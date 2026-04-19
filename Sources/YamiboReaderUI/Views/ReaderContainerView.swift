@@ -4,6 +4,17 @@ import YamiboReaderCore
 #if os(iOS)
 import UIKit
 
+private enum ReaderChromeMode {
+    case loading
+    case error
+    case visible
+    case immersiveHidden
+
+    var showsChrome: Bool {
+        self != .immersiveHidden
+    }
+}
+
 public struct ReaderContainerView: View {
     @StateObject private var model: ReaderContainerModel
     @State private var showingSettings = false
@@ -11,9 +22,12 @@ public struct ReaderContainerView: View {
     @State private var showingCacheProgress = false
     @State private var showingWebJumpSheet = false
     @State private var isChapterDrawerVisible = false
-    @State private var isChromeVisible = true
-    @State private var didEnterImmersiveMode = false
+    @State private var chromeMode: ReaderChromeMode = .loading
     @State private var verticalScrollRequest: Int?
+    @State private var progressPreviewPageIndex: Int?
+    @State private var progressPreviewChapterTitle: String?
+    @State private var isProgressPreviewVisible = false
+    @State private var progressPreviewHideTask: Task<Void, Never>?
     private let appModel: YamiboAppModel
 
     public init(context: ReaderLaunchContext, appModel: YamiboAppModel) {
@@ -32,6 +46,13 @@ public struct ReaderContainerView: View {
 
                 content
 
+                if isProgressPreviewVisible {
+                    ReaderChapterPreviewBubble(title: progressPreviewChapterTitle ?? "•••")
+                        .padding(.bottom, chromeMode.showsChrome ? bottomInset + 118 : bottomInset + 24)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                        .zIndex(1)
+                }
+
                 ReaderChapterDrawerOverlay(
                     model: model,
                     isPresented: $isChapterDrawerVisible,
@@ -41,7 +62,7 @@ public struct ReaderContainerView: View {
                 )
             }
             .safeAreaInset(edge: .top, spacing: 0) {
-                if isChromeVisible {
+                if chromeMode.showsChrome {
                     ReaderTopChrome(
                         model: model,
                         topInset: topInset,
@@ -52,7 +73,7 @@ public struct ReaderContainerView: View {
                 }
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
-                if isChromeVisible {
+                if chromeMode.showsChrome {
                     ReaderBottomChrome(
                         model: model,
                         bottomInset: bottomInset,
@@ -66,6 +87,9 @@ public struct ReaderContainerView: View {
                         onJumpChapter: { delta in
                             jumpAdjacentChapter(delta)
                         },
+                        onProgressPreviewChange: { value, isEditing in
+                            handleProgressPreviewChange(value: value, isEditing: isEditing)
+                        },
                         onProgressCommit: { value in
                             commitProgressSlider(value)
                         }
@@ -77,6 +101,7 @@ public struct ReaderContainerView: View {
                 updateChromeForContentState()
             }
             .onDisappear {
+                progressPreviewHideTask?.cancel()
                 Task { await model.saveProgress() }
             }
             .sheet(isPresented: $showingSettings) {
@@ -105,7 +130,7 @@ public struct ReaderContainerView: View {
                     Task { await jumpToWebView(view) }
                 }
             }
-            .statusBar(hidden: !model.settings.showsSystemStatusBar || !isChromeVisible)
+            .statusBar(hidden: chromeMode == .immersiveHidden || !model.settings.showsSystemStatusBar)
             .onChange(of: model.isLoading) { _, _ in
                 updateChromeForContentState()
             }
@@ -115,6 +140,22 @@ public struct ReaderContainerView: View {
             .onChange(of: model.pages.count) { _, _ in
                 updateChromeForContentState()
             }
+            .onChange(of: showingSettings) { _, _ in
+                updateChromeForContentState()
+            }
+            .onChange(of: showingCachePanel) { _, _ in
+                updateChromeForContentState()
+            }
+            .onChange(of: showingCacheProgress) { _, _ in
+                updateChromeForContentState()
+            }
+            .onChange(of: showingWebJumpSheet) { _, _ in
+                updateChromeForContentState()
+            }
+            .onChange(of: isChapterDrawerVisible) { _, _ in
+                updateChromeForContentState()
+            }
+            .animation(.easeInOut(duration: 0.2), value: isProgressPreviewVisible)
         }
     }
 
@@ -230,48 +271,51 @@ public struct ReaderContainerView: View {
     }
 
     private func retryLoad() {
-        isChromeVisible = true
+        chromeMode = .visible
         Task { await model.loadCurrent(forceRefresh: false) }
     }
 
     private func refreshReader() {
-        isChromeVisible = true
+        chromeMode = .visible
         Task { await model.loadCurrent(forceRefresh: true) }
     }
 
     private func openInForum() {
-        isChromeVisible = true
+        chromeMode = .visible
         Task { await model.saveProgress() }
         appModel.dismissReader(openThreadInForum: model.forumURL)
     }
 
     private func closeReader() {
-        isChromeVisible = true
+        chromeMode = .visible
         Task { await model.saveProgress() }
         appModel.dismissReader()
     }
 
     private func toggleChrome() {
         guard !model.pages.isEmpty else { return }
+        guard !hasPresentedOverlay else { return }
+        progressPreviewHideTask?.cancel()
+        isProgressPreviewVisible = false
         withAnimation(.easeInOut(duration: 0.2)) {
-            isChromeVisible.toggle()
+            chromeMode = chromeMode == .immersiveHidden ? .visible : .immersiveHidden
         }
     }
 
     private func openChapterDrawer() {
-        isChromeVisible = true
+        chromeMode = .visible
         withAnimation(.easeInOut(duration: 0.2)) {
             isChapterDrawerVisible = true
         }
     }
 
     private func openSettings() {
-        isChromeVisible = true
+        chromeMode = .visible
         showingSettings = true
     }
 
     private func openCachePanel() {
-        isChromeVisible = true
+        chromeMode = .visible
         if model.hasCacheOperationSession {
             model.showCacheProgressIfRunning()
             showingCacheProgress = true
@@ -281,18 +325,23 @@ public struct ReaderContainerView: View {
     }
 
     private func openWebJumpSheet() {
-        isChromeVisible = true
+        chromeMode = .visible
         showingWebJumpSheet = true
     }
 
     private func updateChromeForContentState() {
+        guard !hasPresentedOverlay else {
+            chromeMode = .visible
+            return
+        }
+
         if model.isLoading && model.pages.isEmpty {
-            isChromeVisible = true
+            chromeMode = .loading
             return
         }
 
         if model.errorMessage != nil && model.pages.isEmpty {
-            isChromeVisible = true
+            chromeMode = .error
             return
         }
 
@@ -302,28 +351,25 @@ public struct ReaderContainerView: View {
             verticalScrollRequest = model.currentPageIndex
         }
 
-        if !didEnterImmersiveMode {
-            didEnterImmersiveMode = true
+        if chromeMode != .immersiveHidden {
             withAnimation(.easeInOut(duration: 0.2)) {
-                isChromeVisible = false
+                chromeMode = .immersiveHidden
             }
         }
     }
 
     private func commitProgressSlider(_ value: Double) {
+        let targetIndex = model.targetRenderedPageIndex(forProgressValue: value)
+        model.jumpToRenderedPage(targetIndex)
+        showProgressPreview(for: targetIndex, autoHide: true)
         if model.settings.readingMode == .vertical {
-            let percent = min(max(value, 0), 100)
-            let targetIndex = Int((percent / 100) * Double(max(model.renderedPageCount - 1, 0)))
-            model.jumpToRenderedPage(targetIndex)
             verticalScrollRequest = model.currentPageIndex
-            return
         }
-
-        model.jumpToRenderedPage(Int(value.rounded()))
     }
 
     private func jumpAdjacentChapter(_ delta: Int) {
         model.jumpToAdjacentChapter(delta)
+        showProgressPreview(for: model.currentPageIndex, autoHide: true)
         if model.settings.readingMode == .vertical {
             verticalScrollRequest = model.currentPageIndex
         }
@@ -337,7 +383,7 @@ public struct ReaderContainerView: View {
     }
 
     private func jumpToWebView(_ view: Int) async {
-        isChromeVisible = true
+        chromeMode = .visible
         await model.jumpToWebView(view)
         if model.settings.readingMode == .vertical {
             verticalScrollRequest = model.currentPageIndex
@@ -348,6 +394,45 @@ public struct ReaderContainerView: View {
         await model.jumpRelativePage(delta)
         if model.settings.readingMode == .vertical {
             verticalScrollRequest = model.currentPageIndex
+        }
+    }
+
+    private var hasPresentedOverlay: Bool {
+        showingSettings || showingCachePanel || showingCacheProgress || showingWebJumpSheet || isChapterDrawerVisible
+    }
+
+    private func handleProgressPreviewChange(value: Double?, isEditing: Bool) {
+        guard isEditing, let value else {
+            hideProgressPreview(after: 0.8)
+            return
+        }
+
+        let targetIndex = model.targetRenderedPageIndex(forProgressValue: value)
+        showProgressPreview(for: targetIndex, autoHide: false)
+    }
+
+    private func showProgressPreview(for pageIndex: Int, autoHide: Bool) {
+        progressPreviewHideTask?.cancel()
+        progressPreviewPageIndex = pageIndex
+        progressPreviewChapterTitle = model.chapterTitle(forRenderedPageIndex: pageIndex) ?? "•••"
+        withAnimation(.easeInOut(duration: 0.2)) {
+            isProgressPreviewVisible = true
+        }
+        if autoHide {
+            hideProgressPreview(after: 0.8)
+        }
+    }
+
+    private func hideProgressPreview(after delay: TimeInterval) {
+        progressPreviewHideTask?.cancel()
+        progressPreviewHideTask = Task {
+            try? await Task.sleep(for: .seconds(delay))
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isProgressPreviewVisible = false
+                }
+            }
         }
     }
 

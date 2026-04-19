@@ -78,6 +78,42 @@ final class ReaderContainerModelTests: XCTestCase {
         }
     }
 
+    func testChapterTitleHelperResolvesRenderedPageChapter() async throws {
+        let model = try await makeModel(
+            documents: [
+                makeDocument(view: 1, maxView: 1, chapterTitles: ["第一章", "第二章"]),
+            ]
+        )
+
+        await MainActor.run {
+            XCTAssertEqual(model.chapterTitle(forRenderedPageIndex: 0), "第一章")
+            XCTAssertEqual(model.chapterTitle(forRenderedPageIndex: model.renderedPageCount - 1), "第二章")
+            XCTAssertEqual(model.chapterTitle(forRenderedPageIndex: 999), "第二章")
+        }
+    }
+
+    func testTargetRenderedPageIndexMapsPagedAndVerticalProgress() async throws {
+        let pagedModel = try await makeModel(
+            documents: [
+                makeDocument(view: 1, maxView: 1, chapterTitles: ["第一章", "第二章"]),
+            ],
+            settings: ReaderAppearanceSettings(readingMode: .paged)
+        )
+        let verticalModel = try await makeModel(
+            documents: [
+                makeDocument(view: 1, maxView: 1, chapterTitles: ["第一章", "第二章"]),
+            ],
+            settings: ReaderAppearanceSettings(readingMode: .vertical)
+        )
+
+        await MainActor.run {
+            XCTAssertEqual(pagedModel.targetRenderedPageIndex(forProgressValue: -3), 0)
+            XCTAssertEqual(pagedModel.targetRenderedPageIndex(forProgressValue: 999), pagedModel.renderedPageCount - 1)
+            XCTAssertEqual(verticalModel.targetRenderedPageIndex(forProgressValue: 0), 0)
+            XCTAssertEqual(verticalModel.targetRenderedPageIndex(forProgressValue: 100), verticalModel.renderedPageCount - 1)
+        }
+    }
+
     func testCachedViewsTrackCurrentVariant() async throws {
         let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=556677&mobile=2")!
         let unfilteredDocument = makeDocument(

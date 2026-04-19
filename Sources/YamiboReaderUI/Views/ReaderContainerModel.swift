@@ -159,6 +159,31 @@ public final class ReaderContainerModel: ObservableObject {
         "网页 \(displayedView) / \(max(maxView, 1))"
     }
 
+    public func chapterTitle(forRenderedPageIndex pageIndex: Int) -> String? {
+        guard !pages.isEmpty else { return nil }
+        let clampedIndex = min(max(pageIndex, 0), max(pages.count - 1, 0))
+        return chapters.last(where: { $0.startIndex <= clampedIndex })?.title
+    }
+
+    public func targetRenderedPageIndex(forProgressValue value: Double) -> Int {
+        guard !pages.isEmpty else { return 0 }
+
+        switch settings.readingMode {
+        case .paged:
+            return min(
+                max(Int(value.rounded()), 0),
+                max(pages.count - 1, 0)
+            )
+        case .vertical:
+            guard pages.count > 1 else { return 0 }
+            let clampedPercent = min(max(value, 0), 100)
+            return min(
+                max(Int((clampedPercent / 100) * Double(pages.count - 1)), 0),
+                max(pages.count - 1, 0)
+            )
+        }
+    }
+
     public var cacheScopeTitle: String {
         switch currentContentSource {
         case .authorFilteredPage:
