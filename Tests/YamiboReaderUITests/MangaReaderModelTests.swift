@@ -18,6 +18,8 @@ final class MangaReaderModelTests: XCTestCase {
 
         await MainActor.run {
             XCTAssertEqual(model.pages.count, 2)
+            XCTAssertEqual(model.viewportRequest?.targetIndex, 0)
+            XCTAssertEqual(model.viewportRequest?.targetPageID, "700#0")
             model.updateCurrentPage(1)
         }
         await model.saveProgress()
@@ -58,8 +60,50 @@ final class MangaReaderModelTests: XCTestCase {
         await model.jumpToAdjacentChapter(1)
         await MainActor.run {
             XCTAssertEqual(model.currentPage?.chapterTitle, "第2话")
+            XCTAssertEqual(model.currentPageIndex, 2)
+            XCTAssertEqual(model.viewportRequest?.targetPageID, "701#0")
             XCTAssertTrue(model.hasPreviousChapter)
             XCTAssertFalse(model.hasNextChapter)
+        }
+    }
+
+    func testJumpingToLoadedChapterStillEmitsViewportRequest() async throws {
+        let model = try await makeMangaModel(
+            chapterHTMLByTID: [
+                "700": makeMangaHTML(
+                    tid: "700",
+                    title: "第1话",
+                    links: [("701", "第2话")],
+                    imageCount: 2
+                ),
+                "701": makeMangaHTML(
+                    tid: "701",
+                    title: "第2话",
+                    links: [("700", "第1话")],
+                    imageCount: 2
+                )
+            ]
+        )
+
+        await MainActor.run {
+            model.updateCurrentPage(1)
+        }
+        try await waitFor {
+            await MainActor.run { model.pages.count == 4 }
+        }
+
+        let initialRevision = await MainActor.run { model.viewportRequest?.revision }
+        guard let targetChapter = await MainActor.run(body: { model.currentDirectory?.chapters.last }) else {
+            XCTFail("Expected a second chapter")
+            return
+        }
+
+        await model.jumpToChapter(targetChapter)
+
+        await MainActor.run {
+            XCTAssertEqual(model.currentPageIndex, 2)
+            XCTAssertEqual(model.viewportRequest?.targetPageID, "701#0")
+            XCTAssertNotEqual(model.viewportRequest?.revision, initialRevision)
         }
     }
 
@@ -174,6 +218,54 @@ final class MangaReaderModelTests: XCTestCase {
             XCTAssertEqual(model.currentPage?.chapterTitle, "第6话")
             XCTAssertEqual(model.pages.count, 2)
             XCTAssertEqual(Set(model.pages.map(\.chapterTitle)), ["第6话"])
+            XCTAssertEqual(model.viewportRequest?.targetPageID, "705#0")
+        }
+    }
+
+    func testPrefetchingPreviousChapterPreservesCurrentFocusAndStablePageIDs() async throws {
+        let model = try await makeMangaModel(
+            chapterHTMLByTID: [
+                "700": makeMangaHTML(
+                    tid: "700",
+                    title: "第1话",
+                    links: [("701", "第2话")],
+                    imageCount: 2
+                ),
+                "701": makeMangaHTML(
+                    tid: "701",
+                    title: "第2话",
+                    links: [("700", "第1话"), ("702", "第3话")],
+                    imageCount: 2
+                ),
+                "702": makeMangaHTML(
+                    tid: "702",
+                    title: "第3话",
+                    links: [("701", "第2话")],
+                    imageCount: 2
+                )
+            ],
+            appSettings: AppSettings(
+                manga: MangaReaderSettings(readingMode: .paged)
+            ),
+            initialTID: "701"
+        )
+
+        await MainActor.run {
+            XCTAssertEqual(model.currentPage?.id, "701#0")
+            model.updateCurrentPage(0)
+        }
+        try await waitFor {
+            await MainActor.run { Set(model.pages.map(\.tid)) == Set(["700", "701", "702"]) }
+        }
+
+        await MainActor.run {
+            XCTAssertEqual(model.currentPage?.tid, "701")
+            XCTAssertEqual(model.currentPage?.localIndex, 0)
+            XCTAssertEqual(model.currentPage?.id, "701#0")
+            XCTAssertTrue(model.pages.map(\.id).contains("700#0"))
+            XCTAssertTrue(model.pages.map(\.id).contains("700#1"))
+            XCTAssertTrue(model.pages.map(\.id).contains("701#0"))
+            XCTAssertEqual(model.viewportRequest?.targetPageID, "701#0")
         }
     }
 
@@ -472,7 +564,9 @@ private func makeMangaModel(
     chapterHTMLByTID: [String: String],
     appSettings: AppSettings = AppSettings(),
     requestLog: RequestLog? = nil,
-    requestHandler: ((URLRequest) -> (Data, HTTPURLResponse)?)? = nil
+    requestHandler: ((URLRequest) -> (Data, HTTPURLResponse)?)? = nil,
+    initialTID: String = "700",
+    initialPage: Int = 0
 ) async throws -> MangaReaderModel {
     let keyPrefix = UUID().uuidString
     let configuration = URLSessionConfiguration.ephemeral
@@ -509,12 +603,14 @@ private func makeMangaModel(
         session: session
     )
     let model = await MainActor.run {
-        MangaReaderModel(
+        let initialURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(initialTID)&mobile=2")!
+        return MangaReaderModel(
             context: MangaLaunchContext(
-                originalThreadURL: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=700&mobile=2")!,
-                chapterURL: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=700&mobile=2")!,
+                originalThreadURL: initialURL,
+                chapterURL: initialURL,
                 displayTitle: "测试漫画",
-                source: .forum
+                source: .forum,
+                initialPage: initialPage
             ),
             appContext: appContext
         )

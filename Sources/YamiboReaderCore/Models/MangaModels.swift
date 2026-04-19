@@ -188,7 +188,7 @@ public struct MangaPage: Hashable, Identifiable, Sendable {
     public var chapterURL: URL
 
     public var id: String {
-        "\(tid)#\(globalIndex)#\(imageURL.absoluteString)"
+        "\(tid)#\(localIndex)"
     }
 
     public init(

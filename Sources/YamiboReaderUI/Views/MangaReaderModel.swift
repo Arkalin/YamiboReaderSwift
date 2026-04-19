@@ -2,6 +2,20 @@ import Foundation
 import SwiftUI
 import YamiboReaderCore
 
+public struct MangaViewportRequest: Equatable, Sendable {
+    public var targetIndex: Int
+    public var targetPageID: MangaPage.ID
+    public var animated: Bool
+    public var revision: UUID
+
+    public init(targetIndex: Int, targetPageID: MangaPage.ID, animated: Bool, revision: UUID) {
+        self.targetIndex = targetIndex
+        self.targetPageID = targetPageID
+        self.animated = animated
+        self.revision = revision
+    }
+}
+
 @MainActor
 public final class MangaReaderModel: ObservableObject {
     @Published public private(set) var pages: [MangaPage] = []
@@ -10,7 +24,7 @@ public final class MangaReaderModel: ObservableObject {
     @Published public var errorMessage: String?
     @Published public var settings = MangaReaderSettings()
     @Published public var currentPageIndex = 0
-    @Published public var scrollRequestIndex: Int?
+    @Published public private(set) var viewportRequest: MangaViewportRequest?
     @Published public private(set) var isUpdatingDirectory = false
     @Published public private(set) var directoryCooldownRemaining = 0
     @Published public private(set) var showsForceSearchShortcut = false
@@ -29,6 +43,7 @@ public final class MangaReaderModel: ObservableObject {
     private var forceSearchShortcutTask: Task<Void, Never>?
     private var prepared = false
     private let maxLoadedDocuments = 10
+    private var viewportRevision = UUID()
 
     public init(context: MangaLaunchContext, appContext: YamiboAppContext) {
         self.context = context
@@ -132,6 +147,28 @@ public final class MangaReaderModel: ObservableObject {
         }
     }
 
+    public func updateCurrentPage(forPageID pageID: MangaPage.ID) {
+        guard let index = pages.firstIndex(where: { $0.id == pageID }) else { return }
+        guard index != currentPageIndex else { return }
+        updateCurrentPage(index)
+    }
+
+    public func requestCurrentChapterPage(_ localIndex: Int, animated: Bool = true) {
+        guard let currentPage else { return }
+        let clampedLocalIndex = max(0, min(localIndex, max(0, currentPage.chapterTotalPages - 1)))
+        guard let targetIndex = pages.firstIndex(where: {
+            $0.chapterURL == currentPage.chapterURL && $0.localIndex == clampedLocalIndex
+        }) else {
+            return
+        }
+        currentPageIndex = targetIndex
+        emitViewportRequest(targetIndex: targetIndex, animated: animated, resetRevision: false)
+        scheduleImagePrefetch()
+        Task {
+            await prefetchIfNeeded(for: targetIndex)
+        }
+    }
+
     public func saveProgress() async {
         guard let currentPage else { return }
         _ = try? await appContext.favoriteStore.updateMangaProgress(
@@ -166,7 +203,7 @@ public final class MangaReaderModel: ObservableObject {
     public func jumpToChapter(_ chapter: MangaChapter) async {
         if let index = firstPageIndex(for: chapter.url) {
             currentPageIndex = index
-            scrollRequestIndex = index
+            emitViewportRequest(targetIndex: index, animated: true, resetRevision: true)
             scheduleImagePrefetch()
             return
         }
@@ -189,7 +226,7 @@ public final class MangaReaderModel: ObservableObject {
                     preservingTID: document.tid
                 )
             }
-            rebuildPages(focus: focus)
+            rebuildPages(focus: focus, animated: false, resetRevision: true)
             errorMessage = nil
         } catch {
             fallbackWebContext = makeWebFallbackContext(
@@ -218,7 +255,7 @@ public final class MangaReaderModel: ObservableObject {
             )
             self.currentDirectory = result.directory
             reorderDocumentsToMatchDirectory()
-            rebuildPages(focus: currentFocusKey)
+            rebuildPages(focus: currentFocusKey, animated: false, resetRevision: false)
             errorMessage = nil
             handleDirectoryUpdateSuccess(
                 result: result,
@@ -240,7 +277,7 @@ public final class MangaReaderModel: ObservableObject {
             )
             self.currentDirectory = updated
             reorderDocumentsToMatchDirectory()
-            rebuildPages(focus: currentFocusKey)
+            rebuildPages(focus: currentFocusKey, animated: false, resetRevision: false)
             errorMessage = nil
         } catch {
             errorMessage = error.localizedDescription
@@ -260,7 +297,11 @@ public final class MangaReaderModel: ObservableObject {
             currentDirectory = directory
             reorderDocumentsToMatchDirectory()
             let initialLocalPage = max(0, context.initialPage)
-            rebuildPages(focus: MangaFocusKey(chapterURL: document.chapterURL, localIndex: initialLocalPage))
+            rebuildPages(
+                focus: MangaFocusKey(chapterURL: document.chapterURL, localIndex: initialLocalPage),
+                animated: false,
+                resetRevision: true
+            )
             if shouldAutoUpdateDirectory(directory) {
                 await updateDirectory(isForcedSearch: false)
             }
@@ -301,7 +342,7 @@ public final class MangaReaderModel: ObservableObject {
         if index >= pages.count - 6 {
             await loadAdjacentDocument(delta: 1)
         }
-        if settings.readingMode == .vertical, index <= 2 {
+        if index <= 2 {
             await loadAdjacentDocument(delta: -1)
         }
     }
@@ -327,7 +368,7 @@ public final class MangaReaderModel: ObservableObject {
                 )
             }
             reorderDocumentsToMatchDirectory()
-            rebuildPages(focus: focus)
+            rebuildPages(focus: focus, animated: false, resetRevision: delta < 0)
         } catch {
             // Preload failures should not interrupt reading.
         }
@@ -341,7 +382,11 @@ public final class MangaReaderModel: ObservableObject {
         }
     }
 
-    private func rebuildPages(focus: MangaFocusKey?) {
+    private func rebuildPages(
+        focus: MangaFocusKey?,
+        animated: Bool,
+        resetRevision: Bool
+    ) {
         var rebuilt: [MangaPage] = []
         rebuilt.reserveCapacity(loadedDocuments.reduce(0) { $0 + $1.pages.count })
         for document in loadedDocuments {
@@ -359,21 +404,52 @@ public final class MangaReaderModel: ObservableObject {
                 )
             }
         }
+        let targetIndex: Int?
+        if let focus {
+            targetIndex = rebuilt.firstIndex(where: {
+                $0.chapterURL == focus.chapterURL && $0.localIndex == focus.localIndex
+            })
+        } else {
+            targetIndex = nil
+        }
+
         pages = rebuilt
 
-        guard !pages.isEmpty else {
+        guard !rebuilt.isEmpty else {
             currentPageIndex = 0
+            viewportRequest = nil
             return
         }
 
-        if let focus,
-           let targetIndex = pages.firstIndex(where: { $0.chapterURL == focus.chapterURL && $0.localIndex == focus.localIndex }) {
+        if let targetIndex {
             currentPageIndex = targetIndex
-            scrollRequestIndex = targetIndex
+            emitViewportRequest(targetIndex: targetIndex, animated: animated, resetRevision: resetRevision)
         } else {
-            currentPageIndex = max(0, min(currentPageIndex, pages.count - 1))
+            currentPageIndex = max(0, min(currentPageIndex, rebuilt.count - 1))
+            emitViewportRequest(
+                targetIndex: currentPageIndex,
+                animated: animated,
+                resetRevision: resetRevision
+            )
         }
         scheduleImagePrefetch()
+    }
+
+    private func emitViewportRequest(
+        targetIndex: Int,
+        animated: Bool,
+        resetRevision: Bool
+    ) {
+        guard pages.indices.contains(targetIndex) else { return }
+        if resetRevision {
+            viewportRevision = UUID()
+        }
+        viewportRequest = MangaViewportRequest(
+            targetIndex: targetIndex,
+            targetPageID: pages[targetIndex].id,
+            animated: animated,
+            revision: viewportRevision
+        )
     }
 
     private func adjacentChapter(delta: Int) -> MangaChapter? {

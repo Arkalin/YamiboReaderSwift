@@ -9,6 +9,8 @@ public struct MangaReaderView: View {
     @State private var showingSettings = false
     @State private var showingDirectorySheet = false
     @State private var showingChrome = true
+    @State private var selectedPageID: MangaPage.ID?
+    @State private var pagerRevision = UUID()
     private let appModel: YamiboAppModel
 
     public init(context: MangaLaunchContext, appModel: YamiboAppModel) {
@@ -97,23 +99,36 @@ public struct MangaReaderView: View {
     }
 
     private var pagedContent: some View {
-        TabView(selection: $model.currentPageIndex) {
-            ForEach(model.pages.indices, id: \.self) { index in
+        TabView(selection: $selectedPageID) {
+            ForEach(model.pages) { page in
                 MangaPageContent(
-                    page: model.pages[index],
-                    refererURL: model.pages[index].chapterURL,
+                    page: page,
+                    refererURL: page.chapterURL,
                     imageRepository: appModel.appContext.mangaImageRepository,
                     zoomEnabled: model.settings.zoomEnabled,
                     showsChapterTitle: true,
                     onToggleChrome: { showingChrome.toggle() }
                 )
-                .tag(index)
+                .tag(Optional(page.id))
                 .padding(.vertical, 12)
             }
         }
+        .id(pagerRevision)
         .tabViewStyle(.page(indexDisplayMode: .never))
-        .onChange(of: model.currentPageIndex) { _, newValue in
-            model.updateCurrentPage(newValue)
+        .onAppear {
+            if let request = model.viewportRequest {
+                applyViewportRequest(request)
+            } else {
+                selectedPageID = model.currentPage?.id
+            }
+        }
+        .onChange(of: selectedPageID) { _, newValue in
+            guard let newValue else { return }
+            model.updateCurrentPage(forPageID: newValue)
+        }
+        .onChange(of: model.viewportRequest) { _, newValue in
+            guard let newValue else { return }
+            applyViewportRequest(newValue)
         }
     }
 
@@ -121,29 +136,36 @@ public struct MangaReaderView: View {
         ScrollViewReader { proxy in
             ScrollView(.vertical) {
                 LazyVStack(spacing: 12) {
-                    ForEach(model.pages.indices, id: \.self) { index in
+                    ForEach(model.pages) { page in
                         MangaPageContent(
-                            page: model.pages[index],
-                            refererURL: model.pages[index].chapterURL,
+                            page: page,
+                            refererURL: page.chapterURL,
                             imageRepository: appModel.appContext.mangaImageRepository,
                             zoomEnabled: model.settings.zoomEnabled,
                             showsChapterTitle: false,
                             onToggleChrome: { showingChrome.toggle() }
                         )
-                        .id(index)
+                        .id(page.id)
                         .onAppear {
-                            model.updateCurrentPage(index)
+                            model.updateCurrentPage(forPageID: page.id)
                         }
                     }
                 }
                 .padding(.vertical, 12)
             }
-            .onChange(of: model.scrollRequestIndex) { _, request in
+            .onAppear {
+                guard let request = model.viewportRequest else { return }
+                proxy.scrollTo(request.targetPageID, anchor: .top)
+            }
+            .onChange(of: model.viewportRequest) { _, request in
                 guard let request else { return }
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    proxy.scrollTo(request, anchor: .top)
+                if request.animated {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        proxy.scrollTo(request.targetPageID, anchor: .top)
+                    }
+                } else {
+                    proxy.scrollTo(request.targetPageID, anchor: .top)
                 }
-                model.scrollRequestIndex = nil
             }
         }
     }
@@ -202,12 +224,7 @@ public struct MangaReaderView: View {
                     value: Binding(
                         get: { Double(model.currentPage?.localIndex ?? 0) },
                         set: { newValue in
-                            guard let currentPage = model.currentPage else { return }
-                            let target = model.pages.firstIndex {
-                                $0.chapterURL == currentPage.chapterURL && $0.localIndex == Int(newValue.rounded())
-                            } ?? model.currentPageIndex
-                            model.currentPageIndex = target
-                            model.updateCurrentPage(target)
+                            model.requestCurrentChapterPage(Int(newValue.rounded()))
                         }
                     ),
                     in: 0 ... Double(max(0, (model.currentPage?.chapterTotalPages ?? 1) - 1))
@@ -252,6 +269,11 @@ public struct MangaReaderView: View {
         }
         .ignoresSafeArea()
         .allowsHitTesting(false)
+    }
+
+    private func applyViewportRequest(_ request: MangaViewportRequest) {
+        pagerRevision = request.revision
+        selectedPageID = request.targetPageID
     }
 
     private var windowSafeAreaInsets: UIEdgeInsets {
@@ -619,6 +641,7 @@ private struct MangaPageContent: View {
     var body: some View {
         VStack(spacing: 10) {
             MangaAuthenticatedImage(
+                pageID: page.id,
                 url: page.imageURL,
                 refererURL: refererURL,
                 imageRepository: imageRepository,
@@ -677,6 +700,7 @@ private final class MangaImageLoader: ObservableObject {
 
 private struct MangaAuthenticatedImage: View {
     @StateObject private var loader: MangaImageLoader
+    let pageID: MangaPage.ID
     let zoomEnabled: Bool
     @State private var steadyScale: CGFloat = 1
     @State private var gestureScale: CGFloat = 1
@@ -684,11 +708,13 @@ private struct MangaAuthenticatedImage: View {
     @State private var gestureOffset: CGSize = .zero
 
     init(
+        pageID: MangaPage.ID,
         url: URL,
         refererURL: URL,
         imageRepository: MangaImageRepository,
         zoomEnabled: Bool
     ) {
+        self.pageID = pageID
         _loader = StateObject(
             wrappedValue: MangaImageLoader(
                 url: url,
@@ -700,32 +726,40 @@ private struct MangaAuthenticatedImage: View {
     }
 
     var body: some View {
-        Group {
-            if let image = loader.image {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFit()
-                    .scaleEffect(steadyScale * gestureScale)
-                    .offset(
-                        x: steadyOffset.width + gestureOffset.width,
-                        y: steadyOffset.height + gestureOffset.height
-                    )
-                    .animation(.easeOut(duration: 0.2), value: steadyScale)
-                    .animation(.easeOut(duration: 0.2), value: steadyOffset)
-            } else if loader.didFail {
-                Label("图片加载失败", systemImage: "photo")
-                    .foregroundStyle(.secondary)
-                    .padding(.vertical, 40)
-            } else {
-                ProgressView()
-                    .padding(.vertical, 40)
+        optionalDragGesture(
+            Group {
+                if let image = loader.image {
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFit()
+                        .scaleEffect(effectiveScale)
+                        .offset(
+                            x: steadyOffset.width + gestureOffset.width,
+                            y: steadyOffset.height + gestureOffset.height
+                        )
+                        .animation(.easeOut(duration: 0.2), value: steadyScale)
+                        .animation(.easeOut(duration: 0.2), value: steadyOffset)
+                } else if loader.didFail {
+                    Label("图片加载失败", systemImage: "photo")
+                        .foregroundStyle(.secondary)
+                        .padding(.vertical, 40)
+                } else {
+                    ProgressView()
+                        .padding(.vertical, 40)
+                }
             }
-        }
+        )
         .frame(maxWidth: .infinity)
         .task { await loader.loadIfNeeded() }
+        .onChange(of: pageID) { _, _ in
+            resetInteractionState()
+        }
         .simultaneousGesture(doubleTapGesture)
         .simultaneousGesture(magnifyGesture)
-        .simultaneousGesture(dragGesture)
+    }
+
+    private var effectiveScale: CGFloat {
+        steadyScale * gestureScale
     }
 
     private var doubleTapGesture: some Gesture {
@@ -773,6 +807,22 @@ private struct MangaAuthenticatedImage: View {
                     steadyOffset = .zero
                 }
             }
+    }
+
+    @ViewBuilder
+    private func optionalDragGesture<Content: View>(_ content: Content) -> some View {
+        if effectiveScale > 1.01 {
+            content.simultaneousGesture(dragGesture)
+        } else {
+            content
+        }
+    }
+
+    private func resetInteractionState() {
+        steadyScale = 1
+        gestureScale = 1
+        steadyOffset = .zero
+        gestureOffset = .zero
     }
 }
 #else
