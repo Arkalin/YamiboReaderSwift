@@ -197,6 +197,7 @@ private struct ReaderBooksHeroSection: View {
                 onClose: onClose,
                 onConfirm: onConfirm
             )
+            .padding(.horizontal, 28)
 
             ReaderBooksPreviewMaskedContent(
                 settings: settings,
@@ -205,7 +206,6 @@ private struct ReaderBooksHeroSection: View {
             )
         }
         .padding(.top, topInset + 12)
-        .padding(.horizontal, 28)
         .padding(.bottom, 28)
         .frame(maxWidth: .infinity, minHeight: height, maxHeight: height, alignment: .top)
     }
