@@ -288,10 +288,15 @@ struct ReaderBottomChrome: View {
                 Spacer(minLength: 0)
 
                 HStack(spacing: 8) {
-                    Button("设置", action: onShowSettings)
-                        .buttonStyle(.bordered)
-                    Button("缓存", action: onShowCache)
-                        .buttonStyle(.bordered)
+                    Button(action: onShowSettings) {
+                        Label("设置", systemImage: "gearshape")
+                    }
+                    .buttonStyle(.bordered)
+
+                    Button(action: onShowCache) {
+                        Label("缓存", systemImage: "square.and.arrow.down")
+                    }
+                    .buttonStyle(.bordered)
                 }
             }
 

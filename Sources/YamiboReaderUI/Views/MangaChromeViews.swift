@@ -24,9 +24,10 @@ struct MangaBottomChrome: View {
 
                 Spacer(minLength: 0)
 
-                Button("设置", action: onShowSettings)
-                    .buttonStyle(.bordered)
-                    .disabled(model.isTransitioningChapter)
+                Button(action: onShowSettings) {
+                    Label("设置", systemImage: "gearshape")
+                }
+                .buttonStyle(.bordered)
             }
 
             VStack(spacing: 10) {
