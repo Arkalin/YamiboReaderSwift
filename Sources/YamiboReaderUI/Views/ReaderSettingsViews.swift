@@ -6,18 +6,64 @@ import UIKit
 
 extension ReaderFontFamily {
     func font(size: Double, weight: Font.Weight = .regular) -> Font {
+        Font(uiFont(size: size, weight: weight.uiFontWeight))
+    }
+
+    private func uiFont(size: Double, weight: UIFont.Weight) -> UIFont {
+        let pointSize = CGFloat(size)
         switch self {
         case .systemSans:
-            return .system(size: size, weight: weight)
+            return preferredFamilyFont(familyName: "PingFang SC", size: pointSize, weight: weight)
+                ?? .systemFont(ofSize: pointSize, weight: weight)
         case .systemSerif:
-            return .system(size: size, weight: weight, design: .serif)
+            return preferredFamilyFont(familyName: "Songti SC", size: pointSize, weight: weight)
+                ?? systemFont(size: pointSize, weight: weight, design: .serif)
+                ?? .systemFont(ofSize: pointSize, weight: weight)
         case .rounded:
-            return .system(size: size, weight: weight, design: .rounded)
+            return systemFont(size: pointSize, weight: weight, design: .rounded)
+                ?? .systemFont(ofSize: pointSize, weight: weight)
         }
     }
 
     func kerning(size: Double, scale: Double) -> CGFloat {
         CGFloat(size * scale * 0.55)
+    }
+
+    private func preferredFamilyFont(familyName: String, size: CGFloat, weight: UIFont.Weight) -> UIFont? {
+        let descriptor = UIFontDescriptor(
+            fontAttributes: [
+                .family: familyName,
+                .traits: [UIFontDescriptor.TraitKey.weight: weight],
+            ]
+        )
+        let font = UIFont(descriptor: descriptor, size: size)
+        return font.familyName == familyName ? font : nil
+    }
+
+    private func systemFont(size: CGFloat, weight: UIFont.Weight, design: UIFontDescriptor.SystemDesign) -> UIFont? {
+        let baseDescriptor = UIFont.systemFont(ofSize: size, weight: weight).fontDescriptor
+        guard let designedDescriptor = baseDescriptor.withDesign(design) else {
+            return nil
+        }
+
+        return UIFont(descriptor: designedDescriptor, size: size)
+    }
+}
+
+private extension Font.Weight {
+    var uiFontWeight: UIFont.Weight {
+        switch self {
+        case .ultraLight: .ultraLight
+        case .thin: .thin
+        case .light: .light
+        case .regular: .regular
+        case .medium: .medium
+        case .semibold: .semibold
+        case .bold: .bold
+        case .heavy: .heavy
+        case .black: .black
+        default: .regular
+        }
     }
 }
 
@@ -223,7 +269,7 @@ private struct ReaderBooksPreviewMaskedContent: View {
                     .foregroundStyle(palette.primaryText)
                     .lineSpacing(8 * settings.lineHeightScale)
 
-                Text("阅读设置会即时作用在正文中。你可以先把它调到舒服，再继续往下读。")
+                Text("阅读设置会在此处预览，右上角保存后才会作用在正文中。你可以先把它调到舒服，再继续往下读。")
                     .font(settings.fontFamily.font(size: 17 * settings.fontScale))
                     .kerning(settings.fontFamily.kerning(size: 17 * settings.fontScale, scale: settings.characterSpacingScale))
                     .foregroundStyle(palette.secondaryText)
