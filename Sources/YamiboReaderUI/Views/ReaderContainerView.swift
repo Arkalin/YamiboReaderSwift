@@ -18,6 +18,7 @@ private enum ReaderChromeMode {
 public struct ReaderContainerView: View {
     @StateObject private var model: ReaderContainerModel
     @StateObject private var verticalScrollCoordinator = ReaderVerticalScrollCoordinator()
+    @Environment(\.colorScheme) private var colorScheme
     @State private var showingSettings = false
     @State private var showingCachePanel = false
     @State private var showingCacheProgress = false
@@ -265,19 +266,7 @@ public struct ReaderContainerView: View {
     }
 
     private var backgroundColor: Color {
-        if model.settings.usesNightMode {
-            return Color(red: 0.1, green: 0.11, blue: 0.12)
-        }
-        switch model.settings.backgroundStyle {
-        case .system:
-            return Color(uiColor: .systemBackground)
-        case .paper:
-            return Color(red: 0.98, green: 0.95, blue: 0.88)
-        case .mint:
-            return Color(red: 0.91, green: 0.97, blue: 0.93)
-        case .sakura:
-            return Color(red: 0.98, green: 0.92, blue: 0.94)
-        }
+        readerThemeColor(for: model.settings.backgroundStyle, colorScheme: colorScheme)
     }
 
     private func retryLoad() {

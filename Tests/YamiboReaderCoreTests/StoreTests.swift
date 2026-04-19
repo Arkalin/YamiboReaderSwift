@@ -43,7 +43,6 @@ import Testing
             lineHeightScale: 1.6,
             characterSpacingScale: 0.04,
             horizontalPadding: 20,
-            usesNightMode: true,
             loadsInlineImages: false,
             backgroundStyle: .paper,
             readingMode: .vertical,

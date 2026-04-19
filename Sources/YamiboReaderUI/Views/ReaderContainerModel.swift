@@ -279,12 +279,6 @@ public final class ReaderContainerModel: ObservableObject {
         applySettings(updatedSettings)
     }
 
-    public func updateNightMode(_ value: Bool) {
-        var updatedSettings = settings
-        updatedSettings.usesNightMode = value
-        applySettings(updatedSettings)
-    }
-
     public func updateSystemStatusBarVisibility(_ value: Bool) {
         var updatedSettings = settings
         updatedSettings.showsSystemStatusBar = value

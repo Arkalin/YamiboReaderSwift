@@ -70,7 +70,6 @@ public struct ReaderAppearanceSettings: Codable, Hashable, Sendable {
     public var lineHeightScale: Double
     public var characterSpacingScale: Double
     public var horizontalPadding: Double
-    public var usesNightMode: Bool
     public var showsSystemStatusBar: Bool
     public var loadsInlineImages: Bool
     public var backgroundStyle: ReaderBackgroundStyle
@@ -83,7 +82,6 @@ public struct ReaderAppearanceSettings: Codable, Hashable, Sendable {
         lineHeightScale: Double = 1.45,
         characterSpacingScale: Double = 0,
         horizontalPadding: Double = 16,
-        usesNightMode: Bool = false,
         showsSystemStatusBar: Bool = true,
         loadsInlineImages: Bool = true,
         backgroundStyle: ReaderBackgroundStyle = .system,
@@ -95,7 +93,6 @@ public struct ReaderAppearanceSettings: Codable, Hashable, Sendable {
         self.lineHeightScale = lineHeightScale
         self.characterSpacingScale = characterSpacingScale
         self.horizontalPadding = horizontalPadding
-        self.usesNightMode = usesNightMode
         self.showsSystemStatusBar = showsSystemStatusBar
         self.loadsInlineImages = loadsInlineImages
         self.backgroundStyle = backgroundStyle
@@ -109,7 +106,6 @@ public struct ReaderAppearanceSettings: Codable, Hashable, Sendable {
         case lineHeightScale
         case characterSpacingScale
         case horizontalPadding
-        case usesNightMode
         case showsSystemStatusBar
         case loadsInlineImages
         case backgroundStyle
@@ -124,7 +120,6 @@ public struct ReaderAppearanceSettings: Codable, Hashable, Sendable {
         lineHeightScale = try container.decodeIfPresent(Double.self, forKey: .lineHeightScale) ?? 1.45
         characterSpacingScale = try container.decodeIfPresent(Double.self, forKey: .characterSpacingScale) ?? 0
         horizontalPadding = try container.decodeIfPresent(Double.self, forKey: .horizontalPadding) ?? 16
-        usesNightMode = try container.decodeIfPresent(Bool.self, forKey: .usesNightMode) ?? false
         showsSystemStatusBar = try container.decodeIfPresent(Bool.self, forKey: .showsSystemStatusBar) ?? true
         loadsInlineImages = try container.decodeIfPresent(Bool.self, forKey: .loadsInlineImages) ?? true
         backgroundStyle = try container.decodeIfPresent(ReaderBackgroundStyle.self, forKey: .backgroundStyle) ?? .system
@@ -139,7 +134,6 @@ public struct ReaderAppearanceSettings: Codable, Hashable, Sendable {
         try container.encode(lineHeightScale, forKey: .lineHeightScale)
         try container.encode(characterSpacingScale, forKey: .characterSpacingScale)
         try container.encode(horizontalPadding, forKey: .horizontalPadding)
-        try container.encode(usesNightMode, forKey: .usesNightMode)
         try container.encode(showsSystemStatusBar, forKey: .showsSystemStatusBar)
         try container.encode(loadsInlineImages, forKey: .loadsInlineImages)
         try container.encode(backgroundStyle, forKey: .backgroundStyle)

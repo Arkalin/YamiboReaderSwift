@@ -58,6 +58,7 @@ private struct ReaderBlockView: View {
     let settings: ReaderAppearanceSettings
     let refererURL: URL
     let sessionState: SessionState
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         switch block {
@@ -81,7 +82,7 @@ private struct ReaderBlockView: View {
     }
 
     private var readerTextColor: Color {
-        settings.usesNightMode ? Color.white.opacity(0.92) : .primary
+        colorScheme == .dark ? Color.white.opacity(0.92) : .primary
     }
 
     private func styledReaderText(_ text: String, chapterTitle: String?) -> Text {

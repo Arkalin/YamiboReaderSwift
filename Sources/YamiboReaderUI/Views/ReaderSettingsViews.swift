@@ -24,6 +24,7 @@ extension ReaderFontFamily {
 struct ReaderSettingsPanel: View {
     @ObservedObject var model: ReaderContainerModel
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
     @State private var draftSettings = ReaderAppearanceSettings()
     @State private var hasLoadedDraft = false
 
@@ -31,7 +32,7 @@ struct ReaderSettingsPanel: View {
         GeometryReader { proxy in
             let topInset = proxy.safeAreaInsets.top
             let heroHeight = max(300, min(356, proxy.size.height * 0.34)) + topInset
-            let palette = ReaderBooksSheetPalette(settings: draftSettings)
+            let palette = ReaderBooksSheetPalette(settings: draftSettings, colorScheme: colorScheme)
 
             ZStack(alignment: .top) {
                 ReaderBooksUnifiedSheetBackground(
@@ -72,9 +73,9 @@ struct ReaderSettingsPanel: View {
                             ReaderBooksDisplaySection(
                                 settings: draftSettings,
                                 palette: palette,
+                                colorScheme: colorScheme,
                                 onBackgroundStyleChange: setBackgroundStyle,
                                 onReadingModeChange: setReadingMode,
-                                onNightModeChange: setNightMode,
                                 onSelectOriginalText: { setTranslationMode(.none) },
                                 onSelectSimplifiedText: { setTranslationMode(.simplified) },
                                 onSelectTraditionalText: { setTranslationMode(.traditional) }
@@ -113,7 +114,6 @@ struct ReaderSettingsPanel: View {
     private func setBackgroundStyle(_ value: ReaderBackgroundStyle) { draftSettings.backgroundStyle = value }
     private func setReadingMode(_ value: ReaderReadingMode) { draftSettings.readingMode = value }
     private func setTranslationMode(_ value: ReaderTranslationMode) { draftSettings.translationMode = value }
-    private func setNightMode(_ value: Bool) { draftSettings.usesNightMode = value }
     private func setSystemStatusBarVisibility(_ value: Bool) { draftSettings.showsSystemStatusBar = value }
     private func setImageLoading(_ value: Bool) { draftSettings.loadsInlineImages = value }
 
@@ -263,15 +263,13 @@ private struct ReaderBooksSheetPalette {
     let headerButtonBackground: Color
     let confirmButtonBackground: Color
 
-    init(settings: ReaderAppearanceSettings) {
-        let heroBackground = readerThemeColor(
-            for: settings.backgroundStyle,
-            isNightMode: settings.usesNightMode
-        )
+    init(settings: ReaderAppearanceSettings, colorScheme: ColorScheme) {
+        let isNightMode = colorScheme == .dark
+        let heroBackground = readerThemeColor(for: settings.backgroundStyle, colorScheme: colorScheme)
         let bodyBackground: Color
         let cardBackground: Color
 
-        if settings.usesNightMode {
+        if isNightMode {
             bodyBackground = heroBackground.mix(with: Color(red: 0.08, green: 0.09, blue: 0.10), amount: 0.24)
             cardBackground = bodyBackground.mix(with: .white, amount: 0.08)
         } else {
@@ -279,26 +277,26 @@ private struct ReaderBooksSheetPalette {
             cardBackground = bodyBackground.mix(with: .white, amount: 0.35)
         }
 
-        self.isNightMode = settings.usesNightMode
+        self.isNightMode = isNightMode
         self.heroBackground = heroBackground
         self.bodyBackground = bodyBackground
         self.cardBackground = cardBackground
-        primaryText = settings.usesNightMode
+        primaryText = isNightMode
             ? Color.white.opacity(0.92)
             : Color(red: 0.09, green: 0.08, blue: 0.10)
-        secondaryText = settings.usesNightMode
+        secondaryText = isNightMode
             ? Color.white.opacity(0.68)
             : Color.black.opacity(0.56)
-        segmentedBackground = settings.usesNightMode
+        segmentedBackground = isNightMode
             ? bodyBackground.mix(with: .white, amount: 0.05)
             : bodyBackground.mix(with: Color.black, amount: 0.03)
-        divider = settings.usesNightMode
+        divider = isNightMode
             ? Color.white.opacity(0.08)
             : Color.black.opacity(0.08)
-        headerButtonBackground = settings.usesNightMode
+        headerButtonBackground = isNightMode
             ? Color.white.opacity(0.10)
             : Color.white.opacity(0.78)
-        confirmButtonBackground = settings.usesNightMode
+        confirmButtonBackground = isNightMode
             ? heroBackground.mix(with: Color(red: 0.44, green: 0.39, blue: 0.30), amount: 0.58)
             : heroBackground.mix(with: Color(red: 0.31, green: 0.26, blue: 0.18), amount: 0.72)
     }
@@ -404,9 +402,9 @@ private struct ReaderBooksLayoutSection: View {
 private struct ReaderBooksDisplaySection: View {
     let settings: ReaderAppearanceSettings
     let palette: ReaderBooksSheetPalette
+    let colorScheme: ColorScheme
     let onBackgroundStyleChange: (ReaderBackgroundStyle) -> Void
     let onReadingModeChange: (ReaderReadingMode) -> Void
-    let onNightModeChange: (Bool) -> Void
     let onSelectOriginalText: () -> Void
     let onSelectSimplifiedText: () -> Void
     let onSelectTraditionalText: () -> Void
@@ -415,7 +413,7 @@ private struct ReaderBooksDisplaySection: View {
         ReaderBooksSettingsSection(title: "显示与页面", palette: palette) {
             ReaderBooksThemePicker(
                 selectedStyle: settings.backgroundStyle,
-                usesNightMode: settings.usesNightMode,
+                colorScheme: colorScheme,
                 palette: palette,
                 onSelect: onBackgroundStyleChange
             )
@@ -424,15 +422,6 @@ private struct ReaderBooksDisplaySection: View {
                 selection: settings.readingMode,
                 palette: palette,
                 onSelect: onReadingModeChange
-            )
-            ReaderBooksDivider(palette: palette)
-            ReaderBooksToggleRow(
-                title: "夜间模式",
-                palette: palette,
-                isOn: Binding(
-                    get: { settings.usesNightMode },
-                    set: onNightModeChange
-                )
             )
             ReaderBooksDivider(palette: palette)
             ReaderBooksTranslationPicker(
@@ -758,7 +747,7 @@ private struct ReaderBooksTranslationPicker: View {
 
 private struct ReaderBooksThemePicker: View {
     let selectedStyle: ReaderBackgroundStyle
-    let usesNightMode: Bool
+    let colorScheme: ColorScheme
     let palette: ReaderBooksSheetPalette
     let onSelect: (ReaderBackgroundStyle) -> Void
 
@@ -775,7 +764,7 @@ private struct ReaderBooksThemePicker: View {
                     } label: {
                         VStack(spacing: 10) {
                             Circle()
-                                .fill(readerThemeColor(for: style, isNightMode: usesNightMode))
+                                .fill(readerThemeColor(for: style, colorScheme: colorScheme))
                                 .frame(width: 44, height: 44)
                                 .overlay {
                                     Circle()
@@ -807,7 +796,8 @@ private struct ReaderBooksDivider: View {
     }
 }
 
-private func readerThemeColor(for style: ReaderBackgroundStyle, isNightMode: Bool) -> Color {
+func readerThemeColor(for style: ReaderBackgroundStyle, colorScheme: ColorScheme) -> Color {
+    let isNightMode = colorScheme == .dark
     if isNightMode {
         switch style {
         case .system:
