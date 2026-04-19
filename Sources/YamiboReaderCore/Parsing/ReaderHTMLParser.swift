@@ -13,7 +13,8 @@ public enum ReaderHTMLParser {
             throw YamiboError.floodControl
         }
 
-        let parsed = parseSegments(from: html)
+        let context = try ReaderHTMLDOMParser.parse(html: html)
+        let parsed = parseSegments(from: context)
         let segments = parsed.segments
         guard !segments.isEmpty else {
             throw YamiboError.parsingFailed(context: "小说正文")
@@ -22,7 +23,7 @@ public enum ReaderHTMLParser {
         return ReaderPageDocument(
             threadURL: canonicalThreadURL(from: request.threadURL),
             view: request.view,
-            maxView: extractMaxView(from: html, request: request),
+            maxView: (try? ReaderHTMLDOMParser.parseMaxView(in: context, request: request)) ?? max(1, request.view),
             resolvedAuthorID: extractAuthorID(from: html) ?? request.authorID,
             contentSource: contentSource,
             retainedChapterCount: parsed.retainedChapterCount,
@@ -32,12 +33,10 @@ public enum ReaderHTMLParser {
     }
 
     public static func parseSegments(from html: String) -> ReaderParsedContent {
-        extractMessageBlocks(from: html).reduce(into: ReaderParsedContent()) { partial, block in
-            let parsed = parseSegments(fromMessageHTML: block)
-            partial.segments.append(contentsOf: parsed.segments)
-            partial.retainedChapterCount += parsed.retainedChapterCount
-            partial.filteredChapterCandidateCount += parsed.filteredChapterCandidateCount
+        guard let context = try? ReaderHTMLDOMParser.parse(html: html) else {
+            return ReaderParsedContent()
         }
+        return parseSegments(from: context)
     }
 
     public static func isFloodControlOrError(_ html: String) -> Bool {
@@ -62,40 +61,10 @@ public enum ReaderHTMLParser {
     }
 
     public static func extractMaxView(from html: String, request: ReaderPageRequest) -> Int {
-        let fallback = max(1, request.view)
-        guard let threadID = extractThreadID(from: request.threadURL) else {
-            return fallback
+        guard let context = try? ReaderHTMLDOMParser.parse(html: html) else {
+            return max(1, request.view)
         }
-
-        let hrefMatches = HTMLTextExtractor.matches(
-            pattern: #"<a[^>]+href=["']([^"']*(?:viewthread|thread-)[^"']*)["'][^>]*>"#,
-            in: html
-        )
-
-        let pages = hrefMatches
-            .compactMap { $0.dropFirst().first }
-            .map(HTMLTextExtractor.decodeHTMLEntities)
-            .compactMap { href -> Int? in
-                if href.contains("thread-\(threadID)-") {
-                    let pattern = #"thread-\#(threadID)-(\d+)-\d+\.html"#
-                    return HTMLTextExtractor.firstMatch(pattern: pattern, in: href)?
-                        .dropFirst()
-                        .first
-                        .flatMap(Int.init)
-                }
-
-                guard href.localizedCaseInsensitiveContains("viewthread"),
-                      href.contains("tid=\(threadID)") else {
-                    return nil
-                }
-                return URLComponents(string: href)?
-                    .queryItems?
-                    .first(where: { $0.name == "page" })?
-                    .value
-                    .flatMap(Int.init)
-            }
-
-        return max(fallback, pages.max() ?? fallback)
+        return (try? ReaderHTMLDOMParser.parseMaxView(in: context, request: request)) ?? max(1, request.view)
     }
 
     public static func extractAuthorID(from html: String) -> String? {
@@ -113,28 +82,18 @@ public enum ReaderHTMLParser {
     }
 
     public static func extractOnlyAuthorID(from html: String, request: ReaderPageRequest) -> String? {
-        guard let threadID = extractThreadID(from: request.threadURL) else { return nil }
-
-        let hrefMatches = HTMLTextExtractor.matches(
-            pattern: #"<a[^>]+href=["']([^"']*viewthread[^"']*tid=\d+[^"']*authorid=\d+[^"']*)["'][^>]*>"#,
-            in: html
-        )
-
-        for groups in hrefMatches where groups.count >= 2 {
-            let href = HTMLTextExtractor.decodeHTMLEntities(groups[1])
-            guard href.contains("tid=\(threadID)") else { continue }
-            if let authorID = HTMLTextExtractor.firstMatch(
-                pattern: #"authorid=(\d+)"#,
-                in: href
-            )?.dropFirst().first {
-                return authorID
-            }
+        guard let context = try? ReaderHTMLDOMParser.parse(html: html) else {
+            return nil
         }
-
-        return nil
+        return try? ReaderHTMLDOMParser.parseOnlyAuthorID(in: context, request: request)
     }
 
     public static func extractPageTitle(from html: String) -> String? {
+        if let context = try? ReaderHTMLDOMParser.parse(html: html),
+           let title = try? ReaderHTMLDOMParser.parseTitle(in: context) {
+            return title
+        }
+
         guard let raw = HTMLTextExtractor.firstMatch(
             pattern: #"<title[^>]*>(.*?)</title>"#,
             in: html
@@ -146,77 +105,19 @@ public enum ReaderHTMLParser {
         return title.isEmpty ? nil : title
     }
 
-    private static func parseSegments(fromMessageHTML html: String) -> ReaderParsedContent {
-        let text = readableText(from: html)
-        let rawChapterTitle = text
-            .split(whereSeparator: \.isNewline)
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .first(where: { !$0.isEmpty })
-            .map { String($0.prefix(30)) }
-        let chapterTitle = ReaderChapterTitleNormalizer.normalize(rawChapterTitle)
-
-        var segments: [ReaderSegment] = []
-        if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            segments.append(.text(text, chapterTitle: chapterTitle))
-        }
-
-        let imageMatches = HTMLTextExtractor.matches(
-            pattern: #"<img[^>]+(?:zoomfile|file|src)=["']([^"']+)["'][^>]*>"#,
-            in: html
-        )
-
-        for match in imageMatches {
-            guard let raw = match.dropFirst().first?.trimmingCharacters(in: .whitespacesAndNewlines),
-                  !raw.isEmpty,
-                  !raw.localizedCaseInsensitiveContains("smiley/"),
-                  let url = HTMLTextExtractor.absoluteURL(from: raw) else {
-                continue
+    private static func parseSegments(from context: ReaderHTMLDOMParser.Context) -> ReaderParsedContent {
+        let messages = (try? ReaderHTMLDOMParser.parseMessages(in: context)) ?? []
+        return messages.reduce(into: ReaderParsedContent()) { partial, message in
+            if !message.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                partial.segments.append(.text(message.text, chapterTitle: message.chapterTitle))
             }
-            segments.append(.image(url, chapterTitle: chapterTitle))
-        }
 
-        return ReaderParsedContent(
-            segments: segments,
-            retainedChapterCount: chapterTitle == nil ? 0 : 1,
-            filteredChapterCandidateCount: 0
-        )
-    }
-
-    private static func extractMessageBlocks(from html: String) -> [String] {
-        let patterns = [
-            #"<(?:div|td)[^>]*class=["'][^"']*\bmessage\b[^"']*["'][^>]*>(.*?)</(?:div|td)>"#,
-            #"<(?:div|td)[^>]*id=["'][^"']*postmessage[^"']*["'][^>]*>(.*?)</(?:div|td)>"#
-        ]
-
-        for pattern in patterns {
-            let matches = HTMLTextExtractor.matches(pattern: pattern, in: html)
-            let blocks = matches.compactMap { $0.dropFirst().first }
-            if !blocks.isEmpty {
-                return blocks
+            for url in message.imageURLs {
+                partial.segments.append(.image(url, chapterTitle: message.chapterTitle))
             }
-        }
-        return []
-    }
 
-    private static func readableText(from html: String) -> String {
-        var value = html
-        value = value.replacingOccurrences(of: #"(?i)<i[^>]*>.*?</i>"#, with: "", options: .regularExpression)
-        value = value.replacingOccurrences(of: #"(?i)<br\s*/?>"#, with: "\n", options: .regularExpression)
-        value = value.replacingOccurrences(of: #"(?i)</p>"#, with: "\n", options: .regularExpression)
-        value = value.replacingOccurrences(of: #"(?i)</div>"#, with: "\n", options: .regularExpression)
-        value = value.replacingOccurrences(of: #"(?i)</li>"#, with: "\n", options: .regularExpression)
-        value = value.replacingOccurrences(of: #"(?i)<li[^>]*>"#, with: "• ", options: .regularExpression)
-        value = HTMLTextExtractor.decodeHTMLEntities(value)
-        value = value.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
-        value = value.replacingOccurrences(of: "\r\n", with: "\n")
-        value = value.replacingOccurrences(of: "\r", with: "\n")
-        value = value.replacingOccurrences(of: #"[ \t]+\n"#, with: "\n", options: .regularExpression)
-        value = value.replacingOccurrences(of: #"\n{3,}"#, with: "\n\n", options: .regularExpression)
-        return value
-            .split(separator: "\n", omittingEmptySubsequences: false)
-            .map { $0.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression).trimmingCharacters(in: .whitespaces) }
-            .joined(separator: "\n")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+            partial.retainedChapterCount += message.chapterTitle == nil ? 0 : 1
+        }
     }
 
     private static func canonicalThreadURL(from url: URL) -> URL {

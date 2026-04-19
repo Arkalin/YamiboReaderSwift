@@ -11,9 +11,13 @@ let package = Package(
         .library(name: "YamiboReaderCore", targets: ["YamiboReaderCore"]),
         .library(name: "YamiboReaderUI", targets: ["YamiboReaderUI"])
     ],
+    dependencies: [
+        .package(url: "https://github.com/scinfu/SwiftSoup.git", from: "2.13.4")
+    ],
     targets: [
         .target(
-            name: "YamiboReaderCore"
+            name: "YamiboReaderCore",
+            dependencies: ["SwiftSoup"]
         ),
         .target(
             name: "YamiboReaderUI",

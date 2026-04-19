@@ -136,11 +136,106 @@ private final class StubURLProtocol: URLProtocol, @unchecked Sendable {
     #expect(document.segments[2] == .text("第二章\n第二段内容", chapterTitle: "第二章"))
 }
 
+@Test func readerHTMLParserPreservesNestedMessageContent() async throws {
+    let html = #"""
+    <html>
+      <body>
+        <div class="message">
+          <div class="wrapper">
+            序章<br>这里是开头。
+            <div class="nested">
+              这里是被嵌套的正文。
+              <img src="images/nested.jpg" />
+            </div>
+          </div>
+        </div>
+      </body>
+    </html>
+    """#
+
+    let request = ReaderPageRequest(
+        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=2&mobile=2")),
+        view: 1
+    )
+    let document = try ReaderHTMLParser.parseDocument(html: html, request: request)
+
+    #expect(document.segments.count == 2)
+
+    guard case let .text(text, chapterTitle) = document.segments[0] else {
+        Issue.record("Expected the first segment to be text")
+        return
+    }
+
+    #expect(chapterTitle == "序章")
+    #expect(text.contains("这里是开头。"))
+    #expect(text.contains("这里是被嵌套的正文。"))
+    #expect(document.segments[1] == .image(try #require(URL(string: "https://bbs.yamibo.com/images/nested.jpg")), chapterTitle: "序章"))
+}
+
+@Test func readerHTMLParserKeepsMessageOrderAndDeduplicatesSharedSelectors() async throws {
+    let html = #"""
+    <html>
+      <body>
+        <div class="message" id="postmessage_1">第一章<br>正文一</div>
+        <div class="message">第二章<br>正文二</div>
+      </body>
+    </html>
+    """#
+
+    let parsed = ReaderHTMLParser.parseSegments(from: html)
+
+    #expect(parsed.segments.count == 2)
+    #expect(parsed.segments[0] == .text("第一章\n正文一", chapterTitle: "第一章"))
+    #expect(parsed.segments[1] == .text("第二章\n正文二", chapterTitle: "第二章"))
+}
+
+@Test func readerHTMLParserSupportsPostmessageWithoutMessageClass() async throws {
+    let html = #"""
+    <html>
+      <body>
+        <table><tr><td id="postmessage_9">尾声<br>只有 postmessage 也要解析</td></tr></table>
+      </body>
+    </html>
+    """#
+
+    let parsed = ReaderHTMLParser.parseSegments(from: html)
+
+    #expect(parsed.segments == [.text("尾声\n只有 postmessage 也要解析", chapterTitle: "尾声")])
+}
+
+@Test func readerHTMLParserExtractsImagesFromPreferredAttributesAndSkipsSmiley() async throws {
+    let html = #"""
+    <html>
+      <body>
+        <div class="message">
+          插图回<br>
+          <img zoomfile="images/zoom.jpg" src="images/fallback-a.jpg" />
+          <img file="images/file.jpg" src="images/fallback-b.jpg" />
+          <img src="images/plain.jpg" />
+          <img src="images/smiley/icon.png" />
+        </div>
+      </body>
+    </html>
+    """#
+
+    let parsed = ReaderHTMLParser.parseSegments(from: html)
+
+    #expect(parsed.segments.count == 4)
+    #expect(parsed.segments[0] == .text("插图回", chapterTitle: "插图回"))
+    #expect(parsed.segments[1] == .image(try #require(URL(string: "https://bbs.yamibo.com/images/zoom.jpg")), chapterTitle: "插图回"))
+    #expect(parsed.segments[2] == .image(try #require(URL(string: "https://bbs.yamibo.com/images/file.jpg")), chapterTitle: "插图回"))
+    #expect(parsed.segments[3] == .image(try #require(URL(string: "https://bbs.yamibo.com/images/plain.jpg")), chapterTitle: "插图回"))
+}
+
 @Test func readerHTMLParserExtractsMaxViewFromSameThreadLinksOnly() async throws {
     let html = #"""
     <html>
       <body>
         <div class="message">正文里提到第 315 页和 9494 次浏览</div>
+        <select id="dumppage">
+          <option value="1">1/4</option>
+          <option value="4">4/4</option>
+        </select>
         <a href="forum.php?mod=viewthread&tid=557752&page=2&mobile=2">2</a>
         <a href="forum.php?mod=viewthread&tid=557752&page=4&mobile=2">4</a>
         <a href="forum.php?mod=viewthread&tid=999999&page=88&mobile=2">88</a>
@@ -164,6 +259,7 @@ private final class StubURLProtocol: URLProtocol, @unchecked Sendable {
     let html = #"""
     <html>
       <body>
+        <a href="forum.php?mod=viewthread&tid=999999&page=1&authorid=1&mobile=2">别的帖子</a>
         <a class="nav-more-item" href="forum.php?mod=viewthread&tid=557752&page=1&authorid=595655&mobile=2">只看楼主</a>
       </body>
     </html>
@@ -174,6 +270,20 @@ private final class StubURLProtocol: URLProtocol, @unchecked Sendable {
     )
 
     #expect(ReaderHTMLParser.extractOnlyAuthorID(from: html, request: request) == "595655")
+}
+
+@Test func readerHTMLParserHandlesMalformedHTML() async throws {
+    let html = #"""
+    <html>
+      <body>
+        <div class="message"><div>序章<br>这段 HTML 没有正常闭合
+      </body>
+    </html>
+    """#
+
+    let parsed = ReaderHTMLParser.parseSegments(from: html)
+
+    #expect(parsed.segments == [.text("序章\n这段 HTML 没有正常闭合", chapterTitle: "序章")])
 }
 
 @Test func chapterTitleNormalizerPreservesNonEmptyFirstLines() async throws {
@@ -213,6 +323,67 @@ private final class StubURLProtocol: URLProtocol, @unchecked Sendable {
         }
     }
     #expect(chapterTitles == ["第1话 恋爱的开始", "感谢翻译，收藏一波"])
+}
+
+@Test func readerHTMLParserPreservesChapterBodiesInDirectoryStyleThread() async throws {
+    let html = #"""
+    <html>
+      <head><title>测试书 - 百合会</title></head>
+      <body>
+        <div class="message">
+          目录：<br>
+          序章<br>
+          1 如弃猫般的她<br>
+          译者后记
+        </div>
+        <div class="message">
+          <div class="chapter-shell">
+            序章<br>
+            我肯定没有不惜伤害他人也要以自己的恋情为优先的勇气。
+            <blockquote>
+              所以，不是什么道德伦理之类的原因，而是我认为自己绝对不会不忠。
+            </blockquote>
+          </div>
+        </div>
+        <div class="message">
+          1 如弃猫般的她<br>
+          「呐，雪，车站往哪边走？」<br>
+          <div class="nested">在涩谷街上，被唤作雪的我指着东北方回答询问的声音。</div>
+        </div>
+        <div class="message">
+          译者后记<br>
+          首先感谢看到这的各位，加分及留言一直都给了我不少翻下去的动力。
+        </div>
+      </body>
+    </html>
+    """#
+
+    let request = ReaderPageRequest(
+        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=557752&mobile=2")),
+        view: 1
+    )
+    let document = try ReaderHTMLParser.parseDocument(html: html, request: request)
+
+    let chapterTitles = document.segments.compactMap { segment -> String? in
+        switch segment {
+        case let .text(_, chapterTitle), let .image(_, chapterTitle):
+            chapterTitle
+        }
+    }
+
+    #expect(chapterTitles == ["目录：", "序章", "1 如弃猫般的她", "译者后记"])
+    #expect(document.segments.contains {
+        guard case let .text(text, chapterTitle) = $0 else { return false }
+        return chapterTitle == "序章" && text.contains("绝对不会不忠")
+    })
+    #expect(document.segments.contains {
+        guard case let .text(text, chapterTitle) = $0 else { return false }
+        return chapterTitle == "1 如弃猫般的她" && text.contains("在涩谷街上")
+    })
+    #expect(document.segments.contains {
+        guard case let .text(text, chapterTitle) = $0 else { return false }
+        return chapterTitle == "译者后记" && text.contains("翻下去的动力")
+    })
 }
 
 @Test func repositoryTreatsLoginFavoritesPageAsNotAuthenticated() async throws {
