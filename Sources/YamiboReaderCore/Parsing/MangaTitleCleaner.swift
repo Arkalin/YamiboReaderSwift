@@ -93,4 +93,18 @@ public enum MangaTitleCleaner {
 
         return 0
     }
+
+    public static func extractAllPossibleNumbers(from rawTitle: String) -> [Double] {
+        let patterns = [
+            #"\d+(?:\.\d+)?"#,
+            #"第\s*(\d+(?:\.\d+)?)"#,
+        ]
+        var values: [Double] = []
+        for pattern in patterns {
+            for match in HTMLTextExtractor.matches(pattern: pattern, in: rawTitle) {
+                values.append(contentsOf: match.compactMap(Double.init))
+            }
+        }
+        return Array(Set(values)).sorted()
+    }
 }

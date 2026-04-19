@@ -8,6 +8,7 @@ public enum YamiboError: LocalizedError, Equatable, Sendable {
     case floodControl
     case notAuthenticated
     case offline
+    case searchCooldown(seconds: Int)
     case persistenceFailed(String)
     case underlying(String)
 
@@ -30,6 +31,8 @@ public enum YamiboError: LocalizedError, Equatable, Sendable {
             return "当前登录态不可用，请重新登录"
         case .offline:
             return "当前网络不可用，且本地没有可读缓存"
+        case let .searchCooldown(seconds):
+            return "搜索冷却中，请等待\(seconds)秒"
         case let .persistenceFailed(message):
             return "本地数据保存失败：\(message)"
         case let .underlying(message):

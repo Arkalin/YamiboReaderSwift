@@ -25,7 +25,7 @@ public final class ForumBrowserModel: ObservableObject {
     @Published public private(set) var canGoBack = false
     @Published public private(set) var canGoForward = false
     @Published public private(set) var history: [ForumHistoryEntry] = []
-    @Published public private(set) var canOpenReader = false
+    @Published public private(set) var canOpenNative = false
 
     private weak var webView: WKWebView?
 
@@ -70,7 +70,7 @@ public final class ForumBrowserModel: ObservableObject {
         isLoading = webView.isLoading
         canGoBack = webView.canGoBack
         canGoForward = webView.canGoForward
-        canOpenReader = ReaderModeDetector.canOpenReader(url: currentURL, title: pageTitle)
+        canOpenNative = canOpenNativeTarget(url: currentURL)
     }
 
     public func recordVisit(url: URL, title: String?) {
@@ -78,7 +78,7 @@ public final class ForumBrowserModel: ObservableObject {
         pageTitle = title?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
             ? title!
             : pageTitle
-        canOpenReader = ReaderModeDetector.canOpenReader(url: currentURL, title: pageTitle)
+        canOpenNative = canOpenNativeTarget(url: currentURL)
 
         let entry = ForumHistoryEntry(url: url, title: resolvedTitle(for: url, explicitTitle: title))
         history.removeAll(where: { $0.url == url })
@@ -86,6 +86,11 @@ public final class ForumBrowserModel: ObservableObject {
         if history.count > 30 {
             history.removeLast(history.count - 30)
         }
+    }
+
+    public func currentHTML() async -> String? {
+        guard let webView else { return nil }
+        return await webView.outerHTML()
     }
 
     private func resolvedTitle(for url: URL, explicitTitle: String?) -> String {
@@ -97,11 +102,17 @@ public final class ForumBrowserModel: ObservableObject {
         }
         return url.absoluteString
     }
+
+    private func canOpenNativeTarget(url: URL?) -> Bool {
+        guard let absolute = url?.absoluteString.lowercased() else { return false }
+        return absolute.contains("mod=viewthread") || absolute.contains("thread-")
+    }
 }
 
 public struct ForumBrowserView: View {
     @StateObject private var model: ForumBrowserModel
     @State private var showingHistory = false
+    @State private var actionErrorMessage: String?
     private let appContext: YamiboAppContext
     private let appModel: YamiboAppModel
 
@@ -116,7 +127,7 @@ public struct ForumBrowserView: View {
             ForumBrowserToolbar(
                 model: model,
                 showingHistory: $showingHistory,
-                openReader: openReader
+                openNative: openNative
             )
             ZStack(alignment: .top) {
                 IOSForumWebView(model: model, appContext: appContext)
@@ -135,17 +146,43 @@ public struct ForumBrowserView: View {
                 model.load(request.url)
             }
         }
+        .alert("无法原生打开", isPresented: .constant(actionErrorMessage != nil), actions: {
+            Button("确定") {
+                actionErrorMessage = nil
+            }
+        }, message: {
+            Text(actionErrorMessage ?? "")
+        })
     }
 
-    private func openReader() {
-        guard let threadURL = ReaderModeDetector.canonicalThreadURL(from: model.currentURL) else { return }
-        appModel.presentReader(
-            ReaderLaunchContext(
-                threadURL: threadURL,
-                threadTitle: model.pageTitle.isEmpty ? "小说阅读" : model.pageTitle,
-                source: .forum
-            )
-        )
+    private func openNative() {
+        Task {
+            guard let threadURL = ReaderModeDetector.canonicalThreadURL(from: model.currentURL) else { return }
+            do {
+                let html = await model.currentHTML()
+                let resolver = await appContext.makeThreadOpenResolver()
+                let target = try await resolver.resolve(
+                    threadURL: threadURL,
+                    title: model.pageTitle,
+                    htmlOverride: html,
+                    favoriteType: .unknown
+                )
+                switch target {
+                case let .novel(context):
+                    appModel.presentReader(context)
+                case let .manga(context):
+                    await appModel.openManga(
+                        context,
+                        currentHTML: html,
+                        currentTitle: model.pageTitle
+                    )
+                case .web:
+                    actionErrorMessage = "当前帖子不适合原生阅读。"
+                }
+            } catch {
+                actionErrorMessage = error.localizedDescription
+            }
+        }
     }
 }
 
@@ -186,11 +223,11 @@ private struct ForumHistorySheet: View {
 private struct ForumBrowserToolbar: View {
     @ObservedObject var model: ForumBrowserModel
     @Binding var showingHistory: Bool
-    let openReader: () -> Void
+    let openNative: () -> Void
 
     var body: some View {
         VStack(spacing: 8) {
-            ForumBrowserToolbarButtons(model: model, showingHistory: $showingHistory, openReader: openReader)
+            ForumBrowserToolbarButtons(model: model, showingHistory: $showingHistory, openNative: openNative)
             ForumBrowserLocationLabel(model: model)
         }
         .padding(.horizontal, 16)
@@ -202,7 +239,7 @@ private struct ForumBrowserToolbar: View {
 private struct ForumBrowserToolbarButtons: View {
     @ObservedObject var model: ForumBrowserModel
     @Binding var showingHistory: Bool
-    let openReader: () -> Void
+    let openNative: () -> Void
 
     var body: some View {
         HStack(spacing: 12) {
@@ -218,8 +255,8 @@ private struct ForumBrowserToolbarButtons: View {
                 externalButton(for: currentURL)
             }
 
-            if model.canOpenReader {
-                readerButton
+            if model.canOpenNative {
+                nativeButton
             }
         }
     }
@@ -263,9 +300,9 @@ private struct ForumBrowserToolbarButtons: View {
         .disabled(model.history.isEmpty)
     }
 
-    private var readerButton: some View {
-        Button(action: openReader) {
-            Image(systemName: "book.pages")
+    private var nativeButton: some View {
+        Button(action: openNative) {
+            Image(systemName: "sparkles.rectangle.stack")
         }
     }
 
@@ -319,4 +356,16 @@ public struct ForumBrowserView: View {
     }
 }
 
+#endif
+
+#if os(iOS)
+private extension WKWebView {
+    func outerHTML() async -> String? {
+        await withCheckedContinuation { continuation in
+            evaluateJavaScript("document.documentElement.outerHTML") { value, _ in
+                continuation.resume(returning: value as? String)
+            }
+        }
+    }
+}
 #endif

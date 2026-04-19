@@ -150,16 +150,42 @@ public struct ReaderAppearanceSettings: Codable, Hashable, Sendable {
 
 public struct AppSettings: Codable, Hashable, Sendable {
     public var reader: ReaderAppearanceSettings
+    public var manga: MangaReaderSettings
     public var usesDataSaverMode: Bool
     public var collapsesFavoriteSections: Bool
 
     public init(
         reader: ReaderAppearanceSettings = .init(),
+        manga: MangaReaderSettings = .init(),
         usesDataSaverMode: Bool = false,
         collapsesFavoriteSections: Bool = false
     ) {
         self.reader = reader
+        self.manga = manga
         self.usesDataSaverMode = usesDataSaverMode
         self.collapsesFavoriteSections = collapsesFavoriteSections
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case reader
+        case manga
+        case usesDataSaverMode
+        case collapsesFavoriteSections
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        reader = try container.decodeIfPresent(ReaderAppearanceSettings.self, forKey: .reader) ?? .init()
+        manga = try container.decodeIfPresent(MangaReaderSettings.self, forKey: .manga) ?? .init()
+        usesDataSaverMode = try container.decodeIfPresent(Bool.self, forKey: .usesDataSaverMode) ?? false
+        collapsesFavoriteSections = try container.decodeIfPresent(Bool.self, forKey: .collapsesFavoriteSections) ?? false
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(reader, forKey: .reader)
+        try container.encode(manga, forKey: .manga)
+        try container.encode(usesDataSaverMode, forKey: .usesDataSaverMode)
+        try container.encode(collapsesFavoriteSections, forKey: .collapsesFavoriteSections)
     }
 }

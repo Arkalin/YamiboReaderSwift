@@ -8,6 +8,7 @@ public protocol FavoriteStoring: Sendable {
     func setType(_ type: FavoriteType, for favoriteID: String) async throws -> [Favorite]
     func favorite(for url: URL) async -> Favorite?
     func updateReadingProgress(for url: URL, progress: ReaderProgress) async throws -> Favorite
+    func updateMangaProgress(for url: URL, chapterURL: URL, chapterTitle: String, pageIndex: Int) async throws -> Favorite
 }
 
 public actor FavoriteStore: FavoriteStoring {
@@ -110,6 +111,33 @@ public actor FavoriteStore: FavoriteStoring {
             authorID: progress.authorID,
             isHidden: false,
             type: .novel
+        )
+        favorites.append(favorite)
+        try await saveFavorites(favorites)
+        return favorite
+    }
+
+    public func updateMangaProgress(for url: URL, chapterURL: URL, chapterTitle: String, pageIndex: Int) async throws -> Favorite {
+        var favorites = await loadFavorites()
+        if let index = favorites.firstIndex(where: { $0.url == url || $0.id == url.absoluteString }) {
+            favorites[index].lastMangaURL = chapterURL
+            favorites[index].lastChapter = chapterTitle
+            favorites[index].lastPage = max(0, pageIndex)
+            favorites[index].type = .manga
+            try await saveFavorites(favorites)
+            return favorites[index]
+        }
+
+        let favorite = Favorite(
+            title: chapterTitle,
+            url: url,
+            lastPage: max(0, pageIndex),
+            lastView: 1,
+            lastChapter: chapterTitle,
+            authorID: nil,
+            isHidden: false,
+            type: .manga,
+            lastMangaURL: chapterURL
         )
         favorites.append(favorite)
         try await saveFavorites(favorites)

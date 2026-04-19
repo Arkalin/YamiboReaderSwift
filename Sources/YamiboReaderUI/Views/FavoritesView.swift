@@ -93,27 +93,55 @@ public final class FavoritesViewModel: ObservableObject {
     public func resolveOpenTarget(for favorite: Favorite) async -> FavoriteOpenTarget {
         switch favorite.type {
         case .novel:
-            return .reader(favorite)
-        case .manga, .other:
+            return .reader(
+                ReaderLaunchContext(
+                    threadURL: favorite.url,
+                    threadTitle: favorite.title,
+                    source: .favorites,
+                    initialView: favorite.lastView,
+                    initialPage: favorite.lastPage,
+                    authorID: favorite.authorID
+                )
+            )
+        case .manga:
+            return .manga(
+                MangaLaunchContext(
+                    originalThreadURL: favorite.url,
+                    chapterURL: favorite.lastMangaURL ?? favorite.url,
+                    displayTitle: favorite.title,
+                    source: .favorites,
+                    initialPage: favorite.lastPage
+                )
+            )
+        case .other:
             return .web(favorite)
         case .unknown:
             resolvingFavoriteID = favorite.id
             defer { resolvingFavoriteID = nil }
 
             do {
-                let repository = await appContext.makeReaderRepository()
-                let title = try await repository.fetchThreadDisplayTitle(for: favorite.url, authorID: favorite.authorID)
-                if ReaderModeDetector.canOpenReader(url: favorite.url, title: title) {
+                let resolver = await appContext.makeThreadOpenResolver()
+                let target = try await resolver.resolve(
+                    threadURL: favorite.url,
+                    title: favorite.title,
+                    htmlOverride: nil,
+                    favoriteType: .unknown,
+                    favoriteChapterURL: favorite.lastMangaURL,
+                    initialPage: favorite.lastPage
+                )
+                switch target {
+                case let .novel(context):
                     favorites = try await favoriteStore.setType(.novel, for: favorite.id)
+                    return .reader(context)
+                case let .manga(context):
+                    favorites = try await favoriteStore.setType(.manga, for: favorite.id)
+                    return .manga(context)
+                case .web:
+                    favorites = try await favoriteStore.setType(.other, for: favorite.id)
                     var updated = favorite
-                    updated.type = .novel
-                    return .reader(updated)
+                    updated.type = .other
+                    return .web(updated)
                 }
-
-                favorites = try await favoriteStore.setType(.other, for: favorite.id)
-                var updated = favorite
-                updated.type = .other
-                return .web(updated)
             } catch {
                 errorMessage = error.localizedDescription
                 return .web(favorite)
@@ -123,7 +151,8 @@ public final class FavoritesViewModel: ObservableObject {
 }
 
 public enum FavoriteOpenTarget: Sendable {
-    case reader(Favorite)
+    case reader(ReaderLaunchContext)
+    case manga(MangaLaunchContext)
     case web(Favorite)
 }
 
@@ -133,6 +162,7 @@ public struct FavoritesView: View {
     @AppStorage("yamibo.favorite.sort") private var sortRawValue = FavoriteSortOrder.manual.rawValue
     @AppStorage("yamibo.favorite.showHidden") private var showsHidden = false
     @State private var selectedFavorite: Favorite?
+    @State private var showingDirectoryManager = false
     private let appContext: YamiboAppContext
     private let appModel: YamiboAppModel
 
@@ -149,17 +179,10 @@ public struct FavoritesView: View {
                     Task {
                         let target = await viewModel.resolveOpenTarget(for: favorite)
                         switch target {
-                        case let .reader(resolvedFavorite):
-                            appModel.presentReader(
-                                ReaderLaunchContext(
-                                    threadURL: resolvedFavorite.url,
-                                    threadTitle: resolvedFavorite.title,
-                                    source: .favorites,
-                                    initialView: resolvedFavorite.lastView,
-                                    initialPage: resolvedFavorite.lastPage,
-                                    authorID: resolvedFavorite.authorID
-                                )
-                            )
+                        case let .reader(context):
+                            appModel.presentReader(context)
+                        case let .manga(context):
+                            await appModel.openManga(context)
                         case let .web(resolvedFavorite):
                             selectedFavorite = resolvedFavorite
                         }
@@ -229,6 +252,10 @@ public struct FavoritesView: View {
                         }
 
                         Toggle("显示隐藏项", isOn: $showsHidden)
+
+                        Button("管理目录") {
+                            showingDirectoryManager = true
+                        }
                     } label: {
                         Image(systemName: "line.3.horizontal.decrease.circle")
                     }
@@ -251,6 +278,9 @@ public struct FavoritesView: View {
             .sheet(item: $selectedFavorite) { favorite in
                 ForumBrowserView(url: favorite.url, appContext: appContext, appModel: appModel)
                     .ignoresSafeArea()
+            }
+            .sheet(isPresented: $showingDirectoryManager) {
+                MangaDirectoryManagementView(store: appContext.mangaDirectoryStore)
             }
         }
     }
@@ -283,7 +313,13 @@ public struct FavoritesView: View {
 
     private func progressText(for favorite: Favorite) -> String? {
         if let lastChapter = favorite.lastChapter, !lastChapter.isEmpty {
+            if favorite.type == .manga, favorite.lastPage > 0 {
+                return "\(lastChapter) · 第\(favorite.lastPage + 1)页"
+            }
             return lastChapter
+        }
+        if favorite.type == .manga, favorite.lastPage > 0 {
+            return "第\(favorite.lastPage + 1)页"
         }
         if favorite.lastPage > 0 || favorite.lastView > 1 {
             return "第\(favorite.lastPage + 1)页 / 网页第\(favorite.lastView)页"

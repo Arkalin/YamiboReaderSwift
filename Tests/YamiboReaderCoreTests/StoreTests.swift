@@ -49,6 +49,13 @@ import Testing
             readingMode: .vertical,
             translationMode: .traditional
         ),
+        manga: MangaReaderSettings(
+            readingMode: .paged,
+            brightness: 0.82,
+            zoomEnabled: false,
+            showsSystemStatusBar: false,
+            directorySortOrder: .descending
+        ),
         usesDataSaverMode: true,
         collapsesFavoriteSections: true
     )
@@ -82,6 +89,22 @@ import Testing
     #expect(decoded.lineHeightScale == 1.5)
 }
 
+@Test func mangaReaderSettingsDecodesLegacyPayloadWithAscendingDirectorySortOrder() async throws {
+    let legacy = """
+    {
+      "readingMode": "paged",
+      "brightness": 0.8,
+      "zoomEnabled": false,
+      "showsSystemStatusBar": true
+    }
+    """
+
+    let decoded = try JSONDecoder().decode(MangaReaderSettings.self, from: Data(legacy.utf8))
+
+    #expect(decoded.readingMode == .paged)
+    #expect(decoded.directorySortOrder == .ascending)
+}
+
 @Test func favoriteStoreUpdatesReadingProgress() async throws {
     let defaults = try #require(UserDefaults(suiteName: "favorite-progress-tests"))
     defaults.removePersistentDomain(forName: "favorite-progress-tests")
@@ -99,6 +122,27 @@ import Testing
     #expect(favorite?.lastChapter == "第三章")
     #expect(favorite?.authorID == "77")
     #expect(favorite?.type == .novel)
+}
+
+@Test func favoriteStoreUpdatesMangaProgress() async throws {
+    let defaults = try #require(UserDefaults(suiteName: "favorite-manga-progress-tests"))
+    defaults.removePersistentDomain(forName: "favorite-manga-progress-tests")
+    let store = FavoriteStore(defaults: defaults, key: "favorites")
+    let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=40&mobile=2"))
+    let chapterURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=41&mobile=2"))
+
+    _ = try await store.updateMangaProgress(
+        for: url,
+        chapterURL: chapterURL,
+        chapterTitle: "第5话",
+        pageIndex: 8
+    )
+
+    let favorite = await store.favorite(for: url)
+    #expect(favorite?.lastMangaURL == chapterURL)
+    #expect(favorite?.lastChapter == "第5话")
+    #expect(favorite?.lastPage == 8)
+    #expect(favorite?.type == .manga)
 }
 
 @Test func favoriteStoreMergesRemoteFavoritesAndPreservesHiddenLocalEntries() async throws {

@@ -60,14 +60,41 @@ private struct ReaderPresentationModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         #if os(iOS)
-        content.fullScreenCover(item: binding(for: \.activeReaderContext)) { context in
-            ReaderContainerView(context: context, appModel: appModel)
-                .ignoresSafeArea()
-        }
+        content
+            .fullScreenCover(item: binding(for: \.activeReaderContext)) { context in
+                ReaderContainerView(context: context, appModel: appModel)
+                    .ignoresSafeArea()
+            }
+            .fullScreenCover(
+                isPresented: Binding(
+                    get: { appModel.activeMangaRoute != nil },
+                    set: { isPresented in
+                        if !isPresented {
+                            appModel.dismissManga()
+                        }
+                    }
+                )
+            ) {
+                MangaPresentationHostView(appModel: appModel)
+                    .ignoresSafeArea()
+            }
         #else
-        content.sheet(item: binding(for: \.activeReaderContext)) { context in
-            ReaderContainerView(context: context, appModel: appModel)
-        }
+        content
+            .sheet(item: binding(for: \.activeReaderContext)) { context in
+                ReaderContainerView(context: context, appModel: appModel)
+            }
+            .sheet(
+                isPresented: Binding(
+                    get: { appModel.activeMangaRoute != nil },
+                    set: { isPresented in
+                        if !isPresented {
+                            appModel.dismissManga()
+                        }
+                    }
+                )
+            ) {
+                MangaPresentationHostView(appModel: appModel)
+            }
         #endif
     }
 
@@ -76,6 +103,25 @@ private struct ReaderPresentationModifier: ViewModifier {
             get: { appModel[keyPath: keyPath] },
             set: { appModel[keyPath: keyPath] = $0 }
         )
+    }
+}
+
+private struct MangaPresentationHostView: View {
+    let appModel: YamiboAppModel
+
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+
+            switch appModel.activeMangaRoute {
+            case let .native(context)?:
+                MangaReaderView(context: context, appModel: appModel)
+            case let .web(context)?:
+                MangaWebFallbackView(context: context, appModel: appModel)
+            case nil:
+                Color.clear
+            }
+        }
     }
 }
 
