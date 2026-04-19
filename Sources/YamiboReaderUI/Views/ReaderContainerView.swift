@@ -21,7 +21,7 @@ public struct ReaderContainerView: View {
     @State private var showingCachePanel = false
     @State private var showingCacheProgress = false
     @State private var showingWebJumpSheet = false
-    @State private var isChapterDrawerVisible = false
+    @State private var showingChapterSheet = false
     @State private var chromeMode: ReaderChromeMode = .loading
     @State private var verticalScrollRequest: Int?
     @State private var progressPreviewPageIndex: Int?
@@ -52,14 +52,6 @@ public struct ReaderContainerView: View {
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                         .zIndex(1)
                 }
-
-                ReaderChapterDrawerOverlay(
-                    model: model,
-                    isPresented: $isChapterDrawerVisible,
-                    onSelect: { chapter in
-                        jumpToChapter(chapter)
-                    }
-                )
             }
             .safeAreaInset(edge: .top, spacing: 0) {
                 if chromeMode.showsChrome {
@@ -106,6 +98,14 @@ public struct ReaderContainerView: View {
             }
             .sheet(isPresented: $showingSettings) {
                 ReaderSettingsPanel(model: model)
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.hidden)
+                    .presentationBackground(.clear)
+            }
+            .sheet(isPresented: $showingChapterSheet) {
+                ReaderChapterSheet(model: model) { chapter in
+                    jumpToChapter(chapter)
+                }
             }
             .sheet(isPresented: $showingCachePanel) {
                 ReaderCachePanel(model: model) {
@@ -152,7 +152,7 @@ public struct ReaderContainerView: View {
             .onChange(of: showingWebJumpSheet) { _, _ in
                 updateChromeForContentState()
             }
-            .onChange(of: isChapterDrawerVisible) { _, _ in
+            .onChange(of: showingChapterSheet) { _, _ in
                 updateChromeForContentState()
             }
             .animation(.easeInOut(duration: 0.2), value: isProgressPreviewVisible)
@@ -304,9 +304,7 @@ public struct ReaderContainerView: View {
 
     private func openChapterDrawer() {
         chromeMode = .visible
-        withAnimation(.easeInOut(duration: 0.2)) {
-            isChapterDrawerVisible = true
-        }
+        showingChapterSheet = true
     }
 
     private func openSettings() {
@@ -398,7 +396,7 @@ public struct ReaderContainerView: View {
     }
 
     private var hasPresentedOverlay: Bool {
-        showingSettings || showingCachePanel || showingCacheProgress || showingWebJumpSheet || isChapterDrawerVisible
+        showingSettings || showingCachePanel || showingCacheProgress || showingWebJumpSheet || showingChapterSheet
     }
 
     private func handleProgressPreviewChange(value: Double?, isEditing: Bool) {

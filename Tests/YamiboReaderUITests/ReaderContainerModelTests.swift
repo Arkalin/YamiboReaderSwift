@@ -134,6 +134,32 @@ final class ReaderContainerModelTests: XCTestCase {
         }
     }
 
+    func testApplySettingsUpdatesStoredReaderSettings() async throws {
+        let model = try await makeModel(
+            documents: [
+                makeDocument(view: 1, maxView: 1, chapterTitles: ["第一章", "第二章"]),
+            ]
+        )
+        let updated = ReaderAppearanceSettings(
+            fontScale: 1.2,
+            fontFamily: .rounded,
+            lineHeightScale: 1.7,
+            characterSpacingScale: 0.05,
+            horizontalPadding: 22,
+            usesNightMode: true,
+            showsSystemStatusBar: false,
+            loadsInlineImages: false,
+            backgroundStyle: .paper,
+            readingMode: .vertical,
+            translationMode: .traditional
+        )
+
+        await MainActor.run {
+            model.applySettings(updated)
+            XCTAssertEqual(model.settings, updated)
+        }
+    }
+
     func testCachedViewsTrackCurrentVariant() async throws {
         let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=556677&mobile=2")!
         let unfilteredDocument = makeDocument(

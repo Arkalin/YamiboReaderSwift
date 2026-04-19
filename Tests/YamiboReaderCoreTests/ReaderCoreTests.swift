@@ -431,6 +431,65 @@ private final class StubURLProtocol: URLProtocol, @unchecked Sendable {
     #expect(vertical.chapters.last?.title == "第二章")
 }
 
+@Test func readerPaginatorAccountsForFontFamilyAndCharacterSpacing() async throws {
+    let document = ReaderPageDocument(
+        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=44&mobile=2")),
+        view: 1,
+        maxView: 1,
+        segments: [
+            .text(String(repeating: "这是一个很长的段落。", count: 120), chapterTitle: "第一章")
+        ]
+    )
+
+    let compact = ReaderPaginator.paginate(
+        document: document,
+        settings: ReaderAppearanceSettings(
+            fontScale: 1.0,
+            fontFamily: .systemSans,
+            lineHeightScale: 1.45,
+            characterSpacingScale: 0,
+            readingMode: .paged
+        ),
+        layout: ReaderContainerLayout(width: 320, height: 568)
+    )
+    let expanded = ReaderPaginator.paginate(
+        document: document,
+        settings: ReaderAppearanceSettings(
+            fontScale: 1.0,
+            fontFamily: .systemSerif,
+            lineHeightScale: 1.45,
+            characterSpacingScale: 0.12,
+            readingMode: .paged
+        ),
+        layout: ReaderContainerLayout(width: 320, height: 568)
+    )
+    let verticalCompact = ReaderPaginator.paginate(
+        document: document,
+        settings: ReaderAppearanceSettings(
+            fontScale: 1.0,
+            fontFamily: .systemSans,
+            lineHeightScale: 1.45,
+            characterSpacingScale: 0,
+            readingMode: .vertical
+        ),
+        layout: ReaderContainerLayout(width: 320, height: 568)
+    )
+    let verticalExpanded = ReaderPaginator.paginate(
+        document: document,
+        settings: ReaderAppearanceSettings(
+            fontScale: 1.0,
+            fontFamily: .rounded,
+            lineHeightScale: 1.45,
+            characterSpacingScale: 0.12,
+            readingMode: .vertical
+        ),
+        layout: ReaderContainerLayout(width: 320, height: 568)
+    )
+
+    #expect(expanded.pages.count >= compact.pages.count)
+    #expect(verticalExpanded.pages.count >= verticalCompact.pages.count)
+}
+
 @Test func readerCacheStorePersistsAndDeletesPages() async throws {
     let directory = URL(fileURLWithPath: NSTemporaryDirectory())
         .appendingPathComponent(UUID().uuidString, isDirectory: true)

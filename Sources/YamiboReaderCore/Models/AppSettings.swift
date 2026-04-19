@@ -42,9 +42,33 @@ public enum ReaderTranslationMode: String, Codable, Hashable, CaseIterable, Send
     }
 }
 
+public enum ReaderFontFamily: String, Codable, Hashable, CaseIterable, Sendable {
+    case systemSans
+    case systemSerif
+    case rounded
+
+    public var title: String {
+        switch self {
+        case .systemSans: "苹方"
+        case .systemSerif: "宋体"
+        case .rounded: "圆角"
+        }
+    }
+
+    public var paginationWidthFactor: Double {
+        switch self {
+        case .systemSans: 0.9
+        case .systemSerif: 0.98
+        case .rounded: 0.94
+        }
+    }
+}
+
 public struct ReaderAppearanceSettings: Codable, Hashable, Sendable {
     public var fontScale: Double
+    public var fontFamily: ReaderFontFamily
     public var lineHeightScale: Double
+    public var characterSpacingScale: Double
     public var horizontalPadding: Double
     public var usesNightMode: Bool
     public var showsSystemStatusBar: Bool
@@ -55,7 +79,9 @@ public struct ReaderAppearanceSettings: Codable, Hashable, Sendable {
 
     public init(
         fontScale: Double = 1.0,
+        fontFamily: ReaderFontFamily = .systemSans,
         lineHeightScale: Double = 1.45,
+        characterSpacingScale: Double = 0,
         horizontalPadding: Double = 16,
         usesNightMode: Bool = false,
         showsSystemStatusBar: Bool = true,
@@ -65,7 +91,9 @@ public struct ReaderAppearanceSettings: Codable, Hashable, Sendable {
         translationMode: ReaderTranslationMode = .none
     ) {
         self.fontScale = fontScale
+        self.fontFamily = fontFamily
         self.lineHeightScale = lineHeightScale
+        self.characterSpacingScale = characterSpacingScale
         self.horizontalPadding = horizontalPadding
         self.usesNightMode = usesNightMode
         self.showsSystemStatusBar = showsSystemStatusBar
@@ -77,7 +105,9 @@ public struct ReaderAppearanceSettings: Codable, Hashable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case fontScale
+        case fontFamily
         case lineHeightScale
+        case characterSpacingScale
         case horizontalPadding
         case usesNightMode
         case showsSystemStatusBar
@@ -90,7 +120,9 @@ public struct ReaderAppearanceSettings: Codable, Hashable, Sendable {
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         fontScale = try container.decodeIfPresent(Double.self, forKey: .fontScale) ?? 1.0
+        fontFamily = try container.decodeIfPresent(ReaderFontFamily.self, forKey: .fontFamily) ?? .systemSans
         lineHeightScale = try container.decodeIfPresent(Double.self, forKey: .lineHeightScale) ?? 1.45
+        characterSpacingScale = try container.decodeIfPresent(Double.self, forKey: .characterSpacingScale) ?? 0
         horizontalPadding = try container.decodeIfPresent(Double.self, forKey: .horizontalPadding) ?? 16
         usesNightMode = try container.decodeIfPresent(Bool.self, forKey: .usesNightMode) ?? false
         showsSystemStatusBar = try container.decodeIfPresent(Bool.self, forKey: .showsSystemStatusBar) ?? true
@@ -103,7 +135,9 @@ public struct ReaderAppearanceSettings: Codable, Hashable, Sendable {
     public func encode(to encoder: any Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(fontScale, forKey: .fontScale)
+        try container.encode(fontFamily, forKey: .fontFamily)
         try container.encode(lineHeightScale, forKey: .lineHeightScale)
+        try container.encode(characterSpacingScale, forKey: .characterSpacingScale)
         try container.encode(horizontalPadding, forKey: .horizontalPadding)
         try container.encode(usesNightMode, forKey: .usesNightMode)
         try container.encode(showsSystemStatusBar, forKey: .showsSystemStatusBar)

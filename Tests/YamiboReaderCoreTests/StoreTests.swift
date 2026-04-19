@@ -39,7 +39,9 @@ import Testing
     let settings = AppSettings(
         reader: ReaderAppearanceSettings(
             fontScale: 1.1,
+            fontFamily: .rounded,
             lineHeightScale: 1.6,
+            characterSpacingScale: 0.04,
             horizontalPadding: 20,
             usesNightMode: true,
             loadsInlineImages: false,
@@ -55,6 +57,29 @@ import Testing
     let loaded = await store.load()
 
     #expect(loaded == settings)
+}
+
+@Test func readerAppearanceSettingsDecodesLegacyPayloadWithFontDefaults() async throws {
+    let legacy = """
+    {
+      "fontScale": 1.2,
+      "lineHeightScale": 1.5,
+      "horizontalPadding": 18,
+      "usesNightMode": true,
+      "showsSystemStatusBar": false,
+      "loadsInlineImages": false,
+      "backgroundStyle": "paper",
+      "readingMode": "vertical",
+      "translationMode": "traditional"
+    }
+    """
+
+    let decoded = try JSONDecoder().decode(ReaderAppearanceSettings.self, from: Data(legacy.utf8))
+
+    #expect(decoded.fontFamily == .systemSans)
+    #expect(decoded.characterSpacingScale == 0)
+    #expect(decoded.fontScale == 1.2)
+    #expect(decoded.lineHeightScale == 1.5)
 }
 
 @Test func favoriteStoreUpdatesReadingProgress() async throws {

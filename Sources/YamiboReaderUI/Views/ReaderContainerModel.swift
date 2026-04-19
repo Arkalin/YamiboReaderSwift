@@ -274,52 +274,73 @@ public final class ReaderContainerModel: ObservableObject {
     }
 
     public func updateReadingMode(_ mode: ReaderReadingMode) {
-        settings.readingMode = mode
-        persistSettings()
-        repaginate(anchor: currentAnchor())
+        var updatedSettings = settings
+        updatedSettings.readingMode = mode
+        applySettings(updatedSettings)
     }
 
     public func updateNightMode(_ value: Bool) {
-        settings.usesNightMode = value
-        persistSettings()
+        var updatedSettings = settings
+        updatedSettings.usesNightMode = value
+        applySettings(updatedSettings)
     }
 
     public func updateSystemStatusBarVisibility(_ value: Bool) {
-        settings.showsSystemStatusBar = value
-        persistSettings()
+        var updatedSettings = settings
+        updatedSettings.showsSystemStatusBar = value
+        applySettings(updatedSettings)
     }
 
     public func updateImageLoading(_ value: Bool) {
-        settings.loadsInlineImages = value
-        persistSettings()
-        repaginate(anchor: currentAnchor())
+        var updatedSettings = settings
+        updatedSettings.loadsInlineImages = value
+        applySettings(updatedSettings)
     }
 
     public func updateFontScale(_ value: Double) {
-        settings.fontScale = value
-        persistSettings()
-        repaginate(anchor: currentAnchor())
+        var updatedSettings = settings
+        updatedSettings.fontScale = value
+        applySettings(updatedSettings)
+    }
+
+    public func updateFontFamily(_ value: ReaderFontFamily) {
+        var updatedSettings = settings
+        updatedSettings.fontFamily = value
+        applySettings(updatedSettings)
     }
 
     public func updateLineHeightScale(_ value: Double) {
-        settings.lineHeightScale = value
-        persistSettings()
-        repaginate(anchor: currentAnchor())
+        var updatedSettings = settings
+        updatedSettings.lineHeightScale = value
+        applySettings(updatedSettings)
+    }
+
+    public func updateCharacterSpacingScale(_ value: Double) {
+        var updatedSettings = settings
+        updatedSettings.characterSpacingScale = value
+        applySettings(updatedSettings)
     }
 
     public func updateHorizontalPadding(_ value: Double) {
-        settings.horizontalPadding = value
-        persistSettings()
-        repaginate(anchor: currentAnchor())
+        var updatedSettings = settings
+        updatedSettings.horizontalPadding = value
+        applySettings(updatedSettings)
     }
 
     public func updateBackgroundStyle(_ value: ReaderBackgroundStyle) {
-        settings.backgroundStyle = value
-        persistSettings()
+        var updatedSettings = settings
+        updatedSettings.backgroundStyle = value
+        applySettings(updatedSettings)
     }
 
     public func updateTranslationMode(_ value: ReaderTranslationMode) {
-        settings.translationMode = value
+        var updatedSettings = settings
+        updatedSettings.translationMode = value
+        applySettings(updatedSettings)
+    }
+
+    public func applySettings(_ newSettings: ReaderAppearanceSettings) {
+        settings = newSettings
         persistSettings()
         repaginate(anchor: currentAnchor())
     }

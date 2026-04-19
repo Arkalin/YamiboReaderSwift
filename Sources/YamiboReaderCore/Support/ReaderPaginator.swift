@@ -13,7 +13,7 @@ public enum ReaderPaginator {
         case .paged:
             return paginatePaged(segments: transformedSegments, settings: settings, layout: usableLayout)
         case .vertical:
-            return paginateVertical(segments: transformedSegments)
+            return paginateVertical(segments: transformedSegments, settings: settings, layout: usableLayout)
         }
     }
 
@@ -22,8 +22,7 @@ public enum ReaderPaginator {
         settings: ReaderAppearanceSettings,
         layout: ReaderContainerLayout
     ) -> ReaderPaginationResult {
-        let fontSize = max(14, 22 * settings.fontScale)
-        let lineHeight = max(fontSize * settings.lineHeightScale, fontSize * 1.35)
+        let metrics = textMetrics(settings: settings)
 
         var pages: [ReaderRenderedPage] = []
         var chapters: [ReaderChapter] = []
@@ -36,8 +35,8 @@ public enum ReaderPaginator {
                     text,
                     width: layout.width,
                     height: layout.height,
-                    fontSize: fontSize,
-                    lineHeight: lineHeight
+                    settings: settings,
+                    metrics: metrics
                 )
                 for slice in slices where !slice.isEmpty {
                     let page = ReaderRenderedPage(
@@ -68,7 +67,11 @@ public enum ReaderPaginator {
         return ReaderPaginationResult(pages: pages, chapters: chapters)
     }
 
-    private static func paginateVertical(segments: [ReaderSegment]) -> ReaderPaginationResult {
+    private static func paginateVertical(
+        segments: [ReaderSegment],
+        settings: ReaderAppearanceSettings,
+        layout: ReaderContainerLayout
+    ) -> ReaderPaginationResult {
         var pages: [ReaderRenderedPage] = []
         var chapters: [ReaderChapter] = []
         var seenTitles = Set<String>()
@@ -76,7 +79,7 @@ public enum ReaderPaginator {
         for segment in segments {
             switch segment {
             case let .text(text, chapterTitle):
-                let chunks = verticalTextChunks(from: text)
+                let chunks = verticalTextChunks(from: text, settings: settings, layout: layout)
                 for chunk in chunks where !chunk.isEmpty {
                     let page = ReaderRenderedPage(
                         index: pages.count,
@@ -131,14 +134,14 @@ public enum ReaderPaginator {
         _ text: String,
         width: CGFloat,
         height: CGFloat,
-        fontSize: CGFloat,
-        lineHeight: CGFloat
+        settings: ReaderAppearanceSettings,
+        metrics: ReaderTextMetrics
     ) -> [String] {
         let normalized = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalized.isEmpty else { return [] }
 
-        let charsPerLine = max(12, Int(width / max(fontSize * 0.9, 1)))
-        let linesPerPage = max(6, Int(height / max(lineHeight, 1)))
+        let charsPerLine = max(10, Int(width / max(metrics.characterWidth, 1)))
+        let linesPerPage = max(6, Int(height / max(metrics.lineHeight, 1)))
         let charsPerPage = max(120, charsPerLine * linesPerPage)
 
         let paragraphs = normalized
@@ -184,7 +187,12 @@ public enum ReaderPaginator {
         return pages.isEmpty ? [normalized] : pages
     }
 
-    private static func verticalTextChunks(from text: String) -> [String] {
+    private static func verticalTextChunks(
+        from text: String,
+        settings: ReaderAppearanceSettings,
+        layout: ReaderContainerLayout
+    ) -> [String] {
+        let metrics = textMetrics(settings: settings)
         let paragraphs = text
             .components(separatedBy: "\n\n")
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -196,18 +204,21 @@ public enum ReaderPaginator {
 
         var results: [String] = []
         var current = ""
+        let charsPerLine = max(10, Int(layout.width / max(metrics.characterWidth, 1)))
+        let linesPerChunk = max(10, Int((layout.height * 1.8) / max(metrics.lineHeight, 1)))
+        let chunkLimit = max(220, charsPerLine * linesPerChunk)
 
         for paragraph in paragraphs {
             let separator = current.isEmpty ? "" : "\n\n"
-            if (current + separator + paragraph).count > 700 {
+            if (current + separator + paragraph).count > chunkLimit {
                 if !current.isEmpty {
                     results.append(current)
                     current = ""
                 }
-                if paragraph.count > 700 {
+                if paragraph.count > chunkLimit {
                     var remainder = paragraph[...]
-                    while remainder.count > 700 {
-                        let splitIndex = remainder.index(remainder.startIndex, offsetBy: 700)
+                    while remainder.count > chunkLimit {
+                        let splitIndex = remainder.index(remainder.startIndex, offsetBy: chunkLimit)
                         results.append(String(remainder[..<splitIndex]))
                         remainder = remainder[splitIndex...]
                     }
@@ -225,4 +236,22 @@ public enum ReaderPaginator {
         }
         return results
     }
+
+    private static func textMetrics(settings: ReaderAppearanceSettings) -> ReaderTextMetrics {
+        let fontSize = max(14, 22 * settings.fontScale)
+        let lineHeight = max(fontSize * settings.lineHeightScale, fontSize * 1.35)
+        let characterSpacing = fontSize * settings.characterSpacingScale * 0.45
+        let characterWidth = fontSize * settings.fontFamily.paginationWidthFactor + characterSpacing
+        return ReaderTextMetrics(
+            fontSize: fontSize,
+            lineHeight: lineHeight,
+            characterWidth: characterWidth
+        )
+    }
+}
+
+private struct ReaderTextMetrics {
+    let fontSize: CGFloat
+    let lineHeight: CGFloat
+    let characterWidth: CGFloat
 }
