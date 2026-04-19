@@ -143,7 +143,7 @@ public struct MangaReaderView: View {
                     verticalZoomOverlay: $verticalZoomOverlay,
                     usesOverlayPresentation: false,
                     readerCoordinateSpaceName: nil,
-                    showsChapterTitle: true,
+                    showsChapterTitle: false,
                     onToggleChrome: { showingChrome.toggle() }
                 )
                 .tag(Optional(page.id))
