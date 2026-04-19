@@ -10,6 +10,7 @@ public struct MangaReaderView: View {
     @State private var showingDirectorySheet = false
     @State private var showingChrome = true
     @State private var selectedPageID: MangaPage.ID?
+    @State private var activeZoomPageID: MangaPage.ID?
     @State private var pagerRevision = UUID()
     @State private var sliderValue = 0.0
     @State private var isEditingSlider = false
@@ -136,6 +137,7 @@ public struct MangaReaderView: View {
                     refererURL: page.chapterURL,
                     imageRepository: appModel.appContext.mangaImageRepository,
                     zoomEnabled: model.settings.zoomEnabled,
+                    activeZoomPageID: $activeZoomPageID,
                     showsChapterTitle: true,
                     onToggleChrome: { showingChrome.toggle() }
                 )
@@ -147,6 +149,7 @@ public struct MangaReaderView: View {
         .id(pagerRevision)
         .tabViewStyle(.page(indexDisplayMode: .never))
         .onAppear {
+            activeZoomPageID = nil
             if let request = model.viewportRequest {
                 applyViewportRequest(request)
             } else {
@@ -155,10 +158,12 @@ public struct MangaReaderView: View {
         }
         .onChange(of: selectedPageID) { _, newValue in
             guard let newValue else { return }
+            activeZoomPageID = nil
             model.updateCurrentPage(forPageID: newValue)
         }
         .onChange(of: model.viewportRequest) { _, newValue in
             guard let newValue else { return }
+            activeZoomPageID = nil
             applyViewportRequest(newValue)
         }
     }
@@ -173,6 +178,7 @@ public struct MangaReaderView: View {
                             refererURL: page.chapterURL,
                             imageRepository: appModel.appContext.mangaImageRepository,
                             zoomEnabled: model.settings.zoomEnabled,
+                            activeZoomPageID: $activeZoomPageID,
                             showsChapterTitle: false,
                             onToggleChrome: { showingChrome.toggle() }
                         )
@@ -185,11 +191,13 @@ public struct MangaReaderView: View {
                 .padding(.vertical, 12)
             }
             .onAppear {
+                activeZoomPageID = nil
                 guard let request = model.viewportRequest else { return }
                 proxy.scrollTo(request.targetPageID, anchor: .top)
             }
             .onChange(of: model.viewportRequest) { _, request in
                 guard let request else { return }
+                activeZoomPageID = nil
                 if request.animated {
                     withAnimation(.easeInOut(duration: 0.2)) {
                         proxy.scrollTo(request.targetPageID, anchor: .top)
@@ -707,6 +715,7 @@ private struct MangaPageContent: View {
     let refererURL: URL
     let imageRepository: MangaImageRepository
     let zoomEnabled: Bool
+    @Binding var activeZoomPageID: MangaPage.ID?
     let showsChapterTitle: Bool
     let onToggleChrome: () -> Void
 
@@ -717,7 +726,8 @@ private struct MangaPageContent: View {
                 url: page.imageURL,
                 refererURL: refererURL,
                 imageRepository: imageRepository,
-                zoomEnabled: zoomEnabled
+                zoomEnabled: zoomEnabled,
+                activeZoomPageID: $activeZoomPageID
             )
             if showsChapterTitle {
                 Text(page.chapterTitle)
@@ -774,6 +784,7 @@ private struct MangaAuthenticatedImage: View {
     @StateObject private var loader: MangaImageLoader
     let pageID: MangaPage.ID
     let zoomEnabled: Bool
+    @Binding var activeZoomPageID: MangaPage.ID?
     @State private var steadyScale: CGFloat = 1
     @State private var gestureScale: CGFloat = 1
     @State private var steadyOffset: CGSize = .zero
@@ -784,7 +795,8 @@ private struct MangaAuthenticatedImage: View {
         url: URL,
         refererURL: URL,
         imageRepository: MangaImageRepository,
-        zoomEnabled: Bool
+        zoomEnabled: Bool,
+        activeZoomPageID: Binding<MangaPage.ID?>
     ) {
         self.pageID = pageID
         _loader = StateObject(
@@ -795,6 +807,7 @@ private struct MangaAuthenticatedImage: View {
             )
         )
         self.zoomEnabled = zoomEnabled
+        _activeZoomPageID = activeZoomPageID
     }
 
     var body: some View {
@@ -826,6 +839,14 @@ private struct MangaAuthenticatedImage: View {
         .onChange(of: pageID) { _, _ in
             resetInteractionState()
         }
+        .onChange(of: zoomEnabled) { _, isEnabled in
+            guard !isEnabled else { return }
+            resetInteractionState()
+        }
+        .onChange(of: activeZoomPageID) { _, newValue in
+            guard let newValue, newValue != pageID, steadyScale > 1.01 else { return }
+            resetInteractionState()
+        }
         .simultaneousGesture(doubleTapGesture)
         .simultaneousGesture(magnifyGesture)
     }
@@ -839,10 +860,11 @@ private struct MangaAuthenticatedImage: View {
             .onEnded {
                 guard zoomEnabled else { return }
                 if steadyScale > 1.05 {
-                    steadyScale = 1
-                    steadyOffset = .zero
+                    resetInteractionState()
                 } else {
+                    guard canBeginZoom else { return }
                     steadyScale = 2
+                    activeZoomPageID = pageID
                 }
             }
     }
@@ -851,15 +873,24 @@ private struct MangaAuthenticatedImage: View {
         MagnifyGesture()
             .onChanged { value in
                 guard zoomEnabled else { return }
+                guard canContinueMagnify else {
+                    gestureScale = 1
+                    return
+                }
                 gestureScale = value.magnification
             }
             .onEnded { value in
                 guard zoomEnabled else { return }
+                guard canContinueMagnify else {
+                    gestureScale = 1
+                    return
+                }
                 steadyScale = min(4, max(1, steadyScale * value.magnification))
                 gestureScale = 1
                 if steadyScale <= 1.01 {
-                    steadyScale = 1
-                    steadyOffset = .zero
+                    resetInteractionState()
+                } else {
+                    activeZoomPageID = pageID
                 }
             }
     }
@@ -895,6 +926,17 @@ private struct MangaAuthenticatedImage: View {
         gestureScale = 1
         steadyOffset = .zero
         gestureOffset = .zero
+        if activeZoomPageID == pageID {
+            activeZoomPageID = nil
+        }
+    }
+
+    private var canBeginZoom: Bool {
+        activeZoomPageID == nil || activeZoomPageID == pageID
+    }
+
+    private var canContinueMagnify: Bool {
+        steadyScale > 1.01 || canBeginZoom
     }
 }
 #else
