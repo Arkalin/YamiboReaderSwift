@@ -5,12 +5,14 @@ import YamiboReaderCore
 import UIKit
 
 public struct MangaReaderView: View {
+    private static let verticalReaderCoordinateSpaceName = "MangaReaderVerticalCoordinateSpace"
     @StateObject private var model: MangaReaderModel
     @State private var showingSettings = false
     @State private var showingDirectorySheet = false
     @State private var showingChrome = true
     @State private var selectedPageID: MangaPage.ID?
     @State private var activeZoomPageID: MangaPage.ID?
+    @State private var verticalZoomOverlay: MangaVerticalZoomOverlayState?
     @State private var pagerRevision = UUID()
     @State private var sliderValue = 0.0
     @State private var isEditingSlider = false
@@ -138,6 +140,9 @@ public struct MangaReaderView: View {
                     imageRepository: appModel.appContext.mangaImageRepository,
                     zoomEnabled: model.settings.zoomEnabled,
                     activeZoomPageID: $activeZoomPageID,
+                    verticalZoomOverlay: $verticalZoomOverlay,
+                    usesOverlayPresentation: false,
+                    readerCoordinateSpaceName: nil,
                     showsChapterTitle: true,
                     onToggleChrome: { showingChrome.toggle() }
                 )
@@ -150,6 +155,7 @@ public struct MangaReaderView: View {
         .tabViewStyle(.page(indexDisplayMode: .never))
         .onAppear {
             activeZoomPageID = nil
+            verticalZoomOverlay = nil
             if let request = model.viewportRequest {
                 applyViewportRequest(request)
             } else {
@@ -159,45 +165,65 @@ public struct MangaReaderView: View {
         .onChange(of: selectedPageID) { _, newValue in
             guard let newValue else { return }
             activeZoomPageID = nil
+            verticalZoomOverlay = nil
             model.updateCurrentPage(forPageID: newValue)
         }
         .onChange(of: model.viewportRequest) { _, newValue in
             guard let newValue else { return }
             activeZoomPageID = nil
+            verticalZoomOverlay = nil
             applyViewportRequest(newValue)
         }
     }
 
     private var verticalContent: some View {
         ScrollViewReader { proxy in
-            ScrollView(.vertical) {
-                LazyVStack(spacing: 12) {
-                    ForEach(model.pages) { page in
-                        MangaPageContent(
-                            page: page,
-                            refererURL: page.chapterURL,
-                            imageRepository: appModel.appContext.mangaImageRepository,
-                            zoomEnabled: model.settings.zoomEnabled,
-                            activeZoomPageID: $activeZoomPageID,
-                            showsChapterTitle: false,
-                            onToggleChrome: { showingChrome.toggle() }
-                        )
-                        .id(page.id)
-                        .onAppear {
-                            model.updateCurrentPage(forPageID: page.id)
+            ZStack {
+                ScrollView(.vertical) {
+                    LazyVStack(spacing: 12) {
+                        ForEach(model.pages) { page in
+                            MangaPageContent(
+                                page: page,
+                                refererURL: page.chapterURL,
+                                imageRepository: appModel.appContext.mangaImageRepository,
+                                zoomEnabled: model.settings.zoomEnabled,
+                                activeZoomPageID: $activeZoomPageID,
+                                verticalZoomOverlay: $verticalZoomOverlay,
+                                usesOverlayPresentation: true,
+                                readerCoordinateSpaceName: Self.verticalReaderCoordinateSpaceName,
+                                showsChapterTitle: false,
+                                onToggleChrome: { showingChrome.toggle() }
+                            )
+                            .id(page.id)
+                            .onAppear {
+                                model.updateCurrentPage(forPageID: page.id)
+                            }
                         }
                     }
+                    .padding(.vertical, 12)
                 }
-                .padding(.vertical, 12)
+                .coordinateSpace(name: Self.verticalReaderCoordinateSpaceName)
+                .scrollDisabled(activeZoomPageID != nil)
+
+                if let overlay = verticalZoomOverlay {
+                    MangaVerticalZoomOverlay(
+                        overlay: $verticalZoomOverlay,
+                        activeZoomPageID: $activeZoomPageID,
+                        zoomEnabled: model.settings.zoomEnabled
+                    )
+                    .zIndex(10)
+                }
             }
             .onAppear {
                 activeZoomPageID = nil
+                verticalZoomOverlay = nil
                 guard let request = model.viewportRequest else { return }
                 proxy.scrollTo(request.targetPageID, anchor: .top)
             }
             .onChange(of: model.viewportRequest) { _, request in
                 guard let request else { return }
                 activeZoomPageID = nil
+                verticalZoomOverlay = nil
                 if request.animated {
                     withAnimation(.easeInOut(duration: 0.2)) {
                         proxy.scrollTo(request.targetPageID, anchor: .top)
@@ -716,6 +742,9 @@ private struct MangaPageContent: View {
     let imageRepository: MangaImageRepository
     let zoomEnabled: Bool
     @Binding var activeZoomPageID: MangaPage.ID?
+    @Binding var verticalZoomOverlay: MangaVerticalZoomOverlayState?
+    let usesOverlayPresentation: Bool
+    let readerCoordinateSpaceName: String?
     let showsChapterTitle: Bool
     let onToggleChrome: () -> Void
 
@@ -727,7 +756,10 @@ private struct MangaPageContent: View {
                 refererURL: refererURL,
                 imageRepository: imageRepository,
                 zoomEnabled: zoomEnabled,
-                activeZoomPageID: $activeZoomPageID
+                activeZoomPageID: $activeZoomPageID,
+                verticalZoomOverlay: $verticalZoomOverlay,
+                usesOverlayPresentation: usesOverlayPresentation,
+                readerCoordinateSpaceName: readerCoordinateSpaceName
             )
             if showsChapterTitle {
                 Text(page.chapterTitle)
@@ -785,6 +817,11 @@ private struct MangaAuthenticatedImage: View {
     let pageID: MangaPage.ID
     let zoomEnabled: Bool
     @Binding var activeZoomPageID: MangaPage.ID?
+    @Binding var verticalZoomOverlay: MangaVerticalZoomOverlayState?
+    let usesOverlayPresentation: Bool
+    let readerCoordinateSpaceName: String?
+    @State private var baseImageSize: CGSize = .zero
+    @State private var imageFrameInReader: CGRect = .zero
     @State private var steadyScale: CGFloat = 1
     @State private var gestureScale: CGFloat = 1
     @State private var steadyOffset: CGSize = .zero
@@ -796,7 +833,10 @@ private struct MangaAuthenticatedImage: View {
         refererURL: URL,
         imageRepository: MangaImageRepository,
         zoomEnabled: Bool,
-        activeZoomPageID: Binding<MangaPage.ID?>
+        activeZoomPageID: Binding<MangaPage.ID?>,
+        verticalZoomOverlay: Binding<MangaVerticalZoomOverlayState?>,
+        usesOverlayPresentation: Bool,
+        readerCoordinateSpaceName: String?
     ) {
         self.pageID = pageID
         _loader = StateObject(
@@ -808,6 +848,9 @@ private struct MangaAuthenticatedImage: View {
         )
         self.zoomEnabled = zoomEnabled
         _activeZoomPageID = activeZoomPageID
+        _verticalZoomOverlay = verticalZoomOverlay
+        self.usesOverlayPresentation = usesOverlayPresentation
+        self.readerCoordinateSpaceName = readerCoordinateSpaceName
     }
 
     var body: some View {
@@ -817,13 +860,21 @@ private struct MangaAuthenticatedImage: View {
                     Image(uiImage: image)
                         .resizable()
                         .scaledToFit()
-                        .scaleEffect(effectiveScale)
-                        .offset(
-                            x: steadyOffset.width + gestureOffset.width,
-                            y: steadyOffset.height + gestureOffset.height
+                        .background(
+                            GeometryReader { geometry in
+                                Color.clear
+                                    .preference(key: MangaImageBaseSizePreferenceKey.self, value: geometry.size)
+                            }
                         )
-                        .animation(.easeOut(duration: 0.2), value: steadyScale)
-                        .animation(.easeOut(duration: 0.2), value: steadyOffset)
+                        .background(frameMeasurementOverlay)
+                        .scaleEffect(inlineEffectiveScale)
+                        .offset(
+                            x: inlineOffset.width,
+                            y: inlineOffset.height
+                        )
+                        .opacity(shouldHideInlineImage ? 0 : 1)
+                        .animation(.easeOut(duration: 0.2), value: inlineSteadyScale)
+                        .animation(.easeOut(duration: 0.2), value: inlineSteadyOffset)
                 } else if loader.didFail {
                     Label("图片加载失败", systemImage: "photo")
                         .foregroundStyle(.secondary)
@@ -844,8 +895,23 @@ private struct MangaAuthenticatedImage: View {
             resetInteractionState()
         }
         .onChange(of: activeZoomPageID) { _, newValue in
-            guard let newValue, newValue != pageID, steadyScale > 1.01 else { return }
+            guard let newValue, newValue != pageID else {
+                if newValue == nil, usesOverlayPresentation {
+                    verticalZoomOverlay = nil
+                }
+                return
+            }
+            guard steadyScale > 1.01 || (verticalZoomOverlay?.pageID == pageID) else { return }
             resetInteractionState()
+        }
+        .onPreferenceChange(MangaImageBaseSizePreferenceKey.self) { newValue in
+            baseImageSize = newValue
+            if usesOverlayPresentation {
+                updateVerticalOverlayIfNeeded()
+            } else {
+                steadyOffset = clampedOffset(steadyOffset, scale: steadyScale)
+                gestureOffset = .zero
+            }
         }
         .simultaneousGesture(doubleTapGesture)
         .simultaneousGesture(magnifyGesture)
@@ -855,16 +921,50 @@ private struct MangaAuthenticatedImage: View {
         steadyScale * gestureScale
     }
 
+    private var inlineEffectiveScale: CGFloat {
+        usesOverlayPresentation ? 1 : effectiveScale
+    }
+
+    private var inlineSteadyScale: CGFloat {
+        usesOverlayPresentation ? 1 : steadyScale
+    }
+
+    private var inlineOffset: CGSize {
+        usesOverlayPresentation ? .zero : CGSize(
+            width: steadyOffset.width + gestureOffset.width,
+            height: steadyOffset.height + gestureOffset.height
+        )
+    }
+
+    private var inlineSteadyOffset: CGSize {
+        usesOverlayPresentation ? .zero : steadyOffset
+    }
+
+    private var shouldHideInlineImage: Bool {
+        usesOverlayPresentation && verticalZoomOverlay?.pageID == pageID
+    }
+
     private var doubleTapGesture: some Gesture {
         TapGesture(count: 2)
             .onEnded {
                 guard zoomEnabled else { return }
-                if steadyScale > 1.05 {
-                    resetInteractionState()
+                if usesOverlayPresentation {
+                    if verticalZoomOverlay?.pageID == pageID {
+                        resetInteractionState()
+                    } else {
+                        guard canBeginZoom else { return }
+                        activateVerticalOverlay(targetScale: 2)
+                    }
                 } else {
-                    guard canBeginZoom else { return }
-                    steadyScale = 2
-                    activeZoomPageID = pageID
+                    if steadyScale > 1.05 {
+                        resetInteractionState()
+                    } else {
+                        guard canBeginZoom else { return }
+                        steadyScale = 2
+                        steadyOffset = clampedOffset(steadyOffset, scale: steadyScale)
+                        gestureOffset = .zero
+                        activeZoomPageID = pageID
+                    }
                 }
             }
     }
@@ -877,7 +977,14 @@ private struct MangaAuthenticatedImage: View {
                     gestureScale = 1
                     return
                 }
-                gestureScale = value.magnification
+                if usesOverlayPresentation {
+                    activateVerticalOverlayIfNeeded()
+                    guard var overlay = verticalZoomOverlay, overlay.pageID == pageID else { return }
+                    overlay.gestureScale = value.magnification
+                    verticalZoomOverlay = overlay
+                } else {
+                    gestureScale = value.magnification
+                }
             }
             .onEnded { value in
                 guard zoomEnabled else { return }
@@ -885,12 +992,29 @@ private struct MangaAuthenticatedImage: View {
                     gestureScale = 1
                     return
                 }
-                steadyScale = min(4, max(1, steadyScale * value.magnification))
-                gestureScale = 1
-                if steadyScale <= 1.01 {
-                    resetInteractionState()
+                if usesOverlayPresentation {
+                    activateVerticalOverlayIfNeeded()
+                    guard var overlay = verticalZoomOverlay, overlay.pageID == pageID else { return }
+                    overlay.steadyScale = min(4, max(1, overlay.steadyScale * value.magnification))
+                    overlay.gestureScale = 1
+                    if overlay.steadyScale <= 1.01 {
+                        resetInteractionState()
+                    } else {
+                        overlay.steadyOffset = clampedOffset(overlay.steadyOffset, scale: overlay.steadyScale)
+                        overlay.gestureOffset = .zero
+                        verticalZoomOverlay = overlay
+                        activeZoomPageID = pageID
+                    }
                 } else {
-                    activeZoomPageID = pageID
+                    steadyScale = min(4, max(1, steadyScale * value.magnification))
+                    gestureScale = 1
+                    if steadyScale <= 1.01 {
+                        resetInteractionState()
+                    } else {
+                        steadyOffset = clampedOffset(steadyOffset, scale: steadyScale)
+                        gestureOffset = .zero
+                        activeZoomPageID = pageID
+                    }
                 }
             }
     }
@@ -899,12 +1023,17 @@ private struct MangaAuthenticatedImage: View {
         DragGesture()
             .onChanged { value in
                 guard zoomEnabled, steadyScale > 1 else { return }
-                gestureOffset = value.translation
+                gestureOffset = clampedGestureTranslation(value.translation)
             }
             .onEnded { value in
                 guard zoomEnabled, steadyScale > 1 else { return }
-                steadyOffset.width += value.translation.width
-                steadyOffset.height += value.translation.height
+                steadyOffset = clampedOffset(
+                    CGSize(
+                        width: steadyOffset.width + value.translation.width,
+                        height: steadyOffset.height + value.translation.height
+                    ),
+                    scale: steadyScale
+                )
                 gestureOffset = .zero
                 if steadyScale <= 1.05 {
                     steadyOffset = .zero
@@ -922,13 +1051,49 @@ private struct MangaAuthenticatedImage: View {
     }
 
     private func resetInteractionState() {
+        baseImageSize = .zero
+        imageFrameInReader = .zero
         steadyScale = 1
         gestureScale = 1
         steadyOffset = .zero
         gestureOffset = .zero
+        if verticalZoomOverlay?.pageID == pageID {
+            verticalZoomOverlay = nil
+        }
         if activeZoomPageID == pageID {
             activeZoomPageID = nil
         }
+    }
+
+    private func clampedGestureTranslation(_ translation: CGSize) -> CGSize {
+        let proposed = CGSize(
+            width: steadyOffset.width + translation.width,
+            height: steadyOffset.height + translation.height
+        )
+        let clamped = clampedOffset(proposed, scale: steadyScale)
+        return CGSize(
+            width: clamped.width - steadyOffset.width,
+            height: clamped.height - steadyOffset.height
+        )
+    }
+
+    private func clampedOffset(_ proposed: CGSize, scale: CGFloat) -> CGSize {
+        let bounds = dragBounds(for: scale)
+        return CGSize(
+            width: min(bounds.width, max(-bounds.width, proposed.width)),
+            height: min(bounds.height, max(-bounds.height, proposed.height))
+        )
+    }
+
+    private func dragBounds(for scale: CGFloat) -> CGSize {
+        guard baseImageSize.width > 0, baseImageSize.height > 0 else {
+            return .zero
+        }
+
+        return CGSize(
+            width: max(0, (baseImageSize.width * scale - baseImageSize.width) / 2),
+            height: max(0, (baseImageSize.height * scale - baseImageSize.height) / 2)
+        )
     }
 
     private var canBeginZoom: Bool {
@@ -936,7 +1101,198 @@ private struct MangaAuthenticatedImage: View {
     }
 
     private var canContinueMagnify: Bool {
-        steadyScale > 1.01 || canBeginZoom
+        if usesOverlayPresentation {
+            return (verticalZoomOverlay?.pageID == pageID) || canBeginZoom
+        }
+        return steadyScale > 1.01 || canBeginZoom
+    }
+
+    @ViewBuilder
+    private var frameMeasurementOverlay: some View {
+        if let readerCoordinateSpaceName {
+            GeometryReader { geometry in
+                Color.clear
+                    .onAppear {
+                        imageFrameInReader = geometry.frame(in: .named(readerCoordinateSpaceName))
+                        updateVerticalOverlayIfNeeded()
+                    }
+                    .onChange(of: geometry.frame(in: .named(readerCoordinateSpaceName))) { _, newValue in
+                        imageFrameInReader = newValue
+                        updateVerticalOverlayIfNeeded()
+                    }
+            }
+        } else {
+            Color.clear
+        }
+    }
+
+    private func activateVerticalOverlay(targetScale: CGFloat) {
+        guard let image = loader.image else { return }
+        guard baseImageSize != .zero, imageFrameInReader != .zero else { return }
+        activeZoomPageID = pageID
+        verticalZoomOverlay = MangaVerticalZoomOverlayState(
+            pageID: pageID,
+            image: image,
+            frame: imageFrameInReader,
+            baseImageSize: baseImageSize,
+            steadyScale: targetScale,
+            gestureScale: 1,
+            steadyOffset: .zero,
+            gestureOffset: .zero
+        )
+    }
+
+    private func activateVerticalOverlayIfNeeded() {
+        guard usesOverlayPresentation else { return }
+        if verticalZoomOverlay?.pageID != pageID {
+            activateVerticalOverlay(targetScale: 1)
+        }
+    }
+
+    private func updateVerticalOverlayIfNeeded() {
+        guard usesOverlayPresentation else { return }
+        guard var overlay = verticalZoomOverlay, overlay.pageID == pageID else { return }
+        overlay.frame = imageFrameInReader
+        overlay.baseImageSize = baseImageSize
+        overlay.steadyOffset = clampedOffset(overlay.steadyOffset, scale: overlay.steadyScale)
+        overlay.gestureOffset = .zero
+        if let image = loader.image {
+            overlay.image = image
+        }
+        verticalZoomOverlay = overlay
+    }
+}
+
+private struct MangaImageBaseSizePreferenceKey: PreferenceKey {
+    static let defaultValue: CGSize = .zero
+
+    static func reduce(value: inout CGSize, nextValue: () -> CGSize) {
+        let next = nextValue()
+        if next != .zero {
+            value = next
+        }
+    }
+}
+
+private struct MangaVerticalZoomOverlayState {
+    let pageID: MangaPage.ID
+    var image: UIImage
+    var frame: CGRect
+    var baseImageSize: CGSize
+    var steadyScale: CGFloat
+    var gestureScale: CGFloat
+    var steadyOffset: CGSize
+    var gestureOffset: CGSize
+}
+
+private struct MangaVerticalZoomOverlay: View {
+    @Binding var overlay: MangaVerticalZoomOverlayState?
+    @Binding var activeZoomPageID: MangaPage.ID?
+    let zoomEnabled: Bool
+
+    var body: some View {
+        if let overlay {
+            Image(uiImage: overlay.image)
+                .resizable()
+                .scaledToFit()
+                .frame(width: overlay.baseImageSize.width, height: overlay.baseImageSize.height)
+                .scaleEffect(overlay.steadyScale * overlay.gestureScale)
+                .offset(
+                    x: overlay.steadyOffset.width + overlay.gestureOffset.width,
+                    y: overlay.steadyOffset.height + overlay.gestureOffset.height
+                )
+                .position(x: overlay.frame.midX, y: overlay.frame.midY)
+                .animation(.easeOut(duration: 0.2), value: overlay.steadyScale)
+                .animation(.easeOut(duration: 0.2), value: overlay.steadyOffset)
+                .contentShape(Rectangle())
+                .simultaneousGesture(doubleTapGesture)
+                .simultaneousGesture(magnifyGesture)
+                .simultaneousGesture(dragGesture)
+            }
+    }
+
+    private var doubleTapGesture: some Gesture {
+        TapGesture(count: 2)
+            .onEnded {
+                guard zoomEnabled else { return }
+                reset()
+            }
+    }
+
+    private var magnifyGesture: some Gesture {
+        MagnifyGesture()
+            .onChanged { value in
+                guard zoomEnabled else { return }
+                guard var overlay else { return }
+                overlay.gestureScale = value.magnification
+                self.overlay = overlay
+            }
+            .onEnded { value in
+                guard zoomEnabled else { return }
+                guard var overlay else { return }
+                overlay.steadyScale = min(4, max(1, overlay.steadyScale * value.magnification))
+                overlay.gestureScale = 1
+                if overlay.steadyScale <= 1.01 {
+                    reset()
+                } else {
+                    overlay.steadyOffset = clampedOffset(overlay.steadyOffset, for: overlay)
+                    overlay.gestureOffset = .zero
+                    self.overlay = overlay
+                }
+            }
+    }
+
+    private var dragGesture: some Gesture {
+        DragGesture()
+            .onChanged { value in
+                guard zoomEnabled else { return }
+                guard var overlay else { return }
+                guard overlay.steadyScale > 1 else { return }
+                overlay.gestureOffset = clampedGestureTranslation(value.translation, for: overlay)
+                self.overlay = overlay
+            }
+            .onEnded { value in
+                guard zoomEnabled else { return }
+                guard var overlay else { return }
+                guard overlay.steadyScale > 1 else { return }
+                overlay.steadyOffset = clampedOffset(
+                    CGSize(
+                        width: overlay.steadyOffset.width + value.translation.width,
+                        height: overlay.steadyOffset.height + value.translation.height
+                    ),
+                    for: overlay
+                )
+                overlay.gestureOffset = .zero
+                self.overlay = overlay
+            }
+    }
+
+    private func reset() {
+        overlay = nil
+        activeZoomPageID = nil
+    }
+
+    private func clampedGestureTranslation(_ translation: CGSize, for overlay: MangaVerticalZoomOverlayState) -> CGSize {
+        let proposed = CGSize(
+            width: overlay.steadyOffset.width + translation.width,
+            height: overlay.steadyOffset.height + translation.height
+        )
+        let clamped = clampedOffset(proposed, for: overlay)
+        return CGSize(
+            width: clamped.width - overlay.steadyOffset.width,
+            height: clamped.height - overlay.steadyOffset.height
+        )
+    }
+
+    private func clampedOffset(_ proposed: CGSize, for overlay: MangaVerticalZoomOverlayState) -> CGSize {
+        let bounds = CGSize(
+            width: max(0, (overlay.baseImageSize.width * overlay.steadyScale - overlay.baseImageSize.width) / 2),
+            height: max(0, (overlay.baseImageSize.height * overlay.steadyScale - overlay.baseImageSize.height) / 2)
+        )
+        return CGSize(
+            width: min(bounds.width, max(-bounds.width, proposed.width)),
+            height: min(bounds.height, max(-bounds.height, proposed.height))
+        )
     }
 }
 #else
