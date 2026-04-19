@@ -4,6 +4,26 @@ import XCTest
 @testable import YamiboReaderUI
 
 final class ReaderContainerModelTests: XCTestCase {
+    func testChapterTextFormatterSplitsLeadingChapterTitle() {
+        let split = ReaderChapterTextFormatter.split(
+            text: "第一章\n这里是正文",
+            chapterTitle: "第一章"
+        )
+
+        XCTAssertEqual(split.title, "第一章")
+        XCTAssertEqual(split.body, "\n这里是正文")
+    }
+
+    func testChapterTextFormatterDoesNotSplitWhenTitleIsNotLeadingLine() {
+        let split = ReaderChapterTextFormatter.split(
+            text: "序章\n第一章",
+            chapterTitle: "第一章"
+        )
+
+        XCTAssertNil(split.title)
+        XCTAssertNil(split.body)
+    }
+
     func testMovesAcrossWebViewBoundaries() async throws {
         let model = try await makeModel(
             documents: [

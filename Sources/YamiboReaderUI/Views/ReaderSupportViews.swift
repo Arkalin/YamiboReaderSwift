@@ -1,6 +1,34 @@
 import SwiftUI
 import YamiboReaderCore
 
+enum ReaderChapterTextFormatter {
+    static func split(text: String, chapterTitle: String?) -> (title: String?, body: String?) {
+        guard let chapterTitle else {
+            return (nil, nil)
+        }
+
+        let trimmedTitle = chapterTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedTitle.isEmpty else {
+            return (nil, nil)
+        }
+
+        if text == trimmedTitle {
+            return (trimmedTitle, nil)
+        }
+
+        let lineBreakCandidates = ["\r\n", "\n", "\r"]
+        for separator in lineBreakCandidates {
+            let prefixedTitle = trimmedTitle + separator
+            if text.hasPrefix(prefixedTitle) {
+                let body = String(text.dropFirst(prefixedTitle.count))
+                return (trimmedTitle, separator + body)
+            }
+        }
+
+        return (nil, nil)
+    }
+}
+
 #if os(iOS)
 import UIKit
 
@@ -33,8 +61,8 @@ private struct ReaderBlockView: View {
 
     var body: some View {
         switch block {
-        case let .text(text, _):
-            Text(text)
+        case let .text(text, chapterTitle):
+            styledReaderText(text, chapterTitle: chapterTitle)
                 .font(.system(size: 22 * settings.fontScale))
                 .lineSpacing(6 * settings.lineHeightScale)
                 .foregroundColor(readerTextColor)
@@ -56,8 +84,20 @@ private struct ReaderBlockView: View {
     private var readerTextColor: Color {
         settings.usesNightMode ? Color.white.opacity(0.92) : .primary
     }
-}
 
+    private func styledReaderText(_ text: String, chapterTitle: String?) -> Text {
+        let segments = ReaderChapterTextFormatter.split(text: text, chapterTitle: chapterTitle)
+        guard let title = segments.title else {
+            return Text(text)
+        }
+
+        let titleText = Text(title).fontWeight(.bold)
+        guard let body = segments.body else {
+            return titleText
+        }
+        return titleText + Text(body)
+    }
+}
 @MainActor
 private final class ReaderImageLoader: ObservableObject {
     @Published var image: UIImage?
