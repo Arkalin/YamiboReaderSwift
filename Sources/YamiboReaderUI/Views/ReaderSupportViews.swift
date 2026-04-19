@@ -206,10 +206,8 @@ struct ReaderTopChrome: View {
             }
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(model.title)
-                    .font(.headline)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.85)
+                MarqueeText(text: model.title, textStyle: .headline)
+                    .frame(height: MarqueeText.preferredHeight(for: .headline))
                     .frame(maxWidth: .infinity, alignment: .leading)
 
                 Text(model.progressText)
