@@ -31,21 +31,110 @@ public actor ReaderRepository {
         _ = try? await loadPage(nextRequest)
     }
 
-    public func cachedViews(for threadURL: URL) async -> Set<Int> {
-        await cacheStore.cachedViews(for: threadURL)
+    public func cachedViews(
+        for threadURL: URL,
+        authorID: String?,
+        contentSource: ReaderContentSource?
+    ) async -> Set<Int> {
+        await cacheStore.cachedViews(for: threadURL, authorID: authorID, contentSource: contentSource)
     }
 
-    public func deleteCachedViews(_ views: Set<Int>, for threadURL: URL) async throws {
-        try await cacheStore.deleteViews(views, for: threadURL)
+    public func deleteCachedViews(
+        _ views: Set<Int>,
+        for threadURL: URL,
+        authorID: String?,
+        contentSource: ReaderContentSource?
+    ) async throws {
+        try await cacheStore.deleteViews(views, for: threadURL, authorID: authorID, contentSource: contentSource)
     }
 
-    public func refreshCachedViews(_ views: Set<Int>, for threadURL: URL) async throws {
-        let targets = views.isEmpty ? await cacheStore.cachedViews(for: threadURL) : views
-        try await cacheStore.deleteViews(targets, for: threadURL)
+    public func refreshCachedViews(
+        _ views: Set<Int>,
+        for threadURL: URL,
+        authorID: String?,
+        contentSource: ReaderContentSource?
+    ) async throws {
+        let targets = views.isEmpty
+            ? await cacheStore.cachedViews(for: threadURL, authorID: authorID, contentSource: contentSource)
+            : views
+        try await cacheStore.deleteViews(targets, for: threadURL, authorID: authorID, contentSource: contentSource)
         for view in targets.sorted() {
-            let request = ReaderPageRequest(threadURL: threadURL, view: view)
+            let request = ReaderPageRequest(threadURL: threadURL, view: view, authorID: authorID)
             _ = try await loadPage(request, ignoresCache: true)
         }
+    }
+
+    public func cacheViews(
+        _ views: Set<Int>,
+        for threadURL: URL,
+        authorID: String?,
+        contentSource: ReaderContentSource?,
+        progress: (@Sendable (ReaderCacheBatchProgress) async -> Void)? = nil
+    ) async -> ReaderCacheBatchResult {
+        let targets = views.sorted()
+        guard !targets.isEmpty else {
+            let result = ReaderCacheBatchResult(totalCount: 0, completedViews: [], failedViews: [], wasCancelled: false)
+            await progress?(ReaderCacheBatchProgress(
+                totalCount: 0,
+                completedCount: 0,
+                currentView: nil,
+                completedViews: [],
+                failedViews: [],
+                status: .completed
+            ))
+            return result
+        }
+
+        var completedViews: [Int] = []
+        var failedViews: [Int] = []
+        var wasCancelled = false
+
+        for view in targets {
+            if Task.isCancelled {
+                wasCancelled = true
+                break
+            }
+
+            let request = ReaderPageRequest(threadURL: threadURL, view: view, authorID: authorID)
+            do {
+                _ = try await loadPageIgnoringCache(request)
+                completedViews.append(view)
+            } catch is CancellationError {
+                wasCancelled = true
+                break
+            } catch let error as URLError where error.code == .cancelled && Task.isCancelled {
+                wasCancelled = true
+                break
+            } catch {
+                failedViews.append(view)
+            }
+
+            await progress?(ReaderCacheBatchProgress(
+                totalCount: targets.count,
+                completedCount: completedViews.count,
+                currentView: view,
+                completedViews: completedViews,
+                failedViews: failedViews,
+                status: .running
+            ))
+        }
+
+        let status: ReaderCacheBatchProgress.Status = wasCancelled ? .cancelled : .completed
+        let result = ReaderCacheBatchResult(
+            totalCount: targets.count,
+            completedViews: completedViews,
+            failedViews: failedViews,
+            wasCancelled: wasCancelled
+        )
+        await progress?(ReaderCacheBatchProgress(
+            totalCount: targets.count,
+            completedCount: completedViews.count,
+            currentView: nil,
+            completedViews: completedViews,
+            failedViews: failedViews,
+            status: status
+        ))
+        return result
     }
 
     public func loadPageIgnoringCache(_ request: ReaderPageRequest) async throws -> ReaderPageDocument {
@@ -61,7 +150,11 @@ public actor ReaderRepository {
     }
 
     private func loadPage(_ request: ReaderPageRequest, ignoresCache: Bool) async throws -> ReaderPageDocument {
-        if !ignoresCache, let cached = await cacheStore.loadDocument(for: request) {
+        if !ignoresCache,
+           let cached = await cacheStore.loadDocument(
+               for: request,
+               contentSource: request.authorID == nil ? .fallbackUnfilteredPage : .authorFilteredPage
+           ) {
             return cached
         }
 
@@ -73,7 +166,10 @@ public actor ReaderRepository {
             try await cacheStore.save(document)
             return document
         } catch let error as URLError {
-            if let cached = await cacheStore.loadDocument(for: request) {
+            if let cached = await cacheStore.loadDocument(
+                for: request,
+                contentSource: request.authorID == nil ? .fallbackUnfilteredPage : .authorFilteredPage
+            ) {
                 return cached
             }
             if error.code == .notConnectedToInternet || error.code == .networkConnectionLost {
@@ -81,7 +177,10 @@ public actor ReaderRepository {
             }
             throw YamiboError.underlying(error.localizedDescription)
         } catch {
-            if let cached = await cacheStore.loadDocument(for: request) {
+            if let cached = await cacheStore.loadDocument(
+                for: request,
+                contentSource: request.authorID == nil ? .fallbackUnfilteredPage : .authorFilteredPage
+            ) {
                 return cached
             }
             throw error

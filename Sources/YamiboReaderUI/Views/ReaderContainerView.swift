@@ -8,6 +8,7 @@ public struct ReaderContainerView: View {
     @StateObject private var model: ReaderContainerModel
     @State private var showingSettings = false
     @State private var showingCachePanel = false
+    @State private var showingCacheProgress = false
     @State private var showingWebJumpSheet = false
     @State private var isChapterDrawerVisible = false
     @State private var isChromeVisible = true
@@ -82,7 +83,22 @@ public struct ReaderContainerView: View {
                 ReaderSettingsPanel(model: model)
             }
             .sheet(isPresented: $showingCachePanel) {
-                ReaderCachePanel(model: model)
+                ReaderCachePanel(model: model) {
+                    showingCachePanel = false
+                    showingCacheProgress = true
+                }
+            }
+            .sheet(
+                isPresented: $showingCacheProgress,
+                onDismiss: {
+                    if model.hasCacheOperationSession {
+                        model.hideCacheProgress()
+                    }
+                }
+            ) {
+                ReaderCacheProgressSheet(model: model) {
+                    showingCacheProgress = false
+                }
             }
             .sheet(isPresented: $showingWebJumpSheet) {
                 ReaderWebJumpSheet(model: model) { view in
@@ -256,7 +272,12 @@ public struct ReaderContainerView: View {
 
     private func openCachePanel() {
         isChromeVisible = true
-        showingCachePanel = true
+        if model.hasCacheOperationSession {
+            model.showCacheProgressIfRunning()
+            showingCacheProgress = true
+        } else {
+            showingCachePanel = true
+        }
     }
 
     private func openWebJumpSheet() {

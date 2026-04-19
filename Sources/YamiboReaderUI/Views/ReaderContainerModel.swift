@@ -1,6 +1,95 @@
 import SwiftUI
 import YamiboReaderCore
 
+public struct ReaderCacheOperationState: Equatable, Sendable {
+    public enum Status: String, Equatable, Sendable {
+        case idle
+        case running
+        case completed
+        case cancelled
+    }
+
+    public var cachedViews: Set<Int>
+    public var queuedViews: [Int]
+    public var completedViews: [Int]
+    public var failedViews: [Int]
+    public var totalCount: Int
+    public var completedCount: Int
+    public var currentView: Int?
+    public var isProgressHidden: Bool
+    public var status: Status
+    public var summaryMessage: String?
+
+    public init(
+        cachedViews: Set<Int> = [],
+        queuedViews: [Int] = [],
+        completedViews: [Int] = [],
+        failedViews: [Int] = [],
+        totalCount: Int = 0,
+        completedCount: Int = 0,
+        currentView: Int? = nil,
+        isProgressHidden: Bool = false,
+        status: Status = .idle,
+        summaryMessage: String? = nil
+    ) {
+        self.cachedViews = cachedViews
+        self.queuedViews = queuedViews
+        self.completedViews = completedViews
+        self.failedViews = failedViews
+        self.totalCount = totalCount
+        self.completedCount = completedCount
+        self.currentView = currentView
+        self.isProgressHidden = isProgressHidden
+        self.status = status
+        self.summaryMessage = summaryMessage
+    }
+
+    public var isRunning: Bool {
+        status == .running
+    }
+
+    public var isFinished: Bool {
+        status == .completed || status == .cancelled
+    }
+
+    public var hasSession: Bool {
+        isRunning || isFinished
+    }
+}
+
+public struct ReaderCacheSelectionState: Equatable, Sendable {
+    public var selectedViews: Set<Int>
+    public var cachedSelectedViews: Set<Int>
+    public var uncachedSelectedViews: Set<Int>
+    public var canCache: Bool
+    public var canUpdate: Bool
+    public var canDelete: Bool
+    public var isAllSelected: Bool
+
+    public init(
+        selectedViews: Set<Int>,
+        cachedSelectedViews: Set<Int>,
+        uncachedSelectedViews: Set<Int>,
+        canCache: Bool,
+        canUpdate: Bool,
+        canDelete: Bool,
+        isAllSelected: Bool
+    ) {
+        self.selectedViews = selectedViews
+        self.cachedSelectedViews = cachedSelectedViews
+        self.uncachedSelectedViews = uncachedSelectedViews
+        self.canCache = canCache
+        self.canUpdate = canUpdate
+        self.canDelete = canDelete
+        self.isAllSelected = isAllSelected
+    }
+}
+
+private enum ReaderCacheOperationMode {
+    case cache
+    case update
+}
+
 @MainActor
 public final class ReaderContainerModel: ObservableObject {
     @Published public private(set) var isLoading = false
@@ -17,6 +106,7 @@ public final class ReaderContainerModel: ObservableObject {
     @Published public var currentPageIndex = 0
     @Published public var settings = ReaderAppearanceSettings()
     @Published public private(set) var sessionState = SessionState()
+    @Published public private(set) var cacheOperationState = ReaderCacheOperationState()
 
     public let context: ReaderLaunchContext
 
@@ -28,6 +118,7 @@ public final class ReaderContainerModel: ObservableObject {
     private var currentAuthorID: String?
     private var currentDocumentPageCount = 0
     private var prefetchedStartIndex: Int?
+    private var cacheOperationTask: Task<Void, Never>?
 
     public init(context: ReaderLaunchContext, appContext: YamiboAppContext) {
         self.context = context
@@ -68,6 +159,28 @@ public final class ReaderContainerModel: ObservableObject {
         "网页 \(displayedView) / \(max(maxView, 1))"
     }
 
+    public var cacheScopeTitle: String {
+        switch currentContentSource {
+        case .authorFilteredPage:
+            return "当前为只看楼主缓存范围"
+        case .fallbackUnfilteredPage, .allPostsPage:
+            return "当前为全部回复缓存范围"
+        }
+    }
+
+    public var cacheScopeDescription: String {
+        "缓存内容固定为纯文本，不包含图片。"
+    }
+
+    public var allCacheableViews: [Int] {
+        guard maxView > 0 else { return [] }
+        return Array(1 ... maxView)
+    }
+
+    public var hasCacheOperationSession: Bool {
+        cacheOperationState.hasSession
+    }
+
     public var visibleView: Int {
         displayedView
     }
@@ -105,7 +218,6 @@ public final class ReaderContainerModel: ObservableObject {
             settings = await appContext.settingsStore.load().reader
             sessionState = await appContext.sessionStore.load()
         }
-        cachedViews = await repository?.cachedViews(for: context.threadURL) ?? []
         if pages.isEmpty {
             let favorite = await appContext.favoriteStore.favorite(for: context.threadURL)
             let initialView = favorite?.lastView ?? context.initialView ?? 1
@@ -114,6 +226,7 @@ public final class ReaderContainerModel: ObservableObject {
             await load(view: initialView, preferredPage: initialPage, forceRefresh: false)
         } else {
             repaginate(anchor: currentAnchor())
+            await refreshCachedState()
         }
     }
 
@@ -299,12 +412,128 @@ public final class ReaderContainerModel: ObservableObject {
     }
 
     public func refreshCachedState() async {
-        cachedViews = await repository?.cachedViews(for: context.threadURL) ?? []
+        let context = cacheContext(forView: displayedView)
+        let views = await repository?.cachedViews(
+            for: self.context.threadURL,
+            authorID: context.authorID,
+            contentSource: context.contentSource
+        ) ?? []
+        syncCachedViews(views)
+    }
+
+    public func cacheSelectionState(for selectedViews: Set<Int>) -> ReaderCacheSelectionState {
+        let validSelections = selectedViews.intersection(Set(allCacheableViews))
+        let cachedSelectedViews = validSelections.intersection(cachedViews)
+        let uncachedSelectedViews = validSelections.subtracting(cachedViews)
+        return ReaderCacheSelectionState(
+            selectedViews: validSelections,
+            cachedSelectedViews: cachedSelectedViews,
+            uncachedSelectedViews: uncachedSelectedViews,
+            canCache: !uncachedSelectedViews.isEmpty,
+            canUpdate: !cachedSelectedViews.isEmpty,
+            canDelete: !cachedSelectedViews.isEmpty,
+            isAllSelected: !allCacheableViews.isEmpty && validSelections.count == allCacheableViews.count
+        )
+    }
+
+    public func startCaching(views: Set<Int>) {
+        guard !cacheOperationState.isRunning else { return }
+        let selection = cacheSelectionState(for: views)
+        guard !selection.uncachedSelectedViews.isEmpty else { return }
+        let context = cacheContext(forView: displayedView)
+        startCacheOperation(
+            mode: .cache,
+            views: selection.uncachedSelectedViews,
+            context: context
+        )
+    }
+
+    public func updateCachedViews(_ views: Set<Int>) {
+        guard !cacheOperationState.isRunning else { return }
+        let selection = cacheSelectionState(for: views)
+        guard !selection.cachedSelectedViews.isEmpty else { return }
+        let context = cacheContext(forView: displayedView)
+        let targetViews = selection.cachedSelectedViews
+
+        cacheOperationState = ReaderCacheOperationState(
+            cachedViews: cachedViews.subtracting(targetViews),
+            queuedViews: targetViews.sorted(),
+            completedViews: [],
+            failedViews: [],
+            totalCount: targetViews.count,
+            completedCount: 0,
+            currentView: nil,
+            isProgressHidden: false,
+            status: .running,
+            summaryMessage: nil
+        )
+
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                try await self.repository?.deleteCachedViews(
+                    targetViews,
+                    for: self.context.threadURL,
+                    authorID: context.authorID,
+                    contentSource: context.contentSource
+                )
+                self.syncCachedViews(self.cachedViews.subtracting(targetViews))
+                self.startCacheOperation(mode: .update, views: targetViews, context: context)
+            } catch {
+                self.cacheOperationState = ReaderCacheOperationState(cachedViews: self.cachedViews)
+                self.errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    public func deleteCachedViews(_ views: Set<Int>) async {
+        guard !cacheOperationState.isRunning else { return }
+        let selection = cacheSelectionState(for: views)
+        guard !selection.cachedSelectedViews.isEmpty else { return }
+        let context = cacheContext(forView: displayedView)
+
+        do {
+            try await repository?.deleteCachedViews(
+                selection.cachedSelectedViews,
+                for: self.context.threadURL,
+                authorID: context.authorID,
+                contentSource: context.contentSource
+            )
+            syncCachedViews(cachedViews.subtracting(selection.cachedSelectedViews))
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    public func showCacheProgressIfRunning() {
+        guard cacheOperationState.hasSession else { return }
+        cacheOperationState.isProgressHidden = false
+    }
+
+    public func hideCacheProgress() {
+        guard cacheOperationState.hasSession else { return }
+        cacheOperationState.isProgressHidden = true
+    }
+
+    public func dismissCacheProgress() {
+        cacheOperationTask = nil
+        cacheOperationState = ReaderCacheOperationState(cachedViews: cachedViews)
+    }
+
+    public func stopCaching() {
+        guard cacheOperationState.isRunning else { return }
+        cacheOperationTask?.cancel()
     }
 
     public func deleteCurrentCache() async {
         do {
-            try await repository?.deleteCachedViews([displayedView], for: context.threadURL)
+            let context = cacheContext(forView: displayedView)
+            try await repository?.deleteCachedViews(
+                [displayedView],
+                for: self.context.threadURL,
+                authorID: context.authorID,
+                contentSource: context.contentSource
+            )
             await refreshCachedState()
         } catch {
             errorMessage = error.localizedDescription
@@ -313,7 +542,13 @@ public final class ReaderContainerModel: ObservableObject {
 
     public func refreshCurrentCache() async {
         do {
-            try await repository?.refreshCachedViews([displayedView], for: context.threadURL)
+            let context = cacheContext(forView: displayedView)
+            try await repository?.refreshCachedViews(
+                [displayedView],
+                for: self.context.threadURL,
+                authorID: context.authorID,
+                contentSource: context.contentSource
+            )
             await refreshCachedState()
         } catch {
             errorMessage = error.localizedDescription
@@ -326,7 +561,13 @@ public final class ReaderContainerModel: ObservableObject {
         errorMessage = nil
         do {
             if forceRefresh {
-                try await repository.deleteCachedViews([view], for: context.threadURL)
+                let context = cacheContext(forView: view)
+                try await repository.deleteCachedViews(
+                    [view],
+                    for: self.context.threadURL,
+                    authorID: context.authorID,
+                    contentSource: context.contentSource
+                )
             }
             let request = ReaderPageRequest(
                 threadURL: context.threadURL,
@@ -342,7 +583,7 @@ public final class ReaderContainerModel: ObservableObject {
             currentView = document.view
             maxView = document.maxView
             applyPagination(for: document, preferredPage: preferredPage)
-            cachedViews = await repository.cachedViews(for: context.threadURL)
+            await refreshCachedState()
             isLoading = false
 
             Task {
@@ -464,6 +705,46 @@ public final class ReaderContainerModel: ObservableObject {
         return max(currentDocumentPageCount, 1)
     }
 
+    private var displayedDocument: ReaderPageDocument? {
+        if let startIndex = prefetchedStartIndex,
+           settings.readingMode == .vertical,
+           currentPageIndex >= startIndex,
+           let prefetchedDocument {
+            return prefetchedDocument
+        }
+        return currentDocument
+    }
+
+    private func cacheContext(forView view: Int) -> (authorID: String?, contentSource: ReaderContentSource?) {
+        if currentDocument?.view == view {
+            return (
+                currentDocument?.resolvedAuthorID ?? currentAuthorID ?? context.authorID,
+                currentDocument?.contentSource ?? inferredContentSource(for: currentDocument?.resolvedAuthorID ?? currentAuthorID ?? context.authorID)
+            )
+        }
+
+        if prefetchedDocument?.view == view {
+            return (
+                prefetchedDocument?.resolvedAuthorID ?? currentAuthorID ?? context.authorID,
+                prefetchedDocument?.contentSource ?? inferredContentSource(for: prefetchedDocument?.resolvedAuthorID ?? currentAuthorID ?? context.authorID)
+            )
+        }
+
+        let displayedAuthorID = displayedDocument?.resolvedAuthorID ?? currentAuthorID ?? context.authorID
+        let displayedContentSource = displayedDocument?.contentSource ?? currentContentSource
+        return (
+            displayedAuthorID,
+            displayedContentSource == .allPostsPage
+                ? inferredContentSource(for: displayedAuthorID)
+                : displayedContentSource
+        )
+    }
+
+    private func inferredContentSource(for authorID: String?) -> ReaderContentSource {
+        let normalizedAuthorID = authorID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return normalizedAuthorID.isEmpty ? .fallbackUnfilteredPage : .authorFilteredPage
+    }
+
     private func promotePrefetchedDocument(startingAt preferredPage: Int) async {
         guard let nextDocument = prefetchedDocument else { return }
         currentDocument = nextDocument
@@ -482,6 +763,90 @@ public final class ReaderContainerModel: ObservableObject {
             appSettings.reader = settings
             try? await appContext.settingsStore.save(appSettings)
         }
+    }
+
+    private func startCacheOperation(
+        mode: ReaderCacheOperationMode,
+        views: Set<Int>,
+        context: (authorID: String?, contentSource: ReaderContentSource?)
+    ) {
+        guard let repository else { return }
+        let targets = views.sorted()
+        guard !targets.isEmpty else { return }
+
+        cacheOperationState = ReaderCacheOperationState(
+            cachedViews: cachedViews,
+            queuedViews: targets,
+            completedViews: [],
+            failedViews: [],
+            totalCount: targets.count,
+            completedCount: 0,
+            currentView: nil,
+            isProgressHidden: false,
+            status: .running,
+            summaryMessage: nil
+        )
+
+        cacheOperationTask?.cancel()
+        cacheOperationTask = Task { [weak self] in
+            guard let self else { return }
+            let result = await repository.cacheViews(
+                Set(targets),
+                for: self.context.threadURL,
+                authorID: context.authorID,
+                contentSource: context.contentSource
+            ) { [weak self] progress in
+                await self?.applyCacheBatchProgress(progress, allTargets: targets)
+            }
+            await self.finalizeCacheOperation(result: result, mode: mode)
+        }
+    }
+
+    private func applyCacheBatchProgress(_ progress: ReaderCacheBatchProgress, allTargets: [Int]) {
+        cacheOperationState.totalCount = progress.totalCount
+        cacheOperationState.completedCount = progress.completedCount
+        cacheOperationState.currentView = progress.currentView
+        cacheOperationState.completedViews = progress.completedViews
+        cacheOperationState.failedViews = progress.failedViews
+        cacheOperationState.status = progress.status == .cancelled ? .cancelled : .running
+
+        let completed = Set(progress.completedViews)
+        let failed = Set(progress.failedViews)
+        cacheOperationState.queuedViews = allTargets.filter { !completed.contains($0) && !failed.contains($0) }
+        syncCachedViews(cachedViews.union(completed))
+    }
+
+    private func finalizeCacheOperation(result: ReaderCacheBatchResult, mode: ReaderCacheOperationMode) async {
+        cacheOperationTask = nil
+        await refreshCachedState()
+
+        let actionText = switch mode {
+        case .cache: "缓存"
+        case .update: "更新"
+        }
+
+        var summary = result.wasCancelled
+            ? "已终止，已完成 \(result.completedViews.count) / \(result.totalCount) 页\(actionText)"
+            : "已完成 \(result.completedViews.count) / \(result.totalCount) 页\(actionText)"
+        if !result.failedViews.isEmpty {
+            summary += "，\(result.failedViews.count) 页失败，已跳过"
+        }
+
+        cacheOperationState.cachedViews = cachedViews
+        cacheOperationState.queuedViews = []
+        cacheOperationState.completedViews = result.completedViews
+        cacheOperationState.failedViews = result.failedViews
+        cacheOperationState.totalCount = result.totalCount
+        cacheOperationState.completedCount = result.completedViews.count
+        cacheOperationState.currentView = nil
+        cacheOperationState.status = result.wasCancelled ? .cancelled : .completed
+        cacheOperationState.summaryMessage = summary
+        cacheOperationState.isProgressHidden = false
+    }
+
+    private func syncCachedViews(_ views: Set<Int>) {
+        cachedViews = views
+        cacheOperationState.cachedViews = views
     }
 }
 

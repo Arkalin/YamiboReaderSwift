@@ -7,8 +7,57 @@ private struct StubURLProtocolResponse {
     let body: String
 }
 
+private enum StubURLProtocolOutput {
+    case response(StubURLProtocolResponse)
+    case error(URLError)
+}
+
 private final class StubURLProtocol: URLProtocol, @unchecked Sendable {
-    nonisolated(unsafe) static var response: StubURLProtocolResponse?
+    nonisolated(unsafe) static var handler: ((URLRequest) -> StubURLProtocolOutput)? = { request in
+        let absolute = request.url?.absoluteString ?? ""
+
+        if absolute.contains("mod=space"),
+           absolute.contains("do=favorite") {
+            return .response(
+                StubURLProtocolResponse(
+                    statusCode: 200,
+                    body: """
+                    <html>
+                      <head><title>登录 - 百合会 - 手机版 - Powered by Discuz!</title></head>
+                      <body class="pg_logging">
+                        <form id="member_login" action="member.php?mod=logging&action=login"></form>
+                      </body>
+                    </html>
+                    """
+                )
+            )
+        }
+
+        if absolute.contains("tid=22") {
+            return .error(URLError(.notConnectedToInternet))
+        }
+
+        if absolute.contains("tid=23") {
+            let body: String
+            if absolute.contains("authorid=42") {
+                body = "<html><body><div class=\"message\">只看楼主新缓存</div></body></html>"
+            } else {
+                body = "<html><body><div class=\"message\">全部回复新缓存</div></body></html>"
+            }
+            return .response(StubURLProtocolResponse(statusCode: 200, body: body))
+        }
+
+        if absolute.contains("tid=24") {
+            if absolute.contains("page=2") {
+                return .error(URLError(.networkConnectionLost))
+            }
+            let page = absolute.contains("page=3") ? "3" : "1"
+            let body = "<html><body><div class=\"message\">只看楼主缓存页\(page)</div></body></html>"
+            return .response(StubURLProtocolResponse(statusCode: 200, body: body))
+        }
+
+        return .error(URLError(.badServerResponse))
+    }
 
     override class func canInit(with request: URLRequest) -> Bool {
         true
@@ -19,20 +68,26 @@ private final class StubURLProtocol: URLProtocol, @unchecked Sendable {
     }
 
     override func startLoading() {
-        guard let response = Self.response else {
+        let output = Self.handler?(request)
+        guard let output else {
             client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
             return
         }
 
-        let http = HTTPURLResponse(
-            url: request.url!,
-            statusCode: response.statusCode,
-            httpVersion: nil,
-            headerFields: ["Content-Type": "text/html; charset=utf-8"]
-        )!
-        client?.urlProtocol(self, didReceive: http, cacheStoragePolicy: .notAllowed)
-        client?.urlProtocol(self, didLoad: Data(response.body.utf8))
-        client?.urlProtocolDidFinishLoading(self)
+        switch output {
+        case let .response(response):
+            let http = HTTPURLResponse(
+                url: request.url!,
+                statusCode: response.statusCode,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "text/html; charset=utf-8"]
+            )!
+            client?.urlProtocol(self, didReceive: http, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocol(self, didLoad: Data(response.body.utf8))
+            client?.urlProtocolDidFinishLoading(self)
+        case let .error(error):
+            client?.urlProtocol(self, didFailWithError: error)
+        }
     }
 
     override func stopLoading() {}
@@ -168,18 +223,6 @@ private final class StubURLProtocol: URLProtocol, @unchecked Sendable {
         client: YamiboClient(session: session, cookie: "sid=1", userAgent: "Test-UA")
     )
 
-    StubURLProtocol.response = StubURLProtocolResponse(
-        statusCode: 200,
-        body: """
-        <html>
-          <head><title>登录 - 百合会 - 手机版 - Powered by Discuz!</title></head>
-          <body class="pg_logging">
-            <form id="member_login" action="member.php?mod=logging&action=login"></form>
-          </body>
-        </html>
-        """
-    )
-
     await #expect(throws: YamiboError.notAuthenticated) {
         _ = try await repository.fetchFavorites()
     }
@@ -233,9 +276,178 @@ private final class StubURLProtocol: URLProtocol, @unchecked Sendable {
     try await store.save(document)
     let loaded = await store.loadDocument(for: ReaderPageRequest(threadURL: threadURL, view: 3, authorID: "12"))
     #expect(loaded == document)
-    #expect(await store.cachedViews(for: threadURL) == [3])
+    #expect(await store.cachedViews(for: threadURL, authorID: "12", contentSource: .authorFilteredPage) == [3])
 
-    try await store.deleteViews([3], for: threadURL)
+    try await store.deleteViews([3], for: threadURL, authorID: "12", contentSource: .authorFilteredPage)
     let deleted = await store.loadDocument(for: ReaderPageRequest(threadURL: threadURL, view: 3, authorID: "12"))
     #expect(deleted == nil)
+}
+
+@Test func readerCacheStoreSeparatesAuthorFilteredAndUnfilteredVariants() async throws {
+    let directory = URL(fileURLWithPath: NSTemporaryDirectory())
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    let store = ReaderCacheStore(baseDirectory: directory)
+    let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=21&mobile=2"))
+    let unfiltered = ReaderPageDocument(
+        threadURL: threadURL,
+        view: 1,
+        maxView: 3,
+        contentSource: .fallbackUnfilteredPage,
+        segments: [.text("全部回复正文", chapterTitle: "第一章")]
+    )
+    let authorFiltered = ReaderPageDocument(
+        threadURL: threadURL,
+        view: 1,
+        maxView: 3,
+        resolvedAuthorID: "42",
+        contentSource: .authorFilteredPage,
+        segments: [.text("只看楼主正文", chapterTitle: "第一章")]
+    )
+
+    try await store.save(unfiltered)
+    try await store.save(authorFiltered)
+
+    let loadedUnfiltered = await store.loadDocument(
+        for: ReaderPageRequest(threadURL: threadURL, view: 1),
+        contentSource: .fallbackUnfilteredPage
+    )
+    let loadedAuthorFiltered = await store.loadDocument(
+        for: ReaderPageRequest(threadURL: threadURL, view: 1, authorID: "42"),
+        contentSource: .authorFilteredPage
+    )
+
+    #expect(loadedUnfiltered?.segments == unfiltered.segments)
+    #expect(loadedAuthorFiltered?.segments == authorFiltered.segments)
+    #expect(await store.cachedViews(for: threadURL, authorID: nil, contentSource: .fallbackUnfilteredPage) == [1])
+    #expect(await store.cachedViews(for: threadURL, authorID: "42", contentSource: .authorFilteredPage) == [1])
+
+    try await store.deleteViews([1], for: threadURL, authorID: "42", contentSource: .authorFilteredPage)
+
+    let deletedAuthorFiltered = await store.loadDocument(
+        for: ReaderPageRequest(threadURL: threadURL, view: 1, authorID: "42"),
+        contentSource: .authorFilteredPage
+    )
+    let preservedUnfiltered = await store.loadDocument(
+        for: ReaderPageRequest(threadURL: threadURL, view: 1),
+        contentSource: .fallbackUnfilteredPage
+    )
+
+    #expect(deletedAuthorFiltered == nil)
+    #expect(preservedUnfiltered?.segments == unfiltered.segments)
+}
+
+@Test func readerRepositoryDoesNotCrossHitFilteredCacheWhenOffline() async throws {
+    let configuration = URLSessionConfiguration.ephemeral
+    configuration.protocolClasses = [StubURLProtocol.self]
+    let session = URLSession(configuration: configuration)
+    let directory = URL(fileURLWithPath: NSTemporaryDirectory())
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    let cacheStore = ReaderCacheStore(baseDirectory: directory)
+    let repository = ReaderRepository(
+        client: YamiboClient(session: session, cookie: "sid=reader", userAgent: "Test-UA"),
+        cacheStore: cacheStore
+    )
+    let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=22&mobile=2"))
+    let authorFiltered = ReaderPageDocument(
+        threadURL: threadURL,
+        view: 1,
+        maxView: 2,
+        resolvedAuthorID: "42",
+        contentSource: .authorFilteredPage,
+        segments: [.text("只看楼主缓存", chapterTitle: "第一章")]
+    )
+    try await cacheStore.save(authorFiltered)
+
+    await #expect(throws: YamiboError.offline) {
+        _ = try await repository.loadPage(ReaderPageRequest(threadURL: threadURL, view: 1))
+    }
+
+    let authorHit = try await repository.loadPage(ReaderPageRequest(threadURL: threadURL, view: 1, authorID: "42"))
+    #expect(authorHit.segments == authorFiltered.segments)
+}
+
+@Test func readerRepositoryRefreshesOnlyCurrentVariantCache() async throws {
+    let configuration = URLSessionConfiguration.ephemeral
+    configuration.protocolClasses = [StubURLProtocol.self]
+    let session = URLSession(configuration: configuration)
+    let directory = URL(fileURLWithPath: NSTemporaryDirectory())
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    let cacheStore = ReaderCacheStore(baseDirectory: directory)
+    let repository = ReaderRepository(
+        client: YamiboClient(session: session, cookie: "sid=reader", userAgent: "Test-UA"),
+        cacheStore: cacheStore
+    )
+    let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=23&mobile=2"))
+    let unfiltered = ReaderPageDocument(
+        threadURL: threadURL,
+        view: 1,
+        maxView: 2,
+        contentSource: .fallbackUnfilteredPage,
+        segments: [.text("全部回复旧缓存", chapterTitle: "第一章")]
+    )
+    let authorFiltered = ReaderPageDocument(
+        threadURL: threadURL,
+        view: 1,
+        maxView: 2,
+        resolvedAuthorID: "42",
+        contentSource: .authorFilteredPage,
+        segments: [.text("只看楼主旧缓存", chapterTitle: "第一章")]
+    )
+    try await cacheStore.save(unfiltered)
+    try await cacheStore.save(authorFiltered)
+
+    try await repository.refreshCachedViews(
+        [1],
+        for: threadURL,
+        authorID: "42",
+        contentSource: .authorFilteredPage
+    )
+
+    let refreshedAuthorFiltered = await cacheStore.loadDocument(
+        for: ReaderPageRequest(threadURL: threadURL, view: 1, authorID: "42"),
+        contentSource: .authorFilteredPage
+    )
+    let preservedUnfiltered = await cacheStore.loadDocument(
+        for: ReaderPageRequest(threadURL: threadURL, view: 1),
+        contentSource: .fallbackUnfilteredPage
+    )
+
+    let refreshedText = refreshedAuthorFiltered?.segments.compactMap { segment -> String? in
+        if case let .text(text, _) = segment { return text }
+        return nil
+    }.first
+    let preservedText = preservedUnfiltered?.segments.compactMap { segment -> String? in
+        if case let .text(text, _) = segment { return text }
+        return nil
+    }.first
+
+    #expect(refreshedText == "只看楼主新缓存")
+    #expect(preservedText == "全部回复旧缓存")
+}
+
+@Test func readerRepositoryCachesViewsSequentiallyAndSkipsFailures() async throws {
+    let configuration = URLSessionConfiguration.ephemeral
+    configuration.protocolClasses = [StubURLProtocol.self]
+    let session = URLSession(configuration: configuration)
+    let directory = URL(fileURLWithPath: NSTemporaryDirectory())
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    let cacheStore = ReaderCacheStore(baseDirectory: directory)
+    let repository = ReaderRepository(
+        client: YamiboClient(session: session, cookie: "sid=reader", userAgent: "Test-UA"),
+        cacheStore: cacheStore
+    )
+    let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=24&mobile=2"))
+
+    let result = await repository.cacheViews(
+        [1, 2, 3],
+        for: threadURL,
+        authorID: "42",
+        contentSource: .authorFilteredPage
+    )
+
+    #expect(result.completedViews == [1, 3])
+    #expect(result.failedViews == [2])
+    #expect(!result.wasCancelled)
+    #expect(await cacheStore.cachedViews(for: threadURL, authorID: "42", contentSource: .authorFilteredPage) == [1, 3])
+    #expect(await cacheStore.cachedViews(for: threadURL, authorID: nil, contentSource: .fallbackUnfilteredPage).isEmpty)
 }

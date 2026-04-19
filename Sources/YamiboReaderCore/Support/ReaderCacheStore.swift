@@ -1,13 +1,15 @@
 import Foundation
 
 public actor ReaderCacheStore {
+    private static let schemaVersion = 2
+
     private let fileManager: FileManager
     private let baseDirectory: URL
     private let indexURL: URL
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
     private let memoryCache = NSCache<NSString, CacheBox>()
-    private var index: [String: CacheEntryIndex] = [:]
+    private var index: [String: CacheThreadIndex] = [:]
     private var didLoadIndex = false
 
     public init(
@@ -27,19 +29,24 @@ public actor ReaderCacheStore {
         encoder.dateEncodingStrategy = .iso8601
     }
 
-    public func loadDocument(for request: ReaderPageRequest) async -> ReaderPageDocument? {
+    public func loadDocument(
+        for request: ReaderPageRequest,
+        contentSource: ReaderContentSource? = nil
+    ) async -> ReaderPageDocument? {
         await ensureIndexLoaded()
-        let key = cacheKey(for: request)
-        if let cached = memoryCache.object(forKey: key as NSString)?.document {
+        let identity = ReaderCacheIdentity(request: request, contentSource: contentSource)
+        if let cached = memoryCache.object(forKey: identity.cacheKey as NSString)?.document {
             return cached
         }
 
-        guard let metadata = index[request.threadURL.absoluteString]?.pages["\(request.view)"],
+        guard let metadata = index[identity.threadKey]?
+            .variants[identity.variantKey]?
+            .pages["\(identity.view)"],
               let document = try? loadDocumentFromDisk(fileName: metadata.fileName) else {
             return nil
         }
 
-        memoryCache.setObject(CacheBox(document: document), forKey: key as NSString)
+        memoryCache.setObject(CacheBox(document: document), forKey: identity.cacheKey as NSString)
         return document
     }
 
@@ -47,66 +54,102 @@ public actor ReaderCacheStore {
         await ensureIndexLoaded()
         try ensureDirectoryExists()
 
-        let request = ReaderPageRequest(threadURL: document.threadURL, view: document.view, authorID: document.resolvedAuthorID)
-        let key = cacheKey(for: request)
-        let fileName = fileName(for: document.threadURL, view: document.view)
+        let identity = ReaderCacheIdentity(document: document)
+        let fileName = fileName(for: identity)
         let fileURL = baseDirectory.appendingPathComponent(fileName, isDirectory: false)
         let data = try encoder.encode(document)
         try data.write(to: fileURL, options: [.atomic])
 
-        let documentKey = document.threadURL.absoluteString
-        var entry = index[documentKey] ?? CacheEntryIndex(threadURL: document.threadURL)
-        entry.pages["\(document.view)"] = CachePageMetadata(
+        var entry = index[identity.threadKey] ?? CacheThreadIndex(threadURL: identity.threadURL)
+        var variantEntry = entry.variants[identity.variantKey] ?? CacheVariantIndex()
+        variantEntry.pages["\(identity.view)"] = CachePageMetadata(
             fileName: fileName,
             fetchedAt: document.fetchedAt
         )
-        index[documentKey] = entry
+        entry.variants[identity.variantKey] = variantEntry
+        index[identity.threadKey] = entry
         try persistIndex()
 
-        memoryCache.setObject(CacheBox(document: document), forKey: key as NSString)
+        memoryCache.setObject(CacheBox(document: document), forKey: identity.cacheKey as NSString)
     }
 
-    public func cachedViews(for threadURL: URL) async -> Set<Int> {
+    public func cachedViews(
+        for threadURL: URL,
+        authorID: String?,
+        contentSource: ReaderContentSource? = nil
+    ) async -> Set<Int> {
         await ensureIndexLoaded()
-        let entry = index[threadURL.absoluteString] ?? index[canonicalURLString(from: threadURL)]
-        return Set(entry?.pages.keys.compactMap(Int.init) ?? [])
+        let identity = ReaderCacheIdentity(threadURL: threadURL, view: 1, authorID: authorID, contentSource: contentSource)
+        return Set(index[identity.threadKey]?
+            .variants[identity.variantKey]?
+            .pages
+            .keys
+            .compactMap(Int.init) ?? [])
     }
 
-    public func deleteViews(_ views: Set<Int>, for threadURL: URL) async throws {
+    public func deleteViews(
+        _ views: Set<Int>,
+        for threadURL: URL,
+        authorID: String?,
+        contentSource: ReaderContentSource? = nil
+    ) async throws {
         await ensureIndexLoaded()
-        let resolvedKey = resolvedIndexKey(for: threadURL)
-        guard var entry = index[resolvedKey] else { return }
-        memoryCache.removeAllObjects()
+        let identity = ReaderCacheIdentity(threadURL: threadURL, view: 1, authorID: authorID, contentSource: contentSource)
+        guard var entry = index[identity.threadKey],
+              var variantEntry = entry.variants[identity.variantKey] else { return }
 
         for view in views {
-            if let metadata = entry.pages.removeValue(forKey: "\(view)") {
+            if let metadata = variantEntry.pages.removeValue(forKey: "\(view)") {
                 try? fileManager.removeItem(at: baseDirectory.appendingPathComponent(metadata.fileName, isDirectory: false))
+                memoryCache.removeObject(forKey: ReaderCacheIdentity(
+                    threadURL: threadURL,
+                    view: view,
+                    authorID: authorID,
+                    contentSource: contentSource
+                ).cacheKey as NSString)
             }
         }
 
-        if entry.pages.isEmpty {
-            index.removeValue(forKey: resolvedKey)
+        if variantEntry.pages.isEmpty {
+            entry.variants.removeValue(forKey: identity.variantKey)
         } else {
-            index[resolvedKey] = entry
+            entry.variants[identity.variantKey] = variantEntry
+        }
+
+        if entry.variants.isEmpty {
+            index.removeValue(forKey: identity.threadKey)
+        } else {
+            index[identity.threadKey] = entry
         }
         try persistIndex()
     }
 
-    public func deleteAll(for threadURL: URL) async throws {
-        let views = await cachedViews(for: threadURL)
-        try await deleteViews(views, for: threadURL)
+    public func deleteAll(
+        for threadURL: URL,
+        authorID: String?,
+        contentSource: ReaderContentSource? = nil
+    ) async throws {
+        let views = await cachedViews(for: threadURL, authorID: authorID, contentSource: contentSource)
+        try await deleteViews(views, for: threadURL, authorID: authorID, contentSource: contentSource)
     }
 
     private func ensureIndexLoaded() async {
         guard !didLoadIndex else { return }
         didLoadIndex = true
         guard fileManager.fileExists(atPath: indexURL.path),
-              let data = try? Data(contentsOf: indexURL),
-              let decoded = try? decoder.decode([String: CacheEntryIndex].self, from: data) else {
+              let data = try? Data(contentsOf: indexURL) else {
             index = [:]
             return
         }
-        index = decoded
+
+        guard let decoded = try? decoder.decode(CacheIndexEnvelope.self, from: data),
+              decoded.version == Self.schemaVersion else {
+            clearLegacyCacheDirectory()
+            index = [:]
+            return
+        }
+
+        index = decoded.threads
     }
 
     private func loadDocumentFromDisk(fileName: String) throws -> ReaderPageDocument {
@@ -117,8 +160,8 @@ public actor ReaderCacheStore {
 
     private func persistIndex() throws {
         try ensureDirectoryExists()
-        let data = try encoder.encode(index)
-        try data.write(to: indexURL, options: [.atomic])
+        let data = try encoder.encode(CacheIndexEnvelope(version: Self.schemaVersion, threads: index))
+        try data.write(to: indexURL, options: Data.WritingOptions.atomic)
     }
 
     private func ensureDirectoryExists() throws {
@@ -127,21 +170,15 @@ public actor ReaderCacheStore {
         }
     }
 
-    private func cacheKey(for request: ReaderPageRequest) -> String {
-        "\(canonicalURLString(from: request.threadURL))#\(request.view)#\(request.authorID ?? "")"
+    private func fileName(for identity: ReaderCacheIdentity) -> String {
+        "reader_\(stableIdentifier(for: identity.threadKey))_\(stableIdentifier(for: identity.variantKey))_\(identity.view).json"
     }
 
-    private func fileName(for threadURL: URL, view: Int) -> String {
-        "reader_\(stableIdentifier(for: canonicalURLString(from: threadURL)))_\(view).json"
-    }
-
-    private func resolvedIndexKey(for threadURL: URL) -> String {
-        let canonical = canonicalURLString(from: threadURL)
-        return index[canonical] == nil ? threadURL.absoluteString : canonical
-    }
-
-    private func canonicalURLString(from url: URL) -> String {
-        ReaderModeDetector.canonicalThreadURL(from: url)?.absoluteString ?? url.absoluteString
+    private func clearLegacyCacheDirectory() {
+        guard fileManager.fileExists(atPath: baseDirectory.path) else { return }
+        try? fileManager.removeItem(at: baseDirectory)
+        try? fileManager.createDirectory(at: baseDirectory, withIntermediateDirectories: true)
+        memoryCache.removeAllObjects()
     }
 
     private func stableIdentifier(for value: String) -> String {
@@ -162,8 +199,17 @@ private final class CacheBox: NSObject {
     }
 }
 
-private struct CacheEntryIndex: Codable {
+private struct CacheIndexEnvelope: Codable {
+    var version: Int
+    var threads: [String: CacheThreadIndex]
+}
+
+private struct CacheThreadIndex: Codable {
     var threadURL: URL
+    var variants: [String: CacheVariantIndex] = [:]
+}
+
+private struct CacheVariantIndex: Codable {
     var pages: [String: CachePageMetadata] = [:]
 }
 

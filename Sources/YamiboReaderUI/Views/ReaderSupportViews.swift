@@ -904,31 +904,72 @@ private func backgroundColor(for style: ReaderBackgroundStyle, usesNightMode: Bo
 
 struct ReaderCachePanel: View {
     @ObservedObject var model: ReaderContainerModel
+    let onShowProgress: () -> Void
     @Environment(\.dismiss) private var dismiss
+    @State private var selectedViews: Set<Int> = []
 
     var body: some View {
         NavigationStack {
             List {
-                Section("缓存状态") {
-                    if model.cachedViews.isEmpty {
-                        Text("当前没有缓存网页页码")
-                            .foregroundColor(.secondary)
+                Section("缓存范围") {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(model.cacheScopeTitle)
+                            .font(.headline)
+                        Text(model.cacheScopeDescription)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.vertical, 4)
+                }
+
+                Section("选择页码") {
+                    Button(selectionState.isAllSelected ? "取消全选" : "全选") {
+                        if selectionState.isAllSelected {
+                            selectedViews = []
+                        } else {
+                            selectedViews = Set(model.allCacheableViews)
+                        }
+                    }
+                    .disabled(model.allCacheableViews.isEmpty)
+
+                    if model.allCacheableViews.isEmpty {
+                        Text("当前没有可缓存的网页页码")
+                            .foregroundStyle(.secondary)
                     } else {
-                        Text("已缓存网页页码：\(model.cachedViews.sorted().map(String.init).joined(separator: "、"))")
-                            .foregroundColor(.secondary)
+                        ForEach(model.allCacheableViews, id: \.self) { view in
+                            Button {
+                                toggleSelection(for: view)
+                            } label: {
+                                HStack(spacing: 12) {
+                                    Image(systemName: selectedViews.contains(view) ? "checkmark.circle.fill" : "circle")
+                                        .foregroundStyle(selectedViews.contains(view) ? Color.accentColor : Color.secondary)
+                                    Text("第 \(view) 页")
+                                        .foregroundStyle(.primary)
+                                    Spacer()
+                                    if model.cachedViews.contains(view) {
+                                        Label("已缓存", systemImage: "checkmark.seal.fill")
+                                            .labelStyle(.titleAndIcon)
+                                            .font(.caption)
+                                            .foregroundStyle(.green)
+                                    }
+                                }
+                            }
+                            .buttonStyle(.plain)
+                        }
                     }
                 }
 
-                Section("当前网页") {
-                    Button("刷新当前缓存") {
-                        Task { await model.refreshCurrentCache() }
-                    }
-                    Button("删除当前缓存", role: .destructive) {
-                        Task { await model.deleteCurrentCache() }
+                if !selectedViews.isEmpty {
+                    Section("已选内容") {
+                        Text("已选择 \(selectedViews.count) 页")
+                            .foregroundStyle(.secondary)
                     }
                 }
             }
             .navigationTitle("缓存管理")
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                actionBar
+            }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("关闭") {
@@ -940,6 +981,147 @@ struct ReaderCachePanel: View {
                 await model.refreshCachedState()
             }
         }
+    }
+
+    private var selectionState: ReaderCacheSelectionState {
+        model.cacheSelectionState(for: selectedViews)
+    }
+
+    private var actionBar: some View {
+        VStack(spacing: 12) {
+            Divider()
+            HStack(spacing: 12) {
+                Button("缓存") {
+                    model.startCaching(views: selectionState.uncachedSelectedViews)
+                    onShowProgress()
+                    dismiss()
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(!selectionState.canCache)
+
+                Button("更新") {
+                    model.updateCachedViews(selectionState.cachedSelectedViews)
+                    onShowProgress()
+                    dismiss()
+                }
+                .buttonStyle(.bordered)
+                .disabled(!selectionState.canUpdate)
+
+                Button("删除", role: .destructive) {
+                    Task {
+                        await model.deleteCachedViews(selectionState.cachedSelectedViews)
+                        dismiss()
+                    }
+                }
+                .buttonStyle(.bordered)
+                .disabled(!selectionState.canDelete)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 20)
+            .padding(.bottom, 12)
+        }
+        .background(.ultraThinMaterial)
+    }
+
+    private func toggleSelection(for view: Int) {
+        if selectedViews.contains(view) {
+            selectedViews.remove(view)
+        } else {
+            selectedViews.insert(view)
+        }
+    }
+}
+
+struct ReaderCacheProgressSheet: View {
+    @ObservedObject var model: ReaderContainerModel
+    let onClose: () -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 24) {
+                ProgressView(value: progressValue)
+                    .progressViewStyle(.linear)
+
+                VStack(spacing: 10) {
+                    Text(titleText)
+                        .font(.title3.weight(.semibold))
+
+                    Text(detailText)
+                        .font(.body)
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(.secondary)
+
+                    if let summary = model.cacheOperationState.summaryMessage, model.cacheOperationState.isFinished {
+                        Text(summary)
+                            .font(.footnote)
+                            .multilineTextAlignment(.center)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                Spacer()
+            }
+            .padding(24)
+            .navigationTitle("缓存进度")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .bottomBar) {
+                    HStack {
+                        if model.cacheOperationState.isFinished {
+                            Button("完成") {
+                                model.dismissCacheProgress()
+                                onClose()
+                                dismiss()
+                            }
+                            .buttonStyle(.borderedProminent)
+                        } else {
+                            Button("后台运行") {
+                                model.hideCacheProgress()
+                                onClose()
+                                dismiss()
+                            }
+                            .buttonStyle(.borderedProminent)
+
+                            Button("终止", role: .destructive) {
+                                model.stopCaching()
+                            }
+                            .buttonStyle(.bordered)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var progressValue: Double {
+        guard model.cacheOperationState.totalCount > 0 else { return 0 }
+        return Double(model.cacheOperationState.completedCount) / Double(model.cacheOperationState.totalCount)
+    }
+
+    private var titleText: String {
+        switch model.cacheOperationState.status {
+        case .idle:
+            return "准备缓存"
+        case .running:
+            return "正在缓存"
+        case .completed:
+            return "缓存完成"
+        case .cancelled:
+            return "缓存已终止"
+        }
+    }
+
+    private var detailText: String {
+        if model.cacheOperationState.isFinished {
+            return "已完成 \(model.cacheOperationState.completedCount) / \(max(model.cacheOperationState.totalCount, 1)) 页"
+        }
+
+        if let currentView = model.cacheOperationState.currentView {
+            return "正在缓存第 \(currentView) 页\n\(model.cacheOperationState.completedCount) / \(max(model.cacheOperationState.totalCount, 1))"
+        }
+
+        return "准备开始缓存…"
     }
 }
 #endif
