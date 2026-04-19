@@ -421,7 +421,7 @@ struct ReaderChapterPreviewBubble: View {
     }
 }
 
-private struct ReaderChromeIconButton: View {
+struct ReaderChromeIconButton: View {
     let systemName: String
     let title: String
     let action: () -> Void

@@ -11,6 +11,11 @@ public struct MangaReaderView: View {
     @State private var showingChrome = true
     @State private var selectedPageID: MangaPage.ID?
     @State private var pagerRevision = UUID()
+    @State private var sliderValue = 0.0
+    @State private var isEditingSlider = false
+    @State private var previewPageIndex: Int?
+    @State private var isPreviewVisible = false
+    @State private var previewHideTask: Task<Void, Never>?
     private let appModel: YamiboAppModel
 
     public init(context: MangaLaunchContext, appModel: YamiboAppModel) {
@@ -28,6 +33,13 @@ public struct MangaReaderView: View {
                 content(proxy: proxy)
                 brightnessOverlay
                 chapterTransitionOverlay
+
+                if showingChrome, isPreviewVisible {
+                    MangaChapterPreviewBubble(title: previewLabelText)
+                        .padding(.bottom, bottomInset + 110)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                        .zIndex(1)
+                }
             }
             .safeAreaInset(edge: .top, spacing: 0) {
                 if showingChrome {
@@ -43,6 +55,7 @@ public struct MangaReaderView: View {
                 await model.prepare()
             }
             .onDisappear {
+                previewHideTask?.cancel()
                 Task { await model.saveProgress() }
             }
             .onChange(of: model.navigationRequest) { _, newValue in
@@ -63,6 +76,17 @@ public struct MangaReaderView: View {
             .sheet(isPresented: $showingDirectorySheet) {
                 MangaDirectorySheet(model: model)
             }
+            .onChange(of: model.currentPageIndex) { _, _ in
+                syncSliderValueIfNeeded()
+            }
+            .onChange(of: model.isTransitioningChapter) { _, isTransitioning in
+                if isTransitioning {
+                    resetSliderPreview()
+                } else {
+                    syncSliderValueIfNeeded()
+                }
+            }
+            .animation(.easeInOut(duration: 0.2), value: isPreviewVisible)
             .statusBar(hidden: !model.settings.showsSystemStatusBar || !showingChrome)
         }
     }
@@ -181,17 +205,17 @@ public struct MangaReaderView: View {
     private func topChrome(topInset: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 12) {
-                MangaChromeIconButton(systemName: "xmark", title: "关闭") {
+                ReaderChromeIconButton(systemName: "xmark", title: "关闭") {
                     appModel.dismissMangaRestoringWebIfNeeded()
                 }
 
                 Spacer(minLength: 0)
 
                 HStack(spacing: 8) {
-                    MangaChromeIconButton(systemName: "safari", title: "原帖") {
+                    ReaderChromeIconButton(systemName: "safari", title: "原帖") {
                         appModel.dismissManga(openThreadInForum: model.context.originalThreadURL)
                     }
-                    MangaChromeIconButton(systemName: "arrow.clockwise", title: "刷新") {
+                    ReaderChromeIconButton(systemName: "arrow.clockwise", title: "刷新") {
                         Task { await model.retryCurrentChapter() }
                     }
                     .disabled(model.isTransitioningChapter)
@@ -203,7 +227,7 @@ public struct MangaReaderView: View {
                     .frame(height: MarqueeText.preferredHeight(for: .headline))
                     .frame(maxWidth: .infinity, alignment: .leading)
 
-                Text(model.currentPageText)
+                Text(model.progressLabelText)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -220,54 +244,19 @@ public struct MangaReaderView: View {
     }
 
     private func bottomChrome(bottomInset: CGFloat) -> some View {
-        VStack(spacing: 14) {
-            HStack {
-                Button {
-                    Task { await model.jumpToAdjacentChapter(-1) }
-                } label: {
-                    Image(systemName: "chevron.left")
-                }
-                .disabled(!model.hasPreviousChapter || model.isTransitioningChapter)
-
-                Slider(
-                    value: Binding(
-                        get: { Double(model.currentPage?.localIndex ?? 0) },
-                        set: { newValue in
-                            model.requestCurrentChapterPage(Int(newValue.rounded()))
-                        }
-                    ),
-                    in: 0 ... Double(max(0, (model.currentPage?.chapterTotalPages ?? 1) - 1))
-                )
-                .disabled(model.isTransitioningChapter)
-
-                Button {
-                    Task { await model.jumpToAdjacentChapter(1) }
-                } label: {
-                    Image(systemName: "chevron.right")
-                }
-                .disabled(!model.hasNextChapter || model.isTransitioningChapter)
+        MangaBottomChrome(
+            model: model,
+            bottomInset: bottomInset,
+            sliderValue: sliderValue,
+            isEditingSlider: isEditingSlider,
+            onSliderValueChange: handleSliderValueChange(_:),
+            onSliderEditingChanged: handleSliderEditingChanged(_:),
+            onShowSettings: { showingSettings = true },
+            onShowDirectory: { showingDirectorySheet = true },
+            onJumpChapter: { delta in
+                Task { await model.jumpToAdjacentChapter(delta) }
             }
-            .tint(.white)
-
-            HStack(spacing: 24) {
-                Button("设置") {
-                    showingSettings = true
-                }
-                .disabled(model.isTransitioningChapter)
-                Button("目录") {
-                    showingDirectorySheet = true
-                }
-                .disabled(model.isTransitioningChapter)
-                Text(model.currentPageText)
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.white)
-            }
-            .foregroundStyle(.white)
-        }
-        .padding(.horizontal, 16)
-        .padding(.top, 12)
-        .padding(.bottom, max(16, bottomInset))
-        .background(.black.opacity(0.88))
+        )
     }
 
     private var brightnessOverlay: some View {
@@ -314,6 +303,64 @@ public struct MangaReaderView: View {
     private func applyViewportRequest(_ request: MangaViewportRequest) {
         pagerRevision = request.revision
         selectedPageID = request.targetPageID
+        syncSliderValueIfNeeded()
+    }
+
+    private func handleSliderValueChange(_ value: Double) {
+        sliderValue = clampedSliderValue(value)
+        guard isEditingSlider else { return }
+        previewPageIndex = model.clampedLocalPageIndex(for: Int(sliderValue.rounded()))
+        previewHideTask?.cancel()
+        isPreviewVisible = true
+    }
+
+    private func handleSliderEditingChanged(_ editing: Bool) {
+        isEditingSlider = editing
+        previewHideTask?.cancel()
+
+        if editing {
+            sliderValue = clampedSliderValue(sliderValue)
+            previewPageIndex = model.clampedLocalPageIndex(for: Int(sliderValue.rounded()))
+            isPreviewVisible = true
+            return
+        }
+
+        let targetIndex = model.clampedLocalPageIndex(for: Int(sliderValue.rounded()))
+        model.requestCurrentChapterPage(targetIndex)
+        schedulePreviewHide()
+    }
+
+    private func syncSliderValueIfNeeded() {
+        guard !isEditingSlider else { return }
+        sliderValue = Double(model.currentPage?.localIndex ?? 0)
+    }
+
+    private func schedulePreviewHide() {
+        previewHideTask?.cancel()
+        previewHideTask = Task {
+            try? await Task.sleep(nanoseconds: 900_000_000)
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                isPreviewVisible = false
+                previewPageIndex = nil
+            }
+        }
+    }
+
+    private func resetSliderPreview() {
+        previewHideTask?.cancel()
+        isEditingSlider = false
+        isPreviewVisible = false
+        previewPageIndex = nil
+        syncSliderValueIfNeeded()
+    }
+
+    private func clampedSliderValue(_ value: Double) -> Double {
+        min(max(value, model.sliderRange.lowerBound), model.sliderRange.upperBound)
+    }
+
+    private var previewLabelText: String {
+        model.previewLabel(forLocalIndex: previewPageIndex ?? model.currentPage?.localIndex ?? 0)
     }
 
     private var windowSafeAreaInsets: UIEdgeInsets {
@@ -322,22 +369,6 @@ public struct MangaReaderView: View {
             .flatMap(\.windows)
             .first(where: \.isKeyWindow)?
             .safeAreaInsets ?? .zero
-    }
-}
-
-private struct MangaChromeIconButton: View {
-    let systemName: String
-    let title: String
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Image(systemName: systemName)
-                .font(.headline)
-                .frame(width: 34, height: 34)
-        }
-        .buttonStyle(.bordered)
-        .accessibilityLabel(title)
     }
 }
 

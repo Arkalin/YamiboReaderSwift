@@ -83,6 +83,29 @@ public final class MangaReaderModel: ObservableObject {
         return "\(currentPage.localIndex + 1) / \(max(1, currentPage.chapterTotalPages))"
     }
 
+    public var progressLabelText: String {
+        currentPageText
+    }
+
+    public var sliderRange: ClosedRange<Double> {
+        0 ... Double(max(0, (currentPage?.chapterTotalPages ?? 1) - 1))
+    }
+
+    public var sliderHasAvailableRange: Bool {
+        sliderRange.lowerBound < sliderRange.upperBound
+    }
+
+    public func clampedLocalPageIndex(for localIndex: Int) -> Int {
+        let upperBound = max(0, (currentPage?.chapterTotalPages ?? 1) - 1)
+        return min(max(localIndex, 0), upperBound)
+    }
+
+    public func previewLabel(forLocalIndex localIndex: Int) -> String {
+        guard let currentPage else { return "第 1 / 1 页" }
+        let clampedIndex = clampedLocalPageIndex(for: localIndex)
+        return "第 \(clampedIndex + 1) / \(max(1, currentPage.chapterTotalPages)) 页"
+    }
+
     public var hasPreviousChapter: Bool {
         adjacentChapter(delta: -1) != nil
     }

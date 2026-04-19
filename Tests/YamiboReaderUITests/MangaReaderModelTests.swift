@@ -678,6 +678,62 @@ final class MangaReaderModelTests: XCTestCase {
             XCTAssertEqual(model.sortedDirectoryChapters.last?.tid, "700")
         }
     }
+
+    func testRequestCurrentChapterPageClampsOutOfBoundsValues() async throws {
+        let model = try await makeMangaModel(
+            chapterHTMLByTID: [
+                "700": makeMangaHTML(
+                    tid: "700",
+                    title: "第1话",
+                    links: [],
+                    imageCount: 3
+                )
+            ]
+        )
+
+        await MainActor.run {
+            model.requestCurrentChapterPage(-8, animated: false)
+            XCTAssertEqual(model.currentPage?.localIndex, 0)
+            XCTAssertEqual(model.viewportRequest?.targetPageID, "700#0")
+
+            model.requestCurrentChapterPage(99, animated: false)
+            XCTAssertEqual(model.currentPage?.localIndex, 2)
+            XCTAssertEqual(model.viewportRequest?.targetPageID, "700#2")
+        }
+    }
+
+    func testProgressLabelsReflectCurrentAndPreviewPages() async throws {
+        let model = try await makeMangaModel(
+            chapterHTMLByTID: [
+                "700": makeMangaHTML(
+                    tid: "700",
+                    title: "第1话",
+                    links: [("701", "第2话")],
+                    imageCount: 3
+                ),
+                "701": makeMangaHTML(
+                    tid: "701",
+                    title: "第2话",
+                    links: [("700", "第1话")],
+                    imageCount: 2
+                )
+            ]
+        )
+
+        await MainActor.run {
+            XCTAssertEqual(model.progressLabelText, "1 / 3")
+            XCTAssertEqual(model.previewLabel(forLocalIndex: -3), "第 1 / 3 页")
+            XCTAssertEqual(model.previewLabel(forLocalIndex: 1), "第 2 / 3 页")
+            XCTAssertEqual(model.previewLabel(forLocalIndex: 99), "第 3 / 3 页")
+        }
+
+        await model.jumpToAdjacentChapter(1)
+
+        await MainActor.run {
+            XCTAssertEqual(model.progressLabelText, "1 / 2")
+            XCTAssertEqual(model.previewLabel(forLocalIndex: 99), "第 2 / 2 页")
+        }
+    }
 }
 
 private nonisolated(unsafe) var modelTestFavoriteStore: FavoriteStore?
