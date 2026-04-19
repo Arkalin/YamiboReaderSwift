@@ -18,6 +18,9 @@ public struct MangaReaderView: View {
 
     public var body: some View {
         GeometryReader { proxy in
+            let topInset = max(proxy.safeAreaInsets.top, windowSafeAreaInsets.top)
+            let bottomInset = max(proxy.safeAreaInsets.bottom, windowSafeAreaInsets.bottom)
+
             ZStack {
                 Color.black.ignoresSafeArea()
                 content(proxy: proxy)
@@ -25,12 +28,12 @@ public struct MangaReaderView: View {
             }
             .safeAreaInset(edge: .top, spacing: 0) {
                 if showingChrome {
-                    topChrome(topInset: proxy.safeAreaInsets.top)
+                    topChrome(topInset: topInset)
                 }
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 if showingChrome {
-                    bottomChrome(bottomInset: proxy.safeAreaInsets.bottom)
+                    bottomChrome(bottomInset: bottomInset)
                 }
             }
             .task {
@@ -144,34 +147,45 @@ public struct MangaReaderView: View {
     }
 
     private func topChrome(topInset: CGFloat) -> some View {
-        HStack(spacing: 12) {
-            Button {
-                appModel.dismissMangaRestoringWebIfNeeded()
-            } label: {
-                Image(systemName: "xmark")
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 12) {
+                MangaChromeIconButton(systemName: "xmark", title: "关闭") {
+                    appModel.dismissMangaRestoringWebIfNeeded()
+                }
+
+                Spacer(minLength: 0)
+
+                HStack(spacing: 8) {
+                    MangaChromeIconButton(systemName: "safari", title: "原帖") {
+                        appModel.dismissManga(openThreadInForum: model.context.originalThreadURL)
+                    }
+                    MangaChromeIconButton(systemName: "arrow.clockwise", title: "刷新") {
+                        Task { await model.retryCurrentChapter() }
+                    }
+                }
             }
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text(model.title)
                     .font(.headline)
-                    .foregroundStyle(.white)
                     .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
                 Text(model.currentPageText)
                     .font(.caption)
-                    .foregroundStyle(.white.opacity(0.7))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
-
-            Spacer(minLength: 0)
-
-            Button("原帖") {
-                appModel.dismissManga(openThreadInForum: model.context.originalThreadURL)
-            }
-            .font(.caption.weight(.semibold))
         }
+        .padding(.top, max(topInset + 8, 20))
         .padding(.horizontal, 16)
-        .padding(.top, max(12, topInset))
-        .padding(.bottom, 10)
-        .background(.black.opacity(0.86))
+        .padding(.bottom, 12)
+        .background(.ultraThinMaterial)
+        .overlay(alignment: .bottom) {
+            Divider().opacity(0.35)
+        }
     }
 
     private func bottomChrome(bottomInset: CGFloat) -> some View {
@@ -238,6 +252,30 @@ public struct MangaReaderView: View {
         }
         .ignoresSafeArea()
         .allowsHitTesting(false)
+    }
+
+    private var windowSafeAreaInsets: UIEdgeInsets {
+        UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows)
+            .first(where: \.isKeyWindow)?
+            .safeAreaInsets ?? .zero
+    }
+}
+
+private struct MangaChromeIconButton: View {
+    let systemName: String
+    let title: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.headline)
+                .frame(width: 34, height: 34)
+        }
+        .buttonStyle(.bordered)
+        .accessibilityLabel(title)
     }
 }
 
