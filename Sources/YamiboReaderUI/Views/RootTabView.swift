@@ -3,6 +3,7 @@ import YamiboReaderCore
 
 public struct RootTabView: View {
     private let forumURL = URL(string: "https://bbs.yamibo.com/forum.php?mobile=2")!
+    private let mineURL = URL(string: "https://bbs.yamibo.com/home.php?mod=space&do=profile&mycenter=1&mobile=2")!
     private let appModel: YamiboAppModel
 
     public init(appModel: YamiboAppModel, initialTab: AppTab = .forum) {
@@ -38,10 +39,10 @@ public struct RootTabView: View {
                     Label("收藏", systemImage: "heart.text.square")
                 }
 
-            MigrationStatusView()
-                .tag(AppTab.migration)
+            ForumBrowserView(url: mineURL, appContext: appModel.appContext, appModel: appModel)
+                .tag(AppTab.mine)
                 .tabItem {
-                    Label("迁移", systemImage: "hammer")
+                    Label("我的", systemImage: "person.crop.circle")
                 }
         }
         .modifier(ReaderPresentationModifier(appModel: appModel))
@@ -121,19 +122,6 @@ private struct MangaPresentationHostView: View {
             case nil:
                 Color.clear
             }
-        }
-    }
-}
-
-private struct MigrationStatusView: View {
-    var body: some View {
-        NavigationStack {
-            List {
-                Label("论坛浏览容器已迁到 SwiftUI + WebKit", systemImage: "checkmark.circle.fill")
-                Label("收藏页同步、基础解析与数据模型已迁移", systemImage: "checkmark.circle.fill")
-                Label("原生小说阅读器与漫画阅读器待继续迁移", systemImage: "clock")
-            }
-            .navigationTitle("Swift 迁移状态")
         }
     }
 }

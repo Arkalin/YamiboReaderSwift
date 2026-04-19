@@ -22,8 +22,10 @@ struct YamiboReaderIOSApp: App {
         switch ProcessInfo.processInfo.environment["START_TAB"]?.lowercased() {
         case "favorites":
             .favorites
+        case "mine", "my":
+            .mine
         case "migration":
-            .migration
+            .mine
         default:
             .forum
         }
