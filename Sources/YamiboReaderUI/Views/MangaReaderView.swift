@@ -104,6 +104,7 @@ public struct MangaReaderView: View {
                     refererURL: model.pages[index].chapterURL,
                     imageRepository: appModel.appContext.mangaImageRepository,
                     zoomEnabled: model.settings.zoomEnabled,
+                    showsChapterTitle: true,
                     onToggleChrome: { showingChrome.toggle() }
                 )
                 .tag(index)
@@ -126,6 +127,7 @@ public struct MangaReaderView: View {
                             refererURL: model.pages[index].chapterURL,
                             imageRepository: appModel.appContext.mangaImageRepository,
                             zoomEnabled: model.settings.zoomEnabled,
+                            showsChapterTitle: false,
                             onToggleChrome: { showingChrome.toggle() }
                         )
                         .id(index)
@@ -613,6 +615,7 @@ private struct MangaPageContent: View {
     let refererURL: URL
     let imageRepository: MangaImageRepository
     let zoomEnabled: Bool
+    let showsChapterTitle: Bool
     let onToggleChrome: () -> Void
 
     var body: some View {
@@ -623,9 +626,11 @@ private struct MangaPageContent: View {
                 imageRepository: imageRepository,
                 zoomEnabled: zoomEnabled
             )
-            Text(page.chapterTitle)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            if showsChapterTitle {
+                Text(page.chapterTitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
         .contentShape(Rectangle())
         .onTapGesture {
