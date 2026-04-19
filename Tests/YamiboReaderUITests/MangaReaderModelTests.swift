@@ -104,6 +104,7 @@ final class MangaReaderModelTests: XCTestCase {
             XCTAssertEqual(model.currentPageIndex, 2)
             XCTAssertEqual(model.viewportRequest?.targetPageID, "701#0")
             XCTAssertNotEqual(model.viewportRequest?.revision, initialRevision)
+            XCTAssertNil(model.navigationRequest)
         }
     }
 
@@ -122,16 +123,73 @@ final class MangaReaderModelTests: XCTestCase {
                     links: [("700", "第1话")],
                     imageCount: 0
                 )
-            ]
+            ],
+            chapterProbe: { context in
+                .fallback(
+                    reason: .noImages,
+                    suggestedWebContext: MangaWebContext(
+                        currentURL: context.chapterURL,
+                        originalThreadURL: context.originalThreadURL,
+                        source: context.source
+                    )
+                )
+            }
         )
 
         await model.jumpToAdjacentChapter(1)
         await MainActor.run {
+            guard case let .fallbackWeb(context)? = model.navigationRequest else {
+                return XCTFail("Expected fallback web navigation")
+            }
             XCTAssertEqual(
-                model.fallbackWebContext?.currentURL.absoluteString,
+                context.currentURL.absoluteString,
                 "https://bbs.yamibo.com/forum.php?mobile=2&mod=viewthread&page=1&tid=701"
             )
-            XCTAssertFalse(model.fallbackWebContext?.autoOpenNative ?? true)
+            XCTAssertFalse(context.autoOpenNative)
+            XCTAssertFalse(model.isTransitioningChapter)
+        }
+    }
+
+    func testAdjacentJumpCanRecoverViaProbeWhenDirectLoadFails() async throws {
+        let model = try await makeMangaModel(
+            chapterHTMLByTID: [
+                "700": makeMangaHTML(
+                    tid: "700",
+                    title: "第1话",
+                    links: [("701", "第2话")],
+                    imageCount: 1
+                ),
+                "701": makeMangaHTML(
+                    tid: "701",
+                    title: "第2话",
+                    links: [("700", "第1话")],
+                    imageCount: 0
+                )
+            ],
+            chapterProbe: { context in
+                .success(
+                    MangaProbePayload(
+                        images: [
+                            URL(string: "https://img.example.com/701-probe-0.jpg")!,
+                            URL(string: "https://img.example.com/701-probe-1.jpg")!
+                        ],
+                        title: "第2话",
+                        html: "<html></html>",
+                        sectionName: "中文百合漫画区"
+                    )
+                )
+            }
+        )
+
+        await model.jumpToAdjacentChapter(1)
+
+        await MainActor.run {
+            XCTAssertEqual(model.currentPage?.chapterTitle, "第2话")
+            XCTAssertEqual(model.currentPage?.chapterURL.absoluteString, "https://bbs.yamibo.com/forum.php?mobile=2&mod=viewthread&page=1&tid=701")
+            XCTAssertEqual(model.pages.count, 3)
+            XCTAssertEqual(model.viewportRequest?.targetPageID, "701#0")
+            XCTAssertNil(model.navigationRequest)
+            XCTAssertFalse(model.isTransitioningChapter)
         }
     }
 
@@ -197,7 +255,7 @@ final class MangaReaderModelTests: XCTestCase {
         }
     }
 
-    func testFarJumpResetsLoadedWindowToTargetChapter() async throws {
+    func testFarJumpEmitsReopenNativeNavigationRequest() async throws {
         let chapterHTML = Dictionary(uniqueKeysWithValues: (700 ... 705).map { tid in
             let title = "第\(tid - 699)话"
             let links = (700 ... 705)
@@ -215,10 +273,75 @@ final class MangaReaderModelTests: XCTestCase {
         await model.jumpToChapter(targetChapter)
 
         await MainActor.run {
-            XCTAssertEqual(model.currentPage?.chapterTitle, "第6话")
+            guard case let .reopenNative(context)? = model.navigationRequest else {
+                return XCTFail("Expected native reopen navigation")
+            }
+            XCTAssertEqual(context.chapterURL.absoluteString, "https://bbs.yamibo.com/forum.php?mobile=2&mod=viewthread&page=1&tid=705")
+            XCTAssertEqual(context.originalThreadURL.absoluteString, "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=700&mobile=2")
+            XCTAssertEqual(model.currentPage?.chapterTitle, "第1话")
             XCTAssertEqual(model.pages.count, 2)
-            XCTAssertEqual(Set(model.pages.map(\.chapterTitle)), ["第6话"])
-            XCTAssertEqual(model.viewportRequest?.targetPageID, "705#0")
+        }
+    }
+
+    func testRapidAdjacentJumpsCancelEarlierRequestAndKeepLatestResult() async throws {
+        let model = try await makeMangaModel(
+            chapterHTMLByTID: [
+                "700": makeMangaHTML(
+                    tid: "700",
+                    title: "第1话",
+                    links: [("701", "第2话")],
+                    imageCount: 0
+                ),
+                "701": makeMangaHTML(
+                    tid: "701",
+                    title: "第2话",
+                    links: [("700", "第1话"), ("702", "第3话")],
+                    imageCount: 1
+                ),
+                "702": makeMangaHTML(
+                    tid: "702",
+                    title: "第3话",
+                    links: [("701", "第2话")],
+                    imageCount: 0
+                )
+            ],
+            chapterProbe: { context in
+                let tid = MangaTitleCleaner.extractTid(from: context.chapterURL.absoluteString)
+                if tid == "700" {
+                    try? await Task.sleep(nanoseconds: 400_000_000)
+                    return .success(
+                        MangaProbePayload(
+                            images: [URL(string: "https://img.example.com/700-probe-0.jpg")!],
+                            title: "第1话",
+                            html: "<html></html>",
+                            sectionName: "中文百合漫画区"
+                        )
+                    )
+                }
+                try? await Task.sleep(nanoseconds: 50_000_000)
+                return .success(
+                    MangaProbePayload(
+                        images: [URL(string: "https://img.example.com/702-probe-0.jpg")!],
+                        title: "第3话",
+                        html: "<html></html>",
+                        sectionName: "中文百合漫画区"
+                    )
+                )
+            },
+            initialTID: "701"
+        )
+
+        async let firstJump: Void = model.jumpToAdjacentChapter(-1)
+        try? await Task.sleep(nanoseconds: 80_000_000)
+        async let secondJump: Void = model.jumpToAdjacentChapter(1)
+        _ = await (firstJump, secondJump)
+
+        await MainActor.run {
+            XCTAssertEqual(model.currentPage?.chapterTitle, "第3话")
+            XCTAssertEqual(model.currentPage?.tid, "702")
+            XCTAssertFalse(model.pages.map(\.tid).contains("700"))
+            XCTAssertNil(model.navigationRequest)
+            XCTAssertFalse(model.isTransitioningChapter)
         }
     }
 
@@ -565,6 +688,7 @@ private func makeMangaModel(
     appSettings: AppSettings = AppSettings(),
     requestLog: RequestLog? = nil,
     requestHandler: ((URLRequest) -> (Data, HTTPURLResponse)?)? = nil,
+    chapterProbe: (@MainActor (MangaLaunchContext) async -> MangaProbeOutcome)? = nil,
     initialTID: String = "700",
     initialPage: Int = 0
 ) async throws -> MangaReaderModel {
@@ -612,7 +736,8 @@ private func makeMangaModel(
                 source: .forum,
                 initialPage: initialPage
             ),
-            appContext: appContext
+            appContext: appContext,
+            chapterProbe: chapterProbe
         )
     }
     await model.prepare()

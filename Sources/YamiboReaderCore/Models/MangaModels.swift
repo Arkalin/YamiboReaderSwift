@@ -112,6 +112,22 @@ public enum MangaProbeOutcome: Hashable, Sendable {
     case fallback(reason: MangaProbeFailureReason, suggestedWebContext: MangaWebContext)
 }
 
+public enum MangaChapterTransitionSource: String, Hashable, Sendable {
+    case adjacent
+    case directory
+}
+
+public enum MangaChapterTransitionState: Hashable, Sendable {
+    case idle
+    case loading(targetTID: String, source: MangaChapterTransitionSource)
+    case failed(message: String)
+}
+
+public enum MangaReaderNavigationRequest: Hashable, Sendable {
+    case reopenNative(MangaLaunchContext)
+    case fallbackWeb(MangaWebContext)
+}
+
 public enum MangaDirectoryStrategy: String, Codable, Hashable, Sendable {
     case tag
     case links

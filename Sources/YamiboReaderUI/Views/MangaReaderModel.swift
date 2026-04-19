@@ -29,26 +29,44 @@ public final class MangaReaderModel: ObservableObject {
     @Published public private(set) var directoryCooldownRemaining = 0
     @Published public private(set) var showsForceSearchShortcut = false
     @Published public private(set) var forceSearchShortcutRemaining = 0
-    @Published public var fallbackWebContext: MangaWebContext?
+    @Published public private(set) var chapterTransitionState: MangaChapterTransitionState = .idle
+    @Published public private(set) var navigationRequest: MangaReaderNavigationRequest?
 
     public let context: MangaLaunchContext
 
     private let appContext: YamiboAppContext
     private let imageRepository: MangaImageRepository
+    private let chapterProbe: @MainActor (MangaLaunchContext) async -> MangaProbeOutcome
     private var repository: MangaRepository?
     private var loadedDocuments: [MangaChapterDocument] = []
-    private var loadingChapterTIDs = Set<String>()
+    private var chapterDocumentTasks: [String: Task<MangaChapterDocument, Error>] = [:]
+    private var chapterJumpTask: Task<Void, Never>?
     private var imagePrefetchTask: Task<Void, Never>?
     private var directoryCooldownTask: Task<Void, Never>?
     private var forceSearchShortcutTask: Task<Void, Never>?
     private var prepared = false
     private let maxLoadedDocuments = 10
+    private let chapterLoadTimeoutNanoseconds: UInt64 = 12_000_000_000
+    private let chapterTransitionTimeoutNanoseconds: UInt64 = 18_000_000_000
     private var viewportRevision = UUID()
+    private var chapterJumpGeneration = 0
 
-    public init(context: MangaLaunchContext, appContext: YamiboAppContext) {
+    public init(
+        context: MangaLaunchContext,
+        appContext: YamiboAppContext,
+        chapterProbe: (@MainActor (MangaLaunchContext) async -> MangaProbeOutcome)? = nil
+    ) {
         self.context = context
         self.appContext = appContext
         self.imageRepository = appContext.mangaImageRepository
+        self.chapterProbe = chapterProbe ?? { launchContext in
+            let service = MangaProbeService(appContext: appContext)
+            return await service.probe(
+                launchContext: launchContext,
+                currentHTML: nil,
+                currentTitle: nil
+            )
+        }
     }
 
     public var title: String {
@@ -122,6 +140,13 @@ public final class MangaReaderModel: ObservableObject {
         showsForceSearchShortcut || currentDirectory?.strategy != .tag
     }
 
+    public var isTransitioningChapter: Bool {
+        if case .loading = chapterTransitionState {
+            return true
+        }
+        return false
+    }
+
     public func prepare() async {
         guard !prepared else { return }
         prepared = true
@@ -136,6 +161,16 @@ public final class MangaReaderModel: ObservableObject {
     public func retryCurrentChapter() async {
         errorMessage = nil
         await loadInitialChapter()
+    }
+
+    public func consumeNavigationRequest() {
+        navigationRequest = nil
+    }
+
+    public func clearTransitionFailureIfNeeded() {
+        if case .failed = chapterTransitionState {
+            chapterTransitionState = .idle
+        }
     }
 
     public func updateCurrentPage(_ index: Int) {
@@ -197,43 +232,36 @@ public final class MangaReaderModel: ObservableObject {
 
     public func jumpToAdjacentChapter(_ delta: Int) async {
         guard let chapter = adjacentChapter(delta: delta) else { return }
-        await jumpToChapter(chapter)
+        await jumpToChapter(chapter, source: .adjacent)
     }
 
     public func jumpToChapter(_ chapter: MangaChapter) async {
+        await jumpToChapter(chapter, source: .directory)
+    }
+
+    private func jumpToChapter(_ chapter: MangaChapter, source: MangaChapterTransitionSource) async {
         if let index = firstPageIndex(for: chapter.url) {
             currentPageIndex = index
             emitViewportRequest(targetIndex: index, animated: true, resetRevision: true)
             scheduleImagePrefetch()
+            chapterTransitionState = .idle
             return
         }
 
-        do {
-            let document = try await loadDocument(for: chapter.url, htmlOverride: nil)
-            let focus = MangaFocusKey(chapterURL: document.chapterURL, localIndex: 0)
-            if shouldResetLoadedDocuments(for: document) {
-                loadedDocuments = [document]
-            } else if shouldInsertBeforeCurrent(document) {
-                loadedDocuments.insert(document, at: 0)
-                trimLoadedDocumentsIfNeeded(
-                    preferredRemoval: .back,
-                    preservingTID: document.tid
-                )
-            } else {
-                loadedDocuments.append(document)
-                trimLoadedDocumentsIfNeeded(
-                    preferredRemoval: .front,
-                    preservingTID: document.tid
-                )
-            }
-            rebuildPages(focus: focus, animated: false, resetRevision: true)
-            errorMessage = nil
-        } catch {
-            fallbackWebContext = makeWebFallbackContext(
-                currentURL: chapter.url,
-                initialPage: 0
-            )
+        guard let currentDirectory,
+              let targetIndex = currentDirectory.chapters.firstIndex(where: { $0.tid == chapter.tid }),
+              let currentPage,
+              let currentIndex = currentDirectory.chapters.firstIndex(where: { $0.tid == currentPage.tid }) else {
+            chapterTransitionState = .failed(message: "当前章节状态异常，请重试")
+            return
         }
+
+        if abs(targetIndex - currentIndex) > 1 {
+            emitNavigationRequest(.reopenNative(makeNativeLaunchContext(for: chapter)))
+            return
+        }
+
+        await performAdjacentChapterJump(to: chapter, source: source)
     }
 
     public func updateDirectoryFromPanel() async {
@@ -290,6 +318,9 @@ public final class MangaReaderModel: ObservableObject {
     }
 
     private func loadInitialChapter() async {
+        chapterJumpTask?.cancel()
+        chapterTransitionState = .idle
+        navigationRequest = nil
         do {
             let document = try await loadDocument(for: context.chapterURL, htmlOverride: nil)
             loadedDocuments = [document]
@@ -326,15 +357,18 @@ public final class MangaReaderModel: ObservableObject {
 
     private func loadDocument(for url: URL, htmlOverride: String?) async throws -> MangaChapterDocument {
         let tid = MangaTitleCleaner.extractTid(from: url.absoluteString) ?? url.absoluteString
-        guard !loadingChapterTIDs.contains(tid) else {
-            throw YamiboError.underlying("章节仍在加载中")
+        if let existingTask = chapterDocumentTasks[tid] {
+            return try await existingTask.value
         }
-        loadingChapterTIDs.insert(tid)
-        defer { loadingChapterTIDs.remove(tid) }
         guard let repository else {
             throw YamiboError.underlying("漫画仓储未初始化")
         }
-        return try await repository.loadChapter(url: url, htmlOverride: htmlOverride)
+        let task = Task {
+            try await repository.loadChapter(url: url, htmlOverride: htmlOverride)
+        }
+        chapterDocumentTasks[tid] = task
+        defer { chapterDocumentTasks.removeValue(forKey: tid) }
+        return try await task.value
     }
 
     private func prefetchIfNeeded(for index: Int) async {
@@ -554,6 +588,162 @@ public final class MangaReaderModel: ObservableObject {
         }
 
         return requests
+    }
+
+    private func performAdjacentChapterJump(
+        to chapter: MangaChapter,
+        source: MangaChapterTransitionSource
+    ) async {
+        chapterJumpGeneration += 1
+        let generation = chapterJumpGeneration
+        chapterJumpTask?.cancel()
+        imagePrefetchTask?.cancel()
+        chapterTransitionState = .loading(targetTID: chapter.tid, source: source)
+        errorMessage = nil
+
+        let task = Task { @MainActor in
+            await self.runAdjacentChapterJump(
+                to: chapter,
+                source: source,
+                generation: generation
+            )
+        }
+        chapterJumpTask = task
+        await task.value
+    }
+
+    private func runAdjacentChapterJump(
+        to chapter: MangaChapter,
+        source: MangaChapterTransitionSource,
+        generation: Int
+    ) async {
+        do {
+            let document = try await self.withTimeout(nanoseconds: self.chapterTransitionTimeoutNanoseconds) {
+                do {
+                    return try await self.withTimeout(nanoseconds: self.chapterLoadTimeoutNanoseconds) {
+                        try await self.loadDocument(for: chapter.url, htmlOverride: nil)
+                    }
+                } catch is CancellationError {
+                    throw CancellationError()
+                } catch {
+                    return try await self.loadDocumentViaProbe(for: chapter)
+                }
+            }
+
+            try Task.checkCancellation()
+            guard generation == chapterJumpGeneration else { return }
+
+            insertLoadedDocument(document)
+            rebuildPages(
+                focus: MangaFocusKey(chapterURL: document.chapterURL, localIndex: 0),
+                animated: false,
+                resetRevision: true
+            )
+            chapterTransitionState = .idle
+            errorMessage = nil
+        } catch is CancellationError {
+            guard generation == chapterJumpGeneration else { return }
+            chapterTransitionState = .idle
+        } catch {
+            guard generation == chapterJumpGeneration else { return }
+            errorMessage = error.localizedDescription
+            chapterTransitionState = .idle
+            emitNavigationRequest(
+                .fallbackWeb(
+                    makeWebFallbackContext(
+                        currentURL: chapter.url,
+                        initialPage: 0
+                    )
+                )
+            )
+        }
+    }
+
+    private func insertLoadedDocument(_ document: MangaChapterDocument) {
+        if shouldResetLoadedDocuments(for: document) {
+            loadedDocuments = [document]
+        } else if shouldInsertBeforeCurrent(document) {
+            loadedDocuments.insert(document, at: 0)
+            trimLoadedDocumentsIfNeeded(
+                preferredRemoval: .back,
+                preservingTID: document.tid
+            )
+        } else {
+            loadedDocuments.append(document)
+            trimLoadedDocumentsIfNeeded(
+                preferredRemoval: .front,
+                preservingTID: document.tid
+            )
+        }
+    }
+
+    private func loadDocumentViaProbe(for chapter: MangaChapter) async throws -> MangaChapterDocument {
+        let outcome = await chapterProbe(makeNativeLaunchContext(for: chapter))
+        switch outcome {
+        case let .success(payload):
+            guard !payload.images.isEmpty else {
+                throw YamiboError.parsingFailed(context: "漫画图片")
+            }
+            let title = MangaTitleCleaner.cleanThreadTitle(
+                payload.title.isEmpty ? chapter.rawTitle : payload.title
+            )
+            return MangaChapterDocument(
+                tid: chapter.tid,
+                chapterTitle: title,
+                chapterURL: YamiboRoute.thread(url: chapter.url, page: 1, authorID: nil).url,
+                pages: payload.images,
+                html: payload.html ?? ""
+            )
+        case let .fallback(reason, _):
+            switch reason {
+            case .retryableNetwork:
+                throw YamiboError.underlying("章节加载超时，请稍后重试")
+            case .timeout:
+                throw YamiboError.underlying("章节加载超时，请稍后重试")
+            case .notManga:
+                throw YamiboError.parsingFailed(context: "当前页面不是漫画章节")
+            case .noImages:
+                throw YamiboError.parsingFailed(context: "漫画图片")
+            case .webProcessTerminated:
+                throw YamiboError.underlying("章节探测失败，请切换网页模式重试")
+            }
+        }
+    }
+
+    private func makeNativeLaunchContext(for chapter: MangaChapter) -> MangaLaunchContext {
+        MangaLaunchContext(
+            originalThreadURL: context.originalThreadURL,
+            chapterURL: chapter.url,
+            displayTitle: currentDirectoryTitle,
+            source: context.source,
+            initialPage: 0,
+            directoryName: currentDirectory?.cleanBookName
+        )
+    }
+
+    private func emitNavigationRequest(_ request: MangaReaderNavigationRequest) {
+        chapterJumpTask?.cancel()
+        chapterTransitionState = .idle
+        navigationRequest = request
+    }
+
+    private func withTimeout<T: Sendable>(
+        nanoseconds: UInt64,
+        operation: @escaping @MainActor () async throws -> T
+    ) async throws -> T {
+        try await withThrowingTaskGroup(of: T.self) { group in
+            group.addTask {
+                try await operation()
+            }
+            group.addTask {
+                try await Task.sleep(nanoseconds: nanoseconds)
+                throw YamiboError.underlying("章节加载超时，请稍后重试")
+            }
+
+            let result = try await group.next()!
+            group.cancelAll()
+            return result
+        }
     }
 
     public func makeWebFallbackContext(currentURL: URL, initialPage: Int) -> MangaWebContext {

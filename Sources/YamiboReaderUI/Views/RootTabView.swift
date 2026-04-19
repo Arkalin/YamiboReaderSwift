@@ -117,8 +117,10 @@ private struct MangaPresentationHostView: View {
             switch appModel.activeMangaRoute {
             case let .native(context)?:
                 MangaReaderView(context: context, appModel: appModel)
+                    .id("native-\(context.id)")
             case let .web(context)?:
                 MangaWebFallbackView(context: context, appModel: appModel)
+                    .id("web-\(context.id)")
             case nil:
                 Color.clear
             }

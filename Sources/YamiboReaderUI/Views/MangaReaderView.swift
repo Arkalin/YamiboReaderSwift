@@ -27,6 +27,7 @@ public struct MangaReaderView: View {
                 Color.black.ignoresSafeArea()
                 content(proxy: proxy)
                 brightnessOverlay
+                chapterTransitionOverlay
             }
             .safeAreaInset(edge: .top, spacing: 0) {
                 if showingChrome {
@@ -44,10 +45,15 @@ public struct MangaReaderView: View {
             .onDisappear {
                 Task { await model.saveProgress() }
             }
-            .onChange(of: model.fallbackWebContext) { _, newValue in
+            .onChange(of: model.navigationRequest) { _, newValue in
                 if let newValue {
-                    appModel.fallbackMangaToWeb(newValue)
-                    model.fallbackWebContext = nil
+                    switch newValue {
+                    case let .fallbackWeb(context):
+                        appModel.fallbackMangaToWeb(context)
+                    case let .reopenNative(context):
+                        appModel.presentManga(context)
+                    }
+                    model.consumeNavigationRequest()
                 }
             }
             .sheet(isPresented: $showingSettings) {
@@ -113,6 +119,7 @@ public struct MangaReaderView: View {
                 .padding(.vertical, 12)
             }
         }
+        .allowsHitTesting(!model.isTransitioningChapter)
         .id(pagerRevision)
         .tabViewStyle(.page(indexDisplayMode: .never))
         .onAppear {
@@ -168,6 +175,7 @@ public struct MangaReaderView: View {
                 }
             }
         }
+        .allowsHitTesting(!model.isTransitioningChapter)
     }
 
     private func topChrome(topInset: CGFloat) -> some View {
@@ -186,6 +194,7 @@ public struct MangaReaderView: View {
                     MangaChromeIconButton(systemName: "arrow.clockwise", title: "刷新") {
                         Task { await model.retryCurrentChapter() }
                     }
+                    .disabled(model.isTransitioningChapter)
                 }
             }
 
@@ -218,7 +227,7 @@ public struct MangaReaderView: View {
                 } label: {
                     Image(systemName: "chevron.left")
                 }
-                .disabled(!model.hasPreviousChapter)
+                .disabled(!model.hasPreviousChapter || model.isTransitioningChapter)
 
                 Slider(
                     value: Binding(
@@ -229,13 +238,14 @@ public struct MangaReaderView: View {
                     ),
                     in: 0 ... Double(max(0, (model.currentPage?.chapterTotalPages ?? 1) - 1))
                 )
+                .disabled(model.isTransitioningChapter)
 
                 Button {
                     Task { await model.jumpToAdjacentChapter(1) }
                 } label: {
                     Image(systemName: "chevron.right")
                 }
-                .disabled(!model.hasNextChapter)
+                .disabled(!model.hasNextChapter || model.isTransitioningChapter)
             }
             .tint(.white)
 
@@ -243,9 +253,11 @@ public struct MangaReaderView: View {
                 Button("设置") {
                     showingSettings = true
                 }
+                .disabled(model.isTransitioningChapter)
                 Button("目录") {
                     showingDirectorySheet = true
                 }
+                .disabled(model.isTransitioningChapter)
                 Text(model.currentPageText)
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(.white)
@@ -269,6 +281,34 @@ public struct MangaReaderView: View {
         }
         .ignoresSafeArea()
         .allowsHitTesting(false)
+    }
+
+    @ViewBuilder
+    private var chapterTransitionOverlay: some View {
+        if model.isTransitioningChapter {
+            ZStack {
+                Color.black.opacity(0.38)
+                    .ignoresSafeArea()
+
+                VStack(spacing: 12) {
+                    ProgressView()
+                        .tint(.white)
+                        .scaleEffect(1.1)
+                    Text("章节加载中…")
+                        .font(.headline)
+                        .foregroundStyle(.white)
+                    Text("未缓存章节会先探测并尝试切换，失败时将自动回退网页模式。")
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.78))
+                        .multilineTextAlignment(.center)
+                }
+                .padding(.horizontal, 20)
+                .padding(.vertical, 18)
+                .background(.black.opacity(0.8))
+                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .padding(24)
+            }
+        }
     }
 
     private func applyViewportRequest(_ request: MangaViewportRequest) {
@@ -464,12 +504,11 @@ private struct MangaDirectorySheet: View {
                     ForEach(model.sortedDirectoryChapters) { chapter in
                         MangaDirectoryChapterRow(
                             chapter: chapter,
-                            isCurrent: chapter.tid == model.currentPage?.tid
+                            isCurrent: chapter.tid == model.currentPage?.tid,
+                            isDisabled: model.isTransitioningChapter
                         ) {
-                            Task {
-                                await model.jumpToChapter(chapter)
-                                dismiss()
-                            }
+                            dismiss()
+                            Task { await model.jumpToChapter(chapter) }
                         }
                     }
                 }
@@ -521,6 +560,7 @@ private struct MangaDirectorySheet: View {
 private struct MangaDirectoryChapterRow: View {
     let chapter: MangaChapter
     let isCurrent: Bool
+    let isDisabled: Bool
     let onSelect: () -> Void
 
     @State private var isExpanded = false
@@ -569,9 +609,10 @@ private struct MangaDirectoryChapterRow: View {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .fill(isCurrent ? Color.orange.opacity(0.12) : Color(uiColor: .secondarySystemGroupedBackground))
         )
+        .opacity(isDisabled && !isCurrent ? 0.55 : 1)
         .contentShape(Rectangle())
         .onTapGesture {
-            guard !isCurrent else { return }
+            guard !isCurrent, !isDisabled else { return }
             onSelect()
         }
     }
