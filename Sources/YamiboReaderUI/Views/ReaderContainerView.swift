@@ -17,6 +17,7 @@ private enum ReaderChromeMode {
 
 public struct ReaderContainerView: View {
     @StateObject private var model: ReaderContainerModel
+    @StateObject private var verticalScrollCoordinator = ReaderVerticalScrollCoordinator()
     @State private var showingSettings = false
     @State private var showingCachePanel = false
     @State private var showingCacheProgress = false
@@ -28,6 +29,7 @@ public struct ReaderContainerView: View {
     @State private var progressPreviewChapterTitle: String?
     @State private var isProgressPreviewVisible = false
     @State private var progressPreviewHideTask: Task<Void, Never>?
+    @State private var verticalTapSuppressionUntil: CFTimeInterval = 0
     private let appModel: YamiboAppModel
 
     public init(context: ReaderLaunchContext, appModel: YamiboAppModel) {
@@ -239,9 +241,17 @@ public struct ReaderContainerView: View {
                 .padding(.bottom, 24)
             }
             .contentShape(Rectangle())
+            .background(
+                ReaderScrollViewResolver { scrollView in
+                    verticalScrollCoordinator.attach(scrollView: scrollView)
+                }
+            )
+            .simultaneousGesture(
+                verticalScrollSuppressionGesture
+            )
             .simultaneousGesture(
                 TapGesture().onEnded {
-                    toggleChrome()
+                    handleVerticalTap()
                 }
             )
             .onChange(of: verticalScrollRequest) { _, request in
@@ -300,6 +310,34 @@ public struct ReaderContainerView: View {
         withAnimation(.easeInOut(duration: 0.2)) {
             chromeMode = chromeMode == .immersiveHidden ? .visible : .immersiveHidden
         }
+    }
+
+    private func handleVerticalTap() {
+        guard !model.pages.isEmpty else { return }
+        let now = CACurrentMediaTime()
+        if now <= verticalTapSuppressionUntil {
+            verticalTapSuppressionUntil = now + 0.35
+            _ = verticalScrollCoordinator.interruptScrollingIfNeeded()
+            return
+        }
+        if verticalScrollCoordinator.shouldSuppressChromeToggle() {
+            return
+        }
+        if verticalScrollCoordinator.interruptScrollingIfNeeded() {
+            verticalTapSuppressionUntil = now + 0.35
+            return
+        }
+        toggleChrome()
+    }
+
+    private var verticalScrollSuppressionGesture: some Gesture {
+        DragGesture(minimumDistance: 4)
+            .onChanged { _ in
+                verticalTapSuppressionUntil = CACurrentMediaTime() + 0.5
+            }
+            .onEnded { _ in
+                verticalTapSuppressionUntil = CACurrentMediaTime() + 0.5
+            }
     }
 
     private func openChapterDrawer() {
@@ -440,6 +478,164 @@ public struct ReaderContainerView: View {
             .flatMap(\.windows)
             .first(where: \.isKeyWindow)?
             .safeAreaInsets ?? .zero
+    }
+}
+
+private final class ReaderVerticalScrollCoordinator: NSObject, ObservableObject, UIGestureRecognizerDelegate {
+    private weak var scrollView: UIScrollView?
+    private weak var interruptionTapRecognizer: UITapGestureRecognizer?
+    private var contentOffsetObservation: NSKeyValueObservation?
+    private var suppressChromeToggleUntil = CACurrentMediaTime()
+    private var lastMotionTime = CACurrentMediaTime()
+    private let motionSuppressionInterval: CFTimeInterval = 0.35
+
+    func attach(scrollView: UIScrollView?) {
+        guard self.scrollView !== scrollView else { return }
+        detachTapRecognizer()
+        contentOffsetObservation = nil
+        self.scrollView = scrollView
+        installTapRecognizerIfNeeded()
+        installContentOffsetObservationIfNeeded()
+    }
+
+    func interruptScrollingIfNeeded() -> Bool {
+        guard let scrollView, scrollView.isTracking || scrollView.isDragging || scrollView.isDecelerating else {
+            return false
+        }
+
+        let offset = scrollView.contentOffset
+        scrollView.setContentOffset(offset, animated: false)
+        lastMotionTime = CACurrentMediaTime()
+
+        // Toggling scrollability reliably stops residual momentum from SwiftUI's backing scroll view.
+        if scrollView.isDecelerating {
+            scrollView.isScrollEnabled = false
+            scrollView.isScrollEnabled = true
+            scrollView.setContentOffset(offset, animated: false)
+        }
+
+        return true
+    }
+
+    func shouldSuppressChromeToggle() -> Bool {
+        let now = CACurrentMediaTime()
+        if now - lastMotionTime <= motionSuppressionInterval {
+            suppressChromeToggleUntil = now
+            return true
+        }
+        guard now <= suppressChromeToggleUntil else { return false }
+        suppressChromeToggleUntil = now
+        return true
+    }
+
+    private func installTapRecognizerIfNeeded() {
+        guard let scrollView, interruptionTapRecognizer == nil else { return }
+        let recognizer = UITapGestureRecognizer(target: self, action: #selector(handleInterruptionTap(_:)))
+        recognizer.cancelsTouchesInView = false
+        recognizer.delegate = self
+        scrollView.addGestureRecognizer(recognizer)
+        interruptionTapRecognizer = recognizer
+    }
+
+    private func installContentOffsetObservationIfNeeded() {
+        guard let scrollView else { return }
+        contentOffsetObservation = scrollView.observe(\.contentOffset, options: [.old, .new]) { [weak self] _, change in
+            guard let self, let oldValue = change.oldValue, let newValue = change.newValue else { return }
+            guard oldValue != newValue else { return }
+            self.lastMotionTime = CACurrentMediaTime()
+        }
+    }
+
+    private func detachTapRecognizer() {
+        if let recognizer = interruptionTapRecognizer {
+            recognizer.view?.removeGestureRecognizer(recognizer)
+        }
+        interruptionTapRecognizer = nil
+    }
+
+    @objc
+    private func handleInterruptionTap(_ recognizer: UITapGestureRecognizer) {
+        guard recognizer.state == .ended else { return }
+        guard interruptScrollingIfNeeded() else { return }
+        suppressChromeToggleUntil = CACurrentMediaTime() + motionSuppressionInterval
+    }
+
+    func gestureRecognizer(
+        _ gestureRecognizer: UIGestureRecognizer,
+        shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
+    ) -> Bool {
+        true
+    }
+
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+        guard let scrollView else { return false }
+        return scrollView.isTracking || scrollView.isDragging || scrollView.isDecelerating
+    }
+}
+
+private struct ReaderScrollViewResolver: UIViewRepresentable {
+    let onResolve: (UIScrollView?) -> Void
+
+    func makeUIView(context: Context) -> ReaderScrollViewResolverView {
+        let view = ReaderScrollViewResolverView()
+        view.onResolve = onResolve
+        return view
+    }
+
+    func updateUIView(_ uiView: ReaderScrollViewResolverView, context: Context) {
+        uiView.onResolve = onResolve
+        uiView.resolveScrollViewIfNeeded()
+    }
+}
+
+private final class ReaderScrollViewResolverView: UIView {
+    var onResolve: ((UIScrollView?) -> Void)?
+    private weak var resolvedScrollView: UIScrollView?
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        backgroundColor = .clear
+        isUserInteractionEnabled = false
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func didMoveToSuperview() {
+        super.didMoveToSuperview()
+        resolveScrollViewIfNeeded()
+    }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        resolveScrollViewIfNeeded()
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        resolveScrollViewIfNeeded()
+    }
+
+    func resolveScrollViewIfNeeded() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            var candidate = self.superview
+            var scrollView: UIScrollView?
+
+            while let current = candidate {
+                if let resolved = current as? UIScrollView {
+                    scrollView = resolved
+                    break
+                }
+                candidate = current.superview
+            }
+
+            guard scrollView !== self.resolvedScrollView else { return }
+            self.resolvedScrollView = scrollView
+            self.onResolve?(scrollView)
+        }
     }
 }
 
