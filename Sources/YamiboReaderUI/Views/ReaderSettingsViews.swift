@@ -562,14 +562,9 @@ private struct ReaderBooksFontPickerRow: View {
 
     var body: some View {
         HStack {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("字体")
-                    .font(.title3.weight(.semibold))
-                    .foregroundStyle(palette.primaryText)
-                Text(selectedFamily.title)
-                    .font(.body)
-                    .foregroundStyle(palette.secondaryText)
-            }
+            Text("字体")
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(palette.primaryText)
             Spacer()
             Menu {
                 ForEach(ReaderFontFamily.allCases, id: \.self) { family in
