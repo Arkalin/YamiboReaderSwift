@@ -567,12 +567,15 @@ func favoriteProgressText(for favorite: Favorite) -> String? {
     }
     if let lastChapter = favorite.lastChapter, !lastChapter.isEmpty {
         if favorite.type == .manga, favorite.lastPage > 0 {
-            return "\(lastChapter) · 第\(favorite.lastPage + 1)页"
+            if let chapterLabel = favoriteMangaChapterLabel(from: lastChapter) {
+                return "读至第 \(favorite.lastPage + 1) 页 · \(chapterLabel)"
+            }
+            return "读至第 \(favorite.lastPage + 1) 页"
         }
         return lastChapter
     }
     if favorite.type == .manga, favorite.lastPage > 0 {
-        return "第\(favorite.lastPage + 1)页"
+        return "读至第 \(favorite.lastPage + 1) 页"
     }
     if favorite.lastPage > 0 || favorite.lastView > 1 {
         return "第\(favorite.lastPage + 1)页 / 网页第\(favorite.lastView)页"
@@ -580,8 +583,37 @@ func favoriteProgressText(for favorite: Favorite) -> String? {
     return nil
 }
 
+func favoriteMangaChapterLabel(from rawTitle: String) -> String? {
+    let trimmedTitle = rawTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmedTitle.isEmpty else { return nil }
+
+    let chapterNumber = MangaTitleCleaner.extractChapterNumber(trimmedTitle)
+    let displayNumber = MangaChapterDisplayFormatter.displayNumber(
+        rawTitle: trimmedTitle,
+        chapterNumber: chapterNumber
+    )
+
+    guard !displayNumber.isEmpty else { return nil }
+    return "第\(displayNumber)话"
+}
+
 func favoriteDetailLines(for favorite: Favorite) -> [String] {
     var lines: [String] = []
+
+    if favorite.type == .manga {
+        if let progressText = favoriteProgressText(for: favorite) {
+            lines.append(progressText)
+        } else if let lastChapter = favorite.lastChapter?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !lastChapter.isEmpty {
+            lines.append(lastChapter)
+        }
+
+        if lines.isEmpty {
+            lines.append(favorite.type.title)
+        }
+
+        return Array(lines.prefix(1))
+    }
 
     if let lastChapter = favorite.lastChapter?.trimmingCharacters(in: .whitespacesAndNewlines),
        !lastChapter.isEmpty {
@@ -590,7 +622,7 @@ func favoriteDetailLines(for favorite: Favorite) -> [String] {
 
     if favorite.type == .novel {
         if favorite.lastPage > 0 || favorite.lastView > 1 {
-            lines.append("读至第 \(favorite.lastPage + 1) 页 - \(favorite.lastView) 页")
+            lines.append("读至第 \(favorite.lastPage + 1) 页 · 网页第 \(favorite.lastView) 页")
         }
     } else if let progressText = favoriteProgressText(for: favorite),
               !lines.contains(progressText) {
