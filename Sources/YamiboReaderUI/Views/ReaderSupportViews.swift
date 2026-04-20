@@ -63,9 +63,13 @@ private struct ReaderBlockView: View {
     var body: some View {
         switch block {
         case let .text(text, chapterTitle):
-            styledReaderText(text, chapterTitle: chapterTitle)
-                .lineSpacing(6 * settings.lineHeightScale)
-                .foregroundColor(readerTextColor)
+            ReaderRichTextView(
+                text: text,
+                chapterTitle: chapterTitle,
+                settings: settings,
+                baseFontSize: 22,
+                textColor: UIColor(readerTextColor)
+            )
         case let .image(url, _):
             AuthenticatedReaderImage(
                 url: url,
@@ -84,34 +88,69 @@ private struct ReaderBlockView: View {
     private var readerTextColor: Color {
         colorScheme == .dark ? Color.white.opacity(0.92) : .primary
     }
+}
 
-    private func styledReaderText(_ text: String, chapterTitle: String?) -> Text {
+struct ReaderRichTextView: UIViewRepresentable {
+    let text: String
+    let chapterTitle: String?
+    let settings: ReaderAppearanceSettings
+    let baseFontSize: Double
+    let textColor: UIColor
+    var titleWeight: UIFont.Weight = .regular
+
+    func makeUIView(context: Context) -> UILabel {
+        let label = UILabel()
+        label.numberOfLines = 0
+        label.lineBreakMode = .byWordWrapping
+        label.adjustsFontForContentSizeCategory = true
+        label.backgroundColor = .clear
+        return label
+    }
+
+    func updateUIView(_ uiView: UILabel, context: Context) {
+        uiView.attributedText = makeAttributedText()
+    }
+
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView: UILabel, context: Context) -> CGSize? {
+        let targetWidth = proposal.width ?? UIScreen.main.bounds.width
+        let fittingSize = uiView.sizeThatFits(CGSize(width: targetWidth, height: .greatestFiniteMagnitude))
+        return CGSize(width: targetWidth, height: ceil(fittingSize.height))
+    }
+
+    private func makeAttributedText() -> NSAttributedString {
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.lineSpacing = 6 * settings.lineHeightScale
+        paragraphStyle.alignment = settings.usesJustifiedText ? .justified : .natural
+
+        let bodyAttributes: [NSAttributedString.Key: Any] = [
+            .font: settings.fontFamily.uiFont(size: baseFontSize * settings.fontScale, weight: .regular),
+            .kern: settings.fontFamily.kerning(size: baseFontSize * settings.fontScale, scale: settings.characterSpacingScale),
+            .foregroundColor: textColor,
+            .paragraphStyle: paragraphStyle,
+        ]
+        let titleAttributes: [NSAttributedString.Key: Any] = [
+            .font: settings.fontFamily.uiFont(size: baseFontSize * settings.fontScale, weight: titleWeight),
+            .kern: settings.fontFamily.kerning(size: baseFontSize * settings.fontScale, scale: settings.characterSpacingScale),
+            .foregroundColor: textColor,
+            .paragraphStyle: paragraphStyle,
+        ]
+
+        let rendered = NSMutableAttributedString()
         let segments = ReaderChapterTextFormatter.split(text: text, chapterTitle: chapterTitle)
-        guard let title = segments.title else {
-            return Text(text)
-                .font(readerFont())
-                .kerning(readerKerning)
+
+        if let title = segments.title {
+            rendered.append(NSAttributedString(string: title, attributes: titleAttributes))
+            if let body = segments.body {
+                rendered.append(NSAttributedString(string: body, attributes: bodyAttributes))
+            }
+        } else {
+            rendered.append(NSAttributedString(string: text, attributes: bodyAttributes))
         }
 
-        let titleText = Text(title)
-            .font(readerFont(weight: .bold))
-            .kerning(readerKerning)
-        guard let body = segments.body else {
-            return titleText
-        }
-        return titleText + Text(body)
-            .font(readerFont())
-            .kerning(readerKerning)
-    }
-
-    private func readerFont(weight: Font.Weight = .regular) -> Font {
-        settings.fontFamily.font(size: 22 * settings.fontScale, weight: weight)
-    }
-
-    private var readerKerning: CGFloat {
-        settings.fontFamily.kerning(size: 22 * settings.fontScale, scale: settings.characterSpacingScale)
+        return rendered
     }
 }
+
 @MainActor
 private final class ReaderImageLoader: ObservableObject {
     @Published var image: UIImage?

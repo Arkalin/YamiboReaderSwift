@@ -146,6 +146,7 @@ final class ReaderContainerModelTests: XCTestCase {
             lineHeightScale: 1.7,
             characterSpacingScale: 0.05,
             horizontalPadding: 22,
+            usesJustifiedText: true,
             showsSystemStatusBar: false,
             loadsInlineImages: false,
             backgroundStyle: .paper,

@@ -9,7 +9,7 @@ extension ReaderFontFamily {
         Font(uiFont(size: size, weight: weight.uiFontWeight))
     }
 
-    private func uiFont(size: Double, weight: UIFont.Weight) -> UIFont {
+    func uiFont(size: Double, weight: UIFont.Weight) -> UIFont {
         let pointSize = CGFloat(size)
         switch self {
         case .systemSans:
@@ -116,6 +116,15 @@ struct ReaderSettingsPanel: View {
                                 onHorizontalPaddingChange: setHorizontalPadding
                             )
 
+                            ReaderBooksStandaloneToggleSection(
+                                title: "使文本两端对齐",
+                                palette: palette,
+                                isOn: Binding(
+                                    get: { draftSettings.usesJustifiedText },
+                                    set: { draftSettings.usesJustifiedText = $0 }
+                                )
+                            )
+
                             ReaderBooksDisplaySection(
                                 settings: draftSettings,
                                 palette: palette,
@@ -157,6 +166,7 @@ struct ReaderSettingsPanel: View {
     private func setLineHeightScale(_ value: Double) { draftSettings.lineHeightScale = value }
     private func setCharacterSpacingScale(_ value: Double) { draftSettings.characterSpacingScale = value }
     private func setHorizontalPadding(_ value: Double) { draftSettings.horizontalPadding = value }
+    private func setUsesJustifiedText(_ value: Bool) { draftSettings.usesJustifiedText = value }
     private func setBackgroundStyle(_ value: ReaderBackgroundStyle) { draftSettings.backgroundStyle = value }
     private func setReadingMode(_ value: ReaderReadingMode) { draftSettings.readingMode = value }
     private func setTranslationMode(_ value: ReaderTranslationMode) { draftSettings.translationMode = value }
@@ -263,17 +273,22 @@ private struct ReaderBooksPreviewMaskedContent: View {
         ZStack(alignment: .topLeading) {
             Color.clear
             VStack(alignment: .leading, spacing: 20) {
-                Text("今夜，窗外的风像翻页声一样轻。")
-                    .font(settings.fontFamily.font(size: 24 * settings.fontScale, weight: .bold))
-                    .kerning(settings.fontFamily.kerning(size: 24 * settings.fontScale, scale: settings.characterSpacingScale))
-                    .foregroundStyle(palette.primaryText)
-                    .lineSpacing(8 * settings.lineHeightScale)
+                ReaderRichTextView(
+                    text: "今夜，窗外的风像翻页声一样轻。",
+                    chapterTitle: nil,
+                    settings: settings,
+                    baseFontSize: 24,
+                    textColor: UIColor(palette.primaryText),
+                    titleWeight: .bold
+                )
 
-                Text("阅读设置会在此处预览，右上角保存后才会作用在正文中。你可以先把它调到舒服，再继续往下读。")
-                    .font(settings.fontFamily.font(size: 17 * settings.fontScale))
-                    .kerning(settings.fontFamily.kerning(size: 17 * settings.fontScale, scale: settings.characterSpacingScale))
-                    .foregroundStyle(palette.secondaryText)
-                    .lineSpacing(8 * settings.lineHeightScale)
+                ReaderRichTextView(
+                    text: "阅读设置会在此处预览，右上角保存后才会作用在正文中。你可以先把它调到舒服，再继续往下读。",
+                    chapterTitle: nil,
+                    settings: settings,
+                    baseFontSize: 17,
+                    textColor: UIColor(palette.secondaryText)
+                )
             }
             .padding(.top, 4)
             .padding(.horizontal, settings.horizontalPadding)
@@ -445,6 +460,31 @@ private struct ReaderBooksLayoutSection: View {
     }
 }
 
+private struct ReaderBooksStandaloneToggleSection: View {
+    let title: String
+    let palette: ReaderBooksSheetPalette
+    @Binding var isOn: Bool
+
+    var body: some View {
+        HStack {
+            Text(title)
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(palette.primaryText)
+            Spacer()
+            Toggle("", isOn: $isOn)
+                .labelsHidden()
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(palette.cardBackground, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 26, style: .continuous)
+                .strokeBorder(palette.divider, lineWidth: 1)
+        }
+    }
+}
+
 private struct ReaderBooksDisplaySection: View {
     let settings: ReaderAppearanceSettings
     let palette: ReaderBooksSheetPalette
@@ -495,7 +535,7 @@ private struct ReaderBooksMiscSection: View {
                 palette: palette,
                 isOn: Binding(
                     get: { systemStatusBar },
-                    set: onSystemStatusBarChange
+                    set: { onSystemStatusBarChange($0) }
                 )
             )
             ReaderBooksDivider(palette: palette)
@@ -504,7 +544,7 @@ private struct ReaderBooksMiscSection: View {
                 palette: palette,
                 isOn: Binding(
                     get: { loadsInlineImages },
-                    set: onLoadsInlineImagesChange
+                    set: { onLoadsInlineImagesChange($0) }
                 )
             )
         }

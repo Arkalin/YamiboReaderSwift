@@ -43,6 +43,7 @@ import Testing
             lineHeightScale: 1.6,
             characterSpacingScale: 0.04,
             horizontalPadding: 20,
+            usesJustifiedText: true,
             loadsInlineImages: false,
             backgroundStyle: .paper,
             readingMode: .vertical,
@@ -84,6 +85,7 @@ import Testing
 
     #expect(decoded.fontFamily == .systemSans)
     #expect(decoded.characterSpacingScale == 0)
+    #expect(decoded.usesJustifiedText == false)
     #expect(decoded.fontScale == 1.2)
     #expect(decoded.lineHeightScale == 1.5)
 }
