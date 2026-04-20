@@ -148,20 +148,45 @@ public struct ReaderAppearanceSettings: Codable, Hashable, Sendable {
     }
 }
 
+public struct WebBrowserSettings: Codable, Hashable, Sendable {
+    public var showsNavigationBar: Bool
+
+    public init(showsNavigationBar: Bool = true) {
+        self.showsNavigationBar = showsNavigationBar
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case showsNavigationBar
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        showsNavigationBar = try container.decodeIfPresent(Bool.self, forKey: .showsNavigationBar) ?? true
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(showsNavigationBar, forKey: .showsNavigationBar)
+    }
+}
+
 public struct AppSettings: Codable, Hashable, Sendable {
     public var reader: ReaderAppearanceSettings
     public var manga: MangaReaderSettings
+    public var webBrowser: WebBrowserSettings
     public var usesDataSaverMode: Bool
     public var collapsesFavoriteSections: Bool
 
     public init(
         reader: ReaderAppearanceSettings = .init(),
         manga: MangaReaderSettings = .init(),
+        webBrowser: WebBrowserSettings = .init(),
         usesDataSaverMode: Bool = false,
         collapsesFavoriteSections: Bool = false
     ) {
         self.reader = reader
         self.manga = manga
+        self.webBrowser = webBrowser
         self.usesDataSaverMode = usesDataSaverMode
         self.collapsesFavoriteSections = collapsesFavoriteSections
     }
@@ -169,6 +194,7 @@ public struct AppSettings: Codable, Hashable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case reader
         case manga
+        case webBrowser
         case usesDataSaverMode
         case collapsesFavoriteSections
     }
@@ -177,6 +203,7 @@ public struct AppSettings: Codable, Hashable, Sendable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         reader = try container.decodeIfPresent(ReaderAppearanceSettings.self, forKey: .reader) ?? .init()
         manga = try container.decodeIfPresent(MangaReaderSettings.self, forKey: .manga) ?? .init()
+        webBrowser = try container.decodeIfPresent(WebBrowserSettings.self, forKey: .webBrowser) ?? .init()
         usesDataSaverMode = try container.decodeIfPresent(Bool.self, forKey: .usesDataSaverMode) ?? false
         collapsesFavoriteSections = try container.decodeIfPresent(Bool.self, forKey: .collapsesFavoriteSections) ?? false
     }
@@ -185,6 +212,7 @@ public struct AppSettings: Codable, Hashable, Sendable {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(reader, forKey: .reader)
         try container.encode(manga, forKey: .manga)
+        try container.encode(webBrowser, forKey: .webBrowser)
         try container.encode(usesDataSaverMode, forKey: .usesDataSaverMode)
         try container.encode(collapsesFavoriteSections, forKey: .collapsesFavoriteSections)
     }

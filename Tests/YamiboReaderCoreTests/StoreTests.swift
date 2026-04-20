@@ -56,6 +56,7 @@ import Testing
             showsSystemStatusBar: false,
             directorySortOrder: .descending
         ),
+        webBrowser: WebBrowserSettings(showsNavigationBar: false),
         usesDataSaverMode: true,
         collapsesFavoriteSections: true
     )
@@ -64,6 +65,26 @@ import Testing
     let loaded = await store.load()
 
     #expect(loaded == settings)
+}
+
+@Test func appSettingsDecodesLegacyPayloadWithDefaultWebBrowserSettings() async throws {
+    let legacy = """
+    {
+      "reader": {
+        "fontScale": 1.0
+      },
+      "manga": {
+        "readingMode": "vertical"
+      },
+      "usesDataSaverMode": false,
+      "collapsesFavoriteSections": true
+    }
+    """
+
+    let decoded = try JSONDecoder().decode(AppSettings.self, from: Data(legacy.utf8))
+
+    #expect(decoded.webBrowser.showsNavigationBar == true)
+    #expect(decoded.collapsesFavoriteSections == true)
 }
 
 @Test func readerAppearanceSettingsDecodesLegacyPayloadWithFontDefaults() async throws {
@@ -284,4 +305,170 @@ import Testing
     #expect(merged.first?.title == "新标题")
     #expect(merged.first?.displayName == "我的名字")
     #expect(merged.first?.resolvedDisplayTitle == "我的名字")
+}
+
+@Test func settingsStoreResetRestoresDefaults() async throws {
+    let defaults = try makeIsolatedDefaults(prefix: "settings-reset-tests")
+    let store = SettingsStore(defaults: defaults, key: "settings")
+
+    try await store.save(AppSettings(webBrowser: WebBrowserSettings(showsNavigationBar: false)))
+    try await store.reset()
+
+    let loaded = await store.load()
+    #expect(loaded == AppSettings())
+}
+
+@Test func sessionStoreResetRestoresDefaults() async throws {
+    let defaults = try makeIsolatedDefaults(prefix: "session-reset-tests")
+    let store = SessionStore(defaults: defaults, key: "session")
+
+    try await store.updateWebSession(
+        cookie: "sid=reset",
+        userAgent: "Test-UA",
+        isLoggedIn: true
+    )
+    try await store.reset()
+
+    let loaded = await store.load()
+    #expect(loaded == SessionState())
+}
+
+@Test func favoriteStoreClearAllRemovesAllFavorites() async throws {
+    let defaults = try makeIsolatedDefaults(prefix: "favorite-clear-tests")
+    let store = FavoriteStore(defaults: defaults, key: "favorites")
+
+    try await store.saveFavorites([
+        Favorite(
+            title: "测试收藏",
+            url: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=515&mobile=2"))
+        )
+    ])
+
+    try await store.clearAll()
+
+    let loaded = await store.loadFavorites()
+    #expect(loaded.isEmpty)
+}
+
+@Test func readerCacheStoreReportsUsageAndCanClearAll() async throws {
+    let baseDirectory = makeTemporaryDirectory(prefix: "reader-cache-tests")
+    let store = ReaderCacheStore(baseDirectory: baseDirectory)
+    let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=600&mobile=2"))
+
+    try await store.save(
+        ReaderPageDocument(
+            threadURL: threadURL,
+            view: 1,
+            maxView: 1,
+            segments: [.text("测试内容", chapterTitle: "第一章")]
+        )
+    )
+
+    let usage = await store.totalDiskUsageBytes()
+    #expect(usage > 0)
+
+    try await store.clearAll()
+
+    let clearedUsage = await store.totalDiskUsageBytes()
+    #expect(clearedUsage == 0)
+}
+
+@Test func mangaImageCacheStoreReportsUsageAndCanClearAll() async throws {
+    let baseDirectory = makeTemporaryDirectory(prefix: "manga-image-cache-tests")
+    let store = MangaImageCacheStore(baseDirectory: baseDirectory)
+    let imageURL = try #require(URL(string: "https://static.yamibo.com/test-1.jpg"))
+    let data = Data(repeating: 7, count: 2048)
+
+    try await store.save(data, for: imageURL)
+
+    let usage = await store.totalDiskUsageBytes()
+    #expect(usage == data.count)
+
+    try await store.clearAll()
+
+    let clearedUsage = await store.totalDiskUsageBytes()
+    #expect(clearedUsage == 0)
+}
+
+@Test func appContextResetApplicationDataClearsPersistedState() async throws {
+    let suiteName = makeIsolatedDefaultsSuiteName(prefix: "app-reset-tests")
+    UserDefaults(suiteName: suiteName)?.removePersistentDomain(forName: suiteName)
+    let fileManager = FileManager.default
+    let rootDirectory = makeTemporaryDirectory(prefix: "app-reset-root")
+
+    let sessionStore = SessionStore(defaults: try #require(UserDefaults(suiteName: suiteName)), key: "session")
+    let settingsStore = SettingsStore(defaults: try #require(UserDefaults(suiteName: suiteName)), key: "settings")
+    let favoriteStore = FavoriteStore(defaults: try #require(UserDefaults(suiteName: suiteName)), key: "favorites")
+    let readerCacheStore = ReaderCacheStore(baseDirectory: rootDirectory.appendingPathComponent("reader-cache", isDirectory: true))
+    let mangaImageCacheStore = MangaImageCacheStore(baseDirectory: rootDirectory.appendingPathComponent("manga-image-cache", isDirectory: true))
+    let mangaDirectoryStore = MangaDirectoryStore(
+        fileManager: fileManager,
+        baseDirectory: rootDirectory.appendingPathComponent("manga-directory", isDirectory: true)
+    )
+    let appContext = YamiboAppContext(
+        sessionStore: sessionStore,
+        settingsStore: settingsStore,
+        favoriteStore: favoriteStore,
+        readerCacheStore: readerCacheStore,
+        mangaImageCacheStore: mangaImageCacheStore,
+        mangaDirectoryStore: mangaDirectoryStore
+    )
+
+    let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=700&mobile=2"))
+    let imageURL = try #require(URL(string: "https://static.yamibo.com/test-2.jpg"))
+
+    try await sessionStore.updateWebSession(cookie: "sid=1", userAgent: "UA", isLoggedIn: true)
+    try await settingsStore.save(AppSettings(webBrowser: WebBrowserSettings(showsNavigationBar: false)))
+    try await favoriteStore.saveFavorites([Favorite(title: "测试收藏", url: threadURL)])
+    try await readerCacheStore.save(
+        ReaderPageDocument(
+            threadURL: threadURL,
+            view: 1,
+            maxView: 1,
+            segments: [.text("测试", chapterTitle: nil)]
+        )
+    )
+    try await mangaImageCacheStore.save(Data(repeating: 9, count: 1024), for: imageURL)
+    _ = try await mangaDirectoryStore.initializeDirectory(
+        currentURL: threadURL,
+        rawTitle: "测试漫画 第1话",
+        html: ""
+    )
+
+    try await appContext.resetApplicationData()
+
+    let session = await sessionStore.load()
+    let settings = await settingsStore.load()
+    let favorites = await favoriteStore.loadFavorites()
+    let readerCacheBytes = await readerCacheStore.totalDiskUsageBytes()
+    let mangaCacheBytes = await mangaImageCacheStore.totalDiskUsageBytes()
+    let directories = await mangaDirectoryStore.allDirectories()
+
+    #expect(session == SessionState())
+    #expect(settings == AppSettings())
+    #expect(favorites.isEmpty)
+    #expect(readerCacheBytes == 0)
+    #expect(mangaCacheBytes == 0)
+    #expect(directories.isEmpty)
+}
+
+private func makeIsolatedDefaults(prefix: String) throws -> UserDefaults {
+    let suiteName = makeIsolatedDefaultsSuiteName(prefix: prefix)
+    guard let defaults = UserDefaults(suiteName: suiteName) else {
+        struct DefaultsSuiteCreationError: Error {}
+        throw DefaultsSuiteCreationError()
+    }
+    defaults.removePersistentDomain(forName: suiteName)
+    return defaults
+}
+
+private func makeIsolatedDefaultsSuiteName(prefix: String) -> String {
+    "\(prefix)-\(UUID().uuidString)"
+}
+
+private func makeTemporaryDirectory(prefix: String) -> URL {
+    let baseURL = FileManager.default.temporaryDirectory
+        .appendingPathComponent("\(prefix)-\(UUID().uuidString)", isDirectory: true)
+    try? FileManager.default.createDirectory(at: baseURL, withIntermediateDirectories: true)
+    return baseURL
 }

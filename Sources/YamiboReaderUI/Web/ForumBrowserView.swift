@@ -112,6 +112,7 @@ public final class ForumBrowserModel: ObservableObject {
 public struct ForumBrowserView: View {
     @StateObject private var model: ForumBrowserModel
     @State private var showingHistory = false
+    @State private var showsNavigationBar = true
     @State private var actionErrorMessage: String?
     private let appContext: YamiboAppContext
     private let appModel: YamiboAppModel
@@ -131,11 +132,13 @@ public struct ForumBrowserView: View {
 
     public var body: some View {
         VStack(spacing: 0) {
-            ForumBrowserToolbar(
-                model: model,
-                showingHistory: $showingHistory,
-                openNative: openNative
-            )
+            if showsNavigationBar {
+                ForumBrowserToolbar(
+                    model: model,
+                    showingHistory: $showingHistory,
+                    openNative: openNative
+                )
+            }
             ZStack(alignment: .top) {
                 IOSForumWebView(model: model, appContext: appContext)
                 if model.isLoading {
@@ -147,6 +150,12 @@ public struct ForumBrowserView: View {
         }
         .sheet(isPresented: $showingHistory) {
             ForumHistorySheet(model: model, showingHistory: $showingHistory)
+        }
+        .task {
+            await refreshNavigationBarVisibility()
+        }
+        .task {
+            await observeSettingsChanges()
         }
         .onChange(of: appModel.forumNavigationRequest?.id) { _, _ in
             guard listensToForumNavigationRequest else { return }
@@ -161,6 +170,22 @@ public struct ForumBrowserView: View {
         }, message: {
             Text(actionErrorMessage ?? "")
         })
+    }
+
+    private func refreshNavigationBarVisibility() async {
+        let settings = await appContext.settingsStore.load()
+        showsNavigationBar = settings.webBrowser.showsNavigationBar
+    }
+
+    private func observeSettingsChanges() async {
+        for await notification in NotificationCenter.default.notifications(named: SettingsStore.didChangeNotification) {
+            guard !Task.isCancelled else { return }
+            guard let changeID = notification.userInfo?[SettingsStore.changeIDUserInfoKey] as? String,
+                  changeID == appContext.settingsStore.changeID else {
+                continue
+            }
+            await refreshNavigationBarVisibility()
+        }
     }
 
     private func openNative() {

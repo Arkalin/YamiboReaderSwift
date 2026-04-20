@@ -133,6 +133,27 @@ public actor ReaderCacheStore {
         try await deleteViews(views, for: threadURL, authorID: authorID, contentSource: contentSource)
     }
 
+    public func totalDiskUsageBytes() async -> Int {
+        await ensureIndexLoaded()
+
+        return index.values.reduce(into: 0) { total, threadEntry in
+            for variant in threadEntry.variants.values {
+                for metadata in variant.pages.values {
+                    let fileURL = baseDirectory.appendingPathComponent(metadata.fileName, isDirectory: false)
+                    let byteCount = (try? fileURL.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+                    total += byteCount
+                }
+            }
+        }
+    }
+
+    public func clearAll() async throws {
+        await ensureIndexLoaded()
+        clearLegacyCacheDirectory()
+        index = [:]
+        try persistIndex()
+    }
+
     private func ensureIndexLoaded() async {
         guard !didLoadIndex else { return }
         didLoadIndex = true

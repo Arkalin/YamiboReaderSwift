@@ -272,7 +272,7 @@ public struct FavoritesView: View {
     @AppStorage("yamibo.favorite.showHidden") private var showsHidden = false
     @State private var searchText = ""
     @State private var selectedFavorite: Favorite?
-    @State private var showingDirectoryManager = false
+    @State private var showingSettingsSheet = false
     @State private var detailRoute: FavoriteDetailRoute?
     private let appContext: YamiboAppContext
     private let appModel: YamiboAppModel
@@ -337,7 +337,9 @@ public struct FavoritesView: View {
                 #if os(iOS)
                 ToolbarItem(placement: .topBarLeading) {
                     Menu {
-                        Button {} label: {
+                        Button {
+                            showingSettingsSheet = true
+                        } label: {
                             Label("设置", systemImage: "gearshape")
                         }
 
@@ -351,7 +353,9 @@ public struct FavoritesView: View {
                 #else
                 ToolbarItem {
                     Menu {
-                        Button {} label: {
+                        Button {
+                            showingSettingsSheet = true
+                        } label: {
                             Label("设置", systemImage: "gearshape")
                         }
 
@@ -407,8 +411,14 @@ public struct FavoritesView: View {
                 ForumBrowserView(url: favorite.url, appContext: appContext, appModel: appModel)
                     .ignoresSafeArea()
             }
-            .sheet(isPresented: $showingDirectoryManager) {
-                MangaDirectoryManagementView(store: appContext.mangaDirectoryStore)
+            .sheet(isPresented: $showingSettingsSheet) {
+                FavoritesSettingsView(appContext: appContext) {
+                    filterRawValue = FavoriteFilter.all.rawValue
+                    sortRawValue = FavoriteSortOrder.manual.rawValue
+                    showsHidden = false
+                    searchText = ""
+                    await appModel.bootstrap()
+                }
             }
         }
     }
@@ -432,10 +442,6 @@ public struct FavoritesView: View {
         }
 
         Toggle("显示隐藏项", isOn: $showsHidden)
-
-        Button("管理目录") {
-            showingDirectoryManager = true
-        }
     }
 
     private var titleMenuLabel: some View {

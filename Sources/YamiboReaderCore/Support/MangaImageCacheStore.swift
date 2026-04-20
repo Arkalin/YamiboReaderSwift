@@ -83,6 +83,11 @@ public actor MangaImageCacheStore {
         try persistIndex()
     }
 
+    public func totalDiskUsageBytes() async -> Int {
+        await ensureIndexLoaded()
+        return index.values.reduce(0) { $0 + $1.byteCount }
+    }
+
     private func ensureIndexLoaded() async {
         guard !didLoadIndex else { return }
         didLoadIndex = true

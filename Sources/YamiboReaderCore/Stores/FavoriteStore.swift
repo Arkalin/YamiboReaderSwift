@@ -11,6 +11,7 @@ public protocol FavoriteStoring: Sendable {
     func favorite(id: String) async -> Favorite?
     func updateReadingProgress(for url: URL, progress: ReaderProgress) async throws -> Favorite
     func updateMangaProgress(for url: URL, chapterURL: URL, chapterTitle: String, pageIndex: Int) async throws -> Favorite
+    func clearAll() async throws
 }
 
 public actor FavoriteStore: FavoriteStoring {
@@ -169,6 +170,10 @@ public actor FavoriteStore: FavoriteStoring {
         favorites.append(favorite)
         try await saveFavorites(favorites)
         return favorite
+    }
+
+    public func clearAll() async throws {
+        try await saveFavorites([])
     }
 
     private func updateFavorites(

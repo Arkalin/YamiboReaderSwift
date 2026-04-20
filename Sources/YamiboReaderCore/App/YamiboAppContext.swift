@@ -1,10 +1,19 @@
 import Foundation
+#if canImport(WebKit)
+import WebKit
+#endif
 
 public protocol YamiboRepositoryProviding {
     func makeRepository() async -> YamiboRepository
 }
 
 public final class YamiboAppContext: YamiboRepositoryProviding, Sendable {
+    private static let resettableUserDefaultsKeys = [
+        "yamibo.favorite.filter",
+        "yamibo.favorite.sort",
+        "yamibo.favorite.showHidden"
+    ]
+
     public let sessionStore: SessionStore
     public let settingsStore: SettingsStore
     public let favoriteStore: FavoriteStore
@@ -87,6 +96,41 @@ public final class YamiboAppContext: YamiboRepositoryProviding, Sendable {
             settings: await settingsStore.load(),
             favorites: await favoriteStore.loadFavorites()
         )
+    }
+
+    public func resetApplicationData() async throws {
+        try await sessionStore.reset()
+        try await settingsStore.reset()
+        try await favoriteStore.clearAll()
+        try await readerCacheStore.clearAll()
+        try await mangaImageCacheStore.clearAll()
+        try await mangaDirectoryStore.clearAll()
+        clearLocalUIState()
+        await clearWebData()
+    }
+
+    private func clearLocalUIState() {
+        let defaults = UserDefaults.standard
+        Self.resettableUserDefaultsKeys.forEach { defaults.removeObject(forKey: $0) }
+    }
+
+    @MainActor
+    private func clearWebData() async {
+        HTTPCookieStorage.shared.removeCookies(since: .distantPast)
+        URLCache.shared.removeAllCachedResponses()
+
+        #if canImport(WebKit)
+        let dataStore = WKWebsiteDataStore.default()
+        let dataTypes = WKWebsiteDataStore.allWebsiteDataTypes()
+        let records = await withCheckedContinuation { continuation in
+            dataStore.fetchDataRecords(ofTypes: dataTypes) { continuation.resume(returning: $0) }
+        }
+        await withCheckedContinuation { continuation in
+            dataStore.removeData(ofTypes: dataTypes, for: records) {
+                continuation.resume()
+            }
+        }
+        #endif
     }
 }
 

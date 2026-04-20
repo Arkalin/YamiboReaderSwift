@@ -5,6 +5,7 @@ public protocol SessionStoring: Sendable {
     func save(_ session: SessionState) async throws
     func updateCookie(_ cookie: String, isLoggedIn: Bool) async throws
     func updateWebSession(cookie: String, userAgent: String, isLoggedIn: Bool) async throws
+    func reset() async throws
 }
 
 public actor SessionStore: SessionStoring {
@@ -47,5 +48,9 @@ public actor SessionStore: SessionStoring {
         session.isLoggedIn = isLoggedIn
         session.lastUpdatedAt = .now
         try await save(session)
+    }
+
+    public func reset() async throws {
+        try await save(SessionState())
     }
 }
