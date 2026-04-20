@@ -4,6 +4,7 @@ import YamiboReaderCore
 #if os(iOS)
 import UIKit
 
+
 private enum ReaderChromeMode {
     case loading
     case error
@@ -44,7 +45,9 @@ public struct ReaderContainerView: View {
     @State private var showingChapterSheet = false
     @State private var chromeMode: ReaderChromeMode = .loading
     @State private var verticalScrollRequest: ReaderVerticalScrollRequest?
+    @State private var pendingVerticalRestoreRequest: ReaderVerticalScrollRequest?
     @State private var verticalPageFrames: [Int: CGRect] = [:]
+    @State private var suppressVerticalViewportSamplingUntil: CFTimeInterval = 0
     @State private var progressPreviewPageIndex: Int?
     @State private var progressPreviewChapterTitle: String?
     @State private var isProgressPreviewVisible = false
@@ -117,6 +120,7 @@ public struct ReaderContainerView: View {
             }
             .onDisappear {
                 progressPreviewHideTask?.cancel()
+                syncVerticalViewportBeforeSave()
                 Task { await model.saveProgress() }
             }
             .sheet(isPresented: $showingSettings) {
@@ -283,21 +287,22 @@ public struct ReaderContainerView: View {
             )
             .onChange(of: verticalScrollRequest) { _, request in
                 guard let request else { return }
+                pendingVerticalRestoreRequest = request
+                beginVerticalViewportSamplingSuppression(duration: 1.2)
                 withAnimation(.easeInOut(duration: 0.2)) {
                     scrollProxy.scrollTo(request.pageIndex, anchor: .top)
                 }
-                Task { @MainActor in
-                    try? await Task.sleep(for: .milliseconds(60))
-                    applyVerticalFineTune(for: request)
-                }
                 verticalScrollRequest = nil
+                tryApplyPendingVerticalRestore()
             }
             .onPreferenceChange(ReaderVerticalPageFramePreferenceKey.self) { frames in
                 verticalPageFrames = frames
                 updateVerticalViewportPosition()
+                tryApplyPendingVerticalRestore()
             }
             .onChange(of: verticalScrollCoordinator.viewportMetrics) { _, _ in
                 updateVerticalViewportPosition()
+                tryApplyPendingVerticalRestore()
             }
         }
     }
@@ -320,6 +325,7 @@ public struct ReaderContainerView: View {
         chromeMode = .visible
         guard !isDismissing else { return }
         isDismissing = true
+        syncVerticalViewportBeforeSave()
         Task {
             await model.saveProgress()
             appModel.dismissReader(openThreadInForum: model.forumURL)
@@ -330,6 +336,7 @@ public struct ReaderContainerView: View {
         chromeMode = .visible
         guard !isDismissing else { return }
         isDismissing = true
+        syncVerticalViewportBeforeSave()
         Task {
             await model.saveProgress()
             appModel.dismissReader()
@@ -418,7 +425,7 @@ public struct ReaderContainerView: View {
         guard !model.pages.isEmpty else { return }
 
         if model.settings.readingMode == .vertical {
-            verticalScrollRequest = makeVerticalScrollRequest()
+            requestVerticalScrollToCurrentPage()
         }
 
         if chromeMode != .immersiveHidden {
@@ -433,7 +440,7 @@ public struct ReaderContainerView: View {
         model.jumpToRenderedPage(targetIndex)
         showProgressPreview(for: targetIndex, autoHide: true)
         if model.settings.readingMode == .vertical {
-            verticalScrollRequest = makeVerticalScrollRequest()
+            requestVerticalScrollToCurrentPage()
         }
     }
 
@@ -441,14 +448,14 @@ public struct ReaderContainerView: View {
         model.jumpToAdjacentChapter(delta)
         showProgressPreview(for: model.currentPageIndex, autoHide: true)
         if model.settings.readingMode == .vertical {
-            verticalScrollRequest = makeVerticalScrollRequest()
+            requestVerticalScrollToCurrentPage()
         }
     }
 
     private func jumpToChapter(_ chapter: ReaderChapter) {
         model.jumpToChapter(chapter)
         if model.settings.readingMode == .vertical {
-            verticalScrollRequest = makeVerticalScrollRequest()
+            requestVerticalScrollToCurrentPage()
         }
     }
 
@@ -456,14 +463,14 @@ public struct ReaderContainerView: View {
         chromeMode = .visible
         await model.jumpToWebView(view)
         if model.settings.readingMode == .vertical {
-            verticalScrollRequest = makeVerticalScrollRequest()
+            requestVerticalScrollToCurrentPage()
         }
     }
 
     private func goRelativePage(_ delta: Int) async {
         await model.jumpRelativePage(delta)
         if model.settings.readingMode == .vertical {
-            verticalScrollRequest = makeVerticalScrollRequest()
+            requestVerticalScrollToCurrentPage()
         }
     }
 
@@ -513,7 +520,12 @@ public struct ReaderContainerView: View {
         )
     }
 
-    private func updateVerticalViewportPosition() {
+    private func requestVerticalScrollToCurrentPage() {
+        beginVerticalViewportSamplingSuppression(duration: 1.2)
+        verticalScrollRequest = makeVerticalScrollRequest()
+    }
+
+    private func updateVerticalViewportPosition(force: Bool = false) {
         guard model.settings.readingMode == .vertical, !verticalPageFrames.isEmpty else { return }
 
         let referenceLineY = verticalScrollCoordinator.referenceLineY
@@ -527,6 +539,9 @@ public struct ReaderContainerView: View {
 
         let frame = bestMatch.value
         let intraPageProgress = min(max((referenceLineY - frame.minY) / max(frame.height, 1), 0), 1)
+        if !force, shouldSuppressVerticalViewportSampling(for: bestMatch.key, intraPageProgress: intraPageProgress) {
+            return
+        }
         model.updateVerticalViewportPosition(pageIndex: bestMatch.key, intraPageProgress: intraPageProgress)
     }
 
@@ -535,6 +550,41 @@ public struct ReaderContainerView: View {
         verticalScrollCoordinator.restoreOffset(
             to: frame,
             intraPageProgress: request.intraPageProgress
+        )
+        beginVerticalViewportSamplingSuppression(duration: 0.45)
+        pendingVerticalRestoreRequest = nil
+    }
+
+    private func tryApplyPendingVerticalRestore() {
+        guard let request = pendingVerticalRestoreRequest else { return }
+        guard verticalScrollCoordinator.viewportMetrics.viewportHeight > 0 else { return }
+        guard let frame = verticalPageFrames[request.pageIndex], frame.height > 0 else { return }
+        applyVerticalFineTune(for: request)
+    }
+
+    private func syncVerticalViewportBeforeSave() {
+        guard model.settings.readingMode == .vertical else { return }
+        updateVerticalViewportPosition(force: true)
+    }
+
+    private func shouldSuppressVerticalViewportSampling(for pageIndex: Int, intraPageProgress: Double) -> Bool {
+        let now = CACurrentMediaTime()
+        let pendingRequest = pendingVerticalRestoreRequest ?? verticalScrollRequest
+        guard now < suppressVerticalViewportSamplingUntil || pendingRequest != nil else { return false }
+        let pendingDescription: String
+        if let request = pendingRequest {
+            pendingDescription = "\(request.pageIndex)@\(String(format: "%.3f", request.intraPageProgress))"
+        } else {
+            pendingDescription = "none"
+        }
+        let remaining = max(suppressVerticalViewportSamplingUntil - now, 0)
+        return true
+    }
+
+    private func beginVerticalViewportSamplingSuppression(duration: CFTimeInterval) {
+        suppressVerticalViewportSamplingUntil = max(
+            suppressVerticalViewportSamplingUntil,
+            CACurrentMediaTime() + duration
         )
     }
 

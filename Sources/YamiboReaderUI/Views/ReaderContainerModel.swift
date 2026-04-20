@@ -784,7 +784,7 @@ public final class ReaderContainerModel: ObservableObject {
         let offsetWithinSegment = segmentLength > 0
             ? Int((Double(segmentLength) * min(max(currentPageIntraProgress, 0), 1)).rounded(.towardZero))
             : 0
-        return ReaderResumePoint(
+        let resumePoint = ReaderResumePoint(
             view: page.documentView,
             chapterOrdinal: chapterOrdinal,
             chapterTitle: page.chapterTitle,
@@ -794,6 +794,7 @@ public final class ReaderContainerModel: ObservableObject {
             authorID: currentAuthorID ?? context.authorID,
             readingModeHint: settings.readingMode
         )
+        return resumePoint
     }
 
     private func resolveResumePoint(
