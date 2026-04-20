@@ -20,6 +20,7 @@ public struct MangaReaderView: View {
     @State private var isPreviewVisible = false
     @State private var previewHideTask: Task<Void, Never>?
     @State private var pendingVerticalViewportPageID: MangaPage.ID?
+    @State private var isDismissing = false
     private let appModel: YamiboAppModel
 
     public init(context: MangaLaunchContext, appModel: YamiboAppModel) {
@@ -245,19 +246,31 @@ public struct MangaReaderView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 12) {
                 ReaderChromeIconButton(systemName: "xmark", title: "关闭") {
-                    appModel.dismissMangaRestoringWebIfNeeded()
+                    guard !isDismissing else { return }
+                    isDismissing = true
+                    Task {
+                        await model.saveProgress()
+                        appModel.dismissMangaRestoringWebIfNeeded()
+                    }
                 }
+                .disabled(isDismissing)
 
                 Spacer(minLength: 0)
 
                 HStack(spacing: 8) {
                     ReaderChromeIconButton(systemName: "safari", title: "原帖") {
-                        appModel.dismissManga(openThreadInForum: model.context.originalThreadURL)
+                        guard !isDismissing else { return }
+                        isDismissing = true
+                        Task {
+                            await model.saveProgress()
+                            appModel.dismissManga(openThreadInForum: model.context.originalThreadURL)
+                        }
                     }
+                    .disabled(isDismissing)
                     ReaderChromeIconButton(systemName: "arrow.clockwise", title: "刷新") {
                         Task { await model.retryCurrentChapter() }
                     }
-                    .disabled(model.isTransitioningChapter)
+                    .disabled(model.isTransitioningChapter || isDismissing)
                 }
             }
 

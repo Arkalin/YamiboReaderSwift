@@ -123,6 +123,32 @@ import Testing
     #expect(favorite?.type == .novel)
 }
 
+@Test func favoriteStorePostsChangeNotificationWhenProgressChanges() async throws {
+    let defaults = try #require(UserDefaults(suiteName: "favorite-store-notification-tests"))
+    defaults.removePersistentDomain(forName: "favorite-store-notification-tests")
+    let store = FavoriteStore(defaults: defaults, key: "favorites")
+    let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=301&mobile=2"))
+
+    let notificationTask = Task {
+        for await notification in NotificationCenter.default.notifications(named: FavoriteStore.didChangeNotification) {
+            let changeID = notification.userInfo?[FavoriteStore.changeIDUserInfoKey] as? String
+            if changeID == store.changeID {
+                return true
+            }
+        }
+        return false
+    }
+    await Task.yield()
+
+    _ = try await store.updateReadingProgress(
+        for: url,
+        progress: ReaderProgress(view: 2, page: 18, chapterTitle: "第三章", authorID: "77")
+    )
+
+    let didReceive = await notificationTask.value
+    #expect(didReceive)
+}
+
 @Test func favoriteStoreUpdatesMangaProgress() async throws {
     let defaults = try #require(UserDefaults(suiteName: "favorite-manga-progress-tests"))
     defaults.removePersistentDomain(forName: "favorite-manga-progress-tests")

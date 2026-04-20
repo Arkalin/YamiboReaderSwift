@@ -14,6 +14,11 @@ public protocol FavoriteStoring: Sendable {
 }
 
 public actor FavoriteStore: FavoriteStoring {
+    public static let didChangeNotification = Notification.Name("yamibo.favoriteStore.didChange")
+    public static let changeIDUserInfoKey = "changeID"
+
+    public nonisolated let changeID = UUID().uuidString
+
     private let defaults: UserDefaults
     private let key: String
     private let encoder = JSONEncoder()
@@ -33,6 +38,7 @@ public actor FavoriteStore: FavoriteStoring {
         do {
             let data = try encoder.encode(favorites)
             defaults.set(data, forKey: key)
+            postChangeNotification()
         } catch {
             throw YamiboError.persistenceFailed(error.localizedDescription)
         }
@@ -171,6 +177,14 @@ public actor FavoriteStore: FavoriteStoring {
             update(&favorite)
             return favorite
         }
+    }
+
+    private nonisolated func postChangeNotification() {
+        NotificationCenter.default.post(
+            name: Self.didChangeNotification,
+            object: nil,
+            userInfo: [Self.changeIDUserInfoKey: changeID]
+        )
     }
 }
 

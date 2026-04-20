@@ -31,6 +31,7 @@ public struct ReaderContainerView: View {
     @State private var isProgressPreviewVisible = false
     @State private var progressPreviewHideTask: Task<Void, Never>?
     @State private var verticalTapSuppressionUntil: CFTimeInterval = 0
+    @State private var isDismissing = false
     private let appModel: YamiboAppModel
 
     public init(context: ReaderLaunchContext, appModel: YamiboAppModel) {
@@ -281,14 +282,22 @@ public struct ReaderContainerView: View {
 
     private func openInForum() {
         chromeMode = .visible
-        Task { await model.saveProgress() }
-        appModel.dismissReader(openThreadInForum: model.forumURL)
+        guard !isDismissing else { return }
+        isDismissing = true
+        Task {
+            await model.saveProgress()
+            appModel.dismissReader(openThreadInForum: model.forumURL)
+        }
     }
 
     private func closeReader() {
         chromeMode = .visible
-        Task { await model.saveProgress() }
-        appModel.dismissReader()
+        guard !isDismissing else { return }
+        isDismissing = true
+        Task {
+            await model.saveProgress()
+            appModel.dismissReader()
+        }
     }
 
     private func toggleChrome() {

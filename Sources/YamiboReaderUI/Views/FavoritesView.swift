@@ -66,13 +66,33 @@ public final class FavoritesViewModel: ObservableObject {
 
     private let appContext: YamiboAppContext
     private let favoriteStore: FavoriteStore
+    private var favoriteUpdatesTask: Task<Void, Never>?
 
     public init(appContext: YamiboAppContext, favoriteStore: FavoriteStore) {
         self.appContext = appContext
         self.favoriteStore = favoriteStore
+        favoriteUpdatesTask = Task { @MainActor [weak self, favoriteStore] in
+            for await notification in NotificationCenter.default.notifications(named: FavoriteStore.didChangeNotification) {
+                guard !Task.isCancelled else { return }
+                guard let self else { return }
+                guard let changeID = notification.userInfo?[FavoriteStore.changeIDUserInfoKey] as? String,
+                      changeID == favoriteStore.changeID else {
+                    continue
+                }
+                await self.reloadLocalFavorites()
+            }
+        }
+    }
+
+    deinit {
+        favoriteUpdatesTask?.cancel()
     }
 
     public func loadCachedFavorites() async {
+        favorites = await favoriteStore.loadFavorites()
+    }
+
+    public func reloadLocalFavorites() async {
         favorites = await favoriteStore.loadFavorites()
     }
 
@@ -139,61 +159,63 @@ public final class FavoritesViewModel: ObservableObject {
     }
 
     func openTarget(for favorite: Favorite, mode: FavoriteLaunchMode = .resume) async -> FavoriteOpenTarget {
-        switch favorite.type {
+        let latestFavorite = await favoriteStore.favorite(id: favorite.id) ?? favorite
+
+        switch latestFavorite.type {
         case .novel:
             return .reader(
                 ReaderLaunchContext(
-                    threadURL: favorite.url,
-                    threadTitle: favorite.resolvedDisplayTitle,
+                    threadURL: latestFavorite.url,
+                    threadTitle: latestFavorite.resolvedDisplayTitle,
                     source: .favorites,
-                    initialView: mode == .start ? 1 : favorite.lastView,
-                    initialPage: mode == .start ? 0 : favorite.lastPage,
-                    authorID: favorite.authorID
+                    initialView: mode == .start ? 1 : latestFavorite.lastView,
+                    initialPage: mode == .start ? 0 : latestFavorite.lastPage,
+                    authorID: latestFavorite.authorID
                 )
             )
         case .manga:
             return .manga(
                 MangaLaunchContext(
-                    originalThreadURL: favorite.url,
-                    chapterURL: mode == .start ? favorite.url : (favorite.lastMangaURL ?? favorite.url),
-                    displayTitle: favorite.resolvedDisplayTitle,
+                    originalThreadURL: latestFavorite.url,
+                    chapterURL: mode == .start ? latestFavorite.url : (latestFavorite.lastMangaURL ?? latestFavorite.url),
+                    displayTitle: latestFavorite.resolvedDisplayTitle,
                     source: .favorites,
-                    initialPage: mode == .start ? 0 : favorite.lastPage
+                    initialPage: mode == .start ? 0 : latestFavorite.lastPage
                 )
             )
         case .other:
-            return .web(favorite)
+            return .web(latestFavorite)
         case .unknown:
-            resolvingFavoriteID = favorite.id
+            resolvingFavoriteID = latestFavorite.id
             defer { resolvingFavoriteID = nil }
 
             do {
                 let resolver = await appContext.makeThreadOpenResolver()
                 let target = try await resolver.resolve(
-                    threadURL: favorite.url,
-                    title: favorite.resolvedDisplayTitle,
+                    threadURL: latestFavorite.url,
+                    title: latestFavorite.resolvedDisplayTitle,
                     htmlOverride: nil,
                     favoriteType: .unknown,
-                    favoriteChapterURL: favorite.lastMangaURL,
-                    initialPage: favorite.lastPage
+                    favoriteChapterURL: latestFavorite.lastMangaURL,
+                    initialPage: latestFavorite.lastPage
                 )
 
                 switch target {
                 case let .novel(context):
-                    favorites = try await favoriteStore.setType(.novel, for: favorite.id)
-                    return .reader(applyStartModeIfNeeded(to: context, for: favorite, mode: mode))
+                    favorites = try await favoriteStore.setType(.novel, for: latestFavorite.id)
+                    return .reader(applyStartModeIfNeeded(to: context, for: latestFavorite, mode: mode))
                 case let .manga(context):
-                    favorites = try await favoriteStore.setType(.manga, for: favorite.id)
-                    return .manga(applyStartModeIfNeeded(to: context, for: favorite, mode: mode))
+                    favorites = try await favoriteStore.setType(.manga, for: latestFavorite.id)
+                    return .manga(applyStartModeIfNeeded(to: context, for: latestFavorite, mode: mode))
                 case .web:
-                    favorites = try await favoriteStore.setType(.other, for: favorite.id)
-                    var updated = favorite
+                    favorites = try await favoriteStore.setType(.other, for: latestFavorite.id)
+                    var updated = latestFavorite
                     updated.type = .other
                     return .web(updated)
                 }
             } catch {
                 errorMessage = error.localizedDescription
-                return .web(favorite)
+                return .web(latestFavorite)
             }
         }
     }

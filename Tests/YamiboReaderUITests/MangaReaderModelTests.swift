@@ -232,6 +232,75 @@ final class MangaReaderModelTests: XCTestCase {
         }
     }
 
+    func testFavoritesViewModelUsesLatestStoredMangaProgressForResume() async throws {
+        let keyPrefix = UUID().uuidString
+        let favoriteStore = FavoriteStore(key: "\(keyPrefix).favorites")
+        let originalURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=810&mobile=2")!
+        let staleChapterURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=810&mobile=2")!
+        let latestChapterURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=811&mobile=2")!
+        let staleFavorite = Favorite(
+            title: "漫画收藏",
+            url: originalURL,
+            lastPage: 1,
+            type: .manga,
+            lastMangaURL: staleChapterURL
+        )
+        try await favoriteStore.saveFavorites([staleFavorite])
+        _ = try await favoriteStore.updateMangaProgress(
+            for: originalURL,
+            chapterURL: latestChapterURL,
+            chapterTitle: "第2话",
+            pageIndex: 6
+        )
+
+        let appContext = YamiboAppContext(
+            sessionStore: SessionStore(key: "\(keyPrefix).session"),
+            settingsStore: SettingsStore(key: "\(keyPrefix).settings"),
+            favoriteStore: favoriteStore,
+            readerCacheStore: ReaderCacheStore(baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)),
+            mangaDirectoryStore: MangaDirectoryStore(baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true))
+        )
+        let viewModel = await MainActor.run {
+            FavoritesViewModel(appContext: appContext, favoriteStore: favoriteStore)
+        }
+        await viewModel.loadCachedFavorites()
+
+        let target = await viewModel.openTarget(for: staleFavorite, mode: .resume)
+        guard case let .manga(context) = target else {
+            return XCTFail("Expected manga target")
+        }
+
+        XCTAssertEqual(context.chapterURL, latestChapterURL)
+        XCTAssertEqual(context.initialPage, 6)
+    }
+
+    func testPageChangesDebounceAndPersistLatestMangaProgress() async throws {
+        let model = try await makeMangaModel(
+            chapterHTMLByTID: [
+                "700": makeMangaHTML(
+                    tid: "700",
+                    title: "第1话",
+                    links: [],
+                    imageCount: 4
+                )
+            ]
+        )
+
+        await MainActor.run {
+            model.updateCurrentPage(1)
+            model.updateCurrentPage(3)
+        }
+
+        try await waitFor {
+            let favorite = await modelTestFavoriteStore?.favorite(for: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=700&mobile=2")!)
+            return favorite?.lastPage == 3
+        }
+
+        let favorite = await modelTestFavoriteStore?.favorite(for: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=700&mobile=2")!)
+        XCTAssertEqual(favorite?.lastPage, 3)
+        XCTAssertEqual(favorite?.lastChapter, "第1话")
+    }
+
     func testKeepsLoadedDocumentWindowBoundedToTenChapters() async throws {
         let chapterHTML = Dictionary(uniqueKeysWithValues: (700 ... 711).map { tid in
             let title = "第\(tid - 699)话"

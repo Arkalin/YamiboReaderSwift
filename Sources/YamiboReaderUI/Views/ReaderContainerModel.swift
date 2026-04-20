@@ -119,6 +119,10 @@ public final class ReaderContainerModel: ObservableObject {
     private var currentDocumentPageCount = 0
     private var prefetchedStartIndex: Int?
     private var cacheOperationTask: Task<Void, Never>?
+    private var progressSyncTask: Task<Void, Never>?
+    private var lastQueuedProgress: ReaderProgressSnapshot?
+    private var lastSyncedProgress: ReaderProgressSnapshot?
+    private let progressSyncDelayNanoseconds: UInt64 = 350_000_000
 
     public init(context: ReaderLaunchContext, appContext: YamiboAppContext) {
         self.context = context
@@ -246,9 +250,12 @@ public final class ReaderContainerModel: ObservableObject {
         if pages.isEmpty {
             let favorite = await appContext.favoriteStore.favorite(for: context.threadURL)
             let initialView = favorite?.lastView ?? context.initialView ?? 1
-            let initialPage = favorite?.lastPage ?? context.initialPage ?? 0
+            let initialPage = resolvedPreferredPage(
+                fromSavedPage: favorite?.lastPage ?? context.initialPage ?? 0
+            )
             currentAuthorID = favorite?.authorID ?? context.authorID
             await load(view: initialView, preferredPage: initialPage, forceRefresh: false)
+            restoreSavedChapterIfNeeded(favorite?.lastChapter)
         } else {
             repaginate(anchor: currentAnchor())
             await refreshCachedState()
@@ -340,18 +347,13 @@ public final class ReaderContainerModel: ObservableObject {
     }
 
     public func saveProgress() async {
-        let progress = ReaderProgress(
-            view: displayedView,
-            page: displayedPageIndex,
-            chapterTitle: currentChapterTitle,
-            authorID: currentAuthorID ?? context.authorID
-        )
-        _ = try? await appContext.favoriteStore.updateReadingProgress(for: context.threadURL, progress: progress)
+        await flushProgress()
     }
 
     public func updateCurrentPage(_ pageIndex: Int) {
         currentPageIndex = max(0, min(pageIndex, max(pages.count - 1, 0)))
         currentChapterTitle = chapterTitle(for: currentPageIndex)
+        scheduleProgressSync()
 
         Task {
             await prefetchIfNeeded(for: currentPageIndex)
@@ -755,6 +757,100 @@ public final class ReaderContainerModel: ObservableObject {
         return currentDocument
     }
 
+    private var persistedPageIndex: Int {
+        switch settings.readingMode {
+        case .paged:
+            return displayedPageIndex
+        case .vertical:
+            return displayedPageIndex / verticalChunksPerSavedPage()
+        }
+    }
+
+    private func currentProgressSnapshot() -> ReaderProgressSnapshot {
+        ReaderProgressSnapshot(
+            view: displayedView,
+            page: persistedPageIndex,
+            chapterTitle: currentChapterTitle,
+            authorID: currentAuthorID ?? context.authorID
+        )
+    }
+
+    private func resolvedPreferredPage(fromSavedPage savedPage: Int) -> Int {
+        let clampedSavedPage = max(0, savedPage)
+        switch settings.readingMode {
+        case .paged:
+            return clampedSavedPage
+        case .vertical:
+            return clampedSavedPage * verticalChunksPerSavedPage()
+        }
+    }
+
+    private func verticalChunksPerSavedPage() -> Int {
+        let usableHeight = max(260, layout.height - 120)
+        let fontSize = max(14, 22 * settings.fontScale)
+        let lineHeight = max(fontSize * settings.lineHeightScale, fontSize * 1.35)
+        let horizontalLines = max(6, Int(usableHeight / max(lineHeight, 1)))
+        let verticalLines = max(10, Int((usableHeight * 1.8) / max(lineHeight, 1)))
+        let ratio = Double(verticalLines) / Double(max(horizontalLines, 1))
+        return max(1, Int(ratio.rounded(.awayFromZero)))
+    }
+
+    private func restoreSavedChapterIfNeeded(_ savedChapterTitle: String?) {
+        guard let savedChapterTitle,
+              !savedChapterTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              !pages.isEmpty else {
+            return
+        }
+
+        if currentChapterTitle == savedChapterTitle {
+            return
+        }
+
+        guard let chapter = chapters.first(where: { $0.title == savedChapterTitle }) else {
+            return
+        }
+        currentPageIndex = chapter.startIndex
+        currentChapterTitle = chapter.title
+    }
+
+    private func scheduleProgressSync() {
+        let snapshot = currentProgressSnapshot()
+        guard snapshot != lastQueuedProgress else { return }
+
+        lastQueuedProgress = snapshot
+        progressSyncTask?.cancel()
+        progressSyncTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: self?.progressSyncDelayNanoseconds ?? 0)
+            guard !Task.isCancelled else { return }
+            await self?.flushProgress()
+        }
+    }
+
+    private func flushProgress() async {
+        progressSyncTask?.cancel()
+        progressSyncTask = nil
+
+        let snapshot = currentProgressSnapshot()
+        guard snapshot != lastSyncedProgress else {
+            lastQueuedProgress = snapshot
+            return
+        }
+
+        let progress = ReaderProgress(
+            view: snapshot.view,
+            page: snapshot.page,
+            chapterTitle: snapshot.chapterTitle,
+            authorID: snapshot.authorID
+        )
+        do {
+            _ = try await appContext.favoriteStore.updateReadingProgress(for: context.threadURL, progress: progress)
+        } catch {
+            return
+        }
+        lastQueuedProgress = snapshot
+        lastSyncedProgress = snapshot
+    }
+
     private func cacheContext(forView view: Int) -> (authorID: String?, contentSource: ReaderContentSource?) {
         if currentDocument?.view == view {
             return (
@@ -893,4 +989,11 @@ public final class ReaderContainerModel: ObservableObject {
 private struct ReaderPageAnchor {
     let chapterTitle: String?
     let offsetInChapter: Int
+}
+
+private struct ReaderProgressSnapshot: Equatable {
+    let view: Int
+    let page: Int
+    let chapterTitle: String?
+    let authorID: String?
 }

@@ -159,6 +159,166 @@ final class ReaderContainerModelTests: XCTestCase {
         }
     }
 
+    func testPageChangesDebounceAndPersistLatestNovelProgress() async throws {
+        let keyPrefix = UUID().uuidString
+        let settingsStore = SettingsStore(key: "\(keyPrefix).settings")
+        let favoriteStore = FavoriteStore(key: "\(keyPrefix).favorites")
+        let cacheStore = ReaderCacheStore(
+            baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        )
+        let document = makeDocument(view: 1, maxView: 1, chapterTitles: ["第一章", "第二章", "第三章"])
+
+        try await settingsStore.save(AppSettings(reader: ReaderAppearanceSettings(readingMode: .paged)))
+        try await cacheStore.save(document)
+
+        let appContext = YamiboAppContext(
+            sessionStore: SessionStore(key: "\(keyPrefix).session"),
+            settingsStore: settingsStore,
+            favoriteStore: favoriteStore,
+            readerCacheStore: cacheStore
+        )
+        let model = await MainActor.run {
+            ReaderContainerModel(
+                context: ReaderLaunchContext(
+                    threadURL: document.threadURL,
+                    threadTitle: "测试线程",
+                    source: .forum
+                ),
+                appContext: appContext
+            )
+        }
+
+        await model.prepare(layout: ReaderContainerLayout(width: 320, height: 568))
+        await MainActor.run {
+            model.updateCurrentPage(1)
+            model.updateCurrentPage(2)
+        }
+
+        try await waitFor {
+            let favorite = await favoriteStore.favorite(for: document.threadURL)
+            return favorite?.lastPage == 2
+        }
+
+        let favorite = await favoriteStore.favorite(for: document.threadURL)
+        XCTAssertEqual(favorite?.lastView, 1)
+        XCTAssertEqual(favorite?.lastPage, 2)
+    }
+
+    func testVerticalModePersistsNormalizedNovelProgress() async throws {
+        let keyPrefix = UUID().uuidString
+        let settingsStore = SettingsStore(key: "\(keyPrefix).settings")
+        let favoriteStore = FavoriteStore(key: "\(keyPrefix).favorites")
+        let cacheStore = ReaderCacheStore(
+            baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        )
+        let document = ReaderPageDocument(
+            threadURL: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=901&mobile=2")!,
+            view: 1,
+            maxView: 1,
+            contentSource: .fallbackUnfilteredPage,
+            segments: [
+                .text(String(repeating: "第一章 内容。", count: 220), chapterTitle: "第一章")
+            ]
+        )
+
+        try await settingsStore.save(AppSettings(reader: ReaderAppearanceSettings(readingMode: .vertical)))
+        try await cacheStore.save(document)
+
+        let appContext = YamiboAppContext(
+            sessionStore: SessionStore(key: "\(keyPrefix).session"),
+            settingsStore: settingsStore,
+            favoriteStore: favoriteStore,
+            readerCacheStore: cacheStore
+        )
+        let model = await MainActor.run {
+            ReaderContainerModel(
+                context: ReaderLaunchContext(
+                    threadURL: document.threadURL,
+                    threadTitle: "测试线程",
+                    source: .forum
+                ),
+                appContext: appContext
+            )
+        }
+
+        await model.prepare(layout: ReaderContainerLayout(width: 320, height: 568))
+
+        let targetIndex = await MainActor.run { min(2, max(model.renderedPageCount - 1, 0)) }
+        await MainActor.run {
+            model.updateCurrentPage(targetIndex)
+        }
+
+        try await waitFor {
+            let favorite = await favoriteStore.favorite(for: document.threadURL)
+            return favorite?.lastPage == 1
+        }
+
+        let favorite = await favoriteStore.favorite(for: document.threadURL)
+        XCTAssertEqual(favorite?.lastView, 1)
+        XCTAssertEqual(favorite?.lastPage, 1)
+        XCTAssertEqual(favorite?.lastChapter, "第一章")
+    }
+
+    func testVerticalModeRestoreFallsBackToSavedChapterStart() async throws {
+        let keyPrefix = UUID().uuidString
+        let settingsStore = SettingsStore(key: "\(keyPrefix).settings")
+        let favoriteStore = FavoriteStore(key: "\(keyPrefix).favorites")
+        let cacheStore = ReaderCacheStore(
+            baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        )
+        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=902&mobile=2")!
+        let document = ReaderPageDocument(
+            threadURL: threadURL,
+            view: 2,
+            maxView: 2,
+            contentSource: .fallbackUnfilteredPage,
+            segments: [
+                .text(String(repeating: "第一章 内容。", count: 120), chapterTitle: "第一章"),
+                .text(String(repeating: "第二章 内容。", count: 120), chapterTitle: "第二章"),
+                .text(String(repeating: "第三章 内容。", count: 120), chapterTitle: "第三章")
+            ]
+        )
+
+        try await settingsStore.save(AppSettings(reader: ReaderAppearanceSettings(readingMode: .vertical)))
+        try await cacheStore.save(document)
+        try await favoriteStore.saveFavorites([
+            Favorite(
+                title: "测试线程",
+                url: threadURL,
+                lastPage: 0,
+                lastView: 2,
+                lastChapter: "第三章",
+                type: .novel
+            )
+        ])
+
+        let appContext = YamiboAppContext(
+            sessionStore: SessionStore(key: "\(keyPrefix).session"),
+            settingsStore: settingsStore,
+            favoriteStore: favoriteStore,
+            readerCacheStore: cacheStore
+        )
+        let model = await MainActor.run {
+            ReaderContainerModel(
+                context: ReaderLaunchContext(
+                    threadURL: threadURL,
+                    threadTitle: "测试线程",
+                    source: .favorites
+                ),
+                appContext: appContext
+            )
+        }
+
+        await model.prepare(layout: ReaderContainerLayout(width: 320, height: 568))
+
+        await MainActor.run {
+            let savedChapterStartIndex = model.chapters.first(where: { $0.title == "第三章" })?.startIndex
+            XCTAssertEqual(model.currentView, 2)
+            XCTAssertEqual(model.currentChapterTitle, "第三章")
+            XCTAssertEqual(model.currentPageIndex, savedChapterStartIndex)
+        }
+    }
+
     func testCachedViewsTrackCurrentVariant() async throws {
         let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=556677&mobile=2")!
         let unfilteredDocument = makeDocument(
