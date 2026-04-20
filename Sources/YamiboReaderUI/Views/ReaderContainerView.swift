@@ -15,6 +15,24 @@ private enum ReaderChromeMode {
     }
 }
 
+private struct ReaderVerticalScrollRequest: Equatable {
+    let pageIndex: Int
+    let intraPageProgress: Double
+}
+
+private struct ReaderVerticalViewportMetrics: Equatable {
+    var contentOffsetY: CGFloat = 0
+    var viewportHeight: CGFloat = 0
+}
+
+private struct ReaderVerticalPageFramePreferenceKey: PreferenceKey {
+    static var defaultValue: [Int: CGRect] { [:] }
+
+    static func reduce(value: inout [Int: CGRect], nextValue: () -> [Int: CGRect]) {
+        value.merge(nextValue(), uniquingKeysWith: { _, new in new })
+    }
+}
+
 public struct ReaderContainerView: View {
     @StateObject private var model: ReaderContainerModel
     @StateObject private var verticalScrollCoordinator = ReaderVerticalScrollCoordinator()
@@ -25,7 +43,8 @@ public struct ReaderContainerView: View {
     @State private var showingWebJumpSheet = false
     @State private var showingChapterSheet = false
     @State private var chromeMode: ReaderChromeMode = .loading
-    @State private var verticalScrollRequest: Int?
+    @State private var verticalScrollRequest: ReaderVerticalScrollRequest?
+    @State private var verticalPageFrames: [Int: CGRect] = [:]
     @State private var progressPreviewPageIndex: Int?
     @State private var progressPreviewChapterTitle: String?
     @State private var isProgressPreviewVisible = false
@@ -235,13 +254,19 @@ public struct ReaderContainerView: View {
                         .id(page.index)
                         .padding(.horizontal, model.settings.horizontalPadding)
                         .padding(.top, page.index == 0 ? 16 : 0)
-                        .onAppear {
-                            model.updateCurrentPage(page.index)
-                        }
+                        .background(
+                            GeometryReader { geometry in
+                                Color.clear.preference(
+                                    key: ReaderVerticalPageFramePreferenceKey.self,
+                                    value: [page.index: geometry.frame(in: .named("readerVerticalViewport"))]
+                                )
+                            }
+                        )
                     }
                 }
                 .padding(.bottom, 24)
             }
+            .coordinateSpace(name: "readerVerticalViewport")
             .contentShape(Rectangle())
             .background(
                 ReaderScrollViewResolver { scrollView in
@@ -259,9 +284,20 @@ public struct ReaderContainerView: View {
             .onChange(of: verticalScrollRequest) { _, request in
                 guard let request else { return }
                 withAnimation(.easeInOut(duration: 0.2)) {
-                    scrollProxy.scrollTo(request, anchor: .top)
+                    scrollProxy.scrollTo(request.pageIndex, anchor: .top)
+                }
+                Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(60))
+                    applyVerticalFineTune(for: request)
                 }
                 verticalScrollRequest = nil
+            }
+            .onPreferenceChange(ReaderVerticalPageFramePreferenceKey.self) { frames in
+                verticalPageFrames = frames
+                updateVerticalViewportPosition()
+            }
+            .onChange(of: verticalScrollCoordinator.viewportMetrics) { _, _ in
+                updateVerticalViewportPosition()
             }
         }
     }
@@ -382,7 +418,7 @@ public struct ReaderContainerView: View {
         guard !model.pages.isEmpty else { return }
 
         if model.settings.readingMode == .vertical {
-            verticalScrollRequest = model.currentPageIndex
+            verticalScrollRequest = makeVerticalScrollRequest()
         }
 
         if chromeMode != .immersiveHidden {
@@ -397,7 +433,7 @@ public struct ReaderContainerView: View {
         model.jumpToRenderedPage(targetIndex)
         showProgressPreview(for: targetIndex, autoHide: true)
         if model.settings.readingMode == .vertical {
-            verticalScrollRequest = model.currentPageIndex
+            verticalScrollRequest = makeVerticalScrollRequest()
         }
     }
 
@@ -405,14 +441,14 @@ public struct ReaderContainerView: View {
         model.jumpToAdjacentChapter(delta)
         showProgressPreview(for: model.currentPageIndex, autoHide: true)
         if model.settings.readingMode == .vertical {
-            verticalScrollRequest = model.currentPageIndex
+            verticalScrollRequest = makeVerticalScrollRequest()
         }
     }
 
     private func jumpToChapter(_ chapter: ReaderChapter) {
         model.jumpToChapter(chapter)
         if model.settings.readingMode == .vertical {
-            verticalScrollRequest = model.currentPageIndex
+            verticalScrollRequest = makeVerticalScrollRequest()
         }
     }
 
@@ -420,14 +456,14 @@ public struct ReaderContainerView: View {
         chromeMode = .visible
         await model.jumpToWebView(view)
         if model.settings.readingMode == .vertical {
-            verticalScrollRequest = model.currentPageIndex
+            verticalScrollRequest = makeVerticalScrollRequest()
         }
     }
 
     private func goRelativePage(_ delta: Int) async {
         await model.jumpRelativePage(delta)
         if model.settings.readingMode == .vertical {
-            verticalScrollRequest = model.currentPageIndex
+            verticalScrollRequest = makeVerticalScrollRequest()
         }
     }
 
@@ -470,6 +506,48 @@ public struct ReaderContainerView: View {
         }
     }
 
+    private func makeVerticalScrollRequest() -> ReaderVerticalScrollRequest {
+        ReaderVerticalScrollRequest(
+            pageIndex: model.currentPageIndex,
+            intraPageProgress: model.currentPageIntraProgress
+        )
+    }
+
+    private func updateVerticalViewportPosition() {
+        guard model.settings.readingMode == .vertical, !verticalPageFrames.isEmpty else { return }
+
+        let referenceLineY = verticalScrollCoordinator.referenceLineY
+        guard let bestMatch = verticalPageFrames
+            .filter({ $0.value.height > 0 })
+            .min(by: { lhs, rhs in
+                pageDistance(from: referenceLineY, to: lhs.value) < pageDistance(from: referenceLineY, to: rhs.value)
+            }) else {
+            return
+        }
+
+        let frame = bestMatch.value
+        let intraPageProgress = min(max((referenceLineY - frame.minY) / max(frame.height, 1), 0), 1)
+        model.updateVerticalViewportPosition(pageIndex: bestMatch.key, intraPageProgress: intraPageProgress)
+    }
+
+    private func applyVerticalFineTune(for request: ReaderVerticalScrollRequest) {
+        guard let frame = verticalPageFrames[request.pageIndex] else { return }
+        verticalScrollCoordinator.restoreOffset(
+            to: frame,
+            intraPageProgress: request.intraPageProgress
+        )
+    }
+
+    private func pageDistance(from referenceLineY: CGFloat, to frame: CGRect) -> CGFloat {
+        if frame.contains(CGPoint(x: frame.midX, y: referenceLineY)) {
+            return 0
+        }
+        if referenceLineY < frame.minY {
+            return frame.minY - referenceLineY
+        }
+        return referenceLineY - frame.maxY
+    }
+
     private var windowSafeAreaInsets: UIEdgeInsets {
         UIApplication.shared.connectedScenes
             .compactMap { $0 as? UIWindowScene }
@@ -480,9 +558,12 @@ public struct ReaderContainerView: View {
 }
 
 private final class ReaderVerticalScrollCoordinator: NSObject, ObservableObject, UIGestureRecognizerDelegate {
+    @Published private(set) var viewportMetrics = ReaderVerticalViewportMetrics()
+
     private weak var scrollView: UIScrollView?
     private weak var interruptionTapRecognizer: UITapGestureRecognizer?
     private var contentOffsetObservation: NSKeyValueObservation?
+    private var boundsObservation: NSKeyValueObservation?
     private var suppressChromeToggleUntil = CACurrentMediaTime()
     private var lastMotionTime = CACurrentMediaTime()
     private let motionSuppressionInterval: CFTimeInterval = 0.35
@@ -491,9 +572,18 @@ private final class ReaderVerticalScrollCoordinator: NSObject, ObservableObject,
         guard self.scrollView !== scrollView else { return }
         detachTapRecognizer()
         contentOffsetObservation = nil
+        boundsObservation = nil
         self.scrollView = scrollView
         installTapRecognizerIfNeeded()
         installContentOffsetObservationIfNeeded()
+        installBoundsObservationIfNeeded()
+        syncViewportMetrics()
+    }
+
+    var referenceLineY: CGFloat {
+        let height = max(viewportMetrics.viewportHeight, 0)
+        guard height > 0 else { return 96 }
+        return min(max(height * 0.22, 72), 160)
     }
 
     func interruptScrollingIfNeeded() -> Bool {
@@ -513,6 +603,23 @@ private final class ReaderVerticalScrollCoordinator: NSObject, ObservableObject,
         }
 
         return true
+    }
+
+    func restoreOffset(to pageFrame: CGRect, intraPageProgress: Double) {
+        guard let scrollView else { return }
+
+        let desiredY = scrollView.contentOffset.y
+            + pageFrame.minY
+            + (pageFrame.height * min(max(intraPageProgress, 0), 1))
+            - referenceLineY
+        let minOffsetY = -scrollView.adjustedContentInset.top
+        let maxOffsetY = max(
+            minOffsetY,
+            scrollView.contentSize.height - scrollView.bounds.height + scrollView.adjustedContentInset.bottom
+        )
+        let targetOffsetY = min(max(desiredY, minOffsetY), maxOffsetY)
+        scrollView.setContentOffset(CGPoint(x: scrollView.contentOffset.x, y: targetOffsetY), animated: false)
+        syncViewportMetrics()
     }
 
     func shouldSuppressChromeToggle() -> Bool {
@@ -541,6 +648,29 @@ private final class ReaderVerticalScrollCoordinator: NSObject, ObservableObject,
             guard let self, let oldValue = change.oldValue, let newValue = change.newValue else { return }
             guard oldValue != newValue else { return }
             self.lastMotionTime = CACurrentMediaTime()
+            self.syncViewportMetrics()
+        }
+    }
+
+    private func installBoundsObservationIfNeeded() {
+        guard let scrollView else { return }
+        boundsObservation = scrollView.observe(\.bounds, options: [.initial, .new]) { [weak self] _, _ in
+            self?.syncViewportMetrics()
+        }
+    }
+
+    private func syncViewportMetrics() {
+        guard let scrollView else {
+            viewportMetrics = ReaderVerticalViewportMetrics()
+            return
+        }
+        let contentOffsetY = scrollView.contentOffset.y + scrollView.adjustedContentInset.top
+        let metrics = ReaderVerticalViewportMetrics(
+            contentOffsetY: contentOffsetY,
+            viewportHeight: scrollView.bounds.height
+        )
+        if metrics != viewportMetrics {
+            viewportMetrics = metrics
         }
     }
 

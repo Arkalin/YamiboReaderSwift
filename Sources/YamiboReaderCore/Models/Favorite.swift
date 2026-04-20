@@ -9,6 +9,7 @@ public struct Favorite: Codable, Hashable, Identifiable, Sendable {
     public var lastView: Int
     public var lastChapter: String?
     public var authorID: String?
+    public var novelResumePoint: ReaderResumePoint?
     public var isHidden: Bool
     public var type: FavoriteType
     public var lastMangaURL: URL?
@@ -22,6 +23,7 @@ public struct Favorite: Codable, Hashable, Identifiable, Sendable {
         lastView: Int = 1,
         lastChapter: String? = nil,
         authorID: String? = nil,
+        novelResumePoint: ReaderResumePoint? = nil,
         isHidden: Bool = false,
         type: FavoriteType = .unknown,
         lastMangaURL: URL? = nil
@@ -34,6 +36,7 @@ public struct Favorite: Codable, Hashable, Identifiable, Sendable {
         self.lastView = lastView
         self.lastChapter = lastChapter
         self.authorID = authorID
+        self.novelResumePoint = novelResumePoint
         self.isHidden = isHidden
         self.type = type
         self.lastMangaURL = lastMangaURL

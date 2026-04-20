@@ -1,4 +1,5 @@
 import Foundation
+import CoreGraphics
 
 public enum ReaderPaginator {
     public static func paginate(
@@ -7,106 +8,158 @@ public enum ReaderPaginator {
         layout: ReaderContainerLayout
     ) -> ReaderPaginationResult {
         let usableLayout = normalizedLayout(layout, padding: settings.horizontalPadding)
-        let transformedSegments = transformedSegments(from: document.segments, settings: settings)
+        let annotatedSegments = annotatedSegments(from: document.segments, settings: settings)
 
         switch settings.readingMode {
         case .paged:
-            return paginatePaged(segments: transformedSegments, settings: settings, layout: usableLayout)
+            return paginate(
+                annotatedSegments: annotatedSegments,
+                documentView: document.view,
+                settings: settings,
+                layout: usableLayout,
+                chunker: { annotatedSegment, settings, layout in
+                    paginateText(
+                        annotatedSegment.textContent,
+                        settings: settings,
+                        layout: layout
+                    )
+                }
+            )
         case .vertical:
-            return paginateVertical(segments: transformedSegments, settings: settings, layout: usableLayout)
+            return paginate(
+                annotatedSegments: annotatedSegments,
+                documentView: document.view,
+                settings: settings,
+                layout: usableLayout,
+                chunker: { annotatedSegment, settings, layout in
+                    verticalTextChunks(
+                        from: annotatedSegment.textContent,
+                        settings: settings,
+                        layout: layout
+                    )
+                }
+            )
         }
     }
 
-    private static func paginatePaged(
-        segments: [ReaderSegment],
+    private static func paginate(
+        annotatedSegments: [AnnotatedSegment],
+        documentView: Int,
         settings: ReaderAppearanceSettings,
-        layout: ReaderContainerLayout
+        layout: ReaderContainerLayout,
+        chunker: (AnnotatedSegment, ReaderAppearanceSettings, ReaderContainerLayout) -> [TextSlice]
     ) -> ReaderPaginationResult {
-        let metrics = textMetrics(settings: settings)
-
         var pages: [ReaderRenderedPage] = []
         var chapters: [ReaderChapter] = []
-        var seenTitles = Set<String>()
+        var seenChapterOrdinals = Set<Int>()
 
-        for segment in segments {
-            switch segment {
+        for annotatedSegment in annotatedSegments {
+            switch annotatedSegment.segment {
             case let .text(text, chapterTitle):
-                let slices = paginateText(
-                    text,
-                    width: layout.width,
-                    height: layout.height,
-                    settings: settings,
-                    metrics: metrics
-                )
-                for slice in slices where !slice.isEmpty {
+                let slices = chunker(annotatedSegment, settings, layout)
+                for slice in slices where !slice.text.isEmpty {
                     let page = ReaderRenderedPage(
                         index: pages.count,
-                        blocks: [.text(slice, chapterTitle: chapterTitle)]
+                        blocks: [.text(slice.text, chapterTitle: chapterTitle)],
+                        documentView: documentView,
+                        chapterOrdinal: annotatedSegment.chapterOrdinal,
+                        chapterTitle: annotatedSegment.chapterTitle,
+                        segmentIndex: annotatedSegment.index,
+                        segmentStartOffset: slice.startOffset,
+                        segmentEndOffset: slice.endOffset
                     )
-                    if let chapterTitle, seenTitles.insert(chapterTitle).inserted {
-                        chapters.append(ReaderChapter(title: chapterTitle, startIndex: page.index))
+                    if let chapterOrdinal = annotatedSegment.chapterOrdinal,
+                       let chapterTitle = annotatedSegment.chapterTitle,
+                       seenChapterOrdinals.insert(chapterOrdinal).inserted {
+                        chapters.append(
+                            ReaderChapter(
+                                ordinal: chapterOrdinal,
+                                title: chapterTitle,
+                                startIndex: page.index
+                            )
+                        )
                     }
                     pages.append(page)
+                }
+
+                if pages.isEmpty, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    pages.append(
+                        ReaderRenderedPage(
+                            index: 0,
+                            blocks: [.text(text, chapterTitle: chapterTitle)],
+                            documentView: documentView,
+                            chapterOrdinal: annotatedSegment.chapterOrdinal,
+                            chapterTitle: annotatedSegment.chapterTitle,
+                            segmentIndex: annotatedSegment.index,
+                            segmentStartOffset: 0,
+                            segmentEndOffset: text.count
+                        )
+                    )
                 }
             case let .image(url, chapterTitle):
                 let page = ReaderRenderedPage(
                     index: pages.count,
-                    blocks: [.image(url, chapterTitle: chapterTitle)]
+                    blocks: [.image(url, chapterTitle: chapterTitle)],
+                    documentView: documentView,
+                    chapterOrdinal: annotatedSegment.chapterOrdinal,
+                    chapterTitle: annotatedSegment.chapterTitle,
+                    segmentIndex: annotatedSegment.index,
+                    segmentStartOffset: 0,
+                    segmentEndOffset: 0
                 )
-                if let chapterTitle, seenTitles.insert(chapterTitle).inserted {
-                    chapters.append(ReaderChapter(title: chapterTitle, startIndex: page.index))
+                if let chapterOrdinal = annotatedSegment.chapterOrdinal,
+                   let chapterTitle = annotatedSegment.chapterTitle,
+                   seenChapterOrdinals.insert(chapterOrdinal).inserted {
+                    chapters.append(
+                        ReaderChapter(
+                            ordinal: chapterOrdinal,
+                            title: chapterTitle,
+                            startIndex: page.index
+                        )
+                    )
                 }
                 pages.append(page)
             }
         }
 
         if pages.isEmpty {
-            pages = [ReaderRenderedPage(index: 0, blocks: [.footer("暂无可显示内容")])]
+            pages = [ReaderRenderedPage(index: 0, blocks: [.footer("暂无可显示内容")], documentView: documentView)]
         }
 
         return ReaderPaginationResult(pages: pages, chapters: chapters)
     }
 
-    private static func paginateVertical(
-        segments: [ReaderSegment],
-        settings: ReaderAppearanceSettings,
-        layout: ReaderContainerLayout
-    ) -> ReaderPaginationResult {
-        var pages: [ReaderRenderedPage] = []
-        var chapters: [ReaderChapter] = []
-        var seenTitles = Set<String>()
+    private static func annotatedSegments(
+        from segments: [ReaderSegment],
+        settings: ReaderAppearanceSettings
+    ) -> [AnnotatedSegment] {
+        let transformedSegments = transformedSegments(from: segments, settings: settings)
+        var results: [AnnotatedSegment] = []
+        var currentChapterTitle: String?
+        var currentChapterOrdinal: Int?
+        var nextChapterOrdinal = 0
 
-        for segment in segments {
-            switch segment {
-            case let .text(text, chapterTitle):
-                let chunks = verticalTextChunks(from: text, settings: settings, layout: layout)
-                for chunk in chunks where !chunk.isEmpty {
-                    let page = ReaderRenderedPage(
-                        index: pages.count,
-                        blocks: [.text(chunk, chapterTitle: chapterTitle)]
-                    )
-                    if let chapterTitle, seenTitles.insert(chapterTitle).inserted {
-                        chapters.append(ReaderChapter(title: chapterTitle, startIndex: page.index))
-                    }
-                    pages.append(page)
+        for (index, segment) in transformedSegments.enumerated() {
+            let explicitChapterTitle = segment.chapterTitle?.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let explicitChapterTitle, !explicitChapterTitle.isEmpty {
+                if currentChapterTitle != explicitChapterTitle {
+                    currentChapterTitle = explicitChapterTitle
+                    currentChapterOrdinal = nextChapterOrdinal
+                    nextChapterOrdinal += 1
                 }
-            case let .image(url, chapterTitle):
-                let page = ReaderRenderedPage(
-                    index: pages.count,
-                    blocks: [.image(url, chapterTitle: chapterTitle)]
-                )
-                if let chapterTitle, seenTitles.insert(chapterTitle).inserted {
-                    chapters.append(ReaderChapter(title: chapterTitle, startIndex: page.index))
-                }
-                pages.append(page)
             }
+
+            results.append(
+                AnnotatedSegment(
+                    index: index,
+                    segment: segment,
+                    chapterOrdinal: currentChapterOrdinal,
+                    chapterTitle: currentChapterTitle
+                )
+            )
         }
 
-        if pages.isEmpty {
-            pages = [ReaderRenderedPage(index: 0, blocks: [.footer("暂无可显示内容")])]
-        }
-
-        return ReaderPaginationResult(pages: pages, chapters: chapters)
+        return results
     }
 
     private static func transformedSegments(
@@ -132,108 +185,143 @@ public enum ReaderPaginator {
 
     private static func paginateText(
         _ text: String,
-        width: CGFloat,
-        height: CGFloat,
         settings: ReaderAppearanceSettings,
-        metrics: ReaderTextMetrics
-    ) -> [String] {
-        let normalized = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !normalized.isEmpty else { return [] }
-
-        let charsPerLine = max(10, Int(width / max(metrics.characterWidth, 1)))
-        let linesPerPage = max(6, Int(height / max(metrics.lineHeight, 1)))
+        layout: ReaderContainerLayout
+    ) -> [TextSlice] {
+        let metrics = textMetrics(settings: settings)
+        let charsPerLine = max(10, Int(layout.width / max(metrics.characterWidth, 1)))
+        let linesPerPage = max(6, Int(layout.height / max(metrics.lineHeight, 1)))
         let charsPerPage = max(120, charsPerLine * linesPerPage)
-
-        let paragraphs = normalized
-            .components(separatedBy: "\n\n")
-            .map { $0.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-
-        var pages: [String] = []
-        var current = ""
-
-        for paragraph in paragraphs {
-            if paragraph.count > charsPerPage {
-                if !current.isEmpty {
-                    pages.append(current)
-                    current = ""
-                }
-
-                var startIndex = paragraph.startIndex
-                while startIndex < paragraph.endIndex {
-                    let endIndex = paragraph.index(startIndex, offsetBy: charsPerPage, limitedBy: paragraph.endIndex) ?? paragraph.endIndex
-                    let chunk = String(paragraph[startIndex ..< endIndex]).trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
-                    if !chunk.isEmpty {
-                        pages.append(chunk)
-                    }
-                    startIndex = endIndex
-                }
-                continue
-            }
-
-            let candidate = current.isEmpty ? paragraph : current + "\n\n" + paragraph
-            if candidate.count > charsPerPage, !current.isEmpty {
-                pages.append(current)
-                current = paragraph
-            } else {
-                current = candidate
-            }
-        }
-
-        if !current.isEmpty {
-            pages.append(current)
-        }
-
-        return pages.isEmpty ? [normalized] : pages
+        return textSlices(in: text, limit: charsPerPage)
     }
 
     private static func verticalTextChunks(
         from text: String,
         settings: ReaderAppearanceSettings,
         layout: ReaderContainerLayout
-    ) -> [String] {
+    ) -> [TextSlice] {
         let metrics = textMetrics(settings: settings)
-        let paragraphs = text
+        let charsPerLine = max(10, Int(layout.width / max(metrics.characterWidth, 1)))
+        let linesPerChunk = max(10, Int((layout.height * 1.8) / max(metrics.lineHeight, 1)))
+        let chunkLimit = max(220, charsPerLine * linesPerChunk)
+        return textSlices(in: text, limit: chunkLimit)
+    }
+
+    private static func textSlices(in text: String, limit: Int) -> [TextSlice] {
+        let normalized = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return [] }
+
+        let paragraphs = paragraphSlices(in: normalized)
+        guard !paragraphs.isEmpty else {
+            return [TextSlice(text: normalized, startOffset: 0, endOffset: normalized.count)]
+        }
+
+        var results: [TextSlice] = []
+        var currentText = ""
+        var currentStartOffset: Int?
+        var currentEndOffset = 0
+
+        func flushCurrent() {
+            guard let currentStartOffset, !currentText.isEmpty else { return }
+            results.append(
+                TextSlice(
+                    text: currentText,
+                    startOffset: currentStartOffset,
+                    endOffset: currentEndOffset
+                )
+            )
+            currentText = ""
+            selfResetCurrent()
+        }
+
+        func selfResetCurrent() {
+            currentStartOffset = nil
+            currentEndOffset = 0
+        }
+
+        for paragraph in paragraphs {
+            if paragraph.text.count > limit {
+                flushCurrent()
+                for slice in longParagraphSlices(paragraph, limit: limit) {
+                    results.append(slice)
+                }
+                continue
+            }
+
+            let separator = currentText.isEmpty ? "" : "\n\n"
+            let candidateCount = currentText.count + separator.count + paragraph.text.count
+            if candidateCount > limit, !currentText.isEmpty {
+                flushCurrent()
+            }
+
+            if currentStartOffset == nil {
+                currentStartOffset = paragraph.startOffset
+            }
+            currentText += (currentText.isEmpty ? "" : "\n\n") + paragraph.text
+            currentEndOffset = paragraph.endOffset
+        }
+
+        flushCurrent()
+        return results.isEmpty
+            ? [TextSlice(text: normalized, startOffset: 0, endOffset: normalized.count)]
+            : results
+    }
+
+    private static func paragraphSlices(in normalizedText: String) -> [ParagraphSlice] {
+        let paragraphs = normalizedText
             .components(separatedBy: "\n\n")
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
 
-        guard !paragraphs.isEmpty else {
-            return [text]
-        }
-
-        var results: [String] = []
-        var current = ""
-        let charsPerLine = max(10, Int(layout.width / max(metrics.characterWidth, 1)))
-        let linesPerChunk = max(10, Int((layout.height * 1.8) / max(metrics.lineHeight, 1)))
-        let chunkLimit = max(220, charsPerLine * linesPerChunk)
+        var searchStart = normalizedText.startIndex
+        var slices: [ParagraphSlice] = []
 
         for paragraph in paragraphs {
-            let separator = current.isEmpty ? "" : "\n\n"
-            if (current + separator + paragraph).count > chunkLimit {
-                if !current.isEmpty {
-                    results.append(current)
-                    current = ""
-                }
-                if paragraph.count > chunkLimit {
-                    var remainder = paragraph[...]
-                    while remainder.count > chunkLimit {
-                        let splitIndex = remainder.index(remainder.startIndex, offsetBy: chunkLimit)
-                        results.append(String(remainder[..<splitIndex]))
-                        remainder = remainder[splitIndex...]
-                    }
-                    current = String(remainder)
-                } else {
-                    current = paragraph
-                }
-            } else {
-                current += separator + paragraph
+            guard let range = normalizedText.range(of: paragraph, range: searchStart ..< normalizedText.endIndex) else {
+                continue
             }
+            let startOffset = normalizedText.distance(from: normalizedText.startIndex, to: range.lowerBound)
+            let endOffset = normalizedText.distance(from: normalizedText.startIndex, to: range.upperBound)
+            slices.append(
+                ParagraphSlice(
+                    text: paragraph,
+                    startOffset: startOffset,
+                    endOffset: endOffset
+                )
+            )
+            searchStart = range.upperBound
         }
 
-        if !current.isEmpty {
-            results.append(current)
+        return slices
+    }
+
+    private static func longParagraphSlices(_ paragraph: ParagraphSlice, limit: Int) -> [TextSlice] {
+        let characters = Array(paragraph.text)
+        guard !characters.isEmpty else { return [] }
+
+        var results: [TextSlice] = []
+        var start = 0
+
+        while start < characters.count {
+            let end = min(start + limit, characters.count)
+            let chunk = String(characters[start ..< end])
+            let trimmedChunk = chunk.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmedChunk.isEmpty {
+                let leadingTrimCount = chunk.prefix { $0.isWhitespaceOrNewline }.count
+                let trailingTrimCount = chunk.reversed().prefix { $0.isWhitespaceOrNewline }.count
+                let sliceStart = paragraph.startOffset + start + leadingTrimCount
+                let sliceEnd = paragraph.startOffset + end - trailingTrimCount
+                results.append(
+                    TextSlice(
+                        text: trimmedChunk,
+                        startOffset: max(paragraph.startOffset, sliceStart),
+                        endOffset: max(max(paragraph.startOffset, sliceStart), sliceEnd)
+                    )
+                )
+            }
+            start = end
         }
+
         return results
     }
 
@@ -254,4 +342,34 @@ private struct ReaderTextMetrics {
     let fontSize: CGFloat
     let lineHeight: CGFloat
     let characterWidth: CGFloat
+}
+
+private struct AnnotatedSegment {
+    let index: Int
+    let segment: ReaderSegment
+    let chapterOrdinal: Int?
+    let chapterTitle: String?
+
+    var textContent: String {
+        guard case let .text(text, _) = segment else { return "" }
+        return text
+    }
+}
+
+private struct TextSlice {
+    let text: String
+    let startOffset: Int
+    let endOffset: Int
+}
+
+private struct ParagraphSlice {
+    let text: String
+    let startOffset: Int
+    let endOffset: Int
+}
+
+private extension Character {
+    var isWhitespaceOrNewline: Bool {
+        unicodeScalars.allSatisfy { CharacterSet.whitespacesAndNewlines.contains($0) }
+    }
 }

@@ -204,7 +204,7 @@ final class ReaderContainerModelTests: XCTestCase {
         XCTAssertEqual(favorite?.lastPage, 2)
     }
 
-    func testVerticalModePersistsNormalizedNovelProgress() async throws {
+    func testVerticalModePersistsSemanticResumePoint() async throws {
         let keyPrefix = UUID().uuidString
         let settingsStore = SettingsStore(key: "\(keyPrefix).settings")
         let favoriteStore = FavoriteStore(key: "\(keyPrefix).favorites")
@@ -244,22 +244,26 @@ final class ReaderContainerModelTests: XCTestCase {
         await model.prepare(layout: ReaderContainerLayout(width: 320, height: 568))
 
         let targetIndex = await MainActor.run { min(2, max(model.renderedPageCount - 1, 0)) }
+        let targetPage = await MainActor.run { model.pages[targetIndex] }
         await MainActor.run {
-            model.updateCurrentPage(targetIndex)
+            model.updateVerticalViewportPosition(pageIndex: targetIndex, intraPageProgress: 0.55)
         }
 
         try await waitFor {
             let favorite = await favoriteStore.favorite(for: document.threadURL)
-            return favorite?.lastPage == 1
+            return favorite?.novelResumePoint != nil
         }
 
         let favorite = await favoriteStore.favorite(for: document.threadURL)
         XCTAssertEqual(favorite?.lastView, 1)
-        XCTAssertEqual(favorite?.lastPage, 1)
         XCTAssertEqual(favorite?.lastChapter, "第一章")
+        XCTAssertEqual(favorite?.novelResumePoint?.view, 1)
+        XCTAssertEqual(favorite?.novelResumePoint?.segmentIndex, targetPage.segmentIndex)
+        XCTAssertTrue((favorite?.novelResumePoint?.segmentOffset ?? 0) > targetPage.segmentStartOffset)
+        XCTAssertEqual(favorite?.novelResumePoint?.chapterTitle, "第一章")
     }
 
-    func testVerticalModeRestoreFallsBackToSavedChapterStart() async throws {
+    func testVerticalModeRestoresStoredResumePointWithinChapter() async throws {
         let keyPrefix = UUID().uuidString
         let settingsStore = SettingsStore(key: "\(keyPrefix).settings")
         let favoriteStore = FavoriteStore(key: "\(keyPrefix).favorites")
@@ -278,6 +282,25 @@ final class ReaderContainerModelTests: XCTestCase {
                 .text(String(repeating: "第三章 内容。", count: 120), chapterTitle: "第三章")
             ]
         )
+        let pagination = ReaderPaginator.paginate(
+            document: document,
+            settings: ReaderAppearanceSettings(readingMode: .vertical),
+            layout: ReaderContainerLayout(width: 320, height: 568)
+        )
+        let savedPage = try XCTUnwrap(
+            pagination.pages.first(where: { $0.chapterTitle == "第三章" && $0.segmentIndex != nil })
+        )
+        let savedOffset = savedPage.segmentStartOffset + max(1, (savedPage.segmentEndOffset - savedPage.segmentStartOffset) / 2)
+        let savedResumePoint = ReaderResumePoint(
+            view: 2,
+            chapterOrdinal: try XCTUnwrap(savedPage.chapterOrdinal),
+            chapterTitle: savedPage.chapterTitle,
+            segmentIndex: try XCTUnwrap(savedPage.segmentIndex),
+            segmentOffset: savedOffset,
+            segmentProgress: 0.5,
+            authorID: nil,
+            readingModeHint: .vertical
+        )
 
         try await settingsStore.save(AppSettings(reader: ReaderAppearanceSettings(readingMode: .vertical)))
         try await cacheStore.save(document)
@@ -285,9 +308,10 @@ final class ReaderContainerModelTests: XCTestCase {
             Favorite(
                 title: "测试线程",
                 url: threadURL,
-                lastPage: 0,
+                lastPage: savedPage.index,
                 lastView: 2,
                 lastChapter: "第三章",
+                novelResumePoint: savedResumePoint,
                 type: .novel
             )
         ])
@@ -312,10 +336,54 @@ final class ReaderContainerModelTests: XCTestCase {
         await model.prepare(layout: ReaderContainerLayout(width: 320, height: 568))
 
         await MainActor.run {
-            let savedChapterStartIndex = model.chapters.first(where: { $0.title == "第三章" })?.startIndex
             XCTAssertEqual(model.currentView, 2)
             XCTAssertEqual(model.currentChapterTitle, "第三章")
-            XCTAssertEqual(model.currentPageIndex, savedChapterStartIndex)
+            XCTAssertEqual(model.currentPageIndex, savedPage.index)
+            XCTAssertEqual(model.pages[model.currentPageIndex].segmentIndex, savedPage.segmentIndex)
+            XCTAssertGreaterThan(model.currentPageIntraProgress, 0.2)
+        }
+    }
+
+    func testChangingReadingModeKeepsSemanticAnchorOnSameSegment() async throws {
+        let document = ReaderPageDocument(
+            threadURL: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=903&mobile=2")!,
+            view: 1,
+            maxView: 1,
+            contentSource: .fallbackUnfilteredPage,
+            segments: [
+                .text(String(repeating: "第一章 内容。", count: 260), chapterTitle: "第一章")
+            ]
+        )
+        let model = try await makeModel(
+            documents: [document],
+            settings: ReaderAppearanceSettings(readingMode: .paged)
+        )
+
+        let originalOffset = await MainActor.run { () -> Int in
+            let targetIndex = min(1, max(model.renderedPageCount - 1, 0))
+            model.updateVerticalViewportPosition(pageIndex: targetIndex, intraPageProgress: 0.5)
+            let page = model.pages[targetIndex]
+            return page.segmentStartOffset + max(1, (page.segmentEndOffset - page.segmentStartOffset) / 2)
+        }
+
+        await MainActor.run {
+            model.applySettings(ReaderAppearanceSettings(readingMode: .vertical))
+        }
+
+        await MainActor.run {
+            let page = model.pages[model.currentPageIndex]
+            XCTAssertEqual(page.chapterTitle, "第一章")
+            XCTAssertTrue(pageContainsOffset(page, offset: originalOffset))
+        }
+
+        await MainActor.run {
+            model.applySettings(ReaderAppearanceSettings(readingMode: .paged))
+        }
+
+        await MainActor.run {
+            let page = model.pages[model.currentPageIndex]
+            XCTAssertEqual(page.chapterTitle, "第一章")
+            XCTAssertTrue(pageContainsOffset(page, offset: originalOffset))
         }
     }
 
@@ -684,6 +752,13 @@ private func waitFor(
         try await Task.sleep(nanoseconds: pollIntervalNanoseconds)
     }
     XCTFail("Timed out waiting for condition")
+}
+
+private func pageContainsOffset(_ page: ReaderRenderedPage, offset: Int) -> Bool {
+    if page.segmentStartOffset == page.segmentEndOffset {
+        return offset <= page.segmentStartOffset
+    }
+    return offset >= page.segmentStartOffset && offset < page.segmentEndOffset
 }
 
 private func makeDocument(

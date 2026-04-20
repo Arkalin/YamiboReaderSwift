@@ -112,7 +112,22 @@ import Testing
 
     _ = try await store.updateReadingProgress(
         for: url,
-        progress: ReaderProgress(view: 2, page: 18, chapterTitle: "第三章", authorID: "77")
+        progress: ReaderProgress(
+            view: 2,
+            page: 18,
+            chapterTitle: "第三章",
+            authorID: "77",
+            resumePoint: ReaderResumePoint(
+                view: 2,
+                chapterOrdinal: 2,
+                chapterTitle: "第三章",
+                segmentIndex: 8,
+                segmentOffset: 128,
+                segmentProgress: 0.4,
+                authorID: "77",
+                readingModeHint: .vertical
+            )
+        )
     )
 
     let favorite = await store.favorite(for: url)
@@ -120,6 +135,7 @@ import Testing
     #expect(favorite?.lastPage == 18)
     #expect(favorite?.lastChapter == "第三章")
     #expect(favorite?.authorID == "77")
+    #expect(favorite?.novelResumePoint?.segmentIndex == 8)
     #expect(favorite?.type == .novel)
 }
 

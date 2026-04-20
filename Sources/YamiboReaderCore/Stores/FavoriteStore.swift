@@ -118,6 +118,7 @@ public actor FavoriteStore: FavoriteStoring {
             favorites[index].lastPage = progress.page
             favorites[index].lastChapter = progress.chapterTitle
             favorites[index].authorID = progress.authorID
+            favorites[index].novelResumePoint = progress.resumePoint
             if favorites[index].type == .unknown {
                 favorites[index].type = .novel
             }
@@ -132,6 +133,7 @@ public actor FavoriteStore: FavoriteStoring {
             lastView: progress.view,
             lastChapter: progress.chapterTitle,
             authorID: progress.authorID,
+            novelResumePoint: progress.resumePoint,
             isHidden: false,
             type: .novel
         )
@@ -146,6 +148,7 @@ public actor FavoriteStore: FavoriteStoring {
             favorites[index].lastMangaURL = chapterURL
             favorites[index].lastChapter = chapterTitle
             favorites[index].lastPage = max(0, pageIndex)
+            favorites[index].novelResumePoint = nil
             favorites[index].type = .manga
             try await saveFavorites(favorites)
             return favorites[index]
@@ -158,6 +161,7 @@ public actor FavoriteStore: FavoriteStoring {
             lastView: 1,
             lastChapter: chapterTitle,
             authorID: nil,
+            novelResumePoint: nil,
             isHidden: false,
             type: .manga,
             lastMangaURL: chapterURL

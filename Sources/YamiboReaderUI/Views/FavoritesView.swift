@@ -168,8 +168,8 @@ public final class FavoritesViewModel: ObservableObject {
                     threadURL: latestFavorite.url,
                     threadTitle: latestFavorite.resolvedDisplayTitle,
                     source: .favorites,
-                    initialView: mode == .start ? 1 : latestFavorite.lastView,
-                    initialPage: mode == .start ? 0 : latestFavorite.lastPage,
+                    initialView: mode == .start ? 1 : nil,
+                    initialPage: mode == .start ? 0 : nil,
                     authorID: latestFavorite.authorID
                 )
             )
@@ -456,6 +456,11 @@ func progressScore(for favorite: Favorite) -> Int {
 }
 
 func favoriteProgressText(for favorite: Favorite) -> String? {
+    if favorite.type == .novel,
+       let chapterTitle = favorite.novelResumePoint?.chapterTitle,
+       !chapterTitle.isEmpty {
+        return chapterTitle
+    }
     if let lastChapter = favorite.lastChapter, !lastChapter.isEmpty {
         if favorite.type == .manga, favorite.lastPage > 0 {
             return "\(lastChapter) · 第\(favorite.lastPage + 1)页"

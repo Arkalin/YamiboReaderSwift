@@ -59,6 +59,13 @@ public enum ReaderContentSource: String, Codable, Hashable, Sendable {
 public enum ReaderSegment: Hashable, Sendable {
     case text(String, chapterTitle: String?)
     case image(URL, chapterTitle: String?)
+
+    public var chapterTitle: String? {
+        switch self {
+        case let .text(_, chapterTitle), let .image(_, chapterTitle):
+            return chapterTitle
+        }
+    }
 }
 
 extension ReaderSegment: Codable {
@@ -140,12 +147,45 @@ public struct ReaderPageDocument: Codable, Hashable, Sendable {
 }
 
 public struct ReaderChapter: Codable, Hashable, Sendable {
+    public var ordinal: Int
     public var title: String
     public var startIndex: Int
 
-    public init(title: String, startIndex: Int) {
+    public init(ordinal: Int, title: String, startIndex: Int) {
+        self.ordinal = max(0, ordinal)
         self.title = title
         self.startIndex = startIndex
+    }
+}
+
+public struct ReaderResumePoint: Codable, Hashable, Sendable {
+    public var view: Int
+    public var chapterOrdinal: Int
+    public var chapterTitle: String?
+    public var segmentIndex: Int
+    public var segmentOffset: Int
+    public var segmentProgress: Double
+    public var authorID: String?
+    public var readingModeHint: ReaderReadingMode
+
+    public init(
+        view: Int,
+        chapterOrdinal: Int,
+        chapterTitle: String? = nil,
+        segmentIndex: Int,
+        segmentOffset: Int,
+        segmentProgress: Double,
+        authorID: String? = nil,
+        readingModeHint: ReaderReadingMode
+    ) {
+        self.view = max(1, view)
+        self.chapterOrdinal = max(0, chapterOrdinal)
+        self.chapterTitle = chapterTitle
+        self.segmentIndex = max(0, segmentIndex)
+        self.segmentOffset = max(0, segmentOffset)
+        self.segmentProgress = min(max(segmentProgress, 0), 1)
+        self.authorID = authorID
+        self.readingModeHint = readingModeHint
     }
 }
 
@@ -154,12 +194,20 @@ public struct ReaderProgress: Codable, Hashable, Sendable {
     public var page: Int
     public var chapterTitle: String?
     public var authorID: String?
+    public var resumePoint: ReaderResumePoint?
 
-    public init(view: Int, page: Int, chapterTitle: String? = nil, authorID: String? = nil) {
-        self.view = max(1, view)
+    public init(
+        view: Int,
+        page: Int,
+        chapterTitle: String? = nil,
+        authorID: String? = nil,
+        resumePoint: ReaderResumePoint? = nil
+    ) {
+        self.view = max(1, resumePoint?.view ?? view)
         self.page = max(0, page)
-        self.chapterTitle = chapterTitle
-        self.authorID = authorID
+        self.chapterTitle = resumePoint?.chapterTitle ?? chapterTitle
+        self.authorID = resumePoint?.authorID ?? authorID
+        self.resumePoint = resumePoint
     }
 }
 
@@ -192,12 +240,33 @@ public enum ReaderRenderedBlock: Hashable, Identifiable, Sendable {
 public struct ReaderRenderedPage: Hashable, Identifiable, Sendable {
     public var index: Int
     public var blocks: [ReaderRenderedBlock]
+    public var documentView: Int
+    public var chapterOrdinal: Int?
+    public var chapterTitle: String?
+    public var segmentIndex: Int?
+    public var segmentStartOffset: Int
+    public var segmentEndOffset: Int
 
     public var id: Int { index }
 
-    public init(index: Int, blocks: [ReaderRenderedBlock]) {
+    public init(
+        index: Int,
+        blocks: [ReaderRenderedBlock],
+        documentView: Int = 1,
+        chapterOrdinal: Int? = nil,
+        chapterTitle: String? = nil,
+        segmentIndex: Int? = nil,
+        segmentStartOffset: Int = 0,
+        segmentEndOffset: Int = 0
+    ) {
         self.index = index
         self.blocks = blocks
+        self.documentView = max(1, documentView)
+        self.chapterOrdinal = chapterOrdinal
+        self.chapterTitle = chapterTitle
+        self.segmentIndex = segmentIndex
+        self.segmentStartOffset = max(0, segmentStartOffset)
+        self.segmentEndOffset = max(self.segmentStartOffset, segmentEndOffset)
     }
 }
 
