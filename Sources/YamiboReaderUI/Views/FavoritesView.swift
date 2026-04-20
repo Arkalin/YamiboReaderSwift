@@ -308,7 +308,10 @@ public struct FavoritesView: View {
                     ContentUnavailableView("暂无收藏", systemImage: "books.vertical")
                 }
             }
-            .navigationTitle("我的收藏")
+            .navigationTitle("")
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
             .navigationDestination(item: $detailRoute) { route in
                 FavoriteDetailView(
                     favoriteID: route.id,
@@ -319,29 +322,57 @@ public struct FavoritesView: View {
                 )
             }
             .toolbar {
-                ToolbarItem {
+                #if os(iOS)
+                ToolbarItem(placement: .topBarLeading) {
                     Menu {
-                        Picker("分类", selection: $filterRawValue) {
-                            ForEach(FavoriteFilter.allCases) { filter in
-                                Text(filter.title).tag(filter.rawValue)
-                            }
+                        Button {} label: {
+                            Label("设置", systemImage: "gearshape")
                         }
 
-                        Picker("排序", selection: $sortRawValue) {
-                            ForEach(FavoriteSortOrder.allCases) { sortOrder in
-                                Text(sortOrder.title).tag(sortOrder.rawValue)
-                            }
-                        }
-
-                        Toggle("显示隐藏项", isOn: $showsHidden)
-
-                        Button("管理目录") {
-                            showingDirectoryManager = true
+                        Button {} label: {
+                            Label("关于", systemImage: "info.circle")
                         }
                     } label: {
+                        Image(systemName: "ellipsis.circle")
+                    }
+                }
+                #else
+                ToolbarItem {
+                    Menu {
+                        Button {} label: {
+                            Label("设置", systemImage: "gearshape")
+                        }
+
+                        Button {} label: {
+                            Label("关于", systemImage: "info.circle")
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                    }
+                }
+                #endif
+
+                ToolbarItem(placement: .principal) {
+                    Menu {
+                        favoritesToolbarMenuContent
+                    } label: {
+                        titleMenuLabel
+                    }
+                }
+
+                #if os(iOS)
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(action: {}) {
                         Image(systemName: "line.3.horizontal.decrease.circle")
                     }
                 }
+                #else
+                ToolbarItem {
+                    Button(action: {}) {
+                        Image(systemName: "line.3.horizontal.decrease.circle")
+                    }
+                }
+                #endif
             }
             .task {
                 await viewModel.loadCachedFavorites()
@@ -367,13 +398,50 @@ public struct FavoritesView: View {
         }
     }
 
+    private var currentFilter: FavoriteFilter {
+        FavoriteFilter(rawValue: filterRawValue) ?? .all
+    }
+
+    @ViewBuilder
+    private var favoritesToolbarMenuContent: some View {
+        Picker("分类", selection: $filterRawValue) {
+            ForEach(FavoriteFilter.allCases) { filter in
+                Text(filter.title).tag(filter.rawValue)
+            }
+        }
+
+        Picker("排序", selection: $sortRawValue) {
+            ForEach(FavoriteSortOrder.allCases) { sortOrder in
+                Text(sortOrder.title).tag(sortOrder.rawValue)
+            }
+        }
+
+        Toggle("显示隐藏项", isOn: $showsHidden)
+
+        Button("管理目录") {
+            showingDirectoryManager = true
+        }
+    }
+
+    private var titleMenuLabel: some View {
+        HStack(spacing: 6) {
+            Text(currentFilter.title)
+                .font(.headline)
+                .foregroundStyle(.primary)
+
+            Image(systemName: "chevron.down")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+        }
+        .contentShape(Rectangle())
+    }
+
     private var filteredFavorites: [Favorite] {
-        let filter = FavoriteFilter(rawValue: filterRawValue) ?? .all
         let sortOrder = FavoriteSortOrder(rawValue: sortRawValue) ?? .manual
 
         let filtered = viewModel.favorites
             .filter { showsHidden || !$0.isHidden }
-            .filter { filter.matches($0) }
+            .filter { currentFilter.matches($0) }
 
         switch sortOrder {
         case .manual:
