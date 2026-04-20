@@ -262,9 +262,16 @@ public struct FavoritesView: View {
                 .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
                 .listRowBackground(Color.clear)
                 .swipeActions(edge: .leading, allowsFullSwipe: false) {
-                    Button("编辑") {
+                    ShareLink(item: favorite.url) {
+                        swipeActionLabel(title: "分享", systemImage: "square.and.arrow.up")
+                    }
+                    .tint(.teal)
+
+                    Button {
                         editingFavorite = favorite
                         editingDisplayName = favorite.displayName ?? favorite.resolvedDisplayTitle
+                    } label: {
+                        swipeActionLabel(title: "编辑", systemImage: "pencil")
                     }
                     .tint(.indigo)
                 }
@@ -482,6 +489,16 @@ public struct FavoritesView: View {
             case let .web(resolvedFavorite):
                 selectedFavorite = resolvedFavorite
             }
+        }
+    }
+
+    @ViewBuilder
+    private func swipeActionLabel(title: String, systemImage: String) -> some View {
+        VStack(spacing: 4) {
+            Text(title)
+                .font(.caption2.weight(.semibold))
+            Image(systemName: systemImage)
+                .font(.caption.weight(.semibold))
         }
     }
 }
