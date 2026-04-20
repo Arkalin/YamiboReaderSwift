@@ -48,6 +48,15 @@ public enum FavoriteSortOrder: String, CaseIterable, Identifiable {
     }
 }
 
+enum FavoriteLaunchMode: Sendable {
+    case start
+    case resume
+}
+
+struct FavoriteDetailRoute: Hashable, Identifiable {
+    let id: String
+}
+
 @MainActor
 public final class FavoritesViewModel: ObservableObject {
     @Published public private(set) var favorites: [Favorite] = []
@@ -81,6 +90,10 @@ public final class FavoritesViewModel: ObservableObject {
         }
     }
 
+    func favorite(id: String) -> Favorite? {
+        favorites.first { $0.id == id }
+    }
+
     public func setHidden(_ isHidden: Bool, for favorite: Favorite) async {
         do {
             favorites = try await favoriteStore.setHidden(isHidden, for: favorite.id)
@@ -90,16 +103,51 @@ public final class FavoritesViewModel: ObservableObject {
         }
     }
 
-    public func resolveOpenTarget(for favorite: Favorite) async -> FavoriteOpenTarget {
+    public func setDisplayName(_ displayName: String?, for favorite: Favorite) async {
+        do {
+            let normalized = displayName?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let valueToPersist: String? = if let normalized, !normalized.isEmpty, normalized != favorite.title {
+                normalized
+            } else {
+                nil
+            }
+            favorites = try await favoriteStore.setDisplayName(valueToPersist, for: favorite.id)
+            errorMessage = nil
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func clearCache(for favorite: Favorite) async -> Bool {
+        guard favorite.type == .novel else {
+            errorMessage = "当前类型暂不支持定向清理缓存。"
+            return false
+        }
+
+        do {
+            try await appContext.readerCacheStore.deleteAll(
+                for: favorite.url,
+                authorID: favorite.authorID
+            )
+            errorMessage = nil
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
+
+    func openTarget(for favorite: Favorite, mode: FavoriteLaunchMode = .resume) async -> FavoriteOpenTarget {
         switch favorite.type {
         case .novel:
             return .reader(
                 ReaderLaunchContext(
                     threadURL: favorite.url,
-                    threadTitle: favorite.title,
+                    threadTitle: favorite.resolvedDisplayTitle,
                     source: .favorites,
-                    initialView: favorite.lastView,
-                    initialPage: favorite.lastPage,
+                    initialView: mode == .start ? 1 : favorite.lastView,
+                    initialPage: mode == .start ? 0 : favorite.lastPage,
                     authorID: favorite.authorID
                 )
             )
@@ -107,10 +155,10 @@ public final class FavoritesViewModel: ObservableObject {
             return .manga(
                 MangaLaunchContext(
                     originalThreadURL: favorite.url,
-                    chapterURL: favorite.lastMangaURL ?? favorite.url,
-                    displayTitle: favorite.title,
+                    chapterURL: mode == .start ? favorite.url : (favorite.lastMangaURL ?? favorite.url),
+                    displayTitle: favorite.resolvedDisplayTitle,
                     source: .favorites,
-                    initialPage: favorite.lastPage
+                    initialPage: mode == .start ? 0 : favorite.lastPage
                 )
             )
         case .other:
@@ -123,19 +171,20 @@ public final class FavoritesViewModel: ObservableObject {
                 let resolver = await appContext.makeThreadOpenResolver()
                 let target = try await resolver.resolve(
                     threadURL: favorite.url,
-                    title: favorite.title,
+                    title: favorite.resolvedDisplayTitle,
                     htmlOverride: nil,
                     favoriteType: .unknown,
                     favoriteChapterURL: favorite.lastMangaURL,
                     initialPage: favorite.lastPage
                 )
+
                 switch target {
                 case let .novel(context):
                     favorites = try await favoriteStore.setType(.novel, for: favorite.id)
-                    return .reader(context)
+                    return .reader(applyStartModeIfNeeded(to: context, for: favorite, mode: mode))
                 case let .manga(context):
                     favorites = try await favoriteStore.setType(.manga, for: favorite.id)
-                    return .manga(context)
+                    return .manga(applyStartModeIfNeeded(to: context, for: favorite, mode: mode))
                 case .web:
                     favorites = try await favoriteStore.setType(.other, for: favorite.id)
                     var updated = favorite
@@ -147,6 +196,44 @@ public final class FavoritesViewModel: ObservableObject {
                 return .web(favorite)
             }
         }
+    }
+
+    func resolveOpenTarget(for favorite: Favorite) async -> FavoriteOpenTarget {
+        await openTarget(for: favorite, mode: .resume)
+    }
+
+    private func applyStartModeIfNeeded(
+        to context: ReaderLaunchContext,
+        for favorite: Favorite,
+        mode: FavoriteLaunchMode
+    ) -> ReaderLaunchContext {
+        guard mode == .start else { return context }
+
+        return ReaderLaunchContext(
+            threadURL: context.threadURL,
+            threadTitle: favorite.resolvedDisplayTitle,
+            source: context.source,
+            initialView: 1,
+            initialPage: 0,
+            authorID: context.authorID
+        )
+    }
+
+    private func applyStartModeIfNeeded(
+        to context: MangaLaunchContext,
+        for favorite: Favorite,
+        mode: FavoriteLaunchMode
+    ) -> MangaLaunchContext {
+        guard mode == .start else { return context }
+
+        return MangaLaunchContext(
+            originalThreadURL: context.originalThreadURL,
+            chapterURL: favorite.url,
+            displayTitle: favorite.resolvedDisplayTitle,
+            source: context.source,
+            initialPage: 0,
+            directoryName: context.directoryName
+        )
     }
 }
 
@@ -163,6 +250,7 @@ public struct FavoritesView: View {
     @AppStorage("yamibo.favorite.showHidden") private var showsHidden = false
     @State private var selectedFavorite: Favorite?
     @State private var showingDirectoryManager = false
+    @State private var detailRoute: FavoriteDetailRoute?
     private let appContext: YamiboAppContext
     private let appModel: YamiboAppModel
 
@@ -176,56 +264,19 @@ public struct FavoritesView: View {
         NavigationStack {
             List(filteredFavorites) { favorite in
                 Button {
-                    Task {
-                        let target = await viewModel.resolveOpenTarget(for: favorite)
-                        switch target {
-                        case let .reader(context):
-                            appModel.presentReader(context)
-                        case let .manga(context):
-                            await appModel.openManga(context)
-                        case let .web(resolvedFavorite):
-                            selectedFavorite = resolvedFavorite
-                        }
-                    }
+                    open(favorite, mode: .resume)
                 } label: {
-                    HStack(spacing: 12) {
-                        Circle()
-                            .fill(color(for: favorite.type))
-                            .frame(width: 10, height: 10)
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(favorite.title)
-                                .font(.headline)
-                                .lineLimit(2)
-                            if let progressText = progressText(for: favorite) {
-                                Text(progressText)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                            }
-                            Text(favorite.type.title)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer(minLength: 0)
-                        if favorite.isHidden {
-                            Image(systemName: "eye.slash")
-                                .foregroundStyle(.secondary)
-                        }
-                        if viewModel.resolvingFavoriteID == favorite.id {
-                            ProgressView()
-                                .controlSize(.small)
-                        }
-                    }
-                    .padding(.vertical, 4)
+                    FavoriteRow(
+                        favorite: favorite,
+                        isResolving: viewModel.resolvingFavoriteID == favorite.id
+                    )
                 }
                 .buttonStyle(.plain)
                 .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                    Button(favorite.isHidden ? "取消隐藏" : "隐藏") {
-                        Task {
-                            await viewModel.setHidden(!favorite.isHidden, for: favorite)
-                        }
+                    Button("菜单") {
+                        detailRoute = FavoriteDetailRoute(id: favorite.id)
                     }
-                    .tint(favorite.isHidden ? .green : .orange)
+                    .tint(.indigo)
                 }
             }
             .overlay {
@@ -236,6 +287,15 @@ public struct FavoritesView: View {
                 }
             }
             .navigationTitle("我的收藏")
+            .navigationDestination(item: $detailRoute) { route in
+                FavoriteDetailView(
+                    favoriteID: route.id,
+                    viewModel: viewModel,
+                    appContext: appContext,
+                    appModel: appModel,
+                    openFavorite: open
+                )
+            }
             .toolbar {
                 ToolbarItem {
                     Menu {
@@ -298,7 +358,7 @@ public struct FavoritesView: View {
             return filtered
         case .title:
             return filtered.sorted { lhs, rhs in
-                lhs.title.localizedCompare(rhs.title) == .orderedAscending
+                lhs.resolvedDisplayTitle.localizedCompare(rhs.resolvedDisplayTitle) == .orderedAscending
             }
         case .progress:
             return filtered.sorted { lhs, rhs in
@@ -307,32 +367,93 @@ public struct FavoritesView: View {
         }
     }
 
-    private func progressScore(for favorite: Favorite) -> Int {
-        favorite.lastView * 1000 + favorite.lastPage
-    }
-
-    private func progressText(for favorite: Favorite) -> String? {
-        if let lastChapter = favorite.lastChapter, !lastChapter.isEmpty {
-            if favorite.type == .manga, favorite.lastPage > 0 {
-                return "\(lastChapter) · 第\(favorite.lastPage + 1)页"
+    private func open(_ favorite: Favorite, mode: FavoriteLaunchMode) {
+        Task {
+            let target = await viewModel.openTarget(for: favorite, mode: mode)
+            switch target {
+            case let .reader(context):
+                appModel.presentReader(context)
+            case let .manga(context):
+                await appModel.openManga(context)
+            case let .web(resolvedFavorite):
+                selectedFavorite = resolvedFavorite
             }
-            return lastChapter
         }
-        if favorite.type == .manga, favorite.lastPage > 0 {
-            return "第\(favorite.lastPage + 1)页"
-        }
-        if favorite.lastPage > 0 || favorite.lastView > 1 {
-            return "第\(favorite.lastPage + 1)页 / 网页第\(favorite.lastView)页"
-        }
-        return nil
     }
+}
 
-    private func color(for type: FavoriteType) -> Color {
-        switch type {
-        case .unknown: .gray
-        case .novel: .green
-        case .manga: .blue
-        case .other: .orange
+struct FavoriteRow: View {
+    let favorite: Favorite
+    let isResolving: Bool
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Circle()
+                .fill(favoriteAccentColor(for: favorite.type))
+                .frame(width: 10, height: 10)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(favorite.resolvedDisplayTitle)
+                    .font(.headline)
+                    .lineLimit(2)
+
+                if let progressText = favoriteProgressText(for: favorite) {
+                    Text(progressText)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+
+                Text(favorite.type.title)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer(minLength: 0)
+
+            if favorite.isHidden {
+                Image(systemName: "eye.slash")
+                    .foregroundStyle(.secondary)
+            }
+
+            if isResolving {
+                ProgressView()
+                    .controlSize(.small)
+            }
         }
+        .padding(.vertical, 4)
+    }
+}
+
+func favoriteProgressScore(for favorite: Favorite) -> Int {
+    favorite.lastView * 1000 + favorite.lastPage
+}
+
+func progressScore(for favorite: Favorite) -> Int {
+    favoriteProgressScore(for: favorite)
+}
+
+func favoriteProgressText(for favorite: Favorite) -> String? {
+    if let lastChapter = favorite.lastChapter, !lastChapter.isEmpty {
+        if favorite.type == .manga, favorite.lastPage > 0 {
+            return "\(lastChapter) · 第\(favorite.lastPage + 1)页"
+        }
+        return lastChapter
+    }
+    if favorite.type == .manga, favorite.lastPage > 0 {
+        return "第\(favorite.lastPage + 1)页"
+    }
+    if favorite.lastPage > 0 || favorite.lastView > 1 {
+        return "第\(favorite.lastPage + 1)页 / 网页第\(favorite.lastView)页"
+    }
+    return nil
+}
+
+func favoriteAccentColor(for type: FavoriteType) -> Color {
+    switch type {
+    case .unknown: .gray
+    case .novel: .green
+    case .manga: .blue
+    case .other: .orange
     }
 }

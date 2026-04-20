@@ -3,6 +3,7 @@ import Foundation
 public struct Favorite: Codable, Hashable, Identifiable, Sendable {
     public let id: String
     public var title: String
+    public var displayName: String?
     public var url: URL
     public var lastPage: Int
     public var lastView: Int
@@ -15,6 +16,7 @@ public struct Favorite: Codable, Hashable, Identifiable, Sendable {
     public init(
         id: String? = nil,
         title: String,
+        displayName: String? = nil,
         url: URL,
         lastPage: Int = 0,
         lastView: Int = 1,
@@ -26,6 +28,7 @@ public struct Favorite: Codable, Hashable, Identifiable, Sendable {
     ) {
         self.id = id ?? url.absoluteString
         self.title = title
+        self.displayName = displayName
         self.url = url
         self.lastPage = lastPage
         self.lastView = lastView
@@ -34,6 +37,11 @@ public struct Favorite: Codable, Hashable, Identifiable, Sendable {
         self.isHidden = isHidden
         self.type = type
         self.lastMangaURL = lastMangaURL
+    }
+
+    public var resolvedDisplayTitle: String {
+        let trimmed = displayName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? title : trimmed
     }
 }
 

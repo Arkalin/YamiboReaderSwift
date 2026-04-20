@@ -202,3 +202,42 @@ import Testing
     let updated = try await store.setType(.novel, for: favorite.id)
     #expect(updated.first?.type == .novel)
 }
+
+@Test func favoriteStoreCanPersistDisplayNameAndClearIt() async throws {
+    let defaults = try #require(UserDefaults(suiteName: "favorite-display-name-tests"))
+    defaults.removePersistentDomain(forName: "favorite-display-name-tests")
+    let store = FavoriteStore(defaults: defaults, key: "favorites")
+
+    let favorite = Favorite(
+        title: "原标题",
+        url: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=199&mobile=2")!
+    )
+    try await store.saveFavorites([favorite])
+
+    let renamed = try await store.setDisplayName("自定义名称", for: favorite.id)
+    #expect(renamed.first?.displayName == "自定义名称")
+    #expect(renamed.first?.resolvedDisplayTitle == "自定义名称")
+
+    let cleared = try await store.setDisplayName("   ", for: favorite.id)
+    #expect(cleared.first?.displayName == nil)
+    #expect(cleared.first?.resolvedDisplayTitle == "原标题")
+}
+
+@Test func favoriteStoreMergePreservesLocalDisplayName() async throws {
+    let defaults = try #require(UserDefaults(suiteName: "favorite-merge-display-name-tests"))
+    defaults.removePersistentDomain(forName: "favorite-merge-display-name-tests")
+    let store = FavoriteStore(defaults: defaults, key: "favorites")
+    let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=288&mobile=2"))
+
+    try await store.saveFavorites([
+        Favorite(title: "旧标题", displayName: "我的名字", url: url)
+    ])
+
+    let merged = try await store.mergeRemoteFavorites([
+        Favorite(title: "新标题", url: url)
+    ])
+
+    #expect(merged.first?.title == "新标题")
+    #expect(merged.first?.displayName == "我的名字")
+    #expect(merged.first?.resolvedDisplayTitle == "我的名字")
+}

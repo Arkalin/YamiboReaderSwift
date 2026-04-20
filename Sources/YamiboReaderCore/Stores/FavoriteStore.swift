@@ -5,8 +5,10 @@ public protocol FavoriteStoring: Sendable {
     func saveFavorites(_ favorites: [Favorite]) async throws
     func mergeRemoteFavorites(_ favorites: [Favorite]) async throws -> [Favorite]
     func setHidden(_ isHidden: Bool, for favoriteID: String) async throws -> [Favorite]
+    func setDisplayName(_ displayName: String?, for favoriteID: String) async throws -> [Favorite]
     func setType(_ type: FavoriteType, for favoriteID: String) async throws -> [Favorite]
     func favorite(for url: URL) async -> Favorite?
+    func favorite(id: String) async -> Favorite?
     func updateReadingProgress(for url: URL, progress: ReaderProgress) async throws -> Favorite
     func updateMangaProgress(for url: URL, chapterURL: URL, chapterTitle: String, pageIndex: Int) async throws -> Favorite
 }
@@ -61,22 +63,33 @@ public actor FavoriteStore: FavoriteStoring {
     }
 
     public func setHidden(_ isHidden: Bool, for favoriteID: String) async throws -> [Favorite] {
-        let updated = await loadFavorites().map { favorite in
-            guard favorite.id == favoriteID else { return favorite }
-            var favorite = favorite
+        let updated = await updateFavorites { favorite in
             favorite.isHidden = isHidden
-            return favorite
+        } matching: { favorite in
+            favorite.id == favoriteID
+        }
+        try await saveFavorites(updated)
+        return updated
+    }
+
+    public func setDisplayName(_ displayName: String?, for favoriteID: String) async throws -> [Favorite] {
+        let normalized = displayName?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .nilIfEmpty
+        let updated = await updateFavorites { favorite in
+            favorite.displayName = normalized
+        } matching: { favorite in
+            favorite.id == favoriteID
         }
         try await saveFavorites(updated)
         return updated
     }
 
     public func setType(_ type: FavoriteType, for favoriteID: String) async throws -> [Favorite] {
-        let updated = await loadFavorites().map { favorite in
-            guard favorite.id == favoriteID else { return favorite }
-            var favorite = favorite
+        let updated = await updateFavorites { favorite in
             favorite.type = type
-            return favorite
+        } matching: { favorite in
+            favorite.id == favoriteID
         }
         try await saveFavorites(updated)
         return updated
@@ -86,6 +99,10 @@ public actor FavoriteStore: FavoriteStoring {
         await loadFavorites().first { favorite in
             favorite.url == url || favorite.id == url.absoluteString
         }
+    }
+
+    public func favorite(id: String) async -> Favorite? {
+        await loadFavorites().first { $0.id == id }
     }
 
     public func updateReadingProgress(for url: URL, progress: ReaderProgress) async throws -> Favorite {
@@ -142,5 +159,23 @@ public actor FavoriteStore: FavoriteStoring {
         favorites.append(favorite)
         try await saveFavorites(favorites)
         return favorite
+    }
+
+    private func updateFavorites(
+        _ update: (inout Favorite) -> Void,
+        matching predicate: (Favorite) -> Bool
+    ) async -> [Favorite] {
+        await loadFavorites().map { favorite in
+            guard predicate(favorite) else { return favorite }
+            var favorite = favorite
+            update(&favorite)
+            return favorite
+        }
+    }
+}
+
+private extension String {
+    var nilIfEmpty: String? {
+        isEmpty ? nil : self
     }
 }
