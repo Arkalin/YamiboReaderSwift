@@ -270,6 +270,7 @@ public struct FavoritesView: View {
     @AppStorage("yamibo.favorite.filter") private var filterRawValue = FavoriteFilter.all.rawValue
     @AppStorage("yamibo.favorite.sort") private var sortRawValue = FavoriteSortOrder.manual.rawValue
     @AppStorage("yamibo.favorite.showHidden") private var showsHidden = false
+    @State private var searchText = ""
     @State private var selectedFavorite: Favorite?
     @State private var showingDirectoryManager = false
     @State private var detailRoute: FavoriteDetailRoute?
@@ -305,12 +306,23 @@ public struct FavoritesView: View {
                 if viewModel.isLoading {
                     ProgressView("同步收藏中…")
                 } else if filteredFavorites.isEmpty {
-                    ContentUnavailableView("暂无收藏", systemImage: "books.vertical")
+                    if searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        ContentUnavailableView("暂无收藏", systemImage: "books.vertical")
+                    } else {
+                        ContentUnavailableView("没有匹配结果", systemImage: "magnifyingglass")
+                    }
                 }
             }
             .navigationTitle("")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
+            .searchable(
+                text: $searchText,
+                placement: .navigationBarDrawer(displayMode: .always),
+                prompt: "搜索"
+            )
+            #else
+            .searchable(text: $searchText, prompt: "搜索")
             #endif
             .navigationDestination(item: $detailRoute) { route in
                 FavoriteDetailView(
@@ -363,13 +375,13 @@ public struct FavoritesView: View {
                 #if os(iOS)
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(action: {}) {
-                        Image(systemName: "line.3.horizontal.decrease.circle")
+                        Text("选择")
                     }
                 }
                 #else
                 ToolbarItem {
                     Button(action: {}) {
-                        Image(systemName: "line.3.horizontal.decrease.circle")
+                        Text("选择")
                     }
                 }
                 #endif
@@ -377,6 +389,9 @@ public struct FavoritesView: View {
             .task {
                 await viewModel.loadCachedFavorites()
                 await viewModel.refresh()
+            }
+            .onChange(of: filterRawValue) { _, _ in
+                searchText = ""
             }
             .refreshable {
                 await viewModel.refresh()
@@ -438,10 +453,15 @@ public struct FavoritesView: View {
 
     private var filteredFavorites: [Favorite] {
         let sortOrder = FavoriteSortOrder(rawValue: sortRawValue) ?? .manual
+        let trimmedSearchText = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
 
         let filtered = viewModel.favorites
             .filter { showsHidden || !$0.isHidden }
             .filter { currentFilter.matches($0) }
+            .filter { favorite in
+                guard !trimmedSearchText.isEmpty else { return true }
+                return favorite.resolvedDisplayTitle.localizedCaseInsensitiveContains(trimmedSearchText)
+            }
 
         switch sortOrder {
         case .manual:
