@@ -145,6 +145,8 @@ public struct ReaderContainerView: View {
             .sheet(isPresented: $showingChapterSheet) {
                 ReaderChapterSheet(model: model) { chapter in
                     jumpToChapter(chapter)
+                } onSelectWebView: { view in
+                    Task { await jumpToWebView(view) }
                 }
             }
             .sheet(isPresented: $showingCachePanel) {

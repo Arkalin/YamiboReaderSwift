@@ -164,6 +164,10 @@ public final class ReaderContainerModel: ObservableObject {
         "网页 \(displayedView) / \(max(maxView, 1))"
     }
 
+    public var directoryWebTitle: String {
+        "\(currentWebViewText) 的章节"
+    }
+
     public func chapterTitle(forRenderedPageIndex pageIndex: Int) -> String? {
         guard !pages.isEmpty else { return nil }
         let clampedIndex = min(max(pageIndex, 0), max(pages.count - 1, 0))

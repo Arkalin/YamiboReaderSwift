@@ -95,6 +95,7 @@ final class ReaderContainerModelTests: XCTestCase {
             XCTAssertEqual(model.currentView, 2)
             XCTAssertEqual(model.currentRenderedPage, 1)
             XCTAssertEqual(model.currentWebViewText, "网页 2 / 2")
+            XCTAssertEqual(model.directoryWebTitle, "网页 2 / 2 的章节")
         }
     }
 

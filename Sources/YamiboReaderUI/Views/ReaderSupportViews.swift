@@ -486,7 +486,9 @@ struct ReaderChromeIconButton: View {
 struct ReaderChapterSheet: View {
     @ObservedObject var model: ReaderContainerModel
     let onSelect: (ReaderChapter) -> Void
+    let onSelectWebView: (Int) -> Void
     @Environment(\.dismiss) private var dismiss
+    @State private var showingWebPicker = false
 
     var body: some View {
         NavigationStack {
@@ -517,9 +519,35 @@ struct ReaderChapterSheet: View {
                         }
                     }
                 }
-                .navigationTitle("章节目录")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
+                    ToolbarItem(placement: .principal) {
+                        Button {
+                            guard model.maxView > 1 else { return }
+                            showingWebPicker.toggle()
+                        } label: {
+                            HStack(spacing: 6) {
+                                Text(model.directoryWebTitle)
+                                    .lineLimit(1)
+                                Image(systemName: "chevron.down")
+                                    .font(.caption.weight(.semibold))
+                                    .rotationEffect(.degrees(showingWebPicker ? 180 : 0))
+                            }
+                            .font(.headline)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(model.maxView <= 1)
+                        .popover(isPresented: $showingWebPicker, arrowEdge: .top) {
+                            ReaderChapterWebPicker(model: model) { view in
+                                showingWebPicker = false
+                                guard view != model.visibleView else { return }
+                                onSelectWebView(view)
+                            }
+                            .presentationCompactAdaptation(.popover)
+                        }
+                        .accessibilityLabel(model.directoryWebTitle)
+                    }
+
                     ToolbarItem(placement: .topBarTrailing) {
                         Button("关闭") {
                             dismiss()
@@ -531,6 +559,15 @@ struct ReaderChapterSheet: View {
                 }
                 .onChange(of: model.currentChapterIndex) { _, _ in
                     scrollToCurrentChapter(using: scrollProxy)
+                }
+                .onChange(of: model.visibleView) { _, _ in
+                    showingWebPicker = false
+                    scrollToCurrentChapter(using: scrollProxy)
+                }
+                .onChange(of: model.maxView) { _, newValue in
+                    if newValue <= 1 {
+                        showingWebPicker = false
+                    }
                 }
             }
         }
@@ -554,7 +591,70 @@ struct ReaderChapterSheet: View {
               model.chapters.indices.contains(currentChapterIndex) else { return }
         let targetIndex = max(currentChapterIndex - 3, 0)
         let targetChapter = model.chapters[targetIndex]
-        proxy.scrollTo(targetChapter.startIndex, anchor: .top)
+        withAnimation(.easeInOut(duration: 0.2)) {
+            proxy.scrollTo(targetChapter.startIndex, anchor: .top)
+        }
+    }
+}
+
+private struct ReaderChapterWebPicker: View {
+    @ObservedObject var model: ReaderContainerModel
+    let onSelect: (Int) -> Void
+
+    var body: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 4) {
+                    ForEach(1 ... model.maxView, id: \.self) { view in
+                        Button {
+                            onSelect(view)
+                        } label: {
+                            HStack(spacing: 10) {
+                                Image(systemName: view == model.visibleView ? "checkmark.circle.fill" : "circle")
+                                    .foregroundStyle(view == model.visibleView ? Color.accentColor : Color.secondary)
+
+                                Text("第 \(view) 页")
+                                    .foregroundStyle(.primary)
+
+                                Spacer(minLength: 0)
+
+                                if view == model.visibleView {
+                                    Text("当前")
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundStyle(Color.accentColor)
+                                }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 10)
+                            .background(
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .fill(view == model.visibleView ? Color.accentColor.opacity(0.12) : Color.clear)
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .id(view)
+                    }
+                }
+                .padding(8)
+            }
+            .frame(width: 200)
+            .frame(maxHeight: 260)
+            .onAppear {
+                scrollToCurrentView(using: proxy)
+            }
+            .onChange(of: model.visibleView) { _, _ in
+                scrollToCurrentView(using: proxy)
+            }
+        }
+    }
+
+    private func scrollToCurrentView(using proxy: ScrollViewProxy) {
+        guard model.maxView > 0 else { return }
+        let target = max(model.visibleView - 2, 1)
+        withAnimation(.easeInOut(duration: 0.2)) {
+            proxy.scrollTo(target, anchor: .top)
+        }
     }
 }
 
