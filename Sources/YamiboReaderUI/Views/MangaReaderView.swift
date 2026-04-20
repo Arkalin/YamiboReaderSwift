@@ -19,6 +19,7 @@ public struct MangaReaderView: View {
     @State private var previewPageIndex: Int?
     @State private var isPreviewVisible = false
     @State private var previewHideTask: Task<Void, Never>?
+    @State private var pendingVerticalViewportPageID: MangaPage.ID?
     private let appModel: YamiboAppModel
 
     public init(context: MangaLaunchContext, appModel: YamiboAppModel) {
@@ -197,7 +198,7 @@ public struct MangaReaderView: View {
                             )
                             .id(page.id)
                             .onAppear {
-                                model.updateCurrentPage(forPageID: page.id)
+                                handleVerticalPageAppear(page.id)
                             }
                         }
                     }
@@ -220,12 +221,14 @@ public struct MangaReaderView: View {
                 activeZoomPageID = nil
                 verticalZoomOverlay = nil
                 guard let request = model.viewportRequest else { return }
+                pendingVerticalViewportPageID = request.targetPageID
                 proxy.scrollTo(request.targetPageID, anchor: .top)
             }
             .onChange(of: model.viewportRequest) { _, request in
                 guard let request else { return }
                 activeZoomPageID = nil
                 verticalZoomOverlay = nil
+                pendingVerticalViewportPageID = request.targetPageID
                 if request.animated {
                     withAnimation(.easeInOut(duration: 0.2)) {
                         proxy.scrollTo(request.targetPageID, anchor: .top)
@@ -411,6 +414,15 @@ public struct MangaReaderView: View {
         previewPageIndex = nil
     }
 
+    private func handleVerticalPageAppear(_ pageID: MangaPage.ID) {
+        if let pendingVerticalViewportPageID {
+            guard pendingVerticalViewportPageID == pageID else { return }
+            self.pendingVerticalViewportPageID = nil
+        }
+
+        model.updateCurrentPage(forPageID: pageID)
+    }
+
     private func clampedSliderValue(_ value: Double) -> Double {
         min(max(value, model.sliderRange.lowerBound), model.sliderRange.upperBound)
     }
@@ -422,6 +434,7 @@ public struct MangaReaderView: View {
     private var contentInteractionGesture: some Gesture {
         DragGesture(minimumDistance: 4)
             .onChanged { _ in
+                pendingVerticalViewportPageID = nil
                 cancelSliderInteractionForContentGesture()
             }
     }
