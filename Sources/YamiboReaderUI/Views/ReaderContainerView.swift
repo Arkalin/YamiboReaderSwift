@@ -26,6 +26,19 @@ private struct ReaderVerticalViewportMetrics: Equatable {
     var viewportHeight: CGFloat = 0
 }
 
+private enum ReaderVerticalRestorePhase: Equatable {
+    case idle
+    case scrolling(request: ReaderVerticalScrollRequest, deadline: CFTimeInterval)
+    case fineTuning(request: ReaderVerticalScrollRequest, deadline: CFTimeInterval)
+    case settling(deadline: CFTimeInterval)
+}
+
+private struct ReaderVerticalPositioningFingerprint: Equatable {
+    let view: Int
+    let pageCount: Int
+    let readingMode: ReaderReadingMode
+}
+
 private struct ReaderVerticalPageFramePreferenceKey: PreferenceKey {
     static var defaultValue: [Int: CGRect] { [:] }
 
@@ -45,9 +58,9 @@ public struct ReaderContainerView: View {
     @State private var showingChapterSheet = false
     @State private var chromeMode: ReaderChromeMode = .loading
     @State private var verticalScrollRequest: ReaderVerticalScrollRequest?
-    @State private var pendingVerticalRestoreRequest: ReaderVerticalScrollRequest?
+    @State private var verticalRestorePhase: ReaderVerticalRestorePhase = .idle
     @State private var verticalPageFrames: [Int: CGRect] = [:]
-    @State private var suppressVerticalViewportSamplingUntil: CFTimeInterval = 0
+    @State private var lastVerticalPositioningFingerprint: ReaderVerticalPositioningFingerprint?
     @State private var progressPreviewPageIndex: Int?
     @State private var progressPreviewChapterTitle: String?
     @State private var isProgressPreviewVisible = false
@@ -287,22 +300,20 @@ public struct ReaderContainerView: View {
             )
             .onChange(of: verticalScrollRequest) { _, request in
                 guard let request else { return }
-                pendingVerticalRestoreRequest = request
-                beginVerticalViewportSamplingSuppression(duration: 1.2)
                 withAnimation(.easeInOut(duration: 0.2)) {
                     scrollProxy.scrollTo(request.pageIndex, anchor: .top)
                 }
                 verticalScrollRequest = nil
-                tryApplyPendingVerticalRestore()
+                tryAdvanceVerticalRestore()
             }
             .onPreferenceChange(ReaderVerticalPageFramePreferenceKey.self) { frames in
                 verticalPageFrames = frames
                 updateVerticalViewportPosition()
-                tryApplyPendingVerticalRestore()
+                tryAdvanceVerticalRestore()
             }
             .onChange(of: verticalScrollCoordinator.viewportMetrics) { _, _ in
                 updateVerticalViewportPosition()
-                tryApplyPendingVerticalRestore()
+                tryAdvanceVerticalRestore()
             }
         }
     }
@@ -414,18 +425,33 @@ public struct ReaderContainerView: View {
 
         if model.isLoading && model.pages.isEmpty {
             chromeMode = .loading
+            lastVerticalPositioningFingerprint = nil
             return
         }
 
         if model.errorMessage != nil && model.pages.isEmpty {
             chromeMode = .error
+            lastVerticalPositioningFingerprint = nil
             return
         }
 
-        guard !model.pages.isEmpty else { return }
+        guard !model.pages.isEmpty else {
+            lastVerticalPositioningFingerprint = nil
+            return
+        }
 
         if model.settings.readingMode == .vertical {
-            requestVerticalScrollToCurrentPage()
+            let fingerprint = ReaderVerticalPositioningFingerprint(
+                view: model.visibleView,
+                pageCount: model.pages.count,
+                readingMode: model.settings.readingMode
+            )
+            if lastVerticalPositioningFingerprint != fingerprint {
+                lastVerticalPositioningFingerprint = fingerprint
+                requestVerticalScrollToCurrentPage()
+            }
+        } else {
+            lastVerticalPositioningFingerprint = nil
         }
 
         if chromeMode != .immersiveHidden {
@@ -521,8 +547,9 @@ public struct ReaderContainerView: View {
     }
 
     private func requestVerticalScrollToCurrentPage() {
-        beginVerticalViewportSamplingSuppression(duration: 1.2)
-        verticalScrollRequest = makeVerticalScrollRequest()
+        let request = makeVerticalScrollRequest()
+        beginVerticalRestoreScrolling(for: request)
+        verticalScrollRequest = request
     }
 
     private func updateVerticalViewportPosition(force: Bool = false) {
@@ -547,16 +574,20 @@ public struct ReaderContainerView: View {
 
     private func applyVerticalFineTune(for request: ReaderVerticalScrollRequest) {
         guard let frame = verticalPageFrames[request.pageIndex] else { return }
+        verticalRestorePhase = .fineTuning(
+            request: request,
+            deadline: CACurrentMediaTime() + 0.45
+        )
         verticalScrollCoordinator.restoreOffset(
             to: frame,
             intraPageProgress: request.intraPageProgress
         )
-        beginVerticalViewportSamplingSuppression(duration: 0.45)
-        pendingVerticalRestoreRequest = nil
+        verticalRestorePhase = .settling(deadline: CACurrentMediaTime() + 0.45)
     }
 
-    private func tryApplyPendingVerticalRestore() {
-        guard let request = pendingVerticalRestoreRequest else { return }
+    private func tryAdvanceVerticalRestore() {
+        refreshVerticalRestorePhase()
+        guard case let .scrolling(request, _) = verticalRestorePhase else { return }
         guard verticalScrollCoordinator.viewportMetrics.viewportHeight > 0 else { return }
         guard let frame = verticalPageFrames[request.pageIndex], frame.height > 0 else { return }
         applyVerticalFineTune(for: request)
@@ -568,24 +599,33 @@ public struct ReaderContainerView: View {
     }
 
     private func shouldSuppressVerticalViewportSampling(for pageIndex: Int, intraPageProgress: Double) -> Bool {
-        let now = CACurrentMediaTime()
-        let pendingRequest = pendingVerticalRestoreRequest ?? verticalScrollRequest
-        guard now < suppressVerticalViewportSamplingUntil || pendingRequest != nil else { return false }
-        let pendingDescription: String
-        if let request = pendingRequest {
-            pendingDescription = "\(request.pageIndex)@\(String(format: "%.3f", request.intraPageProgress))"
-        } else {
-            pendingDescription = "none"
+        refreshVerticalRestorePhase()
+        switch verticalRestorePhase {
+        case .idle:
+            return false
+        case .scrolling, .fineTuning, .settling:
+            return true
         }
-        let remaining = max(suppressVerticalViewportSamplingUntil - now, 0)
-        return true
     }
 
-    private func beginVerticalViewportSamplingSuppression(duration: CFTimeInterval) {
-        suppressVerticalViewportSamplingUntil = max(
-            suppressVerticalViewportSamplingUntil,
-            CACurrentMediaTime() + duration
+    private func beginVerticalRestoreScrolling(for request: ReaderVerticalScrollRequest) {
+        verticalRestorePhase = .scrolling(
+            request: request,
+            deadline: CACurrentMediaTime() + 1.2
         )
+    }
+
+    private func refreshVerticalRestorePhase(now: CFTimeInterval = CACurrentMediaTime()) {
+        switch verticalRestorePhase {
+        case .idle:
+            return
+        case let .scrolling(_, deadline),
+             let .fineTuning(_, deadline),
+             let .settling(deadline):
+            if now >= deadline {
+                verticalRestorePhase = .idle
+            }
+        }
     }
 
     private func pageDistance(from referenceLineY: CGFloat, to frame: CGRect) -> CGFloat {
