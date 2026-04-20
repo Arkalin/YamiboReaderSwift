@@ -53,10 +53,6 @@ enum FavoriteLaunchMode: Sendable {
     case resume
 }
 
-struct FavoriteDetailRoute: Hashable, Identifiable {
-    let id: String
-}
-
 @MainActor
 public final class FavoritesViewModel: ObservableObject {
     @Published public private(set) var favorites: [Favorite] = []
@@ -110,19 +106,6 @@ public final class FavoritesViewModel: ObservableObject {
         }
     }
 
-    func favorite(id: String) -> Favorite? {
-        favorites.first { $0.id == id }
-    }
-
-    public func setHidden(_ isHidden: Bool, for favorite: Favorite) async {
-        do {
-            favorites = try await favoriteStore.setHidden(isHidden, for: favorite.id)
-            errorMessage = nil
-        } catch {
-            errorMessage = error.localizedDescription
-        }
-    }
-
     public func setDisplayName(_ displayName: String?, for favorite: Favorite) async {
         do {
             let normalized = displayName?
@@ -136,25 +119,6 @@ public final class FavoritesViewModel: ObservableObject {
             errorMessage = nil
         } catch {
             errorMessage = error.localizedDescription
-        }
-    }
-
-    func clearCache(for favorite: Favorite) async -> Bool {
-        guard favorite.type == .novel else {
-            errorMessage = "当前类型暂不支持定向清理缓存。"
-            return false
-        }
-
-        do {
-            try await appContext.readerCacheStore.deleteAll(
-                for: favorite.url,
-                authorID: favorite.authorID
-            )
-            errorMessage = nil
-            return true
-        } catch {
-            errorMessage = error.localizedDescription
-            return false
         }
     }
 
@@ -273,7 +237,8 @@ public struct FavoritesView: View {
     @State private var searchText = ""
     @State private var selectedFavorite: Favorite?
     @State private var showingSettingsSheet = false
-    @State private var detailRoute: FavoriteDetailRoute?
+    @State private var editingFavorite: Favorite?
+    @State private var editingDisplayName = ""
     private let appContext: YamiboAppContext
     private let appModel: YamiboAppModel
 
@@ -286,22 +251,25 @@ public struct FavoritesView: View {
     public var body: some View {
         NavigationStack {
             List(filteredFavorites) { favorite in
-                Button {
-                    open(favorite, mode: .resume)
-                } label: {
-                    FavoriteRow(
-                        favorite: favorite,
-                        isResolving: viewModel.resolvingFavoriteID == favorite.id
-                    )
-                }
-                .buttonStyle(.plain)
-                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                    Button("菜单") {
-                        detailRoute = FavoriteDetailRoute(id: favorite.id)
+                FavoriteRow(
+                    favorite: favorite,
+                    isResolving: viewModel.resolvingFavoriteID == favorite.id,
+                    onOpen: {
+                        open(favorite, mode: .resume)
+                    }
+                )
+                .listRowSeparator(.hidden)
+                .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+                .listRowBackground(Color.clear)
+                .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                    Button("编辑") {
+                        editingFavorite = favorite
+                        editingDisplayName = favorite.displayName ?? favorite.resolvedDisplayTitle
                     }
                     .tint(.indigo)
                 }
             }
+            .listStyle(.plain)
             .overlay {
                 if viewModel.isLoading {
                     ProgressView("同步收藏中…")
@@ -324,15 +292,6 @@ public struct FavoritesView: View {
             #else
             .searchable(text: $searchText, prompt: "搜索")
             #endif
-            .navigationDestination(item: $detailRoute) { route in
-                FavoriteDetailView(
-                    favoriteID: route.id,
-                    viewModel: viewModel,
-                    appContext: appContext,
-                    appModel: appModel,
-                    openFavorite: open
-                )
-            }
             .toolbar {
                 #if os(iOS)
                 ToolbarItem(placement: .topBarLeading) {
@@ -407,6 +366,23 @@ public struct FavoritesView: View {
             }, message: {
                 Text(viewModel.errorMessage ?? "")
             })
+            .alert("编辑显示名称", isPresented: editNameAlertBinding) {
+                TextField("显示名称", text: $editingDisplayName)
+                Button("取消", role: .cancel) {
+                    editingFavorite = nil
+                    editingDisplayName = ""
+                }
+                Button("保存") {
+                    guard let editingFavorite else { return }
+                    Task {
+                        await viewModel.setDisplayName(editingDisplayName, for: editingFavorite)
+                    }
+                    self.editingFavorite = nil
+                    editingDisplayName = ""
+                }
+            } message: {
+                Text("留空后将恢复显示原标题。")
+            }
             .sheet(item: $selectedFavorite) { favorite in
                 ForumBrowserView(url: favorite.url, appContext: appContext, appModel: appModel)
                     .ignoresSafeArea()
@@ -425,6 +401,18 @@ public struct FavoritesView: View {
 
     private var currentFilter: FavoriteFilter {
         FavoriteFilter(rawValue: filterRawValue) ?? .all
+    }
+
+    private var editNameAlertBinding: Binding<Bool> {
+        Binding(
+            get: { editingFavorite != nil },
+            set: { isPresented in
+                if !isPresented {
+                    editingFavorite = nil
+                    editingDisplayName = ""
+                }
+            }
+        )
     }
 
     @ViewBuilder
@@ -501,43 +489,65 @@ public struct FavoritesView: View {
 struct FavoriteRow: View {
     let favorite: Favorite
     let isResolving: Bool
+    let onOpen: () -> Void
 
     var body: some View {
-        HStack(spacing: 12) {
-            Circle()
-                .fill(favoriteAccentColor(for: favorite.type))
-                .frame(width: 10, height: 10)
+        Button(action: onOpen) {
+            HStack(spacing: 0) {
+                RoundedRectangle(cornerRadius: 999, style: .continuous)
+                    .fill(favoriteAccentColor(for: favorite.type))
+                    .frame(width: 5)
+                    .padding(.vertical, 14)
+                    .padding(.leading, 10)
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text(favorite.resolvedDisplayTitle)
-                    .font(.headline)
-                    .lineLimit(2)
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(alignment: .top, spacing: 12) {
+                        Text(favorite.resolvedDisplayTitle)
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundStyle(.primary)
+                            .multilineTextAlignment(.leading)
+                            .lineLimit(3)
+                            .frame(maxWidth: .infinity, alignment: .leading)
 
-                if let progressText = favoriteProgressText(for: favorite) {
-                    Text(progressText)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                        if isResolving {
+                            ProgressView()
+                                .controlSize(.small)
+                                .padding(.top, 2)
+                        }
+                    }
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        ForEach(favoriteDetailLines(for: favorite), id: \.self) { line in
+                            Text(line)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+
+                        if favorite.isHidden {
+                            Label("已隐藏", systemImage: "eye.slash")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                 }
-
-                Text(favorite.type.title)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                .padding(.vertical, 18)
+                .padding(.leading, 16)
+                .padding(.trailing, 14)
             }
-
-            Spacer(minLength: 0)
-
-            if favorite.isHidden {
-                Image(systemName: "eye.slash")
-                    .foregroundStyle(.secondary)
-            }
-
-            if isResolving {
-                ProgressView()
-                    .controlSize(.small)
-            }
+            .frame(maxWidth: .infinity, minHeight: 112, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .fill(.regularMaterial)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .strokeBorder(favoriteAccentColor(for: favorite.type).opacity(0.18), lineWidth: 1)
+            )
+            .shadow(color: .black.opacity(0.04), radius: 8, x: 0, y: 3)
         }
-        .padding(.vertical, 4)
+        .buttonStyle(.plain)
     }
 }
 
@@ -568,6 +578,30 @@ func favoriteProgressText(for favorite: Favorite) -> String? {
         return "第\(favorite.lastPage + 1)页 / 网页第\(favorite.lastView)页"
     }
     return nil
+}
+
+func favoriteDetailLines(for favorite: Favorite) -> [String] {
+    var lines: [String] = []
+
+    if let lastChapter = favorite.lastChapter?.trimmingCharacters(in: .whitespacesAndNewlines),
+       !lastChapter.isEmpty {
+        lines.append(lastChapter)
+    }
+
+    if favorite.type == .novel {
+        if favorite.lastPage > 0 || favorite.lastView > 1 {
+            lines.append("读至第 \(favorite.lastPage + 1) 页 - \(favorite.lastView) 页")
+        }
+    } else if let progressText = favoriteProgressText(for: favorite),
+              !lines.contains(progressText) {
+        lines.append(progressText)
+    }
+
+    if lines.isEmpty {
+        lines.append(favorite.type.title)
+    }
+
+    return Array(lines.prefix(2))
 }
 
 func favoriteAccentColor(for type: FavoriteType) -> Color {
