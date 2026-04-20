@@ -58,6 +58,24 @@ final class MangaPresentationRouteTests: XCTestCase {
 
         XCTAssertNil(appModel.activeMangaRoute)
         XCTAssertNil(appModel.suspendedMangaWebContext)
+        XCTAssertEqual(appModel.selectedTab, .forum)
+        XCTAssertEqual(appModel.forumNavigationRequest?.url, originalURL)
+    }
+
+    func testDismissReaderToOriginalPostSelectsForumAndCreatesNavigationRequest() {
+        let appModel = YamiboAppModel(appContext: YamiboAppContext(), initialTab: .mine)
+        let originalURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=703&mobile=2")!
+        let context = ReaderLaunchContext(
+            threadURL: originalURL,
+            threadTitle: "测试小说",
+            source: .forum
+        )
+
+        appModel.presentReader(context)
+        appModel.dismissReader(openThreadInForum: originalURL)
+
+        XCTAssertNil(appModel.activeReaderContext)
+        XCTAssertEqual(appModel.selectedTab, .forum)
         XCTAssertEqual(appModel.forumNavigationRequest?.url, originalURL)
     }
 

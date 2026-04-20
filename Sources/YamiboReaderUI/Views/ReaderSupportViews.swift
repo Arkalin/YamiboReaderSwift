@@ -316,6 +316,7 @@ struct ReaderBottomChrome: View {
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
+                .disabled(model.maxView <= 1)
 
                 ReaderChromeIconButton(systemName: "chevron.right", title: "下一网页") {
                     onStepWeb(1)
@@ -536,38 +537,64 @@ struct ReaderWebJumpSheet: View {
     let onJump: (Int) -> Void
 
     @Environment(\.dismiss) private var dismiss
-    @State private var input = ""
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section("当前网页") {
-                    Text(model.currentWebViewText)
-                }
+            ScrollViewReader { proxy in
+                List {
+                    Section {
+                        HStack {
+                            Text("当前网页")
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Text(model.currentWebViewText)
+                                .fontWeight(.semibold)
+                        }
+                    }
 
-                Section("目标网页") {
-                    TextField("输入网页页码", text: $input)
-                        .keyboardType(.numberPad)
-                }
-            }
-            .navigationTitle("网页跳转")
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("取消") {
-                        dismiss()
+                    Section("选择网页") {
+                        ForEach(1 ... model.maxView, id: \.self) { view in
+                            Button {
+                                onJump(view)
+                                dismiss()
+                            } label: {
+                                HStack(spacing: 12) {
+                                    Image(systemName: view == model.visibleView ? "checkmark.circle.fill" : "circle")
+                                        .foregroundStyle(view == model.visibleView ? Color.accentColor : Color.secondary)
+
+                                    Text("第 \(view) 页")
+                                        .foregroundStyle(.primary)
+
+                                    Spacer()
+
+                                    if view == model.visibleView {
+                                        Text("当前")
+                                            .font(.caption.weight(.semibold))
+                                            .foregroundStyle(Color.accentColor)
+                                    }
+                                }
+                                .contentShape(Rectangle())
+                            }
+                            .id(view)
+                        }
                     }
                 }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("跳转") {
-                        let target = Int(input.trimmingCharacters(in: .whitespacesAndNewlines)) ?? model.visibleView
-                        onJump(target)
-                        dismiss()
-                    }
+                .navigationTitle("跳转网页")
+                .onAppear {
+                    scrollToCurrentView(using: proxy)
+                }
+                .onChange(of: model.visibleView) { _, _ in
+                    scrollToCurrentView(using: proxy)
                 }
             }
-            .onAppear {
-                input = "\(model.visibleView)"
-            }
+        }
+    }
+
+    private func scrollToCurrentView(using proxy: ScrollViewProxy) {
+        guard model.maxView > 0 else { return }
+        let target = max(model.visibleView - 3, 1)
+        withAnimation(.easeInOut(duration: 0.2)) {
+            proxy.scrollTo(target, anchor: .top)
         }
     }
 }

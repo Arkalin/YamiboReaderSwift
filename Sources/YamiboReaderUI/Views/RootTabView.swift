@@ -27,7 +27,12 @@ public struct RootTabView: View {
         let favoriteStore = appModel.appContext.favoriteStore
 
         return TabView(selection: binding(for: \.selectedTab)) {
-            ForumBrowserView(url: forumURL, appContext: appModel.appContext, appModel: appModel)
+            ForumBrowserView(
+                url: forumURL,
+                appContext: appModel.appContext,
+                appModel: appModel,
+                listensToForumNavigationRequest: true
+            )
                 .tag(AppTab.forum)
                 .tabItem {
                     Label("论坛", systemImage: "globe.asia.australia")
@@ -39,7 +44,12 @@ public struct RootTabView: View {
                     Label("收藏", systemImage: "heart.text.square")
                 }
 
-            ForumBrowserView(url: mineURL, appContext: appModel.appContext, appModel: appModel)
+            ForumBrowserView(
+                url: mineURL,
+                appContext: appModel.appContext,
+                appModel: appModel,
+                listensToForumNavigationRequest: false
+            )
                 .tag(AppTab.mine)
                 .tabItem {
                     Label("我的", systemImage: "person.crop.circle")

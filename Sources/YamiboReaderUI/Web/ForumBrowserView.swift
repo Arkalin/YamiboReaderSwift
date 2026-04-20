@@ -115,11 +115,18 @@ public struct ForumBrowserView: View {
     @State private var actionErrorMessage: String?
     private let appContext: YamiboAppContext
     private let appModel: YamiboAppModel
+    private let listensToForumNavigationRequest: Bool
 
-    public init(url: URL, appContext: YamiboAppContext, appModel: YamiboAppModel) {
+    public init(
+        url: URL,
+        appContext: YamiboAppContext,
+        appModel: YamiboAppModel,
+        listensToForumNavigationRequest: Bool = true
+    ) {
         _model = StateObject(wrappedValue: ForumBrowserModel(initialURL: url))
         self.appContext = appContext
         self.appModel = appModel
+        self.listensToForumNavigationRequest = listensToForumNavigationRequest
     }
 
     public var body: some View {
@@ -142,6 +149,7 @@ public struct ForumBrowserView: View {
             ForumHistorySheet(model: model, showingHistory: $showingHistory)
         }
         .onChange(of: appModel.forumNavigationRequest?.id) { _, _ in
+            guard listensToForumNavigationRequest else { return }
             if let request = appModel.forumNavigationRequest {
                 model.load(request.url)
             }
@@ -345,7 +353,12 @@ public struct ForumBrowserView: View {
     private let appContext: YamiboAppContext
     private let appModel: YamiboAppModel
 
-    public init(url: URL, appContext: YamiboAppContext, appModel: YamiboAppModel) {
+    public init(
+        url: URL,
+        appContext: YamiboAppContext,
+        appModel: YamiboAppModel,
+        listensToForumNavigationRequest: Bool = true
+    ) {
         self.url = url
         self.appContext = appContext
         self.appModel = appModel

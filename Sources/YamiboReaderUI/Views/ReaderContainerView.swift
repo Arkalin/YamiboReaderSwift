@@ -169,6 +169,7 @@ public struct ReaderContainerView: View {
                 ReaderWebJumpSheet(model: model) { view in
                     Task { await jumpToWebView(view) }
                 }
+                .presentationDetents([.medium])
             }
             .statusBar(hidden: chromeMode == .immersiveHidden || !model.settings.showsSystemStatusBar)
             .onChange(of: model.isLoading) { _, _ in
@@ -413,6 +414,7 @@ public struct ReaderContainerView: View {
     }
 
     private func openWebJumpSheet() {
+        guard model.maxView > 1 else { return }
         chromeMode = .visible
         showingWebJumpSheet = true
     }
