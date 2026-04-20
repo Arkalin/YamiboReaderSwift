@@ -431,7 +431,7 @@ private struct ReaderBooksLayoutSection: View {
             )
             ReaderBooksDivider(palette: palette)
             ReaderBooksSliderRow(
-                title: "页边距",
+                title: "页边空白",
                 valueLabel: "\(Int(settings.horizontalPadding.rounded()))",
                 value: settings.horizontalPadding,
                 range: 8 ... 36,
