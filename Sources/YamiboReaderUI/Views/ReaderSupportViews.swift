@@ -492,19 +492,6 @@ struct ReaderChapterSheet: View {
         NavigationStack {
             ScrollViewReader { scrollProxy in
                 List {
-                    Section {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("章节目录")
-                                .font(.title3.weight(.semibold))
-                            if let summary = model.currentChapterTitle {
-                                Text(summary)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                            }
-                        }
-                        .padding(.vertical, 4)
-                    }
 
                     Section {
                         ForEach(model.chapters, id: \.startIndex) { chapter in
