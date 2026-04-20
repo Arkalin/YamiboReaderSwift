@@ -80,7 +80,7 @@ public struct MangaReaderView: View {
                 MangaDirectorySheet(model: model)
             }
             .onChange(of: model.currentPageIndex) { _, _ in
-                syncSliderValueIfNeeded()
+                handleCurrentPageChanged()
             }
             .onChange(of: model.isTransitioningChapter) { _, isTransitioning in
                 if isTransitioning {
@@ -153,6 +153,7 @@ public struct MangaReaderView: View {
         .allowsHitTesting(!model.isTransitioningChapter)
         .id(pagerRevision)
         .tabViewStyle(.page(indexDisplayMode: .never))
+        .simultaneousGesture(contentInteractionGesture)
         .onAppear {
             activeZoomPageID = nil
             verticalZoomOverlay = nil
@@ -204,6 +205,7 @@ public struct MangaReaderView: View {
                 }
                 .coordinateSpace(name: Self.verticalReaderCoordinateSpaceName)
                 .scrollDisabled(activeZoomPageID != nil)
+                .simultaneousGesture(contentInteractionGesture)
 
                 if let overlay = verticalZoomOverlay {
                     MangaVerticalZoomOverlay(
@@ -359,14 +361,19 @@ public struct MangaReaderView: View {
             return
         }
 
-        let targetIndex = model.clampedLocalPageIndex(for: Int(sliderValue.rounded()))
-        model.requestCurrentChapterPage(targetIndex)
-        schedulePreviewHide()
+        commitSliderSelection()
     }
 
     private func syncSliderValueIfNeeded() {
         guard !isEditingSlider else { return }
         sliderValue = Double(model.currentPage?.localIndex ?? 0)
+    }
+
+    private func handleCurrentPageChanged() {
+        if isEditingSlider {
+            cancelSliderInteractionForContentGesture()
+        }
+        syncSliderValueIfNeeded()
     }
 
     private func schedulePreviewHide() {
@@ -389,12 +396,34 @@ public struct MangaReaderView: View {
         syncSliderValueIfNeeded()
     }
 
+    private func commitSliderSelection() {
+        let targetIndex = model.clampedLocalPageIndex(for: Int(sliderValue.rounded()))
+        previewPageIndex = targetIndex
+        model.requestCurrentChapterPage(targetIndex)
+        schedulePreviewHide()
+    }
+
+    private func cancelSliderInteractionForContentGesture() {
+        guard isEditingSlider else { return }
+        previewHideTask?.cancel()
+        isEditingSlider = false
+        isPreviewVisible = false
+        previewPageIndex = nil
+    }
+
     private func clampedSliderValue(_ value: Double) -> Double {
         min(max(value, model.sliderRange.lowerBound), model.sliderRange.upperBound)
     }
 
     private var previewLabelText: String {
         model.previewLabel(forLocalIndex: previewPageIndex ?? model.currentPage?.localIndex ?? 0)
+    }
+
+    private var contentInteractionGesture: some Gesture {
+        DragGesture(minimumDistance: 4)
+            .onChanged { _ in
+                cancelSliderInteractionForContentGesture()
+            }
     }
 
     private var windowSafeAreaInsets: UIEdgeInsets {
