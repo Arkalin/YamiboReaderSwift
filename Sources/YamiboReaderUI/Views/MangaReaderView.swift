@@ -813,13 +813,17 @@ private final class MangaImageLoader: ObservableObject {
 }
 
 private struct MangaAuthenticatedImage: View {
+    private static let defaultPlaceholderAspectRatio: CGFloat = 0.72
+
     @StateObject private var loader: MangaImageLoader
+    let imageURL: URL
     let pageID: MangaPage.ID
     let zoomEnabled: Bool
     @Binding var activeZoomPageID: MangaPage.ID?
     @Binding var verticalZoomOverlay: MangaVerticalZoomOverlayState?
     let usesOverlayPresentation: Bool
     let readerCoordinateSpaceName: String?
+    @State private var estimatedAspectRatio: CGFloat = Self.defaultPlaceholderAspectRatio
     @State private var baseImageSize: CGSize = .zero
     @State private var imageFrameInReader: CGRect = .zero
     @State private var steadyScale: CGFloat = 1
@@ -838,6 +842,7 @@ private struct MangaAuthenticatedImage: View {
         usesOverlayPresentation: Bool,
         readerCoordinateSpaceName: String?
     ) {
+        self.imageURL = url
         self.pageID = pageID
         _loader = StateObject(
             wrappedValue: MangaImageLoader(
@@ -880,15 +885,28 @@ private struct MangaAuthenticatedImage: View {
                         .foregroundStyle(.secondary)
                         .padding(.vertical, 40)
                 } else {
-                    ProgressView()
-                        .padding(.vertical, 40)
+                    placeholderView
                 }
             }
         )
         .frame(maxWidth: .infinity)
-        .task { await loader.loadIfNeeded() }
+        .task {
+            estimatedAspectRatio = MangaImageAspectRatioCache.aspectRatio(for: imageURL)
+                ?? Self.defaultPlaceholderAspectRatio
+            await loader.loadIfNeeded()
+        }
         .onChange(of: pageID) { _, _ in
             resetInteractionState()
+            estimatedAspectRatio = MangaImageAspectRatioCache.aspectRatio(for: imageURL)
+                ?? Self.defaultPlaceholderAspectRatio
+        }
+        .onChange(of: loader.image) { _, newImage in
+            guard let newImage else { return }
+            let size = newImage.size
+            guard size.width > 0, size.height > 0 else { return }
+            let aspectRatio = size.width / size.height
+            estimatedAspectRatio = aspectRatio
+            MangaImageAspectRatioCache.store(aspectRatio: aspectRatio, for: imageURL)
         }
         .onChange(of: zoomEnabled) { _, isEnabled in
             guard !isEnabled else { return }
@@ -915,6 +933,36 @@ private struct MangaAuthenticatedImage: View {
         }
         .simultaneousGesture(doubleTapGesture)
         .simultaneousGesture(magnifyGesture)
+    }
+
+    private var placeholderView: some View {
+        GeometryReader { geometry in
+            let width = max(geometry.size.width, 1)
+            let aspectRatio = max(0.2, estimatedAspectRatio)
+            let height = max(240, width / aspectRatio)
+
+            ZStack {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(Color.white.opacity(0.08))
+
+                VStack(spacing: 10) {
+                    ProgressView()
+                        .tint(.white.opacity(0.85))
+                    Text("加载图片中…")
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.72))
+                }
+            }
+            .frame(width: width, height: height)
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: placeholderHeight)
+    }
+
+    private var placeholderHeight: CGFloat {
+        let screenWidth = UIScreen.main.bounds.width
+        let aspectRatio = max(0.2, estimatedAspectRatio)
+        return max(240, screenWidth / aspectRatio)
     }
 
     private var effectiveScale: CGFloat {
@@ -1160,6 +1208,20 @@ private struct MangaAuthenticatedImage: View {
             overlay.image = image
         }
         verticalZoomOverlay = overlay
+    }
+}
+
+@MainActor
+private enum MangaImageAspectRatioCache {
+    private static let cache = NSCache<NSURL, NSNumber>()
+
+    static func aspectRatio(for url: URL) -> CGFloat? {
+        cache.object(forKey: url as NSURL).map { CGFloat(truncating: $0) }
+    }
+
+    static func store(aspectRatio: CGFloat, for url: URL) {
+        guard aspectRatio.isFinite, aspectRatio > 0 else { return }
+        cache.setObject(NSNumber(value: Double(aspectRatio)), forKey: url as NSURL)
     }
 }
 
