@@ -266,7 +266,8 @@ public struct FavoritesView: View {
                         swipeActionLabel(title: "分享", systemImage: "square.and.arrow.up")
                     }
                     .tint(.teal)
-
+                }
+                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                     Button {
                         editingFavorite = favorite
                         editingDisplayName = favorite.displayName ?? favorite.resolvedDisplayTitle
