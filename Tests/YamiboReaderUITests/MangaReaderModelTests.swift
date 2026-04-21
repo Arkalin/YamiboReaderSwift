@@ -289,6 +289,76 @@ final class MangaReaderModelTests: XCTestCase {
         }
     }
 
+    func testFavoritesViewModelCanToggleHiddenState() async throws {
+        let keyPrefix = UUID().uuidString
+        let favoriteStore = FavoriteStore(key: "\(keyPrefix).favorites")
+        let favorite = Favorite(
+            title: "隐藏测试收藏",
+            url: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=822&mobile=2")!
+        )
+        try await favoriteStore.saveFavorites([favorite])
+
+        let appContext = YamiboAppContext(
+            sessionStore: SessionStore(key: "\(keyPrefix).session"),
+            settingsStore: SettingsStore(key: "\(keyPrefix).settings"),
+            favoriteStore: favoriteStore,
+            readerCacheStore: ReaderCacheStore(baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)),
+            mangaDirectoryStore: MangaDirectoryStore(baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true))
+        )
+        let viewModel = await MainActor.run {
+            FavoritesViewModel(appContext: appContext, favoriteStore: favoriteStore)
+        }
+        await viewModel.loadCachedFavorites()
+
+        await viewModel.setHidden(true, for: favorite)
+
+        await MainActor.run {
+            XCTAssertEqual(viewModel.favorites.first?.isHidden, true)
+            XCTAssertNil(viewModel.errorMessage)
+        }
+
+        guard let hiddenFavorite = await MainActor.run(body: { viewModel.favorites.first }) else {
+            return XCTFail("Expected hidden favorite to remain in view model state")
+        }
+        await viewModel.setHidden(false, for: hiddenFavorite)
+
+        await MainActor.run {
+            XCTAssertEqual(viewModel.favorites.first?.isHidden, false)
+            XCTAssertNil(viewModel.errorMessage)
+        }
+    }
+
+    func testFilteredFavoritesRespectsShowsHiddenFlag() {
+        let visible = Favorite(
+            title: "可见收藏",
+            url: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=823&mobile=2")!
+        )
+        let hidden = Favorite(
+            title: "隐藏收藏",
+            url: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=824&mobile=2")!,
+            isHidden: true
+        )
+
+        let hiddenOff = makeFilteredFavorites(
+            from: [visible, hidden],
+            showsHidden: false,
+            filter: .all,
+            sortOrder: .manual,
+            searchText: ""
+        )
+        XCTAssertEqual(hiddenOff.map(\.id), [visible.id])
+
+        let hiddenOn = makeFilteredFavorites(
+            from: [visible, hidden],
+            showsHidden: true,
+            filter: .all,
+            sortOrder: .manual,
+            searchText: ""
+        )
+        XCTAssertEqual(hiddenOn.map(\.id), [visible.id, hidden.id])
+        XCTAssertEqual(hiddenOn.last?.isHidden, true)
+    }
+
     func testFavoritesViewModelUsesLatestStoredMangaProgressForResume() async throws {
         let keyPrefix = UUID().uuidString
         let favoriteStore = FavoriteStore(key: "\(keyPrefix).favorites")

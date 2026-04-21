@@ -127,6 +127,15 @@ public final class FavoritesViewModel: ObservableObject {
         }
     }
 
+    public func setHidden(_ isHidden: Bool, for favorite: Favorite) async {
+        do {
+            favorites = try await favoriteStore.setHidden(isHidden, for: favorite.id)
+            errorMessage = nil
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     public func deleteFavorite(_ favorite: Favorite) async {
         guard deletingFavoriteID == nil else { return }
         guard let remoteFavoriteID = favorite.remoteFavoriteID, !remoteFavoriteID.isEmpty else {
@@ -316,6 +325,19 @@ public struct FavoritesView: View {
                         )
                     }
                     .tint(.red)
+                    .disabled(viewModel.deletingFavoriteID != nil)
+
+                    Button {
+                        Task {
+                            await viewModel.setHidden(!favorite.isHidden, for: favorite)
+                        }
+                    } label: {
+                        swipeActionLabel(
+                            title: favorite.isHidden ? "取消隐藏" : "隐藏",
+                            systemImage: favorite.isHidden ? "eye" : "eye.slash"
+                        )
+                    }
+                    .tint(.orange)
                     .disabled(viewModel.deletingFavoriteID != nil)
 
                     Button {
@@ -540,29 +562,13 @@ public struct FavoritesView: View {
     }
 
     private var filteredFavorites: [Favorite] {
-        let sortOrder = FavoriteSortOrder(rawValue: sortRawValue) ?? .manual
-        let trimmedSearchText = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        let filtered = viewModel.favorites
-            .filter { showsHidden || !$0.isHidden }
-            .filter { currentFilter.matches($0) }
-            .filter { favorite in
-                guard !trimmedSearchText.isEmpty else { return true }
-                return favorite.resolvedDisplayTitle.localizedCaseInsensitiveContains(trimmedSearchText)
-            }
-
-        switch sortOrder {
-        case .manual:
-            return filtered
-        case .title:
-            return filtered.sorted { lhs, rhs in
-                lhs.resolvedDisplayTitle.localizedCompare(rhs.resolvedDisplayTitle) == .orderedAscending
-            }
-        case .progress:
-            return filtered.sorted { lhs, rhs in
-                progressScore(for: lhs) > progressScore(for: rhs)
-            }
-        }
+        makeFilteredFavorites(
+            from: viewModel.favorites,
+            showsHidden: showsHidden,
+            filter: currentFilter,
+            sortOrder: FavoriteSortOrder(rawValue: sortRawValue) ?? .manual,
+            searchText: searchText
+        )
     }
 
     private func open(_ favorite: Favorite, mode: FavoriteLaunchMode) {
@@ -666,6 +672,37 @@ func favoriteProgressScore(for favorite: Favorite) -> Int {
 
 func progressScore(for favorite: Favorite) -> Int {
     favoriteProgressScore(for: favorite)
+}
+
+func makeFilteredFavorites(
+    from favorites: [Favorite],
+    showsHidden: Bool,
+    filter: FavoriteFilter,
+    sortOrder: FavoriteSortOrder,
+    searchText: String
+) -> [Favorite] {
+    let trimmedSearchText = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+
+    let filtered = favorites
+        .filter { showsHidden || !$0.isHidden }
+        .filter { filter.matches($0) }
+        .filter { favorite in
+            guard !trimmedSearchText.isEmpty else { return true }
+            return favorite.resolvedDisplayTitle.localizedCaseInsensitiveContains(trimmedSearchText)
+        }
+
+    switch sortOrder {
+    case .manual:
+        return filtered
+    case .title:
+        return filtered.sorted { lhs, rhs in
+            lhs.resolvedDisplayTitle.localizedCompare(rhs.resolvedDisplayTitle) == .orderedAscending
+        }
+    case .progress:
+        return filtered.sorted { lhs, rhs in
+            progressScore(for: lhs) > progressScore(for: rhs)
+        }
+    }
 }
 
 func favoriteProgressText(for favorite: Favorite) -> String? {
