@@ -960,6 +960,14 @@ public struct FavoritesView: View {
     private func overlayContent() -> some View {
         if viewModel.isLoading {
             ProgressView("同步收藏中…")
+                .padding(.horizontal, 18)
+                .padding(.vertical, 14)
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+                }
+                .shadow(color: Color.black.opacity(0.08), radius: 14, y: 5)
         } else if visibleEntries.isEmpty {
             emptyStateView
         }
