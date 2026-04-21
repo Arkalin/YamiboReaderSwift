@@ -107,15 +107,19 @@ public final class FavoritesViewModel: ObservableObject {
     }
 
     public func setDisplayName(_ displayName: String?, for favorite: Favorite) async {
+        await setDisplayName(displayName, forFavoriteID: favorite.id, originalTitle: favorite.title)
+    }
+
+    public func setDisplayName(_ displayName: String?, forFavoriteID favoriteID: String, originalTitle: String) async {
         do {
             let normalized = displayName?
                 .trimmingCharacters(in: .whitespacesAndNewlines)
-            let valueToPersist: String? = if let normalized, !normalized.isEmpty, normalized != favorite.title {
+            let valueToPersist: String? = if let normalized, !normalized.isEmpty, normalized != originalTitle {
                 normalized
             } else {
                 nil
             }
-            favorites = try await favoriteStore.setDisplayName(valueToPersist, for: favorite.id)
+            favorites = try await favoriteStore.setDisplayName(valueToPersist, for: favoriteID)
             errorMessage = nil
         } catch {
             errorMessage = error.localizedDescription
@@ -229,6 +233,18 @@ public enum FavoriteOpenTarget: Sendable {
     case web(Favorite)
 }
 
+private struct FavoriteDisplayNameDraft {
+    let favoriteID: String
+    let originalTitle: String
+    var displayName: String
+
+    init(favorite: Favorite) {
+        favoriteID = favorite.id
+        originalTitle = favorite.title
+        displayName = favorite.displayName ?? favorite.resolvedDisplayTitle
+    }
+}
+
 public struct FavoritesView: View {
     @StateObject private var viewModel: FavoritesViewModel
     @AppStorage("yamibo.favorite.filter") private var filterRawValue = FavoriteFilter.all.rawValue
@@ -237,8 +253,7 @@ public struct FavoritesView: View {
     @State private var searchText = ""
     @State private var selectedFavorite: Favorite?
     @State private var showingSettingsSheet = false
-    @State private var editingFavorite: Favorite?
-    @State private var editingDisplayName = ""
+    @State private var displayNameDraft: FavoriteDisplayNameDraft?
     private let appContext: YamiboAppContext
     private let appModel: YamiboAppModel
 
@@ -269,8 +284,7 @@ public struct FavoritesView: View {
                 }
                 .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                     Button {
-                        editingFavorite = favorite
-                        editingDisplayName = favorite.displayName ?? favorite.resolvedDisplayTitle
+                        displayNameDraft = FavoriteDisplayNameDraft(favorite: favorite)
                     } label: {
                         swipeActionLabel(title: "编辑", systemImage: "pencil")
                     }
@@ -375,18 +389,20 @@ public struct FavoritesView: View {
                 Text(viewModel.errorMessage ?? "")
             })
             .alert("编辑显示名称", isPresented: editNameAlertBinding) {
-                TextField("显示名称", text: $editingDisplayName)
+                TextField("显示名称", text: displayNameTextBinding)
                 Button("取消", role: .cancel) {
-                    editingFavorite = nil
-                    editingDisplayName = ""
+                    displayNameDraft = nil
                 }
                 Button("保存") {
-                    guard let editingFavorite else { return }
+                    guard let draft = displayNameDraft else { return }
                     Task {
-                        await viewModel.setDisplayName(editingDisplayName, for: editingFavorite)
+                        await viewModel.setDisplayName(
+                            draft.displayName,
+                            forFavoriteID: draft.favoriteID,
+                            originalTitle: draft.originalTitle
+                        )
                     }
-                    self.editingFavorite = nil
-                    editingDisplayName = ""
+                    displayNameDraft = nil
                 }
             } message: {
                 Text("留空后将恢复显示原标题。")
@@ -413,13 +429,19 @@ public struct FavoritesView: View {
 
     private var editNameAlertBinding: Binding<Bool> {
         Binding(
-            get: { editingFavorite != nil },
+            get: { displayNameDraft != nil },
             set: { isPresented in
                 if !isPresented {
-                    editingFavorite = nil
-                    editingDisplayName = ""
+                    displayNameDraft = nil
                 }
             }
+        )
+    }
+
+    private var displayNameTextBinding: Binding<String> {
+        Binding(
+            get: { displayNameDraft?.displayName ?? "" },
+            set: { displayNameDraft?.displayName = $0 }
         )
     }
 

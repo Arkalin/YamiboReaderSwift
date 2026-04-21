@@ -232,6 +232,63 @@ final class MangaReaderModelTests: XCTestCase {
         }
     }
 
+    func testFavoritesViewModelCanSetDisplayNameByFavoriteID() async throws {
+        let keyPrefix = UUID().uuidString
+        let favoriteStore = FavoriteStore(key: "\(keyPrefix).favorites")
+        let favorite = Favorite(
+            title: "原标题",
+            url: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=820&mobile=2")!
+        )
+        try await favoriteStore.saveFavorites([favorite])
+
+        let appContext = YamiboAppContext(
+            sessionStore: SessionStore(key: "\(keyPrefix).session"),
+            settingsStore: SettingsStore(key: "\(keyPrefix).settings"),
+            favoriteStore: favoriteStore,
+            readerCacheStore: ReaderCacheStore(baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)),
+            mangaDirectoryStore: MangaDirectoryStore(baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true))
+        )
+        let viewModel = await MainActor.run {
+            FavoritesViewModel(appContext: appContext, favoriteStore: favoriteStore)
+        }
+
+        await viewModel.setDisplayName("自定义名称", forFavoriteID: favorite.id, originalTitle: favorite.title)
+
+        await MainActor.run {
+            XCTAssertEqual(viewModel.favorites.first?.displayName, "自定义名称")
+            XCTAssertEqual(viewModel.favorites.first?.resolvedDisplayTitle, "自定义名称")
+        }
+    }
+
+    func testFavoritesViewModelCanClearDisplayNameByFavoriteID() async throws {
+        let keyPrefix = UUID().uuidString
+        let favoriteStore = FavoriteStore(key: "\(keyPrefix).favorites")
+        let favorite = Favorite(
+            title: "原标题",
+            displayName: "自定义名称",
+            url: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=821&mobile=2")!
+        )
+        try await favoriteStore.saveFavorites([favorite])
+
+        let appContext = YamiboAppContext(
+            sessionStore: SessionStore(key: "\(keyPrefix).session"),
+            settingsStore: SettingsStore(key: "\(keyPrefix).settings"),
+            favoriteStore: favoriteStore,
+            readerCacheStore: ReaderCacheStore(baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)),
+            mangaDirectoryStore: MangaDirectoryStore(baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true))
+        )
+        let viewModel = await MainActor.run {
+            FavoritesViewModel(appContext: appContext, favoriteStore: favoriteStore)
+        }
+
+        await viewModel.setDisplayName("   ", forFavoriteID: favorite.id, originalTitle: favorite.title)
+
+        await MainActor.run {
+            XCTAssertNil(viewModel.favorites.first?.displayName)
+            XCTAssertEqual(viewModel.favorites.first?.resolvedDisplayTitle, "原标题")
+        }
+    }
+
     func testFavoritesViewModelUsesLatestStoredMangaProgressForResume() async throws {
         let keyPrefix = UUID().uuidString
         let favoriteStore = FavoriteStore(key: "\(keyPrefix).favorites")
