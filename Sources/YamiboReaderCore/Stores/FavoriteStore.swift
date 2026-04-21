@@ -23,19 +23,28 @@ public struct FavoriteNovelUpdateMetadata: Sendable, Hashable {
     public var novelUpdateStatus: FavoriteNovelUpdateStatus
     public var lastRemoteMaxView: Int?
     public var lastUpdateCheckedAt: Date?
+    public var currentNovelUpdateSignature: String?
+    public var acknowledgedNovelUpdateSignature: String?
+    public var notifiedNovelUpdateSignature: String?
 
     public init(
         knownMaxView: Int? = nil,
         knownMaxViewFingerprint: String? = nil,
         novelUpdateStatus: FavoriteNovelUpdateStatus = .none,
         lastRemoteMaxView: Int? = nil,
-        lastUpdateCheckedAt: Date? = nil
+        lastUpdateCheckedAt: Date? = nil,
+        currentNovelUpdateSignature: String? = nil,
+        acknowledgedNovelUpdateSignature: String? = nil,
+        notifiedNovelUpdateSignature: String? = nil
     ) {
         self.knownMaxView = knownMaxView
         self.knownMaxViewFingerprint = knownMaxViewFingerprint
         self.novelUpdateStatus = novelUpdateStatus
         self.lastRemoteMaxView = lastRemoteMaxView
         self.lastUpdateCheckedAt = lastUpdateCheckedAt
+        self.currentNovelUpdateSignature = currentNovelUpdateSignature
+        self.acknowledgedNovelUpdateSignature = acknowledgedNovelUpdateSignature
+        self.notifiedNovelUpdateSignature = notifiedNovelUpdateSignature
     }
 }
 
@@ -204,6 +213,9 @@ public actor FavoriteStore: FavoriteStoring {
             favorite.novelUpdateStatus = metadata.novelUpdateStatus
             favorite.lastRemoteMaxView = metadata.lastRemoteMaxView
             favorite.lastUpdateCheckedAt = metadata.lastUpdateCheckedAt
+            favorite.currentNovelUpdateSignature = metadata.currentNovelUpdateSignature
+            favorite.acknowledgedNovelUpdateSignature = metadata.acknowledgedNovelUpdateSignature
+            favorite.notifiedNovelUpdateSignature = metadata.notifiedNovelUpdateSignature
         } matching: { favorite in
             favorite.id == favoriteID
         }
@@ -236,6 +248,10 @@ public actor FavoriteStore: FavoriteStoring {
         favorites[index].lastRemoteMaxView = document.maxView
         favorites[index].lastUpdateCheckedAt = Date()
         favorites[index].novelUpdateStatus = .none
+        if let currentSignature = favorites[index].currentNovelUpdateSignature {
+            favorites[index].acknowledgedNovelUpdateSignature = currentSignature
+        }
+        favorites[index].currentNovelUpdateSignature = nil
         if favorites[index].type == .unknown {
             favorites[index].type = .novel
         }

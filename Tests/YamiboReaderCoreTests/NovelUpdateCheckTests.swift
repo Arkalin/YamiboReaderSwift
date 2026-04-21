@@ -108,6 +108,65 @@ struct NovelUpdateCheckTests {
     #expect(updated?.hasPendingNovelUpdate == true)
     #expect(updated?.knownMaxView == 2)
     #expect(updated?.lastRemoteMaxView == 3)
+    #expect(updated?.currentNovelUpdateSignature == "newPage:3")
+}
+
+@Test func novelUpdateCheckDoesNotRepeatAcknowledgedNewPageSignature() async throws {
+    let setup = try await makeNovelUpdateSetup()
+    let cached = makeNovelDocument(threadURL: setup.threadURL, view: 2, maxView: 2, text: "旧末页")
+    try await setup.cacheStore.save(cached)
+    let favorite = Favorite(
+        title: "小说",
+        url: setup.threadURL,
+        type: .novel,
+        knownMaxView: 2,
+        knownMaxViewFingerprint: ReaderDocumentFingerprint.fingerprint(for: cached),
+        currentNovelUpdateSignature: "newPage:3",
+        acknowledgedNovelUpdateSignature: "newPage:3"
+    )
+    try await setup.favoriteStore.saveFavorites([favorite])
+
+    NovelUpdateURLProtocol.handler = { _ in
+        html(text: "第一页", tid: "811", maxView: 3)
+    }
+
+    let result = try await NovelUpdateCheckService(appContext: setup.appContext).check(favoriteID: favorite.id)
+    let updated = await setup.favoriteStore.favorite(id: favorite.id)
+
+    #expect(result.status == .noUpdate)
+    #expect(updated?.novelUpdateStatus == FavoriteNovelUpdateStatus.none)
+    #expect(updated?.hasPendingNovelUpdate == false)
+    #expect(updated?.currentNovelUpdateSignature == "newPage:3")
+    #expect(updated?.acknowledgedNovelUpdateSignature == "newPage:3")
+}
+
+@Test func novelUpdateCheckRemindsAgainWhenRemoteMaxViewAdvancesAfterAcknowledgement() async throws {
+    let setup = try await makeNovelUpdateSetup()
+    let cached = makeNovelDocument(threadURL: setup.threadURL, view: 2, maxView: 2, text: "旧末页")
+    try await setup.cacheStore.save(cached)
+    let favorite = Favorite(
+        title: "小说",
+        url: setup.threadURL,
+        type: .novel,
+        knownMaxView: 2,
+        knownMaxViewFingerprint: ReaderDocumentFingerprint.fingerprint(for: cached),
+        currentNovelUpdateSignature: "newPage:3",
+        acknowledgedNovelUpdateSignature: "newPage:3"
+    )
+    try await setup.favoriteStore.saveFavorites([favorite])
+
+    NovelUpdateURLProtocol.handler = { _ in
+        html(text: "第一页", tid: "811", maxView: 4)
+    }
+
+    let result = try await NovelUpdateCheckService(appContext: setup.appContext).check(favoriteID: favorite.id)
+    let updated = await setup.favoriteStore.favorite(id: favorite.id)
+
+    #expect(result.status == .newPage)
+    #expect(updated?.novelUpdateStatus == .newPage)
+    #expect(updated?.hasPendingNovelUpdate == true)
+    #expect(updated?.currentNovelUpdateSignature == "newPage:4")
+    #expect(updated?.acknowledgedNovelUpdateSignature == "newPage:3")
 }
 
 @Test func novelUpdateCheckMarksContentChangedWhenLastPageFingerprintDiffers() async throws {
@@ -139,6 +198,7 @@ struct NovelUpdateCheckTests {
     #expect(result.status == .contentChanged)
     #expect(updated?.novelUpdateStatus == .contentChanged)
     #expect(updated?.hasPendingNovelUpdate == true)
+    #expect(updated?.currentNovelUpdateSignature?.hasPrefix("contentChanged:2:") == true)
     #expect(cachedViews == Set([2]))
 }
 

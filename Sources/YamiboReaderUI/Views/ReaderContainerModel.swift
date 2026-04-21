@@ -1047,7 +1047,10 @@ public final class ReaderContainerModel: ObservableObject {
                                 knownMaxViewFingerprint: ReaderDocumentFingerprint.fingerprint(for: document),
                                 novelUpdateStatus: .none,
                                 lastRemoteMaxView: document.maxView,
-                                lastUpdateCheckedAt: Date()
+                                lastUpdateCheckedAt: Date(),
+                                currentNovelUpdateSignature: favorite.currentNovelUpdateSignature,
+                                acknowledgedNovelUpdateSignature: favorite.currentNovelUpdateSignature ?? favorite.acknowledgedNovelUpdateSignature,
+                                notifiedNovelUpdateSignature: favorite.notifiedNovelUpdateSignature
                             )
                         )
                     }

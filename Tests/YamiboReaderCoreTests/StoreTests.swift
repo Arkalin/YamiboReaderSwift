@@ -307,8 +307,8 @@ import Testing
     #expect(merged.first?.resolvedDisplayTitle == "我的名字")
 }
 
-@Test func favoriteDecodesLegacyPayloadWithNovelUpdateDefaults() async throws {
-    let legacy = """
+@Test func favoriteDecodesNovelUpdateDeduplicationFields() async throws {
+    let payload = """
     {
       "id": "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=711",
       "title": "旧收藏",
@@ -316,17 +316,27 @@ import Testing
       "lastPage": 2,
       "lastView": 3,
       "isHidden": false,
-      "type": 1
+      "type": 1,
+      "knownMaxView": 5,
+      "knownMaxViewFingerprint": "fingerprint",
+      "novelUpdateStatus": "newPage",
+      "lastRemoteMaxView": 6,
+      "lastUpdateCheckedAt": 1700000000,
+      "currentNovelUpdateSignature": "newPage:6",
+      "acknowledgedNovelUpdateSignature": null,
+      "notifiedNovelUpdateSignature": "newPage:5"
     }
     """
 
-    let favorite = try JSONDecoder().decode(Favorite.self, from: Data(legacy.utf8))
+    let favorite = try JSONDecoder().decode(Favorite.self, from: Data(payload.utf8))
 
-    #expect(favorite.knownMaxView == nil)
-    #expect(favorite.knownMaxViewFingerprint == nil)
-    #expect(favorite.novelUpdateStatus == .none)
-    #expect(favorite.lastRemoteMaxView == nil)
-    #expect(favorite.lastUpdateCheckedAt == nil)
+    #expect(favorite.knownMaxView == 5)
+    #expect(favorite.knownMaxViewFingerprint == "fingerprint")
+    #expect(favorite.novelUpdateStatus == .newPage)
+    #expect(favorite.lastRemoteMaxView == 6)
+    #expect(favorite.currentNovelUpdateSignature == "newPage:6")
+    #expect(favorite.acknowledgedNovelUpdateSignature == nil)
+    #expect(favorite.notifiedNovelUpdateSignature == "newPage:5")
 }
 
 @Test func favoriteStoreMergePreservesNovelUpdateMetadata() async throws {
@@ -345,7 +355,10 @@ import Testing
             knownMaxViewFingerprint: "abc",
             novelUpdateStatus: .newPage,
             lastRemoteMaxView: 9,
-            lastUpdateCheckedAt: checkedAt
+            lastUpdateCheckedAt: checkedAt,
+            currentNovelUpdateSignature: "newPage:9",
+            acknowledgedNovelUpdateSignature: "newPage:8",
+            notifiedNovelUpdateSignature: "newPage:9"
         )
     ])
 
@@ -359,6 +372,9 @@ import Testing
     #expect(merged.first?.novelUpdateStatus == .newPage)
     #expect(merged.first?.lastRemoteMaxView == 9)
     #expect(merged.first?.lastUpdateCheckedAt == checkedAt)
+    #expect(merged.first?.currentNovelUpdateSignature == "newPage:9")
+    #expect(merged.first?.acknowledgedNovelUpdateSignature == "newPage:8")
+    #expect(merged.first?.notifiedNovelUpdateSignature == "newPage:9")
 }
 
 @Test func settingsStoreResetRestoresDefaults() async throws {

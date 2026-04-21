@@ -18,6 +18,9 @@ public struct Favorite: Codable, Hashable, Identifiable, Sendable {
     public var novelUpdateStatus: FavoriteNovelUpdateStatus
     public var lastRemoteMaxView: Int?
     public var lastUpdateCheckedAt: Date?
+    public var currentNovelUpdateSignature: String?
+    public var acknowledgedNovelUpdateSignature: String?
+    public var notifiedNovelUpdateSignature: String?
 
     public init(
         id: String? = nil,
@@ -36,7 +39,10 @@ public struct Favorite: Codable, Hashable, Identifiable, Sendable {
         knownMaxViewFingerprint: String? = nil,
         novelUpdateStatus: FavoriteNovelUpdateStatus = .none,
         lastRemoteMaxView: Int? = nil,
-        lastUpdateCheckedAt: Date? = nil
+        lastUpdateCheckedAt: Date? = nil,
+        currentNovelUpdateSignature: String? = nil,
+        acknowledgedNovelUpdateSignature: String? = nil,
+        notifiedNovelUpdateSignature: String? = nil
     ) {
         self.id = id ?? url.absoluteString
         self.title = title
@@ -55,6 +61,9 @@ public struct Favorite: Codable, Hashable, Identifiable, Sendable {
         self.novelUpdateStatus = novelUpdateStatus
         self.lastRemoteMaxView = lastRemoteMaxView
         self.lastUpdateCheckedAt = lastUpdateCheckedAt
+        self.currentNovelUpdateSignature = currentNovelUpdateSignature
+        self.acknowledgedNovelUpdateSignature = acknowledgedNovelUpdateSignature
+        self.notifiedNovelUpdateSignature = notifiedNovelUpdateSignature
     }
 
     public var resolvedDisplayTitle: String {
@@ -63,7 +72,9 @@ public struct Favorite: Codable, Hashable, Identifiable, Sendable {
     }
 
     public var hasPendingNovelUpdate: Bool {
-        novelUpdateStatus.showsUpdateBadge
+        novelUpdateStatus.showsUpdateBadge &&
+            currentNovelUpdateSignature != nil &&
+            currentNovelUpdateSignature != acknowledgedNovelUpdateSignature
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -84,6 +95,9 @@ public struct Favorite: Codable, Hashable, Identifiable, Sendable {
         case novelUpdateStatus
         case lastRemoteMaxView
         case lastUpdateCheckedAt
+        case currentNovelUpdateSignature
+        case acknowledgedNovelUpdateSignature
+        case notifiedNovelUpdateSignature
     }
 
     public init(from decoder: any Decoder) throws {
@@ -105,6 +119,9 @@ public struct Favorite: Codable, Hashable, Identifiable, Sendable {
         novelUpdateStatus = try container.decodeIfPresent(FavoriteNovelUpdateStatus.self, forKey: .novelUpdateStatus) ?? .none
         lastRemoteMaxView = try container.decodeIfPresent(Int.self, forKey: .lastRemoteMaxView)
         lastUpdateCheckedAt = try container.decodeIfPresent(Date.self, forKey: .lastUpdateCheckedAt)
+        currentNovelUpdateSignature = try container.decodeIfPresent(String.self, forKey: .currentNovelUpdateSignature)
+        acknowledgedNovelUpdateSignature = try container.decodeIfPresent(String.self, forKey: .acknowledgedNovelUpdateSignature)
+        notifiedNovelUpdateSignature = try container.decodeIfPresent(String.self, forKey: .notifiedNovelUpdateSignature)
     }
 }
 

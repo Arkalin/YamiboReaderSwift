@@ -716,7 +716,8 @@ final class ReaderContainerModelTests: XCTestCase {
                 knownMaxView: 2,
                 knownMaxViewFingerprint: ReaderDocumentFingerprint.fingerprint(for: oldKnownPage),
                 novelUpdateStatus: .newPage,
-                lastRemoteMaxView: 3
+                lastRemoteMaxView: 3,
+                currentNovelUpdateSignature: "newPage:3"
             )
         ])
 
@@ -781,6 +782,8 @@ final class ReaderContainerModelTests: XCTestCase {
         XCTAssertEqual(favorite?.novelUpdateStatus, FavoriteNovelUpdateStatus.none)
         XCTAssertEqual(favorite?.knownMaxView, 2)
         XCTAssertEqual(favorite?.lastRemoteMaxView, 3)
+        XCTAssertEqual(favorite?.currentNovelUpdateSignature, "newPage:3")
+        XCTAssertEqual(favorite?.acknowledgedNovelUpdateSignature, "newPage:3")
         XCTAssertEqual(refreshedText, "新末页")
         await MainActor.run {
             XCTAssertEqual(model.maxView, 3)

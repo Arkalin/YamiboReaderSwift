@@ -43,7 +43,8 @@ public struct NovelUpdateCheckService: Sendable {
                 knownMaxView: nil,
                 fingerprint: nil,
                 status: .none,
-                remoteMaxView: nil
+                remoteMaxView: nil,
+                currentSignature: nil
             )
             return NovelUpdateCheckResult(
                 status: .noCachedBaseline,
@@ -60,13 +61,19 @@ public struct NovelUpdateCheckService: Sendable {
         let remoteMaxView = firstRemote.maxView
 
         if remoteMaxView > baseline.view {
+            let signature = Self.newPageSignature(remoteMaxView: remoteMaxView)
+            let status: FavoriteNovelUpdateStatus = signature == favorite.acknowledgedNovelUpdateSignature ? .none : .newPage
             let updated = try await updateMetadata(
                 for: favorite,
                 knownMaxView: baseline.view,
                 fingerprint: baseline.fingerprint,
-                status: .newPage,
-                remoteMaxView: remoteMaxView
+                status: status,
+                remoteMaxView: remoteMaxView,
+                currentSignature: signature
             )
+            if status == .none {
+                return NovelUpdateCheckResult(status: .noUpdate, message: "该更新已处理", updatedFavorite: updated)
+            }
             return NovelUpdateCheckResult(status: .newPage, message: "发现新网页", updatedFavorite: updated)
         }
 
@@ -76,7 +83,8 @@ public struct NovelUpdateCheckService: Sendable {
                 knownMaxView: baseline.view,
                 fingerprint: baseline.fingerprint,
                 status: .structureChanged,
-                remoteMaxView: remoteMaxView
+                remoteMaxView: remoteMaxView,
+                currentSignature: nil
             )
             return NovelUpdateCheckResult(status: .structureChanged, message: "远端结构发生变化", updatedFavorite: updated)
         }
@@ -85,13 +93,21 @@ public struct NovelUpdateCheckService: Sendable {
             ReaderPageRequest(threadURL: favorite.url, view: baseline.view, authorID: favorite.authorID)
         )
         let remoteFingerprint = ReaderDocumentFingerprint.fingerprint(for: remoteLast)
-        let status: FavoriteNovelUpdateStatus = remoteFingerprint == baseline.fingerprint ? .none : .contentChanged
+        let signature = remoteFingerprint == baseline.fingerprint
+            ? nil
+            : Self.contentChangedSignature(knownMaxView: baseline.view, remoteFingerprint: remoteFingerprint)
+        let status: FavoriteNovelUpdateStatus = if let signature, signature != favorite.acknowledgedNovelUpdateSignature {
+            .contentChanged
+        } else {
+            .none
+        }
         let updated = try await updateMetadata(
             for: favorite,
             knownMaxView: baseline.view,
             fingerprint: baseline.fingerprint,
             status: status,
-            remoteMaxView: remoteMaxView
+            remoteMaxView: remoteMaxView,
+            currentSignature: signature
         )
 
         if status == .contentChanged {
@@ -116,7 +132,8 @@ public struct NovelUpdateCheckService: Sendable {
                 knownMaxView: nil,
                 fingerprint: nil,
                 status: .none,
-                remoteMaxView: favorite.lastRemoteMaxView
+                remoteMaxView: favorite.lastRemoteMaxView,
+                currentSignature: nil
             )
             return nil
         }
@@ -138,7 +155,8 @@ public struct NovelUpdateCheckService: Sendable {
             knownMaxView: cached.maxView,
             fingerprint: fingerprint,
             status: .none,
-            remoteMaxView: cached.maxView
+            remoteMaxView: cached.maxView,
+            currentSignature: nil
         )
         let refreshedFavorite = updated ?? favorite
         return Baseline(favorite: refreshedFavorite, view: cached.maxView, fingerprint: fingerprint)
@@ -156,7 +174,8 @@ public struct NovelUpdateCheckService: Sendable {
         knownMaxView: Int?,
         fingerprint: String?,
         status: FavoriteNovelUpdateStatus,
-        remoteMaxView: Int?
+        remoteMaxView: Int?,
+        currentSignature: String?
     ) async throws -> Favorite? {
         let favorites = try await appContext.favoriteStore.updateNovelUpdateMetadata(
             for: favorite.id,
@@ -165,10 +184,21 @@ public struct NovelUpdateCheckService: Sendable {
                 knownMaxViewFingerprint: fingerprint,
                 novelUpdateStatus: status,
                 lastRemoteMaxView: remoteMaxView,
-                lastUpdateCheckedAt: Date()
+                lastUpdateCheckedAt: Date(),
+                currentNovelUpdateSignature: currentSignature,
+                acknowledgedNovelUpdateSignature: favorite.acknowledgedNovelUpdateSignature,
+                notifiedNovelUpdateSignature: favorite.notifiedNovelUpdateSignature
             )
         )
         return favorites.first { $0.id == favorite.id }
+    }
+
+    private static func newPageSignature(remoteMaxView: Int) -> String {
+        "newPage:\(remoteMaxView)"
+    }
+
+    private static func contentChangedSignature(knownMaxView: Int, remoteFingerprint: String) -> String {
+        "contentChanged:\(knownMaxView):\(remoteFingerprint)"
     }
 
     private func contentSource(for favorite: Favorite) -> ReaderContentSource? {
