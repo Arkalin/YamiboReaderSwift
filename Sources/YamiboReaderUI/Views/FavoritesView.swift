@@ -730,6 +730,7 @@ public struct FavoritesView: View {
     @State private var createCollectionName = ""
     @State private var showingMoveDialog = false
     @State private var showingBulkDeleteConfirmation = false
+    @State private var didLoadInitialFavorites = false
 
     private let scope: FavoriteScope
     private let appContext: YamiboAppContext
@@ -1297,6 +1298,9 @@ public struct FavoritesView: View {
     }
 
     private func loadInitialFavorites() async {
+        guard !didLoadInitialFavorites else { return }
+        didLoadInitialFavorites = true
+
         await viewModel.loadCachedFavorites()
         if case .root = scope {
             await viewModel.refresh()
