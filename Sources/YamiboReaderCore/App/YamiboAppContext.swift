@@ -15,6 +15,7 @@ public final class YamiboAppContext: YamiboRepositoryProviding, Sendable {
     ]
 
     public let sessionStore: SessionStore
+    public let autoSignInStore: AutoSignInStore
     public let settingsStore: SettingsStore
     public let favoriteStore: FavoriteStore
     public let readerCacheStore: ReaderCacheStore
@@ -25,6 +26,7 @@ public final class YamiboAppContext: YamiboRepositoryProviding, Sendable {
 
     public init(
         sessionStore: SessionStore = SessionStore(),
+        autoSignInStore: AutoSignInStore = AutoSignInStore(),
         settingsStore: SettingsStore = SettingsStore(),
         favoriteStore: FavoriteStore = FavoriteStore(),
         readerCacheStore: ReaderCacheStore = ReaderCacheStore(),
@@ -33,6 +35,7 @@ public final class YamiboAppContext: YamiboRepositoryProviding, Sendable {
         session: URLSession = .shared
     ) {
         self.sessionStore = sessionStore
+        self.autoSignInStore = autoSignInStore
         self.settingsStore = settingsStore
         self.favoriteStore = favoriteStore
         self.readerCacheStore = readerCacheStore
@@ -88,6 +91,14 @@ public final class YamiboAppContext: YamiboRepositoryProviding, Sendable {
             userAgent: sessionState.userAgent
         )
         return ThreadOpenResolver(client: client)
+    }
+
+    public func makeAutoSignInService() -> AutoSignInService {
+        AutoSignInService(
+            sessionStore: sessionStore,
+            autoSignInStore: autoSignInStore,
+            session: session
+        )
     }
 
     public func bootstrap() async -> YamiboBootstrapState {

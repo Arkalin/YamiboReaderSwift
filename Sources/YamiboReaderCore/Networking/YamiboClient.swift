@@ -16,7 +16,11 @@ public struct YamiboClient: Sendable {
     }
 
     public func fetchHTML(for route: YamiboRoute, userAgent: String? = nil) async throws -> String {
-        var request = URLRequest(url: route.url)
+        try await fetchHTML(url: route.url, userAgent: userAgent)
+    }
+
+    public func fetchHTML(url: URL, userAgent: String? = nil) async throws -> String {
+        var request = URLRequest(url: url)
         request.setValue("text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8", forHTTPHeaderField: "Accept")
         if let cookie, !cookie.isEmpty {
             request.setValue(cookie, forHTTPHeaderField: "Cookie")
