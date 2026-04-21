@@ -151,7 +151,7 @@ public struct FavoritesSettingsView: View {
             Form {
                 Section("网页浏览") {
                     Toggle(
-                        "显示网址导航栏",
+                        "显示网页标题和网址",
                         isOn: Binding(
                             get: { viewModel.showsNavigationBar },
                             set: { viewModel.updateShowsNavigationBar($0) }

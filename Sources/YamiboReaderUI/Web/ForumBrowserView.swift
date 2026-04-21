@@ -132,13 +132,12 @@ public struct ForumBrowserView: View {
 
     public var body: some View {
         VStack(spacing: 0) {
-            if showsNavigationBar {
-                ForumBrowserToolbar(
-                    model: model,
-                    showingHistory: $showingHistory,
-                    openNative: openNative
-                )
-            }
+            ForumBrowserChrome(
+                model: model,
+                showingHistory: $showingHistory,
+                openNative: openNative,
+                showsLocationLabel: showsNavigationBar
+            )
             ZStack(alignment: .top) {
                 IOSForumWebView(model: model, appContext: appContext)
                 if model.isLoading {
@@ -253,15 +252,18 @@ private struct ForumHistorySheet: View {
     }
 }
 
-private struct ForumBrowserToolbar: View {
+struct ForumBrowserChrome: View {
     @ObservedObject var model: ForumBrowserModel
     @Binding var showingHistory: Bool
     let openNative: () -> Void
+    let showsLocationLabel: Bool
 
     var body: some View {
         VStack(spacing: 8) {
             ForumBrowserToolbarButtons(model: model, showingHistory: $showingHistory, openNative: openNative)
-            ForumBrowserLocationLabel(model: model)
+            if showsLocationLabel {
+                ForumBrowserLocationLabel(model: model)
+            }
         }
         .padding(.horizontal, 16)
         .padding(.top, 12)
@@ -269,7 +271,7 @@ private struct ForumBrowserToolbar: View {
     }
 }
 
-private struct ForumBrowserToolbarButtons: View {
+struct ForumBrowserToolbarButtons: View {
     @ObservedObject var model: ForumBrowserModel
     @Binding var showingHistory: Bool
     let openNative: () -> Void
@@ -300,6 +302,7 @@ private struct ForumBrowserToolbarButtons: View {
         } label: {
             Image(systemName: "chevron.backward")
         }
+        .accessibilityIdentifier("forum-browser-back-button")
         .disabled(!model.canGoBack)
     }
 
@@ -309,6 +312,7 @@ private struct ForumBrowserToolbarButtons: View {
         } label: {
             Image(systemName: "chevron.forward")
         }
+        .accessibilityIdentifier("forum-browser-forward-button")
         .disabled(!model.canGoForward)
     }
 
@@ -322,6 +326,7 @@ private struct ForumBrowserToolbarButtons: View {
         } label: {
             Image(systemName: model.isLoading ? "xmark" : "arrow.clockwise")
         }
+        .accessibilityIdentifier("forum-browser-reload-button")
     }
 
     private var historyButton: some View {
@@ -330,6 +335,7 @@ private struct ForumBrowserToolbarButtons: View {
         } label: {
             Image(systemName: "clock.arrow.circlepath")
         }
+        .accessibilityIdentifier("forum-browser-history-button")
         .disabled(model.history.isEmpty)
     }
 
@@ -337,6 +343,7 @@ private struct ForumBrowserToolbarButtons: View {
         Button(action: openNative) {
             Image(systemName: "sparkles.rectangle.stack")
         }
+        .accessibilityIdentifier("forum-browser-open-native-button")
     }
 
     private func externalButton(for url: URL) -> some View {
@@ -345,10 +352,11 @@ private struct ForumBrowserToolbarButtons: View {
         } label: {
             Image(systemName: "square.and.arrow.up")
         }
+        .accessibilityIdentifier("forum-browser-share-button")
     }
 }
 
-private struct ForumBrowserLocationLabel: View {
+struct ForumBrowserLocationLabel: View {
     @ObservedObject var model: ForumBrowserModel
 
     var body: some View {
@@ -362,6 +370,7 @@ private struct ForumBrowserLocationLabel: View {
                 .lineLimit(1)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityIdentifier("forum-browser-location-label")
     }
 }
 
