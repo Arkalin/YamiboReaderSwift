@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import XCTest
 @testable import YamiboReaderCore
 
 private struct StubURLProtocolResponse {
@@ -12,8 +13,11 @@ private enum StubURLProtocolOutput {
     case error(URLError)
 }
 
-private final class StubURLProtocol: URLProtocol, @unchecked Sendable {
-    nonisolated(unsafe) static var handler: ((URLRequest) -> StubURLProtocolOutput)? = { request in
+private final class StubURLProtocol: URLProtocol {
+    nonisolated(unsafe) static var handler: ((URLRequest) -> StubURLProtocolOutput)? = defaultHandler()
+
+    static func defaultHandler() -> (URLRequest) -> StubURLProtocolOutput {
+        { request in
         let absolute = request.url?.absoluteString ?? ""
 
         if absolute.contains("mod=space"),
@@ -29,6 +33,46 @@ private final class StubURLProtocol: URLProtocol, @unchecked Sendable {
                       </body>
                     </html>
                     """
+                )
+            )
+        }
+
+        if absolute.contains("mod=faq") {
+            let cookie = request.value(forHTTPHeaderField: "Cookie") ?? ""
+            if cookie.contains("missing-token=1") {
+                return .response(
+                    StubURLProtocolResponse(
+                        statusCode: 200,
+                        body: "<html><body>no token</body></html>"
+                    )
+                )
+            }
+            return .response(
+                StubURLProtocolResponse(
+                    statusCode: 200,
+                    body: #"<html><body><input name="formhash" value="abc12345" /></body></html>"#
+                )
+            )
+        }
+
+        if absolute.contains("ac=favorite"),
+           absolute.contains("op=delete") {
+            let cookie = request.value(forHTTPHeaderField: "Cookie") ?? ""
+            let body = String(data: request.httpBody ?? Data(), encoding: .utf8) ?? ""
+            if cookie.contains("favorite-delete-success=1")
+                || body.contains("favorite%5B%5D=55")
+                || body.contains("favorite[]=55") {
+                return .response(
+                    StubURLProtocolResponse(
+                        statusCode: 200,
+                        body: "<html><body>操作成功</body></html>"
+                    )
+                )
+            }
+            return .response(
+                StubURLProtocolResponse(
+                    statusCode: 200,
+                    body: "<html><body>操作失败</body></html>"
                 )
             )
         }
@@ -57,6 +101,7 @@ private final class StubURLProtocol: URLProtocol, @unchecked Sendable {
         }
 
         return .error(URLError(.badServerResponse))
+        }
     }
 
     override class func canInit(with request: URLRequest) -> Bool {
@@ -391,7 +436,7 @@ private final class StubURLProtocol: URLProtocol, @unchecked Sendable {
     configuration.protocolClasses = [StubURLProtocol.self]
     let session = URLSession(configuration: configuration)
     let repository = YamiboRepository(
-        client: YamiboClient(session: session, cookie: "sid=1", userAgent: "Test-UA")
+        client: YamiboClient(session: session, cookie: "sid=1; favorite-delete-success=1", userAgent: "Test-UA")
     )
 
     await #expect(throws: YamiboError.notAuthenticated) {
@@ -680,4 +725,46 @@ private final class StubURLProtocol: URLProtocol, @unchecked Sendable {
     #expect(!result.wasCancelled)
     #expect(await cacheStore.cachedViews(for: threadURL, authorID: "42", contentSource: .authorFilteredPage) == [1, 3])
     #expect(await cacheStore.cachedViews(for: threadURL, authorID: nil, contentSource: .fallbackUnfilteredPage).isEmpty)
+}
+
+final class YamiboRepositoryDeleteTests: XCTestCase {
+    func testDeletesFavoriteUsingFormhashAndFavoriteID() async throws {
+        let repository = makeRepository(cookie: "sid=1; favorite-delete-success=1")
+        try await repository.deleteFavorite(remoteFavoriteID: "55")
+    }
+
+    func testThrowsWhenDeleteFormhashIsMissing() async {
+        let repository = makeRepository(cookie: "sid=1; missing-token=1")
+
+        do {
+            try await repository.deleteFavorite(remoteFavoriteID: "55")
+            XCTFail("Expected missingFavoriteDeleteToken")
+        } catch let error as YamiboError {
+            XCTAssertEqual(error, .missingFavoriteDeleteToken)
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
+    func testThrowsWhenDeleteResponseIsFailure() async {
+        let repository = makeRepository(cookie: "sid=1")
+
+        do {
+            try await repository.deleteFavorite(remoteFavoriteID: "999")
+            XCTFail("Expected favoriteDeleteFailed")
+        } catch let error as YamiboError {
+            XCTAssertEqual(error, .favoriteDeleteFailed)
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
+    private func makeRepository(cookie: String) -> YamiboRepository {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [StubURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        return YamiboRepository(
+            client: YamiboClient(session: session, cookie: cookie, userAgent: "Test-UA")
+        )
+    }
 }

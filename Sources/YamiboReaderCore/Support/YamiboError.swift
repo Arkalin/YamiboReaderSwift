@@ -10,6 +10,9 @@ public enum YamiboError: LocalizedError, Equatable, Sendable {
     case offline
     case searchCooldown(seconds: Int)
     case persistenceFailed(String)
+    case missingFavoriteDeleteToken
+    case missingFavoriteDeleteID
+    case favoriteDeleteFailed
     case underlying(String)
 
     public var errorDescription: String? {
@@ -35,6 +38,12 @@ public enum YamiboError: LocalizedError, Equatable, Sendable {
             return "搜索冷却中，请等待\(seconds)秒"
         case let .persistenceFailed(message):
             return "本地数据保存失败：\(message)"
+        case .missingFavoriteDeleteToken:
+            return "删除收藏失败：未拿到表单校验码"
+        case .missingFavoriteDeleteID:
+            return "当前收藏缺少删除标识，请先下拉刷新"
+        case .favoriteDeleteFailed:
+            return "删除收藏失败，请稍后重试"
         case let .underlying(message):
             return message
         }

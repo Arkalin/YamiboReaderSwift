@@ -4,6 +4,8 @@ public enum YamiboRoute: Sendable {
     public static let baseURL = URL(string: "https://bbs.yamibo.com")!
 
     case favorites(page: Int)
+    case favoriteDeleteForm
+    case favoriteDelete
     case tag(id: String, page: Int)
     case search(keyword: String, forumID: String)
     case searchPage(searchID: String, page: Int)
@@ -21,6 +23,24 @@ public enum YamiboRoute: Sendable {
                 .init(name: "type", value: "thread"),
                 .init(name: "mobile", value: "2"),
                 .init(name: "page", value: String(page))
+            ]
+            return components.url!
+        case .favoriteDeleteForm:
+            var components = URLComponents(url: Self.baseURL, resolvingAgainstBaseURL: false)!
+            components.path = "/misc.php"
+            components.queryItems = [
+                .init(name: "mod", value: "faq")
+            ]
+            return components.url!
+        case .favoriteDelete:
+            var components = URLComponents(url: Self.baseURL, resolvingAgainstBaseURL: false)!
+            components.path = "/home.php"
+            components.queryItems = [
+                .init(name: "mod", value: "spacecp"),
+                .init(name: "ac", value: "favorite"),
+                .init(name: "op", value: "delete"),
+                .init(name: "type", value: "all"),
+                .init(name: "checkall", value: "1")
             ]
             return components.url!
         case let .tag(id, page):

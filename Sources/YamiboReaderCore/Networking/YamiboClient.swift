@@ -19,6 +19,25 @@ public struct YamiboClient: Sendable {
         try await fetchHTML(url: route.url, userAgent: userAgent)
     }
 
+    public func submitForm(
+        for route: YamiboRoute,
+        fields: [(String, String)],
+        userAgent: String? = nil
+    ) async throws -> String {
+        var request = URLRequest(url: route.url)
+        request.httpMethod = "POST"
+        request.httpBody = formBody(fields)
+        request.setValue("application/x-www-form-urlencoded; charset=utf-8", forHTTPHeaderField: "Content-Type")
+        request.setValue("text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8", forHTTPHeaderField: "Accept")
+        if let cookie, !cookie.isEmpty {
+            request.setValue(cookie, forHTTPHeaderField: "Cookie")
+        }
+        request.setValue(userAgent ?? self.userAgent, forHTTPHeaderField: "User-Agent")
+
+        let (data, response) = try await session.data(for: request)
+        return try decodeHTML(from: data, response: response)
+    }
+
     public func fetchHTML(url: URL, userAgent: String? = nil) async throws -> String {
         var request = URLRequest(url: url)
         request.setValue("text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8", forHTTPHeaderField: "Accept")
@@ -28,6 +47,10 @@ public struct YamiboClient: Sendable {
         request.setValue(userAgent ?? self.userAgent, forHTTPHeaderField: "User-Agent")
 
         let (data, response) = try await session.data(for: request)
+        return try decodeHTML(from: data, response: response)
+    }
+
+    private func decodeHTML(from data: Data, response: URLResponse) throws -> String {
         guard let httpResponse = response as? HTTPURLResponse else {
             throw YamiboError.invalidResponse(statusCode: nil)
         }
@@ -46,4 +69,25 @@ public struct YamiboClient: Sendable {
         }
         return html
     }
+
+    private func formBody(_ fields: [(String, String)]) -> Data? {
+        let body = fields
+            .map { name, value in
+                "\(percentEncode(name))=\(percentEncode(value))"
+            }
+            .joined(separator: "&")
+        return body.data(using: .utf8)
+    }
+
+    private func percentEncode(_ value: String) -> String {
+        value.addingPercentEncoding(withAllowedCharacters: .formURLQueryAllowed) ?? value
+    }
+}
+
+private extension CharacterSet {
+    static let formURLQueryAllowed: CharacterSet = {
+        var allowed = CharacterSet.urlQueryAllowed
+        allowed.remove(charactersIn: ":#[]@!$&'()*+,;=%/?")
+        return allowed
+    }()
 }

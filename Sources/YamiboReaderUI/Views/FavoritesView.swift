@@ -58,6 +58,7 @@ public final class FavoritesViewModel: ObservableObject {
     @Published public private(set) var favorites: [Favorite] = []
     @Published public private(set) var isLoading = false
     @Published public private(set) var resolvingFavoriteID: String?
+    @Published public private(set) var deletingFavoriteID: String?
     @Published public var errorMessage: String?
 
     private let appContext: YamiboAppContext
@@ -120,6 +121,26 @@ public final class FavoritesViewModel: ObservableObject {
                 nil
             }
             favorites = try await favoriteStore.setDisplayName(valueToPersist, for: favoriteID)
+            errorMessage = nil
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    public func deleteFavorite(_ favorite: Favorite) async {
+        guard deletingFavoriteID == nil else { return }
+        guard let remoteFavoriteID = favorite.remoteFavoriteID, !remoteFavoriteID.isEmpty else {
+            errorMessage = YamiboError.missingFavoriteDeleteID.localizedDescription
+            return
+        }
+
+        deletingFavoriteID = favorite.id
+        defer { deletingFavoriteID = nil }
+
+        do {
+            let repository = await appContext.makeRepository()
+            try await repository.deleteFavorite(remoteFavoriteID: remoteFavoriteID)
+            favorites = try await favoriteStore.deleteFavorite(id: favorite.id)
             errorMessage = nil
         } catch {
             errorMessage = error.localizedDescription
@@ -254,6 +275,7 @@ public struct FavoritesView: View {
     @State private var selectedFavorite: Favorite?
     @State private var showingSettingsSheet = false
     @State private var displayNameDraft: FavoriteDisplayNameDraft?
+    @State private var pendingDeleteFavorite: Favorite?
     private let appContext: YamiboAppContext
     private let appModel: YamiboAppModel
 
@@ -269,6 +291,7 @@ public struct FavoritesView: View {
                 FavoriteRow(
                     favorite: favorite,
                     isResolving: viewModel.resolvingFavoriteID == favorite.id,
+                    isDeleting: viewModel.deletingFavoriteID == favorite.id,
                     onOpen: {
                         open(favorite, mode: .resume)
                     }
@@ -281,14 +304,27 @@ public struct FavoritesView: View {
                         swipeActionLabel(title: "分享", systemImage: "square.and.arrow.up")
                     }
                     .tint(.teal)
+                    .disabled(viewModel.deletingFavoriteID != nil)
                 }
                 .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                    Button(role: .destructive) {
+                        pendingDeleteFavorite = favorite
+                    } label: {
+                        swipeActionLabel(
+                            title: viewModel.deletingFavoriteID == favorite.id ? "删除中" : "删除",
+                            systemImage: "trash"
+                        )
+                    }
+                    .tint(.red)
+                    .disabled(viewModel.deletingFavoriteID != nil)
+
                     Button {
                         displayNameDraft = FavoriteDisplayNameDraft(favorite: favorite)
                     } label: {
                         swipeActionLabel(title: "编辑", systemImage: "pencil")
                     }
                     .tint(.indigo)
+                    .disabled(viewModel.deletingFavoriteID != nil)
                 }
             }
             .listStyle(.plain)
@@ -407,6 +443,23 @@ public struct FavoritesView: View {
             } message: {
                 Text("留空后将恢复显示原标题。")
             }
+            .alert(
+                "删除收藏",
+                isPresented: pendingDeleteAlertBinding,
+                presenting: pendingDeleteFavorite
+            ) { favorite in
+                Button("取消", role: .cancel) {
+                    pendingDeleteFavorite = nil
+                }
+                Button("删除", role: .destructive) {
+                    Task {
+                        await viewModel.deleteFavorite(favorite)
+                    }
+                    pendingDeleteFavorite = nil
+                }
+            } message: { favorite in
+                Text("确定要删除“\(favorite.resolvedDisplayTitle)”吗？这会同步删除远端收藏，但会保留本地缓存和阅读进度。")
+            }
             .sheet(item: $selectedFavorite) { favorite in
                 ForumBrowserView(url: favorite.url, appContext: appContext, appModel: appModel)
                     .ignoresSafeArea()
@@ -442,6 +495,17 @@ public struct FavoritesView: View {
         Binding(
             get: { displayNameDraft?.displayName ?? "" },
             set: { displayNameDraft?.displayName = $0 }
+        )
+    }
+
+    private var pendingDeleteAlertBinding: Binding<Bool> {
+        Binding(
+            get: { pendingDeleteFavorite != nil },
+            set: { isPresented in
+                if !isPresented {
+                    pendingDeleteFavorite = nil
+                }
+            }
         )
     }
 
@@ -529,6 +593,7 @@ public struct FavoritesView: View {
 struct FavoriteRow: View {
     let favorite: Favorite
     let isResolving: Bool
+    let isDeleting: Bool
     let onOpen: () -> Void
 
     var body: some View {
@@ -550,6 +615,10 @@ struct FavoriteRow: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
 
                         if isResolving {
+                            ProgressView()
+                                .controlSize(.small)
+                                .padding(.top, 2)
+                        } else if isDeleting {
                             ProgressView()
                                 .controlSize(.small)
                                 .padding(.top, 2)

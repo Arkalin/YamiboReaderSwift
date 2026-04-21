@@ -5,6 +5,7 @@ public struct Favorite: Codable, Hashable, Identifiable, Sendable {
     public var title: String
     public var displayName: String?
     public var url: URL
+    public var remoteFavoriteID: String?
     public var lastPage: Int
     public var lastView: Int
     public var lastChapter: String?
@@ -19,6 +20,7 @@ public struct Favorite: Codable, Hashable, Identifiable, Sendable {
         title: String,
         displayName: String? = nil,
         url: URL,
+        remoteFavoriteID: String? = nil,
         lastPage: Int = 0,
         lastView: Int = 1,
         lastChapter: String? = nil,
@@ -32,6 +34,7 @@ public struct Favorite: Codable, Hashable, Identifiable, Sendable {
         self.title = title
         self.displayName = displayName
         self.url = url
+        self.remoteFavoriteID = remoteFavoriteID
         self.lastPage = lastPage
         self.lastView = lastView
         self.lastChapter = lastChapter

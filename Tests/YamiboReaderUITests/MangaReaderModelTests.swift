@@ -331,6 +331,125 @@ final class MangaReaderModelTests: XCTestCase {
         XCTAssertEqual(context.initialPage, 6)
     }
 
+    func testFavoritesViewModelDeletesFavoriteAfterRemoteDeleteSucceeds() async throws {
+        let keyPrefix = UUID().uuidString
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [MangaReaderTestURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        MangaReaderTestURLProtocol.handler = { request in
+            let absolute = request.url?.absoluteString ?? ""
+            if absolute.contains("mod=faq") {
+                return httpResponse(url: request.url!, body: #"<html><input name="formhash" value="abc12345" /></html>"#)
+            }
+            if absolute.contains("ac=favorite"), request.httpMethod == "POST" {
+                return httpResponse(url: request.url!, body: "<html><body>操作成功</body></html>")
+            }
+            return httpResponse(url: request.url!, body: "<html></html>", statusCode: 404)
+        }
+
+        let favoriteStore = FavoriteStore(key: "\(keyPrefix).favorites")
+        let favorite = Favorite(
+            title: "待删除收藏",
+            url: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=850&mobile=2")!,
+            remoteFavoriteID: "55"
+        )
+        try await favoriteStore.saveFavorites([favorite])
+
+        let appContext = YamiboAppContext(
+            sessionStore: SessionStore(key: "\(keyPrefix).session"),
+            settingsStore: SettingsStore(key: "\(keyPrefix).settings"),
+            favoriteStore: favoriteStore,
+            readerCacheStore: ReaderCacheStore(baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)),
+            mangaDirectoryStore: MangaDirectoryStore(baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)),
+            session: session
+        )
+        let viewModel = await MainActor.run {
+            FavoritesViewModel(appContext: appContext, favoriteStore: favoriteStore)
+        }
+        await viewModel.loadCachedFavorites()
+        await viewModel.deleteFavorite(favorite)
+
+        await MainActor.run {
+            XCTAssertTrue(viewModel.favorites.isEmpty)
+            XCTAssertNil(viewModel.errorMessage)
+            XCTAssertNil(viewModel.deletingFavoriteID)
+        }
+    }
+
+    func testFavoritesViewModelRejectsDeleteWhenRemoteFavoriteIDMissing() async throws {
+        let keyPrefix = UUID().uuidString
+        let favoriteStore = FavoriteStore(key: "\(keyPrefix).favorites")
+        let favorite = Favorite(
+            title: "无删除标识收藏",
+            url: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=851&mobile=2")!
+        )
+        try await favoriteStore.saveFavorites([favorite])
+
+        let appContext = YamiboAppContext(
+            sessionStore: SessionStore(key: "\(keyPrefix).session"),
+            settingsStore: SettingsStore(key: "\(keyPrefix).settings"),
+            favoriteStore: favoriteStore,
+            readerCacheStore: ReaderCacheStore(baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)),
+            mangaDirectoryStore: MangaDirectoryStore(baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true))
+        )
+        let viewModel = await MainActor.run {
+            FavoritesViewModel(appContext: appContext, favoriteStore: favoriteStore)
+        }
+        await viewModel.loadCachedFavorites()
+        await viewModel.deleteFavorite(favorite)
+
+        await MainActor.run {
+            XCTAssertEqual(viewModel.favorites.count, 1)
+            XCTAssertEqual(viewModel.errorMessage, YamiboError.missingFavoriteDeleteID.localizedDescription)
+            XCTAssertNil(viewModel.deletingFavoriteID)
+        }
+    }
+
+    func testFavoritesViewModelKeepsFavoriteWhenRemoteDeleteFails() async throws {
+        let keyPrefix = UUID().uuidString
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [MangaReaderTestURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        MangaReaderTestURLProtocol.handler = { request in
+            let absolute = request.url?.absoluteString ?? ""
+            if absolute.contains("mod=faq") {
+                return httpResponse(url: request.url!, body: #"<html><input name="formhash" value="abc12345" /></html>"#)
+            }
+            if absolute.contains("ac=favorite"), request.httpMethod == "POST" {
+                return httpResponse(url: request.url!, body: "<html><body>操作失败</body></html>")
+            }
+            return httpResponse(url: request.url!, body: "<html></html>", statusCode: 404)
+        }
+
+        let favoriteStore = FavoriteStore(key: "\(keyPrefix).favorites")
+        let favorite = Favorite(
+            title: "删除失败收藏",
+            url: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=852&mobile=2")!,
+            remoteFavoriteID: "88"
+        )
+        try await favoriteStore.saveFavorites([favorite])
+
+        let appContext = YamiboAppContext(
+            sessionStore: SessionStore(key: "\(keyPrefix).session"),
+            settingsStore: SettingsStore(key: "\(keyPrefix).settings"),
+            favoriteStore: favoriteStore,
+            readerCacheStore: ReaderCacheStore(baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)),
+            mangaDirectoryStore: MangaDirectoryStore(baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)),
+            session: session
+        )
+        let viewModel = await MainActor.run {
+            FavoritesViewModel(appContext: appContext, favoriteStore: favoriteStore)
+        }
+        await viewModel.loadCachedFavorites()
+        await viewModel.deleteFavorite(favorite)
+
+        await MainActor.run {
+            XCTAssertEqual(viewModel.favorites.count, 1)
+            XCTAssertEqual(viewModel.errorMessage, YamiboError.favoriteDeleteFailed.localizedDescription)
+            XCTAssertNil(viewModel.deletingFavoriteID)
+        }
+    }
+
     func testPageChangesDebounceAndPersistLatestMangaProgress() async throws {
         let model = try await makeMangaModel(
             chapterHTMLByTID: [

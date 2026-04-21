@@ -16,6 +16,34 @@ public actor YamiboRepository {
         return favorites
     }
 
+    public func deleteFavorite(remoteFavoriteID: String) async throws {
+        let formHTML = try await client.fetchHTML(for: .favoriteDeleteForm, userAgent: YamiboDefaults.desktopTagUserAgent)
+        if isLoginPage(formHTML) {
+            throw YamiboError.notAuthenticated
+        }
+        guard let formHash = extractFormHash(from: formHTML) else {
+            throw YamiboError.missingFavoriteDeleteToken
+        }
+
+        let responseHTML = try await client.submitForm(
+            for: .favoriteDelete,
+            fields: [
+                ("formhash", formHash),
+                ("delfavorite", "true"),
+                ("deletesubmit", "true"),
+                ("favorite[]", remoteFavoriteID)
+            ],
+            userAgent: YamiboDefaults.desktopTagUserAgent
+        )
+
+        if isLoginPage(responseHTML) {
+            throw YamiboError.notAuthenticated
+        }
+        guard isFavoriteDeleteSuccess(responseHTML) else {
+            throw YamiboError.favoriteDeleteFailed
+        }
+    }
+
     public func fetchMangaTagList(tagID: String, page: Int = 1) async throws -> [MangaChapter] {
         let html = try await client.fetchHTML(
             for: .tag(id: tagID, page: page),
@@ -54,6 +82,21 @@ public actor YamiboRepository {
             "member.php?mod=logging&action=login",
             "id=\"member_login\"",
             "class=\"pg_logging\""
+        ]
+        return markers.contains { html.localizedCaseInsensitiveContains($0) }
+    }
+
+    private func extractFormHash(from html: String) -> String? {
+        HTMLTextExtractor.firstMatch(pattern: #"name=["']formhash["']\s+value=["']([^"']+)["']"#, in: html)?.dropFirst().first
+            ?? HTMLTextExtractor.firstMatch(pattern: #"formhash=([a-zA-Z0-9]+)"#, in: html)?.dropFirst().first
+    }
+
+    private func isFavoriteDeleteSuccess(_ html: String) -> Bool {
+        let markers = [
+            "成功",
+            "succeed",
+            "操作成功",
+            "收藏删除成功"
         ]
         return markers.contains { html.localizedCaseInsensitiveContains($0) }
     }

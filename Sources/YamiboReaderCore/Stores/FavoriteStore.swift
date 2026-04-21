@@ -7,6 +7,7 @@ public protocol FavoriteStoring: Sendable {
     func setHidden(_ isHidden: Bool, for favoriteID: String) async throws -> [Favorite]
     func setDisplayName(_ displayName: String?, for favoriteID: String) async throws -> [Favorite]
     func setType(_ type: FavoriteType, for favoriteID: String) async throws -> [Favorite]
+    func deleteFavorite(id: String) async throws -> [Favorite]
     func favorite(for url: URL) async -> Favorite?
     func favorite(id: String) async -> Favorite?
     func updateReadingProgress(for url: URL, progress: ReaderProgress) async throws -> Favorite
@@ -54,6 +55,7 @@ public actor FavoriteStore: FavoriteStoring {
             if var existing = localByID.removeValue(forKey: remote.id) {
                 existing.title = remote.title
                 existing.url = remote.url
+                existing.remoteFavoriteID = remote.remoteFavoriteID ?? existing.remoteFavoriteID
                 if existing.type == .unknown {
                     existing.type = remote.type
                 }
@@ -98,6 +100,12 @@ public actor FavoriteStore: FavoriteStoring {
         } matching: { favorite in
             favorite.id == favoriteID
         }
+        try await saveFavorites(updated)
+        return updated
+    }
+
+    public func deleteFavorite(id favoriteID: String) async throws -> [Favorite] {
+        let updated = await loadFavorites().filter { $0.id != favoriteID }
         try await saveFavorites(updated)
         return updated
     }

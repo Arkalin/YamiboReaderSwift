@@ -307,6 +307,43 @@ import Testing
     #expect(merged.first?.resolvedDisplayTitle == "我的名字")
 }
 
+@Test func favoriteStoreMergeUpdatesRemoteFavoriteIDFromServer() async throws {
+    let defaults = try #require(UserDefaults(suiteName: "favorite-merge-remote-id-tests"))
+    defaults.removePersistentDomain(forName: "favorite-merge-remote-id-tests")
+    let store = FavoriteStore(defaults: defaults, key: "favorites")
+    let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=289&mobile=2"))
+
+    try await store.saveFavorites([
+        Favorite(title: "旧标题", url: url)
+    ])
+
+    let merged = try await store.mergeRemoteFavorites([
+        Favorite(title: "新标题", url: url, remoteFavoriteID: "9988")
+    ])
+
+    #expect(merged.first?.remoteFavoriteID == "9988")
+}
+
+@Test func favoriteStoreCanDeleteFavoriteByID() async throws {
+    let defaults = try #require(UserDefaults(suiteName: "favorite-delete-tests"))
+    defaults.removePersistentDomain(forName: "favorite-delete-tests")
+    let store = FavoriteStore(defaults: defaults, key: "favorites")
+
+    let first = Favorite(
+        title: "保留项",
+        url: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=390&mobile=2")!
+    )
+    let second = Favorite(
+        title: "删除项",
+        url: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=391&mobile=2")!
+    )
+    try await store.saveFavorites([first, second])
+
+    let updated = try await store.deleteFavorite(id: second.id)
+    #expect(updated.count == 1)
+    #expect(updated.first?.id == first.id)
+}
+
 @Test func settingsStoreResetRestoresDefaults() async throws {
     let defaults = try makeIsolatedDefaults(prefix: "settings-reset-tests")
     let store = SettingsStore(defaults: defaults, key: "settings")

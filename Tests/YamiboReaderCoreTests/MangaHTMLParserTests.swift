@@ -22,13 +22,34 @@ import Testing
 
 @Test func favoriteParserKeepsOnlyThreadLinks() async throws {
     let html = #"""
-    <div>
-      <a href="forum.php?mod=viewthread&tid=88&mobile=2">作品 A</a>
-      <a href="home.php?mod=space">不是作品</a>
-    </div>
+    <ul class="sclist">
+      <li>
+        <a class="mdel" href="home.php?mod=spacecp&ac=favorite&op=delete&favid=456">删除</a>
+        <a href="forum.php?mod=viewthread&tid=88&mobile=2">作品 A</a>
+      </li>
+      <li>
+        <a href="home.php?mod=space">不是作品</a>
+      </li>
+    </ul>
     """#
 
     let favorites = FavoriteHTMLParser.parseFavorites(from: html)
     #expect(favorites.count == 1)
     #expect(favorites.first?.title == "作品 A")
+    #expect(favorites.first?.remoteFavoriteID == "456")
+}
+
+@Test func favoriteParserKeepsFavoriteWhenDeleteLinkIsMissing() async throws {
+    let html = #"""
+    <ul class="sclist">
+      <li>
+        <a href="forum.php?mod=viewthread&tid=99&mobile=2">作品 B</a>
+      </li>
+    </ul>
+    """#
+
+    let favorites = FavoriteHTMLParser.parseFavorites(from: html)
+    #expect(favorites.count == 1)
+    #expect(favorites.first?.title == "作品 B")
+    #expect(favorites.first?.remoteFavoriteID == nil)
 }
