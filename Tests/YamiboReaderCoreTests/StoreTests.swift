@@ -57,6 +57,7 @@ import Testing
             directorySortOrder: .descending
         ),
         webBrowser: WebBrowserSettings(showsNavigationBar: false),
+        homePage: .favorites,
         usesDataSaverMode: true,
         collapsesFavoriteSections: true
     )
@@ -84,7 +85,17 @@ import Testing
     let decoded = try JSONDecoder().decode(AppSettings.self, from: Data(legacy.utf8))
 
     #expect(decoded.webBrowser.showsNavigationBar == true)
+    #expect(decoded.homePage == .forum)
     #expect(decoded.collapsesFavoriteSections == true)
+}
+
+@Test func appSettingsPersistsHomePageWhenEncodingAndDecoding() throws {
+    let settings = AppSettings(homePage: .favorites)
+
+    let encoded = try JSONEncoder().encode(settings)
+    let decoded = try JSONDecoder().decode(AppSettings.self, from: encoded)
+
+    #expect(decoded.homePage == .favorites)
 }
 
 @Test func readerAppearanceSettingsDecodesLegacyPayloadWithFontDefaults() async throws {
@@ -348,11 +359,33 @@ import Testing
     let defaults = try makeIsolatedDefaults(prefix: "settings-reset-tests")
     let store = SettingsStore(defaults: defaults, key: "settings")
 
-    try await store.save(AppSettings(webBrowser: WebBrowserSettings(showsNavigationBar: false)))
+    try await store.save(AppSettings(webBrowser: WebBrowserSettings(showsNavigationBar: false), homePage: .favorites))
     try await store.reset()
 
     let loaded = await store.load()
     #expect(loaded == AppSettings())
+    #expect(loaded.homePage == .forum)
+}
+
+@Test func settingsStoreLoadSyncMatchesAsyncLoad() async throws {
+    let suiteName = makeIsolatedDefaultsSuiteName(prefix: "settings-sync-tests")
+    let actorDefaults = try #require(UserDefaults(suiteName: suiteName))
+    actorDefaults.removePersistentDomain(forName: suiteName)
+    let syncDefaults = try #require(UserDefaults(suiteName: suiteName))
+    let store = SettingsStore(defaults: actorDefaults, key: "settings")
+    let saved = AppSettings(
+        webBrowser: WebBrowserSettings(showsNavigationBar: false),
+        homePage: .favorites,
+        usesDataSaverMode: true
+    )
+
+    try await store.save(saved)
+
+    let syncLoaded = SettingsStore.loadSync(defaults: syncDefaults, key: "settings")
+    let asyncLoaded = await store.load()
+
+    #expect(syncLoaded == saved)
+    #expect(syncLoaded == asyncLoaded)
 }
 
 @Test func sessionStoreResetRestoresDefaults() async throws {

@@ -18,6 +18,7 @@ private enum FavoritesSettingsConfirmation: String, Identifiable {
 
 @MainActor
 private final class FavoritesSettingsViewModel: ObservableObject {
+    @Published var homePage: AppHomePage = .forum
     @Published var showsNavigationBar = true
     @Published private(set) var novelCacheBytes = 0
     @Published private(set) var mangaCacheBytes = 0
@@ -47,8 +48,28 @@ private final class FavoritesSettingsViewModel: ObservableObject {
         defer { activeAction = nil }
 
         let settings = await appContext.settingsStore.load()
+        homePage = settings.homePage
         showsNavigationBar = settings.webBrowser.showsNavigationBar
         await refreshStorageUsage()
+    }
+
+    func updateHomePage(_ value: AppHomePage) {
+        let previous = homePage
+        homePage = value
+
+        Task {
+            var settings = await appContext.settingsStore.load()
+            settings.homePage = value
+
+            do {
+                try await appContext.settingsStore.save(settings)
+            } catch {
+                await MainActor.run {
+                    homePage = previous
+                    errorMessage = error.localizedDescription
+                }
+            }
+        }
     }
 
     func updateShowsNavigationBar(_ value: Bool) {
@@ -104,6 +125,7 @@ private final class FavoritesSettingsViewModel: ObservableObject {
 
         do {
             try await appContext.resetApplicationData()
+            homePage = .forum
             showsNavigationBar = true
             novelCacheBytes = 0
             mangaCacheBytes = 0
@@ -149,6 +171,37 @@ public struct FavoritesSettingsView: View {
     public var body: some View {
         NavigationStack {
             Form {
+                Section("通用") {
+                    Menu {
+                        ForEach(AppHomePage.allCases, id: \.self) { option in
+                            Button {
+                                viewModel.updateHomePage(option)
+                            } label: {
+                                Label(option.title, systemImage: option.systemImageName)
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 12) {
+                            Text("App 主页")
+                                .foregroundStyle(.primary)
+
+                            Spacer(minLength: 0)
+
+                            Image(systemName: viewModel.homePage.systemImageName)
+                                .foregroundStyle(.secondary)
+
+                            Text(viewModel.homePage.title)
+                                .foregroundStyle(.secondary)
+
+                            Image(systemName: "chevron.up.chevron.down")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.tertiary)
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .disabled(viewModel.isBusy)
+                }
+
                 Section("网页浏览") {
                     Toggle(
                         "显示网页标题和网址",

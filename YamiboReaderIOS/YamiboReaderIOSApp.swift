@@ -24,20 +24,8 @@ struct YamiboReaderIOSApp: App {
     }
 
     private static func resolveInitialTab() -> AppTab {
-        #if DEBUG
-        switch ProcessInfo.processInfo.environment["START_TAB"]?.lowercased() {
-        case "favorites":
-            .favorites
-        case "mine", "my":
-            .mine
-        case "migration":
-            .mine
-        default:
-            .forum
-        }
-        #else
-        .forum
-        #endif
+        let settings = SettingsStore.loadSync()
+        return AppTabLaunchResolver.resolveInitialTab(homePage: settings.homePage)
     }
 }
 
