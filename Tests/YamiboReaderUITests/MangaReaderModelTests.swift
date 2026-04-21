@@ -426,6 +426,139 @@ final class MangaReaderModelTests: XCTestCase {
         XCTAssertEqual(hiddenOn.last?.isHidden, true)
     }
 
+    func testRootEntriesShowCollectionsAlongsideFavoritesInManualOrder() {
+        let rootFavorite = Favorite(
+            title: "根页收藏",
+            url: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=860&mobile=2")!,
+            manualOrder: 1
+        )
+        let collectionFavorite = Favorite(
+            title: "合集内收藏",
+            url: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=861&mobile=2")!,
+            parentCollectionID: "collection-1",
+            manualOrder: 0
+        )
+        let collection = FavoriteCollection(id: "collection-1", name: "合集A", manualOrder: 0)
+
+        let entries = makeFavoriteListEntries(
+            scope: .root,
+            favorites: [rootFavorite, collectionFavorite],
+            collections: [collection],
+            showsHidden: false,
+            filter: .all,
+            sortOrder: .manual,
+            searchText: ""
+        )
+
+        XCTAssertEqual(entries.map(\.id), ["collection:collection-1", "favorite:\(rootFavorite.id)"])
+    }
+
+    func testRootTypeFilterShowsCollectionsWithMatchingFavorites() {
+        let novelFavorite = Favorite(
+            title: "小说收藏",
+            url: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=862&mobile=2")!,
+            type: .novel,
+            manualOrder: 2
+        )
+        let collectionNovelFavorite = Favorite(
+            title: "合集内小说",
+            url: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=863&mobile=2")!,
+            type: .novel,
+            parentCollectionID: "collection-2"
+        )
+        let collectionMangaFavorite = Favorite(
+            title: "合集内漫画",
+            url: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=864&mobile=2")!,
+            type: .manga,
+            parentCollectionID: "collection-3"
+        )
+        let novelCollection = FavoriteCollection(id: "collection-2", name: "小说合集", manualOrder: 0)
+        let mangaCollection = FavoriteCollection(id: "collection-3", name: "漫画合集", manualOrder: 1)
+
+        let entries = makeFavoriteListEntries(
+            scope: .root,
+            favorites: [novelFavorite, collectionNovelFavorite, collectionMangaFavorite],
+            collections: [novelCollection, mangaCollection],
+            showsHidden: false,
+            filter: .novel,
+            sortOrder: .manual,
+            searchText: ""
+        )
+
+        XCTAssertEqual(entries.map(\.id), ["collection:collection-2", "favorite:\(novelFavorite.id)"])
+    }
+
+    func testRootTypeFilterCollectionSummaryCountsMatchingFavoritesOnly() {
+        let collection = FavoriteCollection(id: "collection-5", name: "混合合集", manualOrder: 0)
+        let novelFavorite = Favorite(
+            title: "合集内小说",
+            url: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=866&mobile=2")!,
+            type: .novel,
+            parentCollectionID: collection.id
+        )
+        let mangaFavorite = Favorite(
+            title: "合集内漫画",
+            url: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=867&mobile=2")!,
+            type: .manga,
+            parentCollectionID: collection.id
+        )
+
+        let summary = makeFavoriteCollectionSummary(
+            for: collection,
+            favorites: [novelFavorite, mangaFavorite],
+            scope: .root,
+            showsHidden: false,
+            filter: .novel,
+            searchText: ""
+        )
+
+        XCTAssertEqual(summary, FavoriteCollectionSummary(itemCount: 1, hiddenCount: 0))
+    }
+
+    func testRootAllSearchMatchesCollectionFavoriteTitles() {
+        let collectionFavorite = Favorite(
+            title: "会被搜索命中的收藏",
+            url: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=865&mobile=2")!,
+            parentCollectionID: "collection-4"
+        )
+        let collection = FavoriteCollection(id: "collection-4", name: "普通合集名", manualOrder: 0)
+
+        let entries = makeFavoriteListEntries(
+            scope: .root,
+            favorites: [collectionFavorite],
+            collections: [collection],
+            showsHidden: false,
+            filter: .all,
+            sortOrder: .manual,
+            searchText: "搜索命中"
+        )
+
+        XCTAssertEqual(entries.map(\.id), ["collection:collection-4"])
+    }
+
+    func testFavoriteSelectionActionStateMatchesRootAndCollectionRules() {
+        let rootFavoritesOnly = makeFavoriteSelectionActionState(
+            scope: .root,
+            selectedFavoriteCount: 2,
+            selectedCollectionCount: 0
+        )
+        XCTAssertEqual(rootFavoritesOnly, FavoriteSelectionActionState(canCreateCollection: true, canMove: true, canDelete: true))
+
+        let rootMixed = makeFavoriteSelectionActionState(
+            scope: .root,
+            selectedFavoriteCount: 1,
+            selectedCollectionCount: 1
+        )
+        XCTAssertEqual(rootMixed, FavoriteSelectionActionState(canCreateCollection: false, canMove: false, canDelete: true))
+
+        let collectionScope = makeFavoriteSelectionActionState(
+            scope: .collection(FavoriteCollection(id: "collection-3", name: "合集C", manualOrder: 0)),
+            selectedFavoriteCount: 1,
+            selectedCollectionCount: 0
+        )
+        XCTAssertEqual(collectionScope, FavoriteSelectionActionState(canCreateCollection: false, canMove: true, canDelete: true))
+    }
+
     func testFavoritesViewModelUsesLatestStoredMangaProgressForResume() async throws {
         let keyPrefix = UUID().uuidString
         let favoriteStore = FavoriteStore(key: "\(keyPrefix).favorites")

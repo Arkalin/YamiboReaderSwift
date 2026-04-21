@@ -48,6 +48,40 @@ public enum FavoriteSortOrder: String, CaseIterable, Identifiable {
     }
 }
 
+public enum FavoriteScope: Hashable, Sendable {
+    case root
+    case collection(FavoriteCollection)
+
+    fileprivate var collection: FavoriteCollection? {
+        if case let .collection(collection) = self {
+            return collection
+        }
+        return nil
+    }
+}
+
+public enum FavoriteListEntry: Identifiable, Hashable, Sendable {
+    case collection(FavoriteCollection)
+    case favorite(Favorite)
+
+    public var id: String {
+        switch self {
+        case let .collection(collection):
+            "collection:\(collection.id)"
+        case let .favorite(favorite):
+            "favorite:\(favorite.id)"
+        }
+    }
+
+    var moveKey: String { id }
+}
+
+struct FavoriteSelectionActionState: Equatable {
+    let canCreateCollection: Bool
+    let canMove: Bool
+    let canDelete: Bool
+}
+
 enum FavoriteLaunchMode: Sendable {
     case start
     case resume
@@ -56,6 +90,7 @@ enum FavoriteLaunchMode: Sendable {
 @MainActor
 public final class FavoritesViewModel: ObservableObject {
     @Published public private(set) var favorites: [Favorite] = []
+    @Published public private(set) var collections: [FavoriteCollection] = []
     @Published public private(set) var isLoading = false
     @Published public private(set) var resolvingFavoriteID: String?
     @Published public private(set) var deletingFavoriteID: String?
@@ -86,11 +121,11 @@ public final class FavoritesViewModel: ObservableObject {
     }
 
     public func loadCachedFavorites() async {
-        favorites = await favoriteStore.loadFavorites()
+        await reloadLocalFavorites()
     }
 
     public func reloadLocalFavorites() async {
-        favorites = await favoriteStore.loadFavorites()
+        applySnapshot(await favoriteStore.loadLibrarySnapshot())
     }
 
     public func refresh() async {
@@ -101,6 +136,7 @@ public final class FavoritesViewModel: ObservableObject {
             let repository = await appContext.makeRepository()
             let remote = try await repository.fetchFavorites()
             favorites = try await favoriteStore.mergeRemoteFavorites(remote)
+            collections = await favoriteStore.loadCollections()
             errorMessage = nil
         } catch {
             errorMessage = error.localizedDescription
@@ -114,14 +150,52 @@ public final class FavoritesViewModel: ObservableObject {
         deletingFavoriteID == nil
     }
 
+    func canReorderEntries(
+        scope: FavoriteScope,
+        filter: FavoriteFilter,
+        sortOrder: FavoriteSortOrder,
+        searchText: String,
+        isSelecting: Bool
+    ) -> Bool {
+        guard filter == .all, !isSelecting else { return false }
+        return canReorderFavorites(sortOrder: sortOrder, searchText: searchText)
+    }
+
     func reorderFavorites(visibleIDs: [String], fromOffsets: IndexSet, toOffset: Int) async {
+        await reorderFavorites(in: nil, visibleIDs: visibleIDs, fromOffsets: fromOffsets, toOffset: toOffset)
+    }
+
+    func reorderFavorites(
+        in parentCollectionID: String?,
+        visibleIDs: [String],
+        fromOffsets: IndexSet,
+        toOffset: Int
+    ) async {
         guard !visibleIDs.isEmpty, !fromOffsets.isEmpty else { return }
 
         do {
             favorites = try await favoriteStore.reorderFavorites(
+                in: parentCollectionID,
                 visibleIDs: visibleIDs,
                 fromOffsets: fromOffsets,
                 toOffset: toOffset
+            )
+            errorMessage = nil
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func reorderRootEntries(visibleEntryKeys: [String], fromOffsets: IndexSet, toOffset: Int) async {
+        guard !visibleEntryKeys.isEmpty, !fromOffsets.isEmpty else { return }
+
+        do {
+            applySnapshot(
+                try await favoriteStore.reorderRootEntries(
+                    visibleEntryKeys: visibleEntryKeys,
+                    fromOffsets: fromOffsets,
+                    toOffset: toOffset
+                )
             )
             errorMessage = nil
         } catch {
@@ -135,8 +209,7 @@ public final class FavoritesViewModel: ObservableObject {
 
     public func setDisplayName(_ displayName: String?, forFavoriteID favoriteID: String, originalTitle: String) async {
         do {
-            let normalized = displayName?
-                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let normalized = displayName?.trimmingCharacters(in: .whitespacesAndNewlines)
             let valueToPersist: String? = if let normalized, !normalized.isEmpty, normalized != originalTitle {
                 normalized
             } else {
@@ -158,24 +231,68 @@ public final class FavoritesViewModel: ObservableObject {
         }
     }
 
-    public func deleteFavorite(_ favorite: Favorite) async {
-        guard deletingFavoriteID == nil else { return }
-        guard let remoteFavoriteID = favorite.remoteFavoriteID, !remoteFavoriteID.isEmpty else {
-            errorMessage = YamiboError.missingFavoriteDeleteID.localizedDescription
-            return
-        }
-
-        deletingFavoriteID = favorite.id
-        defer { deletingFavoriteID = nil }
-
+    public func createCollection(name: String, favoriteIDs: [String]) async -> Bool {
         do {
-            let repository = await appContext.makeRepository()
-            try await repository.deleteFavorite(remoteFavoriteID: remoteFavoriteID)
-            favorites = try await favoriteStore.deleteFavorite(id: favorite.id)
+            applySnapshot(try await favoriteStore.createCollection(name: name, favoriteIDs: favoriteIDs))
             errorMessage = nil
+            return true
         } catch {
             errorMessage = error.localizedDescription
+            return false
         }
+    }
+
+    public func moveFavorites(ids: [String], toCollectionID: String?) async -> Bool {
+        do {
+            applySnapshot(try await favoriteStore.moveFavorites(ids: ids, toCollectionID: toCollectionID))
+            errorMessage = nil
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
+
+    public func deleteFavorite(_ favorite: Favorite) async {
+        _ = await deleteSelections(favoriteIDs: [favorite.id], collectionIDs: [])
+    }
+
+    public func deleteSelections(favoriteIDs: [String], collectionIDs: [String]) async -> Bool {
+        var changed = false
+        var firstError: String?
+
+        if !collectionIDs.isEmpty {
+            do {
+                applySnapshot(try await favoriteStore.dissolveCollections(ids: collectionIDs))
+                changed = true
+            } catch {
+                firstError = error.localizedDescription
+            }
+        }
+
+        for favoriteID in favoriteIDs {
+            guard firstError == nil || changed else { break }
+            guard let favorite = await favoriteStore.favorite(id: favoriteID) else { continue }
+            guard let remoteFavoriteID = favorite.remoteFavoriteID, !remoteFavoriteID.isEmpty else {
+                firstError = firstError ?? YamiboError.missingFavoriteDeleteID.localizedDescription
+                continue
+            }
+
+            deletingFavoriteID = favorite.id
+            defer { deletingFavoriteID = nil }
+
+            do {
+                let repository = await appContext.makeRepository()
+                try await repository.deleteFavorite(remoteFavoriteID: remoteFavoriteID)
+                applySnapshot(try await favoriteStore.deleteFavorites(ids: [favorite.id]))
+                changed = true
+            } catch {
+                firstError = firstError ?? error.localizedDescription
+            }
+        }
+
+        errorMessage = firstError
+        return changed
     }
 
     func openTarget(for favorite: Favorite, mode: FavoriteLaunchMode = .resume) async -> FavoriteOpenTarget {
@@ -244,6 +361,11 @@ public final class FavoritesViewModel: ObservableObject {
         await openTarget(for: favorite, mode: .resume)
     }
 
+    private func applySnapshot(_ snapshot: FavoriteLibrarySnapshot) {
+        favorites = snapshot.favorites
+        collections = snapshot.collections
+    }
+
     private func applyStartModeIfNeeded(
         to context: ReaderLaunchContext,
         for favorite: Favorite,
@@ -297,6 +419,182 @@ private struct FavoriteDisplayNameDraft {
     }
 }
 
+struct FavoriteCollectionSummary: Equatable {
+    let itemCount: Int
+    let hiddenCount: Int
+}
+
+private struct FavoriteSearchModifier: ViewModifier {
+    @Binding var searchText: String
+
+    func body(content: Content) -> some View {
+        #if os(iOS)
+        content
+            .navigationBarTitleDisplayMode(.inline)
+            .searchable(
+                text: $searchText,
+                placement: .navigationBarDrawer(displayMode: .automatic),
+                prompt: "搜索"
+            )
+        #else
+        content
+            .searchable(text: $searchText, prompt: "搜索")
+        #endif
+    }
+}
+
+private struct FavoriteSettingsMenuButton: View {
+    @Binding var showingSettingsSheet: Bool
+
+    var body: some View {
+        Menu {
+            Button {
+                showingSettingsSheet = true
+            } label: {
+                Label("设置", systemImage: "gearshape")
+            }
+
+            Button {} label: {
+                Label("关于", systemImage: "info.circle")
+            }
+        } label: {
+            Image(systemName: "ellipsis.circle")
+        }
+    }
+}
+
+private struct FavoriteSelectionToggleButton: View {
+    let isSelecting: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(isSelecting ? "完成" : "选择", action: action)
+    }
+}
+
+private struct FavoriteToolbarMenuButton: View {
+    @Binding var filterRawValue: String
+    @Binding var sortRawValue: String
+    @Binding var showsHidden: Bool
+    let allTitle: String
+
+    var body: some View {
+        Menu {
+            Picker("分类", selection: $filterRawValue) {
+                ForEach(FavoriteFilter.allCases) { filter in
+                    Text(filter == .all ? allTitle : filter.title).tag(filter.rawValue)
+                }
+            }
+
+            Picker("排序", selection: $sortRawValue) {
+                ForEach(FavoriteSortOrder.allCases) { sortOrder in
+                    Text(sortOrder.title).tag(sortOrder.rawValue)
+                }
+            }
+
+            Toggle("显示隐藏项", isOn: $showsHidden)
+        } label: {
+            HStack(spacing: 6) {
+                Text(currentTitle)
+                    .font(.headline)
+                    .foregroundStyle(.primary)
+
+                Image(systemName: "chevron.down")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+            .contentShape(Rectangle())
+        }
+    }
+
+    private var currentFilter: FavoriteFilter {
+        FavoriteFilter(rawValue: filterRawValue) ?? .all
+    }
+
+    private var currentTitle: String {
+        currentFilter == .all ? allTitle : currentFilter.title
+    }
+}
+
+private struct FavoriteToolbarModifier: ViewModifier {
+    @Binding var showingSettingsSheet: Bool
+    @Binding var filterRawValue: String
+    @Binding var sortRawValue: String
+    @Binding var showsHidden: Bool
+    @Binding var isSelecting: Bool
+    let showsSettingsMenu: Bool
+    let allTitle: String
+    let onFinishSelection: () -> Void
+
+    func body(content: Content) -> some View {
+        content.toolbar {
+            if showsSettingsMenu {
+                #if os(iOS)
+                ToolbarItem(placement: .topBarLeading) {
+                    FavoriteSettingsMenuButton(showingSettingsSheet: $showingSettingsSheet)
+                }
+                #else
+                ToolbarItem(placement: .automatic) {
+                    FavoriteSettingsMenuButton(showingSettingsSheet: $showingSettingsSheet)
+                }
+                #endif
+            }
+
+            ToolbarItem(placement: .principal) {
+                FavoriteToolbarMenuButton(
+                    filterRawValue: $filterRawValue,
+                    sortRawValue: $sortRawValue,
+                    showsHidden: $showsHidden,
+                    allTitle: allTitle
+                )
+            }
+
+            #if os(iOS)
+            ToolbarItem(placement: .topBarTrailing) {
+                FavoriteSelectionToggleButton(isSelecting: isSelecting) {
+                    if isSelecting {
+                        onFinishSelection()
+                    } else {
+                        isSelecting = true
+                    }
+                }
+            }
+            #else
+            ToolbarItem(placement: .automatic) {
+                FavoriteSelectionToggleButton(isSelecting: isSelecting) {
+                    if isSelecting {
+                        onFinishSelection()
+                    } else {
+                        isSelecting = true
+                    }
+                }
+            }
+            #endif
+        }
+    }
+}
+
+private struct FavoriteCollectionNavigationDestinationModifier: ViewModifier {
+    let isEnabled: Bool
+    let appContext: YamiboAppContext
+    let appModel: YamiboAppModel
+
+    func body(content: Content) -> some View {
+        if isEnabled {
+            content.navigationDestination(for: FavoriteCollection.self) { collection in
+                FavoritesView(
+                    favoriteStore: appContext.favoriteStore,
+                    appContext: appContext,
+                    appModel: appModel,
+                    scope: .collection(collection)
+                )
+            }
+        } else {
+            content
+        }
+    }
+}
+
 public struct FavoritesView: View {
     @StateObject private var viewModel: FavoritesViewModel
     @AppStorage("yamibo.favorite.filter") private var filterRawValue = FavoriteFilter.all.rawValue
@@ -307,30 +605,417 @@ public struct FavoritesView: View {
     @State private var showingSettingsSheet = false
     @State private var displayNameDraft: FavoriteDisplayNameDraft?
     @State private var pendingDeleteFavorite: Favorite?
+    @State private var isSelecting = false
+    @State private var selectedFavoriteIDs: Set<String> = []
+    @State private var selectedCollectionIDs: Set<String> = []
+    @State private var showingCreateCollectionPrompt = false
+    @State private var createCollectionName = ""
+    @State private var showingMoveDialog = false
+    @State private var showingBulkDeleteConfirmation = false
+
+    private let scope: FavoriteScope
     private let appContext: YamiboAppContext
     private let appModel: YamiboAppModel
 
-    public init(favoriteStore: FavoriteStore, appContext: YamiboAppContext, appModel: YamiboAppModel) {
+    public init(
+        favoriteStore: FavoriteStore,
+        appContext: YamiboAppContext,
+        appModel: YamiboAppModel,
+        scope: FavoriteScope = .root
+    ) {
         _viewModel = StateObject(wrappedValue: FavoritesViewModel(appContext: appContext, favoriteStore: favoriteStore))
+        self.scope = scope
         self.appContext = appContext
         self.appModel = appModel
     }
 
     public var body: some View {
-        NavigationStack {
-            List {
-                ForEach(filteredFavorites) { favorite in
-                    FavoriteRow(
-                        favorite: favorite,
-                        isResolving: viewModel.resolvingFavoriteID == favorite.id,
-                        isDeleting: viewModel.deletingFavoriteID == favorite.id,
-                        onOpen: {
-                            open(favorite, mode: .resume)
+        if case .root = scope {
+            NavigationStack {
+                favoritesContent
+            }
+        } else {
+            favoritesContent
+        }
+    }
+
+    private var favoritesContent: some View {
+        let content = favoritesChromeContent
+
+        return Group {
+            if isSelecting {
+                content.safeAreaInset(edge: .bottom, spacing: 0) {
+                    selectionActionBar
+                }
+            } else {
+                content
+            }
+        }
+    }
+
+    private var favoritesChromeContent: some View {
+        favoritesList
+            .listStyle(.plain)
+            .overlay(content: overlayContent)
+            .navigationTitle("")
+            .modifier(FavoriteSearchModifier(searchText: $searchText))
+            .modifier(
+                FavoriteToolbarModifier(
+                    showingSettingsSheet: $showingSettingsSheet,
+                    filterRawValue: $filterRawValue,
+                    sortRawValue: $sortRawValue,
+                    showsHidden: $showsHidden,
+                    isSelecting: $isSelecting,
+                    showsSettingsMenu: isRootScope,
+                    allTitle: filterLabel(for: .all),
+                    onFinishSelection: exitSelectionMode
+                )
+            )
+            .modifier(
+                FavoriteCollectionNavigationDestinationModifier(
+                    isEnabled: isRootScope,
+                    appContext: appContext,
+                    appModel: appModel
+                )
+            )
+            .task {
+                await viewModel.loadCachedFavorites()
+                if case .root = scope {
+                    await viewModel.refresh()
+                }
+            }
+            .onChange(of: filterRawValue) { _, _ in
+                searchText = ""
+            }
+            .onChange(of: isSelecting) { _, isSelecting in
+                if !isSelecting {
+                    selectedFavoriteIDs.removeAll()
+                    selectedCollectionIDs.removeAll()
+                }
+            }
+            .onChange(of: viewModel.favorites.map(\.id)) { _, _ in
+                pruneSelections()
+            }
+            .onChange(of: viewModel.collections.map(\.id)) { _, _ in
+                pruneSelections()
+            }
+            .refreshable {
+                await viewModel.refresh()
+            }
+            .alert("加载失败", isPresented: .constant(viewModel.errorMessage != nil), actions: {
+                Button("确定") {
+                    viewModel.errorMessage = nil
+                }
+            }, message: {
+                Text(viewModel.errorMessage ?? "")
+            })
+            .alert("编辑显示名称", isPresented: editNameAlertBinding) {
+                TextField("显示名称", text: displayNameTextBinding)
+                Button("取消", role: .cancel) {
+                    displayNameDraft = nil
+                }
+                Button("保存") {
+                    guard let draft = displayNameDraft else { return }
+                    Task {
+                        await viewModel.setDisplayName(
+                            draft.displayName,
+                            forFavoriteID: draft.favoriteID,
+                            originalTitle: draft.originalTitle
+                        )
+                    }
+                    displayNameDraft = nil
+                }
+            } message: {
+                Text("留空后将恢复显示原标题。")
+            }
+            .alert("创建合集", isPresented: $showingCreateCollectionPrompt) {
+                TextField("合集名称", text: $createCollectionName)
+                Button("取消", role: .cancel) {
+                    createCollectionName = ""
+                }
+                Button("创建") {
+                    let selectedIDs = Array(selectedFavoriteIDs)
+                    let targetName = createCollectionName
+                    createCollectionName = ""
+                    Task {
+                        if await viewModel.createCollection(name: targetName, favoriteIDs: selectedIDs) {
+                            exitSelectionMode()
                         }
-                    )
+                    }
+                }
+                .disabled(createCollectionName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            } message: {
+                Text("创建后会把当前选中的收藏移入新合集。")
+            }
+            .alert(
+                "删除收藏",
+                isPresented: pendingDeleteAlertBinding,
+                presenting: pendingDeleteFavorite
+            ) { favorite in
+                Button("取消", role: .cancel) {
+                    pendingDeleteFavorite = nil
+                }
+                Button("删除", role: .destructive) {
+                    Task {
+                        await viewModel.deleteFavorite(favorite)
+                    }
+                    pendingDeleteFavorite = nil
+                }
+            } message: { favorite in
+                Text("确定要删除“\(favorite.resolvedDisplayTitle)”吗？这会同步删除远端收藏，但会保留本地缓存和阅读进度。")
+            }
+            .alert("删除所选内容", isPresented: $showingBulkDeleteConfirmation) {
+                Button("取消", role: .cancel) {}
+                Button("删除", role: .destructive) {
+                    let favoriteIDs = Array(selectedFavoriteIDs)
+                    let collectionIDs = Array(selectedCollectionIDs)
+                    Task {
+                        let changed = await viewModel.deleteSelections(favoriteIDs: favoriteIDs, collectionIDs: collectionIDs)
+                        if changed {
+                            exitSelectionMode()
+                        }
+                    }
+                }
+            } message: {
+                Text(bulkDeleteMessage)
+            }
+            .confirmationDialog("移动到合集", isPresented: $showingMoveDialog, titleVisibility: .visible) {
+                Button("未加入合集") {
+                    moveSelectedFavorites(to: nil)
+                }
+                ForEach(moveTargets) { collection in
+                    Button(collection.name) {
+                        moveSelectedFavorites(to: collection.id)
+                    }
+                }
+                Button("取消", role: .cancel) {}
+            } message: {
+                Text("选择目标合集。")
+            }
+            .sheet(item: $selectedFavorite) { favorite in
+                ForumBrowserView(url: favorite.url, appContext: appContext, appModel: appModel)
+                    .ignoresSafeArea()
+            }
+            .sheet(isPresented: $showingSettingsSheet) {
+                FavoritesSettingsView(appContext: appContext) {
+                    filterRawValue = FavoriteFilter.all.rawValue
+                    sortRawValue = FavoriteSortOrder.manual.rawValue
+                    showsHidden = false
+                    searchText = ""
+                    await appModel.bootstrap()
+                }
+            }
+    }
+
+    private var favoritesList: some View {
+        List {
+            ForEach(visibleEntries) { entry in
+                row(for: entry)
                     .listRowSeparator(.hidden)
                     .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
                     .listRowBackground(Color.clear)
+            }
+            .onMove(perform: handleMove)
+            .moveDisabled(!canReorderEntries)
+        }
+    }
+
+    @ViewBuilder
+    private func overlayContent() -> some View {
+        if viewModel.isLoading {
+            ProgressView("同步收藏中…")
+        } else if visibleEntries.isEmpty {
+            emptyStateView
+        }
+    }
+
+    private var currentCollection: FavoriteCollection? {
+        guard let scopedCollection = scope.collection else { return nil }
+        return viewModel.collections.first(where: { $0.id == scopedCollection.id }) ?? scopedCollection
+    }
+
+    private var isRootScope: Bool {
+        if case .root = scope {
+            return true
+        }
+        return false
+    }
+
+    private var currentFilter: FavoriteFilter {
+        FavoriteFilter(rawValue: filterRawValue) ?? .all
+    }
+
+    private var currentSortOrder: FavoriteSortOrder {
+        FavoriteSortOrder(rawValue: sortRawValue) ?? .manual
+    }
+
+    private var canReorderEntries: Bool {
+        viewModel.canReorderEntries(
+            scope: scope,
+            filter: currentFilter,
+            sortOrder: currentSortOrder,
+            searchText: searchText,
+            isSelecting: isSelecting
+        )
+    }
+
+    private var selectionActionState: FavoriteSelectionActionState {
+        makeFavoriteSelectionActionState(
+            scope: scope,
+            selectedFavoriteCount: selectedFavoriteIDs.count,
+            selectedCollectionCount: selectedCollectionIDs.count
+        )
+    }
+
+    private var visibleEntries: [FavoriteListEntry] {
+        makeFavoriteListEntries(
+            scope: scope,
+            favorites: viewModel.favorites,
+            collections: viewModel.collections,
+            showsHidden: showsHidden,
+            filter: currentFilter,
+            sortOrder: currentSortOrder,
+            searchText: searchText
+        )
+    }
+
+    private var moveTargets: [FavoriteCollection] {
+        let targetCollections = orderedCollections(viewModel.collections)
+        guard let currentCollection else { return targetCollections }
+        return targetCollections.filter { $0.id != currentCollection.id }
+    }
+
+    private var bulkDeleteMessage: String {
+        if selectedCollectionIDs.isEmpty {
+            return "确定要删除已选中的收藏吗？这会同步删除远端收藏，但会保留本地缓存和阅读进度。"
+        }
+        if selectedFavoriteIDs.isEmpty {
+            return "确定要解散已选中的合集吗？其中的收藏会返回根页，不会被删除。"
+        }
+        return "确定要删除已选中的内容吗？合集会被解散，收藏会同步删除远端收藏。"
+    }
+
+    private var editNameAlertBinding: Binding<Bool> {
+        Binding(
+            get: { displayNameDraft != nil },
+            set: { isPresented in
+                if !isPresented {
+                    displayNameDraft = nil
+                }
+            }
+        )
+    }
+
+    private var displayNameTextBinding: Binding<String> {
+        Binding(
+            get: { displayNameDraft?.displayName ?? "" },
+            set: { displayNameDraft?.displayName = $0 }
+        )
+    }
+
+    private var pendingDeleteAlertBinding: Binding<Bool> {
+        Binding(
+            get: { pendingDeleteFavorite != nil },
+            set: { isPresented in
+                if !isPresented {
+                    pendingDeleteFavorite = nil
+                }
+            }
+        )
+    }
+
+    @ViewBuilder
+    private var emptyStateView: some View {
+        if viewModel.isLoading {
+            EmptyView()
+        } else if !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            ContentUnavailableView("没有匹配结果", systemImage: "magnifyingglass")
+        } else if currentCollection != nil {
+            ContentUnavailableView("合集为空", systemImage: "folder")
+        } else {
+            ContentUnavailableView("暂无收藏", systemImage: "books.vertical")
+        }
+    }
+
+    private var selectionActionBar: some View {
+        VStack(spacing: 12) {
+            Divider()
+            HStack(spacing: 12) {
+                Button("创建合集") {
+                    showingCreateCollectionPrompt = true
+                }
+                .buttonStyle(.bordered)
+                .disabled(!selectionActionState.canCreateCollection)
+
+                Button("移动到合集") {
+                    showingMoveDialog = true
+                }
+                .buttonStyle(.bordered)
+                .disabled(!selectionActionState.canMove)
+
+                Button("删除", role: .destructive) {
+                    showingBulkDeleteConfirmation = true
+                }
+                .buttonStyle(.bordered)
+                .disabled(!selectionActionState.canDelete)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 20)
+
+            Text("已选择 \(selectedFavoriteIDs.count + selectedCollectionIDs.count) 项")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .padding(.bottom, 12)
+        }
+        .background(.ultraThinMaterial)
+    }
+
+    @ViewBuilder
+    private func row(for entry: FavoriteListEntry) -> some View {
+        switch entry {
+        case let .collection(collection):
+            let summary = collectionSummary(for: collection)
+            if isSelecting {
+                Button {
+                    toggleCollectionSelection(collection)
+                } label: {
+                    FavoriteCollectionRow(
+                        collection: collection,
+                        summary: summary,
+                        isSelected: selectedCollectionIDs.contains(collection.id)
+                    )
+                }
+                .buttonStyle(.plain)
+            } else {
+                NavigationLink(value: collection) {
+                    FavoriteCollectionRow(collection: collection, summary: summary, isSelected: false)
+                }
+                .buttonStyle(.plain)
+            }
+        case let .favorite(favorite):
+            let row = FavoriteRow(
+                favorite: favorite,
+                isResolving: viewModel.resolvingFavoriteID == favorite.id,
+                isDeleting: viewModel.deletingFavoriteID == favorite.id,
+                isSelected: selectedFavoriteIDs.contains(favorite.id),
+                onOpen: {
+                    if isSelecting {
+                        toggleFavoriteSelection(favorite)
+                    } else {
+                        open(favorite, mode: .resume)
+                    }
+                }
+            )
+
+            if isSelecting {
+                Button {
+                    toggleFavoriteSelection(favorite)
+                } label: {
+                    row
+                }
+                .buttonStyle(.plain)
+            } else {
+                row
                     .swipeActions(edge: .leading, allowsFullSwipe: false) {
                         ShareLink(item: favorite.url) {
                             swipeActionLabel(title: "分享", systemImage: "square.and.arrow.up")
@@ -371,249 +1056,35 @@ public struct FavoritesView: View {
                         .tint(.indigo)
                         .disabled(viewModel.deletingFavoriteID != nil)
                     }
-                }
-                .onMove(perform: handleMove)
-                .moveDisabled(!canReorderFavorites)
-            }
-            .listStyle(.plain)
-            .overlay {
-                if viewModel.isLoading {
-                    ProgressView("同步收藏中…")
-                } else if filteredFavorites.isEmpty {
-                    if searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        ContentUnavailableView("暂无收藏", systemImage: "books.vertical")
-                    } else {
-                        ContentUnavailableView("没有匹配结果", systemImage: "magnifyingglass")
-                    }
-                }
-            }
-            .navigationTitle("")
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-            .searchable(
-                text: $searchText,
-                placement: .navigationBarDrawer(displayMode: .automatic),
-                prompt: "搜索"
-            )
-            #else
-            .searchable(text: $searchText, prompt: "搜索")
-            #endif
-            .toolbar {
-                #if os(iOS)
-                ToolbarItem(placement: .topBarLeading) {
-                    Menu {
-                        Button {
-                            showingSettingsSheet = true
-                        } label: {
-                            Label("设置", systemImage: "gearshape")
-                        }
-
-                        Button {} label: {
-                            Label("关于", systemImage: "info.circle")
-                        }
-                    } label: {
-                        Image(systemName: "ellipsis.circle")
-                    }
-                }
-                #else
-                ToolbarItem {
-                    Menu {
-                        Button {
-                            showingSettingsSheet = true
-                        } label: {
-                            Label("设置", systemImage: "gearshape")
-                        }
-
-                        Button {} label: {
-                            Label("关于", systemImage: "info.circle")
-                        }
-                    } label: {
-                        Image(systemName: "ellipsis.circle")
-                    }
-                }
-                #endif
-
-                ToolbarItem(placement: .principal) {
-                    Menu {
-                        favoritesToolbarMenuContent
-                    } label: {
-                        titleMenuLabel
-                    }
-                }
-
-                #if os(iOS)
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button(action: {}) {
-                        Text("选择")
-                    }
-                }
-                #else
-                ToolbarItem {
-                    Button(action: {}) {
-                        Text("选择")
-                    }
-                }
-                #endif
-            }
-            .task {
-                await viewModel.loadCachedFavorites()
-                await viewModel.refresh()
-            }
-            .onChange(of: filterRawValue) { _, _ in
-                searchText = ""
-            }
-            .refreshable {
-                await viewModel.refresh()
-            }
-            .alert("加载失败", isPresented: .constant(viewModel.errorMessage != nil), actions: {
-                Button("确定") {
-                    viewModel.errorMessage = nil
-                }
-            }, message: {
-                Text(viewModel.errorMessage ?? "")
-            })
-            .alert("编辑显示名称", isPresented: editNameAlertBinding) {
-                TextField("显示名称", text: displayNameTextBinding)
-                Button("取消", role: .cancel) {
-                    displayNameDraft = nil
-                }
-                Button("保存") {
-                    guard let draft = displayNameDraft else { return }
-                    Task {
-                        await viewModel.setDisplayName(
-                            draft.displayName,
-                            forFavoriteID: draft.favoriteID,
-                            originalTitle: draft.originalTitle
-                        )
-                    }
-                    displayNameDraft = nil
-                }
-            } message: {
-                Text("留空后将恢复显示原标题。")
-            }
-            .alert(
-                "删除收藏",
-                isPresented: pendingDeleteAlertBinding,
-                presenting: pendingDeleteFavorite
-            ) { favorite in
-                Button("取消", role: .cancel) {
-                    pendingDeleteFavorite = nil
-                }
-                Button("删除", role: .destructive) {
-                    Task {
-                        await viewModel.deleteFavorite(favorite)
-                    }
-                    pendingDeleteFavorite = nil
-                }
-            } message: { favorite in
-                Text("确定要删除“\(favorite.resolvedDisplayTitle)”吗？这会同步删除远端收藏，但会保留本地缓存和阅读进度。")
-            }
-            .sheet(item: $selectedFavorite) { favorite in
-                ForumBrowserView(url: favorite.url, appContext: appContext, appModel: appModel)
-                    .ignoresSafeArea()
-            }
-            .sheet(isPresented: $showingSettingsSheet) {
-                FavoritesSettingsView(appContext: appContext) {
-                    filterRawValue = FavoriteFilter.all.rawValue
-                    sortRawValue = FavoriteSortOrder.manual.rawValue
-                    showsHidden = false
-                    searchText = ""
-                    await appModel.bootstrap()
-                }
             }
         }
-    }
-
-    private var currentFilter: FavoriteFilter {
-        FavoriteFilter(rawValue: filterRawValue) ?? .all
-    }
-
-    private var currentSortOrder: FavoriteSortOrder {
-        FavoriteSortOrder(rawValue: sortRawValue) ?? .manual
-    }
-
-    private var canReorderFavorites: Bool {
-        viewModel.canReorderFavorites(sortOrder: currentSortOrder, searchText: searchText)
-    }
-
-    private var editNameAlertBinding: Binding<Bool> {
-        Binding(
-            get: { displayNameDraft != nil },
-            set: { isPresented in
-                if !isPresented {
-                    displayNameDraft = nil
-                }
-            }
-        )
-    }
-
-    private var displayNameTextBinding: Binding<String> {
-        Binding(
-            get: { displayNameDraft?.displayName ?? "" },
-            set: { displayNameDraft?.displayName = $0 }
-        )
-    }
-
-    private var pendingDeleteAlertBinding: Binding<Bool> {
-        Binding(
-            get: { pendingDeleteFavorite != nil },
-            set: { isPresented in
-                if !isPresented {
-                    pendingDeleteFavorite = nil
-                }
-            }
-        )
-    }
-
-    @ViewBuilder
-    private var favoritesToolbarMenuContent: some View {
-        Picker("分类", selection: $filterRawValue) {
-            ForEach(FavoriteFilter.allCases) { filter in
-                Text(filter.title).tag(filter.rawValue)
-            }
-        }
-
-        Picker("排序", selection: $sortRawValue) {
-            ForEach(FavoriteSortOrder.allCases) { sortOrder in
-                Text(sortOrder.title).tag(sortOrder.rawValue)
-            }
-        }
-
-        Toggle("显示隐藏项", isOn: $showsHidden)
-    }
-
-    private var titleMenuLabel: some View {
-        HStack(spacing: 6) {
-            Text(currentFilter.title)
-                .font(.headline)
-                .foregroundStyle(.primary)
-
-            Image(systemName: "chevron.down")
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(.secondary)
-        }
-        .contentShape(Rectangle())
-    }
-
-    private var filteredFavorites: [Favorite] {
-        makeFilteredFavorites(
-            from: viewModel.favorites,
-            showsHidden: showsHidden,
-            filter: currentFilter,
-            sortOrder: currentSortOrder,
-            searchText: searchText
-        )
     }
 
     private func handleMove(fromOffsets source: IndexSet, toOffset destination: Int) {
-        guard canReorderFavorites else { return }
-        let visibleIDs = filteredFavorites.map(\.id)
-        Task {
-            await viewModel.reorderFavorites(
-                visibleIDs: visibleIDs,
-                fromOffsets: source,
-                toOffset: destination
-            )
+        guard canReorderEntries else { return }
+
+        switch scope {
+        case .root:
+            Task {
+                await viewModel.reorderRootEntries(
+                    visibleEntryKeys: visibleEntries.map(\.moveKey),
+                    fromOffsets: source,
+                    toOffset: destination
+                )
+            }
+        case let .collection(collection):
+            let visibleIDs = visibleEntries.compactMap { entry -> String? in
+                guard case let .favorite(favorite) = entry else { return nil }
+                return favorite.id
+            }
+            Task {
+                await viewModel.reorderFavorites(
+                    in: collection.id,
+                    visibleIDs: visibleIDs,
+                    fromOffsets: source,
+                    toOffset: destination
+                )
+            }
         }
     }
 
@@ -631,6 +1102,63 @@ public struct FavoritesView: View {
         }
     }
 
+    private func toggleFavoriteSelection(_ favorite: Favorite) {
+        if selectedFavoriteIDs.contains(favorite.id) {
+            selectedFavoriteIDs.remove(favorite.id)
+        } else {
+            selectedFavoriteIDs.insert(favorite.id)
+        }
+    }
+
+    private func toggleCollectionSelection(_ collection: FavoriteCollection) {
+        if selectedCollectionIDs.contains(collection.id) {
+            selectedCollectionIDs.remove(collection.id)
+        } else {
+            selectedCollectionIDs.insert(collection.id)
+        }
+    }
+
+    private func moveSelectedFavorites(to collectionID: String?) {
+        let ids = Array(selectedFavoriteIDs)
+        Task {
+            if await viewModel.moveFavorites(ids: ids, toCollectionID: collectionID) {
+                exitSelectionMode()
+            }
+        }
+    }
+
+    private func pruneSelections() {
+        let validFavoriteIDs = Set(viewModel.favorites.map(\.id))
+        let validCollectionIDs = Set(viewModel.collections.map(\.id))
+        selectedFavoriteIDs = selectedFavoriteIDs.intersection(validFavoriteIDs)
+        selectedCollectionIDs = selectedCollectionIDs.intersection(validCollectionIDs)
+        if isSelecting, selectedFavoriteIDs.isEmpty, selectedCollectionIDs.isEmpty {
+            // Keep selection mode active so the toolbar can still be used consistently.
+        }
+    }
+
+    private func exitSelectionMode() {
+        isSelecting = false
+        selectedFavoriteIDs.removeAll()
+        selectedCollectionIDs.removeAll()
+    }
+
+    private func filterLabel(for filter: FavoriteFilter) -> String {
+        guard filter == .all else { return filter.title }
+        return currentCollection?.name ?? filter.title
+    }
+
+    private func collectionSummary(for collection: FavoriteCollection) -> FavoriteCollectionSummary {
+        makeFavoriteCollectionSummary(
+            for: collection,
+            favorites: viewModel.favorites,
+            scope: scope,
+            showsHidden: showsHidden,
+            filter: currentFilter,
+            searchText: searchText
+        )
+    }
+
     @ViewBuilder
     private func swipeActionLabel(title: String, systemImage: String) -> some View {
         VStack(spacing: 4) {
@@ -646,6 +1174,7 @@ struct FavoriteRow: View {
     let favorite: Favorite
     let isResolving: Bool
     let isDeleting: Bool
+    let isSelected: Bool
     let onOpen: () -> Void
 
     var body: some View {
@@ -665,14 +1194,12 @@ struct FavoriteRow: View {
                         .lineLimit(3)
                         .frame(maxWidth: .infinity, alignment: .leading)
 
-                    if isResolving {
+                    if isResolving || isDeleting {
                         ProgressView()
                             .controlSize(.small)
                             .padding(.top, 2)
-                    } else if isDeleting {
-                        ProgressView()
-                            .controlSize(.small)
-                            .padding(.top, 2)
+                    } else if isSelected {
+                        selectionIndicator
                     }
                 }
 
@@ -703,12 +1230,120 @@ struct FavoriteRow: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .strokeBorder(favoriteAccentColor(for: favorite.type).opacity(0.18), lineWidth: 1)
+                .strokeBorder(
+                    isSelected ? Color.accentColor.opacity(0.55) : favoriteAccentColor(for: favorite.type).opacity(0.18),
+                    lineWidth: isSelected ? 1.5 : 1
+                )
         )
         .shadow(color: .black.opacity(0.04), radius: 8, x: 0, y: 3)
         .contentShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
         .onTapGesture(perform: onOpen)
         .accessibilityAddTraits(.isButton)
+    }
+
+    private var selectionIndicator: some View {
+        Image(systemName: "checkmark.circle.fill")
+            .font(.title3.weight(.semibold))
+            .foregroundStyle(.tint)
+            .padding(.top, 1)
+    }
+}
+
+struct FavoriteCollectionRow: View {
+    let collection: FavoriteCollection
+    let summary: FavoriteCollectionSummary
+    let isSelected: Bool
+
+    var body: some View {
+        HStack(spacing: 0) {
+            RoundedRectangle(cornerRadius: 999, style: .continuous)
+                .fill(.orange)
+                .frame(width: 7)
+                .padding(.vertical, 14)
+                .padding(.leading, 10)
+
+            HStack(spacing: 14) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .fill(Color.orange.opacity(0.12))
+                        .frame(width: 54, height: 54)
+                    Image(systemName: "folder.fill")
+                        .font(.title2.weight(.semibold))
+                        .foregroundStyle(.orange)
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(alignment: .top, spacing: 10) {
+                        Text(collection.name)
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundStyle(.primary)
+                            .lineLimit(2)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+
+                        if isSelected {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.title3.weight(.semibold))
+                                .foregroundStyle(.tint)
+                        }
+                    }
+
+                    Text(summaryText)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+
+                    Text("合集")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.orange)
+                }
+            }
+            .padding(.vertical, 18)
+            .padding(.leading, 16)
+            .padding(.trailing, 14)
+        }
+        .frame(maxWidth: .infinity, minHeight: 112, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .fill(Color.orange.opacity(0.08))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .strokeBorder(isSelected ? Color.accentColor.opacity(0.55) : Color.orange.opacity(0.32), lineWidth: isSelected ? 1.5 : 1)
+        )
+        .shadow(color: .black.opacity(0.04), radius: 8, x: 0, y: 3)
+        .contentShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+    }
+
+    private var summaryText: String {
+        if summary.hiddenCount > 0 {
+            return "\(summary.itemCount) 项 · \(summary.hiddenCount) 项已隐藏"
+        }
+        return "\(summary.itemCount) 项"
+    }
+}
+
+func makeFavoriteSelectionActionState(
+    scope: FavoriteScope,
+    selectedFavoriteCount: Int,
+    selectedCollectionCount: Int
+) -> FavoriteSelectionActionState {
+    let hasFavorites = selectedFavoriteCount > 0
+    let hasCollections = selectedCollectionCount > 0
+    let hasSelection = hasFavorites || hasCollections
+
+    switch scope {
+    case .root:
+        return FavoriteSelectionActionState(
+            canCreateCollection: hasFavorites && !hasCollections,
+            canMove: hasFavorites && !hasCollections,
+            canDelete: hasSelection
+        )
+    case .collection:
+        return FavoriteSelectionActionState(
+            canCreateCollection: false,
+            canMove: hasFavorites,
+            canDelete: hasFavorites
+        )
     }
 }
 
@@ -722,14 +1357,17 @@ func progressScore(for favorite: Favorite) -> Int {
 
 func makeFilteredFavorites(
     from favorites: [Favorite],
+    scope: FavoriteScope = .root,
     showsHidden: Bool,
     filter: FavoriteFilter,
     sortOrder: FavoriteSortOrder,
     searchText: String
 ) -> [Favorite] {
     let trimmedSearchText = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+    let parentCollectionID = scope.collection?.id
 
     let filtered = favorites
+        .filter { $0.parentCollectionID == parentCollectionID }
         .filter { showsHidden || !$0.isHidden }
         .filter { filter.matches($0) }
         .filter { favorite in
@@ -739,7 +1377,12 @@ func makeFilteredFavorites(
 
     switch sortOrder {
     case .manual:
-        return filtered
+        return filtered.sorted { lhs, rhs in
+            if lhs.manualOrder != rhs.manualOrder {
+                return lhs.manualOrder < rhs.manualOrder
+            }
+            return lhs.id < rhs.id
+        }
     case .title:
         return filtered.sorted { lhs, rhs in
             lhs.resolvedDisplayTitle.localizedCompare(rhs.resolvedDisplayTitle) == .orderedAscending
@@ -749,6 +1392,126 @@ func makeFilteredFavorites(
             progressScore(for: lhs) > progressScore(for: rhs)
         }
     }
+}
+
+func makeFavoriteListEntries(
+    scope: FavoriteScope,
+    favorites: [Favorite],
+    collections: [FavoriteCollection],
+    showsHidden: Bool,
+    filter: FavoriteFilter,
+    sortOrder: FavoriteSortOrder,
+    searchText: String
+) -> [FavoriteListEntry] {
+    switch scope {
+    case .root:
+        let rootFavorites = makeFilteredFavorites(
+            from: favorites,
+            scope: .root,
+            showsHidden: showsHidden,
+            filter: filter,
+            sortOrder: sortOrder,
+            searchText: searchText
+        )
+
+        let visibleCollections = orderedCollections(collections).filter { collection in
+            rootCollectionMatches(
+                collection,
+                favorites: favorites,
+                showsHidden: showsHidden,
+                filter: filter,
+                searchText: searchText
+            )
+        }
+
+        if sortOrder == .manual {
+            return (visibleCollections.map(FavoriteListEntry.collection) + rootFavorites.map(FavoriteListEntry.favorite))
+                .sorted { lhs, rhs in
+                    if entryManualOrder(lhs) != entryManualOrder(rhs) {
+                        return entryManualOrder(lhs) < entryManualOrder(rhs)
+                    }
+                    return lhs.id < rhs.id
+                }
+        }
+
+        return visibleCollections.map(FavoriteListEntry.collection) + rootFavorites.map(FavoriteListEntry.favorite)
+    case let .collection(collection):
+        return makeFilteredFavorites(
+            from: favorites,
+            scope: .collection(collection),
+            showsHidden: showsHidden,
+            filter: filter,
+            sortOrder: sortOrder,
+            searchText: searchText
+        ).map(FavoriteListEntry.favorite)
+    }
+}
+
+func rootCollectionMatches(
+    _ collection: FavoriteCollection,
+    favorites: [Favorite],
+    showsHidden: Bool,
+    filter: FavoriteFilter,
+    searchText: String
+) -> Bool {
+    let trimmedSearchText = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+    let matchedFavorites = makeFilteredFavorites(
+        from: favorites,
+        scope: .collection(collection),
+        showsHidden: showsHidden,
+        filter: filter,
+        sortOrder: .manual,
+        searchText: searchText
+    )
+
+    guard filter == .all else {
+        return !matchedFavorites.isEmpty
+    }
+
+    guard !trimmedSearchText.isEmpty else {
+        return true
+    }
+
+    return collection.name.localizedCaseInsensitiveContains(trimmedSearchText) || !matchedFavorites.isEmpty
+}
+
+func makeFavoriteCollectionSummary(
+    for collection: FavoriteCollection,
+    favorites: [Favorite],
+    scope: FavoriteScope,
+    showsHidden: Bool,
+    filter: FavoriteFilter,
+    searchText: String
+) -> FavoriteCollectionSummary {
+    let allItems = favorites.filter { $0.parentCollectionID == collection.id }
+
+    guard case .root = scope else {
+        return FavoriteCollectionSummary(
+            itemCount: allItems.count,
+            hiddenCount: allItems.filter(\.isHidden).count
+        )
+    }
+
+    let trimmedSearchText = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+    if filter == .all, trimmedSearchText.isEmpty || collection.name.localizedCaseInsensitiveContains(trimmedSearchText) {
+        return FavoriteCollectionSummary(
+            itemCount: allItems.count,
+            hiddenCount: allItems.filter(\.isHidden).count
+        )
+    }
+
+    let matchingItems = makeFilteredFavorites(
+        from: favorites,
+        scope: .collection(collection),
+        showsHidden: true,
+        filter: filter,
+        sortOrder: .manual,
+        searchText: searchText
+    )
+    return FavoriteCollectionSummary(
+        itemCount: matchingItems.count,
+        hiddenCount: matchingItems.filter(\.isHidden).count
+    )
 }
 
 func favoriteProgressText(for favorite: Favorite) -> String? {
@@ -830,9 +1593,31 @@ func favoriteDetailLines(for favorite: Favorite) -> [String] {
 
 func favoriteAccentColor(for type: FavoriteType) -> Color {
     switch type {
-    case .unknown: .gray
-    case .novel: .green
-    case .manga: .blue
-    case .other: .orange
+    case .novel:
+        .pink
+    case .manga:
+        .blue
+    case .other:
+        .teal
+    case .unknown:
+        .gray
+    }
+}
+
+func orderedCollections(_ collections: [FavoriteCollection]) -> [FavoriteCollection] {
+    collections.sorted { lhs, rhs in
+        if lhs.manualOrder != rhs.manualOrder {
+            return lhs.manualOrder < rhs.manualOrder
+        }
+        return lhs.id < rhs.id
+    }
+}
+
+private func entryManualOrder(_ entry: FavoriteListEntry) -> Int {
+    switch entry {
+    case let .collection(collection):
+        collection.manualOrder
+    case let .favorite(favorite):
+        favorite.manualOrder
     }
 }

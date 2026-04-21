@@ -418,6 +418,109 @@ import Testing
     #expect(updated.first?.id == first.id)
 }
 
+@Test func favoriteStoreLoadsLegacyFavoritesWithDefaultCollectionFields() async throws {
+    let defaults = try makeIsolatedDefaults(prefix: "favorite-legacy-migration-tests")
+    let legacyPayload = """
+    [
+      {
+        "id": "legacy-1",
+        "title": "旧收藏1",
+        "url": "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=901&mobile=2",
+        "lastPage": 3,
+        "lastView": 1,
+        "isHidden": false,
+        "type": 1
+      },
+      {
+        "id": "legacy-2",
+        "title": "旧收藏2",
+        "url": "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=902&mobile=2",
+        "lastPage": 0,
+        "lastView": 1,
+        "isHidden": false,
+        "type": 2
+      }
+    ]
+    """
+    defaults.set(Data(legacyPayload.utf8), forKey: "favorites")
+    let store = FavoriteStore(defaults: defaults, key: "favorites")
+
+    let loaded = await store.loadFavorites()
+
+    #expect(loaded.map(\.id) == ["legacy-1", "legacy-2"])
+    #expect(loaded.map(\.parentCollectionID) == [nil, nil])
+    #expect(loaded.map(\.manualOrder) == [0, 1])
+}
+
+@Test func favoriteStoreCanCreateMoveAndDissolveCollections() async throws {
+    let defaults = try makeIsolatedDefaults(prefix: "favorite-collections-tests")
+    let store = FavoriteStore(defaults: defaults, key: "favorites")
+
+    let first = Favorite(title: "根页1", url: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=903&mobile=2")))
+    let second = Favorite(title: "根页2", url: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=904&mobile=2")))
+    let third = Favorite(title: "根页3", url: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=905&mobile=2")))
+    try await store.saveFavorites([first, second, third])
+
+    let created = try await store.createCollection(name: "测试合集", favoriteIDs: [first.id, third.id])
+    let collectionID = try #require(created.collections.first?.id)
+    #expect(created.collections.map(\.name) == ["测试合集"])
+    #expect(created.favorites.first(where: { $0.id == first.id })?.parentCollectionID == collectionID)
+    #expect(created.favorites.first(where: { $0.id == third.id })?.parentCollectionID == collectionID)
+    #expect(created.favorites.first(where: { $0.id == second.id })?.parentCollectionID == nil)
+
+    let movedBack = try await store.moveFavorites(ids: [third.id], toCollectionID: nil)
+    #expect(movedBack.favorites.first(where: { $0.id == third.id })?.parentCollectionID == nil)
+
+    let dissolved = try await store.dissolveCollections(ids: [collectionID])
+    #expect(dissolved.collections.isEmpty)
+    #expect(dissolved.favorites.allSatisfy { $0.parentCollectionID == nil })
+}
+
+@Test func favoriteStoreCanReorderMixedRootEntries() async throws {
+    let defaults = try makeIsolatedDefaults(prefix: "favorite-root-mixed-reorder-tests")
+    let store = FavoriteStore(defaults: defaults, key: "favorites")
+
+    let first = Favorite(title: "根页1", url: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=906&mobile=2")))
+    let second = Favorite(title: "根页2", url: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=907&mobile=2")))
+    try await store.saveFavorites([first, second])
+
+    let created = try await store.createCollection(name: "合集A", favoriteIDs: [first.id])
+    let collection = try #require(created.collections.first)
+
+    let reordered = try await store.reorderRootEntries(
+        visibleEntryKeys: ["collection:\(collection.id)", "favorite:\(second.id)"],
+        fromOffsets: IndexSet(integer: 1),
+        toOffset: 0
+    )
+
+    #expect(reordered.collections.first?.manualOrder == 1)
+    let rootFavorite = try #require(reordered.favorites.first(where: { $0.id == second.id }))
+    #expect(rootFavorite.parentCollectionID == nil)
+    #expect(rootFavorite.manualOrder == 0)
+}
+
+@Test func favoriteStoreMergePreservesCollectionMembershipAndManualOrder() async throws {
+    let defaults = try makeIsolatedDefaults(prefix: "favorite-collection-merge-tests")
+    let store = FavoriteStore(defaults: defaults, key: "favorites")
+
+    let first = Favorite(title: "旧标题1", url: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=908&mobile=2")))
+    let second = Favorite(title: "旧标题2", url: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=909&mobile=2")))
+    try await store.saveFavorites([first, second])
+
+    let created = try await store.createCollection(name: "合集A", favoriteIDs: [second.id])
+    let collectionID = try #require(created.collections.first?.id)
+
+    let merged = try await store.mergeRemoteFavorites([
+        Favorite(title: "新标题1", url: first.url, remoteFavoriteID: "11"),
+        Favorite(title: "新标题2", url: second.url, remoteFavoriteID: "22")
+    ])
+
+    let mergedSecond = try #require(merged.first(where: { $0.id == second.id }))
+    #expect(mergedSecond.parentCollectionID == collectionID)
+    #expect(mergedSecond.remoteFavoriteID == "22")
+    #expect(mergedSecond.manualOrder == 0)
+}
+
 @Test func settingsStoreResetRestoresDefaults() async throws {
     let defaults = try makeIsolatedDefaults(prefix: "settings-reset-tests")
     let store = SettingsStore(defaults: defaults, key: "settings")
@@ -476,11 +579,15 @@ import Testing
             url: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=515&mobile=2"))
         )
     ])
+    let favoriteID = try #require(await store.loadFavorites().first?.id)
+    _ = try await store.createCollection(name: "待清空合集", favoriteIDs: [favoriteID])
 
     try await store.clearAll()
 
     let loaded = await store.loadFavorites()
+    let collections = await store.loadCollections()
     #expect(loaded.isEmpty)
+    #expect(collections.isEmpty)
 }
 
 @Test func readerCacheStoreReportsUsageAndCanClearAll() async throws {
