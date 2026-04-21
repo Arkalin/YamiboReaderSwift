@@ -4,6 +4,7 @@ public protocol FavoriteStoring: Sendable {
     func loadFavorites() async -> [Favorite]
     func saveFavorites(_ favorites: [Favorite]) async throws
     func mergeRemoteFavorites(_ favorites: [Favorite]) async throws -> [Favorite]
+    func reorderFavorites(visibleIDs: [String], fromOffsets: IndexSet, toOffset: Int) async throws -> [Favorite]
     func setHidden(_ isHidden: Bool, for favoriteID: String) async throws -> [Favorite]
     func setDisplayName(_ displayName: String?, for favoriteID: String) async throws -> [Favorite]
     func setType(_ type: FavoriteType, for favoriteID: String) async throws -> [Favorite]
@@ -48,27 +49,50 @@ public actor FavoriteStore: FavoriteStoring {
 
     public func mergeRemoteFavorites(_ favorites: [Favorite]) async throws -> [Favorite] {
         let local = await loadFavorites()
-        var localByID = Dictionary(uniqueKeysWithValues: local.map { ($0.id, $0) })
-        var merged: [Favorite] = []
+        let localIDs = Set(local.map(\.id))
+        let remoteByID = Dictionary(uniqueKeysWithValues: favorites.map { ($0.id, $0) })
+        let remoteNewFavorites = favorites.filter { !localIDs.contains($0.id) }
+        var merged = remoteNewFavorites
 
-        for remote in favorites {
-            if var existing = localByID.removeValue(forKey: remote.id) {
-                existing.title = remote.title
-                existing.url = remote.url
-                existing.remoteFavoriteID = remote.remoteFavoriteID ?? existing.remoteFavoriteID
-                if existing.type == .unknown {
-                    existing.type = remote.type
+        for localFavorite in local {
+            if let remoteFavorite = remoteByID[localFavorite.id] {
+                var updated = localFavorite
+                updated.title = remoteFavorite.title
+                updated.url = remoteFavorite.url
+                updated.remoteFavoriteID = remoteFavorite.remoteFavoriteID ?? updated.remoteFavoriteID
+                if updated.type == .unknown {
+                    updated.type = remoteFavorite.type
                 }
-                merged.append(existing)
-            } else {
-                merged.append(remote)
+                merged.append(updated)
+            } else if localFavorite.isHidden {
+                merged.append(localFavorite)
             }
         }
 
-        let hiddenOrLocalOnly = localByID.values.filter(\.isHidden)
-        merged.append(contentsOf: hiddenOrLocalOnly)
         try await saveFavorites(merged)
         return merged
+    }
+
+    public func reorderFavorites(visibleIDs: [String], fromOffsets: IndexSet, toOffset: Int) async throws -> [Favorite] {
+        guard !visibleIDs.isEmpty, !fromOffsets.isEmpty else {
+            return await loadFavorites()
+        }
+
+        let favorites = await loadFavorites()
+        let favoritesByID = Dictionary(uniqueKeysWithValues: favorites.map { ($0.id, $0) })
+        var visibleFavorites = visibleIDs.compactMap { favoritesByID[$0] }
+        guard visibleFavorites.count > 1 else { return favorites }
+
+        visibleFavorites.move(fromOffsets: fromOffsets, toOffset: toOffset)
+        let visibleSet = Set(visibleIDs)
+        var reorderedIterator = visibleFavorites.makeIterator()
+        let updated = favorites.map { favorite in
+            guard visibleSet.contains(favorite.id) else { return favorite }
+            return reorderedIterator.next() ?? favorite
+        }
+
+        try await saveFavorites(updated)
+        return updated
     }
 
     public func setHidden(_ isHidden: Bool, for favoriteID: String) async throws -> [Favorite] {
@@ -208,5 +232,20 @@ public actor FavoriteStore: FavoriteStoring {
 private extension String {
     var nilIfEmpty: String? {
         isEmpty ? nil : self
+    }
+}
+
+private extension Array {
+    mutating func move(fromOffsets source: IndexSet, toOffset destination: Int) {
+        guard !source.isEmpty else { return }
+
+        let movingElements = source.sorted().map { self[$0] }
+        for index in source.sorted(by: >) {
+            remove(at: index)
+        }
+
+        let removedBeforeDestination = source.filter { $0 < destination }.count
+        let targetIndex = Swift.max(0, Swift.min(count, destination - removedBeforeDestination))
+        insert(contentsOf: movingElements, at: targetIndex)
     }
 }

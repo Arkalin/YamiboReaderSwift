@@ -107,6 +107,28 @@ public final class FavoritesViewModel: ObservableObject {
         }
     }
 
+    func canReorderFavorites(sortOrder: FavoriteSortOrder, searchText: String) -> Bool {
+        sortOrder == .manual &&
+        searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+        !isLoading &&
+        deletingFavoriteID == nil
+    }
+
+    func reorderFavorites(visibleIDs: [String], fromOffsets: IndexSet, toOffset: Int) async {
+        guard !visibleIDs.isEmpty, !fromOffsets.isEmpty else { return }
+
+        do {
+            favorites = try await favoriteStore.reorderFavorites(
+                visibleIDs: visibleIDs,
+                fromOffsets: fromOffsets,
+                toOffset: toOffset
+            )
+            errorMessage = nil
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     public func setDisplayName(_ displayName: String?, for favorite: Favorite) async {
         await setDisplayName(displayName, forFavoriteID: favorite.id, originalTitle: favorite.title)
     }
@@ -296,58 +318,62 @@ public struct FavoritesView: View {
 
     public var body: some View {
         NavigationStack {
-            List(filteredFavorites) { favorite in
-                FavoriteRow(
-                    favorite: favorite,
-                    isResolving: viewModel.resolvingFavoriteID == favorite.id,
-                    isDeleting: viewModel.deletingFavoriteID == favorite.id,
-                    onOpen: {
-                        open(favorite, mode: .resume)
-                    }
-                )
-                .listRowSeparator(.hidden)
-                .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
-                .listRowBackground(Color.clear)
-                .swipeActions(edge: .leading, allowsFullSwipe: false) {
-                    ShareLink(item: favorite.url) {
-                        swipeActionLabel(title: "分享", systemImage: "square.and.arrow.up")
-                    }
-                    .tint(.teal)
-                    .disabled(viewModel.deletingFavoriteID != nil)
-                }
-                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                    Button(role: .destructive) {
-                        pendingDeleteFavorite = favorite
-                    } label: {
-                        swipeActionLabel(
-                            title: viewModel.deletingFavoriteID == favorite.id ? "删除中" : "删除",
-                            systemImage: "trash"
-                        )
-                    }
-                    .tint(.red)
-                    .disabled(viewModel.deletingFavoriteID != nil)
-
-                    Button {
-                        Task {
-                            await viewModel.setHidden(!favorite.isHidden, for: favorite)
+            List {
+                ForEach(filteredFavorites) { favorite in
+                    FavoriteRow(
+                        favorite: favorite,
+                        isResolving: viewModel.resolvingFavoriteID == favorite.id,
+                        isDeleting: viewModel.deletingFavoriteID == favorite.id,
+                        onOpen: {
+                            open(favorite, mode: .resume)
                         }
-                    } label: {
-                        swipeActionLabel(
-                            title: favorite.isHidden ? "取消隐藏" : "隐藏",
-                            systemImage: favorite.isHidden ? "eye" : "eye.slash"
-                        )
+                    )
+                    .listRowSeparator(.hidden)
+                    .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+                    .listRowBackground(Color.clear)
+                    .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                        ShareLink(item: favorite.url) {
+                            swipeActionLabel(title: "分享", systemImage: "square.and.arrow.up")
+                        }
+                        .tint(.teal)
+                        .disabled(viewModel.deletingFavoriteID != nil)
                     }
-                    .tint(.orange)
-                    .disabled(viewModel.deletingFavoriteID != nil)
+                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        Button(role: .destructive) {
+                            pendingDeleteFavorite = favorite
+                        } label: {
+                            swipeActionLabel(
+                                title: viewModel.deletingFavoriteID == favorite.id ? "删除中" : "删除",
+                                systemImage: "trash"
+                            )
+                        }
+                        .tint(.red)
+                        .disabled(viewModel.deletingFavoriteID != nil)
 
-                    Button {
-                        displayNameDraft = FavoriteDisplayNameDraft(favorite: favorite)
-                    } label: {
-                        swipeActionLabel(title: "编辑", systemImage: "pencil")
+                        Button {
+                            Task {
+                                await viewModel.setHidden(!favorite.isHidden, for: favorite)
+                            }
+                        } label: {
+                            swipeActionLabel(
+                                title: favorite.isHidden ? "取消隐藏" : "隐藏",
+                                systemImage: favorite.isHidden ? "eye" : "eye.slash"
+                            )
+                        }
+                        .tint(.orange)
+                        .disabled(viewModel.deletingFavoriteID != nil)
+
+                        Button {
+                            displayNameDraft = FavoriteDisplayNameDraft(favorite: favorite)
+                        } label: {
+                            swipeActionLabel(title: "编辑", systemImage: "pencil")
+                        }
+                        .tint(.indigo)
+                        .disabled(viewModel.deletingFavoriteID != nil)
                     }
-                    .tint(.indigo)
-                    .disabled(viewModel.deletingFavoriteID != nil)
                 }
+                .onMove(perform: handleMove)
+                .moveDisabled(!canReorderFavorites)
             }
             .listStyle(.plain)
             .overlay {
@@ -502,6 +528,14 @@ public struct FavoritesView: View {
         FavoriteFilter(rawValue: filterRawValue) ?? .all
     }
 
+    private var currentSortOrder: FavoriteSortOrder {
+        FavoriteSortOrder(rawValue: sortRawValue) ?? .manual
+    }
+
+    private var canReorderFavorites: Bool {
+        viewModel.canReorderFavorites(sortOrder: currentSortOrder, searchText: searchText)
+    }
+
     private var editNameAlertBinding: Binding<Bool> {
         Binding(
             get: { displayNameDraft != nil },
@@ -566,9 +600,21 @@ public struct FavoritesView: View {
             from: viewModel.favorites,
             showsHidden: showsHidden,
             filter: currentFilter,
-            sortOrder: FavoriteSortOrder(rawValue: sortRawValue) ?? .manual,
+            sortOrder: currentSortOrder,
             searchText: searchText
         )
+    }
+
+    private func handleMove(fromOffsets source: IndexSet, toOffset destination: Int) {
+        guard canReorderFavorites else { return }
+        let visibleIDs = filteredFavorites.map(\.id)
+        Task {
+            await viewModel.reorderFavorites(
+                visibleIDs: visibleIDs,
+                fromOffsets: source,
+                toOffset: destination
+            )
+        }
     }
 
     private func open(_ favorite: Favorite, mode: FavoriteLaunchMode) {
@@ -603,66 +649,66 @@ struct FavoriteRow: View {
     let onOpen: () -> Void
 
     var body: some View {
-        Button(action: onOpen) {
-            HStack(spacing: 0) {
-                RoundedRectangle(cornerRadius: 999, style: .continuous)
-                    .fill(favoriteAccentColor(for: favorite.type))
-                    .frame(width: 5)
-                    .padding(.vertical, 14)
-                    .padding(.leading, 10)
+        HStack(spacing: 0) {
+            RoundedRectangle(cornerRadius: 999, style: .continuous)
+                .fill(favoriteAccentColor(for: favorite.type))
+                .frame(width: 5)
+                .padding(.vertical, 14)
+                .padding(.leading, 10)
 
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack(alignment: .top, spacing: 12) {
-                        Text(favorite.resolvedDisplayTitle)
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundStyle(.primary)
-                            .multilineTextAlignment(.leading)
-                            .lineLimit(3)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .top, spacing: 12) {
+                    Text(favorite.resolvedDisplayTitle)
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(.primary)
+                        .multilineTextAlignment(.leading)
+                        .lineLimit(3)
+                        .frame(maxWidth: .infinity, alignment: .leading)
 
-                        if isResolving {
-                            ProgressView()
-                                .controlSize(.small)
-                                .padding(.top, 2)
-                        } else if isDeleting {
-                            ProgressView()
-                                .controlSize(.small)
-                                .padding(.top, 2)
-                        }
-                    }
-
-                    VStack(alignment: .leading, spacing: 6) {
-                        ForEach(favoriteDetailLines(for: favorite), id: \.self) { line in
-                            Text(line)
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-
-                        if favorite.isHidden {
-                            Label("已隐藏", systemImage: "eye.slash")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
+                    if isResolving {
+                        ProgressView()
+                            .controlSize(.small)
+                            .padding(.top, 2)
+                    } else if isDeleting {
+                        ProgressView()
+                            .controlSize(.small)
+                            .padding(.top, 2)
                     }
                 }
-                .padding(.vertical, 18)
-                .padding(.leading, 16)
-                .padding(.trailing, 14)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(favoriteDetailLines(for: favorite), id: \.self) { line in
+                        Text(line)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+
+                    if favorite.isHidden {
+                        Label("已隐藏", systemImage: "eye.slash")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
-            .frame(maxWidth: .infinity, minHeight: 112, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .fill(.regularMaterial)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .strokeBorder(favoriteAccentColor(for: favorite.type).opacity(0.18), lineWidth: 1)
-            )
-            .shadow(color: .black.opacity(0.04), radius: 8, x: 0, y: 3)
+            .padding(.vertical, 18)
+            .padding(.leading, 16)
+            .padding(.trailing, 14)
         }
-        .buttonStyle(.plain)
+        .frame(maxWidth: .infinity, minHeight: 112, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .fill(.regularMaterial)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .strokeBorder(favoriteAccentColor(for: favorite.type).opacity(0.18), lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(0.04), radius: 8, x: 0, y: 3)
+        .contentShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .onTapGesture(perform: onOpen)
+        .accessibilityAddTraits(.isButton)
     }
 }
 

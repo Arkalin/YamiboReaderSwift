@@ -328,6 +328,73 @@ final class MangaReaderModelTests: XCTestCase {
         }
     }
 
+    func testFavoritesViewModelCanReorderFavorites() async throws {
+        let keyPrefix = UUID().uuidString
+        let favoriteStore = FavoriteStore(key: "\(keyPrefix).favorites")
+        let first = Favorite(
+            title: "第一项",
+            url: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=826&mobile=2")!
+        )
+        let second = Favorite(
+            title: "第二项",
+            url: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=827&mobile=2")!
+        )
+        let third = Favorite(
+            title: "第三项",
+            url: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=828&mobile=2")!
+        )
+        try await favoriteStore.saveFavorites([first, second, third])
+
+        let appContext = YamiboAppContext(
+            sessionStore: SessionStore(key: "\(keyPrefix).session"),
+            settingsStore: SettingsStore(key: "\(keyPrefix).settings"),
+            favoriteStore: favoriteStore,
+            readerCacheStore: ReaderCacheStore(baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)),
+            mangaDirectoryStore: MangaDirectoryStore(baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true))
+        )
+        let viewModel = await MainActor.run {
+            FavoritesViewModel(appContext: appContext, favoriteStore: favoriteStore)
+        }
+        await viewModel.loadCachedFavorites()
+
+        await viewModel.reorderFavorites(
+            visibleIDs: [first.id, second.id, third.id],
+            fromOffsets: IndexSet(integer: 0),
+            toOffset: 3
+        )
+
+        await MainActor.run {
+            XCTAssertEqual(viewModel.favorites.map(\.id), [second.id, third.id, first.id])
+            XCTAssertNil(viewModel.errorMessage)
+        }
+
+        let persisted = await favoriteStore.loadFavorites()
+        XCTAssertEqual(persisted.map(\.id), [second.id, third.id, first.id])
+    }
+
+    func testFavoritesViewModelReorderAvailabilityRequiresManualSortAndEmptySearch() async throws {
+        let keyPrefix = UUID().uuidString
+        let favoriteStore = FavoriteStore(key: "\(keyPrefix).favorites")
+        let appContext = YamiboAppContext(
+            sessionStore: SessionStore(key: "\(keyPrefix).session"),
+            settingsStore: SettingsStore(key: "\(keyPrefix).settings"),
+            favoriteStore: favoriteStore,
+            readerCacheStore: ReaderCacheStore(baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)),
+            mangaDirectoryStore: MangaDirectoryStore(baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true))
+        )
+        let viewModel = await MainActor.run {
+            FavoritesViewModel(appContext: appContext, favoriteStore: favoriteStore)
+        }
+
+        await MainActor.run {
+            XCTAssertTrue(viewModel.canReorderFavorites(sortOrder: .manual, searchText: ""))
+            XCTAssertFalse(viewModel.canReorderFavorites(sortOrder: .title, searchText: ""))
+            XCTAssertFalse(viewModel.canReorderFavorites(sortOrder: .progress, searchText: ""))
+            XCTAssertFalse(viewModel.canReorderFavorites(sortOrder: .manual, searchText: "百合"))
+            XCTAssertFalse(viewModel.canReorderFavorites(sortOrder: .manual, searchText: "  test  "))
+        }
+    }
+
     func testFilteredFavoritesRespectsShowsHiddenFlag() {
         let visible = Favorite(
             title: "可见收藏",

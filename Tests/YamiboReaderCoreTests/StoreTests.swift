@@ -335,6 +335,69 @@ import Testing
     #expect(merged.first?.remoteFavoriteID == "9988")
 }
 
+@Test func favoriteStoreCanPersistManualReorder() async throws {
+    let defaults = try makeIsolatedDefaults(prefix: "favorite-reorder-tests")
+    let store = FavoriteStore(defaults: defaults, key: "favorites")
+
+    let first = Favorite(title: "第一项", url: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=601&mobile=2")))
+    let second = Favorite(title: "第二项", url: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=602&mobile=2")))
+    let third = Favorite(title: "第三项", url: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=603&mobile=2")))
+    try await store.saveFavorites([first, second, third])
+
+    let reordered = try await store.reorderFavorites(
+        visibleIDs: [first.id, second.id, third.id],
+        fromOffsets: IndexSet(integer: 0),
+        toOffset: 3
+    )
+
+    #expect(reordered.map(\.id) == [second.id, third.id, first.id])
+    let persisted = await store.loadFavorites()
+    #expect(persisted.map(\.id) == [second.id, third.id, first.id])
+}
+
+@Test func favoriteStoreReordersVisibleSubsetWithoutDisturbingHiddenEntries() async throws {
+    let defaults = try makeIsolatedDefaults(prefix: "favorite-reorder-subset-tests")
+    let store = FavoriteStore(defaults: defaults, key: "favorites")
+
+    let firstVisible = Favorite(title: "可见1", url: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=611&mobile=2")), type: .novel)
+    let hidden = Favorite(title: "隐藏项", url: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=612&mobile=2")), isHidden: true, type: .novel)
+    let secondVisible = Favorite(title: "可见2", url: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=613&mobile=2")), type: .novel)
+    let otherType = Favorite(title: "其他分类", url: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=614&mobile=2")), type: .manga)
+    let thirdVisible = Favorite(title: "可见3", url: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=615&mobile=2")), type: .novel)
+    try await store.saveFavorites([firstVisible, hidden, secondVisible, otherType, thirdVisible])
+
+    let reordered = try await store.reorderFavorites(
+        visibleIDs: [firstVisible.id, secondVisible.id, thirdVisible.id],
+        fromOffsets: IndexSet(integer: 2),
+        toOffset: 0
+    )
+
+    #expect(reordered.map(\.id) == [thirdVisible.id, hidden.id, firstVisible.id, otherType.id, secondVisible.id])
+}
+
+@Test func favoriteStoreMergePreservesManualOrderAndPrependsNewRemoteFavorites() async throws {
+    let defaults = try makeIsolatedDefaults(prefix: "favorite-merge-order-tests")
+    let store = FavoriteStore(defaults: defaults, key: "favorites")
+
+    let localFirst = Favorite(title: "本地1", url: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=621&mobile=2")), remoteFavoriteID: "1")
+    let localSecond = Favorite(title: "本地2", url: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=622&mobile=2")), remoteFavoriteID: "2")
+    let hiddenLocalOnly = Favorite(title: "本地隐藏", url: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=623&mobile=2")), isHidden: true)
+    let removedRemote = Favorite(title: "将被移除", url: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=624&mobile=2")))
+    try await store.saveFavorites([localFirst, localSecond, hiddenLocalOnly, removedRemote])
+
+    let newRemote = Favorite(title: "新同步收藏", url: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=625&mobile=2")), remoteFavoriteID: "25")
+    let remoteSecond = Favorite(title: "远端更新2", url: localSecond.url, remoteFavoriteID: "22", type: .manga)
+    let remoteFirst = Favorite(title: "远端更新1", url: localFirst.url, remoteFavoriteID: "11", type: .novel)
+
+    let merged = try await store.mergeRemoteFavorites([newRemote, remoteSecond, remoteFirst])
+
+    #expect(merged.map(\.id) == [newRemote.id, localFirst.id, localSecond.id, hiddenLocalOnly.id])
+    #expect(merged[1].title == "远端更新1")
+    #expect(merged[2].title == "远端更新2")
+    #expect(merged[2].remoteFavoriteID == "22")
+    #expect(merged[3].isHidden == true)
+}
+
 @Test func favoriteStoreCanDeleteFavoriteByID() async throws {
     let defaults = try #require(UserDefaults(suiteName: "favorite-delete-tests"))
     defaults.removePersistentDomain(forName: "favorite-delete-tests")
