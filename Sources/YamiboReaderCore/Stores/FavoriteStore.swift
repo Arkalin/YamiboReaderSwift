@@ -11,7 +11,32 @@ public protocol FavoriteStoring: Sendable {
     func favorite(id: String) async -> Favorite?
     func updateReadingProgress(for url: URL, progress: ReaderProgress) async throws -> Favorite
     func updateMangaProgress(for url: URL, chapterURL: URL, chapterTitle: String, pageIndex: Int) async throws -> Favorite
+    func updateNovelUpdateMetadata(for favoriteID: String, metadata: FavoriteNovelUpdateMetadata) async throws -> [Favorite]
+    func clearNovelUpdateStatus(for url: URL) async throws -> Favorite?
+    func recordKnownMaxViewIfTerminalDocument(_ document: ReaderPageDocument, for url: URL) async throws -> Favorite?
     func clearAll() async throws
+}
+
+public struct FavoriteNovelUpdateMetadata: Sendable, Hashable {
+    public var knownMaxView: Int?
+    public var knownMaxViewFingerprint: String?
+    public var novelUpdateStatus: FavoriteNovelUpdateStatus
+    public var lastRemoteMaxView: Int?
+    public var lastUpdateCheckedAt: Date?
+
+    public init(
+        knownMaxView: Int? = nil,
+        knownMaxViewFingerprint: String? = nil,
+        novelUpdateStatus: FavoriteNovelUpdateStatus = .none,
+        lastRemoteMaxView: Int? = nil,
+        lastUpdateCheckedAt: Date? = nil
+    ) {
+        self.knownMaxView = knownMaxView
+        self.knownMaxViewFingerprint = knownMaxViewFingerprint
+        self.novelUpdateStatus = novelUpdateStatus
+        self.lastRemoteMaxView = lastRemoteMaxView
+        self.lastUpdateCheckedAt = lastUpdateCheckedAt
+    }
 }
 
 public actor FavoriteStore: FavoriteStoring {
@@ -170,6 +195,55 @@ public actor FavoriteStore: FavoriteStoring {
         favorites.append(favorite)
         try await saveFavorites(favorites)
         return favorite
+    }
+
+    public func updateNovelUpdateMetadata(for favoriteID: String, metadata: FavoriteNovelUpdateMetadata) async throws -> [Favorite] {
+        let updated = await updateFavorites { favorite in
+            favorite.knownMaxView = metadata.knownMaxView
+            favorite.knownMaxViewFingerprint = metadata.knownMaxViewFingerprint
+            favorite.novelUpdateStatus = metadata.novelUpdateStatus
+            favorite.lastRemoteMaxView = metadata.lastRemoteMaxView
+            favorite.lastUpdateCheckedAt = metadata.lastUpdateCheckedAt
+        } matching: { favorite in
+            favorite.id == favoriteID
+        }
+        try await saveFavorites(updated)
+        return updated
+    }
+
+    public func clearNovelUpdateStatus(for url: URL) async throws -> Favorite? {
+        var favorites = await loadFavorites()
+        guard let index = favorites.firstIndex(where: { $0.url == url || $0.id == url.absoluteString }) else {
+            return nil
+        }
+
+        favorites[index].novelUpdateStatus = .none
+        favorites[index].lastUpdateCheckedAt = Date()
+        try await saveFavorites(favorites)
+        return favorites[index]
+    }
+
+    public func recordKnownMaxViewIfTerminalDocument(_ document: ReaderPageDocument, for url: URL) async throws -> Favorite? {
+        guard document.view == document.maxView else { return nil }
+
+        var favorites = await loadFavorites()
+        guard let index = favorites.firstIndex(where: { $0.url == url || $0.id == url.absoluteString }) else {
+            return nil
+        }
+
+        favorites[index].knownMaxView = document.maxView
+        favorites[index].knownMaxViewFingerprint = ReaderDocumentFingerprint.fingerprint(for: document)
+        favorites[index].lastRemoteMaxView = document.maxView
+        favorites[index].lastUpdateCheckedAt = Date()
+        favorites[index].novelUpdateStatus = .none
+        if favorites[index].type == .unknown {
+            favorites[index].type = .novel
+        }
+        if let authorID = document.resolvedAuthorID {
+            favorites[index].authorID = authorID
+        }
+        try await saveFavorites(favorites)
+        return favorites[index]
     }
 
     public func clearAll() async throws {

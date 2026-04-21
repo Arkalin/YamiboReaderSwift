@@ -14,6 +14,7 @@ public struct ReaderLaunchContext: Codable, Hashable, Identifiable, Sendable {
     public var initialView: Int?
     public var initialPage: Int?
     public var authorID: String?
+    public var refreshPolicy: ReaderLaunchRefreshPolicy
 
     public var id: String { threadURL.absoluteString }
 
@@ -23,7 +24,8 @@ public struct ReaderLaunchContext: Codable, Hashable, Identifiable, Sendable {
         source: ReaderLaunchSource,
         initialView: Int? = nil,
         initialPage: Int? = nil,
-        authorID: String? = nil
+        authorID: String? = nil,
+        refreshPolicy: ReaderLaunchRefreshPolicy = .normal
     ) {
         self.threadURL = threadURL
         self.threadTitle = threadTitle
@@ -31,7 +33,34 @@ public struct ReaderLaunchContext: Codable, Hashable, Identifiable, Sendable {
         self.initialView = initialView
         self.initialPage = initialPage
         self.authorID = authorID
+        self.refreshPolicy = refreshPolicy
     }
+
+    private enum CodingKeys: String, CodingKey {
+        case threadURL
+        case threadTitle
+        case source
+        case initialView
+        case initialPage
+        case authorID
+        case refreshPolicy
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        threadURL = try container.decode(URL.self, forKey: .threadURL)
+        threadTitle = try container.decode(String.self, forKey: .threadTitle)
+        source = try container.decode(ReaderLaunchSource.self, forKey: .source)
+        initialView = try container.decodeIfPresent(Int.self, forKey: .initialView)
+        initialPage = try container.decodeIfPresent(Int.self, forKey: .initialPage)
+        authorID = try container.decodeIfPresent(String.self, forKey: .authorID)
+        refreshPolicy = try container.decodeIfPresent(ReaderLaunchRefreshPolicy.self, forKey: .refreshPolicy) ?? .normal
+    }
+}
+
+public enum ReaderLaunchRefreshPolicy: Codable, Hashable, Sendable {
+    case normal
+    case refreshKnownMaxView(view: Int)
 }
 
 public struct ReaderPageRequest: Codable, Hashable, Sendable {

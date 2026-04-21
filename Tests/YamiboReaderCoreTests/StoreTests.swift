@@ -307,6 +307,60 @@ import Testing
     #expect(merged.first?.resolvedDisplayTitle == "我的名字")
 }
 
+@Test func favoriteDecodesLegacyPayloadWithNovelUpdateDefaults() async throws {
+    let legacy = """
+    {
+      "id": "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=711",
+      "title": "旧收藏",
+      "url": "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=711",
+      "lastPage": 2,
+      "lastView": 3,
+      "isHidden": false,
+      "type": 1
+    }
+    """
+
+    let favorite = try JSONDecoder().decode(Favorite.self, from: Data(legacy.utf8))
+
+    #expect(favorite.knownMaxView == nil)
+    #expect(favorite.knownMaxViewFingerprint == nil)
+    #expect(favorite.novelUpdateStatus == .none)
+    #expect(favorite.lastRemoteMaxView == nil)
+    #expect(favorite.lastUpdateCheckedAt == nil)
+}
+
+@Test func favoriteStoreMergePreservesNovelUpdateMetadata() async throws {
+    let defaults = try #require(UserDefaults(suiteName: "favorite-merge-update-metadata-tests"))
+    defaults.removePersistentDomain(forName: "favorite-merge-update-metadata-tests")
+    let store = FavoriteStore(defaults: defaults, key: "favorites")
+    let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=719&mobile=2"))
+    let checkedAt = Date(timeIntervalSince1970: 1_700_000_000)
+
+    try await store.saveFavorites([
+        Favorite(
+            title: "旧标题",
+            url: url,
+            type: .novel,
+            knownMaxView: 8,
+            knownMaxViewFingerprint: "abc",
+            novelUpdateStatus: .newPage,
+            lastRemoteMaxView: 9,
+            lastUpdateCheckedAt: checkedAt
+        )
+    ])
+
+    let merged = try await store.mergeRemoteFavorites([
+        Favorite(title: "新标题", url: url)
+    ])
+
+    #expect(merged.first?.title == "新标题")
+    #expect(merged.first?.knownMaxView == 8)
+    #expect(merged.first?.knownMaxViewFingerprint == "abc")
+    #expect(merged.first?.novelUpdateStatus == .newPage)
+    #expect(merged.first?.lastRemoteMaxView == 9)
+    #expect(merged.first?.lastUpdateCheckedAt == checkedAt)
+}
+
 @Test func settingsStoreResetRestoresDefaults() async throws {
     let defaults = try makeIsolatedDefaults(prefix: "settings-reset-tests")
     let store = SettingsStore(defaults: defaults, key: "settings")

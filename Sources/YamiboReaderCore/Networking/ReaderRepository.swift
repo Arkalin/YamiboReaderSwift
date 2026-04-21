@@ -141,6 +141,13 @@ public actor ReaderRepository {
         try await loadPage(request, ignoresCache: true)
     }
 
+    public func fetchRemoteDocument(_ request: ReaderPageRequest) async throws -> ReaderPageDocument {
+        let initialHTML = try await client.fetchHTML(
+            for: .thread(url: request.threadURL, page: request.view, authorID: request.authorID)
+        )
+        return try await parsePreferredDocument(from: initialHTML, request: request)
+    }
+
     public func fetchThreadDisplayTitle(for threadURL: URL, authorID: String? = nil) async throws -> String {
         let html = try await client.fetchHTML(for: .thread(url: threadURL, page: 1, authorID: authorID))
         guard let title = ReaderHTMLParser.extractPageTitle(from: html) else {

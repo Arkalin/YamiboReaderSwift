@@ -123,6 +123,7 @@ public final class ReaderContainerModel: ObservableObject {
     private var progressSyncTask: Task<Void, Never>?
     private var lastQueuedProgress: ReaderProgressSnapshot?
     private var lastSyncedProgress: ReaderProgressSnapshot?
+    private var didApplyLaunchRefreshPolicy = false
     private let progressSyncDelayNanoseconds: UInt64 = 350_000_000
 
     public init(context: ReaderLaunchContext, appContext: YamiboAppContext) {
@@ -252,6 +253,7 @@ public final class ReaderContainerModel: ObservableObject {
             settings = await appContext.settingsStore.load().reader
             sessionState = await appContext.sessionStore.load()
         }
+        await applyLaunchRefreshPolicyIfNeeded()
         if pages.isEmpty {
             let favorite = await appContext.favoriteStore.favorite(for: context.threadURL)
             let initialResumePoint = favorite?.novelResumePoint
@@ -621,6 +623,7 @@ public final class ReaderContainerModel: ObservableObject {
             currentAuthorID = document.resolvedAuthorID ?? currentAuthorID ?? context.authorID
             currentView = document.view
             maxView = document.maxView
+            await recordKnownMaxViewIfNeeded(document)
             applyPagination(for: document, preferredPage: preferredPage, preferredResumePoint: preferredResumePoint)
             await refreshCachedState()
             isLoading = false
@@ -720,6 +723,7 @@ public final class ReaderContainerModel: ObservableObject {
         prefetchedDocument = nextDocument
         currentAuthorID = nextDocument.resolvedAuthorID ?? currentAuthorID ?? context.authorID
         maxView = max(maxView, nextDocument.maxView)
+        await recordKnownMaxViewIfNeeded(nextDocument)
         if settings.readingMode == .vertical {
             applyPagination(
                 for: currentDocument,
@@ -1008,9 +1012,54 @@ public final class ReaderContainerModel: ObservableObject {
         currentAuthorID = nextDocument.resolvedAuthorID ?? currentAuthorID ?? context.authorID
         currentView = nextDocument.view
         maxView = nextDocument.maxView
+        await recordKnownMaxViewIfNeeded(nextDocument)
         let resumePoint = preferredResumePoint?.view == nextDocument.view ? preferredResumePoint : nil
         applyPagination(for: nextDocument, preferredPage: preferredPage, preferredResumePoint: resumePoint)
         await prefetchIfNeeded(for: currentPageIndex)
+    }
+
+    private func applyLaunchRefreshPolicyIfNeeded() async {
+        guard !didApplyLaunchRefreshPolicy else { return }
+        didApplyLaunchRefreshPolicy = true
+        guard let repository else { return }
+
+        switch context.refreshPolicy {
+        case .normal:
+            return
+        case let .refreshKnownMaxView(view):
+            do {
+                let document = try await repository.loadPageIgnoringCache(
+                    ReaderPageRequest(
+                        threadURL: context.threadURL,
+                        view: view,
+                        authorID: currentAuthorID ?? context.authorID
+                    )
+                )
+                currentAuthorID = document.resolvedAuthorID ?? currentAuthorID ?? context.authorID
+                if document.view == document.maxView {
+                    _ = try await appContext.favoriteStore.recordKnownMaxViewIfTerminalDocument(document, for: context.threadURL)
+                } else {
+                    if let favorite = await appContext.favoriteStore.favorite(for: context.threadURL) {
+                        _ = try await appContext.favoriteStore.updateNovelUpdateMetadata(
+                            for: favorite.id,
+                            metadata: FavoriteNovelUpdateMetadata(
+                                knownMaxView: document.view,
+                                knownMaxViewFingerprint: ReaderDocumentFingerprint.fingerprint(for: document),
+                                novelUpdateStatus: .none,
+                                lastRemoteMaxView: document.maxView,
+                                lastUpdateCheckedAt: Date()
+                            )
+                        )
+                    }
+                }
+            } catch {
+                return
+            }
+        }
+    }
+
+    private func recordKnownMaxViewIfNeeded(_ document: ReaderPageDocument) async {
+        _ = try? await appContext.favoriteStore.recordKnownMaxViewIfTerminalDocument(document, for: context.threadURL)
     }
 
     private func persistSettings() {

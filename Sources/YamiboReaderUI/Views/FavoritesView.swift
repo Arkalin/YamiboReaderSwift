@@ -58,7 +58,9 @@ public final class FavoritesViewModel: ObservableObject {
     @Published public private(set) var favorites: [Favorite] = []
     @Published public private(set) var isLoading = false
     @Published public private(set) var resolvingFavoriteID: String?
+    @Published public private(set) var checkingFavoriteID: String?
     @Published public var errorMessage: String?
+    @Published public var updateCheckMessage: String?
 
     private let appContext: YamiboAppContext
     private let favoriteStore: FavoriteStore
@@ -122,6 +124,27 @@ public final class FavoritesViewModel: ObservableObject {
         }
     }
 
+    public func checkNovelUpdate(for favorite: Favorite) async {
+        guard checkingFavoriteID == nil else { return }
+        guard favorite.type == .novel else {
+            updateCheckMessage = "暂仅支持小说检查更新"
+            return
+        }
+
+        checkingFavoriteID = favorite.id
+        defer { checkingFavoriteID = nil }
+
+        do {
+            let service = NovelUpdateCheckService(appContext: appContext)
+            let result = try await service.check(favoriteID: favorite.id)
+            favorites = await favoriteStore.loadFavorites()
+            updateCheckMessage = result.message
+            errorMessage = nil
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     func openTarget(for favorite: Favorite, mode: FavoriteLaunchMode = .resume) async -> FavoriteOpenTarget {
         let latestFavorite = await favoriteStore.favorite(id: favorite.id) ?? favorite
 
@@ -134,7 +157,8 @@ public final class FavoritesViewModel: ObservableObject {
                     source: .favorites,
                     initialView: mode == .start ? 1 : nil,
                     initialPage: mode == .start ? 0 : nil,
-                    authorID: latestFavorite.authorID
+                    authorID: latestFavorite.authorID,
+                    refreshPolicy: refreshPolicy(for: latestFavorite, mode: mode)
                 )
             )
         case .manga:
@@ -201,8 +225,18 @@ public final class FavoritesViewModel: ObservableObject {
             source: context.source,
             initialView: 1,
             initialPage: 0,
-            authorID: context.authorID
+            authorID: context.authorID,
+            refreshPolicy: refreshPolicy(for: favorite, mode: mode)
         )
+    }
+
+    private func refreshPolicy(for favorite: Favorite, mode: FavoriteLaunchMode) -> ReaderLaunchRefreshPolicy {
+        guard mode == .resume,
+              favorite.hasPendingNovelUpdate,
+              let knownMaxView = favorite.knownMaxView else {
+            return .normal
+        }
+        return .refreshKnownMaxView(view: knownMaxView)
     }
 
     private func applyStartModeIfNeeded(
@@ -253,7 +287,7 @@ public struct FavoritesView: View {
             List(filteredFavorites) { favorite in
                 FavoriteRow(
                     favorite: favorite,
-                    isResolving: viewModel.resolvingFavoriteID == favorite.id,
+                    isResolving: viewModel.resolvingFavoriteID == favorite.id || viewModel.checkingFavoriteID == favorite.id,
                     onOpen: {
                         open(favorite, mode: .resume)
                     }
@@ -275,6 +309,16 @@ public struct FavoritesView: View {
                         swipeActionLabel(title: "编辑", systemImage: "pencil")
                     }
                     .tint(.indigo)
+
+                    Button {
+                        Task {
+                            await viewModel.checkNovelUpdate(for: favorite)
+                        }
+                    } label: {
+                        swipeActionLabel(title: "检查更新", systemImage: "arrow.triangle.2.circlepath")
+                    }
+                    .disabled(favorite.type != .novel || viewModel.checkingFavoriteID != nil)
+                    .tint(.red)
                 }
             }
             .listStyle(.plain)
@@ -373,6 +417,13 @@ public struct FavoritesView: View {
                 }
             }, message: {
                 Text(viewModel.errorMessage ?? "")
+            })
+            .alert("检查更新", isPresented: .constant(viewModel.updateCheckMessage != nil), actions: {
+                Button("确定") {
+                    viewModel.updateCheckMessage = nil
+                }
+            }, message: {
+                Text(viewModel.updateCheckMessage ?? "")
             })
             .alert("编辑显示名称", isPresented: editNameAlertBinding) {
                 TextField("显示名称", text: $editingDisplayName)
@@ -563,6 +614,16 @@ struct FavoriteRow: View {
                 RoundedRectangle(cornerRadius: 24, style: .continuous)
                     .strokeBorder(favoriteAccentColor(for: favorite.type).opacity(0.18), lineWidth: 1)
             )
+            .overlay(alignment: .topTrailing) {
+                if favorite.hasPendingNovelUpdate {
+                    Circle()
+                        .fill(.red)
+                        .frame(width: 10, height: 10)
+                        .padding(.top, 16)
+                        .padding(.trailing, 16)
+                        .accessibilityLabel("有小说更新")
+                }
+            }
             .shadow(color: .black.opacity(0.04), radius: 8, x: 0, y: 3)
         }
         .buttonStyle(.plain)

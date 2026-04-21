@@ -697,6 +697,96 @@ final class ReaderContainerModelTests: XCTestCase {
         XCTAssertEqual(updatedText, "新缓存")
         XCTAssertTrue(preservedText?.contains("保留缓存") == true)
     }
+
+    func testPendingNovelUpdateRefreshesKnownMaxViewWithoutAdvancingToRemoteMax() async throws {
+        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=4040&mobile=2")!
+        let oldKnownPage = makeDocument(threadURL: threadURL, view: 2, maxView: 2, chapterTitles: ["旧末页"])
+        let cacheDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let cacheStore = ReaderCacheStore(baseDirectory: cacheDirectory)
+        try await cacheStore.save(oldKnownPage)
+
+        let keyPrefix = UUID().uuidString
+        let favoriteStore = FavoriteStore(key: "\(keyPrefix).favorites")
+        try await favoriteStore.saveFavorites([
+            Favorite(
+                title: "测试小说",
+                url: threadURL,
+                type: .novel,
+                knownMaxView: 2,
+                knownMaxViewFingerprint: ReaderDocumentFingerprint.fingerprint(for: oldKnownPage),
+                novelUpdateStatus: .newPage,
+                lastRemoteMaxView: 3
+            )
+        ])
+
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [ReaderTestURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        ReaderTestURLProtocol.handler = { request in
+            let body = """
+            <html>
+              <body>
+                <div class="message">新末页</div>
+                <a href="forum.php?mod=viewthread&tid=4040&page=1">1</a>
+                <a href="forum.php?mod=viewthread&tid=4040&page=2">2</a>
+                <a href="forum.php?mod=viewthread&tid=4040&page=3">3</a>
+              </body>
+            </html>
+            """
+            return (
+                Data(body.utf8),
+                HTTPURLResponse(
+                    url: request.url!,
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: ["Content-Type": "text/html; charset=utf-8"]
+                )!
+            )
+        }
+
+        let settingsStore = SettingsStore(key: "\(keyPrefix).settings")
+        try await settingsStore.save(AppSettings(reader: ReaderAppearanceSettings(readingMode: .paged)))
+        let appContext = YamiboAppContext(
+            settingsStore: settingsStore,
+            favoriteStore: favoriteStore,
+            readerCacheStore: cacheStore,
+            session: session
+        )
+        let model = await MainActor.run {
+            ReaderContainerModel(
+                context: ReaderLaunchContext(
+                    threadURL: threadURL,
+                    threadTitle: "测试小说",
+                    source: .favorites,
+                    initialView: 2,
+                    refreshPolicy: .refreshKnownMaxView(view: 2)
+                ),
+                appContext: appContext
+            )
+        }
+
+        await model.prepare(layout: ReaderContainerLayout(width: 320, height: 568))
+
+        let favorite = await favoriteStore.favorite(for: threadURL)
+        let refreshed = await cacheStore.loadDocument(
+            for: ReaderPageRequest(threadURL: threadURL, view: 2),
+            contentSource: .fallbackUnfilteredPage
+        )
+        let refreshedText = refreshed?.segments.compactMap { segment -> String? in
+            if case let .text(text, _) = segment { return text }
+            return nil
+        }.first
+
+        XCTAssertEqual(favorite?.novelUpdateStatus, FavoriteNovelUpdateStatus.none)
+        XCTAssertEqual(favorite?.knownMaxView, 2)
+        XCTAssertEqual(favorite?.lastRemoteMaxView, 3)
+        XCTAssertEqual(refreshedText, "新末页")
+        await MainActor.run {
+            XCTAssertEqual(model.maxView, 3)
+            XCTAssertEqual(model.currentView, 2)
+        }
+    }
 }
 
 private func makeModel(
