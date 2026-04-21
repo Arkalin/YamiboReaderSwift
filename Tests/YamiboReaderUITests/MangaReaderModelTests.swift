@@ -586,6 +586,26 @@ final class MangaReaderModelTests: XCTestCase {
         XCTAssertEqual(collectionScope, FavoriteSelectionActionState(canCreateCollection: false, canMove: true, canDelete: true))
     }
 
+    func testFavoriteAccentAppearanceUsesStoredTypeColors() {
+        let appearance = FavoriteAppearanceSettings(
+            collection: .purple,
+            novel: .red,
+            manga: .green,
+            other: .purple
+        )
+
+        XCTAssertEqual(favoriteAccentAppearanceColor(for: .novel, appearance: appearance), .red)
+        XCTAssertEqual(favoriteAccentAppearanceColor(for: .manga, appearance: appearance), .green)
+        XCTAssertEqual(favoriteAccentAppearanceColor(for: .other, appearance: appearance), .purple)
+        XCTAssertEqual(favoriteAccentAppearanceColor(for: .unknown, appearance: appearance), .gray)
+    }
+
+    func testFavoriteCollectionAccentAppearanceUsesStoredCollectionColor() {
+        let appearance = FavoriteAppearanceSettings(collection: .purple)
+
+        XCTAssertEqual(favoriteCollectionAccentAppearanceColor(for: appearance), .purple)
+    }
+
     func testFavoritesViewModelUsesLatestStoredMangaProgressForResume() async throws {
         let keyPrefix = UUID().uuidString
         let favoriteStore = FavoriteStore(key: "\(keyPrefix).favorites")

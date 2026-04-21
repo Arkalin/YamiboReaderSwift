@@ -189,10 +189,81 @@ public struct WebBrowserSettings: Codable, Hashable, Sendable {
     }
 }
 
+public enum FavoriteAppearanceColor: String, Codable, Hashable, CaseIterable, Sendable {
+    case red
+    case pink
+    case orange
+    case yellow
+    case green
+    case mint
+    case cyan
+    case blue
+    case purple
+    case gray
+
+    public var title: String {
+        switch self {
+        case .red: "红色"
+        case .pink: "粉色"
+        case .orange: "橙色"
+        case .yellow: "黄色"
+        case .green: "绿色"
+        case .mint: "薄荷"
+        case .cyan: "青色"
+        case .blue: "蓝色"
+        case .purple: "紫色"
+        case .gray: "灰色"
+        }
+    }
+}
+
+public struct FavoriteAppearanceSettings: Codable, Hashable, Sendable {
+    public var collection: FavoriteAppearanceColor
+    public var novel: FavoriteAppearanceColor
+    public var manga: FavoriteAppearanceColor
+    public var other: FavoriteAppearanceColor
+
+    public init(
+        collection: FavoriteAppearanceColor = .orange,
+        novel: FavoriteAppearanceColor = .pink,
+        manga: FavoriteAppearanceColor = .blue,
+        other: FavoriteAppearanceColor = .cyan
+    ) {
+        self.collection = collection
+        self.novel = novel
+        self.manga = manga
+        self.other = other
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case collection
+        case novel
+        case manga
+        case other
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        collection = try container.decodeIfPresent(FavoriteAppearanceColor.self, forKey: .collection) ?? .orange
+        novel = try container.decodeIfPresent(FavoriteAppearanceColor.self, forKey: .novel) ?? .pink
+        manga = try container.decodeIfPresent(FavoriteAppearanceColor.self, forKey: .manga) ?? .blue
+        other = try container.decodeIfPresent(FavoriteAppearanceColor.self, forKey: .other) ?? .cyan
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(collection, forKey: .collection)
+        try container.encode(novel, forKey: .novel)
+        try container.encode(manga, forKey: .manga)
+        try container.encode(other, forKey: .other)
+    }
+}
+
 public struct AppSettings: Codable, Hashable, Sendable {
     public var reader: ReaderAppearanceSettings
     public var manga: MangaReaderSettings
     public var webBrowser: WebBrowserSettings
+    public var favoriteAppearance: FavoriteAppearanceSettings
     public var homePage: AppHomePage
     public var usesDataSaverMode: Bool
     public var collapsesFavoriteSections: Bool
@@ -201,6 +272,7 @@ public struct AppSettings: Codable, Hashable, Sendable {
         reader: ReaderAppearanceSettings = .init(),
         manga: MangaReaderSettings = .init(),
         webBrowser: WebBrowserSettings = .init(),
+        favoriteAppearance: FavoriteAppearanceSettings = .init(),
         homePage: AppHomePage = .forum,
         usesDataSaverMode: Bool = false,
         collapsesFavoriteSections: Bool = false
@@ -208,6 +280,7 @@ public struct AppSettings: Codable, Hashable, Sendable {
         self.reader = reader
         self.manga = manga
         self.webBrowser = webBrowser
+        self.favoriteAppearance = favoriteAppearance
         self.homePage = homePage
         self.usesDataSaverMode = usesDataSaverMode
         self.collapsesFavoriteSections = collapsesFavoriteSections
@@ -217,6 +290,7 @@ public struct AppSettings: Codable, Hashable, Sendable {
         case reader
         case manga
         case webBrowser
+        case favoriteAppearance
         case homePage
         case usesDataSaverMode
         case collapsesFavoriteSections
@@ -227,6 +301,7 @@ public struct AppSettings: Codable, Hashable, Sendable {
         reader = try container.decodeIfPresent(ReaderAppearanceSettings.self, forKey: .reader) ?? .init()
         manga = try container.decodeIfPresent(MangaReaderSettings.self, forKey: .manga) ?? .init()
         webBrowser = try container.decodeIfPresent(WebBrowserSettings.self, forKey: .webBrowser) ?? .init()
+        favoriteAppearance = try container.decodeIfPresent(FavoriteAppearanceSettings.self, forKey: .favoriteAppearance) ?? .init()
         homePage = try container.decodeIfPresent(AppHomePage.self, forKey: .homePage) ?? .forum
         usesDataSaverMode = try container.decodeIfPresent(Bool.self, forKey: .usesDataSaverMode) ?? false
         collapsesFavoriteSections = try container.decodeIfPresent(Bool.self, forKey: .collapsesFavoriteSections) ?? false
@@ -237,6 +312,7 @@ public struct AppSettings: Codable, Hashable, Sendable {
         try container.encode(reader, forKey: .reader)
         try container.encode(manga, forKey: .manga)
         try container.encode(webBrowser, forKey: .webBrowser)
+        try container.encode(favoriteAppearance, forKey: .favoriteAppearance)
         try container.encode(homePage, forKey: .homePage)
         try container.encode(usesDataSaverMode, forKey: .usesDataSaverMode)
         try container.encode(collapsesFavoriteSections, forKey: .collapsesFavoriteSections)

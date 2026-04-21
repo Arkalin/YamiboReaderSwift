@@ -16,10 +16,53 @@ private enum FavoritesSettingsConfirmation: String, Identifiable {
     var id: String { rawValue }
 }
 
+private enum FavoriteAppearanceCategory: String, CaseIterable, Identifiable {
+    case collection
+    case novel
+    case manga
+    case other
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .collection: "合集"
+        case .novel: "小说"
+        case .manga: "漫画"
+        case .other: "其他"
+        }
+    }
+}
+
+private extension FavoriteAppearanceSettings {
+    func color(for category: FavoriteAppearanceCategory) -> FavoriteAppearanceColor {
+        switch category {
+        case .collection: collection
+        case .novel: novel
+        case .manga: manga
+        case .other: other
+        }
+    }
+
+    mutating func setColor(_ color: FavoriteAppearanceColor, for category: FavoriteAppearanceCategory) {
+        switch category {
+        case .collection:
+            collection = color
+        case .novel:
+            novel = color
+        case .manga:
+            manga = color
+        case .other:
+            other = color
+        }
+    }
+}
+
 @MainActor
 private final class FavoritesSettingsViewModel: ObservableObject {
     @Published var homePage: AppHomePage = .forum
     @Published var showsNavigationBar = true
+    @Published var favoriteAppearance = FavoriteAppearanceSettings()
     @Published private(set) var novelCacheBytes = 0
     @Published private(set) var mangaCacheBytes = 0
     @Published private(set) var activeAction: FavoritesSettingsAction?
@@ -50,6 +93,7 @@ private final class FavoritesSettingsViewModel: ObservableObject {
         let settings = await appContext.settingsStore.load()
         homePage = settings.homePage
         showsNavigationBar = settings.webBrowser.showsNavigationBar
+        favoriteAppearance = settings.favoriteAppearance
         await refreshStorageUsage()
     }
 
@@ -85,6 +129,29 @@ private final class FavoritesSettingsViewModel: ObservableObject {
             } catch {
                 await MainActor.run {
                     showsNavigationBar = previous
+                    errorMessage = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    func updateFavoriteAppearanceColor(_ color: FavoriteAppearanceColor, for category: FavoriteAppearanceCategory) {
+        let previous = favoriteAppearance
+        var updated = favoriteAppearance
+        updated.setColor(color, for: category)
+        favoriteAppearance = updated
+
+        Task {
+            var settings = await appContext.settingsStore.load()
+            settings.favoriteAppearance = updated
+
+            do {
+                try await appContext.settingsStore.save(settings)
+            } catch {
+                await MainActor.run {
+                    if favoriteAppearance == updated {
+                        favoriteAppearance = previous
+                    }
                     errorMessage = error.localizedDescription
                 }
             }
@@ -127,6 +194,7 @@ private final class FavoritesSettingsViewModel: ObservableObject {
             try await appContext.resetApplicationData()
             homePage = .forum
             showsNavigationBar = true
+            favoriteAppearance = .init()
             novelCacheBytes = 0
             mangaCacheBytes = 0
             return true
@@ -153,6 +221,7 @@ public struct FavoritesSettingsView: View {
     @StateObject private var viewModel: FavoritesSettingsViewModel
     @State private var showingDirectoryManager = false
     @State private var pendingConfirmation: FavoritesSettingsConfirmation?
+    @State private var activeAppearanceCategory: FavoriteAppearanceCategory?
 
     private let appContext: YamiboAppContext
     private let onApplicationReset: @MainActor () async -> Void
@@ -172,34 +241,13 @@ public struct FavoritesSettingsView: View {
         NavigationStack {
             Form {
                 Section("通用") {
-                    Menu {
-                        ForEach(AppHomePage.allCases, id: \.self) { option in
-                            Button {
-                                viewModel.updateHomePage(option)
-                            } label: {
-                                Label(option.title, systemImage: option.systemImageName)
-                            }
-                        }
-                    } label: {
-                        HStack(spacing: 12) {
-                            Text("App 主页")
-                                .foregroundStyle(.primary)
+                    homePageSelector
+                }
 
-                            Spacer(minLength: 0)
-
-                            Image(systemName: viewModel.homePage.systemImageName)
-                                .foregroundStyle(.secondary)
-
-                            Text(viewModel.homePage.title)
-                                .foregroundStyle(.secondary)
-
-                            Image(systemName: "chevron.up.chevron.down")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.tertiary)
-                        }
-                        .contentShape(Rectangle())
+                Section("外观") {
+                    ForEach(FavoriteAppearanceCategory.allCases) { category in
+                        colorSelectorRow(for: category)
                     }
-                    .disabled(viewModel.isBusy)
                 }
 
                 Section("网页浏览") {
@@ -302,6 +350,38 @@ public struct FavoritesSettingsView: View {
         }
     }
 
+    private var homePageSelector: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("App 主页")
+                .foregroundStyle(.primary)
+
+            HStack(spacing: 10) {
+                ForEach(AppHomePage.allCases, id: \.self) { option in
+                    Button {
+                        viewModel.updateHomePage(option)
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: option.systemImageName)
+                                .font(.subheadline.weight(.semibold))
+                            Text(option.title)
+                                .font(.subheadline.weight(.semibold))
+                        }
+                        .foregroundStyle(viewModel.homePage == option ? .white : .primary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .background(
+                            Capsule(style: .continuous)
+                                .fill(viewModel.homePage == option ? Color.accentColor : Color.secondary.opacity(0.12))
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(viewModel.isBusy)
+                }
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
     @ViewBuilder
     private func settingsRow(title: String, value: String? = nil) -> some View {
         HStack(spacing: 12) {
@@ -320,6 +400,117 @@ public struct FavoritesSettingsView: View {
             }
         }
         .contentShape(Rectangle())
+    }
+
+    private func colorSelectorRow(for category: FavoriteAppearanceCategory) -> some View {
+        let selectedColor = viewModel.favoriteAppearance.color(for: category)
+
+        return VStack(alignment: .trailing, spacing: 10) {
+            Button {
+                withAnimation(.spring(response: 0.24, dampingFraction: 0.9)) {
+                    activeAppearanceCategory = activeAppearanceCategory == category ? nil : category
+                }
+            } label: {
+                HStack(spacing: 10) {
+                    Text(category.title)
+                        .foregroundStyle(.primary)
+
+                    Spacer(minLength: 0)
+
+                    colorSwatch(selectedColor)
+
+                    Text(selectedColor.title)
+                        .foregroundStyle(.secondary)
+
+                    Image(systemName: activeAppearanceCategory == category ? "chevron.up" : "chevron.down")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(viewModel.isBusy)
+
+            if activeAppearanceCategory == category {
+                colorPaletteBubble(for: category, selectedColor: selectedColor)
+                    .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .topTrailing)))
+            }
+        }
+        .padding(.vertical, 6)
+    }
+
+    private func colorPaletteBubble(
+        for category: FavoriteAppearanceCategory,
+        selectedColor: FavoriteAppearanceColor
+    ) -> some View {
+        let columns = Array(repeating: GridItem(.fixed(34), spacing: 12), count: 5)
+
+        return LazyVGrid(columns: columns, spacing: 12) {
+            ForEach(FavoriteAppearanceColor.allCases, id: \.self) { color in
+                Button {
+                    viewModel.updateFavoriteAppearanceColor(color, for: category)
+                    withAnimation(.spring(response: 0.2, dampingFraction: 0.95)) {
+                        activeAppearanceCategory = nil
+                    }
+                } label: {
+                    colorChoiceSwatch(color, isSelected: selectedColor == color)
+                }
+                .buttonStyle(.plain)
+                .disabled(viewModel.isBusy)
+                .accessibilityLabel("\(category.title)\(color.title)")
+                .accessibilityAddTraits(selectedColor == color ? .isSelected : [])
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.top, 16)
+        .padding(.bottom, 12)
+        .background(alignment: .topTrailing) {
+            ZStack(alignment: .topTrailing) {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(Color.secondary.opacity(0.09))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .strokeBorder(Color.secondary.opacity(0.18), lineWidth: 1)
+                    }
+
+                BubbleArrow()
+                    .fill(Color.secondary.opacity(0.09))
+                    .frame(width: 18, height: 10)
+                    .offset(x: -28, y: -9)
+            }
+        }
+        .padding(.top, 2)
+    }
+
+    private func colorSwatch(_ color: FavoriteAppearanceColor) -> some View {
+        Circle()
+            .fill(color.swiftUIColor)
+            .frame(width: 14, height: 14)
+            .overlay {
+                Circle()
+                    .strokeBorder(.tertiary, lineWidth: 0.5)
+            }
+            .accessibilityHidden(true)
+    }
+
+    private func colorChoiceSwatch(_ color: FavoriteAppearanceColor, isSelected: Bool) -> some View {
+        ZStack {
+            Circle()
+                .fill(color.swiftUIColor)
+                .frame(width: 28, height: 28)
+
+            if isSelected {
+                Image(systemName: "checkmark")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.white)
+            }
+        }
+        .frame(width: 34, height: 34)
+        .overlay {
+            Circle()
+                .strokeBorder(isSelected ? Color.primary.opacity(0.7) : Color.secondary.opacity(0.25), lineWidth: isSelected ? 2 : 0.75)
+        }
+        .contentShape(Circle())
     }
 
     private var confirmationTitle: String {
@@ -367,5 +558,16 @@ public struct FavoritesSettingsView: View {
             dismiss()
             await onApplicationReset()
         }
+    }
+}
+
+private struct BubbleArrow: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.midX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        path.closeSubpath()
+        return path
     }
 }

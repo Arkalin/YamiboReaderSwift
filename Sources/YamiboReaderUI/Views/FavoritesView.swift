@@ -94,11 +94,13 @@ public final class FavoritesViewModel: ObservableObject {
     @Published public private(set) var isLoading = false
     @Published public private(set) var resolvingFavoriteID: String?
     @Published public private(set) var deletingFavoriteID: String?
+    @Published public private(set) var favoriteAppearance = FavoriteAppearanceSettings()
     @Published public var errorMessage: String?
 
     private let appContext: YamiboAppContext
     private let favoriteStore: FavoriteStore
     private var favoriteUpdatesTask: Task<Void, Never>?
+    private var settingsUpdatesTask: Task<Void, Never>?
 
     public init(appContext: YamiboAppContext, favoriteStore: FavoriteStore) {
         self.appContext = appContext
@@ -114,18 +116,35 @@ public final class FavoritesViewModel: ObservableObject {
                 await self.reloadLocalFavorites()
             }
         }
+        settingsUpdatesTask = Task { @MainActor [weak self, settingsStore = appContext.settingsStore] in
+            for await notification in NotificationCenter.default.notifications(named: SettingsStore.didChangeNotification) {
+                guard !Task.isCancelled else { return }
+                guard let self else { return }
+                guard let changeID = notification.userInfo?[SettingsStore.changeIDUserInfoKey] as? String,
+                      changeID == settingsStore.changeID else {
+                    continue
+                }
+                await self.reloadFavoriteAppearance()
+            }
+        }
     }
 
     deinit {
         favoriteUpdatesTask?.cancel()
+        settingsUpdatesTask?.cancel()
     }
 
     public func loadCachedFavorites() async {
+        await reloadFavoriteAppearance()
         await reloadLocalFavorites()
     }
 
     public func reloadLocalFavorites() async {
         applySnapshot(await favoriteStore.loadLibrarySnapshot())
+    }
+
+    public func reloadFavoriteAppearance() async {
+        favoriteAppearance = await appContext.settingsStore.load().favoriteAppearance
     }
 
     public func refresh() async {
@@ -1098,13 +1117,19 @@ public struct FavoritesView: View {
                     FavoriteCollectionRow(
                         collection: collection,
                         summary: summary,
-                        isSelected: selectedCollectionIDs.contains(collection.id)
+                        isSelected: selectedCollectionIDs.contains(collection.id),
+                        accentColor: favoriteCollectionAccentColor(for: viewModel.favoriteAppearance)
                     )
                 }
                 .buttonStyle(.plain)
             } else {
                 NavigationLink(value: collection) {
-                    FavoriteCollectionRow(collection: collection, summary: summary, isSelected: false)
+                    FavoriteCollectionRow(
+                        collection: collection,
+                        summary: summary,
+                        isSelected: false,
+                        accentColor: favoriteCollectionAccentColor(for: viewModel.favoriteAppearance)
+                    )
                 }
                 .buttonStyle(.plain)
                 .swipeActions(edge: .trailing, allowsFullSwipe: false) {
@@ -1141,6 +1166,7 @@ public struct FavoritesView: View {
                 isResolving: viewModel.resolvingFavoriteID == favorite.id,
                 isDeleting: viewModel.deletingFavoriteID == favorite.id,
                 isSelected: selectedFavoriteIDs.contains(favorite.id),
+                accentColor: favoriteAccentColor(for: favorite.type, appearance: viewModel.favoriteAppearance),
                 onOpen: {
                     if isSelecting {
                         toggleFavoriteSelection(favorite)
@@ -1340,12 +1366,13 @@ struct FavoriteRow: View {
     let isResolving: Bool
     let isDeleting: Bool
     let isSelected: Bool
+    let accentColor: Color
     let onOpen: () -> Void
 
     var body: some View {
         HStack(spacing: 0) {
             RoundedRectangle(cornerRadius: 999, style: .continuous)
-                .fill(favoriteAccentColor(for: favorite.type))
+                .fill(accentColor)
                 .frame(width: 5)
                 .padding(.vertical, 14)
                 .padding(.leading, 10)
@@ -1396,7 +1423,7 @@ struct FavoriteRow: View {
         .overlay(
             RoundedRectangle(cornerRadius: 24, style: .continuous)
                 .strokeBorder(
-                    isSelected ? Color.accentColor.opacity(0.55) : favoriteAccentColor(for: favorite.type).opacity(0.18),
+                    isSelected ? Color.accentColor.opacity(0.55) : accentColor.opacity(0.18),
                     lineWidth: isSelected ? 1.5 : 1
                 )
         )
@@ -1418,11 +1445,12 @@ struct FavoriteCollectionRow: View {
     let collection: FavoriteCollection
     let summary: FavoriteCollectionSummary
     let isSelected: Bool
+    let accentColor: Color
 
     var body: some View {
         HStack(spacing: 0) {
             RoundedRectangle(cornerRadius: 999, style: .continuous)
-                .fill(.orange)
+                .fill(accentColor)
                 .frame(width: 7)
                 .padding(.vertical, 14)
                 .padding(.leading, 10)
@@ -1430,11 +1458,11 @@ struct FavoriteCollectionRow: View {
             HStack(spacing: 14) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .fill(Color.orange.opacity(0.12))
+                        .fill(accentColor.opacity(0.12))
                         .frame(width: 54, height: 54)
                     Image(systemName: "folder.fill")
                         .font(.title2.weight(.semibold))
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(accentColor)
                 }
 
                 VStack(alignment: .leading, spacing: 8) {
@@ -1460,7 +1488,7 @@ struct FavoriteCollectionRow: View {
                     HStack(spacing: 8) {
                         Text("合集")
                             .font(.caption.weight(.medium))
-                            .foregroundStyle(.orange)
+                            .foregroundStyle(accentColor)
 
                         if collection.isHidden {
                             Label("已隐藏", systemImage: "eye.slash")
@@ -1477,11 +1505,11 @@ struct FavoriteCollectionRow: View {
         .frame(maxWidth: .infinity, minHeight: 112, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .fill(Color.orange.opacity(0.08))
+                .fill(accentColor.opacity(0.08))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .strokeBorder(isSelected ? Color.accentColor.opacity(0.55) : Color.orange.opacity(0.32), lineWidth: isSelected ? 1.5 : 1)
+                .strokeBorder(isSelected ? Color.accentColor.opacity(0.55) : accentColor.opacity(0.32), lineWidth: isSelected ? 1.5 : 1)
         )
         .shadow(color: .black.opacity(0.04), radius: 8, x: 0, y: 3)
         .contentShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
@@ -1768,17 +1796,40 @@ func favoriteDetailLines(for favorite: Favorite) -> [String] {
     return Array(lines.prefix(2))
 }
 
-func favoriteAccentColor(for type: FavoriteType) -> Color {
+func favoriteAccentAppearanceColor(
+    for type: FavoriteType,
+    appearance: FavoriteAppearanceSettings
+) -> FavoriteAppearanceColor {
     switch type {
     case .novel:
-        .pink
+        appearance.novel
     case .manga:
-        .blue
+        appearance.manga
     case .other:
-        .teal
+        appearance.other
     case .unknown:
         .gray
     }
+}
+
+func favoriteAccentColor(for type: FavoriteType, appearance: FavoriteAppearanceSettings) -> Color {
+    favoriteAccentAppearanceColor(for: type, appearance: appearance).swiftUIColor
+}
+
+func favoriteCollectionAccentColor(for appearance: FavoriteAppearanceSettings) -> Color {
+    appearance.collection.swiftUIColor
+}
+
+func favoriteCollectionAccentAppearanceColor(for appearance: FavoriteAppearanceSettings) -> FavoriteAppearanceColor {
+    appearance.collection
+}
+
+func favoriteAccentColor(for type: FavoriteType) -> Color {
+    favoriteAccentColor(for: type, appearance: .init())
+}
+
+func favoriteCollectionAccentColor() -> Color {
+    favoriteCollectionAccentColor(for: .init())
 }
 
 func orderedCollections(_ collections: [FavoriteCollection]) -> [FavoriteCollection] {

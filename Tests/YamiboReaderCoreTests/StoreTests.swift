@@ -57,6 +57,12 @@ import Testing
             directorySortOrder: .descending
         ),
         webBrowser: WebBrowserSettings(showsNavigationBar: false),
+        favoriteAppearance: FavoriteAppearanceSettings(
+            collection: .purple,
+            novel: .red,
+            manga: .green,
+            other: .gray
+        ),
         homePage: .favorites,
         usesDataSaverMode: true,
         collapsesFavoriteSections: true
@@ -86,7 +92,25 @@ import Testing
 
     #expect(decoded.webBrowser.showsNavigationBar == true)
     #expect(decoded.homePage == .forum)
+    #expect(decoded.favoriteAppearance == FavoriteAppearanceSettings())
     #expect(decoded.collapsesFavoriteSections == true)
+}
+
+@Test func appSettingsDecodesPartialFavoriteAppearanceWithDefaults() async throws {
+    let legacy = """
+    {
+      "favoriteAppearance": {
+        "novel": "red"
+      }
+    }
+    """
+
+    let decoded = try JSONDecoder().decode(AppSettings.self, from: Data(legacy.utf8))
+
+    #expect(decoded.favoriteAppearance.collection == .orange)
+    #expect(decoded.favoriteAppearance.novel == .red)
+    #expect(decoded.favoriteAppearance.manga == .blue)
+    #expect(decoded.favoriteAppearance.other == .cyan)
 }
 
 @Test func appSettingsPersistsHomePageWhenEncodingAndDecoding() throws {
