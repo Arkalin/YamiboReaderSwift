@@ -242,6 +242,26 @@ public final class FavoritesViewModel: ObservableObject {
         }
     }
 
+    public func setCollectionName(_ name: String, for collectionID: String) async -> Bool {
+        do {
+            applySnapshot(try await favoriteStore.setCollectionName(name, for: collectionID))
+            errorMessage = nil
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
+
+    public func setCollectionHidden(_ isHidden: Bool, for collection: FavoriteCollection) async {
+        do {
+            applySnapshot(try await favoriteStore.setCollectionHidden(isHidden, for: collection.id))
+            errorMessage = nil
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     public func moveFavorites(ids: [String], toCollectionID: String?) async -> Bool {
         do {
             applySnapshot(try await favoriteStore.moveFavorites(ids: ids, toCollectionID: toCollectionID))
@@ -416,6 +436,16 @@ private struct FavoriteDisplayNameDraft {
         favoriteID = favorite.id
         originalTitle = favorite.title
         displayName = favorite.displayName ?? favorite.resolvedDisplayTitle
+    }
+}
+
+private struct FavoriteCollectionNameDraft {
+    let collectionID: String
+    var name: String
+
+    init(collection: FavoriteCollection) {
+        collectionID = collection.id
+        name = collection.name
     }
 }
 
@@ -595,6 +625,73 @@ private struct FavoriteCollectionNavigationDestinationModifier: ViewModifier {
     }
 }
 
+private struct FavoriteCollectionDialogsModifier: ViewModifier {
+    @Binding var collectionNameDraft: FavoriteCollectionNameDraft?
+    @Binding var pendingDeleteCollection: FavoriteCollection?
+    let saveName: (FavoriteCollectionNameDraft) -> Void
+    let dissolveCollection: (FavoriteCollection) -> Void
+
+    func body(content: Content) -> some View {
+        content
+            .alert("编辑合集名称", isPresented: collectionNameAlertBinding) {
+                TextField("合集名称", text: collectionNameTextBinding)
+                Button("取消", role: .cancel) {
+                    collectionNameDraft = nil
+                }
+                Button("保存") {
+                    guard let draft = collectionNameDraft else { return }
+                    saveName(draft)
+                }
+                .disabled(collectionNameDraft?.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+            } message: {
+                Text("合集名称会保存在本地。")
+            }
+            .alert(
+                "解散合集",
+                isPresented: pendingCollectionDeleteAlertBinding,
+                presenting: pendingDeleteCollection
+            ) { collection in
+                Button("取消", role: .cancel) {
+                    pendingDeleteCollection = nil
+                }
+                Button("解散", role: .destructive) {
+                    dissolveCollection(collection)
+                }
+            } message: { collection in
+                Text("确定要解散“\(collection.name)”吗？其中的收藏会返回根页，不会被删除。")
+            }
+    }
+
+    private var collectionNameAlertBinding: Binding<Bool> {
+        Binding(
+            get: { collectionNameDraft != nil },
+            set: { isPresented in
+                if !isPresented {
+                    collectionNameDraft = nil
+                }
+            }
+        )
+    }
+
+    private var collectionNameTextBinding: Binding<String> {
+        Binding(
+            get: { collectionNameDraft?.name ?? "" },
+            set: { collectionNameDraft?.name = $0 }
+        )
+    }
+
+    private var pendingCollectionDeleteAlertBinding: Binding<Bool> {
+        Binding(
+            get: { pendingDeleteCollection != nil },
+            set: { isPresented in
+                if !isPresented {
+                    pendingDeleteCollection = nil
+                }
+            }
+        )
+    }
+}
+
 public struct FavoritesView: View {
     @StateObject private var viewModel: FavoritesViewModel
     @AppStorage("yamibo.favorite.filter") private var filterRawValue = FavoriteFilter.all.rawValue
@@ -604,7 +701,9 @@ public struct FavoritesView: View {
     @State private var selectedFavorite: Favorite?
     @State private var showingSettingsSheet = false
     @State private var displayNameDraft: FavoriteDisplayNameDraft?
+    @State private var collectionNameDraft: FavoriteCollectionNameDraft?
     @State private var pendingDeleteFavorite: Favorite?
+    @State private var pendingDeleteCollection: FavoriteCollection?
     @State private var isSelecting = false
     @State private var selectedFavoriteIDs: Set<String> = []
     @State private var selectedCollectionIDs: Set<String> = []
@@ -654,6 +753,10 @@ public struct FavoritesView: View {
     }
 
     private var favoritesChromeContent: some View {
+        favoritesDialogContent
+    }
+
+    private var favoritesNavigationContent: some View {
         favoritesList
             .listStyle(.plain)
             .overlay(content: overlayContent)
@@ -678,11 +781,12 @@ public struct FavoritesView: View {
                     appModel: appModel
                 )
             )
+    }
+
+    private var favoritesLifecycleContent: some View {
+        favoritesNavigationContent
             .task {
-                await viewModel.loadCachedFavorites()
-                if case .root = scope {
-                    await viewModel.refresh()
-                }
+                await loadInitialFavorites()
             }
             .onChange(of: filterRawValue) { _, _ in
                 searchText = ""
@@ -702,6 +806,10 @@ public struct FavoritesView: View {
             .refreshable {
                 await viewModel.refresh()
             }
+    }
+
+    private var favoritesDialogContent: some View {
+        favoritesLifecycleContent
             .alert("加载失败", isPresented: .constant(viewModel.errorMessage != nil), actions: {
                 Button("确定") {
                     viewModel.errorMessage = nil
@@ -805,6 +913,14 @@ public struct FavoritesView: View {
                     await appModel.bootstrap()
                 }
             }
+            .modifier(
+                FavoriteCollectionDialogsModifier(
+                    collectionNameDraft: $collectionNameDraft,
+                    pendingDeleteCollection: $pendingDeleteCollection,
+                    saveName: saveCollectionName,
+                    dissolveCollection: dissolveCollection
+                )
+            )
     }
 
     private var favoritesList: some View {
@@ -991,6 +1107,33 @@ public struct FavoritesView: View {
                     FavoriteCollectionRow(collection: collection, summary: summary, isSelected: false)
                 }
                 .buttonStyle(.plain)
+                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                    Button(role: .destructive) {
+                        pendingDeleteCollection = collection
+                    } label: {
+                        swipeActionLabel(title: "删除", systemImage: "trash")
+                    }
+                    .tint(.red)
+
+                    Button {
+                        Task {
+                            await viewModel.setCollectionHidden(!collection.isHidden, for: collection)
+                        }
+                    } label: {
+                        swipeActionLabel(
+                            title: collection.isHidden ? "取消隐藏" : "隐藏",
+                            systemImage: collection.isHidden ? "eye" : "eye.slash"
+                        )
+                    }
+                    .tint(.orange)
+
+                    Button {
+                        collectionNameDraft = FavoriteCollectionNameDraft(collection: collection)
+                    } label: {
+                        swipeActionLabel(title: "编辑", systemImage: "pencil")
+                    }
+                    .tint(.indigo)
+                }
             }
         case let .favorite(favorite):
             let row = FavoriteRow(
@@ -1125,6 +1268,28 @@ public struct FavoritesView: View {
                 exitSelectionMode()
             }
         }
+    }
+
+    private func loadInitialFavorites() async {
+        await viewModel.loadCachedFavorites()
+        if case .root = scope {
+            await viewModel.refresh()
+        }
+    }
+
+    private func saveCollectionName(_ draft: FavoriteCollectionNameDraft) {
+        Task {
+            if await viewModel.setCollectionName(draft.name, for: draft.collectionID) {
+                collectionNameDraft = nil
+            }
+        }
+    }
+
+    private func dissolveCollection(_ collection: FavoriteCollection) {
+        Task {
+            _ = await viewModel.deleteSelections(favoriteIDs: [], collectionIDs: [collection.id])
+        }
+        pendingDeleteCollection = nil
     }
 
     private func pruneSelections() {
@@ -1292,9 +1457,17 @@ struct FavoriteCollectionRow: View {
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
 
-                    Text("合集")
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.orange)
+                    HStack(spacing: 8) {
+                        Text("合集")
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(.orange)
+
+                        if collection.isHidden {
+                            Label("已隐藏", systemImage: "eye.slash")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                 }
             }
             .padding(.vertical, 18)
@@ -1454,6 +1627,10 @@ func rootCollectionMatches(
     filter: FavoriteFilter,
     searchText: String
 ) -> Bool {
+    guard showsHidden || !collection.isHidden else {
+        return false
+    }
+
     let trimmedSearchText = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
     let matchedFavorites = makeFilteredFavorites(
         from: favorites,

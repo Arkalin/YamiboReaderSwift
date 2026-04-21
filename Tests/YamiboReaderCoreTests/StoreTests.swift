@@ -476,6 +476,27 @@ import Testing
     #expect(dissolved.favorites.allSatisfy { $0.parentCollectionID == nil })
 }
 
+@Test func favoriteStoreCanRenameAndHideCollections() async throws {
+    let defaults = try makeIsolatedDefaults(prefix: "favorite-collection-edit-tests")
+    let store = FavoriteStore(defaults: defaults, key: "favorites")
+
+    let favorite = Favorite(title: "根页收藏", url: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=908&mobile=2")))
+    try await store.saveFavorites([favorite])
+
+    let created = try await store.createCollection(name: "旧合集", favoriteIDs: [favorite.id])
+    let collectionID = try #require(created.collections.first?.id)
+
+    let renamed = try await store.setCollectionName("  新合集  ", for: collectionID)
+    #expect(renamed.collections.first?.name == "新合集")
+
+    let hidden = try await store.setCollectionHidden(true, for: collectionID)
+    #expect(hidden.collections.first?.isHidden == true)
+
+    let loaded = await store.loadCollections()
+    #expect(loaded.first?.name == "新合集")
+    #expect(loaded.first?.isHidden == true)
+}
+
 @Test func favoriteStoreCanReorderMixedRootEntries() async throws {
     let defaults = try makeIsolatedDefaults(prefix: "favorite-root-mixed-reorder-tests")
     let store = FavoriteStore(defaults: defaults, key: "favorites")

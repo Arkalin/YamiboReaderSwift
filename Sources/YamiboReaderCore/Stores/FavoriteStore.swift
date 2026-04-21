@@ -22,6 +22,8 @@ public protocol FavoriteStoring: Sendable {
     func createCollection(name: String, favoriteIDs: [String]) async throws -> FavoriteLibrarySnapshot
     func moveFavorites(ids: [String], toCollectionID: String?) async throws -> FavoriteLibrarySnapshot
     func dissolveCollections(ids: [String]) async throws -> FavoriteLibrarySnapshot
+    func setCollectionName(_ name: String, for collectionID: String) async throws -> FavoriteLibrarySnapshot
+    func setCollectionHidden(_ isHidden: Bool, for collectionID: String) async throws -> FavoriteLibrarySnapshot
     func setHidden(_ isHidden: Bool, for favoriteID: String) async throws -> [Favorite]
     func setDisplayName(_ displayName: String?, for favoriteID: String) async throws -> [Favorite]
     func setType(_ type: FavoriteType, for favoriteID: String) async throws -> [Favorite]
@@ -347,6 +349,33 @@ public actor FavoriteStore: FavoriteStoring {
             ),
             collections: remainingCollections
         )
+    }
+
+    public func setCollectionName(_ name: String, for collectionID: String) async throws -> FavoriteLibrarySnapshot {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else {
+            throw YamiboError.persistenceFailed("合集名称不能为空")
+        }
+
+        let snapshot = await loadLibrarySnapshot()
+        let updatedCollections = snapshot.collections.map { collection in
+            guard collection.id == collectionID else { return collection }
+            var collection = collection
+            collection.name = trimmedName
+            return collection
+        }
+        return try persistLibrary(favorites: snapshot.favorites, collections: updatedCollections)
+    }
+
+    public func setCollectionHidden(_ isHidden: Bool, for collectionID: String) async throws -> FavoriteLibrarySnapshot {
+        let snapshot = await loadLibrarySnapshot()
+        let updatedCollections = snapshot.collections.map { collection in
+            guard collection.id == collectionID else { return collection }
+            var collection = collection
+            collection.isHidden = isHidden
+            return collection
+        }
+        return try persistLibrary(favorites: snapshot.favorites, collections: updatedCollections)
     }
 
     public func setHidden(_ isHidden: Bool, for favoriteID: String) async throws -> [Favorite] {

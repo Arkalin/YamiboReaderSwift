@@ -536,6 +536,33 @@ final class MangaReaderModelTests: XCTestCase {
         XCTAssertEqual(entries.map(\.id), ["collection:collection-4"])
     }
 
+    func testRootHiddenCollectionsRespectShowsHiddenFlag() {
+        let visibleCollection = FavoriteCollection(id: "collection-6", name: "可见合集", manualOrder: 0)
+        let hiddenCollection = FavoriteCollection(id: "collection-7", name: "隐藏合集", manualOrder: 1, isHidden: true)
+
+        let hiddenOff = makeFavoriteListEntries(
+            scope: .root,
+            favorites: [],
+            collections: [visibleCollection, hiddenCollection],
+            showsHidden: false,
+            filter: .all,
+            sortOrder: .manual,
+            searchText: ""
+        )
+        XCTAssertEqual(hiddenOff.map(\.id), ["collection:collection-6"])
+
+        let hiddenOn = makeFavoriteListEntries(
+            scope: .root,
+            favorites: [],
+            collections: [visibleCollection, hiddenCollection],
+            showsHidden: true,
+            filter: .all,
+            sortOrder: .manual,
+            searchText: ""
+        )
+        XCTAssertEqual(hiddenOn.map(\.id), ["collection:collection-6", "collection:collection-7"])
+    }
+
     func testFavoriteSelectionActionStateMatchesRootAndCollectionRules() {
         let rootFavoritesOnly = makeFavoriteSelectionActionState(
             scope: .root,
