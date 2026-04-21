@@ -273,6 +273,7 @@ public struct FavoritesView: View {
     @State private var showingSettingsSheet = false
     @State private var editingFavorite: Favorite?
     @State private var editingDisplayName = ""
+    @State private var updateToastDismissTask: Task<Void, Never>?
     private let appContext: YamiboAppContext
     private let appModel: YamiboAppModel
 
@@ -331,6 +332,17 @@ public struct FavoritesView: View {
                     } else {
                         ContentUnavailableView("没有匹配结果", systemImage: "magnifyingglass")
                     }
+                }
+            }
+            .overlay(alignment: .top) {
+                if let updateCheckMessage = viewModel.updateCheckMessage {
+                    UpdateCheckToast(message: updateCheckMessage) {
+                        dismissUpdateToast()
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.top, 12)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .zIndex(1)
                 }
             }
             .navigationTitle("")
@@ -418,13 +430,12 @@ public struct FavoritesView: View {
             }, message: {
                 Text(viewModel.errorMessage ?? "")
             })
-            .alert("检查更新", isPresented: .constant(viewModel.updateCheckMessage != nil), actions: {
-                Button("确定") {
-                    viewModel.updateCheckMessage = nil
-                }
-            }, message: {
-                Text(viewModel.updateCheckMessage ?? "")
-            })
+            .onChange(of: viewModel.updateCheckMessage) { _, message in
+                scheduleUpdateToastDismiss(for: message)
+            }
+            .onDisappear {
+                updateToastDismissTask?.cancel()
+            }
             .alert("编辑显示名称", isPresented: editNameAlertBinding) {
                 TextField("显示名称", text: $editingDisplayName)
                 Button("取消", role: .cancel) {
@@ -544,6 +555,31 @@ public struct FavoritesView: View {
         }
     }
 
+    private func scheduleUpdateToastDismiss(for message: String?) {
+        updateToastDismissTask?.cancel()
+
+        guard let message else { return }
+
+        updateToastDismissTask = Task {
+            try? await Task.sleep(for: .seconds(2.4))
+            guard !Task.isCancelled else { return }
+
+            await MainActor.run {
+                guard viewModel.updateCheckMessage == message else { return }
+                withAnimation(.snappy(duration: 0.2)) {
+                    viewModel.updateCheckMessage = nil
+                }
+            }
+        }
+    }
+
+    private func dismissUpdateToast() {
+        updateToastDismissTask?.cancel()
+        withAnimation(.snappy(duration: 0.2)) {
+            viewModel.updateCheckMessage = nil
+        }
+    }
+
     @ViewBuilder
     private func swipeActionLabel(title: String, systemImage: String) -> some View {
         VStack(spacing: 4) {
@@ -552,6 +588,44 @@ public struct FavoritesView: View {
             Image(systemName: systemImage)
                 .font(.caption.weight(.semibold))
         }
+    }
+}
+
+private struct UpdateCheckToast: View {
+    let message: String
+    let onDismiss: () -> Void
+
+    var body: some View {
+        Button(action: onDismiss) {
+            HStack(spacing: 10) {
+                Image(systemName: "arrow.triangle.2.circlepath.circle.fill")
+                    .font(.title3)
+                    .foregroundStyle(.green)
+
+                Text(message)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                Image(systemName: "xmark")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .strokeBorder(.green.opacity(0.22), lineWidth: 1)
+            )
+            .shadow(color: .black.opacity(0.12), radius: 14, x: 0, y: 8)
+            .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("检查更新：\(message)")
     }
 }
 
