@@ -248,9 +248,7 @@ public struct FavoritesSettingsView: View {
                     ForEach(FavoriteAppearanceCategory.allCases) { category in
                         colorSelectorRow(for: category)
                     }
-                }
 
-                Section("网页浏览") {
                     Toggle(
                         "显示网页标题和网址",
                         isOn: Binding(
@@ -356,7 +354,7 @@ public struct FavoritesSettingsView: View {
                 .foregroundStyle(.primary)
 
             HStack(spacing: 10) {
-                ForEach(AppHomePage.allCases, id: \.self) { option in
+                ForEach([AppHomePage.forum, .favorites], id: \.self) { option in
                     Button {
                         viewModel.updateHomePage(option)
                     } label: {
