@@ -92,7 +92,7 @@ public struct ReaderContainerView: View {
                         .zIndex(1)
                 }
             }
-            .safeAreaInset(edge: .top, spacing: 0) {
+            .overlay(alignment: .top) {
                 if chromeMode.showsChrome {
                     ReaderTopChrome(
                         model: model,
@@ -101,9 +101,10 @@ public struct ReaderContainerView: View {
                         onOpenForum: openInForum,
                         onRefresh: refreshReader
                     )
+                    .transition(.move(edge: .top).combined(with: .opacity))
                 }
             }
-            .safeAreaInset(edge: .bottom, spacing: 0) {
+            .overlay(alignment: .bottom) {
                 if chromeMode.showsChrome {
                     ReaderBottomChrome(
                         model: model,
@@ -125,6 +126,7 @@ public struct ReaderContainerView: View {
                             commitProgressSlider(value)
                         }
                     )
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }
             .task {
