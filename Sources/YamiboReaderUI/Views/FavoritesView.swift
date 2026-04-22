@@ -176,7 +176,7 @@ public final class FavoritesViewModel: ObservableObject {
         searchText: String,
         isSelecting: Bool
     ) -> Bool {
-        guard filter == .all, !isSelecting else { return false }
+        guard !isSelecting else { return false }
         return canReorderFavorites(sortOrder: sortOrder, searchText: searchText)
     }
 

@@ -392,6 +392,15 @@ final class MangaReaderModelTests: XCTestCase {
             XCTAssertFalse(viewModel.canReorderFavorites(sortOrder: .progress, searchText: ""))
             XCTAssertFalse(viewModel.canReorderFavorites(sortOrder: .manual, searchText: "百合"))
             XCTAssertFalse(viewModel.canReorderFavorites(sortOrder: .manual, searchText: "  test  "))
+
+            XCTAssertTrue(viewModel.canReorderEntries(scope: .root, filter: .all, sortOrder: .manual, searchText: "", isSelecting: false))
+            XCTAssertTrue(viewModel.canReorderEntries(scope: .root, filter: .novel, sortOrder: .manual, searchText: "", isSelecting: false))
+            XCTAssertTrue(viewModel.canReorderEntries(scope: .root, filter: .manga, sortOrder: .manual, searchText: "", isSelecting: false))
+            XCTAssertTrue(viewModel.canReorderEntries(scope: .root, filter: .other, sortOrder: .manual, searchText: "", isSelecting: false))
+            XCTAssertFalse(viewModel.canReorderEntries(scope: .root, filter: .novel, sortOrder: .manual, searchText: "", isSelecting: true))
+            XCTAssertFalse(viewModel.canReorderEntries(scope: .root, filter: .novel, sortOrder: .title, searchText: "", isSelecting: false))
+            XCTAssertFalse(viewModel.canReorderEntries(scope: .root, filter: .novel, sortOrder: .progress, searchText: "", isSelecting: false))
+            XCTAssertFalse(viewModel.canReorderEntries(scope: .root, filter: .novel, sortOrder: .manual, searchText: "百合", isSelecting: false))
         }
     }
 
