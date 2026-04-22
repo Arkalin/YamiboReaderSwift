@@ -72,6 +72,15 @@ public enum MangaTitleCleaner {
             return 999
         }
 
+        if let circledSuffix = HTMLTextExtractor.firstMatch(
+            pattern: #"(?:第)?\s*(\d+(?:\.\d+)?)\s*[话話织回章节幕折更]\s*([①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳⓪]+)"#,
+            in: cleaned
+        ),
+           let base = circledSuffix.dropFirst().first.flatMap(Double.init),
+           let suffix = circledSuffix.dropFirst().dropFirst().first.flatMap(circledDigitsValue) {
+            return base + (suffix / 100)
+        }
+
         let patterns = [
             #"第\s*(\d+(?:\.\d+)?)\s*[-—]\s*(\d+(?:\.\d+)?)"#,
             #"(?:第)?\s*(\d+(?:\.\d+)?)\s*[话話织回章节幕折更]"#,
@@ -92,6 +101,36 @@ public enum MangaTitleCleaner {
         }
 
         return 0
+    }
+
+    private static func circledDigitsValue(_ raw: String) -> Double? {
+        let mapped = raw.compactMap { character -> String? in
+            switch character {
+            case "⓪": return "0"
+            case "①": return "1"
+            case "②": return "2"
+            case "③": return "3"
+            case "④": return "4"
+            case "⑤": return "5"
+            case "⑥": return "6"
+            case "⑦": return "7"
+            case "⑧": return "8"
+            case "⑨": return "9"
+            case "⑩": return "10"
+            case "⑪": return "11"
+            case "⑫": return "12"
+            case "⑬": return "13"
+            case "⑭": return "14"
+            case "⑮": return "15"
+            case "⑯": return "16"
+            case "⑰": return "17"
+            case "⑱": return "18"
+            case "⑲": return "19"
+            case "⑳": return "20"
+            default: return nil
+            }
+        }.joined()
+        return mapped.isEmpty ? nil : Double(mapped)
     }
 
     public static func extractAllPossibleNumbers(from rawTitle: String) -> [Double] {

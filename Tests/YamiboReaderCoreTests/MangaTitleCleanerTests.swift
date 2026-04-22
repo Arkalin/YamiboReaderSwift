@@ -12,6 +12,12 @@ import Testing
     #expect(MangaTitleCleaner.extractChapterNumber("最终话") == 999)
 }
 
+@Test func chapterNumberMatchesCircledSuffixAfterEpisodeMarker() async throws {
+    #expect(MangaTitleCleaner.extractChapterNumber("第03话①") == 3.01)
+    #expect(MangaTitleCleaner.extractChapterNumber("第06话②③") == 6.23)
+    #expect(MangaChapterDisplayFormatter.displayNumber(rawTitle: "第03话①", chapterNumber: 3.01) == "3-1")
+}
+
 @Test func searchKeywordKeepsAuthorAndBookName() async throws {
     #expect(MangaTitleCleaner.searchKeyword("【作者名】作品标题 - 中文百合漫画区") == "作者名 作品标题")
 }
