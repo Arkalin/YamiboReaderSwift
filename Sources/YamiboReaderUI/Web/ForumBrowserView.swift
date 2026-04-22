@@ -38,9 +38,6 @@ public final class ForumBrowserModel: ObservableObject {
 
     public func attach(webView: WKWebView) {
         self.webView = webView
-        if webView.url != nil {
-            sync(with: webView)
-        }
     }
 
     public func load(_ url: URL) {

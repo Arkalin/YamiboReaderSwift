@@ -58,7 +58,6 @@ public struct IOSForumWebView: UIViewRepresentable {
 
     public func updateUIView(_ view: WKWebView, context: Context) {
         context.coordinator.attach(view)
-        model.sync(with: view)
     }
 
     public final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate {
