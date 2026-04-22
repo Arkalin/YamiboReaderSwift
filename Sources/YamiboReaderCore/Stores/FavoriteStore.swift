@@ -31,6 +31,7 @@ public protocol FavoriteStoring: Sendable {
     func deleteFavorites(ids: [String]) async throws -> FavoriteLibrarySnapshot
     func favorite(for url: URL) async -> Favorite?
     func favorite(id: String) async -> Favorite?
+    func markLastReadAt(for favoriteID: String, date: Date) async throws -> [Favorite]
     func updateReadingProgress(for url: URL, progress: ReaderProgress) async throws -> Favorite
     func updateMangaProgress(for url: URL, chapterURL: URL, chapterTitle: String, pageIndex: Int) async throws -> Favorite
     func clearAll() async throws
@@ -435,6 +436,17 @@ public actor FavoriteStore: FavoriteStoring {
 
     public func favorite(id: String) async -> Favorite? {
         await loadFavorites().first { $0.id == id }
+    }
+
+    public func markLastReadAt(for favoriteID: String, date: Date = .now) async throws -> [Favorite] {
+        let snapshot = await loadLibrarySnapshot()
+        let updated = snapshot.favorites.map { favorite in
+            guard favorite.id == favoriteID else { return favorite }
+            var favorite = favorite
+            favorite.lastReadAt = date
+            return favorite
+        }
+        return try persistLibrary(favorites: updated, collections: snapshot.collections).favorites
     }
 
     public func updateReadingProgress(for url: URL, progress: ReaderProgress) async throws -> Favorite {

@@ -36,6 +36,7 @@ public enum FavoriteSortOrder: String, CaseIterable, Identifiable {
     case manual
     case title
     case progress
+    case recentRead
 
     public var id: String { rawValue }
 
@@ -44,6 +45,7 @@ public enum FavoriteSortOrder: String, CaseIterable, Identifiable {
         case .manual: "默认"
         case .title: "标题"
         case .progress: "进度"
+        case .recentRead: "最近阅读"
         }
     }
 }
@@ -335,7 +337,14 @@ public final class FavoritesViewModel: ObservableObject {
     }
 
     func openTarget(for favorite: Favorite, mode: FavoriteLaunchMode = .resume) async -> FavoriteOpenTarget {
-        let latestFavorite = await favoriteStore.favorite(id: favorite.id) ?? favorite
+        var latestFavorite = await favoriteStore.favorite(id: favorite.id) ?? favorite
+        do {
+            let updatedFavorites = try await favoriteStore.markLastReadAt(for: latestFavorite.id, date: .now)
+            favorites = updatedFavorites
+            latestFavorite = updatedFavorites.first(where: { $0.id == latestFavorite.id }) ?? latestFavorite
+        } catch {
+            // Opening should not be blocked by a best-effort recency write.
+        }
 
         switch latestFavorite.type {
         case .novel:
@@ -1604,6 +1613,8 @@ func makeFilteredFavorites(
         return filtered.sorted { lhs, rhs in
             progressScore(for: lhs) > progressScore(for: rhs)
         }
+    case .recentRead:
+        return filtered.sorted(by: compareRecentReadFavorites)
     }
 }
 
@@ -1644,6 +1655,13 @@ func makeFavoriteListEntries(
                         return entryManualOrder(lhs) < entryManualOrder(rhs)
                     }
                     return lhs.id < rhs.id
+                }
+        }
+
+        if sortOrder == .recentRead {
+            return (visibleCollections.map(FavoriteListEntry.collection) + rootFavorites.map(FavoriteListEntry.favorite))
+                .sorted { lhs, rhs in
+                    compareRecentReadEntries(lhs, rhs, favorites: favorites, showsHidden: showsHidden, filter: filter, searchText: searchText)
                 }
         }
 
@@ -1859,5 +1877,68 @@ private func entryManualOrder(_ entry: FavoriteListEntry) -> Int {
         collection.manualOrder
     case let .favorite(favorite):
         favorite.manualOrder
+    }
+}
+
+private func compareRecentReadFavorites(_ lhs: Favorite, _ rhs: Favorite) -> Bool {
+    switch (lhs.lastReadAt, rhs.lastReadAt) {
+    case let (lhsDate?, rhsDate?) where lhsDate != rhsDate:
+        return lhsDate > rhsDate
+    case (_?, nil):
+        return true
+    case (nil, _?):
+        return false
+    default:
+        if lhs.manualOrder != rhs.manualOrder {
+            return lhs.manualOrder < rhs.manualOrder
+        }
+        return lhs.id < rhs.id
+    }
+}
+
+private func compareRecentReadEntries(
+    _ lhs: FavoriteListEntry,
+    _ rhs: FavoriteListEntry,
+    favorites: [Favorite],
+    showsHidden: Bool,
+    filter: FavoriteFilter,
+    searchText: String
+) -> Bool {
+    switch (entryLastReadAt(lhs, favorites: favorites, showsHidden: showsHidden, filter: filter, searchText: searchText), entryLastReadAt(rhs, favorites: favorites, showsHidden: showsHidden, filter: filter, searchText: searchText)) {
+    case let (lhsDate?, rhsDate?) where lhsDate != rhsDate:
+        return lhsDate > rhsDate
+    case (_?, nil):
+        return true
+    case (nil, _?):
+        return false
+    default:
+        if entryManualOrder(lhs) != entryManualOrder(rhs) {
+            return entryManualOrder(lhs) < entryManualOrder(rhs)
+        }
+        return lhs.id < rhs.id
+    }
+}
+
+private func entryLastReadAt(
+    _ entry: FavoriteListEntry,
+    favorites: [Favorite],
+    showsHidden: Bool,
+    filter: FavoriteFilter,
+    searchText: String
+) -> Date? {
+    switch entry {
+    case let .favorite(favorite):
+        return favorite.lastReadAt
+    case let .collection(collection):
+        return makeFilteredFavorites(
+            from: favorites,
+            scope: .collection(collection),
+            showsHidden: showsHidden,
+            filter: filter,
+            sortOrder: .recentRead,
+            searchText: searchText
+        )
+        .compactMap(\.lastReadAt)
+        .max()
     }
 }

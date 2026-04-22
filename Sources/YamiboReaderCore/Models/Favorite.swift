@@ -16,6 +16,7 @@ public struct Favorite: Codable, Hashable, Identifiable, Sendable {
     public var lastMangaURL: URL?
     public var parentCollectionID: String?
     public var manualOrder: Int
+    public var lastReadAt: Date?
 
     private enum CodingKeys: String, CodingKey {
         case id
@@ -33,6 +34,7 @@ public struct Favorite: Codable, Hashable, Identifiable, Sendable {
         case lastMangaURL
         case parentCollectionID
         case manualOrder
+        case lastReadAt
     }
 
     public init(
@@ -50,7 +52,8 @@ public struct Favorite: Codable, Hashable, Identifiable, Sendable {
         type: FavoriteType = .unknown,
         lastMangaURL: URL? = nil,
         parentCollectionID: String? = nil,
-        manualOrder: Int = 0
+        manualOrder: Int = 0,
+        lastReadAt: Date? = nil
     ) {
         self.id = id ?? url.absoluteString
         self.title = title
@@ -67,6 +70,7 @@ public struct Favorite: Codable, Hashable, Identifiable, Sendable {
         self.lastMangaURL = lastMangaURL
         self.parentCollectionID = parentCollectionID
         self.manualOrder = manualOrder
+        self.lastReadAt = lastReadAt
     }
 
     public var resolvedDisplayTitle: String {
@@ -91,6 +95,7 @@ public struct Favorite: Codable, Hashable, Identifiable, Sendable {
         lastMangaURL = try container.decodeIfPresent(URL.self, forKey: .lastMangaURL)
         parentCollectionID = try container.decodeIfPresent(String.self, forKey: .parentCollectionID)
         manualOrder = try container.decodeIfPresent(Int.self, forKey: .manualOrder) ?? 0
+        lastReadAt = try container.decodeIfPresent(Date.self, forKey: .lastReadAt)
     }
 }
 

@@ -390,6 +390,7 @@ final class MangaReaderModelTests: XCTestCase {
             XCTAssertTrue(viewModel.canReorderFavorites(sortOrder: .manual, searchText: ""))
             XCTAssertFalse(viewModel.canReorderFavorites(sortOrder: .title, searchText: ""))
             XCTAssertFalse(viewModel.canReorderFavorites(sortOrder: .progress, searchText: ""))
+            XCTAssertFalse(viewModel.canReorderFavorites(sortOrder: .recentRead, searchText: ""))
             XCTAssertFalse(viewModel.canReorderFavorites(sortOrder: .manual, searchText: "百合"))
             XCTAssertFalse(viewModel.canReorderFavorites(sortOrder: .manual, searchText: "  test  "))
 
@@ -400,6 +401,7 @@ final class MangaReaderModelTests: XCTestCase {
             XCTAssertFalse(viewModel.canReorderEntries(scope: .root, filter: .novel, sortOrder: .manual, searchText: "", isSelecting: true))
             XCTAssertFalse(viewModel.canReorderEntries(scope: .root, filter: .novel, sortOrder: .title, searchText: "", isSelecting: false))
             XCTAssertFalse(viewModel.canReorderEntries(scope: .root, filter: .novel, sortOrder: .progress, searchText: "", isSelecting: false))
+            XCTAssertFalse(viewModel.canReorderEntries(scope: .root, filter: .novel, sortOrder: .recentRead, searchText: "", isSelecting: false))
             XCTAssertFalse(viewModel.canReorderEntries(scope: .root, filter: .novel, sortOrder: .manual, searchText: "百合", isSelecting: false))
         }
     }
@@ -572,6 +574,75 @@ final class MangaReaderModelTests: XCTestCase {
         XCTAssertEqual(hiddenOn.map(\.id), ["collection:collection-6", "collection:collection-7"])
     }
 
+    func testFilteredFavoritesSortsByRecentReadDescendingWithUnreadLast() {
+        let oldReadAt = Date(timeIntervalSince1970: 1_700_000_000)
+        let newReadAt = Date(timeIntervalSince1970: 1_700_000_500)
+        let unread = Favorite(
+            title: "未读",
+            url: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=870&mobile=2")!,
+            manualOrder: 0
+        )
+        let older = Favorite(
+            title: "较早阅读",
+            url: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=871&mobile=2")!,
+            manualOrder: 1,
+            lastReadAt: oldReadAt
+        )
+        let newer = Favorite(
+            title: "最近阅读",
+            url: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=872&mobile=2")!,
+            manualOrder: 2,
+            lastReadAt: newReadAt
+        )
+
+        let sorted = makeFilteredFavorites(
+            from: [unread, older, newer],
+            showsHidden: false,
+            filter: .all,
+            sortOrder: .recentRead,
+            searchText: ""
+        )
+
+        XCTAssertEqual(sorted.map(\.id), [newer.id, older.id, unread.id])
+    }
+
+    func testRootEntriesSortCollectionsByMostRecentChildRead() {
+        let oldReadAt = Date(timeIntervalSince1970: 1_700_000_000)
+        let newReadAt = Date(timeIntervalSince1970: 1_700_000_500)
+        let rootFavorite = Favorite(
+            title: "根页收藏",
+            url: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=873&mobile=2")!,
+            manualOrder: 0,
+            lastReadAt: oldReadAt
+        )
+        let collectionFavorite = Favorite(
+            title: "合集最近阅读",
+            url: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=874&mobile=2")!,
+            parentCollectionID: "collection-8",
+            manualOrder: 0,
+            lastReadAt: newReadAt
+        )
+        let unreadCollectionFavorite = Favorite(
+            title: "未阅读合集收藏",
+            url: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=875&mobile=2")!,
+            parentCollectionID: "collection-9"
+        )
+        let recentCollection = FavoriteCollection(id: "collection-8", name: "最近合集", manualOrder: 1)
+        let unreadCollection = FavoriteCollection(id: "collection-9", name: "未读合集", manualOrder: 2)
+
+        let entries = makeFavoriteListEntries(
+            scope: .root,
+            favorites: [rootFavorite, collectionFavorite, unreadCollectionFavorite],
+            collections: [recentCollection, unreadCollection],
+            showsHidden: false,
+            filter: .all,
+            sortOrder: .recentRead,
+            searchText: ""
+        )
+
+        XCTAssertEqual(entries.map(\.id), ["collection:collection-8", "favorite:\(rootFavorite.id)", "collection:collection-9"])
+    }
+
     func testFavoriteSelectionActionStateMatchesRootAndCollectionRules() {
         let rootFavoritesOnly = makeFavoriteSelectionActionState(
             scope: .root,
@@ -655,6 +726,40 @@ final class MangaReaderModelTests: XCTestCase {
 
         XCTAssertEqual(context.chapterURL, latestChapterURL)
         XCTAssertEqual(context.initialPage, 6)
+    }
+
+    func testFavoritesViewModelMarksLastReadWhenOpeningFavorite() async throws {
+        let keyPrefix = UUID().uuidString
+        let favoriteStore = FavoriteStore(key: "\(keyPrefix).favorites")
+        let favorite = Favorite(
+            title: "网页收藏",
+            url: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=812&mobile=2")!,
+            type: .other
+        )
+        try await favoriteStore.saveFavorites([favorite])
+
+        let appContext = YamiboAppContext(
+            sessionStore: SessionStore(key: "\(keyPrefix).session"),
+            settingsStore: SettingsStore(key: "\(keyPrefix).settings"),
+            favoriteStore: favoriteStore,
+            readerCacheStore: ReaderCacheStore(baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)),
+            mangaDirectoryStore: MangaDirectoryStore(baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true))
+        )
+        let viewModel = await MainActor.run {
+            FavoritesViewModel(appContext: appContext, favoriteStore: favoriteStore)
+        }
+        await viewModel.loadCachedFavorites()
+
+        let target = await viewModel.openTarget(for: favorite, mode: .resume)
+        guard case .web = target else {
+            return XCTFail("Expected web target")
+        }
+
+        let updatedFavorite = await favoriteStore.favorite(id: favorite.id)
+        XCTAssertNotNil(updatedFavorite?.lastReadAt)
+        await MainActor.run {
+            XCTAssertNotNil(viewModel.favorites.first?.lastReadAt)
+        }
     }
 
     func testFavoritesViewModelDeletesFavoriteAfterRemoteDeleteSucceeds() async throws {

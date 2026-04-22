@@ -223,6 +223,24 @@ import Testing
     #expect(didReceive)
 }
 
+@Test func favoriteStoreCanMarkLastReadAt() async throws {
+    let defaults = try #require(UserDefaults(suiteName: "favorite-last-read-tests"))
+    defaults.removePersistentDomain(forName: "favorite-last-read-tests")
+    let store = FavoriteStore(defaults: defaults, key: "favorites")
+    let favorite = Favorite(
+        title: "最近阅读收藏",
+        url: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=302&mobile=2"))
+    )
+    let readAt = Date(timeIntervalSince1970: 1_700_000_000)
+    try await store.saveFavorites([favorite])
+
+    let updated = try await store.markLastReadAt(for: favorite.id, date: readAt)
+    let loaded = await store.favorite(id: favorite.id)
+
+    #expect(updated.first?.lastReadAt == readAt)
+    #expect(loaded?.lastReadAt == readAt)
+}
+
 @Test func favoriteStoreUpdatesMangaProgress() async throws {
     let defaults = try #require(UserDefaults(suiteName: "favorite-manga-progress-tests"))
     defaults.removePersistentDomain(forName: "favorite-manga-progress-tests")
@@ -474,6 +492,7 @@ import Testing
     #expect(loaded.map(\.id) == ["legacy-1", "legacy-2"])
     #expect(loaded.map(\.parentCollectionID) == [nil, nil])
     #expect(loaded.map(\.manualOrder) == [0, 1])
+    #expect(loaded.map(\.lastReadAt) == [nil, nil])
 }
 
 @Test func favoriteStoreCanCreateMoveAndDissolveCollections() async throws {
