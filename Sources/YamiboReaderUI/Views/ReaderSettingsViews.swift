@@ -73,6 +73,8 @@ struct ReaderSettingsPanel: View {
     @Environment(\.colorScheme) private var colorScheme
     @State private var draftSettings = ReaderAppearanceSettings()
     @State private var hasLoadedDraft = false
+    private static let fallbackPreviewText = "今夜，窗外的风像翻页声一样轻，阅读设置会在此处预览，右上角保存后才会作用在正文中。你可以先把它调到舒服，再继续往下读。"
+    private static let previewCharacterCount = 200
 
     var body: some View {
         GeometryReader { proxy in
@@ -90,6 +92,7 @@ struct ReaderSettingsPanel: View {
                     ReaderBooksHeroSection(
                         settings: draftSettings,
                         palette: palette,
+                        previewText: Self.previewText(for: model),
                         topInset: topInset,
                         height: heroHeight,
                         onClose: { dismiss() },
@@ -173,6 +176,18 @@ struct ReaderSettingsPanel: View {
     private func setSystemStatusBarVisibility(_ value: Bool) { draftSettings.showsSystemStatusBar = value }
     private func setImageLoading(_ value: Bool) { draftSettings.loadsInlineImages = value }
 
+    private static func previewText(for model: ReaderContainerModel) -> String {
+        guard !model.pages.isEmpty else { return fallbackPreviewText }
+
+        let startIndex = min(max(model.currentPageIndex, 0), model.pages.count - 1)
+        let sourceText = model.pages[startIndex...]
+            .flatMap(\.previewTextFragments)
+            .joined(separator: "\n\n")
+            .trimmedReaderPreviewText
+
+        guard !sourceText.isEmpty else { return fallbackPreviewText }
+        return String(sourceText.prefix(previewCharacterCount))
+    }
 }
 
 private struct ReaderBooksUnifiedSheetBackground: View {
@@ -195,6 +210,7 @@ private struct ReaderBooksUnifiedSheetBackground: View {
 private struct ReaderBooksHeroSection: View {
     let settings: ReaderAppearanceSettings
     let palette: ReaderBooksSheetPalette
+    let previewText: String
     let topInset: CGFloat
     let height: CGFloat
     let onClose: () -> Void
@@ -212,6 +228,7 @@ private struct ReaderBooksHeroSection: View {
             ReaderBooksPreviewMaskedContent(
                 settings: settings,
                 palette: palette,
+                previewText: previewText,
                 contentHeight: max(160, height - topInset - 122)
             )
         }
@@ -267,6 +284,7 @@ private struct ReaderBooksSettingsHeader: View {
 private struct ReaderBooksPreviewMaskedContent: View {
     let settings: ReaderAppearanceSettings
     let palette: ReaderBooksSheetPalette
+    let previewText: String
     let contentHeight: CGFloat
 
     var body: some View {
@@ -274,7 +292,7 @@ private struct ReaderBooksPreviewMaskedContent: View {
             Color.clear
             VStack(alignment: .leading, spacing: 20) {
                 ReaderRichTextView(
-                    text: "今夜，窗外的风像翻页声一样轻。阅读设置会在此处预览，右上角保存后才会作用在正文中。你可以先把它调到舒服，再继续往下读。",
+                    text: previewText,
                     chapterTitle: nil,
                     settings: settings,
                     baseFontSize: 22,
@@ -300,6 +318,30 @@ private struct ReaderBooksPreviewMaskedContent: View {
             )
         )
         .clipped()
+    }
+}
+
+private extension ReaderRenderedPage {
+    var previewTextFragments: [String] {
+        blocks.compactMap(\.previewTextFragment)
+    }
+}
+
+private extension ReaderRenderedBlock {
+    var previewTextFragment: String? {
+        switch self {
+        case let .text(text, _):
+            let trimmed = text.trimmedReaderPreviewText
+            return trimmed.isEmpty ? nil : trimmed
+        case .image, .footer:
+            return nil
+        }
+    }
+}
+
+private extension String {
+    var trimmedReaderPreviewText: String {
+        trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
 
