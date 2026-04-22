@@ -908,7 +908,7 @@ public struct FavoritesView: View {
                 Text(bulkDeleteMessage)
             }
             .confirmationDialog("移动到合集", isPresented: $showingMoveDialog, titleVisibility: .visible) {
-                Button("未加入合集") {
+                Button("<全部>") {
                     moveSelectedFavorites(to: nil)
                 }
                 ForEach(moveTargets) { collection in
