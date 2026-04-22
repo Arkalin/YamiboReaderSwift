@@ -114,58 +114,31 @@ public struct ReaderContainerView: View {
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                         .zIndex(1)
                 }
+
+                if model.settings.readingMode == .paged && chromeMode.showsChrome {
+                    VStack(spacing: 0) {
+                        topChrome(topInset: topInset)
+                        Spacer(minLength: 0)
+                    }
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .zIndex(2)
+
+                    VStack(spacing: 0) {
+                        Spacer(minLength: 0)
+                        bottomChrome(bottomInset: bottomInset)
+                    }
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .zIndex(2)
+                }
             }
             .safeAreaInset(edge: .top, spacing: 0) {
-                if chromeMode.showsChrome {
-                    ReaderTopChrome(
-                        model: model,
-                        topInset: topInset,
-                        onClose: closeReader,
-                        onOpenForum: openInForum,
-                        onRefresh: refreshReader
-                    )
-                    .background(
-                        GeometryReader { geometry in
-                            Color.clear.preference(
-                                key: ReaderTopChromeHeightPreferenceKey.self,
-                                value: geometry.size.height
-                            )
-                        }
-                    )
-                    .transition(.move(edge: .top).combined(with: .opacity))
+                if model.settings.readingMode == .vertical && chromeMode.showsChrome {
+                    topChrome(topInset: topInset)
                 }
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
-                if chromeMode.showsChrome {
-                    ReaderBottomChrome(
-                        model: model,
-                        bottomInset: bottomInset,
-                        onShowChapters: openChapterDrawer,
-                        onShowWebJump: openWebJumpSheet,
-                        onStepWeb: { delta in
-                            Task { await jumpToWebView(model.visibleView + delta) }
-                        },
-                        onShowSettings: openSettings,
-                        onShowCache: openCachePanel,
-                        onJumpChapter: { delta in
-                            jumpAdjacentChapter(delta)
-                        },
-                        onProgressPreviewChange: { value, isEditing in
-                            handleProgressPreviewChange(value: value, isEditing: isEditing)
-                        },
-                        onProgressCommit: { value in
-                            commitProgressSlider(value)
-                        }
-                    )
-                    .background(
-                        GeometryReader { geometry in
-                            Color.clear.preference(
-                                key: ReaderBottomChromeHeightPreferenceKey.self,
-                                value: geometry.size.height
-                            )
-                        }
-                    )
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                if model.settings.readingMode == .vertical && chromeMode.showsChrome {
+                    bottomChrome(bottomInset: bottomInset)
                 }
             }
             .task {
@@ -375,6 +348,57 @@ public struct ReaderContainerView: View {
         readerThemeColor(for: model.settings.backgroundStyle, colorScheme: colorScheme)
     }
 
+    @ViewBuilder
+    private func topChrome(topInset: CGFloat) -> some View {
+        ReaderTopChrome(
+            model: model,
+            topInset: topInset,
+            onClose: closeReader,
+            onOpenForum: openInForum,
+            onRefresh: refreshReader
+        )
+        .background(
+            GeometryReader { geometry in
+                Color.clear.preference(
+                    key: ReaderTopChromeHeightPreferenceKey.self,
+                    value: geometry.size.height
+                )
+            }
+        )
+    }
+
+    @ViewBuilder
+    private func bottomChrome(bottomInset: CGFloat) -> some View {
+        ReaderBottomChrome(
+            model: model,
+            bottomInset: bottomInset,
+            onShowChapters: openChapterDrawer,
+            onShowWebJump: openWebJumpSheet,
+            onStepWeb: { delta in
+                Task { await jumpToWebView(model.visibleView + delta) }
+            },
+            onShowSettings: openSettings,
+            onShowCache: openCachePanel,
+            onJumpChapter: { delta in
+                jumpAdjacentChapter(delta)
+            },
+            onProgressPreviewChange: { value, isEditing in
+                handleProgressPreviewChange(value: value, isEditing: isEditing)
+            },
+            onProgressCommit: { value in
+                commitProgressSlider(value)
+            }
+        )
+        .background(
+            GeometryReader { geometry in
+                Color.clear.preference(
+                    key: ReaderBottomChromeHeightPreferenceKey.self,
+                    value: geometry.size.height
+                )
+            }
+        )
+    }
+
     private func readerLayout(proxy: GeometryProxy, topInset: CGFloat, bottomInset: CGFloat) -> ReaderContainerLayout {
         let horizontalPadding = max(model.settings.horizontalPadding, 0)
         let safeAreaInsets = ReaderLayoutInsets(
@@ -388,8 +412,8 @@ public struct ReaderContainerView: View {
             trailing: horizontalPadding
         )
         let chromeInsets = ReaderLayoutInsets(
-            top: chromeMode.showsChrome ? max(topChromeHeight - topInset, 0) : 0,
-            bottom: chromeMode.showsChrome ? max(bottomChromeHeight - bottomInset, 0) : 0
+            top: model.settings.readingMode == .vertical && chromeMode.showsChrome ? max(topChromeHeight - topInset, 0) : 0,
+            bottom: model.settings.readingMode == .vertical && chromeMode.showsChrome ? max(bottomChromeHeight - bottomInset, 0) : 0
         )
         return ReaderContainerLayout(
             containerSize: proxy.size,
