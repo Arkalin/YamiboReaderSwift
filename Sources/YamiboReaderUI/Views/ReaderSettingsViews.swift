@@ -274,20 +274,11 @@ private struct ReaderBooksPreviewMaskedContent: View {
             Color.clear
             VStack(alignment: .leading, spacing: 20) {
                 ReaderRichTextView(
-                    text: "今夜，窗外的风像翻页声一样轻。",
+                    text: "今夜，窗外的风像翻页声一样轻。阅读设置会在此处预览，右上角保存后才会作用在正文中。你可以先把它调到舒服，再继续往下读。",
                     chapterTitle: nil,
                     settings: settings,
-                    baseFontSize: 24,
-                    textColor: UIColor(palette.primaryText),
-                    titleWeight: .bold
-                )
-
-                ReaderRichTextView(
-                    text: "阅读设置会在此处预览，右上角保存后才会作用在正文中。你可以先把它调到舒服，再继续往下读。",
-                    chapterTitle: nil,
-                    settings: settings,
-                    baseFontSize: 17,
-                    textColor: UIColor(palette.secondaryText)
+                    baseFontSize: 22,
+                    textColor: UIColor(palette.primaryText)
                 )
             }
             .padding(.top, 4)
