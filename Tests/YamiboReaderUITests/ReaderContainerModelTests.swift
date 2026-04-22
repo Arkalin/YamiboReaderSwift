@@ -161,6 +161,43 @@ final class ReaderContainerModelTests: XCTestCase {
         }
     }
 
+    func testSettingsPreviewTextUsesDraftTranslationModeFromOriginalDocument() async throws {
+        let document = ReaderPageDocument(
+            threadURL: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9012&mobile=2")!,
+            view: 1,
+            maxView: 1,
+            contentSource: .fallbackUnfilteredPage,
+            segments: [
+                .text("聽到弓莉這麼說，我急忙收拾東西。戀上朋友的妹妹了 後記", chapterTitle: "後記")
+            ]
+        )
+        let model = try await makeModel(
+            documents: [document],
+            settings: ReaderAppearanceSettings(translationMode: .simplified)
+        )
+
+        await MainActor.run {
+            let renderedText = model.pages.flatMap(\.blocks).compactMap { block -> String? in
+                if case let .text(text, _) = block { return text }
+                return nil
+            }.joined()
+
+            XCTAssertTrue(renderedText.contains("听到弓莉这么说"))
+            XCTAssertTrue(
+                model.previewText(translationMode: .none, characterCount: 80, fallback: "")
+                    .contains("聽到弓莉這麼說")
+            )
+            XCTAssertTrue(
+                model.previewText(translationMode: .simplified, characterCount: 80, fallback: "")
+                    .contains("听到弓莉这么说")
+            )
+            XCTAssertTrue(
+                model.previewText(translationMode: .traditional, characterCount: 80, fallback: "")
+                    .contains("戀上朋友的妹妹了 後記")
+            )
+        }
+    }
+
     func testPageChangesDebounceAndPersistLatestNovelProgress() async throws {
         let keyPrefix = UUID().uuidString
         let settingsStore = SettingsStore(key: "\(keyPrefix).settings")

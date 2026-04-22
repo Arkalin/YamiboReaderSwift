@@ -92,7 +92,11 @@ struct ReaderSettingsPanel: View {
                     ReaderBooksHeroSection(
                         settings: draftSettings,
                         palette: palette,
-                        previewText: Self.previewText(for: model),
+                        previewText: model.previewText(
+                            translationMode: draftSettings.translationMode,
+                            characterCount: Self.previewCharacterCount,
+                            fallback: Self.fallbackPreviewText
+                        ),
                         topInset: topInset,
                         height: heroHeight,
                         onClose: { dismiss() },
@@ -175,19 +179,6 @@ struct ReaderSettingsPanel: View {
     private func setTranslationMode(_ value: ReaderTranslationMode) { draftSettings.translationMode = value }
     private func setSystemStatusBarVisibility(_ value: Bool) { draftSettings.showsSystemStatusBar = value }
     private func setImageLoading(_ value: Bool) { draftSettings.loadsInlineImages = value }
-
-    private static func previewText(for model: ReaderContainerModel) -> String {
-        guard !model.pages.isEmpty else { return fallbackPreviewText }
-
-        let startIndex = min(max(model.currentPageIndex, 0), model.pages.count - 1)
-        let sourceText = model.pages[startIndex...]
-            .flatMap(\.previewTextFragments)
-            .joined(separator: "\n\n")
-            .trimmedReaderPreviewText
-
-        guard !sourceText.isEmpty else { return fallbackPreviewText }
-        return String(sourceText.prefix(previewCharacterCount))
-    }
 }
 
 private struct ReaderBooksUnifiedSheetBackground: View {
@@ -318,30 +309,6 @@ private struct ReaderBooksPreviewMaskedContent: View {
             )
         )
         .clipped()
-    }
-}
-
-private extension ReaderRenderedPage {
-    var previewTextFragments: [String] {
-        blocks.compactMap(\.previewTextFragment)
-    }
-}
-
-private extension ReaderRenderedBlock {
-    var previewTextFragment: String? {
-        switch self {
-        case let .text(text, _):
-            let trimmed = text.trimmedReaderPreviewText
-            return trimmed.isEmpty ? nil : trimmed
-        case .image, .footer:
-            return nil
-        }
-    }
-}
-
-private extension String {
-    var trimmedReaderPreviewText: String {
-        trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
 

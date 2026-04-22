@@ -139,6 +139,17 @@ public final class ReaderContainerModel: ObservableObject {
         return "第 \(displayedPageIndex + 1) / \(max(displayedPageCount, 1)) 页 · 网页第 \(displayedView) / \(max(maxView, 1)) 页\(chapter)"
     }
 
+    public func previewText(
+        translationMode: ReaderTranslationMode,
+        characterCount: Int,
+        fallback: String
+    ) -> String {
+        let sourceText = rawPreviewTextForCurrentLocation().trimmingCharacters(in: .whitespacesAndNewlines)
+        let previewSource = sourceText.isEmpty ? fallback : sourceText
+        let transformed = ReaderTextTransformer.transform(previewSource, mode: translationMode)
+        return String(transformed.prefix(max(characterCount, 0)))
+    }
+
     public var renderedPageCount: Int {
         max(pages.count, 1)
     }
@@ -761,6 +772,41 @@ public final class ReaderContainerModel: ObservableObject {
         return currentDocument
     }
 
+    private func rawPreviewTextForCurrentLocation() -> String {
+        guard let document = document(for: currentRenderedPageMetadata?.documentView) ?? currentDocument else {
+            return ""
+        }
+        guard !document.segments.isEmpty else { return "" }
+
+        let startSegmentIndex = min(
+            max(currentRenderedPageMetadata?.segmentIndex ?? 0, 0),
+            max(document.segments.count - 1, 0)
+        )
+        let startOffset = currentRenderedPageMetadata?.segmentStartOffset ?? 0
+
+        let fragments = document.segments[startSegmentIndex...].enumerated().compactMap { offset, segment -> String? in
+            guard case let .text(text, _) = segment else { return nil }
+
+            let previewText = offset == 0
+                ? text.droppingReaderPreviewCharacters(startOffset)
+                : text
+            let trimmed = previewText.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? nil : trimmed
+        }
+
+        return fragments.joined(separator: "\n\n")
+    }
+
+    private func document(for view: Int?) -> ReaderPageDocument? {
+        if view == prefetchedDocument?.view {
+            return prefetchedDocument
+        }
+        if view == currentDocument?.view {
+            return currentDocument
+        }
+        return nil
+    }
+
     private var currentRenderedPageMetadata: ReaderRenderedPage? {
         guard pages.indices.contains(currentPageIndex) else { return nil }
         return pages[currentPageIndex]
@@ -1119,4 +1165,14 @@ private struct ReaderProgressSnapshot: Equatable {
     let chapterTitle: String?
     let authorID: String?
     let resumePoint: ReaderResumePoint?
+}
+
+private extension String {
+    func droppingReaderPreviewCharacters(_ count: Int) -> String {
+        guard count > 0 else { return self }
+        guard count < self.count else { return "" }
+
+        let start = index(startIndex, offsetBy: count)
+        return String(self[start...])
+    }
 }
