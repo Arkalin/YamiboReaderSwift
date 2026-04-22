@@ -1142,7 +1142,7 @@ public struct FavoritesView: View {
                 }
                 .buttonStyle(.plain)
                 .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                    Button(role: .destructive) {
+                    Button {
                         pendingDeleteCollection = collection
                     } label: {
                         swipeActionLabel(title: "删除", systemImage: "trash")
@@ -1202,7 +1202,7 @@ public struct FavoritesView: View {
                         .disabled(viewModel.deletingFavoriteID != nil)
                     }
                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                        Button(role: .destructive) {
+                        Button {
                             pendingDeleteFavorite = favorite
                         } label: {
                             swipeActionLabel(
