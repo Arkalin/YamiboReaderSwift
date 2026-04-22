@@ -535,6 +535,104 @@ private final class StubURLProtocol: URLProtocol {
     #expect(verticalExpanded.pages.count >= verticalCompact.pages.count)
 }
 
+@Test func readerContainerLayoutComputesReadableFrameFromSafeAreaAndChrome() async throws {
+    let layout = ReaderContainerLayout(
+        containerSize: CGSize(width: 390, height: 844),
+        safeAreaInsets: ReaderLayoutInsets(top: 59, bottom: 34),
+        contentInsets: ReaderLayoutInsets(top: 0, leading: 20, bottom: 24, trailing: 20),
+        chromeInsets: ReaderLayoutInsets(top: 72, bottom: 96),
+        readingMode: .paged
+    )
+
+    #expect(layout.readableFrame.minX == 20)
+    #expect(layout.readableFrame.minY == 131)
+    #expect(layout.readableFrame.width == 350)
+    #expect(layout.readableFrame.height == 559)
+}
+
+@Test func readerPaginatorUsesReadableFrameForPagedTextRanges() async throws {
+    let text = Array(repeating: "第一段内容。\n第二段内容 with English words and spacing。\nかな混じりの文章。", count: 28).joined(separator: "\n\n")
+    let document = ReaderPageDocument(
+        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=55&mobile=2")),
+        view: 1,
+        maxView: 1,
+        segments: [
+            .text(text, chapterTitle: "第一章")
+        ]
+    )
+
+    let roomyLayout = ReaderContainerLayout(
+        containerSize: CGSize(width: 390, height: 844),
+        safeAreaInsets: ReaderLayoutInsets(top: 59, bottom: 34),
+        contentInsets: ReaderLayoutInsets(leading: 20, trailing: 20),
+        chromeInsets: .zero,
+        readingMode: .paged
+    )
+    let constrainedLayout = ReaderContainerLayout(
+        containerSize: CGSize(width: 390, height: 844),
+        safeAreaInsets: ReaderLayoutInsets(top: 59, bottom: 34),
+        contentInsets: ReaderLayoutInsets(leading: 20, trailing: 20),
+        chromeInsets: ReaderLayoutInsets(top: 90, bottom: 120),
+        readingMode: .paged
+    )
+
+    let roomy = ReaderPaginator.paginate(
+        document: document,
+        settings: ReaderAppearanceSettings(readingMode: .paged),
+        layout: roomyLayout
+    )
+    let constrained = ReaderPaginator.paginate(
+        document: document,
+        settings: ReaderAppearanceSettings(readingMode: .paged),
+        layout: constrainedLayout
+    )
+
+    #expect(constrained.pages.count >= roomy.pages.count)
+
+    let textPages = constrained.pages.compactMap { page -> ReaderRenderedPage? in
+        page.blocks.contains { if case .text = $0 { return true } else { return false } } ? page : nil
+    }
+    #expect(textPages.dropLast().allSatisfy { page in
+        page.segmentEndOffset - page.segmentStartOffset > 20
+    })
+    #expect(textPages.first?.segmentStartOffset == 0)
+    for index in 1..<textPages.count {
+        let previousEnd = textPages[index - 1].segmentEndOffset
+        let nextStart = textPages[index].segmentStartOffset
+        #expect(nextStart >= previousEnd)
+        let gap = String(text.dropFirst(previousEnd).prefix(max(nextStart - previousEnd, 0)))
+        #expect(gap.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+    }
+    #expect(textPages.last?.segmentEndOffset == text.count)
+}
+
+@Test func readerPaginatorPacksShortAdjacentTextSegmentsInPagedMode() async throws {
+    let document = ReaderPageDocument(
+        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=56&mobile=2")),
+        view: 1,
+        maxView: 1,
+        segments: [
+            .text("人", chapterTitle: "第一章"),
+            .text("在车站前停下脚步。", chapterTitle: "第一章"),
+            .text("她抬头看向雪后的街灯，终于松了一口气。", chapterTitle: "第一章")
+        ]
+    )
+
+    let pagination = ReaderPaginator.paginate(
+        document: document,
+        settings: ReaderAppearanceSettings(readingMode: .paged),
+        layout: ReaderContainerLayout(
+            containerSize: CGSize(width: 390, height: 844),
+            safeAreaInsets: ReaderLayoutInsets(top: 59, bottom: 34),
+            contentInsets: ReaderLayoutInsets(leading: 20, trailing: 20),
+            readingMode: .paged
+        )
+    )
+
+    #expect(pagination.pages.count == 1)
+    #expect(pagination.pages.first?.blocks.count == 3)
+}
+
 @Test func readerCacheStorePersistsAndDeletesPages() async throws {
     let directory = URL(fileURLWithPath: NSTemporaryDirectory())
         .appendingPathComponent(UUID().uuidString, isDirectory: true)

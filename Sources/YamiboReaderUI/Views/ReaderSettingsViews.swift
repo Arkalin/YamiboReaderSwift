@@ -4,52 +4,6 @@ import YamiboReaderCore
 #if os(iOS)
 import UIKit
 
-extension ReaderFontFamily {
-    func font(size: Double, weight: Font.Weight = .regular) -> Font {
-        Font(uiFont(size: size, weight: weight.uiFontWeight))
-    }
-
-    func uiFont(size: Double, weight: UIFont.Weight) -> UIFont {
-        let pointSize = CGFloat(size)
-        switch self {
-        case .systemSans:
-            return preferredFamilyFont(familyName: "PingFang SC", size: pointSize, weight: weight)
-                ?? .systemFont(ofSize: pointSize, weight: weight)
-        case .systemSerif:
-            return preferredFamilyFont(familyName: "Songti SC", size: pointSize, weight: weight)
-                ?? systemFont(size: pointSize, weight: weight, design: .serif)
-                ?? .systemFont(ofSize: pointSize, weight: weight)
-        case .rounded:
-            return systemFont(size: pointSize, weight: weight, design: .rounded)
-                ?? .systemFont(ofSize: pointSize, weight: weight)
-        }
-    }
-
-    func kerning(size: Double, scale: Double) -> CGFloat {
-        CGFloat(size * scale * 0.55)
-    }
-
-    private func preferredFamilyFont(familyName: String, size: CGFloat, weight: UIFont.Weight) -> UIFont? {
-        let descriptor = UIFontDescriptor(
-            fontAttributes: [
-                .family: familyName,
-                .traits: [UIFontDescriptor.TraitKey.weight: weight],
-            ]
-        )
-        let font = UIFont(descriptor: descriptor, size: size)
-        return font.familyName == familyName ? font : nil
-    }
-
-    private func systemFont(size: CGFloat, weight: UIFont.Weight, design: UIFontDescriptor.SystemDesign) -> UIFont? {
-        let baseDescriptor = UIFont.systemFont(ofSize: size, weight: weight).fontDescriptor
-        guard let designedDescriptor = baseDescriptor.withDesign(design) else {
-            return nil
-        }
-
-        return UIFont(descriptor: designedDescriptor, size: size)
-    }
-}
-
 private extension Font.Weight {
     var uiFontWeight: UIFont.Weight {
         switch self {

@@ -47,6 +47,22 @@ private struct ReaderVerticalPageFramePreferenceKey: PreferenceKey {
     }
 }
 
+private struct ReaderTopChromeHeightPreferenceKey: PreferenceKey {
+    static var defaultValue: CGFloat { 0 }
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
+private struct ReaderBottomChromeHeightPreferenceKey: PreferenceKey {
+    static var defaultValue: CGFloat { 0 }
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
 public struct ReaderContainerView: View {
     @StateObject private var model: ReaderContainerModel
     @StateObject private var verticalScrollCoordinator = ReaderVerticalScrollCoordinator()
@@ -67,6 +83,8 @@ public struct ReaderContainerView: View {
     @State private var progressPreviewHideTask: Task<Void, Never>?
     @State private var verticalTapSuppressionUntil: CFTimeInterval = 0
     @State private var isDismissing = false
+    @State private var topChromeHeight: CGFloat = 0
+    @State private var bottomChromeHeight: CGFloat = 0
     private let appModel: YamiboAppModel
 
     public init(context: ReaderLaunchContext, appModel: YamiboAppModel) {
@@ -78,6 +96,11 @@ public struct ReaderContainerView: View {
         GeometryReader { proxy in
             let topInset = max(proxy.safeAreaInsets.top, windowSafeAreaInsets.top)
             let bottomInset = max(proxy.safeAreaInsets.bottom, windowSafeAreaInsets.bottom)
+            let currentLayout = readerLayout(
+                proxy: proxy,
+                topInset: topInset,
+                bottomInset: bottomInset
+            )
 
             ZStack {
                 backgroundColor
@@ -92,7 +115,7 @@ public struct ReaderContainerView: View {
                         .zIndex(1)
                 }
             }
-            .overlay(alignment: .top) {
+            .safeAreaInset(edge: .top, spacing: 0) {
                 if chromeMode.showsChrome {
                     ReaderTopChrome(
                         model: model,
@@ -101,10 +124,18 @@ public struct ReaderContainerView: View {
                         onOpenForum: openInForum,
                         onRefresh: refreshReader
                     )
+                    .background(
+                        GeometryReader { geometry in
+                            Color.clear.preference(
+                                key: ReaderTopChromeHeightPreferenceKey.self,
+                                value: geometry.size.height
+                            )
+                        }
+                    )
                     .transition(.move(edge: .top).combined(with: .opacity))
                 }
             }
-            .overlay(alignment: .bottom) {
+            .safeAreaInset(edge: .bottom, spacing: 0) {
                 if chromeMode.showsChrome {
                     ReaderBottomChrome(
                         model: model,
@@ -126,12 +157,23 @@ public struct ReaderContainerView: View {
                             commitProgressSlider(value)
                         }
                     )
+                    .background(
+                        GeometryReader { geometry in
+                            Color.clear.preference(
+                                key: ReaderBottomChromeHeightPreferenceKey.self,
+                                value: geometry.size.height
+                            )
+                        }
+                    )
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }
             .task {
-                await model.prepare(layout: ReaderContainerLayout(width: proxy.size.width, height: proxy.size.height))
+                await model.prepare(layout: currentLayout)
                 updateChromeForContentState()
+            }
+            .onChange(of: currentLayout) { _, newValue in
+                model.updateLayout(newValue)
             }
             .onDisappear {
                 progressPreviewHideTask?.cancel()
@@ -200,6 +242,12 @@ public struct ReaderContainerView: View {
             .onChange(of: showingChapterSheet) { _, _ in
                 updateChromeForContentState()
             }
+            .onPreferenceChange(ReaderTopChromeHeightPreferenceKey.self) { value in
+                topChromeHeight = value
+            }
+            .onPreferenceChange(ReaderBottomChromeHeightPreferenceKey.self) { value in
+                bottomChromeHeight = value
+            }
             .animation(.easeInOut(duration: 0.2), value: isProgressPreviewVisible)
         }
     }
@@ -240,7 +288,7 @@ public struct ReaderContainerView: View {
                 )
                 .tag(page.index)
                 .padding(.horizontal, model.settings.horizontalPadding)
-                .padding(.vertical, 16)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
         }
         .tabViewStyle(.page(indexDisplayMode: .never))
@@ -325,6 +373,31 @@ public struct ReaderContainerView: View {
 
     private var backgroundColor: Color {
         readerThemeColor(for: model.settings.backgroundStyle, colorScheme: colorScheme)
+    }
+
+    private func readerLayout(proxy: GeometryProxy, topInset: CGFloat, bottomInset: CGFloat) -> ReaderContainerLayout {
+        let horizontalPadding = max(model.settings.horizontalPadding, 0)
+        let safeAreaInsets = ReaderLayoutInsets(
+            top: topInset,
+            bottom: bottomInset
+        )
+        let contentInsets = ReaderLayoutInsets(
+            top: model.settings.readingMode == .vertical ? 16 : 0,
+            leading: horizontalPadding,
+            bottom: model.settings.readingMode == .vertical ? 24 : 0,
+            trailing: horizontalPadding
+        )
+        let chromeInsets = ReaderLayoutInsets(
+            top: chromeMode.showsChrome ? max(topChromeHeight - topInset, 0) : 0,
+            bottom: chromeMode.showsChrome ? max(bottomChromeHeight - bottomInset, 0) : 0
+        )
+        return ReaderContainerLayout(
+            containerSize: proxy.size,
+            safeAreaInsets: safeAreaInsets,
+            contentInsets: contentInsets,
+            chromeInsets: chromeInsets,
+            readingMode: model.settings.readingMode
+        )
     }
 
     private func retryLoad() {

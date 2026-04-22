@@ -1,34 +1,6 @@
 import SwiftUI
 import YamiboReaderCore
 
-enum ReaderChapterTextFormatter {
-    static func split(text: String, chapterTitle: String?) -> (title: String?, body: String?) {
-        guard let chapterTitle else {
-            return (nil, nil)
-        }
-
-        let trimmedTitle = chapterTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedTitle.isEmpty else {
-            return (nil, nil)
-        }
-
-        if text == trimmedTitle {
-            return (trimmedTitle, nil)
-        }
-
-        let lineBreakCandidates = ["\r\n", "\n", "\r"]
-        for separator in lineBreakCandidates {
-            let prefixedTitle = trimmedTitle + separator
-            if text.hasPrefix(prefixedTitle) {
-                let body = String(text.dropFirst(prefixedTitle.count))
-                return (trimmedTitle, separator + body)
-            }
-        }
-
-        return (nil, nil)
-    }
-}
-
 #if os(iOS)
 import UIKit
 
@@ -98,56 +70,41 @@ struct ReaderRichTextView: UIViewRepresentable {
     let textColor: UIColor
     var titleWeight: UIFont.Weight = .regular
 
-    func makeUIView(context: Context) -> UILabel {
-        let label = UILabel()
-        label.numberOfLines = 0
-        label.lineBreakMode = .byWordWrapping
-        label.adjustsFontForContentSizeCategory = true
-        label.backgroundColor = .clear
-        return label
+    func makeUIView(context: Context) -> UITextView {
+        let textView = UITextView()
+        textView.isEditable = false
+        textView.isSelectable = false
+        textView.isScrollEnabled = false
+        textView.adjustsFontForContentSizeCategory = true
+        textView.backgroundColor = .clear
+        textView.textContainerInset = .zero
+        textView.textContainer.lineFragmentPadding = 0
+        textView.textContainer.lineBreakMode = .byWordWrapping
+        return textView
     }
 
-    func updateUIView(_ uiView: UILabel, context: Context) {
+    func updateUIView(_ uiView: UITextView, context: Context) {
         uiView.attributedText = makeAttributedText()
+        ReaderDebugLog.log(
+            "RichText render chars=\(text.count) width=\(Int(uiView.bounds.width.rounded())) height=\(Int(uiView.bounds.height.rounded())) snippet=\(text.readerDebugSnippet)"
+        )
     }
 
-    func sizeThatFits(_ proposal: ProposedViewSize, uiView: UILabel, context: Context) -> CGSize? {
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView: UITextView, context: Context) -> CGSize? {
         let targetWidth = proposal.width ?? UIScreen.main.bounds.width
         let fittingSize = uiView.sizeThatFits(CGSize(width: targetWidth, height: .greatestFiniteMagnitude))
         return CGSize(width: targetWidth, height: ceil(fittingSize.height))
     }
 
     private func makeAttributedText() -> NSAttributedString {
-        let paragraphStyle = NSMutableParagraphStyle()
-        paragraphStyle.lineSpacing = 6 * settings.lineHeightScale
-        paragraphStyle.alignment = settings.usesJustifiedText ? .justified : .natural
-
-        let bodyAttributes: [NSAttributedString.Key: Any] = [
-            .font: settings.fontFamily.uiFont(size: baseFontSize * settings.fontScale, weight: .regular),
-            .kern: settings.fontFamily.kerning(size: baseFontSize * settings.fontScale, scale: settings.characterSpacingScale),
-            .foregroundColor: textColor,
-            .paragraphStyle: paragraphStyle,
-        ]
-        let titleAttributes: [NSAttributedString.Key: Any] = [
-            .font: settings.fontFamily.uiFont(size: baseFontSize * settings.fontScale, weight: titleWeight),
-            .kern: settings.fontFamily.kerning(size: baseFontSize * settings.fontScale, scale: settings.characterSpacingScale),
-            .foregroundColor: textColor,
-            .paragraphStyle: paragraphStyle,
-        ]
-
-        let rendered = NSMutableAttributedString()
-        let segments = ReaderChapterTextFormatter.split(text: text, chapterTitle: chapterTitle)
-
-        if let title = segments.title {
-            rendered.append(NSAttributedString(string: title, attributes: titleAttributes))
-            if let body = segments.body {
-                rendered.append(NSAttributedString(string: body, attributes: bodyAttributes))
-            }
-        } else {
-            rendered.append(NSAttributedString(string: text, attributes: bodyAttributes))
-        }
-
-        return rendered
+        ReaderAttributedTextFactory.makeAttributedText(
+            text: text,
+            chapterTitle: chapterTitle,
+            settings: settings,
+            baseFontSize: baseFontSize,
+            textColor: textColor,
+            titleWeight: titleWeight
+        )
     }
 }
 

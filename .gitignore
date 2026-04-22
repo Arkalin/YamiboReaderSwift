@@ -3,6 +3,7 @@
 # Swift Package Manager
 .build/
 .sim-build/
+.xcodebuild/
 build/
 .swiftpm/
 Package.resolved

@@ -5,7 +5,7 @@ import XCTest
 
 final class ReaderContainerModelTests: XCTestCase {
     func testChapterTextFormatterSplitsLeadingChapterTitle() {
-        let split = ReaderChapterTextFormatter.split(
+        let split = ReaderChapterTextComponents.split(
             text: "第一章\n这里是正文",
             chapterTitle: "第一章"
         )
@@ -15,7 +15,7 @@ final class ReaderContainerModelTests: XCTestCase {
     }
 
     func testChapterTextFormatterDoesNotSplitWhenTitleIsNotLeadingLine() {
-        let split = ReaderChapterTextFormatter.split(
+        let split = ReaderChapterTextComponents.split(
             text: "序章\n第一章",
             chapterTitle: "第一章"
         )
@@ -158,6 +158,36 @@ final class ReaderContainerModelTests: XCTestCase {
         await MainActor.run {
             model.applySettings(updated)
             XCTAssertEqual(model.settings, updated)
+        }
+    }
+
+    func testUpdatingLayoutRepaginatesPagedContentAndKeepsCurrentSegment() async throws {
+        let model = try await makeModel(
+            documents: [
+                makeDocument(view: 1, maxView: 1, chapterTitles: ["第一章", "第二章", "第三章"]),
+            ],
+            settings: ReaderAppearanceSettings(readingMode: .paged)
+        )
+
+        let initialPageCount = await MainActor.run { model.renderedPageCount }
+
+        await MainActor.run {
+            model.jumpToRenderedPage(min(1, max(initialPageCount - 1, 0)))
+            model.updateLayout(
+                ReaderContainerLayout(
+                    containerSize: CGSize(width: 390, height: 844),
+                    safeAreaInsets: ReaderLayoutInsets(top: 59, bottom: 34),
+                    contentInsets: ReaderLayoutInsets(leading: 16, trailing: 16),
+                    chromeInsets: ReaderLayoutInsets(top: 88, bottom: 108),
+                    readingMode: .paged
+                )
+            )
+        }
+
+        await MainActor.run {
+            XCTAssertNotEqual(model.renderedPageCount, initialPageCount)
+            XCTAssertEqual(model.currentView, 1)
+            XCTAssertNotNil(model.currentChapterTitle)
         }
     }
 

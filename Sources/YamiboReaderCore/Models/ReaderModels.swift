@@ -235,6 +235,20 @@ public enum ReaderRenderedBlock: Hashable, Identifiable, Sendable {
             return nil
         }
     }
+
+    public var isTextBlock: Bool {
+        if case .text = self {
+            return true
+        }
+        return false
+    }
+
+    public var textContent: String? {
+        if case let .text(text, _) = self {
+            return text
+        }
+        return nil
+    }
 }
 
 public struct ReaderRenderedPage: Hashable, Identifiable, Sendable {
@@ -281,15 +295,89 @@ public struct ReaderPaginationResult: Hashable, Sendable {
 }
 
 public struct ReaderContainerLayout: Hashable, Sendable {
-    public var width: CGFloat
-    public var height: CGFloat
+    public var containerSize: CGSize
+    public var safeAreaInsets: ReaderLayoutInsets
+    public var contentInsets: ReaderLayoutInsets
+    public var chromeInsets: ReaderLayoutInsets
+    public var readingMode: ReaderReadingMode
 
-    public init(width: CGFloat, height: CGFloat) {
-        self.width = width
-        self.height = height
+    public init(
+        width: CGFloat,
+        height: CGFloat,
+        safeAreaInsets: ReaderLayoutInsets = .zero,
+        contentInsets: ReaderLayoutInsets = .zero,
+        chromeInsets: ReaderLayoutInsets = .zero,
+        readingMode: ReaderReadingMode = .paged
+    ) {
+        self.init(
+            containerSize: CGSize(width: width, height: height),
+            safeAreaInsets: safeAreaInsets,
+            contentInsets: contentInsets,
+            chromeInsets: chromeInsets,
+            readingMode: readingMode
+        )
     }
 
-    public static let zero = ReaderContainerLayout(width: 0, height: 0)
+    public init(
+        containerSize: CGSize,
+        safeAreaInsets: ReaderLayoutInsets = .zero,
+        contentInsets: ReaderLayoutInsets = .zero,
+        chromeInsets: ReaderLayoutInsets = .zero,
+        readingMode: ReaderReadingMode = .paged
+    ) {
+        self.containerSize = containerSize
+        self.safeAreaInsets = safeAreaInsets
+        self.contentInsets = contentInsets
+        self.chromeInsets = chromeInsets
+        self.readingMode = readingMode
+    }
+
+    public var width: CGFloat { containerSize.width }
+    public var height: CGFloat { containerSize.height }
+
+    public var readableFrame: CGRect {
+        let totalInsets = safeAreaInsets + contentInsets + chromeInsets
+        let width = max(0, containerSize.width - totalInsets.leading - totalInsets.trailing)
+        let height = max(0, containerSize.height - totalInsets.top - totalInsets.bottom)
+        return CGRect(
+            x: totalInsets.leading,
+            y: totalInsets.top,
+            width: width,
+            height: height
+        )
+    }
+
+    public static let zero = ReaderContainerLayout(containerSize: .zero)
+}
+
+public struct ReaderLayoutInsets: Hashable, Sendable {
+    public var top: CGFloat
+    public var leading: CGFloat
+    public var bottom: CGFloat
+    public var trailing: CGFloat
+
+    public init(
+        top: CGFloat = 0,
+        leading: CGFloat = 0,
+        bottom: CGFloat = 0,
+        trailing: CGFloat = 0
+    ) {
+        self.top = top
+        self.leading = leading
+        self.bottom = bottom
+        self.trailing = trailing
+    }
+
+    public static let zero = ReaderLayoutInsets()
+}
+
+public func + (lhs: ReaderLayoutInsets, rhs: ReaderLayoutInsets) -> ReaderLayoutInsets {
+    ReaderLayoutInsets(
+        top: lhs.top + rhs.top,
+        leading: lhs.leading + rhs.leading,
+        bottom: lhs.bottom + rhs.bottom,
+        trailing: lhs.trailing + rhs.trailing
+    )
 }
 
 public struct ReaderCacheBatchProgress: Hashable, Sendable {

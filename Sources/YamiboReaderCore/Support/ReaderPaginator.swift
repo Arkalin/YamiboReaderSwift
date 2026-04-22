@@ -7,7 +7,6 @@ public enum ReaderPaginator {
         settings: ReaderAppearanceSettings,
         layout: ReaderContainerLayout
     ) -> ReaderPaginationResult {
-        let usableLayout = normalizedLayout(layout, padding: settings.horizontalPadding)
         let annotatedSegments = annotatedSegments(from: document.segments, settings: settings)
 
         switch settings.readingMode {
@@ -16,10 +15,11 @@ public enum ReaderPaginator {
                 annotatedSegments: annotatedSegments,
                 documentView: document.view,
                 settings: settings,
-                layout: usableLayout,
+                layout: layout,
                 chunker: { annotatedSegment, settings, layout in
                     paginateText(
                         annotatedSegment.textContent,
+                        chapterTitle: annotatedSegment.chapterTitle,
                         settings: settings,
                         layout: layout
                     )
@@ -30,7 +30,7 @@ public enum ReaderPaginator {
                 annotatedSegments: annotatedSegments,
                 documentView: document.view,
                 settings: settings,
-                layout: usableLayout,
+                layout: layout,
                 chunker: { annotatedSegment, settings, layout in
                     verticalTextChunks(
                         from: annotatedSegment.textContent,
@@ -56,8 +56,23 @@ public enum ReaderPaginator {
         for annotatedSegment in annotatedSegments {
             switch annotatedSegment.segment {
             case let .text(text, chapterTitle):
+                ReaderDebugLog.log(
+                    "Paginator segment index=\(annotatedSegment.index) chapter=\(annotatedSegment.chapterTitle ?? "nil") chars=\(text.count) snippet=\(text.readerDebugSnippet)"
+                )
                 let slices = chunker(annotatedSegment, settings, layout)
                 for slice in slices where !slice.text.isEmpty {
+                    if settings.readingMode == .paged,
+                       appendTextSliceToPreviousPageIfPossible(
+                           slice,
+                           chapterTitle: chapterTitle,
+                           annotatedSegment: annotatedSegment,
+                           settings: settings,
+                           layout: layout,
+                           pages: &pages
+                       ) {
+                        continue
+                    }
+
                     let page = ReaderRenderedPage(
                         index: pages.count,
                         blocks: [.text(slice.text, chapterTitle: chapterTitle)],
@@ -67,6 +82,9 @@ public enum ReaderPaginator {
                         segmentIndex: annotatedSegment.index,
                         segmentStartOffset: slice.startOffset,
                         segmentEndOffset: slice.endOffset
+                    )
+                    ReaderDebugLog.log(
+                        "Paginator new page index=\(page.index) segment=\(annotatedSegment.index) sliceLen=\(slice.text.count) offsets=\(slice.startOffset)..<\(slice.endOffset) snippet=\(slice.text.readerDebugSnippet)"
                     )
                     if let chapterOrdinal = annotatedSegment.chapterOrdinal,
                        let chapterTitle = annotatedSegment.chapterTitle,
@@ -129,6 +147,48 @@ public enum ReaderPaginator {
         return ReaderPaginationResult(pages: pages, chapters: chapters)
     }
 
+    private static func appendTextSliceToPreviousPageIfPossible(
+        _ slice: TextSlice,
+        chapterTitle: String?,
+        annotatedSegment: AnnotatedSegment,
+        settings: ReaderAppearanceSettings,
+        layout: ReaderContainerLayout,
+        pages: inout [ReaderRenderedPage]
+    ) -> Bool {
+        guard !pages.isEmpty else { return false }
+        let previousIndex = pages.count - 1
+        var previousPage = pages[previousIndex]
+        guard previousPage.documentView > 0,
+              previousPage.chapterOrdinal == annotatedSegment.chapterOrdinal,
+              previousPage.chapterTitle == annotatedSegment.chapterTitle,
+              previousPage.blocks.allSatisfy(\.isTextBlock) else {
+            return false
+        }
+
+        let combinedText = (previousPage.blocks.compactMap(\.textContent) + [slice.text])
+            .joined(separator: "\n\n")
+
+#if canImport(UIKit)
+        guard ReaderPagedLayoutEngine.textFits(
+            combinedText,
+            chapterTitle: previousPage.chapterTitle,
+            settings: settings,
+            layout: layout
+        ) else {
+            return false
+        }
+#else
+        guard combinedText.count < 180 else { return false }
+#endif
+
+        previousPage.blocks.append(.text(slice.text, chapterTitle: chapterTitle))
+        pages[previousIndex] = previousPage
+        ReaderDebugLog.log(
+            "Paginator packed slice into page=\(previousIndex) segment=\(annotatedSegment.index) sliceLen=\(slice.text.count) combinedLen=\(combinedText.count) snippet=\(slice.text.readerDebugSnippet)"
+        )
+        return true
+    }
+
     private static func annotatedSegments(
         from segments: [ReaderSegment],
         settings: ReaderAppearanceSettings
@@ -177,20 +237,27 @@ public enum ReaderPaginator {
         }
     }
 
-    private static func normalizedLayout(_ layout: ReaderContainerLayout, padding: Double) -> ReaderContainerLayout {
-        let width = max(180, layout.width - (padding * 2))
-        let height = max(260, layout.height - 120)
-        return ReaderContainerLayout(width: width, height: height)
-    }
-
     private static func paginateText(
         _ text: String,
+        chapterTitle: String?,
         settings: ReaderAppearanceSettings,
         layout: ReaderContainerLayout
     ) -> [TextSlice] {
+#if canImport(UIKit)
+        let slices = ReaderPagedLayoutEngine.paginateText(
+            text,
+            chapterTitle: chapterTitle,
+            settings: settings,
+            layout: layout
+        )
+        if !slices.isEmpty {
+            return slices
+        }
+#endif
         let metrics = textMetrics(settings: settings)
-        let charsPerLine = max(10, Int(layout.width / max(metrics.characterWidth, 1)))
-        let linesPerPage = max(6, Int(layout.height / max(metrics.lineHeight, 1)))
+        let readableFrame = layout.readableFrame
+        let charsPerLine = max(10, Int(readableFrame.width / max(metrics.characterWidth, 1)))
+        let linesPerPage = max(6, Int(readableFrame.height / max(metrics.lineHeight, 1)))
         let charsPerPage = max(120, charsPerLine * linesPerPage)
         return textSlices(in: text, limit: charsPerPage)
     }
@@ -201,8 +268,9 @@ public enum ReaderPaginator {
         layout: ReaderContainerLayout
     ) -> [TextSlice] {
         let metrics = textMetrics(settings: settings)
-        let charsPerLine = max(10, Int(layout.width / max(metrics.characterWidth, 1)))
-        let linesPerChunk = max(10, Int((layout.height * 1.8) / max(metrics.lineHeight, 1)))
+        let readableFrame = layout.readableFrame
+        let charsPerLine = max(10, Int(readableFrame.width / max(metrics.characterWidth, 1)))
+        let linesPerChunk = max(10, Int((readableFrame.height * 1.8) / max(metrics.lineHeight, 1)))
         let chunkLimit = max(220, charsPerLine * linesPerChunk)
         return textSlices(in: text, limit: chunkLimit)
     }
@@ -356,7 +424,7 @@ private struct AnnotatedSegment {
     }
 }
 
-private struct TextSlice {
+struct TextSlice {
     let text: String
     let startOffset: Int
     let endOffset: Int
