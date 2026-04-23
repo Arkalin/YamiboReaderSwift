@@ -762,6 +762,111 @@ final class MangaReaderModelTests: XCTestCase {
         }
     }
 
+    func testFavoritesViewModelResumesNovelWithoutInjectingLegacyPage() async throws {
+        let keyPrefix = UUID().uuidString
+        let favoriteStore = FavoriteStore(key: "\(keyPrefix).favorites")
+        let favorite = Favorite(
+            title: "小说收藏",
+            url: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=813&mobile=2")!,
+            lastPage: 126,
+            lastView: 1,
+            lastChapter: "第一章",
+            authorID: "42",
+            novelResumePoint: ReaderResumePoint(
+                view: 1,
+                chapterOrdinal: 0,
+                chapterTitle: "第一章",
+                segmentIndex: 3,
+                segmentOffset: 127,
+                segmentProgress: 0.25,
+                authorID: "42",
+                readingModeHint: .vertical
+            ),
+            type: .novel
+        )
+        try await favoriteStore.saveFavorites([favorite])
+
+        let appContext = YamiboAppContext(
+            sessionStore: SessionStore(key: "\(keyPrefix).session"),
+            settingsStore: SettingsStore(key: "\(keyPrefix).settings"),
+            favoriteStore: favoriteStore,
+            readerCacheStore: ReaderCacheStore(baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)),
+            mangaDirectoryStore: MangaDirectoryStore(baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true))
+        )
+        let viewModel = await MainActor.run {
+            FavoritesViewModel(appContext: appContext, favoriteStore: favoriteStore)
+        }
+        await viewModel.loadCachedFavorites()
+
+        let target = await viewModel.openTarget(for: favorite, mode: .resume)
+        guard case let .reader(context) = target else {
+            return XCTFail("Expected reader target")
+        }
+
+        XCTAssertNil(context.initialView)
+        XCTAssertNil(context.initialPage)
+        XCTAssertEqual(context.authorID, "42")
+    }
+
+    func testFavoritesViewModelStartsNovelFromFirstPage() async throws {
+        let keyPrefix = UUID().uuidString
+        let favoriteStore = FavoriteStore(key: "\(keyPrefix).favorites")
+        let favorite = Favorite(
+            title: "小说收藏",
+            url: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=814&mobile=2")!,
+            lastPage: 126,
+            lastView: 3,
+            type: .novel
+        )
+        try await favoriteStore.saveFavorites([favorite])
+
+        let appContext = YamiboAppContext(
+            sessionStore: SessionStore(key: "\(keyPrefix).session"),
+            settingsStore: SettingsStore(key: "\(keyPrefix).settings"),
+            favoriteStore: favoriteStore,
+            readerCacheStore: ReaderCacheStore(baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)),
+            mangaDirectoryStore: MangaDirectoryStore(baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true))
+        )
+        let viewModel = await MainActor.run {
+            FavoritesViewModel(appContext: appContext, favoriteStore: favoriteStore)
+        }
+        await viewModel.loadCachedFavorites()
+
+        let target = await viewModel.openTarget(for: favorite, mode: .start)
+        guard case let .reader(context) = target else {
+            return XCTFail("Expected reader target")
+        }
+
+        XCTAssertEqual(context.initialView, 1)
+        XCTAssertEqual(context.initialPage, 0)
+    }
+
+    func testNovelFavoriteDetailLinesKeepDisplayProgressText() {
+        let favorite = Favorite(
+            title: "小说收藏",
+            url: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=815&mobile=2")!,
+            lastPage: 126,
+            lastView: 1,
+            lastChapter: "第一章",
+            novelResumePoint: ReaderResumePoint(
+                view: 1,
+                chapterOrdinal: 0,
+                chapterTitle: "第一章",
+                segmentIndex: 5,
+                segmentOffset: 400,
+                segmentProgress: 0.4,
+                authorID: nil,
+                readingModeHint: .vertical
+            ),
+            type: .novel
+        )
+
+        XCTAssertEqual(
+            favoriteDetailLines(for: favorite),
+            ["第一章", "读至第 127 页 · 网页第 1 页"]
+        )
+    }
+
     func testFavoritesViewModelDeletesFavoriteAfterRemoteDeleteSucceeds() async throws {
         let keyPrefix = UUID().uuidString
         let configuration = URLSessionConfiguration.ephemeral
