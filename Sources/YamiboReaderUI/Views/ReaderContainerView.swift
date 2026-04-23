@@ -4,17 +4,6 @@ import YamiboReaderCore
 #if os(iOS)
 import UIKit
 
-private enum ReaderChromeMode {
-    case loading
-    case error
-    case visible
-    case immersiveHidden
-
-    var showsChrome: Bool {
-        self != .immersiveHidden
-    }
-}
-
 private struct ReaderVerticalViewportMetrics: Equatable {
     var contentOffsetY: CGFloat = 0
     var viewportHeight: CGFloat = 0
@@ -61,7 +50,7 @@ public struct ReaderContainerView: View {
     @State private var showingCacheProgress = false
     @State private var showingWebJumpSheet = false
     @State private var showingChapterSheet = false
-    @State private var chromeMode: ReaderChromeMode = .loading
+    @State private var chromeState = ReaderChromeState()
     @State private var verticalScrollRequest: ReaderVerticalScrollRequest?
     @State private var verticalRestoreController = ReaderVerticalRestoreController()
     @State private var verticalRestoreRetryTask: Task<Void, Never>?
@@ -100,12 +89,12 @@ public struct ReaderContainerView: View {
 
                 if isProgressPreviewVisible {
                     ReaderChapterPreviewBubble(title: progressPreviewChapterTitle ?? "•••")
-                        .padding(.bottom, chromeMode.showsChrome ? bottomInset + 118 : bottomInset + 24)
+                        .padding(.bottom, chromeState.mode.showsChrome ? bottomInset + 118 : bottomInset + 24)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                         .zIndex(1)
                 }
 
-                if model.settings.readingMode == .paged && chromeMode.showsChrome {
+                if model.settings.readingMode == .paged && chromeState.mode.showsChrome {
                     VStack(spacing: 0) {
                         topChrome(topInset: topInset)
                         Spacer(minLength: 0)
@@ -122,12 +111,12 @@ public struct ReaderContainerView: View {
                 }
             }
             .safeAreaInset(edge: .top, spacing: 0) {
-                if model.settings.readingMode == .vertical && chromeMode.showsChrome {
+                if model.settings.readingMode == .vertical && chromeState.mode.showsChrome {
                     topChrome(topInset: topInset)
                 }
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
-                if model.settings.readingMode == .vertical && chromeMode.showsChrome {
+                if model.settings.readingMode == .vertical && chromeState.mode.showsChrome {
                     bottomChrome(bottomInset: bottomInset)
                 }
             }
@@ -181,7 +170,7 @@ public struct ReaderContainerView: View {
                 }
                 .presentationDetents([.medium])
             }
-            .statusBar(hidden: chromeMode == .immersiveHidden || !model.settings.showsSystemStatusBar)
+            .statusBar(hidden: chromeState.mode == .immersiveHidden || !model.settings.showsSystemStatusBar)
             .onChange(of: model.isLoading) { _, _ in
                 updateChromeForContentState()
             }
@@ -404,8 +393,8 @@ public struct ReaderContainerView: View {
             trailing: horizontalPadding
         )
         let chromeInsets = ReaderLayoutInsets(
-            top: model.settings.readingMode == .vertical && chromeMode.showsChrome ? max(topChromeHeight - topInset, 0) : 0,
-            bottom: model.settings.readingMode == .vertical && chromeMode.showsChrome ? max(bottomChromeHeight - bottomInset, 0) : 0
+            top: model.settings.readingMode == .vertical && chromeState.mode.showsChrome ? max(topChromeHeight - topInset, 0) : 0,
+            bottom: model.settings.readingMode == .vertical && chromeState.mode.showsChrome ? max(bottomChromeHeight - bottomInset, 0) : 0
         )
         return ReaderContainerLayout(
             containerSize: proxy.size,
@@ -417,17 +406,17 @@ public struct ReaderContainerView: View {
     }
 
     private func retryLoad() {
-        chromeMode = .visible
+        chromeState.showChrome()
         Task { await model.loadCurrent(forceRefresh: false) }
     }
 
     private func refreshReader() {
-        chromeMode = .visible
+        chromeState.showChrome()
         Task { await model.loadCurrent(forceRefresh: true) }
     }
 
     private func openInForum() {
-        chromeMode = .visible
+        chromeState.showChrome()
         guard !isDismissing else { return }
         isDismissing = true
         syncVerticalViewportBeforeSave()
@@ -438,7 +427,7 @@ public struct ReaderContainerView: View {
     }
 
     private func closeReader() {
-        chromeMode = .visible
+        chromeState.showChrome()
         guard !isDismissing else { return }
         isDismissing = true
         syncVerticalViewportBeforeSave()
@@ -454,7 +443,7 @@ public struct ReaderContainerView: View {
         progressPreviewHideTask?.cancel()
         isProgressPreviewVisible = false
         withAnimation(.easeInOut(duration: 0.2)) {
-            chromeMode = chromeMode == .immersiveHidden ? .visible : .immersiveHidden
+            chromeState.toggleChrome()
         }
     }
 
@@ -488,17 +477,14 @@ public struct ReaderContainerView: View {
     }
 
     private func openChapterDrawer() {
-        chromeMode = .visible
         showingChapterSheet = true
     }
 
     private func openSettings() {
-        chromeMode = .visible
         showingSettings = true
     }
 
     private func openCachePanel() {
-        chromeMode = .visible
         if model.hasCacheOperationSession {
             model.showCacheProgressIfRunning()
             showingCacheProgress = true
@@ -509,24 +495,32 @@ public struct ReaderContainerView: View {
 
     private func openWebJumpSheet() {
         guard model.maxView > 1 else { return }
-        chromeMode = .visible
         showingWebJumpSheet = true
     }
 
     private func updateChromeForContentState() {
-        guard !hasPresentedOverlay else {
-            chromeMode = .visible
-            return
+        let previousState = chromeState
+        var nextState = chromeState
+        nextState.update(
+            isLoading: model.isLoading,
+            errorMessage: model.errorMessage,
+            hasPages: !model.pages.isEmpty,
+            hasPresentedOverlay: hasPresentedOverlay
+        )
+        if previousState.mode != nextState.mode {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                chromeState = nextState
+            }
+        } else {
+            chromeState = nextState
         }
 
         if model.isLoading && model.pages.isEmpty {
-            chromeMode = .loading
             lastVerticalPositioningFingerprint = nil
             return
         }
 
         if model.errorMessage != nil && model.pages.isEmpty {
-            chromeMode = .error
             lastVerticalPositioningFingerprint = nil
             return
         }
@@ -550,12 +544,6 @@ public struct ReaderContainerView: View {
             }
         } else {
             lastVerticalPositioningFingerprint = nil
-        }
-
-        if chromeMode != .immersiveHidden {
-            withAnimation(.easeInOut(duration: 0.2)) {
-                chromeMode = .immersiveHidden
-            }
         }
     }
 
@@ -584,7 +572,7 @@ public struct ReaderContainerView: View {
     }
 
     private func jumpToWebView(_ view: Int) async {
-        chromeMode = .visible
+        chromeState.showChrome()
         await model.jumpToWebView(view)
         if model.settings.readingMode == .vertical {
             requestVerticalScrollToCurrentPage()
