@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 import YamiboReaderCore
 
 public enum FavoriteFilter: String, CaseIterable, Identifiable {
@@ -218,6 +219,53 @@ public final class FavoritesViewModel: ObservableObject {
                     toOffset: toOffset
                 )
             )
+            errorMessage = nil
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func reorderFavorites(
+        in parentCollectionID: String?,
+        visibleIDs: [String],
+        moves: [FavoriteVisibleOrderMove]
+    ) async {
+        guard !visibleIDs.isEmpty, !moves.isEmpty else { return }
+
+        var workingVisibleIDs = visibleIDs
+
+        do {
+            for move in moves {
+                favorites = try await favoriteStore.reorderFavorites(
+                    in: parentCollectionID,
+                    visibleIDs: workingVisibleIDs,
+                    fromOffsets: move.fromOffsets,
+                    toOffset: move.toOffset
+                )
+                workingVisibleIDs.move(fromOffsets: move.fromOffsets, toOffset: move.toOffset)
+            }
+            errorMessage = nil
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func reorderRootEntries(visibleEntryKeys: [String], moves: [FavoriteVisibleOrderMove]) async {
+        guard !visibleEntryKeys.isEmpty, !moves.isEmpty else { return }
+
+        var workingVisibleEntryKeys = visibleEntryKeys
+
+        do {
+            for move in moves {
+                applySnapshot(
+                    try await favoriteStore.reorderRootEntries(
+                        visibleEntryKeys: workingVisibleEntryKeys,
+                        fromOffsets: move.fromOffsets,
+                        toOffset: move.toOffset
+                    )
+                )
+                workingVisibleEntryKeys.move(fromOffsets: move.fromOffsets, toOffset: move.toOffset)
+            }
             errorMessage = nil
         } catch {
             errorMessage = error.localizedDescription
@@ -482,6 +530,130 @@ struct FavoriteCollectionSummary: Equatable {
     let hiddenCount: Int
 }
 
+enum FavoriteListColumn {
+    case left
+    case right
+}
+
+enum FavoriteDropPosition {
+    case before
+    case after
+}
+
+struct FavoriteVisibleOrderMove: Equatable {
+    let fromOffsets: IndexSet
+    let toOffset: Int
+}
+
+func splitAlternatingColumns<Element>(_ items: [Element]) -> (left: [Element], right: [Element]) {
+    var left: [Element] = []
+    var right: [Element] = []
+
+    for (index, item) in items.enumerated() {
+        if index.isMultiple(of: 2) {
+            left.append(item)
+        } else {
+            right.append(item)
+        }
+    }
+
+    return (left: left, right: right)
+}
+
+func reorderedItemsAfterDrop<Element: Equatable>(
+    _ items: [Element],
+    draggedItem: Element,
+    targetItem: Element,
+    position: FavoriteDropPosition
+) -> [Element] {
+    guard draggedItem != targetItem,
+          let draggedIndex = items.firstIndex(of: draggedItem),
+          items.contains(targetItem) else {
+        return items
+    }
+
+    var reordered = items
+    reordered.remove(at: draggedIndex)
+    guard let targetIndex = reordered.firstIndex(of: targetItem) else { return items }
+
+    let insertionIndex: Int
+    switch position {
+    case .before:
+        insertionIndex = targetIndex
+    case .after:
+        insertionIndex = targetIndex + 1
+    }
+
+    reordered.insert(draggedItem, at: min(insertionIndex, reordered.count))
+    return reordered
+}
+
+func reorderedItemsAfterDroppingAtColumnBottom<Element: Equatable>(
+    _ items: [Element],
+    draggedItem: Element,
+    column: FavoriteListColumn
+) -> [Element] {
+    guard items.contains(draggedItem) else { return items }
+
+    let columns = splitAlternatingColumns(items)
+    let targetColumn = switch column {
+    case .left: columns.left
+    case .right: columns.right
+    }
+
+    if let lastItem = targetColumn.last {
+        return reorderedItemsAfterDrop(items, draggedItem: draggedItem, targetItem: lastItem, position: .after)
+    }
+
+    var reordered = items
+    guard let draggedIndex = reordered.firstIndex(of: draggedItem) else { return items }
+    reordered.remove(at: draggedIndex)
+
+    switch column {
+    case .left:
+        reordered.insert(draggedItem, at: 0)
+    case .right:
+        reordered.append(draggedItem)
+    }
+
+    return reordered
+}
+
+func makeVisibleOrderMovesToTransform<Element: Equatable>(
+    from original: [Element],
+    to target: [Element]
+) -> [FavoriteVisibleOrderMove] {
+    guard original.count == target.count else { return [] }
+
+    var working = original
+    var moves: [FavoriteVisibleOrderMove] = []
+
+    for targetIndex in target.indices {
+        guard working[targetIndex] != target[targetIndex],
+              let sourceIndex = working[targetIndex...].firstIndex(of: target[targetIndex]) else {
+            continue
+        }
+
+        let destination = sourceIndex < targetIndex ? targetIndex + 1 : targetIndex
+        let move = FavoriteVisibleOrderMove(fromOffsets: IndexSet(integer: sourceIndex), toOffset: destination)
+        working.move(fromOffsets: move.fromOffsets, toOffset: move.toOffset)
+        moves.append(move)
+    }
+
+    return working == target ? moves : []
+}
+
+func applyingVisibleOrderMoves<Element>(
+    _ items: [Element],
+    moves: [FavoriteVisibleOrderMove]
+) -> [Element] {
+    var working = items
+    for move in moves {
+        working.move(fromOffsets: move.fromOffsets, toOffset: move.toOffset)
+    }
+    return working
+}
+
 private struct FavoriteSearchModifier: ViewModifier {
     @Binding var searchText: String
 
@@ -720,6 +892,39 @@ private struct FavoriteCollectionDialogsModifier: ViewModifier {
     }
 }
 
+private struct FavoriteEntryDropDelegate: DropDelegate {
+    let draggedEntryKey: String?
+    let targetEntry: FavoriteListEntry?
+    let column: FavoriteListColumn
+    let canReorder: Bool
+    let onDropOnEntry: (String, FavoriteListEntry, FavoriteDropPosition) -> Void
+    let onDropToColumnBottom: (String, FavoriteListColumn) -> Void
+    let onFinish: () -> Void
+
+    func validateDrop(info: DropInfo) -> Bool {
+        canReorder && draggedEntryKey != nil && info.hasItemsConforming(to: [UTType.plainText.identifier])
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        guard canReorder, draggedEntryKey != nil else { return nil }
+        return DropProposal(operation: .move)
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        guard canReorder, let draggedEntryKey else { return false }
+
+        if let targetEntry {
+            let position: FavoriteDropPosition = info.location.y < 56 ? .before : .after
+            onDropOnEntry(draggedEntryKey, targetEntry, position)
+        } else {
+            onDropToColumnBottom(draggedEntryKey, column)
+        }
+
+        onFinish()
+        return true
+    }
+}
+
 public struct FavoritesView: View {
     @StateObject private var viewModel: FavoritesViewModel
     @AppStorage("yamibo.favorite.filter") private var filterRawValue = FavoriteFilter.all.rawValue
@@ -740,6 +945,7 @@ public struct FavoritesView: View {
     @State private var showingMoveDialog = false
     @State private var showingBulkDeleteConfirmation = false
     @State private var didLoadInitialFavorites = false
+    @State private var draggedEntryKey: String?
 
     private let scope: FavoriteScope
     private let appContext: YamiboAppContext
@@ -786,9 +992,7 @@ public struct FavoritesView: View {
     }
 
     private var favoritesNavigationContent: some View {
-        favoritesList
-            .listStyle(.plain)
-            .overlay(content: overlayContent)
+        favoritesListLayout
             .navigationTitle("")
             .modifier(FavoriteSearchModifier(searchText: $searchText))
             .modifier(
@@ -810,6 +1014,20 @@ public struct FavoritesView: View {
                     appModel: appModel
                 )
             )
+    }
+
+    private var favoritesListLayout: some View {
+        GeometryReader { geometry in
+            ZStack {
+                if shouldUseTwoColumnLayout(in: geometry.size) {
+                    twoColumnFavoritesList
+                } else {
+                    singleColumnFavoritesList(entries: visibleEntries)
+                }
+            }
+            .overlay(content: overlayContent)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
     }
 
     private var favoritesLifecycleContent: some View {
@@ -952,9 +1170,71 @@ public struct FavoritesView: View {
             )
     }
 
-    private var favoritesList: some View {
+    private var leftColumnEntries: [FavoriteListEntry] {
+        splitAlternatingColumns(visibleEntries).left
+    }
+
+    private var rightColumnEntries: [FavoriteListEntry] {
+        splitAlternatingColumns(visibleEntries).right
+    }
+
+    private var twoColumnFavoritesList: some View {
+        ScrollView {
+            HStack(alignment: .top, spacing: 20) {
+                twoColumnFavoritesColumn(entries: leftColumnEntries, column: .left)
+                twoColumnFavoritesColumn(entries: rightColumnEntries, column: .right)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+        }
+    }
+
+    private func twoColumnFavoritesColumn(
+        entries: [FavoriteListEntry],
+        column: FavoriteListColumn
+    ) -> some View {
+        LazyVStack(spacing: 16) {
+            ForEach(entries) { entry in
+                twoColumnRow(for: entry)
+                    .onDrop(
+                        of: [UTType.plainText.identifier],
+                        delegate: FavoriteEntryDropDelegate(
+                            draggedEntryKey: draggedEntryKey,
+                            targetEntry: entry,
+                            column: column,
+                            canReorder: canReorderEntries,
+                            onDropOnEntry: handleDrop,
+                            onDropToColumnBottom: handleDropToColumnBottom,
+                            onFinish: { draggedEntryKey = nil }
+                        )
+                    )
+                    .onDragIf(canReorderEntries, value: entry.moveKey) {
+                        draggedEntryKey = entry.moveKey
+                    }
+            }
+
+            Color.clear
+                .frame(height: 88)
+                .contentShape(Rectangle())
+                .onDrop(
+                    of: [UTType.plainText.identifier],
+                    delegate: FavoriteEntryDropDelegate(
+                        draggedEntryKey: draggedEntryKey,
+                        targetEntry: nil,
+                        column: column,
+                        canReorder: canReorderEntries,
+                        onDropOnEntry: handleDrop,
+                        onDropToColumnBottom: handleDropToColumnBottom,
+                        onFinish: { draggedEntryKey = nil }
+                    )
+                )
+        }
+        .frame(maxWidth: .infinity, alignment: .top)
+    }
+
+    private func singleColumnFavoritesList(entries: [FavoriteListEntry]) -> some View {
         List {
-            ForEach(visibleEntries) { entry in
+            ForEach(entries) { entry in
                 row(for: entry)
                     .listRowSeparator(.hidden)
                     .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
@@ -963,6 +1243,7 @@ public struct FavoritesView: View {
             .onMove(perform: handleMove)
             .moveDisabled(!canReorderEntries)
         }
+        .listStyle(.plain)
     }
 
     @ViewBuilder
@@ -1124,6 +1405,69 @@ public struct FavoritesView: View {
     }
 
     @ViewBuilder
+    private func twoColumnRow(for entry: FavoriteListEntry) -> some View {
+        switch entry {
+        case let .collection(collection):
+            let summary = collectionSummary(for: collection)
+            if isSelecting {
+                Button {
+                    toggleCollectionSelection(collection)
+                } label: {
+                    FavoriteCollectionRow(
+                        collection: collection,
+                        summary: summary,
+                        isSelected: selectedCollectionIDs.contains(collection.id),
+                        accentColor: favoriteCollectionAccentColor(for: viewModel.favoriteAppearance)
+                    )
+                }
+                .buttonStyle(.plain)
+            } else {
+                NavigationLink(value: collection) {
+                    FavoriteCollectionRow(
+                        collection: collection,
+                        summary: summary,
+                        isSelected: false,
+                        accentColor: favoriteCollectionAccentColor(for: viewModel.favoriteAppearance)
+                    )
+                }
+                .buttonStyle(.plain)
+                .overlay(alignment: .topTrailing) {
+                    collectionActionMenuButton(collection)
+                }
+            }
+        case let .favorite(favorite):
+            let favoriteRow = FavoriteRow(
+                favorite: favorite,
+                isResolving: viewModel.resolvingFavoriteID == favorite.id,
+                isDeleting: viewModel.deletingFavoriteID == favorite.id,
+                isSelected: selectedFavoriteIDs.contains(favorite.id),
+                accentColor: favoriteAccentColor(for: favorite.type, appearance: viewModel.favoriteAppearance),
+                onOpen: {
+                    if isSelecting {
+                        toggleFavoriteSelection(favorite)
+                    } else {
+                        open(favorite, mode: .resume)
+                    }
+                }
+            )
+
+            if isSelecting {
+                Button {
+                    toggleFavoriteSelection(favorite)
+                } label: {
+                    favoriteRow
+                }
+                .buttonStyle(.plain)
+            } else {
+                favoriteRow
+                    .overlay(alignment: .topTrailing) {
+                        favoriteActionMenuButton(favorite)
+                    }
+            }
+        }
+    }
+
+    @ViewBuilder
     private func row(for entry: FavoriteListEntry) -> some View {
         switch entry {
         case let .collection(collection):
@@ -1247,6 +1591,82 @@ public struct FavoritesView: View {
         }
     }
 
+    private func favoriteActionMenuButton(_ favorite: Favorite) -> some View {
+        Menu {
+            ShareLink(item: favorite.url) {
+                Label("分享", systemImage: "square.and.arrow.up")
+            }
+
+            Button {
+                displayNameDraft = FavoriteDisplayNameDraft(favorite: favorite)
+            } label: {
+                Label("编辑", systemImage: "pencil")
+            }
+
+            Button {
+                Task {
+                    await viewModel.setHidden(!favorite.isHidden, for: favorite)
+                }
+            } label: {
+                Label(favorite.isHidden ? "取消隐藏" : "隐藏", systemImage: favorite.isHidden ? "eye" : "eye.slash")
+            }
+
+            Button(role: .destructive) {
+                pendingDeleteFavorite = favorite
+            } label: {
+                Label(viewModel.deletingFavoriteID == favorite.id ? "删除中" : "删除", systemImage: "trash")
+            }
+            .disabled(viewModel.deletingFavoriteID != nil)
+        } label: {
+            Image(systemName: "ellipsis.circle.fill")
+                .font(.title3)
+                .foregroundStyle(.secondary)
+                .padding(14)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(viewModel.deletingFavoriteID != nil)
+    }
+
+    private func collectionActionMenuButton(_ collection: FavoriteCollection) -> some View {
+        Menu {
+            Button {
+                collectionNameDraft = FavoriteCollectionNameDraft(collection: collection)
+            } label: {
+                Label("编辑", systemImage: "pencil")
+            }
+
+            Button {
+                Task {
+                    await viewModel.setCollectionHidden(!collection.isHidden, for: collection)
+                }
+            } label: {
+                Label(collection.isHidden ? "取消隐藏" : "隐藏", systemImage: collection.isHidden ? "eye" : "eye.slash")
+            }
+
+            Button(role: .destructive) {
+                pendingDeleteCollection = collection
+            } label: {
+                Label("删除", systemImage: "trash")
+            }
+        } label: {
+            Image(systemName: "ellipsis.circle.fill")
+                .font(.title3)
+                .foregroundStyle(.secondary)
+                .padding(14)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func shouldUseTwoColumnLayout(in size: CGSize) -> Bool {
+        #if os(iOS)
+        UIDevice.current.userInterfaceIdiom == .pad && size.width > size.height
+        #else
+        false
+        #endif
+    }
+
     private func handleMove(fromOffsets source: IndexSet, toOffset destination: Int) {
         guard canReorderEntries else { return }
 
@@ -1270,6 +1690,58 @@ public struct FavoritesView: View {
                     visibleIDs: visibleIDs,
                     fromOffsets: source,
                     toOffset: destination
+                )
+            }
+        }
+    }
+
+    private func handleDrop(
+        draggedEntryKey: String,
+        onto targetEntry: FavoriteListEntry,
+        position: FavoriteDropPosition
+    ) {
+        let reorderedKeys = reorderedItemsAfterDrop(
+            visibleEntries.map(\.moveKey),
+            draggedItem: draggedEntryKey,
+            targetItem: targetEntry.moveKey,
+            position: position
+        )
+        applyReorderedVisibleEntries(for: reorderedKeys)
+    }
+
+    private func handleDropToColumnBottom(
+        draggedEntryKey: String,
+        column: FavoriteListColumn
+    ) {
+        let reorderedKeys = reorderedItemsAfterDroppingAtColumnBottom(
+            visibleEntries.map(\.moveKey),
+            draggedItem: draggedEntryKey,
+            column: column
+        )
+        applyReorderedVisibleEntries(for: reorderedKeys)
+    }
+
+    private func applyReorderedVisibleEntries(for reorderedKeys: [String]) {
+        let originalKeys = visibleEntries.map(\.moveKey)
+        guard reorderedKeys != originalKeys else { return }
+        let moves = makeVisibleOrderMovesToTransform(from: originalKeys, to: reorderedKeys)
+        guard !moves.isEmpty else { return }
+
+        switch scope {
+        case .root:
+            Task {
+                await viewModel.reorderRootEntries(visibleEntryKeys: originalKeys, moves: moves)
+            }
+        case let .collection(collection):
+            let originalFavoriteIDs = visibleEntries.compactMap { entry -> String? in
+                guard case let .favorite(favorite) = entry else { return nil }
+                return favorite.id
+            }
+            Task {
+                await viewModel.reorderFavorites(
+                    in: collection.id,
+                    visibleIDs: originalFavoriteIDs,
+                    moves: moves
                 )
             }
         }
@@ -1940,5 +2412,19 @@ private func entryLastReadAt(
         )
         .compactMap(\.lastReadAt)
         .max()
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func onDragIf(_ condition: Bool, value: String, onStart: @escaping () -> Void) -> some View {
+        if condition {
+            onDrag {
+                onStart()
+                return NSItemProvider(object: value as NSString)
+            }
+        } else {
+            self
+        }
     }
 }

@@ -464,6 +464,90 @@ final class MangaReaderModelTests: XCTestCase {
         XCTAssertEqual(entries.map(\.id), ["collection:collection-1", "favorite:\(rootFavorite.id)"])
     }
 
+    func testSplitAlternatingColumnsDistributesRootEntriesLeftRightLeftRight() {
+        let entries = [
+            "collection:1",
+            "favorite:1",
+            "collection:2",
+            "favorite:2",
+            "favorite:3"
+        ]
+
+        let columns = splitAlternatingColumns(entries)
+
+        XCTAssertEqual(columns.left, ["collection:1", "collection:2", "favorite:3"])
+        XCTAssertEqual(columns.right, ["favorite:1", "favorite:2"])
+    }
+
+    func testSplitAlternatingColumnsDistributesCollectionFavoritesLeftRightLeftRight() {
+        let favoriteIDs = ["favorite:1", "favorite:2", "favorite:3", "favorite:4"]
+
+        let columns = splitAlternatingColumns(favoriteIDs)
+
+        XCTAssertEqual(columns.left, ["favorite:1", "favorite:3"])
+        XCTAssertEqual(columns.right, ["favorite:2", "favorite:4"])
+    }
+
+    func testReorderedItemsAfterDropMovesLeftColumnEntryAfterRightColumnEntry() {
+        let entries = ["collection:1", "favorite:1", "collection:2", "favorite:2", "favorite:3"]
+
+        let reordered = reorderedItemsAfterDrop(
+            entries,
+            draggedItem: "collection:2",
+            targetItem: "favorite:2",
+            position: .after
+        )
+
+        XCTAssertEqual(reordered, ["collection:1", "favorite:1", "favorite:2", "collection:2", "favorite:3"])
+    }
+
+    func testReorderedItemsAfterDropMovesRightColumnEntryBackIntoLeftColumnOrder() {
+        let entries = ["collection:1", "favorite:1", "collection:2", "favorite:2", "favorite:3", "favorite:4"]
+
+        let reordered = reorderedItemsAfterDrop(
+            entries,
+            draggedItem: "favorite:4",
+            targetItem: "collection:2",
+            position: .before
+        )
+
+        XCTAssertEqual(reordered, ["collection:1", "favorite:1", "favorite:4", "collection:2", "favorite:2", "favorite:3"])
+    }
+
+    func testReorderedItemsAfterDroppingAtRightColumnBottomAppendsToGlobalOrder() {
+        let entries = ["collection:1", "favorite:1", "collection:2", "favorite:2", "favorite:3"]
+
+        let reordered = reorderedItemsAfterDroppingAtColumnBottom(
+            entries,
+            draggedItem: "collection:1",
+            column: .right
+        )
+
+        XCTAssertEqual(reordered, ["favorite:1", "collection:2", "favorite:2", "collection:1", "favorite:3"])
+    }
+
+    func testReorderedItemsAfterDroppingAtLeftColumnBottomSupportsCollectionScopeFavoritesOnly() {
+        let entries = ["favorite:1", "favorite:2", "favorite:3", "favorite:4"]
+
+        let reordered = reorderedItemsAfterDroppingAtColumnBottom(
+            entries,
+            draggedItem: "favorite:2",
+            column: .left
+        )
+
+        XCTAssertEqual(reordered, ["favorite:1", "favorite:3", "favorite:2", "favorite:4"])
+    }
+
+    func testMoveStepsTransformMixedRootEntriesToAlternatingReorderedOrder() {
+        let original = ["collection:1", "favorite:1", "collection:2", "favorite:2", "favorite:3"]
+        let target = ["collection:2", "favorite:1", "collection:1", "favorite:2", "favorite:3"]
+
+        let moves = makeVisibleOrderMovesToTransform(from: original, to: target)
+
+        XCTAssertFalse(moves.isEmpty)
+        XCTAssertEqual(applyingVisibleOrderMoves(original, moves: moves), target)
+    }
+
     func testRootTypeFilterShowsCollectionsWithMatchingFavorites() {
         let novelFavorite = Favorite(
             title: "小说收藏",
