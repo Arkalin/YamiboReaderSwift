@@ -651,6 +651,87 @@ final class ReaderContainerModelTests: XCTestCase {
         }
     }
 
+    func testChangingReadingModeFromMergedPagedTextTargetsActualSegment() async throws {
+        let document = ReaderPageDocument(
+            threadURL: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=906&mobile=2")!,
+            view: 1,
+            maxView: 1,
+            contentSource: .fallbackUnfilteredPage,
+            segments: [
+                .text("第一段。", chapterTitle: "第一章"),
+                .text("第二段目标位置。", chapterTitle: "第一章"),
+                .text("第三段。", chapterTitle: "第一章")
+            ]
+        )
+        let model = try await makeModel(
+            documents: [document],
+            settings: ReaderAppearanceSettings(readingMode: .paged)
+        )
+
+        let target = try await MainActor.run {
+            let mergedPage = try XCTUnwrap(model.pages.first { $0.textRanges.count >= 2 })
+            let targetRange = try XCTUnwrap(mergedPage.textRanges.first { $0.segmentIndex == 1 })
+            let totalLength = mergedPage.textRanges.reduce(0) { $0 + max($1.length, 1) }
+            let precedingLength = mergedPage.textRanges
+                .prefix { $0.segmentIndex != targetRange.segmentIndex }
+                .reduce(0) { $0 + max($1.length, 1) }
+            let targetOffset = targetRange.startOffset + max(1, targetRange.length / 2)
+            let progress = Double(precedingLength + max(1, targetRange.length / 2)) / Double(max(totalLength, 1))
+            model.updateVerticalViewportPosition(pageIndex: mergedPage.index, intraPageProgress: progress)
+            return (segmentIndex: targetRange.segmentIndex, offset: targetOffset)
+        }
+
+        await MainActor.run {
+            model.applySettings(ReaderAppearanceSettings(readingMode: .vertical))
+        }
+
+        await MainActor.run {
+            let page = model.pages[model.currentPageIndex]
+            XCTAssertTrue(pageContainsSegmentOffset(page, segmentIndex: target.segmentIndex, offset: target.offset))
+        }
+    }
+
+    func testModeSwitchAnchorSurvivesFollowUpLayoutRepagination() async throws {
+        let document = ReaderPageDocument(
+            threadURL: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=907&mobile=2")!,
+            view: 1,
+            maxView: 1,
+            contentSource: .fallbackUnfilteredPage,
+            segments: [
+                .text(String(repeating: "第一章 内容。", count: 420), chapterTitle: "第一章")
+            ]
+        )
+        let model = try await makeModel(
+            documents: [document],
+            settings: ReaderAppearanceSettings(readingMode: .paged)
+        )
+
+        let originalOffset = try await MainActor.run {
+            let page = try XCTUnwrap(model.pages.dropFirst().first { $0.segmentIndex != nil })
+            let offset = page.segmentStartOffset + max(1, (page.segmentEndOffset - page.segmentStartOffset) / 2)
+            model.updateVerticalViewportPosition(pageIndex: page.index, intraPageProgress: 0.5)
+            return offset
+        }
+
+        await MainActor.run {
+            model.applySettings(ReaderAppearanceSettings(readingMode: .vertical))
+            model.updateLayout(
+                ReaderContainerLayout(
+                    containerSize: CGSize(width: 390, height: 844),
+                    safeAreaInsets: ReaderLayoutInsets(top: 59, bottom: 34),
+                    contentInsets: ReaderLayoutInsets(top: 16, leading: 16, bottom: 24, trailing: 16),
+                    chromeInsets: ReaderLayoutInsets(top: 72, bottom: 96),
+                    readingMode: .vertical
+                )
+            )
+        }
+
+        await MainActor.run {
+            let page = model.pages[model.currentPageIndex]
+            XCTAssertTrue(pageContainsSegmentOffset(page, segmentIndex: 0, offset: originalOffset))
+        }
+    }
+
     func testCachedViewsTrackCurrentVariant() async throws {
         let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=556677&mobile=2")!
         let unfilteredDocument = makeDocument(
@@ -1023,6 +1104,20 @@ private func pageContainsOffset(_ page: ReaderRenderedPage, offset: Int) -> Bool
         return offset <= page.segmentStartOffset
     }
     return offset >= page.segmentStartOffset && offset < page.segmentEndOffset
+}
+
+private func pageContainsSegmentOffset(_ page: ReaderRenderedPage, segmentIndex: Int, offset: Int) -> Bool {
+    let matchingRanges = page.textRanges.filter { $0.segmentIndex == segmentIndex }
+    if !matchingRanges.isEmpty {
+        return matchingRanges.contains { range in
+            if range.startOffset == range.endOffset {
+                return offset <= range.startOffset
+            }
+            return offset >= range.startOffset && offset < range.endOffset
+        }
+    }
+    guard page.segmentIndex == segmentIndex else { return false }
+    return pageContainsOffset(page, offset: offset)
 }
 
 private func makeDocument(

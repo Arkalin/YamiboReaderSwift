@@ -123,6 +123,8 @@ public final class ReaderContainerModel: ObservableObject {
     private var progressSyncTask: Task<Void, Never>?
     private var lastQueuedProgress: ReaderProgressSnapshot?
     private var lastSyncedProgress: ReaderProgressSnapshot?
+    private var pendingResumePoint: ReaderResumePoint?
+    private var pendingResumeRequiresLayoutSync = false
     private let progressSyncDelayNanoseconds: UInt64 = 350_000_000
 
     public init(context: ReaderLaunchContext, appContext: YamiboAppContext) {
@@ -291,9 +293,11 @@ public final class ReaderContainerModel: ObservableObject {
 
     public func updateLayout(_ layout: ReaderContainerLayout) {
         guard self.layout != layout else { return }
+        let resumePoint = pendingResumePoint ?? captureCurrentResumePoint()
         self.layout = layout
         guard currentDocument != nil else { return }
-        repaginate(resumePoint: captureCurrentResumePoint())
+        repaginate(resumePoint: resumePoint)
+        clearPendingResumePointIfSettled()
     }
 
     public func loadCurrent(forceRefresh: Bool) async {
@@ -380,10 +384,14 @@ public final class ReaderContainerModel: ObservableObject {
     }
 
     public func applySettings(_ newSettings: ReaderAppearanceSettings) {
+        let oldSettings = settings
         let resumePoint = captureCurrentResumePoint()
+        pendingResumePoint = resumePoint
+        pendingResumeRequiresLayoutSync = oldSettings.readingMode != newSettings.readingMode
         settings = newSettings
         persistSettings()
         repaginate(resumePoint: resumePoint)
+        clearPendingResumePointIfSettled()
     }
 
     public func saveProgress() async {
@@ -666,6 +674,13 @@ public final class ReaderContainerModel: ObservableObject {
         applyPagination(for: document, preferredPage: currentPageIndex, preferredResumePoint: resumePoint)
     }
 
+    private func clearPendingResumePointIfSettled() {
+        guard pendingResumePoint != nil else { return }
+        guard !pendingResumeRequiresLayoutSync || layout.readingMode == settings.readingMode else { return }
+        pendingResumePoint = nil
+        pendingResumeRequiresLayoutSync = false
+    }
+
     private func applyPagination(
         for document: ReaderPageDocument,
         preferredPage: Int,
@@ -693,7 +708,8 @@ public final class ReaderContainerModel: ObservableObject {
                     chapterTitle: page.chapterTitle,
                     segmentIndex: page.segmentIndex,
                     segmentStartOffset: page.segmentStartOffset,
-                    segmentEndOffset: page.segmentEndOffset
+                    segmentEndOffset: page.segmentEndOffset,
+                    textRanges: page.textRanges
                 )
             }
             renderedChapters += nextPagination.chapters.map { chapter in
@@ -714,7 +730,8 @@ public final class ReaderContainerModel: ObservableObject {
                 chapterTitle: page.chapterTitle,
                 segmentIndex: page.segmentIndex,
                 segmentStartOffset: page.segmentStartOffset,
-                segmentEndOffset: page.segmentEndOffset
+                segmentEndOffset: page.segmentEndOffset,
+                textRanges: page.textRanges
             )
         }
         chapters = renderedChapters
@@ -726,7 +743,8 @@ public final class ReaderContainerModel: ObservableObject {
             intraPageProgress: 0,
             documentView: displayedViewCandidate(for: preferredPage)
         )
-        let resolvedTarget = preferredResumePoint.flatMap { resolveResumePoint($0, in: pages) } ?? fallbackTarget
+        let effectiveResumePoint = pendingResumePoint ?? preferredResumePoint
+        let resolvedTarget = effectiveResumePoint.flatMap { resolveResumePoint($0, in: pages) } ?? fallbackTarget
         setCurrentLocation(resolvedTarget)
     }
 
@@ -794,11 +812,14 @@ public final class ReaderContainerModel: ObservableObject {
         }
         guard !document.segments.isEmpty else { return "" }
 
+        let currentRange = currentRenderedPageMetadata.flatMap {
+            textPosition(for: currentPageIntraProgress, in: $0)?.range
+        }
         let startSegmentIndex = min(
-            max(currentRenderedPageMetadata?.segmentIndex ?? 0, 0),
+            max(currentRange?.segmentIndex ?? currentRenderedPageMetadata?.segmentIndex ?? 0, 0),
             max(document.segments.count - 1, 0)
         )
-        let startOffset = currentRenderedPageMetadata?.segmentStartOffset ?? 0
+        let startOffset = currentRange?.startOffset ?? currentRenderedPageMetadata?.segmentStartOffset ?? 0
 
         let fragments = document.segments[startSegmentIndex...].enumerated().compactMap { offset, segment -> String? in
             guard case let .text(text, _) = segment else { return nil }
@@ -842,25 +863,55 @@ public final class ReaderContainerModel: ObservableObject {
     private func captureCurrentResumePoint() -> ReaderResumePoint? {
         guard let page = currentRenderedPageMetadata,
               let chapterOrdinal = page.chapterOrdinal,
-              let segmentIndex = page.segmentIndex else {
+              let position = textPosition(for: currentPageIntraProgress, in: page) else {
             return nil
         }
 
-        let segmentLength = max(page.segmentEndOffset - page.segmentStartOffset, 0)
+        let range = position.range
+        let segmentLength = range.length
         let offsetWithinSegment = segmentLength > 0
-            ? Int((Double(segmentLength) * min(max(currentPageIntraProgress, 0), 1)).rounded(.towardZero))
+            ? Int((Double(segmentLength) * position.progressInRange).rounded(.towardZero))
             : 0
         let resumePoint = ReaderResumePoint(
             view: page.documentView,
             chapterOrdinal: chapterOrdinal,
             chapterTitle: page.chapterTitle,
-            segmentIndex: segmentIndex,
-            segmentOffset: page.segmentStartOffset + offsetWithinSegment,
+            segmentIndex: range.segmentIndex,
+            segmentOffset: range.startOffset + min(offsetWithinSegment, segmentLength),
             segmentProgress: currentPageIntraProgress,
             authorID: currentAuthorID ?? context.authorID,
             readingModeHint: settings.readingMode
         )
         return resumePoint
+    }
+
+    private func textPosition(for intraPageProgress: Double, in page: ReaderRenderedPage) -> ReaderPageTextPosition? {
+        guard !page.textRanges.isEmpty else { return nil }
+        guard page.textRanges.count > 1 else {
+            return page.textRanges.first.map {
+                ReaderPageTextPosition(range: $0, progressInRange: min(max(intraPageProgress, 0), 1))
+            }
+        }
+
+        let totalLength = page.textRanges.reduce(0) { $0 + max($1.length, 1) }
+        let targetOffset = Int((Double(totalLength) * min(max(intraPageProgress, 0), 1)).rounded(.towardZero))
+        var runningLength = 0
+
+        for range in page.textRanges {
+            let length = max(range.length, 1)
+            if targetOffset < runningLength + length {
+                let progressInRange = Double(targetOffset - runningLength) / Double(length)
+                return ReaderPageTextPosition(
+                    range: range,
+                    progressInRange: min(max(progressInRange, 0), 1)
+                )
+            }
+            runningLength += length
+        }
+
+        return page.textRanges.last.map {
+            ReaderPageTextPosition(range: $0, progressInRange: 1)
+        }
     }
 
     private func resolveResumePoint(
@@ -872,9 +923,9 @@ public final class ReaderContainerModel: ObservableObject {
             return nil
         }
 
-        let candidatePages = pagesInView.filter { $0.segmentIndex == resumePoint.segmentIndex }
+        let candidatePages = pagesInView.filter { contains(segmentIndex: resumePoint.segmentIndex, in: $0) }
         let containingPage = candidatePages.first {
-            contains(offset: resumePoint.segmentOffset, in: $0)
+            contains(offset: resumePoint.segmentOffset, segmentIndex: resumePoint.segmentIndex, in: $0)
         }
 
         if let containingPage {
@@ -887,7 +938,8 @@ public final class ReaderContainerModel: ObservableObject {
         }
 
         if let nearestPage = candidatePages.min(by: {
-            distance(from: resumePoint.segmentOffset, to: $0) < distance(from: resumePoint.segmentOffset, to: $1)
+            distance(from: resumePoint.segmentOffset, segmentIndex: resumePoint.segmentIndex, to: $0)
+                < distance(from: resumePoint.segmentOffset, segmentIndex: resumePoint.segmentIndex, to: $1)
         }) {
             let target = ReaderResolvedTarget(
                 pageIndex: nearestPage.index,
@@ -925,15 +977,39 @@ public final class ReaderContainerModel: ObservableObject {
     }
 
     private func contains(offset: Int, in page: ReaderRenderedPage) -> Bool {
+        if !page.textRanges.isEmpty,
+           page.textRanges.contains(where: { contains(offset: offset, in: $0) }) {
+            return true
+        }
         if page.segmentStartOffset == page.segmentEndOffset {
             return offset <= page.segmentStartOffset
         }
         return offset >= page.segmentStartOffset && offset < page.segmentEndOffset
     }
 
+    private func contains(offset: Int, segmentIndex: Int, in page: ReaderRenderedPage) -> Bool {
+        let matchingRanges = page.textRanges.filter { $0.segmentIndex == segmentIndex }
+        if !matchingRanges.isEmpty {
+            return matchingRanges.contains { contains(offset: offset, in: $0) }
+        }
+        guard page.segmentIndex == segmentIndex else { return false }
+        return contains(offset: offset, in: page)
+    }
+
+    private func contains(segmentIndex: Int, in page: ReaderRenderedPage) -> Bool {
+        page.textRanges.contains { $0.segmentIndex == segmentIndex } || page.segmentIndex == segmentIndex
+    }
+
+    private func contains(offset: Int, in range: ReaderRenderedTextRange) -> Bool {
+        if range.startOffset == range.endOffset {
+            return offset <= range.startOffset
+        }
+        return offset >= range.startOffset && offset < range.endOffset
+    }
+
     private func distance(from offset: Int, to page: ReaderRenderedPage) -> Int {
-        if contains(offset: offset, in: page) {
-            return 0
+        if !page.textRanges.isEmpty {
+            return page.textRanges.map { distance(from: offset, to: $0) }.min() ?? 0
         }
         if offset < page.segmentStartOffset {
             return page.segmentStartOffset - offset
@@ -941,7 +1017,38 @@ public final class ReaderContainerModel: ObservableObject {
         return offset - page.segmentEndOffset
     }
 
+    private func distance(from offset: Int, segmentIndex: Int, to page: ReaderRenderedPage) -> Int {
+        let matchingRanges = page.textRanges.filter { $0.segmentIndex == segmentIndex }
+        if !matchingRanges.isEmpty {
+            return matchingRanges.map { distance(from: offset, to: $0) }.min() ?? 0
+        }
+        return distance(from: offset, to: page)
+    }
+
+    private func distance(from offset: Int, to range: ReaderRenderedTextRange) -> Int {
+        if contains(offset: offset, in: range) {
+            return 0
+        }
+        if offset < range.startOffset {
+            return range.startOffset - offset
+        }
+        return offset - range.endOffset
+    }
+
     private func intraPageProgress(for resumePoint: ReaderResumePoint, in page: ReaderRenderedPage) -> Double {
+        if !page.textRanges.isEmpty {
+            let totalLength = page.textRanges.reduce(0) { $0 + max($1.length, 1) }
+            var runningLength = 0
+
+            for range in page.textRanges {
+                let length = max(range.length, 1)
+                defer { runningLength += length }
+                guard range.segmentIndex == resumePoint.segmentIndex else { continue }
+                let localOffset = min(max(resumePoint.segmentOffset - range.startOffset, 0), length)
+                let progress = Double(runningLength + localOffset) / Double(max(totalLength, 1))
+                return min(max(progress, 0), 1)
+            }
+        }
         let length = max(page.segmentEndOffset - page.segmentStartOffset, 0)
         guard length > 0 else {
             return min(max(resumePoint.segmentProgress, 0), 1)
@@ -1180,6 +1287,11 @@ private struct ReaderResolvedTarget {
     let pageIndex: Int
     let intraPageProgress: Double
     let documentView: Int
+}
+
+private struct ReaderPageTextPosition {
+    let range: ReaderRenderedTextRange
+    let progressInRange: Double
 }
 
 private struct ReaderProgressSnapshot: Equatable {

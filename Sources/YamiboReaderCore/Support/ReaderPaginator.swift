@@ -78,7 +78,14 @@ public enum ReaderPaginator {
                         chapterTitle: annotatedSegment.chapterTitle,
                         segmentIndex: annotatedSegment.index,
                         segmentStartOffset: slice.startOffset,
-                        segmentEndOffset: slice.endOffset
+                        segmentEndOffset: slice.endOffset,
+                        textRanges: [
+                            ReaderRenderedTextRange(
+                                segmentIndex: annotatedSegment.index,
+                                startOffset: slice.startOffset,
+                                endOffset: slice.endOffset
+                            )
+                        ]
                     )
                     if let chapterOrdinal = annotatedSegment.chapterOrdinal,
                        let chapterTitle = annotatedSegment.chapterTitle,
@@ -104,7 +111,14 @@ public enum ReaderPaginator {
                             chapterTitle: annotatedSegment.chapterTitle,
                             segmentIndex: annotatedSegment.index,
                             segmentStartOffset: 0,
-                            segmentEndOffset: text.count
+                            segmentEndOffset: text.count,
+                            textRanges: [
+                                ReaderRenderedTextRange(
+                                    segmentIndex: annotatedSegment.index,
+                                    startOffset: 0,
+                                    endOffset: text.count
+                                )
+                            ]
                         )
                     )
                 }
@@ -176,6 +190,14 @@ public enum ReaderPaginator {
 #endif
 
         previousPage.blocks.append(.text(slice.text, chapterTitle: chapterTitle))
+        previousPage.textRanges.append(
+            ReaderRenderedTextRange(
+                segmentIndex: annotatedSegment.index,
+                startOffset: slice.startOffset,
+                endOffset: slice.endOffset
+            )
+        )
+        previousPage.segmentEndOffset = max(previousPage.segmentEndOffset, slice.endOffset)
         pages[previousIndex] = previousPage
         return true
     }

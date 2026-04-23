@@ -251,6 +251,22 @@ public enum ReaderRenderedBlock: Hashable, Identifiable, Sendable {
     }
 }
 
+public struct ReaderRenderedTextRange: Hashable, Sendable {
+    public var segmentIndex: Int
+    public var startOffset: Int
+    public var endOffset: Int
+
+    public init(segmentIndex: Int, startOffset: Int, endOffset: Int) {
+        self.segmentIndex = max(0, segmentIndex)
+        self.startOffset = max(0, startOffset)
+        self.endOffset = max(self.startOffset, endOffset)
+    }
+
+    public var length: Int {
+        max(endOffset - startOffset, 0)
+    }
+}
+
 public struct ReaderRenderedPage: Hashable, Identifiable, Sendable {
     public var index: Int
     public var blocks: [ReaderRenderedBlock]
@@ -260,6 +276,7 @@ public struct ReaderRenderedPage: Hashable, Identifiable, Sendable {
     public var segmentIndex: Int?
     public var segmentStartOffset: Int
     public var segmentEndOffset: Int
+    public var textRanges: [ReaderRenderedTextRange]
 
     public var id: Int { index }
 
@@ -271,7 +288,8 @@ public struct ReaderRenderedPage: Hashable, Identifiable, Sendable {
         chapterTitle: String? = nil,
         segmentIndex: Int? = nil,
         segmentStartOffset: Int = 0,
-        segmentEndOffset: Int = 0
+        segmentEndOffset: Int = 0,
+        textRanges: [ReaderRenderedTextRange]? = nil
     ) {
         self.index = index
         self.blocks = blocks
@@ -281,6 +299,19 @@ public struct ReaderRenderedPage: Hashable, Identifiable, Sendable {
         self.segmentIndex = segmentIndex
         self.segmentStartOffset = max(0, segmentStartOffset)
         self.segmentEndOffset = max(self.segmentStartOffset, segmentEndOffset)
+        if let textRanges {
+            self.textRanges = textRanges
+        } else if let segmentIndex {
+            self.textRanges = [
+                ReaderRenderedTextRange(
+                    segmentIndex: segmentIndex,
+                    startOffset: self.segmentStartOffset,
+                    endOffset: self.segmentEndOffset
+                )
+            ]
+        } else {
+            self.textRanges = []
+        }
     }
 }
 
