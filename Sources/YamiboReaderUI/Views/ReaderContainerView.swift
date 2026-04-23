@@ -772,6 +772,9 @@ private final class ReaderVerticalScrollCoordinator: NSObject, ObservableObject,
     private weak var interruptionTapRecognizer: UITapGestureRecognizer?
     private var contentOffsetObservation: NSKeyValueObservation?
     private var boundsObservation: NSKeyValueObservation?
+    private var currentViewportMetrics = ReaderVerticalViewportMetrics()
+    private var pendingViewportMetrics: ReaderVerticalViewportMetrics?
+    private var isViewportMetricsPublicationScheduled = false
     private var suppressChromeToggleUntil = CACurrentMediaTime()
     private var lastMotionTime = CACurrentMediaTime()
     private var isRestoringOffset = false
@@ -790,7 +793,7 @@ private final class ReaderVerticalScrollCoordinator: NSObject, ObservableObject,
     }
 
     var referenceLineY: CGFloat {
-        let height = max(viewportMetrics.viewportHeight, 0)
+        let height = max(currentViewportMetrics.viewportHeight, 0)
         guard height > 0 else { return 96 }
         return min(max(height * 0.22, 72), 160)
     }
@@ -880,17 +883,38 @@ private final class ReaderVerticalScrollCoordinator: NSObject, ObservableObject,
     }
 
     private func syncViewportMetrics() {
+        let metrics: ReaderVerticalViewportMetrics
         guard let scrollView else {
-            viewportMetrics = ReaderVerticalViewportMetrics()
+            metrics = ReaderVerticalViewportMetrics()
+            updateViewportMetrics(metrics)
             return
         }
         let contentOffsetY = scrollView.contentOffset.y + scrollView.adjustedContentInset.top
-        let metrics = ReaderVerticalViewportMetrics(
+        metrics = ReaderVerticalViewportMetrics(
             contentOffsetY: contentOffsetY,
             viewportHeight: scrollView.bounds.height
         )
-        if metrics != viewportMetrics {
-            viewportMetrics = metrics
+        updateViewportMetrics(metrics)
+    }
+
+    private func updateViewportMetrics(_ metrics: ReaderVerticalViewportMetrics) {
+        guard metrics != currentViewportMetrics else { return }
+        currentViewportMetrics = metrics
+        pendingViewportMetrics = metrics
+        scheduleViewportMetricsPublication()
+    }
+
+    private func scheduleViewportMetricsPublication() {
+        guard !isViewportMetricsPublicationScheduled else { return }
+        isViewportMetricsPublicationScheduled = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.isViewportMetricsPublicationScheduled = false
+            guard let metrics = self.pendingViewportMetrics else { return }
+            self.pendingViewportMetrics = nil
+            if metrics != self.viewportMetrics {
+                self.viewportMetrics = metrics
+            }
         }
     }
 
