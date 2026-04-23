@@ -4,13 +4,6 @@ import YamiboReaderCore
 #if os(iOS)
 import UIKit
 
-#if DEBUG
-private func readerViewDebugLog(_ message: @autoclosure () -> String) {
-    print("[ReaderDebug][View] \(message())")
-}
-#endif
-
-
 private enum ReaderChromeMode {
     case loading
     case error
@@ -33,11 +26,6 @@ private struct ReaderVerticalPositioningFingerprint: Equatable {
     let pageIndex: Int
     let intraPageProgressBucket: Int
     let readingMode: ReaderReadingMode
-}
-
-private struct ReaderVerticalViewportSampleLogFingerprint: Equatable {
-    let pageIndex: Int
-    let intraPageProgress: Double
 }
 
 private struct ReaderVerticalPageFramePreferenceKey: PreferenceKey {
@@ -79,7 +67,6 @@ public struct ReaderContainerView: View {
     @State private var verticalRestoreRetryTask: Task<Void, Never>?
     @State private var verticalPageFrames: [Int: CGRect] = [:]
     @State private var lastVerticalPositioningFingerprint: ReaderVerticalPositioningFingerprint?
-    @State private var lastVerticalViewportSampleLog: ReaderVerticalViewportSampleLogFingerprint?
     @State private var progressPreviewPageIndex: Int?
     @State private var progressPreviewChapterTitle: String?
     @State private var isProgressPreviewVisible = false
@@ -475,31 +462,17 @@ public struct ReaderContainerView: View {
         guard !model.pages.isEmpty else { return }
         let now = CACurrentMediaTime()
         if now <= verticalTapSuppressionUntil {
-#if DEBUG
-            readerViewDebugLog(
-                "handleVerticalTap suppressedByTapWindow now=\(String(format: "%.4f", now)) until=\(String(format: "%.4f", verticalTapSuppressionUntil))"
-            )
-#endif
             verticalTapSuppressionUntil = now + 0.35
             _ = verticalScrollCoordinator.interruptScrollingIfNeeded()
             return
         }
         if verticalScrollCoordinator.shouldSuppressChromeToggle() {
-#if DEBUG
-            readerViewDebugLog("handleVerticalTap suppressedByRecentMotion")
-#endif
             return
         }
         if verticalScrollCoordinator.interruptScrollingIfNeeded() {
-#if DEBUG
-            readerViewDebugLog("handleVerticalTap interrupted scrolling without toggling chrome")
-#endif
             verticalTapSuppressionUntil = now + 0.35
             return
         }
-#if DEBUG
-        readerViewDebugLog("handleVerticalTap toggling chrome")
-#endif
         toggleChrome()
     }
 
@@ -673,11 +646,6 @@ public struct ReaderContainerView: View {
 
     private func requestVerticalScrollToCurrentPage() {
         let request = makeVerticalScrollRequest()
-#if DEBUG
-        readerViewDebugLog(
-            "requestVerticalScrollToCurrentPage pageIndex=\(request.pageIndex) intra=\(String(format: "%.4f", request.intraPageProgress)) visibleView=\(model.visibleView)"
-        )
-#endif
         beginVerticalRestoreScrolling(for: request)
         verticalScrollRequest = request
         scheduleVerticalRestoreRetry(for: request)
@@ -686,13 +654,6 @@ public struct ReaderContainerView: View {
     private func updateVerticalViewportPosition(force: Bool = false) {
         guard model.settings.readingMode == .vertical, !verticalPageFrames.isEmpty else { return }
         guard verticalRestoreController.canSampleViewport(now: CACurrentMediaTime()) else {
-#if DEBUG
-            if force {
-                readerViewDebugLog(
-                    "updateVerticalViewportPosition skipped force=\(force) activeRestorePage=\(verticalRestoreController.activeRequest?.pageIndex ?? -1)"
-                )
-            }
-#endif
             return
         }
 
@@ -707,34 +668,17 @@ public struct ReaderContainerView: View {
 
         let frame = bestMatch.value
         let intraPageProgress = min(max((referenceLineY - frame.minY) / max(frame.height, 1), 0), 1)
-#if DEBUG
-        if shouldLogVerticalViewportSample(pageIndex: bestMatch.key, intraPageProgress: intraPageProgress, force: force) {
-            readerViewDebugLog(
-                "updateVerticalViewportPosition force=\(force) sampledPage=\(bestMatch.key) intra=\(String(format: "%.4f", intraPageProgress)) referenceLineY=\(String(format: "%.2f", referenceLineY)) frameMinY=\(String(format: "%.2f", frame.minY)) frameHeight=\(String(format: "%.2f", frame.height)) contentOffsetY=\(String(format: "%.2f", verticalScrollCoordinator.viewportMetrics.contentOffsetY))"
-            )
-        }
-#endif
         model.updateVerticalViewportPosition(pageIndex: bestMatch.key, intraPageProgress: intraPageProgress)
     }
 
     private func applyVerticalFineTune(for request: ReaderVerticalScrollRequest) {
         guard verticalRestoreController.scrollingRequest == request else { return }
         guard let frame = verticalPageFrames[request.pageIndex] else { return }
-#if DEBUG
-        readerViewDebugLog(
-            "applyVerticalFineTune pageIndex=\(request.pageIndex) intra=\(String(format: "%.4f", request.intraPageProgress)) frameMinY=\(String(format: "%.2f", frame.minY)) frameHeight=\(String(format: "%.2f", frame.height))"
-        )
-#endif
         verticalRestoreController.beginFineTuning(request)
         guard verticalScrollCoordinator.restoreOffset(
             to: frame,
             intraPageProgress: request.intraPageProgress
         ) else {
-#if DEBUG
-            readerViewDebugLog(
-                "applyVerticalFineTune waitingForScrollView pageIndex=\(request.pageIndex)"
-            )
-#endif
             verticalRestoreController.beginScrolling(to: request)
             return
         }
@@ -747,27 +691,12 @@ public struct ReaderContainerView: View {
         refreshVerticalRestorePhase()
         guard let request = verticalRestoreController.scrollingRequest else { return }
         guard verticalScrollCoordinator.hasAttachedScrollView else {
-#if DEBUG
-            readerViewDebugLog(
-                "tryAdvanceVerticalRestore waitingForScrollView pageIndex=\(request.pageIndex)"
-            )
-#endif
             return
         }
         guard let frame = verticalPageFrames[request.pageIndex] else {
-#if DEBUG
-            readerViewDebugLog(
-                "tryAdvanceVerticalRestore waitingForFrame pageIndex=\(request.pageIndex) availableFrames=\(verticalPageFrames.count)"
-            )
-#endif
             return
         }
         guard frame.height > 0 else {
-#if DEBUG
-            readerViewDebugLog(
-                "tryAdvanceVerticalRestore waitingForFrameHeight pageIndex=\(request.pageIndex) frameHeight=\(String(format: "%.2f", frame.height))"
-            )
-#endif
             return
         }
         Task { @MainActor in
@@ -778,29 +707,14 @@ public struct ReaderContainerView: View {
 
     private func syncVerticalViewportBeforeSave() {
         guard model.settings.readingMode == .vertical else { return }
-#if DEBUG
-        readerViewDebugLog(
-            "syncVerticalViewportBeforeSave currentPage=\(model.currentPageIndex) intra=\(String(format: "%.4f", model.currentPageIntraProgress)) visibleView=\(model.visibleView)"
-        )
-#endif
         tryAdvanceVerticalRestore()
         guard verticalRestoreController.canSampleViewport(now: CACurrentMediaTime()) else {
-#if DEBUG
-            readerViewDebugLog(
-                "syncVerticalViewportBeforeSave skipped viewport sampling activeRestorePage=\(verticalRestoreController.activeRequest?.pageIndex ?? -1)"
-            )
-#endif
             return
         }
         updateVerticalViewportPosition(force: true)
     }
 
     private func beginVerticalRestoreScrolling(for request: ReaderVerticalScrollRequest) {
-#if DEBUG
-        readerViewDebugLog(
-            "beginVerticalRestoreScrolling pageIndex=\(request.pageIndex) intra=\(String(format: "%.4f", request.intraPageProgress))"
-        )
-#endif
         verticalRestoreController.beginScrolling(to: request)
     }
 
@@ -810,9 +724,6 @@ public struct ReaderContainerView: View {
 
     private func cancelVerticalRestoreForUserScroll() {
         guard verticalRestoreController.activeRequest != nil else { return }
-#if DEBUG
-        readerViewDebugLog("cancelVerticalRestoreForUserScroll")
-#endif
         verticalRestoreController.cancel(now: CACurrentMediaTime())
         verticalRestoreRetryTask?.cancel()
         verticalRestoreRetryTask = nil
@@ -828,32 +739,12 @@ public struct ReaderContainerView: View {
                     guard verticalRestoreController.scrollingRequest == request else { return }
                     tryAdvanceVerticalRestore()
                     if verticalRestoreController.scrollingRequest == request, attempt == 3 || attempt == 6 || attempt == 9 {
-#if DEBUG
-                        readerViewDebugLog(
-                            "retryVerticalScrollToCurrentPage attempt=\(attempt) pageIndex=\(request.pageIndex)"
-                        )
-#endif
                         verticalScrollRequest = request
                     }
                 }
             }
         }
     }
-
-#if DEBUG
-    private func shouldLogVerticalViewportSample(pageIndex: Int, intraPageProgress: Double, force: Bool) -> Bool {
-        let fingerprint = ReaderVerticalViewportSampleLogFingerprint(
-            pageIndex: pageIndex,
-            intraPageProgress: intraPageProgress
-        )
-        defer {
-            lastVerticalViewportSampleLog = fingerprint
-        }
-        guard !force, let lastVerticalViewportSampleLog else { return true }
-        return lastVerticalViewportSampleLog.pageIndex != pageIndex
-            || abs(lastVerticalViewportSampleLog.intraPageProgress - intraPageProgress) >= 0.05
-    }
-#endif
 
     private func pageDistance(from referenceLineY: CGFloat, to frame: CGRect) -> CGFloat {
         if frame.contains(CGPoint(x: frame.midX, y: referenceLineY)) {
@@ -914,11 +805,6 @@ private final class ReaderVerticalScrollCoordinator: NSObject, ObservableObject,
         }
 
         let offset = scrollView.contentOffset
-#if DEBUG
-        readerViewDebugLog(
-            "interruptScrollingIfNeeded tracking=\(scrollView.isTracking) dragging=\(scrollView.isDragging) decelerating=\(scrollView.isDecelerating) offsetY=\(String(format: "%.2f", offset.y))"
-        )
-#endif
         scrollView.setContentOffset(offset, animated: false)
         lastMotionTime = CACurrentMediaTime()
 
@@ -945,11 +831,6 @@ private final class ReaderVerticalScrollCoordinator: NSObject, ObservableObject,
             scrollView.contentSize.height - scrollView.bounds.height + scrollView.adjustedContentInset.bottom
         )
         let targetOffsetY = min(max(desiredY, minOffsetY), maxOffsetY)
-#if DEBUG
-        readerViewDebugLog(
-            "restoreOffset intra=\(String(format: "%.4f", intraPageProgress)) pageFrameMinY=\(String(format: "%.2f", pageFrame.minY)) pageFrameHeight=\(String(format: "%.2f", pageFrame.height)) desiredY=\(String(format: "%.2f", desiredY)) targetOffsetY=\(String(format: "%.2f", targetOffsetY)) referenceLineY=\(String(format: "%.2f", referenceLineY))"
-        )
-#endif
         isRestoringOffset = true
         scrollView.setContentOffset(CGPoint(x: scrollView.contentOffset.x, y: targetOffsetY), animated: false)
         isRestoringOffset = false

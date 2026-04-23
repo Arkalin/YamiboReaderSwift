@@ -1,12 +1,6 @@
 import SwiftUI
 import YamiboReaderCore
 
-#if DEBUG
-private func readerModelDebugLog(_ message: @autoclosure () -> String) {
-    print("[ReaderDebug][Model] \(message())")
-}
-#endif
-
 public struct ReaderCacheOperationState: Equatable, Sendable {
     public enum Status: String, Equatable, Sendable {
         case idle
@@ -733,17 +727,6 @@ public final class ReaderContainerModel: ObservableObject {
             documentView: displayedViewCandidate(for: preferredPage)
         )
         let resolvedTarget = preferredResumePoint.flatMap { resolveResumePoint($0, in: pages) } ?? fallbackTarget
-#if DEBUG
-        if let preferredResumePoint {
-            readerModelDebugLog(
-                "applyPagination view=\(document.view) pageCount=\(pages.count) preferredPage=\(preferredPage) resumeSegmentIndex=\(preferredResumePoint.segmentIndex) resumeSegmentOffset=\(preferredResumePoint.segmentOffset) resolvedPage=\(resolvedTarget.pageIndex) resolvedIntra=\(String(format: "%.4f", resolvedTarget.intraPageProgress))"
-            )
-        } else {
-            readerModelDebugLog(
-                "applyPagination view=\(document.view) pageCount=\(pages.count) preferredPage=\(preferredPage) fallbackPage=\(resolvedTarget.pageIndex)"
-            )
-        }
-#endif
         setCurrentLocation(resolvedTarget)
     }
 
@@ -860,11 +843,6 @@ public final class ReaderContainerModel: ObservableObject {
         guard let page = currentRenderedPageMetadata,
               let chapterOrdinal = page.chapterOrdinal,
               let segmentIndex = page.segmentIndex else {
-#if DEBUG
-            readerModelDebugLog(
-                "captureCurrentResumePoint skipped view=\(displayedView) pageIndex=\(currentPageIndex) currentPageExists=\(currentRenderedPageMetadata != nil)"
-            )
-#endif
             return nil
         }
 
@@ -882,11 +860,6 @@ public final class ReaderContainerModel: ObservableObject {
             authorID: currentAuthorID ?? context.authorID,
             readingModeHint: settings.readingMode
         )
-#if DEBUG
-        readerModelDebugLog(
-            "captured resumePoint view=\(resumePoint.view) pageIndex=\(page.index) intra=\(String(format: "%.4f", currentPageIntraProgress)) segmentIndex=\(resumePoint.segmentIndex) segmentOffset=\(resumePoint.segmentOffset) segmentRange=\(page.segmentStartOffset)-\(page.segmentEndOffset) chapter=\(resumePoint.chapterTitle ?? "nil") mode=\(resumePoint.readingModeHint.rawValue)"
-        )
-#endif
         return resumePoint
     }
 
@@ -896,11 +869,6 @@ public final class ReaderContainerModel: ObservableObject {
     ) -> ReaderResolvedTarget? {
         let pagesInView = renderedPages.filter { $0.documentView == resumePoint.view }
         guard !pagesInView.isEmpty else {
-#if DEBUG
-            readerModelDebugLog(
-                "resolveResumePoint failed noPages view=\(resumePoint.view) totalPages=\(renderedPages.count) segmentIndex=\(resumePoint.segmentIndex) segmentOffset=\(resumePoint.segmentOffset)"
-            )
-#endif
             return nil
         }
 
@@ -915,11 +883,6 @@ public final class ReaderContainerModel: ObservableObject {
                 intraPageProgress: intraPageProgress(for: resumePoint, in: containingPage),
                 documentView: containingPage.documentView
             )
-#if DEBUG
-            readerModelDebugLog(
-                "resolveResumePoint containingPage targetPage=\(target.pageIndex) targetIntra=\(String(format: "%.4f", target.intraPageProgress)) view=\(target.documentView) segmentRange=\(containingPage.segmentStartOffset)-\(containingPage.segmentEndOffset)"
-            )
-#endif
             return target
         }
 
@@ -931,11 +894,6 @@ public final class ReaderContainerModel: ObservableObject {
                 intraPageProgress: intraPageProgress(for: resumePoint, in: nearestPage),
                 documentView: nearestPage.documentView
             )
-#if DEBUG
-            readerModelDebugLog(
-                "resolveResumePoint nearestPage targetPage=\(target.pageIndex) targetIntra=\(String(format: "%.4f", target.intraPageProgress)) view=\(target.documentView) segmentRange=\(nearestPage.segmentStartOffset)-\(nearestPage.segmentEndOffset)"
-            )
-#endif
             return target
         }
 
@@ -945,11 +903,6 @@ public final class ReaderContainerModel: ObservableObject {
                 intraPageProgress: min(max(resumePoint.segmentProgress, 0), 1),
                 documentView: chapterPage.documentView
             )
-#if DEBUG
-            readerModelDebugLog(
-                "resolveResumePoint chapterFallback targetPage=\(target.pageIndex) targetIntra=\(String(format: "%.4f", target.intraPageProgress)) view=\(target.documentView) chapterOrdinal=\(resumePoint.chapterOrdinal)"
-            )
-#endif
             return target
         }
 
@@ -959,11 +912,6 @@ public final class ReaderContainerModel: ObservableObject {
                 intraPageProgress: min(max(resumePoint.segmentProgress, 0), 1),
                 documentView: titlePage.documentView
             )
-#if DEBUG
-            readerModelDebugLog(
-                "resolveResumePoint titleFallback targetPage=\(target.pageIndex) targetIntra=\(String(format: "%.4f", target.intraPageProgress)) view=\(target.documentView) title=\(resumePoint.chapterTitle ?? "nil")"
-            )
-#endif
             return target
         }
 
@@ -973,11 +921,6 @@ public final class ReaderContainerModel: ObservableObject {
             intraPageProgress: 0,
             documentView: firstPage.documentView
         )
-#if DEBUG
-        readerModelDebugLog(
-            "resolveResumePoint firstPageFallback targetPage=\(target.pageIndex) view=\(target.documentView)"
-        )
-#endif
         return target
     }
 
@@ -1011,11 +954,6 @@ public final class ReaderContainerModel: ObservableObject {
         currentPageIndex = max(0, min(target.pageIndex, max(pages.count - 1, 0)))
         currentPageIntraProgress = min(max(target.intraPageProgress, 0), 1)
         currentChapterTitle = chapterTitle(for: currentPageIndex)
-#if DEBUG
-        readerModelDebugLog(
-            "setCurrentLocation pageIndex=\(currentPageIndex) intra=\(String(format: "%.4f", currentPageIntraProgress)) displayedView=\(displayedView) chapter=\(currentChapterTitle ?? "nil")"
-        )
-#endif
     }
 
     private func displayedViewCandidate(for preferredPage: Int) -> Int {
@@ -1079,11 +1017,6 @@ public final class ReaderContainerModel: ObservableObject {
         let snapshot = currentProgressSnapshot()
         guard snapshot != lastSyncedProgress else {
             lastQueuedProgress = snapshot
-#if DEBUG
-            readerModelDebugLog(
-                "flushProgress skipped duplicate view=\(snapshot.view) page=\(snapshot.page) intra=\(String(format: "%.4f", snapshot.resumePoint?.segmentProgress ?? 0))"
-            )
-#endif
             return
         }
 
@@ -1095,23 +1028,12 @@ public final class ReaderContainerModel: ObservableObject {
             resumePoint: snapshot.resumePoint
         )
         do {
-#if DEBUG
-            readerModelDebugLog(
-                "flushProgress saving view=\(snapshot.view) page=\(snapshot.page) chapter=\(snapshot.chapterTitle ?? "nil") resumeView=\(snapshot.resumePoint?.view ?? -1) segmentIndex=\(snapshot.resumePoint?.segmentIndex ?? -1) segmentOffset=\(snapshot.resumePoint?.segmentOffset ?? -1) intra=\(String(format: "%.4f", snapshot.resumePoint?.segmentProgress ?? 0))"
-            )
-#endif
             _ = try await appContext.favoriteStore.updateReadingProgress(for: context.threadURL, progress: progress)
         } catch {
-#if DEBUG
-            readerModelDebugLog("flushProgress failed error=\(error.localizedDescription)")
-#endif
             return
         }
         lastQueuedProgress = snapshot
         lastSyncedProgress = snapshot
-#if DEBUG
-        readerModelDebugLog("flushProgress finished")
-#endif
     }
 
     private func cacheContext(forView view: Int) -> (authorID: String?, contentSource: ReaderContentSource?) {
