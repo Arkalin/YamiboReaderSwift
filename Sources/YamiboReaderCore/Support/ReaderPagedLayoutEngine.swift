@@ -35,15 +35,10 @@ enum ReaderPagedLayoutEngine {
         layout: ReaderContainerLayout
     ) -> [TextSlice] {
         let pageSize = layout.readableFrame.size
-        ReaderDebugLog.log(
-            "PagedEngine input chars=\(text.count) title=\(chapterTitle ?? "nil") readable=\(format(pageSize)) snippet=\(text.readerDebugSnippet)"
-        )
         guard pageSize.width > 0, pageSize.height > 0 else {
-            ReaderDebugLog.log("PagedEngine fallback because readable size is non-positive")
             return []
         }
         guard pageSize.width >= 120, pageSize.height >= minimumUsablePageHeight(settings: settings) else {
-            ReaderDebugLog.log("PagedEngine fallback because readable size is too small: \(format(pageSize))")
             return []
         }
 
@@ -101,9 +96,6 @@ enum ReaderPagedLayoutEngine {
                             endOffset: trimmedEnd
                         )
                     )
-                    ReaderDebugLog.log(
-                        "PagedEngine slice #\(slices.count - 1) start=\(effectiveStart) end=\(trimmedEnd) len=\(sliceText.count) glyphRange=\(glyphRange) charRange=\(characterRange) snippet=\(sliceText.readerDebugSnippet)"
-                    )
                 }
             }
 
@@ -136,9 +128,6 @@ enum ReaderPagedLayoutEngine {
         return CGFloat(fontSize * max(settings.lineHeightScale, 1.35) * 2)
     }
 
-    private static func format(_ size: CGSize) -> String {
-        "\(Int(size.width.rounded()))x\(Int(size.height.rounded()))"
-    }
 }
 
 private extension String {

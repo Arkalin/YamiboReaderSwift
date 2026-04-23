@@ -85,9 +85,6 @@ struct ReaderRichTextView: UIViewRepresentable {
 
     func updateUIView(_ uiView: UITextView, context: Context) {
         uiView.attributedText = makeAttributedText()
-        ReaderDebugLog.log(
-            "RichText render chars=\(text.count) width=\(Int(uiView.bounds.width.rounded())) height=\(Int(uiView.bounds.height.rounded())) snippet=\(text.readerDebugSnippet)"
-        )
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, uiView: UITextView, context: Context) -> CGSize? {

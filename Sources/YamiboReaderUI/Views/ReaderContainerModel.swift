@@ -282,9 +282,6 @@ public final class ReaderContainerModel: ObservableObject {
 
     public func updateLayout(_ layout: ReaderContainerLayout) {
         guard self.layout != layout else { return }
-        ReaderDebugLog.log(
-            "Model updateLayout old=\(debugLayout(self.layout)) new=\(debugLayout(layout)) pages=\(pages.count)"
-        )
         self.layout = layout
         guard currentDocument != nil else { return }
         repaginate(resumePoint: captureCurrentResumePoint())
@@ -711,9 +708,6 @@ public final class ReaderContainerModel: ObservableObject {
                 segmentEndOffset: page.segmentEndOffset
             )
         }
-        ReaderDebugLog.log(
-            "Model applyPagination pages=\(pages.count) layout=\(debugLayout(layout)) pageSummary=\(pages.prefix(8).map { debugPage($0) }.joined(separator: " | "))"
-        )
         chapters = renderedChapters
         currentContentSource = document.contentSource
         retainedChapterCount = document.retainedChapterCount
@@ -1163,25 +1157,6 @@ public final class ReaderContainerModel: ObservableObject {
     private func syncCachedViews(_ views: Set<Int>) {
         cachedViews = views
         cacheOperationState.cachedViews = views
-    }
-
-    private func debugLayout(_ layout: ReaderContainerLayout) -> String {
-        let frame = layout.readableFrame
-        return "container=\(Int(layout.width))x\(Int(layout.height)) readable=(\(Int(frame.minX)),\(Int(frame.minY)),\(Int(frame.width))x\(Int(frame.height))) safeTop=\(Int(layout.safeAreaInsets.top)) chromeTop=\(Int(layout.chromeInsets.top)) chromeBottom=\(Int(layout.chromeInsets.bottom)) mode=\(layout.readingMode.rawValue)"
-    }
-
-    private func debugPage(_ page: ReaderRenderedPage) -> String {
-        let blockSummary = page.blocks.map { block -> String in
-            switch block {
-            case let .text(text, _):
-                return "text:\(text.count):\(text.readerDebugSnippet)"
-            case .image:
-                return "image"
-            case let .footer(text):
-                return "footer:\(text.count)"
-            }
-        }.joined(separator: ",")
-        return "#\(page.index)[seg=\(page.segmentIndex.map(String.init) ?? "nil") off=\(page.segmentStartOffset)..<\(page.segmentEndOffset) blocks=\(blockSummary)]"
     }
 }
 

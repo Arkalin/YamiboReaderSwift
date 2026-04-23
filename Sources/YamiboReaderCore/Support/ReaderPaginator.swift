@@ -56,9 +56,6 @@ public enum ReaderPaginator {
         for annotatedSegment in annotatedSegments {
             switch annotatedSegment.segment {
             case let .text(text, chapterTitle):
-                ReaderDebugLog.log(
-                    "Paginator segment index=\(annotatedSegment.index) chapter=\(annotatedSegment.chapterTitle ?? "nil") chars=\(text.count) snippet=\(text.readerDebugSnippet)"
-                )
                 let slices = chunker(annotatedSegment, settings, layout)
                 for slice in slices where !slice.text.isEmpty {
                     if settings.readingMode == .paged,
@@ -82,9 +79,6 @@ public enum ReaderPaginator {
                         segmentIndex: annotatedSegment.index,
                         segmentStartOffset: slice.startOffset,
                         segmentEndOffset: slice.endOffset
-                    )
-                    ReaderDebugLog.log(
-                        "Paginator new page index=\(page.index) segment=\(annotatedSegment.index) sliceLen=\(slice.text.count) offsets=\(slice.startOffset)..<\(slice.endOffset) snippet=\(slice.text.readerDebugSnippet)"
                     )
                     if let chapterOrdinal = annotatedSegment.chapterOrdinal,
                        let chapterTitle = annotatedSegment.chapterTitle,
@@ -183,9 +177,6 @@ public enum ReaderPaginator {
 
         previousPage.blocks.append(.text(slice.text, chapterTitle: chapterTitle))
         pages[previousIndex] = previousPage
-        ReaderDebugLog.log(
-            "Paginator packed slice into page=\(previousIndex) segment=\(annotatedSegment.index) sliceLen=\(slice.text.count) combinedLen=\(combinedText.count) snippet=\(slice.text.readerDebugSnippet)"
-        )
         return true
     }
 
