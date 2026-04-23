@@ -25,6 +25,46 @@ struct ReaderPageContent: View {
     }
 }
 
+struct ReaderPagedSpreadContent: View {
+    let spread: ReaderPagedSpread
+    let pages: [ReaderRenderedPage]
+    let settings: ReaderAppearanceSettings
+    let refererURL: URL
+    let sessionState: SessionState
+    let topInset: CGFloat
+    let bottomInset: CGFloat
+
+    var body: some View {
+        HStack(spacing: 0) {
+            spreadColumn(pageIndex: spread.leftPageIndex)
+            spreadColumn(pageIndex: spread.rightPageIndex)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    @ViewBuilder
+    private func spreadColumn(pageIndex: Int?) -> some View {
+        Group {
+            if let pageIndex, pages.indices.contains(pageIndex) {
+                ReaderPageContent(
+                    page: pages[pageIndex],
+                    settings: settings,
+                    refererURL: refererURL,
+                    sessionState: sessionState
+                )
+                .padding(.horizontal, settings.horizontalPadding)
+                .padding(.top, topInset)
+                .padding(.bottom, bottomInset)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            } else {
+                Color.clear
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+}
+
 private struct ReaderBlockView: View {
     let block: ReaderRenderedBlock
     let settings: ReaderAppearanceSettings

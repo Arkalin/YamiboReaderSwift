@@ -135,6 +135,154 @@ final class ReaderContainerModelTests: XCTestCase {
         }
     }
 
+    func testTwoPageSpreadRequiresPadLandscapePagedModeAndSetting() async throws {
+        let document = makeImageDocument(view: 1, maxView: 1, pageCount: 5)
+        let model = try await makeModel(
+            documents: [document],
+            settings: ReaderAppearanceSettings(
+                showsTwoPagesInLandscapeOnPad: true,
+                readingMode: .paged
+            )
+        )
+
+        await MainActor.run {
+            XCTAssertFalse(model.isTwoPageSpreadActive)
+            model.updatePagedPresentationEnvironment(isPad: true)
+            XCTAssertFalse(model.isTwoPageSpreadActive)
+
+            model.updateLayout(
+                ReaderContainerLayout(
+                    width: 844,
+                    height: 390,
+                    readingMode: .paged
+                )
+            )
+            XCTAssertTrue(model.isTwoPageSpreadActive)
+
+            model.applySettings(
+                ReaderAppearanceSettings(
+                    showsTwoPagesInLandscapeOnPad: true,
+                    readingMode: .vertical
+                )
+            )
+            XCTAssertFalse(model.isTwoPageSpreadActive)
+
+            model.applySettings(
+                ReaderAppearanceSettings(
+                    showsTwoPagesInLandscapeOnPad: false,
+                    readingMode: .paged
+                )
+            )
+            XCTAssertFalse(model.isTwoPageSpreadActive)
+        }
+    }
+
+    func testTwoPageSpreadBuildsExpectedPairsAndProgressText() async throws {
+        let document = makeImageDocument(view: 1, maxView: 1, pageCount: 5)
+        let model = try await makeModel(
+            documents: [document],
+            settings: ReaderAppearanceSettings(
+                showsTwoPagesInLandscapeOnPad: true,
+                readingMode: .paged
+            )
+        )
+
+        await MainActor.run {
+            model.updatePagedPresentationEnvironment(isPad: true)
+            model.updateLayout(
+                ReaderContainerLayout(
+                    width: 844,
+                    height: 390,
+                    readingMode: .paged
+                )
+            )
+
+            XCTAssertEqual(
+                model.pagedSpreads.map { "\($0.leftPageIndex)-\($0.rightPageIndex.map(String.init) ?? "nil")" },
+                ["0-1", "2-3", "4-nil"]
+            )
+            XCTAssertEqual(model.pagedSelectionIndex, 0)
+            XCTAssertTrue(model.progressText.contains("第 1-2 / 5 页"))
+
+            model.jumpToRenderedPage(4)
+            XCTAssertEqual(model.currentPageIndex, 4)
+            XCTAssertEqual(model.pagedSelectionIndex, 2)
+            XCTAssertTrue(model.progressText.contains("第 5 / 5 页"))
+        }
+    }
+
+    func testTwoPageSpreadMapsSliderAndPagingToSpreadLeftAnchor() async throws {
+        let document = makeImageDocument(view: 1, maxView: 1, pageCount: 6)
+        let model = try await makeModel(
+            documents: [document],
+            settings: ReaderAppearanceSettings(
+                showsTwoPagesInLandscapeOnPad: true,
+                readingMode: .paged
+            )
+        )
+
+        await MainActor.run {
+            model.updatePagedPresentationEnvironment(isPad: true)
+            model.updateLayout(
+                ReaderContainerLayout(
+                    width: 844,
+                    height: 390,
+                    readingMode: .paged
+                )
+            )
+
+            XCTAssertEqual(model.targetRenderedPageIndex(forProgressValue: 1), 0)
+            XCTAssertEqual(model.targetRenderedPageIndex(forProgressValue: 5), 4)
+
+            model.jumpToRenderedPage(3)
+            XCTAssertEqual(model.currentPageIndex, 2)
+        }
+
+        await model.jumpRelativePage(1)
+        await MainActor.run {
+            XCTAssertEqual(model.currentPageIndex, 4)
+            XCTAssertEqual(model.currentRenderedPage, 5)
+        }
+
+        await MainActor.run {
+            model.updatePagedSelection(1)
+            XCTAssertEqual(model.currentPageIndex, 2)
+        }
+    }
+
+    func testTwoPageSpreadRepaginatesTextForHalfWidthColumns() async throws {
+        let document = ReaderPageDocument(
+            threadURL: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9911&mobile=2")!,
+            view: 1,
+            maxView: 1,
+            contentSource: .fallbackUnfilteredPage,
+            segments: [
+                .text(String(repeating: "第一章 内容。", count: 420), chapterTitle: "第一章")
+            ]
+        )
+        let model = try await makeModel(
+            documents: [document],
+            settings: ReaderAppearanceSettings(
+                showsTwoPagesInLandscapeOnPad: true,
+                readingMode: .paged
+            )
+        )
+
+        let singlePageCount = await MainActor.run { model.renderedPageCount }
+
+        await MainActor.run {
+            model.updatePagedPresentationEnvironment(isPad: true)
+            model.updateLayout(
+                ReaderContainerLayout(
+                    width: 844,
+                    height: 390,
+                    readingMode: .paged
+                )
+            )
+            XCTAssertTrue(model.renderedPageCount > singlePageCount)
+        }
+    }
+
     func testApplySettingsUpdatesStoredReaderSettings() async throws {
         let model = try await makeModel(
             documents: [
@@ -1137,6 +1285,27 @@ private func makeDocument(
         maxView: maxView,
         resolvedAuthorID: authorID,
         contentSource: contentSource,
+        segments: segments
+    )
+}
+
+private func makeImageDocument(
+    threadURL: URL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=998877&mobile=2")!,
+    view: Int,
+    maxView: Int,
+    pageCount: Int
+) -> ReaderPageDocument {
+    let segments = (0..<pageCount).map { index in
+        ReaderSegment.image(
+            URL(string: "https://example.com/\(view)-\(index).jpg")!,
+            chapterTitle: "第\(index + 1)章"
+        )
+    }
+    return ReaderPageDocument(
+        threadURL: threadURL,
+        view: view,
+        maxView: maxView,
+        contentSource: .fallbackUnfilteredPage,
         segments: segments
     )
 }

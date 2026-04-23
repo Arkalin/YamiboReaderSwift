@@ -71,6 +71,14 @@ public struct ReaderContainerView: View {
         self.appModel = appModel
     }
 
+    private var isPadDevice: Bool {
+#if os(iOS)
+        UIDevice.current.userInterfaceIdiom == .pad
+#else
+        false
+#endif
+    }
+
     public var body: some View {
         GeometryReader { proxy in
             let topInset = max(proxy.safeAreaInsets.top, windowSafeAreaInsets.top)
@@ -85,7 +93,10 @@ public struct ReaderContainerView: View {
                 backgroundColor
                     .ignoresSafeArea()
 
-                content
+                content(
+                    topInset: topInset,
+                    bottomInset: bottomInset
+                )
 
                 if isProgressPreviewVisible {
                     ReaderChapterPreviewBubble(title: progressPreviewChapterTitle ?? "•••")
@@ -121,6 +132,7 @@ public struct ReaderContainerView: View {
                 }
             }
             .task {
+                model.updatePagedPresentationEnvironment(isPad: isPadDevice)
                 await model.prepare(layout: currentLayout)
                 updateChromeForContentState()
             }
@@ -206,7 +218,7 @@ public struct ReaderContainerView: View {
     }
 
     @ViewBuilder
-    private var content: some View {
+    private func content(topInset: CGFloat, bottomInset: CGFloat) -> some View {
         if model.isLoading && model.pages.isEmpty {
             VStack(spacing: 12) {
                 ProgressView("加载中…")
@@ -224,30 +236,47 @@ public struct ReaderContainerView: View {
             .padding(24)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if model.settings.readingMode == .paged {
-            pagedContent
+            pagedContent(
+                topInset: topInset,
+                bottomInset: bottomInset
+            )
         } else {
             verticalContent
         }
     }
 
-    private var pagedContent: some View {
-        TabView(selection: $model.currentPageIndex) {
-            ForEach(model.pages) { page in
-                ReaderPageContent(
-                    page: page,
-                    settings: model.settings,
-                    refererURL: model.forumURL,
-                    sessionState: model.sessionState
-                )
-                .tag(page.index)
-                .padding(.horizontal, model.settings.horizontalPadding)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    private func pagedContent(topInset: CGFloat, bottomInset: CGFloat) -> some View {
+        TabView(selection: pagedSelection) {
+            if model.isTwoPageSpreadActive {
+                ForEach(model.pagedSpreads) { spread in
+                    ReaderPagedSpreadContent(
+                        spread: spread,
+                        pages: model.pages,
+                        settings: model.settings,
+                        refererURL: model.forumURL,
+                        sessionState: model.sessionState,
+                        topInset: topInset,
+                        bottomInset: bottomInset
+                    )
+                    .tag(spread.index)
+                }
+            } else {
+                ForEach(model.pages) { page in
+                    ReaderPageContent(
+                        page: page,
+                        settings: model.settings,
+                        refererURL: model.forumURL,
+                        sessionState: model.sessionState
+                    )
+                    .tag(page.index)
+                    .padding(.horizontal, model.settings.horizontalPadding)
+                    .padding(.top, topInset)
+                    .padding(.bottom, bottomInset)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                }
             }
         }
         .tabViewStyle(.page(indexDisplayMode: .never))
-        .onChange(of: model.currentPageIndex) { _, newValue in
-            model.updateCurrentPage(newValue)
-        }
         .overlay {
             if !model.pages.isEmpty {
                 ReaderPagedTapZones(
@@ -261,6 +290,13 @@ public struct ReaderContainerView: View {
                 )
             }
         }
+    }
+
+    private var pagedSelection: Binding<Int> {
+        Binding(
+            get: { model.pagedSelectionIndex },
+            set: { model.updatePagedSelection($0) }
+        )
     }
 
     private var verticalContent: some View {

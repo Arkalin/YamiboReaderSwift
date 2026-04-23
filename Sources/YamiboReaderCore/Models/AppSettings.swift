@@ -92,6 +92,7 @@ public struct ReaderAppearanceSettings: Codable, Hashable, Sendable {
     public var usesJustifiedText: Bool
     public var showsSystemStatusBar: Bool
     public var loadsInlineImages: Bool
+    public var showsTwoPagesInLandscapeOnPad: Bool
     public var backgroundStyle: ReaderBackgroundStyle
     public var readingMode: ReaderReadingMode
     public var translationMode: ReaderTranslationMode
@@ -105,6 +106,7 @@ public struct ReaderAppearanceSettings: Codable, Hashable, Sendable {
         usesJustifiedText: Bool = false,
         showsSystemStatusBar: Bool = true,
         loadsInlineImages: Bool = true,
+        showsTwoPagesInLandscapeOnPad: Bool = false,
         backgroundStyle: ReaderBackgroundStyle = .system,
         readingMode: ReaderReadingMode = .paged,
         translationMode: ReaderTranslationMode = .none
@@ -117,6 +119,7 @@ public struct ReaderAppearanceSettings: Codable, Hashable, Sendable {
         self.usesJustifiedText = usesJustifiedText
         self.showsSystemStatusBar = showsSystemStatusBar
         self.loadsInlineImages = loadsInlineImages
+        self.showsTwoPagesInLandscapeOnPad = showsTwoPagesInLandscapeOnPad
         self.backgroundStyle = backgroundStyle
         self.readingMode = readingMode
         self.translationMode = translationMode
@@ -131,6 +134,7 @@ public struct ReaderAppearanceSettings: Codable, Hashable, Sendable {
         case usesJustifiedText
         case showsSystemStatusBar
         case loadsInlineImages
+        case showsTwoPagesInLandscapeOnPad
         case backgroundStyle
         case readingMode
         case translationMode
@@ -146,6 +150,7 @@ public struct ReaderAppearanceSettings: Codable, Hashable, Sendable {
         usesJustifiedText = try container.decodeIfPresent(Bool.self, forKey: .usesJustifiedText) ?? false
         showsSystemStatusBar = try container.decodeIfPresent(Bool.self, forKey: .showsSystemStatusBar) ?? true
         loadsInlineImages = try container.decodeIfPresent(Bool.self, forKey: .loadsInlineImages) ?? true
+        showsTwoPagesInLandscapeOnPad = try container.decodeIfPresent(Bool.self, forKey: .showsTwoPagesInLandscapeOnPad) ?? false
         backgroundStyle = try container.decodeIfPresent(ReaderBackgroundStyle.self, forKey: .backgroundStyle) ?? .system
         readingMode = try container.decodeIfPresent(ReaderReadingMode.self, forKey: .readingMode) ?? .paged
         translationMode = try container.decodeIfPresent(ReaderTranslationMode.self, forKey: .translationMode) ?? .none
@@ -161,6 +166,7 @@ public struct ReaderAppearanceSettings: Codable, Hashable, Sendable {
         try container.encode(usesJustifiedText, forKey: .usesJustifiedText)
         try container.encode(showsSystemStatusBar, forKey: .showsSystemStatusBar)
         try container.encode(loadsInlineImages, forKey: .loadsInlineImages)
+        try container.encode(showsTwoPagesInLandscapeOnPad, forKey: .showsTwoPagesInLandscapeOnPad)
         try container.encode(backgroundStyle, forKey: .backgroundStyle)
         try container.encode(readingMode, forKey: .readingMode)
         try container.encode(translationMode, forKey: .translationMode)

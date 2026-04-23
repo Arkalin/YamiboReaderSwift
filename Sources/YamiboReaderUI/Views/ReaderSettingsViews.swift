@@ -30,6 +30,14 @@ struct ReaderSettingsPanel: View {
     private static let fallbackPreviewText = "今夜，窗外的风像翻页声一样轻，阅读设置会在此处预览，右上角保存后才会作用在正文中。你可以先把它调到舒服，再继续往下读。"
     private static let previewCharacterCount = 200
 
+    private var showsTwoPageToggle: Bool {
+#if os(iOS)
+        UIDevice.current.userInterfaceIdiom == .pad && draftSettings.readingMode == .paged
+#else
+        false
+#endif
+    }
+
     var body: some View {
         GeometryReader { proxy in
             let topInset = proxy.safeAreaInsets.top
@@ -90,6 +98,11 @@ struct ReaderSettingsPanel: View {
                                 settings: draftSettings,
                                 palette: palette,
                                 colorScheme: colorScheme,
+                                showsTwoPageToggle: showsTwoPageToggle,
+                                showsTwoPagesInLandscapeOnPad: Binding(
+                                    get: { draftSettings.showsTwoPagesInLandscapeOnPad },
+                                    set: { draftSettings.showsTwoPagesInLandscapeOnPad = $0 }
+                                ),
                                 onBackgroundStyleChange: setBackgroundStyle,
                                 onReadingModeChange: setReadingMode,
                                 onSelectOriginalText: { setTranslationMode(.none) },
@@ -443,6 +456,8 @@ private struct ReaderBooksDisplaySection: View {
     let settings: ReaderAppearanceSettings
     let palette: ReaderBooksSheetPalette
     let colorScheme: ColorScheme
+    let showsTwoPageToggle: Bool
+    @Binding var showsTwoPagesInLandscapeOnPad: Bool
     let onBackgroundStyleChange: (ReaderBackgroundStyle) -> Void
     let onReadingModeChange: (ReaderReadingMode) -> Void
     let onSelectOriginalText: () -> Void
@@ -463,6 +478,14 @@ private struct ReaderBooksDisplaySection: View {
                 palette: palette,
                 onSelect: onReadingModeChange
             )
+            if showsTwoPageToggle {
+                ReaderBooksDivider(palette: palette)
+                ReaderBooksToggleRow(
+                    title: "横屏时同时显示 2 页",
+                    palette: palette,
+                    isOn: $showsTwoPagesInLandscapeOnPad
+                )
+            }
             ReaderBooksDivider(palette: palette)
             ReaderBooksTranslationPicker(
                 selectedModeRawValue: settings.translationMode.rawValue,

@@ -45,6 +45,7 @@ import Testing
             horizontalPadding: 20,
             usesJustifiedText: true,
             loadsInlineImages: false,
+            showsTwoPagesInLandscapeOnPad: true,
             backgroundStyle: .paper,
             readingMode: .vertical,
             translationMode: .traditional
@@ -142,6 +143,7 @@ import Testing
     #expect(decoded.fontFamily == .systemSans)
     #expect(decoded.characterSpacingScale == 0)
     #expect(decoded.usesJustifiedText == false)
+    #expect(decoded.showsTwoPagesInLandscapeOnPad == false)
     #expect(decoded.fontScale == 1.2)
     #expect(decoded.lineHeightScale == 1.5)
 }

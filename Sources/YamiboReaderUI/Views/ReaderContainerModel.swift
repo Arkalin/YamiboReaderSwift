@@ -90,6 +90,22 @@ private enum ReaderCacheOperationMode {
     case update
 }
 
+public struct ReaderPagedSpread: Identifiable, Equatable, Sendable {
+    public let index: Int
+    public let leftPageIndex: Int
+    public let rightPageIndex: Int?
+    public let chapterTitle: String?
+
+    public var id: Int { index }
+
+    public init(index: Int, leftPageIndex: Int, rightPageIndex: Int?, chapterTitle: String?) {
+        self.index = max(0, index)
+        self.leftPageIndex = max(0, leftPageIndex)
+        self.rightPageIndex = rightPageIndex
+        self.chapterTitle = chapterTitle
+    }
+}
+
 @MainActor
 public final class ReaderContainerModel: ObservableObject {
     @Published public private(set) var isLoading = false
@@ -108,6 +124,7 @@ public final class ReaderContainerModel: ObservableObject {
     @Published public var settings = ReaderAppearanceSettings()
     @Published public private(set) var sessionState = SessionState()
     @Published public private(set) var cacheOperationState = ReaderCacheOperationState()
+    @Published public private(set) var pagedSpreads: [ReaderPagedSpread] = []
 
     public let context: ReaderLaunchContext
 
@@ -119,6 +136,7 @@ public final class ReaderContainerModel: ObservableObject {
     private var currentAuthorID: String?
     private var currentDocumentPageCount = 0
     private var prefetchedStartIndex: Int?
+    private var usesPadPresentation = false
     private var cacheOperationTask: Task<Void, Never>?
     private var progressSyncTask: Task<Void, Never>?
     private var lastQueuedProgress: ReaderProgressSnapshot?
@@ -136,9 +154,16 @@ public final class ReaderContainerModel: ObservableObject {
         context.threadTitle.isEmpty ? "小说阅读" : context.threadTitle
     }
 
+    public var isTwoPageSpreadActive: Bool {
+        settings.readingMode == .paged &&
+            settings.showsTwoPagesInLandscapeOnPad &&
+            usesPadPresentation &&
+            layout.width > layout.height
+    }
+
     public var progressText: String {
         let chapter = currentChapterTitle.map { " · \($0)" } ?? ""
-        return "第 \(displayedPageIndex + 1) / \(max(displayedPageCount, 1)) 页 · 网页第 \(displayedView) / \(max(maxView, 1)) 页\(chapter)"
+        return "第 \(displayedPageLabel) / \(max(displayedPageCount, 1)) 页 · 网页第 \(displayedView) / \(max(maxView, 1)) 页\(chapter)"
     }
 
     public func previewText(
@@ -181,6 +206,25 @@ public final class ReaderContainerModel: ObservableObject {
         "\(currentWebViewText) 的章节"
     }
 
+    public var pagedSelectionIndex: Int {
+        guard isTwoPageSpreadActive else { return currentPageIndex }
+        return spreadIndex(forPageIndex: currentPageIndex)
+    }
+
+    public func updatePagedPresentationEnvironment(isPad: Bool) {
+        guard usesPadPresentation != isPad else { return }
+        usesPadPresentation = isPad
+        guard currentDocument != nil, settings.readingMode == .paged else { return }
+        repaginate(resumePoint: captureCurrentResumePoint())
+    }
+
+    public func updatePagedSelection(_ selectionIndex: Int) {
+        let targetPageIndex = isTwoPageSpreadActive
+            ? leftPageIndex(forSpreadIndex: selectionIndex)
+            : selectionIndex
+        updateCurrentPage(targetPageIndex)
+    }
+
     public func chapterTitle(forRenderedPageIndex pageIndex: Int) -> String? {
         guard !pages.isEmpty else { return nil }
         let clampedIndex = min(max(pageIndex, 0), max(pages.count - 1, 0))
@@ -192,10 +236,11 @@ public final class ReaderContainerModel: ObservableObject {
 
         switch settings.readingMode {
         case .paged:
-            return min(
+            let target = min(
                 max(Int(value.rounded()), 0),
                 max(pages.count - 1, 0)
             )
+            return normalizedPagedPageIndex(target)
         case .vertical:
             guard pages.count > 1 else { return 0 }
             let clampedPercent = min(max(value, 0), 100)
@@ -416,6 +461,14 @@ public final class ReaderContainerModel: ObservableObject {
 
     public func jumpRelativePage(_ delta: Int) async {
         guard delta != 0 else { return }
+
+        if settings.readingMode == .paged, isTwoPageSpreadActive {
+            let targetSpreadIndex = pagedSelectionIndex + delta
+            if targetSpreadIndex >= 0, targetSpreadIndex < pagedSpreads.count {
+                jumpToRenderedPage(leftPageIndex(forSpreadIndex: targetSpreadIndex))
+                return
+            }
+        }
 
         let targetIndex = currentPageIndex + delta
         if targetIndex >= 0, targetIndex < pages.count {
@@ -686,7 +739,8 @@ public final class ReaderContainerModel: ObservableObject {
         preferredPage: Int,
         preferredResumePoint: ReaderResumePoint?
     ) {
-        let pagination = ReaderPaginator.paginate(document: document, settings: settings, layout: layout)
+        let paginationLayout = effectivePaginationLayout
+        let pagination = ReaderPaginator.paginate(document: document, settings: settings, layout: paginationLayout)
         currentDocumentPageCount = pagination.pages.count
 
         var renderedPages = pagination.pages
@@ -696,7 +750,7 @@ public final class ReaderContainerModel: ObservableObject {
         if settings.readingMode == .vertical,
            let prefetchedDocument,
            prefetchedDocument.view == document.view + 1 {
-            let nextPagination = ReaderPaginator.paginate(document: prefetchedDocument, settings: settings, layout: layout)
+            let nextPagination = ReaderPaginator.paginate(document: prefetchedDocument, settings: settings, layout: paginationLayout)
             let startIndex = renderedPages.count
             prefetchedStartIndex = startIndex
             renderedPages += nextPagination.pages.enumerated().map { offset, page in
@@ -734,6 +788,7 @@ public final class ReaderContainerModel: ObservableObject {
                 textRanges: page.textRanges
             )
         }
+        pagedSpreads = makePagedSpreads(from: pages)
         chapters = renderedChapters
         currentContentSource = document.contentSource
         retainedChapterCount = document.retainedChapterCount
@@ -779,6 +834,19 @@ public final class ReaderContainerModel: ObservableObject {
             return chapters.last(where: { $0.startIndex <= pageIndex })?.title
         }
         return pages[pageIndex].chapterTitle ?? chapters.last(where: { $0.startIndex <= pageIndex })?.title
+    }
+
+    private var displayedPageLabel: String {
+        let leftPageNumber = displayedPageIndex + 1
+        guard isTwoPageSpreadActive,
+              let spread = pagedSpreads.first(where: { $0.leftPageIndex == currentPageIndex }),
+              let rightPageIndex = spread.rightPageIndex,
+              pages.indices.contains(rightPageIndex),
+              pages[rightPageIndex].documentView == displayedView else {
+            return "\(leftPageNumber)"
+        }
+        let rightPageNumber = displayedPageIndex + 2
+        return "\(leftPageNumber)-\(min(rightPageNumber, displayedPageCount))"
     }
 
     private var displayedView: Int {
@@ -845,8 +913,9 @@ public final class ReaderContainerModel: ObservableObject {
     }
 
     private var currentRenderedPageMetadata: ReaderRenderedPage? {
-        guard pages.indices.contains(currentPageIndex) else { return nil }
-        return pages[currentPageIndex]
+        let normalizedIndex = normalizedPagedPageIndex(currentPageIndex)
+        guard pages.indices.contains(normalizedIndex) else { return nil }
+        return pages[normalizedIndex]
     }
 
     private func currentProgressSnapshot() -> ReaderProgressSnapshot {
@@ -1058,23 +1127,25 @@ public final class ReaderContainerModel: ObservableObject {
     }
 
     private func setCurrentLocation(_ target: ReaderResolvedTarget) {
-        currentPageIndex = max(0, min(target.pageIndex, max(pages.count - 1, 0)))
+        currentPageIndex = normalizedPagedPageIndex(target.pageIndex)
         currentPageIntraProgress = min(max(target.intraPageProgress, 0), 1)
         currentChapterTitle = chapterTitle(for: currentPageIndex)
     }
 
     private func displayedViewCandidate(for preferredPage: Int) -> Int {
-        guard pages.indices.contains(preferredPage) else {
+        let normalizedIndex = normalizedPagedPageIndex(preferredPage)
+        guard pages.indices.contains(normalizedIndex) else {
             return currentDocument?.view ?? currentView
         }
-        return pages[preferredPage].documentView
+        return pages[normalizedIndex].documentView
     }
 
     private func updateLocation(pageIndex: Int, intraPageProgress: Double) {
+        let normalizedPageIndex = normalizedPagedPageIndex(pageIndex)
         let target = ReaderResolvedTarget(
-            pageIndex: max(0, min(pageIndex, max(pages.count - 1, 0))),
+            pageIndex: normalizedPageIndex,
             intraPageProgress: intraPageProgress,
-            documentView: displayedViewCandidate(for: pageIndex)
+            documentView: displayedViewCandidate(for: normalizedPageIndex)
         )
         setCurrentLocation(target)
         scheduleProgressSync()
@@ -1102,6 +1173,21 @@ public final class ReaderContainerModel: ObservableObject {
                 await promotePrefetchedDocument(startingAt: 0, preferredResumePoint: nil)
             }
         }
+    }
+
+    private var effectivePaginationLayout: ReaderContainerLayout {
+        guard isTwoPageSpreadActive else { return layout }
+
+        return ReaderContainerLayout(
+            containerSize: CGSize(width: layout.width / 2, height: layout.height),
+            safeAreaInsets: ReaderLayoutInsets(
+                top: layout.safeAreaInsets.top,
+                bottom: layout.safeAreaInsets.bottom
+            ),
+            contentInsets: layout.contentInsets,
+            chromeInsets: layout.chromeInsets,
+            readingMode: layout.readingMode
+        )
     }
 
     private func scheduleProgressSync() {
@@ -1141,6 +1227,60 @@ public final class ReaderContainerModel: ObservableObject {
         }
         lastQueuedProgress = snapshot
         lastSyncedProgress = snapshot
+    }
+
+    private func makePagedSpreads(from pages: [ReaderRenderedPage]) -> [ReaderPagedSpread] {
+        guard !pages.isEmpty else { return [] }
+
+        var spreads: [ReaderPagedSpread] = []
+        var pageIndex = 0
+
+        while pageIndex < pages.count {
+            let leftPage = pages[pageIndex]
+            let candidateRightIndex = pageIndex + 1
+            let rightPageIndex: Int? = if pages.indices.contains(candidateRightIndex),
+                                          pages[candidateRightIndex].documentView == leftPage.documentView {
+                candidateRightIndex
+            } else {
+                nil
+            }
+
+            spreads.append(
+                ReaderPagedSpread(
+                    index: spreads.count,
+                    leftPageIndex: leftPage.index,
+                    rightPageIndex: rightPageIndex,
+                    chapterTitle: leftPage.chapterTitle
+                )
+            )
+            pageIndex += rightPageIndex == nil ? 1 : 2
+        }
+
+        return spreads
+    }
+
+    private func spreadIndex(forPageIndex pageIndex: Int) -> Int {
+        guard isTwoPageSpreadActive else {
+            return max(0, min(pageIndex, max(pages.count - 1, 0)))
+        }
+
+        let normalizedIndex = max(0, min(pageIndex, max(pages.count - 1, 0)))
+        return pagedSpreads.first(where: { spread in
+            spread.leftPageIndex == normalizedIndex || spread.rightPageIndex == normalizedIndex
+        })?.index ?? 0
+    }
+
+    private func leftPageIndex(forSpreadIndex spreadIndex: Int) -> Int {
+        guard let spread = pagedSpreads.first(where: { $0.index == spreadIndex }) ?? pagedSpreads.last else {
+            return 0
+        }
+        return spread.leftPageIndex
+    }
+
+    private func normalizedPagedPageIndex(_ pageIndex: Int) -> Int {
+        let clampedIndex = max(0, min(pageIndex, max(pages.count - 1, 0)))
+        guard isTwoPageSpreadActive else { return clampedIndex }
+        return leftPageIndex(forSpreadIndex: spreadIndex(forPageIndex: clampedIndex))
     }
 
     private func cacheContext(forView view: Int) -> (authorID: String?, contentSource: ReaderContentSource?) {
