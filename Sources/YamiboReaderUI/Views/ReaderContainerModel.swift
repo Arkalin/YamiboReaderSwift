@@ -266,11 +266,20 @@ public final class ReaderContainerModel: ObservableObject {
         if pages.isEmpty {
             let favorite = await appContext.favoriteStore.favorite(for: context.threadURL)
             let initialResumePoint = favorite?.novelResumePoint
-            let initialView = initialResumePoint?.view ?? context.initialView ?? 1
+            let initialView = if let initialResumePoint {
+                initialResumePoint.view
+            } else {
+                context.initialView ?? 1
+            }
+            let preferredPage = if initialResumePoint == nil {
+                max(0, context.initialPage ?? 0)
+            } else {
+                0
+            }
             currentAuthorID = initialResumePoint?.authorID ?? favorite?.authorID ?? context.authorID
             await load(
                 view: initialView,
-                preferredPage: max(0, context.initialPage ?? 0),
+                preferredPage: preferredPage,
                 preferredResumePoint: initialResumePoint,
                 forceRefresh: false
             )
