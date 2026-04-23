@@ -29,14 +29,26 @@ final class ReaderVerticalRestoreControllerTests: XCTestCase {
         XCTAssertNil(controller.activeRequest)
     }
 
-    func testUserScrollCancelAllowsViewportSamplingAgain() {
+    func testUserScrollCancelSuppressesViewportSamplingUntilCooldownEnds() {
         var controller = ReaderVerticalRestoreController()
         let request = ReaderVerticalScrollRequest(pageIndex: 80, intraPageProgress: 0.97)
 
         controller.beginScrolling(to: request)
-        controller.cancel()
+        controller.cancel(now: 20, samplingCooldown: 0.25)
 
         XCTAssertNil(controller.activeRequest)
-        XCTAssertTrue(controller.canSampleViewport(now: 20))
+        XCTAssertFalse(controller.canSampleViewport(now: 20.24))
+        XCTAssertTrue(controller.canSampleViewport(now: 20.25))
+    }
+
+    func testFineTuneSettlingSuppressesForcedSaveSamplingUntilDeadline() {
+        var controller = ReaderVerticalRestoreController()
+        let request = ReaderVerticalScrollRequest(pageIndex: 12, intraPageProgress: 0.59)
+
+        controller.beginFineTuning(request)
+        controller.beginSettling(request, now: 30, duration: 0.45)
+
+        XCTAssertFalse(controller.canSampleViewport(now: 30.44))
+        XCTAssertTrue(controller.canSampleViewport(now: 30.45))
     }
 }

@@ -413,6 +413,73 @@ final class ReaderContainerModelTests: XCTestCase {
         }
     }
 
+    func testVerticalModePersistsSmallIntraPageScrollAndRestoresIt() async throws {
+        let keyPrefix = UUID().uuidString
+        let settingsStore = SettingsStore(key: "\(keyPrefix).settings")
+        let favoriteStore = FavoriteStore(key: "\(keyPrefix).favorites")
+        let cacheStore = ReaderCacheStore(
+            baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        )
+        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=905&mobile=2")!
+        let document = ReaderPageDocument(
+            threadURL: threadURL,
+            view: 1,
+            maxView: 1,
+            contentSource: .fallbackUnfilteredPage,
+            segments: [
+                .text(String(repeating: "第一章 内容。", count: 420), chapterTitle: "第一章")
+            ]
+        )
+
+        try await settingsStore.save(AppSettings(reader: ReaderAppearanceSettings(readingMode: .vertical)))
+        try await cacheStore.save(document)
+
+        let appContext = YamiboAppContext(
+            sessionStore: SessionStore(key: "\(keyPrefix).session"),
+            settingsStore: settingsStore,
+            favoriteStore: favoriteStore,
+            readerCacheStore: cacheStore
+        )
+        let launchContext = ReaderLaunchContext(
+            threadURL: threadURL,
+            threadTitle: "测试线程",
+            source: .favorites
+        )
+        let model = await MainActor.run {
+            ReaderContainerModel(context: launchContext, appContext: appContext)
+        }
+
+        await model.prepare(layout: ReaderContainerLayout(width: 320, height: 568))
+
+        let targetPage = try await MainActor.run {
+            try XCTUnwrap(
+                model.pages.first {
+                    $0.segmentIndex != nil && $0.segmentEndOffset - $0.segmentStartOffset > 50
+                }
+            )
+        }
+        await MainActor.run {
+            model.updateVerticalViewportPosition(pageIndex: targetPage.index, intraPageProgress: 0.50)
+        }
+        await model.saveProgress()
+        await MainActor.run {
+            model.updateVerticalViewportPosition(pageIndex: targetPage.index, intraPageProgress: 0.59)
+        }
+        await model.saveProgress()
+
+        let restoredModel = await MainActor.run {
+            ReaderContainerModel(context: launchContext, appContext: appContext)
+        }
+
+        await restoredModel.prepare(layout: ReaderContainerLayout(width: 320, height: 568))
+
+        await MainActor.run {
+            XCTAssertEqual(restoredModel.currentPageIndex, targetPage.index)
+            XCTAssertEqual(restoredModel.pages[restoredModel.currentPageIndex].segmentIndex, targetPage.segmentIndex)
+            XCTAssertEqual(restoredModel.currentPageIntraProgress, 0.59, accuracy: 0.02)
+        }
+    }
+
     func testStoredResumePointOverridesLaunchPageWhenPreparingReader() async throws {
         let keyPrefix = UUID().uuidString
         let settingsStore = SettingsStore(key: "\(keyPrefix).settings")

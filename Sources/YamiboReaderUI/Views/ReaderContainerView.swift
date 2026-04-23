@@ -30,6 +30,8 @@ private struct ReaderVerticalViewportMetrics: Equatable {
 private struct ReaderVerticalPositioningFingerprint: Equatable {
     let view: Int
     let pageCount: Int
+    let pageIndex: Int
+    let intraPageProgressBucket: Int
     let readingMode: ReaderReadingMode
 }
 
@@ -289,6 +291,12 @@ public struct ReaderContainerView: View {
         ScrollViewReader { scrollProxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 16) {
+                    ReaderScrollViewResolver { scrollView in
+                        verticalScrollCoordinator.attach(scrollView: scrollView)
+                    }
+                    .frame(width: 0, height: 0)
+                    .accessibilityHidden(true)
+
                     ForEach(model.pages) { page in
                         ReaderPageContent(
                             page: page,
@@ -313,11 +321,6 @@ public struct ReaderContainerView: View {
             }
             .coordinateSpace(name: "readerVerticalViewport")
             .contentShape(Rectangle())
-            .background(
-                ReaderScrollViewResolver { scrollView in
-                    verticalScrollCoordinator.attach(scrollView: scrollView)
-                }
-            )
             .simultaneousGesture(
                 verticalScrollSuppressionGesture
             )
@@ -564,6 +567,8 @@ public struct ReaderContainerView: View {
             let fingerprint = ReaderVerticalPositioningFingerprint(
                 view: model.visibleView,
                 pageCount: model.pages.count,
+                pageIndex: model.currentPageIndex,
+                intraPageProgressBucket: Int((model.currentPageIntraProgress * 1000).rounded()),
                 readingMode: model.settings.readingMode
             )
             if lastVerticalPositioningFingerprint != fingerprint {
@@ -713,6 +718,7 @@ public struct ReaderContainerView: View {
     }
 
     private func applyVerticalFineTune(for request: ReaderVerticalScrollRequest) {
+        guard verticalRestoreController.scrollingRequest == request else { return }
         guard let frame = verticalPageFrames[request.pageIndex] else { return }
 #if DEBUG
         readerViewDebugLog(
@@ -720,10 +726,18 @@ public struct ReaderContainerView: View {
         )
 #endif
         verticalRestoreController.beginFineTuning(request)
-        verticalScrollCoordinator.restoreOffset(
+        guard verticalScrollCoordinator.restoreOffset(
             to: frame,
             intraPageProgress: request.intraPageProgress
-        )
+        ) else {
+#if DEBUG
+            readerViewDebugLog(
+                "applyVerticalFineTune waitingForScrollView pageIndex=\(request.pageIndex)"
+            )
+#endif
+            verticalRestoreController.beginScrolling(to: request)
+            return
+        }
         verticalRestoreController.beginSettling(request, now: CACurrentMediaTime())
         verticalRestoreRetryTask?.cancel()
         verticalRestoreRetryTask = nil
@@ -732,9 +746,34 @@ public struct ReaderContainerView: View {
     private func tryAdvanceVerticalRestore() {
         refreshVerticalRestorePhase()
         guard let request = verticalRestoreController.scrollingRequest else { return }
-        guard verticalScrollCoordinator.viewportMetrics.viewportHeight > 0 else { return }
-        guard let frame = verticalPageFrames[request.pageIndex], frame.height > 0 else { return }
-        applyVerticalFineTune(for: request)
+        guard verticalScrollCoordinator.hasAttachedScrollView else {
+#if DEBUG
+            readerViewDebugLog(
+                "tryAdvanceVerticalRestore waitingForScrollView pageIndex=\(request.pageIndex)"
+            )
+#endif
+            return
+        }
+        guard let frame = verticalPageFrames[request.pageIndex] else {
+#if DEBUG
+            readerViewDebugLog(
+                "tryAdvanceVerticalRestore waitingForFrame pageIndex=\(request.pageIndex) availableFrames=\(verticalPageFrames.count)"
+            )
+#endif
+            return
+        }
+        guard frame.height > 0 else {
+#if DEBUG
+            readerViewDebugLog(
+                "tryAdvanceVerticalRestore waitingForFrameHeight pageIndex=\(request.pageIndex) frameHeight=\(String(format: "%.2f", frame.height))"
+            )
+#endif
+            return
+        }
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(1))
+            applyVerticalFineTune(for: request)
+        }
     }
 
     private func syncVerticalViewportBeforeSave() {
@@ -774,7 +813,7 @@ public struct ReaderContainerView: View {
 #if DEBUG
         readerViewDebugLog("cancelVerticalRestoreForUserScroll")
 #endif
-        verticalRestoreController.cancel()
+        verticalRestoreController.cancel(now: CACurrentMediaTime())
         verticalRestoreRetryTask?.cancel()
         verticalRestoreRetryTask = nil
     }
@@ -782,13 +821,13 @@ public struct ReaderContainerView: View {
     private func scheduleVerticalRestoreRetry(for request: ReaderVerticalScrollRequest) {
         verticalRestoreRetryTask?.cancel()
         verticalRestoreRetryTask = Task {
-            for attempt in 1 ... 8 {
+            for attempt in 1 ... 10 {
                 try? await Task.sleep(for: .milliseconds(80))
                 guard !Task.isCancelled else { return }
                 await MainActor.run {
                     guard verticalRestoreController.scrollingRequest == request else { return }
                     tryAdvanceVerticalRestore()
-                    if verticalRestoreController.scrollingRequest == request, attempt == 3 || attempt == 6 {
+                    if verticalRestoreController.scrollingRequest == request, attempt == 3 || attempt == 6 || attempt == 9 {
 #if DEBUG
                         readerViewDebugLog(
                             "retryVerticalScrollToCurrentPage attempt=\(attempt) pageIndex=\(request.pageIndex)"
@@ -844,6 +883,7 @@ private final class ReaderVerticalScrollCoordinator: NSObject, ObservableObject,
     private var boundsObservation: NSKeyValueObservation?
     private var suppressChromeToggleUntil = CACurrentMediaTime()
     private var lastMotionTime = CACurrentMediaTime()
+    private var isRestoringOffset = false
     private let motionSuppressionInterval: CFTimeInterval = 0.35
 
     func attach(scrollView: UIScrollView?) {
@@ -864,8 +904,12 @@ private final class ReaderVerticalScrollCoordinator: NSObject, ObservableObject,
         return min(max(height * 0.22, 72), 160)
     }
 
+    var hasAttachedScrollView: Bool {
+        scrollView != nil
+    }
+
     func interruptScrollingIfNeeded() -> Bool {
-        guard let scrollView, scrollView.isTracking || scrollView.isDragging || scrollView.isDecelerating else {
+        guard let scrollView, scrollView.isDragging || scrollView.isDecelerating else {
             return false
         }
 
@@ -888,8 +932,8 @@ private final class ReaderVerticalScrollCoordinator: NSObject, ObservableObject,
         return true
     }
 
-    func restoreOffset(to pageFrame: CGRect, intraPageProgress: Double) {
-        guard let scrollView else { return }
+    func restoreOffset(to pageFrame: CGRect, intraPageProgress: Double) -> Bool {
+        guard let scrollView else { return false }
 
         let desiredY = scrollView.contentOffset.y
             + pageFrame.minY
@@ -906,8 +950,14 @@ private final class ReaderVerticalScrollCoordinator: NSObject, ObservableObject,
             "restoreOffset intra=\(String(format: "%.4f", intraPageProgress)) pageFrameMinY=\(String(format: "%.2f", pageFrame.minY)) pageFrameHeight=\(String(format: "%.2f", pageFrame.height)) desiredY=\(String(format: "%.2f", desiredY)) targetOffsetY=\(String(format: "%.2f", targetOffsetY)) referenceLineY=\(String(format: "%.2f", referenceLineY))"
         )
 #endif
+        isRestoringOffset = true
         scrollView.setContentOffset(CGPoint(x: scrollView.contentOffset.x, y: targetOffsetY), animated: false)
-        syncViewportMetrics()
+        isRestoringOffset = false
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(1))
+            self?.syncViewportMetrics()
+        }
+        return true
     }
 
     func shouldSuppressChromeToggle() -> Bool {
@@ -935,6 +985,7 @@ private final class ReaderVerticalScrollCoordinator: NSObject, ObservableObject,
         contentOffsetObservation = scrollView.observe(\.contentOffset, options: [.old, .new]) { [weak self] _, change in
             guard let self, let oldValue = change.oldValue, let newValue = change.newValue else { return }
             guard oldValue != newValue else { return }
+            guard !self.isRestoringOffset else { return }
             self.lastMotionTime = CACurrentMediaTime()
             self.syncViewportMetrics()
         }
@@ -985,7 +1036,7 @@ private final class ReaderVerticalScrollCoordinator: NSObject, ObservableObject,
 
     func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
         guard let scrollView else { return false }
-        return scrollView.isTracking || scrollView.isDragging || scrollView.isDecelerating
+        return scrollView.isDragging || scrollView.isDecelerating
     }
 }
 
@@ -1036,22 +1087,22 @@ private final class ReaderScrollViewResolverView: UIView {
 
     func resolveScrollViewIfNeeded() {
         DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            var candidate = self.superview
-            var scrollView: UIScrollView?
-
-            while let current = candidate {
-                if let resolved = current as? UIScrollView {
-                    scrollView = resolved
-                    break
-                }
-                candidate = current.superview
-            }
-
+            guard let self, let scrollView = self.nearestAncestorScrollView() else { return }
             guard scrollView !== self.resolvedScrollView else { return }
             self.resolvedScrollView = scrollView
             self.onResolve?(scrollView)
         }
+    }
+
+    private func nearestAncestorScrollView() -> UIScrollView? {
+        var candidate = superview
+        while let current = candidate {
+            if let scrollView = current as? UIScrollView {
+                return scrollView
+            }
+            candidate = current.superview
+        }
+        return nil
     }
 }
 

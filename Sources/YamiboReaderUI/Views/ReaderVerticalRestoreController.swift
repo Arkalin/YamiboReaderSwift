@@ -14,6 +14,7 @@ enum ReaderVerticalRestorePhase: Equatable, Sendable {
 
 struct ReaderVerticalRestoreController: Equatable, Sendable {
     private(set) var phase: ReaderVerticalRestorePhase = .idle
+    private var viewportSamplingSuppressedUntil: CFTimeInterval?
 
     var activeRequest: ReaderVerticalScrollRequest? {
         switch phase {
@@ -34,10 +35,11 @@ struct ReaderVerticalRestoreController: Equatable, Sendable {
     }
 
     var shouldSuppressViewportSampling: Bool {
-        activeRequest != nil
+        activeRequest != nil || viewportSamplingSuppressedUntil != nil
     }
 
     mutating func beginScrolling(to request: ReaderVerticalScrollRequest) {
+        viewportSamplingSuppressedUntil = nil
         phase = .scrolling(request: request)
     }
 
@@ -49,13 +51,22 @@ struct ReaderVerticalRestoreController: Equatable, Sendable {
         phase = .settling(request: request, deadline: now + duration)
     }
 
-    mutating func cancel() {
+    mutating func cancel(now: CFTimeInterval? = nil, samplingCooldown: CFTimeInterval = 0.25) {
         phase = .idle
+        guard let now, samplingCooldown > 0 else {
+            viewportSamplingSuppressedUntil = nil
+            return
+        }
+        viewportSamplingSuppressedUntil = now + samplingCooldown
     }
 
     mutating func refresh(now: CFTimeInterval) {
-        guard case let .settling(_, deadline) = phase, now >= deadline else { return }
-        phase = .idle
+        if case let .settling(_, deadline) = phase, now >= deadline {
+            phase = .idle
+        }
+        if let viewportSamplingSuppressedUntil, now >= viewportSamplingSuppressedUntil {
+            self.viewportSamplingSuppressedUntil = nil
+        }
     }
 
     mutating func canSampleViewport(now: CFTimeInterval) -> Bool {
