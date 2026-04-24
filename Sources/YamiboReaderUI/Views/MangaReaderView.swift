@@ -6,6 +6,9 @@ import UIKit
 
 public struct MangaReaderView: View {
     private static let verticalReaderCoordinateSpaceName = "MangaReaderVerticalCoordinateSpace"
+    private static let pagedTapDelayNanoseconds: UInt64 = 340_000_000
+    private static let pagedDoubleTapMaximumDelay: TimeInterval = 0.36
+    private static let pagedDoubleTapMaximumDistance: CGFloat = 48
     @StateObject private var model: MangaReaderModel
     @State private var showingSettings = false
     @State private var showingDirectorySheet = false
@@ -19,6 +22,11 @@ public struct MangaReaderView: View {
     @State private var previewPageIndex: Int?
     @State private var isPreviewVisible = false
     @State private var previewHideTask: Task<Void, Never>?
+    @State private var pendingPagedTapTask: Task<Void, Never>?
+    @State private var pendingPagedTapToken = UUID()
+    @State private var lastPagedTapDate: Date?
+    @State private var lastPagedTapLocation: CGPoint?
+    @State private var suppressPagedSingleTapUntil = Date.distantPast
     @State private var pendingVerticalViewportPageID: MangaPage.ID?
     @State private var isDismissing = false
     private let appModel: YamiboAppModel
@@ -78,6 +86,7 @@ public struct MangaReaderView: View {
             }
             .onDisappear {
                 previewHideTask?.cancel()
+                pendingPagedTapTask?.cancel()
                 Task { await model.saveProgress() }
             }
             .onChange(of: model.navigationRequest) { _, newValue in
@@ -160,73 +169,82 @@ public struct MangaReaderView: View {
     }
 
     private var singlePagePagedContent: some View {
-        TabView(selection: $selectedPageID) {
-            ForEach(model.pages) { page in
-                pagedPageContent(page: page)
-                .tag(Optional(page.id))
-                .padding(.vertical, 12)
+        GeometryReader { proxy in
+            TabView(selection: $selectedPageID) {
+                ForEach(model.pages) { page in
+                    pagedPageContent(page: page)
+                    .tag(Optional(page.id))
+                    .padding(.vertical, 12)
+                }
             }
-        }
-        .allowsHitTesting(!model.isTransitioningChapter)
-        .id(pagerRevision)
-        .tabViewStyle(.page(indexDisplayMode: .never))
-        .overlay {
-            pagedTapZones
-        }
-        .simultaneousGesture(contentInteractionGesture)
-        .onAppear {
-            activeZoomPageID = nil
-            verticalZoomOverlay = nil
-            if let request = model.viewportRequest {
-                applyViewportRequest(request)
-            } else {
-                selectedPageID = model.currentPage?.id
+            .allowsHitTesting(!model.isTransitioningChapter)
+            .scrollDisabled(activeZoomPageID != nil)
+            .id(pagerRevision)
+            .tabViewStyle(.page(indexDisplayMode: .never))
+            .simultaneousGesture(pagedSingleTapGesture(containerWidth: proxy.size.width))
+            .simultaneousGesture(pagedDoubleTapCancellationGesture)
+            .simultaneousGesture(contentInteractionGesture)
+            .onAppear {
+                activeZoomPageID = nil
+                verticalZoomOverlay = nil
+                cancelPendingPagedTap()
+                if let request = model.viewportRequest {
+                    applyViewportRequest(request)
+                } else {
+                    selectedPageID = model.currentPage?.id
+                }
             }
-        }
-        .onChange(of: selectedPageID) { _, newValue in
-            guard let newValue else { return }
-            activeZoomPageID = nil
-            verticalZoomOverlay = nil
-            model.updateCurrentPage(forPageID: newValue)
-        }
-        .onChange(of: model.viewportRequest) { _, newValue in
-            guard let newValue else { return }
-            activeZoomPageID = nil
-            verticalZoomOverlay = nil
-            applyViewportRequest(newValue)
+            .onChange(of: selectedPageID) { _, newValue in
+                guard let newValue else { return }
+                activeZoomPageID = nil
+                verticalZoomOverlay = nil
+                cancelPendingPagedTap()
+                model.updateCurrentPage(forPageID: newValue)
+            }
+            .onChange(of: model.viewportRequest) { _, newValue in
+                guard let newValue else { return }
+                activeZoomPageID = nil
+                verticalZoomOverlay = nil
+                cancelPendingPagedTap()
+                applyViewportRequest(newValue)
+            }
         }
     }
 
     private var twoPagePagedContent: some View {
-        TabView(selection: pagedSelection) {
-            ForEach(model.pagedSpreads) { spread in
-                HStack(spacing: 0) {
-                    pagedSpreadColumn(pageIndex: spread.leftPageIndex)
-                    pagedSpreadColumn(pageIndex: spread.rightPageIndex)
+        GeometryReader { proxy in
+            TabView(selection: pagedSelection) {
+                ForEach(model.pagedSpreads) { spread in
+                    HStack(spacing: 0) {
+                        pagedSpreadColumn(pageIndex: spread.leftPageIndex)
+                        pagedSpreadColumn(pageIndex: spread.rightPageIndex)
+                    }
+                    .tag(spread.index)
+                    .padding(.vertical, 12)
                 }
-                .tag(spread.index)
-                .padding(.vertical, 12)
             }
-        }
-        .allowsHitTesting(!model.isTransitioningChapter)
-        .id(pagerRevision)
-        .tabViewStyle(.page(indexDisplayMode: .never))
-        .overlay {
-            pagedTapZones
-        }
-        .simultaneousGesture(contentInteractionGesture)
-        .onAppear {
-            activeZoomPageID = nil
-            verticalZoomOverlay = nil
-            if let request = model.viewportRequest {
-                applyViewportRequest(request)
+            .allowsHitTesting(!model.isTransitioningChapter)
+            .scrollDisabled(activeZoomPageID != nil)
+            .id(pagerRevision)
+            .tabViewStyle(.page(indexDisplayMode: .never))
+            .simultaneousGesture(pagedSingleTapGesture(containerWidth: proxy.size.width))
+            .simultaneousGesture(pagedDoubleTapCancellationGesture)
+            .simultaneousGesture(contentInteractionGesture)
+            .onAppear {
+                activeZoomPageID = nil
+                verticalZoomOverlay = nil
+                cancelPendingPagedTap()
+                if let request = model.viewportRequest {
+                    applyViewportRequest(request)
+                }
             }
-        }
-        .onChange(of: model.viewportRequest) { _, newValue in
-            guard let newValue else { return }
-            activeZoomPageID = nil
-            verticalZoomOverlay = nil
-            applyViewportRequest(newValue)
+            .onChange(of: model.viewportRequest) { _, newValue in
+                guard let newValue else { return }
+                activeZoomPageID = nil
+                verticalZoomOverlay = nil
+                cancelPendingPagedTap()
+                applyViewportRequest(newValue)
+            }
         }
     }
 
@@ -236,6 +254,7 @@ public struct MangaReaderView: View {
             set: { selectionIndex in
                 activeZoomPageID = nil
                 verticalZoomOverlay = nil
+                cancelPendingPagedTap()
                 model.updatePagedSelection(selectionIndex)
             }
         )
@@ -537,26 +556,93 @@ public struct MangaReaderView: View {
         min(max(value, model.sliderRange.lowerBound), model.sliderRange.upperBound)
     }
 
-    @ViewBuilder
-    private var pagedTapZones: some View {
-        if !model.pages.isEmpty, activeZoomPageID == nil {
-            MangaPagedTapZones(
-                onPrevious: {
-                    Task { await goRelativePage(-1) }
-                },
-                onToggleChrome: {
-                    showingChrome.toggle()
-                },
-                onNext: {
-                    Task { await goRelativePage(1) }
-                }
-            )
+    private func pagedSingleTapGesture(containerWidth: CGFloat) -> some Gesture {
+        SpatialTapGesture(count: 1)
+            .onEnded { value in
+                schedulePagedSingleTap(at: value.location, containerWidth: containerWidth)
+            }
+    }
+
+    private var pagedDoubleTapCancellationGesture: some Gesture {
+        SpatialTapGesture(count: 2)
+            .onEnded { _ in
+                cancelPendingPagedTap(suppressingSingleTap: true)
+            }
+    }
+
+    private func schedulePagedSingleTap(at location: CGPoint, containerWidth: CGFloat) {
+        guard !model.pages.isEmpty,
+              !model.isTransitioningChapter,
+              activeZoomPageID == nil else {
+            return
         }
+
+        let now = Date()
+        guard now >= suppressPagedSingleTapUntil else { return }
+
+        if let lastPagedTapDate,
+           let lastPagedTapLocation,
+           now.timeIntervalSince(lastPagedTapDate) <= Self.pagedDoubleTapMaximumDelay,
+           distance(from: lastPagedTapLocation, to: location) <= Self.pagedDoubleTapMaximumDistance {
+            cancelPendingPagedTap(suppressingSingleTap: true)
+            return
+        }
+
+        lastPagedTapDate = now
+        lastPagedTapLocation = location
+        pendingPagedTapTask?.cancel()
+
+        let token = UUID()
+        pendingPagedTapToken = token
+        pendingPagedTapTask = Task {
+            try? await Task.sleep(nanoseconds: Self.pagedTapDelayNanoseconds)
+            guard !Task.isCancelled else { return }
+
+            await MainActor.run {
+                guard pendingPagedTapToken == token,
+                      activeZoomPageID == nil,
+                      Date() >= suppressPagedSingleTapUntil else {
+                    return
+                }
+                performPagedSingleTap(at: location, containerWidth: containerWidth)
+                pendingPagedTapTask = nil
+                lastPagedTapDate = nil
+                lastPagedTapLocation = nil
+            }
+        }
+    }
+
+    private func cancelPendingPagedTap(suppressingSingleTap: Bool = false) {
+        pendingPagedTapTask?.cancel()
+        pendingPagedTapTask = nil
+        lastPagedTapDate = nil
+        lastPagedTapLocation = nil
+        if suppressingSingleTap {
+            suppressPagedSingleTapUntil = Date().addingTimeInterval(Self.pagedDoubleTapMaximumDelay)
+        }
+    }
+
+    private func performPagedSingleTap(at location: CGPoint, containerWidth: CGFloat) {
+        guard containerWidth > 0 else { return }
+        let zoneWidth = containerWidth / 3
+
+        if location.x < zoneWidth {
+            Task { await goRelativePage(-1) }
+        } else if location.x > zoneWidth * 2 {
+            Task { await goRelativePage(1) }
+        } else {
+            showingChrome.toggle()
+        }
+    }
+
+    private func distance(from lhs: CGPoint, to rhs: CGPoint) -> CGFloat {
+        hypot(lhs.x - rhs.x, lhs.y - rhs.y)
     }
 
     private func goRelativePage(_ delta: Int) async {
         pendingVerticalViewportPageID = nil
         cancelSliderInteractionForContentGesture()
+        cancelPendingPagedTap()
         await model.jumpRelativePage(delta)
     }
 
@@ -992,7 +1078,7 @@ private struct MangaPageContent: View {
     let onToggleChrome: (() -> Void)?
 
     var body: some View {
-        VStack(spacing: 10) {
+        let content = VStack(spacing: 10) {
             MangaAuthenticatedImage(
                 pageID: page.id,
                 url: page.imageURL,
@@ -1010,33 +1096,16 @@ private struct MangaPageContent: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .contentShape(Rectangle())
-        .onTapGesture {
-            onToggleChrome?()
+
+        if let onToggleChrome {
+            content
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    onToggleChrome()
+                }
+        } else {
+            content
         }
-    }
-}
-
-private struct MangaPagedTapZones: View {
-    let onPrevious: () -> Void
-    let onToggleChrome: () -> Void
-    let onNext: () -> Void
-
-    var body: some View {
-        HStack(spacing: 0) {
-            tapZone(action: onPrevious)
-                .frame(maxWidth: .infinity)
-            tapZone(action: onToggleChrome)
-                .frame(maxWidth: .infinity)
-            tapZone(action: onNext)
-                .frame(maxWidth: .infinity)
-        }
-    }
-
-    private func tapZone(action: @escaping () -> Void) -> some View {
-        Color.clear
-            .contentShape(Rectangle())
-            .onTapGesture(perform: action)
     }
 }
 
