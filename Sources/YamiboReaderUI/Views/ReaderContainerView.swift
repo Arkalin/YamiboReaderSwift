@@ -309,12 +309,6 @@ public struct ReaderContainerView: View {
         ScrollViewReader { scrollProxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 16) {
-                    ReaderScrollViewResolver { scrollView in
-                        verticalScrollCoordinator.attach(scrollView: scrollView)
-                    }
-                    .frame(width: 0, height: 0)
-                    .accessibilityHidden(true)
-
                     ForEach(model.pages) { page in
                         ReaderPageContent(
                             page: page,
@@ -337,6 +331,13 @@ public struct ReaderContainerView: View {
                 }
                 .padding(.bottom, 24)
             }
+            .background(
+                ReaderScrollViewResolver { scrollView in
+                    verticalScrollCoordinator.attach(scrollView: scrollView)
+                }
+                .frame(width: 0, height: 0)
+                .accessibilityHidden(true)
+            )
             .coordinateSpace(name: "readerVerticalViewport")
             .contentShape(Rectangle())
             .simultaneousGesture(
@@ -349,7 +350,9 @@ public struct ReaderContainerView: View {
             )
             .onChange(of: verticalScrollRequest) { _, request in
                 guard let request else { return }
-                withAnimation(.easeInOut(duration: 0.2)) {
+                var transaction = Transaction()
+                transaction.disablesAnimations = true
+                withTransaction(transaction) {
                     scrollProxy.scrollTo(request.pageIndex, anchor: .top)
                 }
                 verticalScrollRequest = nil
@@ -1053,7 +1056,24 @@ private final class ReaderScrollViewResolverView: UIView {
             if let scrollView = current as? UIScrollView {
                 return scrollView
             }
+            if let scrollView = current.firstDescendantScrollView(excluding: self) {
+                return scrollView
+            }
             candidate = current.superview
+        }
+        return nil
+    }
+}
+
+private extension UIView {
+    func firstDescendantScrollView(excluding excludedView: UIView) -> UIScrollView? {
+        for subview in subviews where subview !== excludedView {
+            if let scrollView = subview as? UIScrollView {
+                return scrollView
+            }
+            if let scrollView = subview.firstDescendantScrollView(excluding: excludedView) {
+                return scrollView
+            }
         }
         return nil
     }
