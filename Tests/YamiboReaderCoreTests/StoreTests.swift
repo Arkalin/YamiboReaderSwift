@@ -54,7 +54,6 @@ import Testing
             readingMode: .paged,
             brightness: 0.82,
             zoomEnabled: false,
-            showsSystemStatusBar: false,
             directorySortOrder: .descending
         ),
         webBrowser: WebBrowserSettings(showsNavigationBar: false),
@@ -130,7 +129,6 @@ import Testing
       "lineHeightScale": 1.5,
       "horizontalPadding": 18,
       "usesNightMode": true,
-      "showsSystemStatusBar": false,
       "loadsInlineImages": false,
       "backgroundStyle": "paper",
       "readingMode": "vertical",
@@ -153,8 +151,7 @@ import Testing
     {
       "readingMode": "paged",
       "brightness": 0.8,
-      "zoomEnabled": false,
-      "showsSystemStatusBar": true
+      "zoomEnabled": false
     }
     """
 

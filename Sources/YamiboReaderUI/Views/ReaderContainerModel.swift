@@ -374,12 +374,6 @@ public final class ReaderContainerModel: ObservableObject {
         applySettings(updatedSettings)
     }
 
-    public func updateSystemStatusBarVisibility(_ value: Bool) {
-        var updatedSettings = settings
-        updatedSettings.showsSystemStatusBar = value
-        applySettings(updatedSettings)
-    }
-
     public func updateImageLoading(_ value: Bool) {
         var updatedSettings = settings
         updatedSettings.loadsInlineImages = value

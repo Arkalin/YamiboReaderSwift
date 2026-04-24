@@ -266,20 +266,17 @@ public struct MangaReaderSettings: Codable, Hashable, Sendable {
     public var readingMode: MangaReadingMode
     public var brightness: Double
     public var zoomEnabled: Bool
-    public var showsSystemStatusBar: Bool
     public var directorySortOrder: MangaDirectorySortOrder
 
     public init(
         readingMode: MangaReadingMode = .vertical,
         brightness: Double = 1,
         zoomEnabled: Bool = true,
-        showsSystemStatusBar: Bool = true,
         directorySortOrder: MangaDirectorySortOrder = .ascending
     ) {
         self.readingMode = readingMode
         self.brightness = brightness
         self.zoomEnabled = zoomEnabled
-        self.showsSystemStatusBar = showsSystemStatusBar
         self.directorySortOrder = directorySortOrder
     }
 
@@ -287,7 +284,6 @@ public struct MangaReaderSettings: Codable, Hashable, Sendable {
         case readingMode
         case brightness
         case zoomEnabled
-        case showsSystemStatusBar
         case directorySortOrder
     }
 
@@ -296,7 +292,6 @@ public struct MangaReaderSettings: Codable, Hashable, Sendable {
         readingMode = try container.decodeIfPresent(MangaReadingMode.self, forKey: .readingMode) ?? .vertical
         brightness = try container.decodeIfPresent(Double.self, forKey: .brightness) ?? 1
         zoomEnabled = try container.decodeIfPresent(Bool.self, forKey: .zoomEnabled) ?? true
-        showsSystemStatusBar = try container.decodeIfPresent(Bool.self, forKey: .showsSystemStatusBar) ?? true
         directorySortOrder = try container.decodeIfPresent(MangaDirectorySortOrder.self, forKey: .directorySortOrder) ?? .ascending
     }
 
@@ -305,7 +300,6 @@ public struct MangaReaderSettings: Codable, Hashable, Sendable {
         try container.encode(readingMode, forKey: .readingMode)
         try container.encode(brightness, forKey: .brightness)
         try container.encode(zoomEnabled, forKey: .zoomEnabled)
-        try container.encode(showsSystemStatusBar, forKey: .showsSystemStatusBar)
         try container.encode(directorySortOrder, forKey: .directorySortOrder)
     }
 }

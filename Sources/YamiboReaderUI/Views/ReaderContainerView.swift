@@ -188,7 +188,7 @@ public struct ReaderContainerView: View {
                 }
                 .presentationDetents([.medium])
             }
-            .statusBar(hidden: chromeState.mode == .immersiveHidden || !model.settings.showsSystemStatusBar)
+            .statusBar(hidden: chromeState.mode == .immersiveHidden)
             .onChange(of: model.isLoading) { _, _ in
                 updateChromeForContentState()
             }
