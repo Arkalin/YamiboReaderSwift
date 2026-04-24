@@ -107,14 +107,12 @@ private struct LaunchAnimationView: View {
 struct YamiboSignInIntent: AppIntent {
     static let title = LocalizedStringResource(
         "app.intent.sign_in.title",
-        table: "Localizable",
-        bundle: L10n.bundle
+        table: "Localizable"
     )
     static let description = IntentDescription(
         LocalizedStringResource(
             "app.intent.sign_in.description",
-            table: "Localizable",
-            bundle: L10n.bundle
+            table: "Localizable"
         )
     )
     static let openAppWhenRun = false
@@ -137,8 +135,7 @@ struct YamiboAppShortcutsProvider: AppShortcutsProvider {
                 ],
                 shortTitle: LocalizedStringResource(
                     "app.intent.sign_in.title",
-                    table: "Localizable",
-                    bundle: L10n.bundle
+                    table: "Localizable"
                 ),
                 systemImageName: "checkmark.circle"
             )
