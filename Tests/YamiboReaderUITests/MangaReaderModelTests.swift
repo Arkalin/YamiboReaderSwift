@@ -1438,6 +1438,87 @@ final class MangaReaderModelTests: XCTestCase {
         XCTAssertEqual(favorite?.lastPage, 4)
     }
 
+    func testRelativePageJumpEmitsViewportRequestsForPagedTapNavigation() async throws {
+        let model = try await makeMangaModel(
+            chapterHTMLByTID: [
+                "700": makeMangaHTML(
+                    tid: "700",
+                    title: "第1话",
+                    links: [],
+                    imageCount: 3
+                )
+            ],
+            appSettings: AppSettings(
+                manga: MangaReaderSettings(readingMode: .paged)
+            )
+        )
+
+        await model.jumpRelativePage(1, animated: false)
+        await MainActor.run {
+            XCTAssertEqual(model.currentPage?.localIndex, 1)
+            XCTAssertEqual(model.viewportRequest?.targetPageID, "700#1")
+        }
+
+        await model.jumpRelativePage(-1, animated: false)
+        await MainActor.run {
+            XCTAssertEqual(model.currentPage?.localIndex, 0)
+            XCTAssertEqual(model.viewportRequest?.targetPageID, "700#0")
+        }
+
+        await model.jumpRelativePage(-1, animated: false)
+        await MainActor.run {
+            XCTAssertEqual(model.currentPage?.localIndex, 0)
+            XCTAssertEqual(model.viewportRequest?.targetPageID, "700#0")
+        }
+    }
+
+    func testRelativePageJumpAdvancesBySpreadInTwoPagePagedMode() async throws {
+        let model = try await makeMangaModel(
+            chapterHTMLByTID: [
+                "700": makeMangaHTML(
+                    tid: "700",
+                    title: "第1话",
+                    links: [],
+                    imageCount: 6
+                )
+            ],
+            appSettings: AppSettings(
+                manga: MangaReaderSettings(
+                    readingMode: .paged,
+                    showsTwoPagesInLandscapeOnPad: true
+                )
+            )
+        )
+
+        await MainActor.run {
+            model.updatePagedPresentationEnvironment(
+                isPad: true,
+                viewportSize: CGSize(width: 844, height: 390)
+            )
+        }
+
+        await model.jumpRelativePage(1, animated: false)
+        await MainActor.run {
+            XCTAssertEqual(model.currentPage?.localIndex, 2)
+            XCTAssertEqual(model.pagedSelectionIndex, 1)
+            XCTAssertEqual(model.viewportRequest?.targetPageID, "700#2")
+        }
+
+        await model.jumpRelativePage(1, animated: false)
+        await MainActor.run {
+            XCTAssertEqual(model.currentPage?.localIndex, 4)
+            XCTAssertEqual(model.pagedSelectionIndex, 2)
+            XCTAssertEqual(model.viewportRequest?.targetPageID, "700#4")
+        }
+
+        await model.jumpRelativePage(1, animated: false)
+        await MainActor.run {
+            XCTAssertEqual(model.currentPage?.localIndex, 4)
+            XCTAssertEqual(model.pagedSelectionIndex, 2)
+            XCTAssertEqual(model.viewportRequest?.targetPageID, "700#4")
+        }
+    }
+
     func testCurrentPagePrefetchesVisibleImageWindow() async throws {
         let observedRequests = RequestLog()
         let model = try await makeMangaModel(
