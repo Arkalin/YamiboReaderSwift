@@ -163,6 +163,9 @@ public struct MangaReaderView: View {
         .allowsHitTesting(!model.isTransitioningChapter)
         .id(pagerRevision)
         .tabViewStyle(.page(indexDisplayMode: .never))
+        .overlay {
+            pagedTapZones
+        }
         .simultaneousGesture(contentInteractionGesture)
         .onAppear {
             activeZoomPageID = nil
@@ -201,6 +204,9 @@ public struct MangaReaderView: View {
         .allowsHitTesting(!model.isTransitioningChapter)
         .id(pagerRevision)
         .tabViewStyle(.page(indexDisplayMode: .never))
+        .overlay {
+            pagedTapZones
+        }
         .simultaneousGesture(contentInteractionGesture)
         .onAppear {
             activeZoomPageID = nil
@@ -239,8 +245,9 @@ public struct MangaReaderView: View {
             usesOverlayPresentation: false,
             readerCoordinateSpaceName: nil,
             showsChapterTitle: false,
-            onToggleChrome: { showingChrome.toggle() }
+            onToggleChrome: nil
         )
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     @ViewBuilder
@@ -521,6 +528,29 @@ public struct MangaReaderView: View {
 
     private func clampedSliderValue(_ value: Double) -> Double {
         min(max(value, model.sliderRange.lowerBound), model.sliderRange.upperBound)
+    }
+
+    @ViewBuilder
+    private var pagedTapZones: some View {
+        if !model.pages.isEmpty, activeZoomPageID == nil {
+            MangaPagedTapZones(
+                onPrevious: {
+                    Task { await goRelativePage(-1) }
+                },
+                onToggleChrome: {
+                    showingChrome.toggle()
+                },
+                onNext: {
+                    Task { await goRelativePage(1) }
+                }
+            )
+        }
+    }
+
+    private func goRelativePage(_ delta: Int) async {
+        pendingVerticalViewportPageID = nil
+        cancelSliderInteractionForContentGesture()
+        await model.jumpRelativePage(delta)
     }
 
     private var previewLabelText: String {
@@ -887,7 +917,7 @@ private struct MangaPageContent: View {
     let usesOverlayPresentation: Bool
     let readerCoordinateSpaceName: String?
     let showsChapterTitle: Bool
-    let onToggleChrome: () -> Void
+    let onToggleChrome: (() -> Void)?
 
     var body: some View {
         VStack(spacing: 10) {
@@ -910,8 +940,31 @@ private struct MangaPageContent: View {
         }
         .contentShape(Rectangle())
         .onTapGesture {
-            onToggleChrome()
+            onToggleChrome?()
         }
+    }
+}
+
+private struct MangaPagedTapZones: View {
+    let onPrevious: () -> Void
+    let onToggleChrome: () -> Void
+    let onNext: () -> Void
+
+    var body: some View {
+        HStack(spacing: 0) {
+            tapZone(action: onPrevious)
+                .frame(maxWidth: .infinity)
+            tapZone(action: onToggleChrome)
+                .frame(maxWidth: .infinity)
+            tapZone(action: onNext)
+                .frame(maxWidth: .infinity)
+        }
+    }
+
+    private func tapZone(action: @escaping () -> Void) -> some View {
+        Color.clear
+            .contentShape(Rectangle())
+            .onTapGesture(perform: action)
     }
 }
 

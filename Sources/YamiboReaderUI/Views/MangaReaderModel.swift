@@ -276,13 +276,27 @@ public final class MangaReaderModel: ObservableObject {
         }) else {
             return
         }
-        let normalizedTargetIndex = normalizedPagedPageIndex(targetIndex)
-        currentPageIndex = normalizedTargetIndex
-        emitViewportRequest(targetIndex: normalizedTargetIndex, animated: animated, resetRevision: false)
-        scheduleImagePrefetch()
-        Task {
-            await prefetchIfNeeded(for: normalizedTargetIndex)
+        jumpToLoadedPage(targetIndex, animated: animated)
+    }
+
+    public func jumpRelativePage(_ delta: Int, animated: Bool = true) async {
+        guard delta != 0, !pages.isEmpty else { return }
+
+        if settings.readingMode == .paged, isTwoPageSpreadActive {
+            let targetSpreadIndex = pagedSelectionIndex + delta
+            if pagedSpreads.indices.contains(targetSpreadIndex) {
+                jumpToLoadedPage(leftPageIndex(forSpreadIndex: targetSpreadIndex), animated: animated)
+                return
+            }
+        } else {
+            let targetIndex = currentPageIndex + delta
+            if pages.indices.contains(targetIndex) {
+                jumpToLoadedPage(targetIndex, animated: animated)
+                return
+            }
         }
+
+        jumpToLoadedPage(delta < 0 ? 0 : pages.count - 1, animated: animated)
     }
 
     public func saveProgress() async {
@@ -660,6 +674,17 @@ public final class MangaReaderModel: ObservableObject {
 
     private func firstPageIndex(for chapterURL: URL) -> Int? {
         pages.firstIndex(where: { $0.chapterURL == chapterURL && $0.localIndex == 0 })
+    }
+
+    private func jumpToLoadedPage(_ pageIndex: Int, animated: Bool) {
+        guard pages.indices.contains(pageIndex) else { return }
+        let normalizedTargetIndex = normalizedPagedPageIndex(pageIndex)
+        currentPageIndex = normalizedTargetIndex
+        emitViewportRequest(targetIndex: normalizedTargetIndex, animated: animated, resetRevision: false)
+        scheduleImagePrefetch()
+        Task {
+            await prefetchIfNeeded(for: normalizedTargetIndex)
+        }
     }
 
     private func trimLoadedDocumentsIfNeeded(
