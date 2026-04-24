@@ -3,6 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "YamiboReader",
+    defaultLocalization: "zh-Hans",
     platforms: [
         .iOS(.v17),
         .macOS(.v14)
@@ -17,7 +18,10 @@ let package = Package(
     targets: [
         .target(
             name: "YamiboReaderCore",
-            dependencies: ["SwiftSoup"]
+            dependencies: ["SwiftSoup"],
+            resources: [
+                .process("Resources")
+            ]
         ),
         .target(
             name: "YamiboReaderUI",

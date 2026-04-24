@@ -125,7 +125,7 @@ public struct MangaReaderView: View {
     @ViewBuilder
     private func content(proxy: GeometryProxy) -> some View {
         if model.isLoading && model.pages.isEmpty {
-            ProgressView("加载漫画中…")
+            ProgressView(L10n.string("manga.loading"))
                 .tint(.white)
         } else if let errorMessage = model.errorMessage, model.pages.isEmpty {
             VStack(spacing: 16) {
@@ -136,7 +136,7 @@ public struct MangaReaderView: View {
                     .foregroundStyle(.white)
                     .multilineTextAlignment(.center)
                 HStack {
-                    Button("返回网页") {
+                    Button(L10n.string("manga.return_to_web")) {
                         appModel.fallbackMangaToWeb(
                             model.makeWebFallbackContext(
                                 currentURL: model.context.chapterURL,
@@ -145,7 +145,7 @@ public struct MangaReaderView: View {
                         )
                     }
                     .buttonStyle(.bordered)
-                    Button("重试") {
+                    Button(L10n.string("common.retry")) {
                         Task { await model.retryCurrentChapter() }
                     }
                     .buttonStyle(.borderedProminent)
@@ -361,7 +361,7 @@ public struct MangaReaderView: View {
     private func topChrome(topInset: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 12) {
-                ReaderChromeIconButton(systemName: "xmark", title: "关闭") {
+                ReaderChromeIconButton(systemName: "xmark", title: L10n.string("common.close")) {
                     guard !isDismissing else { return }
                     isDismissing = true
                     Task {
@@ -374,7 +374,7 @@ public struct MangaReaderView: View {
                 Spacer(minLength: 0)
 
                 HStack(spacing: 8) {
-                    ReaderChromeIconButton(systemName: "safari", title: "原帖") {
+                    ReaderChromeIconButton(systemName: "safari", title: L10n.string("common.original_post")) {
                         guard !isDismissing else { return }
                         isDismissing = true
                         Task {
@@ -383,7 +383,7 @@ public struct MangaReaderView: View {
                         }
                     }
                     .disabled(isDismissing)
-                    ReaderChromeIconButton(systemName: "arrow.clockwise", title: "刷新") {
+                    ReaderChromeIconButton(systemName: "arrow.clockwise", title: L10n.string("common.refresh")) {
                         Task { await model.retryCurrentChapter() }
                     }
                     .disabled(model.isTransitioningChapter || isDismissing)
@@ -451,10 +451,10 @@ public struct MangaReaderView: View {
                     ProgressView()
                         .tint(.white)
                         .scaleEffect(1.1)
-                    Text("章节加载中…")
+                    Text(L10n.string("manga.chapter_loading"))
                         .font(.headline)
                         .foregroundStyle(.white)
-                    Text("未缓存章节会先探测并尝试切换，失败时将自动回退网页模式。")
+                    Text(L10n.string("manga.chapter_loading_hint"))
                         .font(.caption)
                         .foregroundStyle(.white.opacity(0.78))
                         .multilineTextAlignment(.center)
@@ -684,12 +684,12 @@ private struct MangaSettingsSheet: View {
     let showsPadPagedOptions: Bool
     @Environment(\.dismiss) private var dismiss
     @State private var showsApplePencilHelp = false
-    private static let applePencilHelpText = "Apple Pencil Pro 支持「按压」和「双击翻页」（请在系统设置中确保开启 Apple Pencil Pro 的轻点两下开关），其它 Apple Pencil 支持「双击翻页」"
+    private static let applePencilHelpText = L10n.string("apple_pencil.help")
 
     var body: some View {
         NavigationStack {
             Form {
-                Picker("阅读模式", selection: Binding(
+                Picker(L10n.string("reading_mode.title"), selection: Binding(
                     get: { model.settings.readingMode },
                     set: {
                         var updated = model.settings
@@ -703,7 +703,7 @@ private struct MangaSettingsSheet: View {
                 }
 
                 if showsPadPagedOptions, model.settings.readingMode == .paged {
-                    Toggle("横屏时同时显示 2 页", isOn: Binding(
+                    Toggle(L10n.string("reader.two_pages_landscape"), isOn: Binding(
                         get: { model.settings.showsTwoPagesInLandscapeOnPad },
                         set: {
                             var updated = model.settings
@@ -716,7 +716,7 @@ private struct MangaSettingsSheet: View {
                 if showsPadPagedOptions, model.settings.readingMode == .paged {
                     Section("Apple Pencil") {
                         HStack(spacing: 8) {
-                            Text("使用 Apple Pencil 翻页")
+                            Text(L10n.string("apple_pencil.page_turn"))
                             Button {
                                 withAnimation(.easeInOut(duration: 0.18)) {
                                     showsApplePencilHelp.toggle()
@@ -749,7 +749,7 @@ private struct MangaSettingsSheet: View {
                                 .transition(.opacity.combined(with: .move(edge: .top)))
                         }
 
-                        Picker("Apple Pencil Pro 翻页行为", selection: Binding(
+                        Picker(L10n.string("apple_pencil.behavior.title"), selection: Binding(
                             get: { model.applePencilPageTurnSettings.behavior },
                             set: {
                                 var updated = model.applePencilPageTurnSettings
@@ -764,7 +764,7 @@ private struct MangaSettingsSheet: View {
                     }
                 }
 
-                Toggle("启用缩放", isOn: Binding(
+                Toggle(L10n.string("manga.zoom_enabled"), isOn: Binding(
                     get: { model.settings.zoomEnabled },
                     set: {
                         var updated = model.settings
@@ -774,7 +774,7 @@ private struct MangaSettingsSheet: View {
                 ))
 
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("亮度")
+                    Text(L10n.string("manga.brightness"))
                     Slider(
                         value: Binding(
                             get: { model.settings.brightness },
@@ -788,10 +788,10 @@ private struct MangaSettingsSheet: View {
                     )
                 }
             }
-            .navigationTitle("漫画设置")
+            .navigationTitle(L10n.string("manga.settings"))
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("完成") { dismiss() }
+                    Button(L10n.string("common.done")) { dismiss() }
                 }
             }
         }
@@ -818,11 +818,11 @@ private struct MangaDirectorySheet: View {
                 .padding(16)
             }
             .background(Color(uiColor: .systemGroupedBackground))
-            .navigationTitle("目录")
+            .navigationTitle(L10n.string("manga.directory"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("关闭") { dismiss() }
+                    Button(L10n.string("common.close")) { dismiss() }
                 }
             }
             .task {
@@ -886,11 +886,11 @@ private struct MangaDirectorySheet: View {
 
     private var chaptersSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("章节列表")
+            Text(L10n.string("manga.chapter_list"))
                 .font(.headline)
 
             if model.sortedDirectoryChapters.isEmpty {
-                ContentUnavailableView("暂无章节", systemImage: "books.vertical")
+                ContentUnavailableView(L10n.string("manga.no_chapters"), systemImage: "books.vertical")
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 16)
             } else {
@@ -912,19 +912,19 @@ private struct MangaDirectorySheet: View {
 
     private var correctionSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("校正漫画信息")
+            Text(L10n.string("manga.correction_title"))
                 .font(.headline)
 
-            TextField("漫画名称", text: $editedTitle)
+            TextField(L10n.string("manga.name"), text: $editedTitle)
                 .textFieldStyle(.roundedBorder)
 
-            TextField("关键词 1", text: $editedPrimaryKeyword)
+            TextField(L10n.string("manga.keyword_primary"), text: $editedPrimaryKeyword)
                 .textFieldStyle(.roundedBorder)
 
-            TextField("关键词 2（可选）", text: $editedSecondaryKeyword)
+            TextField(L10n.string("manga.keyword_secondary"), text: $editedSecondaryKeyword)
                 .textFieldStyle(.roundedBorder)
 
-            Button("保存校正") {
+            Button(L10n.string("manga.save_correction")) {
                 Task {
                     await model.renameDirectory(
                         cleanBookName: editedTitle.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -978,7 +978,7 @@ private struct MangaDirectoryChapterRow: View {
                 .foregroundStyle(isCurrent ? .primary : .primary)
 
                 if isTruncated {
-                    Button(isExpanded ? "收起" : "展开") {
+                    Button(isExpanded ? L10n.string("common.collapse") : L10n.string("common.expand")) {
                         isExpanded.toggle()
                     }
                     .font(.caption.weight(.semibold))
@@ -1216,7 +1216,7 @@ private struct MangaAuthenticatedImage: View {
                         .animation(.easeOut(duration: 0.2), value: inlineSteadyScale)
                         .animation(.easeOut(duration: 0.2), value: inlineSteadyOffset)
                 } else if loader.didFail {
-                    Label("图片加载失败", systemImage: "photo")
+                    Label(L10n.string("image.load_failed"), systemImage: "photo")
                         .foregroundStyle(.secondary)
                         .padding(.vertical, 40)
                 } else {
@@ -1283,7 +1283,7 @@ private struct MangaAuthenticatedImage: View {
                 VStack(spacing: 10) {
                     ProgressView()
                         .tint(.white.opacity(0.85))
-                    Text("加载图片中…")
+                    Text(L10n.string("image.loading"))
                         .font(.caption)
                         .foregroundStyle(.white.opacity(0.72))
                 }
@@ -1704,7 +1704,7 @@ public struct MangaReaderView: View {
     }
 
     public var body: some View {
-        Text("漫画阅读仅在 iOS 端启用")
+        Text(L10n.string("manga.ios_only"))
             .padding()
     }
 }

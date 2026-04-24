@@ -13,7 +13,7 @@ public struct RootTabView: View {
     public var body: some View {
         Group {
             if appModel.isBootstrapping && appModel.bootstrapState == nil {
-                ProgressView("初始化中…")
+                ProgressView(L10n.string("app.initializing"))
             } else {
                 content
             }
@@ -35,13 +35,13 @@ public struct RootTabView: View {
             )
                 .tag(AppTab.forum)
                 .tabItem {
-                    Label("论坛", systemImage: "globe.asia.australia")
+                    Label(L10n.string("tab.forum"), systemImage: "globe.asia.australia")
                 }
 
             FavoritesView(favoriteStore: favoriteStore, appContext: appModel.appContext, appModel: appModel)
                 .tag(AppTab.favorites)
                 .tabItem {
-                    Label("收藏", systemImage: "heart.text.square")
+                    Label(L10n.string("tab.favorites"), systemImage: "heart.text.square")
                 }
 
             ForumBrowserView(
@@ -52,7 +52,7 @@ public struct RootTabView: View {
             )
                 .tag(AppTab.mine)
                 .tabItem {
-                    Label("我的", systemImage: "person.crop.circle")
+                    Label(L10n.string("tab.mine"), systemImage: "person.crop.circle")
                 }
         }
         .modifier(ReaderPresentationModifier(appModel: appModel))

@@ -208,7 +208,7 @@ private struct AuthenticatedReaderImage: View {
                     .resizable()
                     .scaledToFit()
             } else if loader.didFail {
-                Label("图片加载失败", systemImage: "photo")
+                Label(L10n.string("image.load_failed"), systemImage: "photo")
                     .foregroundColor(.secondary)
             } else {
                 ProgressView()
@@ -231,11 +231,11 @@ struct ReaderTopChrome: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 12) {
-                ReaderChromeIconButton(systemName: "xmark", title: "关闭", action: onClose)
+                ReaderChromeIconButton(systemName: "xmark", title: L10n.string("common.close"), action: onClose)
                 Spacer(minLength: 0)
                 HStack(spacing: 8) {
-                    ReaderChromeIconButton(systemName: "safari", title: "原贴", action: onOpenForum)
-                    ReaderChromeIconButton(systemName: "arrow.clockwise", title: "刷新", action: onRefresh)
+                    ReaderChromeIconButton(systemName: "safari", title: L10n.string("common.original_post"), action: onOpenForum)
+                    ReaderChromeIconButton(systemName: "arrow.clockwise", title: L10n.string("common.refresh"), action: onRefresh)
                 }
             }
 
@@ -314,7 +314,7 @@ struct ReaderBottomChrome: View {
         VStack(spacing: 10) {
             HStack(spacing: 10) {
                 Button(action: onShowChapters) {
-                    Label("章节", systemImage: "list.bullet")
+                    Label(L10n.string("reader.chapters"), systemImage: "list.bullet")
                 }
                 .buttonStyle(.bordered)
 
@@ -322,19 +322,19 @@ struct ReaderBottomChrome: View {
 
                 HStack(spacing: 8) {
                     Button(action: onShowSettings) {
-                        Label("设置", systemImage: "gearshape")
+                        Label(L10n.string("settings.title"), systemImage: "gearshape")
                     }
                     .buttonStyle(.bordered)
 
                     Button(action: onShowCache) {
-                        Label("缓存", systemImage: "square.and.arrow.down")
+                        Label(L10n.string("reader.cache"), systemImage: "square.and.arrow.down")
                     }
                     .buttonStyle(.bordered)
                 }
             }
 
             HStack(spacing: 8) {
-                ReaderChromeIconButton(systemName: "chevron.left", title: "上一网页") {
+                ReaderChromeIconButton(systemName: "chevron.left", title: L10n.string("reader.previous_web_page")) {
                     onStepWeb(-1)
                 }
                 .disabled(model.visibleView <= 1)
@@ -351,7 +351,7 @@ struct ReaderBottomChrome: View {
                 .buttonStyle(.borderedProminent)
                 .disabled(model.maxView <= 1)
 
-                ReaderChromeIconButton(systemName: "chevron.right", title: "下一网页") {
+                ReaderChromeIconButton(systemName: "chevron.right", title: L10n.string("reader.next_web_page")) {
                     onStepWeb(1)
                 }
                 .disabled(model.visibleView >= model.maxView)
@@ -366,7 +366,7 @@ struct ReaderBottomChrome: View {
                 .foregroundStyle(.secondary)
 
             HStack(spacing: 10) {
-                ReaderChromeIconButton(systemName: "backward.end.fill", title: "上一章") {
+                ReaderChromeIconButton(systemName: "backward.end.fill", title: L10n.string("reader.previous_chapter")) {
                     onJumpChapter(-1)
                 }
                 .disabled(!model.hasPreviousChapter)
@@ -400,7 +400,7 @@ struct ReaderBottomChrome: View {
                         .accessibilityHidden(true)
                 }
 
-                ReaderChromeIconButton(systemName: "forward.end.fill", title: "下一章") {
+                ReaderChromeIconButton(systemName: "forward.end.fill", title: L10n.string("reader.next_chapter")) {
                     onJumpChapter(1)
                 }
                 .disabled(!model.hasNextChapter)
@@ -543,7 +543,7 @@ struct ReaderChapterSheet: View {
                     }
 
                     ToolbarItem(placement: .topBarTrailing) {
-                        Button("关闭") {
+                        Button(L10n.string("common.close")) {
                             dismiss()
                         }
                     }
@@ -577,7 +577,7 @@ struct ReaderChapterSheet: View {
             let fraction = Double(chapter.startIndex) / Double(model.renderedPageCount - 1)
             return "\(Int((fraction * 100).rounded()))%"
         }
-        return "第 \(chapter.startIndex + 1) 页"
+        return L10n.string("reader.page_number_spaced", chapter.startIndex + 1)
     }
 
     private func scrollToCurrentChapter(using proxy: ScrollViewProxy) {
@@ -607,13 +607,13 @@ private struct ReaderChapterWebPicker: View {
                                 Image(systemName: view == model.visibleView ? "checkmark.circle.fill" : "circle")
                                     .foregroundStyle(view == model.visibleView ? Color.accentColor : Color.secondary)
 
-                                Text("第 \(view) 页")
+                                Text(L10n.string("reader.page_number_spaced", view))
                                     .foregroundStyle(.primary)
 
                                 Spacer(minLength: 0)
 
                                 if view == model.visibleView {
-                                    Text("当前")
+                                    Text(L10n.string("common.current"))
                                         .font(.caption.weight(.semibold))
                                         .foregroundStyle(Color.accentColor)
                                 }
@@ -664,7 +664,7 @@ struct ReaderWebJumpSheet: View {
                 List {
                     Section {
                         HStack {
-                            Text("当前网页")
+                            Text(L10n.string("reader.current_web_page"))
                                 .foregroundStyle(.secondary)
                             Spacer()
                             Text(model.currentWebViewText)
@@ -672,7 +672,7 @@ struct ReaderWebJumpSheet: View {
                         }
                     }
 
-                    Section("选择网页") {
+                    Section(L10n.string("reader.select_web_page")) {
                         ForEach(1 ... model.maxView, id: \.self) { view in
                             Button {
                                 onJump(view)
@@ -682,13 +682,13 @@ struct ReaderWebJumpSheet: View {
                                     Image(systemName: view == model.visibleView ? "checkmark.circle.fill" : "circle")
                                         .foregroundStyle(view == model.visibleView ? Color.accentColor : Color.secondary)
 
-                                    Text("第 \(view) 页")
+                                    Text(L10n.string("reader.page_number_spaced", view))
                                         .foregroundStyle(.primary)
 
                                     Spacer()
 
                                     if view == model.visibleView {
-                                        Text("当前")
+                                        Text(L10n.string("common.current"))
                                             .font(.caption.weight(.semibold))
                                             .foregroundStyle(Color.accentColor)
                                     }
@@ -699,7 +699,7 @@ struct ReaderWebJumpSheet: View {
                         }
                     }
                 }
-                .navigationTitle("跳转网页")
+                .navigationTitle(L10n.string("reader.jump_web_page"))
                 .onAppear {
                     scrollToCurrentView(using: proxy)
                 }
@@ -728,7 +728,7 @@ struct ReaderCachePanel: View {
     var body: some View {
         NavigationStack {
             List {
-                Section("缓存范围") {
+                Section(L10n.string("reader.cache_scope")) {
                     VStack(alignment: .leading, spacing: 6) {
                         Text(model.cacheScopeTitle)
                             .font(.headline)
@@ -739,8 +739,8 @@ struct ReaderCachePanel: View {
                     .padding(.vertical, 4)
                 }
 
-                Section("选择页码") {
-                    Button(selectionState.isAllSelected ? "取消全选" : "全选") {
+                Section(L10n.string("reader.select_page")) {
+                    Button(selectionState.isAllSelected ? L10n.string("common.deselect_all") : L10n.string("common.select_all")) {
                         if selectionState.isAllSelected {
                             selectedViews = []
                         } else {
@@ -750,7 +750,7 @@ struct ReaderCachePanel: View {
                     .disabled(model.allCacheableViews.isEmpty)
 
                     if model.allCacheableViews.isEmpty {
-                        Text("当前没有可缓存的网页页码")
+                        Text(L10n.string("reader.no_cacheable_pages"))
                             .foregroundStyle(.secondary)
                     } else {
                         ForEach(model.allCacheableViews, id: \.self) { view in
@@ -760,11 +760,11 @@ struct ReaderCachePanel: View {
                                 HStack(spacing: 12) {
                                     Image(systemName: selectedViews.contains(view) ? "checkmark.circle.fill" : "circle")
                                         .foregroundStyle(selectedViews.contains(view) ? Color.accentColor : Color.secondary)
-                                    Text("第 \(view) 页")
+                                    Text(L10n.string("reader.page_number_spaced", view))
                                         .foregroundStyle(.primary)
                                     Spacer()
                                     if model.cachedViews.contains(view) {
-                                        Label("已缓存", systemImage: "checkmark.seal.fill")
+                                        Label(L10n.string("reader.cached"), systemImage: "checkmark.seal.fill")
                                             .labelStyle(.titleAndIcon)
                                             .font(.caption)
                                             .foregroundStyle(.green)
@@ -777,19 +777,19 @@ struct ReaderCachePanel: View {
                 }
 
                 if !selectedViews.isEmpty {
-                    Section("已选内容") {
-                        Text("已选择 \(selectedViews.count) 页")
+                    Section(L10n.string("reader.selected_content")) {
+                        Text(L10n.string("reader.selected_pages", selectedViews.count))
                             .foregroundStyle(.secondary)
                     }
                 }
             }
-            .navigationTitle("缓存管理")
+            .navigationTitle(L10n.string("reader.cache_management"))
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 actionBar
             }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("关闭") {
+                    Button(L10n.string("common.close")) {
                         dismiss()
                     }
                 }
@@ -808,7 +808,7 @@ struct ReaderCachePanel: View {
         VStack(spacing: 12) {
             Divider()
             HStack(spacing: 12) {
-                Button("缓存") {
+                Button(L10n.string("reader.cache_action.cache")) {
                     model.startCaching(views: selectionState.uncachedSelectedViews)
                     onShowProgress()
                     dismiss()
@@ -816,7 +816,7 @@ struct ReaderCachePanel: View {
                 .buttonStyle(.borderedProminent)
                 .disabled(!selectionState.canCache)
 
-                Button("更新") {
+                Button(L10n.string("reader.cache_action.update")) {
                     model.updateCachedViews(selectionState.cachedSelectedViews)
                     onShowProgress()
                     dismiss()
@@ -824,7 +824,7 @@ struct ReaderCachePanel: View {
                 .buttonStyle(.bordered)
                 .disabled(!selectionState.canUpdate)
 
-                Button("删除", role: .destructive) {
+                Button(L10n.string("common.delete"), role: .destructive) {
                     Task {
                         await model.deleteCachedViews(selectionState.cachedSelectedViews)
                         dismiss()
@@ -880,27 +880,27 @@ struct ReaderCacheProgressSheet: View {
                 Spacer()
             }
             .padding(24)
-            .navigationTitle("缓存进度")
+            .navigationTitle(L10n.string("reader.cache_progress"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .bottomBar) {
                     HStack {
                         if model.cacheOperationState.isFinished {
-                            Button("完成") {
+                            Button(L10n.string("common.done")) {
                                 model.dismissCacheProgress()
                                 onClose()
                                 dismiss()
                             }
                             .buttonStyle(.borderedProminent)
                         } else {
-                            Button("后台运行") {
+                            Button(L10n.string("reader.run_in_background")) {
                                 model.hideCacheProgress()
                                 onClose()
                                 dismiss()
                             }
                             .buttonStyle(.borderedProminent)
 
-                            Button("终止", role: .destructive) {
+                            Button(L10n.string("common.stop"), role: .destructive) {
                                 model.stopCaching()
                             }
                             .buttonStyle(.bordered)
@@ -919,26 +919,26 @@ struct ReaderCacheProgressSheet: View {
     private var titleText: String {
         switch model.cacheOperationState.status {
         case .idle:
-            return "准备缓存"
+            return L10n.string("reader.cache_status.ready")
         case .running:
-            return "正在缓存"
+            return L10n.string("reader.cache_status.running")
         case .completed:
-            return "缓存完成"
+            return L10n.string("reader.cache_status.completed")
         case .cancelled:
-            return "缓存已终止"
+            return L10n.string("reader.cache_status.cancelled")
         }
     }
 
     private var detailText: String {
         if model.cacheOperationState.isFinished {
-            return "已完成 \(model.cacheOperationState.completedCount) / \(max(model.cacheOperationState.totalCount, 1)) 页"
+            return L10n.string("reader.cache_detail.completed", model.cacheOperationState.completedCount, max(model.cacheOperationState.totalCount, 1))
         }
 
         if let currentView = model.cacheOperationState.currentView {
-            return "正在缓存第 \(currentView) 页\n\(model.cacheOperationState.completedCount) / \(max(model.cacheOperationState.totalCount, 1))"
+            return L10n.string("reader.cache_detail.running", currentView, model.cacheOperationState.completedCount, max(model.cacheOperationState.totalCount, 1))
         }
 
-        return "准备开始缓存…"
+        return L10n.string("reader.cache_detail.ready")
     }
 }
 #endif

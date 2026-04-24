@@ -6,8 +6,8 @@ public enum AppHomePage: String, Codable, Hashable, CaseIterable, Sendable {
 
     public var title: String {
         switch self {
-        case .favorites: "收藏"
-        case .forum: "论坛"
+        case .favorites: L10n.string("app.home.favorites")
+        case .forum: L10n.string("app.home.forum")
         }
     }
 
@@ -27,10 +27,10 @@ public enum ReaderBackgroundStyle: String, Codable, Hashable, CaseIterable, Send
 
     public var title: String {
         switch self {
-        case .system: "系统"
-        case .paper: "纸张"
-        case .mint: "薄荷"
-        case .sakura: "樱粉"
+        case .system: L10n.string("reader.background.system")
+        case .paper: L10n.string("reader.background.paper")
+        case .mint: L10n.string("color.mint")
+        case .sakura: L10n.string("reader.background.sakura")
         }
     }
 }
@@ -41,8 +41,8 @@ public enum ReaderReadingMode: String, Codable, Hashable, CaseIterable, Sendable
 
     public var title: String {
         switch self {
-        case .paged: "横向分页"
-        case .vertical: "纵向滚动"
+        case .paged: L10n.string("reading_mode.paged")
+        case .vertical: L10n.string("reading_mode.vertical")
         }
     }
 }
@@ -54,9 +54,9 @@ public enum ReaderTranslationMode: String, Codable, Hashable, CaseIterable, Send
 
     public var title: String {
         switch self {
-        case .none: "原文"
-        case .simplified: "简体"
-        case .traditional: "繁体"
+        case .none: L10n.string("translation.original")
+        case .simplified: L10n.string("translation.simplified")
+        case .traditional: L10n.string("translation.traditional")
         }
     }
 }
@@ -68,9 +68,9 @@ public enum ReaderFontFamily: String, Codable, Hashable, CaseIterable, Sendable 
 
     public var title: String {
         switch self {
-        case .systemSans: "苹方"
-        case .systemSerif: "宋体"
-        case .rounded: "圆角"
+        case .systemSans: L10n.string("reader.font.system_sans")
+        case .systemSerif: L10n.string("reader.font.system_serif")
+        case .rounded: L10n.string("reader.font.rounded")
         }
     }
 
@@ -203,16 +203,16 @@ public enum FavoriteAppearanceColor: String, Codable, Hashable, CaseIterable, Se
 
     public var title: String {
         switch self {
-        case .red: "红色"
-        case .pink: "粉色"
-        case .orange: "橙色"
-        case .yellow: "黄色"
-        case .green: "绿色"
-        case .mint: "薄荷"
-        case .cyan: "青色"
-        case .blue: "蓝色"
-        case .purple: "紫色"
-        case .gray: "灰色"
+        case .red: L10n.string("color.red")
+        case .pink: L10n.string("color.pink")
+        case .orange: L10n.string("color.orange")
+        case .yellow: L10n.string("color.yellow")
+        case .green: L10n.string("color.green")
+        case .mint: L10n.string("color.mint")
+        case .cyan: L10n.string("color.cyan")
+        case .blue: L10n.string("color.blue")
+        case .purple: L10n.string("color.purple")
+        case .gray: L10n.string("color.gray")
         }
     }
 }
@@ -270,8 +270,8 @@ public enum ApplePencilPageTurnBehavior: String, Codable, Hashable, CaseIterable
 
     public var title: String {
         switch self {
-        case .doubleTapPreviousSqueezeNext: "双击上一页，按压下一页"
-        case .doubleTapNextSqueezePrevious: "双击下一页，按压上一页"
+        case .doubleTapPreviousSqueezeNext: L10n.string("apple_pencil.behavior.double_tap_previous_squeeze_next")
+        case .doubleTapNextSqueezePrevious: L10n.string("apple_pencil.behavior.double_tap_next_squeeze_previous")
         }
     }
 

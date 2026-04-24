@@ -22,7 +22,7 @@ public actor ThreadOpenResolver {
             return .novel(
                 ReaderLaunchContext(
                     threadURL: canonicalURL,
-                    threadTitle: title ?? "小说阅读",
+                    threadTitle: title ?? L10n.string("reader.title"),
                     source: .favorites,
                     initialPage: initialPage
                 )
@@ -32,7 +32,7 @@ public actor ThreadOpenResolver {
                 MangaLaunchContext(
                     originalThreadURL: canonicalURL,
                     chapterURL: favoriteChapterURL ?? canonicalURL,
-                    displayTitle: title ?? "漫画阅读",
+                    displayTitle: title ?? L10n.string("manga.reader.title"),
                     source: .favorites,
                     initialPage: initialPage
                 )
@@ -59,7 +59,7 @@ public actor ThreadOpenResolver {
                 MangaLaunchContext(
                     originalThreadURL: canonicalURL,
                     chapterURL: favoriteChapterURL ?? canonicalURL,
-                    displayTitle: MangaTitleCleaner.cleanBookName(snapshot.title.isEmpty ? (title ?? "漫画阅读") : snapshot.title),
+                    displayTitle: MangaTitleCleaner.cleanBookName(snapshot.title.isEmpty ? (title ?? L10n.string("manga.reader.title")) : snapshot.title),
                     source: .forum,
                     initialPage: initialPage
                 )

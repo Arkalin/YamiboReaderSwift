@@ -235,7 +235,7 @@ public struct ReaderContainerView: View {
     private func content(topInset: CGFloat, bottomInset: CGFloat) -> some View {
         if model.isLoading && model.pages.isEmpty {
             VStack(spacing: 12) {
-                ProgressView("加载中…")
+                ProgressView(L10n.string("common.loading"))
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if let errorMessage = model.errorMessage, model.pages.isEmpty {
@@ -244,7 +244,7 @@ public struct ReaderContainerView: View {
                     .font(.largeTitle)
                 Text(errorMessage)
                     .multilineTextAlignment(.center)
-                Button("重试", action: retryLoad)
+                Button(L10n.string("common.retry"), action: retryLoad)
                     .buttonStyle(.borderedProminent)
             }
             .padding(24)
@@ -1128,7 +1128,7 @@ public struct ReaderContainerView: View {
     }
 
     public var body: some View {
-        Text("Reader is available on iOS only.")
+        Text(L10n.string("reader.ios_only"))
     }
 }
 #endif

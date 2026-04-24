@@ -175,7 +175,7 @@ final class MangaWebJSBridge: NSObject, WKScriptMessageHandler {
     nonisolated func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         guard message.name == MangaWebMessageName.nativeOpen else { return }
         guard let dictionary = message.body as? [String: Any] else { return }
-        let title = dictionary["title"] as? String ?? "漫画阅读"
+        let title = dictionary["title"] as? String ?? L10n.string("manga.reader.title")
         let clickedIndex = dictionary["clickedIndex"] as? Int ?? 0
         let urls = (dictionary["urls"] as? [String] ?? []).compactMap(URL.init(string:))
         guard !urls.isEmpty else { return }

@@ -60,7 +60,7 @@ private struct LaunchAnimationView: View {
                         .frame(width: iconSize(for: proxy.size), height: iconSize(for: proxy.size))
                         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
 
-                    Text("百合会阅读器")
+                    Text(L10n.string("app.name"))
                         .font(.system(size: titleSize(for: proxy.size), weight: .heavy, design: .rounded))
                         .foregroundStyle(titleColor)
                         .lineLimit(1)
@@ -105,8 +105,18 @@ private struct LaunchAnimationView: View {
 
 #if canImport(AppIntents)
 struct YamiboSignInIntent: AppIntent {
-    static let title: LocalizedStringResource = "百合会签到"
-    static let description = IntentDescription("在后台检查并完成百合会每日签到")
+    static let title = LocalizedStringResource(
+        "app.intent.sign_in.title",
+        table: "Localizable",
+        bundle: L10n.bundle
+    )
+    static let description = IntentDescription(
+        LocalizedStringResource(
+            "app.intent.sign_in.description",
+            table: "Localizable",
+            bundle: L10n.bundle
+        )
+    )
     static let openAppWhenRun = false
 
     func perform() async throws -> some IntentResult & ProvidesDialog {
@@ -125,7 +135,11 @@ struct YamiboAppShortcutsProvider: AppShortcutsProvider {
                     "在 \(.applicationName) 里进行百合会签到",
                     "让 \(.applicationName) 完成百合会签到"
                 ],
-                shortTitle: "百合会签到",
+                shortTitle: LocalizedStringResource(
+                    "app.intent.sign_in.title",
+                    table: "Localizable",
+                    bundle: L10n.bundle
+                ),
                 systemImageName: "checkmark.circle"
             )
         ]

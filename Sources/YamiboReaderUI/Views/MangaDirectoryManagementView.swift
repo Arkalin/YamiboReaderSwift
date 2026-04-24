@@ -18,12 +18,12 @@ public struct MangaDirectoryManagementView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(directory.cleanBookName)
                         .font(.headline)
-                    Text("\(directory.chapters.count) 个章节")
+                    Text(L10n.string("manga_directory.chapter_count", directory.chapters.count))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
                 .swipeActions {
-                    Button("删除", role: .destructive) {
+                    Button(L10n.string("common.delete"), role: .destructive) {
                         Task {
                             _ = try? await store.deleteDirectory(named: directory.cleanBookName)
                             await reload()
@@ -31,14 +31,14 @@ public struct MangaDirectoryManagementView: View {
                     }
                 }
             }
-            .searchable(text: $searchText, prompt: "搜索漫画名称")
-            .navigationTitle("漫画目录管理")
+            .searchable(text: $searchText, prompt: L10n.string("manga_directory.search_prompt"))
+            .navigationTitle(L10n.string("settings.manga_directory_management"))
             .toolbar {
                 ToolbarItem {
-                    Button("关闭") { dismiss() }
+                    Button(L10n.string("common.close")) { dismiss() }
                 }
                 ToolbarItem {
-                    Button("清空") {
+                    Button(L10n.string("common.clear_all")) {
                         Task {
                             try? await store.clearAll()
                             await reload()

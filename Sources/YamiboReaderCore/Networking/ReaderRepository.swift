@@ -144,7 +144,7 @@ public actor ReaderRepository {
     public func fetchThreadDisplayTitle(for threadURL: URL, authorID: String? = nil) async throws -> String {
         let html = try await client.fetchHTML(for: .thread(url: threadURL, page: 1, authorID: authorID))
         guard let title = ReaderHTMLParser.extractPageTitle(from: html) else {
-            throw YamiboError.parsingFailed(context: "帖子标题")
+            throw YamiboError.parsingFailed(context: L10n.string("context.thread_title"))
         }
         return title
     }

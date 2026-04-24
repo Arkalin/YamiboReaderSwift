@@ -1,4 +1,5 @@
 import SwiftUI
+import YamiboReaderCore
 
 #if canImport(UIKit)
 import UIKit
@@ -32,13 +33,13 @@ public struct AboutView: View {
             }
             .frame(maxWidth: .infinity)
             .padding(.horizontal, 24)
-            .navigationTitle("关于")
+            .navigationTitle(L10n.string("about.title"))
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("关闭") {
+                    Button(L10n.string("common.close")) {
                         dismiss()
                     }
                 }
@@ -62,13 +63,13 @@ private enum AppMetadata {
 
         switch (version?.isEmpty == false ? version : nil, build?.isEmpty == false ? build : nil) {
         case let (version?, build?) where version != build:
-            return "版本 \(version) (\(build))"
+            return L10n.string("about.version_with_build", version, build)
         case let (version?, _):
-            return "版本 \(version)"
+            return L10n.string("about.version", version)
         case let (_, build?):
-            return "版本 \(build)"
+            return L10n.string("about.version", build)
         case (nil, nil):
-            return "版本 --"
+            return L10n.string("about.version", "--")
         }
     }
 }

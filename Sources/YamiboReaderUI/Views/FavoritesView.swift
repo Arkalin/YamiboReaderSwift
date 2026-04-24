@@ -16,10 +16,10 @@ public enum FavoriteFilter: String, CaseIterable, Identifiable {
 
     public var title: String {
         switch self {
-        case .all: "全部"
-        case .novel: "小说"
-        case .manga: "漫画"
-        case .other: "其他"
+        case .all: L10n.string("favorites.filter.all")
+        case .novel: L10n.string("favorite_type.novel")
+        case .manga: L10n.string("favorite_type.manga")
+        case .other: L10n.string("favorite_type.other")
         }
     }
 
@@ -47,10 +47,10 @@ public enum FavoriteSortOrder: String, CaseIterable, Identifiable {
 
     public var title: String {
         switch self {
-        case .manual: "默认"
-        case .title: "标题"
-        case .progress: "进度"
-        case .recentRead: "最近阅读"
+        case .manual: L10n.string("favorites.sort.manual")
+        case .title: L10n.string("favorites.sort.title")
+        case .progress: L10n.string("favorites.sort.progress")
+        case .recentRead: L10n.string("favorites.sort.recent_read")
         }
     }
 }
@@ -778,11 +778,11 @@ private struct FavoriteSearchModifier: ViewModifier {
             .searchable(
                 text: $searchText,
                 placement: .navigationBarDrawer(displayMode: .automatic),
-                prompt: "搜索"
+                prompt: L10n.string("common.search")
             )
         #else
         content
-            .searchable(text: $searchText, prompt: "搜索")
+            .searchable(text: $searchText, prompt: L10n.string("common.search"))
         #endif
     }
 }
@@ -796,13 +796,13 @@ private struct FavoriteSettingsMenuButton: View {
             Button {
                 showingSettingsSheet = true
             } label: {
-                Label("设置", systemImage: "gearshape")
+                Label(L10n.string("settings.title"), systemImage: "gearshape")
             }
 
             Button {
                 showingAboutSheet = true
             } label: {
-                Label("关于", systemImage: "info.circle")
+                Label(L10n.string("about.title"), systemImage: "info.circle")
             }
         } label: {
             Image(systemName: "ellipsis.circle")
@@ -815,7 +815,7 @@ private struct FavoriteSelectionToggleButton: View {
     let action: () -> Void
 
     var body: some View {
-        Button(isSelecting ? "完成" : "选择", action: action)
+        Button(isSelecting ? L10n.string("common.done") : L10n.string("common.select"), action: action)
     }
 }
 
@@ -827,19 +827,19 @@ private struct FavoriteToolbarMenuButton: View {
 
     var body: some View {
         Menu {
-            Picker("分类", selection: $filterRawValue) {
+            Picker(L10n.string("favorites.category"), selection: $filterRawValue) {
                 ForEach(FavoriteFilter.allCases) { filter in
                     Text(filter == .all ? allTitle : filter.title).tag(filter.rawValue)
                 }
             }
 
-            Picker("排序", selection: $sortRawValue) {
+            Picker(L10n.string("favorites.sort"), selection: $sortRawValue) {
                 ForEach(FavoriteSortOrder.allCases) { sortOrder in
                     Text(sortOrder.title).tag(sortOrder.rawValue)
                 }
             }
 
-            Toggle("显示隐藏项", isOn: $showsHidden)
+            Toggle(L10n.string("favorites.show_hidden"), isOn: $showsHidden)
         } label: {
             HStack(spacing: 6) {
                 Text(currentTitle)
@@ -957,32 +957,32 @@ private struct FavoriteCollectionDialogsModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .alert("编辑合集名称", isPresented: collectionNameAlertBinding) {
-                TextField("合集名称", text: collectionNameTextBinding)
-                Button("取消", role: .cancel) {
+            .alert(L10n.string("favorites.edit_collection_name"), isPresented: collectionNameAlertBinding) {
+                TextField(L10n.string("favorites.collection_name"), text: collectionNameTextBinding)
+                Button(L10n.string("common.cancel"), role: .cancel) {
                     collectionNameDraft = nil
                 }
-                Button("保存") {
+                Button(L10n.string("common.save")) {
                     guard let draft = collectionNameDraft else { return }
                     saveName(draft)
                 }
                 .disabled(collectionNameDraft?.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
             } message: {
-                Text("合集名称会保存在本地。")
+                Text(L10n.string("favorites.collection_name_message"))
             }
             .alert(
-                "解散合集",
+                L10n.string("favorites.dissolve_collection"),
                 isPresented: pendingCollectionDeleteAlertBinding,
                 presenting: pendingDeleteCollection
             ) { collection in
-                Button("取消", role: .cancel) {
+                Button(L10n.string("common.cancel"), role: .cancel) {
                     pendingDeleteCollection = nil
                 }
-                Button("解散", role: .destructive) {
+                Button(L10n.string("favorites.dissolve"), role: .destructive) {
                     dissolveCollection(collection)
                 }
             } message: { collection in
-                Text("确定要解散“\(collection.name)”吗？其中的收藏会返回根页，不会被删除。")
+                Text(L10n.string("favorites.dissolve_collection_message", collection.name))
             }
     }
 
@@ -1184,19 +1184,19 @@ public struct FavoritesView: View {
 
     private var favoritesDialogContent: some View {
         favoritesLifecycleContent
-            .alert("加载失败", isPresented: .constant(viewModel.errorMessage != nil), actions: {
-                Button("确定") {
+            .alert(L10n.string("common.load_failed"), isPresented: .constant(viewModel.errorMessage != nil), actions: {
+                Button(L10n.string("common.ok")) {
                     viewModel.errorMessage = nil
                 }
             }, message: {
                 Text(viewModel.errorMessage ?? "")
             })
-            .alert("编辑显示名称", isPresented: editNameAlertBinding) {
-                TextField("显示名称", text: displayNameTextBinding)
-                Button("取消", role: .cancel) {
+            .alert(L10n.string("favorites.edit_display_name"), isPresented: editNameAlertBinding) {
+                TextField(L10n.string("favorites.display_name"), text: displayNameTextBinding)
+                Button(L10n.string("common.cancel"), role: .cancel) {
                     displayNameDraft = nil
                 }
-                Button("保存") {
+                Button(L10n.string("common.save")) {
                     guard let draft = displayNameDraft else { return }
                     Task {
                         await viewModel.setDisplayName(
@@ -1208,14 +1208,14 @@ public struct FavoritesView: View {
                     displayNameDraft = nil
                 }
             } message: {
-                Text("留空后将恢复显示原标题。")
+                Text(L10n.string("favorites.display_name_message"))
             }
-            .alert("创建合集", isPresented: $showingCreateCollectionPrompt) {
-                TextField("合集名称", text: $createCollectionName)
-                Button("取消", role: .cancel) {
+            .alert(L10n.string("favorites.create_collection"), isPresented: $showingCreateCollectionPrompt) {
+                TextField(L10n.string("favorites.collection_name"), text: $createCollectionName)
+                Button(L10n.string("common.cancel"), role: .cancel) {
                     createCollectionName = ""
                 }
-                Button("创建") {
+                Button(L10n.string("common.create")) {
                     let selectedIDs = Array(selectedFavoriteIDs)
                     let targetName = createCollectionName
                     createCollectionName = ""
@@ -1227,28 +1227,28 @@ public struct FavoritesView: View {
                 }
                 .disabled(createCollectionName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             } message: {
-                Text("创建后会把当前选中的收藏移入新合集。")
+                Text(L10n.string("favorites.create_collection_message"))
             }
             .alert(
-                "删除收藏",
+                L10n.string("favorites.delete_favorite"),
                 isPresented: pendingDeleteAlertBinding,
                 presenting: pendingDeleteFavorite
             ) { favorite in
-                Button("取消", role: .cancel) {
+                Button(L10n.string("common.cancel"), role: .cancel) {
                     pendingDeleteFavorite = nil
                 }
-                Button("删除", role: .destructive) {
+                Button(L10n.string("common.delete"), role: .destructive) {
                     Task {
                         await viewModel.deleteFavorite(favorite)
                     }
                     pendingDeleteFavorite = nil
                 }
             } message: { favorite in
-                Text("确定要删除“\(favorite.resolvedDisplayTitle)”吗？这会同步删除远端收藏，但会保留本地缓存和阅读进度。")
+                Text(L10n.string("favorites.delete_favorite_message", favorite.resolvedDisplayTitle))
             }
-            .alert("删除所选内容", isPresented: $showingBulkDeleteConfirmation) {
-                Button("取消", role: .cancel) {}
-                Button("删除", role: .destructive) {
+            .alert(L10n.string("favorites.delete_selection"), isPresented: $showingBulkDeleteConfirmation) {
+                Button(L10n.string("common.cancel"), role: .cancel) {}
+                Button(L10n.string("common.delete"), role: .destructive) {
                     let favoriteIDs = Array(selectedFavoriteIDs)
                     let collectionIDs = Array(selectedCollectionIDs)
                     Task {
@@ -1261,8 +1261,8 @@ public struct FavoritesView: View {
             } message: {
                 Text(bulkDeleteMessage)
             }
-            .confirmationDialog("移动到合集", isPresented: $showingMoveDialog, titleVisibility: .visible) {
-                Button("<全部>") {
+            .confirmationDialog(L10n.string("favorites.move_to_collection"), isPresented: $showingMoveDialog, titleVisibility: .visible) {
+                Button(L10n.string("favorites.move_to_root")) {
                     moveSelectedFavorites(to: nil)
                 }
                 ForEach(moveTargets) { collection in
@@ -1270,9 +1270,9 @@ public struct FavoritesView: View {
                         moveSelectedFavorites(to: collection.id)
                     }
                 }
-                Button("取消", role: .cancel) {}
+                Button(L10n.string("common.cancel"), role: .cancel) {}
             } message: {
-                Text("选择目标合集。")
+                Text(L10n.string("favorites.select_target_collection"))
             }
             .sheet(item: $selectedFavorite) { favorite in
                 ForumBrowserView(url: favorite.url, appContext: appContext, appModel: appModel)
@@ -1380,7 +1380,7 @@ public struct FavoritesView: View {
     @ViewBuilder
     private func overlayContent() -> some View {
         if viewModel.isLoading {
-            ProgressView("同步收藏中…")
+            ProgressView(L10n.string("favorites.syncing"))
                 .padding(.horizontal, 18)
                 .padding(.vertical, 14)
                 .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
@@ -1460,12 +1460,12 @@ public struct FavoritesView: View {
 
     private var bulkDeleteMessage: String {
         if selectedCollectionIDs.isEmpty {
-            return "确定要删除已选中的收藏吗？这会同步删除远端收藏，但会保留本地缓存和阅读进度。"
+            return L10n.string("favorites.bulk_delete_favorites_message")
         }
         if selectedFavoriteIDs.isEmpty {
-            return "确定要解散已选中的合集吗？其中的收藏会返回根页，不会被删除。"
+            return L10n.string("favorites.bulk_dissolve_collections_message")
         }
-        return "确定要删除已选中的内容吗？合集会被解散，收藏会同步删除远端收藏。"
+        return L10n.string("favorites.bulk_delete_mixed_message")
     }
 
     private var editNameAlertBinding: Binding<Bool> {
@@ -1502,11 +1502,11 @@ public struct FavoritesView: View {
         if viewModel.isLoading {
             EmptyView()
         } else if !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            ContentUnavailableView("没有匹配结果", systemImage: "magnifyingglass")
+            ContentUnavailableView(L10n.string("favorites.empty.no_results"), systemImage: "magnifyingglass")
         } else if currentCollection != nil {
-            ContentUnavailableView("合集为空", systemImage: "folder")
+            ContentUnavailableView(L10n.string("favorites.empty.collection"), systemImage: "folder")
         } else {
-            ContentUnavailableView("暂无收藏", systemImage: "books.vertical")
+            ContentUnavailableView(L10n.string("favorites.empty.favorites"), systemImage: "books.vertical")
         }
     }
 
@@ -1514,19 +1514,19 @@ public struct FavoritesView: View {
         VStack(spacing: 12) {
             Divider()
             HStack(spacing: 12) {
-                Button("创建合集") {
+                Button(L10n.string("favorites.create_collection")) {
                     showingCreateCollectionPrompt = true
                 }
                 .buttonStyle(.bordered)
                 .disabled(!selectionActionState.canCreateCollection)
 
-                Button("移动到合集") {
+                Button(L10n.string("favorites.move_to_collection")) {
                     showingMoveDialog = true
                 }
                 .buttonStyle(.bordered)
                 .disabled(!selectionActionState.canMove)
 
-                Button("删除", role: .destructive) {
+                Button(L10n.string("common.delete"), role: .destructive) {
                     showingBulkDeleteConfirmation = true
                 }
                 .buttonStyle(.bordered)
@@ -1535,7 +1535,7 @@ public struct FavoritesView: View {
             .frame(maxWidth: .infinity)
             .padding(.horizontal, 20)
 
-            Text("已选择 \(selectedFavoriteIDs.count + selectedCollectionIDs.count) 项")
+            Text(L10n.string("favorites.selected_count", selectedFavoriteIDs.count + selectedCollectionIDs.count))
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .padding(.bottom, 12)
@@ -1637,7 +1637,7 @@ public struct FavoritesView: View {
                     Button {
                         pendingDeleteCollection = collection
                     } label: {
-                        swipeActionLabel(title: "删除", systemImage: "trash")
+                        swipeActionLabel(title: L10n.string("common.delete"), systemImage: "trash")
                     }
                     .tint(.red)
 
@@ -1647,7 +1647,7 @@ public struct FavoritesView: View {
                         }
                     } label: {
                         swipeActionLabel(
-                            title: collection.isHidden ? "取消隐藏" : "隐藏",
+                            title: collection.isHidden ? L10n.string("common.unhide") : L10n.string("common.hide"),
                             systemImage: collection.isHidden ? "eye" : "eye.slash"
                         )
                     }
@@ -1656,7 +1656,7 @@ public struct FavoritesView: View {
                     Button {
                         collectionNameDraft = FavoriteCollectionNameDraft(collection: collection)
                     } label: {
-                        swipeActionLabel(title: "编辑", systemImage: "pencil")
+                        swipeActionLabel(title: L10n.string("common.edit"), systemImage: "pencil")
                     }
                     .tint(.indigo)
                 }
@@ -1696,7 +1696,7 @@ public struct FavoritesView: View {
                             pendingDeleteFavorite = favorite
                         } label: {
                             swipeActionLabel(
-                                title: viewModel.deletingFavoriteID == favorite.id ? "删除中" : "删除",
+                                title: viewModel.deletingFavoriteID == favorite.id ? L10n.string("common.deleting") : L10n.string("common.delete"),
                                 systemImage: "trash"
                             )
                         }
@@ -1709,7 +1709,7 @@ public struct FavoritesView: View {
                             }
                         } label: {
                             swipeActionLabel(
-                                title: favorite.isHidden ? "取消隐藏" : "隐藏",
+                                title: favorite.isHidden ? L10n.string("common.unhide") : L10n.string("common.hide"),
                                 systemImage: favorite.isHidden ? "eye" : "eye.slash"
                             )
                         }
@@ -1719,7 +1719,7 @@ public struct FavoritesView: View {
                         Button {
                             displayNameDraft = FavoriteDisplayNameDraft(favorite: favorite)
                         } label: {
-                            swipeActionLabel(title: "编辑", systemImage: "pencil")
+                            swipeActionLabel(title: L10n.string("common.edit"), systemImage: "pencil")
                         }
                         .tint(.indigo)
                         .disabled(viewModel.deletingFavoriteID != nil)
@@ -1735,7 +1735,7 @@ public struct FavoritesView: View {
             Button {
                 displayNameDraft = FavoriteDisplayNameDraft(favorite: favorite)
             } label: {
-                Label("编辑", systemImage: "pencil")
+                Label(L10n.string("common.edit"), systemImage: "pencil")
             }
 
             Button {
@@ -1743,13 +1743,13 @@ public struct FavoritesView: View {
                     await viewModel.setHidden(!favorite.isHidden, for: favorite)
                 }
             } label: {
-                Label(favorite.isHidden ? "取消隐藏" : "隐藏", systemImage: favorite.isHidden ? "eye" : "eye.slash")
+                Label(favorite.isHidden ? L10n.string("common.unhide") : L10n.string("common.hide"), systemImage: favorite.isHidden ? "eye" : "eye.slash")
             }
 
             Button(role: .destructive) {
                 pendingDeleteFavorite = favorite
             } label: {
-                Label(viewModel.deletingFavoriteID == favorite.id ? "删除中" : "删除", systemImage: "trash")
+                Label(viewModel.deletingFavoriteID == favorite.id ? L10n.string("common.deleting") : L10n.string("common.delete"), systemImage: "trash")
             }
             .disabled(viewModel.deletingFavoriteID != nil)
         } label: {
@@ -1770,16 +1770,16 @@ public struct FavoritesView: View {
             Button {
                 sharingFavorite = favorite
             } label: {
-                swipeActionLabel(title: "分享", systemImage: "square.and.arrow.up")
+                swipeActionLabel(title: L10n.string("common.share"), systemImage: "square.and.arrow.up")
             }
         } else {
             ShareLink(item: favorite.url) {
-                swipeActionLabel(title: "分享", systemImage: "square.and.arrow.up")
+                swipeActionLabel(title: L10n.string("common.share"), systemImage: "square.and.arrow.up")
             }
         }
         #else
         ShareLink(item: favorite.url) {
-            swipeActionLabel(title: "分享", systemImage: "square.and.arrow.up")
+            swipeActionLabel(title: L10n.string("common.share"), systemImage: "square.and.arrow.up")
         }
         #endif
     }
@@ -1791,16 +1791,16 @@ public struct FavoritesView: View {
             Button {
                 sharingFavorite = favorite
             } label: {
-                Label("分享", systemImage: "square.and.arrow.up")
+                Label(L10n.string("common.share"), systemImage: "square.and.arrow.up")
             }
         } else {
             ShareLink(item: favorite.url) {
-                Label("分享", systemImage: "square.and.arrow.up")
+                Label(L10n.string("common.share"), systemImage: "square.and.arrow.up")
             }
         }
         #else
         ShareLink(item: favorite.url) {
-            Label("分享", systemImage: "square.and.arrow.up")
+            Label(L10n.string("common.share"), systemImage: "square.and.arrow.up")
         }
         #endif
     }
@@ -1810,7 +1810,7 @@ public struct FavoritesView: View {
             Button {
                 collectionNameDraft = FavoriteCollectionNameDraft(collection: collection)
             } label: {
-                Label("编辑", systemImage: "pencil")
+                Label(L10n.string("common.edit"), systemImage: "pencil")
             }
 
             Button {
@@ -1818,13 +1818,13 @@ public struct FavoritesView: View {
                     await viewModel.setCollectionHidden(!collection.isHidden, for: collection)
                 }
             } label: {
-                Label(collection.isHidden ? "取消隐藏" : "隐藏", systemImage: collection.isHidden ? "eye" : "eye.slash")
+                Label(collection.isHidden ? L10n.string("common.unhide") : L10n.string("common.hide"), systemImage: collection.isHidden ? "eye" : "eye.slash")
             }
 
             Button(role: .destructive) {
                 pendingDeleteCollection = collection
             } label: {
-                Label("删除", systemImage: "trash")
+                Label(L10n.string("common.delete"), systemImage: "trash")
             }
         } label: {
             Image(systemName: "ellipsis.circle.fill")
@@ -2075,7 +2075,7 @@ struct FavoriteRow: View {
                     }
 
                     if favorite.isHidden {
-                        Label("已隐藏", systemImage: "eye.slash")
+                        Label(L10n.string("common.hidden"), systemImage: "eye.slash")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -2156,12 +2156,12 @@ struct FavoriteCollectionRow: View {
                         .lineLimit(1)
 
                     HStack(spacing: 8) {
-                        Text("合集")
+                        Text(L10n.string("favorite_category.collection"))
                             .font(.caption.weight(.medium))
                             .foregroundStyle(accentColor)
 
                         if collection.isHidden {
-                            Label("已隐藏", systemImage: "eye.slash")
+                            Label(L10n.string("common.hidden"), systemImage: "eye.slash")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -2187,9 +2187,9 @@ struct FavoriteCollectionRow: View {
 
     private var summaryText: String {
         if summary.hiddenCount > 0 {
-            return "\(summary.itemCount) 项 · \(summary.hiddenCount) 项已隐藏"
+            return L10n.string("favorites.collection_summary_hidden", summary.itemCount, summary.hiddenCount)
         }
-        return "\(summary.itemCount) 项"
+        return L10n.string("favorites.collection_summary", summary.itemCount)
     }
 }
 
@@ -2407,17 +2407,17 @@ func favoriteProgressText(for favorite: Favorite) -> String? {
     if let lastChapter = favorite.lastChapter, !lastChapter.isEmpty {
         if favorite.type == .manga, favorite.lastPage > 0 {
             if let chapterLabel = favoriteMangaChapterLabel(from: lastChapter) {
-                return "读至第 \(favorite.lastPage + 1) 页 · \(chapterLabel)"
+                return L10n.string("favorites.progress.page_with_chapter", favorite.lastPage + 1, chapterLabel)
             }
-            return "读至第 \(favorite.lastPage + 1) 页"
+            return L10n.string("favorites.progress.page", favorite.lastPage + 1)
         }
         return lastChapter
     }
     if favorite.type == .manga, favorite.lastPage > 0 {
-        return "读至第 \(favorite.lastPage + 1) 页"
+        return L10n.string("favorites.progress.page", favorite.lastPage + 1)
     }
     if favorite.lastPage > 0 || favorite.lastView > 1 {
-        return "第\(favorite.lastPage + 1)页 / 网页第\(favorite.lastView)页"
+        return L10n.string("favorites.progress.page_web", favorite.lastPage + 1, favorite.lastView)
     }
     return nil
 }
@@ -2433,7 +2433,7 @@ func favoriteMangaChapterLabel(from rawTitle: String) -> String? {
     )
 
     guard !displayNumber.isEmpty else { return nil }
-    return "第\(displayNumber)话"
+    return L10n.string("favorites.manga_chapter", displayNumber)
 }
 
 func favoriteDetailLines(for favorite: Favorite) -> [String] {
@@ -2461,7 +2461,7 @@ func favoriteDetailLines(for favorite: Favorite) -> [String] {
 
     if favorite.type == .novel {
         if favorite.lastPage > 0 || favorite.lastView > 1 {
-            lines.append("读至第 \(favorite.lastPage + 1) 页 · 网页第 \(favorite.lastView) 页")
+            lines.append(L10n.string("favorites.progress.page_web_spaced", favorite.lastPage + 1, favorite.lastView))
         }
     } else if let progressText = favoriteProgressText(for: favorite),
               !lines.contains(progressText) {

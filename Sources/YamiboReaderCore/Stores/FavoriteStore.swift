@@ -235,7 +235,7 @@ public actor FavoriteStore: FavoriteStoring {
     public func createCollection(name: String, favoriteIDs: [String]) async throws -> FavoriteLibrarySnapshot {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty else {
-            throw YamiboError.persistenceFailed("合集名称不能为空")
+            throw YamiboError.persistenceFailed(L10n.string("favorite_store.collection_name_empty"))
         }
 
         let snapshot = await loadLibrarySnapshot()
@@ -355,7 +355,7 @@ public actor FavoriteStore: FavoriteStoring {
     public func setCollectionName(_ name: String, for collectionID: String) async throws -> FavoriteLibrarySnapshot {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty else {
-            throw YamiboError.persistenceFailed("合集名称不能为空")
+            throw YamiboError.persistenceFailed(L10n.string("favorite_store.collection_name_empty"))
         }
 
         let snapshot = await loadLibrarySnapshot()
@@ -451,7 +451,7 @@ public actor FavoriteStore: FavoriteStoring {
 
     public func updateReadingProgress(for url: URL, progress: ReaderProgress) async throws -> Favorite {
         guard let favorite = try await updateReadingProgress(for: url, progress: progress, createIfMissing: true) else {
-            throw YamiboError.persistenceFailed("未能保存阅读进度")
+            throw YamiboError.persistenceFailed(L10n.string("favorite_store.save_reader_progress_failed"))
         }
         return favorite
     }
@@ -498,7 +498,7 @@ public actor FavoriteStore: FavoriteStoring {
             pageIndex: pageIndex,
             createIfMissing: true
         ) else {
-            throw YamiboError.persistenceFailed("未能保存漫画进度")
+            throw YamiboError.persistenceFailed(L10n.string("favorite_store.save_manga_progress_failed"))
         }
         return favorite
     }

@@ -8,7 +8,7 @@ import UIKit
 @MainActor
 public final class MangaWebFallbackModel: ObservableObject {
     @Published public private(set) var context: MangaWebContext
-    @Published public private(set) var pageTitle = "网页漫画模式"
+    @Published public private(set) var pageTitle = L10n.string("manga_web.title")
     @Published public private(set) var isLoading = false
     @Published public private(set) var showLoadError = false
     @Published public private(set) var canGoBack = false
@@ -144,7 +144,7 @@ public final class MangaWebFallbackModel: ObservableObject {
         loadTimeoutTask?.cancel()
         isLoading = true
         showLoadError = false
-        pageTitle = "网页漫画模式"
+        pageTitle = L10n.string("manga_web.title")
         context = context.updating(
             currentURL: url,
             waitingForNativeReturn: false
@@ -300,7 +300,7 @@ public struct MangaWebFallbackView: View {
 
             Spacer(minLength: 0)
 
-            Button("原帖") {
+            Button(L10n.string("common.original_post")) {
                 model.openOriginalPost()
             }
             .font(.caption.weight(.semibold))
@@ -314,7 +314,7 @@ public struct MangaWebFallbackView: View {
     private var overlayProgress: some View {
         ZStack {
             Color.black.opacity(0.75).ignoresSafeArea()
-            ProgressView("正在载入网页漫画…")
+            ProgressView(L10n.string("manga_web.loading"))
                 .tint(.white)
                 .foregroundStyle(.white)
         }
@@ -327,9 +327,9 @@ public struct MangaWebFallbackView: View {
                 Image(systemName: "exclamationmark.triangle")
                     .font(.largeTitle)
                     .foregroundStyle(.white)
-                Text("网页漫画加载失败")
+                Text(L10n.string("manga_web.load_failed"))
                     .foregroundStyle(.white)
-                Button("重试") {
+                Button(L10n.string("common.retry")) {
                     model.retry()
                 }
                 .buttonStyle(.borderedProminent)
@@ -507,7 +507,7 @@ public struct MangaWebFallbackView: View {
     }
 
     public var body: some View {
-        Text("网页漫画模式仅在 iOS 端启用")
+        Text(L10n.string("manga_web.ios_only"))
             .padding()
     }
 }

@@ -19,31 +19,31 @@ public enum YamiboError: LocalizedError, Equatable, Sendable {
         switch self {
         case let .invalidResponse(statusCode):
             if let statusCode {
-                return "论坛响应异常（HTTP \(statusCode)）"
+                return L10n.string("error.invalid_response_with_status", statusCode)
             }
-            return "未拿到有效的论坛响应"
+            return L10n.string("error.invalid_response")
         case .unreadableBody:
-            return "响应内容无法解析为文本"
+            return L10n.string("error.unreadable_body")
         case .emptyHTML:
-            return "返回内容为空"
+            return L10n.string("error.empty_html")
         case let .parsingFailed(context):
-            return "页面解析失败：\(context)"
+            return L10n.string("error.parsing_failed", context)
         case .floodControl:
-            return "论坛触发了防灌水限制，请稍后再试"
+            return L10n.string("error.flood_control")
         case .notAuthenticated:
-            return "当前登录态不可用，请重新登录"
+            return L10n.string("error.not_authenticated")
         case .offline:
-            return "当前网络不可用，且本地没有可读缓存"
+            return L10n.string("error.offline")
         case let .searchCooldown(seconds):
-            return "搜索冷却中，请等待\(seconds)秒"
+            return L10n.string("error.search_cooldown", seconds)
         case let .persistenceFailed(message):
-            return "本地数据保存失败：\(message)"
+            return L10n.string("error.persistence_failed", message)
         case .missingFavoriteDeleteToken:
-            return "删除收藏失败：未拿到表单校验码"
+            return L10n.string("error.missing_favorite_delete_token")
         case .missingFavoriteDeleteID:
-            return "当前收藏缺少删除标识，请先下拉刷新"
+            return L10n.string("error.missing_favorite_delete_id")
         case .favoriteDeleteFailed:
-            return "删除收藏失败，请稍后重试"
+            return L10n.string("error.favorite_delete_failed")
         case let .underlying(message):
             return message
         }
