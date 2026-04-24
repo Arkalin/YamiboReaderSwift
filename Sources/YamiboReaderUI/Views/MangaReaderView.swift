@@ -632,20 +632,14 @@ private struct MangaSettingsSheet: View {
                         HStack(spacing: 8) {
                             Text("使用 Apple Pencil 翻页")
                             Button {
-                                showsApplePencilHelp = true
+                                withAnimation(.easeInOut(duration: 0.18)) {
+                                    showsApplePencilHelp.toggle()
+                                }
                             } label: {
                                 Image(systemName: "questionmark.circle")
                                     .font(.headline.weight(.semibold))
                             }
                             .buttonStyle(.plain)
-                            .popover(isPresented: $showsApplePencilHelp) {
-                                Text(Self.applePencilHelpText)
-                                    .font(.body)
-                                    .fixedSize(horizontal: false, vertical: true)
-                                    .padding(20)
-                                    .frame(maxWidth: 360, alignment: .leading)
-                                    .presentationCompactAdaptation(.popover)
-                            }
 
                             Spacer(minLength: 8)
 
@@ -658,6 +652,15 @@ private struct MangaSettingsSheet: View {
                                 }
                             ))
                             .labelsHidden()
+                        }
+
+                        if showsApplePencilHelp {
+                            Text(Self.applePencilHelpText)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .padding(.vertical, 6)
+                                .transition(.opacity.combined(with: .move(edge: .top)))
                         }
 
                         Picker("Apple Pencil Pro 翻页行为", selection: Binding(
