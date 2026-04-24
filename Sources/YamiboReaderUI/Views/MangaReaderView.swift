@@ -40,6 +40,13 @@ public struct MangaReaderView: View {
             ZStack {
                 Color.black.ignoresSafeArea()
                 content(proxy: proxy)
+                ApplePencilPageTurnInteractionOverlay(
+                    settings: model.applePencilPageTurnSettings,
+                    canTurnPage: canReceiveApplePencilPageTurn
+                ) { delta in
+                    Task { await goRelativePage(delta) }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
                 brightnessOverlay
                 chapterTransitionOverlay
 
@@ -557,6 +564,18 @@ public struct MangaReaderView: View {
         model.previewLabel(forLocalIndex: previewPageIndex ?? model.currentPage?.localIndex ?? 0)
     }
 
+    private var canReceiveApplePencilPageTurn: Bool {
+        isPadDevice &&
+            model.settings.readingMode == .paged &&
+            !model.pages.isEmpty &&
+            !model.isTransitioningChapter &&
+            !showingSettings &&
+            !showingDirectorySheet &&
+            !isDismissing &&
+            activeZoomPageID == nil &&
+            verticalZoomOverlay == nil
+    }
+
     private var contentInteractionGesture: some Gesture {
         DragGesture(minimumDistance: 4)
             .onChanged { _ in
@@ -578,6 +597,8 @@ private struct MangaSettingsSheet: View {
     @ObservedObject var model: MangaReaderModel
     let showsPadPagedOptions: Bool
     @Environment(\.dismiss) private var dismiss
+    @State private var showsApplePencilHelp = false
+    private static let applePencilHelpText = "Apple Pencil Pro 支持「按压」和「双击翻页」（请在系统设置中确保开启 Apple Pencil Pro 的轻点两下开关），其它 Apple Pencil 支持「双击翻页」"
 
     var body: some View {
         NavigationStack {
@@ -604,6 +625,54 @@ private struct MangaSettingsSheet: View {
                             model.applySettings(updated)
                         }
                     ))
+                }
+
+                if showsPadPagedOptions, model.settings.readingMode == .paged {
+                    Section("Apple Pencil") {
+                        HStack(spacing: 8) {
+                            Text("使用 Apple Pencil 翻页")
+                            Button {
+                                showsApplePencilHelp = true
+                            } label: {
+                                Image(systemName: "questionmark.circle")
+                                    .font(.headline.weight(.semibold))
+                            }
+                            .buttonStyle(.plain)
+                            .popover(isPresented: $showsApplePencilHelp) {
+                                Text(Self.applePencilHelpText)
+                                    .font(.body)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .padding(20)
+                                    .frame(maxWidth: 360, alignment: .leading)
+                                    .presentationCompactAdaptation(.popover)
+                            }
+
+                            Spacer(minLength: 8)
+
+                            Toggle("", isOn: Binding(
+                                get: { model.applePencilPageTurnSettings.isEnabled },
+                                set: {
+                                    var updated = model.applePencilPageTurnSettings
+                                    updated.isEnabled = $0
+                                    model.applyApplePencilPageTurnSettings(updated)
+                                }
+                            ))
+                            .labelsHidden()
+                        }
+
+                        Picker("Apple Pencil Pro 翻页行为", selection: Binding(
+                            get: { model.applePencilPageTurnSettings.behavior },
+                            set: {
+                                var updated = model.applePencilPageTurnSettings
+                                updated.behavior = $0
+                                model.applyApplePencilPageTurnSettings(updated)
+                            }
+                        )) {
+                            ForEach(ApplePencilPageTurnBehavior.allCases, id: \.self) { behavior in
+                                Text(behavior.title).tag(behavior)
+                            }
+                        }
+                    }
                 }
 
                 Toggle("启用缩放", isOn: Binding(

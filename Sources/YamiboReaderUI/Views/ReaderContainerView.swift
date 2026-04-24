@@ -100,6 +100,14 @@ public struct ReaderContainerView: View {
                     bottomInset: bottomInset
                 )
 
+                ApplePencilPageTurnInteractionOverlay(
+                    settings: model.applePencilPageTurnSettings,
+                    canTurnPage: canReceiveApplePencilPageTurn
+                ) { delta in
+                    Task { await goRelativePage(delta) }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+
                 if isProgressPreviewVisible {
                     ReaderChapterPreviewBubble(title: progressPreviewChapterTitle ?? "•••")
                         .padding(.bottom, chromeState.mode.showsChrome ? bottomInset + 118 : bottomInset + 24)
@@ -651,6 +659,14 @@ public struct ReaderContainerView: View {
 
     private var hasPresentedOverlay: Bool {
         showingSettings || showingCachePanel || showingCacheProgress || showingWebJumpSheet || showingChapterSheet
+    }
+
+    private var canReceiveApplePencilPageTurn: Bool {
+        isPadDevice &&
+            model.settings.readingMode == .paged &&
+            !model.pages.isEmpty &&
+            !hasPresentedOverlay &&
+            !isDismissing
     }
 
     private func handleProgressPreviewChange(value: Double?, isEditing: Bool) {

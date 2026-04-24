@@ -26,9 +26,18 @@ struct ReaderSettingsPanel: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
     @State private var draftSettings = ReaderAppearanceSettings()
+    @State private var draftApplePencilPageTurnSettings = ApplePencilPageTurnSettings()
     @State private var hasLoadedDraft = false
     private static let fallbackPreviewText = "今夜，窗外的风像翻页声一样轻，阅读设置会在此处预览，右上角保存后才会作用在正文中。你可以先把它调到舒服，再继续往下读。"
     private static let previewCharacterCount = 200
+
+    private var showsApplePencilSection: Bool {
+#if os(iOS)
+        UIDevice.current.userInterfaceIdiom == .pad && draftSettings.readingMode == .paged
+#else
+        false
+#endif
+    }
 
     private var showsTwoPageToggle: Bool {
 #if os(iOS)
@@ -63,7 +72,10 @@ struct ReaderSettingsPanel: View {
                         height: heroHeight,
                         onClose: { dismiss() },
                         onConfirm: {
-                            model.applySettings(draftSettings)
+                            model.applySettings(
+                                draftSettings,
+                                applePencilPageTurnSettings: draftApplePencilPageTurnSettings
+                            )
                             dismiss()
                         }
                     )
@@ -115,6 +127,18 @@ struct ReaderSettingsPanel: View {
                                 loadsInlineImages: draftSettings.loadsInlineImages,
                                 onLoadsInlineImagesChange: setImageLoading
                             )
+
+                            if showsApplePencilSection {
+                                ReaderBooksApplePencilSection(
+                                    settings: draftApplePencilPageTurnSettings,
+                                    palette: palette,
+                                    isEnabled: Binding(
+                                        get: { draftApplePencilPageTurnSettings.isEnabled },
+                                        set: { draftApplePencilPageTurnSettings.isEnabled = $0 }
+                                    ),
+                                    onBehaviorChange: setApplePencilPageTurnBehavior
+                                )
+                            }
                         }
                         .padding(.top, 24)
                         .padding(.horizontal, 20)
@@ -129,6 +153,7 @@ struct ReaderSettingsPanel: View {
         .onAppear {
             guard !hasLoadedDraft else { return }
             draftSettings = model.settings
+            draftApplePencilPageTurnSettings = model.applePencilPageTurnSettings
             hasLoadedDraft = true
         }
     }
@@ -143,6 +168,9 @@ struct ReaderSettingsPanel: View {
     private func setReadingMode(_ value: ReaderReadingMode) { draftSettings.readingMode = value }
     private func setTranslationMode(_ value: ReaderTranslationMode) { draftSettings.translationMode = value }
     private func setImageLoading(_ value: Bool) { draftSettings.loadsInlineImages = value }
+    private func setApplePencilPageTurnBehavior(_ value: ApplePencilPageTurnBehavior) {
+        draftApplePencilPageTurnSettings.behavior = value
+    }
 }
 
 private struct ReaderBooksUnifiedSheetBackground: View {
@@ -510,6 +538,90 @@ private struct ReaderBooksMiscSection: View {
                     set: { onLoadsInlineImagesChange($0) }
                 )
             )
+        }
+    }
+}
+
+private struct ReaderBooksApplePencilSection: View {
+    private static let helpText = "Apple Pencil Pro 支持「按压」和「双击翻页」（请在系统设置中确保开启 Apple Pencil Pro 的轻点两下开关），其它 Apple Pencil 支持「双击翻页」"
+
+    let settings: ApplePencilPageTurnSettings
+    let palette: ReaderBooksSheetPalette
+    @Binding var isEnabled: Bool
+    let onBehaviorChange: (ApplePencilPageTurnBehavior) -> Void
+    @State private var showsHelp = false
+
+    var body: some View {
+        ReaderBooksSettingsSection(title: "Apple Pencil", palette: palette) {
+            HStack(spacing: 10) {
+                Text("使用 Apple Pencil 翻页")
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(palette.primaryText)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.85)
+
+                Button {
+                    showsHelp = true
+                } label: {
+                    Image(systemName: "questionmark.circle")
+                        .font(.title2.weight(.semibold))
+                        .foregroundStyle(Color.blue)
+                }
+                .buttonStyle(.plain)
+                .popover(isPresented: $showsHelp) {
+                    Text(Self.helpText)
+                        .font(.body)
+                        .foregroundStyle(palette.primaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(20)
+                        .frame(maxWidth: 360, alignment: .leading)
+                        .presentationCompactAdaptation(.popover)
+                }
+
+                Spacer(minLength: 8)
+
+                Toggle("", isOn: $isEnabled)
+                    .labelsHidden()
+            }
+
+            ReaderBooksDivider(palette: palette)
+
+            HStack(spacing: 12) {
+                Text("Apple Pencil Pro 翻页行为")
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(palette.primaryText)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.85)
+
+                Spacer(minLength: 8)
+
+                Menu {
+                    ForEach(ApplePencilPageTurnBehavior.allCases, id: \.self) { behavior in
+                        Button {
+                            onBehaviorChange(behavior)
+                        } label: {
+                            if settings.behavior == behavior {
+                                Label(behavior.title, systemImage: "checkmark")
+                            } else {
+                                Text(behavior.title)
+                            }
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 8) {
+                        Text(settings.behavior.title)
+                            .font(.title3)
+                            .foregroundStyle(palette.secondaryText)
+                            .lineLimit(2)
+                            .multilineTextAlignment(.trailing)
+                            .minimumScaleFactor(0.78)
+                        Image(systemName: "chevron.up.chevron.down")
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(palette.secondaryText.opacity(0.75))
+                    }
+                }
+                .buttonStyle(.plain)
+            }
         }
     }
 }

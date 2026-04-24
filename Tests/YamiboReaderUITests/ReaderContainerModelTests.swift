@@ -308,6 +308,72 @@ final class ReaderContainerModelTests: XCTestCase {
         }
     }
 
+    func testApplySettingsPersistsSharedApplePencilSettingsWithoutOverwritingMangaSettings() async throws {
+        let keyPrefix = UUID().uuidString
+        let settingsStore = SettingsStore(key: "\(keyPrefix).settings")
+        let cacheStore = ReaderCacheStore(
+            baseDirectory: FileManager.default.temporaryDirectory
+                .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        )
+        let document = makeDocument(view: 1, maxView: 1, chapterTitles: ["第一章", "第二章"])
+        let initialMangaSettings = MangaReaderSettings(
+            readingMode: .paged,
+            brightness: 0.82,
+            zoomEnabled: false,
+            showsTwoPagesInLandscapeOnPad: true,
+            directorySortOrder: .descending
+        )
+        try await settingsStore.save(
+            AppSettings(
+                reader: ReaderAppearanceSettings(readingMode: .paged),
+                manga: initialMangaSettings
+            )
+        )
+        try await cacheStore.save(document)
+
+        let appContext = YamiboAppContext(
+            sessionStore: SessionStore(key: "\(keyPrefix).session"),
+            settingsStore: settingsStore,
+            favoriteStore: FavoriteStore(key: "\(keyPrefix).favorites"),
+            readerCacheStore: cacheStore
+        )
+        let model = await MainActor.run {
+            ReaderContainerModel(
+                context: ReaderLaunchContext(
+                    threadURL: document.threadURL,
+                    threadTitle: "测试线程",
+                    source: .forum
+                ),
+                appContext: appContext
+            )
+        }
+        await model.prepare(layout: ReaderContainerLayout(width: 320, height: 568))
+
+        let updatedReaderSettings = ReaderAppearanceSettings(
+            fontScale: 1.2,
+            readingMode: .vertical
+        )
+        let updatedApplePencilSettings = ApplePencilPageTurnSettings(
+            isEnabled: true,
+            behavior: .doubleTapNextSqueezePrevious
+        )
+        await MainActor.run {
+            model.applySettings(
+                updatedReaderSettings,
+                applePencilPageTurnSettings: updatedApplePencilSettings
+            )
+        }
+
+        try await waitFor {
+            let loaded = await settingsStore.load()
+            return loaded.reader == updatedReaderSettings &&
+                loaded.applePencilPageTurn == updatedApplePencilSettings
+        }
+
+        let loaded = await settingsStore.load()
+        XCTAssertEqual(loaded.manga, initialMangaSettings)
+    }
+
     func testUpdatingLayoutRepaginatesPagedContentAndKeepsCurrentSegment() async throws {
         let model = try await makeModel(
             documents: [

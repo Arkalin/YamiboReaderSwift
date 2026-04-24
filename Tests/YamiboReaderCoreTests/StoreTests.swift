@@ -64,6 +64,10 @@ import Testing
             manga: .green,
             other: .gray
         ),
+        applePencilPageTurn: ApplePencilPageTurnSettings(
+            isEnabled: true,
+            behavior: .doubleTapNextSqueezePrevious
+        ),
         homePage: .favorites,
         usesDataSaverMode: true,
         collapsesFavoriteSections: true
@@ -94,7 +98,15 @@ import Testing
     #expect(decoded.webBrowser.showsNavigationBar == true)
     #expect(decoded.homePage == .forum)
     #expect(decoded.favoriteAppearance == FavoriteAppearanceSettings())
+    #expect(decoded.applePencilPageTurn == ApplePencilPageTurnSettings())
     #expect(decoded.collapsesFavoriteSections == true)
+}
+
+@Test func applePencilPageTurnBehaviorMapsGesturesToPageDeltas() {
+    #expect(ApplePencilPageTurnBehavior.doubleTapPreviousSqueezeNext.pageDelta(for: .doubleTap) == -1)
+    #expect(ApplePencilPageTurnBehavior.doubleTapPreviousSqueezeNext.pageDelta(for: .squeeze) == 1)
+    #expect(ApplePencilPageTurnBehavior.doubleTapNextSqueezePrevious.pageDelta(for: .doubleTap) == 1)
+    #expect(ApplePencilPageTurnBehavior.doubleTapNextSqueezePrevious.pageDelta(for: .squeeze) == -1)
 }
 
 @Test func appSettingsDecodesPartialFavoriteAppearanceWithDefaults() async throws {

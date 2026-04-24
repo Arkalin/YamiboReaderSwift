@@ -122,6 +122,7 @@ public final class ReaderContainerModel: ObservableObject {
     @Published public var currentPageIndex = 0
     @Published public private(set) var currentPageIntraProgress = 0.0
     @Published public var settings = ReaderAppearanceSettings()
+    @Published public var applePencilPageTurnSettings = ApplePencilPageTurnSettings()
     @Published public private(set) var sessionState = SessionState()
     @Published public private(set) var cacheOperationState = ReaderCacheOperationState()
     @Published public private(set) var pagedSpreads: [ReaderPagedSpread] = []
@@ -307,7 +308,9 @@ public final class ReaderContainerModel: ObservableObject {
         self.layout = layout
         if repository == nil {
             repository = await appContext.makeReaderRepository()
-            settings = await appContext.settingsStore.load().reader
+            let appSettings = await appContext.settingsStore.load()
+            settings = appSettings.reader
+            applePencilPageTurnSettings = appSettings.applePencilPageTurn
             sessionState = await appContext.sessionStore.load()
         }
         if pages.isEmpty {
@@ -423,14 +426,34 @@ public final class ReaderContainerModel: ObservableObject {
     }
 
     public func applySettings(_ newSettings: ReaderAppearanceSettings) {
+        applySettings(newSettings, applePencilPageTurnSettings: applePencilPageTurnSettings)
+    }
+
+    public func applySettings(
+        _ newSettings: ReaderAppearanceSettings,
+        applePencilPageTurnSettings newApplePencilPageTurnSettings: ApplePencilPageTurnSettings
+    ) {
         let oldSettings = settings
-        let resumePoint = captureCurrentResumePoint()
-        pendingResumePoint = resumePoint
-        pendingResumeRequiresLayoutSync = oldSettings.readingMode != newSettings.readingMode
+        let shouldRepaginate = oldSettings != newSettings
+        let resumePoint = shouldRepaginate ? captureCurrentResumePoint() : nil
+        if shouldRepaginate {
+            pendingResumePoint = resumePoint
+            pendingResumeRequiresLayoutSync = oldSettings.readingMode != newSettings.readingMode
+        }
         settings = newSettings
-        persistSettings()
+        applePencilPageTurnSettings = newApplePencilPageTurnSettings
+        persistSettings(
+            readerSettings: newSettings,
+            applePencilPageTurnSettings: newApplePencilPageTurnSettings
+        )
+        guard shouldRepaginate else { return }
         repaginate(resumePoint: resumePoint)
         clearPendingResumePointIfSettled()
+    }
+
+    public func applyApplePencilPageTurnSettings(_ newSettings: ApplePencilPageTurnSettings) {
+        applePencilPageTurnSettings = newSettings
+        persistSettings(applePencilPageTurnSettings: newSettings)
     }
 
     public func saveProgress() async {
@@ -1327,11 +1350,18 @@ public final class ReaderContainerModel: ObservableObject {
         await prefetchIfNeeded(for: currentPageIndex)
     }
 
-    private func persistSettings() {
-        let settings = settings
+    private func persistSettings(
+        readerSettings: ReaderAppearanceSettings? = nil,
+        applePencilPageTurnSettings: ApplePencilPageTurnSettings? = nil
+    ) {
         Task {
             var appSettings = await appContext.settingsStore.load()
-            appSettings.reader = settings
+            if let readerSettings {
+                appSettings.reader = readerSettings
+            }
+            if let applePencilPageTurnSettings {
+                appSettings.applePencilPageTurn = applePencilPageTurnSettings
+            }
             try? await appContext.settingsStore.save(appSettings)
         }
     }
