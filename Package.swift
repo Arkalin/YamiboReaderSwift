@@ -2,7 +2,7 @@
 import PackageDescription
 
 let package = Package(
-    name: "YamiboReaderSwiftPort",
+    name: "YamiboReader",
     platforms: [
         .iOS(.v17),
         .macOS(.v14)
