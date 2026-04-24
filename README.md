@@ -76,9 +76,10 @@ iOS App 入口位于 [YamiboReaderIOS/YamiboReaderIOSApp.swift](/Users/arkalin/D
 ## TODO
 
 - 更完善的 iPad 支持
+- 多设备阅读进度同步
 - 章节评论查看
 - 更新检查
-- 更新订阅
+- 更新推送
 
 ## 特别感谢
 
