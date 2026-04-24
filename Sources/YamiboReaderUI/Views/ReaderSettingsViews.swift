@@ -28,7 +28,7 @@ struct ReaderSettingsPanel: View {
     @State private var draftSettings = ReaderAppearanceSettings()
     @State private var draftApplePencilPageTurnSettings = ApplePencilPageTurnSettings()
     @State private var hasLoadedDraft = false
-    private static let fallbackPreviewText = "今夜，窗外的风像翻页声一样轻，阅读设置会在此处预览，右上角保存后才会作用在正文中。你可以先把它调到舒服，再继续往下读。"
+    private static let fallbackPreviewText = L10n.string("reader.settings.preview_fallback")
     private static let previewCharacterCount = 200
 
     private var showsApplePencilSection: Bool {
@@ -98,7 +98,7 @@ struct ReaderSettingsPanel: View {
                             )
 
                             ReaderBooksStandaloneToggleSection(
-                                title: "使文本两端对齐",
+                                title: L10n.string("reader.justified_text"),
                                 palette: palette,
                                 isOn: Binding(
                                     get: { draftSettings.usesJustifiedText },
@@ -228,7 +228,7 @@ private struct ReaderBooksSettingsHeader: View {
 
     var body: some View {
         ZStack {
-            Text("设置")
+            Text(L10n.string("settings.title"))
                 .font(.title2.weight(.semibold))
                 .foregroundStyle(palette.primaryText)
 
@@ -388,7 +388,7 @@ private struct ReaderBooksTextSection: View {
     let onFontFamilyChange: (ReaderFontFamily) -> Void
 
     var body: some View {
-        ReaderBooksSettingsSection(title: "文本", palette: palette) {
+        ReaderBooksSettingsSection(title: L10n.string("reader.section.text"), palette: palette) {
             ReaderBooksFontScaleRow(
                 value: settings.fontScale,
                 palette: palette,
@@ -412,9 +412,9 @@ private struct ReaderBooksLayoutSection: View {
     let onHorizontalPaddingChange: (Double) -> Void
 
     var body: some View {
-        ReaderBooksSettingsSection(title: "辅助功能与布局选项", palette: palette) {
+        ReaderBooksSettingsSection(title: L10n.string("reader.section.layout"), palette: palette) {
             ReaderBooksSliderRow(
-                title: "行间距",
+                title: L10n.string("reader.line_height"),
                 valueLabel: String(format: "%.2f", settings.lineHeightScale),
                 value: settings.lineHeightScale,
                 range: 1.2 ... 2.2,
@@ -426,7 +426,7 @@ private struct ReaderBooksLayoutSection: View {
             )
             ReaderBooksDivider(palette: palette)
             ReaderBooksSliderRow(
-                title: "字符间距",
+                title: L10n.string("reader.character_spacing"),
                 valueLabel: "\(Int((settings.characterSpacingScale * 100).rounded()))%",
                 value: settings.characterSpacingScale,
                 range: 0 ... 0.12,
@@ -438,7 +438,7 @@ private struct ReaderBooksLayoutSection: View {
             )
             ReaderBooksDivider(palette: palette)
             ReaderBooksSliderRow(
-                title: "页边空白",
+                title: L10n.string("reader.horizontal_padding"),
                 valueLabel: "\(Int(settings.horizontalPadding.rounded()))",
                 value: settings.horizontalPadding,
                 range: 8 ... 36,
@@ -490,7 +490,7 @@ private struct ReaderBooksDisplaySection: View {
     let onSelectTraditionalText: () -> Void
 
     var body: some View {
-        ReaderBooksSettingsSection(title: "显示与页面", palette: palette) {
+        ReaderBooksSettingsSection(title: L10n.string("reader.section.display"), palette: palette) {
             ReaderBooksThemePicker(
                 selectedStyle: settings.backgroundStyle,
                 colorScheme: colorScheme,
@@ -506,7 +506,7 @@ private struct ReaderBooksDisplaySection: View {
             if showsTwoPageToggle {
                 ReaderBooksDivider(palette: palette)
                 ReaderBooksToggleRow(
-                    title: "横屏时同时显示 2 页",
+                    title: L10n.string("reader.two_pages_landscape"),
                     palette: palette,
                     isOn: $showsTwoPagesInLandscapeOnPad
                 )
@@ -529,9 +529,9 @@ private struct ReaderBooksMiscSection: View {
     let onLoadsInlineImagesChange: (Bool) -> Void
 
     var body: some View {
-        ReaderBooksSettingsSection(title: "其他", palette: palette) {
+        ReaderBooksSettingsSection(title: L10n.string("reader.section.other"), palette: palette) {
             ReaderBooksToggleRow(
-                title: "帖子图片",
+                title: L10n.string("reader.inline_images"),
                 palette: palette,
                 isOn: Binding(
                     get: { loadsInlineImages },
@@ -543,7 +543,7 @@ private struct ReaderBooksMiscSection: View {
 }
 
 private struct ReaderBooksApplePencilSection: View {
-    private static let helpText = "Apple Pencil Pro 支持「按压」和「双击翻页」（请在系统设置中确保开启 Apple Pencil Pro 的轻点两下开关），其它 Apple Pencil 支持「双击翻页」"
+    private static let helpText = L10n.string("apple_pencil.help")
 
     let settings: ApplePencilPageTurnSettings
     let palette: ReaderBooksSheetPalette
@@ -554,7 +554,7 @@ private struct ReaderBooksApplePencilSection: View {
     var body: some View {
         ReaderBooksSettingsSection(title: "Apple Pencil", palette: palette) {
             HStack(spacing: 10) {
-                Text("使用 Apple Pencil 翻页")
+                Text(L10n.string("apple_pencil.page_turn"))
                     .font(.title3.weight(.semibold))
                     .foregroundStyle(palette.primaryText)
                     .lineLimit(2)
@@ -592,7 +592,7 @@ private struct ReaderBooksApplePencilSection: View {
             ReaderBooksDivider(palette: palette)
 
             HStack(spacing: 12) {
-                Text("Apple Pencil Pro 翻页行为")
+                Text(L10n.string("apple_pencil.behavior.title"))
                     .font(.title3.weight(.semibold))
                     .foregroundStyle(palette.primaryText)
                     .lineLimit(2)
@@ -665,7 +665,7 @@ private struct ReaderBooksFontScaleRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("大小")
+                Text(L10n.string("reader.font_size"))
                     .font(.title3.weight(.semibold))
                     .foregroundStyle(palette.primaryText)
                 Spacer()
@@ -717,7 +717,7 @@ private struct ReaderBooksFontPickerRow: View {
 
     var body: some View {
         HStack {
-            Text("字体")
+            Text(L10n.string("reader.font_family"))
                 .font(.title3.weight(.semibold))
                 .foregroundStyle(palette.primaryText)
             Spacer()
@@ -820,7 +820,7 @@ private struct ReaderBooksSliderLeadingIcon: View {
                 .foregroundStyle(palette.primaryText)
         case .characterSpacing:
             VStack(spacing: -1) {
-                Text("甲乙丙")
+                Text(L10n.string("reader.character_spacing_sample"))
                     .font(.system(size: 10, weight: .bold))
                     .foregroundStyle(palette.primaryText)
                     .lineLimit(1)
@@ -841,7 +841,7 @@ private struct ReaderBooksReadingModePicker: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("阅读模式")
+            Text(L10n.string("reading_mode.title"))
                 .font(.title3.weight(.semibold))
                 .foregroundStyle(palette.primaryText)
 
@@ -881,14 +881,14 @@ private struct ReaderBooksTranslationPicker: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("简繁转换")
+            Text(L10n.string("translation.title"))
                 .font(.title3.weight(.semibold))
                 .foregroundStyle(palette.primaryText)
 
             HStack(spacing: 8) {
-                translationButton("原文", modeRawValue: ReaderTranslationMode.none.rawValue, action: onSelectOriginal)
-                translationButton("简体", modeRawValue: ReaderTranslationMode.simplified.rawValue, action: onSelectSimplified)
-                translationButton("繁体", modeRawValue: ReaderTranslationMode.traditional.rawValue, action: onSelectTraditional)
+                translationButton(L10n.string("translation.original"), modeRawValue: ReaderTranslationMode.none.rawValue, action: onSelectOriginal)
+                translationButton(L10n.string("translation.simplified"), modeRawValue: ReaderTranslationMode.simplified.rawValue, action: onSelectSimplified)
+                translationButton(L10n.string("translation.traditional"), modeRawValue: ReaderTranslationMode.traditional.rawValue, action: onSelectTraditional)
             }
             .padding(6)
             .background(palette.segmentedBackground, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
@@ -919,7 +919,7 @@ private struct ReaderBooksThemePicker: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("背景主题")
+            Text(L10n.string("reader.background_theme"))
                 .font(.title3.weight(.semibold))
                 .foregroundStyle(palette.primaryText)
 

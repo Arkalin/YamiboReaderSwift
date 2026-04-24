@@ -159,8 +159,8 @@ public struct ForumBrowserView: View {
                 model.load(request.url)
             }
         }
-        .alert("无法原生打开", isPresented: .constant(actionErrorMessage != nil), actions: {
-            Button("确定") {
+        .alert(L10n.string("forum.open_native_failed"), isPresented: .constant(actionErrorMessage != nil), actions: {
+            Button(L10n.string("common.ok")) {
                 actionErrorMessage = nil
             }
         }, message: {
@@ -206,7 +206,7 @@ public struct ForumBrowserView: View {
                         currentTitle: model.pageTitle
                     )
                 case .web:
-                    actionErrorMessage = "当前帖子不适合原生阅读。"
+                    actionErrorMessage = L10n.string("forum.unsupported_native_thread")
                 }
             } catch {
                 actionErrorMessage = error.localizedDescription
@@ -237,10 +237,10 @@ private struct ForumHistorySheet: View {
                 }
                 .buttonStyle(.plain)
             }
-            .navigationTitle("浏览历史")
+            .navigationTitle(L10n.string("forum.history"))
             .toolbar {
                 ToolbarItem {
-                    Button("关闭") {
+                    Button(L10n.string("common.close")) {
                         showingHistory = false
                     }
                 }
@@ -358,7 +358,7 @@ struct ForumBrowserLocationLabel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(model.pageTitle.isEmpty ? "百合会论坛" : model.pageTitle)
+            Text(model.pageTitle.isEmpty ? L10n.string("forum.default_title") : model.pageTitle)
                 .font(.headline)
                 .lineLimit(1)
             Text(model.currentURL?.absoluteString ?? "")

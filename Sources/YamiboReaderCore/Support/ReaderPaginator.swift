@@ -149,7 +149,7 @@ public enum ReaderPaginator {
         }
 
         if pages.isEmpty {
-            pages = [ReaderRenderedPage(index: 0, blocks: [.footer("暂无可显示内容")], documentView: documentView)]
+            pages = [ReaderRenderedPage(index: 0, blocks: [.footer(L10n.string("reader.empty_content"))], documentView: documentView)]
         }
 
         return ReaderPaginationResult(pages: pages, chapters: chapters)

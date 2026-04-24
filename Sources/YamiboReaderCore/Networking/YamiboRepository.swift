@@ -11,7 +11,7 @@ public actor YamiboRepository {
         let html = try await client.fetchHTML(for: .favorites(page: page))
         let favorites = FavoriteHTMLParser.parseFavorites(from: html)
         if favorites.isEmpty {
-            throw inferContentError(from: html, fallback: .parsingFailed(context: "收藏页"))
+            throw inferContentError(from: html, fallback: .parsingFailed(context: L10n.string("context.favorites_page")))
         }
         return favorites
     }
@@ -51,7 +51,7 @@ public actor YamiboRepository {
         )
         let chapters = MangaHTMLParser.parseListHTML(html)
         if chapters.isEmpty {
-            throw inferContentError(from: html, fallback: .parsingFailed(context: "漫画目录"))
+            throw inferContentError(from: html, fallback: .parsingFailed(context: L10n.string("context.manga_directory")))
         }
         return chapters
     }

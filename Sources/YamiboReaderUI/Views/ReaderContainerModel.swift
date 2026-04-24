@@ -152,7 +152,7 @@ public final class ReaderContainerModel: ObservableObject {
     }
 
     public var title: String {
-        context.threadTitle.isEmpty ? "小说阅读" : context.threadTitle
+        context.threadTitle.isEmpty ? L10n.string("reader.title") : context.threadTitle
     }
 
     public var isTwoPageSpreadActive: Bool {
@@ -163,8 +163,11 @@ public final class ReaderContainerModel: ObservableObject {
     }
 
     public var progressText: String {
-        let chapter = currentChapterTitle.map { " · \($0)" } ?? ""
-        return "第 \(displayedPageLabel) / \(max(displayedPageCount, 1)) 页 · 网页第 \(displayedView) / \(max(maxView, 1)) 页\(chapter)"
+        let chapter = currentChapterTitle ?? ""
+        if chapter.isEmpty {
+            return L10n.string("reader.progress", displayedPageLabel, max(displayedPageCount, 1), displayedView, max(maxView, 1))
+        }
+        return L10n.string("reader.progress_with_chapter", displayedPageLabel, max(displayedPageCount, 1), displayedView, max(maxView, 1), chapter)
     }
 
     public func previewText(
@@ -200,11 +203,11 @@ public final class ReaderContainerModel: ObservableObject {
     }
 
     public var currentWebViewText: String {
-        "网页 \(displayedView) / \(max(maxView, 1))"
+        L10n.string("reader.web_view_progress", displayedView, max(maxView, 1))
     }
 
     public var directoryWebTitle: String {
-        "\(currentWebViewText) 的章节"
+        L10n.string("reader.web_view_chapters", currentWebViewText)
     }
 
     public var pagedSelectionIndex: Int {
@@ -255,14 +258,14 @@ public final class ReaderContainerModel: ObservableObject {
     public var cacheScopeTitle: String {
         switch currentContentSource {
         case .authorFilteredPage:
-            return "当前为只看楼主缓存范围"
+            return L10n.string("reader.cache_scope.author")
         case .fallbackUnfilteredPage, .allPostsPage:
-            return "当前为全部回复缓存范围"
+            return L10n.string("reader.cache_scope.all_posts")
         }
     }
 
     public var cacheScopeDescription: String {
-        "缓存内容固定为纯文本，不包含图片。"
+        L10n.string("reader.cache_scope.description")
     }
 
     public var allCacheableViews: [Int] {
@@ -293,11 +296,11 @@ public final class ReaderContainerModel: ObservableObject {
     }
 
     public var sourceStatusText: String? {
-        currentContentSource == .fallbackUnfilteredPage ? "当前为全部回复页" : nil
+        currentContentSource == .fallbackUnfilteredPage ? L10n.string("reader.source.all_posts") : nil
     }
 
     public var chapterSummaryText: String {
-        "目录项 \(retainedChapterCount) · 过滤 \(filteredChapterCandidateCount)"
+        L10n.string("reader.chapter_summary", retainedChapterCount, filteredChapterCandidateCount)
     }
 
     public var forumURL: URL {
@@ -1422,15 +1425,15 @@ public final class ReaderContainerModel: ObservableObject {
         await refreshCachedState()
 
         let actionText = switch mode {
-        case .cache: "缓存"
-        case .update: "更新"
+        case .cache: L10n.string("reader.cache_action.cache")
+        case .update: L10n.string("reader.cache_action.update")
         }
 
         var summary = result.wasCancelled
-            ? "已终止，已完成 \(result.completedViews.count) / \(result.totalCount) 页\(actionText)"
-            : "已完成 \(result.completedViews.count) / \(result.totalCount) 页\(actionText)"
+            ? L10n.string("reader.cache_summary.cancelled", result.completedViews.count, result.totalCount, actionText)
+            : L10n.string("reader.cache_summary.completed", result.completedViews.count, result.totalCount, actionText)
         if !result.failedViews.isEmpty {
-            summary += "，\(result.failedViews.count) 页失败，已跳过"
+            summary += L10n.string("reader.cache_summary.failed_suffix", result.failedViews.count)
         }
 
         cacheOperationState.cachedViews = cachedViews

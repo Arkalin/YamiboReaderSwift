@@ -17,7 +17,7 @@ struct MangaBottomChrome: View {
         VStack(spacing: 14) {
             HStack(spacing: 10) {
                 Button(action: onShowDirectory) {
-                    Label("目录", systemImage: "list.bullet")
+                    Label(L10n.string("manga.directory"), systemImage: "list.bullet")
                 }
                 .buttonStyle(.bordered)
                 .disabled(model.isTransitioningChapter)
@@ -25,7 +25,7 @@ struct MangaBottomChrome: View {
                 Spacer(minLength: 0)
 
                 Button(action: onShowSettings) {
-                    Label("设置", systemImage: "gearshape")
+                    Label(L10n.string("settings.title"), systemImage: "gearshape")
                 }
                 .buttonStyle(.bordered)
             }
@@ -36,7 +36,7 @@ struct MangaBottomChrome: View {
                     .foregroundStyle(.secondary)
 
                 HStack(spacing: 10) {
-                    ReaderChromeIconButton(systemName: "backward.end.fill", title: "上一章") {
+                    ReaderChromeIconButton(systemName: "backward.end.fill", title: L10n.string("reader.previous_chapter")) {
                         onJumpChapter(-1)
                     }
                     .disabled(!model.hasPreviousChapter || model.isTransitioningChapter)
@@ -67,7 +67,7 @@ struct MangaBottomChrome: View {
                             .accessibilityHidden(true)
                     }
 
-                    ReaderChromeIconButton(systemName: "forward.end.fill", title: "下一章") {
+                    ReaderChromeIconButton(systemName: "forward.end.fill", title: L10n.string("reader.next_chapter")) {
                         onJumpChapter(1)
                     }
                     .disabled(!model.hasNextChapter || model.isTransitioningChapter)

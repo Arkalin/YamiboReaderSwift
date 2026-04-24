@@ -14,7 +14,7 @@ public enum MangaChapterDisplayFormatter {
             return "SP"
         }
         if chapterNumber == 999 {
-            return "终"
+            return L10n.string("manga.chapter.final")
         }
         if chapterNumber < 1,
            rawTitle.range(of: zeroMarkerPattern, options: .regularExpression) == nil {

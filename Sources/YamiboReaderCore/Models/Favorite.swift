@@ -107,10 +107,10 @@ public enum FavoriteType: Int, Codable, CaseIterable, Sendable {
 
     public var title: String {
         switch self {
-        case .unknown: "未定"
-        case .novel: "小说"
-        case .manga: "漫画"
-        case .other: "其他"
+        case .unknown: L10n.string("favorite_type.unknown")
+        case .novel: L10n.string("favorite_type.novel")
+        case .manga: L10n.string("favorite_type.manga")
+        case .other: L10n.string("favorite_type.other")
         }
     }
 }

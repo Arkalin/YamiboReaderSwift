@@ -12,15 +12,15 @@ public enum AutoSignInResult: Equatable, Sendable {
     public var message: String {
         switch self {
         case .success:
-            "签到成功"
+            L10n.string("auto_sign_in.success")
         case .alreadySignedToday, .skippedToday:
-            "今日已打卡"
+            L10n.string("auto_sign_in.already_signed_today")
         case .notAuthenticated:
-            "未登录，请先在 App 中登录"
+            L10n.string("auto_sign_in.not_authenticated")
         case .parseFailed:
-            "签到页面解析失败，请稍后重试"
+            L10n.string("auto_sign_in.parse_failed")
         case .verificationFailed:
-            "签到未生效，请手动签到"
+            L10n.string("auto_sign_in.verification_failed")
         case let .networkFailed(message):
             message
         }
@@ -108,8 +108,8 @@ public struct AutoSignInService: Sendable {
         if let yamiboError = error as? YamiboError, yamiboError == .notAuthenticated {
             return .notAuthenticated
         }
-        let message = (error as? LocalizedError)?.errorDescription ?? "网络异常，请稍后重试"
-        return .networkFailed(message.isEmpty ? "网络异常，请稍后重试" : message)
+        let message = (error as? LocalizedError)?.errorDescription ?? L10n.string("auto_sign_in.network_failed")
+        return .networkFailed(message.isEmpty ? L10n.string("auto_sign_in.network_failed") : message)
     }
 
     private static func isAlreadySigned(in html: String) -> Bool {

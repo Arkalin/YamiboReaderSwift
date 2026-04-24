@@ -137,9 +137,9 @@ public final class MangaReaderModel: ObservableObject {
     }
 
     public func previewLabel(forLocalIndex localIndex: Int) -> String {
-        guard let currentPage else { return "第 1 / 1 页" }
+        guard let currentPage else { return L10n.string("manga.preview_page", 1, 1) }
         let clampedIndex = clampedLocalPageIndex(for: localIndex)
-        return "第 \(clampedIndex + 1) / \(max(1, currentPage.chapterTotalPages)) 页"
+        return L10n.string("manga.preview_page", clampedIndex + 1, max(1, currentPage.chapterTotalPages))
     }
 
     public var hasPreviousChapter: Bool {
@@ -170,25 +170,25 @@ public final class MangaReaderModel: ObservableObject {
         else {
             return nil
         }
-        return "最新: 第\(MangaChapterDisplayFormatter.displayNumber(for: latestChapter))话"
+        return L10n.string("manga.latest_chapter", MangaChapterDisplayFormatter.displayNumber(for: latestChapter))
     }
 
     public var directoryUpdateButtonTitle: String {
         if isUpdatingDirectory {
-            return "更新中"
+            return L10n.string("common.updating")
         }
         if directoryCooldownRemaining > 0 {
             return "\(directoryCooldownRemaining)s"
         }
         if showsForceSearchShortcut {
             return forceSearchShortcutRemaining > 0
-                ? "全局搜索 \(forceSearchShortcutRemaining)s"
-                : "全局搜索"
+                ? L10n.string("manga.global_search_countdown", forceSearchShortcutRemaining)
+                : L10n.string("manga.global_search")
         }
         if currentDirectory?.strategy != .tag {
-            return "全局搜索"
+            return L10n.string("manga.global_search")
         }
-        return "更新"
+        return L10n.string("reader.cache_action.update")
     }
 
     public var isDirectoryUpdateButtonEnabled: Bool {
@@ -355,7 +355,7 @@ public final class MangaReaderModel: ObservableObject {
               let targetIndex = currentDirectory.chapters.firstIndex(where: { $0.tid == chapter.tid }),
               let currentPage,
               let currentIndex = currentDirectory.chapters.firstIndex(where: { $0.tid == currentPage.tid }) else {
-            chapterTransitionState = .failed(message: "当前章节状态异常，请重试")
+            chapterTransitionState = .failed(message: L10n.string("manga.chapter_state_invalid"))
             return
         }
 
@@ -464,7 +464,7 @@ public final class MangaReaderModel: ObservableObject {
             return try await existingTask.value
         }
         guard let repository else {
-            throw YamiboError.underlying("漫画仓储未初始化")
+            throw YamiboError.underlying(L10n.string("manga.repository_uninitialized"))
         }
         let task = Task {
             try await repository.loadChapter(url: url, htmlOverride: htmlOverride)
@@ -852,7 +852,7 @@ public final class MangaReaderModel: ObservableObject {
         switch outcome {
         case let .success(payload):
             guard !payload.images.isEmpty else {
-                throw YamiboError.parsingFailed(context: "漫画图片")
+                throw YamiboError.parsingFailed(context: L10n.string("context.manga_images"))
             }
             let title = MangaTitleCleaner.cleanThreadTitle(
                 payload.title.isEmpty ? chapter.rawTitle : payload.title
@@ -867,15 +867,15 @@ public final class MangaReaderModel: ObservableObject {
         case let .fallback(reason, _):
             switch reason {
             case .retryableNetwork:
-                throw YamiboError.underlying("章节加载超时，请稍后重试")
+                throw YamiboError.underlying(L10n.string("manga.chapter_load_timeout"))
             case .timeout:
-                throw YamiboError.underlying("章节加载超时，请稍后重试")
+                throw YamiboError.underlying(L10n.string("manga.chapter_load_timeout"))
             case .notManga:
-                throw YamiboError.parsingFailed(context: "当前页面不是漫画章节")
+                throw YamiboError.parsingFailed(context: L10n.string("context.current_page_not_manga_chapter"))
             case .noImages:
-                throw YamiboError.parsingFailed(context: "漫画图片")
+                throw YamiboError.parsingFailed(context: L10n.string("context.manga_images"))
             case .webProcessTerminated:
-                throw YamiboError.underlying("章节探测失败，请切换网页模式重试")
+                throw YamiboError.underlying(L10n.string("manga.chapter_probe_failed"))
             }
         }
     }
@@ -957,7 +957,7 @@ public final class MangaReaderModel: ObservableObject {
             }
             group.addTask {
                 try await Task.sleep(nanoseconds: nanoseconds)
-                throw YamiboError.underlying("章节加载超时，请稍后重试")
+                throw YamiboError.underlying(L10n.string("manga.chapter_load_timeout"))
             }
 
             let result = try await group.next()!

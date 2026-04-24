@@ -244,8 +244,8 @@ public enum MangaReadingMode: String, Codable, Hashable, CaseIterable, Sendable 
 
     public var title: String {
         switch self {
-        case .paged: "横向分页"
-        case .vertical: "纵向滚动"
+        case .paged: L10n.string("reading_mode.paged")
+        case .vertical: L10n.string("reading_mode.vertical")
         }
     }
 }
@@ -256,8 +256,8 @@ public enum MangaDirectorySortOrder: String, Codable, Hashable, CaseIterable, Se
 
     public var title: String {
         switch self {
-        case .ascending: "正序"
-        case .descending: "倒序"
+        case .ascending: L10n.string("sort.ascending")
+        case .descending: L10n.string("sort.descending")
         }
     }
 }

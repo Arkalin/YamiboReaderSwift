@@ -17,7 +17,7 @@ public enum ReaderHTMLParser {
         let parsed = parseSegments(from: context)
         let segments = parsed.segments
         guard !segments.isEmpty else {
-            throw YamiboError.parsingFailed(context: "小说正文")
+            throw YamiboError.parsingFailed(context: L10n.string("context.novel_body"))
         }
 
         return ReaderPageDocument(

@@ -67,12 +67,12 @@ public actor MangaRepository {
 
         let pages = MangaHTMLParser.extractImageURLs(from: html, baseURL: url)
         guard !pages.isEmpty else {
-            throw YamiboError.parsingFailed(context: "漫画图片")
+            throw YamiboError.parsingFailed(context: L10n.string("context.manga_images"))
         }
 
         let title = MangaHTMLParser.extractThreadTitle(from: html)
             ?? ReaderHTMLParser.extractPageTitle(from: html)
-            ?? "漫画阅读"
+            ?? L10n.string("manga.reader.title")
         let tid = MangaTitleCleaner.extractTid(from: url.absoluteString) ?? UUID().uuidString
         return MangaChapterDocument(
             tid: tid,

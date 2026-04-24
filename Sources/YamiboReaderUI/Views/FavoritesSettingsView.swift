@@ -26,10 +26,10 @@ private enum FavoriteAppearanceCategory: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .collection: "合集"
-        case .novel: "小说"
-        case .manga: "漫画"
-        case .other: "其他"
+        case .collection: L10n.string("favorite_category.collection")
+        case .novel: L10n.string("favorite_category.novel")
+        case .manga: L10n.string("favorite_category.manga")
+        case .other: L10n.string("favorite_category.other")
         }
     }
 }
@@ -241,24 +241,24 @@ public struct FavoritesSettingsView: View {
     public var body: some View {
         NavigationStack {
             Form {
-                Section("通用") {
+                Section(L10n.string("settings.section.general")) {
                     homePageSelector
 
                     Button {
                         openAutoSignInAutomationCreator()
                     } label: {
-                        settingsRow(title: "设置自动签到")
+                        settingsRow(title: L10n.string("settings.auto_sign_in"))
                     }
                     .disabled(viewModel.isBusy)
                 }
 
-                Section("外观") {
+                Section(L10n.string("settings.section.appearance")) {
                     ForEach(FavoriteAppearanceCategory.allCases) { category in
                         colorSelectorRow(for: category)
                     }
 
                     Toggle(
-                        "显示网页标题和网址",
+                        L10n.string("settings.show_web_title_url"),
                         isOn: Binding(
                             get: { viewModel.showsNavigationBar },
                             set: { viewModel.updateShowsNavigationBar($0) }
@@ -267,11 +267,11 @@ public struct FavoritesSettingsView: View {
                     .disabled(viewModel.isBusy)
                 }
 
-                Section("存储管理") {
+                Section(L10n.string("settings.section.storage")) {
                     Button {
                         showingDirectoryManager = true
                     } label: {
-                        settingsRow(title: "漫画目录管理")
+                        settingsRow(title: L10n.string("settings.manga_directory_management"))
                     }
                     .disabled(viewModel.isBusy)
 
@@ -279,7 +279,7 @@ public struct FavoritesSettingsView: View {
                         pendingConfirmation = .clearNovelCache
                     } label: {
                         settingsRow(
-                            title: "清除小说缓存",
+                            title: L10n.string("settings.clear_novel_cache"),
                             value: viewModel.novelCacheLabel
                         )
                     }
@@ -289,7 +289,7 @@ public struct FavoritesSettingsView: View {
                         pendingConfirmation = .clearMangaCache
                     } label: {
                         settingsRow(
-                            title: "清除漫画缓存",
+                            title: L10n.string("settings.clear_manga_cache"),
                             value: viewModel.mangaCacheLabel
                         )
                     }
@@ -298,15 +298,15 @@ public struct FavoritesSettingsView: View {
                     Button(role: .destructive) {
                         pendingConfirmation = .resetApplication
                     } label: {
-                        Text("初始化应用")
+                        Text(L10n.string("settings.reset_application"))
                     }
                     .disabled(viewModel.isBusy)
                 }
             }
-            .navigationTitle("设置")
+            .navigationTitle(L10n.string("settings.title"))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("关闭") {
+                    Button(L10n.string("common.close")) {
                         dismiss()
                     }
                     .disabled(viewModel.activeAction == .resettingApplication)
@@ -314,7 +314,7 @@ public struct FavoritesSettingsView: View {
             }
             .overlay {
                 if viewModel.activeAction == .loading || viewModel.activeAction == .resettingApplication {
-                    ProgressView(viewModel.activeAction == .resettingApplication ? "初始化应用中…" : "加载中…")
+                    ProgressView(viewModel.activeAction == .resettingApplication ? L10n.string("settings.resetting_application") : L10n.string("common.loading"))
                         .padding()
                         .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
                 }
@@ -325,8 +325,8 @@ public struct FavoritesSettingsView: View {
             .sheet(isPresented: $showingDirectoryManager) {
                 MangaDirectoryManagementView(store: appContext.mangaDirectoryStore)
             }
-            .alert("操作失败", isPresented: .constant(viewModel.errorMessage != nil), actions: {
-                Button("确定") {
+            .alert(L10n.string("common.operation_failed"), isPresented: .constant(viewModel.errorMessage != nil), actions: {
+                Button(L10n.string("common.ok")) {
                     viewModel.errorMessage = nil
                 }
             }, message: {
@@ -349,7 +349,7 @@ public struct FavoritesSettingsView: View {
                         await handleConfirmation(confirmation)
                     }
                 }
-                Button("取消", role: .cancel) {}
+                Button(L10n.string("common.cancel"), role: .cancel) {}
             } message: { confirmation in
                 Text(confirmationMessage(for: confirmation))
             }
@@ -358,7 +358,7 @@ public struct FavoritesSettingsView: View {
 
     private var homePageSelector: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("App 主页")
+            Text(L10n.string("settings.home_page"))
                 .foregroundStyle(.primary)
 
             HStack(spacing: 10) {
@@ -522,11 +522,11 @@ public struct FavoritesSettingsView: View {
     private var confirmationTitle: String {
         switch pendingConfirmation {
         case .clearNovelCache:
-            "确认清除小说缓存"
+            L10n.string("settings.confirm_clear_novel_cache")
         case .clearMangaCache:
-            "确认清除漫画缓存"
+            L10n.string("settings.confirm_clear_manga_cache")
         case .resetApplication:
-            "确认初始化应用"
+            L10n.string("settings.confirm_reset_application")
         case nil:
             ""
         }
@@ -534,33 +534,33 @@ public struct FavoritesSettingsView: View {
 
     private func openAutoSignInAutomationCreator() {
         guard let url = URL(string: "shortcuts://create-automation") else {
-            viewModel.errorMessage = "无法打开快捷指令，请手动打开“快捷指令 > 自动化”创建百合会签到自动化。"
+            viewModel.errorMessage = L10n.string("settings.shortcuts_open_failed")
             return
         }
 
         openURL(url) { accepted in
             guard !accepted else { return }
-            viewModel.errorMessage = "无法打开快捷指令，请手动打开“快捷指令 > 自动化”创建百合会签到自动化。"
+            viewModel.errorMessage = L10n.string("settings.shortcuts_open_failed")
         }
     }
 
     private func confirmationButtonTitle(for confirmation: FavoritesSettingsConfirmation) -> String {
         switch confirmation {
         case .clearNovelCache, .clearMangaCache:
-            "清除"
+            L10n.string("common.clear")
         case .resetApplication:
-            "初始化"
+            L10n.string("settings.reset")
         }
     }
 
     private func confirmationMessage(for confirmation: FavoritesSettingsConfirmation) -> String {
         switch confirmation {
         case .clearNovelCache:
-            "将清除所有本地小说阅读缓存。"
+            L10n.string("settings.clear_novel_cache_message")
         case .clearMangaCache:
-            "将清除所有本地漫画图片缓存。"
+            L10n.string("settings.clear_manga_cache_message")
         case .resetApplication:
-            "这将清空登录态、收藏本地状态、全部缓存、漫画目录和应用设置，并移除网页持久化数据。"
+            L10n.string("settings.reset_application_message")
         }
     }
 
