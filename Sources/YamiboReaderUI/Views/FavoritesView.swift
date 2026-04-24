@@ -675,6 +675,7 @@ private struct FavoriteSearchModifier: ViewModifier {
 
 private struct FavoriteSettingsMenuButton: View {
     @Binding var showingSettingsSheet: Bool
+    @Binding var showingAboutSheet: Bool
 
     var body: some View {
         Menu {
@@ -684,7 +685,9 @@ private struct FavoriteSettingsMenuButton: View {
                 Label("设置", systemImage: "gearshape")
             }
 
-            Button {} label: {
+            Button {
+                showingAboutSheet = true
+            } label: {
                 Label("关于", systemImage: "info.circle")
             }
         } label: {
@@ -748,6 +751,7 @@ private struct FavoriteToolbarMenuButton: View {
 
 private struct FavoriteToolbarModifier: ViewModifier {
     @Binding var showingSettingsSheet: Bool
+    @Binding var showingAboutSheet: Bool
     @Binding var filterRawValue: String
     @Binding var sortRawValue: String
     @Binding var showsHidden: Bool
@@ -761,11 +765,17 @@ private struct FavoriteToolbarModifier: ViewModifier {
             if showsSettingsMenu {
                 #if os(iOS)
                 ToolbarItem(placement: .topBarLeading) {
-                    FavoriteSettingsMenuButton(showingSettingsSheet: $showingSettingsSheet)
+                    FavoriteSettingsMenuButton(
+                        showingSettingsSheet: $showingSettingsSheet,
+                        showingAboutSheet: $showingAboutSheet
+                    )
                 }
                 #else
                 ToolbarItem(placement: .automatic) {
-                    FavoriteSettingsMenuButton(showingSettingsSheet: $showingSettingsSheet)
+                    FavoriteSettingsMenuButton(
+                        showingSettingsSheet: $showingSettingsSheet,
+                        showingAboutSheet: $showingAboutSheet
+                    )
                 }
                 #endif
             }
@@ -933,6 +943,7 @@ public struct FavoritesView: View {
     @State private var searchText = ""
     @State private var selectedFavorite: Favorite?
     @State private var showingSettingsSheet = false
+    @State private var showingAboutSheet = false
     @State private var displayNameDraft: FavoriteDisplayNameDraft?
     @State private var collectionNameDraft: FavoriteCollectionNameDraft?
     @State private var pendingDeleteFavorite: Favorite?
@@ -998,6 +1009,7 @@ public struct FavoritesView: View {
             .modifier(
                 FavoriteToolbarModifier(
                     showingSettingsSheet: $showingSettingsSheet,
+                    showingAboutSheet: $showingAboutSheet,
                     filterRawValue: $filterRawValue,
                     sortRawValue: $sortRawValue,
                     showsHidden: $showsHidden,
@@ -1159,6 +1171,9 @@ public struct FavoritesView: View {
                     searchText = ""
                     await appModel.bootstrap()
                 }
+            }
+            .sheet(isPresented: $showingAboutSheet) {
+                AboutView()
             }
             .modifier(
                 FavoriteCollectionDialogsModifier(
