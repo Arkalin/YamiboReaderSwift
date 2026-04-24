@@ -6,11 +6,11 @@ import YamiboReaderCore
 import YamiboReaderUI
 
 @main
-struct YamiboReaderIOSApp: App {
+struct YamiboReaderApp: App {
     @State private var appModel: YamiboAppModel
 
     init() {
-        let initialTab = YamiboReaderIOSApp.resolveInitialTab()
+        let initialTab = YamiboReaderApp.resolveInitialTab()
         _appModel = State(initialValue: YamiboAppModel(appContext: YamiboAppContext(), initialTab: initialTab))
         #if canImport(AppIntents)
         YamiboAppShortcutsProvider.updateAppShortcutParameters()

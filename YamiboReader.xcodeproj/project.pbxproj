@@ -9,14 +9,14 @@
 /* Begin PBXBuildFile section */
 		3DA22816882AD532C8D1254C /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 21C44A49F561B252D12E679E /* Assets.xcassets */; };
 		88E3CF4DFB4E5A070A1D74E1 /* YamiboReaderUI in Frameworks */ = {isa = PBXBuildFile; productRef = A22732C54EFA3206F0D5DA4F /* YamiboReaderUI */; };
-		8DB9A4DDB439844932621256 /* YamiboReaderIOSApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 317B67A274BF37250EE14CD6 /* YamiboReaderIOSApp.swift */; };
+		8DB9A4DDB439844932621256 /* YamiboReaderApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 317B67A274BF37250EE14CD6 /* YamiboReaderApp.swift */; };
 		E40F0270FCC083EAA9080652 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = FDA66CE60A7503624B088913 /* Foundation.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		21C44A49F561B252D12E679E /* Assets.xcassets */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = folder.assetcatalog; name = Assets.xcassets; path = YamiboReaderIOS/Assets.xcassets; sourceTree = "<group>"; };
-		317B67A274BF37250EE14CD6 /* YamiboReaderIOSApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = YamiboReaderIOSApp.swift; path = YamiboReaderIOS/YamiboReaderIOSApp.swift; sourceTree = "<group>"; };
-		8E2ADB21157A5B9E80EB6214 /* YamiboReaderIOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = YamiboReaderIOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		21C44A49F561B252D12E679E /* Assets.xcassets */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = folder.assetcatalog; name = Assets.xcassets; path = YamiboReader/Assets.xcassets; sourceTree = "<group>"; };
+		317B67A274BF37250EE14CD6 /* YamiboReaderApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = YamiboReaderApp.swift; path = YamiboReader/YamiboReaderApp.swift; sourceTree = "<group>"; };
+		8E2ADB21157A5B9E80EB6214 /* YamiboReader.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = YamiboReader.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		FDA66CE60A7503624B088913 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
 /* End PBXFileReference section */
 
@@ -38,25 +38,25 @@
 			children = (
 				31D9190CDAB8C43CCF55087D /* Products */,
 				F060C3354D06F3D3A1C25841 /* Frameworks */,
-				443671A87482B50E67142F19 /* YamiboReaderIOS */,
+				443671A87482B50E67142F19 /* YamiboReader */,
 			);
 			sourceTree = "<group>";
 		};
 		31D9190CDAB8C43CCF55087D /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				8E2ADB21157A5B9E80EB6214 /* YamiboReaderIOS.app */,
+				8E2ADB21157A5B9E80EB6214 /* YamiboReader.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
 		};
-		443671A87482B50E67142F19 /* YamiboReaderIOS */ = {
+		443671A87482B50E67142F19 /* YamiboReader */ = {
 			isa = PBXGroup;
 			children = (
-				317B67A274BF37250EE14CD6 /* YamiboReaderIOSApp.swift */,
+				317B67A274BF37250EE14CD6 /* YamiboReaderApp.swift */,
 				21C44A49F561B252D12E679E /* Assets.xcassets */,
 			);
-			name = YamiboReaderIOS;
+			name = YamiboReader;
 			sourceTree = "<group>";
 		};
 		EC0D45CC479161170AC8F34C /* iOS */ = {
@@ -78,9 +78,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		244F46FBACBE47D1E8CB35A0 /* YamiboReaderIOS */ = {
+		244F46FBACBE47D1E8CB35A0 /* YamiboReader */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 9F5903EDED0757D8A6B87101 /* Build configuration list for PBXNativeTarget "YamiboReaderIOS" */;
+			buildConfigurationList = 9F5903EDED0757D8A6B87101 /* Build configuration list for PBXNativeTarget "YamiboReader" */;
 			buildPhases = (
 				94DA362AFE788C6325A95547 /* Sources */,
 				D5BBCF594FE7996520922D5A /* Frameworks */,
@@ -91,12 +91,12 @@
 			dependencies = (
 				3B538157EFE3A6DB183DB07F /* PBXTargetDependency */,
 			);
-			name = YamiboReaderIOS;
+			name = YamiboReader;
 			packageProductDependencies = (
 				A22732C54EFA3206F0D5DA4F /* YamiboReaderUI */,
 			);
 			productName = YamiboReaderIOS;
-			productReference = 8E2ADB21157A5B9E80EB6214 /* YamiboReaderIOS.app */;
+			productReference = 8E2ADB21157A5B9E80EB6214 /* YamiboReader.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -114,7 +114,7 @@
 					};
 				};
 			};
-			buildConfigurationList = 2300CCCC6AAB81463AFBB0E6 /* Build configuration list for PBXProject "YamiboReaderIOS" */;
+			buildConfigurationList = 2300CCCC6AAB81463AFBB0E6 /* Build configuration list for PBXProject "YamiboReader" */;
 			compatibilityVersion = "Xcode 16.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
@@ -130,7 +130,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				244F46FBACBE47D1E8CB35A0 /* YamiboReaderIOS */,
+				244F46FBACBE47D1E8CB35A0 /* YamiboReader */,
 			);
 		};
 /* End PBXProject section */
@@ -151,7 +151,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				8DB9A4DDB439844932621256 /* YamiboReaderIOSApp.swift in Sources */,
+				8DB9A4DDB439844932621256 /* YamiboReaderApp.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -175,7 +175,8 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 67485D7YXU;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = YamiboReaderIOS;
+				INFOPLIST_KEY_CFBundleDisplayName = "Yamibo Reader";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.books";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UIStatusBarStyle = UIStatusBarStyleDefault;
@@ -186,8 +187,9 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.arkalin.YamiboReaderIOS;
+				MARKETING_VERSION = 0.0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.arkalin.YamiboReader;
+				PRODUCT_NAME = YamiboReader;
 				SDKROOT = auto;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
@@ -322,7 +324,8 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 67485D7YXU;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = YamiboReaderIOS;
+				INFOPLIST_KEY_CFBundleDisplayName = "Yamibo Reader";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.books";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UIStatusBarStyle = UIStatusBarStyleDefault;
@@ -333,8 +336,9 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.arkalin.YamiboReaderIOS;
+				MARKETING_VERSION = 0.0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.arkalin.YamiboReader;
+				PRODUCT_NAME = YamiboReader;
 				SDKROOT = auto;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
@@ -346,7 +350,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		2300CCCC6AAB81463AFBB0E6 /* Build configuration list for PBXProject "YamiboReaderIOS" */ = {
+		2300CCCC6AAB81463AFBB0E6 /* Build configuration list for PBXProject "YamiboReader" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				E4AB3813155E9CFB917102EB /* Debug */,
@@ -355,7 +359,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		9F5903EDED0757D8A6B87101 /* Build configuration list for PBXNativeTarget "YamiboReaderIOS" */ = {
+		9F5903EDED0757D8A6B87101 /* Build configuration list for PBXNativeTarget "YamiboReader" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				1EBF54778128785B62009220 /* Release */,

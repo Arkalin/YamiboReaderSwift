@@ -58,7 +58,7 @@ swift test
 
 ### iOS App
 
-iOS App 入口位于 [YamiboReaderIOS/YamiboReaderIOSApp.swift](/Users/arkalin/Documents/MyDocuments/YamiboReader/YamiboReaderSwift/YamiboReaderIOS/YamiboReaderIOSApp.swift)，对应的 Xcode 工程位于 [YamiboReaderIOS.xcodeproj](/Users/arkalin/Documents/MyDocuments/YamiboReader/YamiboReaderSwift/YamiboReaderIOS.xcodeproj)。
+iOS App 入口位于 [YamiboReader/YamiboReaderApp.swift](/Users/arkalin/Documents/MyDocuments/YamiboReader/YamiboReaderSwift/YamiboReader/YamiboReaderApp.swift)，对应的 Xcode 工程位于 [YamiboReader.xcodeproj](/Users/arkalin/Documents/MyDocuments/YamiboReader/YamiboReaderSwift/YamiboReader.xcodeproj)。
 
 如果需要在模拟器或真机中运行，直接使用该工程打开并构建即可。
 
@@ -68,7 +68,7 @@ iOS App 入口位于 [YamiboReaderIOS/YamiboReaderIOSApp.swift](/Users/arkalin/D
   负责数据模型、网络访问、HTML 解析、阅读 / 漫画支持逻辑、缓存与本地存储。
 - [Sources/YamiboReaderUI](/Users/arkalin/Documents/MyDocuments/YamiboReader/YamiboReaderSwift/Sources/YamiboReaderUI)
   负责 SwiftUI 界面、论坛容器、收藏页、小说阅读器与漫画阅读器的交互层。
-- [YamiboReaderIOS](/Users/arkalin/Documents/MyDocuments/YamiboReader/YamiboReaderSwift/YamiboReaderIOS)
+- [YamiboReader](/Users/arkalin/Documents/MyDocuments/YamiboReader/YamiboReaderSwift/YamiboReader)
   提供独立的 iOS App 入口、资源和系统集成能力。
 - [Tests](/Users/arkalin/Documents/MyDocuments/YamiboReader/YamiboReaderSwift/Tests)
   包含核心解析、阅读流程、漫画流程、路由与界面状态相关测试。
