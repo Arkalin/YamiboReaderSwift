@@ -227,6 +227,7 @@ public struct FavoritesSettingsView: View {
     private let onApplicationReset: @MainActor () async -> Void
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
 
     public init(
         appContext: YamiboAppContext,
@@ -242,6 +243,13 @@ public struct FavoritesSettingsView: View {
             Form {
                 Section("通用") {
                     homePageSelector
+
+                    Button {
+                        openAutoSignInAutomationCreator()
+                    } label: {
+                        settingsRow(title: "设置自动签到")
+                    }
+                    .disabled(viewModel.isBusy)
                 }
 
                 Section("外观") {
@@ -521,6 +529,18 @@ public struct FavoritesSettingsView: View {
             "确认初始化应用"
         case nil:
             ""
+        }
+    }
+
+    private func openAutoSignInAutomationCreator() {
+        guard let url = URL(string: "shortcuts://create-automation") else {
+            viewModel.errorMessage = "无法打开快捷指令，请手动打开“快捷指令 > 自动化”创建百合会签到自动化。"
+            return
+        }
+
+        openURL(url) { accepted in
+            guard !accepted else { return }
+            viewModel.errorMessage = "无法打开快捷指令，请手动打开“快捷指令 > 自动化”创建百合会签到自动化。"
         }
     }
 
