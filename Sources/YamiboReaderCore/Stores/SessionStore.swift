@@ -9,6 +9,11 @@ public protocol SessionStoring: Sendable {
 }
 
 public actor SessionStore: SessionStoring {
+    public static let didChangeNotification = Notification.Name("yamibo.sessionStore.didChange")
+    public static let changeIDUserInfoKey = "changeID"
+
+    public nonisolated let changeID = UUID().uuidString
+
     private let defaults: UserDefaults
     private let key: String
     private let encoder = JSONEncoder()
@@ -28,6 +33,7 @@ public actor SessionStore: SessionStoring {
         do {
             let data = try encoder.encode(session)
             defaults.set(data, forKey: key)
+            postChangeNotification()
         } catch {
             throw YamiboError.persistenceFailed(error.localizedDescription)
         }
@@ -52,5 +58,13 @@ public actor SessionStore: SessionStoring {
 
     public func reset() async throws {
         try await save(SessionState())
+    }
+
+    private nonisolated func postChangeNotification() {
+        NotificationCenter.default.post(
+            name: Self.didChangeNotification,
+            object: nil,
+            userInfo: [Self.changeIDUserInfoKey: changeID]
+        )
     }
 }
