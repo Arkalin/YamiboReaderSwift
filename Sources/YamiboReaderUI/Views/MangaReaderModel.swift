@@ -786,7 +786,8 @@ public final class MangaReaderModel: ObservableObject {
                 for: context.originalThreadURL,
                 chapterURL: snapshot.chapterURL,
                 chapterTitle: snapshot.chapterTitle,
-                pageIndex: snapshot.pageIndex
+                pageIndex: snapshot.pageIndex,
+                createIfMissing: false
             )
         } catch {
             await persistSettings()

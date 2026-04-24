@@ -4,7 +4,7 @@ import XCTest
 @testable import YamiboReaderUI
 
 final class MangaReaderModelTests: XCTestCase {
-    func testPrepareLoadsInitialChapterAndSavesProgress() async throws {
+    func testForumMangaProgressDoesNotCreateFavorite() async throws {
         let model = try await makeMangaModel(
             chapterHTMLByTID: [
                 "700": makeMangaHTML(
@@ -25,6 +25,32 @@ final class MangaReaderModelTests: XCTestCase {
         await model.saveProgress()
 
         let favorite = await modelTestFavoriteStore?.favorite(for: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=700&mobile=2")!)
+        XCTAssertNil(favorite)
+    }
+
+    func testForumMangaProgressUpdatesExistingFavorite() async throws {
+        let originalURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=700&mobile=2")!
+        let model = try await makeMangaModel(
+            chapterHTMLByTID: [
+                "700": makeMangaHTML(
+                    tid: "700",
+                    title: "第1话",
+                    links: [("701", "第2话")],
+                    imageCount: 2
+                )
+            ],
+            initialFavorites: [
+                Favorite(title: "测试漫画", url: originalURL, type: .manga)
+            ]
+        )
+
+        await MainActor.run {
+            XCTAssertEqual(model.pages.count, 2)
+            model.updateCurrentPage(1)
+        }
+        await model.saveProgress()
+
+        let favorite = await modelTestFavoriteStore?.favorite(for: originalURL)
         XCTAssertEqual(favorite?.type, .manga)
         XCTAssertEqual(favorite?.lastPage, 1)
         XCTAssertEqual(favorite?.lastChapter, "第1话")
@@ -1071,6 +1097,7 @@ final class MangaReaderModelTests: XCTestCase {
     }
 
     func testPageChangesDebounceAndPersistLatestMangaProgress() async throws {
+        let originalURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=700&mobile=2")!
         let model = try await makeMangaModel(
             chapterHTMLByTID: [
                 "700": makeMangaHTML(
@@ -1079,6 +1106,9 @@ final class MangaReaderModelTests: XCTestCase {
                     links: [],
                     imageCount: 4
                 )
+            ],
+            initialFavorites: [
+                Favorite(title: "测试漫画", url: originalURL, type: .manga)
             ]
         )
 
@@ -1088,11 +1118,11 @@ final class MangaReaderModelTests: XCTestCase {
         }
 
         try await waitFor {
-            let favorite = await modelTestFavoriteStore?.favorite(for: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=700&mobile=2")!)
+            let favorite = await modelTestFavoriteStore?.favorite(for: originalURL)
             return favorite?.lastPage == 3
         }
 
-        let favorite = await modelTestFavoriteStore?.favorite(for: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=700&mobile=2")!)
+        let favorite = await modelTestFavoriteStore?.favorite(for: originalURL)
         XCTAssertEqual(favorite?.lastPage, 3)
         XCTAssertEqual(favorite?.lastChapter, "第1话")
     }
@@ -1607,6 +1637,7 @@ private nonisolated(unsafe) var modelRequestLog: RequestLog?
 private func makeMangaModel(
     chapterHTMLByTID: [String: String],
     appSettings: AppSettings = AppSettings(),
+    initialFavorites: [Favorite] = [],
     requestLog: RequestLog? = nil,
     requestHandler: ((URLRequest) -> (Data, HTTPURLResponse)?)? = nil,
     chapterProbe: (@MainActor (MangaLaunchContext) async -> MangaProbeOutcome)? = nil,
@@ -1637,6 +1668,7 @@ private func makeMangaModel(
     let favoriteStore = FavoriteStore(key: "\(keyPrefix).favorites")
     let settingsStore = SettingsStore(key: "\(keyPrefix).settings")
     try await settingsStore.save(appSettings)
+    try await favoriteStore.saveFavorites(initialFavorites)
     modelTestFavoriteStore = favoriteStore
     let appContext = YamiboAppContext(
         sessionStore: SessionStore(key: "\(keyPrefix).session"),

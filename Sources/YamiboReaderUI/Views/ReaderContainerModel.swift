@@ -1215,7 +1215,11 @@ public final class ReaderContainerModel: ObservableObject {
             resumePoint: snapshot.resumePoint
         )
         do {
-            _ = try await appContext.favoriteStore.updateReadingProgress(for: context.threadURL, progress: progress)
+            _ = try await appContext.favoriteStore.updateReadingProgress(
+                for: context.threadURL,
+                progress: progress,
+                createIfMissing: false
+            )
         } catch {
             return
         }

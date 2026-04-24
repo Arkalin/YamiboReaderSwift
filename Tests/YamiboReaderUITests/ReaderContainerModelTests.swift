@@ -375,7 +375,7 @@ final class ReaderContainerModelTests: XCTestCase {
         }
     }
 
-    func testPageChangesDebounceAndPersistLatestNovelProgress() async throws {
+    func testForumNovelProgressDoesNotCreateFavorite() async throws {
         let keyPrefix = UUID().uuidString
         let settingsStore = SettingsStore(key: "\(keyPrefix).settings")
         let favoriteStore = FavoriteStore(key: "\(keyPrefix).favorites")
@@ -409,11 +409,49 @@ final class ReaderContainerModelTests: XCTestCase {
             model.updateCurrentPage(1)
             model.updateCurrentPage(2)
         }
+        await model.saveProgress()
 
-        try await waitFor {
-            let favorite = await favoriteStore.favorite(for: document.threadURL)
-            return favorite?.lastPage == 2
+        let favorites = await favoriteStore.loadFavorites()
+        XCTAssertTrue(favorites.isEmpty)
+    }
+
+    func testForumNovelProgressUpdatesExistingFavorite() async throws {
+        let keyPrefix = UUID().uuidString
+        let settingsStore = SettingsStore(key: "\(keyPrefix).settings")
+        let favoriteStore = FavoriteStore(key: "\(keyPrefix).favorites")
+        let cacheStore = ReaderCacheStore(
+            baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        )
+        let document = makeDocument(view: 1, maxView: 1, chapterTitles: ["第一章", "第二章", "第三章"])
+        try await settingsStore.save(AppSettings(reader: ReaderAppearanceSettings(readingMode: .paged)))
+        try await cacheStore.save(document)
+        try await favoriteStore.saveFavorites([
+            Favorite(title: "测试线程", url: document.threadURL, type: .novel)
+        ])
+
+        let appContext = YamiboAppContext(
+            sessionStore: SessionStore(key: "\(keyPrefix).session"),
+            settingsStore: settingsStore,
+            favoriteStore: favoriteStore,
+            readerCacheStore: cacheStore
+        )
+        let model = await MainActor.run {
+            ReaderContainerModel(
+                context: ReaderLaunchContext(
+                    threadURL: document.threadURL,
+                    threadTitle: "测试线程",
+                    source: .forum
+                ),
+                appContext: appContext
+            )
         }
+
+        await model.prepare(layout: ReaderContainerLayout(width: 320, height: 568))
+        await MainActor.run {
+            model.updateCurrentPage(1)
+            model.updateCurrentPage(2)
+        }
+        await model.saveProgress()
 
         let favorite = await favoriteStore.favorite(for: document.threadURL)
         XCTAssertEqual(favorite?.lastView, 1)
@@ -439,6 +477,9 @@ final class ReaderContainerModelTests: XCTestCase {
 
         try await settingsStore.save(AppSettings(reader: ReaderAppearanceSettings(readingMode: .vertical)))
         try await cacheStore.save(document)
+        try await favoriteStore.saveFavorites([
+            Favorite(title: "测试线程", url: document.threadURL, type: .novel)
+        ])
 
         let appContext = YamiboAppContext(
             sessionStore: SessionStore(key: "\(keyPrefix).session"),
@@ -580,6 +621,9 @@ final class ReaderContainerModelTests: XCTestCase {
 
         try await settingsStore.save(AppSettings(reader: ReaderAppearanceSettings(readingMode: .vertical)))
         try await cacheStore.save(document)
+        try await favoriteStore.saveFavorites([
+            Favorite(title: "测试线程", url: threadURL, type: .novel)
+        ])
 
         let appContext = YamiboAppContext(
             sessionStore: SessionStore(key: "\(keyPrefix).session"),
