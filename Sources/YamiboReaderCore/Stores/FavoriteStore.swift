@@ -450,6 +450,13 @@ public actor FavoriteStore: FavoriteStoring {
     }
 
     public func updateReadingProgress(for url: URL, progress: ReaderProgress) async throws -> Favorite {
+        guard let favorite = try await updateReadingProgress(for: url, progress: progress, createIfMissing: true) else {
+            throw YamiboError.persistenceFailed("未能保存阅读进度")
+        }
+        return favorite
+    }
+
+    public func updateReadingProgress(for url: URL, progress: ReaderProgress, createIfMissing: Bool) async throws -> Favorite? {
         let snapshot = await loadLibrarySnapshot()
         var favorites = snapshot.favorites
 
@@ -464,6 +471,8 @@ public actor FavoriteStore: FavoriteStoring {
             }
             return try persistLibrary(favorites: favorites, collections: snapshot.collections).favorites[index]
         }
+
+        guard createIfMissing else { return nil }
 
         var favorite = Favorite(
             title: url.absoluteString,
@@ -482,6 +491,19 @@ public actor FavoriteStore: FavoriteStoring {
     }
 
     public func updateMangaProgress(for url: URL, chapterURL: URL, chapterTitle: String, pageIndex: Int) async throws -> Favorite {
+        guard let favorite = try await updateMangaProgress(
+            for: url,
+            chapterURL: chapterURL,
+            chapterTitle: chapterTitle,
+            pageIndex: pageIndex,
+            createIfMissing: true
+        ) else {
+            throw YamiboError.persistenceFailed("未能保存漫画进度")
+        }
+        return favorite
+    }
+
+    public func updateMangaProgress(for url: URL, chapterURL: URL, chapterTitle: String, pageIndex: Int, createIfMissing: Bool) async throws -> Favorite? {
         let snapshot = await loadLibrarySnapshot()
         var favorites = snapshot.favorites
 
@@ -493,6 +515,8 @@ public actor FavoriteStore: FavoriteStoring {
             favorites[index].type = .manga
             return try persistLibrary(favorites: favorites, collections: snapshot.collections).favorites[index]
         }
+
+        guard createIfMissing else { return nil }
 
         var favorite = Favorite(
             title: chapterTitle,
