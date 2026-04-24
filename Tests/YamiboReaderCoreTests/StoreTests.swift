@@ -54,6 +54,7 @@ import Testing
             readingMode: .paged,
             brightness: 0.82,
             zoomEnabled: false,
+            showsTwoPagesInLandscapeOnPad: true,
             directorySortOrder: .descending
         ),
         webBrowser: WebBrowserSettings(showsNavigationBar: false),
@@ -158,6 +159,7 @@ import Testing
     let decoded = try JSONDecoder().decode(MangaReaderSettings.self, from: Data(legacy.utf8))
 
     #expect(decoded.readingMode == .paged)
+    #expect(decoded.showsTwoPagesInLandscapeOnPad == false)
     #expect(decoded.directorySortOrder == .ascending)
 }
 

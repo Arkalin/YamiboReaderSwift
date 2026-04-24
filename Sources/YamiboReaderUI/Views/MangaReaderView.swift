@@ -28,6 +28,10 @@ public struct MangaReaderView: View {
         self.appModel = appModel
     }
 
+    private var isPadDevice: Bool {
+        UIDevice.current.userInterfaceIdiom == .pad
+    }
+
     public var body: some View {
         GeometryReader { proxy in
             let topInset = max(proxy.safeAreaInsets.top, windowSafeAreaInsets.top)
@@ -59,6 +63,12 @@ public struct MangaReaderView: View {
             .task {
                 await model.prepare()
             }
+            .onAppear {
+                model.updatePagedPresentationEnvironment(isPad: isPadDevice, viewportSize: proxy.size)
+            }
+            .onChange(of: proxy.size) { _, newSize in
+                model.updatePagedPresentationEnvironment(isPad: isPadDevice, viewportSize: newSize)
+            }
             .onDisappear {
                 previewHideTask?.cancel()
                 Task { await model.saveProgress() }
@@ -75,7 +85,7 @@ public struct MangaReaderView: View {
                 }
             }
             .sheet(isPresented: $showingSettings) {
-                MangaSettingsSheet(model: model)
+                MangaSettingsSheet(model: model, showsPadPagedOptions: isPadDevice)
                     .presentationDetents([.medium])
             }
             .sheet(isPresented: $showingDirectorySheet) {
@@ -133,21 +143,19 @@ public struct MangaReaderView: View {
         }
     }
 
+    @ViewBuilder
     private var pagedContent: some View {
+        if model.isTwoPageSpreadActive {
+            twoPagePagedContent
+        } else {
+            singlePagePagedContent
+        }
+    }
+
+    private var singlePagePagedContent: some View {
         TabView(selection: $selectedPageID) {
             ForEach(model.pages) { page in
-                MangaPageContent(
-                    page: page,
-                    refererURL: page.chapterURL,
-                    imageRepository: appModel.appContext.mangaImageRepository,
-                    zoomEnabled: model.settings.zoomEnabled,
-                    activeZoomPageID: $activeZoomPageID,
-                    verticalZoomOverlay: $verticalZoomOverlay,
-                    usesOverlayPresentation: false,
-                    readerCoordinateSpaceName: nil,
-                    showsChapterTitle: false,
-                    onToggleChrome: { showingChrome.toggle() }
-                )
+                pagedPageContent(page: page)
                 .tag(Optional(page.id))
                 .padding(.vertical, 12)
             }
@@ -177,6 +185,81 @@ public struct MangaReaderView: View {
             verticalZoomOverlay = nil
             applyViewportRequest(newValue)
         }
+    }
+
+    private var twoPagePagedContent: some View {
+        TabView(selection: pagedSelection) {
+            ForEach(model.pagedSpreads) { spread in
+                HStack(spacing: 0) {
+                    pagedSpreadColumn(pageIndex: spread.leftPageIndex)
+                    pagedSpreadColumn(pageIndex: spread.rightPageIndex)
+                }
+                .tag(spread.index)
+                .padding(.vertical, 12)
+            }
+        }
+        .allowsHitTesting(!model.isTransitioningChapter)
+        .id(pagerRevision)
+        .tabViewStyle(.page(indexDisplayMode: .never))
+        .simultaneousGesture(contentInteractionGesture)
+        .onAppear {
+            activeZoomPageID = nil
+            verticalZoomOverlay = nil
+            if let request = model.viewportRequest {
+                applyViewportRequest(request)
+            }
+        }
+        .onChange(of: model.viewportRequest) { _, newValue in
+            guard let newValue else { return }
+            activeZoomPageID = nil
+            verticalZoomOverlay = nil
+            applyViewportRequest(newValue)
+        }
+    }
+
+    private var pagedSelection: Binding<Int> {
+        Binding(
+            get: { model.pagedSelectionIndex },
+            set: { selectionIndex in
+                activeZoomPageID = nil
+                verticalZoomOverlay = nil
+                model.updatePagedSelection(selectionIndex)
+            }
+        )
+    }
+
+    private func pagedPageContent(page: MangaPage) -> some View {
+        MangaPageContent(
+            page: page,
+            refererURL: page.chapterURL,
+            imageRepository: appModel.appContext.mangaImageRepository,
+            zoomEnabled: model.settings.zoomEnabled,
+            activeZoomPageID: $activeZoomPageID,
+            verticalZoomOverlay: $verticalZoomOverlay,
+            usesOverlayPresentation: false,
+            readerCoordinateSpaceName: nil,
+            showsChapterTitle: false,
+            onToggleChrome: { showingChrome.toggle() }
+        )
+    }
+
+    @ViewBuilder
+    private func pagedSpreadColumn(pageIndex: Int?) -> some View {
+        let isActiveZoomPage = pageIndex.flatMap { index in
+            model.pages.indices.contains(index) ? model.pages[index].id : nil
+        } == activeZoomPageID
+
+        Group {
+            if let pageIndex, model.pages.indices.contains(pageIndex) {
+                pagedPageContent(page: model.pages[pageIndex])
+            } else {
+                Color.clear
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .accessibilityHidden(true)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .zIndex(isActiveZoomPage ? 1 : 0)
     }
 
     private var verticalContent: some View {
@@ -463,6 +546,7 @@ public struct MangaReaderView: View {
 
 private struct MangaSettingsSheet: View {
     @ObservedObject var model: MangaReaderModel
+    let showsPadPagedOptions: Bool
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -479,6 +563,17 @@ private struct MangaSettingsSheet: View {
                     ForEach(MangaReadingMode.allCases, id: \.self) { mode in
                         Text(mode.title).tag(mode)
                     }
+                }
+
+                if showsPadPagedOptions, model.settings.readingMode == .paged {
+                    Toggle("横屏时同时显示 2 页", isOn: Binding(
+                        get: { model.settings.showsTwoPagesInLandscapeOnPad },
+                        set: {
+                            var updated = model.settings
+                            updated.showsTwoPagesInLandscapeOnPad = $0
+                            model.applySettings(updated)
+                        }
+                    ))
                 }
 
                 Toggle("启用缩放", isOn: Binding(

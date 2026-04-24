@@ -1287,6 +1287,157 @@ final class MangaReaderModelTests: XCTestCase {
         }
     }
 
+    func testTwoPageSpreadRequiresPadLandscapePagedModeAndSetting() async throws {
+        let model = try await makeMangaModel(
+            chapterHTMLByTID: [
+                "700": makeMangaHTML(
+                    tid: "700",
+                    title: "第1话",
+                    links: [],
+                    imageCount: 3
+                )
+            ],
+            appSettings: AppSettings(
+                manga: MangaReaderSettings(
+                    readingMode: .paged,
+                    showsTwoPagesInLandscapeOnPad: true
+                )
+            )
+        )
+
+        await MainActor.run {
+            XCTAssertFalse(model.isTwoPageSpreadActive)
+
+            model.updatePagedPresentationEnvironment(
+                isPad: false,
+                viewportSize: CGSize(width: 844, height: 390)
+            )
+            XCTAssertFalse(model.isTwoPageSpreadActive)
+
+            model.updatePagedPresentationEnvironment(
+                isPad: true,
+                viewportSize: CGSize(width: 390, height: 844)
+            )
+            XCTAssertFalse(model.isTwoPageSpreadActive)
+
+            model.updatePagedPresentationEnvironment(
+                isPad: true,
+                viewportSize: CGSize(width: 844, height: 390)
+            )
+            XCTAssertTrue(model.isTwoPageSpreadActive)
+
+            model.applySettings(
+                MangaReaderSettings(
+                    readingMode: .vertical,
+                    showsTwoPagesInLandscapeOnPad: true
+                )
+            )
+            XCTAssertFalse(model.isTwoPageSpreadActive)
+
+            model.applySettings(
+                MangaReaderSettings(
+                    readingMode: .paged,
+                    showsTwoPagesInLandscapeOnPad: false
+                )
+            )
+            XCTAssertFalse(model.isTwoPageSpreadActive)
+        }
+    }
+
+    func testTwoPageSpreadPairsOddPagesAndDoesNotCrossChapters() async throws {
+        let model = try await makeMangaModel(
+            chapterHTMLByTID: [
+                "700": makeMangaHTML(
+                    tid: "700",
+                    title: "第1话",
+                    links: [("701", "第2话")],
+                    imageCount: 3
+                ),
+                "701": makeMangaHTML(
+                    tid: "701",
+                    title: "第2话",
+                    links: [("700", "第1话")],
+                    imageCount: 2
+                )
+            ],
+            appSettings: AppSettings(
+                manga: MangaReaderSettings(
+                    readingMode: .paged,
+                    showsTwoPagesInLandscapeOnPad: true
+                )
+            )
+        )
+
+        await model.jumpToAdjacentChapter(1)
+
+        await MainActor.run {
+            model.updatePagedPresentationEnvironment(
+                isPad: true,
+                viewportSize: CGSize(width: 844, height: 390)
+            )
+
+            XCTAssertEqual(
+                model.pagedSpreads.map { "\($0.leftPageIndex)-\($0.rightPageIndex.map(String.init) ?? "nil")" },
+                ["0-1", "2-nil", "3-4"]
+            )
+            XCTAssertEqual(model.pagedSpreads[1].chapterTitle, "第1话")
+            XCTAssertEqual(model.pagedSpreads[2].chapterTitle, "第2话")
+        }
+    }
+
+    func testTwoPageSpreadMapsPagingAndProgressToLeftPageAnchor() async throws {
+        let originalURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=700&mobile=2")!
+        let model = try await makeMangaModel(
+            chapterHTMLByTID: [
+                "700": makeMangaHTML(
+                    tid: "700",
+                    title: "第1话",
+                    links: [],
+                    imageCount: 6
+                )
+            ],
+            appSettings: AppSettings(
+                manga: MangaReaderSettings(
+                    readingMode: .paged,
+                    showsTwoPagesInLandscapeOnPad: true
+                )
+            ),
+            initialFavorites: [
+                Favorite(title: "测试漫画", url: originalURL, type: .manga)
+            ]
+        )
+
+        await MainActor.run {
+            model.updatePagedPresentationEnvironment(
+                isPad: true,
+                viewportSize: CGSize(width: 844, height: 390)
+            )
+            XCTAssertEqual(
+                model.pagedSpreads.map { "\($0.leftPageIndex)-\($0.rightPageIndex.map(String.init) ?? "nil")" },
+                ["0-1", "2-3", "4-5"]
+            )
+
+            model.requestCurrentChapterPage(1, animated: false)
+            XCTAssertEqual(model.currentPage?.localIndex, 0)
+            XCTAssertEqual(model.viewportRequest?.targetPageID, "700#0")
+
+            model.requestCurrentChapterPage(5, animated: false)
+            XCTAssertEqual(model.currentPage?.localIndex, 4)
+            XCTAssertEqual(model.pagedSelectionIndex, 2)
+            XCTAssertEqual(model.viewportRequest?.targetPageID, "700#4")
+
+            model.updateCurrentPage(3)
+            XCTAssertEqual(model.currentPage?.localIndex, 2)
+
+            model.updatePagedSelection(2)
+            XCTAssertEqual(model.currentPage?.localIndex, 4)
+        }
+
+        await model.saveProgress()
+        let favorite = await modelTestFavoriteStore?.favorite(for: originalURL)
+        XCTAssertEqual(favorite?.lastPage, 4)
+    }
+
     func testCurrentPagePrefetchesVisibleImageWindow() async throws {
         let observedRequests = RequestLog()
         let model = try await makeMangaModel(
