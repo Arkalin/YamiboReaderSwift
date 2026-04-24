@@ -16,9 +16,26 @@ public struct MangaViewportRequest: Equatable, Sendable {
     }
 }
 
+public struct MangaPagedSpread: Identifiable, Equatable, Sendable {
+    public let index: Int
+    public let leftPageIndex: Int
+    public let rightPageIndex: Int?
+    public let chapterTitle: String
+
+    public var id: Int { index }
+
+    public init(index: Int, leftPageIndex: Int, rightPageIndex: Int?, chapterTitle: String) {
+        self.index = max(0, index)
+        self.leftPageIndex = max(0, leftPageIndex)
+        self.rightPageIndex = rightPageIndex
+        self.chapterTitle = chapterTitle
+    }
+}
+
 @MainActor
 public final class MangaReaderModel: ObservableObject {
     @Published public private(set) var pages: [MangaPage] = []
+    @Published public private(set) var pagedSpreads: [MangaPagedSpread] = []
     @Published public private(set) var currentDirectory: MangaDirectory?
     @Published public private(set) var isLoading = false
     @Published public var errorMessage: String?
@@ -54,6 +71,8 @@ public final class MangaReaderModel: ObservableObject {
     private var lastQueuedProgress: MangaProgressSnapshot?
     private var lastSyncedProgress: MangaProgressSnapshot?
     private let progressSyncDelayNanoseconds: UInt64 = 350_000_000
+    private var usesPadPresentation = false
+    private var pagedViewportSize: CGSize = .zero
 
     public init(
         context: MangaLaunchContext,
@@ -89,6 +108,18 @@ public final class MangaReaderModel: ObservableObject {
 
     public var progressLabelText: String {
         currentPageText
+    }
+
+    public var isTwoPageSpreadActive: Bool {
+        settings.readingMode == .paged &&
+            settings.showsTwoPagesInLandscapeOnPad &&
+            usesPadPresentation &&
+            pagedViewportSize.width > pagedViewportSize.height
+    }
+
+    public var pagedSelectionIndex: Int {
+        guard isTwoPageSpreadActive else { return currentPageIndex }
+        return spreadIndex(forPageIndex: currentPageIndex)
     }
 
     public var sliderRange: ClosedRange<Double> {
@@ -202,7 +233,7 @@ public final class MangaReaderModel: ObservableObject {
 
     public func updateCurrentPage(_ index: Int) {
         guard !pages.isEmpty else { return }
-        currentPageIndex = max(0, min(index, pages.count - 1))
+        currentPageIndex = normalizedPagedPageIndex(index)
         scheduleProgressSync()
         scheduleImagePrefetch()
         Task {
@@ -216,6 +247,27 @@ public final class MangaReaderModel: ObservableObject {
         updateCurrentPage(index)
     }
 
+    public func updatePagedPresentationEnvironment(isPad: Bool, viewportSize: CGSize) {
+        let normalizedSize = CGSize(
+            width: max(0, viewportSize.width),
+            height: max(0, viewportSize.height)
+        )
+        guard usesPadPresentation != isPad || pagedViewportSize != normalizedSize else { return }
+        let wasTwoPageSpreadActive = isTwoPageSpreadActive
+        usesPadPresentation = isPad
+        pagedViewportSize = normalizedSize
+        guard wasTwoPageSpreadActive != isTwoPageSpreadActive else { return }
+        currentPageIndex = normalizedPagedPageIndex(currentPageIndex)
+        emitViewportRequest(targetIndex: currentPageIndex, animated: false, resetRevision: true)
+    }
+
+    public func updatePagedSelection(_ selectionIndex: Int) {
+        let targetPageIndex = isTwoPageSpreadActive
+            ? leftPageIndex(forSpreadIndex: selectionIndex)
+            : selectionIndex
+        updateCurrentPage(targetPageIndex)
+    }
+
     public func requestCurrentChapterPage(_ localIndex: Int, animated: Bool = true) {
         guard let currentPage else { return }
         let clampedLocalIndex = max(0, min(localIndex, max(0, currentPage.chapterTotalPages - 1)))
@@ -224,11 +276,12 @@ public final class MangaReaderModel: ObservableObject {
         }) else {
             return
         }
-        currentPageIndex = targetIndex
-        emitViewportRequest(targetIndex: targetIndex, animated: animated, resetRevision: false)
+        let normalizedTargetIndex = normalizedPagedPageIndex(targetIndex)
+        currentPageIndex = normalizedTargetIndex
+        emitViewportRequest(targetIndex: normalizedTargetIndex, animated: animated, resetRevision: false)
         scheduleImagePrefetch()
         Task {
-            await prefetchIfNeeded(for: targetIndex)
+            await prefetchIfNeeded(for: normalizedTargetIndex)
         }
     }
 
@@ -237,7 +290,12 @@ public final class MangaReaderModel: ObservableObject {
     }
 
     public func applySettings(_ newSettings: MangaReaderSettings) {
+        let wasTwoPageSpreadActive = isTwoPageSpreadActive
         settings = newSettings
+        if wasTwoPageSpreadActive != isTwoPageSpreadActive {
+            currentPageIndex = normalizedPagedPageIndex(currentPageIndex)
+            emitViewportRequest(targetIndex: currentPageIndex, animated: false, resetRevision: true)
+        }
         Task {
             await persistSettings()
         }
@@ -469,18 +527,20 @@ public final class MangaReaderModel: ObservableObject {
         }
 
         pages = rebuilt
+        pagedSpreads = makePagedSpreads(from: rebuilt)
 
         guard !rebuilt.isEmpty else {
             currentPageIndex = 0
+            pagedSpreads = []
             viewportRequest = nil
             return
         }
 
         if let targetIndex {
-            currentPageIndex = targetIndex
-            emitViewportRequest(targetIndex: targetIndex, animated: animated, resetRevision: resetRevision)
+            currentPageIndex = normalizedPagedPageIndex(targetIndex)
+            emitViewportRequest(targetIndex: currentPageIndex, animated: animated, resetRevision: resetRevision)
         } else {
-            currentPageIndex = max(0, min(currentPageIndex, rebuilt.count - 1))
+            currentPageIndex = normalizedPagedPageIndex(currentPageIndex)
             emitViewportRequest(
                 targetIndex: currentPageIndex,
                 animated: animated,
@@ -488,6 +548,60 @@ public final class MangaReaderModel: ObservableObject {
             )
         }
         scheduleImagePrefetch()
+    }
+
+    private func makePagedSpreads(from pages: [MangaPage]) -> [MangaPagedSpread] {
+        guard !pages.isEmpty else { return [] }
+
+        var spreads: [MangaPagedSpread] = []
+        var pageIndex = 0
+
+        while pageIndex < pages.count {
+            let leftPage = pages[pageIndex]
+            let candidateRightIndex = pageIndex + 1
+            let rightPageIndex: Int? = if pages.indices.contains(candidateRightIndex),
+                                          pages[candidateRightIndex].chapterURL == leftPage.chapterURL {
+                candidateRightIndex
+            } else {
+                nil
+            }
+
+            spreads.append(
+                MangaPagedSpread(
+                    index: spreads.count,
+                    leftPageIndex: leftPage.globalIndex,
+                    rightPageIndex: rightPageIndex,
+                    chapterTitle: leftPage.chapterTitle
+                )
+            )
+            pageIndex += rightPageIndex == nil ? 1 : 2
+        }
+
+        return spreads
+    }
+
+    private func spreadIndex(forPageIndex pageIndex: Int) -> Int {
+        guard isTwoPageSpreadActive else {
+            return max(0, min(pageIndex, max(pages.count - 1, 0)))
+        }
+
+        let normalizedIndex = max(0, min(pageIndex, max(pages.count - 1, 0)))
+        return pagedSpreads.first(where: { spread in
+            spread.leftPageIndex == normalizedIndex || spread.rightPageIndex == normalizedIndex
+        })?.index ?? 0
+    }
+
+    private func leftPageIndex(forSpreadIndex spreadIndex: Int) -> Int {
+        guard let spread = pagedSpreads.first(where: { $0.index == spreadIndex }) ?? pagedSpreads.last else {
+            return 0
+        }
+        return spread.leftPageIndex
+    }
+
+    private func normalizedPagedPageIndex(_ pageIndex: Int) -> Int {
+        let clampedIndex = max(0, min(pageIndex, max(pages.count - 1, 0)))
+        guard isTwoPageSpreadActive else { return clampedIndex }
+        return leftPageIndex(forSpreadIndex: spreadIndex(forPageIndex: clampedIndex))
     }
 
     private func emitViewportRequest(
