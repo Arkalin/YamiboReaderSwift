@@ -6,6 +6,8 @@ public struct RootTabView: View {
     private let mineURL = URL(string: "https://bbs.yamibo.com/home.php?mod=space&do=profile&mycenter=1&mobile=2")!
     private let appModel: YamiboAppModel
 
+    @Environment(\.scenePhase) private var scenePhase
+
     public init(appModel: YamiboAppModel, initialTab: AppTab = .forum) {
         self.appModel = appModel
     }
@@ -20,6 +22,27 @@ public struct RootTabView: View {
         }
         .task {
             await appModel.bootstrapIfNeeded()
+        }
+        .task {
+            await observeFavoriteStoreChanges()
+        }
+        .task {
+            await observeSessionStoreChanges()
+        }
+        .task {
+            await observeAutoSignInStoreChanges()
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            switch newPhase {
+            case .active:
+                appModel.synchronizeWebDAVIfNeeded()
+            case .background:
+                appModel.flushWebDAVSyncBeforeBackground()
+            case .inactive:
+                break
+            @unknown default:
+                break
+            }
         }
     }
 
@@ -63,6 +86,39 @@ public struct RootTabView: View {
             get: { appModel[keyPath: keyPath] },
             set: { appModel[keyPath: keyPath] = $0 }
         )
+    }
+
+    private func observeFavoriteStoreChanges() async {
+        for await notification in NotificationCenter.default.notifications(named: FavoriteStore.didChangeNotification) {
+            guard !Task.isCancelled else { return }
+            guard let changeID = notification.userInfo?[FavoriteStore.changeIDUserInfoKey] as? String,
+                  changeID == appModel.appContext.favoriteStore.changeID else {
+                continue
+            }
+            appModel.scheduleWebDAVUploadForLocalChange()
+        }
+    }
+
+    private func observeSessionStoreChanges() async {
+        for await notification in NotificationCenter.default.notifications(named: SessionStore.didChangeNotification) {
+            guard !Task.isCancelled else { return }
+            guard let changeID = notification.userInfo?[SessionStore.changeIDUserInfoKey] as? String,
+                  changeID == appModel.appContext.sessionStore.changeID else {
+                continue
+            }
+            appModel.scheduleWebDAVUploadForLocalChange()
+        }
+    }
+
+    private func observeAutoSignInStoreChanges() async {
+        for await notification in NotificationCenter.default.notifications(named: AutoSignInStore.didChangeNotification) {
+            guard !Task.isCancelled else { return }
+            guard let changeID = notification.userInfo?[AutoSignInStore.changeIDUserInfoKey] as? String,
+                  changeID == appModel.appContext.autoSignInStore.changeID else {
+                continue
+            }
+            appModel.scheduleWebDAVUploadForLocalChange()
+        }
     }
 }
 

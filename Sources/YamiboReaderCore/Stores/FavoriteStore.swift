@@ -1,6 +1,6 @@
 import Foundation
 
-public struct FavoriteLibrarySnapshot: Equatable, Sendable {
+public struct FavoriteLibrarySnapshot: Codable, Equatable, Sendable {
     public var favorites: [Favorite]
     public var collections: [FavoriteCollection]
 
@@ -14,6 +14,7 @@ public protocol FavoriteStoring: Sendable {
     func loadFavorites() async -> [Favorite]
     func loadCollections() async -> [FavoriteCollection]
     func loadLibrarySnapshot() async -> FavoriteLibrarySnapshot
+    func saveLibrarySnapshot(_ snapshot: FavoriteLibrarySnapshot) async throws
     func saveFavorites(_ favorites: [Favorite]) async throws
     func mergeRemoteFavorites(_ favorites: [Favorite]) async throws -> [Favorite]
     func reorderFavorites(visibleIDs: [String], fromOffsets: IndexSet, toOffset: Int) async throws -> [Favorite]
@@ -80,6 +81,10 @@ public actor FavoriteStore: FavoriteStoring {
     public func saveFavorites(_ favorites: [Favorite]) async throws {
         let collections = await loadCollections()
         _ = try persistLibrary(favorites: favorites, collections: collections)
+    }
+
+    public func saveLibrarySnapshot(_ snapshot: FavoriteLibrarySnapshot) async throws {
+        _ = try persistLibrary(favorites: snapshot.favorites, collections: snapshot.collections)
     }
 
     public func mergeRemoteFavorites(_ favorites: [Favorite]) async throws -> [Favorite] {

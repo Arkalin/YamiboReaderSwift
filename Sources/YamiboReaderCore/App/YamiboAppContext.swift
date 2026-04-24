@@ -17,6 +17,7 @@ public final class YamiboAppContext: YamiboRepositoryProviding, Sendable {
     public let sessionStore: SessionStore
     public let autoSignInStore: AutoSignInStore
     public let settingsStore: SettingsStore
+    public let webDAVSyncSettingsStore: WebDAVSyncSettingsStore
     public let favoriteStore: FavoriteStore
     public let readerCacheStore: ReaderCacheStore
     public let mangaImageCacheStore: MangaImageCacheStore
@@ -28,6 +29,7 @@ public final class YamiboAppContext: YamiboRepositoryProviding, Sendable {
         sessionStore: SessionStore = SessionStore(),
         autoSignInStore: AutoSignInStore = AutoSignInStore(),
         settingsStore: SettingsStore = SettingsStore(),
+        webDAVSyncSettingsStore: WebDAVSyncSettingsStore = WebDAVSyncSettingsStore(),
         favoriteStore: FavoriteStore = FavoriteStore(),
         readerCacheStore: ReaderCacheStore = ReaderCacheStore(),
         mangaImageCacheStore: MangaImageCacheStore = MangaImageCacheStore(),
@@ -37,6 +39,7 @@ public final class YamiboAppContext: YamiboRepositoryProviding, Sendable {
         self.sessionStore = sessionStore
         self.autoSignInStore = autoSignInStore
         self.settingsStore = settingsStore
+        self.webDAVSyncSettingsStore = webDAVSyncSettingsStore
         self.favoriteStore = favoriteStore
         self.readerCacheStore = readerCacheStore
         self.mangaImageCacheStore = mangaImageCacheStore
@@ -101,6 +104,16 @@ public final class YamiboAppContext: YamiboRepositoryProviding, Sendable {
         )
     }
 
+    public func makeWebDAVSyncService() -> WebDAVSyncService {
+        WebDAVSyncService(
+            settingsStore: webDAVSyncSettingsStore,
+            favoriteStore: favoriteStore,
+            sessionStore: sessionStore,
+            autoSignInStore: autoSignInStore,
+            client: WebDAVClient(session: session)
+        )
+    }
+
     public func bootstrap() async -> YamiboBootstrapState {
         YamiboBootstrapState(
             session: await sessionStore.load(),
@@ -112,6 +125,7 @@ public final class YamiboAppContext: YamiboRepositoryProviding, Sendable {
     public func resetApplicationData() async throws {
         try await sessionStore.reset()
         try await settingsStore.reset()
+        try await webDAVSyncSettingsStore.reset()
         try await favoriteStore.clearAll()
         try await readerCacheStore.clearAll()
         try await mangaImageCacheStore.clearAll()

@@ -1,7 +1,20 @@
 import CryptoKit
 import Foundation
 
+public struct AutoSignInSnapshot: Codable, Equatable, Sendable {
+    public var signedDatesByAccountHash: [String: String]
+
+    public init(signedDatesByAccountHash: [String: String] = [:]) {
+        self.signedDatesByAccountHash = signedDatesByAccountHash
+    }
+}
+
 public actor AutoSignInStore {
+    public static let didChangeNotification = Notification.Name("yamibo.autoSignInStore.didChange")
+    public static let changeIDUserInfoKey = "changeID"
+
+    public nonisolated let changeID = UUID().uuidString
+
     private let defaults: UserDefaults
     private let keyPrefix: String
     private let calendar: Calendar
@@ -34,11 +47,34 @@ public actor AutoSignInStore {
     public func markSignedIn(session: SessionState) async {
         guard let key = storageKey(for: session) else { return }
         defaults.set(currentDateString(), forKey: key)
+        postChangeNotification()
     }
 
     public func lastSignedDate(session: SessionState) async -> String? {
         guard let key = storageKey(for: session) else { return nil }
         return defaults.string(forKey: key)
+    }
+
+    public func exportSnapshot() async -> AutoSignInSnapshot {
+        let prefix = "\(keyPrefix)."
+        let values = defaults.dictionaryRepresentation().reduce(into: [String: String]()) { partial, item in
+            guard item.key.hasPrefix(prefix), let date = item.value as? String else { return }
+            let hash = String(item.key.dropFirst(prefix.count))
+            guard !hash.isEmpty else { return }
+            partial[hash] = date
+        }
+        return AutoSignInSnapshot(signedDatesByAccountHash: values)
+    }
+
+    public func importSnapshot(_ snapshot: AutoSignInSnapshot) async {
+        let prefix = "\(keyPrefix)."
+        for key in defaults.dictionaryRepresentation().keys where key.hasPrefix(prefix) {
+            defaults.removeObject(forKey: key)
+        }
+        for (hash, date) in snapshot.signedDatesByAccountHash where !hash.isEmpty && !date.isEmpty {
+            defaults.set(date, forKey: "\(prefix)\(hash)")
+        }
+        postChangeNotification()
     }
 
     private func storageKey(for session: SessionState) -> String? {
@@ -67,5 +103,13 @@ public actor AutoSignInStore {
 
         let digest = SHA256.hash(data: Data(authValue.utf8))
         return digest.map { String(format: "%02x", $0) }.joined()
+    }
+
+    private nonisolated func postChangeNotification() {
+        NotificationCenter.default.post(
+            name: Self.didChangeNotification,
+            object: nil,
+            userInfo: [Self.changeIDUserInfoKey: changeID]
+        )
     }
 }

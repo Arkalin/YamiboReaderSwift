@@ -220,6 +220,7 @@ private final class FavoritesSettingsViewModel: ObservableObject {
 public struct FavoritesSettingsView: View {
     @StateObject private var viewModel: FavoritesSettingsViewModel
     @State private var showingDirectoryManager = false
+    @State private var showingWebDAVSettings = false
     @State private var pendingConfirmation: FavoritesSettingsConfirmation?
     @State private var activeAppearanceCategory: FavoriteAppearanceCategory?
 
@@ -248,6 +249,13 @@ public struct FavoritesSettingsView: View {
                         openAutoSignInAutomationCreator()
                     } label: {
                         settingsRow(title: L10n.string("settings.auto_sign_in"))
+                    }
+                    .disabled(viewModel.isBusy)
+
+                    Button {
+                        showingWebDAVSettings = true
+                    } label: {
+                        settingsRow(title: L10n.string("settings.webdav_sync"))
                     }
                     .disabled(viewModel.isBusy)
                 }
@@ -324,6 +332,9 @@ public struct FavoritesSettingsView: View {
             }
             .sheet(isPresented: $showingDirectoryManager) {
                 MangaDirectoryManagementView(store: appContext.mangaDirectoryStore)
+            }
+            .sheet(isPresented: $showingWebDAVSettings) {
+                WebDAVSyncSettingsView(appContext: appContext)
             }
             .alert(L10n.string("common.operation_failed"), isPresented: .constant(viewModel.errorMessage != nil), actions: {
                 Button(L10n.string("common.ok")) {

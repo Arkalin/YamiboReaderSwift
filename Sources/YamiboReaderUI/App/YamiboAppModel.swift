@@ -25,6 +25,10 @@ public final class YamiboAppModel {
 
     public let appContext: YamiboAppContext
 
+    private var webDAVForegroundSyncTask: Task<Void, Never>?
+    private var webDAVDebouncedUploadTask: Task<Void, Never>?
+    private var isWebDAVSyncInProgress = false
+
     public init(appContext: YamiboAppContext, initialTab: AppTab = .forum) {
         self.appContext = appContext
         selectedTab = initialTab
@@ -33,6 +37,7 @@ public final class YamiboAppModel {
     public func bootstrapIfNeeded() async {
         guard bootstrapState == nil, !isBootstrapping else { return }
         await bootstrap()
+        synchronizeWebDAVIfNeeded()
     }
 
     public func bootstrap() async {
@@ -42,6 +47,57 @@ public final class YamiboAppModel {
         let state = await appContext.bootstrap()
         bootstrapState = state
         bootstrapErrorMessage = nil
+    }
+
+    public func synchronizeWebDAVIfNeeded() {
+        webDAVForegroundSyncTask?.cancel()
+        webDAVForegroundSyncTask = Task { @MainActor [appContext] in
+            guard !isWebDAVSyncInProgress else { return }
+            isWebDAVSyncInProgress = true
+            defer { isWebDAVSyncInProgress = false }
+
+            do {
+                try await appContext.makeWebDAVSyncService().synchronizeAutomatically()
+            } catch {
+                // Automatic sync should never block the app shell.
+            }
+        }
+    }
+
+    public func scheduleWebDAVUploadForLocalChange() {
+        guard !isWebDAVSyncInProgress else { return }
+        webDAVDebouncedUploadTask?.cancel()
+        webDAVDebouncedUploadTask = Task { @MainActor [appContext] in
+            do {
+                let service = appContext.makeWebDAVSyncService()
+                try await service.markLocalDataChanged()
+                try await Task.sleep(for: .seconds(2))
+
+                guard !isWebDAVSyncInProgress else { return }
+                isWebDAVSyncInProgress = true
+                defer { isWebDAVSyncInProgress = false }
+
+                try await service.synchronizeAutomatically()
+            } catch {
+                // Keep local data authoritative until the next foreground/manual sync.
+            }
+        }
+    }
+
+    public func flushWebDAVSyncBeforeBackground() {
+        webDAVDebouncedUploadTask?.cancel()
+        webDAVDebouncedUploadTask = nil
+        Task { @MainActor [appContext] in
+            guard !isWebDAVSyncInProgress else { return }
+            isWebDAVSyncInProgress = true
+            defer { isWebDAVSyncInProgress = false }
+
+            do {
+                try await appContext.makeWebDAVSyncService().synchronizeAutomatically()
+            } catch {
+                // Background flush is best effort.
+            }
+        }
     }
 
     public func presentReader(_ context: ReaderLaunchContext) {
