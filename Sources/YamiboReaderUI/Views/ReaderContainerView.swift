@@ -64,6 +64,7 @@ public struct ReaderContainerView: View {
     @State private var isDismissing = false
     @State private var topChromeHeight: CGFloat = 0
     @State private var bottomChromeHeight: CGFloat = 0
+    @State private var retainedVerticalTopSafeAreaInset: CGFloat = 0
     private let appModel: YamiboAppModel
 
     public init(context: ReaderLaunchContext, appModel: YamiboAppModel) {
@@ -81,7 +82,8 @@ public struct ReaderContainerView: View {
 
     public var body: some View {
         GeometryReader { proxy in
-            let topInset = max(proxy.safeAreaInsets.top, windowSafeAreaInsets.top)
+            let rawTopInset = max(proxy.safeAreaInsets.top, windowSafeAreaInsets.top)
+            let topInset = effectiveTopInset(rawTopInset)
             let bottomInset = max(proxy.safeAreaInsets.bottom, windowSafeAreaInsets.bottom)
             let currentLayout = readerLayout(
                 proxy: proxy,
@@ -132,9 +134,13 @@ public struct ReaderContainerView: View {
                 }
             }
             .task {
+                updateRetainedVerticalTopSafeAreaInset(rawTopInset)
                 model.updatePagedPresentationEnvironment(isPad: isPadDevice)
                 await model.prepare(layout: currentLayout)
                 updateChromeForContentState()
+            }
+            .onChange(of: rawTopInset) { _, newValue in
+                updateRetainedVerticalTopSafeAreaInset(newValue)
             }
             .onChange(of: currentLayout) { _, newValue in
                 model.updateLayout(newValue)
@@ -439,6 +445,24 @@ public struct ReaderContainerView: View {
             chromeInsets: chromeInsets,
             readingMode: model.settings.readingMode
         )
+    }
+
+    private func effectiveTopInset(_ rawTopInset: CGFloat) -> CGFloat {
+        guard shouldRetainVerticalTopSafeAreaInset else { return rawTopInset }
+        return max(rawTopInset, retainedVerticalTopSafeAreaInset)
+    }
+
+    private var shouldRetainVerticalTopSafeAreaInset: Bool {
+        isPadDevice && model.settings.readingMode == .vertical
+    }
+
+    private func updateRetainedVerticalTopSafeAreaInset(_ rawTopInset: CGFloat) {
+        guard isPadDevice else {
+            retainedVerticalTopSafeAreaInset = 0
+            return
+        }
+        guard rawTopInset > 0, rawTopInset != retainedVerticalTopSafeAreaInset else { return }
+        retainedVerticalTopSafeAreaInset = rawTopInset
     }
 
     private func retryLoad() {
