@@ -2,6 +2,10 @@ import SwiftUI
 import UniformTypeIdentifiers
 import YamiboReaderCore
 
+#if canImport(UIKit)
+import UIKit
+#endif
+
 public enum FavoriteFilter: String, CaseIterable, Identifiable {
     case all
     case novel
@@ -89,6 +93,116 @@ enum FavoriteLaunchMode: Sendable {
     case start
     case resume
 }
+
+private struct FavoriteSharePresenter: ViewModifier {
+    @Binding var favorite: Favorite?
+
+    func body(content: Content) -> some View {
+        #if canImport(UIKit)
+        content.background {
+            FavoriteActivityPresenter(favorite: $favorite)
+                .allowsHitTesting(false)
+        }
+        #else
+        content
+        #endif
+    }
+}
+
+#if canImport(UIKit)
+private struct FavoriteActivityPresenter: UIViewControllerRepresentable {
+    @Binding var favorite: Favorite?
+
+    func makeUIViewController(context: Context) -> FavoriteShareAnchorViewController {
+        let controller = FavoriteShareAnchorViewController()
+        controller.onFinish = {
+            favorite = nil
+        }
+        return controller
+    }
+
+    func updateUIViewController(_ controller: FavoriteShareAnchorViewController, context: Context) {
+        controller.presentShareSheet(for: favorite)
+    }
+}
+
+@MainActor
+private final class FavoriteShareAnchorViewController: UIViewController {
+    var onFinish: (() -> Void)?
+
+    private var presentedFavoriteID: String?
+    private var pendingFavorite: Favorite?
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        view.backgroundColor = .clear
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        if let pendingFavorite {
+            self.pendingFavorite = nil
+            presentShareSheet(for: pendingFavorite)
+        }
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        updatePopoverAnchor()
+    }
+
+    func presentShareSheet(for favorite: Favorite?) {
+        guard let favorite else { return }
+        guard presentedFavoriteID != favorite.id else { return }
+
+        guard view.window != nil else {
+            pendingFavorite = favorite
+            return
+        }
+
+        if presentedViewController != nil {
+            dismiss(animated: false) { [weak self] in
+                self?.presentShareSheet(for: favorite)
+            }
+            return
+        }
+
+        let activityController = UIActivityViewController(
+            activityItems: [favorite.url],
+            applicationActivities: nil
+        )
+        activityController.completionWithItemsHandler = { [weak self] _, _, _, _ in
+            self?.presentedFavoriteID = nil
+            self?.onFinish?()
+        }
+
+        presentedFavoriteID = favorite.id
+        configurePopover(for: activityController)
+        present(activityController, animated: true)
+    }
+
+    private func configurePopover(for activityController: UIActivityViewController) {
+        guard let popover = activityController.popoverPresentationController else { return }
+
+        popover.sourceView = view
+        popover.sourceRect = anchorRect
+        popover.permittedArrowDirections = []
+    }
+
+    private func updatePopoverAnchor() {
+        guard let activityController = presentedViewController as? UIActivityViewController else { return }
+        configurePopover(for: activityController)
+    }
+
+    private var anchorRect: CGRect {
+        let bounds = view.bounds
+        guard !bounds.isEmpty else {
+            return CGRect(x: 0, y: 0, width: 1, height: 1)
+        }
+        return CGRect(x: bounds.midX, y: bounds.midY, width: 1, height: 1)
+    }
+}
+#endif
 
 @MainActor
 public final class FavoritesViewModel: ObservableObject {
@@ -957,6 +1071,7 @@ public struct FavoritesView: View {
     @State private var showingBulkDeleteConfirmation = false
     @State private var didLoadInitialFavorites = false
     @State private var draggedEntryKey: String?
+    @State private var sharingFavorite: Favorite?
 
     private let scope: FavoriteScope
     private let appContext: YamiboAppContext
@@ -1175,6 +1290,7 @@ public struct FavoritesView: View {
             .sheet(isPresented: $showingAboutSheet) {
                 AboutView()
             }
+            .modifier(FavoriteSharePresenter(favorite: $sharingFavorite))
             .modifier(
                 FavoriteCollectionDialogsModifier(
                     collectionNameDraft: $collectionNameDraft,
@@ -1288,6 +1404,14 @@ public struct FavoritesView: View {
             return true
         }
         return false
+    }
+
+    private var usesIPadSharePresenter: Bool {
+        #if canImport(UIKit)
+        UIDevice.current.userInterfaceIdiom == .pad
+        #else
+        false
+        #endif
     }
 
     private var currentFilter: FavoriteFilter {
@@ -1563,9 +1687,7 @@ public struct FavoritesView: View {
             } else {
                 row
                     .swipeActions(edge: .leading, allowsFullSwipe: false) {
-                        ShareLink(item: favorite.url) {
-                            swipeActionLabel(title: "分享", systemImage: "square.and.arrow.up")
-                        }
+                        favoriteSwipeShareButton(favorite)
                         .tint(.teal)
                         .disabled(viewModel.deletingFavoriteID != nil)
                     }
@@ -1608,9 +1730,7 @@ public struct FavoritesView: View {
 
     private func favoriteActionMenuButton(_ favorite: Favorite) -> some View {
         Menu {
-            ShareLink(item: favorite.url) {
-                Label("分享", systemImage: "square.and.arrow.up")
-            }
+            favoriteMenuShareButton(favorite)
 
             Button {
                 displayNameDraft = FavoriteDisplayNameDraft(favorite: favorite)
@@ -1641,6 +1761,48 @@ public struct FavoritesView: View {
         }
         .buttonStyle(.plain)
         .disabled(viewModel.deletingFavoriteID != nil)
+    }
+
+    @ViewBuilder
+    private func favoriteSwipeShareButton(_ favorite: Favorite) -> some View {
+        #if canImport(UIKit)
+        if usesIPadSharePresenter {
+            Button {
+                sharingFavorite = favorite
+            } label: {
+                swipeActionLabel(title: "分享", systemImage: "square.and.arrow.up")
+            }
+        } else {
+            ShareLink(item: favorite.url) {
+                swipeActionLabel(title: "分享", systemImage: "square.and.arrow.up")
+            }
+        }
+        #else
+        ShareLink(item: favorite.url) {
+            swipeActionLabel(title: "分享", systemImage: "square.and.arrow.up")
+        }
+        #endif
+    }
+
+    @ViewBuilder
+    private func favoriteMenuShareButton(_ favorite: Favorite) -> some View {
+        #if canImport(UIKit)
+        if usesIPadSharePresenter {
+            Button {
+                sharingFavorite = favorite
+            } label: {
+                Label("分享", systemImage: "square.and.arrow.up")
+            }
+        } else {
+            ShareLink(item: favorite.url) {
+                Label("分享", systemImage: "square.and.arrow.up")
+            }
+        }
+        #else
+        ShareLink(item: favorite.url) {
+            Label("分享", systemImage: "square.and.arrow.up")
+        }
+        #endif
     }
 
     private func collectionActionMenuButton(_ collection: FavoriteCollection) -> some View {
