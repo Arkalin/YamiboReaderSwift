@@ -92,7 +92,7 @@ public struct MangaReaderView: View {
                 }
             }
             .animation(.easeInOut(duration: 0.2), value: isPreviewVisible)
-            .statusBar(hidden: !model.settings.showsSystemStatusBar || !showingChrome)
+            .statusBar(hidden: !showingChrome)
         }
     }
 
@@ -486,15 +486,6 @@ private struct MangaSettingsSheet: View {
                     set: {
                         var updated = model.settings
                         updated.zoomEnabled = $0
-                        model.applySettings(updated)
-                    }
-                ))
-
-                Toggle("显示系统状态栏", isOn: Binding(
-                    get: { model.settings.showsSystemStatusBar },
-                    set: {
-                        var updated = model.settings
-                        updated.showsSystemStatusBar = $0
                         model.applySettings(updated)
                     }
                 ))

@@ -112,9 +112,7 @@ struct ReaderSettingsPanel: View {
 
                             ReaderBooksMiscSection(
                                 palette: palette,
-                                systemStatusBar: draftSettings.showsSystemStatusBar,
                                 loadsInlineImages: draftSettings.loadsInlineImages,
-                                onSystemStatusBarChange: setSystemStatusBarVisibility,
                                 onLoadsInlineImagesChange: setImageLoading
                             )
                         }
@@ -144,7 +142,6 @@ struct ReaderSettingsPanel: View {
     private func setBackgroundStyle(_ value: ReaderBackgroundStyle) { draftSettings.backgroundStyle = value }
     private func setReadingMode(_ value: ReaderReadingMode) { draftSettings.readingMode = value }
     private func setTranslationMode(_ value: ReaderTranslationMode) { draftSettings.translationMode = value }
-    private func setSystemStatusBarVisibility(_ value: Bool) { draftSettings.showsSystemStatusBar = value }
     private func setImageLoading(_ value: Bool) { draftSettings.loadsInlineImages = value }
 }
 
@@ -500,22 +497,11 @@ private struct ReaderBooksDisplaySection: View {
 
 private struct ReaderBooksMiscSection: View {
     let palette: ReaderBooksSheetPalette
-    let systemStatusBar: Bool
     let loadsInlineImages: Bool
-    let onSystemStatusBarChange: (Bool) -> Void
     let onLoadsInlineImagesChange: (Bool) -> Void
 
     var body: some View {
         ReaderBooksSettingsSection(title: "其他", palette: palette) {
-            ReaderBooksToggleRow(
-                title: "系统状态栏",
-                palette: palette,
-                isOn: Binding(
-                    get: { systemStatusBar },
-                    set: { onSystemStatusBarChange($0) }
-                )
-            )
-            ReaderBooksDivider(palette: palette)
             ReaderBooksToggleRow(
                 title: "帖子图片",
                 palette: palette,
