@@ -4,11 +4,6 @@
 "app.home.favorites" = "收藏";
 "app.home.forum" = "论坛";
 "app.initializing" = "初始化中…";
-"app.intent.sign_in.description" = "在后台检查并完成百合会每日签到";
-"app.intent.sign_in.phrase.in" = "在 %@ 里进行百合会签到";
-"app.intent.sign_in.phrase.let" = "让 %@ 完成百合会签到";
-"app.intent.sign_in.phrase.use" = "使用 %@ 进行百合会签到";
-"app.intent.sign_in.title" = "百合会签到";
 "app.name" = "百合会阅读器";
 "apple_pencil.behavior.double_tap_next_squeeze_previous" = "双击下一页，按压上一页";
 "apple_pencil.behavior.double_tap_previous_squeeze_next" = "双击上一页，按压下一页";
