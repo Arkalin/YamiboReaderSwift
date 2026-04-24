@@ -561,27 +561,32 @@ private struct ReaderBooksApplePencilSection: View {
                     .minimumScaleFactor(0.85)
 
                 Button {
-                    showsHelp = true
+                    withAnimation(.easeInOut(duration: 0.18)) {
+                        showsHelp.toggle()
+                    }
                 } label: {
                     Image(systemName: "questionmark.circle")
                         .font(.title2.weight(.semibold))
                         .foregroundStyle(Color.blue)
                 }
                 .buttonStyle(.plain)
-                .popover(isPresented: $showsHelp) {
-                    Text(Self.helpText)
-                        .font(.body)
-                        .foregroundStyle(palette.primaryText)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .padding(20)
-                        .frame(maxWidth: 360, alignment: .leading)
-                        .presentationCompactAdaptation(.popover)
-                }
 
                 Spacer(minLength: 8)
 
                 Toggle("", isOn: $isEnabled)
                     .labelsHidden()
+            }
+
+            if showsHelp {
+                Text(Self.helpText)
+                    .font(.subheadline)
+                    .foregroundStyle(palette.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(palette.segmentedBackground, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .transition(.opacity.combined(with: .move(edge: .top)))
             }
 
             ReaderBooksDivider(palette: palette)
