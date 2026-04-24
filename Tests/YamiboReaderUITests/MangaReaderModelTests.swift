@@ -1643,6 +1643,79 @@ final class MangaReaderModelTests: XCTestCase {
         }
     }
 
+    func testApplyApplePencilSettingsPersistsSharedSettingWithoutOverwritingReaderOrMangaSettings() async throws {
+        let keyPrefix = UUID().uuidString
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [MangaReaderTestURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        MangaReaderTestURLProtocol.handler = { request in
+            let html = makeMangaHTML(
+                tid: "700",
+                title: "第1话",
+                links: [],
+                imageCount: 1
+            )
+            return (Data(html.utf8), HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: ["Content-Type": "text/html"])!)
+        }
+
+        let settingsStore = SettingsStore(key: "\(keyPrefix).settings")
+        let initialReaderSettings = ReaderAppearanceSettings(
+            fontScale: 1.2,
+            readingMode: .vertical
+        )
+        let initialMangaSettings = MangaReaderSettings(
+            readingMode: .paged,
+            brightness: 0.82,
+            zoomEnabled: false,
+            showsTwoPagesInLandscapeOnPad: true,
+            directorySortOrder: .descending
+        )
+        try await settingsStore.save(
+            AppSettings(
+                reader: initialReaderSettings,
+                manga: initialMangaSettings
+            )
+        )
+        let appContext = YamiboAppContext(
+            sessionStore: SessionStore(key: "\(keyPrefix).session"),
+            settingsStore: settingsStore,
+            favoriteStore: FavoriteStore(key: "\(keyPrefix).favorites"),
+            readerCacheStore: ReaderCacheStore(baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)),
+            mangaImageCacheStore: MangaImageCacheStore(baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)),
+            mangaDirectoryStore: MangaDirectoryStore(baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)),
+            session: session
+        )
+        let model = await MainActor.run {
+            MangaReaderModel(
+                context: MangaLaunchContext(
+                    originalThreadURL: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=700&mobile=2")!,
+                    chapterURL: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=700&mobile=2")!,
+                    displayTitle: "测试漫画",
+                    source: .forum
+                ),
+                appContext: appContext
+            )
+        }
+        await model.prepare()
+
+        let updatedApplePencilSettings = ApplePencilPageTurnSettings(
+            isEnabled: true,
+            behavior: .doubleTapNextSqueezePrevious
+        )
+        await MainActor.run {
+            model.applyApplePencilPageTurnSettings(updatedApplePencilSettings)
+        }
+
+        try await waitFor {
+            let loaded = await settingsStore.load()
+            return loaded.applePencilPageTurn == updatedApplePencilSettings
+        }
+
+        let loaded = await settingsStore.load()
+        XCTAssertEqual(loaded.reader, initialReaderSettings)
+        XCTAssertEqual(loaded.manga, initialMangaSettings)
+    }
+
     func testAutoTagUpdateShowsForceSearchShortcut() async throws {
         let model = try await makeMangaModel(
             chapterHTMLByTID: [

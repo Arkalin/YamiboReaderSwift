@@ -40,6 +40,7 @@ public final class MangaReaderModel: ObservableObject {
     @Published public private(set) var isLoading = false
     @Published public var errorMessage: String?
     @Published public var settings = MangaReaderSettings()
+    @Published public var applePencilPageTurnSettings = ApplePencilPageTurnSettings()
     @Published public var currentPageIndex = 0
     @Published public private(set) var viewportRequest: MangaViewportRequest?
     @Published public private(set) var isUpdatingDirectory = false
@@ -212,7 +213,9 @@ public final class MangaReaderModel: ObservableObject {
         defer { isLoading = false }
 
         repository = await appContext.makeMangaRepository()
-        settings = await appContext.settingsStore.load().manga
+        let appSettings = await appContext.settingsStore.load()
+        settings = appSettings.manga
+        applePencilPageTurnSettings = appSettings.applePencilPageTurn
         await loadInitialChapter()
     }
 
@@ -311,7 +314,14 @@ public final class MangaReaderModel: ObservableObject {
             emitViewportRequest(targetIndex: currentPageIndex, animated: false, resetRevision: true)
         }
         Task {
-            await persistSettings()
+            await persistSettings(mangaSettings: newSettings)
+        }
+    }
+
+    public func applyApplePencilPageTurnSettings(_ newSettings: ApplePencilPageTurnSettings) {
+        applePencilPageTurnSettings = newSettings
+        Task {
+            await persistSettings(applePencilPageTurnSettings: newSettings)
         }
     }
 
@@ -967,9 +977,15 @@ public final class MangaReaderModel: ObservableObject {
         )
     }
 
-    private func persistSettings() async {
+    private func persistSettings(
+        mangaSettings: MangaReaderSettings? = nil,
+        applePencilPageTurnSettings: ApplePencilPageTurnSettings? = nil
+    ) async {
         var appSettings = await appContext.settingsStore.load()
-        appSettings.manga = settings
+        appSettings.manga = mangaSettings ?? settings
+        if let applePencilPageTurnSettings {
+            appSettings.applePencilPageTurn = applePencilPageTurnSettings
+        }
         try? await appContext.settingsStore.save(appSettings)
     }
 

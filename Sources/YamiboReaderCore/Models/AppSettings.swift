@@ -259,11 +259,79 @@ public struct FavoriteAppearanceSettings: Codable, Hashable, Sendable {
     }
 }
 
+public enum ApplePencilPageTurnGesture: Hashable, Sendable {
+    case doubleTap
+    case squeeze
+}
+
+public enum ApplePencilPageTurnBehavior: String, Codable, Hashable, CaseIterable, Sendable {
+    case doubleTapPreviousSqueezeNext
+    case doubleTapNextSqueezePrevious
+
+    public var title: String {
+        switch self {
+        case .doubleTapPreviousSqueezeNext: "双击上一页，按压下一页"
+        case .doubleTapNextSqueezePrevious: "双击下一页，按压上一页"
+        }
+    }
+
+    public var doubleTapPageDelta: Int {
+        pageDelta(for: .doubleTap)
+    }
+
+    public var squeezePageDelta: Int {
+        pageDelta(for: .squeeze)
+    }
+
+    public func pageDelta(for gesture: ApplePencilPageTurnGesture) -> Int {
+        switch (self, gesture) {
+        case (.doubleTapPreviousSqueezeNext, .doubleTap),
+             (.doubleTapNextSqueezePrevious, .squeeze):
+            -1
+        case (.doubleTapPreviousSqueezeNext, .squeeze),
+             (.doubleTapNextSqueezePrevious, .doubleTap):
+            1
+        }
+    }
+}
+
+public struct ApplePencilPageTurnSettings: Codable, Hashable, Sendable {
+    public var isEnabled: Bool
+    public var behavior: ApplePencilPageTurnBehavior
+
+    public init(
+        isEnabled: Bool = false,
+        behavior: ApplePencilPageTurnBehavior = .doubleTapPreviousSqueezeNext
+    ) {
+        self.isEnabled = isEnabled
+        self.behavior = behavior
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case isEnabled
+        case behavior
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        isEnabled = try container.decodeIfPresent(Bool.self, forKey: .isEnabled) ?? false
+        behavior = try container.decodeIfPresent(ApplePencilPageTurnBehavior.self, forKey: .behavior)
+            ?? .doubleTapPreviousSqueezeNext
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(isEnabled, forKey: .isEnabled)
+        try container.encode(behavior, forKey: .behavior)
+    }
+}
+
 public struct AppSettings: Codable, Hashable, Sendable {
     public var reader: ReaderAppearanceSettings
     public var manga: MangaReaderSettings
     public var webBrowser: WebBrowserSettings
     public var favoriteAppearance: FavoriteAppearanceSettings
+    public var applePencilPageTurn: ApplePencilPageTurnSettings
     public var homePage: AppHomePage
     public var usesDataSaverMode: Bool
     public var collapsesFavoriteSections: Bool
@@ -273,6 +341,7 @@ public struct AppSettings: Codable, Hashable, Sendable {
         manga: MangaReaderSettings = .init(),
         webBrowser: WebBrowserSettings = .init(),
         favoriteAppearance: FavoriteAppearanceSettings = .init(),
+        applePencilPageTurn: ApplePencilPageTurnSettings = .init(),
         homePage: AppHomePage = .forum,
         usesDataSaverMode: Bool = false,
         collapsesFavoriteSections: Bool = false
@@ -281,6 +350,7 @@ public struct AppSettings: Codable, Hashable, Sendable {
         self.manga = manga
         self.webBrowser = webBrowser
         self.favoriteAppearance = favoriteAppearance
+        self.applePencilPageTurn = applePencilPageTurn
         self.homePage = homePage
         self.usesDataSaverMode = usesDataSaverMode
         self.collapsesFavoriteSections = collapsesFavoriteSections
@@ -291,6 +361,7 @@ public struct AppSettings: Codable, Hashable, Sendable {
         case manga
         case webBrowser
         case favoriteAppearance
+        case applePencilPageTurn
         case homePage
         case usesDataSaverMode
         case collapsesFavoriteSections
@@ -302,6 +373,7 @@ public struct AppSettings: Codable, Hashable, Sendable {
         manga = try container.decodeIfPresent(MangaReaderSettings.self, forKey: .manga) ?? .init()
         webBrowser = try container.decodeIfPresent(WebBrowserSettings.self, forKey: .webBrowser) ?? .init()
         favoriteAppearance = try container.decodeIfPresent(FavoriteAppearanceSettings.self, forKey: .favoriteAppearance) ?? .init()
+        applePencilPageTurn = try container.decodeIfPresent(ApplePencilPageTurnSettings.self, forKey: .applePencilPageTurn) ?? .init()
         homePage = try container.decodeIfPresent(AppHomePage.self, forKey: .homePage) ?? .forum
         usesDataSaverMode = try container.decodeIfPresent(Bool.self, forKey: .usesDataSaverMode) ?? false
         collapsesFavoriteSections = try container.decodeIfPresent(Bool.self, forKey: .collapsesFavoriteSections) ?? false
@@ -313,6 +385,7 @@ public struct AppSettings: Codable, Hashable, Sendable {
         try container.encode(manga, forKey: .manga)
         try container.encode(webBrowser, forKey: .webBrowser)
         try container.encode(favoriteAppearance, forKey: .favoriteAppearance)
+        try container.encode(applePencilPageTurn, forKey: .applePencilPageTurn)
         try container.encode(homePage, forKey: .homePage)
         try container.encode(usesDataSaverMode, forKey: .usesDataSaverMode)
         try container.encode(collapsesFavoriteSections, forKey: .collapsesFavoriteSections)
