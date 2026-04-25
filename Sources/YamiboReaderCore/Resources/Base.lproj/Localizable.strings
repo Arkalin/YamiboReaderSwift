@@ -67,7 +67,7 @@
 "error.flood_control" = "论坛触发了防灌水限制，请稍后再试";
 "error.invalid_response" = "未拿到有效的论坛响应";
 "error.invalid_response_with_status" = "论坛响应异常（HTTP %d）";
-"error.account_uid_unavailable" = "无法确认当前登录账号，请重新登录后再同步。";
+"error.account_uid_unavailable" = "无法确认当前百合会账号，请重新登录后再同步。";
 "error.missing_favorite_delete_id" = "当前收藏缺少删除标识，请先下拉刷新";
 "error.missing_favorite_delete_token" = "删除收藏失败：未拿到表单校验码";
 "error.not_authenticated" = "当前登录态不可用，请重新登录";
