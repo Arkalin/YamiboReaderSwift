@@ -5,13 +5,13 @@
 ## 界面预览
 
 <p align="center">
-  <img src="images/1.png" width="25%" alt="iPhone 收藏列表" />
-  <img src="images/2.png" width="25%" alt="iPhone 小说阅读器" />
-  <img src="images/3.png" width="25%" alt="iPhone 漫画阅读器" />
-  <img src="images/4.png" width="25%" alt="iPhone 应用设置" />
+  <img src="images/1.png" width="20%" alt="iPhone 收藏列表" />
+  <img src="images/2.png" width="20%" alt="iPhone 小说阅读器" />
+  <img src="images/3.png" width="20%" alt="iPhone 漫画阅读器" />
+  <img src="images/4.png" width="20%" alt="iPhone 应用设置" />
   <br />
-  <img src="images/5.png" width="50%" alt="iPad 收藏列表" />
-  <img src="images/6.png" width="50%" alt="iPad 阅读设置" />
+  <img src="images/5.png" width="40%" alt="iPad 收藏列表" />
+  <img src="images/6.png" width="40%" alt="iPad 阅读设置" />
 </p>
 
 ## 功能概览
