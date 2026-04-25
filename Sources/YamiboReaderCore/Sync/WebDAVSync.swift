@@ -104,22 +104,19 @@ public struct WebDAVSyncPayload: Codable, Equatable, Sendable {
 
     public var version: Int
     public var updatedAt: Date
+    public var accountUID: String?
     public var library: FavoriteLibrarySnapshot
-    public var session: SessionState
-    public var autoSignIn: AutoSignInSnapshot
 
     public init(
         version: Int = Self.currentVersion,
         updatedAt: Date,
-        library: FavoriteLibrarySnapshot,
-        session: SessionState,
-        autoSignIn: AutoSignInSnapshot
+        accountUID: String? = nil,
+        library: FavoriteLibrarySnapshot
     ) {
         self.version = version
         self.updatedAt = updatedAt
+        self.accountUID = accountUID
         self.library = library
-        self.session = session
-        self.autoSignIn = autoSignIn
     }
 }
 
@@ -135,6 +132,7 @@ public enum WebDAVSyncError: LocalizedError, Equatable, Sendable {
     case unsupportedPayloadVersion(Int)
     case invalidResponse(Int?)
     case emptyPayload
+    case accountMismatch(localUID: String, remoteUID: String)
     case underlying(String)
 
     public var errorDescription: String? {
@@ -155,6 +153,8 @@ public enum WebDAVSyncError: LocalizedError, Equatable, Sendable {
             }
         case .emptyPayload:
             L10n.string("webdav.error.empty_payload")
+        case .accountMismatch:
+            L10n.string("webdav.error.account_mismatch")
         case let .underlying(message):
             message
         }
@@ -267,21 +267,21 @@ public actor WebDAVSyncService {
     private let settingsStore: WebDAVSyncSettingsStore
     private let favoriteStore: FavoriteStore
     private let sessionStore: SessionStore
-    private let autoSignInStore: AutoSignInStore
+    private let accountUIDResolver: AccountUIDResolver
     private let client: WebDAVClient
 
     public init(
         settingsStore: WebDAVSyncSettingsStore,
         favoriteStore: FavoriteStore,
         sessionStore: SessionStore,
-        autoSignInStore: AutoSignInStore,
-        client: WebDAVClient = WebDAVClient()
+        client: WebDAVClient = WebDAVClient(),
+        accountUIDResolver: AccountUIDResolver? = nil
     ) {
         self.settingsStore = settingsStore
         self.favoriteStore = favoriteStore
         self.sessionStore = sessionStore
-        self.autoSignInStore = autoSignInStore
         self.client = client
+        self.accountUIDResolver = accountUIDResolver ?? AccountUIDResolver(sessionStore: sessionStore)
     }
 
     public func upload() async throws -> WebDAVSyncPayload {
@@ -290,11 +290,12 @@ public actor WebDAVSyncService {
     }
 
     @discardableResult
-    public func upload(using settings: WebDAVSyncSettings) async throws -> WebDAVSyncPayload {
-        let payload = try await makePayload(updatedAt: .now)
-        try await client.uploadPayload(payload, settings: settings)
-        try await updateSettingsAfterSync(settings, remoteUpdatedAt: payload.updatedAt)
-        return payload
+    public func upload(using settings: WebDAVSyncSettings, allowingAccountMismatch: Bool = false) async throws -> WebDAVSyncPayload {
+        let accountUID = try await accountUIDResolver.resolveCurrentAccountUID()
+        if !allowingAccountMismatch {
+            try await validateRemoteAccountIfPresent(settings: settings, localUID: accountUID)
+        }
+        return try await upload(using: settings, accountUID: accountUID)
     }
 
     @discardableResult
@@ -304,8 +305,10 @@ public actor WebDAVSyncService {
     }
 
     @discardableResult
-    public func download(using settings: WebDAVSyncSettings) async throws -> WebDAVSyncPayload {
+    public func download(using settings: WebDAVSyncSettings, allowingAccountMismatch: Bool = false) async throws -> WebDAVSyncPayload {
+        let accountUID = try await accountUIDResolver.resolveCurrentAccountUID()
         let payload = try await client.fetchPayload(settings: settings)
+        try validate(remotePayload: payload, localUID: accountUID, allowingAccountMismatch: allowingAccountMismatch)
         try await apply(payload)
         try await updateSettingsAfterSync(settings, remoteUpdatedAt: payload.updatedAt)
         return payload
@@ -314,12 +317,18 @@ public actor WebDAVSyncService {
     public func synchronizeAutomatically() async throws {
         let settings = await settingsStore.load()
         guard settings.isAutoSyncEnabled, settings.isConfigured else { return }
+        let sessionState = await sessionStore.load()
+        guard sessionState.isLoggedIn, !sessionState.cookie.isEmpty else { return }
+        guard let accountUID = try? await accountUIDResolver.resolveCurrentAccountUID() else { return }
 
         let remotePayload: WebDAVSyncPayload?
         do {
             remotePayload = try await client.fetchPayload(settings: settings)
         } catch WebDAVSyncError.notFound {
             remotePayload = nil
+        }
+        if let remotePayload, isAccountMismatch(remotePayload: remotePayload, localUID: accountUID) {
+            return
         }
 
         if let remotePayload, remotePayload.updatedAt > (settings.localUpdatedAt ?? .distantPast) {
@@ -330,7 +339,7 @@ public actor WebDAVSyncService {
 
         let newestKnownRemoteDate = remotePayload?.updatedAt ?? settings.lastRemoteUpdatedAt ?? .distantPast
         if (settings.localUpdatedAt ?? .distantPast) > newestKnownRemoteDate || remotePayload == nil {
-            _ = try await upload(using: settings)
+            _ = try await upload(using: settings, accountUID: accountUID)
         }
     }
 
@@ -341,12 +350,45 @@ public actor WebDAVSyncService {
         try await settingsStore.save(settings)
     }
 
-    private func makePayload(updatedAt: Date) async throws -> WebDAVSyncPayload {
+    private func upload(using settings: WebDAVSyncSettings, accountUID: String) async throws -> WebDAVSyncPayload {
+        let payload = try await makePayload(updatedAt: .now, accountUID: accountUID)
+        try await client.uploadPayload(payload, settings: settings)
+        try await updateSettingsAfterSync(settings, remoteUpdatedAt: payload.updatedAt)
+        return payload
+    }
+
+    private func validateRemoteAccountIfPresent(settings: WebDAVSyncSettings, localUID: String) async throws {
+        do {
+            let remotePayload = try await client.fetchPayload(settings: settings)
+            try validate(remotePayload: remotePayload, localUID: localUID, allowingAccountMismatch: false)
+        } catch WebDAVSyncError.notFound {
+            return
+        }
+    }
+
+    private func validate(
+        remotePayload: WebDAVSyncPayload,
+        localUID: String,
+        allowingAccountMismatch: Bool
+    ) throws {
+        guard !allowingAccountMismatch, isAccountMismatch(remotePayload: remotePayload, localUID: localUID) else {
+            return
+        }
+        throw WebDAVSyncError.accountMismatch(localUID: localUID, remoteUID: remotePayload.accountUID ?? "")
+    }
+
+    private func isAccountMismatch(remotePayload: WebDAVSyncPayload, localUID: String) -> Bool {
+        guard let remoteUID = remotePayload.accountUID?.trimmingCharacters(in: .whitespacesAndNewlines), !remoteUID.isEmpty else {
+            return false
+        }
+        return remoteUID != localUID
+    }
+
+    private func makePayload(updatedAt: Date, accountUID: String) async throws -> WebDAVSyncPayload {
         WebDAVSyncPayload(
             updatedAt: updatedAt,
-            library: await favoriteStore.loadLibrarySnapshot(),
-            session: await sessionStore.load(),
-            autoSignIn: await autoSignInStore.exportSnapshot()
+            accountUID: accountUID,
+            library: await favoriteStore.loadLibrarySnapshot()
         )
     }
 
@@ -355,8 +397,6 @@ public actor WebDAVSyncService {
             throw WebDAVSyncError.unsupportedPayloadVersion(payload.version)
         }
         try await favoriteStore.saveLibrarySnapshot(payload.library)
-        try await sessionStore.save(payload.session)
-        await autoSignInStore.importSnapshot(payload.autoSignIn)
     }
 
     private func updateSettingsAfterSync(_ settings: WebDAVSyncSettings, remoteUpdatedAt: Date) async throws {

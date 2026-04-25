@@ -5,6 +5,7 @@ public protocol SessionStoring: Sendable {
     func save(_ session: SessionState) async throws
     func updateCookie(_ cookie: String, isLoggedIn: Bool) async throws
     func updateWebSession(cookie: String, userAgent: String, isLoggedIn: Bool) async throws
+    func updateAccountUID(_ accountUID: String?) async throws
     func reset() async throws
 }
 
@@ -41,17 +42,32 @@ public actor SessionStore: SessionStoring {
 
     public func updateCookie(_ cookie: String, isLoggedIn: Bool) async throws {
         var session = await load()
+        let previousCookie = session.cookie
         session.cookie = cookie
         session.isLoggedIn = isLoggedIn
+        if !isLoggedIn || cookie != previousCookie {
+            session.accountUID = nil
+        }
         session.lastUpdatedAt = .now
         try await save(session)
     }
 
     public func updateWebSession(cookie: String, userAgent: String, isLoggedIn: Bool) async throws {
         var session = await load()
+        let previousCookie = session.cookie
         session.cookie = cookie
         session.userAgent = userAgent
         session.isLoggedIn = isLoggedIn
+        if !isLoggedIn || cookie != previousCookie {
+            session.accountUID = nil
+        }
+        session.lastUpdatedAt = .now
+        try await save(session)
+    }
+
+    public func updateAccountUID(_ accountUID: String?) async throws {
+        var session = await load()
+        session.accountUID = accountUID?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         session.lastUpdatedAt = .now
         try await save(session)
     }
@@ -66,5 +82,11 @@ public actor SessionStore: SessionStoring {
             object: nil,
             userInfo: [Self.changeIDUserInfoKey: changeID]
         )
+    }
+}
+
+private extension String {
+    var nilIfEmpty: String? {
+        isEmpty ? nil : self
     }
 }

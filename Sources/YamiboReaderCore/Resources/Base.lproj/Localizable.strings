@@ -67,6 +67,7 @@
 "error.flood_control" = "论坛触发了防灌水限制，请稍后再试";
 "error.invalid_response" = "未拿到有效的论坛响应";
 "error.invalid_response_with_status" = "论坛响应异常（HTTP %d）";
+"error.account_uid_unavailable" = "无法确认当前登录账号，请重新登录后再同步。";
 "error.missing_favorite_delete_id" = "当前收藏缺少删除标识，请先下拉刷新";
 "error.missing_favorite_delete_token" = "删除收藏失败：未拿到表单校验码";
 "error.not_authenticated" = "当前登录态不可用，请重新登录";
@@ -262,14 +263,19 @@
 "translation.title" = "简繁转换";
 "translation.traditional" = "繁体";
 "webdav.auto_sync" = "自动同步数据";
+"webdav.account_mismatch_message" = "服务器账号与本机账号数据不一致，是否覆盖？";
+"webdav.account_mismatch_overwrite" = "覆盖";
+"webdav.account_mismatch_title" = "账号不一致";
 "webdav.continue" = "继续";
 "webdav.download" = "下载";
+"webdav.error.account_mismatch" = "服务器账号与本机账号数据不一致。";
 "webdav.error.empty_payload" = "服务器同步文件为空。";
 "webdav.error.invalid_configuration" = "请填写有效的 WebDAV URL 和用户名。";
 "webdav.error.invalid_response" = "WebDAV 服务器响应异常。";
 "webdav.error.invalid_response_with_status" = "WebDAV 服务器响应异常（%d）。";
 "webdav.error.not_authenticated" = "WebDAV 用户名或密码不正确。";
 "webdav.error.not_found" = "服务器上没有找到同步数据，请先上传。";
+"webdav.error.login_required" = "请先登录再同步。";
 "webdav.error.unsupported_version" = "不支持的同步数据版本（%d）。";
 "webdav.last_synced" = "上次同步：%@";
 "webdav.operation" = "操作";
