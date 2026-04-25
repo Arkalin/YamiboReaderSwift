@@ -7,6 +7,7 @@ public enum YamiboError: LocalizedError, Equatable, Sendable {
     case parsingFailed(context: String)
     case floodControl
     case notAuthenticated
+    case accountUIDUnavailable
     case offline
     case searchCooldown(seconds: Int)
     case persistenceFailed(String)
@@ -32,6 +33,8 @@ public enum YamiboError: LocalizedError, Equatable, Sendable {
             return L10n.string("error.flood_control")
         case .notAuthenticated:
             return L10n.string("error.not_authenticated")
+        case .accountUIDUnavailable:
+            return L10n.string("error.account_uid_unavailable")
         case .offline:
             return L10n.string("error.offline")
         case let .searchCooldown(seconds):

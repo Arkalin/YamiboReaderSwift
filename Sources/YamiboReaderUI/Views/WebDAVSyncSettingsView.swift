@@ -17,6 +17,7 @@ private final class WebDAVSyncSettingsViewModel: ObservableObject {
     @Published private(set) var lastSyncedAt: Date?
     @Published var errorMessage: String?
     @Published var successMessage: String?
+    @Published var isShowingAccountMismatchConfirmation = false
 
     private let appContext: YamiboAppContext
 
@@ -46,7 +47,7 @@ private final class WebDAVSyncSettingsViewModel: ObservableObject {
         lastSyncedAt = settings.lastSyncedAt
     }
 
-    func continueSync() async -> Bool {
+    func continueSync(allowingAccountMismatch: Bool = false) async -> Bool {
         activeAction = .syncing
         defer { activeAction = nil }
 
@@ -71,14 +72,17 @@ private final class WebDAVSyncSettingsViewModel: ObservableObject {
             let service = appContext.makeWebDAVSyncService()
             switch direction {
             case .upload:
-                _ = try await service.upload(using: settings)
+                _ = try await service.upload(using: settings, allowingAccountMismatch: allowingAccountMismatch)
             case .download:
-                _ = try await service.download(using: settings)
+                _ = try await service.download(using: settings, allowingAccountMismatch: allowingAccountMismatch)
             }
             let updatedSettings = await appContext.webDAVSyncSettingsStore.load()
             lastSyncedAt = updatedSettings.lastSyncedAt
             successMessage = L10n.string("webdav.sync_success")
             return true
+        } catch WebDAVSyncError.accountMismatch {
+            isShowingAccountMismatchConfirmation = true
+            return false
         } catch {
             errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
             return false
@@ -201,6 +205,19 @@ public struct WebDAVSyncSettingsView: View {
                 }
             }, message: {
                 Text(viewModel.errorMessage ?? "")
+            })
+            .alert(L10n.string("webdav.account_mismatch_title"), isPresented: $viewModel.isShowingAccountMismatchConfirmation, actions: {
+                Button(L10n.string("webdav.account_mismatch_overwrite"), role: .destructive) {
+                    Task {
+                        let didSync = await viewModel.continueSync(allowingAccountMismatch: true)
+                        if didSync {
+                            dismiss()
+                        }
+                    }
+                }
+                Button(L10n.string("common.cancel"), role: .cancel) {}
+            }, message: {
+                Text(L10n.string("webdav.account_mismatch_message"))
             })
         }
     }

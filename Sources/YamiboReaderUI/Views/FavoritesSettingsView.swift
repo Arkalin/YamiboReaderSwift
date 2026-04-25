@@ -253,7 +253,14 @@ public struct FavoritesSettingsView: View {
                     .disabled(viewModel.isBusy)
 
                     Button {
-                        showingWebDAVSettings = true
+                        Task { @MainActor in
+                            let session = await appContext.sessionStore.load()
+                            if session.isLoggedIn, !session.cookie.isEmpty {
+                                showingWebDAVSettings = true
+                            } else {
+                                viewModel.errorMessage = L10n.string("webdav.error.login_required")
+                            }
+                        }
                     } label: {
                         settingsRow(title: L10n.string("settings.webdav_sync"))
                     }

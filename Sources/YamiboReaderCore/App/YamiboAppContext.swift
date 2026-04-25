@@ -109,8 +109,8 @@ public final class YamiboAppContext: YamiboRepositoryProviding, Sendable {
             settingsStore: webDAVSyncSettingsStore,
             favoriteStore: favoriteStore,
             sessionStore: sessionStore,
-            autoSignInStore: autoSignInStore,
-            client: WebDAVClient(session: session)
+            client: WebDAVClient(session: session),
+            accountUIDResolver: AccountUIDResolver(sessionStore: sessionStore, session: session)
         )
     }
 

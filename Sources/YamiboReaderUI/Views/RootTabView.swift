@@ -26,12 +26,6 @@ public struct RootTabView: View {
         .task {
             await observeFavoriteStoreChanges()
         }
-        .task {
-            await observeSessionStoreChanges()
-        }
-        .task {
-            await observeAutoSignInStoreChanges()
-        }
         .onChange(of: scenePhase) { _, newPhase in
             switch newPhase {
             case .active:
@@ -93,28 +87,6 @@ public struct RootTabView: View {
             guard !Task.isCancelled else { return }
             guard let changeID = notification.userInfo?[FavoriteStore.changeIDUserInfoKey] as? String,
                   changeID == appModel.appContext.favoriteStore.changeID else {
-                continue
-            }
-            appModel.scheduleWebDAVUploadForLocalChange()
-        }
-    }
-
-    private func observeSessionStoreChanges() async {
-        for await notification in NotificationCenter.default.notifications(named: SessionStore.didChangeNotification) {
-            guard !Task.isCancelled else { return }
-            guard let changeID = notification.userInfo?[SessionStore.changeIDUserInfoKey] as? String,
-                  changeID == appModel.appContext.sessionStore.changeID else {
-                continue
-            }
-            appModel.scheduleWebDAVUploadForLocalChange()
-        }
-    }
-
-    private func observeAutoSignInStoreChanges() async {
-        for await notification in NotificationCenter.default.notifications(named: AutoSignInStore.didChangeNotification) {
-            guard !Task.isCancelled else { return }
-            guard let changeID = notification.userInfo?[AutoSignInStore.changeIDUserInfoKey] as? String,
-                  changeID == appModel.appContext.autoSignInStore.changeID else {
                 continue
             }
             appModel.scheduleWebDAVUploadForLocalChange()
