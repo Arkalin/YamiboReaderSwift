@@ -2,6 +2,30 @@
 
 `YamiboReader Swift` 是一个面向百合会内容的小说 / 漫画阅读器 SwiftUI 实现。项目包含可复用的核心解析与数据层、SwiftUI 界面层，以及一个独立 iOS App 入口。
 
+## 界面预览
+
+<p align="center">
+  <img src="images/1.png" width="210" alt="iPhone 收藏列表" />
+  <img src="images/2.png" width="210" alt="iPhone 小说阅读器" />
+  <img src="images/3.png" width="210" alt="iPhone 漫画阅读器" />
+  <img src="images/4.png" width="210" alt="iPhone 应用设置" />
+</p>
+
+<table>
+  <tr>
+    <td align="center" width="50%">
+      <img src="images/5.png" alt="iPad 收藏列表" />
+      <br />
+      <sub>iPad 收藏列表</sub>
+    </td>
+    <td align="center" width="50%">
+      <img src="images/6.png" alt="iPad 阅读设置" />
+      <br />
+      <sub>iPad 阅读设置</sub>
+    </td>
+  </tr>
+</table>
+
 ## 功能概览
 
 ### 论坛浏览
