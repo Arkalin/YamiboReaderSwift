@@ -206,6 +206,8 @@
 				DEVELOPMENT_TEAM = 67485D7YXU;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = YamiboReader/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Yamibo Reader";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.books";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -349,6 +351,8 @@
 				DEVELOPMENT_TEAM = 67485D7YXU;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = YamiboReader/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Yamibo Reader";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.books";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
