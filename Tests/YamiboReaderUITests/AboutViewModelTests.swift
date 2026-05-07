@@ -3,6 +3,27 @@ import XCTest
 @testable import YamiboReaderUI
 
 final class AboutViewModelTests: XCTestCase {
+    func testMarkdownBlocksPreserveListItems() {
+        let blocks = AboutReleaseNoteMarkdown.blocks(
+            markdown: """
+            - 新增了更新日志
+              - 支持嵌套项目
+            1. 修复问题
+
+            Full Changelog: [v0.0.1...v0.1.0](https://example.com)
+            """,
+            fallback: "fallback"
+        )
+
+        XCTAssertEqual(blocks, [
+            .unorderedListItem("新增了更新日志", depth: 0),
+            .unorderedListItem("支持嵌套项目", depth: 1),
+            .orderedListItem(marker: "1.", "修复问题", depth: 0),
+            .spacer,
+            .paragraph("Full Changelog: [v0.0.1...v0.1.0](https://example.com)")
+        ])
+    }
+
     func testLoadPublishesReleases() async throws {
         let appContext = YamiboAppContext(session: makeAboutViewModelTestSession())
         AboutViewModelTestURLProtocol.setHandler { request in
