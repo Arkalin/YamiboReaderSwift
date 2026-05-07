@@ -1303,7 +1303,7 @@ public struct FavoritesView: View {
                 }
             }
             .sheet(isPresented: $showingAboutSheet) {
-                AboutView()
+                AboutView(appContext: appContext)
             }
             .modifier(FavoriteSharePresenter(favorite: $sharingFavorite))
             .modifier(
