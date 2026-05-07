@@ -4,6 +4,14 @@ import YamiboReaderCore
 #if os(iOS)
 import UIKit
 
+private struct MangaVerticalPageFramePreferenceKey: PreferenceKey {
+    static var defaultValue: [MangaPage.ID: CGRect] { [:] }
+
+    static func reduce(value: inout [MangaPage.ID: CGRect], nextValue: () -> [MangaPage.ID: CGRect]) {
+        value.merge(nextValue(), uniquingKeysWith: { _, new in new })
+    }
+}
+
 public struct MangaReaderView: View {
     private static let verticalReaderCoordinateSpaceName = "MangaReaderVerticalCoordinateSpace"
     private static let pagedTapDelayNanoseconds: UInt64 = 340_000_000
@@ -27,7 +35,9 @@ public struct MangaReaderView: View {
     @State private var lastPagedTapDate: Date?
     @State private var lastPagedTapLocation: CGPoint?
     @State private var suppressPagedSingleTapUntil = Date.distantPast
-    @State private var pendingVerticalViewportPageID: MangaPage.ID?
+    @State private var verticalRestoreController = ReaderVerticalRestoreController()
+    @State private var verticalRestoreSettleTask: Task<Void, Never>?
+    @State private var verticalPageFrames: [MangaPage.ID: CGRect] = [:]
     @State private var isDismissing = false
     private let appModel: YamiboAppModel
 
@@ -87,6 +97,7 @@ public struct MangaReaderView: View {
             .onDisappear {
                 previewHideTask?.cancel()
                 pendingPagedTapTask?.cancel()
+                verticalRestoreSettleTask?.cancel()
                 Task { await model.saveProgress() }
             }
             .onChange(of: model.navigationRequest) { _, newValue in
@@ -314,8 +325,16 @@ public struct MangaReaderView: View {
                                 onToggleChrome: { showingChrome.toggle() }
                             )
                             .id(page.id)
+                            .background(
+                                GeometryReader { geometry in
+                                    Color.clear.preference(
+                                        key: MangaVerticalPageFramePreferenceKey.self,
+                                        value: [page.id: geometry.frame(in: .named(Self.verticalReaderCoordinateSpaceName))]
+                                    )
+                                }
+                            )
                             .onAppear {
-                                handleVerticalPageAppear(page.id)
+                                handleVerticalPageAppear(page)
                             }
                         }
                     }
@@ -324,6 +343,10 @@ public struct MangaReaderView: View {
                 .coordinateSpace(name: Self.verticalReaderCoordinateSpaceName)
                 .scrollDisabled(activeZoomPageID != nil)
                 .simultaneousGesture(contentInteractionGesture)
+                .onPreferenceChange(MangaVerticalPageFramePreferenceKey.self) { frames in
+                    verticalPageFrames = frames
+                    updateVerticalViewportPosition()
+                }
 
                 if let overlay = verticalZoomOverlay {
                     MangaVerticalZoomOverlay(
@@ -338,14 +361,14 @@ public struct MangaReaderView: View {
                 activeZoomPageID = nil
                 verticalZoomOverlay = nil
                 guard let request = model.viewportRequest else { return }
-                pendingVerticalViewportPageID = request.targetPageID
+                beginVerticalRestore(for: request)
                 proxy.scrollTo(request.targetPageID, anchor: .top)
             }
             .onChange(of: model.viewportRequest) { _, request in
                 guard let request else { return }
                 activeZoomPageID = nil
                 verticalZoomOverlay = nil
-                pendingVerticalViewportPageID = request.targetPageID
+                beginVerticalRestore(for: request)
                 if request.animated {
                     withAnimation(.easeInOut(duration: 0.2)) {
                         proxy.scrollTo(request.targetPageID, anchor: .top)
@@ -543,13 +566,31 @@ public struct MangaReaderView: View {
         previewPageIndex = nil
     }
 
-    private func handleVerticalPageAppear(_ pageID: MangaPage.ID) {
-        if let pendingVerticalViewportPageID {
-            guard pendingVerticalViewportPageID == pageID else { return }
-            self.pendingVerticalViewportPageID = nil
+    private func handleVerticalPageAppear(_ page: MangaPage) {
+        refreshVerticalRestorePhase()
+        guard let request = verticalRestoreController.activeRequest else { return }
+        guard request.pageIndex == page.globalIndex else { return }
+        beginVerticalRestoreSettling(for: request)
+
+        model.updateCurrentPage(forPageID: page.id)
+    }
+
+    private func updateVerticalViewportPosition() {
+        guard model.settings.readingMode == .vertical, !verticalPageFrames.isEmpty else { return }
+        guard activeZoomPageID == nil else { return }
+        guard verticalRestoreController.canSampleViewport(now: CACurrentMediaTime()) else { return }
+
+        let referenceLineY = verticalViewportReferenceLineY
+        guard let bestMatch = verticalPageFrames
+            .filter({ $0.value.height > 0 })
+            .min(by: { lhs, rhs in
+                verticalPageDistance(from: referenceLineY, to: lhs.value) <
+                    verticalPageDistance(from: referenceLineY, to: rhs.value)
+            }) else {
+            return
         }
 
-        model.updateCurrentPage(forPageID: pageID)
+        model.updateCurrentPage(forPageID: bestMatch.key)
     }
 
     private func clampedSliderValue(_ value: Double) -> Double {
@@ -640,7 +681,7 @@ public struct MangaReaderView: View {
     }
 
     private func goRelativePage(_ delta: Int) async {
-        pendingVerticalViewportPageID = nil
+        cancelVerticalRestoreForUserInteraction()
         cancelSliderInteractionForContentGesture()
         cancelPendingPagedTap()
         await model.jumpRelativePage(delta)
@@ -665,9 +706,59 @@ public struct MangaReaderView: View {
     private var contentInteractionGesture: some Gesture {
         DragGesture(minimumDistance: 4)
             .onChanged { _ in
-                pendingVerticalViewportPageID = nil
+                cancelVerticalRestoreForUserInteraction()
                 cancelSliderInteractionForContentGesture()
             }
+    }
+
+    private func beginVerticalRestore(for request: MangaViewportRequest) {
+        verticalRestoreSettleTask?.cancel()
+        verticalRestoreSettleTask = nil
+        verticalRestoreController.beginScrolling(
+            to: ReaderVerticalScrollRequest(
+                pageIndex: request.targetIndex,
+                intraPageProgress: 0
+            )
+        )
+    }
+
+    private func beginVerticalRestoreSettling(for request: ReaderVerticalScrollRequest) {
+        verticalRestoreController.beginSettling(request, now: CACurrentMediaTime())
+        verticalRestoreSettleTask?.cancel()
+        verticalRestoreSettleTask = Task {
+            try? await Task.sleep(for: .milliseconds(460))
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                refreshVerticalRestorePhase()
+                updateVerticalViewportPosition()
+                verticalRestoreSettleTask = nil
+            }
+        }
+    }
+
+    private func refreshVerticalRestorePhase(now: CFTimeInterval = CACurrentMediaTime()) {
+        verticalRestoreController.refresh(now: now)
+    }
+
+    private func cancelVerticalRestoreForUserInteraction() {
+        guard verticalRestoreController.activeRequest != nil else { return }
+        verticalRestoreController.cancel(now: CACurrentMediaTime())
+        verticalRestoreSettleTask?.cancel()
+        verticalRestoreSettleTask = nil
+    }
+
+    private var verticalViewportReferenceLineY: CGFloat {
+        96
+    }
+
+    private func verticalPageDistance(from referenceLineY: CGFloat, to frame: CGRect) -> CGFloat {
+        if frame.contains(CGPoint(x: frame.midX, y: referenceLineY)) {
+            return 0
+        }
+        if referenceLineY < frame.minY {
+            return frame.minY - referenceLineY
+        }
+        return referenceLineY - frame.maxY
     }
 
     private var windowSafeAreaInsets: UIEdgeInsets {
