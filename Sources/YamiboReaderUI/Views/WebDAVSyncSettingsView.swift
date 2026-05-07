@@ -78,7 +78,11 @@ final class WebDAVSyncSettingsViewModel: ObservableObject {
             successMessage = L10n.string("webdav.sync_success")
             return true
         } catch WebDAVSyncError.accountMismatch {
-            isShowingAccountMismatchConfirmation = true
+            if direction == .upload {
+                isShowingAccountMismatchConfirmation = true
+            } else {
+                errorMessage = L10n.string("webdav.error.account_mismatch")
+            }
             return false
         } catch {
             errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
