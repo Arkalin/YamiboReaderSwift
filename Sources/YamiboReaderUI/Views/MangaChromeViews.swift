@@ -12,6 +12,7 @@ struct MangaBottomChrome: View {
     let onShowSettings: () -> Void
     let onShowDirectory: () -> Void
     let onJumpChapter: (Int) -> Void
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         VStack(spacing: 14) {
@@ -20,6 +21,7 @@ struct MangaBottomChrome: View {
                     Label(L10n.string("manga.directory"), systemImage: "list.bullet")
                 }
                 .buttonStyle(.bordered)
+                .tint(readerChromeButtonTint(for: colorScheme))
                 .disabled(model.isTransitioningChapter)
 
                 Spacer(minLength: 0)
@@ -28,6 +30,7 @@ struct MangaBottomChrome: View {
                     Label(L10n.string("settings.title"), systemImage: "gearshape")
                 }
                 .buttonStyle(.bordered)
+                .tint(readerChromeButtonTint(for: colorScheme))
             }
 
             VStack(spacing: 10) {
