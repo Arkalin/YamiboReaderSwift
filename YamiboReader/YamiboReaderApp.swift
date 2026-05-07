@@ -61,7 +61,7 @@ private struct LaunchAnimationView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
 
                     Text(L10n.string("app.name"))
-                        .font(.system(size: titleSize(for: proxy.size), weight: .heavy, design: .rounded))
+                        .font(.system(size: titleSize(for: proxy.size), weight: .medium, design: .rounded))
                         .foregroundStyle(titleColor)
                         .lineLimit(1)
                         .minimumScaleFactor(0.72)
