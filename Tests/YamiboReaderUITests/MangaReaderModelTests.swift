@@ -93,6 +93,56 @@ final class MangaReaderModelTests: XCTestCase {
         }
     }
 
+    func testConcurrentPrefetchDoesNotDuplicateLoadedChapterPages() async throws {
+        let model = try await makeMangaModel(
+            chapterHTMLByTID: [
+                "700": makeMangaHTML(
+                    tid: "700",
+                    title: "第1话",
+                    links: [("701", "第2话")],
+                    imageCount: 2
+                ),
+                "701": makeMangaHTML(
+                    tid: "701",
+                    title: "第2话",
+                    links: [("700", "第1话")],
+                    imageCount: 3
+                )
+            ],
+            requestHandler: { request in
+                let tid = MangaTitleCleaner.extractTid(from: request.url?.absoluteString ?? "")
+                guard tid == "701" else { return nil }
+                Thread.sleep(forTimeInterval: 0.1)
+                let html = makeMangaHTML(
+                    tid: "701",
+                    title: "第2话",
+                    links: [("700", "第1话")],
+                    imageCount: 3
+                )
+                return httpResponse(url: request.url!, body: html)
+            }
+        )
+
+        await MainActor.run {
+            for _ in 0 ..< 5 {
+                model.updateCurrentPage(1)
+            }
+        }
+
+        try await waitFor {
+            await MainActor.run {
+                model.pages.contains { $0.tid == "701" }
+            }
+        }
+        try await Task.sleep(nanoseconds: 300_000_000)
+
+        await MainActor.run {
+            XCTAssertEqual(model.pages.count, 5)
+            XCTAssertEqual(model.pages.map(\.id), ["700#0", "700#1", "701#0", "701#1", "701#2"])
+            XCTAssertEqual(Set(model.pages.map(\.id)).count, model.pages.count)
+        }
+    }
+
     func testJumpingToLoadedChapterStillEmitsViewportRequest() async throws {
         let model = try await makeMangaModel(
             chapterHTMLByTID: [
