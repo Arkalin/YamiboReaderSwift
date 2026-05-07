@@ -178,11 +178,10 @@ private struct ReleaseNoteRow: View {
                 }
             }
 
-            Text(AboutReleaseNoteMarkdown.attributedBody(for: release))
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-                .textSelection(.enabled)
+            ReleaseNoteMarkdownView(
+                markdown: release.displayBody,
+                fallback: L10n.string("about.release_notes.no_body")
+            )
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
@@ -190,26 +189,132 @@ private struct ReleaseNoteRow: View {
     }
 }
 
-enum AboutReleaseNoteMarkdown {
-    static func attributedBody(for release: ReleaseNote) -> AttributedString {
-        attributedBody(markdown: release.displayBody, fallback: L10n.string("about.release_notes.no_body"))
+private struct ReleaseNoteMarkdownView: View {
+    let markdown: String?
+    let fallback: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(Array(AboutReleaseNoteMarkdown.blocks(markdown: markdown, fallback: fallback).enumerated()), id: \.offset) { _, block in
+                switch block {
+                case let .paragraph(text):
+                    markdownText(text)
+                case let .unorderedListItem(text, depth):
+                    HStack(alignment: .firstTextBaseline, spacing: 7) {
+                        Text("•")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .frame(width: 8 + CGFloat(depth * 12), alignment: .trailing)
+
+                        markdownText(text)
+                    }
+                case let .orderedListItem(marker, text, depth):
+                    HStack(alignment: .firstTextBaseline, spacing: 7) {
+                        Text(marker)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .frame(width: 18 + CGFloat(depth * 12), alignment: .trailing)
+
+                        markdownText(text)
+                    }
+                case .spacer:
+                    Spacer()
+                        .frame(height: 4)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    static func attributedBody(markdown: String?, fallback: String) -> AttributedString {
-        guard let markdown else {
-            return AttributedString(fallback)
+    private func markdownText(_ text: String) -> Text {
+        Text(AboutReleaseNoteMarkdown.attributedInlineMarkdown(text))
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+    }
+}
+
+enum AboutReleaseNoteMarkdown {
+    enum Block: Equatable {
+        case paragraph(String)
+        case unorderedListItem(String, depth: Int)
+        case orderedListItem(marker: String, String, depth: Int)
+        case spacer
+    }
+
+    static func blocks(markdown: String?, fallback: String) -> [Block] {
+        guard let markdown, !markdown.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return [.paragraph(fallback)]
         }
 
+        var blocks: [Block] = []
+        let lines = markdown.replacingOccurrences(of: "\r\n", with: "\n").split(separator: "\n", omittingEmptySubsequences: false)
+        for line in lines {
+            blocks.append(block(for: String(line)))
+        }
+        return trimSpacerBlocks(blocks)
+    }
+
+    static func attributedInlineMarkdown(_ markdown: String) -> AttributedString {
         do {
             return try AttributedString(
                 markdown: markdown,
                 options: AttributedString.MarkdownParsingOptions(
-                    interpretedSyntax: .full
+                    interpretedSyntax: .inlineOnlyPreservingWhitespace
                 )
             )
         } catch {
             return AttributedString(markdown)
         }
+    }
+
+    private static func block(for line: String) -> Block {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return .spacer }
+
+        let leadingSpaces = line.prefix { $0 == " " }.count
+        let depth = leadingSpaces / 2
+
+        if let match = unorderedListMatch(in: trimmed) {
+            return .unorderedListItem(match, depth: depth)
+        }
+        if let match = orderedListMatch(in: trimmed) {
+            return .orderedListItem(marker: match.marker, match.text, depth: depth)
+        }
+        return .paragraph(trimmed)
+    }
+
+    private static func unorderedListMatch(in line: String) -> String? {
+        guard line.count > 2 else { return nil }
+        let marker = line[line.startIndex]
+        guard marker == "-" || marker == "*" || marker == "+" else { return nil }
+        let nextIndex = line.index(after: line.startIndex)
+        guard line[nextIndex].isWhitespace else { return nil }
+        return String(line[line.index(after: nextIndex)...]).trimmingCharacters(in: .whitespaces)
+    }
+
+    private static func orderedListMatch(in line: String) -> (marker: String, text: String)? {
+        var index = line.startIndex
+        while index < line.endIndex, line[index].isNumber {
+            index = line.index(after: index)
+        }
+        guard index > line.startIndex, index < line.endIndex, line[index] == "." else { return nil }
+        let markerEnd = line.index(after: index)
+        guard markerEnd < line.endIndex, line[markerEnd].isWhitespace else { return nil }
+        let marker = String(line[..<markerEnd])
+        let textStart = line.index(after: markerEnd)
+        let text = String(line[textStart...]).trimmingCharacters(in: .whitespaces)
+        return (marker, text)
+    }
+
+    private static func trimSpacerBlocks(_ blocks: [Block]) -> [Block] {
+        var blocks = blocks
+        while blocks.first == .spacer {
+            blocks.removeFirst()
+        }
+        while blocks.last == .spacer {
+            blocks.removeLast()
+        }
+        return blocks.isEmpty ? [.spacer] : blocks
     }
 }
 
