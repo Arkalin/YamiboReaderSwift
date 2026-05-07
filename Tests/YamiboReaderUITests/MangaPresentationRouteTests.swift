@@ -64,6 +64,36 @@ final class MangaPresentationRouteTests: XCTestCase {
         XCTAssertFalse(restoredWeb.autoOpenNative)
     }
 
+    func testPresentMangaAfterAutomaticFallbackDoesNotRestoreWebOnDismiss() {
+        let appModel = YamiboAppModel(appContext: YamiboAppContext())
+        let originalURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=704&mobile=2")!
+        let webContext = MangaWebContext(
+            currentURL: originalURL,
+            originalThreadURL: originalURL,
+            source: .favorites,
+            autoOpenNative: true
+        )
+        let nativeContext = MangaLaunchContext(
+            originalThreadURL: originalURL,
+            chapterURL: originalURL,
+            displayTitle: "测试漫画",
+            source: .favorites
+        )
+
+        appModel.presentMangaWeb(webContext)
+        appModel.presentManga(nativeContext)
+
+        guard case .native? = appModel.activeMangaRoute else {
+            return XCTFail("Expected native route")
+        }
+        XCTAssertNil(appModel.suspendedMangaWebContext)
+
+        appModel.dismissMangaRestoringWebIfNeeded()
+
+        XCTAssertNil(appModel.activeMangaRoute)
+        XCTAssertNil(appModel.suspendedMangaWebContext)
+    }
+
     func testDismissMangaToOriginalPostClearsSuspendedContext() {
         let appModel = YamiboAppModel(appContext: YamiboAppContext())
         let originalURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=701&mobile=2")!

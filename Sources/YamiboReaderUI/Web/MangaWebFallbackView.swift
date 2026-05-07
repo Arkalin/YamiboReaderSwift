@@ -127,6 +127,20 @@ public final class MangaWebFallbackModel: ObservableObject {
     }
 
     func handleNativeOpenRequest(title: String, clickedIndex: Int, urls: [URL]) {
+        openNativeReader(
+            title: title,
+            clickedIndex: clickedIndex,
+            urls: urls,
+            preservingWebReturn: true
+        )
+    }
+
+    private func openNativeReader(
+        title: String,
+        clickedIndex: Int,
+        urls: [URL],
+        preservingWebReturn: Bool
+    ) {
         guard !urls.isEmpty else { return }
         autoOpenTask?.cancel()
         loadTimeoutTask?.cancel()
@@ -142,7 +156,11 @@ public final class MangaWebFallbackModel: ObservableObject {
             source: context.source,
             initialPage: clickedIndex
         )
-        appModel.presentMangaFromWeb(nativeContext, preserving: context)
+        if preservingWebReturn {
+            appModel.presentMangaFromWeb(nativeContext, preserving: context)
+        } else {
+            appModel.presentManga(nativeContext)
+        }
     }
 
     private func startLoading(_ url: URL) {
@@ -220,10 +238,11 @@ public final class MangaWebFallbackModel: ObservableObject {
                     }
 
                     if !payload.urls.isEmpty {
-                        handleNativeOpenRequest(
+                        openNativeReader(
                             title: payload.title.isEmpty ? pageTitle : payload.title,
                             clickedIndex: context.initialPage,
-                            urls: payload.urls
+                            urls: payload.urls,
+                            preservingWebReturn: false
                         )
                         return
                     }
