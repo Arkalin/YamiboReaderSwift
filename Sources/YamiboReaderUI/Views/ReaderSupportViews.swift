@@ -227,6 +227,7 @@ struct ReaderTopChrome: View {
     let onClose: () -> Void
     let onOpenForum: () -> Void
     let onRefresh: () -> Void
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -265,6 +266,7 @@ struct ReaderTopChrome: View {
         .overlay(alignment: .bottom) {
             Divider().opacity(0.35)
         }
+        .tint(readerChromeButtonTint(for: colorScheme))
     }
 }
 
@@ -282,6 +284,7 @@ struct ReaderBottomChrome: View {
 
     @State private var sliderValue = 0.0
     @State private var isEditingSlider = false
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         VStack(spacing: 14) {
@@ -317,6 +320,7 @@ struct ReaderBottomChrome: View {
                     Label(L10n.string("reader.chapters"), systemImage: "list.bullet")
                 }
                 .buttonStyle(.bordered)
+                .tint(readerChromeButtonTint(for: colorScheme))
 
                 Spacer(minLength: 0)
 
@@ -325,11 +329,13 @@ struct ReaderBottomChrome: View {
                         Label(L10n.string("settings.title"), systemImage: "gearshape")
                     }
                     .buttonStyle(.bordered)
+                    .tint(readerChromeButtonTint(for: colorScheme))
 
                     Button(action: onShowCache) {
                         Label(L10n.string("reader.cache"), systemImage: "square.and.arrow.down")
                     }
                     .buttonStyle(.bordered)
+                    .tint(readerChromeButtonTint(for: colorScheme))
                 }
             }
 
@@ -465,6 +471,7 @@ struct ReaderChromeIconButton: View {
     let systemName: String
     let title: String
     let action: () -> Void
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         Button(action: action) {
@@ -473,8 +480,13 @@ struct ReaderChromeIconButton: View {
                 .frame(width: 34, height: 34)
         }
         .buttonStyle(.bordered)
+        .tint(readerChromeButtonTint(for: colorScheme))
         .accessibilityLabel(title)
     }
+}
+
+func readerChromeButtonTint(for colorScheme: ColorScheme) -> Color {
+    colorScheme == .dark ? Color(red: 0.53, green: 0.37, blue: 0.27) : .accentColor
 }
 
 struct ReaderChapterSheet: View {
