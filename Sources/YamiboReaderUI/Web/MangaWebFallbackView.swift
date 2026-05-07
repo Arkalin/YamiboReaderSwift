@@ -27,8 +27,15 @@ public final class MangaWebFallbackModel: ObservableObject {
         self.showsReturnMask = context.waitingForNativeReturn
     }
 
-    func attach(webView: WKWebView) {
+    func attach(webView: WKWebView, syncState: Bool = true) {
         self.webView = webView
+        if syncState {
+            sync(with: webView)
+        }
+    }
+
+    func syncAttachedWebViewState() {
+        guard let webView else { return }
         sync(with: webView)
     }
 
@@ -258,26 +265,30 @@ public struct MangaWebFallbackView: View {
     }
 
     public var body: some View {
-        ZStack {
-            Color.black.ignoresSafeArea()
-            MangaFallbackWebView(model: model, appContext: appModel.appContext)
+        GeometryReader { proxy in
+            let topInset = max(proxy.safeAreaInsets.top, windowSafeAreaInsets.top)
 
-            if model.isLoading {
-                overlayProgress
-            } else if model.showLoadError {
-                errorOverlay
-            }
-
-            if model.showsReturnMask {
+            ZStack {
                 Color.black.ignoresSafeArea()
+                MangaFallbackWebView(model: model, appContext: appModel.appContext)
+
+                if model.isLoading {
+                    overlayProgress
+                } else if model.showLoadError {
+                    errorOverlay
+                }
+
+                if model.showsReturnMask {
+                    Color.black.ignoresSafeArea()
+                }
             }
-        }
-        .safeAreaInset(edge: .top, spacing: 0) {
-            topChrome
+            .safeAreaInset(edge: .top, spacing: 0) {
+                topChrome(topInset: topInset)
+            }
         }
     }
 
-    private var topChrome: some View {
+    private func topChrome(topInset: CGFloat) -> some View {
         HStack(spacing: 12) {
             if model.canGoBack {
                 Button {
@@ -306,9 +317,17 @@ public struct MangaWebFallbackView: View {
             .font(.caption.weight(.semibold))
         }
         .padding(.horizontal, 16)
-        .padding(.top, 12)
+        .padding(.top, max(topInset + 8, 20))
         .padding(.bottom, 12)
         .background(.black.opacity(0.82))
+    }
+
+    private var windowSafeAreaInsets: UIEdgeInsets {
+        UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows)
+            .first(where: \.isKeyWindow)?
+            .safeAreaInsets ?? .zero
     }
 
     private var overlayProgress: some View {
@@ -384,7 +403,6 @@ private struct MangaFallbackWebView: UIViewRepresentable {
         @MainActor
         func attach(_ webView: WKWebView) {
             guard self.webView !== webView else {
-                model.attach(webView: webView)
                 return
             }
 
@@ -392,10 +410,13 @@ private struct MangaFallbackWebView: UIViewRepresentable {
             webView.navigationDelegate = self
             webView.uiDelegate = self
             bridge.attach(to: webView)
-            model.attach(webView: webView)
+            model.attach(webView: webView, syncState: false)
 
-            Task { @MainActor in
+            Task { @MainActor [weak self, weak webView] in
+                guard let self, let webView, self.webView === webView else { return }
+                model.syncAttachedWebViewState()
                 let sessionState = await appContext.sessionStore.load()
+                guard self.webView === webView else { return }
                 await webView.yamiboApplySession(sessionState)
                 model.prepareAfterSessionApplied()
             }
