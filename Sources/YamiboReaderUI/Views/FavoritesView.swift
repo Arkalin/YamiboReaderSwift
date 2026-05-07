@@ -89,6 +89,14 @@ struct FavoriteSelectionActionState: Equatable {
     let canDelete: Bool
 }
 
+func favoriteLaunchNeedsMangaProbeBlocker(_ favorite: Favorite) -> Bool {
+    favorite.type == .manga
+}
+
+func shouldBlockFavoriteInteractions(openingMangaFavoriteID: String?) -> Bool {
+    openingMangaFavoriteID != nil
+}
+
 enum FavoriteLaunchMode: Sendable {
     case start
     case resume
@@ -1072,6 +1080,7 @@ public struct FavoritesView: View {
     @State private var didLoadInitialFavorites = false
     @State private var draggedEntryKey: String?
     @State private var sharingFavorite: Favorite?
+    @State private var openingMangaFavoriteID: String?
 
     private let scope: FavoriteScope
     private let appContext: YamiboAppContext
@@ -1109,6 +1118,12 @@ public struct FavoritesView: View {
                 }
             } else {
                 content
+            }
+        }
+        .disabled(isOpeningManga)
+        .overlay {
+            if isOpeningManga {
+                mangaOpeningOverlay
             }
         }
     }
@@ -1394,6 +1409,25 @@ public struct FavoritesView: View {
         }
     }
 
+    private var mangaOpeningOverlay: some View {
+        ZStack {
+            Color.black.opacity(0.35)
+                .ignoresSafeArea()
+                .contentShape(Rectangle())
+
+            ProgressView(L10n.string("manga.loading"))
+                .padding(.horizontal, 18)
+                .padding(.vertical, 14)
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+                }
+                .shadow(color: Color.black.opacity(0.12), radius: 18, y: 6)
+        }
+        .allowsHitTesting(true)
+    }
+
     private var currentCollection: FavoriteCollection? {
         guard let scopedCollection = scope.collection else { return nil }
         return viewModel.collections.first(where: { $0.id == scopedCollection.id }) ?? scopedCollection
@@ -1430,6 +1464,10 @@ public struct FavoritesView: View {
             searchText: searchText,
             isSelecting: isSelecting
         )
+    }
+
+    private var isOpeningManga: Bool {
+        shouldBlockFavoriteInteractions(openingMangaFavoriteID: openingMangaFavoriteID)
     }
 
     private var selectionActionState: FavoriteSelectionActionState {
@@ -1926,13 +1964,21 @@ public struct FavoritesView: View {
 
     private func open(_ favorite: Favorite, mode: FavoriteLaunchMode) {
         Task {
+            if favoriteLaunchNeedsMangaProbeBlocker(favorite) {
+                openingMangaFavoriteID = favorite.id
+            }
+
             let target = await viewModel.openTarget(for: favorite, mode: mode)
             switch target {
             case let .reader(context):
+                openingMangaFavoriteID = nil
                 appModel.presentReader(context)
             case let .manga(context):
+                openingMangaFavoriteID = favorite.id
+                defer { openingMangaFavoriteID = nil }
                 await appModel.openManga(context)
             case let .web(resolvedFavorite):
+                openingMangaFavoriteID = nil
                 selectedFavorite = resolvedFavorite
             }
         }
