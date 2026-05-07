@@ -4,6 +4,32 @@ import XCTest
 
 @MainActor
 final class MangaPresentationRouteTests: XCTestCase {
+    func testMangaFavoriteLaunchNeedsProbeBlocker() {
+        let manga = Favorite(
+            title: "测试漫画",
+            url: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=704&mobile=2")!,
+            type: .manga
+        )
+        let novel = Favorite(
+            title: "测试小说",
+            url: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=705&mobile=2")!,
+            type: .novel
+        )
+        let unknown = Favorite(
+            title: "未知收藏",
+            url: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=706&mobile=2")!
+        )
+
+        XCTAssertTrue(favoriteLaunchNeedsMangaProbeBlocker(manga))
+        XCTAssertFalse(favoriteLaunchNeedsMangaProbeBlocker(novel))
+        XCTAssertFalse(favoriteLaunchNeedsMangaProbeBlocker(unknown))
+    }
+
+    func testOpeningMangaFavoriteIDBlocksFavoriteInteractions() {
+        XCTAssertFalse(shouldBlockFavoriteInteractions(openingMangaFavoriteID: nil))
+        XCTAssertTrue(shouldBlockFavoriteInteractions(openingMangaFavoriteID: "favorite-1"))
+    }
+
     func testPresentMangaFromWebStoresSuspendedContextAndDismissRestoresWeb() {
         let appModel = YamiboAppModel(appContext: YamiboAppContext())
         let webContext = MangaWebContext(
