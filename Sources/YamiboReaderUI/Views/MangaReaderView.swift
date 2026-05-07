@@ -1258,13 +1258,10 @@ private struct MangaAuthenticatedImage: View {
             resetInteractionState()
         }
         .onPreferenceChange(MangaImageBaseSizePreferenceKey.self) { newValue in
-            baseImageSize = newValue
-            if usesOverlayPresentation {
-                updateVerticalOverlayIfNeeded()
-            } else {
-                steadyOffset = clampedOffset(steadyOffset, scale: steadyScale)
-                gestureOffset = .zero
-            }
+            updateBaseImageSize(newValue)
+        }
+        .onPreferenceChange(MangaImageFramePreferenceKey.self) { newValue in
+            updateImageFrameInReader(newValue)
         }
         .simultaneousGesture(doubleTapGesture)
         .simultaneousGesture(magnifyGesture)
@@ -1494,19 +1491,30 @@ private struct MangaAuthenticatedImage: View {
     private var frameMeasurementOverlay: some View {
         if let readerCoordinateSpaceName {
             GeometryReader { geometry in
+                let frame = geometry.frame(in: .named(readerCoordinateSpaceName))
                 Color.clear
-                    .onAppear {
-                        imageFrameInReader = geometry.frame(in: .named(readerCoordinateSpaceName))
-                        updateVerticalOverlayIfNeeded()
-                    }
-                    .onChange(of: geometry.frame(in: .named(readerCoordinateSpaceName))) { _, newValue in
-                        imageFrameInReader = newValue
-                        updateVerticalOverlayIfNeeded()
-                    }
+                    .preference(key: MangaImageFramePreferenceKey.self, value: frame)
             }
         } else {
             Color.clear
         }
+    }
+
+    private func updateBaseImageSize(_ newValue: CGSize) {
+        guard baseImageSize.isMeaningfullyDifferent(from: newValue) else { return }
+        baseImageSize = newValue
+        if usesOverlayPresentation {
+            updateVerticalOverlayIfNeeded()
+        } else {
+            steadyOffset = clampedOffset(steadyOffset, scale: steadyScale)
+            gestureOffset = .zero
+        }
+    }
+
+    private func updateImageFrameInReader(_ newValue: CGRect) {
+        guard imageFrameInReader.isMeaningfullyDifferent(from: newValue) else { return }
+        imageFrameInReader = newValue
+        updateVerticalOverlayIfNeeded()
     }
 
     private func activateVerticalOverlay(targetScale: CGFloat) {
@@ -1568,6 +1576,31 @@ private struct MangaImageBaseSizePreferenceKey: PreferenceKey {
         if next != .zero {
             value = next
         }
+    }
+}
+
+private struct MangaImageFramePreferenceKey: PreferenceKey {
+    static let defaultValue: CGRect = .zero
+
+    static func reduce(value: inout CGRect, nextValue: () -> CGRect) {
+        let next = nextValue()
+        if next != .zero {
+            value = next
+        }
+    }
+}
+
+private extension CGSize {
+    func isMeaningfullyDifferent(from other: CGSize, threshold: CGFloat = 0.5) -> Bool {
+        abs(width - other.width) > threshold || abs(height - other.height) > threshold
+    }
+}
+
+private extension CGRect {
+    func isMeaningfullyDifferent(from other: CGRect, threshold: CGFloat = 0.5) -> Bool {
+        abs(origin.x - other.origin.x) > threshold
+            || abs(origin.y - other.origin.y) > threshold
+            || size.isMeaningfullyDifferent(from: other.size, threshold: threshold)
     }
 }
 
