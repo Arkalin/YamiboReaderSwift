@@ -1,13 +1,13 @@
 import SwiftUI
 import YamiboReaderCore
 
-private enum WebDAVSyncSettingsAction: Equatable {
+enum WebDAVSyncSettingsAction: Equatable {
     case loading
     case syncing
 }
 
 @MainActor
-private final class WebDAVSyncSettingsViewModel: ObservableObject {
+final class WebDAVSyncSettingsViewModel: ObservableObject {
     @Published var baseURLString = ""
     @Published var username = ""
     @Published var password = ""
@@ -51,14 +51,11 @@ private final class WebDAVSyncSettingsViewModel: ObservableObject {
         activeAction = .syncing
         defer { activeAction = nil }
 
-        var settings = WebDAVSyncSettings(
-            baseURLString: baseURLString,
-            username: username,
-            password: password,
-            isAutoSyncEnabled: isAutoSyncEnabled,
-            lastSyncedAt: lastSyncedAt
-        )
-
+        var settings = await appContext.webDAVSyncSettingsStore.load()
+        settings.baseURLString = baseURLString
+        settings.username = username
+        settings.password = password
+        settings.isAutoSyncEnabled = isAutoSyncEnabled
         settings.baseURLString = settings.trimmedBaseURLString
         settings.username = settings.trimmedUsername
 
