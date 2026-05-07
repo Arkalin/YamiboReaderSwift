@@ -491,6 +491,10 @@ public final class MangaReaderModel: ObservableObject {
             let focus = currentFocusKey
             let preservedTID = focus.map { MangaTitleCleaner.extractTid(from: $0.chapterURL.absoluteString) ?? $0.chapterURL.absoluteString }
             let document = try await loadDocument(for: chapter.url, htmlOverride: nil)
+            guard loadedDocumentIndex(for: document) == nil,
+                  firstPageIndex(for: document.chapterURL) == nil else {
+                return
+            }
             if delta < 0 {
                 loadedDocuments.insert(document, at: 0)
                 trimLoadedDocumentsIfNeeded(
@@ -686,6 +690,12 @@ public final class MangaReaderModel: ObservableObject {
         pages.firstIndex(where: { $0.chapterURL == chapterURL && $0.localIndex == 0 })
     }
 
+    private func loadedDocumentIndex(for document: MangaChapterDocument) -> Int? {
+        loadedDocuments.firstIndex { loadedDocument in
+            loadedDocument.tid == document.tid || loadedDocument.chapterURL == document.chapterURL
+        }
+    }
+
     private func jumpToLoadedPage(_ pageIndex: Int, animated: Bool) {
         guard pages.indices.contains(pageIndex) else { return }
         let normalizedTargetIndex = normalizedPagedPageIndex(pageIndex)
@@ -830,6 +840,8 @@ public final class MangaReaderModel: ObservableObject {
     }
 
     private func insertLoadedDocument(_ document: MangaChapterDocument) {
+        guard loadedDocumentIndex(for: document) == nil else { return }
+
         if shouldResetLoadedDocuments(for: document) {
             loadedDocuments = [document]
         } else if shouldInsertBeforeCurrent(document) {
