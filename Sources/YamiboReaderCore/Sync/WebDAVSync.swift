@@ -305,10 +305,10 @@ public actor WebDAVSyncService {
     }
 
     @discardableResult
-    public func download(using settings: WebDAVSyncSettings, allowingAccountMismatch: Bool = false) async throws -> WebDAVSyncPayload {
+    public func download(using settings: WebDAVSyncSettings, allowingAccountMismatch _: Bool = false) async throws -> WebDAVSyncPayload {
         let accountUID = try await accountUIDResolver.resolveCurrentAccountUID()
         let payload = try await client.fetchPayload(settings: settings)
-        try validate(remotePayload: payload, localUID: accountUID, allowingAccountMismatch: allowingAccountMismatch)
+        try validate(remotePayload: payload, localUID: accountUID, allowingAccountMismatch: false)
         try await apply(payload)
         try await updateSettingsAfterSync(settings, remoteUpdatedAt: payload.updatedAt)
         return payload

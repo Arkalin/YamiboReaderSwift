@@ -365,8 +365,10 @@ private enum WebDAVTestError: Error {
     }
     #expect(await favoriteStore.loadFavorites().isEmpty)
 
-    _ = try await service.download(using: settings, allowingAccountMismatch: true)
-    #expect(await favoriteStore.loadFavorites() == [remoteFavorite])
+    await #expect(throws: WebDAVSyncError.accountMismatch(localUID: "local-uid", remoteUID: "remote-uid")) {
+        _ = try await service.download(using: settings, allowingAccountMismatch: true)
+    }
+    #expect(await favoriteStore.loadFavorites().isEmpty)
 
     await #expect(throws: WebDAVSyncError.accountMismatch(localUID: "local-uid", remoteUID: "remote-uid")) {
         _ = try await service.upload(using: settings)

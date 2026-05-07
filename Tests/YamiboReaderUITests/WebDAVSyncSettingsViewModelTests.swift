@@ -3,7 +3,7 @@ import XCTest
 @testable import YamiboReaderUI
 
 final class WebDAVSyncSettingsViewModelTests: XCTestCase {
-    func testContinueSyncPreservesSyncTimestampsWhenAccountMismatchRequiresConfirmation() async throws {
+    func testDownloadMismatchShowsErrorWithoutConfirmationAndPreservesSyncTimestamps() async throws {
         let suiteName = "webdav-settings-view-model-\(UUID().uuidString)"
         UserDefaults(suiteName: suiteName)?.removePersistentDomain(forName: suiteName)
         let host = "settings-mismatch.example.com"
@@ -74,7 +74,9 @@ final class WebDAVSyncSettingsViewModelTests: XCTestCase {
 
         XCTAssertFalse(didSync)
         let isShowingAccountMismatchConfirmation = await viewModel.isShowingAccountMismatchConfirmation
-        XCTAssertTrue(isShowingAccountMismatchConfirmation)
+        XCTAssertFalse(isShowingAccountMismatchConfirmation)
+        let errorMessage = await viewModel.errorMessage
+        XCTAssertEqual(errorMessage, L10n.string("webdav.error.account_mismatch"))
         let savedSettings = await settingsStore.load()
         XCTAssertEqual(savedSettings.baseURLString, "https://\(host)")
         XCTAssertEqual(savedSettings.username, "new-user")
@@ -83,6 +85,72 @@ final class WebDAVSyncSettingsViewModelTests: XCTestCase {
         XCTAssertEqual(savedSettings.lastSyncedAt, lastSyncedAt)
         XCTAssertEqual(savedSettings.lastRemoteUpdatedAt, lastRemoteUpdatedAt)
         XCTAssertEqual(savedSettings.localUpdatedAt, localUpdatedAt)
+    }
+
+    func testUploadMismatchStillRequiresConfirmation() async throws {
+        let suiteName = "webdav-settings-view-model-upload-\(UUID().uuidString)"
+        UserDefaults(suiteName: suiteName)?.removePersistentDomain(forName: suiteName)
+        let host = "settings-upload-mismatch.example.com"
+        let settingsStore = WebDAVSyncSettingsStore(
+            defaults: try XCTUnwrap(UserDefaults(suiteName: suiteName)),
+            key: "webdav"
+        )
+        let sessionStore = SessionStore(
+            defaults: try XCTUnwrap(UserDefaults(suiteName: suiteName)),
+            key: "session"
+        )
+        let favoriteStore = FavoriteStore(
+            defaults: try XCTUnwrap(UserDefaults(suiteName: suiteName)),
+            key: "favorites"
+        )
+        let appContext = YamiboAppContext(
+            sessionStore: sessionStore,
+            webDAVSyncSettingsStore: settingsStore,
+            favoriteStore: favoriteStore,
+            session: makeWebDAVSettingsTestSession()
+        )
+
+        try await settingsStore.save(WebDAVSyncSettings(
+            baseURLString: "https://\(host)",
+            username: "admin",
+            password: "secret",
+            isAutoSyncEnabled: true
+        ))
+        try await sessionStore.save(SessionState(cookie: "sid=local", isLoggedIn: true, accountUID: "local-uid"))
+
+        let remotePayload = WebDAVSyncPayload(
+            updatedAt: Date(timeIntervalSince1970: 4_000),
+            accountUID: "remote-uid",
+            library: FavoriteLibrarySnapshot(favorites: [], collections: [])
+        )
+        let encodedRemotePayload = try JSONEncoder().encode(remotePayload)
+        WebDAVSettingsTestURLProtocol.setHandler(for: host) { request in
+            XCTAssertEqual(request.httpMethod, "GET")
+            return (
+                encodedRemotePayload,
+                HTTPURLResponse(
+                    url: try XCTUnwrap(request.url),
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: ["Content-Type": "application/json"]
+                )!
+            )
+        }
+        defer { WebDAVSettingsTestURLProtocol.removeHandler(for: host) }
+
+        let viewModel = await WebDAVSyncSettingsViewModel(appContext: appContext)
+        await viewModel.load()
+        await MainActor.run {
+            viewModel.direction = .upload
+        }
+
+        let didSync = await viewModel.continueSync()
+
+        XCTAssertFalse(didSync)
+        let isShowingAccountMismatchConfirmation = await viewModel.isShowingAccountMismatchConfirmation
+        XCTAssertTrue(isShowingAccountMismatchConfirmation)
+        let errorMessage = await viewModel.errorMessage
+        XCTAssertNil(errorMessage)
     }
 }
 
