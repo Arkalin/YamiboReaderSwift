@@ -98,6 +98,7 @@ iOS App 入口位于 [`YamiboReader/YamiboReaderApp.swift`](YamiboReader/YamiboR
 
 - [x] 多设备阅读进度同步
 - [x] 更完善的 iPad 支持
+- [ ] Mac 支持
 - [ ] 章节评论查看
 - [ ] 多账号管理
 - [ ] 更新检查
