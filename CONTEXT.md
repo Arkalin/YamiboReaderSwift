@@ -28,6 +28,10 @@ _Avoid_: reader container state, reader model state, document buffer
 The reader's semantic position in a novel thread, identified by web view page, chapter, segment index, segment offset, and intra-page progress.
 _Avoid_: page index, progress, scroll position
 
+**Favorite Library**:
+The local projection of Yamibo remote favorites plus user-owned reading metadata, display names, hidden state, and collections.
+_Avoid_: favorite store, favorites snapshot, favorites list
+
 ## Relationships
 
 - A **Manga Directory** contains zero or more **Manga Chapter Documents** by chapter identity.
@@ -40,6 +44,11 @@ _Avoid_: page index, progress, scroll position
 - A **Novel Reading Session** paginates the current reader page document and can merge an adjacent prefetched reader page document for continuous vertical reading.
 - A **Novel Reading Session** preserves the **Novel Reading Position** when layout or reading mode changes cause repagination.
 - A **Novel Reading Session** can promote its prefetched reader page document to become the current reader page document when page navigation crosses the web view page boundary.
+- A **Favorite Library** is remote-favorite-first: Yamibo remote favorites decide which remote-backed favorite entries exist, while local metadata preserves user-owned reading and organization state for those entries.
+- When a Yamibo remote favorite disappears, the **Favorite Library** removes it from the visible library and archives its local metadata so a later remote re-add can restore reading position, display name, hidden state, and collection membership.
+- Archived **Favorite Library** metadata is synchronized through WebDAV with the visible library because reading position and organization state are user-owned data.
+- Archived **Favorite Library** metadata is matched by canonical thread URL, not Yamibo remote favorite ID, because a remote favorite ID can change when the same thread is removed and re-added.
+- When archived **Favorite Library** metadata restores a favorite whose collection no longer exists, the favorite is restored at the root while preserving display name, hidden state, and reading positions.
 
 ## Example Dialogue
 

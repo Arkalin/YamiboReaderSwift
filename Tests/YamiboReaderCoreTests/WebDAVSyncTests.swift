@@ -274,6 +274,67 @@ private enum WebDAVTestError: Error {
     #expect(updatedSettings.localUpdatedAt == payload.updatedAt)
 }
 
+@Test func webDAVAutomaticSyncDownloadsArchivedFavoriteMetadata() async throws {
+    let suiteName = makeWebDAVDefaultsSuiteName(prefix: "webdav-auto-archive")
+    UserDefaults(suiteName: suiteName)?.removePersistentDomain(forName: suiteName)
+    let settingsStore = WebDAVSyncSettingsStore(defaults: try makeWebDAVDefaults(suiteName: suiteName), key: "webdav")
+    let favoriteStore = FavoriteStore(defaults: try makeWebDAVDefaults(suiteName: suiteName), key: "favorites")
+    let sessionStore = SessionStore(defaults: try makeWebDAVDefaults(suiteName: suiteName), key: "session")
+    let host = "auto-archive.example.com"
+    let archivedURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=941&mobile=2"))
+    let archive = FavoriteMetadataArchiveEntry(
+        canonicalThreadURL: ReaderCacheIdentity.canonicalThreadURL(from: archivedURL),
+        displayName: "下载归档",
+        lastPage: 4,
+        lastView: 1,
+        lastChapter: nil,
+        authorID: nil,
+        novelResumePoint: nil,
+        isHidden: false,
+        type: .manga,
+        lastMangaURL: archivedURL,
+        parentCollectionID: nil,
+        manualOrder: 0,
+        lastReadAt: nil
+    )
+    try await settingsStore.save(WebDAVSyncSettings(
+        baseURLString: "https://\(host)",
+        username: "admin",
+        password: "secret",
+        isAutoSyncEnabled: true,
+        lastRemoteUpdatedAt: Date(timeIntervalSince1970: 1_000),
+        localUpdatedAt: Date(timeIntervalSince1970: 1_000)
+    ))
+    try await sessionStore.save(SessionState(cookie: "sid=local", isLoggedIn: true, accountUID: "100"))
+
+    let payload = WebDAVSyncPayload(
+        updatedAt: Date(timeIntervalSince1970: 2_000),
+        accountUID: "100",
+        library: FavoriteLibrarySnapshot(favorites: [], collections: [], archivedMetadata: [archive])
+    )
+    let encodedPayload = try JSONEncoder().encode(payload)
+
+    WebDAVTestURLProtocol.setHandler(for: host) { request in
+        #expect(request.httpMethod == "GET")
+        return (
+            encodedPayload,
+            HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
+        )
+    }
+    defer { WebDAVTestURLProtocol.removeHandler(for: host) }
+
+    let service = WebDAVSyncService(
+        settingsStore: settingsStore,
+        favoriteStore: favoriteStore,
+        sessionStore: sessionStore,
+        client: WebDAVClient(session: makeWebDAVTestSession())
+    )
+
+    try await service.synchronizeAutomatically()
+
+    #expect((await favoriteStore.loadLibrarySnapshot()).archivedMetadata == [archive])
+}
+
 @Test func webDAVServiceUploadWritesCurrentAccountUID() async throws {
     let suiteName = makeWebDAVDefaultsSuiteName(prefix: "webdav-upload-account")
     UserDefaults(suiteName: suiteName)?.removePersistentDomain(forName: suiteName)
@@ -312,6 +373,67 @@ private enum WebDAVTestError: Error {
     _ = try await service.upload(using: settings)
 
     #expect(uploadedPayload?.accountUID == "123")
+}
+
+@Test func webDAVServiceUploadIncludesArchivedFavoriteMetadata() async throws {
+    let suiteName = makeWebDAVDefaultsSuiteName(prefix: "webdav-upload-archive")
+    UserDefaults(suiteName: suiteName)?.removePersistentDomain(forName: suiteName)
+    let settingsStore = WebDAVSyncSettingsStore(defaults: try makeWebDAVDefaults(suiteName: suiteName), key: "webdav")
+    let favoriteStore = FavoriteStore(defaults: try makeWebDAVDefaults(suiteName: suiteName), key: "favorites")
+    let sessionStore = SessionStore(defaults: try makeWebDAVDefaults(suiteName: suiteName), key: "session")
+    let host = "upload-archive.example.com"
+    let settings = WebDAVSyncSettings(baseURLString: "https://\(host)", username: "admin", password: "secret")
+    let archivedURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=940&mobile=2"))
+    let archive = FavoriteMetadataArchiveEntry(
+        canonicalThreadURL: ReaderCacheIdentity.canonicalThreadURL(from: archivedURL),
+        displayName: "同步归档",
+        lastPage: 9,
+        lastView: 2,
+        lastChapter: "归档章节",
+        authorID: "77",
+        novelResumePoint: nil,
+        isHidden: true,
+        type: .novel,
+        lastMangaURL: nil,
+        parentCollectionID: "collection-a",
+        manualOrder: 3,
+        lastReadAt: Date(timeIntervalSince1970: 1_900_000_000)
+    )
+    try await sessionStore.save(SessionState(cookie: "sid=local", isLoggedIn: true, accountUID: "123"))
+    try await favoriteStore.saveLibrarySnapshot(FavoriteLibrarySnapshot(
+        favorites: [],
+        collections: [],
+        archivedMetadata: [archive]
+    ))
+
+    var uploadedPayload: WebDAVSyncPayload?
+    WebDAVTestURLProtocol.setHandler(for: host) { request in
+        switch request.httpMethod {
+        case "GET":
+            return (Data(), HTTPURLResponse(url: request.url!, statusCode: 404, httpVersion: nil, headerFields: nil)!)
+        case "MKCOL":
+            return (Data(), HTTPURLResponse(url: request.url!, statusCode: 201, httpVersion: nil, headerFields: nil)!)
+        case "PUT":
+            let body = try #require(request.webDAVBodyData())
+            uploadedPayload = try JSONDecoder().decode(WebDAVSyncPayload.self, from: body)
+            return (Data(), HTTPURLResponse(url: request.url!, statusCode: 201, httpVersion: nil, headerFields: nil)!)
+        default:
+            Issue.record("Unexpected method \(request.httpMethod ?? "nil")")
+            return (Data(), HTTPURLResponse(url: request.url!, statusCode: 500, httpVersion: nil, headerFields: nil)!)
+        }
+    }
+    defer { WebDAVTestURLProtocol.removeHandler(for: host) }
+
+    let service = WebDAVSyncService(
+        settingsStore: settingsStore,
+        favoriteStore: favoriteStore,
+        sessionStore: sessionStore,
+        client: WebDAVClient(session: makeWebDAVTestSession())
+    )
+
+    _ = try await service.upload(using: settings)
+
+    #expect(uploadedPayload?.library.archivedMetadata == [archive])
 }
 
 @Test func webDAVManualSyncRequiresConfirmationForAccountMismatch() async throws {
