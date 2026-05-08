@@ -56,7 +56,7 @@ public final class MangaReaderModel: ObservableObject {
     private let imageRepository: MangaImageRepository
     private let chapterProbe: @MainActor (MangaLaunchContext) async -> MangaProbeOutcome
     private var repository: MangaRepository?
-    private var loadedDocuments: [MangaChapterDocument] = []
+    private var chapterWindow: MangaChapterWindow?
     private var chapterDocumentTasks: [String: Task<MangaChapterDocument, Error>] = [:]
     private var chapterJumpTask: Task<Void, Never>?
     private var imagePrefetchTask: Task<Void, Never>?
@@ -385,8 +385,9 @@ public final class MangaReaderModel: ObservableObject {
                 using: repository
             )
             self.currentDirectory = result.directory
-            reorderDocumentsToMatchDirectory()
-            rebuildPages(focus: currentFocusKey, animated: false, resetRevision: false)
+            if let snapshot = chapterWindow?.updateDirectory(result.directory, preserving: currentReadingPosition) {
+                applyWindowSnapshot(snapshot, animated: false, resetRevision: false)
+            }
             errorMessage = nil
             handleDirectoryUpdateSuccess(
                 result: result,
@@ -407,17 +408,18 @@ public final class MangaReaderModel: ObservableObject {
                 newSearchKeyword: searchKeyword
             )
             self.currentDirectory = updated
-            reorderDocumentsToMatchDirectory()
-            rebuildPages(focus: currentFocusKey, animated: false, resetRevision: false)
+            if let snapshot = chapterWindow?.updateDirectory(updated, preserving: currentReadingPosition) {
+                applyWindowSnapshot(snapshot, animated: false, resetRevision: false)
+            }
             errorMessage = nil
         } catch {
             errorMessage = error.localizedDescription
         }
     }
 
-    private var currentFocusKey: MangaFocusKey? {
+    private var currentReadingPosition: MangaReadingPosition? {
         guard let currentPage else { return nil }
-        return MangaFocusKey(chapterURL: currentPage.chapterURL, localIndex: currentPage.localIndex)
+        return MangaReadingPosition(tid: currentPage.tid, localIndex: currentPage.localIndex)
     }
 
     private func loadInitialChapter() async {
@@ -426,13 +428,18 @@ public final class MangaReaderModel: ObservableObject {
         navigationRequest = nil
         do {
             let document = try await loadDocument(for: context.chapterURL, htmlOverride: nil)
-            loadedDocuments = [document]
             let directory = try await resolveDirectory(from: document)
             currentDirectory = directory
-            reorderDocumentsToMatchDirectory()
             let initialLocalPage = max(0, context.initialPage)
-            rebuildPages(
-                focus: MangaFocusKey(chapterURL: document.chapterURL, localIndex: initialLocalPage),
+            let window = MangaChapterWindow(
+                directory: directory,
+                initialDocument: document,
+                position: MangaReadingPosition(tid: document.tid, localIndex: initialLocalPage),
+                maxLoadedDocuments: maxLoadedDocuments
+            )
+            chapterWindow = window
+            applyWindowSnapshot(
+                window.snapshot,
                 animated: false,
                 resetRevision: true
             )
@@ -485,86 +492,37 @@ public final class MangaReaderModel: ObservableObject {
     }
 
     private func loadAdjacentDocument(delta: Int) async {
-        guard let chapter = adjacentChapterForLoadedRange(delta: delta) else { return }
+        guard let chapter = chapterWindow?.adjacentChapterForLoadedRange(delta: delta) else { return }
         guard firstPageIndex(for: chapter.url) == nil else { return }
         do {
-            let focus = currentFocusKey
-            let preservedTID = focus.map { MangaTitleCleaner.extractTid(from: $0.chapterURL.absoluteString) ?? $0.chapterURL.absoluteString }
+            let position = currentReadingPosition
             let document = try await loadDocument(for: chapter.url, htmlOverride: nil)
-            guard loadedDocumentIndex(for: document) == nil,
-                  firstPageIndex(for: document.chapterURL) == nil else {
-                return
+            guard firstPageIndex(for: document.chapterURL) == nil else { return }
+            guard let result = chapterWindow?.insertAdjacentDocument(document, preserving: position) else { return }
+            if case let .changed(snapshot) = result {
+                applyWindowSnapshot(snapshot, animated: false, resetRevision: delta < 0)
             }
-            if delta < 0 {
-                loadedDocuments.insert(document, at: 0)
-                trimLoadedDocumentsIfNeeded(
-                    preferredRemoval: .back,
-                    preservingTID: preservedTID ?? document.tid
-                )
-            } else {
-                loadedDocuments.append(document)
-                trimLoadedDocumentsIfNeeded(
-                    preferredRemoval: .front,
-                    preservingTID: preservedTID ?? document.tid
-                )
-            }
-            reorderDocumentsToMatchDirectory()
-            rebuildPages(focus: focus, animated: false, resetRevision: delta < 0)
         } catch {
             // Preload failures should not interrupt reading.
         }
     }
 
-    private func reorderDocumentsToMatchDirectory() {
-        guard let currentDirectory else { return }
-        let order = Dictionary(uniqueKeysWithValues: currentDirectory.chapters.enumerated().map { ($1.tid, $0) })
-        loadedDocuments.sort {
-            (order[$0.tid] ?? .max) < (order[$1.tid] ?? .max)
-        }
-    }
-
-    private func rebuildPages(
-        focus: MangaFocusKey?,
+    private func applyWindowSnapshot(
+        _ snapshot: MangaChapterWindowSnapshot,
         animated: Bool,
         resetRevision: Bool
     ) {
-        var rebuilt: [MangaPage] = []
-        rebuilt.reserveCapacity(loadedDocuments.reduce(0) { $0 + $1.pages.count })
-        for document in loadedDocuments {
-            for (localIndex, imageURL) in document.pages.enumerated() {
-                rebuilt.append(
-                    MangaPage(
-                        tid: document.tid,
-                        chapterTitle: document.chapterTitle,
-                        imageURL: imageURL,
-                        globalIndex: rebuilt.count,
-                        localIndex: localIndex,
-                        chapterTotalPages: document.pages.count,
-                        chapterURL: document.chapterURL
-                    )
-                )
-            }
-        }
-        let targetIndex: Int?
-        if let focus {
-            targetIndex = rebuilt.firstIndex(where: {
-                $0.chapterURL == focus.chapterURL && $0.localIndex == focus.localIndex
-            })
-        } else {
-            targetIndex = nil
-        }
+        pages = snapshot.pages
+        pagedSpreads = makePagedSpreads(from: snapshot.pages)
 
-        pages = rebuilt
-        pagedSpreads = makePagedSpreads(from: rebuilt)
-
-        guard !rebuilt.isEmpty else {
+        guard !snapshot.pages.isEmpty else {
             currentPageIndex = 0
             pagedSpreads = []
             viewportRequest = nil
             return
         }
 
-        if let targetIndex {
+        if let targetIndex = snapshot.resolvedPageIndex {
             currentPageIndex = normalizedPagedPageIndex(targetIndex)
             emitViewportRequest(targetIndex: currentPageIndex, animated: animated, resetRevision: resetRevision)
         } else {
@@ -650,50 +608,12 @@ public final class MangaReaderModel: ObservableObject {
     }
 
     private func adjacentChapter(delta: Int) -> MangaChapter? {
-        guard let currentPage, let currentDirectory else { return nil }
-        guard let index = currentDirectory.chapters.firstIndex(where: { $0.tid == currentPage.tid }) else { return nil }
-        let target = index + delta
-        guard currentDirectory.chapters.indices.contains(target) else { return nil }
-        return currentDirectory.chapters[target]
-    }
-
-    private func adjacentChapterForLoadedRange(delta: Int) -> MangaChapter? {
-        guard let currentDirectory else { return nil }
-        guard let anchorTID = delta < 0 ? loadedDocuments.first?.tid : loadedDocuments.last?.tid else { return nil }
-        guard let index = currentDirectory.chapters.firstIndex(where: { $0.tid == anchorTID }) else { return nil }
-        let target = index + delta
-        guard currentDirectory.chapters.indices.contains(target) else { return nil }
-        return currentDirectory.chapters[target]
-    }
-
-    private func shouldResetLoadedDocuments(for document: MangaChapterDocument) -> Bool {
-        guard let currentDirectory,
-              let targetIndex = currentDirectory.chapters.firstIndex(where: { $0.tid == document.tid }),
-              let currentPage,
-              let currentIndex = currentDirectory.chapters.firstIndex(where: { $0.tid == currentPage.tid }) else {
-            return true
-        }
-        return abs(targetIndex - currentIndex) > 1
-    }
-
-    private func shouldInsertBeforeCurrent(_ document: MangaChapterDocument) -> Bool {
-        guard let currentDirectory,
-              let targetIndex = currentDirectory.chapters.firstIndex(where: { $0.tid == document.tid }),
-              let firstLoadedTID = loadedDocuments.first?.tid,
-              let firstLoadedIndex = currentDirectory.chapters.firstIndex(where: { $0.tid == firstLoadedTID }) else {
-            return false
-        }
-        return targetIndex < firstLoadedIndex
+        guard let currentReadingPosition else { return nil }
+        return chapterWindow?.adjacentChapter(from: currentReadingPosition, delta: delta)
     }
 
     private func firstPageIndex(for chapterURL: URL) -> Int? {
         pages.firstIndex(where: { $0.chapterURL == chapterURL && $0.localIndex == 0 })
-    }
-
-    private func loadedDocumentIndex(for document: MangaChapterDocument) -> Int? {
-        loadedDocuments.firstIndex { loadedDocument in
-            loadedDocument.tid == document.tid || loadedDocument.chapterURL == document.chapterURL
-        }
     }
 
     private func jumpToLoadedPage(_ pageIndex: Int, animated: Bool) {
@@ -704,32 +624,6 @@ public final class MangaReaderModel: ObservableObject {
         scheduleImagePrefetch()
         Task {
             await prefetchIfNeeded(for: normalizedTargetIndex)
-        }
-    }
-
-    private func trimLoadedDocumentsIfNeeded(
-        preferredRemoval: LoadedDocumentRemovalSide,
-        preservingTID: String
-    ) {
-        while loadedDocuments.count > maxLoadedDocuments {
-            switch preferredRemoval {
-            case .front:
-                if loadedDocuments.first?.tid != preservingTID {
-                    loadedDocuments.removeFirst()
-                } else if loadedDocuments.last?.tid != preservingTID {
-                    loadedDocuments.removeLast()
-                } else {
-                    return
-                }
-            case .back:
-                if loadedDocuments.last?.tid != preservingTID {
-                    loadedDocuments.removeLast()
-                } else if loadedDocuments.first?.tid != preservingTID {
-                    loadedDocuments.removeFirst()
-                } else {
-                    return
-                }
-            }
         }
     }
 
@@ -813,12 +707,7 @@ public final class MangaReaderModel: ObservableObject {
             try Task.checkCancellation()
             guard generation == chapterJumpGeneration else { return }
 
-            insertLoadedDocument(document)
-            rebuildPages(
-                focus: MangaFocusKey(chapterURL: document.chapterURL, localIndex: 0),
-                animated: false,
-                resetRevision: true
-            )
+            applyLoadedChapterDocument(document, animated: false, resetRevision: true)
             chapterTransitionState = .idle
             errorMessage = nil
         } catch is CancellationError {
@@ -839,24 +728,28 @@ public final class MangaReaderModel: ObservableObject {
         }
     }
 
-    private func insertLoadedDocument(_ document: MangaChapterDocument) {
-        guard loadedDocumentIndex(for: document) == nil else { return }
+    private func applyLoadedChapterDocument(
+        _ document: MangaChapterDocument,
+        animated: Bool,
+        resetRevision: Bool
+    ) {
+        let position = MangaReadingPosition(tid: document.tid, localIndex: 0)
+        guard let result = chapterWindow?.insertAdjacentDocument(document, preserving: position) else { return }
 
-        if shouldResetLoadedDocuments(for: document) {
-            loadedDocuments = [document]
-        } else if shouldInsertBeforeCurrent(document) {
-            loadedDocuments.insert(document, at: 0)
-            trimLoadedDocumentsIfNeeded(
-                preferredRemoval: .back,
-                preservingTID: document.tid
-            )
-        } else {
-            loadedDocuments.append(document)
-            trimLoadedDocumentsIfNeeded(
-                preferredRemoval: .front,
-                preservingTID: document.tid
-            )
+        let snapshot: MangaChapterWindowSnapshot
+        switch result {
+        case let .changed(changedSnapshot):
+            snapshot = changedSnapshot
+        case let .unchanged(unchangedSnapshot, reason):
+            if reason == .duplicateChapter {
+                snapshot = unchangedSnapshot
+            } else if let resetSnapshot = chapterWindow?.reset(to: document, position: position) {
+                snapshot = resetSnapshot
+            } else {
+                return
+            }
         }
+        applyWindowSnapshot(snapshot, animated: animated, resetRevision: resetRevision)
     }
 
     private func loadDocumentViaProbe(for chapter: MangaChapter) async throws -> MangaChapterDocument {
@@ -1123,14 +1016,4 @@ public struct MangaDirectoryEditDraft: Equatable, Sendable {
         self.primaryKeyword = primaryKeyword
         self.secondaryKeyword = secondaryKeyword
     }
-}
-
-private struct MangaFocusKey {
-    var chapterURL: URL
-    var localIndex: Int
-}
-
-private enum LoadedDocumentRemovalSide {
-    case front
-    case back
 }
