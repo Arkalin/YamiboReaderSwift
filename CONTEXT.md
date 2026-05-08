@@ -20,6 +20,14 @@ _Avoid_: loaded chapter, chapter HTML
 The reader's current page position within a manga chapter, identified by chapter `tid` and local page index.
 _Avoid_: focus, progress, page focus
 
+**Novel Reading Session**:
+The state machine for native novel reading, holding the current reader page document, optional prefetched reader page document, pagination output, and current novel reading position.
+_Avoid_: reader container state, reader model state, document buffer
+
+**Novel Reading Position**:
+The reader's semantic position in a novel thread, identified by web view page, chapter, segment index, segment offset, and intra-page progress.
+_Avoid_: page index, progress, scroll position
+
 ## Relationships
 
 - A **Manga Directory** contains zero or more **Manga Chapter Documents** by chapter identity.
@@ -29,6 +37,9 @@ _Avoid_: focus, progress, page focus
 - A **Manga Chapter Window** extends continuous reading by inserting adjacent **Manga Chapter Documents** and handles distant jumps through an explicit reset.
 - If a **Manga Reading Position** points past the available pages in its **Manga Chapter Document**, the **Manga Chapter Window** resolves it to the nearest valid page in that chapter.
 - A **Manga Chapter Window** can reset to a **Manga Chapter Document** that is not yet known by the **Manga Directory**, but adjacent insertion requires directory adjacency.
+- A **Novel Reading Session** paginates the current reader page document and can merge an adjacent prefetched reader page document for continuous vertical reading.
+- A **Novel Reading Session** preserves the **Novel Reading Position** when layout or reading mode changes cause repagination.
+- A **Novel Reading Session** can promote its prefetched reader page document to become the current reader page document when page navigation crosses the web view page boundary.
 
 ## Example Dialogue
 

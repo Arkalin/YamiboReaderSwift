@@ -90,22 +90,6 @@ private enum ReaderCacheOperationMode {
     case update
 }
 
-public struct ReaderPagedSpread: Identifiable, Equatable, Sendable {
-    public let index: Int
-    public let leftPageIndex: Int
-    public let rightPageIndex: Int?
-    public let chapterTitle: String?
-
-    public var id: Int { index }
-
-    public init(index: Int, leftPageIndex: Int, rightPageIndex: Int?, chapterTitle: String?) {
-        self.index = max(0, index)
-        self.leftPageIndex = max(0, leftPageIndex)
-        self.rightPageIndex = rightPageIndex
-        self.chapterTitle = chapterTitle
-    }
-}
-
 @MainActor
 public final class ReaderContainerModel: ObservableObject {
     @Published public private(set) var isLoading = false
@@ -131,6 +115,7 @@ public final class ReaderContainerModel: ObservableObject {
 
     private let appContext: YamiboAppContext
     private var repository: ReaderRepository?
+    private var readingSession: NovelReadingSession?
     private var layout: ReaderContainerLayout = .zero
     private var currentDocument: ReaderPageDocument?
     private var prefetchedDocument: ReaderPageDocument?
@@ -142,8 +127,6 @@ public final class ReaderContainerModel: ObservableObject {
     private var progressSyncTask: Task<Void, Never>?
     private var lastQueuedProgress: ReaderProgressSnapshot?
     private var lastSyncedProgress: ReaderProgressSnapshot?
-    private var pendingResumePoint: ReaderResumePoint?
-    private var pendingResumeRequiresLayoutSync = false
     private let progressSyncDelayNanoseconds: UInt64 = 350_000_000
 
     public init(context: ReaderLaunchContext, appContext: YamiboAppContext) {
@@ -218,8 +201,9 @@ public final class ReaderContainerModel: ObservableObject {
     public func updatePagedPresentationEnvironment(isPad: Bool) {
         guard usesPadPresentation != isPad else { return }
         usesPadPresentation = isPad
-        guard currentDocument != nil, settings.readingMode == .paged else { return }
-        repaginate(resumePoint: captureCurrentResumePoint())
+        guard settings.readingMode == .paged else { return }
+        readingSession?.updatePagedPresentationEnvironment(isPad: isPad)
+        syncFromReadingSession()
     }
 
     public func updatePagedSelection(_ selectionIndex: Int) {
@@ -344,11 +328,9 @@ public final class ReaderContainerModel: ObservableObject {
 
     public func updateLayout(_ layout: ReaderContainerLayout) {
         guard self.layout != layout else { return }
-        let resumePoint = pendingResumePoint ?? captureCurrentResumePoint()
         self.layout = layout
-        guard currentDocument != nil else { return }
-        repaginate(resumePoint: resumePoint)
-        clearPendingResumePointIfSettled()
+        readingSession?.updateLayout(layout)
+        syncFromReadingSession()
     }
 
     public func loadCurrent(forceRefresh: Bool) async {
@@ -438,11 +420,6 @@ public final class ReaderContainerModel: ObservableObject {
     ) {
         let oldSettings = settings
         let shouldRepaginate = oldSettings != newSettings
-        let resumePoint = shouldRepaginate ? captureCurrentResumePoint() : nil
-        if shouldRepaginate {
-            pendingResumePoint = resumePoint
-            pendingResumeRequiresLayoutSync = oldSettings.readingMode != newSettings.readingMode
-        }
         settings = newSettings
         applePencilPageTurnSettings = newApplePencilPageTurnSettings
         persistSettings(
@@ -450,8 +427,8 @@ public final class ReaderContainerModel: ObservableObject {
             applePencilPageTurnSettings: newApplePencilPageTurnSettings
         )
         guard shouldRepaginate else { return }
-        repaginate(resumePoint: resumePoint)
-        clearPendingResumePointIfSettled()
+        readingSession?.applySettings(newSettings)
+        syncFromReadingSession()
     }
 
     public func applyApplePencilPageTurnSettings(_ newSettings: ApplePencilPageTurnSettings) {
@@ -464,11 +441,27 @@ public final class ReaderContainerModel: ObservableObject {
     }
 
     public func updateCurrentPage(_ pageIndex: Int) {
-        updateLocation(pageIndex: pageIndex, intraPageProgress: 0)
+        readingSession?.jumpToRenderedPage(pageIndex)
+        syncFromReadingSession()
+        scheduleProgressSync()
+
+        Task {
+            await prefetchIfNeeded(for: currentPageIndex)
+        }
+
+        promoteIfNeededAfterLocationUpdate()
     }
 
     public func updateVerticalViewportPosition(pageIndex: Int, intraPageProgress: Double) {
-        updateLocation(pageIndex: pageIndex, intraPageProgress: intraPageProgress)
+        readingSession?.updateVerticalViewportPosition(pageIndex: pageIndex, intraPageProgress: intraPageProgress)
+        syncFromReadingSession()
+        scheduleProgressSync()
+
+        Task {
+            await prefetchIfNeeded(for: currentPageIndex)
+        }
+
+        promoteIfNeededAfterLocationUpdate()
     }
 
     public func jumpToChapter(_ chapter: ReaderChapter) {
@@ -480,51 +473,22 @@ public final class ReaderContainerModel: ObservableObject {
     }
 
     public func jumpRelativePage(_ delta: Int) async {
-        guard delta != 0 else { return }
-
-        if settings.readingMode == .paged, isTwoPageSpreadActive {
-            let targetSpreadIndex = pagedSelectionIndex + delta
-            if targetSpreadIndex >= 0, targetSpreadIndex < pagedSpreads.count {
-                jumpToRenderedPage(leftPageIndex(forSpreadIndex: targetSpreadIndex))
-                return
+        guard let request = readingSession?.jumpRelativePage(delta) else {
+            syncFromReadingSession()
+            scheduleProgressSync()
+            Task {
+                await prefetchIfNeeded(for: currentPageIndex)
             }
-        }
-
-        let targetIndex = currentPageIndex + delta
-        if targetIndex >= 0, targetIndex < pages.count {
-            jumpToRenderedPage(targetIndex)
             return
         }
 
-        if targetIndex < 0 {
-            let previousView = max(displayedView - 1, 1)
-            guard previousView < displayedView else {
-                jumpToRenderedPage(0)
-                return
-            }
-            await load(view: previousView, preferredPage: .max, preferredResumePoint: nil, forceRefresh: false)
-            return
+        syncFromReadingSession()
+        switch request {
+        case let .loadView(view, preferredPage, resumePoint):
+            await load(view: view, preferredPage: preferredPage, preferredResumePoint: resumePoint, forceRefresh: false)
+        case let .promotePrefetched(preferredPage, resumePoint):
+            await promotePrefetchedDocument(startingAt: preferredPage, preferredResumePoint: resumePoint)
         }
-
-        if let startIndex = prefetchedStartIndex,
-           settings.readingMode == .vertical,
-           targetIndex >= startIndex {
-            await promotePrefetchedDocument(startingAt: targetIndex - startIndex)
-            return
-        }
-
-        if settings.readingMode == .paged,
-           prefetchedDocument?.view == currentView + 1 {
-            await promotePrefetchedDocument(startingAt: 0)
-            return
-        }
-
-        let nextView = min(displayedView + 1, maxView)
-        guard nextView > displayedView else {
-            jumpToRenderedPage(max(pages.count - 1, 0))
-            return
-        }
-        await load(view: nextView, preferredPage: 0, preferredResumePoint: nil, forceRefresh: false)
     }
 
     public func jumpToAdjacentChapter(_ delta: Int) {
@@ -729,7 +693,16 @@ public final class ReaderContainerModel: ObservableObject {
             currentAuthorID = document.resolvedAuthorID ?? currentAuthorID ?? context.authorID
             currentView = document.view
             maxView = document.maxView
-            applyPagination(for: document, preferredPage: preferredPage, preferredResumePoint: preferredResumePoint)
+            readingSession = NovelReadingSession(
+                document: document,
+                settings: settings,
+                layout: layout,
+                preferredPage: preferredPage,
+                resumePoint: preferredResumePoint,
+                usesPadPresentation: usesPadPresentation,
+                currentAuthorID: currentAuthorID
+            )
+            syncFromReadingSession()
             await refreshCachedState()
             isLoading = false
 
@@ -744,14 +717,19 @@ public final class ReaderContainerModel: ObservableObject {
 
     private func repaginate(resumePoint: ReaderResumePoint?) {
         guard let document = currentDocument else { return }
-        applyPagination(for: document, preferredPage: currentPageIndex, preferredResumePoint: resumePoint)
-    }
-
-    private func clearPendingResumePointIfSettled() {
-        guard pendingResumePoint != nil else { return }
-        guard !pendingResumeRequiresLayoutSync || layout.readingMode == settings.readingMode else { return }
-        pendingResumePoint = nil
-        pendingResumeRequiresLayoutSync = false
+        readingSession = NovelReadingSession(
+            document: document,
+            settings: settings,
+            layout: layout,
+            preferredPage: currentPageIndex,
+            resumePoint: resumePoint,
+            usesPadPresentation: usesPadPresentation,
+            currentAuthorID: currentAuthorID
+        )
+        if let prefetchedDocument {
+            readingSession?.acceptPrefetchedDocument(prefetchedDocument)
+        }
+        syncFromReadingSession()
     }
 
     private func applyPagination(
@@ -759,68 +737,37 @@ public final class ReaderContainerModel: ObservableObject {
         preferredPage: Int,
         preferredResumePoint: ReaderResumePoint?
     ) {
-        let paginationLayout = effectivePaginationLayout
-        let pagination = ReaderPaginator.paginate(document: document, settings: settings, layout: paginationLayout)
-        currentDocumentPageCount = pagination.pages.count
-
-        var renderedPages = pagination.pages
-        var renderedChapters = pagination.chapters
-        prefetchedStartIndex = nil
-
-        if settings.readingMode == .vertical,
-           let prefetchedDocument,
-           prefetchedDocument.view == document.view + 1 {
-            let nextPagination = ReaderPaginator.paginate(document: prefetchedDocument, settings: settings, layout: paginationLayout)
-            let startIndex = renderedPages.count
-            prefetchedStartIndex = startIndex
-            renderedPages += nextPagination.pages.enumerated().map { offset, page in
-                ReaderRenderedPage(
-                    index: startIndex + offset,
-                    blocks: page.blocks,
-                    documentView: page.documentView,
-                    chapterOrdinal: page.chapterOrdinal,
-                    chapterTitle: page.chapterTitle,
-                    segmentIndex: page.segmentIndex,
-                    segmentStartOffset: page.segmentStartOffset,
-                    segmentEndOffset: page.segmentEndOffset,
-                    textRanges: page.textRanges
-                )
-            }
-            renderedChapters += nextPagination.chapters.map { chapter in
-                ReaderChapter(
-                    ordinal: chapter.ordinal,
-                    title: chapter.title,
-                    startIndex: chapter.startIndex + startIndex
-                )
-            }
-        }
-
-        pages = renderedPages.enumerated().map { index, page in
-            ReaderRenderedPage(
-                index: index,
-                blocks: page.blocks,
-                documentView: page.documentView,
-                chapterOrdinal: page.chapterOrdinal,
-                chapterTitle: page.chapterTitle,
-                segmentIndex: page.segmentIndex,
-                segmentStartOffset: page.segmentStartOffset,
-                segmentEndOffset: page.segmentEndOffset,
-                textRanges: page.textRanges
-            )
-        }
-        pagedSpreads = makePagedSpreads(from: pages)
-        chapters = renderedChapters
-        currentContentSource = document.contentSource
-        retainedChapterCount = document.retainedChapterCount
-        filteredChapterCandidateCount = document.filteredChapterCandidateCount
-        let fallbackTarget = ReaderResolvedTarget(
-            pageIndex: max(0, min(preferredPage, max(pages.count - 1, 0))),
-            intraPageProgress: 0,
-            documentView: displayedViewCandidate(for: preferredPage)
+        readingSession = NovelReadingSession(
+            document: document,
+            settings: settings,
+            layout: layout,
+            preferredPage: preferredPage,
+            resumePoint: preferredResumePoint,
+            usesPadPresentation: usesPadPresentation,
+            currentAuthorID: currentAuthorID
         )
-        let effectiveResumePoint = pendingResumePoint ?? preferredResumePoint
-        let resolvedTarget = effectiveResumePoint.flatMap { resolveResumePoint($0, in: pages) } ?? fallbackTarget
-        setCurrentLocation(resolvedTarget)
+        if let prefetchedDocument {
+            readingSession?.acceptPrefetchedDocument(prefetchedDocument)
+        }
+        syncFromReadingSession()
+    }
+
+    private func syncFromReadingSession() {
+        guard let snapshot = readingSession?.snapshot else { return }
+        pages = snapshot.pages
+        chapters = snapshot.chapters
+        currentPageIndex = snapshot.currentPageIndex
+        currentPageIntraProgress = snapshot.currentPageIntraProgress
+        currentView = snapshot.currentView
+        maxView = snapshot.maxView
+        currentChapterTitle = snapshot.currentChapterTitle
+        currentContentSource = snapshot.currentContentSource
+        retainedChapterCount = snapshot.retainedChapterCount
+        filteredChapterCandidateCount = snapshot.filteredChapterCandidateCount
+        pagedSpreads = snapshot.pagedSpreads
+        prefetchedStartIndex = snapshot.prefetchedStartIndex
+        currentAuthorID = snapshot.currentAuthorID ?? currentAuthorID
+        currentDocumentPageCount = snapshot.pages.filter { $0.documentView == snapshot.currentView }.count
     }
 
     private func prefetchIfNeeded(for pageIndex: Int) async {
@@ -840,13 +787,8 @@ public final class ReaderContainerModel: ObservableObject {
         prefetchedDocument = nextDocument
         currentAuthorID = nextDocument.resolvedAuthorID ?? currentAuthorID ?? context.authorID
         maxView = max(maxView, nextDocument.maxView)
-        if settings.readingMode == .vertical {
-            applyPagination(
-                for: currentDocument,
-                preferredPage: currentPageIndex,
-                preferredResumePoint: captureCurrentResumePoint()
-            )
-        }
+        readingSession?.acceptPrefetchedDocument(nextDocument)
+        syncFromReadingSession()
     }
 
     private func chapterTitle(for pageIndex: Int) -> String? {
@@ -950,6 +892,9 @@ public final class ReaderContainerModel: ObservableObject {
     }
 
     private func captureCurrentResumePoint() -> ReaderResumePoint? {
+        if let resumePoint = readingSession?.captureNovelReadingPosition() {
+            return resumePoint
+        }
         guard let page = currentRenderedPageMetadata,
               let chapterOrdinal = page.chapterOrdinal,
               let position = textPosition(for: currentPageIntraProgress, in: page) else {
@@ -972,6 +917,28 @@ public final class ReaderContainerModel: ObservableObject {
             readingModeHint: settings.readingMode
         )
         return resumePoint
+    }
+
+    private func promoteIfNeededAfterLocationUpdate() {
+        if settings.readingMode == .vertical,
+           let currentPage = currentRenderedPageMetadata,
+           currentPage.documentView != currentView,
+           prefetchedDocument?.view == currentPage.documentView {
+            let resumePoint = captureCurrentResumePoint()
+            Task {
+                await promotePrefetchedDocument(startingAt: 0, preferredResumePoint: resumePoint)
+            }
+            return
+        }
+
+        if settings.readingMode == .paged,
+           let prefetchedDocument,
+           currentPageIndex >= max(currentDocumentPageCount - 1, 0),
+           prefetchedDocument.view == currentView + 1 {
+            Task {
+                await promotePrefetchedDocument(startingAt: 0, preferredResumePoint: nil)
+            }
+        }
     }
 
     private func textPosition(for intraPageProgress: Double, in page: ReaderRenderedPage) -> ReaderPageTextPosition? {
@@ -1001,213 +968,6 @@ public final class ReaderContainerModel: ObservableObject {
         return page.textRanges.last.map {
             ReaderPageTextPosition(range: $0, progressInRange: 1)
         }
-    }
-
-    private func resolveResumePoint(
-        _ resumePoint: ReaderResumePoint,
-        in renderedPages: [ReaderRenderedPage]
-    ) -> ReaderResolvedTarget? {
-        let pagesInView = renderedPages.filter { $0.documentView == resumePoint.view }
-        guard !pagesInView.isEmpty else {
-            return nil
-        }
-
-        let candidatePages = pagesInView.filter { contains(segmentIndex: resumePoint.segmentIndex, in: $0) }
-        let containingPage = candidatePages.first {
-            contains(offset: resumePoint.segmentOffset, segmentIndex: resumePoint.segmentIndex, in: $0)
-        }
-
-        if let containingPage {
-            let target = ReaderResolvedTarget(
-                pageIndex: containingPage.index,
-                intraPageProgress: intraPageProgress(for: resumePoint, in: containingPage),
-                documentView: containingPage.documentView
-            )
-            return target
-        }
-
-        if let nearestPage = candidatePages.min(by: {
-            distance(from: resumePoint.segmentOffset, segmentIndex: resumePoint.segmentIndex, to: $0)
-                < distance(from: resumePoint.segmentOffset, segmentIndex: resumePoint.segmentIndex, to: $1)
-        }) {
-            let target = ReaderResolvedTarget(
-                pageIndex: nearestPage.index,
-                intraPageProgress: intraPageProgress(for: resumePoint, in: nearestPage),
-                documentView: nearestPage.documentView
-            )
-            return target
-        }
-
-        if let chapterPage = pagesInView.first(where: { $0.chapterOrdinal == resumePoint.chapterOrdinal }) {
-            let target = ReaderResolvedTarget(
-                pageIndex: chapterPage.index,
-                intraPageProgress: min(max(resumePoint.segmentProgress, 0), 1),
-                documentView: chapterPage.documentView
-            )
-            return target
-        }
-
-        if let titlePage = pagesInView.first(where: { $0.chapterTitle == resumePoint.chapterTitle }) {
-            let target = ReaderResolvedTarget(
-                pageIndex: titlePage.index,
-                intraPageProgress: min(max(resumePoint.segmentProgress, 0), 1),
-                documentView: titlePage.documentView
-            )
-            return target
-        }
-
-        guard let firstPage = pagesInView.first else { return nil }
-        let target = ReaderResolvedTarget(
-            pageIndex: firstPage.index,
-            intraPageProgress: 0,
-            documentView: firstPage.documentView
-        )
-        return target
-    }
-
-    private func contains(offset: Int, in page: ReaderRenderedPage) -> Bool {
-        if !page.textRanges.isEmpty,
-           page.textRanges.contains(where: { contains(offset: offset, in: $0) }) {
-            return true
-        }
-        if page.segmentStartOffset == page.segmentEndOffset {
-            return offset <= page.segmentStartOffset
-        }
-        return offset >= page.segmentStartOffset && offset < page.segmentEndOffset
-    }
-
-    private func contains(offset: Int, segmentIndex: Int, in page: ReaderRenderedPage) -> Bool {
-        let matchingRanges = page.textRanges.filter { $0.segmentIndex == segmentIndex }
-        if !matchingRanges.isEmpty {
-            return matchingRanges.contains { contains(offset: offset, in: $0) }
-        }
-        guard page.segmentIndex == segmentIndex else { return false }
-        return contains(offset: offset, in: page)
-    }
-
-    private func contains(segmentIndex: Int, in page: ReaderRenderedPage) -> Bool {
-        page.textRanges.contains { $0.segmentIndex == segmentIndex } || page.segmentIndex == segmentIndex
-    }
-
-    private func contains(offset: Int, in range: ReaderRenderedTextRange) -> Bool {
-        if range.startOffset == range.endOffset {
-            return offset <= range.startOffset
-        }
-        return offset >= range.startOffset && offset < range.endOffset
-    }
-
-    private func distance(from offset: Int, to page: ReaderRenderedPage) -> Int {
-        if !page.textRanges.isEmpty {
-            return page.textRanges.map { distance(from: offset, to: $0) }.min() ?? 0
-        }
-        if offset < page.segmentStartOffset {
-            return page.segmentStartOffset - offset
-        }
-        return offset - page.segmentEndOffset
-    }
-
-    private func distance(from offset: Int, segmentIndex: Int, to page: ReaderRenderedPage) -> Int {
-        let matchingRanges = page.textRanges.filter { $0.segmentIndex == segmentIndex }
-        if !matchingRanges.isEmpty {
-            return matchingRanges.map { distance(from: offset, to: $0) }.min() ?? 0
-        }
-        return distance(from: offset, to: page)
-    }
-
-    private func distance(from offset: Int, to range: ReaderRenderedTextRange) -> Int {
-        if contains(offset: offset, in: range) {
-            return 0
-        }
-        if offset < range.startOffset {
-            return range.startOffset - offset
-        }
-        return offset - range.endOffset
-    }
-
-    private func intraPageProgress(for resumePoint: ReaderResumePoint, in page: ReaderRenderedPage) -> Double {
-        if !page.textRanges.isEmpty {
-            let totalLength = page.textRanges.reduce(0) { $0 + max($1.length, 1) }
-            var runningLength = 0
-
-            for range in page.textRanges {
-                let length = max(range.length, 1)
-                defer { runningLength += length }
-                guard range.segmentIndex == resumePoint.segmentIndex else { continue }
-                let localOffset = min(max(resumePoint.segmentOffset - range.startOffset, 0), length)
-                let progress = Double(runningLength + localOffset) / Double(max(totalLength, 1))
-                return min(max(progress, 0), 1)
-            }
-        }
-        let length = max(page.segmentEndOffset - page.segmentStartOffset, 0)
-        guard length > 0 else {
-            return min(max(resumePoint.segmentProgress, 0), 1)
-        }
-        let progress = Double(resumePoint.segmentOffset - page.segmentStartOffset) / Double(length)
-        return min(max(progress, 0), 1)
-    }
-
-    private func setCurrentLocation(_ target: ReaderResolvedTarget) {
-        currentPageIndex = normalizedPagedPageIndex(target.pageIndex)
-        currentPageIntraProgress = min(max(target.intraPageProgress, 0), 1)
-        currentChapterTitle = chapterTitle(for: currentPageIndex)
-    }
-
-    private func displayedViewCandidate(for preferredPage: Int) -> Int {
-        let normalizedIndex = normalizedPagedPageIndex(preferredPage)
-        guard pages.indices.contains(normalizedIndex) else {
-            return currentDocument?.view ?? currentView
-        }
-        return pages[normalizedIndex].documentView
-    }
-
-    private func updateLocation(pageIndex: Int, intraPageProgress: Double) {
-        let normalizedPageIndex = normalizedPagedPageIndex(pageIndex)
-        let target = ReaderResolvedTarget(
-            pageIndex: normalizedPageIndex,
-            intraPageProgress: intraPageProgress,
-            documentView: displayedViewCandidate(for: normalizedPageIndex)
-        )
-        setCurrentLocation(target)
-        scheduleProgressSync()
-
-        Task {
-            await prefetchIfNeeded(for: currentPageIndex)
-        }
-
-        if settings.readingMode == .vertical,
-           let currentPage = currentRenderedPageMetadata,
-           currentPage.documentView != currentView,
-           prefetchedDocument?.view == currentPage.documentView {
-            let resumePoint = captureCurrentResumePoint()
-            Task {
-                await promotePrefetchedDocument(startingAt: 0, preferredResumePoint: resumePoint)
-            }
-            return
-        }
-
-        if settings.readingMode == .paged,
-           let prefetchedDocument,
-           currentPageIndex >= max(currentDocumentPageCount - 1, 0),
-           prefetchedDocument.view == currentView + 1 {
-            Task {
-                await promotePrefetchedDocument(startingAt: 0, preferredResumePoint: nil)
-            }
-        }
-    }
-
-    private var effectivePaginationLayout: ReaderContainerLayout {
-        guard isTwoPageSpreadActive else { return layout }
-
-        return ReaderContainerLayout(
-            containerSize: CGSize(width: layout.width / 2, height: layout.height),
-            safeAreaInsets: ReaderLayoutInsets(
-                top: layout.safeAreaInsets.top,
-                bottom: layout.safeAreaInsets.bottom
-            ),
-            contentInsets: layout.contentInsets,
-            chromeInsets: layout.chromeInsets,
-            readingMode: layout.readingMode
-        )
     }
 
     private func scheduleProgressSync() {
@@ -1251,36 +1011,6 @@ public final class ReaderContainerModel: ObservableObject {
         }
         lastQueuedProgress = snapshot
         lastSyncedProgress = snapshot
-    }
-
-    private func makePagedSpreads(from pages: [ReaderRenderedPage]) -> [ReaderPagedSpread] {
-        guard !pages.isEmpty else { return [] }
-
-        var spreads: [ReaderPagedSpread] = []
-        var pageIndex = 0
-
-        while pageIndex < pages.count {
-            let leftPage = pages[pageIndex]
-            let candidateRightIndex = pageIndex + 1
-            let rightPageIndex: Int? = if pages.indices.contains(candidateRightIndex),
-                                          pages[candidateRightIndex].documentView == leftPage.documentView {
-                candidateRightIndex
-            } else {
-                nil
-            }
-
-            spreads.append(
-                ReaderPagedSpread(
-                    index: spreads.count,
-                    leftPageIndex: leftPage.index,
-                    rightPageIndex: rightPageIndex,
-                    chapterTitle: leftPage.chapterTitle
-                )
-            )
-            pageIndex += rightPageIndex == nil ? 1 : 2
-        }
-
-        return spreads
     }
 
     private func spreadIndex(forPageIndex pageIndex: Int) -> Int {
@@ -1346,10 +1076,13 @@ public final class ReaderContainerModel: ObservableObject {
         currentDocument = nextDocument
         prefetchedDocument = nil
         currentAuthorID = nextDocument.resolvedAuthorID ?? currentAuthorID ?? context.authorID
-        currentView = nextDocument.view
-        maxView = nextDocument.maxView
         let resumePoint = preferredResumePoint?.view == nextDocument.view ? preferredResumePoint : nil
-        applyPagination(for: nextDocument, preferredPage: preferredPage, preferredResumePoint: resumePoint)
+        if readingSession != nil {
+            readingSession?.promotePrefetchedDocument(preferredPage: preferredPage, resumePoint: resumePoint)
+            syncFromReadingSession()
+        } else {
+            applyPagination(for: nextDocument, preferredPage: preferredPage, preferredResumePoint: resumePoint)
+        }
         await prefetchIfNeeded(for: currentPageIndex)
     }
 
@@ -1452,12 +1185,6 @@ public final class ReaderContainerModel: ObservableObject {
         cachedViews = views
         cacheOperationState.cachedViews = views
     }
-}
-
-private struct ReaderResolvedTarget {
-    let pageIndex: Int
-    let intraPageProgress: Double
-    let documentView: Int
 }
 
 private struct ReaderPageTextPosition {
