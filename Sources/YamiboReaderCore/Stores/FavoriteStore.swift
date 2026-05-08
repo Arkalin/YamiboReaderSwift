@@ -1,15 +1,5 @@
 import Foundation
 
-public struct FavoriteLibrarySnapshot: Codable, Equatable, Sendable {
-    public var favorites: [Favorite]
-    public var collections: [FavoriteCollection]
-
-    public init(favorites: [Favorite], collections: [FavoriteCollection]) {
-        self.favorites = favorites
-        self.collections = collections
-    }
-}
-
 public protocol FavoriteStoring: Sendable {
     func loadFavorites() async -> [Favorite]
     func loadCollections() async -> [FavoriteCollection]
@@ -47,6 +37,7 @@ public actor FavoriteStore: FavoriteStoring {
     private let defaults: UserDefaults
     private let key: String
     private let collectionsKey: String
+    private let archivedMetadataKey: String
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
 
@@ -58,6 +49,7 @@ public actor FavoriteStore: FavoriteStoring {
         self.defaults = defaults
         self.key = key
         collectionsKey = "\(key).collections"
+        archivedMetadataKey = "\(key).archivedMetadata"
     }
 
     public func loadFavorites() async -> [Favorite] {
@@ -74,7 +66,8 @@ public actor FavoriteStore: FavoriteStoring {
     public func loadLibrarySnapshot() async -> FavoriteLibrarySnapshot {
         FavoriteLibrarySnapshot(
             favorites: await loadFavorites(),
-            collections: await loadCollections()
+            collections: await loadCollections(),
+            archivedMetadata: loadArchivedMetadata()
         )
     }
 
@@ -84,50 +77,21 @@ public actor FavoriteStore: FavoriteStoring {
     }
 
     public func saveLibrarySnapshot(_ snapshot: FavoriteLibrarySnapshot) async throws {
-        _ = try persistLibrary(favorites: snapshot.favorites, collections: snapshot.collections)
+        _ = try persistLibrary(
+            favorites: snapshot.favorites,
+            collections: snapshot.collections,
+            archivedMetadata: snapshot.archivedMetadata
+        )
     }
 
     public func mergeRemoteFavorites(_ favorites: [Favorite]) async throws -> [Favorite] {
-        let localFavorites = await loadFavorites()
-        let localCollections = await loadCollections()
-        let localIDs = Set(localFavorites.map(\.id))
-        let minRootOrder = min(
-            localFavorites.filter { $0.parentCollectionID == nil }.map(\.manualOrder).min() ?? 0,
-            localCollections.map(\.manualOrder).min() ?? 0
+        var library = FavoriteLibrary(snapshot: await loadLibrarySnapshot())
+        library.reconcileRemoteFavorites(favorites)
+        let snapshot = try persistLibrary(
+            favorites: library.snapshot.favorites,
+            collections: library.snapshot.collections,
+            archivedMetadata: library.snapshot.archivedMetadata
         )
-
-        let unsortedRemoteNewFavorites = favorites
-            .compactMap { remoteFavorite -> Favorite? in
-                guard !localIDs.contains(remoteFavorite.id) else { return nil }
-                var remoteFavorite = remoteFavorite
-                remoteFavorite.parentCollectionID = nil
-                return remoteFavorite
-            }
-        let remoteNewFavorites = unsortedRemoteNewFavorites
-            .enumerated()
-            .map { offset, remoteFavorite in
-                var remoteFavorite = remoteFavorite
-                remoteFavorite.manualOrder = minRootOrder - unsortedRemoteNewFavorites.count + offset
-                return remoteFavorite
-            }
-        let remoteByID = Dictionary(uniqueKeysWithValues: favorites.map { ($0.id, $0) })
-
-        let mergedFavorites = remoteNewFavorites + localFavorites.compactMap { localFavorite in
-            if let remoteFavorite = remoteByID[localFavorite.id] {
-                var updated = localFavorite
-                updated.title = remoteFavorite.title
-                updated.url = remoteFavorite.url
-                updated.remoteFavoriteID = remoteFavorite.remoteFavoriteID ?? updated.remoteFavoriteID
-                if updated.type == .unknown {
-                    updated.type = remoteFavorite.type
-                }
-                return updated
-            }
-
-            return localFavorite.isHidden ? localFavorite : nil
-        }
-
-        let snapshot = try persistLibrary(favorites: mergedFavorites, collections: localCollections)
         return snapshot.favorites
     }
 
@@ -541,28 +505,41 @@ public actor FavoriteStore: FavoriteStoring {
     }
 
     public func clearAll() async throws {
-        _ = try persistLibrary(favorites: [], collections: [])
+        _ = try persistLibrary(favorites: [], collections: [], archivedMetadata: [])
     }
 
     private func persistLibrary(
         favorites: [Favorite],
-        collections: [FavoriteCollection]
+        collections: [FavoriteCollection],
+        archivedMetadata: [FavoriteMetadataArchiveEntry]? = nil
     ) throws -> FavoriteLibrarySnapshot {
         let sanitizedCollections = sanitizeCollectionsForPersistence(collections)
         let validCollectionIDs = Set(sanitizedCollections.map(\.id))
         let sanitizedFavorites = sanitizeFavoritesForPersistence(favorites, validCollectionIDs: validCollectionIDs)
+        let resolvedArchivedMetadata = archivedMetadata ?? loadArchivedMetadata()
 
         do {
             let favoritesData = try encoder.encode(sanitizedFavorites)
             let collectionsData = try encoder.encode(sanitizedCollections)
+            let archivedMetadataData = try encoder.encode(resolvedArchivedMetadata)
             defaults.set(favoritesData, forKey: key)
             defaults.set(collectionsData, forKey: collectionsKey)
+            defaults.set(archivedMetadataData, forKey: archivedMetadataKey)
             postChangeNotification()
-            return FavoriteLibrarySnapshot(favorites: sanitizedFavorites, collections: sanitizedCollections)
+            return FavoriteLibrarySnapshot(
+                favorites: sanitizedFavorites,
+                collections: sanitizedCollections,
+                archivedMetadata: resolvedArchivedMetadata
+            )
         } catch {
             throw YamiboError.persistenceFailed(error.localizedDescription)
         }
     }
+
+    private func loadArchivedMetadata() -> [FavoriteMetadataArchiveEntry] {
+        decodedValue([FavoriteMetadataArchiveEntry].self, forKey: archivedMetadataKey) ?? []
+    }
+
 
     private func decodedValue<T: Decodable>(_ type: T.Type, forKey key: String) -> T? {
         guard let data = defaults.data(forKey: key) else { return nil }
