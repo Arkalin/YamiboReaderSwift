@@ -19,6 +19,7 @@ public protocol FavoriteStoring: Sendable {
     func setHidden(_ isHidden: Bool, for favoriteID: String) async throws -> [Favorite]
     func setDisplayName(_ displayName: String?, for favoriteID: String) async throws -> [Favorite]
     func setType(_ type: FavoriteType, for favoriteID: String) async throws -> [Favorite]
+    func setTagIDs(_ tagIDs: [String], for favoriteID: String) async throws -> [Favorite]
     func deleteFavorite(id: String) async throws -> [Favorite]
     func deleteFavorites(ids: [String]) async throws -> FavoriteLibrarySnapshot
     func favorite(for url: URL) async -> Favorite?
@@ -406,6 +407,23 @@ public actor FavoriteStore: FavoriteStoring {
             return favorite
         }
         return try persistLibrary(favorites: updated, collections: snapshot.collections).favorites
+    }
+
+    public func setTagIDs(_ tagIDs: [String], for favoriteID: String) async throws -> [Favorite] {
+        let snapshot = await loadLibrarySnapshot()
+        let validTagIDs = Set(snapshot.tags.map(\.id))
+        let normalizedTagIDs = sanitizedTagIDs(tagIDs, validTagIDs: validTagIDs)
+        let updated = snapshot.favorites.map { favorite in
+            guard favorite.id == favoriteID else { return favorite }
+            var favorite = favorite
+            favorite.tagIDs = normalizedTagIDs
+            return favorite
+        }
+        return try persistLibrary(
+            favorites: updated,
+            collections: snapshot.collections,
+            tags: snapshot.tags
+        ).favorites
     }
 
     public func deleteFavorite(id favoriteID: String) async throws -> [Favorite] {

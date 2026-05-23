@@ -216,6 +216,7 @@ private final class FavoriteShareAnchorViewController: UIViewController {
 public final class FavoritesViewModel: ObservableObject {
     @Published public private(set) var favorites: [Favorite] = []
     @Published public private(set) var collections: [FavoriteCollection] = []
+    @Published public private(set) var tags: [FavoriteTag] = []
     @Published public private(set) var isLoading = false
     @Published public private(set) var resolvingFavoriteID: String?
     @Published public private(set) var deletingFavoriteID: String?
@@ -281,6 +282,7 @@ public final class FavoritesViewModel: ObservableObject {
             let remote = try await repository.fetchFavorites()
             favorites = try await favoriteStore.mergeRemoteFavorites(remote)
             collections = await favoriteStore.loadCollections()
+            tags = await favoriteStore.loadTags()
             errorMessage = nil
         } catch {
             errorMessage = error.localizedDescription
@@ -416,6 +418,16 @@ public final class FavoritesViewModel: ObservableObject {
     public func setHidden(_ isHidden: Bool, for favorite: Favorite) async {
         do {
             favorites = try await favoriteStore.setHidden(isHidden, for: favorite.id)
+            errorMessage = nil
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    public func setTagIDs(_ tagIDs: [String], forFavoriteID favoriteID: String) async {
+        do {
+            favorites = try await favoriteStore.setTagIDs(tagIDs, for: favoriteID)
+            tags = await favoriteStore.loadTags()
             errorMessage = nil
         } catch {
             errorMessage = error.localizedDescription
@@ -582,6 +594,7 @@ public final class FavoritesViewModel: ObservableObject {
     private func applySnapshot(_ snapshot: FavoriteLibrarySnapshot) {
         favorites = snapshot.favorites
         collections = snapshot.collections
+        tags = snapshot.tags
     }
 
     private func applyStartModeIfNeeded(
@@ -645,6 +658,13 @@ private struct FavoriteCollectionNameDraft {
         collectionID = collection.id
         name = collection.name
     }
+}
+
+private struct FavoriteTagPickerContext: Identifiable {
+    let favoriteID: String
+    let initialTagIDs: Set<String>
+
+    var id: String { favoriteID }
 }
 
 struct FavoriteCollectionSummary: Equatable {
@@ -1067,6 +1087,8 @@ public struct FavoritesView: View {
     @State private var showingSettingsSheet = false
     @State private var showingAboutSheet = false
     @State private var displayNameDraft: FavoriteDisplayNameDraft?
+    @State private var pendingEditFavorite: Favorite?
+    @State private var tagPickerContext: FavoriteTagPickerContext?
     @State private var collectionNameDraft: FavoriteCollectionNameDraft?
     @State private var pendingDeleteFavorite: Favorite?
     @State private var pendingDeleteCollection: FavoriteCollection?
@@ -1225,6 +1247,22 @@ public struct FavoritesView: View {
             } message: {
                 Text(L10n.string("favorites.display_name_message"))
             }
+            .alert(L10n.string("common.edit"), isPresented: editActionAlertBinding, presenting: pendingEditFavorite) { favorite in
+                Button(L10n.string("favorites.edit_display_name")) {
+                    displayNameDraft = FavoriteDisplayNameDraft(favorite: favorite)
+                    pendingEditFavorite = nil
+                }
+                Button(L10n.string("favorites.edit_tags")) {
+                    tagPickerContext = FavoriteTagPickerContext(
+                        favoriteID: favorite.id,
+                        initialTagIDs: Set(favorite.tagIDs)
+                    )
+                    pendingEditFavorite = nil
+                }
+                Button(L10n.string("common.cancel"), role: .cancel) {
+                    pendingEditFavorite = nil
+                }
+            }
             .alert(L10n.string("favorites.create_collection"), isPresented: $showingCreateCollectionPrompt) {
                 TextField(L10n.string("favorites.collection_name"), text: $createCollectionName)
                 Button(L10n.string("common.cancel"), role: .cancel) {
@@ -1279,6 +1317,24 @@ public struct FavoritesView: View {
             .sheet(item: $selectedFavorite) { favorite in
                 ForumBrowserView(url: favorite.url, appContext: appContext, appModel: appModel)
                     .ignoresSafeArea()
+            }
+            .sheet(item: $tagPickerContext) { context in
+                FavoriteTagPickerView(
+                    tags: viewModel.tags,
+                    initialSelection: context.initialTagIDs,
+                    onCancel: {
+                        tagPickerContext = nil
+                    },
+                    onConfirm: { selectedTagIDs in
+                        let orderedTagIDs = viewModel.tags
+                            .map(\.id)
+                            .filter { selectedTagIDs.contains($0) }
+                        Task {
+                            await viewModel.setTagIDs(orderedTagIDs, forFavoriteID: context.favoriteID)
+                            tagPickerContext = nil
+                        }
+                    }
+                )
             }
             .sheet(isPresented: $showingSettingsSheet) {
                 FavoritesSettingsView(appContext: appContext) {
@@ -1499,6 +1555,17 @@ public struct FavoritesView: View {
             set: { isPresented in
                 if !isPresented {
                     displayNameDraft = nil
+                }
+            }
+        )
+    }
+
+    private var editActionAlertBinding: Binding<Bool> {
+        Binding(
+            get: { pendingEditFavorite != nil },
+            set: { isPresented in
+                if !isPresented {
+                    pendingEditFavorite = nil
                 }
             }
         )
@@ -1755,7 +1822,7 @@ public struct FavoritesView: View {
                         .disabled(viewModel.deletingFavoriteID != nil)
 
                         Button {
-                            displayNameDraft = FavoriteDisplayNameDraft(favorite: favorite)
+                            pendingEditFavorite = favorite
                         } label: {
                             swipeActionLabel(title: L10n.string("common.edit"), systemImage: "pencil")
                         }
@@ -1771,7 +1838,7 @@ public struct FavoritesView: View {
             favoriteMenuShareButton(favorite)
 
             Button {
-                displayNameDraft = FavoriteDisplayNameDraft(favorite: favorite)
+                pendingEditFavorite = favorite
             } label: {
                 Label(L10n.string("common.edit"), systemImage: "pencil")
             }
@@ -2073,6 +2140,109 @@ public struct FavoritesView: View {
                 .font(.caption2.weight(.semibold))
             Image(systemName: systemImage)
                 .font(.caption.weight(.semibold))
+        }
+    }
+}
+
+private struct FavoriteTagPickerView: View {
+    let tags: [FavoriteTag]
+    let initialSelection: Set<String>
+    let onCancel: () -> Void
+    let onConfirm: (Set<String>) -> Void
+
+    @State private var selectedTagIDs: Set<String>
+
+    init(
+        tags: [FavoriteTag],
+        initialSelection: Set<String>,
+        onCancel: @escaping () -> Void,
+        onConfirm: @escaping (Set<String>) -> Void
+    ) {
+        self.tags = tags
+        self.initialSelection = initialSelection
+        self.onCancel = onCancel
+        self.onConfirm = onConfirm
+        _selectedTagIDs = State(initialValue: initialSelection)
+    }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                ForEach(orderedTags) { tag in
+                    Button {
+                        toggle(tag)
+                    } label: {
+                        HStack(spacing: 12) {
+                            Circle()
+                                .fill(tag.color.swiftUIColor)
+                                .frame(width: 12, height: 12)
+
+                            Text(tag.name)
+                                .foregroundStyle(.primary)
+
+                            Spacer()
+
+                            if selectedTagIDs.contains(tag.id) {
+                                Image(systemName: "checkmark")
+                                    .font(.body.weight(.semibold))
+                                    .foregroundStyle(.tint)
+                            }
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .overlay {
+                if tags.isEmpty {
+                    ContentUnavailableView(L10n.string("favorites.tags.empty"), systemImage: "tag")
+                }
+            }
+            .navigationTitle(L10n.string("favorites.select_tags"))
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(L10n.string("common.cancel"), action: onCancel)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(L10n.string("common.done")) {
+                        onConfirm(selectedTagIDs)
+                    }
+                }
+            }
+        }
+    }
+
+    private var orderedTags: [FavoriteTag] {
+        tags.sorted { lhs, rhs in
+            if lhs.manualOrder != rhs.manualOrder {
+                return lhs.manualOrder < rhs.manualOrder
+            }
+            return lhs.id < rhs.id
+        }
+    }
+
+    private func toggle(_ tag: FavoriteTag) {
+        if selectedTagIDs.contains(tag.id) {
+            selectedTagIDs.remove(tag.id)
+        } else {
+            selectedTagIDs.insert(tag.id)
+        }
+    }
+}
+
+private extension FavoriteTagColor {
+    var swiftUIColor: Color {
+        switch self {
+        case .red: .red
+        case .orange: .orange
+        case .yellow: .yellow
+        case .green: .green
+        case .blue: .blue
+        case .purple: .purple
+        case .pink: .pink
+        case .gray: .gray
         }
     }
 }

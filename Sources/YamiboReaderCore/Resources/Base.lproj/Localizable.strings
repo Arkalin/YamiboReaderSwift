@@ -112,6 +112,7 @@
 "favorites.dissolve_collection_message" = "确定要解散“%@”吗？其中的收藏会返回根页，不会被删除。";
 "favorites.edit_collection_name" = "编辑合集名称";
 "favorites.edit_display_name" = "编辑显示名称";
+"favorites.edit_tags" = "编辑标签";
 "favorites.empty.collection" = "合集为空";
 "favorites.empty.favorites" = "暂无收藏";
 "favorites.empty.no_results" = "没有匹配结果";
@@ -124,6 +125,7 @@
 "favorites.progress.page_web_spaced" = "读至第 %d 页 · 网页第 %d 页";
 "favorites.progress.page_with_chapter" = "读至第 %d 页 · %@";
 "favorites.select_target_collection" = "选择目标合集。";
+"favorites.select_tags" = "选择标签";
 "favorites.selected_count" = "已选择 %d 项";
 "favorites.show_hidden" = "显示隐藏项";
 "favorites.sort" = "排序";
@@ -132,6 +134,7 @@
 "favorites.sort.recent_read" = "最近阅读";
 "favorites.sort.title" = "标题";
 "favorites.syncing" = "同步收藏中…";
+"favorites.tags.empty" = "暂无标签";
 "forum.default_title" = "百合会论坛";
 "forum.history" = "浏览历史";
 "forum.open_native_failed" = "无法原生打开";
