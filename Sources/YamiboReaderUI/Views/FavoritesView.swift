@@ -733,6 +733,61 @@ struct FavoriteBatchTagSelectionState: Equatable {
     let showsOverwriteWarning: Bool
 }
 
+let favoriteTagSelectionLimit = 20
+
+enum FavoriteTagSelectionDraftResult: Equatable {
+    case changed
+    case unchanged
+    case selectionLimitExceeded(max: Int)
+}
+
+struct FavoriteTagSelectionDraft: Equatable {
+    var selectedTagIDs: Set<String>
+
+    mutating func toggle(_ tagID: String, limit: Int = favoriteTagSelectionLimit) -> FavoriteTagSelectionDraftResult {
+        if selectedTagIDs.contains(tagID) {
+            selectedTagIDs.remove(tagID)
+            return .changed
+        }
+
+        guard selectedTagIDs.count < limit else {
+            return .selectionLimitExceeded(max: limit)
+        }
+
+        selectedTagIDs.insert(tagID)
+        return .changed
+    }
+
+    mutating func select(_ tagID: String, limit: Int = favoriteTagSelectionLimit) -> FavoriteTagSelectionDraftResult {
+        guard !selectedTagIDs.contains(tagID) else { return .unchanged }
+        guard selectedTagIDs.count < limit else {
+            return .selectionLimitExceeded(max: limit)
+        }
+
+        selectedTagIDs.insert(tagID)
+        return .changed
+    }
+
+    mutating func selectAll(visibleTagIDs: [String], limit: Int = favoriteTagSelectionLimit) -> FavoriteTagSelectionDraftResult {
+        let updatedSelection = selectedTagIDs.union(visibleTagIDs)
+        guard updatedSelection.count <= limit else {
+            return .selectionLimitExceeded(max: limit)
+        }
+        guard updatedSelection != selectedTagIDs else { return .unchanged }
+
+        selectedTagIDs = updatedSelection
+        return .changed
+    }
+
+    mutating func deselectAll(visibleTagIDs: [String]) -> FavoriteTagSelectionDraftResult {
+        let updatedSelection = selectedTagIDs.subtracting(visibleTagIDs)
+        guard updatedSelection != selectedTagIDs else { return .unchanged }
+
+        selectedTagIDs = updatedSelection
+        return .changed
+    }
+}
+
 private struct FavoriteTagEditorDraft: Identifiable {
     let tag: FavoriteTag?
     var name: String
@@ -2267,7 +2322,9 @@ private struct FavoriteTagPickerView: View {
     let onUpdateTag: (String, String, FavoriteTagColor) async -> Bool
     let onDeleteTag: (String) async -> Bool
 
-    @State private var selectedTagIDs: Set<String>
+    @State private var selectionDraft: FavoriteTagSelectionDraft
+    @State private var searchText = ""
+    @State private var selectionErrorMessage: String?
     @State private var editorDraft: FavoriteTagEditorDraft?
     @State private var pendingDeleteTag: FavoriteTag?
     @State private var isConfirming = false
@@ -2290,60 +2347,65 @@ private struct FavoriteTagPickerView: View {
         self.onCreateTag = onCreateTag
         self.onUpdateTag = onUpdateTag
         self.onDeleteTag = onDeleteTag
-        _selectedTagIDs = State(initialValue: initialSelection)
+        _selectionDraft = State(initialValue: FavoriteTagSelectionDraft(selectedTagIDs: initialSelection))
     }
 
     var body: some View {
         NavigationStack {
-            List {
-                if showsOverwriteWarning {
-                    Text(L10n.string("favorites.tags_overwrite_warning"))
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
+            VStack(spacing: 0) {
+                List {
+                    if showsOverwriteWarning {
+                        Text(L10n.string("favorites.tags_overwrite_warning"))
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
 
-                ForEach(orderedTags) { tag in
-                    Button {
-                        toggle(tag)
-                    } label: {
-                        HStack(spacing: 12) {
-                            Circle()
-                                .fill(tag.color.swiftUIColor)
-                                .frame(width: 12, height: 12)
+                    ForEach(visibleTags) { tag in
+                        Button {
+                            toggle(tag)
+                        } label: {
+                            HStack(spacing: 12) {
+                                Circle()
+                                    .fill(tag.color.swiftUIColor)
+                                    .frame(width: 12, height: 12)
 
-                            Text(tag.name)
-                                .foregroundStyle(.primary)
+                                Text(tag.name)
+                                    .foregroundStyle(.primary)
 
-                            Spacer()
+                                Spacer()
 
-                            if selectedTagIDs.contains(tag.id) {
-                                Image(systemName: "checkmark")
-                                    .font(.body.weight(.semibold))
-                                    .foregroundStyle(.tint)
+                                if selectionDraft.selectedTagIDs.contains(tag.id) {
+                                    Image(systemName: "checkmark")
+                                        .font(.body.weight(.semibold))
+                                        .foregroundStyle(.tint)
+                                }
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        .contextMenu {
+                            Button {
+                                editorDraft = FavoriteTagEditorDraft(tag: tag, defaultColor: nextDefaultColor)
+                            } label: {
+                                Label(L10n.string("common.edit"), systemImage: "pencil")
+                            }
+
+                            Button(role: .destructive) {
+                                pendingDeleteTag = tag
+                            } label: {
+                                Label(L10n.string("common.delete"), systemImage: "trash")
                             }
                         }
                     }
-                    .buttonStyle(.plain)
-                    .contextMenu {
-                        Button {
-                            editorDraft = FavoriteTagEditorDraft(tag: tag, defaultColor: nextDefaultColor)
-                        } label: {
-                            Label(L10n.string("common.edit"), systemImage: "pencil")
-                        }
-
-                        Button(role: .destructive) {
-                            pendingDeleteTag = tag
-                        } label: {
-                            Label(L10n.string("common.delete"), systemImage: "trash")
-                        }
+                }
+                .overlay {
+                    if tags.isEmpty {
+                        ContentUnavailableView(L10n.string("favorites.tags.empty"), systemImage: "tag")
                     }
                 }
+
+                tagSelectionFooter
             }
-            .overlay {
-                if tags.isEmpty {
-                    ContentUnavailableView(L10n.string("favorites.tags.empty"), systemImage: "tag")
-                }
-            }
+            .searchable(text: $searchText, prompt: L10n.string("common.search"))
             .navigationTitle(L10n.string("favorites.select_tags"))
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
@@ -2363,7 +2425,7 @@ private struct FavoriteTagPickerView: View {
                     Button(L10n.string("common.done")) {
                         Task {
                             isConfirming = true
-                            _ = await onConfirm(selectedTagIDs)
+                            _ = await onConfirm(selectionDraft.selectedTagIDs)
                             isConfirming = false
                         }
                     }
@@ -2383,7 +2445,8 @@ private struct FavoriteTagPickerView: View {
                     guard let tag = await onCreateTag(name, color) else {
                         return false
                     }
-                    selectedTagIDs.insert(tag.id)
+                    searchText = ""
+                    handleSelectionResult(selectionDraft.select(tag.id))
                     editorDraft = nil
                     return true
                 } onCancel: {
@@ -2401,7 +2464,7 @@ private struct FavoriteTagPickerView: View {
                 Button(L10n.string("common.delete"), role: .destructive) {
                     Task {
                         if await onDeleteTag(tag.id) {
-                            selectedTagIDs.remove(tag.id)
+                            selectionDraft.selectedTagIDs.remove(tag.id)
                             pendingDeleteTag = nil
                         }
                     }
@@ -2410,6 +2473,40 @@ private struct FavoriteTagPickerView: View {
                 Text(L10n.string("favorites.delete_tag_message", tag.name))
             }
         }
+    }
+
+    private var tagSelectionFooter: some View {
+        VStack(spacing: 8) {
+            if let selectionErrorMessage {
+                Text(selectionErrorMessage)
+                    .font(.footnote)
+                    .foregroundStyle(.red)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            HStack(spacing: 12) {
+                Button(L10n.string("favorites.tags_select_all")) {
+                    handleSelectionResult(selectionDraft.selectAll(visibleTagIDs: visibleTags.map(\.id)))
+                }
+                .buttonStyle(.bordered)
+                .disabled(visibleTags.isEmpty)
+
+                Button(L10n.string("favorites.tags_deselect_all")) {
+                    handleSelectionResult(selectionDraft.deselectAll(visibleTagIDs: visibleTags.map(\.id)))
+                }
+                .buttonStyle(.bordered)
+                .disabled(visibleTags.isEmpty)
+
+                Spacer()
+
+                Text(L10n.string("favorites.tags_selected_count", selectionDraft.selectedTagIDs.count))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(.bar)
     }
 
     private var pendingDeleteTagBinding: Binding<Bool> {
@@ -2438,11 +2535,22 @@ private struct FavoriteTagPickerView: View {
         }
     }
 
+    private var visibleTags: [FavoriteTag] {
+        filteredFavoriteTags(orderedTags, searchText: searchText)
+    }
+
     private func toggle(_ tag: FavoriteTag) {
-        if selectedTagIDs.contains(tag.id) {
-            selectedTagIDs.remove(tag.id)
-        } else {
-            selectedTagIDs.insert(tag.id)
+        handleSelectionResult(selectionDraft.toggle(tag.id))
+    }
+
+    private func handleSelectionResult(_ result: FavoriteTagSelectionDraftResult) {
+        switch result {
+        case .changed:
+            selectionErrorMessage = nil
+        case .unchanged:
+            break
+        case let .selectionLimitExceeded(max):
+            selectionErrorMessage = L10n.string("favorites.tags_limit_message", max)
         }
     }
 }
@@ -2746,6 +2854,15 @@ func makeBatchTagSelectionState(
         initialTagIDs: hasDivergentTags ? [] : firstTagIDs,
         showsOverwriteWarning: hasDivergentTags
     )
+}
+
+func filteredFavoriteTags(_ tags: [FavoriteTag], searchText: String) -> [FavoriteTag] {
+    let trimmedSearchText = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmedSearchText.isEmpty else { return tags }
+
+    return tags.filter { tag in
+        tag.name.localizedCaseInsensitiveContains(trimmedSearchText)
+    }
 }
 
 func favoriteProgressScore(for favorite: Favorite) -> Int {
