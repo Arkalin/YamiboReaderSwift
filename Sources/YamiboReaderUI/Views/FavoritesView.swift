@@ -1276,19 +1276,6 @@ public struct FavoritesView: View {
             } message: {
                 Text(bulkDeleteMessage)
             }
-            .confirmationDialog(L10n.string("favorites.move_to_collection"), isPresented: $showingMoveDialog, titleVisibility: .visible) {
-                Button(L10n.string("favorites.move_to_root")) {
-                    moveSelectedFavorites(to: nil)
-                }
-                ForEach(moveTargets) { collection in
-                    Button(collection.name) {
-                        moveSelectedFavorites(to: collection.id)
-                    }
-                }
-                Button(L10n.string("common.cancel"), role: .cancel) {}
-            } message: {
-                Text(L10n.string("favorites.select_target_collection"))
-            }
             .sheet(item: $selectedFavorite) { favorite in
                 ForumBrowserView(url: favorite.url, appContext: appContext, appModel: appModel)
                     .ignoresSafeArea()
@@ -1563,6 +1550,19 @@ public struct FavoritesView: View {
                 }
                 .buttonStyle(.bordered)
                 .disabled(!selectionActionState.canMove)
+                .confirmationDialog(L10n.string("favorites.move_to_collection"), isPresented: $showingMoveDialog, titleVisibility: .visible) {
+                    Button(L10n.string("favorites.move_to_root")) {
+                        moveSelectedFavorites(to: nil)
+                    }
+                    ForEach(moveTargets) { collection in
+                        Button(collection.name) {
+                            moveSelectedFavorites(to: collection.id)
+                        }
+                    }
+                    Button(L10n.string("common.cancel"), role: .cancel) {}
+                } message: {
+                    Text(L10n.string("favorites.select_target_collection"))
+                }
 
                 Button(L10n.string("common.delete"), role: .destructive) {
                     showingBulkDeleteConfirmation = true
