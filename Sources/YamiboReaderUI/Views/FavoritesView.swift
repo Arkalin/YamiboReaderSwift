@@ -434,6 +434,40 @@ public final class FavoritesViewModel: ObservableObject {
         }
     }
 
+    public func createTag(name: String, color: FavoriteTagColor) async -> FavoriteTag? {
+        do {
+            let snapshot = try await favoriteStore.createTag(name: name, color: color)
+            applySnapshot(snapshot)
+            errorMessage = nil
+            return snapshot.tags.first
+        } catch {
+            errorMessage = error.localizedDescription
+            return nil
+        }
+    }
+
+    public func updateTag(id tagID: String, name: String, color: FavoriteTagColor) async -> Bool {
+        do {
+            applySnapshot(try await favoriteStore.updateTag(id: tagID, name: name, color: color))
+            errorMessage = nil
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
+
+    public func deleteTag(id tagID: String) async -> Bool {
+        do {
+            applySnapshot(try await favoriteStore.deleteTag(id: tagID))
+            errorMessage = nil
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
+
     public func createCollection(name: String, favoriteIDs: [String]) async -> Bool {
         do {
             applySnapshot(try await favoriteStore.createCollection(name: name, favoriteIDs: favoriteIDs))
@@ -665,6 +699,20 @@ private struct FavoriteTagPickerContext: Identifiable {
     let initialTagIDs: Set<String>
 
     var id: String { favoriteID }
+}
+
+private struct FavoriteTagEditorDraft: Identifiable {
+    let tag: FavoriteTag?
+    var name: String
+    var color: FavoriteTagColor
+
+    var id: String { tag?.id ?? "new" }
+
+    init(tag: FavoriteTag?, defaultColor: FavoriteTagColor) {
+        self.tag = tag
+        name = tag?.name ?? ""
+        color = tag?.color ?? defaultColor
+    }
 }
 
 struct FavoriteCollectionSummary: Equatable {
@@ -1333,6 +1381,15 @@ public struct FavoritesView: View {
                             await viewModel.setTagIDs(orderedTagIDs, forFavoriteID: context.favoriteID)
                             tagPickerContext = nil
                         }
+                    },
+                    onCreateTag: { name, color in
+                        await viewModel.createTag(name: name, color: color)
+                    },
+                    onUpdateTag: { tagID, name, color in
+                        await viewModel.updateTag(id: tagID, name: name, color: color)
+                    },
+                    onDeleteTag: { tagID in
+                        await viewModel.deleteTag(id: tagID)
                     }
                 )
             }
@@ -2149,19 +2206,30 @@ private struct FavoriteTagPickerView: View {
     let initialSelection: Set<String>
     let onCancel: () -> Void
     let onConfirm: (Set<String>) -> Void
+    let onCreateTag: (String, FavoriteTagColor) async -> FavoriteTag?
+    let onUpdateTag: (String, String, FavoriteTagColor) async -> Bool
+    let onDeleteTag: (String) async -> Bool
 
     @State private var selectedTagIDs: Set<String>
+    @State private var editorDraft: FavoriteTagEditorDraft?
+    @State private var pendingDeleteTag: FavoriteTag?
 
     init(
         tags: [FavoriteTag],
         initialSelection: Set<String>,
         onCancel: @escaping () -> Void,
-        onConfirm: @escaping (Set<String>) -> Void
+        onConfirm: @escaping (Set<String>) -> Void,
+        onCreateTag: @escaping (String, FavoriteTagColor) async -> FavoriteTag?,
+        onUpdateTag: @escaping (String, String, FavoriteTagColor) async -> Bool,
+        onDeleteTag: @escaping (String) async -> Bool
     ) {
         self.tags = tags
         self.initialSelection = initialSelection
         self.onCancel = onCancel
         self.onConfirm = onConfirm
+        self.onCreateTag = onCreateTag
+        self.onUpdateTag = onUpdateTag
+        self.onDeleteTag = onDeleteTag
         _selectedTagIDs = State(initialValue: initialSelection)
     }
 
@@ -2190,6 +2258,19 @@ private struct FavoriteTagPickerView: View {
                         }
                     }
                     .buttonStyle(.plain)
+                    .contextMenu {
+                        Button {
+                            editorDraft = FavoriteTagEditorDraft(tag: tag, defaultColor: nextDefaultColor)
+                        } label: {
+                            Label(L10n.string("common.edit"), systemImage: "pencil")
+                        }
+
+                        Button(role: .destructive) {
+                            pendingDeleteTag = tag
+                        } label: {
+                            Label(L10n.string("common.delete"), systemImage: "trash")
+                        }
+                    }
                 }
             }
             .overlay {
@@ -2205,13 +2286,76 @@ private struct FavoriteTagPickerView: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(L10n.string("common.cancel"), action: onCancel)
                 }
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        editorDraft = FavoriteTagEditorDraft(tag: nil, defaultColor: nextDefaultColor)
+                    } label: {
+                        Image(systemName: "plus")
+                    }
+                }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(L10n.string("common.done")) {
                         onConfirm(selectedTagIDs)
                     }
                 }
             }
+            .sheet(item: $editorDraft) { draft in
+                FavoriteTagEditorView(draft: draft) { name, color in
+                    if let tagID = draft.tag?.id {
+                        if await onUpdateTag(tagID, name, color) {
+                            editorDraft = nil
+                            return true
+                        }
+                        return false
+                    }
+
+                    guard let tag = await onCreateTag(name, color) else {
+                        return false
+                    }
+                    selectedTagIDs.insert(tag.id)
+                    editorDraft = nil
+                    return true
+                } onCancel: {
+                    editorDraft = nil
+                }
+            }
+            .alert(
+                L10n.string("favorites.delete_tag"),
+                isPresented: pendingDeleteTagBinding,
+                presenting: pendingDeleteTag
+            ) { tag in
+                Button(L10n.string("common.cancel"), role: .cancel) {
+                    pendingDeleteTag = nil
+                }
+                Button(L10n.string("common.delete"), role: .destructive) {
+                    Task {
+                        if await onDeleteTag(tag.id) {
+                            selectedTagIDs.remove(tag.id)
+                            pendingDeleteTag = nil
+                        }
+                    }
+                }
+            } message: { tag in
+                Text(L10n.string("favorites.delete_tag_message", tag.name))
+            }
         }
+    }
+
+    private var pendingDeleteTagBinding: Binding<Bool> {
+        Binding(
+            get: { pendingDeleteTag != nil },
+            set: { isPresented in
+                if !isPresented {
+                    pendingDeleteTag = nil
+                }
+            }
+        )
+    }
+
+    private var nextDefaultColor: FavoriteTagColor {
+        let colors = FavoriteTagColor.allCases
+        guard !colors.isEmpty else { return .gray }
+        return colors[tags.count % colors.count]
     }
 
     private var orderedTags: [FavoriteTag] {
@@ -2228,6 +2372,85 @@ private struct FavoriteTagPickerView: View {
             selectedTagIDs.remove(tag.id)
         } else {
             selectedTagIDs.insert(tag.id)
+        }
+    }
+}
+
+private struct FavoriteTagEditorView: View {
+    let draft: FavoriteTagEditorDraft
+    let onSave: (String, FavoriteTagColor) async -> Bool
+    let onCancel: () -> Void
+
+    @State private var name: String
+    @State private var color: FavoriteTagColor
+    @State private var isSaving = false
+
+    init(
+        draft: FavoriteTagEditorDraft,
+        onSave: @escaping (String, FavoriteTagColor) async -> Bool,
+        onCancel: @escaping () -> Void
+    ) {
+        self.draft = draft
+        self.onSave = onSave
+        self.onCancel = onCancel
+        _name = State(initialValue: draft.name)
+        _color = State(initialValue: draft.color)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    TextField(L10n.string("favorites.tag_name"), text: $name)
+                }
+
+                Section {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 44), spacing: 12)], spacing: 12) {
+                        ForEach(FavoriteTagColor.allCases, id: \.self) { tagColor in
+                            Button {
+                                color = tagColor
+                            } label: {
+                                ZStack {
+                                    Circle()
+                                        .fill(tagColor.swiftUIColor)
+                                        .frame(width: 32, height: 32)
+                                    if color == tagColor {
+                                        Image(systemName: "checkmark")
+                                            .font(.caption.weight(.bold))
+                                            .foregroundStyle(.white)
+                                    }
+                                }
+                                .frame(width: 44, height: 44)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
+            .disabled(isSaving)
+            .navigationTitle(draft.tag == nil ? L10n.string("favorites.new_tag") : L10n.string("favorites.edit_tag"))
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(L10n.string("common.cancel"), action: onCancel)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(L10n.string("common.done")) {
+                        Task {
+                            isSaving = true
+                            let didSave = await onSave(name, color)
+                            isSaving = false
+                            if didSave {
+                                onCancel()
+                            }
+                        }
+                    }
+                    .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSaving)
+                }
+            }
         }
     }
 }
