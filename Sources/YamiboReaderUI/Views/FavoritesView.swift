@@ -55,6 +55,30 @@ public enum FavoriteSortOrder: String, CaseIterable, Identifiable {
     }
 }
 
+enum FavoriteTagSortOrder: String, CaseIterable, Identifiable {
+    case manual
+    case name
+    case nameDescending
+    case updatedAt
+    case updatedAtDescending
+    case associationCount
+    case associationCountDescending
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .manual: L10n.string("favorites.tag_sort.manual")
+        case .name: L10n.string("favorites.tag_sort.name")
+        case .nameDescending: L10n.string("favorites.tag_sort.name_desc")
+        case .updatedAt: L10n.string("favorites.tag_sort.updated_at")
+        case .updatedAtDescending: L10n.string("favorites.tag_sort.updated_at_desc")
+        case .associationCount: L10n.string("favorites.tag_sort.association_count")
+        case .associationCountDescending: L10n.string("favorites.tag_sort.association_count_desc")
+        }
+    }
+}
+
 public enum FavoriteScope: Hashable, Sendable {
     case root
     case collection(FavoriteCollection)
@@ -466,6 +490,23 @@ public final class FavoritesViewModel: ObservableObject {
     public func deleteTag(id tagID: String) async -> Bool {
         do {
             applySnapshot(try await favoriteStore.deleteTag(id: tagID))
+            errorMessage = nil
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
+
+    public func reorderTags(visibleIDs: [String], fromOffsets: IndexSet, toOffset: Int) async -> Bool {
+        do {
+            applySnapshot(
+                try await favoriteStore.reorderTags(
+                    visibleIDs: visibleIDs,
+                    fromOffsets: fromOffsets,
+                    toOffset: toOffset
+                )
+            )
             errorMessage = nil
             return true
         } catch {
@@ -1456,6 +1497,7 @@ public struct FavoritesView: View {
             .sheet(item: $tagPickerContext) { context in
                 FavoriteTagPickerView(
                     tags: viewModel.tags,
+                    favorites: viewModel.favorites,
                     initialSelection: context.initialTagIDs,
                     showsOverwriteWarning: context.showsOverwriteWarning,
                     onCancel: {
@@ -1482,6 +1524,13 @@ public struct FavoritesView: View {
                     },
                     onDeleteTag: { tagID in
                         await viewModel.deleteTag(id: tagID)
+                    },
+                    onReorderTags: { visibleIDs, fromOffsets, toOffset in
+                        await viewModel.reorderTags(
+                            visibleIDs: visibleIDs,
+                            fromOffsets: fromOffsets,
+                            toOffset: toOffset
+                        )
                     }
                 )
             }
@@ -2314,6 +2363,7 @@ public struct FavoritesView: View {
 
 private struct FavoriteTagPickerView: View {
     let tags: [FavoriteTag]
+    let favorites: [Favorite]
     let initialSelection: Set<String>
     let showsOverwriteWarning: Bool
     let onCancel: () -> Void
@@ -2321,7 +2371,9 @@ private struct FavoriteTagPickerView: View {
     let onCreateTag: (String, FavoriteTagColor) async -> FavoriteTag?
     let onUpdateTag: (String, String, FavoriteTagColor) async -> Bool
     let onDeleteTag: (String) async -> Bool
+    let onReorderTags: ([String], IndexSet, Int) async -> Bool
 
+    @AppStorage("yamibo.favorite.tag.sort") private var sortRawValue = FavoriteTagSortOrder.manual.rawValue
     @State private var selectionDraft: FavoriteTagSelectionDraft
     @State private var searchText = ""
     @State private var selectionErrorMessage: String?
@@ -2331,15 +2383,18 @@ private struct FavoriteTagPickerView: View {
 
     init(
         tags: [FavoriteTag],
+        favorites: [Favorite],
         initialSelection: Set<String>,
         showsOverwriteWarning: Bool = false,
         onCancel: @escaping () -> Void,
         onConfirm: @escaping (Set<String>) async -> Bool,
         onCreateTag: @escaping (String, FavoriteTagColor) async -> FavoriteTag?,
         onUpdateTag: @escaping (String, String, FavoriteTagColor) async -> Bool,
-        onDeleteTag: @escaping (String) async -> Bool
+        onDeleteTag: @escaping (String) async -> Bool,
+        onReorderTags: @escaping ([String], IndexSet, Int) async -> Bool
     ) {
         self.tags = tags
+        self.favorites = favorites
         self.initialSelection = initialSelection
         self.showsOverwriteWarning = showsOverwriteWarning
         self.onCancel = onCancel
@@ -2347,6 +2402,7 @@ private struct FavoriteTagPickerView: View {
         self.onCreateTag = onCreateTag
         self.onUpdateTag = onUpdateTag
         self.onDeleteTag = onDeleteTag
+        self.onReorderTags = onReorderTags
         _selectionDraft = State(initialValue: FavoriteTagSelectionDraft(selectedTagIDs: initialSelection))
     }
 
@@ -2396,6 +2452,7 @@ private struct FavoriteTagPickerView: View {
                             }
                         }
                     }
+                    .onMove(perform: moveTags)
                 }
                 .overlay {
                     if tags.isEmpty {
@@ -2415,10 +2472,22 @@ private struct FavoriteTagPickerView: View {
                     Button(L10n.string("common.cancel"), action: onCancel)
                 }
                 ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        editorDraft = FavoriteTagEditorDraft(tag: nil, defaultColor: nextDefaultColor)
-                    } label: {
-                        Image(systemName: "plus")
+                    HStack {
+                        Menu {
+                            Picker(L10n.string("favorites.sort"), selection: $sortRawValue) {
+                                ForEach(FavoriteTagSortOrder.allCases) { sortOrder in
+                                    Text(sortOrder.title).tag(sortOrder.rawValue)
+                                }
+                            }
+                        } label: {
+                            Image(systemName: "arrow.up.arrow.down")
+                        }
+
+                        Button {
+                            editorDraft = FavoriteTagEditorDraft(tag: nil, defaultColor: nextDefaultColor)
+                        } label: {
+                            Image(systemName: "plus")
+                        }
                     }
                 }
                 ToolbarItem(placement: .confirmationAction) {
@@ -2472,6 +2541,9 @@ private struct FavoriteTagPickerView: View {
             } message: { tag in
                 Text(L10n.string("favorites.delete_tag_message", tag.name))
             }
+            #if os(iOS)
+            .environment(\.editMode, .constant(canReorderCurrentTags ? .active : .inactive))
+            #endif
         }
     }
 
@@ -2527,20 +2599,31 @@ private struct FavoriteTagPickerView: View {
     }
 
     private var orderedTags: [FavoriteTag] {
-        tags.sorted { lhs, rhs in
-            if lhs.manualOrder != rhs.manualOrder {
-                return lhs.manualOrder < rhs.manualOrder
-            }
-            return lhs.id < rhs.id
-        }
+        sortedFavoriteTags(tags, favorites: favorites, sortOrder: currentSortOrder)
     }
 
     private var visibleTags: [FavoriteTag] {
         filteredFavoriteTags(orderedTags, searchText: searchText)
     }
 
+    private var currentSortOrder: FavoriteTagSortOrder {
+        FavoriteTagSortOrder(rawValue: sortRawValue) ?? .manual
+    }
+
+    private var canReorderCurrentTags: Bool {
+        canReorderFavoriteTags(sortOrder: currentSortOrder, searchText: searchText)
+    }
+
     private func toggle(_ tag: FavoriteTag) {
         handleSelectionResult(selectionDraft.toggle(tag.id))
+    }
+
+    private func moveTags(fromOffsets: IndexSet, toOffset: Int) {
+        guard canReorderCurrentTags else { return }
+        let visibleIDs = visibleTags.map(\.id)
+        Task {
+            _ = await onReorderTags(visibleIDs, fromOffsets, toOffset)
+        }
     }
 
     private func handleSelectionResult(_ result: FavoriteTagSelectionDraftResult) {
@@ -2863,6 +2946,69 @@ func filteredFavoriteTags(_ tags: [FavoriteTag], searchText: String) -> [Favorit
     return tags.filter { tag in
         tag.name.localizedCaseInsensitiveContains(trimmedSearchText)
     }
+}
+
+func canReorderFavoriteTags(sortOrder: FavoriteTagSortOrder, searchText: String) -> Bool {
+    sortOrder == .manual && searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+}
+
+func sortedFavoriteTags(
+    _ tags: [FavoriteTag],
+    favorites: [Favorite],
+    sortOrder: FavoriteTagSortOrder
+) -> [FavoriteTag] {
+    let associationCounts = favoriteTagAssociationCounts(from: favorites)
+    return tags.sorted { lhs, rhs in
+        switch sortOrder {
+        case .manual:
+            break
+        case .name:
+            let result = lhs.name.localizedCaseInsensitiveCompare(rhs.name)
+            if result != .orderedSame {
+                return result == .orderedAscending
+            }
+        case .nameDescending:
+            let result = lhs.name.localizedCaseInsensitiveCompare(rhs.name)
+            if result != .orderedSame {
+                return result == .orderedDescending
+            }
+        case .updatedAt:
+            if lhs.updatedAt != rhs.updatedAt {
+                return lhs.updatedAt < rhs.updatedAt
+            }
+        case .updatedAtDescending:
+            if lhs.updatedAt != rhs.updatedAt {
+                return lhs.updatedAt > rhs.updatedAt
+            }
+        case .associationCount:
+            let lhsCount = associationCounts[lhs.id, default: 0]
+            let rhsCount = associationCounts[rhs.id, default: 0]
+            if lhsCount != rhsCount {
+                return lhsCount < rhsCount
+            }
+        case .associationCountDescending:
+            let lhsCount = associationCounts[lhs.id, default: 0]
+            let rhsCount = associationCounts[rhs.id, default: 0]
+            if lhsCount != rhsCount {
+                return lhsCount > rhsCount
+            }
+        }
+
+        if lhs.manualOrder != rhs.manualOrder {
+            return lhs.manualOrder < rhs.manualOrder
+        }
+        return lhs.id < rhs.id
+    }
+}
+
+func favoriteTagAssociationCounts(from favorites: [Favorite]) -> [String: Int] {
+    var counts: [String: Int] = [:]
+    for favorite in favorites {
+        for tagID in Set(favorite.tagIDs) {
+            counts[tagID, default: 0] += 1
+        }
+    }
+    return counts
 }
 
 func favoriteProgressScore(for favorite: Favorite) -> Int {

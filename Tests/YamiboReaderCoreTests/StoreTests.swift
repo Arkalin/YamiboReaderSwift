@@ -471,6 +471,69 @@ import Testing
     #expect(cleared.favorites.first(where: { $0.id == collectionFavorite.id })?.tagIDs == [])
 }
 
+@Test func favoriteStoreRefreshesOnlyTagsWhoseAssociationsChanged() async throws {
+    let defaults = try #require(UserDefaults(suiteName: "favorite-tag-association-date-tests"))
+    defaults.removePersistentDomain(forName: "favorite-tag-association-date-tests")
+    let store = FavoriteStore(defaults: defaults, key: "favorites")
+    let oldDate = Date(timeIntervalSince1970: 10)
+    let changedDate = Date(timeIntervalSince1970: 20)
+    let first = Favorite(
+        title: "第一",
+        url: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=409&mobile=2")),
+        tagIDs: ["old"]
+    )
+    let second = Favorite(
+        title: "第二",
+        url: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=410&mobile=2")),
+        tagIDs: ["new"]
+    )
+    let oldTag = FavoriteTag(id: "old", name: "旧", color: .gray, manualOrder: 0, updatedAt: oldDate)
+    let newTag = FavoriteTag(id: "new", name: "新", color: .red, manualOrder: 1, updatedAt: oldDate)
+    let untouchedTag = FavoriteTag(id: "untouched", name: "未变", color: .blue, manualOrder: 2, updatedAt: oldDate)
+
+    try await store.saveLibrarySnapshot(
+        FavoriteLibrarySnapshot(
+            favorites: [first, second],
+            collections: [],
+            tags: [oldTag, newTag, untouchedTag]
+        )
+    )
+
+    let updated = try await store.setTagIDs(["new"], forFavoriteIDs: [first.id], date: changedDate)
+
+    #expect(updated.tags.first(where: { $0.id == oldTag.id })?.updatedAt == changedDate)
+    #expect(updated.tags.first(where: { $0.id == newTag.id })?.updatedAt == changedDate)
+    #expect(updated.tags.first(where: { $0.id == untouchedTag.id })?.updatedAt == oldDate)
+}
+
+@Test func favoriteStoreCanReorderTagsAndRefreshOnlyDraggedTag() async throws {
+    let defaults = try #require(UserDefaults(suiteName: "favorite-tag-reorder-tests"))
+    defaults.removePersistentDomain(forName: "favorite-tag-reorder-tests")
+    let store = FavoriteStore(defaults: defaults, key: "favorites")
+    let oldDate = Date(timeIntervalSince1970: 30)
+    let movedDate = Date(timeIntervalSince1970: 40)
+    let first = FavoriteTag(id: "first", name: "第一", color: .gray, manualOrder: 0, updatedAt: oldDate)
+    let second = FavoriteTag(id: "second", name: "第二", color: .red, manualOrder: 1, updatedAt: oldDate)
+    let third = FavoriteTag(id: "third", name: "第三", color: .blue, manualOrder: 2, updatedAt: oldDate)
+
+    try await store.saveLibrarySnapshot(
+        FavoriteLibrarySnapshot(favorites: [], collections: [], tags: [first, second, third])
+    )
+
+    let reordered = try await store.reorderTags(
+        visibleIDs: [first.id, second.id, third.id],
+        fromOffsets: IndexSet(integer: 2),
+        toOffset: 0,
+        date: movedDate
+    )
+
+    #expect(reordered.tags.map(\.id) == [third.id, first.id, second.id])
+    #expect(reordered.tags.map(\.manualOrder) == [0, 1, 2])
+    #expect(reordered.tags.first(where: { $0.id == third.id })?.updatedAt == movedDate)
+    #expect(reordered.tags.first(where: { $0.id == first.id })?.updatedAt == oldDate)
+    #expect(reordered.tags.first(where: { $0.id == second.id })?.updatedAt == oldDate)
+}
+
 @Test func favoriteStoreUpdatesMangaProgress() async throws {
     let defaults = try #require(UserDefaults(suiteName: "favorite-manga-progress-tests"))
     defaults.removePersistentDomain(forName: "favorite-manga-progress-tests")
