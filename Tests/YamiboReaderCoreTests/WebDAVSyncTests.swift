@@ -436,6 +436,174 @@ private enum WebDAVTestError: Error {
     #expect(uploadedPayload?.library.archivedMetadata == [archive])
 }
 
+@Test func webDAVSyncRoundTripsFavoriteTagsAndAssociations() async throws {
+    let uploadSuiteName = makeWebDAVDefaultsSuiteName(prefix: "webdav-tag-upload")
+    let downloadSuiteName = makeWebDAVDefaultsSuiteName(prefix: "webdav-tag-download")
+    UserDefaults(suiteName: uploadSuiteName)?.removePersistentDomain(forName: uploadSuiteName)
+    UserDefaults(suiteName: downloadSuiteName)?.removePersistentDomain(forName: downloadSuiteName)
+    let uploadSettingsStore = WebDAVSyncSettingsStore(defaults: try makeWebDAVDefaults(suiteName: uploadSuiteName), key: "webdav")
+    let downloadSettingsStore = WebDAVSyncSettingsStore(defaults: try makeWebDAVDefaults(suiteName: downloadSuiteName), key: "webdav")
+    let uploadFavoriteStore = FavoriteStore(defaults: try makeWebDAVDefaults(suiteName: uploadSuiteName), key: "favorites")
+    let downloadFavoriteStore = FavoriteStore(defaults: try makeWebDAVDefaults(suiteName: downloadSuiteName), key: "favorites")
+    let uploadSessionStore = SessionStore(defaults: try makeWebDAVDefaults(suiteName: uploadSuiteName), key: "session")
+    let downloadSessionStore = SessionStore(defaults: try makeWebDAVDefaults(suiteName: downloadSuiteName), key: "session")
+    let host = "tag-roundtrip.example.com"
+    let settings = WebDAVSyncSettings(baseURLString: "https://\(host)", username: "admin", password: "secret")
+    let createdAt = Date(timeIntervalSince1970: 1_800_000_000)
+    let updatedAt = Date(timeIntervalSince1970: 1_800_000_500)
+    let loveTag = FavoriteTag(id: "tag-love", name: "百合", color: .pink, manualOrder: 0, createdAt: createdAt, updatedAt: updatedAt)
+    let shortTag = FavoriteTag(id: "tag-short", name: "短篇", color: .blue, manualOrder: 1, createdAt: createdAt.addingTimeInterval(10), updatedAt: updatedAt.addingTimeInterval(10))
+    let favoriteURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=950&mobile=2"))
+    let favorite = Favorite(
+        title: "带标签收藏",
+        url: favoriteURL,
+        remoteFavoriteID: "remote-950",
+        lastPage: 5,
+        tagIDs: [shortTag.id, loveTag.id]
+    )
+    let archiveURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=951&mobile=2"))
+    let archive = FavoriteMetadataArchiveEntry(
+        canonicalThreadURL: ReaderCacheIdentity.canonicalThreadURL(from: archiveURL),
+        displayName: "归档标签",
+        lastPage: 2,
+        lastView: 1,
+        lastChapter: nil,
+        authorID: nil,
+        novelResumePoint: nil,
+        isHidden: false,
+        type: .novel,
+        lastMangaURL: nil,
+        parentCollectionID: nil,
+        manualOrder: 0,
+        lastReadAt: Date(timeIntervalSince1970: 1_900_000_000),
+        tagIDs: [loveTag.id]
+    )
+    let expectedLibrary = FavoriteLibrarySnapshot(
+        favorites: [favorite],
+        collections: [],
+        tags: [loveTag, shortTag],
+        archivedMetadata: [archive]
+    )
+    try await uploadSessionStore.save(SessionState(cookie: "sid=upload", isLoggedIn: true, accountUID: "123"))
+    try await downloadSessionStore.save(SessionState(cookie: "sid=download", isLoggedIn: true, accountUID: "123"))
+    try await uploadFavoriteStore.saveLibrarySnapshot(expectedLibrary)
+
+    var uploadedPayloadData: Data?
+    WebDAVTestURLProtocol.setHandler(for: host) { request in
+        switch request.httpMethod {
+        case "GET":
+            return (Data(), HTTPURLResponse(url: request.url!, statusCode: 404, httpVersion: nil, headerFields: nil)!)
+        case "MKCOL":
+            return (Data(), HTTPURLResponse(url: request.url!, statusCode: 201, httpVersion: nil, headerFields: nil)!)
+        case "PUT":
+            guard let body = request.webDAVBodyData() else {
+                throw WebDAVTestError.missingHandler
+            }
+            uploadedPayloadData = body
+            return (Data(), HTTPURLResponse(url: request.url!, statusCode: 201, httpVersion: nil, headerFields: nil)!)
+        default:
+            Issue.record("Unexpected method \(request.httpMethod ?? "nil")")
+            return (Data(), HTTPURLResponse(url: request.url!, statusCode: 500, httpVersion: nil, headerFields: nil)!)
+        }
+    }
+    defer { WebDAVTestURLProtocol.removeHandler(for: host) }
+
+    let uploadService = WebDAVSyncService(
+        settingsStore: uploadSettingsStore,
+        favoriteStore: uploadFavoriteStore,
+        sessionStore: uploadSessionStore,
+        client: WebDAVClient(session: makeWebDAVTestSession())
+    )
+    _ = try await uploadService.upload(using: settings)
+
+    let payloadData = try #require(uploadedPayloadData)
+    let uploadedPayload = try JSONDecoder().decode(WebDAVSyncPayload.self, from: payloadData)
+    #expect(uploadedPayload.library == expectedLibrary)
+
+    WebDAVTestURLProtocol.setHandler(for: host) { request in
+        #expect(request.httpMethod == "GET")
+        return (
+            payloadData,
+            HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
+        )
+    }
+
+    let downloadService = WebDAVSyncService(
+        settingsStore: downloadSettingsStore,
+        favoriteStore: downloadFavoriteStore,
+        sessionStore: downloadSessionStore,
+        client: WebDAVClient(session: makeWebDAVTestSession())
+    )
+    _ = try await downloadService.download(using: settings)
+
+    #expect(await downloadFavoriteStore.loadLibrarySnapshot() == expectedLibrary)
+}
+
+@Test func webDAVDownloadSanitizesDanglingTagReferencesFromLegacyPayload() async throws {
+    let suiteName = makeWebDAVDefaultsSuiteName(prefix: "webdav-legacy-tags")
+    UserDefaults(suiteName: suiteName)?.removePersistentDomain(forName: suiteName)
+    let settingsStore = WebDAVSyncSettingsStore(defaults: try makeWebDAVDefaults(suiteName: suiteName), key: "webdav")
+    let favoriteStore = FavoriteStore(defaults: try makeWebDAVDefaults(suiteName: suiteName), key: "favorites")
+    let sessionStore = SessionStore(defaults: try makeWebDAVDefaults(suiteName: suiteName), key: "session")
+    let host = "legacy-tags.example.com"
+    let settings = WebDAVSyncSettings(baseURLString: "https://\(host)", username: "admin", password: "secret")
+    let payloadJSON = """
+    {
+      "version": 1,
+      "updatedAt": 2000,
+      "accountUID": "123",
+      "library": {
+        "favorites": [
+          {
+            "id": "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=952&mobile=2",
+            "title": "旧负载收藏",
+            "url": "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=952&mobile=2",
+            "tagIDs": ["missing-tag"]
+          }
+        ],
+        "collections": [],
+        "archivedMetadata": [
+          {
+            "canonicalThreadURL": "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=953&mobile=2",
+            "displayName": "旧负载归档",
+            "lastPage": 0,
+            "lastView": 1,
+            "isHidden": false,
+            "type": 1,
+            "manualOrder": 0,
+            "tagIDs": ["missing-tag"]
+          }
+        ]
+      }
+    }
+    """
+    let payloadData = Data(payloadJSON.utf8)
+    try await sessionStore.save(SessionState(cookie: "sid=download", isLoggedIn: true, accountUID: "123"))
+
+    WebDAVTestURLProtocol.setHandler(for: host) { request in
+        #expect(request.httpMethod == "GET")
+        return (
+            payloadData,
+            HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
+        )
+    }
+    defer { WebDAVTestURLProtocol.removeHandler(for: host) }
+
+    let service = WebDAVSyncService(
+        settingsStore: settingsStore,
+        favoriteStore: favoriteStore,
+        sessionStore: sessionStore,
+        client: WebDAVClient(session: makeWebDAVTestSession())
+    )
+
+    _ = try await service.download(using: settings)
+
+    let loadedLibrary = await favoriteStore.loadLibrarySnapshot()
+    #expect(loadedLibrary.tags.isEmpty)
+    #expect(loadedLibrary.favorites.first?.tagIDs == [])
+    #expect(loadedLibrary.archivedMetadata.first?.tagIDs == [])
+}
+
 @Test func webDAVManualSyncRequiresConfirmationForAccountMismatch() async throws {
     let suiteName = makeWebDAVDefaultsSuiteName(prefix: "webdav-mismatch")
     UserDefaults(suiteName: suiteName)?.removePersistentDomain(forName: suiteName)
