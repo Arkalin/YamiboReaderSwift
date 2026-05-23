@@ -139,6 +139,13 @@
 "favorites.sort.title" = "标题";
 "favorites.syncing" = "同步收藏中…";
 "favorites.tag_name" = "标签名称";
+"favorites.tag_sort.association_count" = "关联数量";
+"favorites.tag_sort.association_count_desc" = "关联数量（倒序）";
+"favorites.tag_sort.manual" = "手动";
+"favorites.tag_sort.name" = "名称";
+"favorites.tag_sort.name_desc" = "名称（倒序）";
+"favorites.tag_sort.updated_at" = "修改时间";
+"favorites.tag_sort.updated_at_desc" = "修改时间（倒序）";
 "favorites.tags_action" = "标签";
 "favorites.tags_deselect_all" = "全不选";
 "favorites.tags.empty" = "暂无标签";

@@ -1004,6 +1004,33 @@ final class MangaReaderModelTests: XCTestCase {
         XCTAssertEqual(bulkDraft.selectedTagIDs.count, 17)
     }
 
+    func testFavoriteTagPickerSortingUsesRequestedOrderAndAssociationCounts() {
+        let baseDate = Date(timeIntervalSince1970: 100)
+        let old = FavoriteTag(id: "old", name: "Zeta", color: .gray, manualOrder: 0, updatedAt: baseDate)
+        let sameCountEarlier = FavoriteTag(id: "same-a", name: "Beta", color: .blue, manualOrder: 1, updatedAt: baseDate.addingTimeInterval(10))
+        let sameCountLater = FavoriteTag(id: "same-b", name: "Alpha", color: .red, manualOrder: 2, updatedAt: baseDate.addingTimeInterval(20))
+        let popular = FavoriteTag(id: "popular", name: "Gamma", color: .green, manualOrder: 3, updatedAt: baseDate.addingTimeInterval(30))
+        let tags = [popular, sameCountLater, sameCountEarlier, old]
+        let favorites = [
+            Favorite(title: "A", url: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=850&mobile=2")!, tagIDs: [popular.id]),
+            Favorite(title: "B", url: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=851&mobile=2")!, isHidden: true, tagIDs: [popular.id]),
+            Favorite(title: "C", url: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=852&mobile=2")!, tagIDs: [sameCountLater.id]),
+            Favorite(title: "D", url: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=853&mobile=2")!, tagIDs: [sameCountEarlier.id])
+        ]
+
+        XCTAssertEqual(sortedFavoriteTags(tags, favorites: favorites, sortOrder: .manual).map(\.id), ["old", "same-a", "same-b", "popular"])
+        XCTAssertEqual(sortedFavoriteTags(tags, favorites: favorites, sortOrder: .name).map(\.id), ["same-b", "same-a", "popular", "old"])
+        XCTAssertEqual(sortedFavoriteTags(tags, favorites: favorites, sortOrder: .nameDescending).map(\.id), ["old", "popular", "same-a", "same-b"])
+        XCTAssertEqual(sortedFavoriteTags(tags, favorites: favorites, sortOrder: .updatedAtDescending).map(\.id), ["popular", "same-b", "same-a", "old"])
+        XCTAssertEqual(sortedFavoriteTags(tags, favorites: favorites, sortOrder: .associationCountDescending).map(\.id), ["popular", "same-a", "same-b", "old"])
+    }
+
+    func testFavoriteTagPickerReorderingAvailabilityRequiresManualSortAndEmptySearch() {
+        XCTAssertTrue(canReorderFavoriteTags(sortOrder: .manual, searchText: ""))
+        XCTAssertFalse(canReorderFavoriteTags(sortOrder: .manual, searchText: " 标签 "))
+        XCTAssertFalse(canReorderFavoriteTags(sortOrder: .name, searchText: ""))
+    }
+
     func testFavoriteAccentAppearanceUsesStoredTypeColors() {
         let appearance = FavoriteAppearanceSettings(
             collection: .purple,

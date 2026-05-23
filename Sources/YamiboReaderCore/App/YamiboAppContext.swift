@@ -11,6 +11,7 @@ public final class YamiboAppContext: YamiboRepositoryProviding, Sendable {
     private static let resettableUserDefaultsKeys = [
         "yamibo.favorite.filter",
         "yamibo.favorite.sort",
+        "yamibo.favorite.tag.sort",
         "yamibo.favorite.showHidden"
     ]
 

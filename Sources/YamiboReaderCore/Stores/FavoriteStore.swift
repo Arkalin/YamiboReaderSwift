@@ -14,6 +14,7 @@ public protocol FavoriteStoring: Sendable {
     func reorderFavorites(visibleIDs: [String], fromOffsets: IndexSet, toOffset: Int) async throws -> [Favorite]
     func reorderFavorites(in parentCollectionID: String?, visibleIDs: [String], fromOffsets: IndexSet, toOffset: Int) async throws -> [Favorite]
     func reorderRootEntries(visibleEntryKeys: [String], fromOffsets: IndexSet, toOffset: Int) async throws -> FavoriteLibrarySnapshot
+    func reorderTags(visibleIDs: [String], fromOffsets: IndexSet, toOffset: Int) async throws -> FavoriteLibrarySnapshot
     func createCollection(name: String, favoriteIDs: [String]) async throws -> FavoriteLibrarySnapshot
     func moveFavorites(ids: [String], toCollectionID: String?) async throws -> FavoriteLibrarySnapshot
     func dissolveCollections(ids: [String]) async throws -> FavoriteLibrarySnapshot
@@ -308,6 +309,56 @@ public actor FavoriteStore: FavoriteStoring {
         )
     }
 
+    public func reorderTags(
+        visibleIDs: [String],
+        fromOffsets: IndexSet,
+        toOffset: Int
+    ) async throws -> FavoriteLibrarySnapshot {
+        try await reorderTags(visibleIDs: visibleIDs, fromOffsets: fromOffsets, toOffset: toOffset, date: .now)
+    }
+
+    public func reorderTags(
+        visibleIDs: [String],
+        fromOffsets: IndexSet,
+        toOffset: Int,
+        date: Date
+    ) async throws -> FavoriteLibrarySnapshot {
+        guard !visibleIDs.isEmpty, !fromOffsets.isEmpty else {
+            return await loadLibrarySnapshot()
+        }
+
+        let snapshot = await loadLibrarySnapshot()
+        let orderedTags = sanitizeTagsForPersistence(snapshot.tags)
+        let tagsByID = Dictionary(uniqueKeysWithValues: orderedTags.map { ($0.id, $0) })
+        let visibleSet = Set(visibleIDs)
+        var visibleTags = visibleIDs.compactMap { tagsByID[$0] }
+        guard visibleTags.count > 1 else { return snapshot }
+
+        let movedTagIDs = Set(fromOffsets.compactMap { index in
+            visibleTags.indices.contains(index) ? visibleTags[index].id : nil
+        })
+        visibleTags.move(fromOffsets: fromOffsets, toOffset: toOffset)
+        var iterator = visibleTags.makeIterator()
+        var reorderedTags = orderedTags.map { tag in
+            guard visibleSet.contains(tag.id) else { return tag }
+            return iterator.next() ?? tag
+        }
+
+        for index in reorderedTags.indices {
+            reorderedTags[index].manualOrder = index
+            if movedTagIDs.contains(reorderedTags[index].id) {
+                reorderedTags[index].updatedAt = date
+            }
+        }
+
+        return try persistLibrary(
+            favorites: snapshot.favorites,
+            collections: snapshot.collections,
+            tags: reorderedTags,
+            archivedMetadata: snapshot.archivedMetadata
+        )
+    }
+
     public func createCollection(name: String, favoriteIDs: [String]) async throws -> FavoriteLibrarySnapshot {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty else {
@@ -492,10 +543,18 @@ public actor FavoriteStore: FavoriteStoring {
     }
 
     public func setTagIDs(_ tagIDs: [String], for favoriteID: String) async throws -> [Favorite] {
-        try await setTagIDs(tagIDs, forFavoriteIDs: [favoriteID]).favorites
+        try await setTagIDs(tagIDs, forFavoriteIDs: [favoriteID], date: .now).favorites
     }
 
     public func setTagIDs(_ tagIDs: [String], forFavoriteIDs favoriteIDs: [String]) async throws -> FavoriteLibrarySnapshot {
+        try await setTagIDs(tagIDs, forFavoriteIDs: favoriteIDs, date: .now)
+    }
+
+    public func setTagIDs(
+        _ tagIDs: [String],
+        forFavoriteIDs favoriteIDs: [String],
+        date: Date
+    ) async throws -> FavoriteLibrarySnapshot {
         let snapshot = await loadLibrarySnapshot()
         let selectedFavoriteIDs = Set(favoriteIDs)
         guard !selectedFavoriteIDs.isEmpty else { return snapshot }
@@ -507,10 +566,16 @@ public actor FavoriteStore: FavoriteStoring {
             favorite.tagIDs = normalizedTagIDs
             return favorite
         }
+        let updatedTags = tagsRefreshingAssociationChanges(
+            snapshot.tags,
+            before: snapshot.favorites,
+            after: updated,
+            date: date
+        )
         return try persistLibrary(
             favorites: updated,
             collections: snapshot.collections,
-            tags: snapshot.tags
+            tags: updatedTags
         )
     }
 
@@ -805,6 +870,34 @@ public actor FavoriteStore: FavoriteStoring {
             seen.insert(tagID)
             return true
         }
+    }
+
+    private func tagsRefreshingAssociationChanges(
+        _ tags: [FavoriteTag],
+        before oldFavorites: [Favorite],
+        after newFavorites: [Favorite],
+        date: Date
+    ) -> [FavoriteTag] {
+        let oldAssociations = tagAssociations(from: oldFavorites)
+        let newAssociations = tagAssociations(from: newFavorites)
+        return tags.map { tag in
+            guard oldAssociations[tag.id, default: []] != newAssociations[tag.id, default: []] else {
+                return tag
+            }
+            var tag = tag
+            tag.updatedAt = date
+            return tag
+        }
+    }
+
+    private func tagAssociations(from favorites: [Favorite]) -> [String: Set<String>] {
+        var associations: [String: Set<String>] = [:]
+        for favorite in favorites {
+            for tagID in Set(favorite.tagIDs) {
+                associations[tagID, default: []].insert(favorite.id)
+            }
+        }
+        return associations
     }
 
     private func validateTagName(
