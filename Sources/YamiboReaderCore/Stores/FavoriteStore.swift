@@ -7,6 +7,9 @@ public protocol FavoriteStoring: Sendable {
     func loadLibrarySnapshot() async -> FavoriteLibrarySnapshot
     func saveLibrarySnapshot(_ snapshot: FavoriteLibrarySnapshot) async throws
     func saveFavorites(_ favorites: [Favorite]) async throws
+    func createTag(name: String, color: FavoriteTagColor, date: Date) async throws -> FavoriteLibrarySnapshot
+    func updateTag(id: String, name: String, color: FavoriteTagColor, date: Date) async throws -> FavoriteLibrarySnapshot
+    func deleteTag(id: String) async throws -> FavoriteLibrarySnapshot
     func mergeRemoteFavorites(_ favorites: [Favorite]) async throws -> [Favorite]
     func reorderFavorites(visibleIDs: [String], fromOffsets: IndexSet, toOffset: Int) async throws -> [Favorite]
     func reorderFavorites(in parentCollectionID: String?, visibleIDs: [String], fromOffsets: IndexSet, toOffset: Int) async throws -> [Favorite]
@@ -105,6 +108,84 @@ public actor FavoriteStore: FavoriteStoring {
             collections: snapshot.collections,
             tags: snapshot.tags,
             archivedMetadata: snapshot.archivedMetadata
+        )
+    }
+
+    public func createTag(
+        name: String,
+        color: FavoriteTagColor,
+        date: Date = .now
+    ) async throws -> FavoriteLibrarySnapshot {
+        let snapshot = await loadLibrarySnapshot()
+        let normalizedName = try validateTagName(name, existingTags: snapshot.tags, excludingTagID: nil)
+        let shiftedTags = snapshot.tags.map { tag in
+            var tag = tag
+            tag.manualOrder += 1
+            return tag
+        }
+        let tag = FavoriteTag(
+            name: normalizedName,
+            color: color,
+            manualOrder: 0,
+            createdAt: date,
+            updatedAt: date
+        )
+        return try persistLibrary(
+            favorites: snapshot.favorites,
+            collections: snapshot.collections,
+            tags: [tag] + shiftedTags,
+            archivedMetadata: snapshot.archivedMetadata
+        )
+    }
+
+    public func updateTag(
+        id tagID: String,
+        name: String,
+        color: FavoriteTagColor,
+        date: Date = .now
+    ) async throws -> FavoriteLibrarySnapshot {
+        let snapshot = await loadLibrarySnapshot()
+        let normalizedName = try validateTagName(name, existingTags: snapshot.tags, excludingTagID: tagID)
+        var didChange = false
+        let updatedTags = snapshot.tags.map { tag in
+            guard tag.id == tagID else { return tag }
+            var tag = tag
+            if tag.name != normalizedName || tag.color != color {
+                tag.name = normalizedName
+                tag.color = color
+                tag.updatedAt = date
+                didChange = true
+            }
+            return tag
+        }
+        guard didChange else { return snapshot }
+        return try persistLibrary(
+            favorites: snapshot.favorites,
+            collections: snapshot.collections,
+            tags: updatedTags,
+            archivedMetadata: snapshot.archivedMetadata
+        )
+    }
+
+    public func deleteTag(id tagID: String) async throws -> FavoriteLibrarySnapshot {
+        let snapshot = await loadLibrarySnapshot()
+        guard snapshot.tags.contains(where: { $0.id == tagID }) else { return snapshot }
+        let updatedTags = snapshot.tags.filter { $0.id != tagID }
+        let updatedFavorites = snapshot.favorites.map { favorite in
+            var favorite = favorite
+            favorite.tagIDs.removeAll { $0 == tagID }
+            return favorite
+        }
+        let updatedArchivedMetadata = snapshot.archivedMetadata.map { entry in
+            var entry = entry
+            entry.tagIDs.removeAll { $0 == tagID }
+            return entry
+        }
+        return try persistLibrary(
+            favorites: updatedFavorites,
+            collections: snapshot.collections,
+            tags: updatedTags,
+            archivedMetadata: updatedArchivedMetadata
         )
     }
 
@@ -717,6 +798,29 @@ public actor FavoriteStore: FavoriteStoring {
             seen.insert(tagID)
             return true
         }
+    }
+
+    private func validateTagName(
+        _ name: String,
+        existingTags: [FavoriteTag],
+        excludingTagID: String?
+    ) throws -> String {
+        let normalizedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedName.isEmpty else {
+            throw YamiboError.persistenceFailed("标签名称不能为空")
+        }
+        guard normalizedName.count <= 20 else {
+            throw YamiboError.persistenceFailed("标签名称不能超过 20 个字符")
+        }
+        let hasDuplicate = existingTags.contains { tag in
+            tag.id != excludingTagID &&
+            tag.name.trimmingCharacters(in: .whitespacesAndNewlines)
+                .localizedCaseInsensitiveCompare(normalizedName) == .orderedSame
+        }
+        guard !hasDuplicate else {
+            throw YamiboError.persistenceFailed("标签名称已存在")
+        }
+        return normalizedName
     }
 
     private func sanitizeCollectionsForPersistence(_ collections: [FavoriteCollection]) -> [FavoriteCollection] {

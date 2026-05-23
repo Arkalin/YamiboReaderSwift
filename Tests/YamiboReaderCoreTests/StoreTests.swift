@@ -344,6 +344,84 @@ import Testing
     #expect(loaded.favorites.first?.tagIDs == [])
 }
 
+@Test func favoriteStoreCanCreateEditAndDeleteTags() async throws {
+    let defaults = try #require(UserDefaults(suiteName: "favorite-tag-management-tests"))
+    defaults.removePersistentDomain(forName: "favorite-tag-management-tests")
+    let store = FavoriteStore(defaults: defaults, key: "favorites")
+    let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=306&mobile=2"))
+    let existing = FavoriteTag(
+        id: "existing",
+        name: "既有",
+        color: .gray,
+        manualOrder: 0,
+        createdAt: Date(timeIntervalSince1970: 10),
+        updatedAt: Date(timeIntervalSince1970: 10)
+    )
+    try await store.saveLibrarySnapshot(
+        FavoriteLibrarySnapshot(
+            favorites: [
+                Favorite(title: "标签管理", url: url, tagIDs: [existing.id])
+            ],
+            collections: [],
+            tags: [existing],
+            archivedMetadata: [
+                FavoriteMetadataArchiveEntry(
+                    canonicalThreadURL: url,
+                    displayName: nil,
+                    lastPage: 0,
+                    lastView: 1,
+                    lastChapter: nil,
+                    authorID: nil,
+                    novelResumePoint: nil,
+                    isHidden: false,
+                    type: .novel,
+                    lastMangaURL: nil,
+                    parentCollectionID: nil,
+                    manualOrder: 0,
+                    lastReadAt: nil,
+                    tagIDs: [existing.id]
+                )
+            ]
+        )
+    )
+
+    let createdAt = Date(timeIntervalSince1970: 20)
+    let created = try await store.createTag(
+        name: " 新标签 ",
+        color: .red,
+        date: createdAt
+    )
+
+    #expect(created.tags.map(\.name) == ["新标签", "既有"])
+    #expect(created.tags.first?.manualOrder == 0)
+    #expect(created.tags.first?.createdAt == createdAt)
+    #expect(created.tags.first?.updatedAt == createdAt)
+    #expect(created.tags.last?.manualOrder == 1)
+
+    let newTagID = try #require(created.tags.first?.id)
+    let editedAt = Date(timeIntervalSince1970: 30)
+    let edited = try await store.updateTag(
+        id: newTagID,
+        name: "改名",
+        color: .blue,
+        date: editedAt
+    )
+    let editedTag = try #require(edited.tags.first(where: { $0.id == newTagID }))
+    #expect(editedTag.name == "改名")
+    #expect(editedTag.color == .blue)
+    #expect(editedTag.createdAt == createdAt)
+    #expect(editedTag.updatedAt == editedAt)
+
+    await #expect(throws: YamiboError.self) {
+        try await store.updateTag(id: newTagID, name: "既有", color: .blue)
+    }
+
+    let deleted = try await store.deleteTag(id: existing.id)
+    #expect(deleted.tags.map(\.id) == [newTagID])
+    #expect(deleted.favorites.first?.tagIDs == [])
+    #expect(deleted.archivedMetadata.first?.tagIDs == [])
+}
+
 @Test func favoriteStoreUpdatesMangaProgress() async throws {
     let defaults = try #require(UserDefaults(suiteName: "favorite-manga-progress-tests"))
     defaults.removePersistentDomain(forName: "favorite-manga-progress-tests")

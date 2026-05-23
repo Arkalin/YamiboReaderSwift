@@ -403,6 +403,46 @@ final class MangaReaderModelTests: XCTestCase {
         }
     }
 
+    func testFavoritesViewModelCanCreateUpdateAndDeleteTags() async throws {
+        let keyPrefix = UUID().uuidString
+        let favoriteStore = FavoriteStore(key: "\(keyPrefix).favorites")
+        let favorite = Favorite(
+            title: "标签管理收藏",
+            url: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=830&mobile=2")!
+        )
+        try await favoriteStore.saveFavorites([favorite])
+        let appContext = YamiboAppContext(
+            sessionStore: SessionStore(key: "\(keyPrefix).session"),
+            settingsStore: SettingsStore(key: "\(keyPrefix).settings"),
+            favoriteStore: favoriteStore,
+            readerCacheStore: ReaderCacheStore(baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)),
+            mangaDirectoryStore: MangaDirectoryStore(baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true))
+        )
+        let viewModel = await MainActor.run {
+            FavoritesViewModel(appContext: appContext, favoriteStore: favoriteStore)
+        }
+
+        let tag = await viewModel.createTag(name: "爱情", color: .red)
+        await MainActor.run {
+            XCTAssertEqual(viewModel.tags.map(\.name), ["爱情"])
+            XCTAssertEqual(tag?.name, "爱情")
+        }
+
+        let tagID = try XCTUnwrap(tag?.id)
+        _ = await viewModel.updateTag(id: tagID, name: "短篇", color: .blue)
+        await MainActor.run {
+            XCTAssertEqual(viewModel.tags.first?.name, "短篇")
+            XCTAssertEqual(viewModel.tags.first?.color, .blue)
+        }
+
+        await viewModel.setTagIDs([tagID], forFavoriteID: favorite.id)
+        _ = await viewModel.deleteTag(id: tagID)
+        await MainActor.run {
+            XCTAssertTrue(viewModel.tags.isEmpty)
+            XCTAssertEqual(viewModel.favorites.first?.tagIDs, [])
+        }
+    }
+
     func testFavoritesViewModelCanToggleHiddenState() async throws {
         let keyPrefix = UUID().uuidString
         let favoriteStore = FavoriteStore(key: "\(keyPrefix).favorites")
