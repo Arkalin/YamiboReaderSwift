@@ -829,6 +829,11 @@ struct FavoriteTagSelectionDraft: Equatable {
     }
 }
 
+struct FavoriteTagChipSummary: Equatable {
+    let chips: [FavoriteTag]
+    let overflowCount: Int
+}
+
 private struct FavoriteTagEditorDraft: Identifiable {
     let tag: FavoriteTag?
     var name: String
@@ -1889,6 +1894,8 @@ public struct FavoritesView: View {
                 isResolving: viewModel.resolvingFavoriteID == favorite.id,
                 isDeleting: viewModel.deletingFavoriteID == favorite.id,
                 isSelected: selectedFavoriteIDs.contains(favorite.id),
+                tags: viewModel.tags,
+                tagSearchText: searchText,
                 accentColor: favoriteAccentColor(for: favorite.type, appearance: viewModel.favoriteAppearance),
                 onOpen: {
                     if isSelecting {
@@ -1976,6 +1983,8 @@ public struct FavoritesView: View {
                 isResolving: viewModel.resolvingFavoriteID == favorite.id,
                 isDeleting: viewModel.deletingFavoriteID == favorite.id,
                 isSelected: selectedFavoriteIDs.contains(favorite.id),
+                tags: viewModel.tags,
+                tagSearchText: searchText,
                 accentColor: favoriteAccentColor(for: favorite.type, appearance: viewModel.favoriteAppearance),
                 onOpen: {
                     if isSelecting {
@@ -2737,8 +2746,14 @@ struct FavoriteRow: View {
     let isResolving: Bool
     let isDeleting: Bool
     let isSelected: Bool
+    let tags: [FavoriteTag]
+    let tagSearchText: String
     let accentColor: Color
     let onOpen: () -> Void
+
+    private var tagChipSummary: FavoriteTagChipSummary {
+        makeFavoriteTagChipSummary(for: favorite, tags: tags, searchText: tagSearchText)
+    }
 
     var body: some View {
         HStack(spacing: 0) {
@@ -2780,6 +2795,10 @@ struct FavoriteRow: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
+
+                    if !tagChipSummary.chips.isEmpty {
+                        FavoriteTagChipRow(summary: tagChipSummary)
+                    }
                 }
             }
             .padding(.vertical, 18)
@@ -2809,6 +2828,57 @@ struct FavoriteRow: View {
             .font(.title3.weight(.semibold))
             .foregroundStyle(.tint)
             .padding(.top, 1)
+    }
+}
+
+private struct FavoriteTagChipRow: View {
+    let summary: FavoriteTagChipSummary
+
+    var body: some View {
+        HStack(spacing: 6) {
+            ForEach(summary.chips) { tag in
+                FavoriteTagChip(tag: tag)
+            }
+
+            if summary.overflowCount > 0 {
+                Text("+\(summary.overflowCount)")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 4)
+                    .background(
+                        Capsule(style: .continuous)
+                            .fill(.secondary.opacity(0.12))
+                    )
+            }
+        }
+        .lineLimit(1)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct FavoriteTagChip: View {
+    let tag: FavoriteTag
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Circle()
+                .fill(tag.color.swiftUIColor)
+                .frame(width: 6, height: 6)
+
+            Text(tag.name)
+                .lineLimit(1)
+                .truncationMode(.tail)
+        }
+        .font(.caption.weight(.medium))
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 7)
+        .padding(.vertical, 4)
+        .frame(maxWidth: 96)
+        .background(
+            Capsule(style: .continuous)
+                .fill(tag.color.swiftUIColor.opacity(0.13))
+        )
     }
 }
 
@@ -3009,6 +3079,40 @@ func favoriteTagAssociationCounts(from favorites: [Favorite]) -> [String: Int] {
         }
     }
     return counts
+}
+
+func makeFavoriteTagChipSummary(
+    for favorite: Favorite,
+    tags: [FavoriteTag],
+    searchText: String,
+    prioritizedTagIDs: Set<String> = []
+) -> FavoriteTagChipSummary {
+    let tagIDs = Set(favorite.tagIDs)
+    guard !tagIDs.isEmpty else {
+        return FavoriteTagChipSummary(chips: [], overflowCount: 0)
+    }
+
+    let trimmedSearchText = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+    let favoriteTags = tags
+        .filter { tagIDs.contains($0.id) }
+        .sorted { lhs, rhs in
+            let lhsIsPrioritized = prioritizedTagIDs.contains(lhs.id) ||
+                (!trimmedSearchText.isEmpty && lhs.name.localizedCaseInsensitiveContains(trimmedSearchText))
+            let rhsIsPrioritized = prioritizedTagIDs.contains(rhs.id) ||
+                (!trimmedSearchText.isEmpty && rhs.name.localizedCaseInsensitiveContains(trimmedSearchText))
+            if lhsIsPrioritized != rhsIsPrioritized {
+                return lhsIsPrioritized
+            }
+            if lhs.manualOrder != rhs.manualOrder {
+                return lhs.manualOrder < rhs.manualOrder
+            }
+            return lhs.id < rhs.id
+        }
+    let chips = Array(favoriteTags.prefix(3))
+    return FavoriteTagChipSummary(
+        chips: chips,
+        overflowCount: max(0, favoriteTags.count - chips.count)
+    )
 }
 
 func favoriteProgressScore(for favorite: Favorite) -> Int {
