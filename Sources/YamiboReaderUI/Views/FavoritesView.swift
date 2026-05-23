@@ -3346,13 +3346,19 @@ func rootCollectionMatches(
     }
 
     let trimmedSearchText = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+    let containedFavoriteSearchText = favoriteSearchTextForCollectionMatch(
+        collection,
+        filter: filter,
+        searchText: searchText,
+        selectedTagIDs: selectedTagIDs
+    )
     let matchedFavorites = makeFilteredFavorites(
         from: favorites,
         scope: .collection(collection),
         showsHidden: showsHidden,
         filter: filter,
         sortOrder: .manual,
-        searchText: searchText,
+        searchText: containedFavoriteSearchText,
         selectedTagIDs: selectedTagIDs
     )
 
@@ -3395,19 +3401,41 @@ func makeFavoriteCollectionSummary(
         )
     }
 
+    let containedFavoriteSearchText = favoriteSearchTextForCollectionMatch(
+        collection,
+        filter: filter,
+        searchText: searchText,
+        selectedTagIDs: selectedTagIDs
+    )
     let matchingItems = makeFilteredFavorites(
         from: favorites,
         scope: .collection(collection),
         showsHidden: true,
         filter: filter,
         sortOrder: .manual,
-        searchText: searchText,
+        searchText: containedFavoriteSearchText,
         selectedTagIDs: selectedTagIDs
     )
     return FavoriteCollectionSummary(
         itemCount: matchingItems.count,
         hiddenCount: matchingItems.filter(\.isHidden).count
     )
+}
+
+private func favoriteSearchTextForCollectionMatch(
+    _ collection: FavoriteCollection,
+    filter: FavoriteFilter,
+    searchText: String,
+    selectedTagIDs: Set<String>
+) -> String {
+    let trimmedSearchText = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !selectedTagIDs.isEmpty,
+          filter == .all,
+          !trimmedSearchText.isEmpty,
+          collection.name.localizedCaseInsensitiveContains(trimmedSearchText) else {
+        return searchText
+    }
+    return ""
 }
 
 func favoriteProgressText(for favorite: Favorite) -> String? {
@@ -3610,13 +3638,19 @@ private func entryLastReadAt(
     case let .favorite(favorite):
         return favorite.lastReadAt
     case let .collection(collection):
+        let containedFavoriteSearchText = favoriteSearchTextForCollectionMatch(
+            collection,
+            filter: filter,
+            searchText: searchText,
+            selectedTagIDs: selectedTagIDs
+        )
         return makeFilteredFavorites(
             from: favorites,
             scope: .collection(collection),
             showsHidden: showsHidden,
             filter: filter,
             sortOrder: .recentRead,
-            searchText: searchText,
+            searchText: containedFavoriteSearchText,
             selectedTagIDs: selectedTagIDs
         )
         .compactMap(\.lastReadAt)

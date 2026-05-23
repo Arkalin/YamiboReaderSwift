@@ -827,6 +827,46 @@ final class MangaReaderModelTests: XCTestCase {
         XCTAssertEqual(entries.map(\.id), ["collection:collection-4"])
     }
 
+    func testRootTagFilterAllowsCollectionNameSearchOnlyWhenContainedFavoritesMatchTags() {
+        let taggedCollection = FavoriteCollection(id: "collection-tagged", name: "标签合集", manualOrder: 0)
+        let untaggedCollection = FavoriteCollection(id: "collection-untagged", name: "标签合集空", manualOrder: 1)
+        let taggedFavorite = Favorite(
+            title: "普通收藏",
+            url: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=876&mobile=2")!,
+            parentCollectionID: taggedCollection.id,
+            tagIDs: ["love"]
+        )
+        let untaggedFavorite = Favorite(
+            title: "普通收藏二",
+            url: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=877&mobile=2")!,
+            parentCollectionID: untaggedCollection.id,
+            tagIDs: ["short"]
+        )
+
+        let entries = makeFavoriteListEntries(
+            scope: .root,
+            favorites: [taggedFavorite, untaggedFavorite],
+            collections: [taggedCollection, untaggedCollection],
+            showsHidden: false,
+            filter: .all,
+            sortOrder: .manual,
+            searchText: "标签合集",
+            selectedTagIDs: ["love"]
+        )
+        let summary = makeFavoriteCollectionSummary(
+            for: taggedCollection,
+            favorites: [taggedFavorite, untaggedFavorite],
+            scope: .root,
+            showsHidden: false,
+            filter: .all,
+            searchText: "标签合集",
+            selectedTagIDs: ["love"]
+        )
+
+        XCTAssertEqual(entries.map(\.id), ["collection:collection-tagged"])
+        XCTAssertEqual(summary, FavoriteCollectionSummary(itemCount: 1, hiddenCount: 0))
+    }
+
     func testRootHiddenCollectionsRespectShowsHiddenFlag() {
         let visibleCollection = FavoriteCollection(id: "collection-6", name: "可见合集", manualOrder: 0)
         let hiddenCollection = FavoriteCollection(id: "collection-7", name: "隐藏合集", manualOrder: 1, isHidden: true)
@@ -921,6 +961,47 @@ final class MangaReaderModelTests: XCTestCase {
         )
 
         XCTAssertEqual(entries.map(\.id), ["collection:collection-8", "favorite:\(rootFavorite.id)", "collection:collection-9"])
+    }
+
+    func testRootRecentReadSortUsesMatchingTaggedFavoritesWhenCollectionNameMatchesSearch() {
+        let oldReadAt = Date(timeIntervalSince1970: 1_700_000_000)
+        let newReadAt = Date(timeIntervalSince1970: 1_700_000_500)
+        let olderCollection = FavoriteCollection(id: "collection-old-tag", name: "标签合集旧", manualOrder: 0)
+        let newerCollection = FavoriteCollection(id: "collection-new-tag", name: "标签合集新", manualOrder: 1)
+        let olderTaggedFavorite = Favorite(
+            title: "普通收藏旧",
+            url: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=878&mobile=2")!,
+            parentCollectionID: olderCollection.id,
+            lastReadAt: oldReadAt,
+            tagIDs: ["love"]
+        )
+        let newerTaggedFavorite = Favorite(
+            title: "普通收藏新",
+            url: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=879&mobile=2")!,
+            parentCollectionID: newerCollection.id,
+            lastReadAt: newReadAt,
+            tagIDs: ["love"]
+        )
+        let nonMatchingRecentFavorite = Favorite(
+            title: "普通收藏不匹配",
+            url: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=880&mobile=2")!,
+            parentCollectionID: olderCollection.id,
+            lastReadAt: Date(timeIntervalSince1970: 1_700_001_000),
+            tagIDs: ["short"]
+        )
+
+        let entries = makeFavoriteListEntries(
+            scope: .root,
+            favorites: [olderTaggedFavorite, newerTaggedFavorite, nonMatchingRecentFavorite],
+            collections: [olderCollection, newerCollection],
+            showsHidden: false,
+            filter: .all,
+            sortOrder: .recentRead,
+            searchText: "标签合集",
+            selectedTagIDs: ["love"]
+        )
+
+        XCTAssertEqual(entries.map(\.id), ["collection:collection-new-tag", "collection:collection-old-tag"])
     }
 
     func testFavoriteSelectionActionStateMatchesRootAndCollectionRules() {
