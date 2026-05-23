@@ -254,6 +254,96 @@ import Testing
     #expect(loaded?.lastReadAt == readAt)
 }
 
+@Test func favoriteLibrarySnapshotPersistsTagsAndRestoresArchivedTagMetadata() async throws {
+    let defaults = try #require(UserDefaults(suiteName: "favorite-tag-model-tests"))
+    defaults.removePersistentDomain(forName: "favorite-tag-model-tests")
+    let store = FavoriteStore(defaults: defaults, key: "favorites")
+    let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=303&mobile=2"))
+    let tag = FavoriteTag(
+        id: "tag-love",
+        name: "爱情",
+        color: .red,
+        manualOrder: 0,
+        createdAt: Date(timeIntervalSince1970: 100),
+        updatedAt: Date(timeIntervalSince1970: 200)
+    )
+    let favorite = Favorite(
+        title: "带标签收藏",
+        url: url,
+        tagIDs: [tag.id]
+    )
+
+    try await store.saveLibrarySnapshot(
+        FavoriteLibrarySnapshot(
+            favorites: [favorite],
+            collections: [],
+            tags: [tag]
+        )
+    )
+
+    let stored = await store.loadLibrarySnapshot()
+    #expect(stored.tags == [tag])
+    #expect(stored.favorites.first?.tagIDs == [tag.id])
+
+    _ = try await store.mergeRemoteFavorites([])
+    let archived = await store.loadLibrarySnapshot()
+    #expect(archived.archivedMetadata.first?.tagIDs == [tag.id])
+
+    _ = try await store.mergeRemoteFavorites([
+        Favorite(title: "远端返回", url: url)
+    ])
+    let restored = await store.loadLibrarySnapshot()
+    #expect(restored.favorites.first?.tagIDs == [tag.id])
+}
+
+@Test func favoriteLibrarySnapshotDecodesLegacyTagsAndDropsDanglingTagReferences() async throws {
+    let legacySnapshot = """
+    {
+      "favorites": [],
+      "collections": [],
+      "archivedMetadata": [
+        {
+          "canonicalThreadURL": "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=304",
+          "displayName": "旧归档",
+          "lastPage": 1,
+          "lastView": 1,
+          "lastChapter": null,
+          "authorID": null,
+          "novelResumePoint": null,
+          "isHidden": false,
+          "type": 1,
+          "lastMangaURL": null,
+          "parentCollectionID": null,
+          "manualOrder": 0,
+          "lastReadAt": null
+        }
+      ]
+    }
+    """
+
+    let decoded = try JSONDecoder().decode(FavoriteLibrarySnapshot.self, from: Data(legacySnapshot.utf8))
+
+    #expect(decoded.tags.isEmpty)
+    #expect(decoded.archivedMetadata.first?.tagIDs.isEmpty == true)
+
+    let defaults = try #require(UserDefaults(suiteName: "favorite-tag-sanitize-tests"))
+    defaults.removePersistentDomain(forName: "favorite-tag-sanitize-tests")
+    let store = FavoriteStore(defaults: defaults, key: "favorites")
+    let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=305&mobile=2"))
+    try await store.saveLibrarySnapshot(
+        FavoriteLibrarySnapshot(
+            favorites: [
+                Favorite(title: "悬空标签", url: url, tagIDs: ["missing-tag", "missing-tag"])
+            ],
+            collections: [],
+            tags: []
+        )
+    )
+
+    let loaded = await store.loadLibrarySnapshot()
+    #expect(loaded.favorites.first?.tagIDs == [])
+}
+
 @Test func favoriteStoreUpdatesMangaProgress() async throws {
     let defaults = try #require(UserDefaults(suiteName: "favorite-manga-progress-tests"))
     defaults.removePersistentDomain(forName: "favorite-manga-progress-tests")

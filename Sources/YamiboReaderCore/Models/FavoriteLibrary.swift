@@ -3,21 +3,25 @@ import Foundation
 public struct FavoriteLibrarySnapshot: Codable, Equatable, Sendable {
     public var favorites: [Favorite]
     public var collections: [FavoriteCollection]
+    public var tags: [FavoriteTag]
     public var archivedMetadata: [FavoriteMetadataArchiveEntry]
 
     private enum CodingKeys: String, CodingKey {
         case favorites
         case collections
+        case tags
         case archivedMetadata
     }
 
     public init(
         favorites: [Favorite],
         collections: [FavoriteCollection],
+        tags: [FavoriteTag] = [],
         archivedMetadata: [FavoriteMetadataArchiveEntry] = []
     ) {
         self.favorites = favorites
         self.collections = collections
+        self.tags = tags
         self.archivedMetadata = archivedMetadata
     }
 
@@ -25,6 +29,7 @@ public struct FavoriteLibrarySnapshot: Codable, Equatable, Sendable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         favorites = try container.decode([Favorite].self, forKey: .favorites)
         collections = try container.decode([FavoriteCollection].self, forKey: .collections)
+        tags = try container.decodeIfPresent([FavoriteTag].self, forKey: .tags) ?? []
         archivedMetadata = try container.decodeIfPresent([FavoriteMetadataArchiveEntry].self, forKey: .archivedMetadata) ?? []
     }
 
@@ -32,6 +37,7 @@ public struct FavoriteLibrarySnapshot: Codable, Equatable, Sendable {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(favorites, forKey: .favorites)
         try container.encode(collections, forKey: .collections)
+        try container.encode(tags, forKey: .tags)
         try container.encode(archivedMetadata, forKey: .archivedMetadata)
     }
 }
@@ -50,6 +56,24 @@ public struct FavoriteMetadataArchiveEntry: Codable, Equatable, Sendable {
     public var parentCollectionID: String?
     public var manualOrder: Int
     public var lastReadAt: Date?
+    public var tagIDs: [String]
+
+    private enum CodingKeys: String, CodingKey {
+        case canonicalThreadURL
+        case displayName
+        case lastPage
+        case lastView
+        case lastChapter
+        case authorID
+        case novelResumePoint
+        case isHidden
+        case type
+        case lastMangaURL
+        case parentCollectionID
+        case manualOrder
+        case lastReadAt
+        case tagIDs
+    }
 
     public init(
         canonicalThreadURL: URL,
@@ -64,7 +88,8 @@ public struct FavoriteMetadataArchiveEntry: Codable, Equatable, Sendable {
         lastMangaURL: URL?,
         parentCollectionID: String?,
         manualOrder: Int,
-        lastReadAt: Date?
+        lastReadAt: Date?,
+        tagIDs: [String] = []
     ) {
         self.canonicalThreadURL = canonicalThreadURL
         self.displayName = displayName
@@ -79,6 +104,7 @@ public struct FavoriteMetadataArchiveEntry: Codable, Equatable, Sendable {
         self.parentCollectionID = parentCollectionID
         self.manualOrder = manualOrder
         self.lastReadAt = lastReadAt
+        self.tagIDs = tagIDs
     }
 
     public init(favorite: Favorite) {
@@ -95,19 +121,40 @@ public struct FavoriteMetadataArchiveEntry: Codable, Equatable, Sendable {
             lastMangaURL: favorite.lastMangaURL,
             parentCollectionID: favorite.parentCollectionID,
             manualOrder: favorite.manualOrder,
-            lastReadAt: favorite.lastReadAt
+            lastReadAt: favorite.lastReadAt,
+            tagIDs: favorite.tagIDs
         )
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        canonicalThreadURL = try container.decode(URL.self, forKey: .canonicalThreadURL)
+        displayName = try container.decodeIfPresent(String.self, forKey: .displayName)
+        lastPage = max(0, try container.decodeIfPresent(Int.self, forKey: .lastPage) ?? 0)
+        lastView = max(1, try container.decodeIfPresent(Int.self, forKey: .lastView) ?? 1)
+        lastChapter = try container.decodeIfPresent(String.self, forKey: .lastChapter)
+        authorID = try container.decodeIfPresent(String.self, forKey: .authorID)
+        novelResumePoint = try container.decodeIfPresent(ReaderResumePoint.self, forKey: .novelResumePoint)
+        isHidden = try container.decodeIfPresent(Bool.self, forKey: .isHidden) ?? false
+        type = try container.decodeIfPresent(FavoriteType.self, forKey: .type) ?? .unknown
+        lastMangaURL = try container.decodeIfPresent(URL.self, forKey: .lastMangaURL)
+        parentCollectionID = try container.decodeIfPresent(String.self, forKey: .parentCollectionID)
+        manualOrder = try container.decodeIfPresent(Int.self, forKey: .manualOrder) ?? 0
+        lastReadAt = try container.decodeIfPresent(Date.self, forKey: .lastReadAt)
+        tagIDs = try container.decodeIfPresent([String].self, forKey: .tagIDs) ?? []
     }
 }
 
 public struct FavoriteLibrary: Equatable, Sendable {
     public private(set) var favorites: [Favorite]
     public private(set) var collections: [FavoriteCollection]
+    public private(set) var tags: [FavoriteTag]
     public private(set) var archivedMetadata: [FavoriteMetadataArchiveEntry]
 
     public init(snapshot: FavoriteLibrarySnapshot) {
         favorites = snapshot.favorites
         collections = snapshot.collections
+        tags = snapshot.tags
         archivedMetadata = snapshot.archivedMetadata
     }
 
@@ -115,12 +162,14 @@ public struct FavoriteLibrary: Equatable, Sendable {
         FavoriteLibrarySnapshot(
             favorites: favorites,
             collections: collections,
+            tags: tags,
             archivedMetadata: archivedMetadata
         )
     }
 
     public mutating func reconcileRemoteFavorites(_ remoteFavorites: [Favorite]) {
         let validCollectionIDs = Set(collections.map(\.id))
+        let validTagIDs = Set(tags.map(\.id))
         let localCanonicalURLs = Set(favorites.map { Self.canonicalThreadURL(for: $0) })
         let minRootOrder = min(
             favorites.filter { $0.parentCollectionID == nil }.map(\.manualOrder).min() ?? 0,
@@ -137,7 +186,11 @@ public struct FavoriteLibrary: Equatable, Sendable {
                 var remoteFavorite = remoteFavorite
                 remoteFavorite.parentCollectionID = nil
                 if let archive = archiveByURL[canonicalURL] {
-                    remoteFavorite.applyArchivedMetadata(archive, validCollectionIDs: validCollectionIDs)
+                    remoteFavorite.applyArchivedMetadata(
+                        archive,
+                        validCollectionIDs: validCollectionIDs,
+                        validTagIDs: validTagIDs
+                    )
                     restoredArchiveURLs.insert(archive.canonicalThreadURL)
                 }
                 return remoteFavorite
@@ -197,7 +250,8 @@ public struct FavoriteLibrary: Equatable, Sendable {
 private extension Favorite {
     mutating func applyArchivedMetadata(
         _ archive: FavoriteMetadataArchiveEntry,
-        validCollectionIDs: Set<String>
+        validCollectionIDs: Set<String>,
+        validTagIDs: Set<String>
     ) {
         displayName = archive.displayName
         lastPage = archive.lastPage
@@ -211,5 +265,6 @@ private extension Favorite {
         parentCollectionID = archive.parentCollectionID.flatMap { validCollectionIDs.contains($0) ? $0 : nil }
         manualOrder = archive.manualOrder
         lastReadAt = archive.lastReadAt
+        tagIDs = archive.tagIDs.filter { validTagIDs.contains($0) }
     }
 }
