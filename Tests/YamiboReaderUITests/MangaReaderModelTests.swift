@@ -394,7 +394,7 @@ final class MangaReaderModelTests: XCTestCase {
             FavoritesViewModel(appContext: appContext, favoriteStore: favoriteStore)
         }
 
-        await viewModel.setTagIDs(["new"], forFavoriteID: favorite.id)
+        _ = await viewModel.setTagIDs(["new"], forFavoriteID: favorite.id)
 
         let stored = await favoriteStore.favorite(id: favorite.id)
         await MainActor.run {
@@ -435,11 +435,53 @@ final class MangaReaderModelTests: XCTestCase {
             XCTAssertEqual(viewModel.tags.first?.color, .blue)
         }
 
-        await viewModel.setTagIDs([tagID], forFavoriteID: favorite.id)
+        _ = await viewModel.setTagIDs([tagID], forFavoriteID: favorite.id)
         _ = await viewModel.deleteTag(id: tagID)
         await MainActor.run {
             XCTAssertTrue(viewModel.tags.isEmpty)
             XCTAssertEqual(viewModel.favorites.first?.tagIDs, [])
+        }
+    }
+
+    func testFavoritesViewModelCanOverwriteTagsForMultipleFavorites() async throws {
+        let keyPrefix = UUID().uuidString
+        let favoriteStore = FavoriteStore(key: "\(keyPrefix).favorites")
+        let first = Favorite(
+            title: "批量收藏A",
+            url: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=831&mobile=2")!,
+            tagIDs: ["old"]
+        )
+        let second = Favorite(
+            title: "批量收藏B",
+            url: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=832&mobile=2")!,
+            tagIDs: ["old"]
+        )
+        try await favoriteStore.saveLibrarySnapshot(
+            FavoriteLibrarySnapshot(
+                favorites: [first, second],
+                collections: [],
+                tags: [
+                    FavoriteTag(id: "old", name: "旧", color: .gray, manualOrder: 0),
+                    FavoriteTag(id: "new", name: "新", color: .red, manualOrder: 1)
+                ]
+            )
+        )
+        let appContext = YamiboAppContext(
+            sessionStore: SessionStore(key: "\(keyPrefix).session"),
+            settingsStore: SettingsStore(key: "\(keyPrefix).settings"),
+            favoriteStore: favoriteStore,
+            readerCacheStore: ReaderCacheStore(baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)),
+            mangaDirectoryStore: MangaDirectoryStore(baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true))
+        )
+        let viewModel = await MainActor.run {
+            FavoritesViewModel(appContext: appContext, favoriteStore: favoriteStore)
+        }
+
+        let didUpdate = await viewModel.setTagIDs(["new"], forFavoriteIDs: [first.id, second.id])
+
+        await MainActor.run {
+            XCTAssertTrue(didUpdate)
+            XCTAssertEqual(viewModel.favorites.map(\.tagIDs), [["new"], ["new"]])
         }
     }
 
@@ -887,21 +929,48 @@ final class MangaReaderModelTests: XCTestCase {
             selectedFavoriteCount: 2,
             selectedCollectionCount: 0
         )
-        XCTAssertEqual(rootFavoritesOnly, FavoriteSelectionActionState(canCreateCollection: true, canMove: true, canDelete: true))
+        XCTAssertEqual(rootFavoritesOnly, FavoriteSelectionActionState(canTag: true, canCreateCollection: true, canMove: true, canDelete: true))
 
         let rootMixed = makeFavoriteSelectionActionState(
             scope: .root,
             selectedFavoriteCount: 1,
             selectedCollectionCount: 1
         )
-        XCTAssertEqual(rootMixed, FavoriteSelectionActionState(canCreateCollection: false, canMove: false, canDelete: true))
+        XCTAssertEqual(rootMixed, FavoriteSelectionActionState(canTag: false, canCreateCollection: false, canMove: false, canDelete: true))
 
         let collectionScope = makeFavoriteSelectionActionState(
             scope: .collection(FavoriteCollection(id: "collection-3", name: "合集C", manualOrder: 0)),
             selectedFavoriteCount: 1,
             selectedCollectionCount: 0
         )
-        XCTAssertEqual(collectionScope, FavoriteSelectionActionState(canCreateCollection: false, canMove: true, canDelete: true))
+        XCTAssertEqual(collectionScope, FavoriteSelectionActionState(canTag: true, canCreateCollection: false, canMove: true, canDelete: true))
+    }
+
+    func testBatchTagSelectionStateReflectsIdenticalAndDivergentTags() {
+        let first = Favorite(
+            title: "A",
+            url: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=840&mobile=2")!,
+            tagIDs: ["one", "two"]
+        )
+        let matching = Favorite(
+            title: "B",
+            url: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=841&mobile=2")!,
+            tagIDs: ["one", "two"]
+        )
+        let divergent = Favorite(
+            title: "C",
+            url: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=842&mobile=2")!,
+            tagIDs: ["one"]
+        )
+
+        XCTAssertEqual(
+            makeBatchTagSelectionState(favorites: [first, matching], selectedFavoriteIDs: [first.id, matching.id]),
+            FavoriteBatchTagSelectionState(initialTagIDs: ["one", "two"], showsOverwriteWarning: false)
+        )
+        XCTAssertEqual(
+            makeBatchTagSelectionState(favorites: [first, divergent], selectedFavoriteIDs: [first.id, divergent.id]),
+            FavoriteBatchTagSelectionState(initialTagIDs: [], showsOverwriteWarning: true)
+        )
     }
 
     func testFavoriteAccentAppearanceUsesStoredTypeColors() {

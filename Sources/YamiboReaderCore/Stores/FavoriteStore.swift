@@ -23,6 +23,7 @@ public protocol FavoriteStoring: Sendable {
     func setDisplayName(_ displayName: String?, for favoriteID: String) async throws -> [Favorite]
     func setType(_ type: FavoriteType, for favoriteID: String) async throws -> [Favorite]
     func setTagIDs(_ tagIDs: [String], for favoriteID: String) async throws -> [Favorite]
+    func setTagIDs(_ tagIDs: [String], forFavoriteIDs favoriteIDs: [String]) async throws -> FavoriteLibrarySnapshot
     func deleteFavorite(id: String) async throws -> [Favorite]
     func deleteFavorites(ids: [String]) async throws -> FavoriteLibrarySnapshot
     func favorite(for url: URL) async -> Favorite?
@@ -491,11 +492,17 @@ public actor FavoriteStore: FavoriteStoring {
     }
 
     public func setTagIDs(_ tagIDs: [String], for favoriteID: String) async throws -> [Favorite] {
+        try await setTagIDs(tagIDs, forFavoriteIDs: [favoriteID]).favorites
+    }
+
+    public func setTagIDs(_ tagIDs: [String], forFavoriteIDs favoriteIDs: [String]) async throws -> FavoriteLibrarySnapshot {
         let snapshot = await loadLibrarySnapshot()
+        let selectedFavoriteIDs = Set(favoriteIDs)
+        guard !selectedFavoriteIDs.isEmpty else { return snapshot }
         let validTagIDs = Set(snapshot.tags.map(\.id))
         let normalizedTagIDs = sanitizedTagIDs(tagIDs, validTagIDs: validTagIDs)
         let updated = snapshot.favorites.map { favorite in
-            guard favorite.id == favoriteID else { return favorite }
+            guard selectedFavoriteIDs.contains(favorite.id) else { return favorite }
             var favorite = favorite
             favorite.tagIDs = normalizedTagIDs
             return favorite
@@ -504,7 +511,7 @@ public actor FavoriteStore: FavoriteStoring {
             favorites: updated,
             collections: snapshot.collections,
             tags: snapshot.tags
-        ).favorites
+        )
     }
 
     public func deleteFavorite(id favoriteID: String) async throws -> [Favorite] {

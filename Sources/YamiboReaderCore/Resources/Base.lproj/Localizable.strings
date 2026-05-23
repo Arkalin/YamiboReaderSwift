@@ -139,7 +139,9 @@
 "favorites.sort.title" = "标题";
 "favorites.syncing" = "同步收藏中…";
 "favorites.tag_name" = "标签名称";
+"favorites.tags_action" = "标签";
 "favorites.tags.empty" = "暂无标签";
+"favorites.tags_overwrite_warning" = "所选收藏的标签不一致，确认后会用当前选择覆盖全部所选收藏。";
 "forum.default_title" = "百合会论坛";
 "forum.history" = "浏览历史";
 "forum.open_native_failed" = "无法原生打开";

@@ -84,6 +84,7 @@ public enum FavoriteListEntry: Identifiable, Hashable, Sendable {
 }
 
 struct FavoriteSelectionActionState: Equatable {
+    let canTag: Bool
     let canCreateCollection: Bool
     let canMove: Bool
     let canDelete: Bool
@@ -424,13 +425,18 @@ public final class FavoritesViewModel: ObservableObject {
         }
     }
 
-    public func setTagIDs(_ tagIDs: [String], forFavoriteID favoriteID: String) async {
+    public func setTagIDs(_ tagIDs: [String], forFavoriteID favoriteID: String) async -> Bool {
+        await setTagIDs(tagIDs, forFavoriteIDs: [favoriteID])
+    }
+
+    public func setTagIDs(_ tagIDs: [String], forFavoriteIDs favoriteIDs: [String]) async -> Bool {
         do {
-            favorites = try await favoriteStore.setTagIDs(tagIDs, for: favoriteID)
-            tags = await favoriteStore.loadTags()
+            applySnapshot(try await favoriteStore.setTagIDs(tagIDs, forFavoriteIDs: favoriteIDs))
             errorMessage = nil
+            return true
         } catch {
             errorMessage = error.localizedDescription
+            return false
         }
     }
 
@@ -695,10 +701,36 @@ private struct FavoriteCollectionNameDraft {
 }
 
 private struct FavoriteTagPickerContext: Identifiable {
-    let favoriteID: String
+    let favoriteIDs: [String]
     let initialTagIDs: Set<String>
+    let showsOverwriteWarning: Bool
+    let exitsSelectionModeOnConfirm: Bool
 
-    var id: String { favoriteID }
+    var id: String { favoriteIDs.sorted().joined(separator: ",") }
+
+    init(favoriteID: String, initialTagIDs: Set<String>) {
+        favoriteIDs = [favoriteID]
+        self.initialTagIDs = initialTagIDs
+        showsOverwriteWarning = false
+        exitsSelectionModeOnConfirm = false
+    }
+
+    init(
+        favoriteIDs: [String],
+        initialTagIDs: Set<String>,
+        showsOverwriteWarning: Bool,
+        exitsSelectionModeOnConfirm: Bool
+    ) {
+        self.favoriteIDs = favoriteIDs
+        self.initialTagIDs = initialTagIDs
+        self.showsOverwriteWarning = showsOverwriteWarning
+        self.exitsSelectionModeOnConfirm = exitsSelectionModeOnConfirm
+    }
+}
+
+struct FavoriteBatchTagSelectionState: Equatable {
+    let initialTagIDs: Set<String>
+    let showsOverwriteWarning: Bool
 }
 
 private struct FavoriteTagEditorDraft: Identifiable {
@@ -1370,6 +1402,7 @@ public struct FavoritesView: View {
                 FavoriteTagPickerView(
                     tags: viewModel.tags,
                     initialSelection: context.initialTagIDs,
+                    showsOverwriteWarning: context.showsOverwriteWarning,
                     onCancel: {
                         tagPickerContext = nil
                     },
@@ -1377,10 +1410,14 @@ public struct FavoritesView: View {
                         let orderedTagIDs = viewModel.tags
                             .map(\.id)
                             .filter { selectedTagIDs.contains($0) }
-                        Task {
-                            await viewModel.setTagIDs(orderedTagIDs, forFavoriteID: context.favoriteID)
+                        if await viewModel.setTagIDs(orderedTagIDs, forFavoriteIDs: context.favoriteIDs) {
                             tagPickerContext = nil
+                            if context.exitsSelectionModeOnConfirm {
+                                exitSelectionMode()
+                            }
+                            return true
                         }
+                        return false
                     },
                     onCreateTag: { name, color in
                         await viewModel.createTag(name: name, color: color)
@@ -1663,6 +1700,12 @@ public struct FavoritesView: View {
         VStack(spacing: 12) {
             Divider()
             HStack(spacing: 12) {
+                Button(L10n.string("favorites.tags_action")) {
+                    presentBatchTagPicker()
+                }
+                .buttonStyle(.bordered)
+                .disabled(!selectionActionState.canTag)
+
                 Button(L10n.string("favorites.create_collection")) {
                     showingCreateCollectionPrompt = true
                 }
@@ -2133,6 +2176,19 @@ public struct FavoritesView: View {
         }
     }
 
+    private func presentBatchTagPicker() {
+        let tagSelectionState = makeBatchTagSelectionState(
+            favorites: viewModel.favorites,
+            selectedFavoriteIDs: selectedFavoriteIDs
+        )
+        tagPickerContext = FavoriteTagPickerContext(
+            favoriteIDs: Array(selectedFavoriteIDs),
+            initialTagIDs: tagSelectionState.initialTagIDs,
+            showsOverwriteWarning: tagSelectionState.showsOverwriteWarning,
+            exitsSelectionModeOnConfirm: true
+        )
+    }
+
     private func loadInitialFavorites() async {
         guard !didLoadInitialFavorites else { return }
         didLoadInitialFavorites = true
@@ -2204,8 +2260,9 @@ public struct FavoritesView: View {
 private struct FavoriteTagPickerView: View {
     let tags: [FavoriteTag]
     let initialSelection: Set<String>
+    let showsOverwriteWarning: Bool
     let onCancel: () -> Void
-    let onConfirm: (Set<String>) -> Void
+    let onConfirm: (Set<String>) async -> Bool
     let onCreateTag: (String, FavoriteTagColor) async -> FavoriteTag?
     let onUpdateTag: (String, String, FavoriteTagColor) async -> Bool
     let onDeleteTag: (String) async -> Bool
@@ -2213,18 +2270,21 @@ private struct FavoriteTagPickerView: View {
     @State private var selectedTagIDs: Set<String>
     @State private var editorDraft: FavoriteTagEditorDraft?
     @State private var pendingDeleteTag: FavoriteTag?
+    @State private var isConfirming = false
 
     init(
         tags: [FavoriteTag],
         initialSelection: Set<String>,
+        showsOverwriteWarning: Bool = false,
         onCancel: @escaping () -> Void,
-        onConfirm: @escaping (Set<String>) -> Void,
+        onConfirm: @escaping (Set<String>) async -> Bool,
         onCreateTag: @escaping (String, FavoriteTagColor) async -> FavoriteTag?,
         onUpdateTag: @escaping (String, String, FavoriteTagColor) async -> Bool,
         onDeleteTag: @escaping (String) async -> Bool
     ) {
         self.tags = tags
         self.initialSelection = initialSelection
+        self.showsOverwriteWarning = showsOverwriteWarning
         self.onCancel = onCancel
         self.onConfirm = onConfirm
         self.onCreateTag = onCreateTag
@@ -2236,6 +2296,12 @@ private struct FavoriteTagPickerView: View {
     var body: some View {
         NavigationStack {
             List {
+                if showsOverwriteWarning {
+                    Text(L10n.string("favorites.tags_overwrite_warning"))
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+
                 ForEach(orderedTags) { tag in
                     Button {
                         toggle(tag)
@@ -2295,8 +2361,13 @@ private struct FavoriteTagPickerView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(L10n.string("common.done")) {
-                        onConfirm(selectedTagIDs)
+                        Task {
+                            isConfirming = true
+                            _ = await onConfirm(selectedTagIDs)
+                            isConfirming = false
+                        }
                     }
+                    .disabled(isConfirming)
                 }
             }
             .sheet(item: $editorDraft) { draft in
@@ -2644,17 +2715,37 @@ func makeFavoriteSelectionActionState(
     switch scope {
     case .root:
         return FavoriteSelectionActionState(
+            canTag: hasFavorites && !hasCollections,
             canCreateCollection: hasFavorites && !hasCollections,
             canMove: hasFavorites && !hasCollections,
             canDelete: hasSelection
         )
     case .collection:
         return FavoriteSelectionActionState(
+            canTag: hasFavorites,
             canCreateCollection: false,
             canMove: hasFavorites,
             canDelete: hasFavorites
         )
     }
+}
+
+func makeBatchTagSelectionState(
+    favorites: [Favorite],
+    selectedFavoriteIDs: Set<String>
+) -> FavoriteBatchTagSelectionState {
+    let selectedIDs = selectedFavoriteIDs
+    let selectedFavorites = favorites.filter { selectedIDs.contains($0.id) }
+    guard let firstFavorite = selectedFavorites.first else {
+        return FavoriteBatchTagSelectionState(initialTagIDs: [], showsOverwriteWarning: false)
+    }
+
+    let firstTagIDs = Set(firstFavorite.tagIDs)
+    let hasDivergentTags = selectedFavorites.dropFirst().contains { Set($0.tagIDs) != firstTagIDs }
+    return FavoriteBatchTagSelectionState(
+        initialTagIDs: hasDivergentTags ? [] : firstTagIDs,
+        showsOverwriteWarning: hasDivergentTags
+    )
 }
 
 func favoriteProgressScore(for favorite: Favorite) -> Int {
