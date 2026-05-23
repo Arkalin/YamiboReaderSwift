@@ -1066,6 +1066,63 @@ final class MangaReaderModelTests: XCTestCase {
         )
     }
 
+    func testFilteredFavoritesAppliesTagFilterWithAndSemantics() {
+        let first = Favorite(
+            title: "百合短篇",
+            url: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=856&mobile=2")!,
+            type: .novel,
+            tagIDs: ["love", "short"]
+        )
+        let missingOne = Favorite(
+            title: "百合长篇",
+            url: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=857&mobile=2")!,
+            type: .novel,
+            tagIDs: ["love"]
+        )
+        let hiddenMatch = Favorite(
+            title: "隐藏短篇",
+            url: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=858&mobile=2")!,
+            isHidden: true,
+            type: .novel,
+            tagIDs: ["love", "short"]
+        )
+        let mangaMatch = Favorite(
+            title: "漫画短篇",
+            url: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=859&mobile=2")!,
+            type: .manga,
+            tagIDs: ["love", "short"]
+        )
+
+        XCTAssertEqual(
+            makeFilteredFavorites(
+                from: [first, missingOne, hiddenMatch, mangaMatch],
+                showsHidden: false,
+                filter: .novel,
+                sortOrder: .manual,
+                searchText: "短篇",
+                selectedTagIDs: ["love", "short"]
+            ).map(\.id),
+            [first.id]
+        )
+        XCTAssertEqual(
+            makeFilteredFavorites(
+                from: [first, missingOne, hiddenMatch, mangaMatch],
+                showsHidden: true,
+                filter: .novel,
+                sortOrder: .manual,
+                searchText: "短篇",
+                selectedTagIDs: ["love", "short"]
+            ).map(\.id),
+            [first.id, hiddenMatch.id]
+        )
+    }
+
+    func testFavoriteReorderingAvailabilityRequiresNoTagFilter() {
+        XCTAssertTrue(canReorderFavoriteEntries(sortOrder: .manual, searchText: "", selectedTagIDs: []))
+        XCTAssertFalse(canReorderFavoriteEntries(sortOrder: .manual, searchText: "", selectedTagIDs: ["love"]))
+        XCTAssertFalse(canReorderFavoriteEntries(sortOrder: .manual, searchText: "百合", selectedTagIDs: []))
+    }
+
     func testFavoriteAccentAppearanceUsesStoredTypeColors() {
         let appearance = FavoriteAppearanceSettings(
             collection: .purple,

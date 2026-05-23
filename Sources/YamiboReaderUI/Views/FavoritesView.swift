@@ -314,9 +314,16 @@ public final class FavoritesViewModel: ObservableObject {
         }
     }
 
-    func canReorderFavorites(sortOrder: FavoriteSortOrder, searchText: String) -> Bool {
-        sortOrder == .manual &&
-        searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+    func canReorderFavorites(
+        sortOrder: FavoriteSortOrder,
+        searchText: String,
+        selectedTagIDs: Set<String> = []
+    ) -> Bool {
+        canReorderFavoriteEntries(
+            sortOrder: sortOrder,
+            searchText: searchText,
+            selectedTagIDs: selectedTagIDs
+        ) &&
         !isLoading &&
         deletingFavoriteID == nil
     }
@@ -326,10 +333,15 @@ public final class FavoritesViewModel: ObservableObject {
         filter: FavoriteFilter,
         sortOrder: FavoriteSortOrder,
         searchText: String,
+        selectedTagIDs: Set<String> = [],
         isSelecting: Bool
     ) -> Bool {
         guard !isSelecting else { return false }
-        return canReorderFavorites(sortOrder: sortOrder, searchText: searchText)
+        return canReorderFavorites(
+            sortOrder: sortOrder,
+            searchText: searchText,
+            selectedTagIDs: selectedTagIDs
+        )
     }
 
     func reorderFavorites(visibleIDs: [String], fromOffsets: IndexSet, toOffset: Int) async {
@@ -746,14 +758,26 @@ private struct FavoriteTagPickerContext: Identifiable {
     let initialTagIDs: Set<String>
     let showsOverwriteWarning: Bool
     let exitsSelectionModeOnConfirm: Bool
+    let isFilter: Bool
 
-    var id: String { favoriteIDs.sorted().joined(separator: ",") }
+    var id: String {
+        isFilter ? "filter" : favoriteIDs.sorted().joined(separator: ",")
+    }
 
     init(favoriteID: String, initialTagIDs: Set<String>) {
         favoriteIDs = [favoriteID]
         self.initialTagIDs = initialTagIDs
         showsOverwriteWarning = false
         exitsSelectionModeOnConfirm = false
+        isFilter = false
+    }
+
+    init(filterTagIDs: Set<String>) {
+        favoriteIDs = []
+        initialTagIDs = filterTagIDs
+        showsOverwriteWarning = false
+        exitsSelectionModeOnConfirm = false
+        isFilter = true
     }
 
     init(
@@ -766,6 +790,7 @@ private struct FavoriteTagPickerContext: Identifiable {
         self.initialTagIDs = initialTagIDs
         self.showsOverwriteWarning = showsOverwriteWarning
         self.exitsSelectionModeOnConfirm = exitsSelectionModeOnConfirm
+        isFilter = false
     }
 }
 
@@ -1032,7 +1057,10 @@ private struct FavoriteToolbarMenuButton: View {
     @Binding var filterRawValue: String
     @Binding var sortRawValue: String
     @Binding var showsHidden: Bool
+    let selectedTagCount: Int
     let allTitle: String
+    let onEditTagFilter: () -> Void
+    let onClearTagFilter: () -> Void
 
     var body: some View {
         Menu {
@@ -1045,6 +1073,16 @@ private struct FavoriteToolbarMenuButton: View {
             Picker(L10n.string("favorites.sort"), selection: $sortRawValue) {
                 ForEach(FavoriteSortOrder.allCases) { sortOrder in
                     Text(sortOrder.title).tag(sortOrder.rawValue)
+                }
+            }
+
+            Button(action: onEditTagFilter) {
+                Label(tagFilterTitle, systemImage: "tag")
+            }
+
+            if selectedTagCount > 0 {
+                Button(action: onClearTagFilter) {
+                    Label(L10n.string("favorites.filter.clear_tags"), systemImage: "xmark.circle")
                 }
             }
 
@@ -1070,6 +1108,13 @@ private struct FavoriteToolbarMenuButton: View {
     private var currentTitle: String {
         currentFilter == .all ? allTitle : currentFilter.title
     }
+
+    private var tagFilterTitle: String {
+        guard selectedTagCount > 0 else {
+            return L10n.string("favorites.filter.tags")
+        }
+        return L10n.string("favorites.filter.tags_count", selectedTagCount)
+    }
 }
 
 private struct FavoriteToolbarModifier: ViewModifier {
@@ -1080,8 +1125,11 @@ private struct FavoriteToolbarModifier: ViewModifier {
     @Binding var showsHidden: Bool
     @Binding var isSelecting: Bool
     let showsSettingsMenu: Bool
+    let selectedTagCount: Int
     let allTitle: String
     let onFinishSelection: () -> Void
+    let onEditTagFilter: () -> Void
+    let onClearTagFilter: () -> Void
 
     func body(content: Content) -> some View {
         content.toolbar {
@@ -1108,7 +1156,10 @@ private struct FavoriteToolbarModifier: ViewModifier {
                     filterRawValue: $filterRawValue,
                     sortRawValue: $sortRawValue,
                     showsHidden: $showsHidden,
-                    allTitle: allTitle
+                    selectedTagCount: selectedTagCount,
+                    allTitle: allTitle,
+                    onEditTagFilter: onEditTagFilter,
+                    onClearTagFilter: onClearTagFilter
                 )
             }
 
@@ -1276,6 +1327,7 @@ public struct FavoritesView: View {
     @State private var isSelecting = false
     @State private var selectedFavoriteIDs: Set<String> = []
     @State private var selectedCollectionIDs: Set<String> = []
+    @State private var selectedFilterTagIDs: Set<String> = []
     @State private var showingCreateCollectionPrompt = false
     @State private var createCollectionName = ""
     @State private var showingMoveDialog = false
@@ -1348,8 +1400,13 @@ public struct FavoritesView: View {
                     showsHidden: $showsHidden,
                     isSelecting: $isSelecting,
                     showsSettingsMenu: isRootScope,
+                    selectedTagCount: selectedFilterTagIDs.count,
                     allTitle: filterLabel(for: .all),
-                    onFinishSelection: exitSelectionMode
+                    onFinishSelection: exitSelectionMode,
+                    onEditTagFilter: presentFilterTagPicker,
+                    onClearTagFilter: {
+                        selectedFilterTagIDs.removeAll()
+                    }
                 )
             )
             .modifier(
@@ -1394,6 +1451,9 @@ public struct FavoritesView: View {
             }
             .onChange(of: viewModel.collections.map(\.id)) { _, _ in
                 pruneSelections()
+            }
+            .onChange(of: viewModel.tags.map(\.id)) { _, tagIDs in
+                selectedFilterTagIDs.formIntersection(Set(tagIDs))
             }
             .refreshable {
                 await viewModel.refresh()
@@ -1509,6 +1569,12 @@ public struct FavoritesView: View {
                         tagPickerContext = nil
                     },
                     onConfirm: { selectedTagIDs in
+                        if context.isFilter {
+                            selectedFilterTagIDs = selectedTagIDs
+                            tagPickerContext = nil
+                            return true
+                        }
+
                         let orderedTagIDs = viewModel.tags
                             .map(\.id)
                             .filter { selectedTagIDs.contains($0) }
@@ -1708,6 +1774,7 @@ public struct FavoritesView: View {
             filter: currentFilter,
             sortOrder: currentSortOrder,
             searchText: searchText,
+            selectedTagIDs: selectedFilterTagIDs,
             isSelecting: isSelecting
         )
     }
@@ -1732,7 +1799,8 @@ public struct FavoritesView: View {
             showsHidden: showsHidden,
             filter: currentFilter,
             sortOrder: currentSortOrder,
-            searchText: searchText
+            searchText: searchText,
+            selectedTagIDs: selectedFilterTagIDs
         )
     }
 
@@ -1798,6 +1866,8 @@ public struct FavoritesView: View {
             EmptyView()
         } else if !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             ContentUnavailableView(L10n.string("favorites.empty.no_results"), systemImage: "magnifyingglass")
+        } else if !selectedFilterTagIDs.isEmpty {
+            ContentUnavailableView(L10n.string("favorites.empty.no_results"), systemImage: "tag")
         } else if currentCollection != nil {
             ContentUnavailableView(L10n.string("favorites.empty.collection"), systemImage: "folder")
         } else {
@@ -1896,6 +1966,7 @@ public struct FavoritesView: View {
                 isSelected: selectedFavoriteIDs.contains(favorite.id),
                 tags: viewModel.tags,
                 tagSearchText: searchText,
+                prioritizedTagIDs: selectedFilterTagIDs,
                 accentColor: favoriteAccentColor(for: favorite.type, appearance: viewModel.favoriteAppearance),
                 onOpen: {
                     if isSelecting {
@@ -1985,6 +2056,7 @@ public struct FavoritesView: View {
                 isSelected: selectedFavoriteIDs.contains(favorite.id),
                 tags: viewModel.tags,
                 tagSearchText: searchText,
+                prioritizedTagIDs: selectedFilterTagIDs,
                 accentColor: favoriteAccentColor(for: favorite.type, appearance: viewModel.favoriteAppearance),
                 onOpen: {
                     if isSelecting {
@@ -2302,6 +2374,10 @@ public struct FavoritesView: View {
         )
     }
 
+    private func presentFilterTagPicker() {
+        tagPickerContext = FavoriteTagPickerContext(filterTagIDs: selectedFilterTagIDs)
+    }
+
     private func loadInitialFavorites() async {
         guard !didLoadInitialFavorites else { return }
         didLoadInitialFavorites = true
@@ -2355,7 +2431,8 @@ public struct FavoritesView: View {
             scope: scope,
             showsHidden: showsHidden,
             filter: currentFilter,
-            searchText: searchText
+            searchText: searchText,
+            selectedTagIDs: selectedFilterTagIDs
         )
     }
 
@@ -2748,11 +2825,17 @@ struct FavoriteRow: View {
     let isSelected: Bool
     let tags: [FavoriteTag]
     let tagSearchText: String
+    let prioritizedTagIDs: Set<String>
     let accentColor: Color
     let onOpen: () -> Void
 
     private var tagChipSummary: FavoriteTagChipSummary {
-        makeFavoriteTagChipSummary(for: favorite, tags: tags, searchText: tagSearchText)
+        makeFavoriteTagChipSummary(
+            for: favorite,
+            tags: tags,
+            searchText: tagSearchText,
+            prioritizedTagIDs: prioritizedTagIDs
+        )
     }
 
     var body: some View {
@@ -3022,6 +3105,16 @@ func canReorderFavoriteTags(sortOrder: FavoriteTagSortOrder, searchText: String)
     sortOrder == .manual && searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
 }
 
+func canReorderFavoriteEntries(
+    sortOrder: FavoriteSortOrder,
+    searchText: String,
+    selectedTagIDs: Set<String> = []
+) -> Bool {
+    sortOrder == .manual &&
+        searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+        selectedTagIDs.isEmpty
+}
+
 func sortedFavoriteTags(
     _ tags: [FavoriteTag],
     favorites: [Favorite],
@@ -3129,7 +3222,8 @@ func makeFilteredFavorites(
     showsHidden: Bool,
     filter: FavoriteFilter,
     sortOrder: FavoriteSortOrder,
-    searchText: String
+    searchText: String,
+    selectedTagIDs: Set<String> = []
 ) -> [Favorite] {
     let trimmedSearchText = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
     let parentCollectionID = scope.collection?.id
@@ -3138,6 +3232,9 @@ func makeFilteredFavorites(
         .filter { $0.parentCollectionID == parentCollectionID }
         .filter { showsHidden || !$0.isHidden }
         .filter { filter.matches($0) }
+        .filter { favorite in
+            selectedTagIDs.isEmpty || selectedTagIDs.isSubset(of: Set(favorite.tagIDs))
+        }
         .filter { favorite in
             guard !trimmedSearchText.isEmpty else { return true }
             return favorite.resolvedDisplayTitle.localizedCaseInsensitiveContains(trimmedSearchText)
@@ -3171,7 +3268,8 @@ func makeFavoriteListEntries(
     showsHidden: Bool,
     filter: FavoriteFilter,
     sortOrder: FavoriteSortOrder,
-    searchText: String
+    searchText: String,
+    selectedTagIDs: Set<String> = []
 ) -> [FavoriteListEntry] {
     switch scope {
     case .root:
@@ -3181,7 +3279,8 @@ func makeFavoriteListEntries(
             showsHidden: showsHidden,
             filter: filter,
             sortOrder: sortOrder,
-            searchText: searchText
+            searchText: searchText,
+            selectedTagIDs: selectedTagIDs
         )
 
         let visibleCollections = orderedCollections(collections).filter { collection in
@@ -3190,7 +3289,8 @@ func makeFavoriteListEntries(
                 favorites: favorites,
                 showsHidden: showsHidden,
                 filter: filter,
-                searchText: searchText
+                searchText: searchText,
+                selectedTagIDs: selectedTagIDs
             )
         }
 
@@ -3207,7 +3307,15 @@ func makeFavoriteListEntries(
         if sortOrder == .recentRead {
             return (visibleCollections.map(FavoriteListEntry.collection) + rootFavorites.map(FavoriteListEntry.favorite))
                 .sorted { lhs, rhs in
-                    compareRecentReadEntries(lhs, rhs, favorites: favorites, showsHidden: showsHidden, filter: filter, searchText: searchText)
+                    compareRecentReadEntries(
+                        lhs,
+                        rhs,
+                        favorites: favorites,
+                        showsHidden: showsHidden,
+                        filter: filter,
+                        searchText: searchText,
+                        selectedTagIDs: selectedTagIDs
+                    )
                 }
         }
 
@@ -3219,7 +3327,8 @@ func makeFavoriteListEntries(
             showsHidden: showsHidden,
             filter: filter,
             sortOrder: sortOrder,
-            searchText: searchText
+            searchText: searchText,
+            selectedTagIDs: selectedTagIDs
         ).map(FavoriteListEntry.favorite)
     }
 }
@@ -3229,7 +3338,8 @@ func rootCollectionMatches(
     favorites: [Favorite],
     showsHidden: Bool,
     filter: FavoriteFilter,
-    searchText: String
+    searchText: String,
+    selectedTagIDs: Set<String> = []
 ) -> Bool {
     guard showsHidden || !collection.isHidden else {
         return false
@@ -3242,10 +3352,11 @@ func rootCollectionMatches(
         showsHidden: showsHidden,
         filter: filter,
         sortOrder: .manual,
-        searchText: searchText
+        searchText: searchText,
+        selectedTagIDs: selectedTagIDs
     )
 
-    guard filter == .all else {
+    guard filter == .all, selectedTagIDs.isEmpty else {
         return !matchedFavorites.isEmpty
     }
 
@@ -3262,7 +3373,8 @@ func makeFavoriteCollectionSummary(
     scope: FavoriteScope,
     showsHidden: Bool,
     filter: FavoriteFilter,
-    searchText: String
+    searchText: String,
+    selectedTagIDs: Set<String> = []
 ) -> FavoriteCollectionSummary {
     let allItems = favorites.filter { $0.parentCollectionID == collection.id }
 
@@ -3274,7 +3386,9 @@ func makeFavoriteCollectionSummary(
     }
 
     let trimmedSearchText = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-    if filter == .all, trimmedSearchText.isEmpty || collection.name.localizedCaseInsensitiveContains(trimmedSearchText) {
+    if selectedTagIDs.isEmpty,
+       filter == .all,
+       trimmedSearchText.isEmpty || collection.name.localizedCaseInsensitiveContains(trimmedSearchText) {
         return FavoriteCollectionSummary(
             itemCount: allItems.count,
             hiddenCount: allItems.filter(\.isHidden).count
@@ -3287,7 +3401,8 @@ func makeFavoriteCollectionSummary(
         showsHidden: true,
         filter: filter,
         sortOrder: .manual,
-        searchText: searchText
+        searchText: searchText,
+        selectedTagIDs: selectedTagIDs
     )
     return FavoriteCollectionSummary(
         itemCount: matchingItems.count,
@@ -3448,9 +3563,27 @@ private func compareRecentReadEntries(
     favorites: [Favorite],
     showsHidden: Bool,
     filter: FavoriteFilter,
-    searchText: String
+    searchText: String,
+    selectedTagIDs: Set<String> = []
 ) -> Bool {
-    switch (entryLastReadAt(lhs, favorites: favorites, showsHidden: showsHidden, filter: filter, searchText: searchText), entryLastReadAt(rhs, favorites: favorites, showsHidden: showsHidden, filter: filter, searchText: searchText)) {
+    switch (
+        entryLastReadAt(
+            lhs,
+            favorites: favorites,
+            showsHidden: showsHidden,
+            filter: filter,
+            searchText: searchText,
+            selectedTagIDs: selectedTagIDs
+        ),
+        entryLastReadAt(
+            rhs,
+            favorites: favorites,
+            showsHidden: showsHidden,
+            filter: filter,
+            searchText: searchText,
+            selectedTagIDs: selectedTagIDs
+        )
+    ) {
     case let (lhsDate?, rhsDate?) where lhsDate != rhsDate:
         return lhsDate > rhsDate
     case (_?, nil):
@@ -3470,7 +3603,8 @@ private func entryLastReadAt(
     favorites: [Favorite],
     showsHidden: Bool,
     filter: FavoriteFilter,
-    searchText: String
+    searchText: String,
+    selectedTagIDs: Set<String> = []
 ) -> Date? {
     switch entry {
     case let .favorite(favorite):
@@ -3482,7 +3616,8 @@ private func entryLastReadAt(
             showsHidden: showsHidden,
             filter: filter,
             sortOrder: .recentRead,
-            searchText: searchText
+            searchText: searchText,
+            selectedTagIDs: selectedTagIDs
         )
         .compactMap(\.lastReadAt)
         .max()
