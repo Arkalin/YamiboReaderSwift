@@ -17,6 +17,7 @@ public struct Favorite: Codable, Hashable, Identifiable, Sendable {
     public var parentCollectionID: String?
     public var manualOrder: Int
     public var lastReadAt: Date?
+    public var tagIDs: [String]
 
     private enum CodingKeys: String, CodingKey {
         case id
@@ -35,6 +36,7 @@ public struct Favorite: Codable, Hashable, Identifiable, Sendable {
         case parentCollectionID
         case manualOrder
         case lastReadAt
+        case tagIDs
     }
 
     public init(
@@ -53,7 +55,8 @@ public struct Favorite: Codable, Hashable, Identifiable, Sendable {
         lastMangaURL: URL? = nil,
         parentCollectionID: String? = nil,
         manualOrder: Int = 0,
-        lastReadAt: Date? = nil
+        lastReadAt: Date? = nil,
+        tagIDs: [String] = []
     ) {
         self.id = id ?? url.absoluteString
         self.title = title
@@ -71,6 +74,7 @@ public struct Favorite: Codable, Hashable, Identifiable, Sendable {
         self.parentCollectionID = parentCollectionID
         self.manualOrder = manualOrder
         self.lastReadAt = lastReadAt
+        self.tagIDs = tagIDs
     }
 
     public var resolvedDisplayTitle: String {
@@ -96,6 +100,7 @@ public struct Favorite: Codable, Hashable, Identifiable, Sendable {
         parentCollectionID = try container.decodeIfPresent(String.self, forKey: .parentCollectionID)
         manualOrder = try container.decodeIfPresent(Int.self, forKey: .manualOrder) ?? 0
         lastReadAt = try container.decodeIfPresent(Date.self, forKey: .lastReadAt)
+        tagIDs = try container.decodeIfPresent([String].self, forKey: .tagIDs) ?? []
     }
 }
 
@@ -141,5 +146,60 @@ public struct FavoriteCollection: Codable, Hashable, Identifiable, Sendable {
         name = try container.decode(String.self, forKey: .name)
         manualOrder = try container.decodeIfPresent(Int.self, forKey: .manualOrder) ?? 0
         isHidden = try container.decodeIfPresent(Bool.self, forKey: .isHidden) ?? false
+    }
+}
+
+public enum FavoriteTagColor: String, Codable, CaseIterable, Sendable {
+    case red
+    case orange
+    case yellow
+    case green
+    case blue
+    case purple
+    case pink
+    case gray
+}
+
+public struct FavoriteTag: Codable, Hashable, Identifiable, Sendable {
+    public let id: String
+    public var name: String
+    public var color: FavoriteTagColor
+    public var manualOrder: Int
+    public var createdAt: Date
+    public var updatedAt: Date
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case color
+        case manualOrder
+        case createdAt
+        case updatedAt
+    }
+
+    public init(
+        id: String = UUID().uuidString,
+        name: String,
+        color: FavoriteTagColor,
+        manualOrder: Int = 0,
+        createdAt: Date = .now,
+        updatedAt: Date = .now
+    ) {
+        self.id = id
+        self.name = name
+        self.color = color
+        self.manualOrder = manualOrder
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        color = try container.decodeIfPresent(FavoriteTagColor.self, forKey: .color) ?? .gray
+        manualOrder = try container.decodeIfPresent(Int.self, forKey: .manualOrder) ?? 0
+        createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date(timeIntervalSince1970: 0)
+        updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt) ?? Date(timeIntervalSince1970: 0)
     }
 }

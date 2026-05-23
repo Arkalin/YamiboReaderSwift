@@ -3,6 +3,7 @@ import Foundation
 public protocol FavoriteStoring: Sendable {
     func loadFavorites() async -> [Favorite]
     func loadCollections() async -> [FavoriteCollection]
+    func loadTags() async -> [FavoriteTag]
     func loadLibrarySnapshot() async -> FavoriteLibrarySnapshot
     func saveLibrarySnapshot(_ snapshot: FavoriteLibrarySnapshot) async throws
     func saveFavorites(_ favorites: [Favorite]) async throws
@@ -37,6 +38,7 @@ public actor FavoriteStore: FavoriteStoring {
     private let defaults: UserDefaults
     private let key: String
     private let collectionsKey: String
+    private let tagsKey: String
     private let archivedMetadataKey: String
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
@@ -49,25 +51,45 @@ public actor FavoriteStore: FavoriteStoring {
         self.defaults = defaults
         self.key = key
         collectionsKey = "\(key).collections"
+        tagsKey = "\(key).tags"
         archivedMetadataKey = "\(key).archivedMetadata"
     }
 
     public func loadFavorites() async -> [Favorite] {
         let favorites = decodedValue([Favorite].self, forKey: key) ?? []
         let collections = decodedValue([FavoriteCollection].self, forKey: collectionsKey) ?? []
+        let tags = decodedValue([FavoriteTag].self, forKey: tagsKey) ?? []
         let validCollectionIDs = Set(collections.map(\.id))
-        return sanitizeLoadedFavorites(favorites, collections: collections, validCollectionIDs: validCollectionIDs)
+        let validTagIDs = Set(tags.map(\.id))
+        return sanitizeLoadedFavorites(
+            favorites,
+            collections: collections,
+            validCollectionIDs: validCollectionIDs,
+            validTagIDs: validTagIDs
+        )
     }
 
     public func loadCollections() async -> [FavoriteCollection] {
         sanitizeLoadedCollections(decodedValue([FavoriteCollection].self, forKey: collectionsKey) ?? [])
     }
 
+    public func loadTags() async -> [FavoriteTag] {
+        sanitizeTagsForPersistence(decodedValue([FavoriteTag].self, forKey: tagsKey) ?? [])
+    }
+
     public func loadLibrarySnapshot() async -> FavoriteLibrarySnapshot {
-        FavoriteLibrarySnapshot(
-            favorites: await loadFavorites(),
-            collections: await loadCollections(),
-            archivedMetadata: loadArchivedMetadata()
+        let favorites = await loadFavorites()
+        let collections = await loadCollections()
+        let tags = await loadTags()
+        let validTagIDs = Set(tags.map(\.id))
+        return FavoriteLibrarySnapshot(
+            favorites: favorites,
+            collections: collections,
+            tags: tags,
+            archivedMetadata: sanitizeArchivedMetadata(
+                loadArchivedMetadata(),
+                validTagIDs: validTagIDs
+            )
         )
     }
 
@@ -80,6 +102,7 @@ public actor FavoriteStore: FavoriteStoring {
         _ = try persistLibrary(
             favorites: snapshot.favorites,
             collections: snapshot.collections,
+            tags: snapshot.tags,
             archivedMetadata: snapshot.archivedMetadata
         )
     }
@@ -90,6 +113,7 @@ public actor FavoriteStore: FavoriteStoring {
         let snapshot = try persistLibrary(
             favorites: library.snapshot.favorites,
             collections: library.snapshot.collections,
+            tags: library.snapshot.tags,
             archivedMetadata: library.snapshot.archivedMetadata
         )
         return snapshot.favorites
@@ -505,30 +529,43 @@ public actor FavoriteStore: FavoriteStoring {
     }
 
     public func clearAll() async throws {
-        _ = try persistLibrary(favorites: [], collections: [], archivedMetadata: [])
+        _ = try persistLibrary(favorites: [], collections: [], tags: [], archivedMetadata: [])
     }
 
     private func persistLibrary(
         favorites: [Favorite],
         collections: [FavoriteCollection],
+        tags: [FavoriteTag]? = nil,
         archivedMetadata: [FavoriteMetadataArchiveEntry]? = nil
     ) throws -> FavoriteLibrarySnapshot {
         let sanitizedCollections = sanitizeCollectionsForPersistence(collections)
+        let sanitizedTags = sanitizeTagsForPersistence(tags ?? (decodedValue([FavoriteTag].self, forKey: tagsKey) ?? []))
         let validCollectionIDs = Set(sanitizedCollections.map(\.id))
-        let sanitizedFavorites = sanitizeFavoritesForPersistence(favorites, validCollectionIDs: validCollectionIDs)
-        let resolvedArchivedMetadata = archivedMetadata ?? loadArchivedMetadata()
+        let validTagIDs = Set(sanitizedTags.map(\.id))
+        let sanitizedFavorites = sanitizeFavoritesForPersistence(
+            favorites,
+            validCollectionIDs: validCollectionIDs,
+            validTagIDs: validTagIDs
+        )
+        let resolvedArchivedMetadata = sanitizeArchivedMetadata(
+            archivedMetadata ?? loadArchivedMetadata(),
+            validTagIDs: validTagIDs
+        )
 
         do {
             let favoritesData = try encoder.encode(sanitizedFavorites)
             let collectionsData = try encoder.encode(sanitizedCollections)
+            let tagsData = try encoder.encode(sanitizedTags)
             let archivedMetadataData = try encoder.encode(resolvedArchivedMetadata)
             defaults.set(favoritesData, forKey: key)
             defaults.set(collectionsData, forKey: collectionsKey)
+            defaults.set(tagsData, forKey: tagsKey)
             defaults.set(archivedMetadataData, forKey: archivedMetadataKey)
             postChangeNotification()
             return FavoriteLibrarySnapshot(
                 favorites: sanitizedFavorites,
                 collections: sanitizedCollections,
+                tags: sanitizedTags,
                 archivedMetadata: resolvedArchivedMetadata
             )
         } catch {
@@ -549,13 +586,15 @@ public actor FavoriteStore: FavoriteStoring {
     private func sanitizeLoadedFavorites(
         _ favorites: [Favorite],
         collections: [FavoriteCollection],
-        validCollectionIDs: Set<String>
+        validCollectionIDs: Set<String>,
+        validTagIDs: Set<String>
     ) -> [Favorite] {
         let sanitizedFavorites = favorites.map { favorite in
             var favorite = favorite
             if let parentCollectionID = favorite.parentCollectionID, !validCollectionIDs.contains(parentCollectionID) {
                 favorite.parentCollectionID = nil
             }
+            favorite.tagIDs = sanitizedTagIDs(favorite.tagIDs, validTagIDs: validTagIDs)
             return favorite
         }
 
@@ -570,7 +609,11 @@ public actor FavoriteStore: FavoriteStoring {
             }
         }
 
-        return sanitizeFavoritesForPersistence(sanitizedFavorites, validCollectionIDs: validCollectionIDs)
+        return sanitizeFavoritesForPersistence(
+            sanitizedFavorites,
+            validCollectionIDs: validCollectionIDs,
+            validTagIDs: validTagIDs
+        )
     }
 
     private func sanitizeLoadedCollections(_ collections: [FavoriteCollection]) -> [FavoriteCollection] {
@@ -586,7 +629,8 @@ public actor FavoriteStore: FavoriteStoring {
 
     private func sanitizeFavoritesForPersistence(
         _ favorites: [Favorite],
-        validCollectionIDs: Set<String>
+        validCollectionIDs: Set<String>,
+        validTagIDs: Set<String>
     ) -> [Favorite] {
         let rootFavorites = favorites
             .filter { favorite in
@@ -595,6 +639,7 @@ public actor FavoriteStore: FavoriteStoring {
             .map { favorite -> Favorite in
                 var favorite = favorite
                 favorite.parentCollectionID = nil
+                favorite.tagIDs = sanitizedTagIDs(favorite.tagIDs, validTagIDs: validTagIDs)
                 return favorite
             }
             .sorted { lhs, rhs in
@@ -618,12 +663,42 @@ public actor FavoriteStore: FavoriteStoring {
                 .map { index, favorite in
                     var favorite = favorite
                     favorite.parentCollectionID = collectionID
+                    favorite.tagIDs = sanitizedTagIDs(favorite.tagIDs, validTagIDs: validTagIDs)
                     favorite.manualOrder = index
                     return favorite
                 }
             sanitized.append(contentsOf: collectionFavorites)
         }
         return sanitized
+    }
+
+    private func sanitizeTagsForPersistence(_ tags: [FavoriteTag]) -> [FavoriteTag] {
+        tags.sorted { lhs, rhs in
+            if lhs.manualOrder != rhs.manualOrder {
+                return lhs.manualOrder < rhs.manualOrder
+            }
+            return lhs.id < rhs.id
+        }
+    }
+
+    private func sanitizeArchivedMetadata(
+        _ archivedMetadata: [FavoriteMetadataArchiveEntry],
+        validTagIDs: Set<String>
+    ) -> [FavoriteMetadataArchiveEntry] {
+        archivedMetadata.map { entry in
+            var entry = entry
+            entry.tagIDs = sanitizedTagIDs(entry.tagIDs, validTagIDs: validTagIDs)
+            return entry
+        }
+    }
+
+    private func sanitizedTagIDs(_ tagIDs: [String], validTagIDs: Set<String>) -> [String] {
+        var seen: Set<String> = []
+        return tagIDs.filter { tagID in
+            guard validTagIDs.contains(tagID), !seen.contains(tagID) else { return false }
+            seen.insert(tagID)
+            return true
+        }
     }
 
     private func sanitizeCollectionsForPersistence(_ collections: [FavoriteCollection]) -> [FavoriteCollection] {
