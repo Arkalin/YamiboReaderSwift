@@ -1083,6 +1083,11 @@ final class MangaReaderModelTests: XCTestCase {
         XCTAssertFalse(bulkDraft.selectedTagIDs.contains("tag-0"))
         XCTAssertFalse(bulkDraft.selectedTagIDs.contains("tag-1"))
         XCTAssertEqual(bulkDraft.selectedTagIDs.count, 17)
+
+        var successfulBulkDraft = FavoriteTagSelectionDraft(selectedTagIDs: ["tag-0"])
+        XCTAssertEqual(successfulBulkDraft.selectAll(visibleTagIDs: ["tag-0", "tag-1", "tag-2"]), .changed)
+        XCTAssertEqual(successfulBulkDraft.selectedTagIDs, ["tag-0", "tag-1", "tag-2"])
+        XCTAssertEqual(successfulBulkDraft.selectAll(visibleTagIDs: ["tag-1", "tag-2"]), .unchanged)
     }
 
     func testFavoriteTagPickerSortingUsesRequestedOrderAndAssociationCounts() {
@@ -1104,6 +1109,27 @@ final class MangaReaderModelTests: XCTestCase {
         XCTAssertEqual(sortedFavoriteTags(tags, favorites: favorites, sortOrder: .nameDescending).map(\.id), ["old", "popular", "same-a", "same-b"])
         XCTAssertEqual(sortedFavoriteTags(tags, favorites: favorites, sortOrder: .updatedAtDescending).map(\.id), ["popular", "same-b", "same-a", "old"])
         XCTAssertEqual(sortedFavoriteTags(tags, favorites: favorites, sortOrder: .associationCountDescending).map(\.id), ["popular", "same-a", "same-b", "old"])
+    }
+
+    func testFavoriteTagSortingUsesManualOrderAndIDAsStableTieBreakers() {
+        let baseDate = Date(timeIntervalSince1970: 100)
+        let laterManual = FavoriteTag(id: "b-later", name: "同名", color: .red, manualOrder: 2, updatedAt: baseDate)
+        let earlierManual = FavoriteTag(id: "a-earlier", name: "同名", color: .blue, manualOrder: 1, updatedAt: baseDate)
+        let sameManualHigherID = FavoriteTag(id: "z-same", name: "同名", color: .gray, manualOrder: 1, updatedAt: baseDate)
+        let tags = [laterManual, sameManualHigherID, earlierManual]
+
+        XCTAssertEqual(
+            sortedFavoriteTags(tags, favorites: [], sortOrder: .name).map(\.id),
+            ["a-earlier", "z-same", "b-later"]
+        )
+        XCTAssertEqual(
+            sortedFavoriteTags(tags, favorites: [], sortOrder: .updatedAt).map(\.id),
+            ["a-earlier", "z-same", "b-later"]
+        )
+        XCTAssertEqual(
+            sortedFavoriteTags(tags, favorites: [], sortOrder: .associationCount).map(\.id),
+            ["a-earlier", "z-same", "b-later"]
+        )
     }
 
     func testFavoriteTagPickerReorderingAvailabilityRequiresManualSortAndEmptySearch() {
