@@ -365,6 +365,44 @@ final class MangaReaderModelTests: XCTestCase {
         }
     }
 
+    func testFavoritesViewModelCanOverwriteFavoriteTagsByFavoriteID() async throws {
+        let keyPrefix = UUID().uuidString
+        let favoriteStore = FavoriteStore(key: "\(keyPrefix).favorites")
+        let favorite = Favorite(
+            title: "标签测试收藏",
+            url: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=829&mobile=2")!,
+            tagIDs: ["old"]
+        )
+        let oldTag = FavoriteTag(id: "old", name: "旧标签", color: .gray)
+        let newTag = FavoriteTag(id: "new", name: "新标签", color: .red)
+        try await favoriteStore.saveLibrarySnapshot(
+            FavoriteLibrarySnapshot(
+                favorites: [favorite],
+                collections: [],
+                tags: [oldTag, newTag]
+            )
+        )
+
+        let appContext = YamiboAppContext(
+            sessionStore: SessionStore(key: "\(keyPrefix).session"),
+            settingsStore: SettingsStore(key: "\(keyPrefix).settings"),
+            favoriteStore: favoriteStore,
+            readerCacheStore: ReaderCacheStore(baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)),
+            mangaDirectoryStore: MangaDirectoryStore(baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true))
+        )
+        let viewModel = await MainActor.run {
+            FavoritesViewModel(appContext: appContext, favoriteStore: favoriteStore)
+        }
+
+        await viewModel.setTagIDs(["new"], forFavoriteID: favorite.id)
+
+        let stored = await favoriteStore.favorite(id: favorite.id)
+        await MainActor.run {
+            XCTAssertEqual(stored?.tagIDs, ["new"])
+            XCTAssertEqual(viewModel.favorites.first?.tagIDs, ["new"])
+        }
+    }
+
     func testFavoritesViewModelCanToggleHiddenState() async throws {
         let keyPrefix = UUID().uuidString
         let favoriteStore = FavoriteStore(key: "\(keyPrefix).favorites")
