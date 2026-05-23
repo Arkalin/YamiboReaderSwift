@@ -422,6 +422,55 @@ import Testing
     #expect(deleted.archivedMetadata.first?.tagIDs == [])
 }
 
+@Test func favoriteStoreCanOverwriteTagsForMultipleFavoritesWithoutMovingThem() async throws {
+    let defaults = try #require(UserDefaults(suiteName: "favorite-batch-tag-tests"))
+    defaults.removePersistentDomain(forName: "favorite-batch-tag-tests")
+    let store = FavoriteStore(defaults: defaults, key: "favorites")
+    let rootURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=406&mobile=2"))
+    let collectionURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=407&mobile=2"))
+    let untouchedURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=408&mobile=2"))
+    let oldTag = FavoriteTag(id: "old", name: "旧", color: .gray, manualOrder: 0)
+    let newTag = FavoriteTag(id: "new", name: "新", color: .red, manualOrder: 1)
+    let rootFavorite = Favorite(title: "根收藏", url: rootURL, manualOrder: 4, tagIDs: [oldTag.id])
+    let collectionFavorite = Favorite(
+        title: "合集收藏",
+        url: collectionURL,
+        parentCollectionID: "collection-1",
+        manualOrder: 2,
+        tagIDs: [oldTag.id]
+    )
+    let untouchedFavorite = Favorite(title: "未选择", url: untouchedURL, manualOrder: 5, tagIDs: [oldTag.id])
+    let collection = FavoriteCollection(id: "collection-1", name: "合集", manualOrder: 0)
+
+    try await store.saveLibrarySnapshot(
+        FavoriteLibrarySnapshot(
+            favorites: [rootFavorite, collectionFavorite, untouchedFavorite],
+            collections: [collection],
+            tags: [oldTag, newTag]
+        )
+    )
+    let baseline = await store.loadLibrarySnapshot()
+    let baselineRoot = try #require(baseline.favorites.first(where: { $0.id == rootFavorite.id }))
+    let baselineCollectionFavorite = try #require(baseline.favorites.first(where: { $0.id == collectionFavorite.id }))
+
+    let updated = try await store.setTagIDs([newTag.id], forFavoriteIDs: [rootFavorite.id, collectionFavorite.id])
+    let updatedRoot = try #require(updated.favorites.first(where: { $0.id == rootFavorite.id }))
+    let updatedCollectionFavorite = try #require(updated.favorites.first(where: { $0.id == collectionFavorite.id }))
+    let unchangedFavorite = try #require(updated.favorites.first(where: { $0.id == untouchedFavorite.id }))
+
+    #expect(updatedRoot.tagIDs == [newTag.id])
+    #expect(updatedRoot.parentCollectionID == nil)
+    #expect(updatedRoot.manualOrder == baselineRoot.manualOrder)
+    #expect(updatedCollectionFavorite.tagIDs == [newTag.id])
+    #expect(updatedCollectionFavorite.parentCollectionID == collection.id)
+    #expect(updatedCollectionFavorite.manualOrder == baselineCollectionFavorite.manualOrder)
+    #expect(unchangedFavorite.tagIDs == [oldTag.id])
+
+    let cleared = try await store.setTagIDs([], forFavoriteIDs: [rootFavorite.id, collectionFavorite.id])
+    #expect(cleared.favorites.first(where: { $0.id == rootFavorite.id })?.tagIDs == [])
+    #expect(cleared.favorites.first(where: { $0.id == collectionFavorite.id })?.tagIDs == [])
+}
+
 @Test func favoriteStoreUpdatesMangaProgress() async throws {
     let defaults = try #require(UserDefaults(suiteName: "favorite-manga-progress-tests"))
     defaults.removePersistentDomain(forName: "favorite-manga-progress-tests")
