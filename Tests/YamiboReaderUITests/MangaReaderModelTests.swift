@@ -973,6 +973,37 @@ final class MangaReaderModelTests: XCTestCase {
         )
     }
 
+    func testFavoriteTagPickerSearchUsesNameContainmentOnly() {
+        let tags = [
+            FavoriteTag(id: "cn", name: "百合", color: .red, manualOrder: 0),
+            FavoriteTag(id: "jp", name: "恋爱", color: .blue, manualOrder: 1),
+            FavoriteTag(id: "en", name: "Drama", color: .gray, manualOrder: 2)
+        ]
+
+        XCTAssertEqual(filteredFavoriteTags(tags, searchText: "合").map(\.id), ["cn"])
+        XCTAssertEqual(filteredFavoriteTags(tags, searchText: "dra").map(\.id), ["en"])
+        XCTAssertEqual(filteredFavoriteTags(tags, searchText: "bai").map(\.id), [])
+    }
+
+    func testFavoriteTagSelectionDraftEnforcesLimitAndVisibleRangeBulkActions() {
+        let initialIDs = (0..<19).map { "tag-\($0)" }
+        var draft = FavoriteTagSelectionDraft(selectedTagIDs: Set(initialIDs))
+
+        XCTAssertEqual(draft.toggle("tag-19"), .changed)
+        XCTAssertEqual(draft.selectedTagIDs.count, 20)
+        XCTAssertEqual(draft.toggle("tag-20"), .selectionLimitExceeded(max: 20))
+        XCTAssertFalse(draft.selectedTagIDs.contains("tag-20"))
+
+        var bulkDraft = FavoriteTagSelectionDraft(selectedTagIDs: Set(initialIDs))
+        XCTAssertEqual(bulkDraft.selectAll(visibleTagIDs: ["tag-19", "tag-20"]), .selectionLimitExceeded(max: 20))
+        XCTAssertEqual(bulkDraft.selectedTagIDs, Set(initialIDs))
+
+        XCTAssertEqual(bulkDraft.deselectAll(visibleTagIDs: ["tag-0", "tag-1", "missing"]), .changed)
+        XCTAssertFalse(bulkDraft.selectedTagIDs.contains("tag-0"))
+        XCTAssertFalse(bulkDraft.selectedTagIDs.contains("tag-1"))
+        XCTAssertEqual(bulkDraft.selectedTagIDs.count, 17)
+    }
+
     func testFavoriteAccentAppearanceUsesStoredTypeColors() {
         let appearance = FavoriteAppearanceSettings(
             collection: .purple,
