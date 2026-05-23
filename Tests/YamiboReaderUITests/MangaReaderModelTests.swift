@@ -1031,6 +1031,41 @@ final class MangaReaderModelTests: XCTestCase {
         XCTAssertFalse(canReorderFavoriteTags(sortOrder: .name, searchText: ""))
     }
 
+    func testFavoriteTagChipsUseManualOrderOverflowAndSearchPriority() {
+        let tags = [
+            FavoriteTag(id: "hidden", name: "隐藏", color: .gray, manualOrder: 0),
+            FavoriteTag(id: "manual-a", name: "日常", color: .red, manualOrder: 1),
+            FavoriteTag(id: "manual-b", name: "长篇", color: .blue, manualOrder: 2),
+            FavoriteTag(id: "match", name: "百合", color: .purple, manualOrder: 3),
+            FavoriteTag(id: "manual-c", name: "完结", color: .green, manualOrder: 4)
+        ]
+        let favorite = Favorite(
+            title: "带标签收藏",
+            url: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=854&mobile=2")!,
+            tagIDs: ["manual-c", "match", "manual-b", "manual-a"]
+        )
+
+        XCTAssertEqual(
+            makeFavoriteTagChipSummary(for: favorite, tags: tags, searchText: "").chips.map(\.id),
+            ["manual-a", "manual-b", "match"]
+        )
+        XCTAssertEqual(
+            makeFavoriteTagChipSummary(for: favorite, tags: tags, searchText: "").overflowCount,
+            1
+        )
+        XCTAssertEqual(
+            makeFavoriteTagChipSummary(for: favorite, tags: tags, searchText: "百").chips.map(\.id),
+            ["match", "manual-a", "manual-b"]
+        )
+        XCTAssertTrue(
+            makeFavoriteTagChipSummary(
+                for: Favorite(title: "无标签", url: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=855&mobile=2")!),
+                tags: tags,
+                searchText: ""
+            ).chips.isEmpty
+        )
+    }
+
     func testFavoriteAccentAppearanceUsesStoredTypeColors() {
         let appearance = FavoriteAppearanceSettings(
             collection: .purple,
