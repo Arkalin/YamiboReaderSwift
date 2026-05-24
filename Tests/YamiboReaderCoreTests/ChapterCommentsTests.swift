@@ -76,7 +76,7 @@ import Testing
     #expect(page.comments.map(\.authorName) == ["读者甲", "读者丙"])
     #expect(page.comments.map(\.body) == ["这章很好", "这期神了"])
     #expect(page.comments.first?.metadata == "发表于 2026-5-1 12:00")
-    #expect(page.isBoundaryClosed == true)
+    #expect(page.isBoundaryClosed == false)
 }
 
 @Test func chapterCommentsParserFiltersDefaultRatingReasonTemplatesExactly() throws {
@@ -105,4 +105,47 @@ import Testing
     let page = try ChapterCommentsHTMLParser.parseInitialPage(html: html, target: target)
 
     #expect(page.comments.map(\.body) == ["我很赞同这个观点"])
+}
+
+@Test func chapterCommentsParserIncludesSamePageRepliesUntilNextOwnerPost() throws {
+    let html = """
+    <html><body>
+      <div id="post_100">
+        <div class="authi"><em title="楼主"></em><a class="author">楼主</a></div>
+        <div class="t_f" id="postmessage_100">第一章<br>正文</div>
+      </div>
+      <div id="post_101">
+        <div class="authi"><a class="author">读者甲</a></div>
+        <div class="t_f" id="postmessage_101">
+          <div class="quote"><blockquote>引用内容</blockquote></div>
+          自己的回复
+        </div>
+      </div>
+      <div id="post_102">
+        <div class="authi"><a class="author">读者乙</a></div>
+        <div class="t_f" id="postmessage_102">第二条回复</div>
+      </div>
+      <div id="post_200">
+        <div class="authi"><em title="楼主"></em><a class="author">楼主</a></div>
+        <div class="t_f" id="postmessage_200">第二章<br>正文</div>
+      </div>
+      <div id="post_103">
+        <div class="authi"><a class="author">读者丙</a></div>
+        <div class="t_f" id="postmessage_103">下一章评论</div>
+      </div>
+    </body></html>
+    """
+    let target = ReaderChapterCommentTarget(
+        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=42&mobile=2")),
+        view: 1,
+        ownerPostID: "100",
+        title: "第一章"
+    )
+
+    let page = try ChapterCommentsHTMLParser.parseInitialPage(html: html, target: target)
+
+    #expect(page.comments.map(\.source) == [.reply, .reply])
+    #expect(page.comments.map(\.authorName) == ["读者甲", "读者乙"])
+    #expect(page.comments.map(\.body) == ["自己的回复", "第二条回复"])
+    #expect(page.isBoundaryClosed == true)
 }
