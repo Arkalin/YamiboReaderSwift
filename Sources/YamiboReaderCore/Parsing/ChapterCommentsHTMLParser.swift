@@ -18,7 +18,9 @@ public enum ChapterCommentsHTMLParser {
         var comments: [ChapterComment] = []
         comments.append(contentsOf: try postComments(in: document, target: target))
         comments.append(contentsOf: try ratingReasons(in: document, target: target))
-        return ChapterCommentsPage(target: target, comments: comments, isBoundaryClosed: true)
+        let replies = try samePageReplies(in: document, target: target)
+        comments.append(contentsOf: replies.comments)
+        return ChapterCommentsPage(target: target, comments: comments, isBoundaryClosed: replies.isBoundaryClosed)
     }
 
     private static func postComments(
@@ -64,6 +66,104 @@ public enum ChapterCommentsHTMLParser {
                 postID: target.ownerPostID
             )
         }
+    }
+
+    private static func samePageReplies(
+        in document: Document,
+        target: ReaderChapterCommentTarget
+    ) throws -> (comments: [ChapterComment], isBoundaryClosed: Bool) {
+        let messageNodes = try document.select("[id^=postmessage_]").array()
+        var foundTarget = false
+        var comments: [ChapterComment] = []
+
+        for message in messageNodes {
+            guard let postID = postID(from: message) else { continue }
+            if postID == target.ownerPostID {
+                foundTarget = true
+                continue
+            }
+            guard foundTarget else { continue }
+
+            if isOwnerPost(message) {
+                return (comments, true)
+            }
+
+            guard let body = try replyBody(from: message), !body.isEmpty else {
+                continue
+            }
+            comments.append(
+                ChapterComment(
+                    id: "\(target.ownerPostID):reply:\(postID)",
+                    source: .reply,
+                    authorName: authorName(for: message),
+                    body: body,
+                    postID: postID
+                )
+            )
+        }
+
+        return (comments, false)
+    }
+
+    private static func replyBody(from message: Element) throws -> String? {
+        let fragment = try SwiftSoup.parseBodyFragment(try message.html())
+        guard let body = fragment.body() else { return nil }
+        try body.select(".quote, blockquote, i").remove()
+        let text = normalizeText(try body.text())
+        return text.isEmpty ? nil : text
+    }
+
+    private static func isOwnerPost(_ message: Element) -> Bool {
+        guard let container = postContainer(for: message) else {
+            return false
+        }
+        if ((try? container.select("[title=楼主]").isEmpty()) == false) {
+            return true
+        }
+        return false
+    }
+
+    private static func authorName(for message: Element) -> String {
+        guard let container = postContainer(for: message) else {
+            return ""
+        }
+        let selectors = [
+            ".authi .author",
+            ".authi a[href*=space-uid]",
+            ".authi a",
+            ".psta a.xi2",
+            ".psta a"
+        ]
+        for selector in selectors {
+            if let text = try? container.select(selector).first()?.text(),
+               let normalized = nilIfEmpty(normalizeText(text)) {
+                return normalized
+            }
+        }
+        return ""
+    }
+
+    private static func postContainer(for element: Element) -> Element? {
+        var current: Element? = element
+        while let candidate = current {
+            if let id = try? candidate.attr("id"),
+               id.hasPrefix("post_") {
+                return candidate
+            }
+            if ((try? candidate.select(".authi").isEmpty()) == false),
+               ((try? candidate.select("[id^=postmessage_]").isEmpty()) == false) {
+                return candidate
+            }
+            current = candidate.parent()
+        }
+        return nil
+    }
+
+    private static func postID(from element: Element) -> String? {
+        let raw = (try? element.attr("id"))?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard raw.hasPrefix("postmessage_") else { return nil }
+        let value = raw.replacingOccurrences(of: "postmessage_", with: "")
+        return value.isEmpty ? nil : value
     }
 
     private static func normalizeRatingReason(_ text: String) -> String {
