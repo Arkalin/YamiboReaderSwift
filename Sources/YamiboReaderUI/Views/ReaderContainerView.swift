@@ -175,7 +175,7 @@ public struct ReaderContainerView: View {
                 }
             }
             .sheet(isPresented: $showingChapterComments) {
-                ReaderChapterCommentsSheet(model: model, target: chapterCommentsTarget)
+                ReaderChapterCommentsSheet(model: model, target: chapterCommentsTarget, appModel: appModel)
             }
             .sheet(isPresented: $showingCachePanel) {
                 ReaderCachePanel(model: model) {

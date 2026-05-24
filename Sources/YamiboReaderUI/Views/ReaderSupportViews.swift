@@ -613,6 +613,7 @@ struct ReaderChapterSheet: View {
 struct ReaderChapterCommentsSheet: View {
     @ObservedObject var model: ReaderContainerModel
     let target: ReaderChapterCommentTarget?
+    let appModel: YamiboAppModel
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -623,11 +624,14 @@ struct ReaderChapterCommentsSheet: View {
                 loadMoreError: model.chapterCommentsLoadMoreError,
                 refreshError: model.chapterCommentsRefreshError,
                 retry: { target in Task { await model.loadChapterComments(for: target) } },
-                loadNext: { Task { await model.loadNextChapterCommentsPage() } }
+                loadNext: { Task { await model.loadNextChapterCommentsPage() } },
+                openOriginalPost: openOriginalPost(_:)
             )
-                .navigationTitle(L10n.string("reader.chapter_comments"))
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
+                    ToolbarItem(placement: .principal) {
+                        ReaderChapterCommentsToolbarTitle(target: target)
+                    }
                     ToolbarItem(placement: .topBarLeading) {
                         Button {
                             Task { await model.refreshChapterComments(for: target) }
@@ -645,11 +649,20 @@ struct ReaderChapterCommentsSheet: View {
             await model.loadChapterComments(for: target)
         }
     }
+
+    private func openOriginalPost(_ url: URL) {
+        dismiss()
+        Task {
+            await model.saveProgress()
+            appModel.dismissReader(openThreadInForum: url)
+        }
+    }
 }
 
 struct MangaChapterCommentsSheet: View {
     @ObservedObject var model: MangaReaderModel
     let target: ReaderChapterCommentTarget?
+    let appModel: YamiboAppModel
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -660,11 +673,14 @@ struct MangaChapterCommentsSheet: View {
                 loadMoreError: model.chapterCommentsLoadMoreError,
                 refreshError: model.chapterCommentsRefreshError,
                 retry: { target in Task { await model.loadChapterComments(for: target) } },
-                loadNext: { Task { await model.loadNextChapterCommentsPage() } }
+                loadNext: { Task { await model.loadNextChapterCommentsPage() } },
+                openOriginalPost: openOriginalPost(_:)
             )
-            .navigationTitle(L10n.string("reader.chapter_comments"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .principal) {
+                    ReaderChapterCommentsToolbarTitle(target: target)
+                }
                 ToolbarItem(placement: .topBarLeading) {
                     Button {
                         Task { await model.refreshChapterComments(for: target) }
@@ -682,6 +698,14 @@ struct MangaChapterCommentsSheet: View {
             await model.loadChapterComments(for: target)
         }
     }
+
+    private func openOriginalPost(_ url: URL) {
+        dismiss()
+        Task {
+            await model.saveProgress()
+            appModel.dismissManga(openThreadInForum: url)
+        }
+    }
 }
 
 private struct ReaderChapterCommentsContent: View {
@@ -691,6 +715,7 @@ private struct ReaderChapterCommentsContent: View {
     let refreshError: String?
     let retry: (ReaderChapterCommentTarget) -> Void
     let loadNext: () -> Void
+    let openOriginalPost: (URL) -> Void
 
     var body: some View {
         content
@@ -748,7 +773,11 @@ private struct ReaderChapterCommentsContent: View {
                     }
                     Section {
                         ForEach(page.comments) { comment in
-                            ReaderChapterCommentRow(comment: comment)
+                            ReaderChapterCommentRow(
+                                comment: comment,
+                                originalPostURL: comment.originalPostURL(threadURL: target.threadURL),
+                                openOriginalPost: openOriginalPost
+                            )
                         }
                     }
                     if page.nextView != nil {
@@ -774,8 +803,27 @@ private struct ReaderChapterCommentsContent: View {
     }
 }
 
+private struct ReaderChapterCommentsToolbarTitle: View {
+    let target: ReaderChapterCommentTarget?
+
+    var body: some View {
+        VStack(spacing: 1) {
+            Text(L10n.string("reader.chapter_comments"))
+                .font(.headline)
+            if let title = target?.title, !title.isEmpty {
+                Text(title)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+        }
+    }
+}
+
 private struct ReaderChapterCommentRow: View {
     let comment: ChapterComment
+    let originalPostURL: URL?
+    let openOriginalPost: (URL) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -791,6 +839,16 @@ private struct ReaderChapterCommentRow: View {
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                 }
+                Spacer(minLength: 8)
+                if let originalPostURL {
+                    Button {
+                        openOriginalPost(originalPostURL)
+                    } label: {
+                        Image(systemName: "arrow.up.forward.square")
+                    }
+                    .buttonStyle(.borderless)
+                    .accessibilityLabel(L10n.string("reader.open_original_post"))
+                }
             }
             Text(comment.body)
                 .font(.body)
@@ -800,14 +858,7 @@ private struct ReaderChapterCommentRow: View {
     }
 
     private var sourceText: String {
-        switch comment.source {
-        case .postComment:
-            L10n.string("reader.comment_source.post_comment")
-        case .ratingReason:
-            L10n.string("reader.comment_source.rating_reason")
-        case .reply:
-            L10n.string("reader.comment_source.reply")
-        }
+        comment.source.displayLabel
     }
 }
 
