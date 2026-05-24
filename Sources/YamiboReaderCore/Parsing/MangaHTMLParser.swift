@@ -64,6 +64,26 @@ public enum MangaHTMLParser {
         }
     }
 
+    public static func extractFirstPostID(from html: String) -> String? {
+        guard let document = try? SwiftSoup.parse(html) else { return nil }
+        let selectors = [
+            "[id^=postmessage_]",
+            "[id^=pid]",
+            "[id^=post_]"
+        ]
+        for selector in selectors {
+            guard let rawID = try? document.select(selector).first()?.attr("id") else {
+                continue
+            }
+            for prefix in ["postmessage_", "pid", "post_"] {
+                if let postID = postID(fromRawID: rawID, prefix: prefix) {
+                    return postID
+                }
+            }
+        }
+        return nil
+    }
+
     public static func extractSectionName(from html: String) -> String? {
         guard let document = try? SwiftSoup.parse(html) else { return nil }
         let selectors = [
@@ -228,6 +248,13 @@ public enum MangaHTMLParser {
     private static func extractUID(from url: String) -> String? {
         HTMLTextExtractor.firstMatch(pattern: #"uid=(\d+)"#, in: url)?.dropFirst().first
             ?? HTMLTextExtractor.firstMatch(pattern: #"uid-(\d+)"#, in: url)?.dropFirst().first
+    }
+
+    private static func postID(fromRawID rawID: String, prefix: String) -> String? {
+        guard rawID.hasPrefix(prefix) else { return nil }
+        let postID = String(rawID.dropFirst(prefix.count))
+        guard !postID.isEmpty, postID.allSatisfy(\.isNumber) else { return nil }
+        return postID
     }
 
     private static func parseDate(_ raw: String?) -> Date? {

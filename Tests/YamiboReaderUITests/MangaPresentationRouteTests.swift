@@ -4,7 +4,7 @@ import XCTest
 
 @MainActor
 final class MangaPresentationRouteTests: XCTestCase {
-    func testMangaFavoriteLaunchNeedsProbeBlocker() {
+    func testMangaFavoriteLaunchDoesNotNeedProbeBlocker() {
         let manga = Favorite(
             title: "测试漫画",
             url: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=704&mobile=2")!,
@@ -20,7 +20,7 @@ final class MangaPresentationRouteTests: XCTestCase {
             url: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=706&mobile=2")!
         )
 
-        XCTAssertTrue(favoriteLaunchNeedsMangaProbeBlocker(manga))
+        XCTAssertFalse(favoriteLaunchNeedsMangaProbeBlocker(manga))
         XCTAssertFalse(favoriteLaunchNeedsMangaProbeBlocker(novel))
         XCTAssertFalse(favoriteLaunchNeedsMangaProbeBlocker(unknown))
     }

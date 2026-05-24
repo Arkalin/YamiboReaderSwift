@@ -15,6 +15,7 @@ private enum StubURLProtocolOutput {
 
 private final class StubURLProtocol: URLProtocol {
     nonisolated(unsafe) static var handler: ((URLRequest) -> StubURLProtocolOutput)? = defaultHandler()
+    nonisolated(unsafe) static var tid28UnfilteredCachePolicy: URLRequest.CachePolicy?
 
     static func defaultHandler() -> (URLRequest) -> StubURLProtocolOutput {
         { request in
@@ -97,6 +98,182 @@ private final class StubURLProtocol: URLProtocol {
             }
             let page = absolute.contains("page=3") ? "3" : "1"
             let body = "<html><body><div class=\"message\">只看楼主缓存页\(page)</div></body></html>"
+            return .response(StubURLProtocolResponse(statusCode: 200, body: body))
+        }
+
+        if absolute.contains("tid=25") {
+            return .response(
+                StubURLProtocolResponse(
+                    statusCode: 200,
+                    body: """
+                    <html><body>
+                      <div id="pid41257246">
+                        <div class="message">新解析章节<br>新正文</div>
+                      </div>
+                    </body></html>
+                    """
+                )
+            )
+        }
+
+        if absolute.contains("action=viewratings"),
+           absolute.contains("tid=26"),
+           absolute.contains("pid=2601") {
+            return .response(
+                StubURLProtocolResponse(
+                    statusCode: 200,
+                    body: """
+                    <html><body>
+                      <ul class="post_box cl">
+                        <li class="flex-box mli">
+                          <div><span class="z">积分</span></div>
+                          <div><span class="z">用户名</span></div>
+                          <div><span class="y">时间</span></div>
+                        </li>
+                        <li class="flex-box mli">
+                          <div><span class="z">积分 +2 点</span></div>
+                          <div><span class="z">读者甲</span></div>
+                          <div><span class="y">2026-5-6 00:10</span></div>
+                        </li>
+                        <li class="flex-box mli"><div><span class="z">好萌好萌好萌</span></div></li>
+                        <li class="flex-box mli">
+                          <div><span class="z">积分 +5 点</span></div>
+                          <div><span class="z">读者乙</span></div>
+                          <div><span class="y">2024-11-23 11:15</span></div>
+                        </li>
+                        <li class="flex-box mli"><div><span class="z">完整评分理由</span></div></li>
+                      </ul>
+                    </body></html>
+                    """
+                )
+            )
+        }
+
+        if absolute.contains("tid=26") {
+            let body = absolute.contains("authorid=42")
+                ? """
+                <html><body>
+                  <div id="pid2601">
+                    <div class="message">episode 16<br>正文</div>
+                    <div id="ratelog_2601">
+                      <ul class="post_box cl">
+                        <li class="flex-box mli p0">
+                          <div>参与人数</div><div>积分</div><div>理由</div>
+                        </li>
+                        <li class="flex-box mli p0">
+                          <div><a>读者甲</a></div><div> + 2</div><div>有效评分理由</div>
+                        </li>
+                        <li class="flex-box mli p0">
+                          <div><a href="forum.php?mod=misc&amp;action=viewratings&amp;tid=26&amp;pid=2601&amp;mobile=2" title="查看全部评分">查看全部评分</a></div>
+                        </li>
+                      </ul>
+                    </div>
+                  </div>
+                </body></html>
+                """
+                : """
+                <html><body>
+                  <div id="pid9999"><div class="message">普通第 2 页没有目标楼层</div></div>
+                </body></html>
+                """
+            return .response(StubURLProtocolResponse(statusCode: 200, body: body))
+        }
+
+        if absolute.contains("tid=27") {
+            let body = absolute.contains("authorid=42")
+                ? """
+                <html><body>
+                  <div class="plc cl" id="pid2701">
+                    <ul class="authi"><li class="mtit"><a href="home.php?mod=space&uid=42&mobile=2">楼主</a></li></ul>
+                    <div class="message">第一章<br>正文</div>
+                  </div>
+                  <div class="plc cl" id="pid2703">
+                    <ul class="authi"><li class="mtit"><a href="home.php?mod=space&uid=42&mobile=2">楼主</a></li></ul>
+                    <div class="message">第二章<br>正文</div>
+                  </div>
+                </body></html>
+                """
+                : """
+                <html><body>
+                  <div class="plc cl" id="pid2701">
+                    <ul class="authi"><li class="mtit"><a href="home.php?mod=space&uid=42&mobile=2">楼主</a></li></ul>
+                    <div class="message">第一章<br>正文</div>
+                  </div>
+                  <div class="plc cl" id="pid2702">
+                    <ul class="authi"><li class="mtit"><a href="home.php?mod=space&uid=77&mobile=2">读者甲</a></li></ul>
+                    <div class="message">楼间回复</div>
+                  </div>
+                  <div class="plc cl" id="pid2703">
+                    <ul class="authi"><li class="mtit"><a href="home.php?mod=space&uid=42&mobile=2">楼主</a></li></ul>
+                    <div class="message">第二章<br>正文</div>
+                  </div>
+                </body></html>
+                """
+            return .response(StubURLProtocolResponse(statusCode: 200, body: body))
+        }
+
+        if absolute.contains("tid=28") || absolute.contains("ptid=28") {
+            if !absolute.contains("authorid=42") {
+                tid28UnfilteredCachePolicy = request.cachePolicy
+            }
+            let body = absolute.contains("authorid=42")
+                ? """
+                <html><body>
+                  <div class="plc cl" id="pid2801">
+                    <ul class="authi"><li class="mtit"><a href="home.php?mod=space&uid=42&mobile=2">楼主</a></li></ul>
+                    <div class="message">第一章<br>正文</div>
+                  </div>
+                </body></html>
+                """
+                : """
+                <html><body>
+                  <div class="plc cl" id="pid2801">
+                    <ul class="authi"><li class="mtit"><a href="home.php?mod=space&uid=42&mobile=2">楼主</a></li></ul>
+                    <div class="message">第一章<br>正文</div>
+                  </div>
+                  <div class="plc cl" id="pid2802">
+                    <ul class="authi"><li class="mtit"><a href="home.php?mod=space&uid=77&mobile=2">读者甲</a></li></ul>
+                    <div class="message">楼间回复</div>
+                  </div>
+                </body></html>
+                """
+            return .response(StubURLProtocolResponse(statusCode: 200, body: body))
+        }
+
+        if absolute.contains("tid=29") || absolute.contains("ptid=29") {
+            let body: String
+            if absolute.contains("authorid=42") {
+                body = """
+                <html><body>
+                  <div class="plc cl" id="pid2901">
+                    <ul class="authi"><li class="mtit"><a href="home.php?mod=space&uid=42&mobile=2">楼主</a></li></ul>
+                    <div class="message">第一章<br>正文</div>
+                  </div>
+                </body></html>
+                """
+            } else if absolute.contains("mod=redirect"), absolute.contains("pid=2901") {
+                body = """
+                <html><body>
+                  <div class="plc cl" id="pid2901">
+                    <ul class="authi"><li class="mtit"><a href="home.php?mod=space&uid=42&mobile=2">楼主</a></li></ul>
+                    <div class="message">第一章<br>正文</div>
+                  </div>
+                  <div class="plc cl" id="pid2902">
+                    <ul class="authi"><li class="mtit"><a href="home.php?mod=space&uid=77&mobile=2">读者甲</a></li></ul>
+                    <div class="message">真实全帖页回复</div>
+                  </div>
+                  <div class="pg"><strong>4</strong><a href="forum.php?mod=viewthread&amp;tid=29&amp;page=5&amp;mobile=2">5</a></div>
+                </body></html>
+                """
+            } else {
+                body = """
+                <html><body>
+                  <div class="plc cl" id="pid9999">
+                    <div class="message">错误全帖页</div>
+                  </div>
+                </body></html>
+                """
+            }
             return .response(StubURLProtocolResponse(statusCode: 200, body: body))
         }
 
@@ -850,6 +1027,126 @@ private final class StubURLProtocol: URLProtocol {
     #expect(!result.wasCancelled)
     #expect(await cacheStore.cachedViews(for: threadURL, authorID: "42", contentSource: .authorFilteredPage) == [1, 3])
     #expect(await cacheStore.cachedViews(for: threadURL, authorID: nil, contentSource: .fallbackUnfilteredPage).isEmpty)
+}
+
+@Test func readerRepositoryRefreshesLegacyCacheMissingChapterCommentSources() async throws {
+    let configuration = URLSessionConfiguration.ephemeral
+    configuration.protocolClasses = [StubURLProtocol.self]
+    let session = URLSession(configuration: configuration)
+    let directory = URL(fileURLWithPath: NSTemporaryDirectory())
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    let cacheStore = ReaderCacheStore(baseDirectory: directory)
+    let repository = ReaderRepository(
+        client: YamiboClient(session: session, cookie: "sid=reader", userAgent: "Test-UA"),
+        cacheStore: cacheStore
+    )
+    let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=25&mobile=2"))
+    let legacyDocument = ReaderPageDocument(
+        threadURL: threadURL,
+        view: 1,
+        maxView: 1,
+        resolvedAuthorID: "42",
+        contentSource: .authorFilteredPage,
+        retainedChapterCount: 1,
+        segments: [.text("旧缓存章节\n旧正文", chapterTitle: "旧缓存章节")]
+    )
+    try await cacheStore.save(legacyDocument)
+
+    let loaded = try await repository.loadPage(ReaderPageRequest(threadURL: threadURL, view: 1, authorID: "42"))
+
+    #expect(loaded.segments == [.text("新解析章节\n新正文", chapterTitle: "新解析章节")])
+    #expect(loaded.source(forSegmentIndex: 0)?.ownerPostID == "41257246")
+}
+
+@Test func readerRepositoryLoadsChapterCommentsFromAuthorFilteredPageWhenTargetHasAuthorID() async throws {
+    let configuration = URLSessionConfiguration.ephemeral
+    configuration.protocolClasses = [StubURLProtocol.self]
+    let session = URLSession(configuration: configuration)
+    let repository = ReaderRepository(
+        client: YamiboClient(session: session, cookie: "sid=reader", userAgent: "Test-UA"),
+        cacheStore: ReaderCacheStore(baseDirectory: URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString, isDirectory: true))
+    )
+    let target = ReaderChapterCommentTarget(
+        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=26&mobile=2")),
+        view: 2,
+        ownerPostID: "2601",
+        title: "episode 16",
+        authorID: "42"
+    )
+
+    let page = try await repository.loadChapterComments(for: target)
+
+    #expect(page.comments.map(\.body) == ["完整评分理由"])
+}
+
+@Test func readerRepositoryLoadsSamePageRepliesFromUnfilteredPageForAuthorFilteredTarget() async throws {
+    let configuration = URLSessionConfiguration.ephemeral
+    configuration.protocolClasses = [StubURLProtocol.self]
+    let session = URLSession(configuration: configuration)
+    let repository = ReaderRepository(
+        client: YamiboClient(session: session, cookie: "sid=reader", userAgent: "Test-UA"),
+        cacheStore: ReaderCacheStore(baseDirectory: URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString, isDirectory: true))
+    )
+    let target = ReaderChapterCommentTarget(
+        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?authorid=42&mod=viewthread&tid=27&mobile=2")),
+        view: 2,
+        ownerPostID: "2701",
+        title: "第一章",
+        authorID: "42"
+    )
+
+    let page = try await repository.loadChapterComments(for: target)
+
+    #expect(page.comments.map(\.source) == [.reply])
+    #expect(page.comments.map(\.authorName) == ["读者甲"])
+    #expect(page.comments.map(\.body) == ["楼间回复"])
+    #expect(page.isBoundaryClosed == true)
+    #expect(page.nextView == nil)
+}
+
+@Test func readerRepositoryReloadsUnfilteredRepliesIgnoringURLCache() async throws {
+    let configuration = URLSessionConfiguration.ephemeral
+    configuration.protocolClasses = [StubURLProtocol.self]
+    let session = URLSession(configuration: configuration)
+    let repository = ReaderRepository(
+        client: YamiboClient(session: session, cookie: "sid=reader", userAgent: "Test-UA"),
+        cacheStore: ReaderCacheStore(baseDirectory: URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString, isDirectory: true))
+    )
+    let target = ReaderChapterCommentTarget(
+        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?authorid=42&mod=viewthread&tid=28&mobile=2")),
+        view: 2,
+        ownerPostID: "2801",
+        title: "第一章",
+        authorID: "42"
+    )
+    StubURLProtocol.tid28UnfilteredCachePolicy = nil
+
+    let page = try await repository.loadChapterComments(for: target)
+
+    #expect(page.comments.map(\.body) == ["楼间回复"])
+    #expect(StubURLProtocol.tid28UnfilteredCachePolicy == .reloadIgnoringLocalCacheData)
+}
+
+@Test func readerRepositoryFindsRealUnfilteredPageForAuthorFilteredChapterComments() async throws {
+    let configuration = URLSessionConfiguration.ephemeral
+    configuration.protocolClasses = [StubURLProtocol.self]
+    let session = URLSession(configuration: configuration)
+    let repository = ReaderRepository(
+        client: YamiboClient(session: session, cookie: "sid=reader", userAgent: "Test-UA"),
+        cacheStore: ReaderCacheStore(baseDirectory: URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString, isDirectory: true))
+    )
+    let target = ReaderChapterCommentTarget(
+        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?authorid=42&mod=viewthread&tid=29&mobile=2")),
+        view: 2,
+        ownerPostID: "2901",
+        title: "第一章",
+        authorID: "42"
+    )
+
+    let page = try await repository.loadChapterComments(for: target)
+
+    #expect(page.comments.map(\.body) == ["真实全帖页回复"])
+    #expect(page.nextView == 5)
 }
 
 final class YamiboRepositoryDeleteTests: XCTestCase {

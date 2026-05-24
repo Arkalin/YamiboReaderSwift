@@ -76,6 +76,7 @@ public actor MangaRepository {
         let tid = MangaTitleCleaner.extractTid(from: url.absoluteString) ?? UUID().uuidString
         return MangaChapterDocument(
             tid: tid,
+            ownerPostID: MangaHTMLParser.extractFirstPostID(from: html) ?? tid,
             chapterTitle: MangaTitleCleaner.cleanThreadTitle(title),
             chapterURL: YamiboRoute.thread(url: url, page: 1, authorID: nil).url,
             pages: pages,
