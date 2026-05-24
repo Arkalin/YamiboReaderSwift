@@ -93,6 +93,40 @@ final class MangaReaderModelTests: XCTestCase {
         }
     }
 
+    func testChapterCommentTargetUsesCurrentMangaChapterIdentity() async throws {
+        let model = try await makeMangaModel(
+            chapterHTMLByTID: [
+                "700": makeMangaHTML(
+                    tid: "700",
+                    title: "第1话",
+                    links: [("701", "第2话")],
+                    imageCount: 2
+                ),
+                "701": makeMangaHTML(
+                    tid: "701",
+                    title: "第2话",
+                    links: [("700", "第1话")],
+                    imageCount: 1
+                )
+            ]
+        )
+
+        await MainActor.run {
+            XCTAssertEqual(model.currentChapterCommentTarget?.ownerPostID, "700")
+            XCTAssertEqual(model.currentChapterCommentTarget?.view, 1)
+            XCTAssertEqual(model.currentChapterCommentTarget?.threadURL.absoluteString, "https://bbs.yamibo.com/forum.php?mobile=2&mod=viewthread&page=1&tid=700")
+            XCTAssertEqual(model.currentChapterCommentTarget?.title, "第1话")
+        }
+
+        await model.jumpToAdjacentChapter(1)
+
+        await MainActor.run {
+            XCTAssertEqual(model.currentChapterCommentTarget?.ownerPostID, "701")
+            XCTAssertEqual(model.currentChapterCommentTarget?.threadURL.absoluteString, "https://bbs.yamibo.com/forum.php?mobile=2&mod=viewthread&page=1&tid=701")
+            XCTAssertEqual(model.currentChapterCommentTarget?.title, "第2话")
+        }
+    }
+
     func testConcurrentPrefetchDoesNotDuplicateLoadedChapterPages() async throws {
         let model = try await makeMangaModel(
             chapterHTMLByTID: [

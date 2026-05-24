@@ -20,6 +20,8 @@ public struct MangaReaderView: View {
     @StateObject private var model: MangaReaderModel
     @State private var showingSettings = false
     @State private var showingDirectorySheet = false
+    @State private var showingChapterComments = false
+    @State private var chapterCommentsTarget: ReaderChapterCommentTarget?
     @State private var showingChrome = true
     @State private var selectedPageID: MangaPage.ID?
     @State private var activeZoomPageID: MangaPage.ID?
@@ -117,6 +119,9 @@ public struct MangaReaderView: View {
             }
             .sheet(isPresented: $showingDirectorySheet) {
                 MangaDirectorySheet(model: model)
+            }
+            .sheet(isPresented: $showingChapterComments) {
+                MangaChapterCommentsSheet(model: model, target: chapterCommentsTarget)
             }
             .onChange(of: model.currentPageIndex) { _, _ in
                 handleCurrentPageChanged()
@@ -444,6 +449,10 @@ public struct MangaReaderView: View {
             onSliderEditingChanged: handleSliderEditingChanged(_:),
             onShowSettings: { showingSettings = true },
             onShowDirectory: { showingDirectorySheet = true },
+            onShowComments: {
+                chapterCommentsTarget = model.currentChapterCommentTarget
+                showingChapterComments = true
+            },
             onJumpChapter: { delta in
                 Task { await model.jumpToAdjacentChapter(delta) }
             }
