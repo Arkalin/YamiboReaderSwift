@@ -127,6 +127,56 @@ final class MangaReaderModelTests: XCTestCase {
         }
     }
 
+    func testMangaChapterCommentsReuseSessionCacheUntilExplicitRefresh() async throws {
+        nonisolated(unsafe) var servesComments = false
+        nonisolated(unsafe) var requestCount = 0
+        let model = try await makeMangaModel(
+            chapterHTMLByTID: [
+                "700": makeMangaHTML(
+                    tid: "700",
+                    title: "第1话",
+                    links: [],
+                    imageCount: 1
+                )
+            ],
+            requestHandler: { request in
+                guard servesComments,
+                      request.url?.host == "bbs.yamibo.com",
+                      (request.url?.absoluteString.contains("tid=700") == true) else {
+                    return nil
+                }
+                requestCount += 1
+                let body = makeChapterCommentsHTML(ownerPostID: "700", commentBody: "漫画评论\(requestCount)")
+                return httpResponse(url: request.url!, body: body)
+            }
+        )
+        let target = await MainActor.run { model.currentChapterCommentTarget }
+        servesComments = true
+
+        await model.loadChapterComments(for: target)
+        await model.loadChapterComments(for: target)
+
+        await MainActor.run {
+            guard case let .loaded(_, page) = model.chapterCommentsState else {
+                XCTFail("Expected loaded chapter comments")
+                return
+            }
+            XCTAssertEqual(page.comments.map(\.body), ["漫画评论1"])
+            XCTAssertEqual(requestCount, 1)
+        }
+
+        await model.refreshChapterComments(for: target)
+
+        await MainActor.run {
+            guard case let .loaded(_, page) = model.chapterCommentsState else {
+                XCTFail("Expected refreshed chapter comments")
+                return
+            }
+            XCTAssertEqual(page.comments.map(\.body), ["漫画评论2"])
+            XCTAssertEqual(requestCount, 2)
+        }
+    }
+
     func testConcurrentPrefetchDoesNotDuplicateLoadedChapterPages() async throws {
         let model = try await makeMangaModel(
             chapterHTMLByTID: [
@@ -2518,6 +2568,20 @@ private func makeMangaHTML(
         </div>
       </body>
     </html>
+    """
+}
+
+private func makeChapterCommentsHTML(ownerPostID: String, commentBody: String) -> String {
+    """
+    <html><body>
+      <div class="t_f" id="postmessage_\(ownerPostID)">第1话<br>正文</div>
+      <div id="comment_\(ownerPostID)" class="cm">
+        <div class="pstl xs1 cl">
+          <div class="psta vm"><a class="xi2 xw1">读者甲</a></div>
+          <div class="psti">\(commentBody) <span class="xg1">发表于 2026-5-1 12:00</span></div>
+        </div>
+      </div>
+    </body></html>
     """
 }
 

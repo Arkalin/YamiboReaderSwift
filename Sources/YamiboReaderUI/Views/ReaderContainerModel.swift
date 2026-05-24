@@ -120,6 +120,7 @@ public final class ReaderContainerModel: ObservableObject {
     @Published public private(set) var chapterCommentsState: ReaderChapterCommentsState = .idle
     @Published public private(set) var isLoadingMoreChapterComments = false
     @Published public private(set) var chapterCommentsLoadMoreError: String?
+    @Published public private(set) var chapterCommentsRefreshError: String?
     @Published public private(set) var pagedSpreads: [ReaderPagedSpread] = []
 
     public let context: ReaderLaunchContext
@@ -134,6 +135,7 @@ public final class ReaderContainerModel: ObservableObject {
     private var currentDocumentPageCount = 0
     private var prefetchedStartIndex: Int?
     private var usesPadPresentation = false
+    private var chapterCommentsCache: [ReaderChapterCommentTarget: ChapterCommentsPage] = [:]
     private var cacheOperationTask: Task<Void, Never>?
     private var progressSyncTask: Task<Void, Never>?
     private var lastQueuedProgress: ReaderProgressSnapshot?
@@ -641,6 +643,19 @@ public final class ReaderContainerModel: ObservableObject {
             chapterCommentsState = .unsupported
             return
         }
+        if let cached = chapterCommentsCache[target] {
+            chapterCommentsRefreshError = nil
+            chapterCommentsState = .loaded(target, cached)
+            return
+        }
+        await refreshChapterComments(for: target)
+    }
+
+    public func refreshChapterComments(for target: ReaderChapterCommentTarget?) async {
+        guard let target else {
+            chapterCommentsState = .unsupported
+            return
+        }
         if repository == nil {
             repository = await appContext.makeReaderRepository()
         }
@@ -650,11 +665,18 @@ public final class ReaderContainerModel: ObservableObject {
         }
         chapterCommentsState = .loading(target)
         chapterCommentsLoadMoreError = nil
+        chapterCommentsRefreshError = nil
         do {
             let page = try await repository.loadChapterComments(for: target)
+            chapterCommentsCache[target] = page
             chapterCommentsState = .loaded(target, page)
         } catch {
-            chapterCommentsState = .failed(target, error.localizedDescription)
+            if let cached = chapterCommentsCache[target] {
+                chapterCommentsRefreshError = error.localizedDescription
+                chapterCommentsState = .loaded(target, cached)
+            } else {
+                chapterCommentsState = .failed(target, error.localizedDescription)
+            }
         }
     }
 
@@ -673,15 +695,15 @@ public final class ReaderContainerModel: ObservableObject {
         chapterCommentsLoadMoreError = nil
         do {
             let nextPage = try await repository.loadMoreChapterComments(for: target, view: nextView)
-            chapterCommentsState = .loaded(
-                target,
-                ChapterCommentsPage(
-                    target: target,
-                    comments: currentPage.comments + nextPage.comments,
-                    isBoundaryClosed: nextPage.isBoundaryClosed,
-                    nextView: nextPage.nextView
-                )
+            let mergedPage = ChapterCommentsPage(
+                target: target,
+                comments: currentPage.comments + nextPage.comments,
+                isBoundaryClosed: nextPage.isBoundaryClosed,
+                nextView: nextPage.nextView
             )
+            chapterCommentsCache[target] = mergedPage
+            chapterCommentsState = .loaded(target, mergedPage)
+            chapterCommentsRefreshError = nil
         } catch {
             chapterCommentsLoadMoreError = error.localizedDescription
         }

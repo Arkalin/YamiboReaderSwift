@@ -1108,6 +1108,156 @@ final class ReaderContainerModelTests: XCTestCase {
         )
     }
 
+    func testChapterCommentsReuseSessionCacheUntilExplicitRefresh() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [ReaderTestURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9001&mobile=2")!
+        nonisolated(unsafe) var requestCount = 0
+        ReaderTestURLProtocol.handler = { request in
+            requestCount += 1
+            let body = makeChapterCommentsHTML(ownerPostID: "100", commentBody: "评论\(requestCount)")
+            return (
+                Data(body.utf8),
+                HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: ["Content-Type": "text/html; charset=utf-8"])!
+            )
+        }
+        let target = ReaderChapterCommentTarget(threadURL: threadURL, view: 1, ownerPostID: "100", title: "第一章")
+        let model = try await makeModel(
+            documents: [makeDocument(threadURL: threadURL, view: 1, maxView: 1, chapterTitles: ["第一章"])],
+            session: session
+        )
+
+        await model.loadChapterComments(for: target)
+        await model.loadChapterComments(for: target)
+
+        await MainActor.run {
+            guard case let .loaded(_, page) = model.chapterCommentsState else {
+                XCTFail("Expected loaded chapter comments")
+                return
+            }
+            XCTAssertEqual(page.comments.map(\.body), ["评论1"])
+            XCTAssertEqual(requestCount, 1)
+        }
+
+        await model.refreshChapterComments(for: target)
+
+        await MainActor.run {
+            guard case let .loaded(_, page) = model.chapterCommentsState else {
+                XCTFail("Expected refreshed chapter comments")
+                return
+            }
+            XCTAssertEqual(page.comments.map(\.body), ["评论2"])
+            XCTAssertEqual(requestCount, 2)
+        }
+    }
+
+    func testChapterCommentsRefreshFailurePreservesCachedRows() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [ReaderTestURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9002&mobile=2")!
+        ReaderTestURLProtocol.handler = { request in
+            let body = makeChapterCommentsHTML(ownerPostID: "100", commentBody: "旧评论")
+            return (
+                Data(body.utf8),
+                HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: ["Content-Type": "text/html; charset=utf-8"])!
+            )
+        }
+        let target = ReaderChapterCommentTarget(threadURL: threadURL, view: 1, ownerPostID: "100", title: "第一章")
+        let model = try await makeModel(
+            documents: [makeDocument(threadURL: threadURL, view: 1, maxView: 1, chapterTitles: ["第一章"])],
+            session: session
+        )
+        await model.loadChapterComments(for: target)
+
+        ReaderTestURLProtocol.handler = { request in
+            (
+                Data("server error".utf8),
+                HTTPURLResponse(url: request.url!, statusCode: 500, httpVersion: nil, headerFields: ["Content-Type": "text/html; charset=utf-8"])!
+            )
+        }
+
+        await model.refreshChapterComments(for: target)
+
+        await MainActor.run {
+            guard case let .loaded(_, page) = model.chapterCommentsState else {
+                XCTFail("Expected cached comments to remain visible")
+                return
+            }
+            XCTAssertEqual(page.comments.map(\.body), ["旧评论"])
+            XCTAssertNotNil(model.chapterCommentsRefreshError)
+        }
+    }
+
+    func testChapterCommentsInitialFailureShowsRetryableErrorState() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [ReaderTestURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9003&mobile=2")!
+        ReaderTestURLProtocol.handler = { request in
+            (
+                Data("server error".utf8),
+                HTTPURLResponse(url: request.url!, statusCode: 500, httpVersion: nil, headerFields: ["Content-Type": "text/html; charset=utf-8"])!
+            )
+        }
+        let target = ReaderChapterCommentTarget(threadURL: threadURL, view: 1, ownerPostID: "100", title: "第一章")
+        let model = try await makeModel(
+            documents: [makeDocument(threadURL: threadURL, view: 1, maxView: 1, chapterTitles: ["第一章"])],
+            session: session
+        )
+
+        await model.loadChapterComments(for: target)
+
+        await MainActor.run {
+            guard case let .failed(failedTarget, message) = model.chapterCommentsState else {
+                XCTFail("Expected failed chapter comments state")
+                return
+            }
+            XCTAssertEqual(failedTarget, target)
+            XCTAssertFalse(message.isEmpty)
+            XCTAssertNil(model.chapterCommentsRefreshError)
+        }
+    }
+
+    func testReaderBodyRefreshDoesNotClearChapterCommentsSessionCache() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [ReaderTestURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9004&mobile=2")!
+        nonisolated(unsafe) var requestCount = 0
+        nonisolated(unsafe) var servesComments = true
+        ReaderTestURLProtocol.handler = { request in
+            requestCount += 1
+            let body = servesComments
+                ? makeChapterCommentsHTML(ownerPostID: "100", commentBody: "缓存评论")
+                : "<html><body><div class=\"message\">正文刷新结果</div></body></html>"
+            return (
+                Data(body.utf8),
+                HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: ["Content-Type": "text/html; charset=utf-8"])!
+            )
+        }
+        let target = ReaderChapterCommentTarget(threadURL: threadURL, view: 1, ownerPostID: "100", title: "第一章")
+        let model = try await makeModel(
+            documents: [makeDocument(threadURL: threadURL, view: 1, maxView: 1, chapterTitles: ["第一章"])],
+            session: session
+        )
+
+        await model.loadChapterComments(for: target)
+        servesComments = false
+        await model.refreshCurrentCache()
+        await model.loadChapterComments(for: target)
+
+        await MainActor.run {
+            guard case let .loaded(_, page) = model.chapterCommentsState else {
+                XCTFail("Expected cached chapter comments")
+                return
+            }
+            XCTAssertEqual(page.comments.map(\.body), ["缓存评论"])
+            XCTAssertEqual(requestCount, 2)
+        }
+    }
+
     func testCacheSelectionStateSeparatesCachedAndUncachedViews() async throws {
         let model = try await makeModel(
             documents: [
@@ -1417,6 +1567,20 @@ private func makeImageDocument(
         contentSource: .fallbackUnfilteredPage,
         segments: segments
     )
+}
+
+private func makeChapterCommentsHTML(ownerPostID: String, commentBody: String) -> String {
+    """
+    <html><body>
+      <div class="t_f" id="postmessage_\(ownerPostID)">第一章<br>正文</div>
+      <div id="comment_\(ownerPostID)" class="cm">
+        <div class="pstl xs1 cl">
+          <div class="psta vm"><a class="xi2 xw1">读者甲</a></div>
+          <div class="psti">\(commentBody) <span class="xg1">发表于 2026-5-1 12:00</span></div>
+        </div>
+      </div>
+    </body></html>
+    """
 }
 
 private final class ReaderTestURLProtocol: URLProtocol {
