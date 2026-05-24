@@ -43,11 +43,13 @@
 "common.deselect_all" = "取消全选";
 "common.done" = "完成";
 "common.edit" = "编辑";
+"common.invert_selection" = "反选";
 "common.expand" = "展开";
 "common.hidden" = "已隐藏";
 "common.hide" = "隐藏";
 "common.load_failed" = "加载失败";
 "common.loading" = "加载中…";
+"common.move" = "移动";
 "common.ok" = "确定";
 "common.operation_failed" = "操作失败";
 "common.original_post" = "原帖";

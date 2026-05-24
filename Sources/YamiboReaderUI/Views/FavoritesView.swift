@@ -1224,15 +1224,26 @@ private struct FavoriteToolbarModifier: ViewModifier {
     let favoriteAppearance: FavoriteAppearanceSettings
     let showsSettingsMenu: Bool
     let selectedTagCount: Int
+    let visibleSelectionIsComplete: Bool
+    let canToggleVisibleSelection: Bool
     let allTitle: String
     let onFinishSelection: () -> Void
+    let onToggleVisibleSelection: () -> Void
     let onEditTagFilter: () -> Void
     let onClearTagFilter: () -> Void
 
     func body(content: Content) -> some View {
         content.toolbar {
-            if showsSettingsMenu {
-                #if os(iOS)
+            #if os(iOS)
+            if isSelecting {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button(
+                        visibleSelectionIsComplete ? L10n.string("common.invert_selection") : L10n.string("common.select_all"),
+                        action: onToggleVisibleSelection
+                    )
+                    .disabled(!canToggleVisibleSelection)
+                }
+            } else if showsSettingsMenu {
                 ToolbarItemGroup(placement: .topBarLeading) {
                     FavoriteSettingsMenuButton(
                         showingSettingsSheet: $showingSettingsSheet,
@@ -1241,15 +1252,17 @@ private struct FavoriteToolbarModifier: ViewModifier {
 
                     FavoriteSortMenuButton(sortRawValue: $sortRawValue)
                 }
-                #else
+            }
+            #else
+            if showsSettingsMenu {
                 ToolbarItem(placement: .automatic) {
                     FavoriteSettingsMenuButton(
                         showingSettingsSheet: $showingSettingsSheet,
                         showingAboutSheet: $showingAboutSheet
                     )
                 }
-                #endif
             }
+            #endif
 
             ToolbarItem(placement: .principal) {
                 FavoriteToolbarMenuButton(
@@ -1481,6 +1494,9 @@ public struct FavoritesView: View {
                 mangaOpeningOverlay
             }
         }
+        #if os(iOS)
+        .toolbar(isSelecting ? .hidden : .visible, for: .tabBar)
+        #endif
     }
 
     private var favoritesChromeContent: some View {
@@ -1502,8 +1518,11 @@ public struct FavoritesView: View {
                     favoriteAppearance: viewModel.favoriteAppearance,
                     showsSettingsMenu: isRootScope,
                     selectedTagCount: selectedFilterTagIDs.count,
+                    visibleSelectionIsComplete: visibleSelectionIsComplete,
+                    canToggleVisibleSelection: !visibleEntries.isEmpty,
                     allTitle: filterLabel(for: .all),
                     onFinishSelection: exitSelectionMode,
+                    onToggleVisibleSelection: toggleVisibleSelection,
                     onEditTagFilter: presentFilterTagPicker,
                     onClearTagFilter: {
                         selectedFilterTagIDs.removeAll()
@@ -1556,6 +1575,8 @@ public struct FavoritesView: View {
             .onChange(of: viewModel.tags.map(\.id)) { _, tagIDs in
                 selectedFilterTagIDs.formIntersection(Set(tagIDs))
             }
+            .sensoryFeedback(.selection, trigger: selectedFavoriteIDs)
+            .sensoryFeedback(.selection, trigger: selectedCollectionIDs)
             .refreshable {
                 await viewModel.refresh()
             }
@@ -1905,6 +1926,18 @@ public struct FavoritesView: View {
         )
     }
 
+    private var visibleSelectionIsComplete: Bool {
+        guard !visibleEntries.isEmpty else { return false }
+        return visibleEntries.allSatisfy { entry in
+            switch entry {
+            case let .collection(collection):
+                selectedCollectionIDs.contains(collection.id)
+            case let .favorite(favorite):
+                selectedFavoriteIDs.contains(favorite.id)
+            }
+        }
+    }
+
     private var moveTargets: [FavoriteCollection] {
         let targetCollections = orderedCollections(viewModel.collections)
         guard let currentCollection else { return targetCollections }
@@ -1977,25 +2010,34 @@ public struct FavoritesView: View {
     }
 
     private var selectionActionBar: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 0) {
             Divider()
-            HStack(spacing: 12) {
-                Button(L10n.string("favorites.tags_action")) {
+            HStack(alignment: .top, spacing: 0) {
+                selectionActionButton(
+                    title: L10n.string("favorites.tags_action"),
+                    systemImage: "tag",
+                    isEnabled: selectionActionState.canTag
+                ) {
                     presentBatchTagPicker()
                 }
-                .buttonStyle(.bordered)
                 .disabled(!selectionActionState.canTag)
 
-                Button(L10n.string("favorites.create_collection")) {
+                selectionActionButton(
+                    title: L10n.string("favorites.create_collection"),
+                    systemImage: "folder.badge.plus",
+                    isEnabled: selectionActionState.canCreateCollection
+                ) {
                     showingCreateCollectionPrompt = true
                 }
-                .buttonStyle(.bordered)
                 .disabled(!selectionActionState.canCreateCollection)
 
-                Button(L10n.string("favorites.move_to_collection")) {
+                selectionActionButton(
+                    title: L10n.string("common.move"),
+                    systemImage: "doc.on.doc",
+                    isEnabled: selectionActionState.canMove
+                ) {
                     showingMoveDialog = true
                 }
-                .buttonStyle(.bordered)
                 .disabled(!selectionActionState.canMove)
                 .confirmationDialog(L10n.string("favorites.move_to_collection"), isPresented: $showingMoveDialog, titleVisibility: .visible) {
                     Button(L10n.string("favorites.move_to_root")) {
@@ -2011,21 +2053,56 @@ public struct FavoritesView: View {
                     Text(L10n.string("favorites.select_target_collection"))
                 }
 
-                Button(L10n.string("common.delete"), role: .destructive) {
+                selectionActionButton(
+                    title: L10n.string("common.delete"),
+                    systemImage: "trash",
+                    role: .destructive,
+                    isEnabled: selectionActionState.canDelete
+                ) {
                     showingBulkDeleteConfirmation = true
                 }
-                .buttonStyle(.bordered)
                 .disabled(!selectionActionState.canDelete)
             }
             .frame(maxWidth: .infinity)
-            .padding(.horizontal, 20)
-
-            Text(L10n.string("favorites.selected_count", selectedFavoriteIDs.count + selectedCollectionIDs.count))
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .padding(.bottom, 12)
+            .padding(.top, 10)
+            .padding(.horizontal, 16)
+            .padding(.bottom, 14)
         }
-        .background(.ultraThinMaterial)
+        .background(selectionActionBarBackground)
+    }
+
+    private var selectionActionBarBackground: Color {
+        #if canImport(UIKit)
+        Color(uiColor: .systemGray6)
+        #else
+        Color.gray.opacity(0.12)
+        #endif
+    }
+
+    private func selectionActionButton(
+        title: String,
+        systemImage: String,
+        role: ButtonRole? = nil,
+        isEnabled: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(role: role, action: action) {
+            VStack(spacing: 3) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 23, weight: .regular))
+                    .frame(width: 28, height: 27)
+
+                Text(title)
+                    .font(.caption)
+                    .fontWeight(.regular)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.78)
+            }
+            .frame(maxWidth: .infinity)
+            .foregroundStyle(role == .destructive ? Color.red : Color.primary)
+            .opacity(isEnabled ? 1 : 0.28)
+        }
+        .buttonStyle(.plain)
     }
 
     @ViewBuilder
@@ -2041,6 +2118,7 @@ public struct FavoritesView: View {
                         collection: collection,
                         summary: summary,
                         isSelected: selectedCollectionIDs.contains(collection.id),
+                        isSelecting: true,
                         accentColor: favoriteCollectionAccentColor(for: viewModel.favoriteAppearance)
                     )
                 }
@@ -2051,6 +2129,7 @@ public struct FavoritesView: View {
                         collection: collection,
                         summary: summary,
                         isSelected: false,
+                        isSelecting: false,
                         accentColor: favoriteCollectionAccentColor(for: viewModel.favoriteAppearance)
                     )
                 }
@@ -2065,6 +2144,7 @@ public struct FavoritesView: View {
                 isResolving: viewModel.resolvingFavoriteID == favorite.id,
                 isDeleting: viewModel.deletingFavoriteID == favorite.id,
                 isSelected: selectedFavoriteIDs.contains(favorite.id),
+                isSelecting: isSelecting,
                 tags: viewModel.tags,
                 tagSearchText: searchText,
                 prioritizedTagIDs: selectedFilterTagIDs,
@@ -2107,6 +2187,7 @@ public struct FavoritesView: View {
                         collection: collection,
                         summary: summary,
                         isSelected: selectedCollectionIDs.contains(collection.id),
+                        isSelecting: true,
                         accentColor: favoriteCollectionAccentColor(for: viewModel.favoriteAppearance)
                     )
                 }
@@ -2117,6 +2198,7 @@ public struct FavoritesView: View {
                         collection: collection,
                         summary: summary,
                         isSelected: false,
+                        isSelecting: false,
                         accentColor: favoriteCollectionAccentColor(for: viewModel.favoriteAppearance)
                     )
                 }
@@ -2155,6 +2237,7 @@ public struct FavoritesView: View {
                 isResolving: viewModel.resolvingFavoriteID == favorite.id,
                 isDeleting: viewModel.deletingFavoriteID == favorite.id,
                 isSelected: selectedFavoriteIDs.contains(favorite.id),
+                isSelecting: isSelecting,
                 tags: viewModel.tags,
                 tagSearchText: searchText,
                 prioritizedTagIDs: selectedFilterTagIDs,
@@ -2450,6 +2533,28 @@ public struct FavoritesView: View {
             selectedCollectionIDs.remove(collection.id)
         } else {
             selectedCollectionIDs.insert(collection.id)
+        }
+    }
+
+    private func toggleVisibleSelection() {
+        if visibleSelectionIsComplete {
+            for entry in visibleEntries {
+                switch entry {
+                case let .collection(collection):
+                    selectedCollectionIDs.remove(collection.id)
+                case let .favorite(favorite):
+                    selectedFavoriteIDs.remove(favorite.id)
+                }
+            }
+        } else {
+            for entry in visibleEntries {
+                switch entry {
+                case let .collection(collection):
+                    selectedCollectionIDs.insert(collection.id)
+                case let .favorite(favorite):
+                    selectedFavoriteIDs.insert(favorite.id)
+                }
+            }
         }
     }
 
@@ -3071,6 +3176,7 @@ struct FavoriteRow: View {
     let isResolving: Bool
     let isDeleting: Bool
     let isSelected: Bool
+    let isSelecting: Bool
     let tags: [FavoriteTag]
     let tagSearchText: String
     let prioritizedTagIDs: Set<String>
@@ -3098,7 +3204,7 @@ struct FavoriteRow: View {
                 HStack(alignment: .top, spacing: 12) {
                     Text(favorite.resolvedDisplayTitle)
                         .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(titleColor)
                         .multilineTextAlignment(.leading)
                         .lineLimit(3)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -3107,8 +3213,6 @@ struct FavoriteRow: View {
                         ProgressView()
                             .controlSize(.small)
                             .padding(.top, 2)
-                    } else if isSelected {
-                        selectionIndicator
                     }
                 }
 
@@ -3154,11 +3258,8 @@ struct FavoriteRow: View {
         .accessibilityAddTraits(.isButton)
     }
 
-    private var selectionIndicator: some View {
-        Image(systemName: "checkmark.circle.fill")
-            .font(.title3.weight(.semibold))
-            .foregroundStyle(.tint)
-            .padding(.top, 1)
+    private var titleColor: Color {
+        isSelecting && !isSelected ? .secondary : .primary
     }
 }
 
@@ -3217,6 +3318,7 @@ struct FavoriteCollectionRow: View {
     let collection: FavoriteCollection
     let summary: FavoriteCollectionSummary
     let isSelected: Bool
+    let isSelecting: Bool
     let accentColor: Color
 
     var body: some View {
@@ -3241,15 +3343,9 @@ struct FavoriteCollectionRow: View {
                     HStack(alignment: .top, spacing: 10) {
                         Text(collection.name)
                             .font(.system(size: 18, weight: .semibold))
-                            .foregroundStyle(.primary)
+                            .foregroundStyle(titleColor)
                             .lineLimit(2)
                             .frame(maxWidth: .infinity, alignment: .leading)
-
-                        if isSelected {
-                            Image(systemName: "checkmark.circle.fill")
-                                .font(.title3.weight(.semibold))
-                                .foregroundStyle(.tint)
-                        }
                     }
 
                     Text(summaryText)
@@ -3285,6 +3381,10 @@ struct FavoriteCollectionRow: View {
         )
         .shadow(color: .black.opacity(0.04), radius: 8, x: 0, y: 3)
         .contentShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+    }
+
+    private var titleColor: Color {
+        isSelecting && !isSelected ? .secondary : .primary
     }
 
     private var summaryText: String {
