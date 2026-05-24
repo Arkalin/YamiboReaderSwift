@@ -151,9 +151,34 @@ public actor ReaderRepository {
 
     public func loadChapterComments(for target: ReaderChapterCommentTarget) async throws -> ChapterCommentsPage {
         let html = try await client.fetchHTML(
-            for: .thread(url: target.threadURL, page: target.view, authorID: nil)
+            for: .thread(url: target.threadURL, page: target.view, authorID: target.authorID)
         )
-        return try ChapterCommentsHTMLParser.parseInitialPage(html: html, target: target)
+        var page = try ChapterCommentsHTMLParser.parseInitialPage(html: html, target: target)
+        if let fullRatingsURL = try ChapterCommentsHTMLParser.fullRatingReasonsURL(html: html, target: target),
+           let fullRatingsHTML = try? await client.fetchHTML(url: fullRatingsURL) {
+            let fullRatings = try ChapterCommentsHTMLParser.parseFullRatingReasonsPage(
+                html: fullRatingsHTML,
+                target: target
+            )
+            if !fullRatings.isEmpty {
+                page.comments = Self.replacingPreviewRatings(in: page.comments, with: fullRatings)
+            }
+        }
+        if target.authorID != nil,
+           let unfilteredHTML = try? await loadUnfilteredChapterCommentHTML(for: target) {
+            let unfilteredView = (try? ChapterCommentsHTMLParser.currentView(
+                html: unfilteredHTML,
+                fallback: target.view
+            )) ?? target.view
+            var unfilteredTarget = target
+            unfilteredTarget.view = unfilteredView
+            let unfilteredPage = try ChapterCommentsHTMLParser.parseInitialPage(
+                html: unfilteredHTML,
+                target: unfilteredTarget
+            )
+            page = Self.appendingSamePageReplies(from: unfilteredPage, to: page)
+        }
+        return page
     }
 
     public func loadMoreChapterComments(
@@ -161,9 +186,24 @@ public actor ReaderRepository {
         view: Int
     ) async throws -> ChapterCommentsPage {
         let html = try await client.fetchHTML(
-            for: .thread(url: target.threadURL, page: view, authorID: nil)
+            for: .thread(url: Self.threadURLRemovingAuthorID(target.threadURL), page: view, authorID: nil),
+            cachePolicy: .reloadIgnoringLocalCacheData
         )
         return try ChapterCommentsHTMLParser.parseContinuationPage(html: html, target: target, view: view)
+    }
+
+    private func loadUnfilteredChapterCommentHTML(for target: ReaderChapterCommentTarget) async throws -> String {
+        if let findPostURL = Self.findPostURL(for: target),
+           let html = try? await client.fetchHTML(
+               url: findPostURL,
+               cachePolicy: .reloadIgnoringLocalCacheData
+           ) {
+            return html
+        }
+        return try await client.fetchHTML(
+            for: .thread(url: Self.threadURLRemovingAuthorID(target.threadURL), page: target.view, authorID: nil),
+            cachePolicy: .reloadIgnoringLocalCacheData
+        )
     }
 
     private func loadPage(_ request: ReaderPageRequest, ignoresCache: Bool) async throws -> ReaderPageDocument {
@@ -171,7 +211,8 @@ public actor ReaderRepository {
            let cached = await cacheStore.loadDocument(
                for: request,
                contentSource: request.authorID == nil ? .fallbackUnfilteredPage : .authorFilteredPage
-           ) {
+           ),
+           !isLegacyCachedDocumentMissingChapterCommentSources(cached) {
             return cached
         }
 
@@ -202,6 +243,70 @@ public actor ReaderRepository {
             }
             throw error
         }
+    }
+
+    private func isLegacyCachedDocumentMissingChapterCommentSources(_ document: ReaderPageDocument) -> Bool {
+        guard document.retainedChapterCount > 0, !document.segments.isEmpty else {
+            return false
+        }
+        return !document.segmentSources.contains { source in
+            source?.ownerPostID?.isEmpty == false
+        }
+    }
+
+    private static func replacingPreviewRatings(
+        in comments: [ChapterComment],
+        with fullRatings: [ChapterComment]
+    ) -> [ChapterComment] {
+        let insertionIndex = comments.firstIndex { $0.source == .ratingReason }
+            ?? comments.firstIndex { $0.source != .postComment }
+            ?? comments.count
+        let retainedBeforeInsertion = comments[..<insertionIndex].filter { $0.source != .ratingReason }.count
+        var merged = comments.filter { $0.source != .ratingReason }
+        merged.insert(contentsOf: fullRatings, at: retainedBeforeInsertion)
+        return merged
+    }
+
+    private static func appendingSamePageReplies(
+        from unfilteredPage: ChapterCommentsPage,
+        to page: ChapterCommentsPage
+    ) -> ChapterCommentsPage {
+        let existingIDs = Set(page.comments.map(\.id))
+        let replies = unfilteredPage.comments.filter { comment in
+            comment.source == .reply && !existingIDs.contains(comment.id)
+        }
+        return ChapterCommentsPage(
+            target: page.target,
+            comments: page.comments + replies,
+            isBoundaryClosed: unfilteredPage.isBoundaryClosed,
+            nextView: unfilteredPage.nextView
+        )
+    }
+
+    private static func threadURLRemovingAuthorID(_ url: URL) -> URL {
+        guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              let queryItems = components.queryItems else {
+            return url
+        }
+        components.queryItems = queryItems.filter { $0.name != "authorid" }
+        return components.url ?? url
+    }
+
+    private static func findPostURL(for target: ReaderChapterCommentTarget) -> URL? {
+        guard let threadID = ReaderHTMLParser.extractThreadID(from: target.threadURL),
+              !target.ownerPostID.isEmpty else {
+            return nil
+        }
+        var components = URLComponents(url: YamiboRoute.baseURL, resolvingAgainstBaseURL: false)
+        components?.path = "/forum.php"
+        components?.queryItems = [
+            .init(name: "mod", value: "redirect"),
+            .init(name: "goto", value: "findpost"),
+            .init(name: "ptid", value: threadID),
+            .init(name: "pid", value: target.ownerPostID),
+            .init(name: "mobile", value: "2")
+        ]
+        return components?.url
     }
 
     private func parsePreferredDocument(

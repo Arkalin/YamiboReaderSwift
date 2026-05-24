@@ -118,7 +118,7 @@ public final class MangaReaderModel: ObservableObject {
         return ReaderChapterCommentTarget(
             threadURL: currentPage.chapterURL,
             view: webViewPage(from: currentPage.chapterURL),
-            ownerPostID: currentPage.tid,
+            ownerPostID: currentPage.ownerPostID,
             title: currentPage.chapterTitle
         )
     }
@@ -852,6 +852,7 @@ public final class MangaReaderModel: ObservableObject {
             )
             return MangaChapterDocument(
                 tid: chapter.tid,
+                ownerPostID: MangaHTMLParser.extractFirstPostID(from: payload.html ?? "") ?? chapter.tid,
                 chapterTitle: title,
                 chapterURL: YamiboRoute.thread(url: chapter.url, page: 1, authorID: nil).url,
                 pages: payload.images,

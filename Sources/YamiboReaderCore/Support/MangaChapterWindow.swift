@@ -146,6 +146,7 @@ public struct MangaChapterWindow: Sendable {
                 pages.append(
                     MangaPage(
                         tid: document.tid,
+                        ownerPostID: document.ownerPostID,
                         chapterTitle: document.chapterTitle,
                         imageURL: imageURL,
                         globalIndex: pages.count,

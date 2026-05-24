@@ -30,6 +30,66 @@ import Testing
     #expect(pagination.pages.first?.chapterCommentTarget?.title == "第一章")
 }
 
+@Test func readerDocumentCarriesNestedOwnerPostIDToRenderedPages() throws {
+    let html = """
+    <html><body>
+      <div id="post_595655">
+        <div class="message">
+          <div class="t_f" id="postmessage_595655">第一章<br>正文</div>
+        </div>
+      </div>
+    </body></html>
+    """
+    let request = ReaderPageRequest(
+        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=557752&mobile=2")),
+        view: 1,
+        authorID: "595655"
+    )
+
+    let document = try ReaderHTMLParser.parseDocument(
+        html: html,
+        request: request,
+        contentSource: .authorFilteredPage
+    )
+    let pagination = ReaderPaginator.paginate(
+        document: document,
+        settings: ReaderAppearanceSettings(),
+        layout: ReaderContainerLayout(width: 390, height: 844)
+    )
+
+    #expect(document.segments.count == 1)
+    #expect(pagination.pages.first?.chapterCommentTarget?.ownerPostID == "595655")
+    #expect(pagination.pages.first?.chapterCommentTarget?.view == 1)
+}
+
+@Test func readerDocumentCarriesAncestorOwnerPostIDToRenderedPages() throws {
+    let html = """
+    <html><body>
+      <div id="pid41257246">
+        <div class="message">作品名：测试<br>作者：测试</div>
+      </div>
+    </body></html>
+    """
+    let request = ReaderPageRequest(
+        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=557752&mobile=2")),
+        view: 1,
+        authorID: "595655"
+    )
+
+    let document = try ReaderHTMLParser.parseDocument(
+        html: html,
+        request: request,
+        contentSource: .authorFilteredPage
+    )
+    let pagination = ReaderPaginator.paginate(
+        document: document,
+        settings: ReaderAppearanceSettings(),
+        layout: ReaderContainerLayout(width: 390, height: 844)
+    )
+
+    #expect(pagination.pages.first?.chapterCommentTarget?.ownerPostID == "41257246")
+}
+
 @Test func chapterCommentsParserReadsOwnerPostCommentsAndFilteredRatings() throws {
     let html = """
     <html><body>
@@ -78,6 +138,109 @@ import Testing
     #expect(page.comments.first?.metadata == "发表于 2026-5-1 12:00")
     #expect(page.comments.last?.metadata == nil)
     #expect(page.isBoundaryClosed == false)
+}
+
+@Test func chapterCommentsParserReadsMobileOwnerPostCommentsAndRatings() throws {
+    let html = """
+    <html><body>
+      <div class="plc cl" id="pid41257246">
+        <div class="message">第一章<br>正文</div>
+        <div id="comment_41257246">
+          <h3>点评</h3>
+          <div class="plc p0 cl" id="commentdetail_1">
+            <ul>
+              <li><a>读者甲</a></li>
+              <li class="mtime">2025-5-25 19:58</li>
+              <li class="mtxt mt5">悠宇把自己开发成了0</li>
+            </ul>
+          </div>
+        </div>
+        <h3>评分</h3>
+        <div id="ratelog_41257246">
+          <ul class="post_box cl">
+            <li class="flex-box mli p0">
+              <div class="flex-2 xs1 xg1 xw1">参与人数 <span class="xi1">14</span></div>
+              <div class="flex-2 xs1 xg1 xw1">积分 <span class="xi1">+116</span></div>
+              <div class="flex-3 xs1 xg1 xw1">理由</div>
+            </li>
+            <li class="flex-box mli p0">
+              <div class="flex-2 xs1 xg1"><a>丰川之刃</a></div>
+              <div class="flex-2 xs1 xi1 xw1"> + 10</div>
+              <div class="flex-3 xs1 xg1">精品文章</div>
+            </li>
+            <li class="flex-box mli p0">
+              <div class="flex-2 xs1 xg1"><a>seccyzwvvk</a></div>
+              <div class="flex-2 xs1 xi1 xw1"> + 5</div>
+              <div class="flex-3 xs1 xg1">翻译大大辛苦了</div>
+            </li>
+            <li class="flex-box mli p0">
+              <div class="flex-2 xs1 xg1"><a>3504822324</a></div>
+              <div class="flex-2 xs1 xi1 xw1"> + 10</div>
+              <div class="flex-3 xs1 xg1">感谢款待</div>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </body></html>
+    """
+    let target = ReaderChapterCommentTarget(
+        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=557752&mobile=2")),
+        view: 1,
+        ownerPostID: "41257246",
+        title: "第一章"
+    )
+
+    let page = try ChapterCommentsHTMLParser.parseInitialPage(html: html, target: target)
+
+    #expect(page.comments.map(\.source) == [.postComment, .ratingReason, .ratingReason])
+    #expect(page.comments.map(\.authorName) == ["读者甲", "seccyzwvvk", "3504822324"])
+    #expect(page.comments.map(\.body) == ["悠宇把自己开发成了0", "翻译大大辛苦了", "感谢款待"])
+    #expect(page.comments.first?.metadata == "2025-5-25 19:58")
+}
+
+@Test func chapterCommentsParserIncludesMobileRepliesBetweenOwnerPosts() throws {
+    let html = """
+    <html><body>
+      <div class="plc cl" id="pid40217745">
+        <ul class="authi">
+          <li class="mtit"><span class="y">21<sup>#</sup></span><a href="home.php?mod=space&uid=406769&mobile=2">楼主</a></li>
+          <li class="mtime">2021-10-16 20:00</li>
+        </ul>
+        <div class="message">episode 16<br>正文</div>
+      </div>
+      <div class="plc cl" id="pid40218000">
+        <ul class="authi">
+          <li class="mtit"><span class="y">22<sup>#</sup></span><a href="home.php?mod=space&uid=700001&mobile=2">读者甲</a></li>
+          <li class="mtime">2021-10-16 21:00</li>
+        </ul>
+        <div class="message"><i class="pstatus">编辑记录</i><br>楼间回复内容</div>
+      </div>
+      <div class="plc cl" id="pid40218661">
+        <ul class="authi">
+          <li class="mtit"><span class="y">23<sup>#</sup></span><a href="home.php?mod=space&uid=406769&mobile=2">楼主</a></li>
+          <li class="mtime">2021-10-16 22:32</li>
+        </ul>
+        <div class="message">episode 17<br>下一章正文</div>
+      </div>
+      <a href="forum.php?mod=viewthread&tid=521519&page=3&mobile=2">3</a>
+    </body></html>
+    """
+    let target = ReaderChapterCommentTarget(
+        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=521519&mobile=2")),
+        view: 2,
+        ownerPostID: "40217745",
+        title: "episode 16",
+        authorID: "406769"
+    )
+
+    let page = try ChapterCommentsHTMLParser.parseInitialPage(html: html, target: target)
+
+    #expect(page.comments.map(\.source) == [.reply])
+    #expect(page.comments.map(\.authorName) == ["读者甲"])
+    #expect(page.comments.map(\.body) == ["楼间回复内容"])
+    #expect(page.comments.first?.metadata == "22# · 2021-10-16 21:00")
+    #expect(page.isBoundaryClosed == true)
+    #expect(page.nextView == nil)
 }
 
 @Test func chapterCommentsParserFiltersDefaultRatingReasonTemplatesExactly() throws {
@@ -311,4 +474,51 @@ import Testing
     #expect(page.comments.map(\.body) == ["跨页回复"])
     #expect(page.isBoundaryClosed == true)
     #expect(page.nextView == nil)
+}
+
+@Test func chapterCommentsParserReadsFullRatingReasonDialogAndFiltersTemplates() throws {
+    let html = """
+    <html><body>
+      <div id="floatlayout_topicadmin">
+        <h2>查看全部评分</h2>
+        <ul class="post_box cl">
+          <li class="flex-box mli">
+            <div><span class="z">积分</span></div>
+            <div><span class="z">用户名</span></div>
+            <div><span class="y">时间</span></div>
+          </li>
+          <li class="flex-box mli">
+            <div><span class="z">积分 +2 点</span></div>
+            <div><span class="z">读者甲</span></div>
+            <div><span class="y">2026-5-6 00:10</span></div>
+          </li>
+          <li class="flex-box mli"><div><span class="z">好萌好萌好萌</span></div></li>
+          <li class="flex-box mli">
+            <div><span class="z">积分 +5 点</span></div>
+            <div><span class="z">读者乙</span></div>
+            <div><span class="y">2024-11-23 11:15</span></div>
+          </li>
+          <li class="flex-box mli"><div><span class="z">嘿嘿，急了👈</span></div></li>
+          <li class="flex-box mli">
+            <div><span class="z">积分 +1 点</span></div>
+            <div><span class="z">读者丙</span></div>
+            <div><span class="y">2023-4-1 04:21</span></div>
+          </li>
+          <li class="flex-box mli"><div><span class="z">你太可愛</span></div></li>
+        </ul>
+      </div>
+    </body></html>
+    """
+    let target = ReaderChapterCommentTarget(
+        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=42&mobile=2")),
+        view: 1,
+        ownerPostID: "100",
+        title: "第一章"
+    )
+
+    let comments = try ChapterCommentsHTMLParser.parseFullRatingReasonsPage(html: html, target: target)
+
+    #expect(comments.map(\.body) == ["嘿嘿，急了👈"])
+    #expect(comments.first?.authorName == "读者乙")
+    #expect(comments.first?.metadata == "积分 +5 点 · 2024-11-23 11:15")
 }

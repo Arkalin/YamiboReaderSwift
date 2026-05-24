@@ -84,12 +84,17 @@ public struct ReaderChapterCommentTarget: Codable, Hashable, Sendable {
     public var view: Int
     public var ownerPostID: String
     public var title: String?
+    public var authorID: String?
 
-    public init(threadURL: URL, view: Int, ownerPostID: String, title: String? = nil) {
+    public init(threadURL: URL, view: Int, ownerPostID: String, title: String? = nil, authorID: String? = nil) {
         self.threadURL = threadURL
         self.view = max(1, view)
         self.ownerPostID = ownerPostID.trimmingCharacters(in: .whitespacesAndNewlines)
         self.title = title
+        self.authorID = authorID?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if self.authorID?.isEmpty == true {
+            self.authorID = nil
+        }
     }
 }
 

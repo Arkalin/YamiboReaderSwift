@@ -270,7 +270,8 @@ public enum ReaderPaginator {
             threadURL: document.threadURL,
             view: document.view,
             ownerPostID: ownerPostID,
-            title: annotatedSegment.chapterTitle
+            title: annotatedSegment.chapterTitle,
+            authorID: document.contentSource.isAuthorFiltered ? document.resolvedAuthorID : nil
         )
     }
 

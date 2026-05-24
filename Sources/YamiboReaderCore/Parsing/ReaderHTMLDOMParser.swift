@@ -17,9 +17,13 @@ enum ReaderHTMLDOMParser {
     }
 
     static func messageNodes(in context: Context) throws -> [Element] {
-        let nodes = try context.document.select(".message, [id*=postmessage]")
+        let nodes = try context.document.select(".message, [id^=postmessage_]")
         var uniqueNodes: [Element] = []
         for node in nodes {
+            if !isPostMessageElement(node),
+               ((try? node.select("[id^=postmessage_]").isEmpty()) == false) {
+                continue
+            }
             if uniqueNodes.contains(where: { $0 === node }) {
                 continue
             }
@@ -107,9 +111,37 @@ enum ReaderHTMLDOMParser {
 
     private static func postID(from element: Element) -> String? {
         let rawID = (try? element.attr("id"))?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        guard rawID.hasPrefix("postmessage_") else { return nil }
-        let postID = rawID.replacingOccurrences(of: "postmessage_", with: "")
-        return postID.isEmpty ? nil : postID
+        if let postID = postID(fromRawID: rawID, prefix: "postmessage_") {
+            return postID
+        }
+        if let postID = postID(fromRawID: rawID, prefix: "pid") {
+            return postID
+        }
+
+        var current = element.parent()
+        while let candidate = current {
+            let candidateID = (try? candidate.attr("id"))?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            if let postID = postID(fromRawID: candidateID, prefix: "post_") {
+                return postID
+            }
+            if let postID = postID(fromRawID: candidateID, prefix: "pid") {
+                return postID
+            }
+            current = candidate.parent()
+        }
+        return nil
+    }
+
+    private static func isPostMessageElement(_ element: Element) -> Bool {
+        let rawID = (try? element.attr("id"))?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return rawID.hasPrefix("postmessage_")
+    }
+
+    private static func postID(fromRawID rawID: String, prefix: String) -> String? {
+        guard rawID.hasPrefix(prefix) else { return nil }
+        let postID = String(rawID.dropFirst(prefix.count))
+        guard !postID.isEmpty, postID.allSatisfy(\.isNumber) else { return nil }
+        return postID
     }
 
     private static func readableText(from body: Element) throws -> String {

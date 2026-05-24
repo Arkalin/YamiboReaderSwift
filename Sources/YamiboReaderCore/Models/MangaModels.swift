@@ -174,6 +174,7 @@ public struct MangaDirectoryUpdateResult: Hashable, Sendable {
 
 public struct MangaChapterDocument: Hashable, Sendable {
     public var tid: String
+    public var ownerPostID: String
     public var chapterTitle: String
     public var chapterURL: URL
     public var pages: [URL]
@@ -181,12 +182,15 @@ public struct MangaChapterDocument: Hashable, Sendable {
 
     public init(
         tid: String,
+        ownerPostID: String? = nil,
         chapterTitle: String,
         chapterURL: URL,
         pages: [URL],
         html: String
     ) {
         self.tid = tid
+        let normalizedOwnerPostID = ownerPostID?.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.ownerPostID = normalizedOwnerPostID?.isEmpty == false ? normalizedOwnerPostID! : tid
         self.chapterTitle = chapterTitle
         self.chapterURL = chapterURL
         self.pages = pages
@@ -196,6 +200,7 @@ public struct MangaChapterDocument: Hashable, Sendable {
 
 public struct MangaPage: Hashable, Identifiable, Sendable {
     public var tid: String
+    public var ownerPostID: String
     public var chapterTitle: String
     public var imageURL: URL
     public var globalIndex: Int
@@ -209,6 +214,7 @@ public struct MangaPage: Hashable, Identifiable, Sendable {
 
     public init(
         tid: String,
+        ownerPostID: String? = nil,
         chapterTitle: String,
         imageURL: URL,
         globalIndex: Int,
@@ -217,6 +223,8 @@ public struct MangaPage: Hashable, Identifiable, Sendable {
         chapterURL: URL
     ) {
         self.tid = tid
+        let normalizedOwnerPostID = ownerPostID?.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.ownerPostID = normalizedOwnerPostID?.isEmpty == false ? normalizedOwnerPostID! : tid
         self.chapterTitle = chapterTitle
         self.imageURL = imageURL
         self.globalIndex = globalIndex

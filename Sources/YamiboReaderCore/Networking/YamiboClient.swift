@@ -15,8 +15,12 @@ public struct YamiboClient: Sendable {
         self.userAgent = userAgent
     }
 
-    public func fetchHTML(for route: YamiboRoute, userAgent: String? = nil) async throws -> String {
-        try await fetchHTML(url: route.url, userAgent: userAgent)
+    public func fetchHTML(
+        for route: YamiboRoute,
+        userAgent: String? = nil,
+        cachePolicy: URLRequest.CachePolicy = .useProtocolCachePolicy
+    ) async throws -> String {
+        try await fetchHTML(url: route.url, userAgent: userAgent, cachePolicy: cachePolicy)
     }
 
     public func submitForm(
@@ -38,8 +42,13 @@ public struct YamiboClient: Sendable {
         return try decodeHTML(from: data, response: response)
     }
 
-    public func fetchHTML(url: URL, userAgent: String? = nil) async throws -> String {
+    public func fetchHTML(
+        url: URL,
+        userAgent: String? = nil,
+        cachePolicy: URLRequest.CachePolicy = .useProtocolCachePolicy
+    ) async throws -> String {
         var request = URLRequest(url: url)
+        request.cachePolicy = cachePolicy
         request.setValue("text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8", forHTTPHeaderField: "Accept")
         if let cookie, !cookie.isEmpty {
             request.setValue(cookie, forHTTPHeaderField: "Cookie")

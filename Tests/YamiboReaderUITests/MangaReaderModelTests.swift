@@ -98,12 +98,14 @@ final class MangaReaderModelTests: XCTestCase {
             chapterHTMLByTID: [
                 "700": makeMangaHTML(
                     tid: "700",
+                    ownerPostID: "900700",
                     title: "第1话",
                     links: [("701", "第2话")],
                     imageCount: 2
                 ),
                 "701": makeMangaHTML(
                     tid: "701",
+                    ownerPostID: "900701",
                     title: "第2话",
                     links: [("700", "第1话")],
                     imageCount: 1
@@ -112,7 +114,7 @@ final class MangaReaderModelTests: XCTestCase {
         )
 
         await MainActor.run {
-            XCTAssertEqual(model.currentChapterCommentTarget?.ownerPostID, "700")
+            XCTAssertEqual(model.currentChapterCommentTarget?.ownerPostID, "900700")
             XCTAssertEqual(model.currentChapterCommentTarget?.view, 1)
             XCTAssertEqual(model.currentChapterCommentTarget?.threadURL.absoluteString, "https://bbs.yamibo.com/forum.php?mobile=2&mod=viewthread&page=1&tid=700")
             XCTAssertEqual(model.currentChapterCommentTarget?.title, "第1话")
@@ -121,7 +123,7 @@ final class MangaReaderModelTests: XCTestCase {
         await model.jumpToAdjacentChapter(1)
 
         await MainActor.run {
-            XCTAssertEqual(model.currentChapterCommentTarget?.ownerPostID, "701")
+            XCTAssertEqual(model.currentChapterCommentTarget?.ownerPostID, "900701")
             XCTAssertEqual(model.currentChapterCommentTarget?.threadURL.absoluteString, "https://bbs.yamibo.com/forum.php?mobile=2&mod=viewthread&page=1&tid=701")
             XCTAssertEqual(model.currentChapterCommentTarget?.title, "第2话")
         }
@@ -2542,6 +2544,7 @@ private func makeMangaModel(
 
 private func makeMangaHTML(
     tid: String,
+    ownerPostID: String? = nil,
     title: String,
     links: [(String, String)],
     imageCount: Int,
@@ -2561,10 +2564,12 @@ private func makeMangaHTML(
       <head><title>\(title) - 中文百合漫画区 - 百合会</title></head>
       <body>
         <div class="header"><h2><a>中文百合漫画区</a></h2></div>
-        <div class="message">
-          \(tagHTML)
-          \(linkHTML)
-          \(imageHTML)
+        <div class="plc cl" id="pid\(ownerPostID ?? tid)">
+          <div class="message">
+            \(tagHTML)
+            \(linkHTML)
+            \(imageHTML)
+          </div>
         </div>
       </body>
     </html>

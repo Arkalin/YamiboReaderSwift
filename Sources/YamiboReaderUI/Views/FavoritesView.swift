@@ -115,7 +115,7 @@ struct FavoriteSelectionActionState: Equatable {
 }
 
 func favoriteLaunchNeedsMangaProbeBlocker(_ favorite: Favorite) -> Bool {
-    favorite.type == .manga
+    false
 }
 
 func shouldBlockFavoriteInteractions(openingMangaFavoriteID: String?) -> Bool {
@@ -2510,9 +2510,8 @@ public struct FavoritesView: View {
                 openingMangaFavoriteID = nil
                 appModel.presentReader(context)
             case let .manga(context):
-                openingMangaFavoriteID = favorite.id
-                defer { openingMangaFavoriteID = nil }
-                await appModel.openManga(context)
+                openingMangaFavoriteID = nil
+                appModel.presentManga(context)
             case let .web(resolvedFavorite):
                 openingMangaFavoriteID = nil
                 selectedFavorite = resolvedFavorite
