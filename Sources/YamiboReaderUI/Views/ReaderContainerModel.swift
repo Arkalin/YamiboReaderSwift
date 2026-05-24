@@ -94,7 +94,7 @@ public enum ReaderChapterCommentsState: Equatable, Sendable {
     case idle
     case unsupported
     case loading(ReaderChapterCommentTarget)
-    case loaded(ReaderChapterCommentTarget, [ChapterComment])
+    case loaded(ReaderChapterCommentTarget, ChapterCommentsPage)
     case failed(ReaderChapterCommentTarget, String)
 }
 
@@ -118,6 +118,8 @@ public final class ReaderContainerModel: ObservableObject {
     @Published public private(set) var sessionState = SessionState()
     @Published public private(set) var cacheOperationState = ReaderCacheOperationState()
     @Published public private(set) var chapterCommentsState: ReaderChapterCommentsState = .idle
+    @Published public private(set) var isLoadingMoreChapterComments = false
+    @Published public private(set) var chapterCommentsLoadMoreError: String?
     @Published public private(set) var pagedSpreads: [ReaderPagedSpread] = []
 
     public let context: ReaderLaunchContext
@@ -647,12 +649,43 @@ public final class ReaderContainerModel: ObservableObject {
             return
         }
         chapterCommentsState = .loading(target)
+        chapterCommentsLoadMoreError = nil
         do {
             let page = try await repository.loadChapterComments(for: target)
-            chapterCommentsState = .loaded(target, page.comments)
+            chapterCommentsState = .loaded(target, page)
         } catch {
             chapterCommentsState = .failed(target, error.localizedDescription)
         }
+    }
+
+    public func loadNextChapterCommentsPage() async {
+        guard case let .loaded(target, currentPage) = chapterCommentsState,
+              let nextView = currentPage.nextView,
+              !isLoadingMoreChapterComments else {
+            return
+        }
+        if repository == nil {
+            repository = await appContext.makeReaderRepository()
+        }
+        guard let repository else { return }
+
+        isLoadingMoreChapterComments = true
+        chapterCommentsLoadMoreError = nil
+        do {
+            let nextPage = try await repository.loadMoreChapterComments(for: target, view: nextView)
+            chapterCommentsState = .loaded(
+                target,
+                ChapterCommentsPage(
+                    target: target,
+                    comments: currentPage.comments + nextPage.comments,
+                    isBoundaryClosed: nextPage.isBoundaryClosed,
+                    nextView: nextPage.nextView
+                )
+            )
+        } catch {
+            chapterCommentsLoadMoreError = error.localizedDescription
+        }
+        isLoadingMoreChapterComments = false
     }
 
     public func dismissCacheProgress() {

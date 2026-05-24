@@ -231,6 +231,7 @@
 "reader.chapter_comments" = "章节评论";
 "reader.chapter_comments_empty" = "暂无章节评论";
 "reader.chapter_comments_failed" = "章节评论加载失败";
+"reader.chapter_comments_load_next" = "加载下一页评论";
 "reader.chapter_comments_unsupported" = "该章节暂不支持评论";
 "reader.character_spacing" = "字符间距";
 "reader.character_spacing_sample" = "甲乙丙";
