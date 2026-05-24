@@ -90,6 +90,14 @@ private enum ReaderCacheOperationMode {
     case update
 }
 
+public enum ReaderChapterCommentsState: Equatable, Sendable {
+    case idle
+    case unsupported
+    case loading(ReaderChapterCommentTarget)
+    case loaded(ReaderChapterCommentTarget, [ChapterComment])
+    case failed(ReaderChapterCommentTarget, String)
+}
+
 @MainActor
 public final class ReaderContainerModel: ObservableObject {
     @Published public private(set) var isLoading = false
@@ -109,6 +117,7 @@ public final class ReaderContainerModel: ObservableObject {
     @Published public var applePencilPageTurnSettings = ApplePencilPageTurnSettings()
     @Published public private(set) var sessionState = SessionState()
     @Published public private(set) var cacheOperationState = ReaderCacheOperationState()
+    @Published public private(set) var chapterCommentsState: ReaderChapterCommentsState = .idle
     @Published public private(set) var pagedSpreads: [ReaderPagedSpread] = []
 
     public let context: ReaderLaunchContext
@@ -183,6 +192,10 @@ public final class ReaderContainerModel: ObservableObject {
 
     public var currentProgressPercentText: String {
         "\(currentProgressPercent)%"
+    }
+
+    public var currentChapterCommentTarget: ReaderChapterCommentTarget? {
+        currentRenderedPageMetadata?.chapterCommentTarget
     }
 
     public var currentWebViewText: String {
@@ -619,6 +632,27 @@ public final class ReaderContainerModel: ObservableObject {
     public func hideCacheProgress() {
         guard cacheOperationState.hasSession else { return }
         cacheOperationState.isProgressHidden = true
+    }
+
+    public func loadChapterComments(for target: ReaderChapterCommentTarget?) async {
+        guard let target else {
+            chapterCommentsState = .unsupported
+            return
+        }
+        if repository == nil {
+            repository = await appContext.makeReaderRepository()
+        }
+        guard let repository else {
+            chapterCommentsState = .failed(target, L10n.string("reader.chapter_comments_failed"))
+            return
+        }
+        chapterCommentsState = .loading(target)
+        do {
+            let page = try await repository.loadChapterComments(for: target)
+            chapterCommentsState = .loaded(target, page.comments)
+        } catch {
+            chapterCommentsState = .failed(target, error.localizedDescription)
+        }
     }
 
     public func dismissCacheProgress() {

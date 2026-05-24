@@ -68,6 +68,31 @@ public enum ReaderSegment: Hashable, Sendable {
     }
 }
 
+public struct ReaderSegmentSource: Codable, Hashable, Sendable {
+    public var ownerPostID: String?
+
+    public init(ownerPostID: String? = nil) {
+        self.ownerPostID = ownerPostID?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if self.ownerPostID?.isEmpty == true {
+            self.ownerPostID = nil
+        }
+    }
+}
+
+public struct ReaderChapterCommentTarget: Codable, Hashable, Sendable {
+    public var threadURL: URL
+    public var view: Int
+    public var ownerPostID: String
+    public var title: String?
+
+    public init(threadURL: URL, view: Int, ownerPostID: String, title: String? = nil) {
+        self.threadURL = threadURL
+        self.view = max(1, view)
+        self.ownerPostID = ownerPostID.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.title = title
+    }
+}
+
 extension ReaderSegment: Codable {
     private enum CodingKeys: String, CodingKey {
         case kind
@@ -121,6 +146,7 @@ public struct ReaderPageDocument: Codable, Hashable, Sendable {
     public var retainedChapterCount: Int
     public var filteredChapterCandidateCount: Int
     public var segments: [ReaderSegment]
+    public var segmentSources: [ReaderSegmentSource?]
     public var fetchedAt: Date
 
     public init(
@@ -132,6 +158,7 @@ public struct ReaderPageDocument: Codable, Hashable, Sendable {
         retainedChapterCount: Int = 0,
         filteredChapterCandidateCount: Int = 0,
         segments: [ReaderSegment],
+        segmentSources: [ReaderSegmentSource?]? = nil,
         fetchedAt: Date = .now
     ) {
         self.threadURL = threadURL
@@ -142,7 +169,59 @@ public struct ReaderPageDocument: Codable, Hashable, Sendable {
         self.retainedChapterCount = retainedChapterCount
         self.filteredChapterCandidateCount = filteredChapterCandidateCount
         self.segments = segments
+        self.segmentSources = segmentSources ?? Array(repeating: nil, count: segments.count)
         self.fetchedAt = fetchedAt
+    }
+
+    public func source(forSegmentIndex index: Int) -> ReaderSegmentSource? {
+        guard segmentSources.indices.contains(index) else { return nil }
+        return segmentSources[index]
+    }
+}
+
+extension ReaderPageDocument {
+    private enum CodingKeys: String, CodingKey {
+        case threadURL
+        case view
+        case maxView
+        case resolvedAuthorID
+        case contentSource
+        case retainedChapterCount
+        case filteredChapterCandidateCount
+        case segments
+        case segmentSources
+        case fetchedAt
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let segments = try container.decode([ReaderSegment].self, forKey: .segments)
+        self.init(
+            threadURL: try container.decode(URL.self, forKey: .threadURL),
+            view: try container.decode(Int.self, forKey: .view),
+            maxView: try container.decode(Int.self, forKey: .maxView),
+            resolvedAuthorID: try container.decodeIfPresent(String.self, forKey: .resolvedAuthorID),
+            contentSource: try container.decodeIfPresent(ReaderContentSource.self, forKey: .contentSource) ?? .allPostsPage,
+            retainedChapterCount: try container.decodeIfPresent(Int.self, forKey: .retainedChapterCount) ?? 0,
+            filteredChapterCandidateCount: try container.decodeIfPresent(Int.self, forKey: .filteredChapterCandidateCount) ?? 0,
+            segments: segments,
+            segmentSources: try container.decodeIfPresent([ReaderSegmentSource?].self, forKey: .segmentSources),
+            fetchedAt: try container.decodeIfPresent(Date.self, forKey: .fetchedAt) ?? .distantPast
+        )
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(threadURL, forKey: .threadURL)
+        try container.encode(view, forKey: .view)
+        try container.encode(maxView, forKey: .maxView)
+        try container.encodeIfPresent(resolvedAuthorID, forKey: .resolvedAuthorID)
+        try container.encode(contentSource, forKey: .contentSource)
+        try container.encode(retainedChapterCount, forKey: .retainedChapterCount)
+        try container.encode(filteredChapterCandidateCount, forKey: .filteredChapterCandidateCount)
+        try container.encode(segments, forKey: .segments)
+        try container.encode(segmentSources, forKey: .segmentSources)
+        try container.encode(fetchedAt, forKey: .fetchedAt)
     }
 }
 
@@ -150,11 +229,18 @@ public struct ReaderChapter: Codable, Hashable, Sendable {
     public var ordinal: Int
     public var title: String
     public var startIndex: Int
+    public var chapterCommentTarget: ReaderChapterCommentTarget?
 
-    public init(ordinal: Int, title: String, startIndex: Int) {
+    public init(
+        ordinal: Int,
+        title: String,
+        startIndex: Int,
+        chapterCommentTarget: ReaderChapterCommentTarget? = nil
+    ) {
         self.ordinal = max(0, ordinal)
         self.title = title
         self.startIndex = startIndex
+        self.chapterCommentTarget = chapterCommentTarget
     }
 }
 
@@ -277,6 +363,7 @@ public struct ReaderRenderedPage: Hashable, Identifiable, Sendable {
     public var segmentStartOffset: Int
     public var segmentEndOffset: Int
     public var textRanges: [ReaderRenderedTextRange]
+    public var chapterCommentTarget: ReaderChapterCommentTarget?
 
     public var id: Int { index }
 
@@ -289,7 +376,8 @@ public struct ReaderRenderedPage: Hashable, Identifiable, Sendable {
         segmentIndex: Int? = nil,
         segmentStartOffset: Int = 0,
         segmentEndOffset: Int = 0,
-        textRanges: [ReaderRenderedTextRange]? = nil
+        textRanges: [ReaderRenderedTextRange]? = nil,
+        chapterCommentTarget: ReaderChapterCommentTarget? = nil
     ) {
         self.index = index
         self.blocks = blocks
@@ -299,6 +387,7 @@ public struct ReaderRenderedPage: Hashable, Identifiable, Sendable {
         self.segmentIndex = segmentIndex
         self.segmentStartOffset = max(0, segmentStartOffset)
         self.segmentEndOffset = max(self.segmentStartOffset, segmentEndOffset)
+        self.chapterCommentTarget = chapterCommentTarget
         if let textRanges {
             self.textRanges = textRanges
         } else if let segmentIndex {

@@ -28,7 +28,8 @@ public enum ReaderHTMLParser {
             contentSource: contentSource,
             retainedChapterCount: parsed.retainedChapterCount,
             filteredChapterCandidateCount: parsed.filteredChapterCandidateCount,
-            segments: segments
+            segments: segments,
+            segmentSources: parsed.segmentSources
         )
     }
 
@@ -109,6 +110,12 @@ public enum ReaderHTMLParser {
         let messages = (try? ReaderHTMLDOMParser.parseMessages(in: context)) ?? []
         return messages.reduce(into: ReaderParsedContent()) { partial, message in
             partial.segments.append(contentsOf: message.segments)
+            partial.segmentSources.append(
+                contentsOf: Array(
+                    repeating: ReaderSegmentSource(ownerPostID: message.ownerPostID),
+                    count: message.segments.count
+                )
+            )
             partial.retainedChapterCount += message.chapterTitle == nil ? 0 : 1
         }
     }
@@ -150,15 +157,18 @@ public enum ReaderHTMLParser {
 
 public struct ReaderParsedContent: Hashable, Sendable {
     public var segments: [ReaderSegment]
+    public var segmentSources: [ReaderSegmentSource?]
     public var retainedChapterCount: Int
     public var filteredChapterCandidateCount: Int
 
     public init(
         segments: [ReaderSegment] = [],
+        segmentSources: [ReaderSegmentSource?] = [],
         retainedChapterCount: Int = 0,
         filteredChapterCandidateCount: Int = 0
     ) {
         self.segments = segments
+        self.segmentSources = segmentSources
         self.retainedChapterCount = retainedChapterCount
         self.filteredChapterCandidateCount = filteredChapterCandidateCount
     }
