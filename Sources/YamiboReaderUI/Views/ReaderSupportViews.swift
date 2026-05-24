@@ -278,6 +278,7 @@ struct ReaderBottomChrome: View {
     let onStepWeb: (Int) -> Void
     let onShowSettings: () -> Void
     let onShowCache: () -> Void
+    let onShowComments: () -> Void
     let onJumpChapter: (Int) -> Void
     let onProgressPreviewChange: (Double?, Bool) -> Void
     let onProgressCommit: (Double) -> Void
@@ -325,6 +326,12 @@ struct ReaderBottomChrome: View {
                 Spacer(minLength: 0)
 
                 HStack(spacing: 8) {
+                    Button(action: onShowComments) {
+                        Label(L10n.string("reader.comments"), systemImage: "text.bubble")
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(readerChromeButtonTint(for: colorScheme))
+
                     Button(action: onShowSettings) {
                         Label(L10n.string("settings.title"), systemImage: "gearshape")
                     }
@@ -599,6 +606,118 @@ struct ReaderChapterSheet: View {
         let targetChapter = model.chapters[targetIndex]
         withAnimation(.easeInOut(duration: 0.2)) {
             proxy.scrollTo(targetChapter.startIndex, anchor: .top)
+        }
+    }
+}
+
+struct ReaderChapterCommentsSheet: View {
+    @ObservedObject var model: ReaderContainerModel
+    let target: ReaderChapterCommentTarget?
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            content
+                .navigationTitle(L10n.string("reader.chapter_comments"))
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button(L10n.string("common.done")) { dismiss() }
+                    }
+                }
+        }
+        .task(id: target) {
+            await model.loadChapterComments(for: target)
+        }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        switch model.chapterCommentsState {
+        case .idle, .loading:
+            VStack(spacing: 12) {
+                ProgressView()
+                Text(L10n.string("common.loading"))
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        case .unsupported:
+            ContentUnavailableView(
+                L10n.string("reader.chapter_comments_unsupported"),
+                systemImage: "text.bubble"
+            )
+        case let .failed(target, message):
+            VStack(spacing: 12) {
+                ContentUnavailableView(
+                    message,
+                    systemImage: "exclamationmark.triangle"
+                )
+                Button(L10n.string("common.retry")) {
+                    Task { await model.loadChapterComments(for: target) }
+                }
+                .buttonStyle(.borderedProminent)
+            }
+            .padding()
+        case let .loaded(target, comments):
+            if comments.isEmpty {
+                ContentUnavailableView(
+                    L10n.string("reader.chapter_comments_empty"),
+                    systemImage: "text.bubble"
+                )
+            } else {
+                List {
+                    if let title = target.title, !title.isEmpty {
+                        Section {
+                            Text(title)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    Section {
+                        ForEach(comments) { comment in
+                            ReaderChapterCommentRow(comment: comment)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct ReaderChapterCommentRow: View {
+    let comment: ChapterComment
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Text(sourceText)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Text(comment.authorName.isEmpty ? L10n.string("reader.comment_anonymous") : comment.authorName)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                if let metadata = comment.metadata {
+                    Text(metadata)
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            Text(comment.body)
+                .font(.body)
+                .textSelection(.enabled)
+        }
+        .padding(.vertical, 4)
+    }
+
+    private var sourceText: String {
+        switch comment.source {
+        case .postComment:
+            L10n.string("reader.comment_source.post_comment")
+        case .ratingReason:
+            L10n.string("reader.comment_source.rating_reason")
+        case .reply:
+            L10n.string("reader.comment_source.reply")
         }
     }
 }

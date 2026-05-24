@@ -7,13 +7,13 @@ public enum ReaderPaginator {
         settings: ReaderAppearanceSettings,
         layout: ReaderContainerLayout
     ) -> ReaderPaginationResult {
-        let annotatedSegments = annotatedSegments(from: document.segments, settings: settings)
+        let annotatedSegments = annotatedSegments(from: document, settings: settings)
 
         switch settings.readingMode {
         case .paged:
             return paginate(
                 annotatedSegments: annotatedSegments,
-                documentView: document.view,
+                document: document,
                 settings: settings,
                 layout: layout,
                 chunker: { annotatedSegment, settings, layout in
@@ -28,7 +28,7 @@ public enum ReaderPaginator {
         case .vertical:
             return paginate(
                 annotatedSegments: annotatedSegments,
-                documentView: document.view,
+                document: document,
                 settings: settings,
                 layout: layout,
                 chunker: { annotatedSegment, settings, layout in
@@ -44,7 +44,7 @@ public enum ReaderPaginator {
 
     private static func paginate(
         annotatedSegments: [AnnotatedSegment],
-        documentView: Int,
+        document: ReaderPageDocument,
         settings: ReaderAppearanceSettings,
         layout: ReaderContainerLayout,
         chunker: (AnnotatedSegment, ReaderAppearanceSettings, ReaderContainerLayout) -> [TextSlice]
@@ -63,6 +63,7 @@ public enum ReaderPaginator {
                            slice,
                            chapterTitle: chapterTitle,
                            annotatedSegment: annotatedSegment,
+                           document: document,
                            settings: settings,
                            layout: layout,
                            pages: &pages
@@ -73,7 +74,7 @@ public enum ReaderPaginator {
                     let page = ReaderRenderedPage(
                         index: pages.count,
                         blocks: [.text(slice.text, chapterTitle: chapterTitle)],
-                        documentView: documentView,
+                        documentView: document.view,
                         chapterOrdinal: annotatedSegment.chapterOrdinal,
                         chapterTitle: annotatedSegment.chapterTitle,
                         segmentIndex: annotatedSegment.index,
@@ -85,7 +86,8 @@ public enum ReaderPaginator {
                                 startOffset: slice.startOffset,
                                 endOffset: slice.endOffset
                             )
-                        ]
+                        ],
+                        chapterCommentTarget: chapterCommentTarget(for: annotatedSegment, document: document)
                     )
                     if let chapterOrdinal = annotatedSegment.chapterOrdinal,
                        let chapterTitle = annotatedSegment.chapterTitle,
@@ -94,7 +96,8 @@ public enum ReaderPaginator {
                             ReaderChapter(
                                 ordinal: chapterOrdinal,
                                 title: chapterTitle,
-                                startIndex: page.index
+                                startIndex: page.index,
+                                chapterCommentTarget: page.chapterCommentTarget
                             )
                         )
                     }
@@ -106,7 +109,7 @@ public enum ReaderPaginator {
                         ReaderRenderedPage(
                             index: 0,
                             blocks: [.text(text, chapterTitle: chapterTitle)],
-                            documentView: documentView,
+                            documentView: document.view,
                             chapterOrdinal: annotatedSegment.chapterOrdinal,
                             chapterTitle: annotatedSegment.chapterTitle,
                             segmentIndex: annotatedSegment.index,
@@ -118,7 +121,8 @@ public enum ReaderPaginator {
                                     startOffset: 0,
                                     endOffset: text.count
                                 )
-                            ]
+                            ],
+                            chapterCommentTarget: chapterCommentTarget(for: annotatedSegment, document: document)
                         )
                     )
                 }
@@ -126,12 +130,13 @@ public enum ReaderPaginator {
                 let page = ReaderRenderedPage(
                     index: pages.count,
                     blocks: [.image(url, chapterTitle: chapterTitle)],
-                    documentView: documentView,
+                    documentView: document.view,
                     chapterOrdinal: annotatedSegment.chapterOrdinal,
                     chapterTitle: annotatedSegment.chapterTitle,
                     segmentIndex: annotatedSegment.index,
                     segmentStartOffset: 0,
-                    segmentEndOffset: 0
+                    segmentEndOffset: 0,
+                    chapterCommentTarget: chapterCommentTarget(for: annotatedSegment, document: document)
                 )
                 if let chapterOrdinal = annotatedSegment.chapterOrdinal,
                    let chapterTitle = annotatedSegment.chapterTitle,
@@ -140,7 +145,8 @@ public enum ReaderPaginator {
                         ReaderChapter(
                             ordinal: chapterOrdinal,
                             title: chapterTitle,
-                            startIndex: page.index
+                            startIndex: page.index,
+                            chapterCommentTarget: page.chapterCommentTarget
                         )
                     )
                 }
@@ -149,7 +155,7 @@ public enum ReaderPaginator {
         }
 
         if pages.isEmpty {
-            pages = [ReaderRenderedPage(index: 0, blocks: [.footer(L10n.string("reader.empty_content"))], documentView: documentView)]
+            pages = [ReaderRenderedPage(index: 0, blocks: [.footer(L10n.string("reader.empty_content"))], documentView: document.view)]
         }
 
         return ReaderPaginationResult(pages: pages, chapters: chapters)
@@ -159,6 +165,7 @@ public enum ReaderPaginator {
         _ slice: TextSlice,
         chapterTitle: String?,
         annotatedSegment: AnnotatedSegment,
+        document: ReaderPageDocument,
         settings: ReaderAppearanceSettings,
         layout: ReaderContainerLayout,
         pages: inout [ReaderRenderedPage]
@@ -169,6 +176,7 @@ public enum ReaderPaginator {
         guard previousPage.documentView > 0,
               previousPage.chapterOrdinal == annotatedSegment.chapterOrdinal,
               previousPage.chapterTitle == annotatedSegment.chapterTitle,
+              previousPage.chapterCommentTarget == chapterCommentTarget(for: annotatedSegment, document: document),
               previousPage.blocks.allSatisfy(\.isTextBlock) else {
             return false
         }
@@ -203,16 +211,18 @@ public enum ReaderPaginator {
     }
 
     private static func annotatedSegments(
-        from segments: [ReaderSegment],
+        from document: ReaderPageDocument,
         settings: ReaderAppearanceSettings
     ) -> [AnnotatedSegment] {
-        let transformedSegments = transformedSegments(from: segments, settings: settings)
         var results: [AnnotatedSegment] = []
         var currentChapterTitle: String?
         var currentChapterOrdinal: Int?
         var nextChapterOrdinal = 0
 
-        for (index, segment) in transformedSegments.enumerated() {
+        for (index, segment) in document.segments.enumerated() {
+            guard let transformedSegment = transformedSegment(from: segment, settings: settings) else {
+                continue
+            }
             let explicitChapterTitle = segment.chapterTitle?.trimmingCharacters(in: .whitespacesAndNewlines)
             if let explicitChapterTitle, !explicitChapterTitle.isEmpty {
                 if currentChapterTitle != explicitChapterTitle {
@@ -225,7 +235,7 @@ public enum ReaderPaginator {
             results.append(
                 AnnotatedSegment(
                     index: index,
-                    segment: segment,
+                    segment: transformedSegment,
                     chapterOrdinal: currentChapterOrdinal,
                     chapterTitle: currentChapterTitle
                 )
@@ -235,19 +245,33 @@ public enum ReaderPaginator {
         return results
     }
 
-    private static func transformedSegments(
-        from segments: [ReaderSegment],
+    private static func transformedSegment(
+        from segment: ReaderSegment,
         settings: ReaderAppearanceSettings
-    ) -> [ReaderSegment] {
-        segments.compactMap { segment in
-            switch segment {
-            case let .text(text, chapterTitle):
-                let transformed = ReaderTextTransformer.transform(text, mode: settings.translationMode)
-                return .text(transformed, chapterTitle: chapterTitle)
-            case let .image(url, chapterTitle):
-                return settings.loadsInlineImages ? .image(url, chapterTitle: chapterTitle) : nil
-            }
+    ) -> ReaderSegment? {
+        switch segment {
+        case let .text(text, chapterTitle):
+            let transformed = ReaderTextTransformer.transform(text, mode: settings.translationMode)
+            return .text(transformed, chapterTitle: chapterTitle)
+        case let .image(url, chapterTitle):
+            return settings.loadsInlineImages ? .image(url, chapterTitle: chapterTitle) : nil
         }
+    }
+
+    private static func chapterCommentTarget(
+        for annotatedSegment: AnnotatedSegment,
+        document: ReaderPageDocument
+    ) -> ReaderChapterCommentTarget? {
+        guard let ownerPostID = document.source(forSegmentIndex: annotatedSegment.index)?.ownerPostID,
+              !ownerPostID.isEmpty else {
+            return nil
+        }
+        return ReaderChapterCommentTarget(
+            threadURL: document.threadURL,
+            view: document.view,
+            ownerPostID: ownerPostID,
+            title: annotatedSegment.chapterTitle
+        )
     }
 
     private static func paginateText(

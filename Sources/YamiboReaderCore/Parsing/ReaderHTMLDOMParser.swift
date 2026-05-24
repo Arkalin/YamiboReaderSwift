@@ -9,6 +9,7 @@ enum ReaderHTMLDOMParser {
     struct ParsedMessage {
         let segments: [ReaderSegment]
         let chapterTitle: String?
+        let ownerPostID: String?
     }
 
     static func parse(html: String) throws -> Context {
@@ -87,7 +88,7 @@ enum ReaderHTMLDOMParser {
         let fragmentHTML = try element.html()
         let fragment = try SwiftSoup.parseBodyFragment(fragmentHTML)
         guard let body = fragment.body() else {
-            return ParsedMessage(segments: [], chapterTitle: nil)
+            return ParsedMessage(segments: [], chapterTitle: nil, ownerPostID: postID(from: element))
         }
 
         try body.select("i").remove()
@@ -101,7 +102,14 @@ enum ReaderHTMLDOMParser {
         )
 
         let segments = try orderedSegments(from: body, chapterTitle: chapterTitle)
-        return ParsedMessage(segments: segments, chapterTitle: chapterTitle)
+        return ParsedMessage(segments: segments, chapterTitle: chapterTitle, ownerPostID: postID(from: element))
+    }
+
+    private static func postID(from element: Element) -> String? {
+        let rawID = (try? element.attr("id"))?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard rawID.hasPrefix("postmessage_") else { return nil }
+        let postID = rawID.replacingOccurrences(of: "postmessage_", with: "")
+        return postID.isEmpty ? nil : postID
     }
 
     private static func readableText(from body: Element) throws -> String {

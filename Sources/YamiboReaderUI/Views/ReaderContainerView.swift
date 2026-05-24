@@ -50,6 +50,8 @@ public struct ReaderContainerView: View {
     @State private var showingCacheProgress = false
     @State private var showingWebJumpSheet = false
     @State private var showingChapterSheet = false
+    @State private var showingChapterComments = false
+    @State private var chapterCommentsTarget: ReaderChapterCommentTarget?
     @State private var chromeState = ReaderChromeState()
     @State private var verticalScrollRequest: ReaderVerticalScrollRequest?
     @State private var verticalRestoreController = ReaderVerticalRestoreController()
@@ -172,6 +174,9 @@ public struct ReaderContainerView: View {
                     Task { await jumpToWebView(view) }
                 }
             }
+            .sheet(isPresented: $showingChapterComments) {
+                ReaderChapterCommentsSheet(model: model, target: chapterCommentsTarget)
+            }
             .sheet(isPresented: $showingCachePanel) {
                 ReaderCachePanel(model: model) {
                     showingCachePanel = false
@@ -219,6 +224,9 @@ public struct ReaderContainerView: View {
                 updateChromeForContentState()
             }
             .onChange(of: showingChapterSheet) { _, _ in
+                updateChromeForContentState()
+            }
+            .onChange(of: showingChapterComments) { _, _ in
                 updateChromeForContentState()
             }
             .onPreferenceChange(ReaderTopChromeHeightPreferenceKey.self) { value in
@@ -413,6 +421,7 @@ public struct ReaderContainerView: View {
             },
             onShowSettings: openSettings,
             onShowCache: openCachePanel,
+            onShowComments: openChapterComments,
             onJumpChapter: { delta in
                 jumpAdjacentChapter(delta)
             },
@@ -551,6 +560,11 @@ public struct ReaderContainerView: View {
         showingChapterSheet = true
     }
 
+    private func openChapterComments() {
+        chapterCommentsTarget = model.currentChapterCommentTarget
+        showingChapterComments = true
+    }
+
     private func openSettings() {
         showingSettings = true
     }
@@ -658,7 +672,7 @@ public struct ReaderContainerView: View {
     }
 
     private var hasPresentedOverlay: Bool {
-        showingSettings || showingCachePanel || showingCacheProgress || showingWebJumpSheet || showingChapterSheet
+        showingSettings || showingCachePanel || showingCacheProgress || showingWebJumpSheet || showingChapterSheet || showingChapterComments
     }
 
     private var canReceiveApplePencilPageTurn: Bool {

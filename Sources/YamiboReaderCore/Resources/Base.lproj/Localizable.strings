@@ -202,6 +202,11 @@
 "reader.background.system" = "系统";
 "reader.background_theme" = "背景主题";
 "reader.cache" = "缓存";
+"reader.comment_anonymous" = "匿名";
+"reader.comment_source.post_comment" = "点评";
+"reader.comment_source.rating_reason" = "评分";
+"reader.comment_source.reply" = "回复";
+"reader.comments" = "评论";
 "reader.cache_action.cache" = "缓存";
 "reader.cache_action.update" = "更新";
 "reader.cache_detail.completed" = "已完成 %d / %d 页";
@@ -223,6 +228,10 @@
 "reader.cached" = "已缓存";
 "reader.chapter_summary" = "目录项 %d · 过滤 %d";
 "reader.chapters" = "章节";
+"reader.chapter_comments" = "章节评论";
+"reader.chapter_comments_empty" = "暂无章节评论";
+"reader.chapter_comments_failed" = "章节评论加载失败";
+"reader.chapter_comments_unsupported" = "该章节暂不支持评论";
 "reader.character_spacing" = "字符间距";
 "reader.character_spacing_sample" = "甲乙丙";
 "reader.current_web_page" = "当前网页";

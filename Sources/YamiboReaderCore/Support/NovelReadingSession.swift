@@ -346,14 +346,16 @@ public struct NovelReadingSession: Sendable {
                     segmentIndex: page.segmentIndex,
                     segmentStartOffset: page.segmentStartOffset,
                     segmentEndOffset: page.segmentEndOffset,
-                    textRanges: page.textRanges
+                    textRanges: page.textRanges,
+                    chapterCommentTarget: page.chapterCommentTarget
                 )
             }
             renderedChapters += nextPagination.chapters.map { chapter in
                 ReaderChapter(
                     ordinal: chapter.ordinal,
                     title: chapter.title,
-                    startIndex: chapter.startIndex + startIndex
+                    startIndex: chapter.startIndex + startIndex,
+                    chapterCommentTarget: chapter.chapterCommentTarget
                 )
             }
         }
@@ -368,7 +370,8 @@ public struct NovelReadingSession: Sendable {
                 segmentIndex: page.segmentIndex,
                 segmentStartOffset: page.segmentStartOffset,
                 segmentEndOffset: page.segmentEndOffset,
-                textRanges: page.textRanges
+                textRanges: page.textRanges,
+                chapterCommentTarget: page.chapterCommentTarget
             )
         }
         let fallbackTarget = ReaderResolvedTarget(
