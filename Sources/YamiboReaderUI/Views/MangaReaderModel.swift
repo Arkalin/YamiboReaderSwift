@@ -49,6 +49,9 @@ public final class MangaReaderModel: ObservableObject {
     @Published public private(set) var forceSearchShortcutRemaining = 0
     @Published public private(set) var chapterTransitionState: MangaChapterTransitionState = .idle
     @Published public private(set) var navigationRequest: MangaReaderNavigationRequest?
+    @Published public private(set) var chapterCommentsState: ReaderChapterCommentsState = .idle
+    @Published public private(set) var isLoadingMoreChapterComments = false
+    @Published public private(set) var chapterCommentsLoadMoreError: String?
 
     public let context: MangaLaunchContext
 
@@ -56,6 +59,7 @@ public final class MangaReaderModel: ObservableObject {
     private let imageRepository: MangaImageRepository
     private let chapterProbe: @MainActor (MangaLaunchContext) async -> MangaProbeOutcome
     private var repository: MangaRepository?
+    private var readerRepository: ReaderRepository?
     private var chapterWindow: MangaChapterWindow?
     private var chapterDocumentTasks: [String: Task<MangaChapterDocument, Error>] = [:]
     private var chapterJumpTask: Task<Void, Never>?
@@ -105,6 +109,16 @@ public final class MangaReaderModel: ObservableObject {
     public var currentPageText: String {
         guard let currentPage else { return "0 / 0" }
         return "\(currentPage.localIndex + 1) / \(max(1, currentPage.chapterTotalPages))"
+    }
+
+    public var currentChapterCommentTarget: ReaderChapterCommentTarget? {
+        guard let currentPage else { return nil }
+        return ReaderChapterCommentTarget(
+            threadURL: currentPage.chapterURL,
+            view: webViewPage(from: currentPage.chapterURL),
+            ownerPostID: currentPage.tid,
+            title: currentPage.chapterTitle
+        )
     }
 
     public var progressLabelText: String {
@@ -226,6 +240,58 @@ public final class MangaReaderModel: ObservableObject {
 
     public func consumeNavigationRequest() {
         navigationRequest = nil
+    }
+
+    public func loadChapterComments(for target: ReaderChapterCommentTarget?) async {
+        guard let target else {
+            chapterCommentsState = .unsupported
+            return
+        }
+        if readerRepository == nil {
+            readerRepository = await appContext.makeReaderRepository()
+        }
+        guard let readerRepository else {
+            chapterCommentsState = .failed(target, L10n.string("reader.chapter_comments_failed"))
+            return
+        }
+        chapterCommentsState = .loading(target)
+        chapterCommentsLoadMoreError = nil
+        do {
+            let page = try await readerRepository.loadChapterComments(for: target)
+            chapterCommentsState = .loaded(target, page)
+        } catch {
+            chapterCommentsState = .failed(target, error.localizedDescription)
+        }
+    }
+
+    public func loadNextChapterCommentsPage() async {
+        guard case let .loaded(target, currentPage) = chapterCommentsState,
+              let nextView = currentPage.nextView,
+              !isLoadingMoreChapterComments else {
+            return
+        }
+        if readerRepository == nil {
+            readerRepository = await appContext.makeReaderRepository()
+        }
+        guard let readerRepository else { return }
+
+        isLoadingMoreChapterComments = true
+        chapterCommentsLoadMoreError = nil
+        do {
+            let nextPage = try await readerRepository.loadMoreChapterComments(for: target, view: nextView)
+            chapterCommentsState = .loaded(
+                target,
+                ChapterCommentsPage(
+                    target: target,
+                    comments: currentPage.comments + nextPage.comments,
+                    isBoundaryClosed: nextPage.isBoundaryClosed,
+                    nextView: nextPage.nextView
+                )
+            )
+        } catch {
+            chapterCommentsLoadMoreError = error.localizedDescription
+        }
+        isLoadingMoreChapterComments = false
     }
 
     public func clearTransitionFailureIfNeeded() {
@@ -997,6 +1063,14 @@ public final class MangaReaderModel: ObservableObject {
             ?? currentDirectory.chapters.last?.rawTitle
             ?? currentDirectory.cleanBookName
         return MangaTitleCleaner.extractAuthorPrefix(seedTitle)
+    }
+
+    private func webViewPage(from url: URL) -> Int {
+        URLComponents(url: url, resolvingAgainstBaseURL: false)?
+            .queryItems?
+            .first(where: { $0.name == "page" })?
+            .value
+            .flatMap(Int.init) ?? 1
     }
 }
 

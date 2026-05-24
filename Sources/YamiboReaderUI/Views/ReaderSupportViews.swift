@@ -704,6 +704,116 @@ struct ReaderChapterCommentsSheet: View {
     }
 }
 
+struct MangaChapterCommentsSheet: View {
+    @ObservedObject var model: MangaReaderModel
+    let target: ReaderChapterCommentTarget?
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ReaderChapterCommentsContent(
+                state: model.chapterCommentsState,
+                isLoadingMore: model.isLoadingMoreChapterComments,
+                loadMoreError: model.chapterCommentsLoadMoreError,
+                retry: { target in Task { await model.loadChapterComments(for: target) } },
+                loadNext: { Task { await model.loadNextChapterCommentsPage() } }
+            )
+            .navigationTitle(L10n.string("reader.chapter_comments"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(L10n.string("common.done")) { dismiss() }
+                }
+            }
+        }
+        .task(id: target) {
+            await model.loadChapterComments(for: target)
+        }
+    }
+}
+
+private struct ReaderChapterCommentsContent: View {
+    let state: ReaderChapterCommentsState
+    let isLoadingMore: Bool
+    let loadMoreError: String?
+    let retry: (ReaderChapterCommentTarget) -> Void
+    let loadNext: () -> Void
+
+    var body: some View {
+        content
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        switch state {
+        case .idle, .loading:
+            VStack(spacing: 12) {
+                ProgressView()
+                Text(L10n.string("common.loading"))
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        case .unsupported:
+            ContentUnavailableView(
+                L10n.string("reader.chapter_comments_unsupported"),
+                systemImage: "text.bubble"
+            )
+        case let .failed(target, message):
+            VStack(spacing: 12) {
+                ContentUnavailableView(
+                    message,
+                    systemImage: "exclamationmark.triangle"
+                )
+                Button(L10n.string("common.retry")) {
+                    retry(target)
+                }
+                .buttonStyle(.borderedProminent)
+            }
+            .padding()
+        case let .loaded(target, page):
+            if page.comments.isEmpty {
+                ContentUnavailableView(
+                    L10n.string("reader.chapter_comments_empty"),
+                    systemImage: "text.bubble"
+                )
+            } else {
+                List {
+                    if let title = target.title, !title.isEmpty {
+                        Section {
+                            Text(title)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    Section {
+                        ForEach(page.comments) { comment in
+                            ReaderChapterCommentRow(comment: comment)
+                        }
+                    }
+                    if page.nextView != nil {
+                        Section {
+                            Button(action: loadNext) {
+                                HStack {
+                                    Spacer()
+                                    if isLoadingMore {
+                                        ProgressView()
+                                    } else {
+                                        Text(loadMoreError ?? L10n.string("reader.chapter_comments_load_next"))
+                                            .font(.footnote)
+                                    }
+                                    Spacer()
+                                }
+                            }
+                            .disabled(isLoadingMore)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 private struct ReaderChapterCommentRow: View {
     let comment: ChapterComment
 

@@ -11,6 +11,7 @@ struct MangaBottomChrome: View {
     let onSliderEditingChanged: (Bool) -> Void
     let onShowSettings: () -> Void
     let onShowDirectory: () -> Void
+    let onShowComments: () -> Void
     let onJumpChapter: (Int) -> Void
     @Environment(\.colorScheme) private var colorScheme
 
@@ -19,6 +20,15 @@ struct MangaBottomChrome: View {
             HStack(spacing: 10) {
                 Button(action: onShowDirectory) {
                     Label(L10n.string("manga.directory"), systemImage: "list.bullet")
+                }
+                .buttonStyle(.bordered)
+                .tint(readerChromeButtonTint(for: colorScheme))
+                .disabled(model.isTransitioningChapter)
+
+                Spacer(minLength: 0)
+
+                Button(action: onShowComments) {
+                    Label(L10n.string("reader.comments"), systemImage: "text.bubble")
                 }
                 .buttonStyle(.bordered)
                 .tint(readerChromeButtonTint(for: colorScheme))
