@@ -1488,7 +1488,7 @@ public struct FavoritesView: View {
             } message: {
                 Text(L10n.string("favorites.display_name_message"))
             }
-            .alert(L10n.string("common.edit"), isPresented: editActionAlertBinding, presenting: pendingEditFavorite) { favorite in
+            .alert("", isPresented: editActionAlertBinding, presenting: pendingEditFavorite) { favorite in
                 Button(L10n.string("favorites.edit_display_name")) {
                     displayNameDraft = FavoriteDisplayNameDraft(favorite: favorite)
                     pendingEditFavorite = nil
@@ -2496,36 +2496,35 @@ private struct FavoriteTagPickerView: View {
         NavigationStack {
             VStack(spacing: 0) {
                 List {
+                    tagSelectionHeader
+                        .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 8, trailing: 16))
+                        .listRowSeparator(.hidden)
+                        .listRowBackground(Color.clear)
+
                     if showsOverwriteWarning {
                         Text(L10n.string("favorites.tags_overwrite_warning"))
                             .font(.footnote)
                             .foregroundStyle(.secondary)
+                            .listRowSeparator(.hidden)
+                            .listRowBackground(Color.clear)
                     }
 
                     ForEach(visibleTags) { tag in
+                        let isSelected = selectionDraft.selectedTagIDs.contains(tag.id)
+
                         Button {
                             toggle(tag)
                         } label: {
-                            HStack(spacing: 12) {
-                                Circle()
-                                    .fill(tag.color.swiftUIColor)
-                                    .frame(width: 12, height: 12)
-
-                                Text(tag.name)
-                                    .foregroundStyle(.primary)
-
-                                Spacer()
-
-                                if selectionDraft.selectedTagIDs.contains(tag.id) {
-                                    Image(systemName: "checkmark")
-                                        .font(.body.weight(.semibold))
-                                        .foregroundStyle(.tint)
-                                }
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .contentShape(Rectangle())
+                            FavoriteTagPickerRow(
+                                tag: tag,
+                                isSelected: isSelected,
+                                includesReorderHandle: canReorderCurrentTags
+                            )
                         }
                         .buttonStyle(.plain)
+                        .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                        .listRowSeparator(.hidden)
+                        .listRowBackground(Color.clear)
                         .contextMenu {
                             Button {
                                 editorDraft = FavoriteTagEditorDraft(tag: tag, defaultColor: nextDefaultColor)
@@ -2547,48 +2546,33 @@ private struct FavoriteTagPickerView: View {
                         ContentUnavailableView(L10n.string("favorites.tags.empty"), systemImage: "tag")
                     }
                 }
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
 
                 tagSelectionFooter
             }
-            .searchable(text: $searchText, prompt: L10n.string("common.search"))
+            .favoriteTagPickerSearch(text: $searchText)
             .navigationTitle(L10n.string("favorites.select_tags"))
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button(L10n.string("common.cancel"), action: onCancel)
+                    Button(visibleTagsAreFullySelected ? L10n.string("favorites.tags_deselect_all") : L10n.string("favorites.tags_select_all")) {
+                        toggleVisibleTagsSelection()
+                    }
+                    .disabled(visibleTags.isEmpty)
                 }
-                ToolbarItem(placement: .primaryAction) {
-                    HStack {
-                        Menu {
-                            Picker(L10n.string("favorites.sort"), selection: $sortRawValue) {
-                                ForEach(FavoriteTagSortOrder.allCases) { sortOrder in
-                                    Text(sortOrder.title).tag(sortOrder.rawValue)
-                                }
-                            }
-                        } label: {
-                            Image(systemName: "arrow.up.arrow.down")
-                        }
 
-                        Button {
-                            editorDraft = FavoriteTagEditorDraft(tag: nil, defaultColor: nextDefaultColor)
-                        } label: {
-                            Image(systemName: "plus")
-                        }
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        editorDraft = FavoriteTagEditorDraft(tag: nil, defaultColor: nextDefaultColor)
+                    } label: {
+                        Image(systemName: "plus")
                     }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button(L10n.string("common.done")) {
-                        Task {
-                            isConfirming = true
-                            _ = await onConfirm(selectionDraft.selectedTagIDs)
-                            isConfirming = false
-                        }
-                    }
-                    .disabled(isConfirming)
                 }
             }
+            .sensoryFeedback(.selection, trigger: selectionDraft.selectedTagIDs)
             .sheet(item: $editorDraft) { draft in
                 FavoriteTagEditorView(draft: draft) { name, color in
                     if let tagID = draft.tag?.id {
@@ -2635,37 +2619,72 @@ private struct FavoriteTagPickerView: View {
         }
     }
 
+    private var tagSelectionHeader: some View {
+        tagSortMenu
+    }
+
+    private var tagSortMenu: some View {
+        Menu {
+            Picker(L10n.string("favorites.sort"), selection: $sortRawValue) {
+                ForEach(FavoriteTagSortOrder.allCases) { sortOrder in
+                    Text(sortOrder.title).tag(sortOrder.rawValue)
+                }
+            }
+        } label: {
+            VStack(spacing: 0) {
+                Divider()
+
+                HStack {
+                    Text(L10n.string("favorites.sort"))
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+
+                    Spacer()
+
+                    Text(currentSortOrder.title)
+                        .foregroundStyle(.secondary)
+
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.vertical, 16)
+
+                Divider()
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
     private var tagSelectionFooter: some View {
-        VStack(spacing: 8) {
-            if let selectionErrorMessage {
-                Text(selectionErrorMessage)
-                    .font(.footnote)
-                    .foregroundStyle(.red)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
+        HStack {
+            Button(L10n.string("common.cancel"), action: onCancel)
+                .font(.headline)
+                .foregroundStyle(.red)
 
-            HStack(spacing: 12) {
-                Button(L10n.string("favorites.tags_select_all")) {
-                    handleSelectionResult(selectionDraft.selectAll(visibleTagIDs: visibleTags.map(\.id)))
+            Spacer()
+
+            Text(selectionPrompt)
+                .font(.headline)
+                .foregroundStyle(selectionErrorMessage == nil ? Color.secondary : Color.red)
+                .lineLimit(2)
+                .multilineTextAlignment(.center)
+
+            Spacer()
+
+            Button(L10n.string("common.ok")) {
+                Task {
+                    isConfirming = true
+                    _ = await onConfirm(selectionDraft.selectedTagIDs)
+                    isConfirming = false
                 }
-                .buttonStyle(.bordered)
-                .disabled(visibleTags.isEmpty)
-
-                Button(L10n.string("favorites.tags_deselect_all")) {
-                    handleSelectionResult(selectionDraft.deselectAll(visibleTagIDs: visibleTags.map(\.id)))
-                }
-                .buttonStyle(.bordered)
-                .disabled(visibleTags.isEmpty)
-
-                Spacer()
-
-                Text(L10n.string("favorites.tags_selected_count", selectionDraft.selectedTagIDs.count))
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
             }
+            .font(.headline)
+            .disabled(isConfirming)
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 10)
+        .padding(.vertical, 14)
         .background(.bar)
     }
 
@@ -2702,8 +2721,30 @@ private struct FavoriteTagPickerView: View {
         canReorderFavoriteTags(sortOrder: currentSortOrder, searchText: searchText)
     }
 
+    private var visibleTagIDs: [String] {
+        visibleTags.map(\.id)
+    }
+
+    private var visibleTagsAreFullySelected: Bool {
+        let ids = Set(visibleTagIDs)
+        return !ids.isEmpty && ids.isSubset(of: selectionDraft.selectedTagIDs)
+    }
+
+    private var selectionPrompt: String {
+        selectionErrorMessage ?? L10n.string("favorites.tags_selected_count", selectionDraft.selectedTagIDs.count)
+    }
+
     private func toggle(_ tag: FavoriteTag) {
         handleSelectionResult(selectionDraft.toggle(tag.id))
+    }
+
+    private func toggleVisibleTagsSelection() {
+        let ids = visibleTagIDs
+        if visibleTagsAreFullySelected {
+            handleSelectionResult(selectionDraft.deselectAll(visibleTagIDs: ids))
+        } else {
+            handleSelectionResult(selectionDraft.selectAll(visibleTagIDs: ids))
+        }
     }
 
     private func moveTags(fromOffsets: IndexSet, toOffset: Int) {
@@ -2723,6 +2764,91 @@ private struct FavoriteTagPickerView: View {
         case let .selectionLimitExceeded(max):
             selectionErrorMessage = L10n.string("favorites.tags_limit_message", max)
         }
+    }
+}
+
+private struct FavoriteTagPickerRow: View {
+    let tag: FavoriteTag
+    let isSelected: Bool
+    let includesReorderHandle: Bool
+
+    var body: some View {
+        HStack(spacing: 14) {
+            ZStack {
+                Circle()
+                    .fill(tag.color.swiftUIColor)
+                    .frame(width: isSelected ? 31 : 28, height: isSelected ? 31 : 28)
+
+                Text(tagInitial)
+                    .font(.callout.weight(.bold))
+                    .foregroundStyle(tag.color.iconTextColor)
+            }
+            .frame(width: 34, height: 34)
+            .shadow(color: tag.color.swiftUIColor.opacity(isSelected ? 0.28 : 0.18), radius: 8, y: 4)
+
+            Text(tag.name)
+                .font(isSelected ? .body.weight(.semibold) : .body)
+                .foregroundStyle(isSelected ? .primary : .secondary)
+
+            Spacer()
+
+            ZStack {
+                if isSelected {
+                    Circle()
+                        .fill(tag.color.swiftUIColor)
+                        .frame(width: 24, height: 24)
+
+                    Image(systemName: "checkmark")
+                        .font(.callout.weight(.bold))
+                        .foregroundStyle(.white)
+                } else {
+                    Circle()
+                        .stroke(.secondary.opacity(0.55), lineWidth: 2.25)
+                        .frame(width: 22, height: 22)
+                }
+            }
+            .frame(width: 26, height: 26)
+        }
+        .padding(.horizontal, 14)
+        .frame(maxWidth: .infinity, minHeight: 58, maxHeight: 58, alignment: .leading)
+        .background {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(isSelected ? tag.color.swiftUIColor.opacity(0.10) : .clear)
+                .padding(.trailing, -selectionOutlineTrailingExtension)
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(isSelected ? tag.color.swiftUIColor : .clear, lineWidth: 2)
+                .padding(.trailing, -selectionOutlineTrailingExtension)
+        }
+        .contentShape(Rectangle())
+        .animation(.spring(response: 0.28, dampingFraction: 0.78), value: isSelected)
+    }
+
+    private var tagInitial: String {
+        let trimmedName = tag.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmedName.first.map(String.init) ?? "#"
+    }
+
+    private var selectionOutlineTrailingExtension: CGFloat {
+        includesReorderHandle ? 52 : 0
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func favoriteTagPickerSearch(text: Binding<String>) -> some View {
+        #if os(iOS)
+        self
+            .searchable(
+                text: text,
+                placement: .navigationBarDrawer(displayMode: .always),
+                prompt: L10n.string("favorites.search_tags")
+            )
+        #else
+        self
+            .searchable(text: text, prompt: L10n.string("favorites.search_tags"))
+        #endif
     }
 }
 
@@ -2817,6 +2943,25 @@ private extension FavoriteTagColor {
         case .pink: .pink
         case .gray: .gray
         }
+    }
+
+    var iconTextColor: Color {
+        relativeLuminance > 0.52 ? .black : .white
+    }
+
+    private var relativeLuminance: Double {
+        let components: (red: Double, green: Double, blue: Double) = switch self {
+        case .red: (1.00, 0.23, 0.19)
+        case .orange: (1.00, 0.58, 0.00)
+        case .yellow: (1.00, 0.80, 0.00)
+        case .green: (0.20, 0.78, 0.35)
+        case .blue: (0.00, 0.48, 1.00)
+        case .purple: (0.69, 0.32, 0.87)
+        case .pink: (1.00, 0.18, 0.33)
+        case .gray: (0.56, 0.56, 0.58)
+        }
+
+        return 0.2126 * components.red + 0.7152 * components.green + 0.0722 * components.blue
     }
 }
 
