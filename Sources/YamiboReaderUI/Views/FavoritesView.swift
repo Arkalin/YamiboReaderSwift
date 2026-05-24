@@ -1044,6 +1044,22 @@ private struct FavoriteSettingsMenuButton: View {
     }
 }
 
+private struct FavoriteSortMenuButton: View {
+    @Binding var sortRawValue: String
+
+    var body: some View {
+        Menu {
+            Picker(L10n.string("favorites.sort"), selection: $sortRawValue) {
+                ForEach(FavoriteSortOrder.allCases) { sortOrder in
+                    Text(sortOrder.title).tag(sortOrder.rawValue)
+                }
+            }
+        } label: {
+            Image(systemName: "arrow.up.arrow.down.circle")
+        }
+    }
+}
+
 private struct FavoriteSelectionToggleButton: View {
     let isSelecting: Bool
     let action: () -> Void
@@ -1055,8 +1071,8 @@ private struct FavoriteSelectionToggleButton: View {
 
 private struct FavoriteToolbarMenuButton: View {
     @Binding var filterRawValue: String
-    @Binding var sortRawValue: String
     @Binding var showsHidden: Bool
+    let favoriteAppearance: FavoriteAppearanceSettings
     let selectedTagCount: Int
     let allTitle: String
     let onEditTagFilter: () -> Void
@@ -1066,13 +1082,12 @@ private struct FavoriteToolbarMenuButton: View {
         Menu {
             Picker(L10n.string("favorites.category"), selection: $filterRawValue) {
                 ForEach(FavoriteFilter.allCases) { filter in
-                    Text(filter == .all ? allTitle : filter.title).tag(filter.rawValue)
-                }
-            }
-
-            Picker(L10n.string("favorites.sort"), selection: $sortRawValue) {
-                ForEach(FavoriteSortOrder.allCases) { sortOrder in
-                    Text(sortOrder.title).tag(sortOrder.rawValue)
+                    Label {
+                        Text(filter == .all ? allTitle : filter.title)
+                    } icon: {
+                        filter.menuIcon(appearance: favoriteAppearance)
+                    }
+                    .tag(filter.rawValue)
                 }
             }
 
@@ -1086,7 +1101,11 @@ private struct FavoriteToolbarMenuButton: View {
                 }
             }
 
-            Toggle(L10n.string("favorites.show_hidden"), isOn: $showsHidden)
+            Divider()
+
+            Toggle(isOn: $showsHidden) {
+                Label(L10n.string("favorites.show_hidden"), systemImage: "eye.slash")
+            }
         } label: {
             HStack(spacing: 6) {
                 Text(currentTitle)
@@ -1117,6 +1136,84 @@ private struct FavoriteToolbarMenuButton: View {
     }
 }
 
+private extension FavoriteFilter {
+    var menuIconName: String {
+        switch self {
+        case .all:
+            "square.grid.2x2.fill"
+        case .novel:
+            "book.closed.fill"
+        case .manga:
+            "photo.on.rectangle.angled"
+        case .other:
+            "ellipsis.circle.fill"
+        }
+    }
+
+    @ViewBuilder
+    func menuIcon(appearance: FavoriteAppearanceSettings) -> some View {
+        #if canImport(UIKit)
+        if let icon = UIImage(systemName: menuIconName)?
+            .withTintColor(menuUIColor(appearance: appearance), renderingMode: .alwaysOriginal) {
+            Image(uiImage: icon)
+        } else {
+            Image(systemName: menuIconName)
+                .foregroundStyle(menuColor(appearance: appearance))
+        }
+        #else
+        Image(systemName: menuIconName)
+            .foregroundStyle(menuColor(appearance: appearance))
+        #endif
+    }
+
+    func menuColor(appearance: FavoriteAppearanceSettings) -> Color {
+        switch self {
+        case .all:
+            .black
+        case .novel:
+            favoriteAccentColor(for: .novel, appearance: appearance)
+        case .manga:
+            favoriteAccentColor(for: .manga, appearance: appearance)
+        case .other:
+            favoriteAccentColor(for: .other, appearance: appearance)
+        }
+    }
+
+    #if canImport(UIKit)
+    func menuUIColor(appearance: FavoriteAppearanceSettings) -> UIColor {
+        switch self {
+        case .all:
+            .black
+        case .novel:
+            appearance.novel.uiColor
+        case .manga:
+            appearance.manga.uiColor
+        case .other:
+            appearance.other.uiColor
+        }
+    }
+    #endif
+}
+
+#if canImport(UIKit)
+private extension FavoriteAppearanceColor {
+    var uiColor: UIColor {
+        switch self {
+        case .red: .systemRed
+        case .pink: .systemPink
+        case .orange: .systemOrange
+        case .yellow: .systemYellow
+        case .green: .systemGreen
+        case .mint: .systemMint
+        case .cyan: .systemCyan
+        case .blue: .systemBlue
+        case .purple: .systemPurple
+        case .gray: .systemGray
+        }
+    }
+}
+#endif
+
 private struct FavoriteToolbarModifier: ViewModifier {
     @Binding var showingSettingsSheet: Bool
     @Binding var showingAboutSheet: Bool
@@ -1124,6 +1221,7 @@ private struct FavoriteToolbarModifier: ViewModifier {
     @Binding var sortRawValue: String
     @Binding var showsHidden: Bool
     @Binding var isSelecting: Bool
+    let favoriteAppearance: FavoriteAppearanceSettings
     let showsSettingsMenu: Bool
     let selectedTagCount: Int
     let allTitle: String
@@ -1135,11 +1233,13 @@ private struct FavoriteToolbarModifier: ViewModifier {
         content.toolbar {
             if showsSettingsMenu {
                 #if os(iOS)
-                ToolbarItem(placement: .topBarLeading) {
+                ToolbarItemGroup(placement: .topBarLeading) {
                     FavoriteSettingsMenuButton(
                         showingSettingsSheet: $showingSettingsSheet,
                         showingAboutSheet: $showingAboutSheet
                     )
+
+                    FavoriteSortMenuButton(sortRawValue: $sortRawValue)
                 }
                 #else
                 ToolbarItem(placement: .automatic) {
@@ -1154,8 +1254,8 @@ private struct FavoriteToolbarModifier: ViewModifier {
             ToolbarItem(placement: .principal) {
                 FavoriteToolbarMenuButton(
                     filterRawValue: $filterRawValue,
-                    sortRawValue: $sortRawValue,
                     showsHidden: $showsHidden,
+                    favoriteAppearance: favoriteAppearance,
                     selectedTagCount: selectedTagCount,
                     allTitle: allTitle,
                     onEditTagFilter: onEditTagFilter,
@@ -1399,6 +1499,7 @@ public struct FavoritesView: View {
                     sortRawValue: $sortRawValue,
                     showsHidden: $showsHidden,
                     isSelecting: $isSelecting,
+                    favoriteAppearance: viewModel.favoriteAppearance,
                     showsSettingsMenu: isRootScope,
                     selectedTagCount: selectedFilterTagIDs.count,
                     allTitle: filterLabel(for: .all),
