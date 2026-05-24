@@ -156,6 +156,16 @@ public actor ReaderRepository {
         return try ChapterCommentsHTMLParser.parseInitialPage(html: html, target: target)
     }
 
+    public func loadMoreChapterComments(
+        for target: ReaderChapterCommentTarget,
+        view: Int
+    ) async throws -> ChapterCommentsPage {
+        let html = try await client.fetchHTML(
+            for: .thread(url: target.threadURL, page: view, authorID: nil)
+        )
+        return try ChapterCommentsHTMLParser.parseContinuationPage(html: html, target: target, view: view)
+    }
+
     private func loadPage(_ request: ReaderPageRequest, ignoresCache: Bool) async throws -> ReaderPageDocument {
         if !ignoresCache,
            let cached = await cacheStore.loadDocument(

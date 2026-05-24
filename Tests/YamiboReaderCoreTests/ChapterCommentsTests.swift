@@ -149,3 +149,87 @@ import Testing
     #expect(page.comments.map(\.body) == ["自己的回复", "第二条回复"])
     #expect(page.isBoundaryClosed == true)
 }
+
+@Test func chapterCommentsParserExposesNextPageWhenBoundaryStaysOpen() throws {
+    let html = """
+    <html><body>
+      <a href="forum.php?mod=viewthread&tid=42&page=2&mobile=2">2</a>
+      <div id="post_100">
+        <div class="authi"><em title="楼主"></em></div>
+        <div class="t_f" id="postmessage_100">第一章<br>正文</div>
+      </div>
+      <div id="post_101">
+        <div class="authi"><a class="author">读者甲</a></div>
+        <div class="t_f" id="postmessage_101">页尾回复</div>
+      </div>
+    </body></html>
+    """
+    let target = ReaderChapterCommentTarget(
+        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=42&mobile=2")),
+        view: 1,
+        ownerPostID: "100",
+        title: "第一章"
+    )
+
+    let page = try ChapterCommentsHTMLParser.parseInitialPage(html: html, target: target)
+
+    #expect(page.comments.map(\.body) == ["页尾回复"])
+    #expect(page.isBoundaryClosed == false)
+    #expect(page.nextView == 2)
+}
+
+@Test func chapterCommentsParserContinuationClosesSilentlyWhenNextPageStartsWithOwnerPost() throws {
+    let html = """
+    <html><body>
+      <a href="forum.php?mod=viewthread&tid=42&page=2&mobile=2">2</a>
+      <div id="post_200">
+        <div class="authi"><em title="楼主"></em></div>
+        <div class="t_f" id="postmessage_200">第二章<br>正文</div>
+      </div>
+      <div id="post_201">
+        <div class="authi"><a class="author">读者甲</a></div>
+        <div class="t_f" id="postmessage_201">下一章回复</div>
+      </div>
+    </body></html>
+    """
+    let target = ReaderChapterCommentTarget(
+        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=42&mobile=2")),
+        view: 1,
+        ownerPostID: "100",
+        title: "第一章"
+    )
+
+    let page = try ChapterCommentsHTMLParser.parseContinuationPage(html: html, target: target, view: 2)
+
+    #expect(page.comments.isEmpty)
+    #expect(page.isBoundaryClosed == true)
+    #expect(page.nextView == nil)
+}
+
+@Test func chapterCommentsParserContinuationAppendsRepliesBeforeNextOwnerPost() throws {
+    let html = """
+    <html><body>
+      <a href="forum.php?mod=viewthread&tid=42&page=3&mobile=2">3</a>
+      <div id="post_150">
+        <div class="authi"><a class="author">读者甲</a></div>
+        <div class="t_f" id="postmessage_150">跨页回复</div>
+      </div>
+      <div id="post_200">
+        <div class="authi"><em title="楼主"></em></div>
+        <div class="t_f" id="postmessage_200">第二章<br>正文</div>
+      </div>
+    </body></html>
+    """
+    let target = ReaderChapterCommentTarget(
+        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=42&mobile=2")),
+        view: 1,
+        ownerPostID: "100",
+        title: "第一章"
+    )
+
+    let page = try ChapterCommentsHTMLParser.parseContinuationPage(html: html, target: target, view: 2)
+
+    #expect(page.comments.map(\.body) == ["跨页回复"])
+    #expect(page.isBoundaryClosed == true)
+    #expect(page.nextView == nil)
+}

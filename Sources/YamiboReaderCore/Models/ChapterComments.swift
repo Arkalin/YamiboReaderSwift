@@ -40,14 +40,17 @@ public struct ChapterCommentsPage: Codable, Hashable, Sendable {
     public var target: ReaderChapterCommentTarget
     public var comments: [ChapterComment]
     public var isBoundaryClosed: Bool
+    public var nextView: Int?
 
     public init(
         target: ReaderChapterCommentTarget,
         comments: [ChapterComment],
-        isBoundaryClosed: Bool
+        isBoundaryClosed: Bool,
+        nextView: Int? = nil
     ) {
         self.target = target
         self.comments = comments
         self.isBoundaryClosed = isBoundaryClosed
+        self.nextView = nextView
     }
 }

@@ -659,8 +659,8 @@ struct ReaderChapterCommentsSheet: View {
                 .buttonStyle(.borderedProminent)
             }
             .padding()
-        case let .loaded(target, comments):
-            if comments.isEmpty {
+        case let .loaded(target, page):
+            if page.comments.isEmpty {
                 ContentUnavailableView(
                     L10n.string("reader.chapter_comments_empty"),
                     systemImage: "text.bubble"
@@ -675,8 +675,27 @@ struct ReaderChapterCommentsSheet: View {
                         }
                     }
                     Section {
-                        ForEach(comments) { comment in
+                        ForEach(page.comments) { comment in
                             ReaderChapterCommentRow(comment: comment)
+                        }
+                    }
+                    if page.nextView != nil {
+                        Section {
+                            Button {
+                                Task { await model.loadNextChapterCommentsPage() }
+                            } label: {
+                                HStack {
+                                    Spacer()
+                                    if model.isLoadingMoreChapterComments {
+                                        ProgressView()
+                                    } else {
+                                        Text(model.chapterCommentsLoadMoreError ?? L10n.string("reader.chapter_comments_load_next"))
+                                            .font(.footnote)
+                                    }
+                                    Spacer()
+                                }
+                            }
+                            .disabled(model.isLoadingMoreChapterComments)
                         }
                     }
                 }

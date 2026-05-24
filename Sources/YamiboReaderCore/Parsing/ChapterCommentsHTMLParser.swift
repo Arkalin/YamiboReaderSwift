@@ -20,7 +20,27 @@ public enum ChapterCommentsHTMLParser {
         comments.append(contentsOf: try ratingReasons(in: document, target: target))
         let replies = try samePageReplies(in: document, target: target)
         comments.append(contentsOf: replies.comments)
-        return ChapterCommentsPage(target: target, comments: comments, isBoundaryClosed: replies.isBoundaryClosed)
+        return ChapterCommentsPage(
+            target: target,
+            comments: comments,
+            isBoundaryClosed: replies.isBoundaryClosed,
+            nextView: nextView(in: document, target: target, currentView: target.view, isBoundaryClosed: replies.isBoundaryClosed)
+        )
+    }
+
+    public static func parseContinuationPage(
+        html: String,
+        target: ReaderChapterCommentTarget,
+        view: Int
+    ) throws -> ChapterCommentsPage {
+        let document = try SwiftSoup.parse(html)
+        let replies = try continuationReplies(in: document, target: target)
+        return ChapterCommentsPage(
+            target: target,
+            comments: replies.comments,
+            isBoundaryClosed: replies.isBoundaryClosed,
+            nextView: nextView(in: document, target: target, currentView: view, isBoundaryClosed: replies.isBoundaryClosed)
+        )
     }
 
     private static func postComments(
@@ -105,6 +125,35 @@ public enum ChapterCommentsHTMLParser {
         return (comments, false)
     }
 
+    private static func continuationReplies(
+        in document: Document,
+        target: ReaderChapterCommentTarget
+    ) throws -> (comments: [ChapterComment], isBoundaryClosed: Bool) {
+        let messageNodes = try document.select("[id^=postmessage_]").array()
+        var comments: [ChapterComment] = []
+
+        for message in messageNodes {
+            guard let postID = postID(from: message) else { continue }
+            if isOwnerPost(message) {
+                return (comments, true)
+            }
+            guard let body = try replyBody(from: message), !body.isEmpty else {
+                continue
+            }
+            comments.append(
+                ChapterComment(
+                    id: "\(target.ownerPostID):reply:\(postID)",
+                    source: .reply,
+                    authorName: authorName(for: message),
+                    body: body,
+                    postID: postID
+                )
+            )
+        }
+
+        return (comments, false)
+    }
+
     private static func replyBody(from message: Element) throws -> String? {
         let fragment = try SwiftSoup.parseBodyFragment(try message.html())
         guard let body = fragment.body() else { return nil }
@@ -164,6 +213,19 @@ public enum ChapterCommentsHTMLParser {
         guard raw.hasPrefix("postmessage_") else { return nil }
         let value = raw.replacingOccurrences(of: "postmessage_", with: "")
         return value.isEmpty ? nil : value
+    }
+
+    private static func nextView(
+        in document: Document,
+        target: ReaderChapterCommentTarget,
+        currentView: Int,
+        isBoundaryClosed: Bool
+    ) -> Int? {
+        guard !isBoundaryClosed else { return nil }
+        let request = ReaderPageRequest(threadURL: target.threadURL, view: currentView)
+        let maxView = (try? ReaderHTMLDOMParser.parseMaxView(in: .init(document: document), request: request)) ?? currentView
+        let next = currentView + 1
+        return next <= maxView ? next : nil
     }
 
     private static func normalizeRatingReason(_ text: String) -> String {
