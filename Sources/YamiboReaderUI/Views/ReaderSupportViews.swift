@@ -617,10 +617,25 @@ struct ReaderChapterCommentsSheet: View {
 
     var body: some View {
         NavigationStack {
-            content
+            ReaderChapterCommentsContent(
+                state: model.chapterCommentsState,
+                isLoadingMore: model.isLoadingMoreChapterComments,
+                loadMoreError: model.chapterCommentsLoadMoreError,
+                refreshError: model.chapterCommentsRefreshError,
+                retry: { target in Task { await model.loadChapterComments(for: target) } },
+                loadNext: { Task { await model.loadNextChapterCommentsPage() } }
+            )
                 .navigationTitle(L10n.string("reader.chapter_comments"))
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button {
+                            Task { await model.refreshChapterComments(for: target) }
+                        } label: {
+                            Label(L10n.string("common.refresh"), systemImage: "arrow.clockwise")
+                        }
+                        .disabled(target == nil)
+                    }
                     ToolbarItem(placement: .topBarTrailing) {
                         Button(L10n.string("common.done")) { dismiss() }
                     }
@@ -628,78 +643,6 @@ struct ReaderChapterCommentsSheet: View {
         }
         .task(id: target) {
             await model.loadChapterComments(for: target)
-        }
-    }
-
-    @ViewBuilder
-    private var content: some View {
-        switch model.chapterCommentsState {
-        case .idle, .loading:
-            VStack(spacing: 12) {
-                ProgressView()
-                Text(L10n.string("common.loading"))
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-        case .unsupported:
-            ContentUnavailableView(
-                L10n.string("reader.chapter_comments_unsupported"),
-                systemImage: "text.bubble"
-            )
-        case let .failed(target, message):
-            VStack(spacing: 12) {
-                ContentUnavailableView(
-                    message,
-                    systemImage: "exclamationmark.triangle"
-                )
-                Button(L10n.string("common.retry")) {
-                    Task { await model.loadChapterComments(for: target) }
-                }
-                .buttonStyle(.borderedProminent)
-            }
-            .padding()
-        case let .loaded(target, page):
-            if page.comments.isEmpty {
-                ContentUnavailableView(
-                    L10n.string("reader.chapter_comments_empty"),
-                    systemImage: "text.bubble"
-                )
-            } else {
-                List {
-                    if let title = target.title, !title.isEmpty {
-                        Section {
-                            Text(title)
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    Section {
-                        ForEach(page.comments) { comment in
-                            ReaderChapterCommentRow(comment: comment)
-                        }
-                    }
-                    if page.nextView != nil {
-                        Section {
-                            Button {
-                                Task { await model.loadNextChapterCommentsPage() }
-                            } label: {
-                                HStack {
-                                    Spacer()
-                                    if model.isLoadingMoreChapterComments {
-                                        ProgressView()
-                                    } else {
-                                        Text(model.chapterCommentsLoadMoreError ?? L10n.string("reader.chapter_comments_load_next"))
-                                            .font(.footnote)
-                                    }
-                                    Spacer()
-                                }
-                            }
-                            .disabled(model.isLoadingMoreChapterComments)
-                        }
-                    }
-                }
-            }
         }
     }
 }
@@ -715,12 +658,21 @@ struct MangaChapterCommentsSheet: View {
                 state: model.chapterCommentsState,
                 isLoadingMore: model.isLoadingMoreChapterComments,
                 loadMoreError: model.chapterCommentsLoadMoreError,
+                refreshError: model.chapterCommentsRefreshError,
                 retry: { target in Task { await model.loadChapterComments(for: target) } },
                 loadNext: { Task { await model.loadNextChapterCommentsPage() } }
             )
             .navigationTitle(L10n.string("reader.chapter_comments"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        Task { await model.refreshChapterComments(for: target) }
+                    } label: {
+                        Label(L10n.string("common.refresh"), systemImage: "arrow.clockwise")
+                    }
+                    .disabled(target == nil)
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(L10n.string("common.done")) { dismiss() }
                 }
@@ -736,6 +688,7 @@ private struct ReaderChapterCommentsContent: View {
     let state: ReaderChapterCommentsState
     let isLoadingMore: Bool
     let loadMoreError: String?
+    let refreshError: String?
     let retry: (ReaderChapterCommentTarget) -> Void
     let loadNext: () -> Void
 
@@ -779,6 +732,13 @@ private struct ReaderChapterCommentsContent: View {
                 )
             } else {
                 List {
+                    if let refreshError {
+                        Section {
+                            Label(refreshError, systemImage: "exclamationmark.triangle")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                     if let title = target.title, !title.isEmpty {
                         Section {
                             Text(title)
