@@ -131,6 +131,7 @@
 "favorites.progress.page_web" = "第%d页 / 网页第%d页";
 "favorites.progress.page_web_spaced" = "读至第 %d 页 · 网页第 %d 页";
 "favorites.progress.page_with_chapter" = "读至第 %d 页 · %@";
+"favorites.search_tags" = "搜索标签";
 "favorites.select_target_collection" = "选择目标合集。";
 "favorites.select_tags" = "选择标签";
 "favorites.selected_count" = "已选择 %d 项";
