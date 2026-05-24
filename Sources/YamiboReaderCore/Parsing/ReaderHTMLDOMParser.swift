@@ -7,8 +7,7 @@ enum ReaderHTMLDOMParser {
     }
 
     struct ParsedMessage {
-        let text: String
-        let imageURLs: [URL]
+        let segments: [ReaderSegment]
         let chapterTitle: String?
     }
 
@@ -88,7 +87,7 @@ enum ReaderHTMLDOMParser {
         let fragmentHTML = try element.html()
         let fragment = try SwiftSoup.parseBodyFragment(fragmentHTML)
         guard let body = fragment.body() else {
-            return ParsedMessage(text: "", imageURLs: [], chapterTitle: nil)
+            return ParsedMessage(segments: [], chapterTitle: nil)
         }
 
         try body.select("i").remove()
@@ -101,19 +100,8 @@ enum ReaderHTMLDOMParser {
                 .map { String($0.prefix(30)) }
         )
 
-        var imageURLs: [URL] = []
-        for image in try body.select("img") {
-            let raw = try imageSource(from: image)
-            guard let raw,
-                  !raw.isEmpty,
-                  !raw.localizedCaseInsensitiveContains("smiley/"),
-                  let url = HTMLTextExtractor.absoluteURL(from: raw) else {
-                continue
-            }
-            imageURLs.append(url)
-        }
-
-        return ParsedMessage(text: text, imageURLs: imageURLs, chapterTitle: chapterTitle)
+        let segments = try orderedSegments(from: body, chapterTitle: chapterTitle)
+        return ParsedMessage(segments: segments, chapterTitle: chapterTitle)
     }
 
     private static func readableText(from body: Element) throws -> String {
@@ -122,6 +110,67 @@ enum ReaderHTMLDOMParser {
             try appendText(from: child, into: &value)
         }
         return normalizeText(value)
+    }
+
+    private static func orderedSegments(from body: Element, chapterTitle: String?) throws -> [ReaderSegment] {
+        var segments: [ReaderSegment] = []
+        var text = ""
+
+        func flushText() {
+            let normalized = normalizeText(text)
+            guard !normalized.isEmpty else {
+                text = ""
+                return
+            }
+            segments.append(.text(normalized, chapterTitle: chapterTitle))
+            text = ""
+        }
+
+        func appendSegments(from node: Node) throws {
+            if let textNode = node as? TextNode {
+                text += textNode
+                    .getWholeText()
+                    .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+                return
+            }
+
+            if let element = node as? Element {
+                let tagName = element.tagName().lowercased()
+                if tagName == "br" {
+                    text += "\n"
+                    return
+                }
+                if tagName == "img" {
+                    guard let url = try imageURL(from: element) else { return }
+                    flushText()
+                    segments.append(.image(url, chapterTitle: chapterTitle))
+                    return
+                }
+                if tagName == "li" {
+                    text += "• "
+                }
+
+                for child in element.getChildNodes() {
+                    try appendSegments(from: child)
+                }
+
+                if blockBreakTags.contains(tagName) {
+                    text += "\n"
+                }
+                return
+            }
+
+            for child in node.getChildNodes() {
+                try appendSegments(from: child)
+            }
+        }
+
+        for child in body.getChildNodes() {
+            try appendSegments(from: child)
+        }
+        flushText()
+
+        return segments
     }
 
     private static func appendText(from node: Node, into value: inout String) throws {
@@ -155,6 +204,16 @@ enum ReaderHTMLDOMParser {
         for child in node.getChildNodes() {
             try appendText(from: child, into: &value)
         }
+    }
+
+    private static func imageURL(from image: Element) throws -> URL? {
+        let raw = try imageSource(from: image)
+        guard let raw,
+              !raw.isEmpty,
+              !raw.localizedCaseInsensitiveContains("smiley/") else {
+            return nil
+        }
+        return HTMLTextExtractor.absoluteURL(from: raw)
     }
 
     private static func imageSource(from image: Element) throws -> String? {

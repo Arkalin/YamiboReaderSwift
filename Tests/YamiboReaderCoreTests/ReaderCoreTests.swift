@@ -181,6 +181,33 @@ private final class StubURLProtocol: URLProtocol {
     #expect(document.segments[2] == .text("第二章\n第二段内容", chapterTitle: "第二章"))
 }
 
+@Test func readerHTMLParserPreservesInlineImagePositionWithinMessage() async throws {
+    let html = #"""
+    <html>
+      <body>
+        <div class="message">
+          第一章 相遇<br>
+          这里是前文。
+          <img src="images/first.jpg" />
+          这里是后文。
+          <img file="images/second.jpg" src="images/fallback.jpg" />
+          这里是尾声。
+        </div>
+      </body>
+    </html>
+    """#
+
+    let parsed = ReaderHTMLParser.parseSegments(from: html)
+
+    #expect(parsed.segments == [
+        .text("第一章 相遇\n这里是前文。", chapterTitle: "第一章 相遇"),
+        .image(try #require(URL(string: "https://bbs.yamibo.com/images/first.jpg")), chapterTitle: "第一章 相遇"),
+        .text("这里是后文。", chapterTitle: "第一章 相遇"),
+        .image(try #require(URL(string: "https://bbs.yamibo.com/images/second.jpg")), chapterTitle: "第一章 相遇"),
+        .text("这里是尾声。", chapterTitle: "第一章 相遇")
+    ])
+}
+
 @Test func readerHTMLParserPreservesNestedMessageContent() async throws {
     let html = #"""
     <html>

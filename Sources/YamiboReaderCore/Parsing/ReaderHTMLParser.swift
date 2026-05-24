@@ -108,14 +108,7 @@ public enum ReaderHTMLParser {
     private static func parseSegments(from context: ReaderHTMLDOMParser.Context) -> ReaderParsedContent {
         let messages = (try? ReaderHTMLDOMParser.parseMessages(in: context)) ?? []
         return messages.reduce(into: ReaderParsedContent()) { partial, message in
-            if !message.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                partial.segments.append(.text(message.text, chapterTitle: message.chapterTitle))
-            }
-
-            for url in message.imageURLs {
-                partial.segments.append(.image(url, chapterTitle: message.chapterTitle))
-            }
-
+            partial.segments.append(contentsOf: message.segments)
             partial.retainedChapterCount += message.chapterTitle == nil ? 0 : 1
         }
     }
