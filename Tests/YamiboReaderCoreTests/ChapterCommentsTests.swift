@@ -76,6 +76,7 @@ import Testing
     #expect(page.comments.map(\.authorName) == ["读者甲", "读者丙"])
     #expect(page.comments.map(\.body) == ["这章很好", "这期神了"])
     #expect(page.comments.first?.metadata == "发表于 2026-5-1 12:00")
+    #expect(page.comments.last?.metadata == nil)
     #expect(page.isBoundaryClosed == false)
 }
 
@@ -105,6 +106,84 @@ import Testing
     let page = try ChapterCommentsHTMLParser.parseInitialPage(html: html, target: target)
 
     #expect(page.comments.map(\.body) == ["我很赞同这个观点"])
+}
+
+@Test func chapterCommentsParserOmitsImageOnlyEmoticonOnlyAndEmptyRows() throws {
+    let html = """
+    <html><body>
+      <div id="post_100"><div class="t_f" id="postmessage_100">第一章<br>正文</div></div>
+      <div id="comment_100" class="cm">
+        <div class="pstl"><div class="psta"><a>空点评</a></div><div class="psti"><span class="xg1">发表于 2026-5-1</span></div></div>
+        <div class="pstl"><div class="psta"><a>图点评</a></div><div class="psti"><img src="x.jpg"></div></div>
+        <div class="pstl"><div class="psta"><a>表情点评</a></div><div class="psti"><img smilieid="1" alt=""></div></div>
+        <div class="pstl"><div class="psta"><a>有效点评</a></div><div class="psti">有文字</div></div>
+      </div>
+      <div id="post_101">
+        <div class="authi"><a class="author">回复甲</a></div>
+        <div class="t_f" id="postmessage_101"><img src="reply.jpg"></div>
+      </div>
+      <div id="post_102">
+        <div class="authi"><a class="author">回复乙</a></div>
+        <div class="t_f" id="postmessage_102">有效回复</div>
+      </div>
+    </body></html>
+    """
+    let target = ReaderChapterCommentTarget(
+        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=42&mobile=2")),
+        view: 1,
+        ownerPostID: "100",
+        title: "第一章"
+    )
+
+    let page = try ChapterCommentsHTMLParser.parseInitialPage(html: html, target: target)
+
+    #expect(page.comments.map(\.body) == ["有文字", "有效回复"])
+}
+
+@Test func chapterCommentOriginalPostURLUsesThreadAndPostIdentity() throws {
+    let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=42&mobile=2&page=3"))
+    let comment = ChapterComment(
+        id: "100:reply:102",
+        source: .reply,
+        authorName: "读者",
+        body: "回复",
+        postID: "102"
+    )
+
+    let url = try #require(comment.originalPostURL(threadURL: threadURL))
+
+    #expect(url.absoluteString == "https://bbs.yamibo.com/forum.php?goto=findpost&mobile=2&mod=redirect&pid=102&ptid=42")
+}
+
+@Test func chapterCommentSourcesExposeLightweightDisplayLabels() {
+    #expect(ChapterCommentSource.postComment.displayLabel == "点评")
+    #expect(ChapterCommentSource.ratingReason.displayLabel == "评分")
+    #expect(ChapterCommentSource.reply.displayLabel == "回复")
+}
+
+@Test func chapterCommentsParserKeepsReplyFloorAndTimeMetadata() throws {
+    let html = """
+    <html><body>
+      <div id="post_100">
+        <div class="t_f" id="postmessage_100">第一章<br>正文</div>
+      </div>
+      <div id="post_101">
+        <div class="pi"><strong><a><em>2#</em></a></strong></div>
+        <div class="authi"><a class="author">回复甲</a><em>发表于 2026-5-2 10:00</em></div>
+        <div class="t_f" id="postmessage_101">有效回复</div>
+      </div>
+    </body></html>
+    """
+    let target = ReaderChapterCommentTarget(
+        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=42&mobile=2")),
+        view: 1,
+        ownerPostID: "100",
+        title: "第一章"
+    )
+
+    let page = try ChapterCommentsHTMLParser.parseInitialPage(html: html, target: target)
+
+    #expect(page.comments.first?.metadata == "2# · 发表于 2026-5-2 10:00")
 }
 
 @Test func chapterCommentsParserIncludesSamePageRepliesUntilNextOwnerPost() throws {

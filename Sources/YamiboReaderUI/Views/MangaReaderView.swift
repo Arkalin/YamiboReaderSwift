@@ -121,7 +121,7 @@ public struct MangaReaderView: View {
                 MangaDirectorySheet(model: model)
             }
             .sheet(isPresented: $showingChapterComments) {
-                MangaChapterCommentsSheet(model: model, target: chapterCommentsTarget)
+                MangaChapterCommentsSheet(model: model, target: chapterCommentsTarget, appModel: appModel)
             }
             .onChange(of: model.currentPageIndex) { _, _ in
                 handleCurrentPageChanged()

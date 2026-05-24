@@ -233,6 +233,7 @@
 "reader.chapter_comments_failed" = "章节评论加载失败";
 "reader.chapter_comments_load_next" = "加载下一页评论";
 "reader.chapter_comments_unsupported" = "该章节暂不支持评论";
+"reader.open_original_post" = "打开原帖";
 "reader.character_spacing" = "字符间距";
 "reader.character_spacing_sample" = "甲乙丙";
 "reader.current_web_page" = "当前网页";

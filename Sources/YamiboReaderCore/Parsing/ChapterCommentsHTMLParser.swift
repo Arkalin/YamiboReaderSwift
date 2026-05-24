@@ -116,6 +116,7 @@ public enum ChapterCommentsHTMLParser {
                     id: "\(target.ownerPostID):reply:\(postID)",
                     source: .reply,
                     authorName: authorName(for: message),
+                    metadata: replyMetadata(for: message),
                     body: body,
                     postID: postID
                 )
@@ -145,6 +146,7 @@ public enum ChapterCommentsHTMLParser {
                     id: "\(target.ownerPostID):reply:\(postID)",
                     source: .reply,
                     authorName: authorName(for: message),
+                    metadata: replyMetadata(for: message),
                     body: body,
                     postID: postID
                 )
@@ -190,6 +192,33 @@ public enum ChapterCommentsHTMLParser {
             }
         }
         return ""
+    }
+
+    private static func replyMetadata(for message: Element) -> String? {
+        guard let container = postContainer(for: message) else {
+            return nil
+        }
+        let floor = firstNormalizedText(in: container, selectors: [
+            ".pi strong a em",
+            ".pi strong em",
+            "[id^=postnum] em",
+            "[id^=postnum]"
+        ])
+        let time = firstNormalizedText(in: container, selectors: [
+            ".authi em",
+            ".pti .authi em"
+        ])
+        return nilIfEmpty([floor, time].compactMap(\.self).joined(separator: " · "))
+    }
+
+    private static func firstNormalizedText(in element: Element, selectors: [String]) -> String? {
+        for selector in selectors {
+            if let text = try? element.select(selector).first()?.text(),
+               let normalized = nilIfEmpty(normalizeText(text)) {
+                return normalized
+            }
+        }
+        return nil
     }
 
     private static func postContainer(for element: Element) -> Element? {
