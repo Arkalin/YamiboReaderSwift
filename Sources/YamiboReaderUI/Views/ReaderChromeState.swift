@@ -61,6 +61,10 @@ struct ReaderChromeState: Equatable {
         mode = mode == .immersiveHidden ? .visible : .immersiveHidden
     }
 
+    mutating func hideChrome() {
+        mode = .immersiveHidden
+    }
+
     mutating func showChrome() {
         mode = .visible
     }

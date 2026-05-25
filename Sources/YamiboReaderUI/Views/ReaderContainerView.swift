@@ -301,15 +301,18 @@ public struct ReaderContainerView: View {
             }
         }
         .tabViewStyle(.page(indexDisplayMode: .never))
+        .scrollDisabled(chromeState.mode.showsChrome)
         .overlay {
             if !model.pages.isEmpty {
                 ReaderPagedTapZones(
                     onPrevious: {
-                        Task { await goRelativePage(-1) }
+                        handlePagedContentTap(pageDelta: -1)
                     },
-                    onToggleChrome: toggleChrome,
+                    onToggleChrome: {
+                        handlePagedContentTap()
+                    },
                     onNext: {
-                        Task { await goRelativePage(1) }
+                        handlePagedContentTap(pageDelta: 1)
                     }
                 )
             }
@@ -529,6 +532,29 @@ public struct ReaderContainerView: View {
         }
     }
 
+    private func enterImmersiveMode() {
+        guard !model.pages.isEmpty else { return }
+        guard !hasPresentedOverlay else { return }
+        progressPreviewHideTask?.cancel()
+        isProgressPreviewVisible = false
+        withAnimation(.easeInOut(duration: 0.2)) {
+            chromeState.hideChrome()
+        }
+    }
+
+    private func handlePagedContentTap(pageDelta: Int? = nil) {
+        guard !chromeState.mode.showsChrome else {
+            enterImmersiveMode()
+            return
+        }
+
+        if let pageDelta {
+            Task { await goRelativePage(pageDelta) }
+        } else {
+            toggleChrome()
+        }
+    }
+
     private func handleVerticalTap() {
         guard !model.pages.isEmpty else { return }
         let now = CACurrentMediaTime()
@@ -681,7 +707,8 @@ public struct ReaderContainerView: View {
             model.settings.readingMode == .paged &&
             !model.pages.isEmpty &&
             !hasPresentedOverlay &&
-            !isDismissing
+            !isDismissing &&
+            !chromeState.mode.showsChrome
     }
 
     private func handleProgressPreviewChange(value: Double?, isEditing: Bool) {
