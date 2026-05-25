@@ -121,6 +121,7 @@
 "favorites.empty.collection" = "合集为空";
 "favorites.empty.favorites" = "暂无收藏";
 "favorites.empty.no_results" = "没有匹配结果";
+"favorites.error.login_required" = "请前往“我的”进行登录";
 "favorites.filter.all" = "全部";
 "favorites.filter.clear_tags" = "清除标签筛选";
 "favorites.filter.tags" = "标签";

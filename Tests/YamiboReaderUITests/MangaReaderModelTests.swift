@@ -394,6 +394,44 @@ final class MangaReaderModelTests: XCTestCase {
         }
     }
 
+    func testFavoritesViewModelPromptsMineLoginWhenRefreshNeedsAuthentication() async throws {
+        let keyPrefix = UUID().uuidString
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [MangaReaderTestURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        MangaReaderTestURLProtocol.handler = { request in
+            let html = """
+            <html>
+              <head><title>登录 - 百合会 - 手机版 - Powered by Discuz!</title></head>
+              <body class="pg_logging">
+                <form id="member_login" action="member.php?mod=logging&action=login"></form>
+              </body>
+            </html>
+            """
+            return (Data(html.utf8), HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: ["Content-Type": "text/html"])!)
+        }
+        defer { MangaReaderTestURLProtocol.handler = nil }
+
+        let favoriteStore = FavoriteStore(key: "\(keyPrefix).favorites")
+        let appContext = YamiboAppContext(
+            sessionStore: SessionStore(key: "\(keyPrefix).session"),
+            settingsStore: SettingsStore(key: "\(keyPrefix).settings"),
+            favoriteStore: favoriteStore,
+            readerCacheStore: ReaderCacheStore(baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)),
+            mangaDirectoryStore: MangaDirectoryStore(baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)),
+            session: session
+        )
+        let viewModel = await MainActor.run {
+            FavoritesViewModel(appContext: appContext, favoriteStore: favoriteStore)
+        }
+
+        await viewModel.refresh()
+
+        await MainActor.run {
+            XCTAssertEqual(viewModel.errorMessage, L10n.string("favorites.error.login_required"))
+        }
+    }
+
     func testFavoritesViewModelCanSetDisplayNameByFavoriteID() async throws {
         let keyPrefix = UUID().uuidString
         let favoriteStore = FavoriteStore(key: "\(keyPrefix).favorites")
