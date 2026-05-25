@@ -115,10 +115,6 @@ public final class YamiboAppContext: YamiboRepositoryProviding, Sendable {
         )
     }
 
-    public func makeReleaseNotesService() -> ReleaseNotesService {
-        ReleaseNotesService(session: session)
-    }
-
     public func bootstrap() async -> YamiboBootstrapState {
         YamiboBootstrapState(
             session: await sessionStore.load(),
