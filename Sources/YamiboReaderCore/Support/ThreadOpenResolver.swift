@@ -16,6 +16,7 @@ public actor ThreadOpenResolver {
         initialPage: Int = 0
     ) async throws -> ThreadOpenTarget {
         let canonicalURL = ReaderModeDetector.canonicalThreadURL(from: threadURL) ?? threadURL
+        let authorID = Self.authorID(from: canonicalURL)
 
         switch favoriteType {
         case .novel:
@@ -24,7 +25,8 @@ public actor ThreadOpenResolver {
                     threadURL: canonicalURL,
                     threadTitle: title ?? L10n.string("reader.title"),
                     source: .favorites,
-                    initialPage: initialPage
+                    initialPage: initialPage,
+                    authorID: authorID
                 )
             )
         case .manga:
@@ -49,7 +51,8 @@ public actor ThreadOpenResolver {
                 ReaderLaunchContext(
                     threadURL: canonicalURL,
                     threadTitle: snapshot.title,
-                    source: .forum
+                    source: .forum,
+                    authorID: authorID
                 )
             )
         }
@@ -78,5 +81,15 @@ public actor ThreadOpenResolver {
         let html = try await client.fetchHTML(for: .thread(url: url, page: 1, authorID: nil))
         let extractedTitle = ReaderHTMLParser.extractPageTitle(from: html) ?? knownTitle ?? ""
         return (extractedTitle, html)
+    }
+
+    private static func authorID(from url: URL) -> String? {
+        guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              let value = components.queryItems?.first(where: { $0.name == "authorid" })?.value?
+              .trimmingCharacters(in: .whitespacesAndNewlines),
+              !value.isEmpty else {
+            return nil
+        }
+        return value
     }
 }
