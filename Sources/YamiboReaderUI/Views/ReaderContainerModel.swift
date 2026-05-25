@@ -284,6 +284,14 @@ public final class ReaderContainerModel: ObservableObject {
         return pages[clampedIndex].chapterTitle ?? chapters.last(where: { $0.startIndex <= clampedIndex })?.title
     }
 
+    public func progressChapterTickStartIndex(forRenderedPageIndex pageIndex: Int) -> Int? {
+        guard !chapters.isEmpty else { return nil }
+        let clampedIndex = min(max(pageIndex, 0), max(renderedPageCount - 1, 0))
+        return chapters
+            .map { min(max($0.startIndex, 0), max(renderedPageCount - 1, 0)) }
+            .first { $0 == clampedIndex }
+    }
+
     public func targetRenderedPageIndex(forProgressValue value: Double) -> Int {
         guard !pages.isEmpty else { return 0 }
 

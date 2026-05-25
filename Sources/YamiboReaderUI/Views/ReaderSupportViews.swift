@@ -285,6 +285,8 @@ struct ReaderBottomChrome: View {
 
     @State private var sliderValue = 0.0
     @State private var isEditingSlider = false
+    @State private var progressTickFeedbackGenerator = UISelectionFeedbackGenerator()
+    @State private var lastFeedbackTickStartIndex: Int?
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
@@ -393,6 +395,7 @@ struct ReaderBottomChrome: View {
                                 set: { newValue in
                                     guard isEditingSlider else { return }
                                     sliderValue = min(max(newValue, sliderRange.lowerBound), sliderRange.upperBound)
+                                    triggerProgressTickFeedbackIfNeeded()
                                     onProgressPreviewChange(sliderValue, true)
                                 }
                             ),
@@ -401,8 +404,11 @@ struct ReaderBottomChrome: View {
                         ) { editing in
                             isEditingSlider = editing
                             if editing {
+                                lastFeedbackTickStartIndex = nil
+                                progressTickFeedbackGenerator.prepare()
                                 onProgressPreviewChange(sliderValue, true)
                             } else {
+                                lastFeedbackTickStartIndex = nil
                                 onProgressPreviewChange(nil, false)
                             }
                             if !editing {
@@ -464,6 +470,18 @@ struct ReaderBottomChrome: View {
 
     private var sliderTargetRenderedPageIndex: Int {
         model.targetRenderedPageIndex(forProgressValue: sliderValue)
+    }
+
+    private func triggerProgressTickFeedbackIfNeeded() {
+        guard let tickStartIndex = model.progressChapterTickStartIndex(forRenderedPageIndex: sliderTargetRenderedPageIndex) else {
+            lastFeedbackTickStartIndex = nil
+            return
+        }
+        guard lastFeedbackTickStartIndex != tickStartIndex else { return }
+
+        progressTickFeedbackGenerator.selectionChanged()
+        progressTickFeedbackGenerator.prepare()
+        lastFeedbackTickStartIndex = tickStartIndex
     }
 }
 

@@ -113,6 +113,21 @@ final class ReaderContainerModelTests: XCTestCase {
         }
     }
 
+    func testProgressChapterTickStartIndexMatchesChapterBoundaryPages() async throws {
+        let model = try await makeModel(
+            documents: [
+                makeImageDocument(view: 1, maxView: 1, pageCount: 5),
+            ],
+            settings: ReaderAppearanceSettings(readingMode: .paged)
+        )
+
+        await MainActor.run {
+            XCTAssertEqual(model.progressChapterTickStartIndex(forRenderedPageIndex: 0), 0)
+            XCTAssertEqual(model.progressChapterTickStartIndex(forRenderedPageIndex: 3), 3)
+            XCTAssertEqual(model.progressChapterTickStartIndex(forRenderedPageIndex: 999), 4)
+        }
+    }
+
     func testTargetRenderedPageIndexMapsPagedAndVerticalProgress() async throws {
         let pagedModel = try await makeModel(
             documents: [
