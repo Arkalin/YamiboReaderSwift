@@ -1,11 +1,6 @@
 "about.title" = "关于";
 "about.version" = "版本 %@";
 "about.version_with_build" = "版本 %@ (%@)";
-"about.release_notes.empty" = "暂无更新日志";
-"about.release_notes.load_failed" = "更新日志加载失败：%@";
-"about.release_notes.loading" = "正在加载更新日志…";
-"about.release_notes.no_body" = "暂无更新说明";
-"about.release_notes.title" = "更新日志";
 "app.home.favorites" = "收藏";
 "app.home.forum" = "论坛";
 "app.initializing" = "初始化中…";
