@@ -106,17 +106,52 @@ public struct WebDAVSyncPayload: Codable, Equatable, Sendable {
     public var updatedAt: Date
     public var accountUID: String?
     public var library: FavoriteLibrarySnapshot
+    public var appSettings: WebDAVSyncedAppSettings?
 
     public init(
         version: Int = Self.currentVersion,
         updatedAt: Date,
         accountUID: String? = nil,
-        library: FavoriteLibrarySnapshot
+        library: FavoriteLibrarySnapshot,
+        appSettings: WebDAVSyncedAppSettings? = nil
     ) {
         self.version = version
         self.updatedAt = updatedAt
         self.accountUID = accountUID
         self.library = library
+        self.appSettings = appSettings
+    }
+}
+
+public struct WebDAVSyncedAppSettings: Codable, Equatable, Sendable {
+    public var homePage: AppHomePage
+    public var webBrowser: WebBrowserSettings
+    public var favoriteAppearance: FavoriteAppearanceSettings
+
+    public init(
+        homePage: AppHomePage,
+        webBrowser: WebBrowserSettings,
+        favoriteAppearance: FavoriteAppearanceSettings
+    ) {
+        self.homePage = homePage
+        self.webBrowser = webBrowser
+        self.favoriteAppearance = favoriteAppearance
+    }
+
+    public init(settings: AppSettings) {
+        self.init(
+            homePage: settings.homePage,
+            webBrowser: settings.webBrowser,
+            favoriteAppearance: settings.favoriteAppearance
+        )
+    }
+
+    public func applying(to settings: AppSettings) -> AppSettings {
+        var updated = settings
+        updated.homePage = homePage
+        updated.webBrowser = webBrowser
+        updated.favoriteAppearance = favoriteAppearance
+        return updated
     }
 }
 
@@ -267,6 +302,7 @@ public actor WebDAVSyncService {
     private let settingsStore: WebDAVSyncSettingsStore
     private let favoriteStore: FavoriteStore
     private let sessionStore: SessionStore
+    private let appSettingsStore: (any SettingsStoring)?
     private let accountUIDResolver: AccountUIDResolver
     private let client: WebDAVClient
 
@@ -274,12 +310,14 @@ public actor WebDAVSyncService {
         settingsStore: WebDAVSyncSettingsStore,
         favoriteStore: FavoriteStore,
         sessionStore: SessionStore,
+        appSettingsStore: (any SettingsStoring)? = nil,
         client: WebDAVClient = WebDAVClient(),
         accountUIDResolver: AccountUIDResolver? = nil
     ) {
         self.settingsStore = settingsStore
         self.favoriteStore = favoriteStore
         self.sessionStore = sessionStore
+        self.appSettingsStore = appSettingsStore
         self.client = client
         self.accountUIDResolver = accountUIDResolver ?? AccountUIDResolver(sessionStore: sessionStore)
     }
@@ -385,10 +423,18 @@ public actor WebDAVSyncService {
     }
 
     private func makePayload(updatedAt: Date, accountUID: String) async throws -> WebDAVSyncPayload {
-        WebDAVSyncPayload(
+        let syncedAppSettings: WebDAVSyncedAppSettings?
+        if let appSettingsStore {
+            syncedAppSettings = WebDAVSyncedAppSettings(settings: await appSettingsStore.load())
+        } else {
+            syncedAppSettings = nil
+        }
+
+        return WebDAVSyncPayload(
             updatedAt: updatedAt,
             accountUID: accountUID,
-            library: await favoriteStore.loadLibrarySnapshot()
+            library: await favoriteStore.loadLibrarySnapshot(),
+            appSettings: syncedAppSettings
         )
     }
 
@@ -397,6 +443,10 @@ public actor WebDAVSyncService {
             throw WebDAVSyncError.unsupportedPayloadVersion(payload.version)
         }
         try await favoriteStore.saveLibrarySnapshot(payload.library)
+        if let appSettings = payload.appSettings, let appSettingsStore {
+            let currentSettings = await appSettingsStore.load()
+            try await appSettingsStore.save(appSettings.applying(to: currentSettings))
+        }
     }
 
     private func updateSettingsAfterSync(_ settings: WebDAVSyncSettings, remoteUpdatedAt: Date) async throws {
