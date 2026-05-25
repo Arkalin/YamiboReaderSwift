@@ -196,7 +196,7 @@ public struct MangaReaderView: View {
                 }
             }
             .allowsHitTesting(!model.isTransitioningChapter)
-            .scrollDisabled(activeZoomPageID != nil)
+            .scrollDisabled(showingChrome || activeZoomPageID != nil)
             .id(pagerRevision)
             .tabViewStyle(.page(indexDisplayMode: .never))
             .simultaneousGesture(pagedSingleTapGesture(containerWidth: proxy.size.width))
@@ -242,7 +242,7 @@ public struct MangaReaderView: View {
                 }
             }
             .allowsHitTesting(!model.isTransitioningChapter)
-            .scrollDisabled(activeZoomPageID != nil)
+            .scrollDisabled(showingChrome || activeZoomPageID != nil)
             .id(pagerRevision)
             .tabViewStyle(.page(indexDisplayMode: .never))
             .simultaneousGesture(pagedSingleTapGesture(containerWidth: proxy.size.width))
@@ -283,7 +283,7 @@ public struct MangaReaderView: View {
             page: page,
             refererURL: page.chapterURL,
             imageRepository: appModel.appContext.mangaImageRepository,
-            zoomEnabled: model.settings.zoomEnabled,
+            zoomEnabled: model.settings.zoomEnabled && !showingChrome,
             activeZoomPageID: $activeZoomPageID,
             verticalZoomOverlay: $verticalZoomOverlay,
             usesOverlayPresentation: false,
@@ -323,13 +323,13 @@ public struct MangaReaderView: View {
                                 page: page,
                                 refererURL: page.chapterURL,
                                 imageRepository: appModel.appContext.mangaImageRepository,
-                                zoomEnabled: model.settings.zoomEnabled,
+                                zoomEnabled: model.settings.zoomEnabled && !showingChrome,
                                 activeZoomPageID: $activeZoomPageID,
                                 verticalZoomOverlay: $verticalZoomOverlay,
                                 usesOverlayPresentation: true,
                                 readerCoordinateSpaceName: Self.verticalReaderCoordinateSpaceName,
                                 showsChapterTitle: false,
-                                onToggleChrome: { showingChrome.toggle() }
+                                onToggleChrome: handleReadingAreaTap
                             )
                             .id(page.id)
                             .background(
@@ -627,6 +627,10 @@ public struct MangaReaderView: View {
               activeZoomPageID == nil else {
             return
         }
+        guard !showingChrome else {
+            handleReadingAreaTap()
+            return
+        }
 
         let now = Date()
         guard now >= suppressPagedSingleTapUntil else { return }
@@ -675,6 +679,11 @@ public struct MangaReaderView: View {
 
     private func performPagedSingleTap(at location: CGPoint, containerWidth: CGFloat) {
         guard containerWidth > 0 else { return }
+        guard !showingChrome else {
+            handleReadingAreaTap()
+            return
+        }
+
         let zoneWidth = containerWidth / 3
 
         if location.x < zoneWidth {
@@ -683,6 +692,18 @@ public struct MangaReaderView: View {
             Task { await goRelativePage(1) }
         } else {
             showingChrome.toggle()
+        }
+    }
+
+    private func handleReadingAreaTap() {
+        if showingChrome {
+            activeZoomPageID = nil
+            verticalZoomOverlay = nil
+            cancelPendingPagedTap()
+            cancelSliderInteractionForContentGesture()
+            showingChrome = false
+        } else {
+            showingChrome = true
         }
     }
 
@@ -709,6 +730,7 @@ public struct MangaReaderView: View {
             !showingSettings &&
             !showingDirectorySheet &&
             !isDismissing &&
+            !showingChrome &&
             activeZoomPageID == nil &&
             verticalZoomOverlay == nil
     }
