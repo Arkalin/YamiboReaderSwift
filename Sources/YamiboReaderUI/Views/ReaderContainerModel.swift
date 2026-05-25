@@ -98,6 +98,18 @@ public enum ReaderChapterCommentsState: Equatable, Sendable {
     case failed(ReaderChapterCommentTarget, String)
 }
 
+public struct ReaderProgressChapterTick: Equatable, Sendable {
+    public var chapter: ReaderChapter
+    public var position: Double
+    public var isCurrent: Bool
+
+    public init(chapter: ReaderChapter, position: Double, isCurrent: Bool) {
+        self.chapter = chapter
+        self.position = position
+        self.isCurrent = isCurrent
+    }
+}
+
 @MainActor
 public final class ReaderContainerModel: ObservableObject {
     @Published public private(set) var isLoading = false
@@ -196,6 +208,24 @@ public final class ReaderContainerModel: ObservableObject {
 
     public var currentProgressPercentText: String {
         "\(currentProgressPercent)%"
+    }
+
+    public var progressChapterTicks: [ReaderProgressChapterTick] {
+        guard renderedPageCount > 1, !chapters.isEmpty else { return [] }
+
+        let currentIndex = currentChapterIndex
+        let maxPageIndex = max(renderedPageCount - 1, 1)
+        var seenStartIndexes = Set<Int>()
+
+        return chapters.enumerated().compactMap { index, chapter in
+            let clampedStartIndex = min(max(chapter.startIndex, 0), maxPageIndex)
+            guard seenStartIndexes.insert(clampedStartIndex).inserted else { return nil }
+            return ReaderProgressChapterTick(
+                chapter: chapter,
+                position: Double(clampedStartIndex) / Double(maxPageIndex),
+                isCurrent: currentIndex == index
+            )
+        }
     }
 
     public func progressSliderLabelText(
