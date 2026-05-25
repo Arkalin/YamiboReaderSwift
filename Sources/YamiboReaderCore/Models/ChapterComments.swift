@@ -8,11 +8,11 @@ public enum ChapterCommentSource: String, Codable, Hashable, Sendable {
     public var displayLabel: String {
         switch self {
         case .postComment:
-            "点评"
+            L10n.string("reader.comment_source.post_comment")
         case .ratingReason:
-            "评分"
+            L10n.string("reader.comment_source.rating_reason")
         case .reply:
-            "回复"
+            L10n.string("reader.comment_source.reply")
         }
     }
 }
