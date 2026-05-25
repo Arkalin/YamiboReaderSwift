@@ -7,8 +7,10 @@ public enum ChapterCommentsHTMLParser {
         "你太可愛",
         "好萌好萌好萌",
         "我很赞同",
+        "我很贊同",
         "精品文章",
-        "原创内容"
+        "原创内容",
+        "原創內容"
     ]
 
     public static func parseInitialPage(
