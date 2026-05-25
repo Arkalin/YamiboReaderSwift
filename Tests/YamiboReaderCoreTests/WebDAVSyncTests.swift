@@ -375,6 +375,116 @@ private enum WebDAVTestError: Error {
     #expect(uploadedPayload?.accountUID == "123")
 }
 
+@Test func webDAVServiceUploadIncludesSyncedAppSettings() async throws {
+    let suiteName = makeWebDAVDefaultsSuiteName(prefix: "webdav-upload-app-settings")
+    UserDefaults(suiteName: suiteName)?.removePersistentDomain(forName: suiteName)
+    let settingsStore = WebDAVSyncSettingsStore(defaults: try makeWebDAVDefaults(suiteName: suiteName), key: "webdav")
+    let favoriteStore = FavoriteStore(defaults: try makeWebDAVDefaults(suiteName: suiteName), key: "favorites")
+    let sessionStore = SessionStore(defaults: try makeWebDAVDefaults(suiteName: suiteName), key: "session")
+    let appSettingsStore = SettingsStore(defaults: try makeWebDAVDefaults(suiteName: suiteName), key: "settings")
+    let host = "upload-app-settings.example.com"
+    let settings = WebDAVSyncSettings(baseURLString: "https://\(host)", username: "admin", password: "secret")
+    let appSettings = AppSettings(
+        webBrowser: WebBrowserSettings(showsNavigationBar: false),
+        favoriteAppearance: FavoriteAppearanceSettings(collection: .purple, novel: .red, manga: .green, other: .gray),
+        homePage: .favorites,
+        usesDataSaverMode: true
+    )
+    try await sessionStore.save(SessionState(cookie: "sid=local", isLoggedIn: true, accountUID: "123"))
+    try await appSettingsStore.save(appSettings)
+
+    var uploadedPayload: WebDAVSyncPayload?
+    WebDAVTestURLProtocol.setHandler(for: host) { request in
+        switch request.httpMethod {
+        case "GET":
+            return (Data(), HTTPURLResponse(url: request.url!, statusCode: 404, httpVersion: nil, headerFields: nil)!)
+        case "MKCOL":
+            return (Data(), HTTPURLResponse(url: request.url!, statusCode: 201, httpVersion: nil, headerFields: nil)!)
+        case "PUT":
+            let body = try #require(request.webDAVBodyData())
+            uploadedPayload = try JSONDecoder().decode(WebDAVSyncPayload.self, from: body)
+            return (Data(), HTTPURLResponse(url: request.url!, statusCode: 201, httpVersion: nil, headerFields: nil)!)
+        default:
+            Issue.record("Unexpected method \(request.httpMethod ?? "nil")")
+            return (Data(), HTTPURLResponse(url: request.url!, statusCode: 500, httpVersion: nil, headerFields: nil)!)
+        }
+    }
+    defer { WebDAVTestURLProtocol.removeHandler(for: host) }
+
+    let service = WebDAVSyncService(
+        settingsStore: settingsStore,
+        favoriteStore: favoriteStore,
+        sessionStore: sessionStore,
+        appSettingsStore: appSettingsStore,
+        client: WebDAVClient(session: makeWebDAVTestSession())
+    )
+
+    _ = try await service.upload(using: settings)
+
+    #expect(uploadedPayload?.appSettings == WebDAVSyncedAppSettings(settings: appSettings))
+}
+
+@Test func webDAVServiceDownloadAppliesSyncedAppSettingsOnly() async throws {
+    let suiteName = makeWebDAVDefaultsSuiteName(prefix: "webdav-download-app-settings")
+    UserDefaults(suiteName: suiteName)?.removePersistentDomain(forName: suiteName)
+    let settingsStore = WebDAVSyncSettingsStore(defaults: try makeWebDAVDefaults(suiteName: suiteName), key: "webdav")
+    let favoriteStore = FavoriteStore(defaults: try makeWebDAVDefaults(suiteName: suiteName), key: "favorites")
+    let sessionStore = SessionStore(defaults: try makeWebDAVDefaults(suiteName: suiteName), key: "session")
+    let appSettingsStore = SettingsStore(defaults: try makeWebDAVDefaults(suiteName: suiteName), key: "settings")
+    let host = "download-app-settings.example.com"
+    let settings = WebDAVSyncSettings(baseURLString: "https://\(host)", username: "admin", password: "secret")
+    let localSettings = AppSettings(
+        reader: ReaderAppearanceSettings(readingMode: .vertical),
+        webBrowser: WebBrowserSettings(showsNavigationBar: true),
+        favoriteAppearance: FavoriteAppearanceSettings(collection: .orange, novel: .pink, manga: .blue, other: .cyan),
+        homePage: .forum,
+        usesDataSaverMode: true,
+        collapsesFavoriteSections: true
+    )
+    let remoteSyncedSettings = WebDAVSyncedAppSettings(
+        homePage: .favorites,
+        webBrowser: WebBrowserSettings(showsNavigationBar: false),
+        favoriteAppearance: FavoriteAppearanceSettings(collection: .purple, novel: .red, manga: .green, other: .gray)
+    )
+    let payload = WebDAVSyncPayload(
+        updatedAt: Date(timeIntervalSince1970: 2_000),
+        accountUID: "123",
+        library: FavoriteLibrarySnapshot(favorites: [], collections: []),
+        appSettings: remoteSyncedSettings
+    )
+    let encodedPayload = try JSONEncoder().encode(payload)
+
+    try await sessionStore.save(SessionState(cookie: "sid=local", isLoggedIn: true, accountUID: "123"))
+    try await appSettingsStore.save(localSettings)
+
+    WebDAVTestURLProtocol.setHandler(for: host) { request in
+        #expect(request.httpMethod == "GET")
+        return (
+            encodedPayload,
+            HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
+        )
+    }
+    defer { WebDAVTestURLProtocol.removeHandler(for: host) }
+
+    let service = WebDAVSyncService(
+        settingsStore: settingsStore,
+        favoriteStore: favoriteStore,
+        sessionStore: sessionStore,
+        appSettingsStore: appSettingsStore,
+        client: WebDAVClient(session: makeWebDAVTestSession())
+    )
+
+    _ = try await service.download(using: settings)
+
+    let loadedSettings = await appSettingsStore.load()
+    #expect(loadedSettings.homePage == .favorites)
+    #expect(loadedSettings.webBrowser.showsNavigationBar == false)
+    #expect(loadedSettings.favoriteAppearance == remoteSyncedSettings.favoriteAppearance)
+    #expect(loadedSettings.reader.readingMode == .vertical)
+    #expect(loadedSettings.usesDataSaverMode == true)
+    #expect(loadedSettings.collapsesFavoriteSections == true)
+}
+
 @Test func webDAVServiceUploadIncludesArchivedFavoriteMetadata() async throws {
     let suiteName = makeWebDAVDefaultsSuiteName(prefix: "webdav-upload-archive")
     UserDefaults(suiteName: suiteName)?.removePersistentDomain(forName: suiteName)
