@@ -316,34 +316,27 @@ struct ReaderBottomChrome: View {
 
     private var firstRow: some View {
         VStack(spacing: 10) {
-            HStack(spacing: 10) {
-                Button(action: onShowChapters) {
-                    Label(L10n.string("reader.chapters"), systemImage: "list.bullet")
-                }
-                .buttonStyle(.bordered)
-                .tint(readerChromeButtonTint(for: colorScheme))
-
-                Spacer(minLength: 0)
-
-                HStack(spacing: 8) {
-                    Button(action: onShowComments) {
-                        Label(L10n.string("reader.comments"), systemImage: "text.bubble")
-                    }
-                    .buttonStyle(.bordered)
-                    .tint(readerChromeButtonTint(for: colorScheme))
-
-                    Button(action: onShowSettings) {
-                        Label(L10n.string("settings.title"), systemImage: "gearshape")
-                    }
-                    .buttonStyle(.bordered)
-                    .tint(readerChromeButtonTint(for: colorScheme))
-
-                    Button(action: onShowCache) {
-                        Label(L10n.string("reader.cache"), systemImage: "square.and.arrow.down")
-                    }
-                    .buttonStyle(.bordered)
-                    .tint(readerChromeButtonTint(for: colorScheme))
-                }
+            HStack(spacing: 8) {
+                chromeActionButton(
+                    title: L10n.string("reader.chapters"),
+                    systemName: "list.bullet",
+                    action: onShowChapters
+                )
+                chromeActionButton(
+                    title: L10n.string("reader.comments"),
+                    systemName: "text.bubble",
+                    action: onShowComments
+                )
+                chromeActionButton(
+                    title: L10n.string("settings.title"),
+                    systemName: "gearshape",
+                    action: onShowSettings
+                )
+                chromeActionButton(
+                    title: L10n.string("reader.cache"),
+                    systemName: "square.and.arrow.down",
+                    action: onShowCache
+                )
             }
 
             HStack(spacing: 8) {
@@ -370,6 +363,19 @@ struct ReaderBottomChrome: View {
                 .disabled(model.visibleView >= model.maxView)
             }
         }
+    }
+
+    private func chromeActionButton(title: String, systemName: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Label(title, systemImage: systemName)
+                .font(.callout.weight(.medium))
+                .lineLimit(1)
+                .minimumScaleFactor(0.78)
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.regular)
+        .tint(readerChromeButtonTint(for: colorScheme))
     }
 
     private var secondRow: some View {
@@ -764,13 +770,6 @@ private struct ReaderChapterCommentsContent: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
-                    if let title = target.title, !title.isEmpty {
-                        Section {
-                            Text(title)
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
                     Section {
                         ForEach(page.comments) { comment in
                             ReaderChapterCommentRow(
@@ -779,28 +778,40 @@ private struct ReaderChapterCommentsContent: View {
                                 openOriginalPost: openOriginalPost
                             )
                         }
-                    }
-                    if page.nextView != nil {
-                        Section {
-                            Button(action: loadNext) {
-                                HStack {
-                                    Spacer()
-                                    if isLoadingMore {
-                                        ProgressView()
-                                    } else {
-                                        Text(loadMoreError ?? L10n.string("reader.chapter_comments_load_next"))
-                                            .font(.footnote)
-                                    }
-                                    Spacer()
-                                }
-                            }
-                            .disabled(isLoadingMore)
+                    } footer: {
+                        if page.nextView != nil {
+                            loadNextButton
+                                .padding(.top, 10)
                         }
                     }
                 }
             }
         }
     }
+
+    private var loadNextButton: some View {
+        Button(action: loadNext) {
+            HStack {
+                Spacer()
+                if isLoadingMore {
+                    ProgressView()
+                        .tint(Self.loadNextColor)
+                } else {
+                    Text(loadMoreError ?? L10n.string("reader.chapter_comments_load_next"))
+                        .font(.footnote.weight(.medium))
+                }
+                Spacer()
+            }
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity)
+            .foregroundStyle(Self.loadNextColor)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(isLoadingMore)
+    }
+
+    private static let loadNextColor = Color(red: 0.54, green: 0.35, blue: 0.22)
 }
 
 private struct ReaderChapterCommentsToolbarTitle: View {
@@ -828,9 +839,6 @@ private struct ReaderChapterCommentRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
-                Text(sourceText)
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.secondary)
                 Text(comment.authorName.isEmpty ? L10n.string("reader.comment_anonymous") : comment.authorName)
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -840,6 +848,7 @@ private struct ReaderChapterCommentRow: View {
                         .foregroundStyle(.tertiary)
                 }
                 Spacer(minLength: 8)
+                ReaderChapterCommentSourceBadge(source: comment.source)
                 if let originalPostURL {
                     Button {
                         openOriginalPost(originalPostURL)
@@ -856,9 +865,34 @@ private struct ReaderChapterCommentRow: View {
         }
         .padding(.vertical, 4)
     }
+}
 
-    private var sourceText: String {
-        comment.source.displayLabel
+private struct ReaderChapterCommentSourceBadge: View {
+    let source: ChapterCommentSource
+
+    var body: some View {
+        Text(source.displayLabel)
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(palette.foreground)
+            .lineLimit(1)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .overlay {
+                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                    .strokeBorder(palette.border, lineWidth: 1)
+            }
+            .accessibilityLabel(source.displayLabel)
+    }
+
+    private var palette: (foreground: Color, border: Color) {
+        switch source {
+        case .postComment:
+            (Color(red: 0.54, green: 0.35, blue: 0.22), Color(red: 0.74, green: 0.52, blue: 0.38))
+        case .ratingReason:
+            (Color(red: 0.15, green: 0.44, blue: 0.36), Color(red: 0.36, green: 0.65, blue: 0.55))
+        case .reply:
+            (Color(red: 0.28, green: 0.36, blue: 0.68), Color(red: 0.48, green: 0.56, blue: 0.82))
+        }
     }
 }
 
