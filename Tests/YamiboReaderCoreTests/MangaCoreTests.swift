@@ -126,6 +126,18 @@ private final class MangaCooldownStubURLProtocol: URLProtocol, @unchecked Sendab
         Issue.record("Expected novel target")
     }
 
+    let authorFilteredNovelTarget = try await resolver.resolve(
+        threadURL: URL(string: "https://bbs.yamibo.com/forum.php?authorid=595655&mobile=2&mod=viewthread&page=1&tid=557752")!,
+        title: "测试 - 文学区 - 百合会",
+        htmlOverride: novelHTML
+    )
+    if case let .novel(context) = authorFilteredNovelTarget {
+        #expect(context.threadURL.absoluteString.contains("authorid=595655"))
+        #expect(context.authorID == "595655")
+    } else {
+        Issue.record("Expected author-filtered novel target")
+    }
+
     let mangaTarget = try await resolver.resolve(
         threadURL: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=2&mobile=2")!,
         title: "测试 - 中文百合漫画区 - 百合会",
