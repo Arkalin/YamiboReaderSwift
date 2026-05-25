@@ -3305,7 +3305,7 @@ private struct FavoriteTagChip: View {
         .foregroundStyle(.secondary)
         .padding(.horizontal, 7)
         .padding(.vertical, 4)
-        .frame(maxWidth: 96)
+        .fixedSize(horizontal: true, vertical: false)
         .background(
             Capsule(style: .continuous)
                 .fill(tag.color.swiftUIColor.opacity(0.13))
