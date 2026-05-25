@@ -97,12 +97,15 @@ struct ReaderSettingsPanel: View {
                                 onHorizontalPaddingChange: setHorizontalPadding
                             )
 
-                            ReaderBooksStandaloneToggleSection(
-                                title: L10n.string("reader.justified_text"),
+                            ReaderBooksTextOptionsSection(
                                 palette: palette,
-                                isOn: Binding(
+                                usesJustifiedText: Binding(
                                     get: { draftSettings.usesJustifiedText },
                                     set: { draftSettings.usesJustifiedText = $0 }
+                                ),
+                                usesFirstLineIndent: Binding(
+                                    get: { draftSettings.usesFirstLineIndent },
+                                    set: { draftSettings.usesFirstLineIndent = $0 }
                                 )
                             )
 
@@ -164,6 +167,7 @@ struct ReaderSettingsPanel: View {
     private func setCharacterSpacingScale(_ value: Double) { draftSettings.characterSpacingScale = value }
     private func setHorizontalPadding(_ value: Double) { draftSettings.horizontalPadding = value }
     private func setUsesJustifiedText(_ value: Bool) { draftSettings.usesJustifiedText = value }
+    private func setUsesFirstLineIndent(_ value: Bool) { draftSettings.usesFirstLineIndent = value }
     private func setBackgroundStyle(_ value: ReaderBackgroundStyle) { draftSettings.backgroundStyle = value }
     private func setReadingMode(_ value: ReaderReadingMode) { draftSettings.readingMode = value }
     private func setTranslationMode(_ value: ReaderTranslationMode) { draftSettings.translationMode = value }
@@ -452,28 +456,46 @@ private struct ReaderBooksLayoutSection: View {
     }
 }
 
-private struct ReaderBooksStandaloneToggleSection: View {
-    let title: String
+private struct ReaderBooksTextOptionsSection: View {
     let palette: ReaderBooksSheetPalette
-    @Binding var isOn: Bool
+    @Binding var usesJustifiedText: Bool
+    @Binding var usesFirstLineIndent: Bool
 
     var body: some View {
-        HStack {
-            Text(title)
-                .font(.title3.weight(.semibold))
-                .foregroundStyle(palette.primaryText)
-            Spacer()
-            Toggle("", isOn: $isOn)
-                .labelsHidden()
+        VStack(spacing: 0) {
+            toggleRow(
+                title: L10n.string("reader.justified_text"),
+                isOn: $usesJustifiedText
+            )
+
+            Divider()
+                .overlay(palette.divider)
+                .padding(.leading, 20)
+
+            toggleRow(
+                title: L10n.string("reader.first_line_indent"),
+                isOn: $usesFirstLineIndent
+            )
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 18)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(palette.cardBackground, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 26, style: .continuous)
                 .strokeBorder(palette.divider, lineWidth: 1)
         }
+    }
+
+    private func toggleRow(title: String, isOn: Binding<Bool>) -> some View {
+        HStack {
+            Text(title)
+                .font(.title3)
+                .foregroundStyle(palette.primaryText)
+            Spacer()
+            Toggle("", isOn: isOn)
+                .labelsHidden()
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 18)
     }
 }
 

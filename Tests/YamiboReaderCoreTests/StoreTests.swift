@@ -44,6 +44,7 @@ import Testing
             characterSpacingScale: 0.04,
             horizontalPadding: 20,
             usesJustifiedText: true,
+            usesFirstLineIndent: true,
             loadsInlineImages: false,
             showsTwoPagesInLandscapeOnPad: true,
             backgroundStyle: .paper,
@@ -154,6 +155,7 @@ import Testing
     #expect(decoded.fontFamily == .systemSans)
     #expect(decoded.characterSpacingScale == 0)
     #expect(decoded.usesJustifiedText == false)
+    #expect(decoded.usesFirstLineIndent == false)
     #expect(decoded.showsTwoPagesInLandscapeOnPad == false)
     #expect(decoded.fontScale == 1.2)
     #expect(decoded.lineHeightScale == 1.5)
