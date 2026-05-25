@@ -281,7 +281,7 @@ struct ReaderBottomChrome: View {
     let onShowComments: () -> Void
     let onJumpChapter: (Int) -> Void
     let onProgressPreviewChange: (Double?, Bool) -> Void
-    let onProgressCommit: (Double) -> Void
+    let onProgressCommit: (Int) -> Void
 
     @State private var sliderValue = 0.0
     @State private var isEditingSlider = false
@@ -305,11 +305,6 @@ struct ReaderBottomChrome: View {
         .onChange(of: sliderModelValue) { _, newValue in
             if !isEditingSlider {
                 sliderValue = newValue
-            }
-        }
-        .onChange(of: sliderValue) { _, newValue in
-            if isEditingSlider {
-                onProgressPreviewChange(newValue, true)
             }
         }
     }
@@ -392,7 +387,14 @@ struct ReaderBottomChrome: View {
 
                 if sliderHasAvailableRange {
                     Slider(
-                        value: $sliderValue,
+                        value: Binding(
+                            get: { sliderValue },
+                            set: { newValue in
+                                guard isEditingSlider else { return }
+                                sliderValue = min(max(newValue, sliderRange.lowerBound), sliderRange.upperBound)
+                                onProgressPreviewChange(sliderValue, true)
+                            }
+                        ),
                         in: sliderRange,
                         step: 1
                     ) { editing in
@@ -403,7 +405,8 @@ struct ReaderBottomChrome: View {
                             onProgressPreviewChange(nil, false)
                         }
                         if !editing {
-                            onProgressCommit(sliderValue)
+                            onProgressCommit(sliderTargetRenderedPageIndex)
+                            sliderValue = sliderModelValue
                         }
                     }
                 } else {
@@ -448,11 +451,15 @@ struct ReaderBottomChrome: View {
     }
 
     private var progressLabelText: String {
-        if model.settings.readingMode == .vertical {
-            model.currentProgressPercentText
-        } else {
-            "\(model.currentRenderedPage) / \(model.renderedPageCount)"
-        }
+        model.progressSliderLabelText(
+            isEditing: isEditingSlider,
+            sliderValue: sliderValue,
+            targetRenderedPageIndex: sliderTargetRenderedPageIndex
+        )
+    }
+
+    private var sliderTargetRenderedPageIndex: Int {
+        model.targetRenderedPageIndex(forProgressValue: sliderValue)
     }
 }
 
@@ -460,20 +467,17 @@ struct ReaderChapterPreviewBubble: View {
     let title: String
 
     var body: some View {
-        VStack {
-            Spacer()
-            Text(title)
-                .font(.caption.weight(.semibold))
-                .lineLimit(1)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .background(.ultraThinMaterial, in: Capsule())
-                .overlay {
-                    Capsule()
-                        .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
-                }
-                .shadow(color: Color.black.opacity(0.08), radius: 10, y: 4)
-        }
+        Text(title)
+            .font(.caption.weight(.semibold))
+            .lineLimit(1)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .background(.ultraThinMaterial, in: Capsule())
+            .overlay {
+                Capsule()
+                    .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+            }
+            .shadow(color: Color.black.opacity(0.08), radius: 10, y: 4)
         .frame(maxWidth: .infinity)
         .allowsHitTesting(false)
         .accessibilityHidden(true)

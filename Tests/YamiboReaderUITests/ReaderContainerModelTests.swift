@@ -135,6 +135,36 @@ final class ReaderContainerModelTests: XCTestCase {
         }
     }
 
+    func testProgressSliderPreviewLabelUsesEditingTargetPage() async throws {
+        let model = try await makeModel(
+            documents: [
+                makeImageDocument(view: 1, maxView: 1, pageCount: 5),
+            ],
+            settings: ReaderAppearanceSettings(readingMode: .paged)
+        )
+
+        await MainActor.run {
+            let targetIndex = model.targetRenderedPageIndex(forProgressValue: 3)
+            XCTAssertEqual(targetIndex, 3)
+            XCTAssertEqual(
+                model.progressSliderLabelText(
+                    isEditing: true,
+                    sliderValue: 3,
+                    targetRenderedPageIndex: targetIndex
+                ),
+                "4 / 5"
+            )
+            XCTAssertEqual(
+                model.progressSliderLabelText(
+                    isEditing: false,
+                    sliderValue: 3,
+                    targetRenderedPageIndex: targetIndex
+                ),
+                "1 / 5"
+            )
+        }
+    }
+
     func testTwoPageSpreadRequiresPadLandscapePagedModeAndSetting() async throws {
         let document = makeImageDocument(view: 1, maxView: 1, pageCount: 5)
         let model = try await makeModel(

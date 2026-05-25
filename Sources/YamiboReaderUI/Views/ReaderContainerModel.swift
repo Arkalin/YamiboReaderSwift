@@ -198,6 +198,24 @@ public final class ReaderContainerModel: ObservableObject {
         "\(currentProgressPercent)%"
     }
 
+    public func progressSliderLabelText(
+        isEditing: Bool,
+        sliderValue: Double,
+        targetRenderedPageIndex: Int
+    ) -> String {
+        if settings.readingMode == .vertical {
+            guard isEditing else { return currentProgressPercentText }
+            let percent = Int(min(max(sliderValue, 0), 100).rounded())
+            return "\(percent)%"
+        }
+
+        guard isEditing else {
+            return "\(currentRenderedPage) / \(renderedPageCount)"
+        }
+        let page = min(max(targetRenderedPageIndex + 1, 1), renderedPageCount)
+        return "\(page) / \(renderedPageCount)"
+    }
+
     public var currentChapterCommentTarget: ReaderChapterCommentTarget? {
         currentRenderedPageMetadata?.chapterCommentTarget
     }
