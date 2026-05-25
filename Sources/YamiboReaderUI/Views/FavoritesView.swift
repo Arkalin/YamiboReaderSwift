@@ -310,8 +310,15 @@ public final class FavoritesViewModel: ObservableObject {
             tags = await favoriteStore.loadTags()
             errorMessage = nil
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = refreshErrorMessage(for: error)
         }
+    }
+
+    private func refreshErrorMessage(for error: Error) -> String {
+        if (error as? YamiboError) == .notAuthenticated {
+            return L10n.string("favorites.error.login_required")
+        }
+        return error.localizedDescription
     }
 
     func canReorderFavorites(
