@@ -318,7 +318,7 @@ import Testing
     #expect(url.absoluteString == "https://bbs.yamibo.com/forum.php?goto=findpost&mobile=2&mod=redirect&pid=102&ptid=42")
 }
 
-@Test func chapterCommentSourcesExposeLightweightDisplayLabels() {
+@Test func chapterCommentSourcesExposeLocalizedDisplayLabels() {
     #expect(ChapterCommentSource.postComment.displayLabel == "点评")
     #expect(ChapterCommentSource.ratingReason.displayLabel == "评分")
     #expect(ChapterCommentSource.reply.displayLabel == "回复")
