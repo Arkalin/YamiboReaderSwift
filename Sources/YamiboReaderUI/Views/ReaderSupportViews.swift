@@ -164,6 +164,7 @@ private final class ReaderImageLoader: ObservableObject {
     func loadIfNeeded() async {
         guard image == nil, !isLoading else { return }
         isLoading = true
+        didFail = false
         defer { isLoading = false }
 
         var request = URLRequest(url: url)
@@ -185,6 +186,10 @@ private final class ReaderImageLoader: ObservableObject {
         } catch {
             didFail = true
         }
+    }
+
+    func retry() async {
+        await loadIfNeeded()
     }
 }
 
@@ -208,8 +213,22 @@ private struct AuthenticatedReaderImage: View {
                     .resizable()
                     .scaledToFit()
             } else if loader.didFail {
-                Label(L10n.string("image.load_failed"), systemImage: "photo")
-                    .foregroundColor(.secondary)
+                VStack(spacing: 8) {
+                    Label(L10n.string("image.load_failed"), systemImage: "photo")
+                        .foregroundColor(.secondary)
+
+                    Button {
+                        Task {
+                            await loader.retry()
+                        }
+                    } label: {
+                        Label(L10n.string("common.retry"), systemImage: "arrow.clockwise")
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
             } else {
                 ProgressView()
                     .frame(maxWidth: .infinity)
