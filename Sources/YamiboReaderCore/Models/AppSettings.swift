@@ -90,6 +90,7 @@ public struct ReaderAppearanceSettings: Codable, Hashable, Sendable {
     public var characterSpacingScale: Double
     public var horizontalPadding: Double
     public var usesJustifiedText: Bool
+    public var usesFirstLineIndent: Bool
     public var loadsInlineImages: Bool
     public var showsTwoPagesInLandscapeOnPad: Bool
     public var backgroundStyle: ReaderBackgroundStyle
@@ -103,6 +104,7 @@ public struct ReaderAppearanceSettings: Codable, Hashable, Sendable {
         characterSpacingScale: Double = 0,
         horizontalPadding: Double = 16,
         usesJustifiedText: Bool = false,
+        usesFirstLineIndent: Bool = false,
         loadsInlineImages: Bool = true,
         showsTwoPagesInLandscapeOnPad: Bool = false,
         backgroundStyle: ReaderBackgroundStyle = .system,
@@ -115,6 +117,7 @@ public struct ReaderAppearanceSettings: Codable, Hashable, Sendable {
         self.characterSpacingScale = characterSpacingScale
         self.horizontalPadding = horizontalPadding
         self.usesJustifiedText = usesJustifiedText
+        self.usesFirstLineIndent = usesFirstLineIndent
         self.loadsInlineImages = loadsInlineImages
         self.showsTwoPagesInLandscapeOnPad = showsTwoPagesInLandscapeOnPad
         self.backgroundStyle = backgroundStyle
@@ -129,6 +132,7 @@ public struct ReaderAppearanceSettings: Codable, Hashable, Sendable {
         case characterSpacingScale
         case horizontalPadding
         case usesJustifiedText
+        case usesFirstLineIndent
         case loadsInlineImages
         case showsTwoPagesInLandscapeOnPad
         case backgroundStyle
@@ -144,6 +148,7 @@ public struct ReaderAppearanceSettings: Codable, Hashable, Sendable {
         characterSpacingScale = try container.decodeIfPresent(Double.self, forKey: .characterSpacingScale) ?? 0
         horizontalPadding = try container.decodeIfPresent(Double.self, forKey: .horizontalPadding) ?? 16
         usesJustifiedText = try container.decodeIfPresent(Bool.self, forKey: .usesJustifiedText) ?? false
+        usesFirstLineIndent = try container.decodeIfPresent(Bool.self, forKey: .usesFirstLineIndent) ?? false
         loadsInlineImages = try container.decodeIfPresent(Bool.self, forKey: .loadsInlineImages) ?? true
         showsTwoPagesInLandscapeOnPad = try container.decodeIfPresent(Bool.self, forKey: .showsTwoPagesInLandscapeOnPad) ?? false
         backgroundStyle = try container.decodeIfPresent(ReaderBackgroundStyle.self, forKey: .backgroundStyle) ?? .system
@@ -159,6 +164,7 @@ public struct ReaderAppearanceSettings: Codable, Hashable, Sendable {
         try container.encode(characterSpacingScale, forKey: .characterSpacingScale)
         try container.encode(horizontalPadding, forKey: .horizontalPadding)
         try container.encode(usesJustifiedText, forKey: .usesJustifiedText)
+        try container.encode(usesFirstLineIndent, forKey: .usesFirstLineIndent)
         try container.encode(loadsInlineImages, forKey: .loadsInlineImages)
         try container.encode(showsTwoPagesInLandscapeOnPad, forKey: .showsTwoPagesInLandscapeOnPad)
         try container.encode(backgroundStyle, forKey: .backgroundStyle)

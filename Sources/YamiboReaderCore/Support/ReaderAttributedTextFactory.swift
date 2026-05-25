@@ -44,19 +44,20 @@ public enum ReaderAttributedTextFactory {
     ) -> NSAttributedString {
         let rendered = NSMutableAttributedString()
         let segments = ReaderChapterTextComponents.split(text: text, chapterTitle: chapterTitle)
-        let paragraphStyle = makeParagraphStyle(settings: settings)
         let pointSize = baseFontSize * settings.fontScale
+        let bodyParagraphStyle = makeParagraphStyle(settings: settings, pointSize: pointSize)
+        let titleParagraphStyle = makeParagraphStyle(settings: settings, pointSize: pointSize, appliesFirstLineIndent: false)
         let bodyAttributes: [NSAttributedString.Key: Any] = [
             .font: settings.fontFamily.uiFont(size: pointSize, weight: .regular),
             .kern: settings.fontFamily.kerning(size: pointSize, scale: settings.characterSpacingScale),
             .foregroundColor: textColor,
-            .paragraphStyle: paragraphStyle,
+            .paragraphStyle: bodyParagraphStyle,
         ]
         let titleAttributes: [NSAttributedString.Key: Any] = [
             .font: settings.fontFamily.uiFont(size: pointSize, weight: titleWeight),
             .kern: settings.fontFamily.kerning(size: pointSize, scale: settings.characterSpacingScale),
             .foregroundColor: textColor,
-            .paragraphStyle: paragraphStyle,
+            .paragraphStyle: titleParagraphStyle,
         ]
 
         if let title = segments.title {
@@ -72,9 +73,18 @@ public enum ReaderAttributedTextFactory {
     }
 
     public static func makeParagraphStyle(settings: ReaderAppearanceSettings) -> NSMutableParagraphStyle {
+        makeParagraphStyle(settings: settings, pointSize: defaultBaseFontSize)
+    }
+
+    private static func makeParagraphStyle(
+        settings: ReaderAppearanceSettings,
+        pointSize: Double,
+        appliesFirstLineIndent: Bool = true
+    ) -> NSMutableParagraphStyle {
         let style = NSMutableParagraphStyle()
         style.lineSpacing = 6 * settings.lineHeightScale
         style.alignment = settings.usesJustifiedText ? .justified : .natural
+        style.firstLineHeadIndent = settings.usesFirstLineIndent && appliesFirstLineIndent ? CGFloat(pointSize * 2) : 0
         style.lineBreakMode = .byWordWrapping
         return style
     }

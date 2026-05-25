@@ -3,6 +3,10 @@ import Testing
 import XCTest
 @testable import YamiboReaderCore
 
+#if canImport(UIKit)
+import UIKit
+#endif
+
 private struct StubURLProtocolResponse {
     let statusCode: Int
     let body: String
@@ -836,6 +840,38 @@ private final class StubURLProtocol: URLProtocol {
     #expect(pagination.pages.count == 1)
     #expect(pagination.pages.first?.blocks.count == 3)
 }
+
+#if canImport(UIKit)
+@Test func readerAttributedTextFactoryAppliesFirstLineIndentToBodyOnly() throws {
+    let defaultStyle = ReaderAttributedTextFactory.makeParagraphStyle(settings: ReaderAppearanceSettings())
+    #expect(defaultStyle.firstLineHeadIndent == 0)
+
+    let pointSize = 24.0
+    let attributedText = ReaderAttributedTextFactory.makeAttributedText(
+        text: "第一章\n第一段正文。\n\n第二段正文。",
+        chapterTitle: "第一章",
+        settings: ReaderAppearanceSettings(usesFirstLineIndent: true),
+        baseFontSize: pointSize
+    )
+    let titleStyle = try #require(
+        attributedText.attribute(
+            .paragraphStyle,
+            at: 0,
+            effectiveRange: nil
+        ) as? NSParagraphStyle
+    )
+    let bodyStyle = try #require(
+        attributedText.attribute(
+            .paragraphStyle,
+            at: "第一章\n".count,
+            effectiveRange: nil
+        ) as? NSParagraphStyle
+    )
+
+    #expect(titleStyle.firstLineHeadIndent == 0)
+    #expect(bodyStyle.firstLineHeadIndent == CGFloat(pointSize * 2))
+}
+#endif
 
 @Test func readerCacheStorePersistsAndDeletesPages() async throws {
     let directory = URL(fileURLWithPath: NSTemporaryDirectory())
