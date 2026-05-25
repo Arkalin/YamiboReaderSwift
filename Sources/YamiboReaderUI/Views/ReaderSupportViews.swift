@@ -386,29 +386,33 @@ struct ReaderBottomChrome: View {
                 .disabled(!model.hasPreviousChapter)
 
                 if sliderHasAvailableRange {
-                    Slider(
-                        value: Binding(
-                            get: { sliderValue },
-                            set: { newValue in
-                                guard isEditingSlider else { return }
-                                sliderValue = min(max(newValue, sliderRange.lowerBound), sliderRange.upperBound)
+                    ZStack {
+                        Slider(
+                            value: Binding(
+                                get: { sliderValue },
+                                set: { newValue in
+                                    guard isEditingSlider else { return }
+                                    sliderValue = min(max(newValue, sliderRange.lowerBound), sliderRange.upperBound)
+                                    onProgressPreviewChange(sliderValue, true)
+                                }
+                            ),
+                            in: sliderRange,
+                            step: 1
+                        ) { editing in
+                            isEditingSlider = editing
+                            if editing {
                                 onProgressPreviewChange(sliderValue, true)
+                            } else {
+                                onProgressPreviewChange(nil, false)
                             }
-                        ),
-                        in: sliderRange,
-                        step: 1
-                    ) { editing in
-                        isEditingSlider = editing
-                        if editing {
-                            onProgressPreviewChange(sliderValue, true)
-                        } else {
-                            onProgressPreviewChange(nil, false)
+                            if !editing {
+                                onProgressCommit(sliderTargetRenderedPageIndex)
+                                sliderValue = sliderModelValue
+                            }
                         }
-                        if !editing {
-                            onProgressCommit(sliderTargetRenderedPageIndex)
-                            sliderValue = sliderModelValue
-                        }
+                        ReaderProgressChapterTickOverlay(ticks: model.progressChapterTicks)
                     }
+                    .frame(maxWidth: .infinity)
                 } else {
                     Capsule()
                         .fill(Color.secondary.opacity(0.2))
@@ -460,6 +464,27 @@ struct ReaderBottomChrome: View {
 
     private var sliderTargetRenderedPageIndex: Int {
         model.targetRenderedPageIndex(forProgressValue: sliderValue)
+    }
+}
+
+private struct ReaderProgressChapterTickOverlay: View {
+    let ticks: [ReaderProgressChapterTick]
+
+    var body: some View {
+        GeometryReader { geometry in
+            ForEach(Array(ticks.enumerated()), id: \.element.chapter.startIndex) { _, tick in
+                Capsule()
+                    .fill(tick.isCurrent ? Color.accentColor : Color.secondary.opacity(0.38))
+                    .frame(width: tick.isCurrent ? 3 : 2, height: tick.isCurrent ? 12 : 8)
+                    .position(
+                        x: min(max(tick.position, 0), 1) * geometry.size.width,
+                        y: geometry.size.height / 2
+                    )
+                    .accessibilityHidden(true)
+            }
+        }
+        .frame(height: 24)
+        .allowsHitTesting(false)
     }
 }
 
