@@ -42,6 +42,7 @@ public struct MangaReaderView: View {
     @State private var verticalPageFrames: [MangaPage.ID: CGRect] = [:]
     @State private var isDismissing = false
     private let appModel: YamiboAppModel
+    private let sliderPreviewHideDelay: TimeInterval = 2.0
 
     public init(context: MangaLaunchContext, appModel: YamiboAppModel) {
         _model = StateObject(wrappedValue: MangaReaderModel(context: context, appContext: appModel.appContext))
@@ -72,9 +73,10 @@ public struct MangaReaderView: View {
 
                 if showingChrome, isPreviewVisible {
                     MangaChapterPreviewBubble(title: previewLabelText)
-                        .padding(.bottom, bottomInset + 110)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
-                        .zIndex(1)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+                        .padding(.horizontal, 24)
+                        .transition(.opacity)
+                        .zIndex(3)
                 }
             }
             .safeAreaInset(edge: .top, spacing: 0) {
@@ -512,6 +514,7 @@ public struct MangaReaderView: View {
         previewPageIndex = model.clampedLocalPageIndex(for: Int(sliderValue.rounded()))
         previewHideTask?.cancel()
         isPreviewVisible = true
+        schedulePreviewHide()
     }
 
     private func handleSliderEditingChanged(_ editing: Bool) {
@@ -522,6 +525,7 @@ public struct MangaReaderView: View {
             sliderValue = clampedSliderValue(sliderValue)
             previewPageIndex = model.clampedLocalPageIndex(for: Int(sliderValue.rounded()))
             isPreviewVisible = true
+            schedulePreviewHide()
             return
         }
 
@@ -534,16 +538,13 @@ public struct MangaReaderView: View {
     }
 
     private func handleCurrentPageChanged() {
-        if isEditingSlider {
-            cancelSliderInteractionForContentGesture()
-        }
         syncSliderValueIfNeeded()
     }
 
     private func schedulePreviewHide() {
         previewHideTask?.cancel()
         previewHideTask = Task {
-            try? await Task.sleep(nanoseconds: 900_000_000)
+            try? await Task.sleep(for: .seconds(sliderPreviewHideDelay))
             guard !Task.isCancelled else { return }
             await MainActor.run {
                 isPreviewVisible = false

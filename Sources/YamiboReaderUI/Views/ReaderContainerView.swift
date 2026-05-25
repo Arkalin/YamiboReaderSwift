@@ -68,6 +68,7 @@ public struct ReaderContainerView: View {
     @State private var bottomChromeHeight: CGFloat = 0
     @State private var retainedVerticalTopSafeAreaInset: CGFloat = 0
     private let appModel: YamiboAppModel
+    private let progressPreviewHideDelay: TimeInterval = 2.0
 
     public init(context: ReaderLaunchContext, appModel: YamiboAppModel) {
         _model = StateObject(wrappedValue: ReaderContainerModel(context: context, appContext: appModel.appContext))
@@ -112,9 +113,10 @@ public struct ReaderContainerView: View {
 
                 if isProgressPreviewVisible {
                     ReaderChapterPreviewBubble(title: progressPreviewChapterTitle ?? "•••")
-                        .padding(.bottom, chromeState.mode.showsChrome ? bottomInset + 118 : bottomInset + 24)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
-                        .zIndex(1)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+                        .padding(.horizontal, 24)
+                        .transition(.opacity)
+                        .zIndex(3)
                 }
 
                 if model.settings.readingMode == .paged && chromeState.mode.showsChrome {
@@ -428,8 +430,8 @@ public struct ReaderContainerView: View {
             onProgressPreviewChange: { value, isEditing in
                 handleProgressPreviewChange(value: value, isEditing: isEditing)
             },
-            onProgressCommit: { value in
-                commitProgressSlider(value)
+            onProgressCommit: { pageIndex in
+                commitProgressSlider(pageIndex)
             }
         )
         .background(
@@ -632,8 +634,7 @@ public struct ReaderContainerView: View {
         }
     }
 
-    private func commitProgressSlider(_ value: Double) {
-        let targetIndex = model.targetRenderedPageIndex(forProgressValue: value)
+    private func commitProgressSlider(_ targetIndex: Int) {
         model.jumpToRenderedPage(targetIndex)
         showProgressPreview(for: targetIndex, autoHide: true)
         if model.settings.readingMode == .vertical {
@@ -685,12 +686,13 @@ public struct ReaderContainerView: View {
 
     private func handleProgressPreviewChange(value: Double?, isEditing: Bool) {
         guard isEditing, let value else {
-            hideProgressPreview(after: 0.8)
+            hideProgressPreview(after: progressPreviewHideDelay)
             return
         }
 
         let targetIndex = model.targetRenderedPageIndex(forProgressValue: value)
         showProgressPreview(for: targetIndex, autoHide: false)
+        hideProgressPreview(after: progressPreviewHideDelay)
     }
 
     private func showProgressPreview(for pageIndex: Int, autoHide: Bool) {
@@ -701,7 +703,7 @@ public struct ReaderContainerView: View {
             isProgressPreviewVisible = true
         }
         if autoHide {
-            hideProgressPreview(after: 0.8)
+            hideProgressPreview(after: progressPreviewHideDelay)
         }
     }
 
