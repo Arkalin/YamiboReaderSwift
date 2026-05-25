@@ -15,9 +15,11 @@ public struct AboutView: View {
     public var body: some View {
         NavigationStack {
             ScrollView {
-                VStack {
+                VStack(spacing: 40) {
                     AboutHeaderView()
                         .padding(.top, 32)
+
+                    AboutLinksSection()
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.horizontal, 24)
@@ -35,6 +37,43 @@ public struct AboutView: View {
                 }
             }
         }
+    }
+}
+
+private struct AboutLinksSection: View {
+    var body: some View {
+        VStack(spacing: 0) {
+            AboutExternalLinkRow(
+                title: L10n.string("about.github"),
+                destination: AppMetadata.githubURL
+            )
+        }
+    }
+}
+
+private struct AboutExternalLinkRow: View {
+    let title: String
+    let destination: URL
+
+    var body: some View {
+        Link(destination: destination) {
+            HStack(spacing: 16) {
+                Text(title)
+                    .font(.title3)
+                    .foregroundStyle(.primary)
+
+                Spacer(minLength: 16)
+
+                Image(systemName: "arrow.up.forward.square")
+                    .font(.title2.weight(.semibold))
+                    .foregroundStyle(Color.accentColor)
+                    .accessibilityHidden(true)
+            }
+            .frame(minHeight: 64)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(title)
     }
 }
 
@@ -58,6 +97,8 @@ private struct AboutHeaderView: View {
 }
 
 private enum AppMetadata {
+    static let githubURL = URL(string: "https://github.com/Arkalin/YamiboReaderSwift")!
+
     static var displayName: String {
         let bundle = Bundle.main
         return bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String
