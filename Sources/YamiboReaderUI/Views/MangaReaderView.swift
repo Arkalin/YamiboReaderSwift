@@ -1609,9 +1609,15 @@ private struct MangaAuthenticatedImage: View {
 
     @ViewBuilder
     private var frameMeasurementOverlay: some View {
-        if readerCoordinateSpaceName != nil {
-            MangaImageFrameReporter { frame in
-                updateImageFrameInReader(frame)
+        if let readerCoordinateSpaceName {
+            GeometryReader { geometry in
+                Color.clear
+                    .onAppear {
+                        updateImageFrameInReader(geometry.frame(in: .named(readerCoordinateSpaceName)))
+                    }
+                    .onChange(of: geometry.frame(in: .named(readerCoordinateSpaceName))) { _, newValue in
+                        updateImageFrameInReader(newValue)
+                    }
             }
             .allowsHitTesting(false)
         } else {
@@ -1695,88 +1701,6 @@ private struct MangaImageBaseSizePreferenceKey: PreferenceKey {
         if next != .zero {
             value = next
         }
-    }
-}
-
-private struct MangaImageFrameReporter: UIViewRepresentable {
-    let onFrameChange: (CGRect) -> Void
-
-    func makeUIView(context: Context) -> MangaImageFrameReporterView {
-        let view = MangaImageFrameReporterView()
-        view.onFrameChange = onFrameChange
-        return view
-    }
-
-    func updateUIView(_ uiView: MangaImageFrameReporterView, context: Context) {
-        uiView.onFrameChange = onFrameChange
-        uiView.scheduleFrameReport()
-    }
-}
-
-private final class MangaImageFrameReporterView: UIView {
-    var onFrameChange: ((CGRect) -> Void)?
-    private var lastReportedFrame: CGRect = .zero
-    private var isReportScheduled = false
-
-    override init(frame: CGRect) {
-        super.init(frame: frame)
-        isUserInteractionEnabled = false
-        backgroundColor = .clear
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        scheduleFrameReport()
-    }
-
-    override func didMoveToWindow() {
-        super.didMoveToWindow()
-        scheduleFrameReport()
-    }
-
-    override func didMoveToSuperview() {
-        super.didMoveToSuperview()
-        scheduleFrameReport()
-    }
-
-    func scheduleFrameReport() {
-        guard !isReportScheduled else { return }
-        isReportScheduled = true
-        DispatchQueue.main.async { [weak self] in
-            self?.reportFrameIfNeeded()
-        }
-    }
-
-    private func reportFrameIfNeeded() {
-        isReportScheduled = false
-        guard window != nil else { return }
-        let frame = currentFrameInScrollViewport()
-        guard lastReportedFrame.isMeaningfullyDifferent(from: frame) else { return }
-        lastReportedFrame = frame
-        onFrameChange?(frame)
-    }
-
-    private func currentFrameInScrollViewport() -> CGRect {
-        guard let scrollView = nearestAncestorScrollView() else {
-            return superview?.convert(frame, to: nil) ?? .zero
-        }
-        return convert(bounds, to: scrollView)
-    }
-
-    private func nearestAncestorScrollView() -> UIScrollView? {
-        var current = superview
-        while let view = current {
-            if let scrollView = view as? UIScrollView {
-                return scrollView
-            }
-            current = view.superview
-        }
-        return nil
     }
 }
 
