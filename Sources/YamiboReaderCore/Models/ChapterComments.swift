@@ -12,7 +12,7 @@ public enum ChapterCommentSource: String, Codable, Hashable, Sendable {
         case .ratingReason:
             L10n.string("reader.comment_source.rating_reason")
         case .reply:
-            L10n.string("reader.comment_source.reply")
+            L10n.string("reader.comment_source.others_post")
         }
     }
 }
