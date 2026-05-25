@@ -118,6 +118,51 @@ final class MangaPresentationRouteTests: XCTestCase {
         XCTAssertEqual(appModel.forumNavigationRequest?.url, originalURL)
     }
 
+    func testSelectingFavoritesAfterMangaOpenedForumRestoresManga() {
+        let appModel = YamiboAppModel(appContext: YamiboAppContext(), initialTab: .favorites)
+        let originalURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=704&mobile=2")!
+        let context = MangaLaunchContext(
+            originalThreadURL: originalURL,
+            chapterURL: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=704&page=3&mobile=2")!,
+            displayTitle: "测试漫画",
+            source: .favorites,
+            initialPage: 5
+        )
+
+        appModel.presentManga(context)
+        appModel.dismissManga(openThreadInForum: originalURL)
+        appModel.selectTab(.favorites)
+
+        guard case let .native(restoredContext)? = appModel.activeMangaRoute else {
+            return XCTFail("Expected restored native manga route")
+        }
+        XCTAssertEqual(restoredContext, context)
+        XCTAssertNil(appModel.suspendedMangaRoute)
+        XCTAssertEqual(appModel.selectedTab, .favorites)
+    }
+
+    func testMangaPresentationDismissCallbackDoesNotClearSuspendedMangaRoute() {
+        let appModel = YamiboAppModel(appContext: YamiboAppContext(), initialTab: .favorites)
+        let originalURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=704&mobile=2")!
+        let context = MangaLaunchContext(
+            originalThreadURL: originalURL,
+            chapterURL: originalURL,
+            displayTitle: "测试漫画",
+            source: .favorites,
+            initialPage: 2
+        )
+
+        appModel.presentManga(context)
+        appModel.dismissManga(openThreadInForum: originalURL)
+        appModel.dismissManga()
+        appModel.selectTab(.favorites)
+
+        guard case let .native(restoredContext)? = appModel.activeMangaRoute else {
+            return XCTFail("Expected restored native manga route")
+        }
+        XCTAssertEqual(restoredContext, context)
+    }
+
     func testDismissReaderToOriginalPostSelectsForumAndCreatesNavigationRequest() {
         let appModel = YamiboAppModel(appContext: YamiboAppContext(), initialTab: .mine)
         let originalURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=703&mobile=2")!
@@ -131,8 +176,29 @@ final class MangaPresentationRouteTests: XCTestCase {
         appModel.dismissReader(openThreadInForum: originalURL)
 
         XCTAssertNil(appModel.activeReaderContext)
+        XCTAssertEqual(appModel.suspendedReaderContext, context)
         XCTAssertEqual(appModel.selectedTab, .forum)
         XCTAssertEqual(appModel.forumNavigationRequest?.url, originalURL)
+    }
+
+    func testSelectingFavoritesAfterReaderOpenedForumRestoresReader() {
+        let appModel = YamiboAppModel(appContext: YamiboAppContext(), initialTab: .favorites)
+        let originalURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=703&mobile=2")!
+        let context = ReaderLaunchContext(
+            threadURL: originalURL,
+            threadTitle: "测试小说",
+            source: .favorites,
+            initialView: 2,
+            initialPage: 4
+        )
+
+        appModel.presentReader(context)
+        appModel.dismissReader(openThreadInForum: originalURL)
+        appModel.selectTab(.favorites)
+
+        XCTAssertEqual(appModel.activeReaderContext, context)
+        XCTAssertNil(appModel.suspendedReaderContext)
+        XCTAssertEqual(appModel.selectedTab, .favorites)
     }
 
     func testFallbackMangaToWebDisablesAutoOpenLoop() {

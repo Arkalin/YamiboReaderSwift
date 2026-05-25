@@ -17,9 +17,11 @@ public final class YamiboAppModel {
     public private(set) var bootstrapState: YamiboBootstrapState?
     public private(set) var isBootstrapping = false
     public var bootstrapErrorMessage: String?
-    public var selectedTab: AppTab
+    public private(set) var selectedTab: AppTab
     public var activeReaderContext: ReaderLaunchContext?
     public var activeMangaRoute: MangaPresentationRoute?
+    public private(set) var suspendedReaderContext: ReaderLaunchContext?
+    public private(set) var suspendedMangaRoute: MangaPresentationRoute?
     public private(set) var suspendedMangaWebContext: MangaWebContext?
     public private(set) var forumNavigationRequest: ForumNavigationRequest?
 
@@ -101,20 +103,30 @@ public final class YamiboAppModel {
     }
 
     public func presentReader(_ context: ReaderLaunchContext) {
+        suspendedReaderContext = nil
         activeReaderContext = context
     }
 
+    public func selectTab(_ tab: AppTab) {
+        selectedTab = tab
+        restoreSuspendedReaderIfNeeded(for: tab)
+        restoreSuspendedMangaIfNeeded(for: tab)
+    }
+
     public func presentManga(_ context: MangaLaunchContext) {
+        suspendedMangaRoute = nil
         suspendedMangaWebContext = nil
         activeMangaRoute = .native(context)
     }
 
     public func presentMangaWeb(_ context: MangaWebContext) {
+        suspendedMangaRoute = nil
         suspendedMangaWebContext = nil
         activeMangaRoute = .web(context)
     }
 
     public func presentMangaFromWeb(_ context: MangaLaunchContext, preserving webContext: MangaWebContext) {
+        suspendedMangaRoute = nil
         suspendedMangaWebContext = webContext.updating(
             autoOpenNative: false,
             waitingForNativeReturn: false
@@ -123,6 +135,7 @@ public final class YamiboAppModel {
     }
 
     public func fallbackMangaToWeb(_ context: MangaWebContext) {
+        suspendedMangaRoute = nil
         suspendedMangaWebContext = nil
         activeMangaRoute = .web(
             context.updating(
@@ -137,6 +150,7 @@ public final class YamiboAppModel {
             dismissManga()
             return
         }
+        suspendedMangaRoute = nil
         self.suspendedMangaWebContext = nil
         activeMangaRoute = .web(
             suspendedMangaWebContext.updating(
@@ -163,6 +177,11 @@ public final class YamiboAppModel {
     }
 
     public func dismissReader(openThreadInForum url: URL? = nil) {
+        if url != nil {
+            suspendedReaderContext = activeReaderContext
+        } else {
+            suspendedReaderContext = nil
+        }
         activeReaderContext = nil
         if let url {
             selectedTab = .forum
@@ -171,11 +190,28 @@ public final class YamiboAppModel {
     }
 
     public func dismissManga(openThreadInForum url: URL? = nil) {
+        if url != nil {
+            suspendedMangaRoute = activeMangaRoute
+        } else if activeMangaRoute != nil {
+            suspendedMangaRoute = nil
+        }
         activeMangaRoute = nil
         suspendedMangaWebContext = nil
         if let url {
             selectedTab = .forum
             forumNavigationRequest = ForumNavigationRequest(url: url)
         }
+    }
+
+    private func restoreSuspendedReaderIfNeeded(for tab: AppTab) {
+        guard tab == .favorites, let context = suspendedReaderContext else { return }
+        suspendedReaderContext = nil
+        activeReaderContext = context
+    }
+
+    private func restoreSuspendedMangaIfNeeded(for tab: AppTab) {
+        guard tab == .favorites, let route = suspendedMangaRoute else { return }
+        suspendedMangaRoute = nil
+        activeMangaRoute = route
     }
 }

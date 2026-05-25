@@ -43,7 +43,7 @@ public struct RootTabView: View {
     private var content: some View {
         let favoriteStore = appModel.appContext.favoriteStore
 
-        return TabView(selection: binding(for: \.selectedTab)) {
+        return TabView(selection: selectedTabBinding) {
             ForumBrowserView(
                 url: forumURL,
                 appContext: appModel.appContext,
@@ -75,10 +75,10 @@ public struct RootTabView: View {
         .modifier(ReaderPresentationModifier(appModel: appModel))
     }
 
-    private func binding<Value>(for keyPath: ReferenceWritableKeyPath<YamiboAppModel, Value>) -> Binding<Value> {
+    private var selectedTabBinding: Binding<AppTab> {
         Binding(
-            get: { appModel[keyPath: keyPath] },
-            set: { appModel[keyPath: keyPath] = $0 }
+            get: { appModel.selectedTab },
+            set: { appModel.selectTab($0) }
         )
     }
 
