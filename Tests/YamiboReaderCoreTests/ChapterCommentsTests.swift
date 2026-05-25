@@ -321,7 +321,7 @@ import Testing
 @Test func chapterCommentSourcesExposeLocalizedDisplayLabels() {
     #expect(ChapterCommentSource.postComment.displayLabel == "点评")
     #expect(ChapterCommentSource.ratingReason.displayLabel == "评分")
-    #expect(ChapterCommentSource.reply.displayLabel == "回复")
+    #expect(ChapterCommentSource.reply.displayLabel == "帖子")
 }
 
 @Test func chapterCommentsParserKeepsReplyFloorAndTimeMetadata() throws {
