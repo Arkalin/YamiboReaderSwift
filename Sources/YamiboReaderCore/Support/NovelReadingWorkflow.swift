@@ -60,7 +60,8 @@ public struct NovelReadingWorkflowState: Equatable, Sendable {
     }
 }
 
-public actor NovelReadingWorkflow {
+@MainActor
+public final class NovelReadingWorkflow {
     public private(set) var state: NovelReadingWorkflowState?
 
     private let context: ReaderLaunchContext
@@ -149,19 +150,55 @@ public actor NovelReadingWorkflow {
         )
     }
 
-    public func updateSettings(_ settings: ReaderAppearanceSettings) {
+    @discardableResult
+    public func updateSettings(_ settings: ReaderAppearanceSettings) -> NovelReadingWorkflowState? {
         self.settings = settings
         session?.applySettings(settings)
+        return updateStateFromSession(cachedViews: state?.cachedViews ?? [])
     }
 
-    public func updateLayout(_ layout: ReaderContainerLayout) {
+    @discardableResult
+    public func updateLayout(_ layout: ReaderContainerLayout) -> NovelReadingWorkflowState? {
         self.layout = layout
         session?.updateLayout(layout)
+        return updateStateFromSession(cachedViews: state?.cachedViews ?? [])
     }
 
-    public func updatePagedPresentationEnvironment(isPad: Bool) {
+    @discardableResult
+    public func updatePagedPresentationEnvironment(isPad: Bool) -> NovelReadingWorkflowState? {
         usesPadPresentation = isPad
         session?.updatePagedPresentationEnvironment(isPad: isPad)
+        return updateStateFromSession(cachedViews: state?.cachedViews ?? [])
+    }
+
+    @discardableResult
+    public func jumpToRenderedPage(_ pageIndex: Int) -> NovelReadingWorkflowState? {
+        session?.jumpToRenderedPage(pageIndex)
+        return updateStateFromSession(cachedViews: state?.cachedViews ?? [])
+    }
+
+    @discardableResult
+    public func updateVerticalViewportPosition(
+        pageIndex: Int,
+        intraPageProgress: Double
+    ) -> NovelReadingWorkflowState? {
+        session?.updateVerticalViewportPosition(
+            pageIndex: pageIndex,
+            intraPageProgress: intraPageProgress
+        )
+        return updateStateFromSession(cachedViews: state?.cachedViews ?? [])
+    }
+
+    @discardableResult
+    public func jumpRelativePage(_ delta: Int) -> (state: NovelReadingWorkflowState, request: NovelReadingNavigationRequest?)? {
+        guard session != nil else { return nil }
+        let request = session?.jumpRelativePage(delta)
+        guard let state = updateStateFromSession(cachedViews: state?.cachedViews ?? []) else { return nil }
+        return (state, request)
+    }
+
+    public func captureNovelReadingPosition() -> ReaderResumePoint? {
+        session?.captureNovelReadingPosition()
     }
 
     private func cacheContext(for document: ReaderPageDocument) -> NovelReadingCacheContext {
@@ -258,7 +295,7 @@ public actor NovelReadingWorkflow {
 
     private func updateStateFromSession(refreshCachedViews: Bool) async -> NovelReadingWorkflowState {
         guard let snapshot = session?.snapshot,
-              let currentDocument else {
+              currentDocument != nil else {
             preconditionFailure("Novel reading workflow has no active session")
         }
         currentAuthorID = snapshot.currentAuthorID ?? currentAuthorID
@@ -272,6 +309,19 @@ public actor NovelReadingWorkflow {
         } else {
             state?.cachedViews ?? []
         }
+        guard let nextState = updateStateFromSession(cachedViews: cachedViews) else {
+            preconditionFailure("Novel reading workflow has no active session")
+        }
+        return nextState
+    }
+
+    private func updateStateFromSession(cachedViews: Set<Int>) -> NovelReadingWorkflowState? {
+        guard let snapshot = session?.snapshot,
+              let currentDocument else {
+            return nil
+        }
+        currentAuthorID = snapshot.currentAuthorID ?? currentAuthorID
+        currentDocumentPageCount = snapshot.pages.filter { $0.documentView == snapshot.currentView }.count
         let nextState = NovelReadingWorkflowState(
             snapshot: snapshot,
             currentAuthorID: currentAuthorID,

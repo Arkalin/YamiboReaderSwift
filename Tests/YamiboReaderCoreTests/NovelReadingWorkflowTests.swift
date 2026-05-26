@@ -2,6 +2,7 @@ import Foundation
 import XCTest
 @testable import YamiboReaderCore
 
+@MainActor
 final class NovelReadingWorkflowTests: XCTestCase {
     func testStartUsesStoredResumePointBeforeLaunchPage() async throws {
         let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9101&mobile=2")!
@@ -235,7 +236,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
         let initialState = try await workflow.start(initial: NovelReadingInitialPosition())
 
         let prefetchState = await workflow.prefetchIfNeeded(forPageIndex: max(initialState.snapshot.pages.count - 2, 0))
-        let currentState = await workflow.state
+        let currentState = workflow.state
 
         XCTAssertNil(prefetchState)
         XCTAssertEqual(currentState, initialState)
@@ -275,8 +276,8 @@ final class NovelReadingWorkflowTests: XCTestCase {
 
         _ = await workflow.prefetchIfNeeded(forPageIndex: max(initialState.snapshot.pages.count - 2, 0))
 
-        let currentContext = await workflow.cacheContext(forView: 1)
-        let prefetchedContext = await workflow.cacheContext(forView: 2)
+        let currentContext = workflow.cacheContext(forView: 1)
+        let prefetchedContext = workflow.cacheContext(forView: 2)
 
         XCTAssertEqual(currentContext, NovelReadingCacheContext(authorID: nil, contentSource: .fallbackUnfilteredPage))
         XCTAssertEqual(prefetchedContext, NovelReadingCacheContext(authorID: "author-2", contentSource: .authorFilteredPage))
