@@ -285,6 +285,7 @@ public final class MangaReaderModel: ObservableObject {
     public func updateCurrentPage(_ index: Int) {
         guard !pages.isEmpty else { return }
         currentPageIndex = normalizedPagedPageIndex(index)
+        _ = chapterWindow?.moveToLoadedPage(at: currentPageIndex)
         scheduleProgressSync()
         scheduleImagePrefetch()
         Task {
@@ -359,6 +360,7 @@ public final class MangaReaderModel: ObservableObject {
         settings = newSettings
         if wasTwoPageSpreadActive != isTwoPageSpreadActive {
             currentPageIndex = normalizedPagedPageIndex(currentPageIndex)
+            _ = chapterWindow?.moveToLoadedPage(at: currentPageIndex)
             emitViewportRequest(targetIndex: currentPageIndex, animated: false, resetRevision: true)
         }
         Task {
@@ -589,9 +591,11 @@ public final class MangaReaderModel: ObservableObject {
 
         if let targetIndex = snapshot.resolvedPageIndex {
             currentPageIndex = normalizedPagedPageIndex(targetIndex)
+            _ = chapterWindow?.moveToLoadedPage(at: currentPageIndex)
             emitViewportRequest(targetIndex: currentPageIndex, animated: animated, resetRevision: resetRevision)
         } else {
             currentPageIndex = normalizedPagedPageIndex(currentPageIndex)
+            _ = chapterWindow?.moveToLoadedPage(at: currentPageIndex)
             emitViewportRequest(
                 targetIndex: currentPageIndex,
                 animated: animated,
@@ -685,6 +689,7 @@ public final class MangaReaderModel: ObservableObject {
         guard pages.indices.contains(pageIndex) else { return }
         let normalizedTargetIndex = normalizedPagedPageIndex(pageIndex)
         currentPageIndex = normalizedTargetIndex
+        _ = chapterWindow?.moveToLoadedPage(at: normalizedTargetIndex)
         emitViewportRequest(targetIndex: normalizedTargetIndex, animated: animated, resetRevision: false)
         scheduleImagePrefetch()
         Task {

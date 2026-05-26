@@ -63,6 +63,30 @@ import Testing
     }
 }
 
+@Test func mangaChapterWindowMovesReadingPositionByLoadedPageIndexAndPreservesItWhenPreviousChapterIsInserted() {
+    let directory = makeMangaDirectory(tids: ["699", "700"])
+    var window = MangaChapterWindow(
+        directory: directory,
+        initialDocument: makeMangaChapterDocument(tid: "700", pageCount: 3),
+        position: MangaReadingPosition(tid: "700", localIndex: 0)
+    )
+
+    let movedSnapshot = window.moveToLoadedPage(at: 2)
+
+    #expect(movedSnapshot.resolvedPosition == MangaReadingPosition(tid: "700", localIndex: 2))
+    #expect(movedSnapshot.resolvedPageIndex == 2)
+
+    let result = window.insertAdjacentDocument(makeMangaChapterDocument(tid: "699", pageCount: 2))
+
+    if case let .changed(snapshot) = result {
+        #expect(snapshot.pages.map(\.id) == ["699#0", "699#1", "700#0", "700#1", "700#2"])
+        #expect(snapshot.resolvedPosition == MangaReadingPosition(tid: "700", localIndex: 2))
+        #expect(snapshot.resolvedPageIndex == 4)
+    } else {
+        Issue.record("Expected adjacent previous insertion to preserve the stored Manga Reading Position")
+    }
+}
+
 @Test func mangaChapterWindowRejectsDuplicateChapterIdentity() {
     let directory = makeMangaDirectory(tids: ["700", "701"])
     let position = MangaReadingPosition(tid: "700", localIndex: 0)
