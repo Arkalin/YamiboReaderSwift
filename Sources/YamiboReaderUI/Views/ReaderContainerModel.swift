@@ -90,14 +90,6 @@ private enum ReaderCacheOperationMode {
     case update
 }
 
-public enum ReaderChapterCommentsState: Equatable, Sendable {
-    case idle
-    case unsupported
-    case loading(ReaderChapterCommentTarget)
-    case loaded(ReaderChapterCommentTarget, ChapterCommentsPage)
-    case failed(ReaderChapterCommentTarget, String)
-}
-
 public struct ReaderProgressChapterTick: Equatable, Sendable {
     public var chapter: ReaderChapter
     public var position: Double
@@ -147,12 +139,32 @@ public final class ReaderContainerModel: ObservableObject {
     private var currentDocumentPageCount = 0
     private var prefetchedStartIndex: Int?
     private var usesPadPresentation = false
-    private var chapterCommentsCache: [ReaderChapterCommentTarget: ChapterCommentsPage] = [:]
     private var cacheOperationTask: Task<Void, Never>?
     private var progressSyncTask: Task<Void, Never>?
     private var lastQueuedProgress: ReaderProgressSnapshot?
     private var lastSyncedProgress: ReaderProgressSnapshot?
     private let progressSyncDelayNanoseconds: UInt64 = 350_000_000
+    private lazy var chapterCommentsModule = ReaderChapterCommentsModule(
+        adapter: ReaderChapterCommentsModule.Adapter(
+            loadInitial: { [weak self] target in
+                guard let self else {
+                    throw ReaderChapterCommentsUnavailableError()
+                }
+                let repository = await self.ensureReaderRepository()
+                return try await repository.loadChapterComments(for: target)
+            },
+            loadMore: { [weak self] target, view in
+                guard let self else {
+                    throw ReaderChapterCommentsUnavailableError()
+                }
+                let repository = await self.ensureReaderRepository()
+                return try await repository.loadMoreChapterComments(for: target, view: view)
+            }
+        ),
+        onChange: { [weak self] module in
+            self?.syncChapterComments(from: module)
+        }
+    )
 
     public init(context: ReaderLaunchContext, appContext: YamiboAppContext) {
         self.context = context
@@ -695,75 +707,15 @@ public final class ReaderContainerModel: ObservableObject {
     }
 
     public func loadChapterComments(for target: ReaderChapterCommentTarget?) async {
-        guard let target else {
-            chapterCommentsState = .unsupported
-            return
-        }
-        if let cached = chapterCommentsCache[target] {
-            chapterCommentsRefreshError = nil
-            chapterCommentsState = .loaded(target, cached)
-            return
-        }
-        await refreshChapterComments(for: target)
+        await chapterCommentsModule.load(target)
     }
 
     public func refreshChapterComments(for target: ReaderChapterCommentTarget?) async {
-        guard let target else {
-            chapterCommentsState = .unsupported
-            return
-        }
-        if repository == nil {
-            repository = await appContext.makeReaderRepository()
-        }
-        guard let repository else {
-            chapterCommentsState = .failed(target, L10n.string("reader.chapter_comments_failed"))
-            return
-        }
-        chapterCommentsState = .loading(target)
-        chapterCommentsLoadMoreError = nil
-        chapterCommentsRefreshError = nil
-        do {
-            let page = try await repository.loadChapterComments(for: target)
-            chapterCommentsCache[target] = page
-            chapterCommentsState = .loaded(target, page)
-        } catch {
-            if let cached = chapterCommentsCache[target] {
-                chapterCommentsRefreshError = error.localizedDescription
-                chapterCommentsState = .loaded(target, cached)
-            } else {
-                chapterCommentsState = .failed(target, error.localizedDescription)
-            }
-        }
+        await chapterCommentsModule.refresh(target)
     }
 
     public func loadNextChapterCommentsPage() async {
-        guard case let .loaded(target, currentPage) = chapterCommentsState,
-              let nextView = currentPage.nextView,
-              !isLoadingMoreChapterComments else {
-            return
-        }
-        if repository == nil {
-            repository = await appContext.makeReaderRepository()
-        }
-        guard let repository else { return }
-
-        isLoadingMoreChapterComments = true
-        chapterCommentsLoadMoreError = nil
-        do {
-            let nextPage = try await repository.loadMoreChapterComments(for: target, view: nextView)
-            let mergedPage = ChapterCommentsPage(
-                target: target,
-                comments: currentPage.comments + nextPage.comments,
-                isBoundaryClosed: nextPage.isBoundaryClosed,
-                nextView: nextPage.nextView
-            )
-            chapterCommentsCache[target] = mergedPage
-            chapterCommentsState = .loaded(target, mergedPage)
-            chapterCommentsRefreshError = nil
-        } catch {
-            chapterCommentsLoadMoreError = error.localizedDescription
-        }
-        isLoadingMoreChapterComments = false
+        await chapterCommentsModule.loadNextPage()
     }
 
     public func dismissCacheProgress() {
@@ -875,6 +827,23 @@ public final class ReaderContainerModel: ObservableObject {
             readingSession?.acceptPrefetchedDocument(prefetchedDocument)
         }
         syncFromReadingSession()
+    }
+
+    private func ensureReaderRepository() async -> ReaderRepository {
+        if repository == nil {
+            repository = await appContext.makeReaderRepository()
+        }
+        guard let repository else {
+            preconditionFailure("Reader repository should be initialized")
+        }
+        return repository
+    }
+
+    private func syncChapterComments(from module: ReaderChapterCommentsModule) {
+        chapterCommentsState = module.state
+        isLoadingMoreChapterComments = module.isLoadingMore
+        chapterCommentsLoadMoreError = module.loadMoreError
+        chapterCommentsRefreshError = module.refreshError
     }
 
     private func applyPagination(
