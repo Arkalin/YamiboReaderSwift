@@ -61,7 +61,7 @@ public final class MangaReaderModel: ObservableObject {
     private let chapterProbe: @MainActor (MangaLaunchContext) async -> MangaProbeOutcome
     private var repository: MangaRepository?
     private var readerRepository: ReaderRepository?
-    private var chapterWindow: MangaChapterWindow?
+    private var readingSession: MangaReadingSession?
     private var chapterDocumentTasks: [String: Task<MangaChapterDocument, Error>] = [:]
     private var chapterJumpTask: Task<Void, Never>?
     private var imagePrefetchTask: Task<Void, Never>?
@@ -285,10 +285,10 @@ public final class MangaReaderModel: ObservableObject {
     public func updateCurrentPage(_ index: Int) {
         guard !pages.isEmpty else { return }
         currentPageIndex = normalizedPagedPageIndex(index)
-        _ = chapterWindow?.moveToLoadedPage(at: currentPageIndex)
         scheduleProgressSync()
         scheduleImagePrefetch()
         Task {
+            _ = try? await readingSession?.moveToLoadedPage(currentPageIndex)
             await prefetchIfNeeded(for: currentPageIndex)
         }
     }
@@ -360,8 +360,10 @@ public final class MangaReaderModel: ObservableObject {
         settings = newSettings
         if wasTwoPageSpreadActive != isTwoPageSpreadActive {
             currentPageIndex = normalizedPagedPageIndex(currentPageIndex)
-            _ = chapterWindow?.moveToLoadedPage(at: currentPageIndex)
             emitViewportRequest(targetIndex: currentPageIndex, animated: false, resetRevision: true)
+            Task {
+                _ = try? await readingSession?.moveToLoadedPage(currentPageIndex)
+            }
         }
         Task {
             await persistSettings(mangaSettings: newSettings)
@@ -435,7 +437,7 @@ public final class MangaReaderModel: ObservableObject {
                 using: repository
             )
             self.currentDirectory = result.directory
-            if let snapshot = chapterWindow?.updateDirectory(result.directory, preserving: currentReadingPosition) {
+            if let snapshot = try await readingSession?.updateDirectory(result.directory, preserving: currentReadingPosition) {
                 applyWindowSnapshot(snapshot, animated: false, resetRevision: false)
             }
             errorMessage = nil
@@ -458,7 +460,7 @@ public final class MangaReaderModel: ObservableObject {
                 newSearchKeyword: searchKeyword
             )
             self.currentDirectory = updated
-            if let snapshot = chapterWindow?.updateDirectory(updated, preserving: currentReadingPosition) {
+            if let snapshot = try await readingSession?.updateDirectory(updated, preserving: currentReadingPosition) {
                 applyWindowSnapshot(snapshot, animated: false, resetRevision: false)
             }
             errorMessage = nil
@@ -477,23 +479,26 @@ public final class MangaReaderModel: ObservableObject {
         chapterTransitionState = .idle
         navigationRequest = nil
         do {
-            let document = try await loadDocument(for: context.chapterURL, htmlOverride: nil)
-            let directory = try await resolveDirectory(from: document)
-            currentDirectory = directory
-            let initialLocalPage = max(0, context.initialPage)
-            let window = MangaChapterWindow(
-                directory: directory,
-                initialDocument: document,
-                position: MangaReadingPosition(tid: document.tid, localIndex: initialLocalPage),
+            guard let repository else {
+                throw YamiboError.underlying(L10n.string("manga.repository_uninitialized"))
+            }
+            let session = MangaReadingSession(
+                context: context,
+                documentLoader: { url, htmlOverride in
+                    try await repository.loadChapter(url: url, htmlOverride: htmlOverride)
+                },
+                directoryResolver: MangaReaderDirectoryResolver(appContext: appContext),
                 maxLoadedDocuments: maxLoadedDocuments
             )
-            chapterWindow = window
+            let snapshot = try await session.prepare()
+            readingSession = session
+            currentDirectory = snapshot.directory
             applyWindowSnapshot(
-                window.snapshot,
+                snapshot.window,
                 animated: false,
                 resetRevision: true
             )
-            if shouldAutoUpdateDirectory(directory) {
+            if shouldAutoUpdateDirectory(snapshot.directory) {
                 await updateDirectory(isForcedSearch: false)
             }
             errorMessage = nil
@@ -549,25 +554,11 @@ public final class MangaReaderModel: ObservableObject {
     }
 
     private func prefetchIfNeeded(for index: Int) async {
-        guard !pages.isEmpty else { return }
-        if index >= pages.count - 6 {
-            await loadAdjacentDocument(delta: 1)
-        }
-        if index <= 2 {
-            await loadAdjacentDocument(delta: -1)
-        }
-    }
-
-    private func loadAdjacentDocument(delta: Int) async {
-        guard let chapter = chapterWindow?.adjacentChapterForLoadedRange(delta: delta) else { return }
-        guard firstPageIndex(for: chapter.url) == nil else { return }
+        guard !pages.isEmpty, let readingSession else { return }
         do {
-            let position = currentReadingPosition
-            let document = try await loadDocument(for: chapter.url, htmlOverride: nil)
-            guard firstPageIndex(for: document.chapterURL) == nil else { return }
-            guard let result = chapterWindow?.insertAdjacentDocument(document, preserving: position) else { return }
-            if case let .changed(snapshot) = result {
-                applyWindowSnapshot(snapshot, animated: false, resetRevision: delta < 0)
+            if let snapshot = try await readingSession.prefetchIfNeeded(around: index) {
+                let resetRevision = snapshot.resolvedPageIndex != nil && snapshot.resolvedPageIndex != currentPageIndex
+                applyWindowSnapshot(snapshot, animated: false, resetRevision: resetRevision)
             }
         } catch {
             // Preload failures should not interrupt reading.
@@ -591,11 +582,9 @@ public final class MangaReaderModel: ObservableObject {
 
         if let targetIndex = snapshot.resolvedPageIndex {
             currentPageIndex = normalizedPagedPageIndex(targetIndex)
-            _ = chapterWindow?.moveToLoadedPage(at: currentPageIndex)
             emitViewportRequest(targetIndex: currentPageIndex, animated: animated, resetRevision: resetRevision)
         } else {
             currentPageIndex = normalizedPagedPageIndex(currentPageIndex)
-            _ = chapterWindow?.moveToLoadedPage(at: currentPageIndex)
             emitViewportRequest(
                 targetIndex: currentPageIndex,
                 animated: animated,
@@ -677,8 +666,14 @@ public final class MangaReaderModel: ObservableObject {
     }
 
     private func adjacentChapter(delta: Int) -> MangaChapter? {
-        guard let currentReadingPosition else { return nil }
-        return chapterWindow?.adjacentChapter(from: currentReadingPosition, delta: delta)
+        guard let currentReadingPosition,
+              let chapters = currentDirectory?.chapters,
+              let index = chapters.firstIndex(where: { $0.tid == currentReadingPosition.tid }) else {
+            return nil
+        }
+        let targetIndex = index + delta
+        guard chapters.indices.contains(targetIndex) else { return nil }
+        return chapters[targetIndex]
     }
 
     private func firstPageIndex(for chapterURL: URL) -> Int? {
@@ -689,10 +684,10 @@ public final class MangaReaderModel: ObservableObject {
         guard pages.indices.contains(pageIndex) else { return }
         let normalizedTargetIndex = normalizedPagedPageIndex(pageIndex)
         currentPageIndex = normalizedTargetIndex
-        _ = chapterWindow?.moveToLoadedPage(at: normalizedTargetIndex)
         emitViewportRequest(targetIndex: normalizedTargetIndex, animated: animated, resetRevision: false)
         scheduleImagePrefetch()
         Task {
+            _ = try? await readingSession?.moveToLoadedPage(normalizedTargetIndex)
             await prefetchIfNeeded(for: normalizedTargetIndex)
         }
     }
@@ -777,7 +772,7 @@ public final class MangaReaderModel: ObservableObject {
             try Task.checkCancellation()
             guard generation == chapterJumpGeneration else { return }
 
-            applyLoadedChapterDocument(document, animated: false, resetRevision: true)
+            await applyLoadedChapterDocument(document, animated: false, resetRevision: true)
             chapterTransitionState = .idle
             errorMessage = nil
         } catch is CancellationError {
@@ -802,23 +797,13 @@ public final class MangaReaderModel: ObservableObject {
         _ document: MangaChapterDocument,
         animated: Bool,
         resetRevision: Bool
-    ) {
+    ) async {
         let position = MangaReadingPosition(tid: document.tid, localIndex: 0)
-        guard let result = chapterWindow?.insertAdjacentDocument(document, preserving: position) else { return }
-
-        let snapshot: MangaChapterWindowSnapshot
-        switch result {
-        case let .changed(changedSnapshot):
-            snapshot = changedSnapshot
-        case let .unchanged(unchangedSnapshot, reason):
-            if reason == .duplicateChapter {
-                snapshot = unchangedSnapshot
-            } else if let resetSnapshot = chapterWindow?.reset(to: document, position: position) {
-                snapshot = resetSnapshot
-            } else {
-                return
-            }
-        }
+        guard let snapshot = try? await readingSession?.applyLoadedDocument(
+            document,
+            preserving: position,
+            allowsReset: true
+        ) else { return }
         applyWindowSnapshot(snapshot, animated: animated, resetRevision: resetRevision)
     }
 
@@ -1049,6 +1034,26 @@ public final class MangaReaderModel: ObservableObject {
             .first(where: { $0.name == "page" })?
             .value
             .flatMap(Int.init) ?? 1
+    }
+}
+
+private struct MangaReaderDirectoryResolver: MangaReadingDirectoryResolving {
+    let appContext: YamiboAppContext
+
+    func resolveInitialDirectory(
+        context: MangaLaunchContext,
+        document: MangaChapterDocument
+    ) async throws -> MangaDirectory {
+        if let directoryName = context.directoryName,
+           let existing = await appContext.mangaDirectoryStore.directory(named: directoryName) {
+            return existing
+        }
+
+        return try await appContext.mangaDirectoryStore.initializeDirectory(
+            currentURL: document.chapterURL,
+            rawTitle: document.chapterTitle,
+            html: document.html
+        )
     }
 }
 
