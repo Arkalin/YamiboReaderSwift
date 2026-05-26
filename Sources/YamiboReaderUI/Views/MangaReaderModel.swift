@@ -74,10 +74,7 @@ public final class MangaReaderModel: ObservableObject {
     private let chapterTransitionTimeoutNanoseconds: UInt64 = 18_000_000_000
     private var viewportRevision = UUID()
     private var chapterJumpGeneration = 0
-    private var progressSyncTask: Task<Void, Never>?
-    private var lastQueuedProgress: MangaProgressSnapshot?
-    private var lastSyncedProgress: MangaProgressSnapshot?
-    private let progressSyncDelayNanoseconds: UInt64 = 350_000_000
+    private let progressSync: ProgressSyncModule
     private var usesPadPresentation = false
     private var pagedViewportSize: CGSize = .zero
 
@@ -89,6 +86,9 @@ public final class MangaReaderModel: ObservableObject {
         self.context = context
         self.appContext = appContext
         self.imageRepository = appContext.mangaImageRepository
+        progressSync = ProgressSyncModule(
+            adapter: FavoriteLibraryProgressSyncAdapter(favoriteStore: appContext.favoriteStore)
+        )
         self.chapterProbe = chapterProbe ?? { launchContext in
             let service = MangaProbeService(appContext: appContext)
             return await service.probe(
@@ -891,9 +891,10 @@ public final class MangaReaderModel: ObservableObject {
         navigationRequest = request
     }
 
-    private func currentProgressSnapshot() -> MangaProgressSnapshot? {
+    private func currentProgressSnapshot() -> MangaProgressReadingPosition? {
         guard let currentPage else { return nil }
-        return MangaProgressSnapshot(
+        return MangaProgressReadingPosition(
+            threadURL: context.originalThreadURL,
             chapterURL: currentPage.chapterURL,
             chapterTitle: currentPage.chapterTitle,
             pageIndex: currentPage.localIndex
@@ -902,42 +903,14 @@ public final class MangaReaderModel: ObservableObject {
 
     private func scheduleProgressSync() {
         guard let snapshot = currentProgressSnapshot() else { return }
-        guard snapshot != lastQueuedProgress else { return }
-
-        lastQueuedProgress = snapshot
-        progressSyncTask?.cancel()
-        progressSyncTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: self?.progressSyncDelayNanoseconds ?? 0)
-            guard !Task.isCancelled else { return }
-            await self?.flushProgress()
+        Task { [progressSync] in
+            await progressSync.queue(.manga(snapshot))
         }
     }
 
     private func flushProgress() async {
-        progressSyncTask?.cancel()
-        progressSyncTask = nil
-
         guard let snapshot = currentProgressSnapshot() else { return }
-        guard snapshot != lastSyncedProgress else {
-            lastQueuedProgress = snapshot
-            await persistSettings()
-            return
-        }
-
-        do {
-            _ = try await appContext.favoriteStore.updateMangaProgress(
-                for: context.originalThreadURL,
-                chapterURL: snapshot.chapterURL,
-                chapterTitle: snapshot.chapterTitle,
-                pageIndex: snapshot.pageIndex,
-                createIfMissing: false
-            )
-        } catch {
-            await persistSettings()
-            return
-        }
-        lastQueuedProgress = snapshot
-        lastSyncedProgress = snapshot
+        try? await progressSync.flush(.manga(snapshot))
         await persistSettings()
     }
 
@@ -1095,12 +1068,6 @@ public final class MangaReaderModel: ObservableObject {
             .value
             .flatMap(Int.init) ?? 1
     }
-}
-
-private struct MangaProgressSnapshot: Equatable {
-    let chapterURL: URL
-    let chapterTitle: String
-    let pageIndex: Int
 }
 
 public struct MangaDirectoryEditDraft: Equatable, Sendable {
