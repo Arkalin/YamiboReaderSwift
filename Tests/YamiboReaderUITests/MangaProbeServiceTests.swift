@@ -3,6 +3,58 @@ import XCTest
 @testable import YamiboReaderUI
 
 final class MangaProbeServiceTests: XCTestCase {
+    @MainActor
+    func testServiceUsesHiddenAdapterOnlyWhenImmediateOutcomeNeedsDynamicProbe() async {
+        let context = makeLaunchContext()
+        var dynamicProbeInputs: [(MangaLaunchContext, String?)] = []
+        let dynamicOutcome = MangaProbeOutcome.fallback(
+            reason: .timeout,
+            suggestedWebContext: MangaProbeService.makeSuggestedWebContext(from: context)
+        )
+        let service = MangaProbeService(appContext: YamiboAppContext()) { launchContext, fallbackTitle in
+            dynamicProbeInputs.append((launchContext, fallbackTitle))
+            return dynamicOutcome
+        }
+
+        let successHTML = makeProbeHTML(
+            title: "第1话 - 中文百合漫画区 - 百合会",
+            section: "中文百合漫画区",
+            imageCount: 1
+        )
+        _ = await service.probe(
+            launchContext: context,
+            currentHTML: successHTML,
+            currentTitle: "第1话"
+        )
+
+        let notMangaHTML = makeProbeHTML(
+            title: "小说 - 原创小说区 - 百合会",
+            section: "原创小说区",
+            imageCount: 1
+        )
+        _ = await service.probe(
+            launchContext: context,
+            currentHTML: notMangaHTML,
+            currentTitle: "小说"
+        )
+
+        let noImagesHTML = makeProbeHTML(
+            title: "第2话 - 中文百合漫画区 - 百合会",
+            section: "中文百合漫画区",
+            imageCount: 0
+        )
+        let outcome = await service.probe(
+            launchContext: context,
+            currentHTML: noImagesHTML,
+            currentTitle: "第2话"
+        )
+
+        XCTAssertEqual(dynamicProbeInputs.count, 1)
+        XCTAssertEqual(dynamicProbeInputs.first?.0, context)
+        XCTAssertEqual(dynamicProbeInputs.first?.1, "第2话")
+        XCTAssertEqual(outcome, dynamicOutcome)
+    }
+
     func testClassifierMarksAnnouncementSnapshotAsNotManga() {
         let snapshot = MangaProbeSnapshot(
             title: "公告",
