@@ -305,6 +305,7 @@ public actor WebDAVSyncService {
     private let appSettingsStore: (any SettingsStoring)?
     private let accountUIDResolver: AccountUIDResolver
     private let client: WebDAVClient
+    private let policyModule: WebDAVSyncPolicyModule
 
     public init(
         settingsStore: WebDAVSyncSettingsStore,
@@ -312,7 +313,8 @@ public actor WebDAVSyncService {
         sessionStore: SessionStore,
         appSettingsStore: (any SettingsStoring)? = nil,
         client: WebDAVClient = WebDAVClient(),
-        accountUIDResolver: AccountUIDResolver? = nil
+        accountUIDResolver: AccountUIDResolver? = nil,
+        policyModule: WebDAVSyncPolicyModule = WebDAVSyncPolicyModule()
     ) {
         self.settingsStore = settingsStore
         self.favoriteStore = favoriteStore
@@ -320,6 +322,7 @@ public actor WebDAVSyncService {
         self.appSettingsStore = appSettingsStore
         self.client = client
         self.accountUIDResolver = accountUIDResolver ?? AccountUIDResolver(sessionStore: sessionStore)
+        self.policyModule = policyModule
     }
 
     public func upload() async throws -> WebDAVSyncPayload {
@@ -354,9 +357,8 @@ public actor WebDAVSyncService {
 
     public func synchronizeAutomatically() async throws {
         let settings = await settingsStore.load()
-        guard settings.isAutoSyncEnabled, settings.isConfigured else { return }
         let sessionState = await sessionStore.load()
-        guard sessionState.isLoggedIn, !sessionState.cookie.isEmpty else { return }
+        guard policyModule.canSynchronizeAutomatically(settings: settings, session: sessionState) else { return }
         guard let accountUID = try? await accountUIDResolver.resolveCurrentAccountUID() else { return }
 
         let remotePayload: WebDAVSyncPayload?
@@ -365,18 +367,13 @@ public actor WebDAVSyncService {
         } catch WebDAVSyncError.notFound {
             remotePayload = nil
         }
-        if let remotePayload, isAccountMismatch(remotePayload: remotePayload, localUID: accountUID) {
+        switch policyModule.automaticDecision(settings: settings, remotePayload: remotePayload, localUID: accountUID) {
+        case .skip:
             return
-        }
-
-        if let remotePayload, remotePayload.updatedAt > (settings.localUpdatedAt ?? .distantPast) {
+        case let .download(remotePayload):
             try await apply(remotePayload)
             try await updateSettingsAfterSync(settings, remoteUpdatedAt: remotePayload.updatedAt)
-            return
-        }
-
-        let newestKnownRemoteDate = remotePayload?.updatedAt ?? settings.lastRemoteUpdatedAt ?? .distantPast
-        if (settings.localUpdatedAt ?? .distantPast) > newestKnownRemoteDate || remotePayload == nil {
+        case .upload:
             _ = try await upload(using: settings, accountUID: accountUID)
         }
     }
@@ -398,7 +395,7 @@ public actor WebDAVSyncService {
     private func validateRemoteAccountIfPresent(settings: WebDAVSyncSettings, localUID: String) async throws {
         do {
             let remotePayload = try await client.fetchPayload(settings: settings)
-            try validate(remotePayload: remotePayload, localUID: localUID, allowingAccountMismatch: false)
+            try policyModule.validate(remotePayload: remotePayload, localUID: localUID, allowingAccountMismatch: false)
         } catch WebDAVSyncError.notFound {
             return
         }
@@ -409,17 +406,15 @@ public actor WebDAVSyncService {
         localUID: String,
         allowingAccountMismatch: Bool
     ) throws {
-        guard !allowingAccountMismatch, isAccountMismatch(remotePayload: remotePayload, localUID: localUID) else {
-            return
-        }
-        throw WebDAVSyncError.accountMismatch(localUID: localUID, remoteUID: remotePayload.accountUID ?? "")
+        try policyModule.validate(
+            remotePayload: remotePayload,
+            localUID: localUID,
+            allowingAccountMismatch: allowingAccountMismatch
+        )
     }
 
     private func isAccountMismatch(remotePayload: WebDAVSyncPayload, localUID: String) -> Bool {
-        guard let remoteUID = remotePayload.accountUID?.trimmingCharacters(in: .whitespacesAndNewlines), !remoteUID.isEmpty else {
-            return false
-        }
-        return remoteUID != localUID
+        policyModule.isAccountMismatch(remotePayload: remotePayload, localUID: localUID)
     }
 
     private func makePayload(updatedAt: Date, accountUID: String) async throws -> WebDAVSyncPayload {
