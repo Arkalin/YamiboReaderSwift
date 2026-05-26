@@ -206,6 +206,193 @@ import Testing
     #expect(latestSnapshot?.resolvedPageIndex == 9)
 }
 
+@Test func mangaReadingSessionAdjacentJumpRecoversViaProbeWhenDirectLoadFails() async throws {
+    let loader = MangaDocumentLoadRecorder(documents: [
+        "700": makeMangaChapterDocument(tid: "700", pageCount: 1),
+    ])
+    let session = MangaReadingSession(
+        context: makeMangaLaunchContext(tid: "700"),
+        documentLoader: { url, htmlOverride in
+            try await loader.load(url: url, htmlOverride: htmlOverride)
+        },
+        directoryResolver: StubMangaDirectoryResolver(directory: makeMangaDirectory(tids: ["700", "701"])),
+        chapterProbe: { context in
+            #expect(MangaTitleCleaner.extractTid(from: context.chapterURL.absoluteString) == "701")
+            return .success(
+                MangaProbePayload(
+                    images: [
+                        URL(string: "https://img.example.com/701-probe-0.jpg")!,
+                        URL(string: "https://img.example.com/701-probe-1.jpg")!,
+                    ],
+                    title: "第2话",
+                    html: "<html></html>",
+                    sectionName: "中文百合漫画区"
+                )
+            )
+        },
+        maxLoadedDocuments: 10
+    )
+    _ = try await session.prepare()
+
+    let result = try await session.jump(
+        to: makeMangaChapter(tid: "701", index: 1),
+        from: MangaReadingPosition(tid: "700", localIndex: 0)
+    )
+
+    if case let .loaded(snapshot) = result {
+        #expect(snapshot.pages.map { $0.id } == ["700#0", "701#0", "701#1"])
+        #expect(snapshot.resolvedPosition == MangaReadingPosition(tid: "701", localIndex: 0))
+        #expect(snapshot.resolvedPageIndex == 1)
+    } else {
+        Issue.record("Expected probe-recovered adjacent jump to load")
+    }
+    #expect(await loader.loadCount(for: "701") == 1)
+}
+
+@Test func mangaReadingSessionAdjacentJumpRecoversViaProbeWhenDirectLoadTimesOut() async throws {
+    let loader = MangaDocumentLoadRecorder(
+        documents: [
+            "700": makeMangaChapterDocument(tid: "700", pageCount: 1),
+            "701": makeMangaChapterDocument(tid: "701", pageCount: 1),
+        ],
+        delayNanoseconds: 300_000_000
+    )
+    let session = MangaReadingSession(
+        context: makeMangaLaunchContext(tid: "700"),
+        documentLoader: { url, htmlOverride in
+            try await loader.load(url: url, htmlOverride: htmlOverride)
+        },
+        directoryResolver: StubMangaDirectoryResolver(directory: makeMangaDirectory(tids: ["700", "701"])),
+        chapterProbe: { _ in
+            .success(
+                MangaProbePayload(
+                    images: [URL(string: "https://img.example.com/701-probe-0.jpg")!],
+                    title: "第2话",
+                    html: "<html></html>",
+                    sectionName: "中文百合漫画区"
+                )
+            )
+        },
+        maxLoadedDocuments: 10,
+        directLoadTimeoutNanoseconds: 50_000_000
+    )
+    _ = try await session.prepare()
+
+    let result = try await session.jump(
+        to: makeMangaChapter(tid: "701", index: 1),
+        from: MangaReadingPosition(tid: "700", localIndex: 0)
+    )
+
+    if case let .loaded(snapshot) = result {
+        #expect(snapshot.pages.map { $0.id } == ["700#0", "701#0"])
+        #expect(snapshot.pages.last?.imageURL.absoluteString == "https://img.example.com/701-probe-0.jpg")
+    } else {
+        Issue.record("Expected timed-out direct load to recover through probe")
+    }
+}
+
+@Test func mangaReadingSessionAdjacentJumpReturnsFallbackWebWhenProbeCannotRecover() async throws {
+    let loader = MangaDocumentLoadRecorder(documents: [
+        "700": makeMangaChapterDocument(tid: "700", pageCount: 1),
+    ])
+    let session = MangaReadingSession(
+        context: makeMangaLaunchContext(tid: "700"),
+        documentLoader: { url, htmlOverride in
+            try await loader.load(url: url, htmlOverride: htmlOverride)
+        },
+        directoryResolver: StubMangaDirectoryResolver(directory: makeMangaDirectory(tids: ["700", "701"])),
+        chapterProbe: { context in
+            .fallback(
+                reason: .noImages,
+                suggestedWebContext: MangaWebContext(
+                    currentURL: context.chapterURL,
+                    originalThreadURL: context.originalThreadURL,
+                    source: context.source,
+                    autoOpenNative: true,
+                    waitingForNativeReturn: false
+                )
+            )
+        },
+        maxLoadedDocuments: 10
+    )
+    _ = try await session.prepare()
+
+    let result = try await session.jump(
+        to: makeMangaChapter(tid: "701", index: 1),
+        from: MangaReadingPosition(tid: "700", localIndex: 0)
+    )
+
+    if case let .fallbackWeb(context) = result {
+        #expect(MangaTitleCleaner.extractTid(from: context.currentURL.absoluteString) == "701")
+        #expect(context.autoOpenNative == false)
+        #expect(context.waitingForNativeReturn == false)
+    } else {
+        Issue.record("Expected probe fallback to request web fallback")
+    }
+
+    let snapshot = try await session.moveToLoadedPage(0)
+    #expect(snapshot.pages.map { $0.id } == ["700#0"])
+    #expect(snapshot.resolvedPosition == MangaReadingPosition(tid: "700", localIndex: 0))
+}
+
+@Test func mangaReadingSessionRapidAdjacentJumpsIgnoreOlderResultAndKeepLatestPosition() async throws {
+    let loader = MangaDocumentLoadRecorder(documents: [
+        "701": makeMangaChapterDocument(tid: "701", pageCount: 1),
+    ])
+    let session = MangaReadingSession(
+        context: makeMangaLaunchContext(tid: "701"),
+        documentLoader: { url, htmlOverride in
+            try await loader.load(url: url, htmlOverride: htmlOverride)
+        },
+        directoryResolver: StubMangaDirectoryResolver(directory: makeMangaDirectory(tids: ["700", "701", "702"])),
+        chapterProbe: { context in
+            let tid = MangaTitleCleaner.extractTid(from: context.chapterURL.absoluteString)
+            if tid == "700" {
+                try? await Task.sleep(nanoseconds: 400_000_000)
+            } else {
+                try? await Task.sleep(nanoseconds: 50_000_000)
+            }
+            return .success(
+                MangaProbePayload(
+                    images: [URL(string: "https://img.example.com/\(tid ?? "unknown")-probe-0.jpg")!],
+                    title: tid == "700" ? "第1话" : "第3话",
+                    html: "<html></html>",
+                    sectionName: "中文百合漫画区"
+                )
+            )
+        },
+        maxLoadedDocuments: 10
+    )
+    _ = try await session.prepare()
+
+    async let first = session.jump(
+        to: makeMangaChapter(tid: "700", index: 0),
+        from: MangaReadingPosition(tid: "701", localIndex: 0)
+    )
+    try? await Task.sleep(nanoseconds: 80_000_000)
+    async let second = session.jump(
+        to: makeMangaChapter(tid: "702", index: 2),
+        from: MangaReadingPosition(tid: "701", localIndex: 0)
+    )
+
+    let results = try await (first, second)
+
+    if case .ignored = results.0 {
+        // Expected: the older jump must not publish after the newer jump wins.
+    } else {
+        Issue.record("Expected older adjacent jump to be ignored")
+    }
+    if case let .loaded(snapshot) = results.1 {
+        #expect(snapshot.resolvedPosition == MangaReadingPosition(tid: "702", localIndex: 0))
+    } else {
+        Issue.record("Expected newer adjacent jump to load")
+    }
+
+    let snapshot = try await session.moveToLoadedPage(1)
+    #expect(snapshot.pages.map { $0.tid }.contains("700") == false)
+    #expect(snapshot.resolvedPosition == MangaReadingPosition(tid: "702", localIndex: 0))
+}
+
 private struct StubMangaDirectoryResolver: MangaReadingDirectoryResolving {
     var directory: MangaDirectory
 
