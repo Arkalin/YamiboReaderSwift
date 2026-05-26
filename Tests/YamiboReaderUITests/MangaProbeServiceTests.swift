@@ -4,7 +4,7 @@ import XCTest
 
 final class MangaProbeServiceTests: XCTestCase {
     @MainActor
-    func testServiceUsesHiddenAdapterOnlyWhenImmediateOutcomeNeedsDynamicProbe() async {
+    func testServiceUsesDynamicProbeOnlyWhenImmediateOutcomeNeedsDynamicProbe() async {
         let context = makeLaunchContext()
         var dynamicProbeInputs: [(MangaLaunchContext, String?)] = []
         let dynamicOutcome = MangaProbeOutcome.fallback(
@@ -55,166 +55,41 @@ final class MangaProbeServiceTests: XCTestCase {
         XCTAssertEqual(outcome, dynamicOutcome)
     }
 
-    func testClassifierMarksAnnouncementSnapshotAsNotManga() {
-        let snapshot = MangaProbeSnapshot(
-            title: "公告",
-            html: nil,
-            sectionName: "中文百合漫画区",
-            isAnnouncement: true,
-            imageURLs: [
-                URL(string: "https://img.example.com/probe.jpg")!
-            ],
-            baseURL: makeLaunchContext().chapterURL
-        )
-
-        XCTAssertEqual(MangaProbeClassifier.classify(snapshot), .notManga)
-    }
-
-    func testClassifierMarksDisallowedSectionSnapshotAsNotManga() {
-        let snapshot = MangaProbeSnapshot(
-            title: "小说章节",
-            html: nil,
-            sectionName: "原创小说区",
-            isAnnouncement: false,
-            imageURLs: [
-                URL(string: "https://img.example.com/probe.jpg")!
-            ],
-            baseURL: makeLaunchContext().chapterURL
-        )
-
-        XCTAssertEqual(MangaProbeClassifier.classify(snapshot), .notManga)
-    }
-
-    func testClassifierMarksAllowedMangaSnapshotWithoutImagesAsNoImages() {
-        let snapshot = MangaProbeSnapshot(
-            title: "第1话",
-            html: nil,
-            sectionName: "中文百合漫画区",
-            isAnnouncement: false,
-            imageURLs: [],
-            baseURL: makeLaunchContext().chapterURL
-        )
-
-        XCTAssertEqual(MangaProbeClassifier.classify(snapshot), .noImages)
-    }
-
-    func testClassifierReturnsSuccessForAllowedMangaSnapshotWithImages() {
-        let imageURL = URL(string: "https://img.example.com/probe.jpg")!
-        let html = makeProbeHTML(
-            title: "第1话 - 中文百合漫画区 - 百合会",
-            section: "中文百合漫画区",
-            imageCount: 1
-        )
-        let snapshot = MangaProbeSnapshot(
-            title: "第1话",
-            html: html,
-            sectionName: "中文百合漫画区",
-            isAnnouncement: false,
-            imageURLs: [imageURL],
-            baseURL: makeLaunchContext().chapterURL
-        )
-
-        guard case let .success(payload) = MangaProbeClassifier.classify(snapshot) else {
-            return XCTFail("Expected success classification")
-        }
-        XCTAssertEqual(payload.images, [imageURL])
-        XCTAssertEqual(payload.title, "第1话")
-        XCTAssertEqual(payload.html, html)
-        XCTAssertEqual(payload.sectionName, "中文百合漫画区")
-    }
-
-    func testImmediateOutcomeReturnsSuccessForValidMangaHTML() {
+    @MainActor
+    func testServiceCallsDynamicProbeWhenCurrentHTMLMissing() async {
         let context = makeLaunchContext()
-        let html = makeProbeHTML(
-            title: "第1话 - 中文百合漫画区 - 百合会",
-            section: "中文百合漫画区",
-            imageCount: 2
+        var dynamicProbeInputs: [(MangaLaunchContext, String?)] = []
+        let dynamicOutcome = MangaProbeOutcome.fallback(
+            reason: .timeout,
+            suggestedWebContext: MangaProbeService.makeSuggestedWebContext(from: context)
         )
+        let service = MangaProbeService(appContext: YamiboAppContext()) { launchContext, fallbackTitle in
+            dynamicProbeInputs.append((launchContext, fallbackTitle))
+            return dynamicOutcome
+        }
 
-        let outcome = MangaProbeService.immediateOutcome(
+        let outcome = await service.probe(
             launchContext: context,
-            html: html,
-            title: "第1话"
+            currentHTML: nil,
+            currentTitle: "第3话"
         )
 
-        guard case let .success(payload) = outcome else {
-            return XCTFail("Expected success outcome")
-        }
-        XCTAssertEqual(payload.images.count, 2)
-        XCTAssertEqual(payload.sectionName, "中文百合漫画区")
+        XCTAssertEqual(dynamicProbeInputs.count, 1)
+        XCTAssertEqual(dynamicProbeInputs.first?.0, context)
+        XCTAssertEqual(dynamicProbeInputs.first?.1, "第3话")
+        XCTAssertEqual(outcome, dynamicOutcome)
     }
 
-    func testImmediateOutcomeMarksAnnouncementAsNotManga() {
+    func testServiceStaticHelpersForwardToCoreDecision() {
         let context = makeLaunchContext()
-        let html = """
-        <html>
-          <head><title>公告 - 中文百合漫画区 - 百合会</title></head>
-          <body>
-            <div class="header"><h2><a>中文百合漫画区</a></h2></div>
-            <div class="view_tit"><em>公告</em></div>
-          </body>
-        </html>
-        """
 
-        let outcome = MangaProbeService.immediateOutcome(
-            launchContext: context,
-            html: html,
-            title: "公告"
+        XCTAssertEqual(
+            MangaProbeService.makeSuggestedWebContext(from: context),
+            MangaProbeDecision.suggestedWebContext(from: context)
         )
-
-        guard case let .fallback(reason, suggestedWebContext) = outcome else {
-            return XCTFail("Expected fallback outcome")
-        }
-        XCTAssertEqual(reason, .notManga)
-        XCTAssertTrue(suggestedWebContext.autoOpenNative)
-    }
-
-    func testImmediateOutcomeFallsBackWhenImagesAreMissing() {
-        let context = makeLaunchContext()
-        let html = makeProbeHTML(
-            title: "第1话 - 中文百合漫画区 - 百合会",
-            section: "中文百合漫画区",
-            imageCount: 0
-        )
-
-        let outcome = MangaProbeService.immediateOutcome(
-            launchContext: context,
-            html: html,
-            title: "第1话"
-        )
-
-        guard case let .fallback(reason, suggestedWebContext) = outcome else {
-            return XCTFail("Expected fallback outcome")
-        }
-        XCTAssertEqual(reason, .noImages)
-        XCTAssertEqual(suggestedWebContext.currentURL, context.chapterURL)
-    }
-
-    func testImmediateProbeCompletionPolicyKeepsNoImagesDynamicButStopsNotManga() {
-        let context = makeLaunchContext()
-        let webContext = MangaProbeService.makeSuggestedWebContext(from: context)
-
-        XCTAssertTrue(
-            MangaProbeService.shouldCompleteAfterImmediateOutcome(
-                .fallback(reason: .notManga, suggestedWebContext: webContext)
-            )
-        )
-        XCTAssertFalse(
-            MangaProbeService.shouldCompleteAfterImmediateOutcome(
-                .fallback(reason: .noImages, suggestedWebContext: webContext)
-            )
-        )
-        XCTAssertTrue(
-            MangaProbeService.shouldCompleteAfterImmediateOutcome(
-                .success(MangaProbePayload(images: [], title: "第1话"))
-            )
-        )
-    }
-
-    func testFailureReasonTreatsURLDomainErrorsAsRetryableNetwork() {
         XCTAssertEqual(
             MangaProbeService.failureReason(for: URLError(.timedOut)),
-            .retryableNetwork
+            MangaProbeDecision.failureReason(for: URLError(.timedOut))
         )
     }
 }
