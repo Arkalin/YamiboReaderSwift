@@ -767,18 +767,14 @@ public struct ReaderContainerView: View {
             return
         }
 
-        let referenceLineY = verticalScrollCoordinator.referenceLineY
-        guard let bestMatch = verticalPageFrames
-            .filter({ $0.value.height > 0 })
-            .min(by: { lhs, rhs in
-                pageDistance(from: referenceLineY, to: lhs.value) < pageDistance(from: referenceLineY, to: rhs.value)
-            }) else {
-            return
-        }
-
-        let frame = bestMatch.value
-        let intraPageProgress = min(max((referenceLineY - frame.minY) / max(frame.height, 1), 0), 1)
-        model.updateVerticalViewportPosition(pageIndex: bestMatch.key, intraPageProgress: intraPageProgress)
+        guard let sample = ReaderVerticalPositioning.sample(
+            frames: verticalPageFrames,
+            referenceLineY: verticalScrollCoordinator.referenceLineY
+        ) else { return }
+        model.updateVerticalViewportPosition(
+            pageIndex: sample.pageIndex,
+            intraPageProgress: sample.intraPageProgress
+        )
     }
 
     private func applyVerticalFineTune(for request: ReaderVerticalScrollRequest) {
@@ -854,16 +850,6 @@ public struct ReaderContainerView: View {
                 }
             }
         }
-    }
-
-    private func pageDistance(from referenceLineY: CGFloat, to frame: CGRect) -> CGFloat {
-        if frame.contains(CGPoint(x: frame.midX, y: referenceLineY)) {
-            return 0
-        }
-        if referenceLineY < frame.minY {
-            return frame.minY - referenceLineY
-        }
-        return referenceLineY - frame.maxY
     }
 
     private var windowSafeAreaInsets: UIEdgeInsets {
