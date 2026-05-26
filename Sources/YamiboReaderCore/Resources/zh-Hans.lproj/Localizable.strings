@@ -245,7 +245,6 @@
 "reader.ios_only" = "Reader is available on iOS only.";
 "reader.jump_web_page" = "跳转网页";
 "reader.justified_text" = "使文本两端对齐";
-"reader.first_line_indent" = "段落首行缩进";
 "reader.line_height" = "行间距";
 "reader.next_chapter" = "下一章";
 "reader.next_web_page" = "下一网页";

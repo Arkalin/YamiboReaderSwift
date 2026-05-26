@@ -842,15 +842,12 @@ private final class StubURLProtocol: URLProtocol {
 }
 
 #if canImport(UIKit)
-@Test func readerAttributedTextFactoryAppliesFirstLineIndentToBodyOnly() throws {
-    let defaultStyle = ReaderAttributedTextFactory.makeParagraphStyle(settings: ReaderAppearanceSettings())
-    #expect(defaultStyle.firstLineHeadIndent == 0)
-
+@Test func readerAttributedTextFactoryUsesParagraphStyleForTitleAndBody() throws {
     let pointSize = 24.0
     let attributedText = ReaderAttributedTextFactory.makeAttributedText(
         text: "第一章\n第一段正文。\n\n第二段正文。",
         chapterTitle: "第一章",
-        settings: ReaderAppearanceSettings(usesFirstLineIndent: true),
+        settings: ReaderAppearanceSettings(lineHeightScale: 1.6),
         baseFontSize: pointSize
     )
     let titleStyle = try #require(
@@ -868,8 +865,8 @@ private final class StubURLProtocol: URLProtocol {
         ) as? NSParagraphStyle
     )
 
-    #expect(titleStyle.firstLineHeadIndent == 0)
-    #expect(bodyStyle.firstLineHeadIndent == CGFloat(pointSize * 2))
+    #expect(titleStyle.lineSpacing == 9.6)
+    #expect(bodyStyle.lineSpacing == 9.6)
 }
 #endif
 

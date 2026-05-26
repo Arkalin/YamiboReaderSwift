@@ -102,10 +102,6 @@ struct ReaderSettingsPanel: View {
                                 usesJustifiedText: Binding(
                                     get: { draftSettings.usesJustifiedText },
                                     set: { draftSettings.usesJustifiedText = $0 }
-                                ),
-                                usesFirstLineIndent: Binding(
-                                    get: { draftSettings.usesFirstLineIndent },
-                                    set: { draftSettings.usesFirstLineIndent = $0 }
                                 )
                             )
 
@@ -167,7 +163,6 @@ struct ReaderSettingsPanel: View {
     private func setCharacterSpacingScale(_ value: Double) { draftSettings.characterSpacingScale = value }
     private func setHorizontalPadding(_ value: Double) { draftSettings.horizontalPadding = value }
     private func setUsesJustifiedText(_ value: Bool) { draftSettings.usesJustifiedText = value }
-    private func setUsesFirstLineIndent(_ value: Bool) { draftSettings.usesFirstLineIndent = value }
     private func setBackgroundStyle(_ value: ReaderBackgroundStyle) { draftSettings.backgroundStyle = value }
     private func setReadingMode(_ value: ReaderReadingMode) { draftSettings.readingMode = value }
     private func setTranslationMode(_ value: ReaderTranslationMode) { draftSettings.translationMode = value }
@@ -459,22 +454,12 @@ private struct ReaderBooksLayoutSection: View {
 private struct ReaderBooksTextOptionsSection: View {
     let palette: ReaderBooksSheetPalette
     @Binding var usesJustifiedText: Bool
-    @Binding var usesFirstLineIndent: Bool
 
     var body: some View {
         VStack(spacing: 0) {
             toggleRow(
                 title: L10n.string("reader.justified_text"),
                 isOn: $usesJustifiedText
-            )
-
-            Divider()
-                .overlay(palette.divider)
-                .padding(.leading, 20)
-
-            toggleRow(
-                title: L10n.string("reader.first_line_indent"),
-                isOn: $usesFirstLineIndent
             )
         }
         .frame(maxWidth: .infinity, alignment: .leading)
