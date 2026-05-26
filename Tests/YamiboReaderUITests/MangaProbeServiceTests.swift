@@ -3,6 +3,74 @@ import XCTest
 @testable import YamiboReaderUI
 
 final class MangaProbeServiceTests: XCTestCase {
+    func testClassifierMarksAnnouncementSnapshotAsNotManga() {
+        let snapshot = MangaProbeSnapshot(
+            title: "公告",
+            html: nil,
+            sectionName: "中文百合漫画区",
+            isAnnouncement: true,
+            imageURLs: [
+                URL(string: "https://img.example.com/probe.jpg")!
+            ],
+            baseURL: makeLaunchContext().chapterURL
+        )
+
+        XCTAssertEqual(MangaProbeClassifier.classify(snapshot), .notManga)
+    }
+
+    func testClassifierMarksDisallowedSectionSnapshotAsNotManga() {
+        let snapshot = MangaProbeSnapshot(
+            title: "小说章节",
+            html: nil,
+            sectionName: "原创小说区",
+            isAnnouncement: false,
+            imageURLs: [
+                URL(string: "https://img.example.com/probe.jpg")!
+            ],
+            baseURL: makeLaunchContext().chapterURL
+        )
+
+        XCTAssertEqual(MangaProbeClassifier.classify(snapshot), .notManga)
+    }
+
+    func testClassifierMarksAllowedMangaSnapshotWithoutImagesAsNoImages() {
+        let snapshot = MangaProbeSnapshot(
+            title: "第1话",
+            html: nil,
+            sectionName: "中文百合漫画区",
+            isAnnouncement: false,
+            imageURLs: [],
+            baseURL: makeLaunchContext().chapterURL
+        )
+
+        XCTAssertEqual(MangaProbeClassifier.classify(snapshot), .noImages)
+    }
+
+    func testClassifierReturnsSuccessForAllowedMangaSnapshotWithImages() {
+        let imageURL = URL(string: "https://img.example.com/probe.jpg")!
+        let html = makeProbeHTML(
+            title: "第1话 - 中文百合漫画区 - 百合会",
+            section: "中文百合漫画区",
+            imageCount: 1
+        )
+        let snapshot = MangaProbeSnapshot(
+            title: "第1话",
+            html: html,
+            sectionName: "中文百合漫画区",
+            isAnnouncement: false,
+            imageURLs: [imageURL],
+            baseURL: makeLaunchContext().chapterURL
+        )
+
+        guard case let .success(payload) = MangaProbeClassifier.classify(snapshot) else {
+            return XCTFail("Expected success classification")
+        }
+        XCTAssertEqual(payload.images, [imageURL])
+        XCTAssertEqual(payload.title, "第1话")
+        XCTAssertEqual(payload.html, html)
+        XCTAssertEqual(payload.sectionName, "中文百合漫画区")
+    }
+
     func testImmediateOutcomeReturnsSuccessForValidMangaHTML() {
         let context = makeLaunchContext()
         let html = makeProbeHTML(
@@ -68,6 +136,27 @@ final class MangaProbeServiceTests: XCTestCase {
         }
         XCTAssertEqual(reason, .noImages)
         XCTAssertEqual(suggestedWebContext.currentURL, context.chapterURL)
+    }
+
+    func testImmediateProbeCompletionPolicyKeepsNoImagesDynamicButStopsNotManga() {
+        let context = makeLaunchContext()
+        let webContext = MangaProbeService.makeSuggestedWebContext(from: context)
+
+        XCTAssertTrue(
+            MangaProbeService.shouldCompleteAfterImmediateOutcome(
+                .fallback(reason: .notManga, suggestedWebContext: webContext)
+            )
+        )
+        XCTAssertFalse(
+            MangaProbeService.shouldCompleteAfterImmediateOutcome(
+                .fallback(reason: .noImages, suggestedWebContext: webContext)
+            )
+        )
+        XCTAssertTrue(
+            MangaProbeService.shouldCompleteAfterImmediateOutcome(
+                .success(MangaProbePayload(images: [], title: "第1话"))
+            )
+        )
     }
 
     func testFailureReasonTreatsURLDomainErrorsAsRetryableNetwork() {
