@@ -149,14 +149,14 @@ public final class ReaderContainerModel: ObservableObject {
     private var usesPadPresentation = false
     private var chapterCommentsCache: [ReaderChapterCommentTarget: ChapterCommentsPage] = [:]
     private var cacheOperationTask: Task<Void, Never>?
-    private var progressSyncTask: Task<Void, Never>?
-    private var lastQueuedProgress: ReaderProgressSnapshot?
-    private var lastSyncedProgress: ReaderProgressSnapshot?
-    private let progressSyncDelayNanoseconds: UInt64 = 350_000_000
+    private let progressSync: ProgressSyncModule
 
     public init(context: ReaderLaunchContext, appContext: YamiboAppContext) {
         self.context = context
         self.appContext = appContext
+        progressSync = ProgressSyncModule(
+            adapter: FavoriteLibraryProgressSyncAdapter(favoriteStore: appContext.favoriteStore)
+        )
     }
 
     public var title: String {
@@ -1025,9 +1025,10 @@ public final class ReaderContainerModel: ObservableObject {
         return pages[normalizedIndex]
     }
 
-    private func currentProgressSnapshot() -> ReaderProgressSnapshot {
+    private func currentProgressSnapshot() -> NovelReadingPosition {
         let resumePoint = captureCurrentResumePoint()
-        return ReaderProgressSnapshot(
+        return NovelReadingPosition(
+            threadURL: context.threadURL,
             view: resumePoint?.view ?? displayedView,
             page: displayedPageIndex,
             chapterTitle: resumePoint?.chapterTitle ?? currentChapterTitle,
@@ -1117,45 +1118,14 @@ public final class ReaderContainerModel: ObservableObject {
 
     private func scheduleProgressSync() {
         let snapshot = currentProgressSnapshot()
-        guard snapshot != lastQueuedProgress else { return }
-
-        lastQueuedProgress = snapshot
-        progressSyncTask?.cancel()
-        progressSyncTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: self?.progressSyncDelayNanoseconds ?? 0)
-            guard !Task.isCancelled else { return }
-            await self?.flushProgress()
+        Task { [progressSync] in
+            await progressSync.queue(.novel(snapshot))
         }
     }
 
     private func flushProgress() async {
-        progressSyncTask?.cancel()
-        progressSyncTask = nil
-
         let snapshot = currentProgressSnapshot()
-        guard snapshot != lastSyncedProgress else {
-            lastQueuedProgress = snapshot
-            return
-        }
-
-        let progress = ReaderProgress(
-            view: snapshot.view,
-            page: snapshot.page,
-            chapterTitle: snapshot.chapterTitle,
-            authorID: snapshot.authorID,
-            resumePoint: snapshot.resumePoint
-        )
-        do {
-            _ = try await appContext.favoriteStore.updateReadingProgress(
-                for: context.threadURL,
-                progress: progress,
-                createIfMissing: false
-            )
-        } catch {
-            return
-        }
-        lastQueuedProgress = snapshot
-        lastSyncedProgress = snapshot
+        try? await progressSync.flush(.novel(snapshot))
     }
 
     private func spreadIndex(forPageIndex pageIndex: Int) -> Int {
@@ -1335,14 +1305,6 @@ public final class ReaderContainerModel: ObservableObject {
 private struct ReaderPageTextPosition {
     let range: ReaderRenderedTextRange
     let progressInRange: Double
-}
-
-private struct ReaderProgressSnapshot: Equatable {
-    let view: Int
-    let page: Int
-    let chapterTitle: String?
-    let authorID: String?
-    let resumePoint: ReaderResumePoint?
 }
 
 private extension String {
