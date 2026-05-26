@@ -62,17 +62,13 @@ public final class MangaReaderModel: ObservableObject {
     private var repository: MangaRepository?
     private var readerRepository: ReaderRepository?
     private var readingSession: MangaReadingSession?
-    private var chapterDocumentTasks: [String: Task<MangaChapterDocument, Error>] = [:]
     private var chapterJumpTask: Task<Void, Never>?
     private var imagePrefetchTask: Task<Void, Never>?
     private var directoryCooldownTask: Task<Void, Never>?
     private var forceSearchShortcutTask: Task<Void, Never>?
     private var prepared = false
     private let maxLoadedDocuments = 10
-    private let chapterLoadTimeoutNanoseconds: UInt64 = 12_000_000_000
-    private let chapterTransitionTimeoutNanoseconds: UInt64 = 18_000_000_000
     private var viewportRevision = UUID()
-    private var chapterJumpGeneration = 0
     private let progressSync: ProgressSyncModule
     private var usesPadPresentation = false
     private var pagedViewportSize: CGSize = .zero
@@ -395,15 +391,8 @@ public final class MangaReaderModel: ObservableObject {
     }
 
     private func jumpToChapter(_ chapter: MangaChapter, source: MangaChapterTransitionSource) async {
-        if let index = firstPageIndex(for: chapter.url) {
-            currentPageIndex = index
-            emitViewportRequest(targetIndex: index, animated: true, resetRevision: true)
-            scheduleImagePrefetch()
-            chapterTransitionState = .idle
-            return
-        }
-
-        guard let currentDirectory,
+        guard let readingSession,
+              let currentDirectory,
               let targetIndex = currentDirectory.chapters.firstIndex(where: { $0.tid == chapter.tid }),
               let currentPage,
               let currentIndex = currentDirectory.chapters.firstIndex(where: { $0.tid == currentPage.tid }) else {
@@ -412,7 +401,24 @@ public final class MangaReaderModel: ObservableObject {
         }
 
         if abs(targetIndex - currentIndex) > 1 {
-            emitNavigationRequest(.reopenNative(makeNativeLaunchContext(for: chapter)))
+            do {
+                let result = try await readingSession.jump(to: chapter, from: currentReadingPosition)
+                applyJumpResult(result, animated: true, resetRevision: true)
+            } catch {
+                errorMessage = error.localizedDescription
+                chapterTransitionState = .idle
+            }
+            return
+        }
+
+        if pages.contains(where: { $0.tid == chapter.tid && $0.localIndex == 0 }) {
+            do {
+                let result = try await readingSession.jump(to: chapter, from: currentReadingPosition)
+                applyJumpResult(result, animated: true, resetRevision: true)
+            } catch {
+                errorMessage = error.localizedDescription
+                chapterTransitionState = .idle
+            }
             return
         }
 
@@ -488,6 +494,7 @@ public final class MangaReaderModel: ObservableObject {
                     try await repository.loadChapter(url: url, htmlOverride: htmlOverride)
                 },
                 directoryResolver: MangaReaderDirectoryResolver(appContext: appContext),
+                chapterProbe: chapterProbe,
                 maxLoadedDocuments: maxLoadedDocuments
             )
             let snapshot = try await session.prepare()
@@ -535,22 +542,6 @@ public final class MangaReaderModel: ObservableObject {
         isLoadingMoreChapterComments = module.isLoadingMore
         chapterCommentsLoadMoreError = module.loadMoreError
         chapterCommentsRefreshError = module.refreshError
-    }
-
-    private func loadDocument(for url: URL, htmlOverride: String?) async throws -> MangaChapterDocument {
-        let tid = MangaTitleCleaner.extractTid(from: url.absoluteString) ?? url.absoluteString
-        if let existingTask = chapterDocumentTasks[tid] {
-            return try await existingTask.value
-        }
-        guard let repository else {
-            throw YamiboError.underlying(L10n.string("manga.repository_uninitialized"))
-        }
-        let task = Task {
-            try await repository.loadChapter(url: url, htmlOverride: htmlOverride)
-        }
-        chapterDocumentTasks[tid] = task
-        defer { chapterDocumentTasks.removeValue(forKey: tid) }
-        return try await task.value
     }
 
     private func prefetchIfNeeded(for index: Int) async {
@@ -676,10 +667,6 @@ public final class MangaReaderModel: ObservableObject {
         return chapters[targetIndex]
     }
 
-    private func firstPageIndex(for chapterURL: URL) -> Int? {
-        pages.firstIndex(where: { $0.chapterURL == chapterURL && $0.localIndex == 0 })
-    }
-
     private func jumpToLoadedPage(_ pageIndex: Int, animated: Bool) {
         guard pages.indices.contains(pageIndex) else { return }
         let normalizedTargetIndex = normalizedPagedPageIndex(pageIndex)
@@ -733,8 +720,6 @@ public final class MangaReaderModel: ObservableObject {
         to chapter: MangaChapter,
         source: MangaChapterTransitionSource
     ) async {
-        chapterJumpGeneration += 1
-        let generation = chapterJumpGeneration
         chapterJumpTask?.cancel()
         imagePrefetchTask?.cancel()
         chapterTransitionState = .loading(targetTID: chapter.tid, source: source)
@@ -742,114 +727,53 @@ public final class MangaReaderModel: ObservableObject {
 
         let task = Task { @MainActor in
             await self.runAdjacentChapterJump(
-                to: chapter,
-                source: source,
-                generation: generation
+                to: chapter
             )
         }
         chapterJumpTask = task
         await task.value
     }
 
-    private func runAdjacentChapterJump(
-        to chapter: MangaChapter,
-        source: MangaChapterTransitionSource,
-        generation: Int
-    ) async {
+    private func runAdjacentChapterJump(to chapter: MangaChapter) async {
         do {
-            let document = try await self.withTimeout(nanoseconds: self.chapterTransitionTimeoutNanoseconds) {
-                do {
-                    return try await self.withTimeout(nanoseconds: self.chapterLoadTimeoutNanoseconds) {
-                        try await self.loadDocument(for: chapter.url, htmlOverride: nil)
-                    }
-                } catch is CancellationError {
-                    throw CancellationError()
-                } catch {
-                    return try await self.loadDocumentViaProbe(for: chapter)
-                }
-            }
-
             try Task.checkCancellation()
-            guard generation == chapterJumpGeneration else { return }
-
-            await applyLoadedChapterDocument(document, animated: false, resetRevision: true)
-            chapterTransitionState = .idle
-            errorMessage = nil
+            guard let readingSession else {
+                throw YamiboError.underlying(L10n.string("manga.chapter_state_invalid"))
+            }
+            let result = try await readingSession.jump(to: chapter, from: currentReadingPosition)
+            applyJumpResult(result, animated: false, resetRevision: true)
         } catch is CancellationError {
-            guard generation == chapterJumpGeneration else { return }
             chapterTransitionState = .idle
         } catch {
-            guard generation == chapterJumpGeneration else { return }
             errorMessage = error.localizedDescription
             chapterTransitionState = .idle
-            emitNavigationRequest(
-                .fallbackWeb(
-                    makeWebFallbackContext(
-                        currentURL: chapter.url,
-                        initialPage: 0
-                    )
-                )
-            )
         }
     }
 
-    private func applyLoadedChapterDocument(
-        _ document: MangaChapterDocument,
+    private func applyJumpResult(
+        _ result: MangaReadingSession.JumpResult,
         animated: Bool,
         resetRevision: Bool
-    ) async {
-        let position = MangaReadingPosition(tid: document.tid, localIndex: 0)
-        guard let snapshot = try? await readingSession?.applyLoadedDocument(
-            document,
-            preserving: position,
-            allowsReset: true
-        ) else { return }
-        applyWindowSnapshot(snapshot, animated: animated, resetRevision: resetRevision)
-    }
-
-    private func loadDocumentViaProbe(for chapter: MangaChapter) async throws -> MangaChapterDocument {
-        let outcome = await chapterProbe(makeNativeLaunchContext(for: chapter))
-        switch outcome {
-        case let .success(payload):
-            guard !payload.images.isEmpty else {
-                throw YamiboError.parsingFailed(context: L10n.string("context.manga_images"))
-            }
-            let title = MangaTitleCleaner.cleanThreadTitle(
-                payload.title.isEmpty ? chapter.rawTitle : payload.title
-            )
-            return MangaChapterDocument(
-                tid: chapter.tid,
-                ownerPostID: MangaHTMLParser.extractFirstPostID(from: payload.html ?? "") ?? chapter.tid,
-                chapterTitle: title,
-                chapterURL: YamiboRoute.thread(url: chapter.url, page: 1, authorID: nil).url,
-                pages: payload.images,
-                html: payload.html ?? ""
-            )
-        case let .fallback(reason, _):
-            switch reason {
-            case .retryableNetwork:
-                throw YamiboError.underlying(L10n.string("manga.chapter_load_timeout"))
-            case .timeout:
-                throw YamiboError.underlying(L10n.string("manga.chapter_load_timeout"))
-            case .notManga:
-                throw YamiboError.parsingFailed(context: L10n.string("context.current_page_not_manga_chapter"))
-            case .noImages:
-                throw YamiboError.parsingFailed(context: L10n.string("context.manga_images"))
-            case .webProcessTerminated:
-                throw YamiboError.underlying(L10n.string("manga.chapter_probe_failed"))
-            }
+    ) {
+        switch result {
+        case let .loaded(snapshot):
+            applyWindowSnapshot(snapshot, animated: animated, resetRevision: resetRevision)
+            chapterTransitionState = .idle
+            errorMessage = nil
+        case let .alreadyLoaded(pageIndex):
+            let normalizedTargetIndex = normalizedPagedPageIndex(pageIndex)
+            currentPageIndex = normalizedTargetIndex
+            emitViewportRequest(targetIndex: normalizedTargetIndex, animated: animated, resetRevision: resetRevision)
+            scheduleImagePrefetch()
+            chapterTransitionState = .idle
+            errorMessage = nil
+        case let .reopenNative(context):
+            emitNavigationRequest(.reopenNative(context))
+        case let .fallbackWeb(context):
+            emitNavigationRequest(.fallbackWeb(context))
+        case .ignored:
+            break
         }
-    }
-
-    private func makeNativeLaunchContext(for chapter: MangaChapter) -> MangaLaunchContext {
-        MangaLaunchContext(
-            originalThreadURL: context.originalThreadURL,
-            chapterURL: chapter.url,
-            displayTitle: currentDirectoryTitle,
-            source: context.source,
-            initialPage: 0,
-            directoryName: currentDirectory?.cleanBookName
-        )
     }
 
     private func emitNavigationRequest(_ request: MangaReaderNavigationRequest) {
@@ -879,25 +803,6 @@ public final class MangaReaderModel: ObservableObject {
         guard let snapshot = currentProgressSnapshot() else { return }
         try? await progressSync.flush(.manga(snapshot))
         await persistSettings()
-    }
-
-    private func withTimeout<T: Sendable>(
-        nanoseconds: UInt64,
-        operation: @escaping @MainActor () async throws -> T
-    ) async throws -> T {
-        try await withThrowingTaskGroup(of: T.self) { group in
-            group.addTask {
-                try await operation()
-            }
-            group.addTask {
-                try await Task.sleep(nanoseconds: nanoseconds)
-                throw YamiboError.underlying(L10n.string("manga.chapter_load_timeout"))
-            }
-
-            let result = try await group.next()!
-            group.cancelAll()
-            return result
-        }
     }
 
     public func makeWebFallbackContext(currentURL: URL, initialPage: Int) -> MangaWebContext {
