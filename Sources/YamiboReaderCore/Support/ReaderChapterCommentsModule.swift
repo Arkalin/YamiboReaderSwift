@@ -1,5 +1,4 @@
 import Foundation
-import YamiboReaderCore
 
 public enum ReaderChapterCommentsState: Equatable, Sendable {
     case idle
