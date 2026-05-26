@@ -35,6 +35,15 @@ public enum FavoriteFilter: String, CaseIterable, Identifiable {
             favorite.type == .other || favorite.type == .unknown
         }
     }
+
+    fileprivate var libraryFilter: FavoriteLibraryFilter {
+        switch self {
+        case .all: .all
+        case .novel: .novel
+        case .manga: .manga
+        case .other: .other
+        }
+    }
 }
 
 public enum FavoriteSortOrder: String, CaseIterable, Identifiable {
@@ -51,6 +60,15 @@ public enum FavoriteSortOrder: String, CaseIterable, Identifiable {
         case .title: L10n.string("favorites.sort.title")
         case .progress: L10n.string("favorites.sort.progress")
         case .recentRead: L10n.string("favorites.sort.recent_read")
+        }
+    }
+
+    fileprivate var librarySortOrder: FavoriteLibrarySortOrder {
+        switch self {
+        case .manual: .manual
+        case .title: .title
+        case .progress: .progress
+        case .recentRead: .recentRead
         }
     }
 }
@@ -77,6 +95,18 @@ enum FavoriteTagSortOrder: String, CaseIterable, Identifiable {
         case .associationCountDescending: L10n.string("favorites.tag_sort.association_count_desc")
         }
     }
+
+    fileprivate var libraryTagSortOrder: FavoriteLibraryTagSortOrder {
+        switch self {
+        case .manual: .manual
+        case .name: .name
+        case .nameDescending: .nameDescending
+        case .updatedAt: .updatedAt
+        case .updatedAtDescending: .updatedAtDescending
+        case .associationCount: .associationCount
+        case .associationCountDescending: .associationCountDescending
+        }
+    }
 }
 
 public enum FavoriteScope: Hashable, Sendable {
@@ -88,6 +118,15 @@ public enum FavoriteScope: Hashable, Sendable {
             return collection
         }
         return nil
+    }
+
+    fileprivate var libraryScope: FavoriteLibraryScope {
+        switch self {
+        case .root:
+            .root
+        case let .collection(collection):
+            .collection(collection)
+        }
     }
 }
 
@@ -105,6 +144,17 @@ public enum FavoriteListEntry: Identifiable, Hashable, Sendable {
     }
 
     var moveKey: String { id }
+}
+
+private extension FavoriteLibraryEntry {
+    var favoriteListEntry: FavoriteListEntry {
+        switch self {
+        case let .collection(collection):
+            .collection(collection)
+        case let .favorite(favorite):
+            .favorite(favorite)
+        }
+    }
 }
 
 struct FavoriteSelectionActionState: Equatable {
@@ -3406,57 +3456,39 @@ func makeFavoriteSelectionActionState(
     selectedFavoriteCount: Int,
     selectedCollectionCount: Int
 ) -> FavoriteSelectionActionState {
-    let hasFavorites = selectedFavoriteCount > 0
-    let hasCollections = selectedCollectionCount > 0
-    let hasSelection = hasFavorites || hasCollections
-
-    switch scope {
-    case .root:
-        return FavoriteSelectionActionState(
-            canTag: hasFavorites && !hasCollections,
-            canCreateCollection: hasFavorites && !hasCollections,
-            canMove: hasFavorites && !hasCollections,
-            canDelete: hasSelection
-        )
-    case .collection:
-        return FavoriteSelectionActionState(
-            canTag: hasFavorites,
-            canCreateCollection: false,
-            canMove: hasFavorites,
-            canDelete: hasFavorites
-        )
-    }
+    let state = FavoriteLibraryProjection.selectionActionState(
+        scope: scope.libraryScope,
+        selectedFavoriteCount: selectedFavoriteCount,
+        selectedCollectionCount: selectedCollectionCount
+    )
+    return FavoriteSelectionActionState(
+        canTag: state.canTag,
+        canCreateCollection: state.canCreateCollection,
+        canMove: state.canMove,
+        canDelete: state.canDelete
+    )
 }
 
 func makeBatchTagSelectionState(
     favorites: [Favorite],
     selectedFavoriteIDs: Set<String>
 ) -> FavoriteBatchTagSelectionState {
-    let selectedIDs = selectedFavoriteIDs
-    let selectedFavorites = favorites.filter { selectedIDs.contains($0.id) }
-    guard let firstFavorite = selectedFavorites.first else {
-        return FavoriteBatchTagSelectionState(initialTagIDs: [], showsOverwriteWarning: false)
-    }
-
-    let firstTagIDs = Set(firstFavorite.tagIDs)
-    let hasDivergentTags = selectedFavorites.dropFirst().contains { Set($0.tagIDs) != firstTagIDs }
+    let state = FavoriteLibraryProjection.batchTagSelectionState(
+        favorites: favorites,
+        selectedFavoriteIDs: selectedFavoriteIDs
+    )
     return FavoriteBatchTagSelectionState(
-        initialTagIDs: hasDivergentTags ? [] : firstTagIDs,
-        showsOverwriteWarning: hasDivergentTags
+        initialTagIDs: state.initialTagIDs,
+        showsOverwriteWarning: state.showsOverwriteWarning
     )
 }
 
 func filteredFavoriteTags(_ tags: [FavoriteTag], searchText: String) -> [FavoriteTag] {
-    let trimmedSearchText = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmedSearchText.isEmpty else { return tags }
-
-    return tags.filter { tag in
-        tag.name.localizedCaseInsensitiveContains(trimmedSearchText)
-    }
+    FavoriteLibraryProjection.filteredTags(tags, searchText: searchText)
 }
 
 func canReorderFavoriteTags(sortOrder: FavoriteTagSortOrder, searchText: String) -> Bool {
-    sortOrder == .manual && searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    FavoriteLibraryProjection.canReorderTags(sortOrder: sortOrder.libraryTagSortOrder, searchText: searchText)
 }
 
 func canReorderFavoriteEntries(
@@ -3464,9 +3496,11 @@ func canReorderFavoriteEntries(
     searchText: String,
     selectedTagIDs: Set<String> = []
 ) -> Bool {
-    sortOrder == .manual &&
-        searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-        selectedTagIDs.isEmpty
+    FavoriteLibraryProjection.canReorderEntries(
+        sortOrder: sortOrder.librarySortOrder,
+        searchText: searchText,
+        selectedTagIDs: selectedTagIDs
+    )
 }
 
 func sortedFavoriteTags(
@@ -3474,58 +3508,11 @@ func sortedFavoriteTags(
     favorites: [Favorite],
     sortOrder: FavoriteTagSortOrder
 ) -> [FavoriteTag] {
-    let associationCounts = favoriteTagAssociationCounts(from: favorites)
-    return tags.sorted { lhs, rhs in
-        switch sortOrder {
-        case .manual:
-            break
-        case .name:
-            let result = lhs.name.localizedCaseInsensitiveCompare(rhs.name)
-            if result != .orderedSame {
-                return result == .orderedAscending
-            }
-        case .nameDescending:
-            let result = lhs.name.localizedCaseInsensitiveCompare(rhs.name)
-            if result != .orderedSame {
-                return result == .orderedDescending
-            }
-        case .updatedAt:
-            if lhs.updatedAt != rhs.updatedAt {
-                return lhs.updatedAt < rhs.updatedAt
-            }
-        case .updatedAtDescending:
-            if lhs.updatedAt != rhs.updatedAt {
-                return lhs.updatedAt > rhs.updatedAt
-            }
-        case .associationCount:
-            let lhsCount = associationCounts[lhs.id, default: 0]
-            let rhsCount = associationCounts[rhs.id, default: 0]
-            if lhsCount != rhsCount {
-                return lhsCount < rhsCount
-            }
-        case .associationCountDescending:
-            let lhsCount = associationCounts[lhs.id, default: 0]
-            let rhsCount = associationCounts[rhs.id, default: 0]
-            if lhsCount != rhsCount {
-                return lhsCount > rhsCount
-            }
-        }
-
-        if lhs.manualOrder != rhs.manualOrder {
-            return lhs.manualOrder < rhs.manualOrder
-        }
-        return lhs.id < rhs.id
-    }
+    FavoriteLibraryProjection.sortedTags(tags, favorites: favorites, sortOrder: sortOrder.libraryTagSortOrder)
 }
 
 func favoriteTagAssociationCounts(from favorites: [Favorite]) -> [String: Int] {
-    var counts: [String: Int] = [:]
-    for favorite in favorites {
-        for tagID in Set(favorite.tagIDs) {
-            counts[tagID, default: 0] += 1
-        }
-    }
-    return counts
+    FavoriteLibraryProjection.tagAssociationCounts(from: favorites)
 }
 
 func makeFavoriteTagChipSummary(
@@ -3534,31 +3521,15 @@ func makeFavoriteTagChipSummary(
     searchText: String,
     prioritizedTagIDs: Set<String> = []
 ) -> FavoriteTagChipSummary {
-    let tagIDs = Set(favorite.tagIDs)
-    guard !tagIDs.isEmpty else {
-        return FavoriteTagChipSummary(chips: [], overflowCount: 0)
-    }
-
-    let trimmedSearchText = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-    let favoriteTags = tags
-        .filter { tagIDs.contains($0.id) }
-        .sorted { lhs, rhs in
-            let lhsIsPrioritized = prioritizedTagIDs.contains(lhs.id) ||
-                (!trimmedSearchText.isEmpty && lhs.name.localizedCaseInsensitiveContains(trimmedSearchText))
-            let rhsIsPrioritized = prioritizedTagIDs.contains(rhs.id) ||
-                (!trimmedSearchText.isEmpty && rhs.name.localizedCaseInsensitiveContains(trimmedSearchText))
-            if lhsIsPrioritized != rhsIsPrioritized {
-                return lhsIsPrioritized
-            }
-            if lhs.manualOrder != rhs.manualOrder {
-                return lhs.manualOrder < rhs.manualOrder
-            }
-            return lhs.id < rhs.id
-        }
-    let chips = Array(favoriteTags.prefix(3))
+    let summary = FavoriteLibraryProjection.tagChipSummary(
+        for: favorite,
+        tags: tags,
+        searchText: searchText,
+        prioritizedTagIDs: prioritizedTagIDs
+    )
     return FavoriteTagChipSummary(
-        chips: chips,
-        overflowCount: max(0, favoriteTags.count - chips.count)
+        chips: summary.chips,
+        overflowCount: summary.overflowCount
     )
 }
 
@@ -3579,40 +3550,18 @@ func makeFilteredFavorites(
     searchText: String,
     selectedTagIDs: Set<String> = []
 ) -> [Favorite] {
-    let trimmedSearchText = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-    let parentCollectionID = scope.collection?.id
-
-    let filtered = favorites
-        .filter { $0.parentCollectionID == parentCollectionID }
-        .filter { showsHidden || !$0.isHidden }
-        .filter { filter.matches($0) }
-        .filter { favorite in
-            selectedTagIDs.isEmpty || selectedTagIDs.isSubset(of: Set(favorite.tagIDs))
-        }
-        .filter { favorite in
-            guard !trimmedSearchText.isEmpty else { return true }
-            return favorite.resolvedDisplayTitle.localizedCaseInsensitiveContains(trimmedSearchText)
-        }
-
-    switch sortOrder {
-    case .manual:
-        return filtered.sorted { lhs, rhs in
-            if lhs.manualOrder != rhs.manualOrder {
-                return lhs.manualOrder < rhs.manualOrder
-            }
-            return lhs.id < rhs.id
-        }
-    case .title:
-        return filtered.sorted { lhs, rhs in
-            lhs.resolvedDisplayTitle.localizedCompare(rhs.resolvedDisplayTitle) == .orderedAscending
-        }
-    case .progress:
-        return filtered.sorted { lhs, rhs in
-            progressScore(for: lhs) > progressScore(for: rhs)
-        }
-    case .recentRead:
-        return filtered.sorted(by: compareRecentReadFavorites)
-    }
+    let snapshot = FavoriteLibrarySnapshot(favorites: favorites, collections: [])
+    return FavoriteLibraryProjection.favorites(
+        in: snapshot,
+        query: FavoriteLibraryQuery(
+            scope: scope.libraryScope,
+            showsHidden: showsHidden,
+            filter: filter.libraryFilter,
+            sortOrder: sortOrder.librarySortOrder,
+            searchText: searchText,
+            selectedTagIDs: selectedTagIDs
+        )
+    )
 }
 
 func makeFavoriteListEntries(
@@ -3625,66 +3574,19 @@ func makeFavoriteListEntries(
     searchText: String,
     selectedTagIDs: Set<String> = []
 ) -> [FavoriteListEntry] {
-    switch scope {
-    case .root:
-        let rootFavorites = makeFilteredFavorites(
-            from: favorites,
-            scope: .root,
+    let snapshot = FavoriteLibrarySnapshot(favorites: favorites, collections: collections)
+    return FavoriteLibraryProjection.entries(
+        in: snapshot,
+        query: FavoriteLibraryQuery(
+            scope: scope.libraryScope,
             showsHidden: showsHidden,
-            filter: filter,
-            sortOrder: sortOrder,
+            filter: filter.libraryFilter,
+            sortOrder: sortOrder.librarySortOrder,
             searchText: searchText,
             selectedTagIDs: selectedTagIDs
         )
-
-        let visibleCollections = orderedCollections(collections).filter { collection in
-            rootCollectionMatches(
-                collection,
-                favorites: favorites,
-                showsHidden: showsHidden,
-                filter: filter,
-                searchText: searchText,
-                selectedTagIDs: selectedTagIDs
-            )
-        }
-
-        if sortOrder == .manual {
-            return (visibleCollections.map(FavoriteListEntry.collection) + rootFavorites.map(FavoriteListEntry.favorite))
-                .sorted { lhs, rhs in
-                    if entryManualOrder(lhs) != entryManualOrder(rhs) {
-                        return entryManualOrder(lhs) < entryManualOrder(rhs)
-                    }
-                    return lhs.id < rhs.id
-                }
-        }
-
-        if sortOrder == .recentRead {
-            return (visibleCollections.map(FavoriteListEntry.collection) + rootFavorites.map(FavoriteListEntry.favorite))
-                .sorted { lhs, rhs in
-                    compareRecentReadEntries(
-                        lhs,
-                        rhs,
-                        favorites: favorites,
-                        showsHidden: showsHidden,
-                        filter: filter,
-                        searchText: searchText,
-                        selectedTagIDs: selectedTagIDs
-                    )
-                }
-        }
-
-        return visibleCollections.map(FavoriteListEntry.collection) + rootFavorites.map(FavoriteListEntry.favorite)
-    case let .collection(collection):
-        return makeFilteredFavorites(
-            from: favorites,
-            scope: .collection(collection),
-            showsHidden: showsHidden,
-            filter: filter,
-            sortOrder: sortOrder,
-            searchText: searchText,
-            selectedTagIDs: selectedTagIDs
-        ).map(FavoriteListEntry.favorite)
-    }
+    )
+    .map(\.favoriteListEntry)
 }
 
 func rootCollectionMatches(
@@ -3695,36 +3597,17 @@ func rootCollectionMatches(
     searchText: String,
     selectedTagIDs: Set<String> = []
 ) -> Bool {
-    guard showsHidden || !collection.isHidden else {
-        return false
-    }
-
-    let trimmedSearchText = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-    let containedFavoriteSearchText = favoriteSearchTextForCollectionMatch(
-        collection,
-        filter: filter,
-        searchText: searchText,
-        selectedTagIDs: selectedTagIDs
-    )
-    let matchedFavorites = makeFilteredFavorites(
-        from: favorites,
-        scope: .collection(collection),
+    let entries = makeFavoriteListEntries(
+        scope: .root,
+        favorites: favorites,
+        collections: [collection],
         showsHidden: showsHidden,
         filter: filter,
         sortOrder: .manual,
-        searchText: containedFavoriteSearchText,
+        searchText: searchText,
         selectedTagIDs: selectedTagIDs
     )
-
-    guard filter == .all, selectedTagIDs.isEmpty else {
-        return !matchedFavorites.isEmpty
-    }
-
-    guard !trimmedSearchText.isEmpty else {
-        return true
-    }
-
-    return collection.name.localizedCaseInsensitiveContains(trimmedSearchText) || !matchedFavorites.isEmpty
+    return entries.contains(.collection(collection))
 }
 
 func makeFavoriteCollectionSummary(
@@ -3736,43 +3619,22 @@ func makeFavoriteCollectionSummary(
     searchText: String,
     selectedTagIDs: Set<String> = []
 ) -> FavoriteCollectionSummary {
-    let allItems = favorites.filter { $0.parentCollectionID == collection.id }
-
-    guard case .root = scope else {
-        return FavoriteCollectionSummary(
-            itemCount: allItems.count,
-            hiddenCount: allItems.filter(\.isHidden).count
+    let snapshot = FavoriteLibrarySnapshot(favorites: favorites, collections: [])
+    let summary = FavoriteLibraryProjection.collectionSummary(
+        for: collection,
+        in: snapshot,
+        query: FavoriteLibraryQuery(
+            scope: scope.libraryScope,
+            showsHidden: showsHidden,
+            filter: filter.libraryFilter,
+            sortOrder: .manual,
+            searchText: searchText,
+            selectedTagIDs: selectedTagIDs
         )
-    }
-
-    let trimmedSearchText = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-    if selectedTagIDs.isEmpty,
-       filter == .all,
-       trimmedSearchText.isEmpty || collection.name.localizedCaseInsensitiveContains(trimmedSearchText) {
-        return FavoriteCollectionSummary(
-            itemCount: allItems.count,
-            hiddenCount: allItems.filter(\.isHidden).count
-        )
-    }
-
-    let containedFavoriteSearchText = favoriteSearchTextForCollectionMatch(
-        collection,
-        filter: filter,
-        searchText: searchText,
-        selectedTagIDs: selectedTagIDs
-    )
-    let matchingItems = makeFilteredFavorites(
-        from: favorites,
-        scope: .collection(collection),
-        showsHidden: true,
-        filter: filter,
-        sortOrder: .manual,
-        searchText: containedFavoriteSearchText,
-        selectedTagIDs: selectedTagIDs
     )
     return FavoriteCollectionSummary(
-        itemCount: matchingItems.count,
-        hiddenCount: matchingItems.filter(\.isHidden).count
+        itemCount: summary.itemCount,
+        hiddenCount: summary.hiddenCount
     )
 }
 
