@@ -24,13 +24,8 @@ public struct MangaProbeService {
                 html: currentHTML,
                 title: currentTitle
             )
-            switch immediateOutcome {
-            case .success:
+            if Self.shouldCompleteAfterImmediateOutcome(immediateOutcome) {
                 return immediateOutcome
-            case let .fallback(reason, _):
-                if reason == .notManga {
-                    return immediateOutcome
-                }
             }
         }
 
@@ -45,33 +40,16 @@ public struct MangaProbeService {
         html: String,
         title: String?
     ) -> MangaProbeOutcome {
-        let webContext = makeSuggestedWebContext(from: launchContext)
-        if MangaHTMLParser.isAnnouncement(from: html) {
-            return .fallback(reason: .notManga, suggestedWebContext: webContext)
-        }
-
-        let sectionName = MangaHTMLParser.extractSectionName(from: html)
-        if let sectionName, !MangaHTMLParser.isAllowedMangaSection(sectionName) {
-            return .fallback(reason: .notManga, suggestedWebContext: webContext)
-        }
-
-        guard MangaHTMLParser.isLikelyMangaThread(title: title, html: html) else {
-            return .fallback(reason: .notManga, suggestedWebContext: webContext)
-        }
-
-        let images = MangaHTMLParser.extractImageURLs(from: html, baseURL: launchContext.chapterURL)
-        guard !images.isEmpty else {
-            return .fallback(reason: .noImages, suggestedWebContext: webContext)
-        }
-
-        let resolvedTitle = MangaHTMLParser.extractThreadTitle(from: html) ?? title ?? launchContext.displayTitle
-        return .success(
-            MangaProbePayload(
-                images: images,
-                title: resolvedTitle,
-                html: html,
-                sectionName: sectionName
-            )
+        outcome(
+            for: MangaProbeClassifier.classify(
+                MangaProbeSnapshot(
+                    html: html,
+                    title: title,
+                    fallbackTitle: launchContext.displayTitle,
+                    baseURL: launchContext.chapterURL
+                )
+            ),
+            launchContext: launchContext
         )
     }
 
@@ -227,7 +205,19 @@ private final class HiddenProbeNavigationDelegate: NSObject, WKNavigationDelegat
                 if let payload = await webView.yamiboEvaluateExtractionPayload(
                     MangaWebJavaScript.extractionScript(includeHTML: true)
                 ) {
-                    if payload.isAnnouncement || (payload.sectionName != nil && !payload.isAllowedMangaPage) {
+                    let classification = MangaProbeClassifier.classify(
+                        MangaProbeSnapshot(
+                            title: payload.title.isEmpty ? (fallbackTitle ?? launchContext.displayTitle) : payload.title,
+                            html: payload.html,
+                            sectionName: payload.sectionName,
+                            isAnnouncement: payload.isAnnouncement,
+                            imageURLs: payload.urls,
+                            baseURL: launchContext.chapterURL
+                        )
+                    )
+
+                    switch classification {
+                    case .notManga:
                         complete(
                             .fallback(
                                 reason: .notManga,
@@ -235,20 +225,11 @@ private final class HiddenProbeNavigationDelegate: NSObject, WKNavigationDelegat
                             )
                         )
                         return
-                    }
-
-                    if !payload.urls.isEmpty {
-                        complete(
-                            .success(
-                                MangaProbePayload(
-                                    images: payload.urls,
-                                    title: payload.title.isEmpty ? (fallbackTitle ?? launchContext.displayTitle) : payload.title,
-                                    html: payload.html,
-                                    sectionName: payload.sectionName
-                                )
-                            )
-                        )
+                    case let .success(payload):
+                        complete(.success(payload))
                         return
+                    case .noImages:
+                        break
                     }
                 }
 
@@ -334,33 +315,16 @@ public struct MangaProbeService {
         html: String,
         title: String?
     ) -> MangaProbeOutcome {
-        let webContext = makeSuggestedWebContext(from: launchContext)
-        if MangaHTMLParser.isAnnouncement(from: html) {
-            return .fallback(reason: .notManga, suggestedWebContext: webContext)
-        }
-
-        let sectionName = MangaHTMLParser.extractSectionName(from: html)
-        if let sectionName, !MangaHTMLParser.isAllowedMangaSection(sectionName) {
-            return .fallback(reason: .notManga, suggestedWebContext: webContext)
-        }
-
-        guard MangaHTMLParser.isLikelyMangaThread(title: title, html: html) else {
-            return .fallback(reason: .notManga, suggestedWebContext: webContext)
-        }
-
-        let images = MangaHTMLParser.extractImageURLs(from: html, baseURL: launchContext.chapterURL)
-        guard !images.isEmpty else {
-            return .fallback(reason: .noImages, suggestedWebContext: webContext)
-        }
-
-        let resolvedTitle = MangaHTMLParser.extractThreadTitle(from: html) ?? title ?? launchContext.displayTitle
-        return .success(
-            MangaProbePayload(
-                images: images,
-                title: resolvedTitle,
-                html: html,
-                sectionName: sectionName
-            )
+        outcome(
+            for: MangaProbeClassifier.classify(
+                MangaProbeSnapshot(
+                    html: html,
+                    title: title,
+                    fallbackTitle: launchContext.displayTitle,
+                    baseURL: launchContext.chapterURL
+                )
+            ),
+            launchContext: launchContext
         )
     }
 
@@ -383,4 +347,36 @@ public struct MangaProbeService {
         return .timeout
     }
 }
+
 #endif
+
+extension MangaProbeService {
+    static func shouldCompleteAfterImmediateOutcome(_ outcome: MangaProbeOutcome) -> Bool {
+        switch outcome {
+        case .success:
+            return true
+        case let .fallback(reason, _):
+            return reason == .notManga
+        }
+    }
+
+    static func outcome(
+        for classification: MangaProbeClassification,
+        launchContext: MangaLaunchContext
+    ) -> MangaProbeOutcome {
+        switch classification {
+        case let .success(payload):
+            return .success(payload)
+        case .notManga:
+            return .fallback(
+                reason: .notManga,
+                suggestedWebContext: makeSuggestedWebContext(from: launchContext)
+            )
+        case .noImages:
+            return .fallback(
+                reason: .noImages,
+                suggestedWebContext: makeSuggestedWebContext(from: launchContext)
+            )
+        }
+    }
+}
