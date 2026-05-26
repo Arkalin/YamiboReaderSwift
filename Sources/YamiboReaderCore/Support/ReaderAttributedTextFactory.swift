@@ -46,7 +46,7 @@ public enum ReaderAttributedTextFactory {
         let segments = ReaderChapterTextComponents.split(text: text, chapterTitle: chapterTitle)
         let pointSize = baseFontSize * settings.fontScale
         let bodyParagraphStyle = makeParagraphStyle(settings: settings, pointSize: pointSize)
-        let titleParagraphStyle = makeParagraphStyle(settings: settings, pointSize: pointSize, appliesFirstLineIndent: false)
+        let titleParagraphStyle = makeParagraphStyle(settings: settings, pointSize: pointSize)
         let bodyAttributes: [NSAttributedString.Key: Any] = [
             .font: settings.fontFamily.uiFont(size: pointSize, weight: .regular),
             .kern: settings.fontFamily.kerning(size: pointSize, scale: settings.characterSpacingScale),
@@ -78,13 +78,11 @@ public enum ReaderAttributedTextFactory {
 
     private static func makeParagraphStyle(
         settings: ReaderAppearanceSettings,
-        pointSize: Double,
-        appliesFirstLineIndent: Bool = true
+        pointSize: Double
     ) -> NSMutableParagraphStyle {
         let style = NSMutableParagraphStyle()
         style.lineSpacing = 6 * settings.lineHeightScale
         style.alignment = settings.usesJustifiedText ? .justified : .natural
-        style.firstLineHeadIndent = settings.usesFirstLineIndent && appliesFirstLineIndent ? CGFloat(pointSize * 2) : 0
         style.lineBreakMode = .byWordWrapping
         return style
     }
