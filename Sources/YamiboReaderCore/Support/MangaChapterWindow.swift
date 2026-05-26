@@ -59,6 +59,18 @@ public struct MangaChapterWindow: Sendable {
         makeSnapshot(position: currentPosition)
     }
 
+    public mutating func moveToLoadedPage(at pageIndex: Int) -> MangaChapterWindowSnapshot {
+        let pages = makePages()
+        guard !pages.isEmpty else {
+            currentPosition = nil
+            return makeSnapshot(position: nil)
+        }
+        let clampedIndex = min(max(pageIndex, 0), pages.count - 1)
+        let page = pages[clampedIndex]
+        currentPosition = MangaReadingPosition(tid: page.tid, localIndex: page.localIndex)
+        return makeSnapshot(position: currentPosition)
+    }
+
     public mutating func updateDirectory(
         _ directory: MangaDirectory,
         preserving position: MangaReadingPosition?
@@ -67,6 +79,12 @@ public struct MangaChapterWindow: Sendable {
         reorderDocumentsToMatchDirectory()
         currentPosition = position
         return makeSnapshot(position: position)
+    }
+
+    public mutating func insertAdjacentDocument(
+        _ document: MangaChapterDocument
+    ) -> MangaChapterWindowMutationResult {
+        insertAdjacentDocument(document, preserving: currentPosition)
     }
 
     public mutating func insertAdjacentDocument(
