@@ -107,6 +107,45 @@ final class ReaderCacheOperationModuleTests: XCTestCase {
         XCTAssertEqual(module.state.completedViews, [1])
     }
 
+    func testRepositoryReceivesSnapshotContextForCacheUpdateDeleteAndRefresh() async throws {
+        let context = ReaderCacheOperationContext(
+            threadURL: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=42&mobile=2")!,
+            authorID: "42",
+            contentSource: .authorFilteredPage
+        )
+        let snapshot = ReaderCacheOperationSnapshot(
+            cacheableViews: [1, 2, 3],
+            cachedViews: [1],
+            context: context
+        )
+        let repository = FakeCacheOperationRepository(cachedViews: [1])
+        let module = ReaderCacheOperationModule()
+        module.syncCachedViews([1])
+
+        module.startCaching(
+            views: [2],
+            snapshot: snapshot,
+            repository: repository,
+            summary: { _, _ in "cached" }
+        )
+        try await waitFor { module.state.isFinished }
+
+        module.updateCachedViews(
+            [1],
+            snapshot: snapshot,
+            repository: repository,
+            summary: { _, _ in "updated" },
+            onFailure: { _ in XCTFail("Update should not fail") }
+        )
+        try await waitFor { module.state.isFinished && module.state.summaryMessage == "updated" }
+
+        try await module.deleteCachedViews([1], snapshot: snapshot, repository: repository)
+
+        let contexts = await repository.receivedContexts
+        XCTAssertFalse(contexts.isEmpty)
+        XCTAssertTrue(contexts.allSatisfy { $0 == context })
+    }
+
     func testProgressVisibilityAndDismissDoNotCancelBackgroundOperation() async throws {
         let repository = FakeCacheOperationRepository(cachedViews: [1], delayNanoseconds: 20_000_000)
         let module = ReaderCacheOperationModule()
@@ -152,6 +191,7 @@ final class ReaderCacheOperationModuleTests: XCTestCase {
 private actor FakeCacheOperationRepository: ReaderCacheOperationRepository {
     private(set) var deletedViews: [Set<Int>] = []
     private(set) var cachedBatches: [Set<Int>] = []
+    private(set) var receivedContexts: [ReaderCacheOperationContext] = []
     private var storedCachedViews: Set<Int>
     private let delayNanoseconds: UInt64
 
@@ -160,31 +200,26 @@ private actor FakeCacheOperationRepository: ReaderCacheOperationRepository {
         self.delayNanoseconds = delayNanoseconds
     }
 
-    func cachedViews(
-        for threadURL: URL,
-        authorID: String?,
-        contentSource: ReaderContentSource?
-    ) async -> Set<Int> {
-        storedCachedViews
+    func cachedViews(for context: ReaderCacheOperationContext) async -> Set<Int> {
+        receivedContexts.append(context)
+        return storedCachedViews
     }
 
     func deleteCachedViews(
         _ views: Set<Int>,
-        for threadURL: URL,
-        authorID: String?,
-        contentSource: ReaderContentSource?
+        for context: ReaderCacheOperationContext
     ) async throws {
+        receivedContexts.append(context)
         deletedViews.append(views)
         storedCachedViews.subtract(views)
     }
 
     func cacheViews(
         _ views: Set<Int>,
-        for threadURL: URL,
-        authorID: String?,
-        contentSource: ReaderContentSource?,
+        for context: ReaderCacheOperationContext,
         progress: (@Sendable (ReaderCacheBatchProgress) async -> Void)?
     ) async -> ReaderCacheBatchResult {
+        receivedContexts.append(context)
         let targets = views.sorted()
         cachedBatches.append(Set(targets))
         var completedViews: [Int] = []
