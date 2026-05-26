@@ -150,6 +150,52 @@ final class ReaderContainerModelTests: XCTestCase {
         }
     }
 
+    func testVerticalNearEndPrefetchMergesNextWebView() async throws {
+        let model = try await makeModel(
+            documents: [
+                makeDocument(view: 1, maxView: 2, chapterTitles: ["第一章", "第二章"]),
+                makeDocument(view: 2, maxView: 2, chapterTitles: ["第三章"]),
+            ],
+            settings: ReaderAppearanceSettings(readingMode: .vertical)
+        )
+
+        await MainActor.run {
+            model.updateCurrentPage(max(model.renderedPageCount - 1, 0))
+        }
+
+        try await waitFor {
+            await MainActor.run {
+                Set(model.pages.map(\.documentView)).isSuperset(of: [1, 2])
+            }
+        }
+
+        await MainActor.run {
+            XCTAssertEqual(model.currentView, 1)
+            XCTAssertTrue(model.pages.contains { $0.documentView == 2 })
+        }
+    }
+
+    func testPagedNearEndPrefetchDoesNotMergeNextWebView() async throws {
+        let model = try await makeModel(
+            documents: [
+                makeDocument(view: 1, maxView: 2, chapterTitles: ["第一章", "第二章"]),
+                makeDocument(view: 2, maxView: 2, chapterTitles: ["第三章"]),
+            ],
+            settings: ReaderAppearanceSettings(readingMode: .paged)
+        )
+
+        await MainActor.run {
+            model.updateCurrentPage(max(model.renderedPageCount - 1, 0))
+        }
+
+        try await Task.sleep(nanoseconds: 100_000_000)
+
+        await MainActor.run {
+            XCTAssertEqual(model.currentView, 1)
+            XCTAssertEqual(Set(model.pages.map(\.documentView)), [1])
+        }
+    }
+
     func testProgressSliderPreviewLabelUsesEditingTargetPage() async throws {
         let model = try await makeModel(
             documents: [
