@@ -1,7 +1,6 @@
 import Foundation
 import XCTest
 @testable import YamiboReaderCore
-@testable import YamiboReaderUI
 
 @MainActor
 final class ReaderChapterCommentsModuleTests: XCTestCase {
@@ -136,6 +135,88 @@ final class ReaderChapterCommentsModuleTests: XCTestCase {
         XCTAssertEqual(module.state, .unsupported)
         XCTAssertTrue(adapter.initialTargets.isEmpty)
     }
+
+    func testRefreshNilTargetIsUnsupported() async throws {
+        let adapter = ChapterCommentsAdapterSpy()
+        let module = adapter.makeModule()
+
+        await module.refresh(nil)
+
+        XCTAssertEqual(module.state, .unsupported)
+        XCTAssertTrue(adapter.initialTargets.isEmpty)
+    }
+
+    func testCacheIsSeparatedByFullTarget() async throws {
+        let target = makeTarget()
+        let sameThreadDifferentOwner = makeTarget(ownerPostID: "101")
+        let adapter = ChapterCommentsAdapterSpy()
+        adapter.initialResults = [
+            .success(makePage(target: target, bodies: ["first-owner"])),
+            .success(makePage(target: sameThreadDifferentOwner, bodies: ["second-owner"]))
+        ]
+        let module = adapter.makeModule()
+
+        await module.load(target)
+        await module.load(sameThreadDifferentOwner)
+        await module.load(target)
+
+        guard case let .loaded(loadedTarget, page) = module.state else {
+            XCTFail("Expected cached comments for the original full target")
+            return
+        }
+        XCTAssertEqual(loadedTarget, target)
+        XCTAssertEqual(page.comments.map(\.body), ["first-owner"])
+        XCTAssertEqual(adapter.initialTargets, [target, sameThreadDifferentOwner])
+    }
+
+    func testLoadMoreWithoutLoadedStateDoesNotCallAdapter() async throws {
+        let adapter = ChapterCommentsAdapterSpy()
+        let module = adapter.makeModule()
+
+        await module.loadNextPage()
+
+        XCTAssertTrue(adapter.moreRequests.isEmpty)
+        XCTAssertFalse(module.isLoadingMore)
+    }
+
+    func testLoadMoreWithoutNextViewDoesNotCallAdapter() async throws {
+        let target = makeTarget()
+        let adapter = ChapterCommentsAdapterSpy()
+        adapter.initialResults = [
+            .success(makePage(target: target, bodies: ["only-page"], nextView: nil))
+        ]
+        let module = adapter.makeModule()
+
+        await module.load(target)
+        await module.loadNextPage()
+
+        XCTAssertTrue(adapter.moreRequests.isEmpty)
+        XCTAssertFalse(module.isLoadingMore)
+    }
+
+    func testLoadCachedTargetClearsRefreshErrorAndPreservesLoadMoreError() async throws {
+        let target = makeTarget()
+        let adapter = ChapterCommentsAdapterSpy()
+        adapter.initialResults = [
+            .success(makePage(target: target, bodies: ["cached"], nextView: 2)),
+            .failure(TestError("refresh failed"))
+        ]
+        adapter.moreResults = [.failure(TestError("more failed"))]
+        let module = adapter.makeModule()
+
+        await module.load(target)
+        await module.refresh(target)
+        await module.loadNextPage()
+        await module.load(target)
+
+        guard case let .loaded(_, page) = module.state else {
+            XCTFail("Expected cached comments")
+            return
+        }
+        XCTAssertEqual(page.comments.map(\.body), ["cached"])
+        XCTAssertNil(module.refreshError)
+        XCTAssertEqual(module.loadMoreError, "more failed")
+    }
 }
 
 @MainActor
@@ -179,12 +260,17 @@ private struct TestError: LocalizedError {
     }
 }
 
-private func makeTarget() -> ReaderChapterCommentTarget {
+private func makeTarget(
+    ownerPostID: String = "100",
+    title: String? = "第一章",
+    authorID: String? = nil
+) -> ReaderChapterCommentTarget {
     ReaderChapterCommentTarget(
         threadURL: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9001&mobile=2")!,
         view: 1,
-        ownerPostID: "100",
-        title: "第一章"
+        ownerPostID: ownerPostID,
+        title: title,
+        authorID: authorID
     )
 }
 
