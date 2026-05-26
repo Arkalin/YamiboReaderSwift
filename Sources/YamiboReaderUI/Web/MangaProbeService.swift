@@ -7,9 +7,24 @@ import WebKit
 
 public struct MangaProbeService {
     private let appContext: YamiboAppContext
+    private let dynamicProbe: @MainActor (MangaLaunchContext, String?) async -> MangaProbeOutcome
 
     public init(appContext: YamiboAppContext) {
+        self.init(appContext: appContext, dynamicProbe: nil)
+    }
+
+    init(
+        appContext: YamiboAppContext,
+        dynamicProbe: (@MainActor (MangaLaunchContext, String?) async -> MangaProbeOutcome)?
+    ) {
         self.appContext = appContext
+        self.dynamicProbe = dynamicProbe ?? { [appContext] launchContext, fallbackTitle in
+            await Self.probeWithHiddenWebView(
+                appContext: appContext,
+                launchContext: launchContext,
+                fallbackTitle: fallbackTitle
+            )
+        }
     }
 
     @MainActor
@@ -29,10 +44,7 @@ public struct MangaProbeService {
             }
         }
 
-        return await probeWithHiddenWebView(
-            launchContext: launchContext,
-            fallbackTitle: currentTitle
-        )
+        return await dynamicProbe(launchContext, currentTitle)
     }
 
     static func immediateOutcome(
@@ -73,7 +85,8 @@ public struct MangaProbeService {
     }
 
     @MainActor
-    private func probeWithHiddenWebView(
+    private static func probeWithHiddenWebView(
+        appContext: YamiboAppContext,
         launchContext: MangaLaunchContext,
         fallbackTitle: String?
     ) async -> MangaProbeOutcome {
@@ -289,7 +302,25 @@ private extension MangaProbeOutcome {
 #else
 
 public struct MangaProbeService {
-    public init(appContext: YamiboAppContext) {}
+    private let dynamicProbe: @MainActor (MangaLaunchContext, String?) async -> MangaProbeOutcome
+    private let usesInjectedDynamicProbe: Bool
+
+    public init(appContext: YamiboAppContext) {
+        self.init(appContext: appContext, dynamicProbe: nil)
+    }
+
+    init(
+        appContext _: YamiboAppContext,
+        dynamicProbe: (@MainActor (MangaLaunchContext, String?) async -> MangaProbeOutcome)?
+    ) {
+        usesInjectedDynamicProbe = dynamicProbe != nil
+        self.dynamicProbe = dynamicProbe ?? { launchContext, _ in
+            .fallback(
+                reason: .timeout,
+                suggestedWebContext: Self.makeSuggestedWebContext(from: launchContext)
+            )
+        }
+    }
 
     public func probe(
         launchContext: MangaLaunchContext,
@@ -297,17 +328,18 @@ public struct MangaProbeService {
         currentTitle: String?
     ) async -> MangaProbeOutcome {
         if let currentHTML {
-            return Self.immediateOutcome(
+            let immediateOutcome = Self.immediateOutcome(
                 launchContext: launchContext,
                 html: currentHTML,
                 title: currentTitle
             )
+            if usesInjectedDynamicProbe, !Self.shouldCompleteAfterImmediateOutcome(immediateOutcome) {
+                return await dynamicProbe(launchContext, currentTitle)
+            }
+            return immediateOutcome
         }
 
-        return .fallback(
-            reason: .timeout,
-            suggestedWebContext: Self.makeSuggestedWebContext(from: launchContext)
-        )
+        return await dynamicProbe(launchContext, currentTitle)
     }
 
     static func immediateOutcome(
