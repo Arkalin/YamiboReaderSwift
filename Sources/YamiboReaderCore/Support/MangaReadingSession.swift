@@ -9,6 +9,7 @@ public protocol MangaReadingDirectoryResolving: Sendable {
 
 public actor MangaReadingSession {
     public typealias DocumentLoader = @Sendable (URL, String?) async throws -> MangaChapterDocument
+    public typealias ChapterProbe = @MainActor @Sendable (MangaLaunchContext) async -> MangaProbeOutcome
 
     public struct Snapshot: Equatable, Sendable {
         public var directory: MangaDirectory
@@ -24,26 +25,40 @@ public actor MangaReadingSession {
         case loaded(MangaChapterWindowSnapshot)
         case alreadyLoaded(pageIndex: Int)
         case reopenNative(MangaLaunchContext)
+        case fallbackWeb(MangaWebContext)
+        case ignored
+    }
+
+    private enum ProbeRecovery: Sendable {
+        case document(MangaChapterDocument)
+        case fallbackWeb(MangaWebContext)
     }
 
     private let context: MangaLaunchContext
     private let documentLoader: DocumentLoader
     private let directoryResolver: any MangaReadingDirectoryResolving
+    private let chapterProbe: ChapterProbe?
     private let maxLoadedDocuments: Int
+    private let directLoadTimeoutNanoseconds: UInt64
     private var directory: MangaDirectory?
     private var window: MangaChapterWindow?
     private var documentTasks: [String: Task<MangaChapterDocument, Error>] = [:]
+    private var jumpGeneration = 0
 
     public init(
         context: MangaLaunchContext,
         documentLoader: @escaping DocumentLoader,
         directoryResolver: any MangaReadingDirectoryResolving,
-        maxLoadedDocuments: Int = 10
+        chapterProbe: ChapterProbe? = nil,
+        maxLoadedDocuments: Int = 10,
+        directLoadTimeoutNanoseconds: UInt64 = 12_000_000_000
     ) {
         self.context = context
         self.documentLoader = documentLoader
         self.directoryResolver = directoryResolver
+        self.chapterProbe = chapterProbe
         self.maxLoadedDocuments = max(1, maxLoadedDocuments)
+        self.directLoadTimeoutNanoseconds = directLoadTimeoutNanoseconds
     }
 
     public func prepare() async throws -> Snapshot {
@@ -115,6 +130,8 @@ public actor MangaReadingSession {
         guard var chapterWindow = window, let currentDirectory = directory else {
             throw YamiboError.underlying("Manga reading session is not prepared.")
         }
+        jumpGeneration += 1
+        let generation = jumpGeneration
 
         if let loadedIndex = chapterWindow.snapshot.pages.firstIndex(where: { page in
             page.tid == chapter.tid && page.localIndex == 0
@@ -135,7 +152,19 @@ public actor MangaReadingSession {
             return .reopenNative(makeNativeLaunchContext(for: chapter, directory: currentDirectory))
         }
 
-        let document = try await loadDocument(for: chapter.url, htmlOverride: nil)
+        let document: MangaChapterDocument
+        do {
+            document = try await loadDocumentForJump(for: chapter.url)
+        } catch {
+            switch try await recoverDocumentViaProbe(for: chapter, in: currentDirectory) {
+            case let .document(recoveredDocument):
+                document = recoveredDocument
+            case let .fallbackWeb(context):
+                guard generation == jumpGeneration else { return .ignored }
+                return .fallbackWeb(context)
+            }
+        }
+        guard generation == jumpGeneration else { return .ignored }
         let targetPosition = MangaReadingPosition(tid: document.tid, localIndex: 0)
         let result = chapterWindow.insertAdjacentDocument(document, preserving: targetPosition)
         let snapshot: MangaChapterWindowSnapshot
@@ -207,6 +236,67 @@ public actor MangaReadingSession {
         documentTasks[tid] = task
         defer { documentTasks.removeValue(forKey: tid) }
         return try await task.value
+    }
+
+    private func loadDocumentForJump(for url: URL) async throws -> MangaChapterDocument {
+        try await withThrowingTaskGroup(of: MangaChapterDocument.self) { group in
+            group.addTask { [directLoadTimeoutNanoseconds] in
+                try await Task.sleep(nanoseconds: directLoadTimeoutNanoseconds)
+                throw YamiboError.underlying(L10n.string("manga.chapter_load_timeout"))
+            }
+            group.addTask {
+                try await self.loadDocument(for: url, htmlOverride: nil)
+            }
+
+            let result = try await group.next()!
+            group.cancelAll()
+            return result
+        }
+    }
+
+    private func recoverDocumentViaProbe(
+        for chapter: MangaChapter,
+        in directory: MangaDirectory
+    ) async throws -> ProbeRecovery {
+        guard let chapterProbe else {
+            throw YamiboError.underlying(L10n.string("manga.chapter_load_timeout"))
+        }
+        let outcome = await chapterProbe(makeNativeLaunchContext(for: chapter, directory: directory))
+        switch outcome {
+        case let .success(payload):
+            guard !payload.images.isEmpty else {
+                throw YamiboError.parsingFailed(context: L10n.string("context.manga_images"))
+            }
+            let title = MangaTitleCleaner.cleanThreadTitle(
+                payload.title.isEmpty ? chapter.rawTitle : payload.title
+            )
+            return .document(
+                MangaChapterDocument(
+                    tid: chapter.tid,
+                    ownerPostID: MangaHTMLParser.extractFirstPostID(from: payload.html ?? "") ?? chapter.tid,
+                    chapterTitle: title,
+                    chapterURL: YamiboRoute.thread(url: chapter.url, page: 1, authorID: nil).url,
+                    pages: payload.images,
+                    html: payload.html ?? ""
+                )
+            )
+        case let .fallback(reason, _):
+            switch reason {
+            case .retryableNetwork, .timeout, .notManga, .noImages, .webProcessTerminated:
+                return .fallbackWeb(makeWebFallbackContext(for: chapter))
+            }
+        }
+    }
+
+    private func makeWebFallbackContext(for chapter: MangaChapter) -> MangaWebContext {
+        MangaWebContext(
+            currentURL: chapter.url,
+            originalThreadURL: context.originalThreadURL,
+            source: context.source,
+            initialPage: 0,
+            autoOpenNative: false,
+            waitingForNativeReturn: false
+        )
     }
 
     private func makeNativeLaunchContext(
