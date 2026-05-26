@@ -42,15 +42,21 @@ public struct NovelReadingWorkflowState: Equatable, Sendable {
     public var snapshot: NovelReadingSnapshot
     public var currentAuthorID: String?
     public var cachedViews: Set<Int>
+    public var currentDocument: ReaderPageDocument
+    public var prefetchedDocument: ReaderPageDocument?
 
     public init(
         snapshot: NovelReadingSnapshot,
         currentAuthorID: String?,
-        cachedViews: Set<Int> = []
+        cachedViews: Set<Int> = [],
+        currentDocument: ReaderPageDocument,
+        prefetchedDocument: ReaderPageDocument? = nil
     ) {
         self.snapshot = snapshot
         self.currentAuthorID = currentAuthorID
         self.cachedViews = cachedViews
+        self.currentDocument = currentDocument
+        self.prefetchedDocument = prefetchedDocument
     }
 }
 
@@ -103,6 +109,21 @@ public actor NovelReadingWorkflow {
         forceRefresh: Bool
     ) async throws -> NovelReadingWorkflowState {
         let view = state?.snapshot.currentView ?? context.initialView ?? 1
+        return try await loadView(
+            view,
+            preferredPage: preferredPage,
+            preferredResumePoint: preferredResumePoint,
+            forceRefresh: forceRefresh
+        )
+    }
+
+    @discardableResult
+    public func loadView(
+        _ view: Int,
+        preferredPage: Int,
+        preferredResumePoint: ReaderResumePoint?,
+        forceRefresh: Bool
+    ) async throws -> NovelReadingWorkflowState {
         return try await load(
             view: view,
             preferredPage: preferredPage,
@@ -126,6 +147,21 @@ public actor NovelReadingWorkflow {
             authorID: authorID,
             contentSource: contentSource == .allPostsPage ? inferredContentSource(for: authorID) : contentSource
         )
+    }
+
+    public func updateSettings(_ settings: ReaderAppearanceSettings) {
+        self.settings = settings
+        session?.applySettings(settings)
+    }
+
+    public func updateLayout(_ layout: ReaderContainerLayout) {
+        self.layout = layout
+        session?.updateLayout(layout)
+    }
+
+    public func updatePagedPresentationEnvironment(isPad: Bool) {
+        usesPadPresentation = isPad
+        session?.updatePagedPresentationEnvironment(isPad: isPad)
     }
 
     private func cacheContext(for document: ReaderPageDocument) -> NovelReadingCacheContext {
@@ -165,6 +201,20 @@ public actor NovelReadingWorkflow {
         currentAuthorID = nextDocument.resolvedAuthorID ?? currentAuthorID ?? context.authorID
         session?.acceptPrefetchedDocument(nextDocument)
         return await updateStateFromSession(refreshCachedViews: false)
+    }
+
+    @discardableResult
+    public func promotePrefetchedDocument(
+        preferredPage: Int,
+        resumePoint: ReaderResumePoint?
+    ) async -> NovelReadingWorkflowState? {
+        guard let nextDocument = prefetchedDocument else { return nil }
+        currentDocument = nextDocument
+        prefetchedDocument = nil
+        currentAuthorID = nextDocument.resolvedAuthorID ?? currentAuthorID ?? context.authorID
+        let resumePoint = resumePoint?.view == nextDocument.view ? resumePoint : nil
+        session?.promotePrefetchedDocument(preferredPage: preferredPage, resumePoint: resumePoint)
+        return await updateStateFromSession(refreshCachedViews: true)
     }
 
     private func load(
@@ -207,7 +257,8 @@ public actor NovelReadingWorkflow {
     }
 
     private func updateStateFromSession(refreshCachedViews: Bool) async -> NovelReadingWorkflowState {
-        guard let snapshot = session?.snapshot else {
+        guard let snapshot = session?.snapshot,
+              let currentDocument else {
             preconditionFailure("Novel reading workflow has no active session")
         }
         currentAuthorID = snapshot.currentAuthorID ?? currentAuthorID
@@ -224,7 +275,9 @@ public actor NovelReadingWorkflow {
         let nextState = NovelReadingWorkflowState(
             snapshot: snapshot,
             currentAuthorID: currentAuthorID,
-            cachedViews: cachedViews
+            cachedViews: cachedViews,
+            currentDocument: currentDocument,
+            prefetchedDocument: prefetchedDocument
         )
         state = nextState
         return nextState

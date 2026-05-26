@@ -42,6 +42,7 @@ public final class ReaderContainerModel: ObservableObject {
 
     private let appContext: YamiboAppContext
     private var repository: ReaderRepository?
+    private var readingWorkflow: NovelReadingWorkflow?
     private var readingSession: NovelReadingSession?
     private var layout: ReaderContainerLayout = .zero
     private var currentDocument: ReaderPageDocument?
@@ -194,6 +195,9 @@ public final class ReaderContainerModel: ObservableObject {
         guard usesPadPresentation != isPad else { return }
         usesPadPresentation = isPad
         guard settings.readingMode == .paged else { return }
+        Task { [readingWorkflow] in
+            await readingWorkflow?.updatePagedPresentationEnvironment(isPad: isPad)
+        }
         readingSession?.updatePagedPresentationEnvironment(isPad: isPad)
         syncFromReadingSession()
     }
@@ -299,26 +303,21 @@ public final class ReaderContainerModel: ObservableObject {
             settings = appSettings.reader
             applePencilPageTurnSettings = appSettings.applePencilPageTurn
             sessionState = await appContext.sessionStore.load()
+            if let repository {
+                readingWorkflow = NovelReadingWorkflow(
+                    context: context,
+                    settings: settings,
+                    layout: layout,
+                    repository: repository,
+                    usesPadPresentation: usesPadPresentation
+                )
+            }
         }
         if pages.isEmpty {
             let favorite = await appContext.favoriteStore.favorite(for: context.threadURL)
-            let initialResumePoint = favorite?.novelResumePoint
-            let initialView = if let initialResumePoint {
-                initialResumePoint.view
-            } else {
-                context.initialView ?? 1
-            }
-            let preferredPage = if initialResumePoint == nil {
-                max(0, context.initialPage ?? 0)
-            } else {
-                0
-            }
-            currentAuthorID = initialResumePoint?.authorID ?? favorite?.authorID ?? context.authorID
-            await load(
-                view: initialView,
-                preferredPage: preferredPage,
-                preferredResumePoint: initialResumePoint,
-                forceRefresh: false
+            await startReadingWorkflow(
+                resumePoint: favorite?.novelResumePoint,
+                favoriteAuthorID: favorite?.authorID
             )
         } else {
             repaginate(resumePoint: captureCurrentResumePoint())
@@ -329,6 +328,9 @@ public final class ReaderContainerModel: ObservableObject {
     public func updateLayout(_ layout: ReaderContainerLayout) {
         guard self.layout != layout else { return }
         self.layout = layout
+        Task { [readingWorkflow] in
+            await readingWorkflow?.updateLayout(layout)
+        }
         readingSession?.updateLayout(layout)
         syncFromReadingSession()
     }
@@ -427,6 +429,9 @@ public final class ReaderContainerModel: ObservableObject {
             applePencilPageTurnSettings: newApplePencilPageTurnSettings
         )
         guard shouldRepaginate else { return }
+        Task { [readingWorkflow] in
+            await readingWorkflow?.updateSettings(newSettings)
+        }
         readingSession?.applySettings(newSettings)
         syncFromReadingSession()
     }
@@ -631,43 +636,51 @@ public final class ReaderContainerModel: ObservableObject {
         preferredResumePoint: ReaderResumePoint?,
         forceRefresh: Bool
     ) async {
-        guard let repository else { return }
+        guard let workflow = await ensureReadingWorkflow() else { return }
         isLoading = true
         errorMessage = nil
         do {
-            if forceRefresh {
-                let context = cacheContext(forView: view)
-                try await repository.deleteCachedViews(
-                    [view],
-                    for: self.context.threadURL,
-                    authorID: context.authorID,
-                    contentSource: context.contentSource
-                )
-            }
-            let request = ReaderPageRequest(
-                threadURL: context.threadURL,
-                view: view,
-                authorID: currentAuthorID ?? context.authorID
-            )
-            let document = forceRefresh
-                ? try await repository.loadPageIgnoringCache(request)
-                : try await repository.loadPage(request)
-            currentDocument = document
-            prefetchedDocument = nil
-            currentAuthorID = document.resolvedAuthorID ?? currentAuthorID ?? context.authorID
-            currentView = document.view
-            maxView = document.maxView
-            readingSession = NovelReadingSession(
-                document: document,
-                settings: settings,
-                layout: layout,
+            let state = try await workflow.loadView(
+                view,
                 preferredPage: preferredPage,
-                resumePoint: preferredResumePoint,
-                usesPadPresentation: usesPadPresentation,
-                currentAuthorID: currentAuthorID
+                preferredResumePoint: preferredResumePoint,
+                forceRefresh: forceRefresh
             )
-            syncFromReadingSession()
-            await refreshCachedState()
+            syncFromWorkflowState(
+                state,
+                preferredPage: preferredPage,
+                preferredResumePoint: preferredResumePoint,
+                rebuildLocalSession: true
+            )
+            isLoading = false
+
+            Task {
+                await prefetchIfNeeded(for: currentPageIndex)
+            }
+        } catch {
+            errorMessage = error.localizedDescription
+            isLoading = false
+        }
+    }
+
+    private func startReadingWorkflow(resumePoint: ReaderResumePoint?, favoriteAuthorID: String?) async {
+        guard let workflow = await ensureReadingWorkflow() else { return }
+        isLoading = true
+        errorMessage = nil
+        do {
+            let state = try await workflow.start(
+                initial: NovelReadingInitialPosition(
+                    resumePoint: resumePoint,
+                    favoriteAuthorID: favoriteAuthorID
+                )
+            )
+            let preferredPage = resumePoint == nil ? max(0, context.initialPage ?? 0) : 0
+            syncFromWorkflowState(
+                state,
+                preferredPage: preferredPage,
+                preferredResumePoint: resumePoint,
+                rebuildLocalSession: true
+            )
             isLoading = false
 
             Task {
@@ -704,6 +717,22 @@ public final class ReaderContainerModel: ObservableObject {
             preconditionFailure("Reader repository should be initialized")
         }
         return repository
+    }
+
+    private func ensureReadingWorkflow() async -> NovelReadingWorkflow? {
+        let repository = await ensureReaderRepository()
+        if readingWorkflow == nil {
+            readingWorkflow = NovelReadingWorkflow(
+                context: context,
+                settings: settings,
+                layout: layout,
+                repository: repository,
+                usesPadPresentation: usesPadPresentation
+            )
+        }
+        await readingWorkflow?.updateSettings(settings)
+        await readingWorkflow?.updateLayout(layout)
+        return readingWorkflow
     }
 
     private func syncChapterComments(from module: ReaderChapterCommentsModule) {
@@ -751,25 +780,65 @@ public final class ReaderContainerModel: ObservableObject {
         currentDocumentPageCount = snapshot.pages.filter { $0.documentView == snapshot.currentView }.count
     }
 
+    private func syncFromWorkflowState(
+        _ state: NovelReadingWorkflowState,
+        preferredPage: Int,
+        preferredResumePoint: ReaderResumePoint?,
+        rebuildLocalSession: Bool
+    ) {
+        currentDocument = state.currentDocument
+        prefetchedDocument = state.prefetchedDocument
+        currentAuthorID = state.currentAuthorID
+        if rebuildLocalSession {
+            readingSession = NovelReadingSession(
+                document: state.currentDocument,
+                settings: settings,
+                layout: layout,
+                preferredPage: preferredPage,
+                resumePoint: preferredResumePoint,
+                usesPadPresentation: usesPadPresentation,
+                currentAuthorID: state.currentAuthorID
+            )
+            if let prefetchedDocument = state.prefetchedDocument {
+                readingSession?.acceptPrefetchedDocument(prefetchedDocument)
+            }
+        } else if let prefetchedDocument = state.prefetchedDocument,
+                  prefetchedDocument.view != self.prefetchedDocument?.view {
+            readingSession?.acceptPrefetchedDocument(prefetchedDocument)
+        }
+        syncFromWorkflowSnapshot(state.snapshot)
+        syncCachedViews(state.cachedViews)
+    }
+
+    private func syncFromWorkflowSnapshot(_ snapshot: NovelReadingSnapshot) {
+        pages = snapshot.pages
+        chapters = snapshot.chapters
+        currentPageIndex = snapshot.currentPageIndex
+        currentPageIntraProgress = snapshot.currentPageIntraProgress
+        currentView = snapshot.currentView
+        maxView = snapshot.maxView
+        currentChapterTitle = snapshot.currentChapterTitle
+        currentContentSource = snapshot.currentContentSource
+        retainedChapterCount = snapshot.retainedChapterCount
+        filteredChapterCandidateCount = snapshot.filteredChapterCandidateCount
+        pagedSpreads = snapshot.pagedSpreads
+        prefetchedStartIndex = snapshot.prefetchedStartIndex
+        currentAuthorID = snapshot.currentAuthorID ?? currentAuthorID
+        currentDocumentPageCount = snapshot.pages.filter { $0.documentView == snapshot.currentView }.count
+    }
+
     private func prefetchIfNeeded(for pageIndex: Int) async {
-        guard let repository, let currentDocument else { return }
-        guard currentDocument.view < currentDocument.maxView else { return }
-        let thresholdIndex = max(currentDocumentPageCount - 2, 0)
-        guard pageIndex >= thresholdIndex else { return }
-        if let prefetchedDocument, prefetchedDocument.view == currentDocument.view + 1 { return }
-
-        let nextRequest = ReaderPageRequest(
-            threadURL: context.threadURL,
-            view: currentDocument.view + 1,
-            authorID: currentAuthorID ?? currentDocument.resolvedAuthorID ?? context.authorID
-        )
-        guard let nextDocument = try? await repository.loadPage(nextRequest) else { return }
-
-        prefetchedDocument = nextDocument
-        currentAuthorID = nextDocument.resolvedAuthorID ?? currentAuthorID ?? context.authorID
-        maxView = max(maxView, nextDocument.maxView)
-        readingSession?.acceptPrefetchedDocument(nextDocument)
-        syncFromReadingSession()
+        guard let workflow = await ensureReadingWorkflow(),
+              let state = await workflow.prefetchIfNeeded(forPageIndex: pageIndex) else { return }
+        let previousPrefetchedView = prefetchedDocument?.view
+        currentDocument = state.currentDocument
+        prefetchedDocument = state.prefetchedDocument
+        currentAuthorID = state.currentAuthorID
+        if let nextDocument = state.prefetchedDocument,
+           nextDocument.view != previousPrefetchedView {
+            readingSession?.acceptPrefetchedDocument(nextDocument)
+        }
+        syncFromWorkflowSnapshot(state.snapshot)
     }
 
     private func chapterTitle(for pageIndex: Int) -> String? {
@@ -990,17 +1059,11 @@ public final class ReaderContainerModel: ObservableObject {
 
     private func cacheContext(forView view: Int) -> (authorID: String?, contentSource: ReaderContentSource?) {
         if currentDocument?.view == view {
-            return (
-                currentDocument?.resolvedAuthorID ?? currentAuthorID ?? context.authorID,
-                currentDocument?.contentSource ?? inferredContentSource(for: currentDocument?.resolvedAuthorID ?? currentAuthorID ?? context.authorID)
-            )
+            return cacheContext(for: currentDocument)
         }
 
         if prefetchedDocument?.view == view {
-            return (
-                prefetchedDocument?.resolvedAuthorID ?? currentAuthorID ?? context.authorID,
-                prefetchedDocument?.contentSource ?? inferredContentSource(for: prefetchedDocument?.resolvedAuthorID ?? currentAuthorID ?? context.authorID)
-            )
+            return cacheContext(for: prefetchedDocument)
         }
 
         let displayedAuthorID = displayedDocument?.resolvedAuthorID ?? currentAuthorID ?? context.authorID
@@ -1011,6 +1074,26 @@ public final class ReaderContainerModel: ObservableObject {
                 ? inferredContentSource(for: displayedAuthorID)
                 : displayedContentSource
         )
+    }
+
+    private func cacheContext(for document: ReaderPageDocument?) -> (authorID: String?, contentSource: ReaderContentSource?) {
+        guard let document else {
+            let authorID = currentAuthorID ?? context.authorID
+            return (authorID, inferredContentSource(for: authorID))
+        }
+
+        switch document.contentSource {
+        case .authorFilteredPage:
+            return (
+                document.resolvedAuthorID ?? currentAuthorID ?? context.authorID,
+                .authorFilteredPage
+            )
+        case .fallbackUnfilteredPage:
+            return (nil, .fallbackUnfilteredPage)
+        case .allPostsPage:
+            let authorID = document.resolvedAuthorID ?? currentAuthorID ?? context.authorID
+            return (authorID, inferredContentSource(for: authorID))
+        }
     }
 
     private func inferredContentSource(for authorID: String?) -> ReaderContentSource {
@@ -1059,6 +1142,10 @@ public final class ReaderContainerModel: ObservableObject {
 
     private func promotePrefetchedDocument(startingAt preferredPage: Int, preferredResumePoint: ReaderResumePoint?) async {
         guard let nextDocument = prefetchedDocument else { return }
+        let workflowState = await readingWorkflow?.promotePrefetchedDocument(
+            preferredPage: preferredPage,
+            resumePoint: preferredResumePoint
+        )
         currentDocument = nextDocument
         prefetchedDocument = nil
         currentAuthorID = nextDocument.resolvedAuthorID ?? currentAuthorID ?? context.authorID
@@ -1068,6 +1155,9 @@ public final class ReaderContainerModel: ObservableObject {
             syncFromReadingSession()
         } else {
             applyPagination(for: nextDocument, preferredPage: preferredPage, preferredResumePoint: resumePoint)
+        }
+        if let workflowState {
+            syncCachedViews(workflowState.cachedViews)
         }
         await prefetchIfNeeded(for: currentPageIndex)
     }
