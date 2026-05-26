@@ -115,24 +115,16 @@ public enum ReaderCacheOperationMode: Sendable {
 }
 
 public protocol ReaderCacheOperationRepository: Sendable {
-    func cachedViews(
-        for threadURL: URL,
-        authorID: String?,
-        contentSource: ReaderContentSource?
-    ) async -> Set<Int>
+    func cachedViews(for context: ReaderCacheOperationContext) async -> Set<Int>
 
     func deleteCachedViews(
         _ views: Set<Int>,
-        for threadURL: URL,
-        authorID: String?,
-        contentSource: ReaderContentSource?
+        for context: ReaderCacheOperationContext
     ) async throws
 
     func cacheViews(
         _ views: Set<Int>,
-        for threadURL: URL,
-        authorID: String?,
-        contentSource: ReaderContentSource?,
+        for context: ReaderCacheOperationContext,
         progress: (@Sendable (ReaderCacheBatchProgress) async -> Void)?
     ) async -> ReaderCacheBatchResult
 }
@@ -144,35 +136,36 @@ public struct ReaderRepositoryCacheOperationAdapter: ReaderCacheOperationReposit
         self.repository = repository
     }
 
-    public func cachedViews(
-        for threadURL: URL,
-        authorID: String?,
-        contentSource: ReaderContentSource?
-    ) async -> Set<Int> {
-        await repository.cachedViews(for: threadURL, authorID: authorID, contentSource: contentSource)
+    public func cachedViews(for context: ReaderCacheOperationContext) async -> Set<Int> {
+        await repository.cachedViews(
+            for: context.threadURL,
+            authorID: context.authorID,
+            contentSource: context.contentSource
+        )
     }
 
     public func deleteCachedViews(
         _ views: Set<Int>,
-        for threadURL: URL,
-        authorID: String?,
-        contentSource: ReaderContentSource?
+        for context: ReaderCacheOperationContext
     ) async throws {
-        try await repository.deleteCachedViews(views, for: threadURL, authorID: authorID, contentSource: contentSource)
+        try await repository.deleteCachedViews(
+            views,
+            for: context.threadURL,
+            authorID: context.authorID,
+            contentSource: context.contentSource
+        )
     }
 
     public func cacheViews(
         _ views: Set<Int>,
-        for threadURL: URL,
-        authorID: String?,
-        contentSource: ReaderContentSource?,
+        for context: ReaderCacheOperationContext,
         progress: (@Sendable (ReaderCacheBatchProgress) async -> Void)?
     ) async -> ReaderCacheBatchResult {
         await repository.cacheViews(
             views,
-            for: threadURL,
-            authorID: authorID,
-            contentSource: contentSource,
+            for: context.threadURL,
+            authorID: context.authorID,
+            contentSource: context.contentSource,
             progress: progress
         )
     }
@@ -260,9 +253,7 @@ public final class ReaderCacheOperationModule {
             do {
                 try await repository.deleteCachedViews(
                     targetViews,
-                    for: snapshot.context.threadURL,
-                    authorID: snapshot.context.authorID,
-                    contentSource: snapshot.context.contentSource
+                    for: snapshot.context
                 )
                 self.syncCachedViews(self.cachedViews.subtracting(targetViews))
                 self.startOperation(
@@ -290,9 +281,7 @@ public final class ReaderCacheOperationModule {
 
         try await repository.deleteCachedViews(
             selection.cachedSelectedViews,
-            for: snapshot.context.threadURL,
-            authorID: snapshot.context.authorID,
-            contentSource: snapshot.context.contentSource
+            for: snapshot.context
         )
         syncCachedViews(cachedViews.subtracting(selection.cachedSelectedViews))
     }
@@ -347,9 +336,7 @@ public final class ReaderCacheOperationModule {
             guard let self else { return }
             let result = await repository.cacheViews(
                 Set(targets),
-                for: snapshot.context.threadURL,
-                authorID: snapshot.context.authorID,
-                contentSource: snapshot.context.contentSource
+                for: snapshot.context
             ) { [weak self] progress in
                 await self?.apply(progress: progress, allTargets: targets)
             }
@@ -379,11 +366,7 @@ public final class ReaderCacheOperationModule {
         summary: @MainActor (ReaderCacheOperationMode, ReaderCacheBatchResult) -> String
     ) async {
         operationTask = nil
-        let refreshedViews = await repository.cachedViews(
-            for: snapshot.context.threadURL,
-            authorID: snapshot.context.authorID,
-            contentSource: snapshot.context.contentSource
-        )
+        let refreshedViews = await repository.cachedViews(for: snapshot.context)
         syncCachedViews(refreshedViews)
 
         state.cachedViews = cachedViews
