@@ -167,6 +167,17 @@ public struct FavoriteLibrary: Equatable, Sendable {
         )
     }
 
+    public mutating func setDisplayName(_ displayName: String?, for favoriteID: String) {
+        let trimmedDisplayName = displayName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let normalized = trimmedDisplayName.isEmpty ? nil : trimmedDisplayName
+        favorites = favorites.map { favorite in
+            guard favorite.id == favoriteID else { return favorite }
+            var favorite = favorite
+            favorite.displayName = normalized
+            return favorite
+        }
+    }
+
     public mutating func reconcileRemoteFavorites(_ remoteFavorites: [Favorite]) {
         let validCollectionIDs = Set(collections.map(\.id))
         let validTagIDs = Set(tags.map(\.id))
