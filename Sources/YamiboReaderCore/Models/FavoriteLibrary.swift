@@ -209,7 +209,11 @@ public struct FavoriteLibrary: Equatable, Sendable {
         let removedFavorites = favorites.filter { localFavorite in
             !remoteCanonicalURLs.contains(Self.canonicalThreadURL(for: localFavorite))
         }
-        archivedMetadata = Self.upsertingArchiveEntries(from: removedFavorites, into: archivedMetadata)
+        archivedMetadata = Self.upsertingArchiveEntries(
+            from: removedFavorites,
+            into: archivedMetadata,
+            validTagIDs: validTagIDs
+        )
             .filter { !restoredArchiveURLs.contains($0.canonicalThreadURL) }
 
         favorites = remoteNewFavorites + favorites.compactMap { localFavorite in
@@ -234,11 +238,13 @@ public struct FavoriteLibrary: Equatable, Sendable {
 
     private static func upsertingArchiveEntries(
         from favorites: [Favorite],
-        into archivedMetadata: [FavoriteMetadataArchiveEntry]
+        into archivedMetadata: [FavoriteMetadataArchiveEntry],
+        validTagIDs: Set<String>
     ) -> [FavoriteMetadataArchiveEntry] {
         var entriesByURL = Dictionary(uniqueKeysWithValues: archivedMetadata.map { ($0.canonicalThreadURL, $0) })
         for favorite in favorites {
-            let entry = FavoriteMetadataArchiveEntry(favorite: favorite)
+            var entry = FavoriteMetadataArchiveEntry(favorite: favorite)
+            entry.tagIDs = entry.tagIDs.filter { validTagIDs.contains($0) }
             entriesByURL[entry.canonicalThreadURL] = entry
         }
         return entriesByURL.values.sorted { lhs, rhs in
