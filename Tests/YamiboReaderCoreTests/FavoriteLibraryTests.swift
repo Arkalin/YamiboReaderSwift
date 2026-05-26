@@ -2,6 +2,41 @@ import Foundation
 import Testing
 @testable import YamiboReaderCore
 
+@Test func favoriteLibrarySetsDisplayNameAndClearsBlankDisplayName() throws {
+    let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=933&mobile=2"))
+    let favorite = Favorite(
+        title: "原标题",
+        url: url,
+        remoteFavoriteID: "remote-933",
+        parentCollectionID: "collection-a",
+        manualOrder: 7,
+        tagIDs: ["tag-a"]
+    )
+    var library = FavoriteLibrary(snapshot: FavoriteLibrarySnapshot(
+        favorites: [favorite],
+        collections: [],
+        tags: [FavoriteTag(id: "tag-a", name: "标签", color: .blue)]
+    ))
+
+    library.setDisplayName("  自定义名称  ", for: favorite.id)
+
+    let renamed = try #require(library.favorites.first)
+    #expect(renamed.displayName == "自定义名称")
+    #expect(renamed.resolvedDisplayTitle == "自定义名称")
+    #expect(renamed.title == favorite.title)
+    #expect(renamed.url == favorite.url)
+    #expect(renamed.remoteFavoriteID == favorite.remoteFavoriteID)
+    #expect(renamed.parentCollectionID == favorite.parentCollectionID)
+    #expect(renamed.manualOrder == favorite.manualOrder)
+    #expect(renamed.tagIDs == favorite.tagIDs)
+
+    library.setDisplayName("   ", for: favorite.id)
+
+    let cleared = try #require(library.favorites.first)
+    #expect(cleared.displayName == nil)
+    #expect(cleared.resolvedDisplayTitle == "原标题")
+}
+
 @Test func favoriteLibraryArchivesRemovedRemoteMetadataWithOnlyValidTags() throws {
     let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=934&mobile=2"))
     let tag = FavoriteTag(id: "tag-valid", name: "有效标签", color: .blue)

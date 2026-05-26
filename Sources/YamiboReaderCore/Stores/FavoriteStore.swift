@@ -518,17 +518,14 @@ public actor FavoriteStore: FavoriteStoring {
     }
 
     public func setDisplayName(_ displayName: String?, for favoriteID: String) async throws -> [Favorite] {
-        let normalized = displayName?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .nilIfEmpty
-        let snapshot = await loadLibrarySnapshot()
-        let updated = snapshot.favorites.map { favorite in
-            guard favorite.id == favoriteID else { return favorite }
-            var favorite = favorite
-            favorite.displayName = normalized
-            return favorite
-        }
-        return try persistLibrary(favorites: updated, collections: snapshot.collections).favorites
+        var library = FavoriteLibrary(snapshot: await loadLibrarySnapshot())
+        library.setDisplayName(displayName, for: favoriteID)
+        return try persistLibrary(
+            favorites: library.snapshot.favorites,
+            collections: library.snapshot.collections,
+            tags: library.snapshot.tags,
+            archivedMetadata: library.snapshot.archivedMetadata
+        ).favorites
     }
 
     public func setType(_ type: FavoriteType, for favoriteID: String) async throws -> [Favorite] {
