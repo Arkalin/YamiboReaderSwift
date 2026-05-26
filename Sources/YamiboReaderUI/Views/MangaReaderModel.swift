@@ -61,7 +61,6 @@ public final class MangaReaderModel: ObservableObject {
     private let chapterProbe: @MainActor (MangaLaunchContext) async -> MangaProbeOutcome
     private var repository: MangaRepository?
     private var readerRepository: ReaderRepository?
-    private var chapterCommentsCache: [ReaderChapterCommentTarget: ChapterCommentsPage] = [:]
     private var chapterWindow: MangaChapterWindow?
     private var chapterDocumentTasks: [String: Task<MangaChapterDocument, Error>] = [:]
     private var chapterJumpTask: Task<Void, Never>?
@@ -77,6 +76,27 @@ public final class MangaReaderModel: ObservableObject {
     private let progressSync: ProgressSyncModule
     private var usesPadPresentation = false
     private var pagedViewportSize: CGSize = .zero
+    private lazy var chapterCommentsModule = ReaderChapterCommentsModule(
+        adapter: ReaderChapterCommentsModule.Adapter(
+            loadInitial: { [weak self] target in
+                guard let self else {
+                    throw ReaderChapterCommentsUnavailableError()
+                }
+                let readerRepository = await self.ensureReaderRepository()
+                return try await readerRepository.loadChapterComments(for: target)
+            },
+            loadMore: { [weak self] target, view in
+                guard let self else {
+                    throw ReaderChapterCommentsUnavailableError()
+                }
+                let readerRepository = await self.ensureReaderRepository()
+                return try await readerRepository.loadMoreChapterComments(for: target, view: view)
+            }
+        ),
+        onChange: { [weak self] module in
+            self?.syncChapterComments(from: module)
+        }
+    )
 
     public init(
         context: MangaLaunchContext,
@@ -245,75 +265,15 @@ public final class MangaReaderModel: ObservableObject {
     }
 
     public func loadChapterComments(for target: ReaderChapterCommentTarget?) async {
-        guard let target else {
-            chapterCommentsState = .unsupported
-            return
-        }
-        if let cached = chapterCommentsCache[target] {
-            chapterCommentsRefreshError = nil
-            chapterCommentsState = .loaded(target, cached)
-            return
-        }
-        await refreshChapterComments(for: target)
+        await chapterCommentsModule.load(target)
     }
 
     public func refreshChapterComments(for target: ReaderChapterCommentTarget?) async {
-        guard let target else {
-            chapterCommentsState = .unsupported
-            return
-        }
-        if readerRepository == nil {
-            readerRepository = await appContext.makeReaderRepository()
-        }
-        guard let readerRepository else {
-            chapterCommentsState = .failed(target, L10n.string("reader.chapter_comments_failed"))
-            return
-        }
-        chapterCommentsState = .loading(target)
-        chapterCommentsLoadMoreError = nil
-        chapterCommentsRefreshError = nil
-        do {
-            let page = try await readerRepository.loadChapterComments(for: target)
-            chapterCommentsCache[target] = page
-            chapterCommentsState = .loaded(target, page)
-        } catch {
-            if let cached = chapterCommentsCache[target] {
-                chapterCommentsRefreshError = error.localizedDescription
-                chapterCommentsState = .loaded(target, cached)
-            } else {
-                chapterCommentsState = .failed(target, error.localizedDescription)
-            }
-        }
+        await chapterCommentsModule.refresh(target)
     }
 
     public func loadNextChapterCommentsPage() async {
-        guard case let .loaded(target, currentPage) = chapterCommentsState,
-              let nextView = currentPage.nextView,
-              !isLoadingMoreChapterComments else {
-            return
-        }
-        if readerRepository == nil {
-            readerRepository = await appContext.makeReaderRepository()
-        }
-        guard let readerRepository else { return }
-
-        isLoadingMoreChapterComments = true
-        chapterCommentsLoadMoreError = nil
-        do {
-            let nextPage = try await readerRepository.loadMoreChapterComments(for: target, view: nextView)
-            let mergedPage = ChapterCommentsPage(
-                target: target,
-                comments: currentPage.comments + nextPage.comments,
-                isBoundaryClosed: nextPage.isBoundaryClosed,
-                nextView: nextPage.nextView
-            )
-            chapterCommentsCache[target] = mergedPage
-            chapterCommentsState = .loaded(target, mergedPage)
-            chapterCommentsRefreshError = nil
-        } catch {
-            chapterCommentsLoadMoreError = error.localizedDescription
-        }
-        isLoadingMoreChapterComments = false
+        await chapterCommentsModule.loadNextPage()
     }
 
     public func clearTransitionFailureIfNeeded() {
@@ -551,6 +511,23 @@ public final class MangaReaderModel: ObservableObject {
             rawTitle: document.chapterTitle,
             html: document.html
         )
+    }
+
+    private func ensureReaderRepository() async -> ReaderRepository {
+        if readerRepository == nil {
+            readerRepository = await appContext.makeReaderRepository()
+        }
+        guard let readerRepository else {
+            preconditionFailure("Reader repository should be initialized")
+        }
+        return readerRepository
+    }
+
+    private func syncChapterComments(from module: ReaderChapterCommentsModule) {
+        chapterCommentsState = module.state
+        isLoadingMoreChapterComments = module.isLoadingMore
+        chapterCommentsLoadMoreError = module.loadMoreError
+        chapterCommentsRefreshError = module.refreshError
     }
 
     private func loadDocument(for url: URL, htmlOverride: String?) async throws -> MangaChapterDocument {
