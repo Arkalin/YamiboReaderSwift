@@ -41,6 +41,7 @@ public struct MangaReaderView: View {
     @State private var verticalRestoreSettleTask: Task<Void, Never>?
     @State private var verticalPageFrames: [MangaPage.ID: CGRect] = [:]
     @State private var isDismissing = false
+    @Environment(\.colorScheme) private var colorScheme
     private let appModel: YamiboAppModel
     private let sliderPreviewHideDelay: TimeInterval = 2.0
 
@@ -389,56 +390,57 @@ public struct MangaReaderView: View {
     }
 
     private func topChrome(topInset: CGFloat) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 12) {
-                ReaderChromeIconButton(systemName: "xmark", title: L10n.string("common.close")) {
-                    guard !isDismissing else { return }
-                    isDismissing = true
-                    Task {
-                        await model.saveProgress()
-                        appModel.dismissMangaRestoringWebIfNeeded()
-                    }
-                }
-                .disabled(isDismissing)
-
-                Spacer(minLength: 0)
-
-                HStack(spacing: 8) {
-                    ReaderChromeIconButton(systemName: "safari", title: L10n.string("common.original_post")) {
+        ReaderGlassContainer(spacing: 12) {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 12) {
+                    ReaderChromeIconButton(systemName: "xmark", title: L10n.string("common.close")) {
                         guard !isDismissing else { return }
                         isDismissing = true
                         Task {
                             await model.saveProgress()
-                            appModel.dismissManga(openThreadInForum: model.context.originalThreadURL)
+                            appModel.dismissMangaRestoringWebIfNeeded()
                         }
                     }
                     .disabled(isDismissing)
-                    ReaderChromeIconButton(systemName: "arrow.clockwise", title: L10n.string("common.refresh")) {
-                        Task { await model.retryCurrentChapter() }
+
+                    Spacer(minLength: 0)
+
+                    HStack(spacing: 8) {
+                        ReaderChromeIconButton(systemName: "safari", title: L10n.string("common.original_post")) {
+                            guard !isDismissing else { return }
+                            isDismissing = true
+                            Task {
+                                await model.saveProgress()
+                                appModel.dismissManga(openThreadInForum: model.context.originalThreadURL)
+                            }
+                        }
+                        .disabled(isDismissing)
+                        ReaderChromeIconButton(systemName: "arrow.clockwise", title: L10n.string("common.refresh")) {
+                            Task { await model.retryCurrentChapter() }
+                        }
+                        .disabled(model.isTransitioningChapter || isDismissing)
                     }
-                    .disabled(model.isTransitioningChapter || isDismissing)
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    MarqueeText(text: model.title, textStyle: .headline)
+                        .frame(height: MarqueeText.preferredHeight(for: .headline))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                    Text(model.progressLabelText)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
-
-            VStack(alignment: .leading, spacing: 4) {
-                MarqueeText(text: model.title, textStyle: .headline)
-                    .frame(height: MarqueeText.preferredHeight(for: .headline))
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                Text(model.progressLabelText)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .readerChromePanel(tint: readerChromePanelTint(for: colorScheme))
         }
         .padding(.top, max(topInset + 8, 20))
-        .padding(.horizontal, 16)
-        .padding(.bottom, 12)
-        .background(.ultraThinMaterial)
-        .overlay(alignment: .bottom) {
-            Divider().opacity(0.35)
-        }
+        .padding(.horizontal, 12)
+        .padding(.bottom, 8)
     }
 
     private func bottomChrome(bottomInset: CGFloat) -> some View {

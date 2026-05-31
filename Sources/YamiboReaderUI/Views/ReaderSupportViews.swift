@@ -4,6 +4,67 @@ import YamiboReaderCore
 #if os(iOS)
 import UIKit
 
+struct ReaderGlassContainer<Content: View>: View {
+    let spacing: CGFloat
+    @ViewBuilder let content: () -> Content
+
+    init(spacing: CGFloat = 16, @ViewBuilder content: @escaping () -> Content) {
+        self.spacing = spacing
+        self.content = content
+    }
+
+    var body: some View {
+        if #available(iOS 26.0, *) {
+            GlassEffectContainer(spacing: spacing) {
+                content()
+            }
+        } else {
+            content()
+        }
+    }
+}
+
+extension View {
+    @ViewBuilder
+    func readerChromePanel(cornerRadius: CGFloat = 28, tint: Color = .clear) -> some View {
+        if #available(iOS 26.0, *) {
+            self.glassEffect(.regular.tint(tint), in: .rect(cornerRadius: cornerRadius))
+        } else {
+            self
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                        .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+                }
+        }
+    }
+
+    @ViewBuilder
+    func readerChromeButtonStyle(prominent: Bool = false, tint: Color) -> some View {
+        if #available(iOS 26.0, *) {
+            if prominent {
+                self
+                    .buttonStyle(.glassProminent)
+                    .tint(tint)
+            } else {
+                self
+                    .buttonStyle(.glass)
+                    .tint(tint)
+            }
+        } else {
+            if prominent {
+                self
+                    .buttonStyle(.borderedProminent)
+                    .tint(tint)
+            } else {
+                self
+                    .buttonStyle(.bordered)
+                    .tint(tint)
+            }
+        }
+    }
+}
+
 struct ReaderPageContent: View {
     let page: ReaderRenderedPage
     let settings: ReaderAppearanceSettings
@@ -249,42 +310,43 @@ struct ReaderTopChrome: View {
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 12) {
-                ReaderChromeIconButton(systemName: "xmark", title: L10n.string("common.close"), action: onClose)
-                Spacer(minLength: 0)
-                HStack(spacing: 8) {
-                    ReaderChromeIconButton(systemName: "safari", title: L10n.string("common.original_post"), action: onOpenForum)
-                    ReaderChromeIconButton(systemName: "arrow.clockwise", title: L10n.string("common.refresh"), action: onRefresh)
+        ReaderGlassContainer(spacing: 12) {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 12) {
+                    ReaderChromeIconButton(systemName: "xmark", title: L10n.string("common.close"), action: onClose)
+                    Spacer(minLength: 0)
+                    HStack(spacing: 8) {
+                        ReaderChromeIconButton(systemName: "safari", title: L10n.string("common.original_post"), action: onOpenForum)
+                        ReaderChromeIconButton(systemName: "arrow.clockwise", title: L10n.string("common.refresh"), action: onRefresh)
+                    }
                 }
-            }
 
-            VStack(alignment: .leading, spacing: 4) {
-                MarqueeText(text: model.title, textStyle: .headline)
-                    .frame(height: MarqueeText.preferredHeight(for: .headline))
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                Text(model.progressText)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                if let sourceStatusText = model.sourceStatusText {
-                    Text(sourceStatusText)
-                        .font(.caption2)
-                        .foregroundStyle(.orange)
+                VStack(alignment: .leading, spacing: 4) {
+                    MarqueeText(text: model.title, textStyle: .headline)
+                        .frame(height: MarqueeText.preferredHeight(for: .headline))
                         .frame(maxWidth: .infinity, alignment: .leading)
+
+                    Text(model.progressText)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                    if let sourceStatusText = model.sourceStatusText {
+                        Text(sourceStatusText)
+                            .font(.caption2)
+                            .foregroundStyle(.orange)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
                 }
             }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .readerChromePanel(tint: readerChromePanelTint(for: colorScheme))
         }
         .padding(.top, max(topInset + 8, 20))
-        .padding(.horizontal, 16)
-        .padding(.bottom, 12)
-        .background(.ultraThinMaterial)
-        .overlay(alignment: .bottom) {
-            Divider().opacity(0.35)
-        }
+        .padding(.horizontal, 12)
+        .padding(.bottom, 8)
         .tint(readerChromeButtonTint(for: colorScheme))
     }
 }
@@ -309,17 +371,18 @@ struct ReaderBottomChrome: View {
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        VStack(spacing: 14) {
-            firstRow
-            secondRow
+        ReaderGlassContainer(spacing: 12) {
+            VStack(spacing: 14) {
+                firstRow
+                secondRow
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .readerChromePanel(tint: readerChromePanelTint(for: colorScheme))
         }
-        .padding(.horizontal, 16)
-        .padding(.top, 12)
+        .padding(.horizontal, 12)
+        .padding(.top, 8)
         .padding(.bottom, max(bottomInset, 12))
-        .background(.ultraThinMaterial)
-        .overlay(alignment: .top) {
-            Divider().opacity(0.35)
-        }
         .onAppear {
             sliderValue = sliderModelValue
         }
@@ -370,7 +433,7 @@ struct ReaderBottomChrome: View {
                         .padding(.vertical, 8)
                         .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.borderedProminent)
+                .readerChromeButtonStyle(prominent: true, tint: readerChromeButtonTint(for: colorScheme))
                 .disabled(model.maxView <= 1)
 
                 ReaderChromeIconButton(systemName: "chevron.right", title: L10n.string("reader.next_web_page")) {
@@ -389,9 +452,8 @@ struct ReaderBottomChrome: View {
                 .minimumScaleFactor(0.78)
                 .frame(maxWidth: .infinity)
         }
-        .buttonStyle(.bordered)
         .controlSize(.regular)
-        .tint(readerChromeButtonTint(for: colorScheme))
+        .readerChromeButtonStyle(tint: readerChromeButtonTint(for: colorScheme))
     }
 
     private var secondRow: some View {
@@ -534,11 +596,7 @@ struct ReaderChapterPreviewBubble: View {
             .lineLimit(1)
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
-            .background(.ultraThinMaterial, in: Capsule())
-            .overlay {
-                Capsule()
-                    .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
-            }
+            .readerChromePanel(cornerRadius: 18, tint: Color.accentColor.opacity(0.08))
             .shadow(color: Color.black.opacity(0.08), radius: 10, y: 4)
         .frame(maxWidth: .infinity)
         .allowsHitTesting(false)
@@ -558,10 +616,13 @@ struct ReaderChromeIconButton: View {
                 .font(.headline)
                 .frame(width: 34, height: 34)
         }
-        .buttonStyle(.bordered)
-        .tint(readerChromeButtonTint(for: colorScheme))
+        .readerChromeButtonStyle(tint: readerChromeButtonTint(for: colorScheme))
         .accessibilityLabel(title)
     }
+}
+
+func readerChromePanelTint(for colorScheme: ColorScheme) -> Color {
+    colorScheme == .dark ? Color.white.opacity(0.06) : Color.white.opacity(0.18)
 }
 
 func readerChromeButtonTint(for colorScheme: ColorScheme) -> Color {
