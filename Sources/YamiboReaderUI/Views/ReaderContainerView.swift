@@ -114,7 +114,6 @@ public struct ReaderContainerView: View {
     @State private var showingSettings = false
     @State private var showingCachePanel = false
     @State private var showingCacheProgress = false
-    @State private var showingWebJumpSheet = false
     @State private var showingChapterSheet = false
     @State private var showingChapterComments = false
     @State private var chapterCommentsTarget: ReaderChapterCommentTarget?
@@ -257,12 +256,6 @@ public struct ReaderContainerView: View {
                     showingCacheProgress = false
                 }
             }
-            .sheet(isPresented: $showingWebJumpSheet) {
-                ReaderWebJumpSheet(model: model) { view in
-                    Task { await jumpToWebView(view) }
-                }
-                .presentationDetents([.medium])
-            }
             .statusBar(hidden: chromeState.mode == .immersiveHidden)
             .onChange(of: model.isLoading) { _, _ in
                 updateChromeForContentState()
@@ -290,9 +283,6 @@ public struct ReaderContainerView: View {
                 updateChromeForContentState()
             }
             .onChange(of: showingCacheProgress) { _, _ in
-                updateChromeForContentState()
-            }
-            .onChange(of: showingWebJumpSheet) { _, _ in
                 updateChromeForContentState()
             }
             .onChange(of: showingChapterSheet) { _, _ in
@@ -601,10 +591,6 @@ public struct ReaderContainerView: View {
             model: model,
             bottomInset: bottomInset,
             onShowChapters: openChapterDrawer,
-            onShowWebJump: openWebJumpSheet,
-            onStepWeb: { delta in
-                Task { await jumpToWebView(model.visibleView + delta) }
-            },
             onShowSettings: openSettings,
             onShowCache: openCachePanel,
             onShowComments: openChapterComments,
@@ -783,11 +769,6 @@ public struct ReaderContainerView: View {
         }
     }
 
-    private func openWebJumpSheet() {
-        guard model.maxView > 1 else { return }
-        showingWebJumpSheet = true
-    }
-
     private func updateChromeForContentState() {
         let previousState = chromeState
         var nextState = chromeState
@@ -942,7 +923,7 @@ public struct ReaderContainerView: View {
     }
 
     private var hasPresentedOverlay: Bool {
-        showingSettings || showingCachePanel || showingCacheProgress || showingWebJumpSheet || showingChapterSheet || showingChapterComments
+        showingSettings || showingCachePanel || showingCacheProgress || showingChapterSheet || showingChapterComments
     }
 
     private var canReceiveApplePencilPageTurn: Bool {
