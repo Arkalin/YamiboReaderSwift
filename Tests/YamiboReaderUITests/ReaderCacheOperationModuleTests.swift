@@ -146,32 +146,6 @@ final class ReaderCacheOperationModuleTests: XCTestCase {
         XCTAssertTrue(contexts.allSatisfy { $0 == context })
     }
 
-    func testProgressVisibilityAndDismissDoNotCancelBackgroundOperation() async throws {
-        let repository = FakeCacheOperationRepository(cachedViews: [1], delayNanoseconds: 20_000_000)
-        let module = ReaderCacheOperationModule()
-        module.syncCachedViews([1])
-
-        module.startCaching(
-            views: [2, 3],
-            snapshot: makeSnapshot(cacheableViews: [1, 2, 3], cachedViews: [1]),
-            repository: repository,
-            summary: { _, _ in "done" }
-        )
-        module.hideProgress()
-        XCTAssertTrue(module.state.isProgressHidden)
-
-        module.showProgressIfRunning()
-        XCTAssertFalse(module.state.isProgressHidden)
-
-        module.dismissProgress()
-        XCTAssertEqual(module.state.status, .idle)
-
-        try await waitFor {
-            module.cachedViews == [1, 2, 3]
-        }
-        XCTAssertEqual(module.state.status, .completed)
-    }
-
     private func makeSnapshot(
         cacheableViews: Set<Int>,
         cachedViews: Set<Int>

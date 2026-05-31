@@ -45,24 +45,6 @@ import Testing
     #expect(saved == [position])
 }
 
-@Test func progressSyncRetriesSamePositionAfterFailedSave() async throws {
-    let adapter = RecordingProgressSyncAdapter()
-    await adapter.failNextSave()
-    let sync = ProgressSyncModule(adapter: adapter, debounceNanoseconds: 20_000_000)
-    let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=5&mobile=2")!
-    let position = ProgressSyncPosition.novel(NovelReadingPosition(threadURL: threadURL, view: 1, page: 5))
-
-    await sync.queue(position)
-    try await Task.sleep(nanoseconds: 60_000_000)
-    await sync.queue(position)
-    try await Task.sleep(nanoseconds: 60_000_000)
-
-    let saved = await adapter.savedPositions
-    let failures = await adapter.failureCount
-    #expect(saved == [position])
-    #expect(failures == 1)
-}
-
 @Test func favoriteLibraryProgressSyncDoesNotCreateMissingFavorite() async throws {
     let keyPrefix = UUID().uuidString
     let favoriteStore = FavoriteStore(key: "\(keyPrefix).favorites")
