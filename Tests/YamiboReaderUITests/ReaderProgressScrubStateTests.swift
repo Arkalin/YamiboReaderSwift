@@ -94,4 +94,20 @@ final class ReaderProgressScrubStateTests: XCTestCase {
         XCTAssertTrue(visible.showsVerticalScrubber)
         XCTAssertFalse(hidden.showsVerticalScrubber)
     }
+
+    func testBottomActionRowHidesDuringScrubWithoutLosingLayout() {
+        let resting = ReaderBottomActionRowPresentation(isScrubbing: false)
+        let scrubbing = ReaderBottomActionRowPresentation(isScrubbing: true)
+
+        XCTAssertEqual(resting.actions.map(\.kind), [.comments, .settings, .bookmark, .cache])
+        XCTAssertTrue(resting.actions.first(where: { $0.kind == .bookmark })?.isDisabled == true)
+        XCTAssertEqual(resting.opacity, 1)
+        XCTAssertTrue(resting.allowsHitTesting)
+        XCTAssertFalse(resting.isAccessibilityHidden)
+
+        XCTAssertEqual(scrubbing.opacity, 0)
+        XCTAssertFalse(scrubbing.allowsHitTesting)
+        XCTAssertTrue(scrubbing.isAccessibilityHidden)
+        XCTAssertTrue(scrubbing.preservesLayout)
+    }
 }

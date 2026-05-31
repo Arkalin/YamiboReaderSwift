@@ -114,6 +114,54 @@ public struct ReaderProgressChromePresentation: Equatable, Sendable {
     }
 }
 
+public enum ReaderBottomActionKind: Equatable, Sendable {
+    case comments
+    case settings
+    case bookmark
+    case cache
+}
+
+public struct ReaderBottomAction: Equatable, Sendable {
+    public var kind: ReaderBottomActionKind
+    public var isDisabled: Bool
+
+    public init(kind: ReaderBottomActionKind, isDisabled: Bool = false) {
+        self.kind = kind
+        self.isDisabled = isDisabled
+    }
+}
+
+public struct ReaderBottomActionRowPresentation: Equatable, Sendable {
+    public var isScrubbing: Bool
+
+    public init(isScrubbing: Bool) {
+        self.isScrubbing = isScrubbing
+    }
+
+    public var actions: [ReaderBottomAction] {
+        [
+            ReaderBottomAction(kind: .comments),
+            ReaderBottomAction(kind: .settings),
+            ReaderBottomAction(kind: .bookmark, isDisabled: true),
+            ReaderBottomAction(kind: .cache),
+        ]
+    }
+
+    public var opacity: Double {
+        isScrubbing ? 0 : 1
+    }
+
+    public var allowsHitTesting: Bool {
+        !isScrubbing
+    }
+
+    public var isAccessibilityHidden: Bool {
+        isScrubbing
+    }
+
+    public var preservesLayout: Bool { true }
+}
+
 public struct ReaderProgressScrubState: Equatable, Sendable {
     public private(set) var phase: ReaderProgressScrubPhase = .idle
     public private(set) var value = 0.0
@@ -566,6 +614,7 @@ struct ReaderBottomChrome: View {
     let onJumpChapter: (Int) -> Void
     let onProgressPreviewChange: (Double?, Bool) -> Void
     let onProgressCommit: (Int) -> Void
+    let isProgressScrubbing: Bool
 
     @State private var sliderState = ReaderProgressSliderState()
     @State private var scrubState = ReaderProgressScrubState()
@@ -579,7 +628,7 @@ struct ReaderBottomChrome: View {
         ReaderGlassContainer(spacing: 12) {
             VStack(spacing: 14) {
                 progressControl
-                firstRow
+                actionRow
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
@@ -599,43 +648,59 @@ struct ReaderBottomChrome: View {
         }
     }
 
-    private var firstRow: some View {
-        VStack(spacing: 10) {
-            HStack(spacing: 8) {
-                chromeActionButton(
-                    title: L10n.string("reader.chapters"),
-                    systemName: "list.bullet",
-                    action: onShowChapters
-                )
-                chromeActionButton(
-                    title: L10n.string("reader.comments"),
-                    systemName: "text.bubble",
-                    action: onShowComments
-                )
-                chromeActionButton(
-                    title: L10n.string("settings.title"),
-                    systemName: "gearshape",
-                    action: onShowSettings
-                )
-                chromeActionButton(
-                    title: L10n.string("reader.cache"),
-                    systemName: "square.and.arrow.down",
-                    action: onShowCache
-                )
-            }
+    private var actionRow: some View {
+        let presentation = actionRowPresentation
+        return HStack(spacing: 18) {
+            bottomActionButton(
+                action: ReaderBottomAction(kind: .comments),
+                title: L10n.string("reader.comments"),
+                systemName: "text.bubble",
+                handler: onShowComments
+            )
+            bottomActionButton(
+                action: ReaderBottomAction(kind: .settings),
+                title: L10n.string("settings.title"),
+                systemName: "gearshape",
+                handler: onShowSettings
+            )
+            bottomActionButton(
+                action: ReaderBottomAction(kind: .bookmark, isDisabled: true),
+                title: "书签",
+                systemName: "bookmark",
+                handler: {}
+            )
+            bottomActionButton(
+                action: ReaderBottomAction(kind: .cache),
+                title: L10n.string("reader.cache"),
+                systemName: "square.and.arrow.down",
+                handler: onShowCache
+            )
         }
+        .frame(maxWidth: .infinity)
+        .frame(height: 44)
+        .opacity(presentation.opacity)
+        .allowsHitTesting(presentation.allowsHitTesting)
+        .accessibilityHidden(presentation.isAccessibilityHidden)
     }
 
-    private func chromeActionButton(title: String, systemName: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Label(title, systemImage: systemName)
-                .font(.callout.weight(.medium))
-                .lineLimit(1)
-                .minimumScaleFactor(0.78)
-                .frame(maxWidth: .infinity)
+    private var actionRowPresentation: ReaderBottomActionRowPresentation {
+        ReaderBottomActionRowPresentation(isScrubbing: isProgressScrubbing || scrubState.phase == .scrubbing)
+    }
+
+    private func bottomActionButton(
+        action: ReaderBottomAction,
+        title: String,
+        systemName: String,
+        handler: @escaping () -> Void
+    ) -> some View {
+        Button(action: handler) {
+            Image(systemName: systemName)
+                .font(.headline)
+                .frame(width: 38, height: 38)
         }
-        .controlSize(.regular)
         .readerChromeButtonStyle(tint: readerChromeButtonTint(for: colorScheme))
+        .disabled(action.isDisabled)
+        .accessibilityLabel(title)
     }
 
     private var progressControl: some View {
