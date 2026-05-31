@@ -83,4 +83,15 @@ final class ReaderProgressScrubStateTests: XCTestCase {
         XCTAssertFalse(presentation.showsConventionalSlider)
         XCTAssertFalse(presentation.showsVerticalScrubber)
     }
+
+    func testVerticalChromePresentationUsesDirectoryCapsuleAndVisibleVerticalScrubber() {
+        let visible = ReaderProgressChromePresentation(readingMode: .vertical, isChromeVisible: true)
+        let hidden = ReaderProgressChromePresentation(readingMode: .vertical, isChromeVisible: false)
+
+        XCTAssertEqual(visible.horizontalCapsuleText(percentText: "64%"), "目录 · 64%")
+        XCTAssertFalse(visible.showsHorizontalFill)
+        XCTAssertFalse(visible.supportsHorizontalScrub)
+        XCTAssertTrue(visible.showsVerticalScrubber)
+        XCTAssertFalse(hidden.showsVerticalScrubber)
+    }
 }
