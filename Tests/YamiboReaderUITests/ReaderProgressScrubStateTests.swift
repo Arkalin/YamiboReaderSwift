@@ -110,4 +110,27 @@ final class ReaderProgressScrubStateTests: XCTestCase {
         XCTAssertTrue(scrubbing.isAccessibilityHidden)
         XCTAssertTrue(scrubbing.preservesLayout)
     }
+
+    func testIntegratedProgressChromeContractsAcrossPagedAndVerticalModes() {
+        let paged = ReaderProgressChromePresentation(readingMode: .paged, isChromeVisible: true)
+        let verticalVisible = ReaderProgressChromePresentation(readingMode: .vertical, isChromeVisible: true)
+        let verticalHidden = ReaderProgressChromePresentation(readingMode: .vertical, isChromeVisible: false)
+        let restingActions = ReaderBottomActionRowPresentation(isScrubbing: false)
+        let scrubbingActions = ReaderBottomActionRowPresentation(isScrubbing: true)
+
+        XCTAssertFalse(paged.showsConventionalSlider)
+        XCTAssertTrue(paged.supportsHorizontalScrub)
+        XCTAssertTrue(paged.showsHorizontalFill)
+        XCTAssertFalse(paged.showsVerticalScrubber)
+
+        XCTAssertFalse(verticalVisible.supportsHorizontalScrub)
+        XCTAssertFalse(verticalVisible.showsHorizontalFill)
+        XCTAssertTrue(verticalVisible.showsVerticalScrubber)
+        XCTAssertFalse(verticalHidden.showsVerticalScrubber)
+
+        XCTAssertTrue(restingActions.actions.contains(ReaderBottomAction(kind: .bookmark, isDisabled: true)))
+        XCTAssertEqual(scrubbingActions.opacity, 0)
+        XCTAssertFalse(scrubbingActions.allowsHitTesting)
+        XCTAssertTrue(scrubbingActions.preservesLayout)
+    }
 }
