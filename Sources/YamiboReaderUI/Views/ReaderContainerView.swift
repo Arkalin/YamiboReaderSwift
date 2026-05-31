@@ -644,7 +644,7 @@ public struct ReaderContainerView: View {
                 }
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
-            .padding(.bottom, max(bottomInset, 12) + layout.verticalScrubberActionRowBottomOffset)
+            .padding(.bottom, max(bottomInset, 12) + layout.bottomControlsAdditionalBottomOffset + layout.verticalScrubberActionRowBottomOffset)
             .padding(.trailing, 12)
             .allowsHitTesting(true)
         }

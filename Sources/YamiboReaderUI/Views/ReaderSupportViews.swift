@@ -175,12 +175,14 @@ public struct ReaderBottomChromeLayoutPresentation: Equatable, Sendable {
     public var progressPanelHeight: CGFloat { 44 }
     public var actionButtonIconFrame: CGFloat { 34 }
     public var actionButtonSpacing: CGFloat { 8 }
+    public var bottomControlsAdditionalBottomOffset: CGFloat { 8 }
     public var horizontalAlignment: ReaderBottomChromeHorizontalAlignment { .trailing }
     public var progressTextLeadsIcon: Bool { true }
     public var progressFillHasVerticalTrailingEdge: Bool { true }
     public var horizontalProgressThumbVisible: Bool { false }
     public var horizontalChapterTicksVisibleOnlyWhileScrubbing: Bool { true }
     public var horizontalDirectoryContentHiddenWhileScrubbing: Bool { true }
+    public var progressCapsulesUseButtonTint: Bool { true }
     public var verticalScrubberWidth: CGFloat { progressPanelHeight }
     public var verticalScrubberHeight: CGFloat { progressPanelHeight * 3 + actionButtonIconFrame }
     public var verticalPreviewWidth: CGFloat { maxChromeWidth }
@@ -696,6 +698,7 @@ struct ReaderBottomChrome: View {
             .frame(maxWidth: .infinity, alignment: .trailing)
             .padding(.leading, 12)
             .padding(.trailing, bottomChromeTrailingPadding)
+            .padding(.bottom, chromeLayout.bottomControlsAdditionalBottomOffset)
 
             progressSummary
                 .padding(.horizontal, 12)
@@ -968,12 +971,13 @@ struct ReaderBottomChrome: View {
 
 private struct ReaderProgressChapterTickOverlay: View {
     let ticks: [ReaderProgressChapterTick]
+    let currentTint: Color
 
     var body: some View {
         GeometryReader { geometry in
             ForEach(Array(ticks.enumerated()), id: \.element.chapter.startIndex) { _, tick in
                 Capsule()
-                    .fill(tick.isCurrent ? Color.accentColor : Color.secondary.opacity(0.38))
+                    .fill(tick.isCurrent ? currentTint : Color.secondary.opacity(0.38))
                     .frame(width: tick.isCurrent ? 3 : 2, height: tick.isCurrent ? 12 : 8)
                     .position(
                         x: min(max(tick.position, 0), 1) * geometry.size.width,
@@ -1002,6 +1006,7 @@ private struct ReaderDirectoryProgressCapsule: View {
     var body: some View {
         GeometryReader { geometry in
             let layout = ReaderBottomChromeLayoutPresentation()
+            let controlTint = layout.progressCapsulesUseButtonTint ? readerChromeButtonTint(for: colorScheme) : Color.accentColor
             let width = max(geometry.size.width, 1)
             let clampedProgress = min(max(progressFraction, 0), 1)
 
@@ -1011,12 +1016,12 @@ private struct ReaderDirectoryProgressCapsule: View {
 
                 if showsFill {
                     Rectangle()
-                        .fill(Color.accentColor.opacity(colorScheme == .dark ? 0.24 : 0.18))
+                        .fill(controlTint.opacity(colorScheme == .dark ? 0.24 : 0.18))
                         .frame(width: max(0, width * clampedProgress))
                         .accessibilityHidden(true)
                 }
 
-                ReaderProgressChapterTickOverlay(ticks: ticks)
+                ReaderProgressChapterTickOverlay(ticks: ticks, currentTint: controlTint)
                     .padding(.horizontal, 12)
                     .opacity(showsFill && (!layout.horizontalChapterTicksVisibleOnlyWhileScrubbing || isScrubbing) ? 1 : 0)
 
@@ -1029,7 +1034,7 @@ private struct ReaderDirectoryProgressCapsule: View {
                     Image(systemName: "list.bullet")
                         .font(.callout.weight(.semibold))
                 }
-                .foregroundStyle(layout.directoryCapsuleContentUsesAccentColor ? Color.accentColor : Color.primary)
+                .foregroundStyle(layout.directoryCapsuleContentUsesAccentColor ? controlTint : Color.primary)
                 .frame(maxWidth: .infinity)
                 .padding(.horizontal, 18)
                 .opacity(layout.horizontalDirectoryContentHiddenWhileScrubbing && isScrubbing ? 0 : 1)
@@ -1110,6 +1115,7 @@ struct ReaderVerticalProgressCapsule: View {
 
     private func verticalProgressBar(height: CGFloat, thumbY: CGFloat) -> some View {
         let layout = ReaderBottomChromeLayoutPresentation()
+        let controlTint = layout.progressCapsulesUseButtonTint ? readerChromeButtonTint(for: colorScheme) : Color.accentColor
 
         return ZStack(alignment: .topTrailing) {
             Capsule()
@@ -1118,18 +1124,18 @@ struct ReaderVerticalProgressCapsule: View {
 
             if layout.verticalScrubberShowsProgressFill {
                 Rectangle()
-                    .fill(Color.accentColor.opacity(colorScheme == .dark ? 0.24 : 0.18))
+                    .fill(controlTint.opacity(colorScheme == .dark ? 0.24 : 0.18))
                     .frame(width: layout.verticalScrubberWidth, height: max(0, thumbY))
                     .accessibilityHidden(true)
             }
 
-            ReaderVerticalProgressChapterTickOverlay(ticks: ticks)
+            ReaderVerticalProgressChapterTickOverlay(ticks: ticks, currentTint: controlTint)
                 .padding(.vertical, 12)
                 .opacity(layout.verticalScrubberShowsChapterTicks && (!layout.verticalChapterTicksVisibleOnlyWhileScrubbing || isScrubbing) ? 1 : 0)
 
             if layout.verticalScrubberShowsLiveThumb {
                 Capsule()
-                    .fill(Color.accentColor.opacity(0.82))
+                    .fill(controlTint.opacity(0.82))
                     .frame(width: 28, height: 3)
                     .offset(x: -18, y: min(max(thumbY - 1.5, 0), height - 3))
                     .accessibilityHidden(true)
@@ -1141,6 +1147,7 @@ struct ReaderVerticalProgressCapsule: View {
 
 private struct ReaderVerticalProgressChapterTickOverlay: View {
     let ticks: [ReaderProgressChapterTick]
+    let currentTint: Color
 
     var body: some View {
         let layout = ReaderBottomChromeLayoutPresentation()
@@ -1148,7 +1155,7 @@ private struct ReaderVerticalProgressChapterTickOverlay: View {
         GeometryReader { geometry in
             ForEach(Array(ticks.enumerated()), id: \.element.chapter.startIndex) { _, tick in
                 Capsule()
-                    .fill(tick.isCurrent && layout.verticalCurrentChapterTickUsesAccentColor ? Color.accentColor : Color.secondary.opacity(0.38))
+                    .fill(tick.isCurrent && layout.verticalCurrentChapterTickUsesAccentColor ? currentTint : Color.secondary.opacity(0.38))
                     .frame(width: tick.isCurrent ? 28 : 18, height: tick.isCurrent ? 3 : 2)
                     .position(
                         x: layout.verticalScrubberTicksAreCentered ? geometry.size.width / 2 : geometry.size.width - 24,
@@ -1227,7 +1234,7 @@ func readerChromePanelTint(for colorScheme: ColorScheme) -> Color {
 }
 
 func readerChromeButtonTint(for colorScheme: ColorScheme) -> Color {
-    colorScheme == .dark ? Color(red: 0.53, green: 0.37, blue: 0.27) : .accentColor
+    colorScheme == .dark ? Color(red: 0.78, green: 0.58, blue: 0.42) : .accentColor
 }
 
 struct ReaderChapterSheet: View {

@@ -121,12 +121,14 @@ final class ReaderProgressScrubStateTests: XCTestCase {
         XCTAssertEqual(presentation.progressPanelHeight, 44)
         XCTAssertEqual(presentation.actionButtonIconFrame, 34)
         XCTAssertEqual(presentation.actionButtonSpacing, 8)
+        XCTAssertEqual(presentation.bottomControlsAdditionalBottomOffset, 8)
         XCTAssertEqual(presentation.horizontalAlignment, .trailing)
         XCTAssertTrue(presentation.progressTextLeadsIcon)
         XCTAssertTrue(presentation.progressFillHasVerticalTrailingEdge)
         XCTAssertFalse(presentation.horizontalProgressThumbVisible)
         XCTAssertTrue(presentation.horizontalChapterTicksVisibleOnlyWhileScrubbing)
         XCTAssertTrue(presentation.horizontalDirectoryContentHiddenWhileScrubbing)
+        XCTAssertTrue(presentation.progressCapsulesUseButtonTint)
     }
 
     func testReaderChromeSummarySeparatesChapterAndProgressLines() {
