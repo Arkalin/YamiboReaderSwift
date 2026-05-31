@@ -80,6 +80,7 @@ final class ReaderProgressScrubStateTests: XCTestCase {
         XCTAssertEqual(presentation.horizontalCapsuleText(percentText: "37%"), "目录 · 37%")
         XCTAssertTrue(presentation.showsHorizontalFill)
         XCTAssertTrue(presentation.supportsHorizontalScrub)
+        XCTAssertTrue(presentation.horizontalCapsuleUsesIndependentTapAndDrag)
         XCTAssertFalse(presentation.showsConventionalSlider)
         XCTAssertFalse(presentation.showsVerticalScrubber)
     }
@@ -123,6 +124,9 @@ final class ReaderProgressScrubStateTests: XCTestCase {
         XCTAssertEqual(presentation.horizontalAlignment, .trailing)
         XCTAssertTrue(presentation.progressTextLeadsIcon)
         XCTAssertTrue(presentation.progressFillHasVerticalTrailingEdge)
+        XCTAssertFalse(presentation.horizontalProgressThumbVisible)
+        XCTAssertTrue(presentation.horizontalChapterTicksVisibleOnlyWhileScrubbing)
+        XCTAssertTrue(presentation.horizontalDirectoryContentHiddenWhileScrubbing)
     }
 
     func testReaderChromeSummarySeparatesChapterAndProgressLines() {
@@ -144,6 +148,7 @@ final class ReaderProgressScrubStateTests: XCTestCase {
         XCTAssertEqual(presentation.verticalPreviewWidth, presentation.maxChromeWidth)
         XCTAssertEqual(presentation.verticalPreviewHeight, 50)
         XCTAssertTrue(presentation.verticalScrubberShowsChapterTicks)
+        XCTAssertTrue(presentation.verticalChapterTicksVisibleOnlyWhileScrubbing)
         XCTAssertTrue(presentation.verticalScrubberFillHasSquareEdge)
         XCTAssertTrue(presentation.hidesDirectoryCapsuleDuringVerticalScrub)
         XCTAssertEqual(presentation.verticalScrubberSideSpacing, presentation.actionButtonSpacing)
@@ -152,12 +157,14 @@ final class ReaderProgressScrubStateTests: XCTestCase {
         XCTAssertTrue(presentation.verticalScrubberBottomAlignsWithActionButtons)
         XCTAssertTrue(presentation.verticalPreviewUsesTwoLineChapterAndPage)
         XCTAssertTrue(presentation.verticalPreviewUsesLiquidGlass)
+        XCTAssertTrue(presentation.horizontalPreviewMatchesVerticalCapsule)
         XCTAssertTrue(presentation.verticalScrubberShowsProgressFill)
         XCTAssertTrue(presentation.verticalCurrentChapterTickUsesAccentColor)
         XCTAssertTrue(presentation.directoryCapsuleContentUsesAccentColor)
         XCTAssertTrue(presentation.bottomProgressSummaryUsesPageCenter)
         XCTAssertTrue(presentation.verticalProgressSummaryUsesLiquidGlass)
         XCTAssertTrue(presentation.verticalChapterTitleCapsuleWrapsContent)
+        XCTAssertEqual(presentation.verticalScrubberActionRowBottomOffset, 46)
     }
 
     func testIntegratedProgressChromeContractsAcrossPagedAndVerticalModes() {

@@ -629,6 +629,7 @@ public struct ReaderContainerView: View {
             readingMode: model.settings.readingMode,
             isChromeVisible: chromeState.mode.showsChrome
         )
+        let layout = ReaderBottomChromeLayoutPresentation()
         if presentation.showsVerticalScrubber {
             ReaderVerticalProgressCapsule(
                 progressFraction: verticalDisplayedProgressFraction,
@@ -643,7 +644,7 @@ public struct ReaderContainerView: View {
                 }
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
-            .padding(.bottom, max(bottomInset, 12))
+            .padding(.bottom, max(bottomInset, 12) + layout.verticalScrubberActionRowBottomOffset)
             .padding(.trailing, 12)
             .allowsHitTesting(true)
         }
