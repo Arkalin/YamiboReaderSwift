@@ -165,7 +165,7 @@
 "image.loading" = "加载图片中…";
 "manga.brightness" = "亮度";
 "manga.chapter.final" = "终";
-"manga.chapter_list" = "章节列表";
+"manga.chapter_list" = "目录";
 "manga.chapter_load_timeout" = "章节加载超时，请稍后重试";
 "manga.chapter_loading" = "章节加载中…";
 "manga.chapter_loading_hint" = "未缓存章节会先探测并尝试切换，失败时将自动回退网页模式。";
@@ -225,7 +225,7 @@
 "reader.cache_summary.failed_suffix" = "，%d 页失败，已跳过";
 "reader.cached" = "已缓存";
 "reader.chapter_summary" = "目录项 %d · 过滤 %d";
-"reader.chapters" = "章节";
+"reader.chapters" = "目录";
 "reader.chapter_comments" = "章节评论";
 "reader.chapter_comments_empty" = "暂无章节评论";
 "reader.chapter_comments_failed" = "章节评论加载失败";
