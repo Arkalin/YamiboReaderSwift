@@ -128,6 +128,10 @@ public struct ReaderContainerView: View {
     @State private var progressPreviewChapterTitle: String?
     @State private var isProgressPreviewVisible = false
     @State private var progressPreviewHideTask: Task<Void, Never>?
+    @State private var verticalProgressScrubState = ReaderProgressScrubState()
+    @State private var verticalProgressStartFeedbackGenerator = UIImpactFeedbackGenerator(style: .light)
+    @State private var verticalProgressTickFeedbackGenerator = UISelectionFeedbackGenerator()
+    @State private var verticalProgressCommitFeedbackGenerator = UIImpactFeedbackGenerator(style: .medium)
     @State private var verticalTapSuppressionUntil: CFTimeInterval = 0
     @State private var verticalBoundaryPullState = ReaderVerticalBoundaryPullState.idle
     @State private var isHandlingVerticalBoundaryPull = false
@@ -201,6 +205,10 @@ public struct ReaderContainerView: View {
                     }
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                     .zIndex(2)
+
+                    verticalProgressScrubber(topInset: topInset, bottomInset: bottomInset)
+                        .transition(.opacity)
+                        .zIndex(2)
                 }
             }
             .task {
@@ -614,6 +622,32 @@ public struct ReaderContainerView: View {
         )
     }
 
+    @ViewBuilder
+    private func verticalProgressScrubber(topInset: CGFloat, bottomInset: CGFloat) -> some View {
+        let presentation = ReaderProgressChromePresentation(
+            readingMode: model.settings.readingMode,
+            isChromeVisible: chromeState.mode.showsChrome
+        )
+        if presentation.showsVerticalScrubber {
+            ReaderVerticalProgressCapsule(
+                progressFraction: verticalDisplayedProgressFraction,
+                preview: verticalProgressScrubState.preview,
+                isScrubbing: verticalProgressScrubState.phase == .scrubbing,
+                onScrub: { locationY, height in
+                    handleVerticalProgressScrub(locationY: locationY, height: height)
+                },
+                onEndScrub: {
+                    commitVerticalProgressScrub()
+                }
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
+            .padding(.top, max(topInset + 92, topChromeHeight + 12))
+            .padding(.bottom, max(bottomInset + 128, bottomChromeHeight + 12))
+            .padding(.trailing, 10)
+            .allowsHitTesting(true)
+        }
+    }
+
     private func readerLayout(proxy: GeometryProxy, topInset: CGFloat, bottomInset: CGFloat) -> ReaderContainerLayout {
         let horizontalPadding = max(model.settings.horizontalPadding, 0)
         let safeAreaInsets = ReaderLayoutInsets(
@@ -933,6 +967,68 @@ public struct ReaderContainerView: View {
             !hasPresentedOverlay &&
             !isDismissing &&
             !chromeState.mode.showsChrome
+    }
+
+    private var verticalProgressScrubContext: ReaderProgressScrubContext {
+        ReaderProgressScrubContext(
+            readingMode: .vertical,
+            pageCount: model.renderedPageCount,
+            currentProgressPercent: model.currentProgressPercent,
+            targetPageIndex: { value in
+                model.targetRenderedPageIndex(forProgressValue: value)
+            },
+            chapterTitle: { pageIndex in
+                model.chapterTitle(forRenderedPageIndex: pageIndex)
+            },
+            chapterTickStartIndex: { pageIndex in
+                model.progressChapterTickStartIndex(forRenderedPageIndex: pageIndex)
+            }
+        )
+    }
+
+    private var verticalDisplayedProgressFraction: Double {
+        if verticalProgressScrubState.phase == .scrubbing {
+            guard model.renderedPageCount > 1 else { return 0 }
+            return Double(verticalProgressScrubState.targetRenderedPageIndex) / Double(max(model.renderedPageCount - 1, 1))
+        }
+        return model.currentProgressFraction
+    }
+
+    private func handleVerticalProgressScrub(locationY: CGFloat, height: CGFloat) {
+        guard height > 0 else { return }
+        let fraction = min(max(locationY / height, 0), 1)
+        let value = fraction * 100
+        let update = verticalProgressScrubState.update(value: value, context: verticalProgressScrubContext)
+        triggerVerticalProgressFeedback(update.haptics)
+        verticalTapSuppressionUntil = CACurrentMediaTime() + 0.5
+    }
+
+    private func commitVerticalProgressScrub() {
+        guard verticalProgressScrubState.phase == .scrubbing else { return }
+        let update = verticalProgressScrubState.end()
+        triggerVerticalProgressFeedback(update.haptics)
+        if let target = update.committedPageIndex {
+            model.jumpToRenderedPage(target)
+            requestVerticalScrollToCurrentPage()
+        }
+        verticalTapSuppressionUntil = CACurrentMediaTime() + 0.5
+    }
+
+    private func triggerVerticalProgressFeedback(_ haptics: [ReaderProgressScrubHaptic]) {
+        for haptic in haptics {
+            switch haptic {
+            case .start:
+                verticalProgressStartFeedbackGenerator.impactOccurred()
+                verticalProgressStartFeedbackGenerator.prepare()
+                verticalProgressTickFeedbackGenerator.prepare()
+            case .chapterTick:
+                verticalProgressTickFeedbackGenerator.selectionChanged()
+                verticalProgressTickFeedbackGenerator.prepare()
+            case .commit:
+                verticalProgressCommitFeedbackGenerator.impactOccurred()
+                verticalProgressCommitFeedbackGenerator.prepare()
+            }
+        }
     }
 
     private func handleProgressPreviewChange(value: Double?, isEditing: Bool) {

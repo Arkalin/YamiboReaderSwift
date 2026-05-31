@@ -879,6 +879,68 @@ private struct ReaderDirectoryProgressCapsule: View {
     }
 }
 
+struct ReaderVerticalProgressCapsule: View {
+    let progressFraction: Double
+    let preview: ReaderProgressScrubPreview?
+    let isScrubbing: Bool
+    let onScrub: (CGFloat, CGFloat) -> Void
+    let onEndScrub: () -> Void
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        GeometryReader { geometry in
+            let height = max(geometry.size.height, 1)
+            let clampedProgress = min(max(progressFraction, 0), 1)
+            let thumbY = min(max(height * clampedProgress, 0), height)
+
+            ZStack(alignment: .topTrailing) {
+                Capsule()
+                    .fill(Color.secondary.opacity(colorScheme == .dark ? 0.18 : 0.12))
+                    .frame(width: 28)
+                    .readerChromePanel(cornerRadius: 18, tint: readerChromePanelTint(for: colorScheme))
+
+                Capsule()
+                    .fill(Color.accentColor.opacity(colorScheme == .dark ? 0.24 : 0.18))
+                    .frame(width: 28, height: max(10, thumbY))
+                    .accessibilityHidden(true)
+
+                Capsule()
+                    .fill(Color.accentColor.opacity(0.82))
+                    .frame(width: 18, height: 3)
+                    .offset(x: -5, y: min(max(thumbY - 1.5, 0), height - 3))
+                    .accessibilityHidden(true)
+
+                if isScrubbing, let preview {
+                    Text(preview.displayText)
+                        .font(.caption.weight(.semibold))
+                        .lineLimit(1)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 7)
+                        .readerChromePanel(cornerRadius: 16, tint: Color.accentColor.opacity(0.08))
+                        .shadow(color: Color.black.opacity(0.08), radius: 10, y: 4)
+                        .frame(width: 156, alignment: .trailing)
+                        .offset(x: -38, y: min(max(thumbY - 18, 0), max(height - 36, 0)))
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
+            }
+            .frame(width: geometry.size.width, height: height, alignment: .topTrailing)
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { value in
+                        onScrub(value.location.y, height)
+                    }
+                    .onEnded { _ in
+                        onEndScrub()
+                    }
+            )
+            .accessibilityLabel("目录 · 进度")
+        }
+        .frame(width: 190)
+    }
+}
+
 struct ReaderChapterPreviewBubble: View {
     let title: String
 
