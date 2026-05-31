@@ -68,6 +68,45 @@ private struct ReaderBottomChromeHeightPreferenceKey: PreferenceKey {
     }
 }
 
+private struct ReaderVerticalBoundaryPullBadge: View {
+    let text: String
+    let systemImage: String
+    let progress: CGFloat
+    let isArmed: Bool
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        ReaderGlassContainer(spacing: 8) {
+            Label {
+                Text(text)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+            } icon: {
+                Image(systemName: systemImage)
+                    .symbolVariant(isArmed ? .fill : .none)
+                    .foregroundStyle(Color.accentColor)
+            }
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.primary)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 9)
+            .readerChromePanel(cornerRadius: 22, tint: badgeTint)
+            .overlay {
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .strokeBorder(Color.accentColor.opacity(0.22 + 0.38 * progress), lineWidth: 1)
+            }
+            .shadow(color: Color.black.opacity(colorScheme == .dark ? 0.18 : 0.08), radius: 12, y: 4)
+        }
+    }
+
+    private var badgeTint: Color {
+        if isArmed {
+            return Color.accentColor.opacity(colorScheme == .dark ? 0.18 : 0.14)
+        }
+        return readerChromePanelTint(for: colorScheme)
+    }
+}
+
 public struct ReaderContainerView: View {
     @StateObject private var model: ReaderContainerModel
     @State private var verticalScrollCoordinator = ReaderVerticalScrollCoordinator()
@@ -496,19 +535,12 @@ public struct ReaderContainerView: View {
         if verticalBoundaryPullState.direction == direction,
            canNavigateVerticalBoundary(direction) {
             let progress = min(max(verticalBoundaryPullState.distance / ReaderVerticalScrollCoordinator.boundaryTriggerDistance, 0), 1)
-            Label(
-                verticalBoundaryPullText(for: direction, isArmed: verticalBoundaryPullState.isArmed),
-                systemImage: direction == .next ? "arrow.down.circle" : "arrow.up.circle"
+            ReaderVerticalBoundaryPullBadge(
+                text: verticalBoundaryPullText(for: direction, isArmed: verticalBoundaryPullState.isArmed),
+                systemImage: direction == .next ? "arrow.down.circle" : "arrow.up.circle",
+                progress: progress,
+                isArmed: verticalBoundaryPullState.isArmed
             )
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(.primary)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 8)
-            .background(.ultraThinMaterial, in: Capsule())
-            .overlay {
-                Capsule()
-                    .stroke(Color.accentColor.opacity(0.35 + 0.45 * progress), lineWidth: 1)
-            }
             .padding(.top, direction == .previous ? verticalBoundaryPullTopPadding(topInset: topInset) : 0)
             .padding(.bottom, direction == .next ? verticalBoundaryPullBottomPadding(bottomInset: bottomInset) : 0)
             .opacity(0.45 + 0.55 * progress)
@@ -1186,6 +1218,7 @@ private final class ReaderVerticalScrollCoordinator: NSObject, UIGestureRecogniz
             try? await Task.sleep(for: .milliseconds(1))
             self?.scheduleViewportSync()
         }
+     
         return true
     }
 
