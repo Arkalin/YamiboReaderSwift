@@ -392,8 +392,23 @@ public struct MangaReaderView: View {
     private func topChrome(topInset: CGFloat) -> some View {
         ReaderGlassContainer(spacing: 12) {
             VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    MarqueeText(text: model.title, textStyle: .headline)
+                        .frame(height: MarqueeText.preferredHeight(for: .headline))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                    Text(model.progressLabelText)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .readerChromePanel(tint: readerChromePanelTint(for: colorScheme))
+
                 HStack(spacing: 12) {
-                    ReaderChromeIconButton(systemName: "xmark", title: L10n.string("common.close")) {
+                    ReaderChromeIconButton(systemName: "chevron.backward", title: L10n.string("common.back")) {
                         guard !isDismissing else { return }
                         isDismissing = true
                         Task {
@@ -421,22 +436,8 @@ public struct MangaReaderView: View {
                         .disabled(model.isTransitioningChapter || isDismissing)
                     }
                 }
-
-                VStack(alignment: .leading, spacing: 4) {
-                    MarqueeText(text: model.title, textStyle: .headline)
-                        .frame(height: MarqueeText.preferredHeight(for: .headline))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-
-                    Text(model.progressLabelText)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
+                .padding(.horizontal, 4)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-            .readerChromePanel(tint: readerChromePanelTint(for: colorScheme))
         }
         .padding(.top, max(topInset + 8, 20))
         .padding(.horizontal, 12)

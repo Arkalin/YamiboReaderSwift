@@ -30,6 +30,7 @@
 "common.cancel" = "取消";
 "common.clear" = "清除";
 "common.clear_all" = "清空";
+"common.back" = "返回";
 "common.close" = "关闭";
 "common.collapse" = "收起";
 "common.create" = "创建";
