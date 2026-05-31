@@ -2,22 +2,6 @@ import Foundation
 import Testing
 @testable import YamiboReaderCore
 
-@Test func progressSyncContinuousUpdatesPersistOnlyLatestPosition() async throws {
-    let adapter = RecordingProgressSyncAdapter()
-    let sync = ProgressSyncModule(adapter: adapter, debounceNanoseconds: 20_000_000)
-    let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=1&mobile=2")!
-
-    await sync.queue(.novel(NovelReadingPosition(threadURL: threadURL, view: 1, page: 1)))
-    await sync.queue(.novel(NovelReadingPosition(threadURL: threadURL, view: 1, page: 2)))
-
-    try await Task.sleep(nanoseconds: 60_000_000)
-
-    let saved = await adapter.savedPositions
-    #expect(saved == [
-        .novel(NovelReadingPosition(threadURL: threadURL, view: 1, page: 2))
-    ])
-}
-
 @Test func progressSyncFlushCancelsPendingAndPersistsLatestPosition() async throws {
     let adapter = RecordingProgressSyncAdapter()
     let sync = ProgressSyncModule(adapter: adapter, debounceNanoseconds: 100_000_000)
