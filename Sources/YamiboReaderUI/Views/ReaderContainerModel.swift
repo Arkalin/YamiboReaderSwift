@@ -134,6 +134,10 @@ public final class ReaderContainerModel: ObservableObject {
     }
 
     public var currentProgressFraction: Double {
+        if settings.readingMode == .vertical {
+            guard displayedPageCount > 1 else { return 0 }
+            return Double(displayedPageIndex) / Double(displayedPageCount - 1)
+        }
         guard renderedPageCount > 1 else { return 0 }
         return Double(currentPageIndex) / Double(renderedPageCount - 1)
     }
@@ -264,12 +268,18 @@ public final class ReaderContainerModel: ObservableObject {
             )
             return normalizedPagedPageIndex(target)
         case .vertical:
-            guard pages.count > 1 else { return 0 }
+            let view = displayedView
+            let viewPageIndexes = pages.indices.filter { pages[$0].documentView == view }
+            guard let firstPageIndex = viewPageIndexes.first,
+                  viewPageIndexes.count > 1 else {
+                return pages.firstIndex(where: { $0.documentView == view }) ?? 0
+            }
             let clampedPercent = min(max(value, 0), 100)
-            return min(
-                max(Int((clampedPercent / 100) * Double(pages.count - 1)), 0),
-                max(pages.count - 1, 0)
+            let localPageIndex = min(
+                max(Int((clampedPercent / 100) * Double(viewPageIndexes.count - 1)), 0),
+                max(viewPageIndexes.count - 1, 0)
             )
+            return firstPageIndex + localPageIndex
         }
     }
 
@@ -487,9 +497,14 @@ public final class ReaderContainerModel: ObservableObject {
     }
 
     public func updateVerticalViewportPosition(pageIndex: Int, intraPageProgress: Double) {
+        let normalizedProgress = min(max(intraPageProgress, 0), 1)
+        guard pageIndex != currentPageIndex ||
+            abs(normalizedProgress - currentPageIntraProgress) >= 0.002 else {
+            return
+        }
         if let state = readingWorkflow?.updateVerticalViewportPosition(
             pageIndex: pageIndex,
-            intraPageProgress: intraPageProgress
+            intraPageProgress: normalizedProgress
         ) {
             syncFromWorkflowState(state)
         }
@@ -548,25 +563,26 @@ public final class ReaderContainerModel: ObservableObject {
     }
 
     public func jumpToWebView(_ view: Int) async {
+        await jumpToWebView(view, preferredPage: 0)
+    }
+
+    public func jumpToWebView(_ view: Int, preferredPage: Int) async {
         let clampedView = max(1, min(maxView, view))
         debugReaderPagingModel(
-            "model.jumpToWebView target=\(view) clamped=\(clampedView) currentView=\(currentView) currentPageIndex=\(currentPageIndex) rendered=\(currentRenderedPage)/\(renderedPageCount)"
+            "model.jumpToWebView target=\(view) clamped=\(clampedView) preferredPage=\(preferredPage) currentView=\(currentView) currentPageIndex=\(currentPageIndex) rendered=\(currentRenderedPage)/\(renderedPageCount)"
         )
 
-        if let startIndex = prefetchedStartIndex,
-           settings.readingMode == .vertical,
-           clampedView == displayedView,
-           currentPageIndex >= startIndex {
-            await promotePrefetchedDocument(startingAt: 0)
+        if clampedView == prefetchedDocument?.view {
+            await promotePrefetchedDocument(startingAt: preferredPage, preferredResumePoint: nil)
             return
         }
 
         if clampedView == currentView {
-            jumpToRenderedPage(0)
+            jumpToRenderedPage(normalizedPagedPageIndex(preferredPage))
             return
         }
 
-        await load(view: clampedView, preferredPage: 0, preferredResumePoint: nil, forceRefresh: false)
+        await load(view: clampedView, preferredPage: preferredPage, preferredResumePoint: nil, forceRefresh: false)
     }
 
     public func resetChapterDirectoryBrowsing() {
@@ -987,17 +1003,6 @@ public final class ReaderContainerModel: ObservableObject {
     }
 
     private func promoteIfNeededAfterLocationUpdate() {
-        if settings.readingMode == .vertical,
-           let currentPage = currentRenderedPageMetadata,
-           currentPage.documentView != currentView,
-           prefetchedDocument?.view == currentPage.documentView {
-            let resumePoint = captureCurrentResumePoint()
-            Task {
-                await promotePrefetchedDocument(startingAt: 0, preferredResumePoint: resumePoint)
-            }
-            return
-        }
-
         if settings.readingMode == .paged,
            let prefetchedDocument,
            currentPageIndex >= max(currentDocumentPageCount - 1, 0),

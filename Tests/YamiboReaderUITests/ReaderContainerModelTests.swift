@@ -221,7 +221,7 @@ final class ReaderContainerModelTests: XCTestCase {
         }
     }
 
-    func testVerticalNearEndPrefetchMergesNextWebView() async throws {
+    func testVerticalNearEndPrefetchDoesNotMergeNextWebView() async throws {
         let model = try await makeModel(
             documents: [
                 makeDocument(view: 1, maxView: 2, chapterTitles: ["第一章", "第二章"]),
@@ -236,13 +236,26 @@ final class ReaderContainerModelTests: XCTestCase {
 
         try await waitFor {
             await MainActor.run {
-                Set(model.pages.map(\.documentView)).isSuperset(of: [1, 2])
+                model.currentProgressPercentText == "100%"
             }
         }
 
         await MainActor.run {
             XCTAssertEqual(model.currentView, 1)
-            XCTAssertTrue(model.pages.contains { $0.documentView == 2 })
+            XCTAssertEqual(Set(model.pages.map(\.documentView)), [1])
+            XCTAssertEqual(model.currentProgressPercentText, "100%")
+            XCTAssertEqual(
+                model.targetRenderedPageIndex(forProgressValue: 100),
+                model.pages.lastIndex(where: { $0.documentView == 1 })
+            )
+        }
+
+        await model.jumpRelativePage(1)
+
+        await MainActor.run {
+            XCTAssertEqual(model.currentView, 2)
+            XCTAssertEqual(model.currentRenderedPage, 1)
+            XCTAssertEqual(Set(model.pages.map(\.documentView)), [2])
         }
     }
 

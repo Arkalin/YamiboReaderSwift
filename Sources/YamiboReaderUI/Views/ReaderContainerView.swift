@@ -9,6 +9,24 @@ private struct ReaderVerticalViewportMetrics: Equatable {
     var viewportHeight: CGFloat = 0
 }
 
+private enum ReaderVerticalBoundaryDirection: Equatable {
+    case previous
+    case next
+}
+
+private struct ReaderVerticalBoundaryPullState: Equatable {
+    var direction: ReaderVerticalBoundaryDirection?
+    var distance: CGFloat = 0
+    var isArmed = false
+
+    static let idle = ReaderVerticalBoundaryPullState()
+}
+
+private struct ReaderVerticalPageFrameValue: Equatable {
+    let documentView: Int
+    let frame: CGRect
+}
+
 private struct ReaderVerticalPositioningFingerprint: Equatable {
     let view: Int
     let pageCount: Int
@@ -27,9 +45,9 @@ private func debugReaderPaging(_ message: @autoclosure () -> String) {
 }
 
 private struct ReaderVerticalPageFramePreferenceKey: PreferenceKey {
-    static var defaultValue: [Int: CGRect] { [:] }
+    static var defaultValue: [Int: ReaderVerticalPageFrameValue] { [:] }
 
-    static func reduce(value: inout [Int: CGRect], nextValue: () -> [Int: CGRect]) {
+    static func reduce(value: inout [Int: ReaderVerticalPageFrameValue], nextValue: () -> [Int: ReaderVerticalPageFrameValue]) {
         value.merge(nextValue(), uniquingKeysWith: { _, new in new })
     }
 }
@@ -52,7 +70,7 @@ private struct ReaderBottomChromeHeightPreferenceKey: PreferenceKey {
 
 public struct ReaderContainerView: View {
     @StateObject private var model: ReaderContainerModel
-    @StateObject private var verticalScrollCoordinator = ReaderVerticalScrollCoordinator()
+    @State private var verticalScrollCoordinator = ReaderVerticalScrollCoordinator()
     @Environment(\.colorScheme) private var colorScheme
     @State private var showingSettings = false
     @State private var showingCachePanel = false
@@ -65,13 +83,16 @@ public struct ReaderContainerView: View {
     @State private var verticalScrollRequest: ReaderVerticalScrollRequest?
     @State private var verticalRestoreController = ReaderVerticalRestoreController()
     @State private var verticalRestoreRetryTask: Task<Void, Never>?
-    @State private var verticalPageFrames: [Int: CGRect] = [:]
+    @State private var verticalViewportPositionUpdateTask: Task<Void, Never>?
+    @State private var verticalPageFrames: [Int: ReaderVerticalPageFrameValue] = [:]
     @State private var lastVerticalPositioningFingerprint: ReaderVerticalPositioningFingerprint?
     @State private var progressPreviewPageIndex: Int?
     @State private var progressPreviewChapterTitle: String?
     @State private var isProgressPreviewVisible = false
     @State private var progressPreviewHideTask: Task<Void, Never>?
     @State private var verticalTapSuppressionUntil: CFTimeInterval = 0
+    @State private var verticalBoundaryPullState = ReaderVerticalBoundaryPullState.idle
+    @State private var isHandlingVerticalBoundaryPull = false
     @State private var isDismissing = false
     @State private var topChromeHeight: CGFloat = 0
     @State private var bottomChromeHeight: CGFloat = 0
@@ -169,6 +190,7 @@ public struct ReaderContainerView: View {
             .onDisappear {
                 progressPreviewHideTask?.cancel()
                 verticalRestoreRetryTask?.cancel()
+                verticalViewportPositionUpdateTask?.cancel()
                 syncVerticalViewportBeforeSave()
                 Task { await model.saveProgress() }
             }
@@ -380,7 +402,12 @@ public struct ReaderContainerView: View {
                             GeometryReader { geometry in
                                 Color.clear.preference(
                                     key: ReaderVerticalPageFramePreferenceKey.self,
-                                    value: [page.index: geometry.frame(in: .named("readerVerticalViewport"))]
+                                    value: [
+                                        page.index: ReaderVerticalPageFrameValue(
+                                            documentView: page.documentView,
+                                            frame: geometry.frame(in: .named("readerVerticalViewport"))
+                                        )
+                                    ]
                                 )
                             }
                         )
@@ -391,6 +418,22 @@ public struct ReaderContainerView: View {
             .background(
                 ReaderScrollViewResolver { scrollView in
                     verticalScrollCoordinator.attach(scrollView: scrollView)
+                    verticalScrollCoordinator.onBoundaryPullRelease = { direction in
+                        Task { @MainActor in
+                            await handleVerticalBoundaryPullRelease(direction)
+                        }
+                    }
+                    verticalScrollCoordinator.onViewportMetricsChange = {
+                        Task { @MainActor in
+                            tryAdvanceVerticalRestore()
+                            scheduleVerticalViewportPositionUpdate()
+                        }
+                    }
+                    verticalScrollCoordinator.onBoundaryPullStateChange = { state in
+                        Task { @MainActor in
+                            updateVerticalBoundaryPullState(state)
+                        }
+                    }
                 }
                 .frame(width: 0, height: 0)
                 .accessibilityHidden(true)
@@ -407,28 +450,83 @@ public struct ReaderContainerView: View {
             )
             .onChange(of: verticalScrollRequest) { _, request in
                 guard let request else { return }
-                var transaction = Transaction()
-                transaction.disablesAnimations = true
-                withTransaction(transaction) {
-                    scrollProxy.scrollTo(request.pageIndex, anchor: .top)
+                Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(1))
+                    guard verticalRestoreController.scrollingRequest == request else { return }
+                    guard request.view == nil || request.view == model.visibleView else { return }
+                    debugReaderPaging(
+                        "verticalRestore scrollTo requestView=\(String(describing: request.view)) pageIndex=\(request.pageIndex) currentView=\(model.visibleView)"
+                    )
+                    var transaction = Transaction()
+                    transaction.disablesAnimations = true
+                    withTransaction(transaction) {
+                        scrollProxy.scrollTo(request.pageIndex, anchor: .top)
+                    }
+                    verticalScrollRequest = nil
+                    tryAdvanceVerticalRestore()
                 }
-                verticalScrollRequest = nil
-                tryAdvanceVerticalRestore()
             }
             .onPreferenceChange(ReaderVerticalPageFramePreferenceKey.self) { frames in
-                verticalPageFrames = frames
-                tryAdvanceVerticalRestore()
-                updateVerticalViewportPosition()
+                Task { @MainActor in
+                    verticalPageFrames = frames
+                    tryAdvanceVerticalRestore()
+                    scheduleVerticalViewportPositionUpdate()
+                }
             }
-            .onChange(of: verticalScrollCoordinator.viewportMetrics) { _, _ in
-                tryAdvanceVerticalRestore()
-                updateVerticalViewportPosition()
+            .overlay(alignment: .top) {
+                verticalBoundaryPullOverlay(direction: .previous)
+            }
+            .overlay(alignment: .bottom) {
+                verticalBoundaryPullOverlay(direction: .next)
             }
         }
     }
 
     private var backgroundColor: Color {
         readerThemeColor(for: model.settings.backgroundStyle, colorScheme: colorScheme)
+    }
+
+    @ViewBuilder
+    private func verticalBoundaryPullOverlay(direction: ReaderVerticalBoundaryDirection) -> some View {
+        if verticalBoundaryPullState.direction == direction,
+           canNavigateVerticalBoundary(direction) {
+            let progress = min(max(verticalBoundaryPullState.distance / ReaderVerticalScrollCoordinator.boundaryTriggerDistance, 0), 1)
+            Label(
+                verticalBoundaryPullText(for: direction, isArmed: verticalBoundaryPullState.isArmed),
+                systemImage: direction == .next ? "arrow.down.circle" : "arrow.up.circle"
+            )
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.primary)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(.ultraThinMaterial, in: Capsule())
+            .overlay {
+                Capsule()
+                    .stroke(Color.accentColor.opacity(0.35 + 0.45 * progress), lineWidth: 1)
+            }
+            .padding(.top, direction == .previous ? max(topChromeHeight, 24) + 8 : 0)
+            .padding(.bottom, direction == .next ? max(bottomChromeHeight, 24) + 8 : 0)
+            .opacity(0.45 + 0.55 * progress)
+            .transition(.opacity.combined(with: .scale(scale: 0.96)))
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+        }
+    }
+
+    private func verticalBoundaryPullText(
+        for direction: ReaderVerticalBoundaryDirection,
+        isArmed: Bool
+    ) -> String {
+        switch (direction, isArmed) {
+        case (.previous, false):
+            return L10n.string("reader.pull_previous_web_page")
+        case (.previous, true):
+            return L10n.string("reader.release_previous_web_page")
+        case (.next, false):
+            return L10n.string("reader.pull_next_web_page")
+        case (.next, true):
+            return L10n.string("reader.release_next_web_page")
+        }
     }
 
     @ViewBuilder
@@ -727,11 +825,15 @@ public struct ReaderContainerView: View {
     }
 
     private func jumpToWebView(_ view: Int) async {
+        await jumpToWebView(view, preferredPage: 0)
+    }
+
+    private func jumpToWebView(_ view: Int, preferredPage: Int) async {
         chromeState.showChrome()
         debugReaderPaging(
-            "jumpToWebView start target=\(view) currentView=\(model.visibleView) currentPageIndex=\(model.currentPageIndex) rendered=\(model.currentRenderedPage)/\(model.renderedPageCount)"
+            "jumpToWebView start target=\(view) preferredPage=\(preferredPage) currentView=\(model.visibleView) currentPageIndex=\(model.currentPageIndex) rendered=\(model.currentRenderedPage)/\(model.renderedPageCount)"
         )
-        await model.jumpToWebView(view)
+        await model.jumpToWebView(view, preferredPage: preferredPage)
         debugReaderPaging(
             "jumpToWebView end currentView=\(model.visibleView) currentPageIndex=\(model.currentPageIndex) rendered=\(model.currentRenderedPage)/\(model.renderedPageCount)"
         )
@@ -751,6 +853,49 @@ public struct ReaderContainerView: View {
         if model.settings.readingMode == .vertical {
             requestVerticalScrollToCurrentPage()
         }
+    }
+
+    private func canNavigateVerticalBoundary(_ direction: ReaderVerticalBoundaryDirection) -> Bool {
+        guard model.settings.readingMode == .vertical, !model.pages.isEmpty else { return false }
+        switch direction {
+        case .previous:
+            return model.visibleView > 1
+        case .next:
+            return model.visibleView < model.maxView
+        }
+    }
+
+    private func updateVerticalBoundaryPullState(_ state: ReaderVerticalBoundaryPullState) {
+        guard let direction = state.direction,
+              canNavigateVerticalBoundary(direction) else {
+            if verticalBoundaryPullState != .idle {
+                withAnimation(.easeInOut(duration: 0.12)) {
+                    verticalBoundaryPullState = .idle
+                }
+            }
+            return
+        }
+
+        withAnimation(.easeInOut(duration: 0.12)) {
+            verticalBoundaryPullState = state
+        }
+    }
+
+    private func handleVerticalBoundaryPullRelease(_ direction: ReaderVerticalBoundaryDirection) async {
+        guard canNavigateVerticalBoundary(direction), !isHandlingVerticalBoundaryPull else { return }
+        isHandlingVerticalBoundaryPull = true
+        verticalBoundaryPullState = .idle
+        cancelVerticalRestoreForUserScroll()
+        debugReaderPaging(
+            "verticalBoundaryPull release direction=\(direction) view=\(model.visibleView) currentPageIndex=\(model.currentPageIndex) rendered=\(model.currentRenderedPage)/\(model.renderedPageCount)"
+        )
+        switch direction {
+        case .previous:
+            await jumpToWebView(model.visibleView - 1, preferredPage: .max)
+        case .next:
+            await jumpToWebView(model.visibleView + 1, preferredPage: 0)
+        }
+        isHandlingVerticalBoundaryPull = false
     }
 
     private var hasPresentedOverlay: Bool {
@@ -804,6 +949,7 @@ public struct ReaderContainerView: View {
 
     private func makeVerticalScrollRequest() -> ReaderVerticalScrollRequest {
         ReaderVerticalScrollRequest(
+            view: model.visibleView,
             pageIndex: model.currentPageIndex,
             intraPageProgress: model.currentPageIntraProgress
         )
@@ -817,13 +963,14 @@ public struct ReaderContainerView: View {
     }
 
     private func updateVerticalViewportPosition(force: Bool = false) {
-        guard model.settings.readingMode == .vertical, !verticalPageFrames.isEmpty else { return }
+        let frames = currentVerticalPageFrames
+        guard model.settings.readingMode == .vertical, !frames.isEmpty else { return }
         guard verticalRestoreController.canSampleViewport(now: CACurrentMediaTime()) else {
             return
         }
 
         guard let sample = ReaderVerticalPositioning.sample(
-            frames: verticalPageFrames,
+            frames: frames,
             referenceLineY: verticalScrollCoordinator.referenceLineY
         ) else { return }
         model.updateVerticalViewportPosition(
@@ -832,9 +979,22 @@ public struct ReaderContainerView: View {
         )
     }
 
+    private func scheduleVerticalViewportPositionUpdate() {
+        verticalViewportPositionUpdateTask?.cancel()
+        verticalViewportPositionUpdateTask = Task {
+            try? await Task.sleep(for: .milliseconds(16))
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                updateVerticalViewportPosition()
+                verticalViewportPositionUpdateTask = nil
+            }
+        }
+    }
+
     private func applyVerticalFineTune(for request: ReaderVerticalScrollRequest) {
         guard verticalRestoreController.scrollingRequest == request else { return }
-        guard let frame = verticalPageFrames[request.pageIndex] else { return }
+        guard request.view == nil || request.view == model.visibleView else { return }
+        guard let frame = currentVerticalPageFrames[request.pageIndex] else { return }
         verticalRestoreController.beginFineTuning(request)
         guard verticalScrollCoordinator.restoreOffset(
             to: frame,
@@ -851,10 +1011,15 @@ public struct ReaderContainerView: View {
     private func tryAdvanceVerticalRestore() {
         refreshVerticalRestorePhase()
         guard let request = verticalRestoreController.scrollingRequest else { return }
+        guard request.view == nil || request.view == model.visibleView else { return }
         guard verticalScrollCoordinator.hasAttachedScrollView else {
             return
         }
-        guard let frame = verticalPageFrames[request.pageIndex] else {
+        let frames = currentVerticalPageFrames
+        guard let frame = frames[request.pageIndex] else {
+            debugReaderPaging(
+                "verticalRestore waitingForFrame requestView=\(String(describing: request.view)) pageIndex=\(request.pageIndex) currentView=\(model.visibleView) available=\(frames.keys.sorted().prefix(5))...\(frames.keys.sorted().suffix(5))"
+            )
             return
         }
         guard frame.height > 0 else {
@@ -877,6 +1042,12 @@ public struct ReaderContainerView: View {
 
     private func beginVerticalRestoreScrolling(for request: ReaderVerticalScrollRequest) {
         verticalRestoreController.beginScrolling(to: request)
+    }
+
+    private var currentVerticalPageFrames: [Int: CGRect] {
+        verticalPageFrames.compactMapValues { value in
+            value.documentView == model.visibleView ? value.frame : nil
+        }
     }
 
     private func refreshVerticalRestorePhase(now: CFTimeInterval = CACurrentMediaTime()) {
@@ -916,16 +1087,25 @@ public struct ReaderContainerView: View {
     }
 }
 
-private final class ReaderVerticalScrollCoordinator: NSObject, ObservableObject, UIGestureRecognizerDelegate {
-    @Published private(set) var viewportMetrics = ReaderVerticalViewportMetrics()
+private final class ReaderVerticalScrollCoordinator: NSObject, UIGestureRecognizerDelegate {
+    static let boundaryTriggerDistance: CGFloat = 72
+
+    var onBoundaryPullRelease: ((ReaderVerticalBoundaryDirection) -> Void)?
+    var onViewportMetricsChange: (() -> Void)?
+    var onBoundaryPullStateChange: ((ReaderVerticalBoundaryPullState) -> Void)?
 
     private weak var scrollView: UIScrollView?
     private weak var interruptionTapRecognizer: UITapGestureRecognizer?
+    private weak var boundaryPanGestureRecognizer: UIPanGestureRecognizer?
     private var contentOffsetObservation: NSKeyValueObservation?
     private var boundsObservation: NSKeyValueObservation?
     private var currentViewportMetrics = ReaderVerticalViewportMetrics()
     private var pendingViewportMetrics: ReaderVerticalViewportMetrics?
     private var isViewportMetricsPublicationScheduled = false
+    private var currentBoundaryPullState = ReaderVerticalBoundaryPullState.idle
+    private var pendingBoundaryPullState: ReaderVerticalBoundaryPullState?
+    private var isBoundaryPullStatePublicationScheduled = false
+    private var isViewportSyncScheduled = false
     private var suppressChromeToggleUntil = CACurrentMediaTime()
     private var lastMotionTime = CACurrentMediaTime()
     private var isRestoringOffset = false
@@ -934,13 +1114,16 @@ private final class ReaderVerticalScrollCoordinator: NSObject, ObservableObject,
     func attach(scrollView: UIScrollView?) {
         guard self.scrollView !== scrollView else { return }
         detachTapRecognizer()
+        detachBoundaryPanTarget()
         contentOffsetObservation = nil
         boundsObservation = nil
         self.scrollView = scrollView
+        scrollView?.alwaysBounceVertical = true
         installTapRecognizerIfNeeded()
+        installBoundaryPanTargetIfNeeded()
         installContentOffsetObservationIfNeeded()
         installBoundsObservationIfNeeded()
-        syncViewportMetrics()
+        scheduleViewportSync()
     }
 
     var referenceLineY: CGFloat {
@@ -990,7 +1173,7 @@ private final class ReaderVerticalScrollCoordinator: NSObject, ObservableObject,
         isRestoringOffset = false
         Task { @MainActor [weak self] in
             try? await Task.sleep(for: .milliseconds(1))
-            self?.syncViewportMetrics()
+            self?.scheduleViewportSync()
         }
         return true
     }
@@ -1022,14 +1205,24 @@ private final class ReaderVerticalScrollCoordinator: NSObject, ObservableObject,
             guard oldValue != newValue else { return }
             guard !self.isRestoringOffset else { return }
             self.lastMotionTime = CACurrentMediaTime()
-            self.syncViewportMetrics()
+            self.scheduleViewportSync()
         }
     }
 
     private func installBoundsObservationIfNeeded() {
         guard let scrollView else { return }
         boundsObservation = scrollView.observe(\.bounds, options: [.initial, .new]) { [weak self] _, _ in
-            self?.syncViewportMetrics()
+            self?.scheduleViewportSync()
+        }
+    }
+
+    private func scheduleViewportSync() {
+        guard !isViewportSyncScheduled else { return }
+        isViewportSyncScheduled = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.001) { [weak self] in
+            guard let self else { return }
+            self.isViewportSyncScheduled = false
+            self.syncViewportMetrics()
         }
     }
 
@@ -1038,6 +1231,7 @@ private final class ReaderVerticalScrollCoordinator: NSObject, ObservableObject,
         guard let scrollView else {
             metrics = ReaderVerticalViewportMetrics()
             updateViewportMetrics(metrics)
+            updateBoundaryPullState(.idle)
             return
         }
         let contentOffsetY = scrollView.contentOffset.y + scrollView.adjustedContentInset.top
@@ -1046,6 +1240,7 @@ private final class ReaderVerticalScrollCoordinator: NSObject, ObservableObject,
             viewportHeight: scrollView.bounds.height
         )
         updateViewportMetrics(metrics)
+        updateBoundaryPullState(boundaryPullState(for: scrollView))
     }
 
     private func updateViewportMetrics(_ metrics: ReaderVerticalViewportMetrics) {
@@ -1058,13 +1253,67 @@ private final class ReaderVerticalScrollCoordinator: NSObject, ObservableObject,
     private func scheduleViewportMetricsPublication() {
         guard !isViewportMetricsPublicationScheduled else { return }
         isViewportMetricsPublicationScheduled = true
-        DispatchQueue.main.async { [weak self] in
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.001) { [weak self] in
             guard let self else { return }
             self.isViewportMetricsPublicationScheduled = false
             guard let metrics = self.pendingViewportMetrics else { return }
             self.pendingViewportMetrics = nil
-            if metrics != self.viewportMetrics {
-                self.viewportMetrics = metrics
+            guard metrics == self.currentViewportMetrics else { return }
+            self.onViewportMetricsChange?()
+        }
+    }
+
+    private func boundaryPullState(for scrollView: UIScrollView) -> ReaderVerticalBoundaryPullState {
+        let minOffsetY = -scrollView.adjustedContentInset.top
+        let maxOffsetY = max(
+            minOffsetY,
+            scrollView.contentSize.height - scrollView.bounds.height + scrollView.adjustedContentInset.bottom
+        )
+        let topOverscroll = max(minOffsetY - scrollView.contentOffset.y, 0)
+        let bottomOverscroll = max(scrollView.contentOffset.y - maxOffsetY, 0)
+
+        if topOverscroll > 0 {
+            return ReaderVerticalBoundaryPullState(
+                direction: .previous,
+                distance: topOverscroll,
+                isArmed: topOverscroll >= Self.boundaryTriggerDistance
+            )
+        }
+
+        if bottomOverscroll > 0 {
+            return ReaderVerticalBoundaryPullState(
+                direction: .next,
+                distance: bottomOverscroll,
+                isArmed: bottomOverscroll >= Self.boundaryTriggerDistance
+            )
+        }
+
+        return .idle
+    }
+
+    private func updateBoundaryPullState(_ state: ReaderVerticalBoundaryPullState) {
+        if state == currentBoundaryPullState {
+            pendingBoundaryPullState = nil
+            return
+        }
+        guard state != pendingBoundaryPullState else {
+            return
+        }
+        pendingBoundaryPullState = state
+        scheduleBoundaryPullStatePublication()
+    }
+
+    private func scheduleBoundaryPullStatePublication() {
+        guard !isBoundaryPullStatePublicationScheduled else { return }
+        isBoundaryPullStatePublicationScheduled = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.001) { [weak self] in
+            guard let self else { return }
+            self.isBoundaryPullStatePublicationScheduled = false
+            guard let state = self.pendingBoundaryPullState else { return }
+            self.pendingBoundaryPullState = nil
+            if state != self.currentBoundaryPullState {
+                self.currentBoundaryPullState = state
+                self.onBoundaryPullStateChange?(state)
             }
         }
     }
@@ -1076,11 +1325,47 @@ private final class ReaderVerticalScrollCoordinator: NSObject, ObservableObject,
         interruptionTapRecognizer = nil
     }
 
+    private func installBoundaryPanTargetIfNeeded() {
+        guard let panGestureRecognizer = scrollView?.panGestureRecognizer,
+              boundaryPanGestureRecognizer !== panGestureRecognizer else {
+            return
+        }
+        panGestureRecognizer.addTarget(self, action: #selector(handleBoundaryPan(_:)))
+        boundaryPanGestureRecognizer = panGestureRecognizer
+    }
+
+    private func detachBoundaryPanTarget() {
+        if let recognizer = boundaryPanGestureRecognizer {
+            recognizer.removeTarget(self, action: #selector(handleBoundaryPan(_:)))
+        }
+        boundaryPanGestureRecognizer = nil
+        updateBoundaryPullState(.idle)
+    }
+
     @objc
     private func handleInterruptionTap(_ recognizer: UITapGestureRecognizer) {
         guard recognizer.state == .ended else { return }
         guard interruptScrollingIfNeeded() else { return }
         suppressChromeToggleUntil = CACurrentMediaTime() + motionSuppressionInterval
+    }
+
+    @objc
+    private func handleBoundaryPan(_ recognizer: UIPanGestureRecognizer) {
+        switch recognizer.state {
+        case .ended, .cancelled, .failed:
+            let releasedState = currentBoundaryPullState
+            updateBoundaryPullState(.idle)
+            guard releasedState.isArmed,
+                  let direction = releasedState.direction else {
+                return
+            }
+            debugReaderPaging(
+                "verticalBoundaryPull armedRelease direction=\(direction) distance=\(releasedState.distance)"
+            )
+            onBoundaryPullRelease?(direction)
+        default:
+            break
+        }
     }
 
     func gestureRecognizer(
