@@ -86,6 +86,34 @@ public struct ReaderProgressScrubUpdate: Equatable, Sendable {
     }
 }
 
+public struct ReaderProgressChromePresentation: Equatable, Sendable {
+    public var readingMode: ReaderReadingMode
+    public var isChromeVisible: Bool
+
+    public init(readingMode: ReaderReadingMode, isChromeVisible: Bool) {
+        self.readingMode = readingMode
+        self.isChromeVisible = isChromeVisible
+    }
+
+    public var showsConventionalSlider: Bool { false }
+
+    public var showsHorizontalFill: Bool {
+        readingMode == .paged
+    }
+
+    public var supportsHorizontalScrub: Bool {
+        readingMode == .paged
+    }
+
+    public var showsVerticalScrubber: Bool {
+        readingMode == .vertical && isChromeVisible
+    }
+
+    public func horizontalCapsuleText(percentText: String) -> String {
+        "目录 · \(percentText)"
+    }
+}
+
 public struct ReaderProgressScrubState: Equatable, Sendable {
     public private(set) var phase: ReaderProgressScrubPhase = .idle
     public private(set) var value = 0.0
@@ -540,15 +568,18 @@ struct ReaderBottomChrome: View {
     let onProgressCommit: (Int) -> Void
 
     @State private var sliderState = ReaderProgressSliderState()
+    @State private var scrubState = ReaderProgressScrubState()
     @State private var progressTickFeedbackGenerator = UISelectionFeedbackGenerator()
+    @State private var progressStartFeedbackGenerator = UIImpactFeedbackGenerator(style: .light)
+    @State private var progressCommitFeedbackGenerator = UIImpactFeedbackGenerator(style: .medium)
     @State private var lastFeedbackTickStartIndex: Int?
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         ReaderGlassContainer(spacing: 12) {
             VStack(spacing: 14) {
+                progressControl
                 firstRow
-                secondRow
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
@@ -607,69 +638,33 @@ struct ReaderBottomChrome: View {
         .readerChromeButtonStyle(tint: readerChromeButtonTint(for: colorScheme))
     }
 
-    private var secondRow: some View {
+    private var progressControl: some View {
         VStack(spacing: 8) {
-            Text(progressLabelText)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
-            HStack(spacing: 10) {
-                ReaderChromeIconButton(systemName: "backward.end.fill", title: L10n.string("reader.previous_chapter")) {
-                    onJumpChapter(-1)
-                }
-                .disabled(!model.hasPreviousChapter)
-
-                if sliderHasAvailableRange {
-                    ZStack {
-                        Slider(
-                            value: Binding(
-                                get: { sliderState.sliderValue },
-                                set: { newValue in
-                                    guard sliderState.isEditing else { return }
-                                    sliderState.sliderValue = min(max(newValue, sliderRange.lowerBound), sliderRange.upperBound)
-                                    triggerProgressTickFeedbackIfNeeded()
-                                    onProgressPreviewChange(sliderState.sliderValue, true)
-                                }
-                            ),
-                            in: sliderRange,
-                            step: 1
-                        ) { editing in
-                            sliderState.isEditing = editing
-                            if editing {
-                                lastFeedbackTickStartIndex = nil
-                                progressTickFeedbackGenerator.prepare()
-                                onProgressPreviewChange(sliderState.sliderValue, true)
-                            } else {
-                                lastFeedbackTickStartIndex = nil
-                                onProgressPreviewChange(nil, false)
-                            }
-                            if !editing {
-                                onProgressCommit(sliderTargetRenderedPageIndex)
-                                sliderState.sliderValue = sliderModelValue
-                            }
-                        }
-                        ReaderProgressChapterTickOverlay(ticks: model.progressChapterTicks)
-                    }
+            if let preview = scrubState.preview, scrubState.phase == .scrubbing {
+                ReaderChapterPreviewBubble(title: preview.displayText)
                     .frame(maxWidth: .infinity)
-                } else {
-                    Capsule()
-                        .fill(Color.secondary.opacity(0.2))
-                        .frame(height: 4)
-                        .overlay(alignment: .leading) {
-                            Capsule()
-                                .fill(Color.accentColor.opacity(0.55))
-                                .frame(width: 24, height: 4)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .accessibilityHidden(true)
-                }
-
-                ReaderChromeIconButton(systemName: "forward.end.fill", title: L10n.string("reader.next_chapter")) {
-                    onJumpChapter(1)
-                }
-                .disabled(!model.hasNextChapter)
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
             }
+
+            ReaderDirectoryProgressCapsule(
+                title: progressChromePresentation.horizontalCapsuleText(percentText: model.currentProgressPercentText),
+                progressFraction: displayedProgressFraction,
+                showsFill: progressChromePresentation.showsHorizontalFill,
+                supportsScrub: progressChromePresentation.supportsHorizontalScrub && sliderHasAvailableRange,
+                ticks: model.progressChapterTicks,
+                onTapDirectory: onShowChapters,
+                onScrub: { locationX, width in
+                    handleHorizontalCapsuleScrub(locationX: locationX, width: width)
+                },
+                onEndScrub: {
+                    commitHorizontalCapsuleScrub()
+                }
+            )
         }
+    }
+
+    private var progressChromePresentation: ReaderProgressChromePresentation {
+        ReaderProgressChromePresentation(readingMode: model.settings.readingMode, isChromeVisible: true)
     }
 
     private var sliderRange: ClosedRange<Double> {
@@ -702,6 +697,14 @@ struct ReaderBottomChrome: View {
         sliderRange.lowerBound < sliderRange.upperBound
     }
 
+    private var displayedProgressFraction: Double {
+        if scrubState.phase == .scrubbing {
+            guard model.renderedPageCount > 1 else { return 0 }
+            return Double(scrubState.targetRenderedPageIndex) / Double(max(model.renderedPageCount - 1, 1))
+        }
+        return model.currentProgressFraction
+    }
+
     private var progressLabelText: String {
         model.progressSliderLabelText(
             isEditing: sliderState.isEditing,
@@ -712,6 +715,59 @@ struct ReaderBottomChrome: View {
 
     private var sliderTargetRenderedPageIndex: Int {
         model.targetRenderedPageIndex(forProgressValue: sliderState.sliderValue)
+    }
+
+    private var scrubContext: ReaderProgressScrubContext {
+        ReaderProgressScrubContext(
+            readingMode: model.settings.readingMode,
+            pageCount: model.renderedPageCount,
+            currentProgressPercent: model.currentProgressPercent,
+            targetPageIndex: { value in
+                model.targetRenderedPageIndex(forProgressValue: value)
+            },
+            chapterTitle: { pageIndex in
+                model.chapterTitle(forRenderedPageIndex: pageIndex)
+            },
+            chapterTickStartIndex: { pageIndex in
+                model.progressChapterTickStartIndex(forRenderedPageIndex: pageIndex)
+            }
+        )
+    }
+
+    private func handleHorizontalCapsuleScrub(locationX: CGFloat, width: CGFloat) {
+        guard progressChromePresentation.supportsHorizontalScrub, width > 0 else { return }
+        let fraction = min(max(locationX / width, 0), 1)
+        let value = sliderRange.lowerBound + Double(fraction) * (sliderRange.upperBound - sliderRange.lowerBound)
+        let update = scrubState.update(value: value, context: scrubContext)
+        triggerFeedback(update.haptics)
+    }
+
+    private func commitHorizontalCapsuleScrub() {
+        guard scrubState.phase == .scrubbing else { return }
+        let update = scrubState.end()
+        triggerFeedback(update.haptics)
+        if let target = update.committedPageIndex {
+            onProgressCommit(target)
+        }
+        sliderState.sliderValue = sliderModelValue
+        onProgressPreviewChange(nil, false)
+    }
+
+    private func triggerFeedback(_ haptics: [ReaderProgressScrubHaptic]) {
+        for haptic in haptics {
+            switch haptic {
+            case .start:
+                progressStartFeedbackGenerator.impactOccurred()
+                progressStartFeedbackGenerator.prepare()
+                progressTickFeedbackGenerator.prepare()
+            case .chapterTick:
+                progressTickFeedbackGenerator.selectionChanged()
+                progressTickFeedbackGenerator.prepare()
+            case .commit:
+                progressCommitFeedbackGenerator.impactOccurred()
+                progressCommitFeedbackGenerator.prepare()
+            }
+        }
     }
 
     private func triggerProgressTickFeedbackIfNeeded() {
@@ -745,6 +801,81 @@ private struct ReaderProgressChapterTickOverlay: View {
         }
         .frame(height: 24)
         .allowsHitTesting(false)
+    }
+}
+
+private struct ReaderDirectoryProgressCapsule: View {
+    let title: String
+    let progressFraction: Double
+    let showsFill: Bool
+    let supportsScrub: Bool
+    let ticks: [ReaderProgressChapterTick]
+    let onTapDirectory: () -> Void
+    let onScrub: (CGFloat, CGFloat) -> Void
+    let onEndScrub: () -> Void
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        GeometryReader { geometry in
+            let width = max(geometry.size.width, 1)
+            let clampedProgress = min(max(progressFraction, 0), 1)
+
+            Button(action: onTapDirectory) {
+                ZStack(alignment: .leading) {
+                    Capsule()
+                        .fill(Color.secondary.opacity(colorScheme == .dark ? 0.18 : 0.12))
+
+                    if showsFill {
+                        Capsule()
+                            .fill(Color.accentColor.opacity(colorScheme == .dark ? 0.24 : 0.18))
+                            .frame(width: max(8, width * clampedProgress))
+                            .accessibilityHidden(true)
+
+                        Capsule()
+                            .fill(Color.accentColor.opacity(0.78))
+                            .frame(width: 3, height: 24)
+                            .offset(x: min(max(width * clampedProgress - 1.5, 0), width - 3))
+                            .accessibilityHidden(true)
+                    }
+
+                    ReaderProgressChapterTickOverlay(ticks: ticks)
+                        .padding(.horizontal, 12)
+                        .opacity(showsFill ? 1 : 0)
+
+                    HStack(spacing: 8) {
+                        Image(systemName: "list.bullet")
+                            .font(.callout.weight(.semibold))
+                        Text(title)
+                            .font(.callout.weight(.semibold))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.85)
+                    }
+                    .foregroundStyle(.primary)
+                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal, 18)
+                }
+                .frame(height: 44)
+                .contentShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .readerChromePanel(cornerRadius: 24, tint: readerChromePanelTint(for: colorScheme))
+            .gesture(scrubGesture(width: width), including: supportsScrub ? .gesture : .subviews)
+            .accessibilityLabel(title)
+            .accessibilityHint(L10n.string("reader.chapters"))
+        }
+        .frame(height: 44)
+    }
+
+    private func scrubGesture(width: CGFloat) -> some Gesture {
+        DragGesture(minimumDistance: 6)
+            .onChanged { value in
+                guard supportsScrub else { return }
+                onScrub(value.location.x, width)
+            }
+            .onEnded { _ in
+                guard supportsScrub else { return }
+                onEndScrub()
+            }
     }
 }
 
