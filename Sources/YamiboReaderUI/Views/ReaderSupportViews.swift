@@ -388,8 +388,6 @@ struct ReaderBottomChrome: View {
     @ObservedObject var model: ReaderContainerModel
     let bottomInset: CGFloat
     let onShowChapters: () -> Void
-    let onShowWebJump: () -> Void
-    let onStepWeb: (Int) -> Void
     let onShowSettings: () -> Void
     let onShowCache: () -> Void
     let onShowComments: () -> Void
@@ -449,30 +447,6 @@ struct ReaderBottomChrome: View {
                     systemName: "square.and.arrow.down",
                     action: onShowCache
                 )
-            }
-
-            HStack(spacing: 8) {
-                ReaderChromeIconButton(systemName: "chevron.left", title: L10n.string("reader.previous_web_page")) {
-                    onStepWeb(-1)
-                }
-                .disabled(model.visibleView <= 1)
-
-                Button(action: onShowWebJump) {
-                    Text(model.currentWebViewText)
-                        .font(.callout.weight(.semibold))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.85)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 8)
-                        .frame(maxWidth: .infinity)
-                }
-                .readerChromeButtonStyle(prominent: true, tint: readerChromeButtonTint(for: colorScheme))
-                .disabled(model.maxView <= 1)
-
-                ReaderChromeIconButton(systemName: "chevron.right", title: L10n.string("reader.next_web_page")) {
-                    onStepWeb(1)
-                }
-                .disabled(model.visibleView >= model.maxView)
             }
         }
     }
