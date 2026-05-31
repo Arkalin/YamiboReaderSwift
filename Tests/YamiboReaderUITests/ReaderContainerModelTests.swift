@@ -99,6 +99,77 @@ final class ReaderContainerModelTests: XCTestCase {
         }
     }
 
+    func testPreviewingChapterDirectoryWebViewDoesNotMoveReadingPosition() async throws {
+        let model = try await makeModel(
+            documents: [
+                makeDocument(view: 1, maxView: 2, chapterTitles: ["第一章", "第二章"]),
+                makeDocument(view: 2, maxView: 2, chapterTitles: ["第三章", "第四章"]),
+            ]
+        )
+
+        await MainActor.run {
+            model.jumpToRenderedPage(model.renderedPageCount - 1)
+            XCTAssertEqual(model.currentView, 1)
+            XCTAssertEqual(model.currentChapterTitle, "第二章")
+        }
+
+        await model.previewChapterDirectoryWebView(2)
+
+        await MainActor.run {
+            XCTAssertEqual(model.currentView, 1)
+            XCTAssertEqual(model.currentChapterTitle, "第二章")
+            XCTAssertEqual(model.currentRenderedPage, model.renderedPageCount)
+            XCTAssertEqual(model.visibleChapterDirectoryView, 2)
+            XCTAssertEqual(model.visibleChapterDirectoryChapters.map(\.title), ["第三章", "第四章"])
+            XCTAssertNil(model.currentChapterDirectoryIndex)
+        }
+    }
+
+    func testPreviewingCurrentChapterDirectoryWebViewReturnsToReadingDirectory() async throws {
+        let model = try await makeModel(
+            documents: [
+                makeDocument(view: 1, maxView: 2, chapterTitles: ["第一章", "第二章"]),
+                makeDocument(view: 2, maxView: 2, chapterTitles: ["第三章", "第四章"]),
+            ]
+        )
+
+        await model.previewChapterDirectoryWebView(2)
+        await MainActor.run {
+            XCTAssertEqual(model.visibleChapterDirectoryView, 2)
+        }
+
+        await model.previewChapterDirectoryWebView(1)
+
+        await MainActor.run {
+            XCTAssertEqual(model.currentView, 1)
+            XCTAssertEqual(model.visibleChapterDirectoryView, 1)
+            XCTAssertEqual(model.visibleChapterDirectoryChapters.map(\.title), ["第一章", "第二章"])
+            XCTAssertEqual(model.currentChapterDirectoryIndex, model.currentChapterIndex)
+        }
+    }
+
+    func testSelectingPreviewedChapterDirectoryChapterMovesReaderToThatChapter() async throws {
+        let model = try await makeModel(
+            documents: [
+                makeDocument(view: 1, maxView: 2, chapterTitles: ["第一章", "第二章"]),
+                makeDocument(view: 2, maxView: 2, chapterTitles: ["第三章", "第四章"]),
+            ]
+        )
+
+        await model.previewChapterDirectoryWebView(2)
+        let target = try await MainActor.run {
+            try XCTUnwrap(model.visibleChapterDirectoryChapters.first(where: { $0.title == "第四章" }))
+        }
+        await model.jumpToChapterDirectoryChapter(target)
+
+        await MainActor.run {
+            XCTAssertEqual(model.currentView, 2)
+            XCTAssertEqual(model.currentChapterTitle, "第四章")
+            XCTAssertEqual(model.visibleChapterDirectoryView, model.visibleView)
+            XCTAssertEqual(model.visibleChapterDirectoryChapters.map(\.title), ["第三章", "第四章"])
+        }
+    }
+
     func testChapterTitleHelperResolvesRenderedPageChapter() async throws {
         let model = try await makeModel(
             documents: [
