@@ -241,6 +241,8 @@
 "reader.font.system_serif" = "宋体";
 "reader.font_family" = "字体";
 "reader.font_size" = "大小";
+"reader.go_next_web_page" = "前往下一网页…";
+"reader.go_previous_web_page" = "前往上一网页…";
 "reader.horizontal_padding" = "页边空白";
 "reader.inline_images" = "帖子图片";
 "reader.ios_only" = "Reader is available on iOS only.";

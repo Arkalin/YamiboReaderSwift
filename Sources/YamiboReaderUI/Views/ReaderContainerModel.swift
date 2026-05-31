@@ -210,6 +210,16 @@ public final class ReaderContainerModel: ObservableObject {
         chapterDirectoryView == nil ? renderedPageCount : max(chapterDirectoryPageCount, 1)
     }
 
+    public var previousChapterDirectoryWebView: Int? {
+        let target = visibleChapterDirectoryView - 1
+        return target >= 1 ? target : nil
+    }
+
+    public var nextChapterDirectoryWebView: Int? {
+        let target = visibleChapterDirectoryView + 1
+        return target <= maxView ? target : nil
+    }
+
     public var chapterDirectoryWebTitle: String {
         L10n.string(
             "reader.web_view_chapters",
