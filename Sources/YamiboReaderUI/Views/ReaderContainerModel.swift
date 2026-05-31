@@ -13,6 +13,10 @@ public struct ReaderProgressChapterTick: Equatable, Sendable {
     }
 }
 
+private func debugReaderPagingModel(_ message: @autoclosure () -> String) {
+    print("[DEBUG-reader-paging] \(message())")
+}
+
 @MainActor
 public final class ReaderContainerModel: ObservableObject {
     @Published public private(set) var isLoading = false
@@ -507,7 +511,11 @@ public final class ReaderContainerModel: ObservableObject {
     }
 
     public func jumpRelativePage(_ delta: Int) async {
+        debugReaderPagingModel(
+            "model.jumpRelativePage start delta=\(delta) view=\(currentView) currentPageIndex=\(currentPageIndex) rendered=\(currentRenderedPage)/\(renderedPageCount)"
+        )
         guard let result = readingWorkflow?.jumpRelativePage(delta) else {
+            debugReaderPagingModel("model.jumpRelativePage no workflow result")
             scheduleProgressSync()
             Task {
                 await prefetchIfNeeded(for: currentPageIndex)
@@ -516,6 +524,9 @@ public final class ReaderContainerModel: ObservableObject {
         }
 
         syncFromWorkflowState(result.state)
+        debugReaderPagingModel(
+            "model.jumpRelativePage after sync request=\(String(describing: result.request)) view=\(currentView) currentPageIndex=\(currentPageIndex) rendered=\(currentRenderedPage)/\(renderedPageCount)"
+        )
         switch result.request {
         case nil:
             scheduleProgressSync()
@@ -538,6 +549,9 @@ public final class ReaderContainerModel: ObservableObject {
 
     public func jumpToWebView(_ view: Int) async {
         let clampedView = max(1, min(maxView, view))
+        debugReaderPagingModel(
+            "model.jumpToWebView target=\(view) clamped=\(clampedView) currentView=\(currentView) currentPageIndex=\(currentPageIndex) rendered=\(currentRenderedPage)/\(renderedPageCount)"
+        )
 
         if let startIndex = prefetchedStartIndex,
            settings.readingMode == .vertical,
@@ -726,6 +740,9 @@ public final class ReaderContainerModel: ObservableObject {
         forceRefresh: Bool
     ) async {
         guard let workflow = await ensureReadingWorkflow() else { return }
+        debugReaderPagingModel(
+            "model.load start view=\(view) preferredPage=\(preferredPage) resumePointView=\(String(describing: preferredResumePoint?.view)) forceRefresh=\(forceRefresh)"
+        )
         isLoading = true
         errorMessage = nil
         do {
@@ -736,6 +753,9 @@ public final class ReaderContainerModel: ObservableObject {
                 forceRefresh: forceRefresh
             )
             syncFromWorkflowState(state)
+            debugReaderPagingModel(
+                "model.load success loadedView=\(currentView) currentPageIndex=\(currentPageIndex) rendered=\(currentRenderedPage)/\(renderedPageCount)"
+            )
             isLoading = false
 
             Task {
@@ -812,6 +832,9 @@ public final class ReaderContainerModel: ObservableObject {
     }
 
     private func syncFromWorkflowSnapshot(_ snapshot: NovelReadingSnapshot) {
+        debugReaderPagingModel(
+            "model.syncSnapshot view=\(snapshot.currentView) pageIndex=\(snapshot.currentPageIndex) pages=\(snapshot.pages.count) prefetchedStartIndex=\(String(describing: snapshot.prefetchedStartIndex))"
+        )
         pages = snapshot.pages
         chapters = snapshot.chapters
         currentPageIndex = snapshot.currentPageIndex

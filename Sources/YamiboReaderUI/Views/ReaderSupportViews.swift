@@ -1,6 +1,38 @@
 import SwiftUI
 import YamiboReaderCore
 
+struct ReaderProgressSliderSnapshot: Equatable {
+    var readingMode: ReaderReadingMode
+    var visibleView: Int
+    var renderedPageCount: Int
+    var currentRenderedPage: Int
+    var currentProgressPercent: Int
+
+    var modelValue: Double {
+        switch readingMode {
+        case .vertical:
+            Double(currentProgressPercent)
+        case .paged:
+            Double(max(currentRenderedPage - 1, 0))
+        }
+    }
+}
+
+struct ReaderProgressSliderState: Equatable {
+    var sliderValue = 0.0
+    var isEditing = false
+
+    mutating func reset(to snapshot: ReaderProgressSliderSnapshot) {
+        isEditing = false
+        sliderValue = snapshot.modelValue
+    }
+
+    mutating func syncModelValue(_ value: Double) {
+        guard !isEditing else { return }
+        sliderValue = value
+    }
+}
+
 #if os(iOS)
 import UIKit
 
@@ -365,8 +397,7 @@ struct ReaderBottomChrome: View {
     let onProgressPreviewChange: (Double?, Bool) -> Void
     let onProgressCommit: (Int) -> Void
 
-    @State private var sliderValue = 0.0
-    @State private var isEditingSlider = false
+    @State private var sliderState = ReaderProgressSliderState()
     @State private var progressTickFeedbackGenerator = UISelectionFeedbackGenerator()
     @State private var lastFeedbackTickStartIndex: Int?
     @Environment(\.colorScheme) private var colorScheme
@@ -385,12 +416,13 @@ struct ReaderBottomChrome: View {
         .padding(.top, 8)
         .padding(.bottom, max(bottomInset, 12))
         .onAppear {
-            sliderValue = sliderModelValue
+            sliderState.reset(to: sliderSnapshot)
+        }
+        .onChange(of: sliderSnapshot) { _, newValue in
+            sliderState.reset(to: newValue)
         }
         .onChange(of: sliderModelValue) { _, newValue in
-            if !isEditingSlider {
-                sliderValue = newValue
-            }
+            sliderState.syncModelValue(newValue)
         }
     }
 
@@ -473,29 +505,29 @@ struct ReaderBottomChrome: View {
                     ZStack {
                         Slider(
                             value: Binding(
-                                get: { sliderValue },
+                                get: { sliderState.sliderValue },
                                 set: { newValue in
-                                    guard isEditingSlider else { return }
-                                    sliderValue = min(max(newValue, sliderRange.lowerBound), sliderRange.upperBound)
+                                    guard sliderState.isEditing else { return }
+                                    sliderState.sliderValue = min(max(newValue, sliderRange.lowerBound), sliderRange.upperBound)
                                     triggerProgressTickFeedbackIfNeeded()
-                                    onProgressPreviewChange(sliderValue, true)
+                                    onProgressPreviewChange(sliderState.sliderValue, true)
                                 }
                             ),
                             in: sliderRange,
                             step: 1
                         ) { editing in
-                            isEditingSlider = editing
+                            sliderState.isEditing = editing
                             if editing {
                                 lastFeedbackTickStartIndex = nil
                                 progressTickFeedbackGenerator.prepare()
-                                onProgressPreviewChange(sliderValue, true)
+                                onProgressPreviewChange(sliderState.sliderValue, true)
                             } else {
                                 lastFeedbackTickStartIndex = nil
                                 onProgressPreviewChange(nil, false)
                             }
                             if !editing {
                                 onProgressCommit(sliderTargetRenderedPageIndex)
-                                sliderValue = sliderModelValue
+                                sliderState.sliderValue = sliderModelValue
                             }
                         }
                         ReaderProgressChapterTickOverlay(ticks: model.progressChapterTicks)
@@ -538,20 +570,30 @@ struct ReaderBottomChrome: View {
         }
     }
 
+    private var sliderSnapshot: ReaderProgressSliderSnapshot {
+        ReaderProgressSliderSnapshot(
+            readingMode: model.settings.readingMode,
+            visibleView: model.visibleView,
+            renderedPageCount: model.renderedPageCount,
+            currentRenderedPage: model.currentRenderedPage,
+            currentProgressPercent: model.currentProgressPercent
+        )
+    }
+
     private var sliderHasAvailableRange: Bool {
         sliderRange.lowerBound < sliderRange.upperBound
     }
 
     private var progressLabelText: String {
         model.progressSliderLabelText(
-            isEditing: isEditingSlider,
-            sliderValue: sliderValue,
+            isEditing: sliderState.isEditing,
+            sliderValue: sliderState.sliderValue,
             targetRenderedPageIndex: sliderTargetRenderedPageIndex
         )
     }
 
     private var sliderTargetRenderedPageIndex: Int {
-        model.targetRenderedPageIndex(forProgressValue: sliderValue)
+        model.targetRenderedPageIndex(forProgressValue: sliderState.sliderValue)
     }
 
     private func triggerProgressTickFeedbackIfNeeded() {

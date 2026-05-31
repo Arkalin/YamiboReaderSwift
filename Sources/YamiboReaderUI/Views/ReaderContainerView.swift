@@ -17,6 +17,15 @@ private struct ReaderVerticalPositioningFingerprint: Equatable {
     let readingMode: ReaderReadingMode
 }
 
+private struct ReaderPagedSelectionTag: Hashable {
+    let view: Int
+    let index: Int
+}
+
+private func debugReaderPaging(_ message: @autoclosure () -> String) {
+    print("[DEBUG-reader-paging] \(message())")
+}
+
 private struct ReaderVerticalPageFramePreferenceKey: PreferenceKey {
     static var defaultValue: [Int: CGRect] { [:] }
 
@@ -213,6 +222,16 @@ public struct ReaderContainerView: View {
             .onChange(of: model.pages.count) { _, _ in
                 updateChromeForContentState()
             }
+            .onChange(of: model.visibleView) { oldValue, newValue in
+                debugReaderPaging(
+                    "view changed \(oldValue)->\(newValue) currentPageIndex=\(model.currentPageIndex) rendered=\(model.currentRenderedPage)/\(model.renderedPageCount)"
+                )
+            }
+            .onChange(of: model.currentPageIndex) { oldValue, newValue in
+                debugReaderPaging(
+                    "currentPageIndex changed \(oldValue)->\(newValue) view=\(model.visibleView) rendered=\(model.currentRenderedPage)/\(model.renderedPageCount)"
+                )
+            }
             .onChange(of: showingSettings) { _, _ in
                 updateChromeForContentState()
             }
@@ -282,7 +301,7 @@ public struct ReaderContainerView: View {
                         topInset: topInset,
                         bottomInset: bottomInset
                     )
-                    .tag(spread.index)
+                    .tag(ReaderPagedSelectionTag(view: pagedSpreadView(spread), index: spread.index))
                 }
             } else {
                 ForEach(model.pages) { page in
@@ -292,7 +311,7 @@ public struct ReaderContainerView: View {
                         refererURL: model.forumURL,
                         sessionState: model.sessionState
                     )
-                    .tag(page.index)
+                    .tag(ReaderPagedSelectionTag(view: page.documentView, index: page.index))
                     .padding(.horizontal, model.settings.horizontalPadding)
                     .padding(.top, topInset)
                     .padding(.bottom, bottomInset)
@@ -301,6 +320,7 @@ public struct ReaderContainerView: View {
             }
         }
         .tabViewStyle(.page(indexDisplayMode: .never))
+        .id(model.visibleView)
         .scrollDisabled(chromeState.mode.showsChrome)
         .overlay {
             if !model.pages.isEmpty {
@@ -319,11 +339,27 @@ public struct ReaderContainerView: View {
         }
     }
 
-    private var pagedSelection: Binding<Int> {
+    private var pagedSelection: Binding<ReaderPagedSelectionTag> {
         Binding(
-            get: { model.pagedSelectionIndex },
-            set: { model.updatePagedSelection($0) }
+            get: { ReaderPagedSelectionTag(view: model.visibleView, index: model.pagedSelectionIndex) },
+            set: { selection in
+                debugReaderPaging(
+                    "TabView selection set view=\(selection.view) index=\(selection.index) modelView=\(model.visibleView) currentPageIndex=\(model.currentPageIndex) rendered=\(model.currentRenderedPage)/\(model.renderedPageCount)"
+                )
+                guard selection.view == model.visibleView else {
+                    debugReaderPaging("TabView selection ignored stale view=\(selection.view) modelView=\(model.visibleView)")
+                    return
+                }
+                model.updatePagedSelection(selection.index)
+            }
         )
+    }
+
+    private func pagedSpreadView(_ spread: ReaderPagedSpread) -> Int {
+        guard model.pages.indices.contains(spread.leftPageIndex) else {
+            return model.visibleView
+        }
+        return model.pages[spread.leftPageIndex].documentView
     }
 
     private var verticalContent: some View {
@@ -692,14 +728,26 @@ public struct ReaderContainerView: View {
 
     private func jumpToWebView(_ view: Int) async {
         chromeState.showChrome()
+        debugReaderPaging(
+            "jumpToWebView start target=\(view) currentView=\(model.visibleView) currentPageIndex=\(model.currentPageIndex) rendered=\(model.currentRenderedPage)/\(model.renderedPageCount)"
+        )
         await model.jumpToWebView(view)
+        debugReaderPaging(
+            "jumpToWebView end currentView=\(model.visibleView) currentPageIndex=\(model.currentPageIndex) rendered=\(model.currentRenderedPage)/\(model.renderedPageCount)"
+        )
         if model.settings.readingMode == .vertical {
             requestVerticalScrollToCurrentPage()
         }
     }
 
     private func goRelativePage(_ delta: Int) async {
+        debugReaderPaging(
+            "goRelativePage start delta=\(delta) view=\(model.visibleView) currentPageIndex=\(model.currentPageIndex) rendered=\(model.currentRenderedPage)/\(model.renderedPageCount)"
+        )
         await model.jumpRelativePage(delta)
+        debugReaderPaging(
+            "goRelativePage end delta=\(delta) view=\(model.visibleView) currentPageIndex=\(model.currentPageIndex) rendered=\(model.currentRenderedPage)/\(model.renderedPageCount)"
+        )
         if model.settings.readingMode == .vertical {
             requestVerticalScrollToCurrentPage()
         }
