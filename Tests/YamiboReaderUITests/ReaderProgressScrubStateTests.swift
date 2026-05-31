@@ -73,4 +73,14 @@ final class ReaderProgressScrubStateTests: XCTestCase {
 
         XCTAssertEqual(state.preview?.displayText, "第4页")
     }
+
+    func testPagedChromePresentationUsesHorizontalScrubbingCapsule() {
+        let presentation = ReaderProgressChromePresentation(readingMode: .paged, isChromeVisible: true)
+
+        XCTAssertEqual(presentation.horizontalCapsuleText(percentText: "37%"), "目录 · 37%")
+        XCTAssertTrue(presentation.showsHorizontalFill)
+        XCTAssertTrue(presentation.supportsHorizontalScrub)
+        XCTAssertFalse(presentation.showsConventionalSlider)
+        XCTAssertFalse(presentation.showsVerticalScrubber)
+    }
 }
