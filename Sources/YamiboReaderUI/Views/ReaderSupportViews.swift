@@ -312,15 +312,6 @@ struct ReaderTopChrome: View {
     var body: some View {
         ReaderGlassContainer(spacing: 12) {
             VStack(alignment: .leading, spacing: 12) {
-                HStack(spacing: 12) {
-                    ReaderChromeIconButton(systemName: "xmark", title: L10n.string("common.close"), action: onClose)
-                    Spacer(minLength: 0)
-                    HStack(spacing: 8) {
-                        ReaderChromeIconButton(systemName: "safari", title: L10n.string("common.original_post"), action: onOpenForum)
-                        ReaderChromeIconButton(systemName: "arrow.clockwise", title: L10n.string("common.refresh"), action: onRefresh)
-                    }
-                }
-
                 VStack(alignment: .leading, spacing: 4) {
                     MarqueeText(text: model.title, textStyle: .headline)
                         .frame(height: MarqueeText.preferredHeight(for: .headline))
@@ -339,10 +330,20 @@ struct ReaderTopChrome: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .readerChromePanel(tint: readerChromePanelTint(for: colorScheme))
+
+                HStack(spacing: 12) {
+                    ReaderChromeIconButton(systemName: "chevron.backward", title: L10n.string("common.back"), action: onClose)
+                    Spacer(minLength: 0)
+                    HStack(spacing: 8) {
+                        ReaderChromeIconButton(systemName: "safari", title: L10n.string("common.original_post"), action: onOpenForum)
+                        ReaderChromeIconButton(systemName: "arrow.clockwise", title: L10n.string("common.refresh"), action: onRefresh)
+                    }
+                }
+                .padding(.horizontal, 4)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-            .readerChromePanel(tint: readerChromePanelTint(for: colorScheme))
         }
         .padding(.top, max(topInset + 8, 20))
         .padding(.horizontal, 12)
