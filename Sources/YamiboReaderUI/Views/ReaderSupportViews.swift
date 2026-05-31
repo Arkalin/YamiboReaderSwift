@@ -1,6 +1,150 @@
 import SwiftUI
 import YamiboReaderCore
 
+public enum ReaderProgressScrubPhase: Equatable, Sendable {
+    case idle
+    case pressed
+    case scrubbing
+    case ended
+}
+
+public enum ReaderProgressScrubHaptic: Equatable, Sendable {
+    case start
+    case chapterTick
+    case commit
+}
+
+public struct ReaderProgressScrubPreview: Equatable, Sendable {
+    public var chapterTitle: String?
+    public var pageNumber: Int
+
+    public init(chapterTitle: String?, pageNumber: Int) {
+        self.chapterTitle = chapterTitle
+        self.pageNumber = max(pageNumber, 1)
+    }
+
+    public var displayText: String {
+        let pageText = "第\(pageNumber)页"
+        guard let chapterTitle,
+              !chapterTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return pageText
+        }
+        return "\(chapterTitle) \(pageText)"
+    }
+}
+
+public struct ReaderProgressScrubContext: Sendable {
+    public var readingMode: ReaderReadingMode
+    public var pageCount: Int
+    public var currentProgressPercent: Int
+    public var targetPageIndex: @Sendable (Double) -> Int
+    public var chapterTitle: @Sendable (Int) -> String?
+    public var chapterTickStartIndex: @Sendable (Int) -> Int?
+
+    public init(
+        readingMode: ReaderReadingMode,
+        pageCount: Int,
+        currentProgressPercent: Int,
+        targetPageIndex: @escaping @Sendable (Double) -> Int,
+        chapterTitle: @escaping @Sendable (Int) -> String?,
+        chapterTickStartIndex: @escaping @Sendable (Int) -> Int?
+    ) {
+        self.readingMode = readingMode
+        self.pageCount = max(pageCount, 1)
+        self.currentProgressPercent = min(max(currentProgressPercent, 0), 100)
+        self.targetPageIndex = targetPageIndex
+        self.chapterTitle = chapterTitle
+        self.chapterTickStartIndex = chapterTickStartIndex
+    }
+
+    public var valueRange: ClosedRange<Double> {
+        switch readingMode {
+        case .paged:
+            0 ... Double(max(pageCount - 1, 0))
+        case .vertical:
+            0 ... 100
+        }
+    }
+
+    public var restingValue: Double {
+        switch readingMode {
+        case .paged:
+            0
+        case .vertical:
+            Double(currentProgressPercent)
+        }
+    }
+}
+
+public struct ReaderProgressScrubUpdate: Equatable, Sendable {
+    public var haptics: [ReaderProgressScrubHaptic]
+    public var committedPageIndex: Int?
+
+    public init(haptics: [ReaderProgressScrubHaptic] = [], committedPageIndex: Int? = nil) {
+        self.haptics = haptics
+        self.committedPageIndex = committedPageIndex
+    }
+}
+
+public struct ReaderProgressScrubState: Equatable, Sendable {
+    public private(set) var phase: ReaderProgressScrubPhase = .idle
+    public private(set) var value = 0.0
+    public private(set) var targetRenderedPageIndex = 0
+    public private(set) var preview: ReaderProgressScrubPreview?
+    private var lastChapterTickStartIndex: Int?
+
+    public init() {}
+
+    @discardableResult
+    public mutating func press(value newValue: Double, context: ReaderProgressScrubContext) -> ReaderProgressScrubUpdate {
+        phase = .pressed
+        return update(value: newValue, context: context)
+    }
+
+    @discardableResult
+    public mutating func update(value newValue: Double, context: ReaderProgressScrubContext) -> ReaderProgressScrubUpdate {
+        var haptics: [ReaderProgressScrubHaptic] = []
+        if phase != .scrubbing {
+            haptics.append(.start)
+        }
+
+        phase = .scrubbing
+        value = Self.clamp(newValue, to: context.valueRange)
+        targetRenderedPageIndex = context.targetPageIndex(value)
+        preview = ReaderProgressScrubPreview(
+            chapterTitle: context.chapterTitle(targetRenderedPageIndex),
+            pageNumber: targetRenderedPageIndex + 1
+        )
+
+        let tickStartIndex = context.chapterTickStartIndex(targetRenderedPageIndex)
+        if let tickStartIndex, tickStartIndex != lastChapterTickStartIndex {
+            haptics.append(.chapterTick)
+        }
+        lastChapterTickStartIndex = tickStartIndex
+
+        return ReaderProgressScrubUpdate(haptics: haptics)
+    }
+
+    @discardableResult
+    public mutating func end() -> ReaderProgressScrubUpdate {
+        phase = .ended
+        lastChapterTickStartIndex = nil
+        return ReaderProgressScrubUpdate(haptics: [.commit], committedPageIndex: targetRenderedPageIndex)
+    }
+
+    public mutating func reset(to value: Double = 0) {
+        phase = .idle
+        self.value = value
+        targetRenderedPageIndex = 0
+        preview = nil
+        lastChapterTickStartIndex = nil
+    }
+
+    private static func clamp(_ value: Double, to range: ClosedRange<Double>) -> Double {
+        min(max(value, range.lowerBound), range.upperBound)
+    }
+}
+
 struct ReaderProgressSliderSnapshot: Equatable {
     var readingMode: ReaderReadingMode
     var visibleView: Int
