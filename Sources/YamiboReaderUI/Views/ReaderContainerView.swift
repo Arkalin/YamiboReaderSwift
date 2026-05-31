@@ -634,6 +634,7 @@ public struct ReaderContainerView: View {
                 progressFraction: verticalDisplayedProgressFraction,
                 preview: verticalProgressScrubState.preview,
                 isScrubbing: verticalProgressScrubState.phase == .scrubbing,
+                ticks: model.progressChapterTicks,
                 onScrub: { locationY, height in
                     handleVerticalProgressScrub(locationY: locationY, height: height)
                 },
@@ -641,10 +642,9 @@ public struct ReaderContainerView: View {
                     commitVerticalProgressScrub()
                 }
             )
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
-            .padding(.top, max(topInset + 92, topChromeHeight + 12))
-            .padding(.bottom, max(bottomInset + 128, bottomChromeHeight + 12))
-            .padding(.trailing, 10)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+            .padding(.bottom, max(bottomInset, 12))
+            .padding(.trailing, 12)
             .allowsHitTesting(true)
         }
     }
@@ -661,11 +661,14 @@ public struct ReaderContainerView: View {
             bottom: model.settings.readingMode == .vertical ? 24 : 0,
             trailing: horizontalPadding
         )
+        let chromeInsets = model.settings.readingMode == .paged
+            ? ReaderLayoutInsets(top: 48, bottom: 42)
+            : .zero
         return ReaderContainerLayout(
             containerSize: proxy.size,
             safeAreaInsets: safeAreaInsets,
             contentInsets: contentInsets,
-            chromeInsets: ReaderLayoutInsets(),
+            chromeInsets: chromeInsets,
             readingMode: model.settings.readingMode
         )
     }
