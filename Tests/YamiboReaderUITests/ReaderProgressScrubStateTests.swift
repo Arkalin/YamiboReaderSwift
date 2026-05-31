@@ -111,6 +111,55 @@ final class ReaderProgressScrubStateTests: XCTestCase {
         XCTAssertTrue(scrubbing.preservesLayout)
     }
 
+    func testBottomChromeSeparatesProgressCapsuleFromActionButtons() {
+        let presentation = ReaderBottomChromeLayoutPresentation()
+
+        XCTAssertTrue(presentation.usesIndependentControls)
+        XCTAssertEqual(presentation.panelSpacing, 10)
+        XCTAssertEqual(presentation.maxChromeWidth, 260)
+        XCTAssertEqual(presentation.progressPanelHeight, 44)
+        XCTAssertEqual(presentation.actionButtonIconFrame, 34)
+        XCTAssertEqual(presentation.actionButtonSpacing, 8)
+        XCTAssertEqual(presentation.horizontalAlignment, .trailing)
+        XCTAssertTrue(presentation.progressTextLeadsIcon)
+        XCTAssertTrue(presentation.progressFillHasVerticalTrailingEdge)
+    }
+
+    func testReaderChromeSummarySeparatesChapterAndProgressLines() {
+        let summary = ReaderChromeProgressSummary(
+            chapterTitle: "20主导权",
+            progressText: "第 75 / 144 页 · 网页第 2 / 5 页 · 20主导权"
+        )
+
+        XCTAssertEqual(summary.chapterTitle, "20主导权")
+        XCTAssertEqual(summary.pageProgressLine, "第 75 / 144 页")
+        XCTAssertEqual(summary.webProgressLine, "网页第 2 / 5 页")
+    }
+
+    func testVerticalProgressScrubberMatchesDirectoryCapsuleLayout() {
+        let presentation = ReaderBottomChromeLayoutPresentation()
+
+        XCTAssertEqual(presentation.verticalScrubberWidth, presentation.progressPanelHeight)
+        XCTAssertEqual(presentation.verticalScrubberHeight, 166)
+        XCTAssertEqual(presentation.verticalPreviewWidth, presentation.maxChromeWidth)
+        XCTAssertEqual(presentation.verticalPreviewHeight, 50)
+        XCTAssertTrue(presentation.verticalScrubberShowsChapterTicks)
+        XCTAssertTrue(presentation.verticalScrubberFillHasSquareEdge)
+        XCTAssertTrue(presentation.hidesDirectoryCapsuleDuringVerticalScrub)
+        XCTAssertEqual(presentation.verticalScrubberSideSpacing, presentation.actionButtonSpacing)
+        XCTAssertTrue(presentation.verticalScrubberTicksAreCentered)
+        XCTAssertFalse(presentation.verticalScrubberShowsLiveThumb)
+        XCTAssertTrue(presentation.verticalScrubberBottomAlignsWithActionButtons)
+        XCTAssertTrue(presentation.verticalPreviewUsesTwoLineChapterAndPage)
+        XCTAssertTrue(presentation.verticalPreviewUsesLiquidGlass)
+        XCTAssertTrue(presentation.verticalScrubberShowsProgressFill)
+        XCTAssertTrue(presentation.verticalCurrentChapterTickUsesAccentColor)
+        XCTAssertTrue(presentation.directoryCapsuleContentUsesAccentColor)
+        XCTAssertTrue(presentation.bottomProgressSummaryUsesPageCenter)
+        XCTAssertTrue(presentation.verticalProgressSummaryUsesLiquidGlass)
+        XCTAssertTrue(presentation.verticalChapterTitleCapsuleWrapsContent)
+    }
+
     func testIntegratedProgressChromeContractsAcrossPagedAndVerticalModes() {
         let paged = ReaderProgressChromePresentation(readingMode: .paged, isChromeVisible: true)
         let verticalVisible = ReaderProgressChromePresentation(readingMode: .vertical, isChromeVisible: true)

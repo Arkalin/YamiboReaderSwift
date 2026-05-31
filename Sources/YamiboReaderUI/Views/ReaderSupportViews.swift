@@ -162,6 +162,60 @@ public struct ReaderBottomActionRowPresentation: Equatable, Sendable {
     public var preservesLayout: Bool { true }
 }
 
+public enum ReaderBottomChromeHorizontalAlignment: Equatable, Sendable {
+    case trailing
+}
+
+public struct ReaderBottomChromeLayoutPresentation: Equatable, Sendable {
+    public var usesIndependentControls: Bool { true }
+    public var panelSpacing: CGFloat { 10 }
+    public var maxChromeWidth: CGFloat { 260 }
+    public var progressPanelHeight: CGFloat { 44 }
+    public var actionButtonIconFrame: CGFloat { 34 }
+    public var actionButtonSpacing: CGFloat { 8 }
+    public var horizontalAlignment: ReaderBottomChromeHorizontalAlignment { .trailing }
+    public var progressTextLeadsIcon: Bool { true }
+    public var progressFillHasVerticalTrailingEdge: Bool { true }
+    public var verticalScrubberWidth: CGFloat { progressPanelHeight }
+    public var verticalScrubberHeight: CGFloat { progressPanelHeight * 3 + actionButtonIconFrame }
+    public var verticalPreviewWidth: CGFloat { maxChromeWidth }
+    public var verticalPreviewHeight: CGFloat { 50 }
+    public var verticalScrubberShowsChapterTicks: Bool { true }
+    public var verticalScrubberFillHasSquareEdge: Bool { true }
+    public var hidesDirectoryCapsuleDuringVerticalScrub: Bool { true }
+    public var verticalScrubberSideSpacing: CGFloat { actionButtonSpacing }
+    public var verticalScrubberTicksAreCentered: Bool { true }
+    public var verticalScrubberShowsLiveThumb: Bool { false }
+    public var verticalScrubberBottomAlignsWithActionButtons: Bool { true }
+    public var verticalPreviewUsesTwoLineChapterAndPage: Bool { true }
+    public var verticalPreviewUsesLiquidGlass: Bool { true }
+    public var verticalScrubberShowsProgressFill: Bool { true }
+    public var verticalCurrentChapterTickUsesAccentColor: Bool { true }
+    public var directoryCapsuleContentUsesAccentColor: Bool { true }
+    public var bottomProgressSummaryUsesPageCenter: Bool { true }
+    public var verticalProgressSummaryUsesLiquidGlass: Bool { true }
+    public var verticalChapterTitleCapsuleWrapsContent: Bool { true }
+
+    public init() {}
+}
+
+public struct ReaderChromeProgressSummary: Equatable, Sendable {
+    public var chapterTitle: String
+    public var pageProgressLine: String
+    public var webProgressLine: String
+
+    public init(chapterTitle: String?, progressText: String) {
+        let components = progressText
+            .split(separator: "·", omittingEmptySubsequences: true)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+        let trimmedChapter = chapterTitle?.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.chapterTitle = trimmedChapter?.isEmpty == false ? trimmedChapter! : components.dropFirst(2).first ?? ""
+        self.pageProgressLine = components.first ?? progressText
+        self.webProgressLine = components.dropFirst().first ?? ""
+    }
+}
+
 public struct ReaderProgressScrubState: Equatable, Sendable {
     public private(set) var phase: ReaderProgressScrubPhase = .idle
     public private(set) var value = 0.0
@@ -562,45 +616,45 @@ struct ReaderTopChrome: View {
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
+        let summary = ReaderChromeProgressSummary(
+            chapterTitle: model.currentChapterTitle,
+            progressText: model.progressText
+        )
+
         ReaderGlassContainer(spacing: 12) {
-            VStack(alignment: .leading, spacing: 12) {
-                VStack(alignment: .leading, spacing: 4) {
-                    MarqueeText(text: model.title, textStyle: .headline)
-                        .frame(height: MarqueeText.preferredHeight(for: .headline))
-                        .frame(maxWidth: .infinity, alignment: .leading)
+            HStack(spacing: 12) {
+                ReaderChromeIconButton(systemName: "xmark", title: L10n.string("common.close"), action: onClose)
 
-                    Text(model.progressText)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                chapterTitleView(summary.chapterTitle)
+                    .frame(maxWidth: .infinity)
 
-                    if let sourceStatusText = model.sourceStatusText {
-                        Text(sourceStatusText)
-                            .font(.caption2)
-                            .foregroundStyle(.orange)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
-                .readerChromePanel(tint: readerChromePanelTint(for: colorScheme))
-
-                HStack(spacing: 12) {
-                    ReaderChromeIconButton(systemName: "chevron.backward", title: L10n.string("common.back"), action: onClose)
-                    Spacer(minLength: 0)
-                    HStack(spacing: 8) {
-                        ReaderChromeIconButton(systemName: "safari", title: L10n.string("common.original_post"), action: onOpenForum)
-                        ReaderChromeIconButton(systemName: "arrow.clockwise", title: L10n.string("common.refresh"), action: onRefresh)
-                    }
-                }
-                .padding(.horizontal, 4)
+                ReaderChromeIconButton(systemName: "safari", title: L10n.string("common.original_post"), action: onOpenForum)
             }
+            .padding(.horizontal, 4)
         }
         .padding(.top, max(topInset + 8, 20))
         .padding(.horizontal, 12)
         .padding(.bottom, 8)
         .tint(readerChromeButtonTint(for: colorScheme))
+    }
+
+    @ViewBuilder
+    private func chapterTitleView(_ title: String) -> some View {
+        let text = Text(title)
+            .font(.callout.weight(.semibold))
+            .lineLimit(1)
+            .minimumScaleFactor(0.75)
+            .foregroundStyle(.primary)
+
+        if model.settings.readingMode == .vertical {
+            text
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .readerChromePanel(cornerRadius: 18, tint: readerChromePanelTint(for: colorScheme))
+        } else {
+            text
+                .frame(maxWidth: .infinity)
+        }
     }
 }
 
@@ -625,16 +679,19 @@ struct ReaderBottomChrome: View {
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        ReaderGlassContainer(spacing: 12) {
-            VStack(spacing: 14) {
+        VStack(spacing: 12) {
+            VStack(spacing: chromeLayout.panelSpacing) {
                 progressControl
                 actionRow
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-            .readerChromePanel(tint: readerChromePanelTint(for: colorScheme))
+            .frame(maxWidth: chromeLayout.maxChromeWidth)
+            .frame(maxWidth: .infinity, alignment: .trailing)
+            .padding(.leading, 12)
+            .padding(.trailing, bottomChromeTrailingPadding)
+
+            progressSummary
+                .padding(.horizontal, 12)
         }
-        .padding(.horizontal, 12)
         .padding(.top, 8)
         .padding(.bottom, max(bottomInset, 12))
         .onAppear {
@@ -648,9 +705,18 @@ struct ReaderBottomChrome: View {
         }
     }
 
+    private var chromeLayout: ReaderBottomChromeLayoutPresentation {
+        ReaderBottomChromeLayoutPresentation()
+    }
+
+    private var bottomChromeTrailingPadding: CGFloat {
+        guard model.settings.readingMode == .vertical else { return 12 }
+        return 12 + chromeLayout.verticalScrubberWidth + chromeLayout.verticalScrubberSideSpacing
+    }
+
     private var actionRow: some View {
         let presentation = actionRowPresentation
-        return HStack(spacing: 18) {
+        return HStack(spacing: chromeLayout.actionButtonSpacing) {
             bottomActionButton(
                 action: ReaderBottomAction(kind: .comments),
                 title: L10n.string("reader.comments"),
@@ -677,7 +743,7 @@ struct ReaderBottomChrome: View {
             )
         }
         .frame(maxWidth: .infinity)
-        .frame(height: 44)
+        .frame(height: chromeLayout.actionButtonIconFrame)
         .opacity(presentation.opacity)
         .allowsHitTesting(presentation.allowsHitTesting)
         .accessibilityHidden(presentation.isAccessibilityHidden)
@@ -685,6 +751,39 @@ struct ReaderBottomChrome: View {
 
     private var actionRowPresentation: ReaderBottomActionRowPresentation {
         ReaderBottomActionRowPresentation(isScrubbing: isProgressScrubbing || scrubState.phase == .scrubbing)
+    }
+
+    @ViewBuilder
+    private var progressSummary: some View {
+        let summary = ReaderChromeProgressSummary(
+            chapterTitle: model.currentChapterTitle,
+            progressText: model.progressText
+        )
+
+        let content = VStack(spacing: 2) {
+            Text(summary.pageProgressLine)
+            if !summary.webProgressLine.isEmpty {
+                Text(summary.webProgressLine)
+            }
+        }
+        .font(.caption2.weight(.semibold))
+        .foregroundStyle(.secondary)
+        .lineLimit(1)
+        .minimumScaleFactor(0.75)
+        .multilineTextAlignment(.center)
+        .opacity(actionRowPresentation.opacity)
+        .accessibilityHidden(actionRowPresentation.isAccessibilityHidden)
+
+        if model.settings.readingMode == .vertical {
+            content
+                .padding(.horizontal, 14)
+                .padding(.vertical, 6)
+                .readerChromePanel(cornerRadius: 16, tint: readerChromePanelTint(for: colorScheme))
+                .frame(maxWidth: .infinity, alignment: .center)
+        } else {
+            content
+                .frame(maxWidth: .infinity, alignment: .center)
+        }
     }
 
     private func bottomActionButton(
@@ -696,9 +795,10 @@ struct ReaderBottomChrome: View {
         Button(action: handler) {
             Image(systemName: systemName)
                 .font(.headline)
-                .frame(width: 38, height: 38)
+                .frame(width: chromeLayout.actionButtonIconFrame, height: chromeLayout.actionButtonIconFrame)
         }
         .readerChromeButtonStyle(tint: readerChromeButtonTint(for: colorScheme))
+        .opacity(action.isDisabled ? 0.34 : 1)
         .disabled(action.isDisabled)
         .accessibilityLabel(title)
     }
@@ -725,7 +825,16 @@ struct ReaderBottomChrome: View {
                     commitHorizontalCapsuleScrub()
                 }
             )
+            .opacity(shouldHideDirectoryCapsule ? 0 : 1)
+            .allowsHitTesting(!shouldHideDirectoryCapsule)
+            .accessibilityHidden(shouldHideDirectoryCapsule)
         }
+    }
+
+    private var shouldHideDirectoryCapsule: Bool {
+        chromeLayout.hidesDirectoryCapsuleDuringVerticalScrub
+            && model.settings.readingMode == .vertical
+            && isProgressScrubbing
     }
 
     private var progressChromePresentation: ReaderProgressChromePresentation {
@@ -891,9 +1000,9 @@ private struct ReaderDirectoryProgressCapsule: View {
                         .fill(Color.secondary.opacity(colorScheme == .dark ? 0.18 : 0.12))
 
                     if showsFill {
-                        Capsule()
+                        Rectangle()
                             .fill(Color.accentColor.opacity(colorScheme == .dark ? 0.24 : 0.18))
-                            .frame(width: max(8, width * clampedProgress))
+                            .frame(width: max(0, width * clampedProgress))
                             .accessibilityHidden(true)
 
                         Capsule()
@@ -908,18 +1017,20 @@ private struct ReaderDirectoryProgressCapsule: View {
                         .opacity(showsFill ? 1 : 0)
 
                     HStack(spacing: 8) {
-                        Image(systemName: "list.bullet")
-                            .font(.callout.weight(.semibold))
                         Text(title)
                             .font(.callout.weight(.semibold))
                             .lineLimit(1)
                             .minimumScaleFactor(0.85)
+                        Spacer(minLength: 12)
+                        Image(systemName: "list.bullet")
+                            .font(.callout.weight(.semibold))
                     }
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(ReaderBottomChromeLayoutPresentation().directoryCapsuleContentUsesAccentColor ? Color.accentColor : Color.primary)
                     .frame(maxWidth: .infinity)
                     .padding(.horizontal, 18)
                 }
                 .frame(height: 44)
+                .clipShape(Capsule())
                 .contentShape(Capsule())
             }
             .buttonStyle(.plain)
@@ -928,7 +1039,7 @@ private struct ReaderDirectoryProgressCapsule: View {
             .accessibilityLabel(title)
             .accessibilityHint(L10n.string("reader.chapters"))
         }
-        .frame(height: 44)
+        .frame(height: ReaderBottomChromeLayoutPresentation().progressPanelHeight)
     }
 
     private func scrubGesture(width: CGFloat) -> some Gesture {
@@ -948,43 +1059,29 @@ struct ReaderVerticalProgressCapsule: View {
     let progressFraction: Double
     let preview: ReaderProgressScrubPreview?
     let isScrubbing: Bool
+    let ticks: [ReaderProgressChapterTick]
     let onScrub: (CGFloat, CGFloat) -> Void
     let onEndScrub: () -> Void
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
+        let layout = ReaderBottomChromeLayoutPresentation()
+        let totalWidth = isScrubbing ? layout.verticalPreviewWidth + layout.verticalScrubberSideSpacing + layout.verticalScrubberWidth : layout.verticalScrubberWidth
+
         GeometryReader { geometry in
             let height = max(geometry.size.height, 1)
             let clampedProgress = min(max(progressFraction, 0), 1)
             let thumbY = min(max(height * clampedProgress, 0), height)
 
             ZStack(alignment: .topTrailing) {
-                Capsule()
-                    .fill(Color.secondary.opacity(colorScheme == .dark ? 0.18 : 0.12))
-                    .frame(width: 28)
-                    .readerChromePanel(cornerRadius: 18, tint: readerChromePanelTint(for: colorScheme))
-
-                Capsule()
-                    .fill(Color.accentColor.opacity(colorScheme == .dark ? 0.24 : 0.18))
-                    .frame(width: 28, height: max(10, thumbY))
-                    .accessibilityHidden(true)
-
-                Capsule()
-                    .fill(Color.accentColor.opacity(0.82))
-                    .frame(width: 18, height: 3)
-                    .offset(x: -5, y: min(max(thumbY - 1.5, 0), height - 3))
-                    .accessibilityHidden(true)
+                verticalProgressBar(height: height, thumbY: thumbY)
+                    .frame(width: layout.verticalScrubberWidth, height: height)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
 
                 if isScrubbing, let preview {
-                    Text(preview.displayText)
-                        .font(.caption.weight(.semibold))
-                        .lineLimit(1)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 7)
-                        .readerChromePanel(cornerRadius: 16, tint: Color.accentColor.opacity(0.08))
-                        .shadow(color: Color.black.opacity(0.08), radius: 10, y: 4)
-                        .frame(width: 156, alignment: .trailing)
-                        .offset(x: -38, y: min(max(thumbY - 18, 0), max(height - 36, 0)))
+                    ReaderVerticalProgressPreviewCapsule(preview: preview)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .offset(y: min(max(thumbY - layout.verticalPreviewHeight / 2, 0), max(height - layout.verticalPreviewHeight, 0)))
                         .allowsHitTesting(false)
                         .accessibilityHidden(true)
                 }
@@ -1002,7 +1099,87 @@ struct ReaderVerticalProgressCapsule: View {
             )
             .accessibilityLabel("目录 · 进度")
         }
-        .frame(width: 190)
+        .frame(width: totalWidth)
+        .frame(height: layout.verticalScrubberHeight)
+    }
+
+    private func verticalProgressBar(height: CGFloat, thumbY: CGFloat) -> some View {
+        let layout = ReaderBottomChromeLayoutPresentation()
+
+        return ZStack(alignment: .topTrailing) {
+            Capsule()
+                .fill(Color.secondary.opacity(colorScheme == .dark ? 0.18 : 0.12))
+                .readerChromePanel(cornerRadius: 24, tint: readerChromePanelTint(for: colorScheme))
+
+            if layout.verticalScrubberShowsProgressFill {
+                Rectangle()
+                    .fill(Color.accentColor.opacity(colorScheme == .dark ? 0.24 : 0.18))
+                    .frame(width: layout.verticalScrubberWidth, height: max(0, thumbY))
+                    .accessibilityHidden(true)
+            }
+
+            ReaderVerticalProgressChapterTickOverlay(ticks: ticks)
+                .padding(.vertical, 12)
+                .opacity(layout.verticalScrubberShowsChapterTicks ? 1 : 0)
+
+            if layout.verticalScrubberShowsLiveThumb {
+                Capsule()
+                    .fill(Color.accentColor.opacity(0.82))
+                    .frame(width: 28, height: 3)
+                    .offset(x: -18, y: min(max(thumbY - 1.5, 0), height - 3))
+                    .accessibilityHidden(true)
+            }
+        }
+        .mask(Capsule())
+    }
+}
+
+private struct ReaderVerticalProgressChapterTickOverlay: View {
+    let ticks: [ReaderProgressChapterTick]
+
+    var body: some View {
+        let layout = ReaderBottomChromeLayoutPresentation()
+
+        GeometryReader { geometry in
+            ForEach(Array(ticks.enumerated()), id: \.element.chapter.startIndex) { _, tick in
+                Capsule()
+                    .fill(tick.isCurrent && layout.verticalCurrentChapterTickUsesAccentColor ? Color.accentColor : Color.secondary.opacity(0.38))
+                    .frame(width: tick.isCurrent ? 28 : 18, height: tick.isCurrent ? 3 : 2)
+                    .position(
+                        x: layout.verticalScrubberTicksAreCentered ? geometry.size.width / 2 : geometry.size.width - 24,
+                        y: min(max(tick.position, 0), 1) * geometry.size.height
+                    )
+                    .accessibilityHidden(true)
+            }
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+
+private struct ReaderVerticalProgressPreviewCapsule: View {
+    let preview: ReaderProgressScrubPreview
+
+    var body: some View {
+        let layout = ReaderBottomChromeLayoutPresentation()
+        let chapterTitle = preview.chapterTitle?.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        VStack(spacing: 2) {
+            Text(chapterTitle?.isEmpty == false ? chapterTitle! : "目录")
+                .font(.callout.weight(.semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.82)
+
+            Text("第\(preview.pageNumber)页")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(.horizontal, 16)
+            .frame(width: layout.verticalPreviewWidth, height: layout.verticalPreviewHeight)
+            .readerChromePanel(cornerRadius: 24, tint: Color.accentColor.opacity(0.08))
+            .shadow(color: Color.black.opacity(0.08), radius: 10, y: 4)
     }
 }
 
