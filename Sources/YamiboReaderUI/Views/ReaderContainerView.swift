@@ -610,7 +610,8 @@ public struct ReaderContainerView: View {
             },
             onProgressCommit: { pageIndex in
                 commitProgressSlider(pageIndex)
-            }
+            },
+            isProgressScrubbing: verticalProgressScrubState.phase == .scrubbing
         )
         .background(
             GeometryReader { geometry in
