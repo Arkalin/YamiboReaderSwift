@@ -841,15 +841,18 @@ struct ReaderChapterCommentsSheet: View {
                         ReaderChapterCommentsToolbarTitle(target: target)
                     }
                     ToolbarItem(placement: .topBarLeading) {
+                        Button { dismiss() } label: {
+                            Label(L10n.string("common.done"), systemImage: "xmark")
+                                .labelStyle(.iconOnly)
+                        }
+                    }
+                    ToolbarItem(placement: .topBarTrailing) {
                         Button {
                             Task { await model.refreshChapterComments(for: target) }
                         } label: {
                             Label(L10n.string("common.refresh"), systemImage: "arrow.clockwise")
                         }
                         .disabled(target == nil)
-                    }
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button(L10n.string("common.done")) { dismiss() }
                     }
                 }
         }
@@ -890,15 +893,18 @@ struct MangaChapterCommentsSheet: View {
                     ReaderChapterCommentsToolbarTitle(target: target)
                 }
                 ToolbarItem(placement: .topBarLeading) {
+                    Button { dismiss() } label: {
+                        Label(L10n.string("common.done"), systemImage: "xmark")
+                            .labelStyle(.iconOnly)
+                    }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         Task { await model.refreshChapterComments(for: target) }
                     } label: {
                         Label(L10n.string("common.refresh"), systemImage: "arrow.clockwise")
                     }
                     .disabled(target == nil)
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button(L10n.string("common.done")) { dismiss() }
                 }
             }
         }
