@@ -105,6 +105,8 @@ public struct ReaderProgressChromePresentation: Equatable, Sendable {
         readingMode == .paged
     }
 
+    public var horizontalCapsuleUsesIndependentTapAndDrag: Bool { true }
+
     public var showsVerticalScrubber: Bool {
         readingMode == .vertical && isChromeVisible
     }
@@ -176,11 +178,15 @@ public struct ReaderBottomChromeLayoutPresentation: Equatable, Sendable {
     public var horizontalAlignment: ReaderBottomChromeHorizontalAlignment { .trailing }
     public var progressTextLeadsIcon: Bool { true }
     public var progressFillHasVerticalTrailingEdge: Bool { true }
+    public var horizontalProgressThumbVisible: Bool { false }
+    public var horizontalChapterTicksVisibleOnlyWhileScrubbing: Bool { true }
+    public var horizontalDirectoryContentHiddenWhileScrubbing: Bool { true }
     public var verticalScrubberWidth: CGFloat { progressPanelHeight }
     public var verticalScrubberHeight: CGFloat { progressPanelHeight * 3 + actionButtonIconFrame }
     public var verticalPreviewWidth: CGFloat { maxChromeWidth }
     public var verticalPreviewHeight: CGFloat { 50 }
     public var verticalScrubberShowsChapterTicks: Bool { true }
+    public var verticalChapterTicksVisibleOnlyWhileScrubbing: Bool { true }
     public var verticalScrubberFillHasSquareEdge: Bool { true }
     public var hidesDirectoryCapsuleDuringVerticalScrub: Bool { true }
     public var verticalScrubberSideSpacing: CGFloat { actionButtonSpacing }
@@ -189,12 +195,14 @@ public struct ReaderBottomChromeLayoutPresentation: Equatable, Sendable {
     public var verticalScrubberBottomAlignsWithActionButtons: Bool { true }
     public var verticalPreviewUsesTwoLineChapterAndPage: Bool { true }
     public var verticalPreviewUsesLiquidGlass: Bool { true }
+    public var horizontalPreviewMatchesVerticalCapsule: Bool { true }
     public var verticalScrubberShowsProgressFill: Bool { true }
     public var verticalCurrentChapterTickUsesAccentColor: Bool { true }
     public var directoryCapsuleContentUsesAccentColor: Bool { true }
     public var bottomProgressSummaryUsesPageCenter: Bool { true }
     public var verticalProgressSummaryUsesLiquidGlass: Bool { true }
     public var verticalChapterTitleCapsuleWrapsContent: Bool { true }
+    public var verticalScrubberActionRowBottomOffset: CGFloat { 46 }
 
     public init() {}
 }
@@ -806,7 +814,7 @@ struct ReaderBottomChrome: View {
     private var progressControl: some View {
         VStack(spacing: 8) {
             if let preview = scrubState.preview, scrubState.phase == .scrubbing {
-                ReaderChapterPreviewBubble(title: preview.displayText)
+                ReaderVerticalProgressPreviewCapsule(preview: preview)
                     .frame(maxWidth: .infinity)
                     .transition(.opacity.combined(with: .move(edge: .bottom)))
             }
@@ -816,6 +824,7 @@ struct ReaderBottomChrome: View {
                 progressFraction: displayedProgressFraction,
                 showsFill: progressChromePresentation.showsHorizontalFill,
                 supportsScrub: progressChromePresentation.supportsHorizontalScrub && sliderHasAvailableRange,
+                isScrubbing: scrubState.phase == .scrubbing,
                 ticks: model.progressChapterTicks,
                 onTapDirectory: onShowChapters,
                 onScrub: { locationX, width in
@@ -983,6 +992,7 @@ private struct ReaderDirectoryProgressCapsule: View {
     let progressFraction: Double
     let showsFill: Bool
     let supportsScrub: Bool
+    let isScrubbing: Bool
     let ticks: [ReaderProgressChapterTick]
     let onTapDirectory: () -> Void
     let onScrub: (CGFloat, CGFloat) -> Void
@@ -991,51 +1001,46 @@ private struct ReaderDirectoryProgressCapsule: View {
 
     var body: some View {
         GeometryReader { geometry in
+            let layout = ReaderBottomChromeLayoutPresentation()
             let width = max(geometry.size.width, 1)
             let clampedProgress = min(max(progressFraction, 0), 1)
 
-            Button(action: onTapDirectory) {
-                ZStack(alignment: .leading) {
-                    Capsule()
-                        .fill(Color.secondary.opacity(colorScheme == .dark ? 0.18 : 0.12))
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(Color.secondary.opacity(colorScheme == .dark ? 0.18 : 0.12))
 
-                    if showsFill {
-                        Rectangle()
-                            .fill(Color.accentColor.opacity(colorScheme == .dark ? 0.24 : 0.18))
-                            .frame(width: max(0, width * clampedProgress))
-                            .accessibilityHidden(true)
-
-                        Capsule()
-                            .fill(Color.accentColor.opacity(0.78))
-                            .frame(width: 3, height: 24)
-                            .offset(x: min(max(width * clampedProgress - 1.5, 0), width - 3))
-                            .accessibilityHidden(true)
-                    }
-
-                    ReaderProgressChapterTickOverlay(ticks: ticks)
-                        .padding(.horizontal, 12)
-                        .opacity(showsFill ? 1 : 0)
-
-                    HStack(spacing: 8) {
-                        Text(title)
-                            .font(.callout.weight(.semibold))
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.85)
-                        Spacer(minLength: 12)
-                        Image(systemName: "list.bullet")
-                            .font(.callout.weight(.semibold))
-                    }
-                    .foregroundStyle(ReaderBottomChromeLayoutPresentation().directoryCapsuleContentUsesAccentColor ? Color.accentColor : Color.primary)
-                    .frame(maxWidth: .infinity)
-                    .padding(.horizontal, 18)
+                if showsFill {
+                    Rectangle()
+                        .fill(Color.accentColor.opacity(colorScheme == .dark ? 0.24 : 0.18))
+                        .frame(width: max(0, width * clampedProgress))
+                        .accessibilityHidden(true)
                 }
-                .frame(height: 44)
-                .clipShape(Capsule())
-                .contentShape(Capsule())
+
+                ReaderProgressChapterTickOverlay(ticks: ticks)
+                    .padding(.horizontal, 12)
+                    .opacity(showsFill && (!layout.horizontalChapterTicksVisibleOnlyWhileScrubbing || isScrubbing) ? 1 : 0)
+
+                HStack(spacing: 8) {
+                    Text(title)
+                        .font(.callout.weight(.semibold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
+                    Spacer(minLength: 12)
+                    Image(systemName: "list.bullet")
+                        .font(.callout.weight(.semibold))
+                }
+                .foregroundStyle(layout.directoryCapsuleContentUsesAccentColor ? Color.accentColor : Color.primary)
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, 18)
+                .opacity(layout.horizontalDirectoryContentHiddenWhileScrubbing && isScrubbing ? 0 : 1)
             }
-            .buttonStyle(.plain)
+            .frame(height: 44)
+            .clipShape(Capsule())
+            .contentShape(Capsule())
             .readerChromePanel(cornerRadius: 24, tint: readerChromePanelTint(for: colorScheme))
             .gesture(scrubGesture(width: width), including: supportsScrub ? .gesture : .subviews)
+            .onTapGesture(perform: onTapDirectory)
+            .accessibilityAddTraits(.isButton)
             .accessibilityLabel(title)
             .accessibilityHint(L10n.string("reader.chapters"))
         }
@@ -1120,7 +1125,7 @@ struct ReaderVerticalProgressCapsule: View {
 
             ReaderVerticalProgressChapterTickOverlay(ticks: ticks)
                 .padding(.vertical, 12)
-                .opacity(layout.verticalScrubberShowsChapterTicks ? 1 : 0)
+                .opacity(layout.verticalScrubberShowsChapterTicks && (!layout.verticalChapterTicksVisibleOnlyWhileScrubbing || isScrubbing) ? 1 : 0)
 
             if layout.verticalScrubberShowsLiveThumb {
                 Capsule()
