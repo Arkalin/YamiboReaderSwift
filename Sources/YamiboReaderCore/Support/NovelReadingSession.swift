@@ -193,18 +193,8 @@ public struct NovelReadingSession: Sendable {
             return .loadView(view: previousView, preferredPage: .max, resumePoint: nil)
         }
 
-        if let prefetchedStartIndex = snapshot.prefetchedStartIndex,
-           settings.readingMode == .vertical,
-           targetIndex >= prefetchedStartIndex {
-            debugNovelPaging(
-                "session.jumpRelativePage request promote vertical preferredPage=\(targetIndex - prefetchedStartIndex)"
-            )
-            return .promotePrefetched(preferredPage: targetIndex - prefetchedStartIndex, resumePoint: nil)
-        }
-
-        if settings.readingMode == .paged,
-           prefetchedDocument?.view == snapshot.currentView + 1 {
-            debugNovelPaging("session.jumpRelativePage request promote paged preferredPage=0")
+        if prefetchedDocument?.view == snapshot.currentView + 1 {
+            debugNovelPaging("session.jumpRelativePage request promote prefetched preferredPage=0")
             return .promotePrefetched(preferredPage: 0, resumePoint: nil)
         }
 
@@ -225,13 +215,6 @@ public struct NovelReadingSession: Sendable {
     public mutating func acceptPrefetchedDocument(_ document: ReaderPageDocument) {
         prefetchedDocument = document
         snapshot.maxView = max(snapshot.maxView, document.maxView)
-        if settings.readingMode == .vertical {
-            applyPagination(
-                for: currentDocument,
-                preferredPage: snapshot.currentPageIndex,
-                preferredResumePoint: captureNovelReadingPosition()
-            )
-        }
     }
 
     public mutating func promotePrefetchedDocument(
@@ -344,39 +327,9 @@ public struct NovelReadingSession: Sendable {
     ) {
         let paginationLayout = effectivePaginationLayout
         let pagination = ReaderPaginator.paginate(document: document, settings: settings, layout: paginationLayout)
-        var renderedPages = pagination.pages
-        var renderedChapters = pagination.chapters
-        var prefetchedStartIndex: Int?
-
-        if settings.readingMode == .vertical,
-           let prefetchedDocument,
-           prefetchedDocument.view == document.view + 1 {
-            let nextPagination = ReaderPaginator.paginate(document: prefetchedDocument, settings: settings, layout: paginationLayout)
-            let startIndex = renderedPages.count
-            prefetchedStartIndex = startIndex
-            renderedPages += nextPagination.pages.enumerated().map { offset, page in
-                ReaderRenderedPage(
-                    index: startIndex + offset,
-                    blocks: page.blocks,
-                    documentView: page.documentView,
-                    chapterOrdinal: page.chapterOrdinal,
-                    chapterTitle: page.chapterTitle,
-                    segmentIndex: page.segmentIndex,
-                    segmentStartOffset: page.segmentStartOffset,
-                    segmentEndOffset: page.segmentEndOffset,
-                    textRanges: page.textRanges,
-                    chapterCommentTarget: page.chapterCommentTarget
-                )
-            }
-            renderedChapters += nextPagination.chapters.map { chapter in
-                ReaderChapter(
-                    ordinal: chapter.ordinal,
-                    title: chapter.title,
-                    startIndex: chapter.startIndex + startIndex,
-                    chapterCommentTarget: chapter.chapterCommentTarget
-                )
-            }
-        }
+        let renderedPages = pagination.pages
+        let renderedChapters = pagination.chapters
+        let prefetchedStartIndex: Int? = nil
 
         let pages = renderedPages.enumerated().map { index, page in
             ReaderRenderedPage(

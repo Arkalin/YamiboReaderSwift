@@ -123,7 +123,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
         ])
     }
 
-    func testPrefetchNearEndLoadsNextViewAndMergesInVerticalMode() async throws {
+    func testPrefetchNearEndLoadsNextViewWithoutMergingInVerticalMode() async throws {
         let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9103&mobile=2")!
         let repository = RecordingNovelReadingRepository(documents: [
             1: makeNovelDocument(threadURL: threadURL, view: 1, maxView: 2, authorID: "author-1"),
@@ -151,8 +151,37 @@ final class NovelReadingWorkflowTests: XCTestCase {
             ReaderPageRequest(threadURL: threadURL, view: 2, authorID: "author-1")
         ])
         XCTAssertEqual(state.snapshot.currentView, 1)
-        XCTAssertEqual(state.snapshot.prefetchedStartIndex, initialState.snapshot.pages.count)
-        XCTAssertEqual(Set(state.snapshot.pages.map(\.documentView)), [1, 2])
+        XCTAssertNil(state.snapshot.prefetchedStartIndex)
+        XCTAssertEqual(Set(state.snapshot.pages.map(\.documentView)), [1])
+    }
+
+    func testPromotingPrefetchedViewPublishesRequestedPageImmediately() async throws {
+        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9109&mobile=2")!
+        let repository = RecordingNovelReadingRepository(documents: [
+            1: makeNovelDocument(threadURL: threadURL, view: 1, maxView: 2, authorID: "author-1"),
+            2: makeNovelDocument(threadURL: threadURL, view: 2, maxView: 2, authorID: "author-1")
+        ])
+        let workflow = NovelReadingWorkflow(
+            context: ReaderLaunchContext(
+                threadURL: threadURL,
+                threadTitle: "Thread",
+                source: .forum,
+                initialView: 1,
+                authorID: "author-1"
+            ),
+            settings: ReaderAppearanceSettings(readingMode: .vertical),
+            layout: ReaderContainerLayout(width: 320, height: 568),
+            repository: repository
+        )
+        let initialState = try await workflow.start(initial: NovelReadingInitialPosition())
+        _ = await workflow.prefetchIfNeeded(forPageIndex: max(initialState.snapshot.pages.count - 2, 0))
+
+        let promotedStateOptional = await workflow.promotePrefetchedDocument(preferredPage: 0, resumePoint: nil)
+        let promotedState = try XCTUnwrap(promotedStateOptional)
+
+        XCTAssertEqual(promotedState.snapshot.currentView, 2)
+        XCTAssertEqual(promotedState.snapshot.currentPageIndex, 0)
+        XCTAssertEqual(Set(promotedState.snapshot.pages.map(\.documentView)), [2])
     }
 
     func testPrefetchNearEndDoesNotMergeNextViewInPagedMode() async throws {

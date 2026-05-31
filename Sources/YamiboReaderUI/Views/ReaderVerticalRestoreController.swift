@@ -1,8 +1,15 @@
 import Foundation
 
 struct ReaderVerticalScrollRequest: Equatable, Sendable {
+    let view: Int?
     let pageIndex: Int
     let intraPageProgress: Double
+
+    init(view: Int? = nil, pageIndex: Int, intraPageProgress: Double) {
+        self.view = view
+        self.pageIndex = pageIndex
+        self.intraPageProgress = intraPageProgress
+    }
 }
 
 enum ReaderVerticalRestorePhase: Equatable, Sendable {

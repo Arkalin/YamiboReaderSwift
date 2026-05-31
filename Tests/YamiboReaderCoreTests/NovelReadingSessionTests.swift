@@ -68,7 +68,7 @@ final class NovelReadingSessionTests: XCTestCase {
         XCTAssertTrue(pageContainsSegmentOffset(restoredPage, segmentIndex: try XCTUnwrap(targetPage.segmentIndex), offset: targetOffset))
     }
 
-    func testVerticalModeMergesPrefetchedReaderPageDocument() {
+    func testVerticalModeKeepsPrefetchedReaderPageDocumentSeparate() {
         let current = makeNovelDocument(view: 1, maxView: 2, segments: [("第一章", "当前页正文")])
         let prefetched = makeNovelDocument(view: 2, maxView: 2, segments: [("第二章", "预取页正文")])
         var session = NovelReadingSession(
@@ -81,9 +81,9 @@ final class NovelReadingSessionTests: XCTestCase {
 
         XCTAssertEqual(session.snapshot.currentView, 1)
         XCTAssertEqual(session.snapshot.maxView, 2)
-        XCTAssertEqual(session.snapshot.prefetchedStartIndex, 1)
-        XCTAssertEqual(session.snapshot.pages.map(\.documentView), [1, 2])
-        XCTAssertEqual(session.snapshot.chapters.map(\.title), ["第一章", "第二章"])
+        XCTAssertNil(session.snapshot.prefetchedStartIndex)
+        XCTAssertEqual(session.snapshot.pages.map(\.documentView), [1])
+        XCTAssertEqual(session.snapshot.chapters.map(\.title), ["第一章"])
     }
 
     func testPromotesPrefetchedReaderPageDocument() {

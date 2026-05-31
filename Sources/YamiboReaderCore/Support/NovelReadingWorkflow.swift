@@ -251,7 +251,7 @@ public final class NovelReadingWorkflow {
         currentAuthorID = nextDocument.resolvedAuthorID ?? currentAuthorID ?? context.authorID
         let resumePoint = resumePoint?.view == nextDocument.view ? resumePoint : nil
         session?.promotePrefetchedDocument(preferredPage: preferredPage, resumePoint: resumePoint)
-        return await updateStateFromSession(refreshCachedViews: true)
+        return updateStateFromSession(cachedViews: state?.cachedViews ?? [])
     }
 
     private func load(
