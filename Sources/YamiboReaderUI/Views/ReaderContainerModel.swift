@@ -37,6 +37,11 @@ public final class ReaderContainerModel: ObservableObject {
     @Published public private(set) var chapterCommentsLoadMoreError: String?
     @Published public private(set) var chapterCommentsRefreshError: String?
     @Published public private(set) var pagedSpreads: [ReaderPagedSpread] = []
+    @Published public private(set) var chapterDirectoryView: Int?
+    @Published public private(set) var chapterDirectoryChapters: [ReaderChapter] = []
+    @Published public private(set) var chapterDirectoryPageCount = 0
+    @Published public private(set) var isLoadingChapterDirectory = false
+    @Published public private(set) var chapterDirectoryError: String?
 
     public let context: ReaderLaunchContext
 
@@ -183,6 +188,30 @@ public final class ReaderContainerModel: ObservableObject {
 
     public var directoryWebTitle: String {
         L10n.string("reader.web_view_chapters", currentWebViewText)
+    }
+
+    public var visibleChapterDirectoryView: Int {
+        chapterDirectoryView ?? visibleView
+    }
+
+    public var visibleChapterDirectoryChapters: [ReaderChapter] {
+        chapterDirectoryView == nil ? chapters : chapterDirectoryChapters
+    }
+
+    public var visibleChapterDirectoryPageCount: Int {
+        chapterDirectoryView == nil ? renderedPageCount : max(chapterDirectoryPageCount, 1)
+    }
+
+    public var chapterDirectoryWebTitle: String {
+        L10n.string(
+            "reader.web_view_chapters",
+            L10n.string("reader.web_view_progress", visibleChapterDirectoryView, max(maxView, 1))
+        )
+    }
+
+    public var currentChapterDirectoryIndex: Int? {
+        guard chapterDirectoryView == nil || visibleChapterDirectoryView == visibleView else { return nil }
+        return currentChapterIndex
     }
 
     public var pagedSelectionIndex: Int {
@@ -524,6 +553,62 @@ public final class ReaderContainerModel: ObservableObject {
         }
 
         await load(view: clampedView, preferredPage: 0, preferredResumePoint: nil, forceRefresh: false)
+    }
+
+    public func resetChapterDirectoryBrowsing() {
+        chapterDirectoryView = nil
+        chapterDirectoryChapters = []
+        chapterDirectoryPageCount = 0
+        isLoadingChapterDirectory = false
+        chapterDirectoryError = nil
+    }
+
+    public func previewChapterDirectoryWebView(_ view: Int) async {
+        let clampedView = max(1, min(maxView, view))
+        if clampedView == visibleView {
+            resetChapterDirectoryBrowsing()
+            return
+        }
+
+        let repository = await ensureReaderRepository()
+        chapterDirectoryView = clampedView
+        chapterDirectoryChapters = []
+        chapterDirectoryPageCount = 0
+        isLoadingChapterDirectory = true
+        chapterDirectoryError = nil
+        do {
+            let context = cacheContext(forView: clampedView)
+            let document = try await repository.loadPage(
+                ReaderPageRequest(
+                    threadURL: self.context.threadURL,
+                    view: clampedView,
+                    authorID: context.authorID
+                )
+            )
+            let session = NovelReadingSession(
+                document: document,
+                settings: settings,
+                layout: layout,
+                usesPadPresentation: usesPadPresentation,
+                currentAuthorID: document.resolvedAuthorID ?? currentAuthorID ?? self.context.authorID
+            )
+            chapterDirectoryChapters = session.snapshot.chapters
+            chapterDirectoryPageCount = session.snapshot.pages.count
+            isLoadingChapterDirectory = false
+        } catch {
+            chapterDirectoryError = error.localizedDescription
+            isLoadingChapterDirectory = false
+        }
+    }
+
+    public func jumpToChapterDirectoryChapter(_ chapter: ReaderChapter) async {
+        let targetView = visibleChapterDirectoryView
+        resetChapterDirectoryBrowsing()
+        if targetView == visibleView {
+            jumpToChapter(chapter)
+            return
+        }
+        await load(view: targetView, preferredPage: chapter.startIndex, preferredResumePoint: nil, forceRefresh: false)
     }
 
     public func refreshCachedState() async {

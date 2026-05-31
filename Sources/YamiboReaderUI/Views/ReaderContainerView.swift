@@ -171,9 +171,9 @@ public struct ReaderContainerView: View {
             }
             .sheet(isPresented: $showingChapterSheet) {
                 ReaderChapterSheet(model: model) { chapter in
-                    jumpToChapter(chapter)
+                    Task { await jumpToChapterDirectoryChapter(chapter) }
                 } onSelectWebView: { view in
-                    Task { await jumpToWebView(view) }
+                    Task { await model.previewChapterDirectoryWebView(view) }
                 }
             }
             .sheet(isPresented: $showingChapterComments) {
@@ -678,6 +678,13 @@ public struct ReaderContainerView: View {
 
     private func jumpToChapter(_ chapter: ReaderChapter) {
         model.jumpToChapter(chapter)
+        if model.settings.readingMode == .vertical {
+            requestVerticalScrollToCurrentPage()
+        }
+    }
+
+    private func jumpToChapterDirectoryChapter(_ chapter: ReaderChapter) async {
+        await model.jumpToChapterDirectoryChapter(chapter)
         if model.settings.readingMode == .vertical {
             requestVerticalScrollToCurrentPage()
         }
