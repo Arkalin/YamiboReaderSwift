@@ -121,6 +121,8 @@ final class ReaderContainerModelTests: XCTestCase {
             XCTAssertEqual(model.currentRenderedPage, model.renderedPageCount)
             XCTAssertEqual(model.visibleChapterDirectoryView, 2)
             XCTAssertEqual(model.visibleChapterDirectoryChapters.map(\.title), ["第三章", "第四章"])
+            XCTAssertEqual(model.previousChapterDirectoryWebView, 1)
+            XCTAssertNil(model.nextChapterDirectoryWebView)
             XCTAssertNil(model.currentChapterDirectoryIndex)
         }
     }
@@ -136,6 +138,8 @@ final class ReaderContainerModelTests: XCTestCase {
         await model.previewChapterDirectoryWebView(2)
         await MainActor.run {
             XCTAssertEqual(model.visibleChapterDirectoryView, 2)
+            XCTAssertEqual(model.previousChapterDirectoryWebView, 1)
+            XCTAssertNil(model.nextChapterDirectoryWebView)
         }
 
         await model.previewChapterDirectoryWebView(1)
@@ -143,6 +147,8 @@ final class ReaderContainerModelTests: XCTestCase {
         await MainActor.run {
             XCTAssertEqual(model.currentView, 1)
             XCTAssertEqual(model.visibleChapterDirectoryView, 1)
+            XCTAssertNil(model.previousChapterDirectoryWebView)
+            XCTAssertEqual(model.nextChapterDirectoryWebView, 2)
             XCTAssertEqual(model.visibleChapterDirectoryChapters.map(\.title), ["第一章", "第二章"])
             XCTAssertEqual(model.currentChapterDirectoryIndex, model.currentChapterIndex)
         }

@@ -697,6 +697,14 @@ struct ReaderChapterSheet: View {
                                         .foregroundStyle(.secondary)
                                 }
 
+                                if let previousView = model.previousChapterDirectoryWebView {
+                                    ReaderChapterWebNavigationButton(
+                                        title: L10n.string("reader.go_previous_web_page"),
+                                        systemImage: "chevron.up",
+                                        action: { onSelectWebView(previousView) }
+                                    )
+                                }
+
                                 ForEach(model.visibleChapterDirectoryChapters, id: \.startIndex) { chapter in
                                     Button {
                                         onSelect(chapter)
@@ -717,6 +725,14 @@ struct ReaderChapterSheet: View {
                                     .buttonStyle(.plain)
                                     .listRowBackground(isCurrent(chapter) ? Color.accentColor.opacity(0.12) : Color.clear)
                                     .id(chapter.startIndex)
+                                }
+
+                                if let nextView = model.nextChapterDirectoryWebView {
+                                    ReaderChapterWebNavigationButton(
+                                        title: L10n.string("reader.go_next_web_page"),
+                                        systemImage: "chevron.down",
+                                        action: { onSelectWebView(nextView) }
+                                    )
                                 }
                             }
                         }
@@ -802,6 +818,29 @@ struct ReaderChapterSheet: View {
         withAnimation(.easeInOut(duration: 0.2)) {
             proxy.scrollTo(targetChapter.startIndex, anchor: .top)
         }
+    }
+}
+
+private struct ReaderChapterWebNavigationButton: View {
+    let title: String
+    let systemImage: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                Image(systemName: systemImage)
+                    .font(.caption.weight(.semibold))
+                Text(title)
+                    .font(.callout.weight(.semibold))
+            }
+            .foregroundStyle(Color.accentColor)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 8)
+        }
+        .buttonStyle(.plain)
+        .listRowBackground(Color.clear)
+        .listRowSeparator(.hidden)
     }
 }
 
