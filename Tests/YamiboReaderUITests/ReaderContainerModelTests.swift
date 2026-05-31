@@ -297,6 +297,32 @@ final class ReaderContainerModelTests: XCTestCase {
         }
     }
 
+    func testProgressSliderStateResetsStaleEditingValueWhenWebViewChanges() {
+        var state = ReaderProgressSliderState(sliderValue: 62, isEditing: true)
+
+        state.reset(
+            to: ReaderProgressSliderSnapshot(
+                readingMode: .vertical,
+                visibleView: 2,
+                renderedPageCount: 144,
+                currentRenderedPage: 1,
+                currentProgressPercent: 0
+            )
+        )
+
+        XCTAssertFalse(state.isEditing)
+        XCTAssertEqual(state.sliderValue, 0)
+    }
+
+    func testProgressSliderStateKeepsEditingValueForOrdinaryModelRefresh() {
+        var state = ReaderProgressSliderState(sliderValue: 62, isEditing: true)
+
+        state.syncModelValue(0)
+
+        XCTAssertTrue(state.isEditing)
+        XCTAssertEqual(state.sliderValue, 62)
+    }
+
     func testTwoPageSpreadRequiresPadLandscapePagedModeAndSetting() async throws {
         let document = makeImageDocument(view: 1, maxView: 1, pageCount: 5)
         let model = try await makeModel(

@@ -1,5 +1,9 @@
 import Foundation
 
+private func debugNovelPaging(_ message: @autoclosure () -> String) {
+    print("[DEBUG-reader-paging] \(message())")
+}
+
 public struct ReaderPagedSpread: Identifiable, Equatable, Sendable {
     public let index: Int
     public let leftPageIndex: Int
@@ -153,6 +157,9 @@ public struct NovelReadingSession: Sendable {
     @discardableResult
     public mutating func jumpRelativePage(_ delta: Int) -> NovelReadingNavigationRequest? {
         guard delta != 0 else { return nil }
+        debugNovelPaging(
+            "session.jumpRelativePage start delta=\(delta) view=\(snapshot.currentView) currentPageIndex=\(snapshot.currentPageIndex) pages=\(snapshot.pages.count) prefetchedStartIndex=\(String(describing: snapshot.prefetchedStartIndex))"
+        )
 
         if settings.readingMode == .paged, isTwoPageSpreadActive {
             let targetSpreadIndex = spreadIndex(
@@ -169,6 +176,9 @@ public struct NovelReadingSession: Sendable {
         let targetIndex = snapshot.currentPageIndex + delta
         if targetIndex >= 0, targetIndex < snapshot.pages.count {
             jumpToRenderedPage(targetIndex)
+            debugNovelPaging(
+                "session.jumpRelativePage local targetIndex=\(targetIndex) view=\(snapshot.currentView) currentPageIndex=\(snapshot.currentPageIndex)"
+            )
             return nil
         }
 
@@ -176,27 +186,35 @@ public struct NovelReadingSession: Sendable {
             let previousView = max(snapshot.currentView - 1, 1)
             guard previousView < snapshot.currentView else {
                 jumpToRenderedPage(0)
+                debugNovelPaging("session.jumpRelativePage clamped at first view")
                 return nil
             }
+            debugNovelPaging("session.jumpRelativePage request previousView=\(previousView) preferredPage=max")
             return .loadView(view: previousView, preferredPage: .max, resumePoint: nil)
         }
 
         if let prefetchedStartIndex = snapshot.prefetchedStartIndex,
            settings.readingMode == .vertical,
            targetIndex >= prefetchedStartIndex {
+            debugNovelPaging(
+                "session.jumpRelativePage request promote vertical preferredPage=\(targetIndex - prefetchedStartIndex)"
+            )
             return .promotePrefetched(preferredPage: targetIndex - prefetchedStartIndex, resumePoint: nil)
         }
 
         if settings.readingMode == .paged,
            prefetchedDocument?.view == snapshot.currentView + 1 {
+            debugNovelPaging("session.jumpRelativePage request promote paged preferredPage=0")
             return .promotePrefetched(preferredPage: 0, resumePoint: nil)
         }
 
         let nextView = min(snapshot.currentView + 1, snapshot.maxView)
         guard nextView > snapshot.currentView else {
             jumpToRenderedPage(max(snapshot.pages.count - 1, 0))
+            debugNovelPaging("session.jumpRelativePage clamped at last view")
             return nil
         }
+        debugNovelPaging("session.jumpRelativePage request nextView=\(nextView) preferredPage=0")
         return .loadView(view: nextView, preferredPage: 0, resumePoint: nil)
     }
 
@@ -382,6 +400,9 @@ public struct NovelReadingSession: Sendable {
         let effectiveResumePoint = pendingResumePoint ?? preferredResumePoint
         let resolvedTarget = effectiveResumePoint.flatMap { resolveResumePoint($0, in: pages) } ?? fallbackTarget
         let normalizedPageIndex = normalizedPagedPageIndex(resolvedTarget.pageIndex, pages: pages, pagedSpreads: makePagedSpreads(from: pages))
+        debugNovelPaging(
+            "session.applyPagination documentView=\(document.view) preferredPage=\(preferredPage) resumePointView=\(String(describing: effectiveResumePoint?.view)) fallbackPage=\(fallbackTarget.pageIndex) resolvedPage=\(resolvedTarget.pageIndex) normalizedPage=\(normalizedPageIndex) pages=\(pages.count)"
+        )
         snapshot = NovelReadingSnapshot(
             pages: pages,
             chapters: renderedChapters,
