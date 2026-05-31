@@ -149,7 +149,7 @@ public struct ReaderContainerView: View {
                         .zIndex(3)
                 }
 
-                if model.settings.readingMode == .paged && chromeState.mode.showsChrome {
+                if chromeState.mode.showsChrome {
                     VStack(spacing: 0) {
                         topChrome(topInset: topInset)
                         Spacer(minLength: 0)
@@ -163,16 +163,6 @@ public struct ReaderContainerView: View {
                     }
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                     .zIndex(2)
-                }
-            }
-            .safeAreaInset(edge: .top, spacing: 0) {
-                if model.settings.readingMode == .vertical && chromeState.mode.showsChrome {
-                    topChrome(topInset: topInset)
-                }
-            }
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                if model.settings.readingMode == .vertical && chromeState.mode.showsChrome {
-                    bottomChrome(bottomInset: bottomInset)
                 }
             }
             .task {
@@ -306,7 +296,10 @@ public struct ReaderContainerView: View {
                 bottomInset: bottomInset
             )
         } else {
-            verticalContent
+            verticalContent(
+                topInset: topInset,
+                bottomInset: bottomInset
+            )
         }
     }
 
@@ -384,7 +377,7 @@ public struct ReaderContainerView: View {
         return model.pages[spread.leftPageIndex].documentView
     }
 
-    private var verticalContent: some View {
+    private func verticalContent(topInset: CGFloat, bottomInset: CGFloat) -> some View {
         ScrollViewReader { scrollProxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 16) {
@@ -474,10 +467,18 @@ public struct ReaderContainerView: View {
                 }
             }
             .overlay(alignment: .top) {
-                verticalBoundaryPullOverlay(direction: .previous)
+                verticalBoundaryPullOverlay(
+                    direction: .previous,
+                    topInset: topInset,
+                    bottomInset: bottomInset
+                )
             }
             .overlay(alignment: .bottom) {
-                verticalBoundaryPullOverlay(direction: .next)
+                verticalBoundaryPullOverlay(
+                    direction: .next,
+                    topInset: topInset,
+                    bottomInset: bottomInset
+                )
             }
         }
     }
@@ -487,7 +488,11 @@ public struct ReaderContainerView: View {
     }
 
     @ViewBuilder
-    private func verticalBoundaryPullOverlay(direction: ReaderVerticalBoundaryDirection) -> some View {
+    private func verticalBoundaryPullOverlay(
+        direction: ReaderVerticalBoundaryDirection,
+        topInset: CGFloat,
+        bottomInset: CGFloat
+    ) -> some View {
         if verticalBoundaryPullState.direction == direction,
            canNavigateVerticalBoundary(direction) {
             let progress = min(max(verticalBoundaryPullState.distance / ReaderVerticalScrollCoordinator.boundaryTriggerDistance, 0), 1)
@@ -504,13 +509,23 @@ public struct ReaderContainerView: View {
                 Capsule()
                     .stroke(Color.accentColor.opacity(0.35 + 0.45 * progress), lineWidth: 1)
             }
-            .padding(.top, direction == .previous ? max(topChromeHeight, 24) + 8 : 0)
-            .padding(.bottom, direction == .next ? max(bottomChromeHeight, 24) + 8 : 0)
+            .padding(.top, direction == .previous ? verticalBoundaryPullTopPadding(topInset: topInset) : 0)
+            .padding(.bottom, direction == .next ? verticalBoundaryPullBottomPadding(bottomInset: bottomInset) : 0)
             .opacity(0.45 + 0.55 * progress)
             .transition(.opacity.combined(with: .scale(scale: 0.96)))
             .allowsHitTesting(false)
             .accessibilityHidden(true)
         }
+    }
+
+    private func verticalBoundaryPullTopPadding(topInset: CGFloat) -> CGFloat {
+        let chromeAvoidance = chromeState.mode.showsChrome ? max(topChromeHeight, topInset + 140) : 0
+        return max(chromeAvoidance, topInset, 24) + 8
+    }
+
+    private func verticalBoundaryPullBottomPadding(bottomInset: CGFloat) -> CGFloat {
+        let chromeAvoidance = chromeState.mode.showsChrome ? max(bottomChromeHeight, bottomInset + 210) : 0
+        return max(chromeAvoidance, bottomInset, 24) + 8
     }
 
     private func verticalBoundaryPullText(
@@ -593,15 +608,11 @@ public struct ReaderContainerView: View {
             bottom: model.settings.readingMode == .vertical ? 24 : 0,
             trailing: horizontalPadding
         )
-        let chromeInsets = ReaderLayoutInsets(
-            top: model.settings.readingMode == .vertical && chromeState.mode.showsChrome ? max(topChromeHeight - topInset, 0) : 0,
-            bottom: model.settings.readingMode == .vertical && chromeState.mode.showsChrome ? max(bottomChromeHeight - bottomInset, 0) : 0
-        )
         return ReaderContainerLayout(
             containerSize: proxy.size,
             safeAreaInsets: safeAreaInsets,
             contentInsets: contentInsets,
-            chromeInsets: chromeInsets,
+            chromeInsets: ReaderLayoutInsets(),
             readingMode: model.settings.readingMode
         )
     }
@@ -1264,6 +1275,12 @@ private final class ReaderVerticalScrollCoordinator: NSObject, UIGestureRecogniz
     }
 
     private func boundaryPullState(for scrollView: UIScrollView) -> ReaderVerticalBoundaryPullState {
+        guard let panGestureRecognizer = boundaryPanGestureRecognizer,
+              scrollView.isDragging,
+              panGestureRecognizer.state == .began || panGestureRecognizer.state == .changed else {
+            return .idle
+        }
+
         let minOffsetY = -scrollView.adjustedContentInset.top
         let maxOffsetY = max(
             minOffsetY,
@@ -1271,8 +1288,9 @@ private final class ReaderVerticalScrollCoordinator: NSObject, UIGestureRecogniz
         )
         let topOverscroll = max(minOffsetY - scrollView.contentOffset.y, 0)
         let bottomOverscroll = max(scrollView.contentOffset.y - maxOffsetY, 0)
+        let translationY = panGestureRecognizer.translation(in: scrollView).y
 
-        if topOverscroll > 0 {
+        if topOverscroll > 0, translationY > 0 {
             return ReaderVerticalBoundaryPullState(
                 direction: .previous,
                 distance: topOverscroll,
@@ -1280,7 +1298,7 @@ private final class ReaderVerticalScrollCoordinator: NSObject, UIGestureRecogniz
             )
         }
 
-        if bottomOverscroll > 0 {
+        if bottomOverscroll > 0, translationY < 0 {
             return ReaderVerticalBoundaryPullState(
                 direction: .next,
                 distance: bottomOverscroll,
