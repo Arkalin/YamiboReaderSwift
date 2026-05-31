@@ -640,44 +640,43 @@ struct ReaderChapterSheet: View {
     var body: some View {
         NavigationStack {
             ScrollViewReader { scrollProxy in
-                List {
-
-                    Section {
-                        if model.isLoadingChapterDirectory {
-                            HStack {
-                                Spacer()
-                                ProgressView()
-                                Spacer()
-                            }
-                            .padding(.vertical, 24)
-                        }
-
-                        if let error = model.chapterDirectoryError {
-                            Label(error, systemImage: "exclamationmark.triangle")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                        }
-
-                        ForEach(model.visibleChapterDirectoryChapters, id: \.startIndex) { chapter in
-                            Button {
-                                onSelect(chapter)
-                                dismiss()
-                            } label: {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(chapter.title)
-                                        .font(.body.weight(isCurrent(chapter) ? .semibold : .regular))
-                                        .foregroundStyle(isCurrent(chapter) ? Color.accentColor : .primary)
-                                        .lineLimit(1)
-                                    Text(chapterLocationText(for: chapter))
-                                        .font(.caption)
+                ZStack {
+                    if model.isLoadingChapterDirectory {
+                        Text(L10n.string("common.loading"))
+                            .font(.body)
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    } else {
+                        List {
+                            Section {
+                                if let error = model.chapterDirectoryError {
+                                    Label(error, systemImage: "exclamationmark.triangle")
+                                        .font(.footnote)
                                         .foregroundStyle(.secondary)
                                 }
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(.vertical, 4)
+
+                                ForEach(model.visibleChapterDirectoryChapters, id: \.startIndex) { chapter in
+                                    Button {
+                                        onSelect(chapter)
+                                        dismiss()
+                                    } label: {
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            Text(chapter.title)
+                                                .font(.body.weight(isCurrent(chapter) ? .semibold : .regular))
+                                                .foregroundStyle(isCurrent(chapter) ? Color.accentColor : .primary)
+                                                .lineLimit(1)
+                                            Text(chapterLocationText(for: chapter))
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
+                                        }
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        .padding(.vertical, 4)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .listRowBackground(isCurrent(chapter) ? Color.accentColor.opacity(0.12) : Color.clear)
+                                    .id(chapter.startIndex)
+                                }
                             }
-                            .buttonStyle(.plain)
-                            .listRowBackground(isCurrent(chapter) ? Color.accentColor.opacity(0.12) : Color.clear)
-                            .id(chapter.startIndex)
                         }
                     }
                 }
