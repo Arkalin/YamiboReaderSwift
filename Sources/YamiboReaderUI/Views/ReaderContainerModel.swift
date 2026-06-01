@@ -362,7 +362,7 @@ public final class ReaderContainerModel: ObservableObject {
         if pages.isEmpty {
             let favorite = await appContext.favoriteStore.favorite(for: context.threadURL)
             await startReadingWorkflow(
-                resumePoint: favorite?.novelResumePoint,
+                resumePoint: context.initialResumePoint ?? favorite?.novelResumePoint,
                 favoriteAuthorID: favorite?.authorID
             )
         } else {
@@ -1031,6 +1031,7 @@ public final class ReaderContainerModel: ObservableObject {
 
     private func scheduleProgressSync() {
         let snapshot = currentProgressSnapshot()
+        persistReaderResumeRoute(snapshot)
         Task { [progressSync] in
             await progressSync.queue(.novel(snapshot))
         }
@@ -1038,7 +1039,23 @@ public final class ReaderContainerModel: ObservableObject {
 
     private func flushProgress() async {
         let snapshot = currentProgressSnapshot()
+        persistReaderResumeRoute(snapshot)
         try? await progressSync.flush(.novel(snapshot))
+    }
+
+    private func persistReaderResumeRoute(_ snapshot: NovelReadingPosition) {
+        let resumeContext = ReaderLaunchContext(
+            threadURL: context.threadURL,
+            threadTitle: context.threadTitle,
+            source: .resume,
+            initialView: snapshot.view,
+            initialPage: snapshot.page,
+            authorID: snapshot.authorID ?? context.authorID,
+            initialResumePoint: snapshot.resumePoint
+        )
+        Task { [appContext] in
+            try? await appContext.readerResumeRouteStore.saveReadingPosition(.novel(resumeContext))
+        }
     }
 
     private func spreadIndex(forPageIndex pageIndex: Int) -> Int {

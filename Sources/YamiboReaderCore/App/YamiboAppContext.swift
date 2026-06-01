@@ -19,6 +19,7 @@ public final class YamiboAppContext: YamiboRepositoryProviding, Sendable {
     public let autoSignInStore: AutoSignInStore
     public let settingsStore: SettingsStore
     public let webDAVSyncSettingsStore: WebDAVSyncSettingsStore
+    public let readerResumeRouteStore: ReaderResumeRouteStore
     public let favoriteStore: FavoriteStore
     public let readerCacheStore: ReaderCacheStore
     public let mangaImageCacheStore: MangaImageCacheStore
@@ -31,6 +32,7 @@ public final class YamiboAppContext: YamiboRepositoryProviding, Sendable {
         autoSignInStore: AutoSignInStore = AutoSignInStore(),
         settingsStore: SettingsStore = SettingsStore(),
         webDAVSyncSettingsStore: WebDAVSyncSettingsStore = WebDAVSyncSettingsStore(),
+        readerResumeRouteStore: ReaderResumeRouteStore = ReaderResumeRouteStore(),
         favoriteStore: FavoriteStore = FavoriteStore(),
         readerCacheStore: ReaderCacheStore = ReaderCacheStore(),
         mangaImageCacheStore: MangaImageCacheStore = MangaImageCacheStore(),
@@ -41,6 +43,7 @@ public final class YamiboAppContext: YamiboRepositoryProviding, Sendable {
         self.autoSignInStore = autoSignInStore
         self.settingsStore = settingsStore
         self.webDAVSyncSettingsStore = webDAVSyncSettingsStore
+        self.readerResumeRouteStore = readerResumeRouteStore
         self.favoriteStore = favoriteStore
         self.readerCacheStore = readerCacheStore
         self.mangaImageCacheStore = mangaImageCacheStore
@@ -128,6 +131,7 @@ public final class YamiboAppContext: YamiboRepositoryProviding, Sendable {
         try await sessionStore.reset()
         try await settingsStore.reset()
         try await webDAVSyncSettingsStore.reset()
+        await readerResumeRouteStore.clear()
         try await favoriteStore.clearAll()
         try await readerCacheStore.clearAll()
         try await mangaImageCacheStore.clearAll()

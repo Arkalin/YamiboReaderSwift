@@ -741,6 +741,102 @@ final class ReaderContainerModelTests: XCTestCase {
         XCTAssertTrue(favorites.isEmpty)
     }
 
+    func testNovelProgressPersistsReaderResumeRoute() async throws {
+        let keyPrefix = UUID().uuidString
+        let settingsStore = SettingsStore(key: "\(keyPrefix).settings")
+        let favoriteStore = FavoriteStore(key: "\(keyPrefix).favorites")
+        let readerResumeRouteStore = ReaderResumeRouteStore(key: "\(keyPrefix).readerRoute")
+        let cacheStore = ReaderCacheStore(
+            baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        )
+        let document = makeDocument(view: 1, maxView: 1, chapterTitles: ["第一章", "第二章", "第三章"])
+
+        try await settingsStore.save(AppSettings(reader: ReaderAppearanceSettings(readingMode: .paged)))
+        try await cacheStore.save(document)
+
+        let appContext = YamiboAppContext(
+            sessionStore: SessionStore(key: "\(keyPrefix).session"),
+            settingsStore: settingsStore,
+            readerResumeRouteStore: readerResumeRouteStore,
+            favoriteStore: favoriteStore,
+            readerCacheStore: cacheStore
+        )
+        let model = await MainActor.run {
+            ReaderContainerModel(
+                context: ReaderLaunchContext(
+                    threadURL: document.threadURL,
+                    threadTitle: "测试线程",
+                    source: .forum
+                ),
+                appContext: appContext
+            )
+        }
+
+        await model.prepare(layout: ReaderContainerLayout(width: 320, height: 568))
+        await MainActor.run {
+            model.updateCurrentPage(2)
+        }
+        await model.saveProgress()
+
+        guard case let .novel(context)? = await readerResumeRouteStore.load() else {
+            return XCTFail("Expected novel resume route")
+        }
+        XCTAssertEqual(context.threadURL, document.threadURL)
+        XCTAssertEqual(context.threadTitle, "测试线程")
+        XCTAssertEqual(context.source, .resume)
+        XCTAssertEqual(context.initialView, 1)
+        XCTAssertEqual(context.initialPage, 2)
+        XCTAssertEqual(context.initialResumePoint?.view, 1)
+    }
+
+    func testLateNovelSaveAfterDismissDoesNotRecreateReaderResumeRoute() async throws {
+        let keyPrefix = UUID().uuidString
+        let settingsStore = SettingsStore(key: "\(keyPrefix).settings")
+        let favoriteStore = FavoriteStore(key: "\(keyPrefix).favorites")
+        let readerResumeRouteStore = ReaderResumeRouteStore(key: "\(keyPrefix).readerRoute")
+        let cacheStore = ReaderCacheStore(
+            baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        )
+        let document = makeDocument(view: 1, maxView: 1, chapterTitles: ["第一章", "第二章", "第三章"])
+
+        try await settingsStore.save(AppSettings(reader: ReaderAppearanceSettings(readingMode: .paged)))
+        try await cacheStore.save(document)
+
+        let appContext = YamiboAppContext(
+            sessionStore: SessionStore(key: "\(keyPrefix).session"),
+            settingsStore: settingsStore,
+            readerResumeRouteStore: readerResumeRouteStore,
+            favoriteStore: favoriteStore,
+            readerCacheStore: cacheStore
+        )
+        let model = await MainActor.run {
+            ReaderContainerModel(
+                context: ReaderLaunchContext(
+                    threadURL: document.threadURL,
+                    threadTitle: "测试线程",
+                    source: .forum
+                ),
+                appContext: appContext
+            )
+        }
+
+        await model.prepare(layout: ReaderContainerLayout(width: 320, height: 568))
+        await MainActor.run {
+            model.updateCurrentPage(2)
+        }
+        await model.saveProgress()
+        try await waitFor {
+            await readerResumeRouteStore.load() != nil
+        }
+
+        readerResumeRouteStore.clearSync()
+        await model.saveProgress()
+        try await Task.sleep(nanoseconds: 100_000_000)
+
+        let routeAfterLateSave = await readerResumeRouteStore.load()
+        XCTAssertNil(routeAfterLateSave)
+    }
+
     func testForumNovelProgressUpdatesExistingFavorite() async throws {
         let keyPrefix = UUID().uuidString
         let settingsStore = SettingsStore(key: "\(keyPrefix).settings")
