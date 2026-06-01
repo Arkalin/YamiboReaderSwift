@@ -232,34 +232,22 @@ private struct ReaderBooksSettingsHeader: View {
                 .foregroundStyle(palette.primaryText)
 
             HStack {
-                headerButton(
+                ReaderChromeCircleButton(
                     systemName: "xmark",
-                    foreground: palette.primaryText,
-                    background: palette.headerButtonBackground,
+                    title: L10n.string("common.close"),
+                    tint: palette.primaryText,
                     action: onClose
                 )
                 Spacer()
-                headerButton(
+                ReaderChromeCircleButton(
                     systemName: "checkmark",
-                    foreground: .white,
-                    background: palette.confirmButtonBackground,
+                    title: L10n.string("common.done"),
+                    tint: palette.confirmButtonBackground,
+                    prominent: true,
                     action: onConfirm
                 )
             }
         }
-    }
-
-    private func headerButton(systemName: String, foreground: Color, background: Color, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: systemName)
-                .font(.system(size: 20, weight: .semibold))
-                .foregroundStyle(foreground)
-                .frame(width: 44, height: 44)
-                .background(background, in: Circle())
-                .shadow(color: Color.black.opacity(systemName == "checkmark" ? 0.16 : 0.08), radius: 14, y: 6)
-        }
-        .buttonStyle(.plain)
-        .contentShape(Circle())
     }
 }
 
