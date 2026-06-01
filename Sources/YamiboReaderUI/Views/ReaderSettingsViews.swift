@@ -205,7 +205,7 @@ private struct ReaderBooksHeroSection: View {
                 onClose: onClose,
                 onConfirm: onConfirm
             )
-            .padding(.horizontal, 28)
+            .padding(.horizontal, 16)
 
             ReaderBooksPreviewMaskedContent(
                 settings: settings,
@@ -247,7 +247,6 @@ private struct ReaderBooksSettingsHeader: View {
                 )
             }
         }
-        .padding(.horizontal, 6)
     }
 
     private func headerButton(systemName: String, foreground: Color, background: Color, action: @escaping () -> Void) -> some View {
@@ -255,11 +254,12 @@ private struct ReaderBooksSettingsHeader: View {
             Image(systemName: systemName)
                 .font(.system(size: 20, weight: .semibold))
                 .foregroundStyle(foreground)
-                .frame(width: 58, height: 58)
+                .frame(width: 44, height: 44)
                 .background(background, in: Circle())
                 .shadow(color: Color.black.opacity(systemName == "checkmark" ? 0.16 : 0.08), radius: 14, y: 6)
         }
         .buttonStyle(.plain)
+        .contentShape(Circle())
     }
 }
 
