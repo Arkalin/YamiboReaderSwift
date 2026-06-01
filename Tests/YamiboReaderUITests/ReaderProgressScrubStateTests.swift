@@ -147,6 +147,7 @@ final class ReaderProgressScrubStateTests: XCTestCase {
         XCTAssertTrue(presentation.horizontalChapterTicksVisibleOnlyWhileScrubbing)
         XCTAssertTrue(presentation.horizontalDirectoryContentHiddenWhileScrubbing)
         XCTAssertTrue(presentation.progressCapsulesUseButtonTint)
+        XCTAssertTrue(presentation.progressSummaryVisibleWhileScrubbing)
     }
 
     func testReaderChromeSummarySeparatesChapterAndProgressLines() {

@@ -198,6 +198,7 @@ public struct ReaderBottomChromeLayoutPresentation: Equatable, Sendable {
     public var horizontalChapterTicksVisibleOnlyWhileScrubbing: Bool { true }
     public var horizontalDirectoryContentHiddenWhileScrubbing: Bool { true }
     public var progressCapsulesUseButtonTint: Bool { true }
+    public var progressSummaryVisibleWhileScrubbing: Bool { true }
     public var verticalScrubberWidth: CGFloat { progressPanelHeight }
     public var verticalScrubberHeight: CGFloat { progressPanelHeight * 3 + actionButtonIconFrame }
     public var verticalPreviewWidth: CGFloat { maxChromeWidth }
@@ -796,8 +797,6 @@ struct ReaderBottomChrome: View {
         .lineLimit(1)
         .minimumScaleFactor(0.75)
         .multilineTextAlignment(.center)
-        .opacity(actionRowPresentation.opacity)
-        .accessibilityHidden(actionRowPresentation.isAccessibilityHidden)
 
         if model.settings.readingMode == .vertical {
             content
