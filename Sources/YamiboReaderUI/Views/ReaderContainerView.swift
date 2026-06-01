@@ -44,6 +44,8 @@ private func debugReaderPaging(_ message: @autoclosure () -> String) {
     print("[DEBUG-reader-paging] \(message())")
 }
 
+private let readerPadVisibleStatusBarTopInset: CGFloat = 32
+
 private struct ReaderVerticalPageFramePreferenceKey: PreferenceKey {
     static var defaultValue: [Int: ReaderVerticalPageFrameValue] { [:] }
 
@@ -134,7 +136,6 @@ public struct ReaderContainerView: View {
     @State private var isDismissing = false
     @State private var topChromeHeight: CGFloat = 0
     @State private var bottomChromeHeight: CGFloat = 0
-    @State private var retainedVerticalTopSafeAreaInset: CGFloat = 0
     private let appModel: YamiboAppModel
 
     public init(context: ReaderLaunchContext, appModel: YamiboAppModel) {
@@ -154,6 +155,7 @@ public struct ReaderContainerView: View {
         GeometryReader { proxy in
             let rawTopInset = max(proxy.safeAreaInsets.top, windowSafeAreaInsets.top)
             let topInset = effectiveTopInset(rawTopInset)
+            let contentTopInset = readerContentTopInset(for: topInset, rawTopInset: rawTopInset)
             let bottomInset = max(proxy.safeAreaInsets.bottom, windowSafeAreaInsets.bottom)
             let currentLayout = readerLayout(
                 proxy: proxy,
@@ -166,9 +168,10 @@ public struct ReaderContainerView: View {
                     .ignoresSafeArea()
 
                 content(
-                    topInset: topInset,
+                    topInset: contentTopInset,
                     bottomInset: bottomInset
                 )
+                .ignoresSafeArea(.container, edges: .top)
 
                 ApplePencilPageTurnInteractionOverlay(
                     settings: model.applePencilPageTurnSettings,
@@ -205,13 +208,9 @@ public struct ReaderContainerView: View {
                 .zIndex(3)
             }
             .task {
-                updateRetainedVerticalTopSafeAreaInset(rawTopInset)
                 model.updatePagedPresentationEnvironment(isPad: isPadDevice)
                 await model.prepare(layout: currentLayout)
                 updateChromeForContentState()
-            }
-            .onChange(of: rawTopInset) { _, newValue in
-                updateRetainedVerticalTopSafeAreaInset(newValue)
             }
             .onChange(of: currentLayout) { _, newValue in
                 model.updateLayout(newValue)
@@ -669,21 +668,17 @@ public struct ReaderContainerView: View {
     }
 
     private func effectiveTopInset(_ rawTopInset: CGFloat) -> CGFloat {
-        guard shouldRetainVerticalTopSafeAreaInset else { return rawTopInset }
-        return max(rawTopInset, retainedVerticalTopSafeAreaInset)
+        // Keep pagination based on the status-bar-visible safe area so immersive status bar changes
+        // do not move text or alter rendered page counts.
+        guard isPadDevice else { return rawTopInset }
+        return readerPadVisibleStatusBarTopInset
     }
 
-    private var shouldRetainVerticalTopSafeAreaInset: Bool {
-        isPadDevice && model.settings.readingMode == .vertical
-    }
-
-    private func updateRetainedVerticalTopSafeAreaInset(_ rawTopInset: CGFloat) {
-        guard isPadDevice else {
-            retainedVerticalTopSafeAreaInset = 0
-            return
-        }
-        guard rawTopInset > 0, rawTopInset != retainedVerticalTopSafeAreaInset else { return }
-        retainedVerticalTopSafeAreaInset = rawTopInset
+    private func readerContentTopInset(for layoutTopInset: CGFloat, rawTopInset: CGFloat) -> CGFloat {
+        guard isPadDevice else { return layoutTopInset }
+        return rawTopInset > 0
+            ? layoutTopInset
+            : layoutTopInset + readerPadVisibleStatusBarTopInset
     }
 
     private func retryLoad() {
