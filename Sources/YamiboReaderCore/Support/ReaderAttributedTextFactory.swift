@@ -28,6 +28,44 @@ public enum ReaderChapterTextComponents {
     }
 }
 
+struct ReaderParagraphIndentPlanner {
+    static func indentedParagraphRangesAfterFirst(in text: String) -> [Range<String.Index>] {
+        guard !text.isEmpty else { return [] }
+
+        var ranges: [Range<String.Index>] = []
+        var index = text.startIndex
+        var isFirstParagraph = true
+
+        while index < text.endIndex {
+            let paragraphStart = index
+            while index < text.endIndex, text[index].isReaderParagraphSeparator {
+                index = text.index(after: index)
+            }
+
+            var paragraphEnd = index
+            while paragraphEnd < text.endIndex, !text[paragraphEnd].isReaderParagraphSeparator {
+                paragraphEnd = text.index(after: paragraphEnd)
+            }
+
+            let styleRange = paragraphStart ..< paragraphEnd
+            if !isFirstParagraph, !styleRange.isEmpty {
+                ranges.append(styleRange)
+            }
+
+            isFirstParagraph = false
+            index = paragraphEnd
+        }
+
+        return ranges
+    }
+}
+
+private extension Character {
+    var isReaderParagraphSeparator: Bool {
+        self == "\n" || self == "\r"
+    }
+}
+
 #if canImport(UIKit)
 import UIKit
 
@@ -37,6 +75,7 @@ public enum ReaderAttributedTextFactory {
     public static func makeAttributedText(
         text: String,
         chapterTitle: String?,
+        startsAtParagraphBoundary: Bool = true,
         settings: ReaderAppearanceSettings,
         baseFontSize: Double = defaultBaseFontSize,
         textColor: UIColor = .label,
@@ -45,13 +84,22 @@ public enum ReaderAttributedTextFactory {
         let rendered = NSMutableAttributedString()
         let segments = ReaderChapterTextComponents.split(text: text, chapterTitle: chapterTitle)
         let pointSize = baseFontSize * settings.fontScale
-        let bodyParagraphStyle = makeParagraphStyle(settings: settings, pointSize: pointSize)
-        let titleParagraphStyle = makeParagraphStyle(settings: settings, pointSize: pointSize)
+        let firstBodyParagraphStyle = makeParagraphStyle(
+            settings: settings,
+            pointSize: pointSize,
+            appliesFirstLineIndent: startsAtParagraphBoundary
+        )
+        let laterBodyParagraphStyle = makeParagraphStyle(
+            settings: settings,
+            pointSize: pointSize,
+            appliesFirstLineIndent: true
+        )
+        let titleParagraphStyle = makeParagraphStyle(settings: settings, pointSize: pointSize, appliesFirstLineIndent: false)
         let bodyAttributes: [NSAttributedString.Key: Any] = [
             .font: settings.fontFamily.uiFont(size: pointSize, weight: .regular),
             .kern: settings.fontFamily.kerning(size: pointSize, scale: settings.characterSpacingScale),
             .foregroundColor: textColor,
-            .paragraphStyle: bodyParagraphStyle,
+            .paragraphStyle: firstBodyParagraphStyle,
         ]
         let titleAttributes: [NSAttributedString.Key: Any] = [
             .font: settings.fontFamily.uiFont(size: pointSize, weight: titleWeight),
@@ -63,28 +111,67 @@ public enum ReaderAttributedTextFactory {
         if let title = segments.title {
             rendered.append(NSAttributedString(string: title, attributes: titleAttributes))
             if let body = segments.body {
-                rendered.append(NSAttributedString(string: body, attributes: bodyAttributes))
+                appendBody(
+                    body,
+                    to: rendered,
+                    attributes: bodyAttributes,
+                    laterParagraphStyle: laterBodyParagraphStyle,
+                    startsAtParagraphBoundary: startsAtParagraphBoundary
+                )
             }
         } else {
-            rendered.append(NSAttributedString(string: text, attributes: bodyAttributes))
+            appendBody(
+                text,
+                to: rendered,
+                attributes: bodyAttributes,
+                laterParagraphStyle: laterBodyParagraphStyle,
+                startsAtParagraphBoundary: startsAtParagraphBoundary
+            )
         }
 
         return rendered
     }
 
     public static func makeParagraphStyle(settings: ReaderAppearanceSettings) -> NSMutableParagraphStyle {
-        makeParagraphStyle(settings: settings, pointSize: defaultBaseFontSize)
+        makeParagraphStyle(settings: settings, pointSize: defaultBaseFontSize, appliesFirstLineIndent: true)
     }
 
     private static func makeParagraphStyle(
         settings: ReaderAppearanceSettings,
-        pointSize: Double
+        pointSize: Double,
+        appliesFirstLineIndent: Bool
     ) -> NSMutableParagraphStyle {
         let style = NSMutableParagraphStyle()
         style.lineSpacing = 6 * settings.lineHeightScale
         style.alignment = settings.usesJustifiedText ? .justified : .natural
         style.lineBreakMode = .byWordWrapping
+        if settings.indentsParagraphFirstLine, appliesFirstLineIndent {
+            style.firstLineHeadIndent = CGFloat(pointSize * 2)
+        }
         return style
+    }
+
+    private static func appendBody(
+        _ body: String,
+        to rendered: NSMutableAttributedString,
+        attributes: [NSAttributedString.Key: Any],
+        laterParagraphStyle: NSParagraphStyle,
+        startsAtParagraphBoundary: Bool
+    ) {
+        let bodyStartLocation = rendered.length
+        rendered.append(NSAttributedString(string: body, attributes: attributes))
+        guard !startsAtParagraphBoundary else { return }
+
+        for range in ReaderParagraphIndentPlanner.indentedParagraphRangesAfterFirst(in: body) {
+            let location = body.distance(from: body.startIndex, to: range.lowerBound)
+            let length = body.distance(from: range.lowerBound, to: range.upperBound)
+            guard length > 0 else { continue }
+            rendered.addAttribute(
+                .paragraphStyle,
+                value: laterParagraphStyle,
+                range: NSRange(location: bodyStartLocation + location, length: length)
+            )
+        }
     }
 }
 

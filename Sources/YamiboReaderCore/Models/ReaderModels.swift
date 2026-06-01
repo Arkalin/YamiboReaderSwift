@@ -306,14 +306,14 @@ public struct ReaderProgress: Codable, Hashable, Sendable {
 }
 
 public enum ReaderRenderedBlock: Hashable, Identifiable, Sendable {
-    case text(String, chapterTitle: String?)
+    case text(String, chapterTitle: String?, startsAtParagraphBoundary: Bool = true)
     case image(URL, chapterTitle: String?)
     case footer(String)
 
     public var id: String {
         switch self {
-        case let .text(text, chapterTitle):
-            return "text:\(chapterTitle ?? ""):\(text.hashValue)"
+        case let .text(text, chapterTitle, startsAtParagraphBoundary):
+            return "text:\(chapterTitle ?? ""):\(startsAtParagraphBoundary):\(text.hashValue)"
         case let .image(url, chapterTitle):
             return "image:\(chapterTitle ?? ""):\(url.absoluteString)"
         case let .footer(text):
@@ -323,7 +323,7 @@ public enum ReaderRenderedBlock: Hashable, Identifiable, Sendable {
 
     public var chapterTitle: String? {
         switch self {
-        case let .text(_, chapterTitle), let .image(_, chapterTitle):
+        case let .text(_, chapterTitle, _), let .image(_, chapterTitle):
             return chapterTitle
         case .footer:
             return nil
@@ -338,10 +338,17 @@ public enum ReaderRenderedBlock: Hashable, Identifiable, Sendable {
     }
 
     public var textContent: String? {
-        if case let .text(text, _) = self {
+        if case let .text(text, _, _) = self {
             return text
         }
         return nil
+    }
+
+    public var startsAtParagraphBoundary: Bool {
+        if case let .text(_, _, startsAtParagraphBoundary) = self {
+            return startsAtParagraphBoundary
+        }
+        return false
     }
 }
 

@@ -68,6 +68,35 @@ final class NovelReadingSessionTests: XCTestCase {
         XCTAssertTrue(pageContainsSegmentOffset(restoredPage, segmentIndex: try XCTUnwrap(targetPage.segmentIndex), offset: targetOffset))
     }
 
+    func testEnablingParagraphFirstLineIndentPreservesNovelReadingPositionOffset() throws {
+        let document = makeNovelDocument(
+            view: 1,
+            maxView: 1,
+            segments: [
+                ("第一章", String(repeating: "第一章 内容。", count: 320)),
+            ]
+        )
+        var session = NovelReadingSession(
+            document: document,
+            settings: ReaderAppearanceSettings(readingMode: .paged),
+            layout: ReaderContainerLayout(width: 320, height: 568)
+        )
+        let targetPage = try XCTUnwrap(session.snapshot.pages.dropFirst().first { $0.segmentIndex != nil })
+        let targetOffset = targetPage.segmentStartOffset + max(1, (targetPage.segmentEndOffset - targetPage.segmentStartOffset) / 2)
+
+        session.updateVerticalViewportPosition(pageIndex: targetPage.index, intraPageProgress: 0.5)
+        session.applySettings(
+            ReaderAppearanceSettings(
+                indentsParagraphFirstLine: true,
+                readingMode: .paged
+            )
+        )
+
+        let restoredPage = session.snapshot.pages[session.snapshot.currentPageIndex]
+        XCTAssertEqual(restoredPage.chapterTitle, "第一章")
+        XCTAssertTrue(pageContainsSegmentOffset(restoredPage, segmentIndex: try XCTUnwrap(targetPage.segmentIndex), offset: targetOffset))
+    }
+
     func testVerticalModeKeepsPrefetchedReaderPageDocumentSeparate() {
         let current = makeNovelDocument(view: 1, maxView: 2, segments: [("第一章", "当前页正文")])
         let prefetched = makeNovelDocument(view: 2, maxView: 2, segments: [("第二章", "预取页正文")])
