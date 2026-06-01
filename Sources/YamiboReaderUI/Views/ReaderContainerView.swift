@@ -565,7 +565,6 @@ public struct ReaderContainerView: View {
             model: model,
             topInset: topInset,
             onClose: closeReader,
-            onOpenForum: openInForum,
             onRefresh: refreshReader
         )
         .background(
@@ -587,6 +586,7 @@ public struct ReaderContainerView: View {
             onShowSettings: openSettings,
             onShowCache: openCachePanel,
             onShowComments: openChapterComments,
+            onOpenForum: openInForum,
             onJumpChapter: { delta in
                 jumpAdjacentChapter(delta)
             },

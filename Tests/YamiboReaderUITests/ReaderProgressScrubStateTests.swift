@@ -118,7 +118,7 @@ final class ReaderProgressScrubStateTests: XCTestCase {
         let resting = ReaderBottomActionRowPresentation(isScrubbing: false)
         let scrubbing = ReaderBottomActionRowPresentation(isScrubbing: true)
 
-        XCTAssertEqual(resting.actions.map(\.kind), [.comments, .settings, .bookmark, .cache])
+        XCTAssertEqual(resting.actions.map(\.kind), [.browser, .bookmark, .cache])
         XCTAssertTrue(resting.actions.first(where: { $0.kind == .bookmark })?.isDisabled == true)
         XCTAssertEqual(resting.opacity, 1)
         XCTAssertTrue(resting.allowsHitTesting)
@@ -138,6 +138,7 @@ final class ReaderProgressScrubStateTests: XCTestCase {
         XCTAssertEqual(presentation.maxChromeWidth, 260)
         XCTAssertEqual(presentation.progressPanelHeight, 44)
         XCTAssertEqual(presentation.actionButtonIconFrame, 34)
+        XCTAssertEqual(presentation.actionButtonRowHeight, presentation.progressPanelHeight)
         XCTAssertEqual(presentation.actionButtonSpacing, 8)
         XCTAssertEqual(presentation.bottomControlsAdditionalBottomOffset, 8)
         XCTAssertEqual(presentation.horizontalAlignment, .trailing)
@@ -165,7 +166,7 @@ final class ReaderProgressScrubStateTests: XCTestCase {
         let presentation = ReaderBottomChromeLayoutPresentation()
 
         XCTAssertEqual(presentation.verticalScrubberWidth, presentation.progressPanelHeight)
-        XCTAssertEqual(presentation.verticalScrubberHeight, 166)
+        XCTAssertEqual(presentation.verticalScrubberHeight, 206)
         XCTAssertEqual(presentation.verticalPreviewWidth, presentation.maxChromeWidth)
         XCTAssertEqual(presentation.verticalPreviewHeight, 50)
         XCTAssertTrue(presentation.verticalScrubberShowsChapterTicks)

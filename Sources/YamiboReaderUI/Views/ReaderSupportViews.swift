@@ -132,6 +132,7 @@ public struct ReaderProgressChromePresentation: Equatable, Sendable {
 }
 
 public enum ReaderBottomActionKind: Equatable, Sendable {
+    case browser
     case comments
     case settings
     case bookmark
@@ -157,8 +158,7 @@ public struct ReaderBottomActionRowPresentation: Equatable, Sendable {
 
     public var actions: [ReaderBottomAction] {
         [
-            ReaderBottomAction(kind: .comments),
-            ReaderBottomAction(kind: .settings),
+            ReaderBottomAction(kind: .browser),
             ReaderBottomAction(kind: .bookmark, isDisabled: true),
             ReaderBottomAction(kind: .cache),
         ]
@@ -189,6 +189,7 @@ public struct ReaderBottomChromeLayoutPresentation: Equatable, Sendable {
     public var maxChromeWidth: CGFloat { 260 }
     public var progressPanelHeight: CGFloat { 44 }
     public var actionButtonIconFrame: CGFloat { 34 }
+    public var actionButtonRowHeight: CGFloat { progressPanelHeight }
     public var actionButtonSpacing: CGFloat { 8 }
     public var bottomControlsAdditionalBottomOffset: CGFloat { 8 }
     public var horizontalAlignment: ReaderBottomChromeHorizontalAlignment { .trailing }
@@ -200,7 +201,7 @@ public struct ReaderBottomChromeLayoutPresentation: Equatable, Sendable {
     public var progressCapsulesUseButtonTint: Bool { true }
     public var progressSummaryVisibleWhileScrubbing: Bool { true }
     public var verticalScrubberWidth: CGFloat { progressPanelHeight }
-    public var verticalScrubberHeight: CGFloat { progressPanelHeight * 3 + actionButtonIconFrame }
+    public var verticalScrubberHeight: CGFloat { progressPanelHeight * 3 + panelSpacing * 3 + actionButtonRowHeight }
     public var verticalPreviewWidth: CGFloat { maxChromeWidth }
     public var verticalPreviewHeight: CGFloat { 50 }
     public var verticalScrubberShowsChapterTicks: Bool { true }
@@ -637,7 +638,6 @@ struct ReaderTopChrome: View {
     let model: ReaderContainerModel
     let topInset: CGFloat
     let onClose: () -> Void
-    let onOpenForum: () -> Void
     let onRefresh: () -> Void
     @Environment(\.colorScheme) private var colorScheme
 
@@ -648,13 +648,26 @@ struct ReaderTopChrome: View {
         )
 
         ReaderGlassContainer(spacing: 12) {
+            let closeButtonSize: CGFloat = 44
+
             HStack(spacing: 12) {
-                ReaderChromeIconButton(systemName: "xmark", title: L10n.string("common.close"), action: onClose)
+                Color.clear
+                    .frame(width: closeButtonSize, height: closeButtonSize)
+                    .accessibilityHidden(true)
 
                 chapterTitleView(summary.chapterTitle)
                     .frame(maxWidth: .infinity)
 
-                ReaderChromeIconButton(systemName: "safari", title: L10n.string("common.original_post"), action: onOpenForum)
+                Button(action: onClose) {
+                    Image(systemName: "xmark")
+                        .font(.headline)
+                        .frame(width: closeButtonSize, height: closeButtonSize)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(readerChromeButtonTint(for: colorScheme))
+                .contentShape(Circle())
+                .readerChromePanel(cornerRadius: closeButtonSize / 2, tint: readerChromePanelTint(for: colorScheme))
+                .accessibilityLabel(L10n.string("common.close"))
             }
             .padding(.horizontal, 4)
         }
@@ -691,6 +704,7 @@ struct ReaderBottomChrome: View {
     let onShowSettings: () -> Void
     let onShowCache: () -> Void
     let onShowComments: () -> Void
+    let onOpenForum: () -> Void
     let onJumpChapter: (Int) -> Void
     let onProgressCommit: (Int) -> Void
     let isProgressScrubbing: Bool
@@ -742,25 +756,21 @@ struct ReaderBottomChrome: View {
 
     private var actionRow: some View {
         let presentation = actionRowPresentation
-        return HStack(spacing: chromeLayout.actionButtonSpacing) {
+        return HStack(spacing: 0) {
             bottomActionButton(
-                action: ReaderBottomAction(kind: .comments),
-                title: L10n.string("reader.comments"),
-                systemName: "text.bubble",
-                handler: onShowComments
+                action: ReaderBottomAction(kind: .browser),
+                title: L10n.string("common.original_post"),
+                systemName: "safari",
+                handler: onOpenForum
             )
-            bottomActionButton(
-                action: ReaderBottomAction(kind: .settings),
-                title: L10n.string("settings.title"),
-                systemName: "gearshape",
-                handler: onShowSettings
-            )
+            Spacer(minLength: chromeLayout.actionButtonSpacing)
             bottomActionButton(
                 action: ReaderBottomAction(kind: .bookmark, isDisabled: true),
                 title: "书签",
                 systemName: "bookmark",
                 handler: {}
             )
+            Spacer(minLength: chromeLayout.actionButtonSpacing)
             bottomActionButton(
                 action: ReaderBottomAction(kind: .cache),
                 title: L10n.string("reader.cache"),
@@ -769,7 +779,7 @@ struct ReaderBottomChrome: View {
             )
         }
         .frame(maxWidth: .infinity)
-        .frame(height: chromeLayout.actionButtonIconFrame)
+        .frame(height: chromeLayout.actionButtonRowHeight)
         .opacity(presentation.opacity)
         .allowsHitTesting(presentation.allowsHitTesting)
         .accessibilityHidden(presentation.isAccessibilityHidden)
@@ -828,7 +838,7 @@ struct ReaderBottomChrome: View {
     }
 
     private var progressControl: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: chromeLayout.panelSpacing) {
             if let preview = scrubState.preview, scrubState.phase == .scrubbing {
                 ReaderVerticalProgressPreviewCapsule(preview: preview)
                     .frame(maxWidth: .infinity)
@@ -853,7 +863,51 @@ struct ReaderBottomChrome: View {
             .opacity(shouldHideDirectoryCapsule ? 0 : 1)
             .allowsHitTesting(!shouldHideDirectoryCapsule)
             .accessibilityHidden(shouldHideDirectoryCapsule)
+
+            secondaryCapsuleButton(
+                title: L10n.string("reader.comments"),
+                systemName: "text.bubble",
+                action: onShowComments
+            )
+
+            secondaryCapsuleButton(
+                title: L10n.string("settings.title"),
+                systemName: "gearshape",
+                action: onShowSettings
+            )
         }
+    }
+
+    private func secondaryCapsuleButton(
+        title: String,
+        systemName: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        let presentation = actionRowPresentation
+        let controlTint = chromeLayout.progressCapsulesUseButtonTint ? readerChromeButtonTint(for: colorScheme) : Color.accentColor
+
+        return Button(action: action) {
+            HStack(spacing: 8) {
+                Text(title)
+                    .font(.callout.weight(.semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+                Spacer(minLength: 12)
+                Image(systemName: systemName)
+                    .font(.callout.weight(.semibold))
+            }
+            .foregroundStyle(chromeLayout.directoryCapsuleContentUsesAccentColor ? controlTint : Color.primary)
+            .frame(maxWidth: .infinity)
+            .frame(height: chromeLayout.progressPanelHeight)
+            .padding(.horizontal, 18)
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .readerChromePanel(cornerRadius: 24, tint: readerChromePanelTint(for: colorScheme))
+        .opacity(presentation.opacity)
+        .allowsHitTesting(presentation.allowsHitTesting)
+        .accessibilityHidden(presentation.isAccessibilityHidden)
+        .accessibilityLabel(title)
     }
 
     private var shouldHideDirectoryCapsule: Bool {
@@ -1259,6 +1313,7 @@ struct ReaderChapterSheet: View {
     let onSelect: (ReaderChapter) -> Void
     let onSelectWebView: (Int) -> Void
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
     @State private var showingWebPicker = false
 
     var body: some View {
@@ -1349,10 +1404,19 @@ struct ReaderChapterSheet: View {
                         .accessibilityLabel(model.chapterDirectoryWebTitle)
                     }
 
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button(L10n.string("common.close")) {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button {
                             dismiss()
+                        } label: {
+                            Image(systemName: "xmark")
+                                .font(.headline)
+                                .frame(width: 44, height: 44)
                         }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(readerChromeButtonTint(for: colorScheme))
+                        .contentShape(Circle())
+                        .readerChromePanel(cornerRadius: 22, tint: readerChromePanelTint(for: colorScheme))
+                        .accessibilityLabel(L10n.string("common.close"))
                     }
                 }
                 .onAppear {
