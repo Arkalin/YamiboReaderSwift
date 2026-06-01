@@ -73,7 +73,13 @@ public enum ReaderPaginator {
 
                     let page = ReaderRenderedPage(
                         index: pages.count,
-                        blocks: [.text(slice.text, chapterTitle: chapterTitle)],
+                        blocks: [
+                            .text(
+                                slice.text,
+                                chapterTitle: chapterTitle,
+                                startsAtParagraphBoundary: slice.startsAtParagraphBoundary
+                            ),
+                        ],
                         documentView: document.view,
                         chapterOrdinal: annotatedSegment.chapterOrdinal,
                         chapterTitle: annotatedSegment.chapterTitle,
@@ -197,7 +203,13 @@ public enum ReaderPaginator {
         guard combinedText.count < 180 else { return false }
 #endif
 
-        previousPage.blocks.append(.text(slice.text, chapterTitle: chapterTitle))
+        previousPage.blocks.append(
+            .text(
+                slice.text,
+                chapterTitle: chapterTitle,
+                startsAtParagraphBoundary: slice.startsAtParagraphBoundary
+            )
+        )
         previousPage.textRanges.append(
             ReaderRenderedTextRange(
                 segmentIndex: annotatedSegment.index,
@@ -333,7 +345,8 @@ public enum ReaderPaginator {
                 TextSlice(
                     text: currentText,
                     startOffset: currentStartOffset,
-                    endOffset: currentEndOffset
+                    endOffset: currentEndOffset,
+                    startsAtParagraphBoundary: true
                 )
             )
             currentText = ""
@@ -421,7 +434,8 @@ public enum ReaderPaginator {
                     TextSlice(
                         text: trimmedChunk,
                         startOffset: max(paragraph.startOffset, sliceStart),
-                        endOffset: max(max(paragraph.startOffset, sliceStart), sliceEnd)
+                        endOffset: max(max(paragraph.startOffset, sliceStart), sliceEnd),
+                        startsAtParagraphBoundary: start == 0
                     )
                 )
             }
@@ -466,6 +480,19 @@ struct TextSlice {
     let text: String
     let startOffset: Int
     let endOffset: Int
+    let startsAtParagraphBoundary: Bool
+
+    init(
+        text: String,
+        startOffset: Int,
+        endOffset: Int,
+        startsAtParagraphBoundary: Bool = true
+    ) {
+        self.text = text
+        self.startOffset = startOffset
+        self.endOffset = endOffset
+        self.startsAtParagraphBoundary = startsAtParagraphBoundary
+    }
 }
 
 private struct ParagraphSlice {

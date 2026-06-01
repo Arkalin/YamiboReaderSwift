@@ -512,10 +512,11 @@ private struct ReaderBlockView: View {
 
     var body: some View {
         switch block {
-        case let .text(text, chapterTitle):
+        case let .text(text, chapterTitle, startsAtParagraphBoundary):
             ReaderRichTextView(
                 text: text,
                 chapterTitle: chapterTitle,
+                startsAtParagraphBoundary: startsAtParagraphBoundary,
                 settings: settings,
                 baseFontSize: 22,
                 textColor: UIColor(readerTextColor)
@@ -543,6 +544,7 @@ private struct ReaderBlockView: View {
 struct ReaderRichTextView: UIViewRepresentable {
     let text: String
     let chapterTitle: String?
+    var startsAtParagraphBoundary: Bool = true
     let settings: ReaderAppearanceSettings
     let baseFontSize: Double
     let textColor: UIColor
@@ -575,6 +577,7 @@ struct ReaderRichTextView: UIViewRepresentable {
         ReaderAttributedTextFactory.makeAttributedText(
             text: text,
             chapterTitle: chapterTitle,
+            startsAtParagraphBoundary: startsAtParagraphBoundary,
             settings: settings,
             baseFontSize: baseFontSize,
             textColor: textColor,

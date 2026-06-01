@@ -93,7 +93,8 @@ enum ReaderPagedLayoutEngine {
                         TextSlice(
                             text: sliceText,
                             startOffset: effectiveStart,
-                            endOffset: trimmedEnd
+                            endOffset: trimmedEnd,
+                            startsAtParagraphBoundary: effectiveStart == 0 || isParagraphBoundary(in: attributedText.string, at: effectiveStart)
                         )
                     )
                 }
@@ -128,6 +129,30 @@ enum ReaderPagedLayoutEngine {
         return CGFloat(fontSize * max(settings.lineHeightScale, 1.35) * 2)
     }
 
+    private static func isParagraphBoundary(in text: String, at offset: Int) -> Bool {
+        guard offset > 0, offset <= text.count else { return false }
+        let nsText = text as NSString
+        var index = offset - 1
+        var newlineCount = 0
+
+        while index >= 0 {
+            let character = nsText.substring(with: NSRange(location: index, length: 1))
+            if character == "\n" || character == "\r" {
+                newlineCount += 1
+                if newlineCount >= 2 {
+                    return true
+                }
+            } else if character.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                index -= 1
+                continue
+            } else {
+                return false
+            }
+            index -= 1
+        }
+
+        return false
+    }
 }
 
 private extension String {

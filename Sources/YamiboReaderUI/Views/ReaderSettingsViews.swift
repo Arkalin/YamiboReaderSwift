@@ -102,6 +102,10 @@ struct ReaderSettingsPanel: View {
                                 usesJustifiedText: Binding(
                                     get: { draftSettings.usesJustifiedText },
                                     set: { draftSettings.usesJustifiedText = $0 }
+                                ),
+                                indentsParagraphFirstLine: Binding(
+                                    get: { draftSettings.indentsParagraphFirstLine },
+                                    set: { draftSettings.indentsParagraphFirstLine = $0 }
                                 )
                             )
 
@@ -442,12 +446,18 @@ private struct ReaderBooksLayoutSection: View {
 private struct ReaderBooksTextOptionsSection: View {
     let palette: ReaderBooksSheetPalette
     @Binding var usesJustifiedText: Bool
+    @Binding var indentsParagraphFirstLine: Bool
 
     var body: some View {
         VStack(spacing: 0) {
             toggleRow(
                 title: L10n.string("reader.justified_text"),
                 isOn: $usesJustifiedText
+            )
+            ReaderBooksDivider(palette: palette)
+            toggleRow(
+                title: L10n.string("reader.paragraph_first_line_indent"),
+                isOn: $indentsParagraphFirstLine
             )
         }
         .frame(maxWidth: .infinity, alignment: .leading)

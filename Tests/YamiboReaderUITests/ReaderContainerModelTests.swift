@@ -681,7 +681,7 @@ final class ReaderContainerModelTests: XCTestCase {
 
         await MainActor.run {
             let renderedText = model.pages.flatMap(\.blocks).compactMap { block -> String? in
-                if case let .text(text, _) = block { return text }
+                if case let .text(text, _, _) = block { return text }
                 return nil
             }.joined()
 

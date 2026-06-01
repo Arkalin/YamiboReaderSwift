@@ -814,6 +814,34 @@ private final class StubURLProtocol: URLProtocol {
     #expect(textPages.last?.segmentEndOffset == text.count)
 }
 
+@Test func readerPaginatorMarksOnlyRealParagraphStartsForFirstLineIndent() async throws {
+    let text = String(repeating: "这是一个会横跨多个分页的长段落。", count: 160)
+    let document = ReaderPageDocument(
+        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=57&mobile=2")),
+        view: 1,
+        maxView: 1,
+        segments: [.text(text, chapterTitle: "第一章")]
+    )
+
+    let pagination = ReaderPaginator.paginate(
+        document: document,
+        settings: ReaderAppearanceSettings(
+            indentsParagraphFirstLine: true,
+            readingMode: .paged
+        ),
+        layout: ReaderContainerLayout(
+            containerSize: CGSize(width: 390, height: 260),
+            contentInsets: ReaderLayoutInsets(leading: 20, trailing: 20),
+            readingMode: .paged
+        )
+    )
+    let textBlocks = pagination.pages.compactMap(\.blocks.first)
+
+    #expect(textBlocks.count > 1)
+    #expect(textBlocks.first?.startsAtParagraphBoundary == true)
+    #expect(textBlocks.dropFirst().allSatisfy { $0.startsAtParagraphBoundary == false })
+}
+
 @Test func readerPaginatorPacksShortAdjacentTextSegmentsInPagedMode() async throws {
     let document = ReaderPageDocument(
         threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=56&mobile=2")),
@@ -839,6 +867,14 @@ private final class StubURLProtocol: URLProtocol {
 
     #expect(pagination.pages.count == 1)
     #expect(pagination.pages.first?.blocks.count == 3)
+}
+
+@Test func readerParagraphIndentPlannerKeepsContinuationFirstParagraphUnindentedOnly() {
+    let text = "续页正文。\n\n新段落正文。\n第三段正文。"
+    let ranges = ReaderParagraphIndentPlanner.indentedParagraphRangesAfterFirst(in: text)
+    let substrings = ranges.map { String(text[$0]) }
+
+    #expect(substrings == ["\n\n新段落正文。", "\n第三段正文。"])
 }
 
 #if canImport(UIKit)
@@ -867,6 +903,58 @@ private final class StubURLProtocol: URLProtocol {
 
     #expect(titleStyle.lineSpacing == 9.6)
     #expect(bodyStyle.lineSpacing == 9.6)
+}
+
+@Test func readerAttributedTextFactoryIndentsBodyButNotTitleOrContinuationSlices() throws {
+    let pointSize = 24.0
+    let settings = ReaderAppearanceSettings(indentsParagraphFirstLine: true)
+    let paragraphStart = ReaderAttributedTextFactory.makeAttributedText(
+        text: "第一章\n第一段正文。",
+        chapterTitle: "第一章",
+        startsAtParagraphBoundary: true,
+        settings: settings,
+        baseFontSize: pointSize
+    )
+    let continuation = ReaderAttributedTextFactory.makeAttributedText(
+        text: "续页正文。",
+        chapterTitle: "第一章",
+        startsAtParagraphBoundary: false,
+        settings: settings,
+        baseFontSize: pointSize
+    )
+    let titleStyle = try #require(
+        paragraphStart.attribute(.paragraphStyle, at: 0, effectiveRange: nil) as? NSParagraphStyle
+    )
+    let bodyStyle = try #require(
+        paragraphStart.attribute(.paragraphStyle, at: "第一章\n".count, effectiveRange: nil) as? NSParagraphStyle
+    )
+    let continuationStyle = try #require(
+        continuation.attribute(.paragraphStyle, at: 0, effectiveRange: nil) as? NSParagraphStyle
+    )
+
+    #expect(titleStyle.firstLineHeadIndent == 0)
+    #expect(bodyStyle.firstLineHeadIndent == 48)
+    #expect(continuationStyle.firstLineHeadIndent == 0)
+}
+
+@Test func readerAttributedTextFactoryIndentsLaterParagraphsInContinuationSlices() throws {
+    let pointSize = 24.0
+    let attributedText = ReaderAttributedTextFactory.makeAttributedText(
+        text: "续页正文。\n\n新段落正文。",
+        chapterTitle: "第一章",
+        startsAtParagraphBoundary: false,
+        settings: ReaderAppearanceSettings(indentsParagraphFirstLine: true),
+        baseFontSize: pointSize
+    )
+    let continuationStyle = try #require(
+        attributedText.attribute(.paragraphStyle, at: 0, effectiveRange: nil) as? NSParagraphStyle
+    )
+    let newParagraphStyle = try #require(
+        attributedText.attribute(.paragraphStyle, at: "续页正文。\n\n".count, effectiveRange: nil) as? NSParagraphStyle
+    )
+
+    #expect(continuationStyle.firstLineHeadIndent == 0)
+    #expect(newParagraphStyle.firstLineHeadIndent == 48)
 }
 #endif
 
