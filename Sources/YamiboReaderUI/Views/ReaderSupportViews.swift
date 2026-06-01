@@ -1403,20 +1403,11 @@ struct ReaderChapterSheet: View {
                         }
                         .accessibilityLabel(model.chapterDirectoryWebTitle)
                     }
-
                     ToolbarItem(placement: .topBarLeading) {
-                        Button {
-                            dismiss()
-                        } label: {
-                            Image(systemName: "xmark")
-                                .font(.headline)
-                                .frame(width: 44, height: 44)
+                        Button { dismiss() } label: {
+                            Label(L10n.string("common.done"), systemImage: "xmark")
+                                .labelStyle(.iconOnly)
                         }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(readerChromeButtonTint(for: colorScheme))
-                        .contentShape(Circle())
-                        .readerChromePanel(cornerRadius: 22, tint: readerChromePanelTint(for: colorScheme))
-                        .accessibilityLabel(L10n.string("common.close"))
                     }
                 }
                 .onAppear {
