@@ -146,6 +146,7 @@ final class ReaderProgressScrubStateTests: XCTestCase {
         XCTAssertTrue(presentation.progressFillHasVerticalTrailingEdge)
         XCTAssertFalse(presentation.horizontalProgressThumbVisible)
         XCTAssertTrue(presentation.horizontalChapterTicksVisibleOnlyWhileScrubbing)
+        XCTAssertTrue(presentation.directoryChapterTicksDoNotRequireProgressFill)
         XCTAssertTrue(presentation.horizontalDirectoryContentHiddenWhileScrubbing)
         XCTAssertTrue(presentation.progressCapsulesUseButtonTint)
         XCTAssertTrue(presentation.progressSummaryVisibleWhileScrubbing)
@@ -187,6 +188,76 @@ final class ReaderProgressScrubStateTests: XCTestCase {
         XCTAssertTrue(presentation.verticalProgressSummaryUsesLiquidGlass)
         XCTAssertTrue(presentation.verticalChapterTitleCapsuleWrapsContent)
         XCTAssertEqual(presentation.verticalScrubberActionRowBottomOffset, 46)
+    }
+
+    func testCapsuleChapterTicksUseRoundedEdgeInsets() {
+        let presentation = ReaderBottomChromeLayoutPresentation()
+
+        XCTAssertEqual(
+            presentation.capsuleChapterTickCoordinate(
+                position: 0,
+                length: presentation.maxChromeWidth,
+                edgeInset: presentation.capsuleChapterTickRoundedEdgeInset
+            ),
+            6
+        )
+        XCTAssertEqual(
+            presentation.capsuleChapterTickCoordinate(
+                position: 0.5,
+                length: presentation.maxChromeWidth,
+                edgeInset: presentation.capsuleChapterTickRoundedEdgeInset
+            ),
+            130
+        )
+        XCTAssertEqual(
+            presentation.capsuleChapterTickCoordinate(
+                position: 1,
+                length: presentation.maxChromeWidth,
+                edgeInset: presentation.capsuleChapterTickRoundedEdgeInset
+            ),
+            254
+        )
+        XCTAssertEqual(
+            presentation.capsuleChapterTickCoordinate(
+                position: 1,
+                length: presentation.verticalScrubberHeight,
+                edgeInset: presentation.capsuleChapterTickRoundedEdgeInset
+            ),
+            200
+        )
+    }
+
+    func testCapsuleProgressFillUsesTickCoordinateScale() {
+        let presentation = ReaderBottomChromeLayoutPresentation()
+
+        XCTAssertEqual(
+            presentation.capsuleProgressFillExtent(
+                position: 0,
+                length: presentation.maxChromeWidth,
+                edgeInset: presentation.capsuleChapterTickRoundedEdgeInset
+            ),
+            0
+        )
+        XCTAssertEqual(
+            presentation.capsuleProgressFillExtent(
+                position: 0.5,
+                length: presentation.maxChromeWidth,
+                edgeInset: presentation.capsuleChapterTickRoundedEdgeInset
+            ),
+            presentation.capsuleChapterTickCoordinate(
+                position: 0.5,
+                length: presentation.maxChromeWidth,
+                edgeInset: presentation.capsuleChapterTickRoundedEdgeInset
+            )
+        )
+        XCTAssertEqual(
+            presentation.capsuleProgressFillExtent(
+                position: 1,
+                length: presentation.maxChromeWidth,
+                edgeInset: presentation.capsuleChapterTickRoundedEdgeInset
+            ),
+            presentation.maxChromeWidth
+        )
     }
 
     func testIntegratedProgressChromeContractsAcrossPagedAndVerticalModes() {
