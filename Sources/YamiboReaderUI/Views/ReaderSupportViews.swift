@@ -1,6 +1,10 @@
 import SwiftUI
 import YamiboReaderCore
 
+#if os(iOS)
+import UIKit
+#endif
+
 public enum ReaderProgressScrubPhase: Equatable, Sendable {
     case idle
     case pressed
@@ -651,6 +655,8 @@ private struct AuthenticatedReaderImage: View {
 }
 
 struct ReaderTopChrome: View {
+    private let pagedChapterTitleTopLift: CGFloat = 12
+
     let model: ReaderContainerModel
     let topInset: CGFloat
     let onClose: () -> Void
@@ -670,6 +676,7 @@ struct ReaderTopChrome: View {
                 chapterTitleView(summary.chapterTitle)
                     .frame(maxWidth: .infinity)
                     .padding(.horizontal, closeButtonSize + 16)
+                    .offset(y: shouldLiftPagedChapterTitle ? -pagedChapterTitleTopLift : 0)
 
                 HStack {
                     Spacer(minLength: 0)
@@ -709,6 +716,14 @@ struct ReaderTopChrome: View {
             text
                 .frame(maxWidth: .infinity)
         }
+    }
+
+    private var shouldLiftPagedChapterTitle: Bool {
+#if os(iOS)
+        UIDevice.current.userInterfaceIdiom == .pad && model.settings.readingMode == .paged
+#else
+        false
+#endif
     }
 }
 
