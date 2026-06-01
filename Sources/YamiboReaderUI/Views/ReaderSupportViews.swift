@@ -658,16 +658,12 @@ struct ReaderTopChrome: View {
                 chapterTitleView(summary.chapterTitle)
                     .frame(maxWidth: .infinity)
 
-                Button(action: onClose) {
-                    Image(systemName: "xmark")
-                        .font(.headline)
-                        .frame(width: closeButtonSize, height: closeButtonSize)
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(readerChromeButtonTint(for: colorScheme))
-                .contentShape(Circle())
-                .readerChromePanel(cornerRadius: closeButtonSize / 2, tint: readerChromePanelTint(for: colorScheme))
-                .accessibilityLabel(L10n.string("common.close"))
+                ReaderChromeCircleButton(
+                    systemName: "xmark",
+                    title: L10n.string("common.close"),
+                    tint: readerChromeButtonTint(for: colorScheme),
+                    action: onClose
+                )
             }
             .padding(.horizontal, 4)
         }
@@ -1296,6 +1292,25 @@ struct ReaderChromeIconButton: View {
                 .frame(width: 34, height: 34)
         }
         .readerChromeButtonStyle(tint: readerChromeButtonTint(for: colorScheme))
+        .accessibilityLabel(title)
+    }
+}
+
+struct ReaderChromeCircleButton: View {
+    let systemName: String
+    let title: String
+    var tint: Color
+    var prominent = false
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.headline)
+                .frame(width: 34, height: 34)
+        }
+        .buttonBorderShape(.circle)
+        .readerChromeButtonStyle(prominent: prominent, tint: tint)
         .accessibilityLabel(title)
     }
 }
