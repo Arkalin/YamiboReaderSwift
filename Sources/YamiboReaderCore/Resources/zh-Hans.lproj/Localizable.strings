@@ -257,8 +257,8 @@
 "reader.previous_web_page" = "上一网页";
 "reader.progress" = "第 %@ / %d 页 · 网页第 %d / %d 页";
 "reader.progress_with_chapter" = "第 %@ / %d 页 · 网页第 %d / %d 页 · %@";
-"reader.pull_next_web_page" = "继续上拉前往下一网页";
-"reader.pull_previous_web_page" = "继续下拉前往上一网页";
+"reader.pull_next_web_page" = "继续拖动前往下一网页";
+"reader.pull_previous_web_page" = "继续拖动前往上一网页";
 "reader.release_next_web_page" = "松开前往下一网页";
 "reader.release_previous_web_page" = "松开前往上一网页";
 "reader.run_in_background" = "后台运行";
