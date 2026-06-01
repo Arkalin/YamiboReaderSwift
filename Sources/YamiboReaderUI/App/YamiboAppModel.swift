@@ -30,6 +30,7 @@ public final class YamiboAppModel {
     private var webDAVForegroundSyncTask: Task<Void, Never>?
     private var webDAVDebouncedUploadTask: Task<Void, Never>?
     private var isWebDAVSyncInProgress = false
+    private var hasRestoredReaderResumeRoute = false
 
     public init(appContext: YamiboAppContext, initialTab: AppTab = .forum) {
         self.appContext = appContext
@@ -49,6 +50,7 @@ public final class YamiboAppModel {
         let state = await appContext.bootstrap()
         bootstrapState = state
         bootstrapErrorMessage = nil
+        await restoreReaderResumeRouteIfNeeded()
     }
 
     public func synchronizeWebDAVIfNeeded() {
@@ -105,6 +107,7 @@ public final class YamiboAppModel {
     public func presentReader(_ context: ReaderLaunchContext) {
         suspendedReaderContext = nil
         activeReaderContext = context
+        persistReaderResumeRoute(.novel(context))
     }
 
     public func selectTab(_ tab: AppTab) {
@@ -116,13 +119,17 @@ public final class YamiboAppModel {
     public func presentManga(_ context: MangaLaunchContext) {
         suspendedMangaRoute = nil
         suspendedMangaWebContext = nil
-        activeMangaRoute = .native(context)
+        let route = MangaPresentationRoute.native(context)
+        activeMangaRoute = route
+        persistReaderResumeRoute(.manga(route))
     }
 
     public func presentMangaWeb(_ context: MangaWebContext) {
         suspendedMangaRoute = nil
         suspendedMangaWebContext = nil
-        activeMangaRoute = .web(context)
+        let route = MangaPresentationRoute.web(context)
+        activeMangaRoute = route
+        persistReaderResumeRoute(.manga(route))
     }
 
     public func presentMangaFromWeb(_ context: MangaLaunchContext, preserving webContext: MangaWebContext) {
@@ -131,18 +138,22 @@ public final class YamiboAppModel {
             autoOpenNative: false,
             waitingForNativeReturn: false
         )
-        activeMangaRoute = .native(context)
+        let route = MangaPresentationRoute.native(context)
+        activeMangaRoute = route
+        persistReaderResumeRoute(.manga(route))
     }
 
     public func fallbackMangaToWeb(_ context: MangaWebContext) {
         suspendedMangaRoute = nil
         suspendedMangaWebContext = nil
-        activeMangaRoute = .web(
+        let route = MangaPresentationRoute.web(
             context.updating(
                 autoOpenNative: false,
                 waitingForNativeReturn: false
             )
         )
+        activeMangaRoute = route
+        persistReaderResumeRoute(.manga(route))
     }
 
     public func dismissMangaRestoringWebIfNeeded() {
@@ -152,12 +163,14 @@ public final class YamiboAppModel {
         }
         suspendedMangaRoute = nil
         self.suspendedMangaWebContext = nil
-        activeMangaRoute = .web(
+        let route = MangaPresentationRoute.web(
             suspendedMangaWebContext.updating(
                 autoOpenNative: false,
                 waitingForNativeReturn: true
             )
         )
+        activeMangaRoute = route
+        persistReaderResumeRoute(.manga(route))
     }
 
     public func openManga(_ context: MangaLaunchContext, currentHTML: String? = nil, currentTitle: String? = nil) async {
@@ -183,6 +196,7 @@ public final class YamiboAppModel {
             suspendedReaderContext = nil
         }
         activeReaderContext = nil
+        clearReaderResumeRoute()
         if let url {
             selectedTab = .forum
             forumNavigationRequest = ForumNavigationRequest(url: url)
@@ -197,10 +211,53 @@ public final class YamiboAppModel {
         }
         activeMangaRoute = nil
         suspendedMangaWebContext = nil
+        clearReaderResumeRoute()
         if let url {
             selectedTab = .forum
             forumNavigationRequest = ForumNavigationRequest(url: url)
         }
+    }
+
+    public func updateReaderResumeRoute(_ route: ReaderResumeRoute) {
+        switch route {
+        case let .novel(context):
+            guard activeReaderContext != nil else { return }
+            activeReaderContext = context
+        case let .manga(route):
+            guard activeMangaRoute != nil else { return }
+            activeMangaRoute = route
+        }
+        persistReaderResumePosition(route)
+    }
+
+    private func restoreReaderResumeRouteIfNeeded() async {
+        guard !hasRestoredReaderResumeRoute else { return }
+        hasRestoredReaderResumeRoute = true
+        guard activeReaderContext == nil, activeMangaRoute == nil else { return }
+        guard let route = await appContext.readerResumeRouteStore.load() else { return }
+
+        switch route {
+        case let .novel(context):
+            activeReaderContext = context
+        case let .manga(route):
+            activeMangaRoute = route
+        }
+    }
+
+    private func persistReaderResumeRoute(_ route: ReaderResumeRoute) {
+        Task { [appContext] in
+            try? await appContext.readerResumeRouteStore.save(route)
+        }
+    }
+
+    private func persistReaderResumePosition(_ route: ReaderResumeRoute) {
+        Task { [appContext] in
+            try? await appContext.readerResumeRouteStore.saveReadingPosition(route)
+        }
+    }
+
+    private func clearReaderResumeRoute() {
+        appContext.readerResumeRouteStore.clearSync()
     }
 
     private func restoreSuspendedReaderIfNeeded(for tab: AppTab) {

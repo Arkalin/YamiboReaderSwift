@@ -794,6 +794,7 @@ public final class MangaReaderModel: ObservableObject {
 
     private func scheduleProgressSync() {
         guard let snapshot = currentProgressSnapshot() else { return }
+        persistReaderResumeRoute(snapshot)
         Task { [progressSync] in
             await progressSync.queue(.manga(snapshot))
         }
@@ -801,8 +802,23 @@ public final class MangaReaderModel: ObservableObject {
 
     private func flushProgress() async {
         guard let snapshot = currentProgressSnapshot() else { return }
+        persistReaderResumeRoute(snapshot)
         try? await progressSync.flush(.manga(snapshot))
         await persistSettings()
+    }
+
+    private func persistReaderResumeRoute(_ snapshot: MangaProgressReadingPosition) {
+        let resumeContext = MangaLaunchContext(
+            originalThreadURL: context.originalThreadURL,
+            chapterURL: snapshot.chapterURL,
+            displayTitle: context.displayTitle,
+            source: .resume,
+            initialPage: snapshot.pageIndex,
+            directoryName: currentDirectory?.cleanBookName ?? context.directoryName
+        )
+        Task { [appContext] in
+            try? await appContext.readerResumeRouteStore.saveReadingPosition(.manga(.native(resumeContext)))
+        }
     }
 
     public func makeWebFallbackContext(currentURL: URL, initialPage: Int) -> MangaWebContext {

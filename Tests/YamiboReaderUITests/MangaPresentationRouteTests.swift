@@ -4,6 +4,117 @@ import XCTest
 
 @MainActor
 final class MangaPresentationRouteTests: XCTestCase {
+    func testBootstrapRestoresNovelResumeRoute() async throws {
+        let (appModel, store) = try await makeAppModelWithReaderResumeRouteStore()
+        let originalURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=720&mobile=2"))
+        let context = ReaderLaunchContext(
+            threadURL: originalURL,
+            threadTitle: "测试小说",
+            source: .resume,
+            initialView: 3,
+            initialPage: 4
+        )
+        try await store.save(.novel(context))
+
+        await appModel.bootstrap()
+
+        XCTAssertEqual(appModel.activeReaderContext, context)
+        XCTAssertNil(appModel.activeMangaRoute)
+    }
+
+    func testBootstrapRestoresMangaResumeRoute() async throws {
+        let (appModel, store) = try await makeAppModelWithReaderResumeRouteStore()
+        let originalURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=721&mobile=2"))
+        let chapterURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=722&mobile=2"))
+        let route = MangaPresentationRoute.native(
+            MangaLaunchContext(
+                originalThreadURL: originalURL,
+                chapterURL: chapterURL,
+                displayTitle: "测试漫画",
+                source: .resume,
+                initialPage: 6
+            )
+        )
+        try await store.save(.manga(route))
+
+        await appModel.bootstrap()
+
+        XCTAssertNil(appModel.activeReaderContext)
+        XCTAssertEqual(appModel.activeMangaRoute, route)
+    }
+
+    func testPresentingReadersPersistsResumeRouteAndDismissClearsIt() async throws {
+        let (appModel, store) = try await makeAppModelWithReaderResumeRouteStore()
+        let originalURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=723&mobile=2"))
+        let readerContext = ReaderLaunchContext(
+            threadURL: originalURL,
+            threadTitle: "测试小说",
+            source: .favorites,
+            initialView: 2
+        )
+
+        appModel.presentReader(readerContext)
+        try await waitForReaderResumeRoute(store, equals: .novel(readerContext))
+
+        appModel.dismissReader()
+        try await waitForReaderResumeRoute(store, equals: nil)
+
+        let mangaContext = MangaLaunchContext(
+            originalThreadURL: originalURL,
+            chapterURL: originalURL,
+            displayTitle: "测试漫画",
+            source: .favorites,
+            initialPage: 2
+        )
+        appModel.presentManga(mangaContext)
+        try await waitForReaderResumeRoute(store, equals: .manga(.native(mangaContext)))
+
+        appModel.dismissManga()
+        try await waitForReaderResumeRoute(store, equals: nil)
+    }
+
+    func testPresentingMangaWebPersistsResumeRouteAndOpenForumClearsIt() async throws {
+        let (appModel, store) = try await makeAppModelWithReaderResumeRouteStore()
+        let originalURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=724&mobile=2"))
+        let context = MangaWebContext(
+            currentURL: originalURL,
+            originalThreadURL: originalURL,
+            source: .favorites,
+            initialPage: 1,
+            autoOpenNative: false
+        )
+
+        appModel.presentMangaWeb(context)
+        try await waitForReaderResumeRoute(store, equals: .manga(.web(context)))
+
+        appModel.dismissManga(openThreadInForum: originalURL)
+        try await waitForReaderResumeRoute(store, equals: nil)
+        XCTAssertNotNil(appModel.suspendedMangaRoute)
+        XCTAssertEqual(appModel.selectedTab, .forum)
+    }
+
+    func testReaderResumeRouteUpdateAfterDismissDoesNotRecreateRestoreState() async throws {
+        let (appModel, store) = try await makeAppModelWithReaderResumeRouteStore()
+        let originalURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=725&mobile=2"))
+        let context = MangaWebContext(
+            currentURL: originalURL,
+            originalThreadURL: originalURL,
+            source: .forum
+        )
+
+        appModel.presentMangaWeb(context)
+        try await waitForReaderResumeRoute(store, equals: .manga(.web(context)))
+
+        appModel.dismissManga()
+        try await waitForReaderResumeRoute(store, equals: nil)
+
+        appModel.updateReaderResumeRoute(.manga(.web(context.updating(initialPage: 3))))
+
+        let loadedRoute = await store.load()
+        XCTAssertNil(loadedRoute)
+        XCTAssertNil(appModel.activeMangaRoute)
+    }
+
     func testMangaFavoriteLaunchDoesNotNeedProbeBlocker() {
         let manga = Favorite(
             title: "测试漫画",
@@ -220,4 +331,39 @@ final class MangaPresentationRouteTests: XCTestCase {
         XCTAssertFalse(activeWeb.autoOpenNative)
         XCTAssertFalse(activeWeb.waitingForNativeReturn)
     }
+}
+
+private func makeAppModelWithReaderResumeRouteStore() async throws -> (YamiboAppModel, ReaderResumeRouteStore) {
+    let suiteName = "reader-resume-app-model-tests-\(UUID().uuidString)"
+    try XCTUnwrap(UserDefaults(suiteName: suiteName)).removePersistentDomain(forName: suiteName)
+    let store = ReaderResumeRouteStore(
+        defaults: try XCTUnwrap(UserDefaults(suiteName: suiteName)),
+        key: "reader-route"
+    )
+    let context = YamiboAppContext(
+        sessionStore: SessionStore(defaults: try XCTUnwrap(UserDefaults(suiteName: suiteName)), key: "session"),
+        settingsStore: SettingsStore(defaults: try XCTUnwrap(UserDefaults(suiteName: suiteName)), key: "settings"),
+        readerResumeRouteStore: store,
+        favoriteStore: FavoriteStore(defaults: try XCTUnwrap(UserDefaults(suiteName: suiteName)), key: "favorites")
+    )
+    let appModel = await MainActor.run {
+        YamiboAppModel(appContext: context)
+    }
+    return (appModel, store)
+}
+
+private func waitForReaderResumeRoute(
+    _ store: ReaderResumeRouteStore,
+    equals expected: ReaderResumeRoute?,
+    file: StaticString = #filePath,
+    line: UInt = #line
+) async throws {
+    for _ in 0..<20 {
+        if await store.load() == expected {
+            return
+        }
+        try await Task.sleep(nanoseconds: 25_000_000)
+    }
+    let loaded = await store.load()
+    XCTAssertEqual(loaded, expected, file: file, line: line)
 }

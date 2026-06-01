@@ -56,6 +56,68 @@ final class MangaReaderModelTests: XCTestCase {
         XCTAssertEqual(favorite?.lastChapter, "第1话")
     }
 
+    func testMangaProgressPersistsReaderResumeRoute() async throws {
+        let keyPrefix = UUID().uuidString
+        let readerResumeRouteStore = ReaderResumeRouteStore(key: "\(keyPrefix).readerRoute")
+        let model = try await makeMangaModel(
+            chapterHTMLByTID: [
+                "700": makeMangaHTML(
+                    tid: "700",
+                    title: "第1话",
+                    links: [("701", "第2话")],
+                    imageCount: 2
+                )
+            ],
+            readerResumeRouteStore: readerResumeRouteStore
+        )
+
+        await MainActor.run {
+            model.updateCurrentPage(1)
+        }
+        await model.saveProgress()
+
+        guard case let .manga(.native(context))? = await readerResumeRouteStore.load() else {
+            return XCTFail("Expected native manga resume route")
+        }
+        XCTAssertEqual(MangaTitleCleaner.extractTid(from: context.originalThreadURL.absoluteString), "700")
+        XCTAssertEqual(MangaTitleCleaner.extractTid(from: context.chapterURL.absoluteString), "700")
+        XCTAssertEqual(context.displayTitle, "测试漫画")
+        XCTAssertEqual(context.source, .resume)
+        XCTAssertEqual(context.initialPage, 1)
+        XCTAssertEqual(context.directoryName, "第1话")
+    }
+
+    func testLateMangaSaveAfterDismissDoesNotRecreateReaderResumeRoute() async throws {
+        let keyPrefix = UUID().uuidString
+        let readerResumeRouteStore = ReaderResumeRouteStore(key: "\(keyPrefix).readerRoute")
+        let model = try await makeMangaModel(
+            chapterHTMLByTID: [
+                "700": makeMangaHTML(
+                    tid: "700",
+                    title: "第1话",
+                    links: [("701", "第2话")],
+                    imageCount: 2
+                )
+            ],
+            readerResumeRouteStore: readerResumeRouteStore
+        )
+
+        await MainActor.run {
+            model.updateCurrentPage(1)
+        }
+        await model.saveProgress()
+        try await waitFor {
+            await readerResumeRouteStore.load() != nil
+        }
+
+        readerResumeRouteStore.clearSync()
+        await model.saveProgress()
+        try await Task.sleep(nanoseconds: 100_000_000)
+
+        let routeAfterLateSave = await readerResumeRouteStore.load()
+        XCTAssertNil(routeAfterLateSave)
+    }
+
     func testPrefetchesNextChapterAndJumpsBetweenChapters() async throws {
         let model = try await makeMangaModel(
             chapterHTMLByTID: [
@@ -2524,6 +2586,7 @@ private func makeMangaModel(
     requestLog: RequestLog? = nil,
     requestHandler: ((URLRequest) -> (Data, HTTPURLResponse)?)? = nil,
     chapterProbe: (@MainActor (MangaLaunchContext) async -> MangaProbeOutcome)? = nil,
+    readerResumeRouteStore: ReaderResumeRouteStore? = nil,
     initialTID: String = "700",
     initialPage: Int = 0
 ) async throws -> MangaReaderModel {
@@ -2556,6 +2619,7 @@ private func makeMangaModel(
     let appContext = YamiboAppContext(
         sessionStore: SessionStore(key: "\(keyPrefix).session"),
         settingsStore: settingsStore,
+        readerResumeRouteStore: readerResumeRouteStore ?? ReaderResumeRouteStore(key: "\(keyPrefix).readerRoute"),
         favoriteStore: favoriteStore,
         readerCacheStore: ReaderCacheStore(baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)),
         mangaImageCacheStore: MangaImageCacheStore(baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)),

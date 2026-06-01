@@ -85,6 +85,41 @@ public enum MangaPresentationRoute: Hashable, Sendable {
     case web(MangaWebContext)
 }
 
+extension MangaPresentationRoute: Codable {
+    private enum CodingKeys: String, CodingKey {
+        case kind
+        case nativeContext
+        case webContext
+    }
+
+    private enum Kind: String, Codable {
+        case native
+        case web
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        switch self {
+        case let .native(context):
+            try container.encode(Kind.native, forKey: .kind)
+            try container.encode(context, forKey: .nativeContext)
+        case let .web(context):
+            try container.encode(Kind.web, forKey: .kind)
+            try container.encode(context, forKey: .webContext)
+        }
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        switch try container.decode(Kind.self, forKey: .kind) {
+        case .native:
+            self = .native(try container.decode(MangaLaunchContext.self, forKey: .nativeContext))
+        case .web:
+            self = .web(try container.decode(MangaWebContext.self, forKey: .webContext))
+        }
+    }
+}
+
 public struct MangaProbePayload: Hashable, Sendable {
     public var images: [URL]
     public var title: String

@@ -1119,6 +1119,97 @@ import Testing
     #expect(loaded == SessionState())
 }
 
+@Test func readerResumeRouteStorePersistsNovelRouteAndClearsIt() async throws {
+    let defaults = try makeIsolatedDefaults(prefix: "reader-resume-novel-tests")
+    let store = ReaderResumeRouteStore(defaults: defaults, key: "reader-route")
+    let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=611&mobile=2"))
+    let resumePoint = ReaderResumePoint(
+        view: 2,
+        chapterOrdinal: 3,
+        chapterTitle: "第三章",
+        segmentIndex: 4,
+        segmentOffset: 20,
+        segmentProgress: 0.5,
+        authorID: "42",
+        readingModeHint: .vertical
+    )
+    let context = ReaderLaunchContext(
+        threadURL: threadURL,
+        threadTitle: "测试小说",
+        source: .resume,
+        initialView: 2,
+        initialPage: 5,
+        authorID: "42",
+        initialResumePoint: resumePoint
+    )
+
+    try await store.save(.novel(context))
+
+    #expect(await store.load() == .novel(context))
+
+    await store.clear()
+
+    #expect(await store.load() == nil)
+}
+
+@Test func readerResumeRouteStorePersistsMangaRouteAndIgnoresInvalidData() async throws {
+    let defaults = try makeIsolatedDefaults(prefix: "reader-resume-manga-tests")
+    let store = ReaderResumeRouteStore(defaults: defaults, key: "reader-route")
+    let originalURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=612&mobile=2"))
+    let chapterURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=613&mobile=2"))
+    let route = MangaPresentationRoute.native(
+        MangaLaunchContext(
+            originalThreadURL: originalURL,
+            chapterURL: chapterURL,
+            displayTitle: "测试漫画",
+            source: .resume,
+            initialPage: 7,
+            directoryName: "测试漫画"
+        )
+    )
+
+    try await store.save(.manga(route))
+
+    #expect(await store.load() == .manga(route))
+
+    let invalidDefaults = try makeIsolatedDefaults(prefix: "reader-resume-invalid-tests")
+    invalidDefaults.set(Data("legacy".utf8), forKey: "reader-route")
+    let invalidStore = ReaderResumeRouteStore(defaults: invalidDefaults, key: "reader-route")
+
+    #expect(await invalidStore.load() == nil)
+}
+
+@Test func readerResumeRouteStoreSuppressesLatePositionSaveAfterClearUntilNextPresentation() async throws {
+    let defaults = try makeIsolatedDefaults(prefix: "reader-resume-suppression-tests")
+    let store = ReaderResumeRouteStore(defaults: defaults, key: "reader-route")
+    let firstURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=614&mobile=2"))
+    let secondURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=615&mobile=2"))
+    let firstRoute = ReaderResumeRoute.novel(
+        ReaderLaunchContext(
+            threadURL: firstURL,
+            threadTitle: "第一本",
+            source: .resume
+        )
+    )
+    let secondRoute = ReaderResumeRoute.novel(
+        ReaderLaunchContext(
+            threadURL: secondURL,
+            threadTitle: "第二本",
+            source: .resume
+        )
+    )
+
+    try await store.save(firstRoute)
+    await store.clear()
+    try await store.saveReadingPosition(firstRoute)
+
+    #expect(await store.load() == nil)
+
+    try await store.save(secondRoute)
+
+    #expect(await store.load() == secondRoute)
+}
+
 @Test func favoriteStoreClearAllRemovesAllFavorites() async throws {
     let defaults = try makeIsolatedDefaults(prefix: "favorite-clear-tests")
     let store = FavoriteStore(defaults: defaults, key: "favorites")
@@ -1188,6 +1279,7 @@ import Testing
 
     let sessionStore = SessionStore(defaults: try #require(UserDefaults(suiteName: suiteName)), key: "session")
     let settingsStore = SettingsStore(defaults: try #require(UserDefaults(suiteName: suiteName)), key: "settings")
+    let readerResumeRouteStore = ReaderResumeRouteStore(defaults: try #require(UserDefaults(suiteName: suiteName)), key: "reader-route")
     let favoriteStore = FavoriteStore(defaults: try #require(UserDefaults(suiteName: suiteName)), key: "favorites")
     let readerCacheStore = ReaderCacheStore(baseDirectory: rootDirectory.appendingPathComponent("reader-cache", isDirectory: true))
     let mangaImageCacheStore = MangaImageCacheStore(baseDirectory: rootDirectory.appendingPathComponent("manga-image-cache", isDirectory: true))
@@ -1198,6 +1290,7 @@ import Testing
     let appContext = YamiboAppContext(
         sessionStore: sessionStore,
         settingsStore: settingsStore,
+        readerResumeRouteStore: readerResumeRouteStore,
         favoriteStore: favoriteStore,
         readerCacheStore: readerCacheStore,
         mangaImageCacheStore: mangaImageCacheStore,
@@ -1209,6 +1302,15 @@ import Testing
 
     try await sessionStore.updateWebSession(cookie: "sid=1", userAgent: "UA", isLoggedIn: true)
     try await settingsStore.save(AppSettings(webBrowser: WebBrowserSettings(showsNavigationBar: false)))
+    try await readerResumeRouteStore.save(
+        .novel(
+            ReaderLaunchContext(
+                threadURL: threadURL,
+                threadTitle: "测试小说",
+                source: .resume
+            )
+        )
+    )
     try await favoriteStore.saveFavorites([Favorite(title: "测试收藏", url: threadURL)])
     try await readerCacheStore.save(
         ReaderPageDocument(
@@ -1229,6 +1331,7 @@ import Testing
 
     let session = await sessionStore.load()
     let settings = await settingsStore.load()
+    let readerResumeRoute = await readerResumeRouteStore.load()
     let favorites = await favoriteStore.loadFavorites()
     let readerCacheBytes = await readerCacheStore.totalDiskUsageBytes()
     let mangaCacheBytes = await mangaImageCacheStore.totalDiskUsageBytes()
@@ -1236,6 +1339,7 @@ import Testing
 
     #expect(session == SessionState())
     #expect(settings == AppSettings())
+    #expect(readerResumeRoute == nil)
     #expect(favorites.isEmpty)
     #expect(readerCacheBytes == 0)
     #expect(mangaCacheBytes == 0)

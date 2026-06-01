@@ -7,7 +7,11 @@ import UIKit
 
 @MainActor
 public final class MangaWebFallbackModel: ObservableObject {
-    @Published public private(set) var context: MangaWebContext
+    @Published public private(set) var context: MangaWebContext {
+        didSet {
+            appModel.updateReaderResumeRoute(.manga(.web(context.updating(autoOpenNative: false))))
+        }
+    }
     @Published public private(set) var pageTitle = L10n.string("manga_web.title")
     @Published public private(set) var isLoading = false
     @Published public private(set) var showLoadError = false
