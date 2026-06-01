@@ -650,23 +650,26 @@ struct ReaderTopChrome: View {
         ReaderGlassContainer(spacing: 12) {
             let closeButtonSize: CGFloat = 44
 
-            HStack(spacing: 12) {
-                Color.clear
-                    .frame(width: closeButtonSize, height: closeButtonSize)
-                    .accessibilityHidden(true)
-
+            ZStack {
                 chapterTitleView(summary.chapterTitle)
                     .frame(maxWidth: .infinity)
+                    .padding(.horizontal, closeButtonSize + 16)
 
-                ReaderChromeCircleButton(
-                    systemName: "xmark",
-                    title: L10n.string("common.close"),
-                    tint: readerChromeButtonTint(for: colorScheme),
-                    action: onClose
-                )
+                HStack {
+                    Spacer(minLength: 0)
+                    ReaderChromeCircleButton(
+                        systemName: "xmark",
+                        title: L10n.string("common.close"),
+                        tint: readerChromeButtonTint(for: colorScheme),
+                        action: onClose
+                    )
+                    .frame(width: closeButtonSize, height: closeButtonSize)
+                }
             }
+            .frame(maxWidth: .infinity, minHeight: closeButtonSize)
             .padding(.horizontal, 4)
         }
+        .frame(maxWidth: .infinity)
         .padding(.top, max(topInset + 8, 20))
         .padding(.horizontal, 12)
         .padding(.bottom, 8)
