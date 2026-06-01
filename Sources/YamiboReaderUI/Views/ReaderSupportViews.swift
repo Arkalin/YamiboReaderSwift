@@ -691,7 +691,6 @@ struct ReaderBottomChrome: View {
     let onShowCache: () -> Void
     let onShowComments: () -> Void
     let onJumpChapter: (Int) -> Void
-    let onProgressPreviewChange: (Double?, Bool) -> Void
     let onProgressCommit: (Int) -> Void
     let isProgressScrubbing: Bool
 
@@ -951,7 +950,6 @@ struct ReaderBottomChrome: View {
             onProgressCommit(target)
         }
         sliderState.sliderValue = sliderModelValue
-        onProgressPreviewChange(nil, false)
     }
 
     private func triggerFeedback(_ haptics: [ReaderProgressScrubHaptic]) {
@@ -1229,23 +1227,6 @@ private struct ReaderVerticalProgressPreviewCapsule: View {
             .frame(width: layout.verticalPreviewWidth, height: layout.verticalPreviewHeight)
             .readerChromePanel(cornerRadius: 24, tint: Color.accentColor.opacity(0.08))
             .shadow(color: Color.black.opacity(0.08), radius: 10, y: 4)
-    }
-}
-
-struct ReaderChapterPreviewBubble: View {
-    let title: String
-
-    var body: some View {
-        Text(title)
-            .font(.caption.weight(.semibold))
-            .lineLimit(1)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
-            .readerChromePanel(cornerRadius: 18, tint: Color.accentColor.opacity(0.08))
-            .shadow(color: Color.black.opacity(0.08), radius: 10, y: 4)
-        .frame(maxWidth: .infinity)
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
     }
 }
 
