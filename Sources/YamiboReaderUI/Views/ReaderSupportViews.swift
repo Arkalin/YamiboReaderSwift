@@ -1300,6 +1300,20 @@ struct ReaderChromeIconButton: View {
     }
 }
 
+struct ReaderToolbarIconButton: View {
+    let systemName: String
+    let title: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Label(title, systemImage: systemName)
+                .labelStyle(.iconOnly)
+        }
+        .accessibilityLabel(title)
+    }
+}
+
 func readerChromePanelTint(for colorScheme: ColorScheme) -> Color {
     colorScheme == .dark ? Color.white.opacity(0.06) : Color.white.opacity(0.18)
 }
@@ -1404,10 +1418,11 @@ struct ReaderChapterSheet: View {
                         .accessibilityLabel(model.chapterDirectoryWebTitle)
                     }
                     ToolbarItem(placement: .topBarLeading) {
-                        Button { dismiss() } label: {
-                            Label(L10n.string("common.done"), systemImage: "xmark")
-                                .labelStyle(.iconOnly)
-                        }
+                        ReaderToolbarIconButton(
+                            systemName: "xmark",
+                            title: L10n.string("common.done"),
+                            action: { dismiss() }
+                        )
                     }
                 }
                 .onAppear {
@@ -1504,17 +1519,18 @@ struct ReaderChapterCommentsSheet: View {
                         ReaderChapterCommentsToolbarTitle(target: target)
                     }
                     ToolbarItem(placement: .topBarLeading) {
-                        Button { dismiss() } label: {
-                            Label(L10n.string("common.done"), systemImage: "xmark")
-                                .labelStyle(.iconOnly)
-                        }
+                        ReaderToolbarIconButton(
+                            systemName: "xmark",
+                            title: L10n.string("common.done"),
+                            action: { dismiss() }
+                        )
                     }
                     ToolbarItem(placement: .topBarTrailing) {
-                        Button {
-                            Task { await model.refreshChapterComments(for: target) }
-                        } label: {
-                            Label(L10n.string("common.refresh"), systemImage: "arrow.clockwise")
-                        }
+                        ReaderToolbarIconButton(
+                            systemName: "arrow.clockwise",
+                            title: L10n.string("common.refresh"),
+                            action: { Task { await model.refreshChapterComments(for: target) } }
+                        )
                         .disabled(target == nil)
                     }
                 }
@@ -1556,17 +1572,18 @@ struct MangaChapterCommentsSheet: View {
                     ReaderChapterCommentsToolbarTitle(target: target)
                 }
                 ToolbarItem(placement: .topBarLeading) {
-                    Button { dismiss() } label: {
-                        Label(L10n.string("common.done"), systemImage: "xmark")
-                            .labelStyle(.iconOnly)
-                    }
+                    ReaderToolbarIconButton(
+                        systemName: "xmark",
+                        title: L10n.string("common.done"),
+                        action: { dismiss() }
+                    )
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        Task { await model.refreshChapterComments(for: target) }
-                    } label: {
-                        Label(L10n.string("common.refresh"), systemImage: "arrow.clockwise")
-                    }
+                    ReaderToolbarIconButton(
+                        systemName: "arrow.clockwise",
+                        title: L10n.string("common.refresh"),
+                        action: { Task { await model.refreshChapterComments(for: target) } }
+                    )
                     .disabled(target == nil)
                 }
             }
