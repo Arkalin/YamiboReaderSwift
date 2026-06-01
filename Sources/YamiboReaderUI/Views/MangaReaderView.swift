@@ -29,9 +29,6 @@ public struct MangaReaderView: View {
     @State private var pagerRevision = UUID()
     @State private var sliderValue = 0.0
     @State private var isEditingSlider = false
-    @State private var previewPageIndex: Int?
-    @State private var isPreviewVisible = false
-    @State private var previewHideTask: Task<Void, Never>?
     @State private var pendingPagedTapTask: Task<Void, Never>?
     @State private var pendingPagedTapToken = UUID()
     @State private var lastPagedTapDate: Date?
@@ -43,7 +40,6 @@ public struct MangaReaderView: View {
     @State private var isDismissing = false
     @Environment(\.colorScheme) private var colorScheme
     private let appModel: YamiboAppModel
-    private let sliderPreviewHideDelay: TimeInterval = 2.0
 
     public init(context: MangaLaunchContext, appModel: YamiboAppModel) {
         _model = StateObject(wrappedValue: MangaReaderModel(context: context, appContext: appModel.appContext))
@@ -71,14 +67,6 @@ public struct MangaReaderView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 brightnessOverlay
                 chapterTransitionOverlay
-
-                if showingChrome, isPreviewVisible {
-                    MangaChapterPreviewBubble(title: previewLabelText)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-                        .padding(.horizontal, 24)
-                        .transition(.opacity)
-                        .zIndex(3)
-                }
             }
             .safeAreaInset(edge: .top, spacing: 0) {
                 if showingChrome {
@@ -100,7 +88,6 @@ public struct MangaReaderView: View {
                 model.updatePagedPresentationEnvironment(isPad: isPadDevice, viewportSize: newSize)
             }
             .onDisappear {
-                previewHideTask?.cancel()
                 pendingPagedTapTask?.cancel()
                 verticalRestoreSettleTask?.cancel()
                 Task { await model.saveProgress() }
@@ -136,7 +123,6 @@ public struct MangaReaderView: View {
                     syncSliderValueIfNeeded()
                 }
             }
-            .animation(.easeInOut(duration: 0.2), value: isPreviewVisible)
             .statusBar(hidden: !showingChrome)
         }
     }
@@ -513,22 +499,13 @@ public struct MangaReaderView: View {
 
     private func handleSliderValueChange(_ value: Double) {
         sliderValue = clampedSliderValue(value)
-        guard isEditingSlider else { return }
-        previewPageIndex = model.clampedLocalPageIndex(for: Int(sliderValue.rounded()))
-        previewHideTask?.cancel()
-        isPreviewVisible = true
-        schedulePreviewHide()
     }
 
     private func handleSliderEditingChanged(_ editing: Bool) {
         isEditingSlider = editing
-        previewHideTask?.cancel()
 
         if editing {
             sliderValue = clampedSliderValue(sliderValue)
-            previewPageIndex = model.clampedLocalPageIndex(for: Int(sliderValue.rounded()))
-            isPreviewVisible = true
-            schedulePreviewHide()
             return
         }
 
@@ -544,39 +521,19 @@ public struct MangaReaderView: View {
         syncSliderValueIfNeeded()
     }
 
-    private func schedulePreviewHide() {
-        previewHideTask?.cancel()
-        previewHideTask = Task {
-            try? await Task.sleep(for: .seconds(sliderPreviewHideDelay))
-            guard !Task.isCancelled else { return }
-            await MainActor.run {
-                isPreviewVisible = false
-                previewPageIndex = nil
-            }
-        }
-    }
-
     private func resetSliderPreview() {
-        previewHideTask?.cancel()
         isEditingSlider = false
-        isPreviewVisible = false
-        previewPageIndex = nil
         syncSliderValueIfNeeded()
     }
 
     private func commitSliderSelection() {
         let targetIndex = model.clampedLocalPageIndex(for: Int(sliderValue.rounded()))
-        previewPageIndex = targetIndex
         model.requestCurrentChapterPage(targetIndex)
-        schedulePreviewHide()
     }
 
     private func cancelSliderInteractionForContentGesture() {
         guard isEditingSlider else { return }
-        previewHideTask?.cancel()
         isEditingSlider = false
-        isPreviewVisible = false
-        previewPageIndex = nil
     }
 
     private func handleVerticalPageAppear(_ page: MangaPage) {
@@ -719,10 +676,6 @@ public struct MangaReaderView: View {
         cancelSliderInteractionForContentGesture()
         cancelPendingPagedTap()
         await model.jumpRelativePage(delta)
-    }
-
-    private var previewLabelText: String {
-        model.previewLabel(forLocalIndex: previewPageIndex ?? model.currentPage?.localIndex ?? 0)
     }
 
     private var canReceiveApplePencilPageTurn: Bool {

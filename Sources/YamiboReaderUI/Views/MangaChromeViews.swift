@@ -102,20 +102,4 @@ struct MangaBottomChrome: View {
     }
 }
 
-struct MangaChapterPreviewBubble: View {
-    let title: String
-
-    var body: some View {
-        Text(title)
-            .font(.caption.weight(.semibold))
-            .lineLimit(1)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
-            .readerChromePanel(cornerRadius: 18, tint: Color.accentColor.opacity(0.08))
-            .shadow(color: Color.black.opacity(0.08), radius: 10, y: 4)
-        .frame(maxWidth: .infinity)
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
-    }
-}
 #endif

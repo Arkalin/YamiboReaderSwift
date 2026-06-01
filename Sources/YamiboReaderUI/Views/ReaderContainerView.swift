@@ -124,10 +124,6 @@ public struct ReaderContainerView: View {
     @State private var verticalViewportPositionUpdateTask: Task<Void, Never>?
     @State private var verticalPageFrames: [Int: ReaderVerticalPageFrameValue] = [:]
     @State private var lastVerticalPositioningFingerprint: ReaderVerticalPositioningFingerprint?
-    @State private var progressPreviewPageIndex: Int?
-    @State private var progressPreviewChapterTitle: String?
-    @State private var isProgressPreviewVisible = false
-    @State private var progressPreviewHideTask: Task<Void, Never>?
     @State private var verticalProgressScrubState = ReaderProgressScrubState()
     @State private var verticalProgressStartFeedbackGenerator = UIImpactFeedbackGenerator(style: .light)
     @State private var verticalProgressTickFeedbackGenerator = UISelectionFeedbackGenerator()
@@ -140,7 +136,6 @@ public struct ReaderContainerView: View {
     @State private var bottomChromeHeight: CGFloat = 0
     @State private var retainedVerticalTopSafeAreaInset: CGFloat = 0
     private let appModel: YamiboAppModel
-    private let progressPreviewHideDelay: TimeInterval = 2.0
 
     public init(context: ReaderLaunchContext, appModel: YamiboAppModel) {
         _model = StateObject(wrappedValue: ReaderContainerModel(context: context, appContext: appModel.appContext))
@@ -183,14 +178,6 @@ public struct ReaderContainerView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-                if isProgressPreviewVisible {
-                    ReaderChapterPreviewBubble(title: progressPreviewChapterTitle ?? "•••")
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-                        .padding(.horizontal, 24)
-                        .transition(.opacity)
-                        .zIndex(3)
-                }
-
                 if chromeState.mode.showsChrome {
                     VStack(spacing: 0) {
                         topChrome(topInset: topInset)
@@ -224,7 +211,6 @@ public struct ReaderContainerView: View {
                 model.updateLayout(newValue)
             }
             .onDisappear {
-                progressPreviewHideTask?.cancel()
                 verticalRestoreRetryTask?.cancel()
                 verticalViewportPositionUpdateTask?.cancel()
                 syncVerticalViewportBeforeSave()
@@ -305,7 +291,6 @@ public struct ReaderContainerView: View {
             .onPreferenceChange(ReaderBottomChromeHeightPreferenceKey.self) { value in
                 bottomChromeHeight = value
             }
-            .animation(.easeInOut(duration: 0.2), value: isProgressPreviewVisible)
         }
     }
 
@@ -605,9 +590,6 @@ public struct ReaderContainerView: View {
             onJumpChapter: { delta in
                 jumpAdjacentChapter(delta)
             },
-            onProgressPreviewChange: { value, isEditing in
-                handleProgressPreviewChange(value: value, isEditing: isEditing)
-            },
             onProgressCommit: { pageIndex in
                 commitProgressSlider(pageIndex)
             },
@@ -727,8 +709,6 @@ public struct ReaderContainerView: View {
     private func toggleChrome() {
         guard !model.pages.isEmpty else { return }
         guard !hasPresentedOverlay else { return }
-        progressPreviewHideTask?.cancel()
-        isProgressPreviewVisible = false
         withAnimation(.easeInOut(duration: 0.2)) {
             chromeState.toggleChrome()
         }
@@ -737,8 +717,6 @@ public struct ReaderContainerView: View {
     private func enterImmersiveMode() {
         guard !model.pages.isEmpty else { return }
         guard !hasPresentedOverlay else { return }
-        progressPreviewHideTask?.cancel()
-        isProgressPreviewVisible = false
         withAnimation(.easeInOut(duration: 0.2)) {
             chromeState.hideChrome()
         }
@@ -859,7 +837,6 @@ public struct ReaderContainerView: View {
 
     private func commitProgressSlider(_ targetIndex: Int) {
         model.jumpToRenderedPage(targetIndex)
-        showProgressPreview(for: targetIndex, autoHide: true)
         if model.settings.readingMode == .vertical {
             requestVerticalScrollToCurrentPage()
         }
@@ -867,7 +844,6 @@ public struct ReaderContainerView: View {
 
     private func jumpAdjacentChapter(_ delta: Int) {
         model.jumpToAdjacentChapter(delta)
-        showProgressPreview(for: model.currentPageIndex, autoHide: true)
         if model.settings.readingMode == .vertical {
             requestVerticalScrollToCurrentPage()
         }
@@ -1032,42 +1008,6 @@ public struct ReaderContainerView: View {
             case .commit:
                 verticalProgressCommitFeedbackGenerator.impactOccurred()
                 verticalProgressCommitFeedbackGenerator.prepare()
-            }
-        }
-    }
-
-    private func handleProgressPreviewChange(value: Double?, isEditing: Bool) {
-        guard isEditing, let value else {
-            hideProgressPreview(after: progressPreviewHideDelay)
-            return
-        }
-
-        let targetIndex = model.targetRenderedPageIndex(forProgressValue: value)
-        showProgressPreview(for: targetIndex, autoHide: false)
-        hideProgressPreview(after: progressPreviewHideDelay)
-    }
-
-    private func showProgressPreview(for pageIndex: Int, autoHide: Bool) {
-        progressPreviewHideTask?.cancel()
-        progressPreviewPageIndex = pageIndex
-        progressPreviewChapterTitle = model.chapterTitle(forRenderedPageIndex: pageIndex) ?? "•••"
-        withAnimation(.easeInOut(duration: 0.2)) {
-            isProgressPreviewVisible = true
-        }
-        if autoHide {
-            hideProgressPreview(after: progressPreviewHideDelay)
-        }
-    }
-
-    private func hideProgressPreview(after delay: TimeInterval) {
-        progressPreviewHideTask?.cancel()
-        progressPreviewHideTask = Task {
-            try? await Task.sleep(for: .seconds(delay))
-            guard !Task.isCancelled else { return }
-            await MainActor.run {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    isProgressPreviewVisible = false
-                }
             }
         }
     }
