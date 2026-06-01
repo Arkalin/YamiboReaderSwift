@@ -86,6 +86,21 @@ public struct ReaderProgressScrubUpdate: Equatable, Sendable {
     }
 }
 
+public enum ReaderProgressDragMapping {
+    public static func value(
+        startProgressFraction: Double,
+        translation: CGFloat,
+        length: CGFloat,
+        range: ClosedRange<Double>
+    ) -> Double {
+        guard length > 0 else { return range.lowerBound }
+        let startFraction = min(max(startProgressFraction, 0), 1)
+        let translatedFraction = startFraction + Double(translation / length)
+        let clampedFraction = min(max(translatedFraction, 0), 1)
+        return range.lowerBound + clampedFraction * (range.upperBound - range.lowerBound)
+    }
+}
+
 public struct ReaderProgressChromePresentation: Equatable, Sendable {
     public var readingMode: ReaderReadingMode
     public var isChromeVisible: Bool
@@ -1001,6 +1016,7 @@ private struct ReaderDirectoryProgressCapsule: View {
     let onTapDirectory: () -> Void
     let onScrub: (CGFloat, CGFloat) -> Void
     let onEndScrub: () -> Void
+    @State private var dragStartProgressFraction: Double?
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
@@ -1056,10 +1072,20 @@ private struct ReaderDirectoryProgressCapsule: View {
         DragGesture(minimumDistance: 6)
             .onChanged { value in
                 guard supportsScrub else { return }
-                onScrub(value.location.x, width)
+                if dragStartProgressFraction == nil {
+                    dragStartProgressFraction = progressFraction
+                }
+                let targetFraction = ReaderProgressDragMapping.value(
+                    startProgressFraction: dragStartProgressFraction ?? progressFraction,
+                    translation: value.translation.width,
+                    length: width,
+                    range: 0...1
+                )
+                onScrub(CGFloat(targetFraction) * width, width)
             }
             .onEnded { _ in
                 guard supportsScrub else { return }
+                dragStartProgressFraction = nil
                 onEndScrub()
             }
     }
@@ -1072,6 +1098,7 @@ struct ReaderVerticalProgressCapsule: View {
     let ticks: [ReaderProgressChapterTick]
     let onScrub: (CGFloat, CGFloat) -> Void
     let onEndScrub: () -> Void
+    @State private var dragStartProgressFraction: Double?
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
@@ -1101,9 +1128,19 @@ struct ReaderVerticalProgressCapsule: View {
             .gesture(
                 DragGesture(minimumDistance: 0)
                     .onChanged { value in
-                        onScrub(value.location.y, height)
+                        if dragStartProgressFraction == nil {
+                            dragStartProgressFraction = progressFraction
+                        }
+                        let targetFraction = ReaderProgressDragMapping.value(
+                            startProgressFraction: dragStartProgressFraction ?? progressFraction,
+                            translation: value.translation.height,
+                            length: height,
+                            range: 0...1
+                        )
+                        onScrub(CGFloat(targetFraction) * height, height)
                     }
                     .onEnded { _ in
+                        dragStartProgressFraction = nil
                         onEndScrub()
                     }
             )
