@@ -197,6 +197,12 @@ public struct ReaderContainerView: View {
                         .transition(.opacity)
                         .zIndex(2)
                 }
+
+                verticalBoundaryPullOverlayLayer(
+                    topInset: topInset,
+                    bottomInset: bottomInset
+                )
+                .zIndex(3)
             }
             .task {
                 updateRetainedVerticalTopSafeAreaInset(rawTopInset)
@@ -488,25 +494,31 @@ public struct ReaderContainerView: View {
                     scheduleVerticalViewportPositionUpdate()
                 }
             }
-            .overlay(alignment: .top) {
-                verticalBoundaryPullOverlay(
-                    direction: .previous,
-                    topInset: topInset,
-                    bottomInset: bottomInset
-                )
-            }
-            .overlay(alignment: .bottom) {
-                verticalBoundaryPullOverlay(
-                    direction: .next,
-                    topInset: topInset,
-                    bottomInset: bottomInset
-                )
-            }
         }
     }
 
     private var backgroundColor: Color {
         readerThemeColor(for: model.settings.backgroundStyle, colorScheme: colorScheme)
+    }
+
+    private func verticalBoundaryPullOverlayLayer(topInset: CGFloat, bottomInset: CGFloat) -> some View {
+        VStack(spacing: 0) {
+            verticalBoundaryPullOverlay(
+                direction: .previous,
+                topInset: topInset,
+                bottomInset: bottomInset
+            )
+
+            Spacer(minLength: 0)
+
+            verticalBoundaryPullOverlay(
+                direction: .next,
+                topInset: topInset,
+                bottomInset: bottomInset
+            )
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .allowsHitTesting(false)
     }
 
     @ViewBuilder
@@ -539,7 +551,7 @@ public struct ReaderContainerView: View {
     }
 
     private func verticalBoundaryPullBottomPadding(bottomInset: CGFloat) -> CGFloat {
-        let chromeAvoidance = chromeState.mode.showsChrome ? max(bottomChromeHeight, bottomInset + 210) : 0
+        let chromeAvoidance = chromeState.mode.showsChrome ? max(bottomChromeHeight, bottomInset + 210) + 55 : 0
         return max(chromeAvoidance, bottomInset, 24) + 8
     }
 
