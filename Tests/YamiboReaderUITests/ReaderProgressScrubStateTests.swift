@@ -74,6 +74,24 @@ final class ReaderProgressScrubStateTests: XCTestCase {
         XCTAssertEqual(state.preview?.displayText, "第4页")
     }
 
+    func testDragMappingUsesCurrentProgressAsAnchorInsteadOfFingerStartLocation() {
+        let horizontal = ReaderProgressDragMapping.value(
+            startProgressFraction: 0.25,
+            translation: 20,
+            length: 200,
+            range: 0...100
+        )
+        let vertical = ReaderProgressDragMapping.value(
+            startProgressFraction: 0.60,
+            translation: -30,
+            length: 300,
+            range: 0...100
+        )
+
+        XCTAssertEqual(horizontal, 35, accuracy: 0.001)
+        XCTAssertEqual(vertical, 50, accuracy: 0.001)
+    }
+
     func testPagedChromePresentationUsesHorizontalScrubbingCapsule() {
         let presentation = ReaderProgressChromePresentation(readingMode: .paged, isChromeVisible: true)
 
