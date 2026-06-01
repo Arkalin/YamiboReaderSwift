@@ -354,6 +354,30 @@ struct ReaderProgressSliderState: Equatable {
     }
 }
 
+struct ReaderPagedPagerIdentity: Hashable {
+    let visibleView: Int
+    let pageCount: Int
+    let spreadCount: Int
+    let usesTwoPageSpread: Bool
+    let layoutWidth: Int
+    let layoutHeight: Int
+
+    init(
+        visibleView: Int,
+        pageCount: Int,
+        spreadCount: Int,
+        usesTwoPageSpread: Bool,
+        layout: ReaderContainerLayout
+    ) {
+        self.visibleView = visibleView
+        self.pageCount = pageCount
+        self.spreadCount = spreadCount
+        self.usesTwoPageSpread = usesTwoPageSpread
+        layoutWidth = Int(layout.width.rounded())
+        layoutHeight = Int(layout.height.rounded())
+    }
+}
+
 #if os(iOS)
 import UIKit
 
