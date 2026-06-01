@@ -1,9 +1,62 @@
 import Foundation
+import CoreGraphics
 import XCTest
 @testable import YamiboReaderCore
 @testable import YamiboReaderUI
 
 final class ReaderContainerModelTests: XCTestCase {
+    func testPagedPagerIdentityChangesWhenRotationChangesPagedLayout() {
+        let portrait = ReaderContainerLayout(
+            containerSize: CGSize(width: 1032, height: 1376),
+            readingMode: .paged
+        )
+        let landscape = ReaderContainerLayout(
+            containerSize: CGSize(width: 1376, height: 1032),
+            readingMode: .paged
+        )
+
+        let portraitIdentity = ReaderPagedPagerIdentity(
+            visibleView: 1,
+            pageCount: 342,
+            spreadCount: 342,
+            usesTwoPageSpread: false,
+            layout: portrait
+        )
+        let landscapeIdentity = ReaderPagedPagerIdentity(
+            visibleView: 1,
+            pageCount: 342,
+            spreadCount: 171,
+            usesTwoPageSpread: true,
+            layout: landscape
+        )
+
+        XCTAssertNotEqual(portraitIdentity, landscapeIdentity)
+    }
+
+    func testPagedPagerIdentityIgnoresCurrentPageChanges() {
+        let layout = ReaderContainerLayout(
+            containerSize: CGSize(width: 1376, height: 1032),
+            readingMode: .paged
+        )
+
+        let first = ReaderPagedPagerIdentity(
+            visibleView: 1,
+            pageCount: 342,
+            spreadCount: 171,
+            usesTwoPageSpread: true,
+            layout: layout
+        )
+        let second = ReaderPagedPagerIdentity(
+            visibleView: 1,
+            pageCount: 342,
+            spreadCount: 171,
+            usesTwoPageSpread: true,
+            layout: layout
+        )
+
+        XCTAssertEqual(first, second)
+    }
+
     func testChapterTextFormatterSplitsLeadingChapterTitle() {
         let split = ReaderChapterTextComponents.split(
             text: "第一章\n这里是正文",
