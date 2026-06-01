@@ -197,6 +197,7 @@ public struct ReaderBottomChromeLayoutPresentation: Equatable, Sendable {
     public var progressFillHasVerticalTrailingEdge: Bool { true }
     public var horizontalProgressThumbVisible: Bool { false }
     public var horizontalChapterTicksVisibleOnlyWhileScrubbing: Bool { true }
+    public var directoryChapterTicksDoNotRequireProgressFill: Bool { true }
     public var horizontalDirectoryContentHiddenWhileScrubbing: Bool { true }
     public var progressCapsulesUseButtonTint: Bool { true }
     public var progressSummaryVisibleWhileScrubbing: Bool { true }
@@ -222,8 +223,23 @@ public struct ReaderBottomChromeLayoutPresentation: Equatable, Sendable {
     public var verticalProgressSummaryUsesLiquidGlass: Bool { true }
     public var verticalChapterTitleCapsuleWrapsContent: Bool { true }
     public var verticalScrubberActionRowBottomOffset: CGFloat { 46 }
+    public var capsuleChapterTickRoundedEdgeInset: CGFloat { 6 }
 
     public init() {}
+
+    public func capsuleChapterTickCoordinate(position: Double, length: CGFloat, edgeInset: CGFloat) -> CGFloat {
+        let clampedPosition = min(max(position, 0), 1)
+        let clampedLength = max(length, 0)
+        let clampedInset = min(max(edgeInset, 0), clampedLength / 2)
+        let usableLength = max(clampedLength - clampedInset * 2, 0)
+        return clampedInset + CGFloat(clampedPosition) * usableLength
+    }
+
+    public func capsuleProgressFillExtent(position: Double, length: CGFloat, edgeInset: CGFloat) -> CGFloat {
+        if position <= 0 { return 0 }
+        if position >= 1 { return max(length, 0) }
+        return capsuleChapterTickCoordinate(position: position, length: length, edgeInset: edgeInset)
+    }
 }
 
 public struct ReaderChromeProgressSummary: Equatable, Sendable {
@@ -1039,19 +1055,25 @@ private struct ReaderProgressChapterTickOverlay: View {
     let currentTint: Color
 
     var body: some View {
+        let layout = ReaderBottomChromeLayoutPresentation()
+
         GeometryReader { geometry in
             ForEach(Array(ticks.enumerated()), id: \.element.chapter.startIndex) { _, tick in
                 Capsule()
                     .fill(tick.isCurrent ? currentTint : Color.secondary.opacity(0.38))
                     .frame(width: tick.isCurrent ? 3 : 2, height: tick.isCurrent ? 12 : 8)
                     .position(
-                        x: min(max(tick.position, 0), 1) * geometry.size.width,
+                        x: layout.capsuleChapterTickCoordinate(
+                            position: tick.position,
+                            length: geometry.size.width,
+                            edgeInset: layout.capsuleChapterTickRoundedEdgeInset
+                        ),
                         y: geometry.size.height / 2
                     )
                     .accessibilityHidden(true)
             }
         }
-        .frame(height: 24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .allowsHitTesting(false)
     }
 }
@@ -1083,13 +1105,18 @@ private struct ReaderDirectoryProgressCapsule: View {
                 if showsFill {
                     Rectangle()
                         .fill(controlTint.opacity(colorScheme == .dark ? 0.24 : 0.18))
-                        .frame(width: max(0, width * clampedProgress))
+                        .frame(
+                            width: layout.capsuleProgressFillExtent(
+                                position: clampedProgress,
+                                length: width,
+                                edgeInset: layout.capsuleChapterTickRoundedEdgeInset
+                            )
+                        )
                         .accessibilityHidden(true)
                 }
 
                 ReaderProgressChapterTickOverlay(ticks: ticks, currentTint: controlTint)
-                    .padding(.horizontal, 12)
-                    .opacity(showsFill && (!layout.horizontalChapterTicksVisibleOnlyWhileScrubbing || isScrubbing) ? 1 : 0)
+                    .opacity(showsChapterTicks(layout: layout) ? 1 : 0)
 
                 HStack(spacing: 8) {
                     Text(title)
@@ -1138,6 +1165,11 @@ private struct ReaderDirectoryProgressCapsule: View {
                 dragStartProgressFraction = nil
                 onEndScrub()
             }
+    }
+
+    private func showsChapterTicks(layout: ReaderBottomChromeLayoutPresentation) -> Bool {
+        let canShowTicks = showsFill || layout.directoryChapterTicksDoNotRequireProgressFill
+        return canShowTicks && (!layout.horizontalChapterTicksVisibleOnlyWhileScrubbing || isScrubbing)
     }
 }
 
@@ -1212,12 +1244,18 @@ struct ReaderVerticalProgressCapsule: View {
             if layout.verticalScrubberShowsProgressFill {
                 Rectangle()
                     .fill(controlTint.opacity(colorScheme == .dark ? 0.24 : 0.18))
-                    .frame(width: layout.verticalScrubberWidth, height: max(0, thumbY))
+                    .frame(
+                        width: layout.verticalScrubberWidth,
+                        height: layout.capsuleProgressFillExtent(
+                            position: min(max(thumbY / max(height, 1), 0), 1),
+                            length: height,
+                            edgeInset: layout.capsuleChapterTickRoundedEdgeInset
+                        )
+                    )
                     .accessibilityHidden(true)
             }
 
             ReaderVerticalProgressChapterTickOverlay(ticks: ticks, currentTint: controlTint)
-                .padding(.vertical, 12)
                 .opacity(layout.verticalScrubberShowsChapterTicks && (!layout.verticalChapterTicksVisibleOnlyWhileScrubbing || isScrubbing) ? 1 : 0)
 
             if layout.verticalScrubberShowsLiveThumb {
@@ -1246,11 +1284,16 @@ private struct ReaderVerticalProgressChapterTickOverlay: View {
                     .frame(width: tick.isCurrent ? 28 : 18, height: tick.isCurrent ? 3 : 2)
                     .position(
                         x: layout.verticalScrubberTicksAreCentered ? geometry.size.width / 2 : geometry.size.width - 24,
-                        y: min(max(tick.position, 0), 1) * geometry.size.height
+                        y: layout.capsuleChapterTickCoordinate(
+                            position: tick.position,
+                            length: geometry.size.height,
+                            edgeInset: layout.capsuleChapterTickRoundedEdgeInset
+                        )
                     )
                     .accessibilityHidden(true)
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .allowsHitTesting(false)
         .accessibilityHidden(true)
     }
