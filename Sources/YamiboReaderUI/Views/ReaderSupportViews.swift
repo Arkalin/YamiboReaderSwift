@@ -569,8 +569,15 @@ struct ReaderRichTextView: UIViewRepresentable {
 
     func sizeThatFits(_ proposal: ProposedViewSize, uiView: UITextView, context: Context) -> CGSize? {
         let targetWidth = proposal.width ?? UIScreen.main.bounds.width
-        let fittingSize = uiView.sizeThatFits(CGSize(width: targetWidth, height: .greatestFiniteMagnitude))
-        return CGSize(width: targetWidth, height: ceil(fittingSize.height))
+        let height = NovelTextLayout.measuredTextHeight(
+            text,
+            chapterTitle: chapterTitle,
+            startsAtParagraphBoundary: startsAtParagraphBoundary,
+            settings: settings,
+            width: targetWidth,
+            baseFontSize: baseFontSize
+        )
+        return CGSize(width: targetWidth, height: height)
     }
 
     private func makeAttributedText() -> NSAttributedString {
