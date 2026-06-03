@@ -97,6 +97,90 @@ final class NovelReadingSessionTests: XCTestCase {
         XCTAssertTrue(pageContainsSegmentOffset(restoredPage, segmentIndex: try XCTUnwrap(targetPage.segmentIndex), offset: targetOffset))
     }
 
+    func testPagedTextKitRepaginationPreservesSemanticReadingPosition() throws {
+        let document = makeNovelDocument(
+            view: 1,
+            maxView: 1,
+            segments: [
+                ("第一章", String(repeating: "第一章 内容。", count: 90)),
+            ]
+        )
+        var session = try NovelReadingSession(
+            validating: document,
+            settings: ReaderAppearanceSettings(readingMode: .paged),
+            layout: ReaderContainerLayout(width: 320, height: 568),
+            pagination: textRangePagination(
+                defaultRanges: [0 ..< 100, 100 ..< 200, 200 ..< 300],
+                repaginatedRanges: [0 ..< 60, 60 ..< 120, 120 ..< 180, 180 ..< 240, 240 ..< 300]
+            )
+        )
+
+        session.updateVerticalViewportPosition(pageIndex: 1, intraPageProgress: 0.5)
+        let savedPosition = try XCTUnwrap(session.captureNovelReadingPosition())
+
+        session.applySettings(
+            ReaderAppearanceSettings(
+                fontScale: 1.25,
+                lineHeightScale: 1.7,
+                horizontalPadding: 24,
+                readingMode: .paged
+            )
+        )
+
+        let restoredPage = session.snapshot.pages[session.snapshot.currentPageIndex]
+        XCTAssertEqual(savedPosition.view, 1)
+        XCTAssertEqual(savedPosition.chapterOrdinal, 0)
+        XCTAssertEqual(savedPosition.chapterTitle, "第一章")
+        XCTAssertEqual(savedPosition.segmentIndex, 0)
+        XCTAssertEqual(savedPosition.segmentOffset, 150)
+        XCTAssertEqual(savedPosition.readingModeHint, .paged)
+        XCTAssertTrue(pageContainsSegmentOffset(restoredPage, segmentIndex: 0, offset: savedPosition.segmentOffset))
+        XCTAssertEqual(restoredPage.segmentStartOffset, 120)
+        XCTAssertEqual(restoredPage.segmentEndOffset, 180)
+        XCTAssertEqual(session.snapshot.currentPageIntraProgress, 0.5, accuracy: 0.001)
+    }
+
+    func testVerticalTextKitViewportRepaginationPreservesIntraPageProgress() throws {
+        let document = makeNovelDocument(
+            view: 1,
+            maxView: 1,
+            segments: [
+                ("第一章", String(repeating: "第一章 内容。", count: 90)),
+            ]
+        )
+        var session = try NovelReadingSession(
+            validating: document,
+            settings: ReaderAppearanceSettings(readingMode: .vertical),
+            layout: ReaderContainerLayout(width: 320, height: 568),
+            pagination: textRangePagination(
+                defaultRanges: [0 ..< 200, 200 ..< 300],
+                repaginatedRanges: [0 ..< 40, 40 ..< 80, 80 ..< 120, 120 ..< 160, 160 ..< 200, 200 ..< 240, 240 ..< 300]
+            )
+        )
+
+        session.updateVerticalViewportPosition(pageIndex: 0, intraPageProgress: 0.25)
+        let savedPosition = try XCTUnwrap(session.captureNovelReadingPosition())
+
+        session.updateLayout(
+            ReaderContainerLayout(
+                containerSize: CGSize(width: 390, height: 844),
+                safeAreaInsets: ReaderLayoutInsets(top: 59, bottom: 34),
+                contentInsets: ReaderLayoutInsets(top: 16, leading: 20, bottom: 24, trailing: 20),
+                chromeInsets: ReaderLayoutInsets(top: 72, bottom: 96),
+                readingMode: .vertical
+            )
+        )
+
+        let restoredPage = session.snapshot.pages[session.snapshot.currentPageIndex]
+        XCTAssertEqual(savedPosition.segmentOffset, 50)
+        XCTAssertEqual(savedPosition.segmentProgress, 0.25, accuracy: 0.001)
+        XCTAssertEqual(savedPosition.readingModeHint, .vertical)
+        XCTAssertTrue(pageContainsSegmentOffset(restoredPage, segmentIndex: 0, offset: savedPosition.segmentOffset))
+        XCTAssertEqual(restoredPage.segmentStartOffset, 40)
+        XCTAssertEqual(restoredPage.segmentEndOffset, 80)
+        XCTAssertEqual(session.snapshot.currentPageIntraProgress, 0.25, accuracy: 0.001)
+    }
+
     func testVerticalModeKeepsPrefetchedReaderPageDocumentSeparate() {
         let current = makeNovelDocument(view: 1, maxView: 2, segments: [("第一章", "当前页正文")])
         let prefetched = makeNovelDocument(view: 2, maxView: 2, segments: [("第二章", "预取页正文")])
@@ -210,4 +294,39 @@ private func pageContainsSegmentOffset(_ page: ReaderRenderedPage, segmentIndex:
         return offset <= page.segmentStartOffset
     }
     return offset >= page.segmentStartOffset && offset < page.segmentEndOffset
+}
+
+private func textRangePagination(
+    defaultRanges: [Range<Int>],
+    repaginatedRanges: [Range<Int>]
+) -> NovelTextPagination {
+    { document, settings, layout in
+        let ranges = settings.fontScale > 1 || settings.lineHeightScale > 1.45 || settings.horizontalPadding > 16 || layout.width > 320
+            ? repaginatedRanges
+            : defaultRanges
+        return ReaderPaginationResult(
+            pages: ranges.enumerated().map { index, range in
+                ReaderRenderedPage(
+                    index: index,
+                    blocks: [.text("slice-\(range.lowerBound)-\(range.upperBound)", chapterTitle: "第一章")],
+                    documentView: document.view,
+                    chapterOrdinal: 0,
+                    chapterTitle: "第一章",
+                    segmentIndex: 0,
+                    segmentStartOffset: range.lowerBound,
+                    segmentEndOffset: range.upperBound,
+                    textRanges: [
+                        ReaderRenderedTextRange(
+                            segmentIndex: 0,
+                            startOffset: range.lowerBound,
+                            endOffset: range.upperBound
+                        )
+                    ]
+                )
+            },
+            chapters: [
+                ReaderChapter(ordinal: 0, title: "第一章", startIndex: 0)
+            ]
+        )
+    }
 }
