@@ -24,42 +24,8 @@ public enum ReaderPaginator {
         settings: ReaderAppearanceSettings,
         layout: ReaderContainerLayout
     ) -> ReaderPaginationResult {
-        let annotatedSegments = annotatedSegments(from: document, settings: settings)
-
-        switch settings.readingMode {
-        case .paged:
-            return (try? paginate(
-                annotatedSegments: annotatedSegments,
-                document: document,
-                settings: settings,
-                layout: layout,
-                chunker: { annotatedSegment, settings, layout in
-                    NovelTextLayout.renderedTextSlices(
-                        annotatedSegment.textContent,
-                        chapterTitle: annotatedSegment.chapterTitle,
-                        settings: settings,
-                        layout: layout,
-                        readingMode: .paged
-                    )
-                }
-            )) ?? emptyPagination(documentView: document.view)
-        case .vertical:
-            return (try? paginate(
-                annotatedSegments: annotatedSegments,
-                document: document,
-                settings: settings,
-                layout: layout,
-                chunker: { annotatedSegment, settings, layout in
-                    NovelTextLayout.renderedTextSlices(
-                        annotatedSegment.textContent,
-                        chapterTitle: annotatedSegment.chapterTitle,
-                        settings: settings,
-                        layout: layout,
-                        readingMode: .vertical
-                    )
-                }
-            )) ?? emptyPagination(documentView: document.view)
-        }
+        (try? paginateNovelTextLayout(document: document, settings: settings, layout: layout))
+            ?? emptyPagination(documentView: document.view)
     }
 
     public static func paginateNovelTextLayout(
@@ -124,7 +90,7 @@ public enum ReaderPaginator {
     }
 
     private static func requiresAuthoritativePagedLayout(for settings: ReaderAppearanceSettings) -> Bool {
-#if canImport(UIKit)
+#if canImport(UIKit) || canImport(AppKit)
         settings.readingMode == .paged
 #else
         false
@@ -132,7 +98,7 @@ public enum ReaderPaginator {
     }
 
     private static func requiresAuthoritativeVerticalLayout(for settings: ReaderAppearanceSettings) -> Bool {
-#if canImport(UIKit)
+#if canImport(UIKit) || canImport(AppKit)
         settings.readingMode == .vertical
 #else
         false

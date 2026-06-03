@@ -684,66 +684,6 @@ private final class StubURLProtocol: URLProtocol {
     #expect(vertical.chapters.last?.title == "第二章")
 }
 
-#if !canImport(UIKit) && !canImport(AppKit)
-@Test func estimatedFallbackPaginatorAccountsForFontFamilyAndCharacterSpacing() async throws {
-    let document = ReaderPageDocument(
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=44&mobile=2")),
-        view: 1,
-        maxView: 1,
-        segments: [
-            .text(String(repeating: "这是一个很长的段落。", count: 120), chapterTitle: "第一章")
-        ]
-    )
-
-    let compact = ReaderPaginator.paginate(
-        document: document,
-        settings: ReaderAppearanceSettings(
-            fontScale: 1.0,
-            fontFamily: .systemSans,
-            lineHeightScale: 1.45,
-            characterSpacingScale: 0,
-            readingMode: .paged
-        ),
-        layout: ReaderContainerLayout(width: 320, height: 568)
-    )
-    let expanded = ReaderPaginator.paginate(
-        document: document,
-        settings: ReaderAppearanceSettings(
-            fontScale: 1.0,
-            fontFamily: .systemSerif,
-            lineHeightScale: 1.45,
-            characterSpacingScale: 0.12,
-            readingMode: .paged
-        ),
-        layout: ReaderContainerLayout(width: 320, height: 568)
-    )
-    let verticalCompact = ReaderPaginator.paginate(
-        document: document,
-        settings: ReaderAppearanceSettings(
-            fontScale: 1.0,
-            fontFamily: .systemSans,
-            lineHeightScale: 1.45,
-            characterSpacingScale: 0,
-            readingMode: .vertical
-        ),
-        layout: ReaderContainerLayout(width: 320, height: 568)
-    )
-    let verticalExpanded = ReaderPaginator.paginate(
-        document: document,
-        settings: ReaderAppearanceSettings(
-            fontScale: 1.0,
-            fontFamily: .rounded,
-            lineHeightScale: 1.45,
-            characterSpacingScale: 0.12,
-            readingMode: .vertical
-        ),
-        layout: ReaderContainerLayout(width: 320, height: 568)
-    )
-
-    #expect(expanded.pages.count >= compact.pages.count)
-    #expect(verticalExpanded.pages.count >= verticalCompact.pages.count)
-}
-
 @Test func readerContainerLayoutComputesReadableFrameFromSafeAreaAndChrome() async throws {
     let layout = ReaderContainerLayout(
         containerSize: CGSize(width: 390, height: 844),
@@ -759,136 +699,27 @@ private final class StubURLProtocol: URLProtocol {
     #expect(layout.readableFrame.height == 559)
 }
 
-@Test func estimatedFallbackPaginatorUsesReadableFrameForPagedTextRanges() async throws {
-    let text = Array(repeating: "第一段内容。\n第二段内容 with English words and spacing。\nかな混じりの文章。", count: 28).joined(separator: "\n\n")
-    let document = ReaderPageDocument(
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=55&mobile=2")),
-        view: 1,
-        maxView: 1,
-        segments: [
-            .text(text, chapterTitle: "第一章")
-        ]
-    )
-
-    let roomyLayout = ReaderContainerLayout(
-        containerSize: CGSize(width: 390, height: 844),
-        safeAreaInsets: ReaderLayoutInsets(top: 59, bottom: 34),
-        contentInsets: ReaderLayoutInsets(leading: 20, trailing: 20),
-        chromeInsets: .zero,
-        readingMode: .paged
-    )
-    let constrainedLayout = ReaderContainerLayout(
-        containerSize: CGSize(width: 390, height: 844),
-        safeAreaInsets: ReaderLayoutInsets(top: 59, bottom: 34),
-        contentInsets: ReaderLayoutInsets(leading: 20, trailing: 20),
-        chromeInsets: ReaderLayoutInsets(top: 90, bottom: 120),
-        readingMode: .paged
-    )
-
-    let roomy = ReaderPaginator.paginate(
-        document: document,
-        settings: ReaderAppearanceSettings(readingMode: .paged),
-        layout: roomyLayout
-    )
-    let constrained = ReaderPaginator.paginate(
-        document: document,
-        settings: ReaderAppearanceSettings(readingMode: .paged),
-        layout: constrainedLayout
-    )
-
-    #expect(constrained.pages.count >= roomy.pages.count)
-
-    let textPages = constrained.pages.compactMap { page -> ReaderRenderedPage? in
-        page.blocks.contains { if case .text = $0 { return true } else { return false } } ? page : nil
-    }
-    #expect(textPages.dropLast().allSatisfy { page in
-        page.segmentEndOffset - page.segmentStartOffset > 20
-    })
-    #expect(textPages.first?.segmentStartOffset == 0)
-    for index in 1..<textPages.count {
-        let previousEnd = textPages[index - 1].segmentEndOffset
-        let nextStart = textPages[index].segmentStartOffset
-        #expect(nextStart >= previousEnd)
-        let gap = String(text.dropFirst(previousEnd).prefix(max(nextStart - previousEnd, 0)))
-        #expect(gap.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-    }
-    #expect(textPages.last?.segmentEndOffset == text.count)
-}
-
-@Test func estimatedFallbackPaginatorMarksOnlyRealParagraphStartsForFirstLineIndent() async throws {
-    let text = String(repeating: "这是一个会横跨多个分页的长段落。", count: 160)
-    let document = ReaderPageDocument(
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=57&mobile=2")),
-        view: 1,
-        maxView: 1,
-        segments: [.text(text, chapterTitle: "第一章")]
-    )
-
-    let pagination = ReaderPaginator.paginate(
-        document: document,
-        settings: ReaderAppearanceSettings(
-            indentsParagraphFirstLine: true,
-            readingMode: .paged
-        ),
-        layout: ReaderContainerLayout(
-            containerSize: CGSize(width: 390, height: 260),
-            contentInsets: ReaderLayoutInsets(leading: 20, trailing: 20),
-            readingMode: .paged
-        )
-    )
-    let textBlocks = pagination.pages.compactMap(\.blocks.first)
-
-    #expect(textBlocks.count > 1)
-    #expect(textBlocks.first?.startsAtParagraphBoundary == true)
-    #expect(textBlocks.dropFirst().allSatisfy { $0.startsAtParagraphBoundary == false })
-}
-
-@Test func estimatedFallbackPaginatorPacksShortAdjacentTextSegmentsInPagedMode() async throws {
-    let document = ReaderPageDocument(
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=56&mobile=2")),
-        view: 1,
-        maxView: 1,
-        segments: [
-            .text("人", chapterTitle: "第一章"),
-            .text("在车站前停下脚步。", chapterTitle: "第一章"),
-            .text("她抬头看向雪后的街灯，终于松了一口气。", chapterTitle: "第一章")
-        ]
-    )
-
-    let pagination = ReaderPaginator.paginate(
-        document: document,
-        settings: ReaderAppearanceSettings(readingMode: .paged),
-        layout: ReaderContainerLayout(
-            containerSize: CGSize(width: 390, height: 844),
-            safeAreaInsets: ReaderLayoutInsets(top: 59, bottom: 34),
-            contentInsets: ReaderLayoutInsets(leading: 20, trailing: 20),
-            readingMode: .paged
-        )
-    )
-
-    #expect(pagination.pages.count == 1)
-    #expect(pagination.pages.first?.blocks.count == 3)
-}
-#endif
-
-@Test func novelTextLayoutProducesPagedAndVerticalRangesAtModuleSeam() {
+@Test func novelTextLayoutProducesPagedAndVerticalRangesAtModuleSeam() throws {
     let text = String(repeating: "这是用于模块边界测试的正文。", count: 120)
     let layout = ReaderContainerLayout(width: 320, height: 568)
     let settings = ReaderAppearanceSettings(readingMode: .paged)
 
-    let pagedSlices = NovelTextLayout.renderedTextSlices(
+    let pagedSlices = try NovelTextLayout.renderedTextSlices(
         text,
         chapterTitle: "第一章",
         settings: settings,
         layout: layout,
-        readingMode: .paged
+        readingMode: .paged,
+        requiresAuthoritativePagedLayout: true
     )
-    let verticalSlices = NovelTextLayout.renderedTextSlices(
+    let verticalSlices = try NovelTextLayout.renderedTextSlices(
         text,
         chapterTitle: "第一章",
         settings: ReaderAppearanceSettings(readingMode: .vertical),
         layout: layout,
-        readingMode: .vertical
+        readingMode: .vertical,
+        requiresAuthoritativePagedLayout: false,
+        requiresAuthoritativeVerticalLayout: true
     )
 
     #expect(!pagedSlices.isEmpty)
@@ -908,6 +739,39 @@ private final class StubURLProtocol: URLProtocol {
 }
 
 #if canImport(AppKit) && !canImport(UIKit)
+@Test func novelTextLayoutEmptyAppKitPagedAdapterThrowsWithoutEstimatedFallback() throws {
+    let text = String(repeating: "Empty AppKit adapter output must not fall back to estimated slicing. ", count: 20)
+
+    #expect(throws: NovelTextLayoutFailure.unableToLayoutText) {
+        _ = try NovelTextLayout.renderedTextSlices(
+            text,
+            chapterTitle: nil,
+            settings: ReaderAppearanceSettings(readingMode: .paged),
+            layout: ReaderContainerLayout(width: 320, height: 568),
+            readingMode: .paged,
+            requiresAuthoritativePagedLayout: false,
+            pagedLayout: { _, _, _, _ in [] }
+        )
+    }
+}
+
+@Test func novelTextLayoutEmptyAppKitVerticalAdapterThrowsWithoutEstimatedFallback() throws {
+    let text = String(repeating: "Empty AppKit adapter output must not fall back to estimated vertical slicing. ", count: 20)
+
+    #expect(throws: NovelTextLayoutFailure.unableToLayoutText) {
+        _ = try NovelTextLayout.renderedTextSlices(
+            text,
+            chapterTitle: nil,
+            settings: ReaderAppearanceSettings(readingMode: .vertical),
+            layout: ReaderContainerLayout(width: 320, height: 568, readingMode: .vertical),
+            readingMode: .vertical,
+            requiresAuthoritativePagedLayout: false,
+            requiresAuthoritativeVerticalLayout: false,
+            verticalLayout: { _, _, _, _ in [] }
+        )
+    }
+}
+
 @Test func novelTextLayoutAppKitTextKit2ProducesNonEmptyPagedRanges() throws {
     let text = Array(
         repeating: "AppKit TextKit 2 should produce concrete page ranges for novel text.",
@@ -975,12 +839,13 @@ private final class StubURLProtocol: URLProtocol {
     let settings = ReaderAppearanceSettings(readingMode: .paged)
     let layout = ReaderContainerLayout(width: 320, height: 568)
 
-    let expectedSlices = NovelTextLayout.renderedTextSlices(
+    let expectedSlices = try NovelTextLayout.renderedTextSlices(
         text,
         chapterTitle: "第一章",
         settings: settings,
         layout: layout,
-        readingMode: .paged
+        readingMode: .paged,
+        requiresAuthoritativePagedLayout: true
     )
     let pagination = ReaderPaginator.paginate(document: document, settings: settings, layout: layout)
 
