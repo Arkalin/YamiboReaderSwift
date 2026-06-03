@@ -121,4 +121,53 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertFalse(productionDisplaySources.contains("ReaderRichTextView"))
         XCTAssertFalse(productionDisplaySources.contains("UITextView"))
     }
+
+    func testNovelTextLayoutDisplayStyleCoversFontSizeSpacingIndentAndChapterTitleForNovelReadingSession() throws {
+        let settings = ReaderAppearanceSettings(
+            fontScale: 1.3,
+            fontFamily: .systemSerif,
+            lineHeightScale: 1.8,
+            characterSpacingScale: 0.16,
+            indentsParagraphFirstLine: true,
+            readingMode: .paged
+        )
+
+        let plan = try XCTUnwrap(ReaderBlockTextDisplayPlanner.displayPlan(
+            for: .text(
+                "第一章\n正文需要覆盖字体、字号、行距、字距和段首缩进。",
+                chapterTitle: "第一章",
+                startsAtParagraphBoundary: true
+            ),
+            settings: settings
+        ))
+
+        XCTAssertEqual(plan.style.fontFamily, .systemSerif)
+        XCTAssertEqual(plan.style.pointSize, 28.6, accuracy: 0.001)
+        XCTAssertEqual(plan.style.lineHeightScale, 1.8)
+        XCTAssertEqual(plan.style.characterSpacingScale, 0.16)
+        XCTAssertTrue(plan.style.indentsParagraphFirstLine)
+        XCTAssertTrue(plan.style.includesChapterTitle)
+    }
+
+    func testNovelReadingPositionDisplayFailureDoesNotPublishUIKitOrEstimatedFallback() throws {
+        let text = String(repeating: "Novel Reading Position must not advance through fallback display. ", count: 12)
+        let document = ReaderPageDocument(
+            threadURL: try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=124&mobile=2")),
+            view: 1,
+            maxView: 1,
+            segments: [.text(text, chapterTitle: "第一章")]
+        )
+
+        XCTAssertThrowsError(
+            try NovelTextLayout.renderedPages(
+                document: document,
+                settings: ReaderAppearanceSettings(readingMode: .paged),
+                layout: ReaderContainerLayout(width: 320, height: 568),
+                requiresAuthoritativePagedLayout: true,
+                pagedLayout: { _, _, _, _ in [] }
+            )
+        ) { error in
+            XCTAssertEqual(error as? NovelTextLayoutFailure, .unableToLayoutText)
+        }
+    }
 }
