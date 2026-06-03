@@ -77,6 +77,7 @@ public struct NovelReadingSession: Sendable {
     private var usesPadPresentation: Bool
     private var pendingResumePoint: ReaderResumePoint?
     private var pendingResumeRequiresLayoutSync = false
+    private let pagination: NovelTextPagination
 
     public init(
         document: ReaderPageDocument,
@@ -87,11 +88,54 @@ public struct NovelReadingSession: Sendable {
         usesPadPresentation: Bool = false,
         currentAuthorID: String? = nil
     ) {
+        self.init(
+            unpaginatedDocument: document,
+            settings: settings,
+            layout: layout,
+            usesPadPresentation: usesPadPresentation,
+            currentAuthorID: currentAuthorID,
+            pagination: { document, settings, layout in
+                ReaderPaginator.paginate(document: document, settings: settings, layout: layout)
+            }
+        )
+        applyPaginationIgnoringFailure(for: document, preferredPage: preferredPage, preferredResumePoint: resumePoint)
+    }
+
+    public init(
+        validating document: ReaderPageDocument,
+        settings: ReaderAppearanceSettings,
+        layout: ReaderContainerLayout,
+        preferredPage: Int = 0,
+        resumePoint: ReaderResumePoint? = nil,
+        usesPadPresentation: Bool = false,
+        currentAuthorID: String? = nil,
+        pagination: @escaping NovelTextPagination = ReaderPaginator.paginateNovelTextLayout
+    ) throws {
+        self.init(
+            unpaginatedDocument: document,
+            settings: settings,
+            layout: layout,
+            usesPadPresentation: usesPadPresentation,
+            currentAuthorID: currentAuthorID,
+            pagination: pagination
+        )
+        try applyPagination(for: document, preferredPage: preferredPage, preferredResumePoint: resumePoint)
+    }
+
+    private init(
+        unpaginatedDocument document: ReaderPageDocument,
+        settings: ReaderAppearanceSettings,
+        layout: ReaderContainerLayout,
+        usesPadPresentation: Bool,
+        currentAuthorID: String?,
+        pagination: @escaping NovelTextPagination
+    ) {
         self.settings = settings
         self.layout = layout
         self.currentDocument = document
         self.usesPadPresentation = usesPadPresentation
         self.pendingResumePoint = nil
+        self.pagination = pagination
         self.snapshot = NovelReadingSnapshot(
             pages: [],
             chapters: [],
@@ -107,7 +151,6 @@ public struct NovelReadingSession: Sendable {
             prefetchedStartIndex: nil,
             currentAuthorID: document.resolvedAuthorID ?? currentAuthorID
         )
-        applyPagination(for: document, preferredPage: preferredPage, preferredResumePoint: resumePoint)
     }
 
     private var isTwoPageSpreadActive: Bool {
@@ -127,7 +170,7 @@ public struct NovelReadingSession: Sendable {
         }
         settings = newSettings
         guard shouldRepaginate else { return }
-        applyPagination(for: currentDocument, preferredPage: snapshot.currentPageIndex, preferredResumePoint: resumePoint)
+        applyPaginationIgnoringFailure(for: currentDocument, preferredPage: snapshot.currentPageIndex, preferredResumePoint: resumePoint)
         clearPendingResumePointIfSettled()
     }
 
@@ -135,7 +178,7 @@ public struct NovelReadingSession: Sendable {
         guard self.layout != layout else { return }
         let resumePoint = pendingResumePoint ?? captureNovelReadingPosition()
         self.layout = layout
-        applyPagination(for: currentDocument, preferredPage: snapshot.currentPageIndex, preferredResumePoint: resumePoint)
+        applyPaginationIgnoringFailure(for: currentDocument, preferredPage: snapshot.currentPageIndex, preferredResumePoint: resumePoint)
         clearPendingResumePointIfSettled()
     }
 
@@ -143,7 +186,7 @@ public struct NovelReadingSession: Sendable {
         guard usesPadPresentation != isPad else { return }
         usesPadPresentation = isPad
         guard settings.readingMode == .paged else { return }
-        applyPagination(for: currentDocument, preferredPage: snapshot.currentPageIndex, preferredResumePoint: captureNovelReadingPosition())
+        applyPaginationIgnoringFailure(for: currentDocument, preferredPage: snapshot.currentPageIndex, preferredResumePoint: captureNovelReadingPosition())
     }
 
     public mutating func jumpToRenderedPage(_ pageIndex: Int) {
@@ -210,7 +253,7 @@ public struct NovelReadingSession: Sendable {
         currentDocument = nextDocument
         prefetchedDocument = nil
         let effectiveResumePoint = resumePoint?.view == nextDocument.view ? resumePoint : nil
-        applyPagination(for: nextDocument, preferredPage: preferredPage, preferredResumePoint: effectiveResumePoint)
+        applyPaginationIgnoringFailure(for: nextDocument, preferredPage: preferredPage, preferredResumePoint: effectiveResumePoint)
     }
 
     public func captureNovelReadingPosition() -> ReaderResumePoint? {
@@ -309,9 +352,9 @@ public struct NovelReadingSession: Sendable {
         for document: ReaderPageDocument,
         preferredPage: Int,
         preferredResumePoint: ReaderResumePoint?
-    ) {
+    ) throws {
         let paginationLayout = effectivePaginationLayout
-        let pagination = ReaderPaginator.paginate(document: document, settings: settings, layout: paginationLayout)
+        let pagination = try pagination(document, settings, paginationLayout)
         let renderedPages = pagination.pages
         let renderedChapters = pagination.chapters
         let prefetchedStartIndex: Int? = nil
@@ -352,6 +395,18 @@ public struct NovelReadingSession: Sendable {
             pagedSpreads: makePagedSpreads(from: pages),
             prefetchedStartIndex: prefetchedStartIndex,
             currentAuthorID: document.resolvedAuthorID ?? snapshot.currentAuthorID
+        )
+    }
+
+    private mutating func applyPaginationIgnoringFailure(
+        for document: ReaderPageDocument,
+        preferredPage: Int,
+        preferredResumePoint: ReaderResumePoint?
+    ) {
+        try? applyPagination(
+            for: document,
+            preferredPage: preferredPage,
+            preferredResumePoint: preferredResumePoint
         )
     }
 

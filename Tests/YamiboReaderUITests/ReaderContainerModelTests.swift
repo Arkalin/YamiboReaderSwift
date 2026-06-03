@@ -634,6 +634,22 @@ final class ReaderContainerModelTests: XCTestCase {
         XCTAssertEqual(loaded.manga, initialMangaSettings)
     }
 
+    func testNovelTextLayoutFailureSurfacesAsReaderErrorWithoutEmptyContent() async throws {
+        let failure = NovelTextLayoutFailure.unableToLayoutText
+        let model = try await makeModel(
+            documents: [
+                makeDocument(view: 1, maxView: 1, chapterTitles: ["第一章"])
+            ],
+            pagination: { _, _, _ in throw failure }
+        )
+
+        await MainActor.run {
+            XCTAssertEqual(model.errorMessage, failure.localizedDescription)
+            XCTAssertTrue(model.pages.isEmpty)
+            XCTAssertFalse(model.isLoading)
+        }
+    }
+
     func testUpdatingLayoutRepaginatesPagedContentAndKeepsCurrentSegment() async throws {
         let model = try await makeModel(
             documents: [
@@ -1810,7 +1826,8 @@ private func makeModel(
     settings: ReaderAppearanceSettings = ReaderAppearanceSettings(readingMode: .paged),
     launchContext: ReaderLaunchContext? = nil,
     session: URLSession = .shared,
-    cacheStore: ReaderCacheStore? = nil
+    cacheStore: ReaderCacheStore? = nil,
+    pagination: @escaping NovelTextPagination = ReaderPaginator.paginateNovelTextLayout
 ) async throws -> ReaderContainerModel {
     let keyPrefix = UUID().uuidString
     let sessionStore = SessionStore(key: "\(keyPrefix).session")
@@ -1839,7 +1856,8 @@ private func makeModel(
                 threadTitle: "测试线程",
                 source: .forum
             ),
-            appContext: appContext
+            appContext: appContext,
+            pagination: pagination
         )
     }
 

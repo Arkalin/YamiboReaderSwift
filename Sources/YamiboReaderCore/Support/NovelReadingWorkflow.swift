@@ -74,19 +74,22 @@ public final class NovelReadingWorkflow {
     private var currentAuthorID: String?
     private var currentDocumentPageCount = 0
     private var usesPadPresentation: Bool
+    private let pagination: NovelTextPagination
 
     public init(
         context: ReaderLaunchContext,
         settings: ReaderAppearanceSettings,
         layout: ReaderContainerLayout,
         repository: any NovelReadingPageRepository,
-        usesPadPresentation: Bool = false
+        usesPadPresentation: Bool = false,
+        pagination: @escaping NovelTextPagination = ReaderPaginator.paginateNovelTextLayout
     ) {
         self.context = context
         self.settings = settings
         self.layout = layout
         self.repository = repository
         self.usesPadPresentation = usesPadPresentation
+        self.pagination = pagination
     }
 
     @discardableResult
@@ -281,14 +284,15 @@ public final class NovelReadingWorkflow {
         currentDocument = document
         prefetchedDocument = nil
         currentAuthorID = document.resolvedAuthorID ?? currentAuthorID ?? context.authorID
-        session = NovelReadingSession(
-            document: document,
+        session = try NovelReadingSession(
+            validating: document,
             settings: settings,
             layout: layout,
             preferredPage: preferredPage,
             resumePoint: preferredResumePoint,
             usesPadPresentation: usesPadPresentation,
-            currentAuthorID: currentAuthorID
+            currentAuthorID: currentAuthorID,
+            pagination: pagination
         )
         return await updateStateFromSession(refreshCachedViews: true)
     }
