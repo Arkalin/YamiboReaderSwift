@@ -72,4 +72,35 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertEqual(plan?.chapterTitle, "第一章")
         XCTAssertEqual(plan?.startsAtParagraphBoundary, false)
     }
+
+    func testNovelTextLayoutDisplayMeasurementUsesSameTextKit2DisplayAdapterForPreviewAndReadingSessionBlocks() {
+        let settings = ReaderAppearanceSettings(
+            fontScale: 1.05,
+            lineHeightScale: 1.55,
+            characterSpacingScale: 0.05,
+            indentsParagraphFirstLine: true,
+            readingMode: .vertical
+        )
+        let previewPlan = NovelTextDisplayAdapter.displayPlan(
+            surface: .settingsPreview,
+            text: "设置预览测高应该跟显示走同一条 Novel Text Layout 路径。",
+            chapterTitle: nil,
+            startsAtParagraphBoundary: true,
+            settings: settings,
+            baseFontSize: 22,
+            textColor: .settingsPreviewPrimaryText
+        )
+        let blockPlan = ReaderBlockTextDisplayPlanner.displayPlan(
+            for: .text(
+                "纵向阅读正文块测高也不能回退到独立 text view fitting。",
+                chapterTitle: "第一章",
+                startsAtParagraphBoundary: true
+            ),
+            settings: settings
+        )
+
+        XCTAssertEqual(previewPlan.measurementBackend, .textKit2DisplayAdapter)
+        XCTAssertEqual(blockPlan?.measurementBackend, previewPlan.measurementBackend)
+        XCTAssertEqual(blockPlan?.surface, .novelReadingSessionTextBlock)
+    }
 }
