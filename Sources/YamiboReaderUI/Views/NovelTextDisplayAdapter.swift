@@ -30,6 +30,7 @@ struct NovelTextDisplayStyle: Equatable {
 struct NovelTextDisplayPlan: Equatable {
     var surface: NovelTextDisplaySurface
     var backend: NovelTextDisplayBackend
+    var measurementBackend: NovelTextDisplayBackend
     var text: String
     var chapterTitle: String?
     var startsAtParagraphBoundary: Bool
@@ -49,6 +50,7 @@ enum NovelTextDisplayAdapter {
         NovelTextDisplayPlan(
             surface: surface,
             backend: .textKit2DisplayAdapter,
+            measurementBackend: .textKit2DisplayAdapter,
             text: text,
             chapterTitle: chapterTitle,
             startsAtParagraphBoundary: startsAtParagraphBoundary,
@@ -91,6 +93,16 @@ enum ReaderBlockTextDisplayPlanner {
 import SwiftUI
 import UIKit
 
+extension NovelTextDisplayAdapter {
+    static func measuredHeight(
+        width: CGFloat,
+        attributedText: NSAttributedString,
+        displayView: NovelTextKit2DisplayUIView
+    ) -> CGFloat {
+        displayView.measuredHeight(width: width, attributedText: attributedText)
+    }
+}
+
 struct NativeNovelTextDisplayView: UIViewRepresentable {
     let surface: NovelTextDisplaySurface
     let text: String
@@ -132,7 +144,11 @@ struct NativeNovelTextDisplayView: UIViewRepresentable {
         context: Context
     ) -> CGSize? {
         let targetWidth = proposal.width ?? UIScreen.main.bounds.width
-        let height = uiView.measuredHeight(width: targetWidth, attributedText: makeAttributedText())
+        let height = NovelTextDisplayAdapter.measuredHeight(
+            width: targetWidth,
+            attributedText: makeAttributedText(),
+            displayView: uiView
+        )
         return CGSize(width: targetWidth, height: height)
     }
 
