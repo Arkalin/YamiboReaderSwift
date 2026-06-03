@@ -99,7 +99,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
                 if settings.fontScale > 1 {
                     throw NovelTextLayoutFailure.unableToLayoutText
                 }
-                return try ReaderPaginator.paginateNovelTextLayout(
+                return try NovelTextLayout.renderedPages(
                     document: document,
                     settings: settings,
                     layout: layout
