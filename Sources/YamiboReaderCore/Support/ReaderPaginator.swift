@@ -28,7 +28,7 @@ public enum ReaderPaginator {
 
         switch settings.readingMode {
         case .paged:
-            return paginate(
+            return (try? paginate(
                 annotatedSegments: annotatedSegments,
                 document: document,
                 settings: settings,
@@ -42,9 +42,9 @@ public enum ReaderPaginator {
                         readingMode: .paged
                     )
                 }
-            )
+            )) ?? emptyPagination(documentView: document.view)
         case .vertical:
-            return paginate(
+            return (try? paginate(
                 annotatedSegments: annotatedSegments,
                 document: document,
                 settings: settings,
@@ -58,8 +58,71 @@ public enum ReaderPaginator {
                         readingMode: .vertical
                     )
                 }
-            )
+            )) ?? emptyPagination(documentView: document.view)
         }
+    }
+
+    public static func paginateNovelTextLayout(
+        document: ReaderPageDocument,
+        settings: ReaderAppearanceSettings,
+        layout: ReaderContainerLayout
+    ) throws -> ReaderPaginationResult {
+        try paginateNovelTextLayout(
+            document: document,
+            settings: settings,
+            layout: layout,
+            pagedLayout: nil,
+            requiresAuthoritativePagedLayout: nil
+        )
+    }
+
+    static func paginateNovelTextLayout(
+        document: ReaderPageDocument,
+        settings: ReaderAppearanceSettings,
+        layout: ReaderContainerLayout,
+        pagedLayout: NovelPagedTextLayout?,
+        requiresAuthoritativePagedLayout: Bool? = nil
+    ) throws -> ReaderPaginationResult {
+        let annotatedSegments = annotatedSegments(from: document, settings: settings)
+        let result = try paginate(
+            annotatedSegments: annotatedSegments,
+            document: document,
+            settings: settings,
+            layout: layout,
+            chunker: { annotatedSegment, settings, layout in
+                try NovelTextLayout.renderedTextSlices(
+                    annotatedSegment.textContent,
+                    chapterTitle: annotatedSegment.chapterTitle,
+                    settings: settings,
+                    layout: layout,
+                    readingMode: settings.readingMode,
+                    requiresAuthoritativePagedLayout: requiresAuthoritativePagedLayout ?? Self.requiresAuthoritativePagedLayout(for: settings),
+                    pagedLayout: pagedLayout
+                )
+            }
+        )
+        let hasVisibleText = result.pages.contains { page in
+            page.blocks.contains { block in
+                guard case let .text(text, _, _) = block else { return false }
+                return !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            }
+        }
+        let hasInputText = document.segments.contains { segment in
+            guard case let .text(text, _) = segment else { return false }
+            return !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+        guard !hasInputText || hasVisibleText else {
+            throw NovelTextLayoutFailure.unableToLayoutText
+        }
+        return result
+    }
+
+    private static func requiresAuthoritativePagedLayout(for settings: ReaderAppearanceSettings) -> Bool {
+#if canImport(UIKit)
+        settings.readingMode == .paged
+#else
+        false
+#endif
     }
 
     private static func paginate(
@@ -67,8 +130,8 @@ public enum ReaderPaginator {
         document: ReaderPageDocument,
         settings: ReaderAppearanceSettings,
         layout: ReaderContainerLayout,
-        chunker: (AnnotatedSegment, ReaderAppearanceSettings, ReaderContainerLayout) -> [TextSlice]
-    ) -> ReaderPaginationResult {
+        chunker: (AnnotatedSegment, ReaderAppearanceSettings, ReaderContainerLayout) throws -> [TextSlice]
+    ) throws -> ReaderPaginationResult {
         var pages: [ReaderRenderedPage] = []
         var chapters: [ReaderChapter] = []
         var seenChapterOrdinals = Set<Int>()
@@ -76,7 +139,7 @@ public enum ReaderPaginator {
         for annotatedSegment in annotatedSegments {
             switch annotatedSegment.segment {
             case let .text(text, chapterTitle):
-                let slices = chunker(annotatedSegment, settings, layout)
+                let slices = try chunker(annotatedSegment, settings, layout)
                 for slice in slices where !slice.text.isEmpty {
                     if settings.readingMode == .paged,
                        appendTextSliceToPreviousPageIfPossible(
@@ -187,28 +250,6 @@ public enum ReaderPaginator {
         return ReaderPaginationResult(pages: pages, chapters: chapters)
     }
 
-    public static func paginateNovelTextLayout(
-        document: ReaderPageDocument,
-        settings: ReaderAppearanceSettings,
-        layout: ReaderContainerLayout
-    ) throws -> ReaderPaginationResult {
-        let result = paginate(document: document, settings: settings, layout: layout)
-        let hasVisibleText = result.pages.contains { page in
-            page.blocks.contains { block in
-                guard case let .text(text, _, _) = block else { return false }
-                return !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            }
-        }
-        let hasInputText = document.segments.contains { segment in
-            guard case let .text(text, _) = segment else { return false }
-            return !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        }
-        guard !hasInputText || hasVisibleText else {
-            throw NovelTextLayoutFailure.unableToLayoutText
-        }
-        return result
-    }
-
     private static func appendTextSliceToPreviousPageIfPossible(
         _ slice: TextSlice,
         chapterTitle: String?,
@@ -258,6 +299,19 @@ public enum ReaderPaginator {
         previousPage.segmentEndOffset = max(previousPage.segmentEndOffset, slice.endOffset)
         pages[previousIndex] = previousPage
         return true
+    }
+
+    private static func emptyPagination(documentView: Int) -> ReaderPaginationResult {
+        ReaderPaginationResult(
+            pages: [
+                ReaderRenderedPage(
+                    index: 0,
+                    blocks: [.footer(L10n.string("reader.empty_content"))],
+                    documentView: documentView
+                )
+            ],
+            chapters: []
+        )
     }
 
     private static func annotatedSegments(
