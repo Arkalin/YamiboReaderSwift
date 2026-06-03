@@ -82,7 +82,7 @@ public final class NovelReadingWorkflow {
         layout: ReaderContainerLayout,
         repository: any NovelReadingPageRepository,
         usesPadPresentation: Bool = false,
-        pagination: @escaping NovelTextPagination = ReaderPaginator.paginateNovelTextLayout
+        pagination: @escaping NovelTextPagination = NovelTextLayout.renderedPages
     ) {
         self.context = context
         self.settings = settings
