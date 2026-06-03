@@ -738,6 +738,45 @@ private final class StubURLProtocol: URLProtocol {
     )
 }
 
+@Test func novelTextLayoutAssemblesDocumentPagesChaptersImagesAndTextRanges() async throws {
+    let imageURL = try #require(URL(string: "https://example.com/image.jpg"))
+    let document = ReaderPageDocument(
+        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=99&mobile=2")),
+        view: 1,
+        maxView: 1,
+        segments: [
+            .text("开头", chapterTitle: "第一章"),
+            .text("继续", chapterTitle: "第一章"),
+            .image(imageURL, chapterTitle: "第一章"),
+            .text("第二章正文", chapterTitle: "第二章")
+        ]
+    )
+
+    let pagination = try NovelTextLayout.renderedPages(
+        document: document,
+        settings: ReaderAppearanceSettings(readingMode: .paged),
+        layout: ReaderContainerLayout(width: 390, height: 844),
+        requiresAuthoritativePagedLayout: false,
+        pagedLayout: { text, _, _, _ in
+            [TextSlice(text: text, startOffset: 0, endOffset: text.count)]
+        }
+    )
+
+    #expect(pagination.pages.count == 3)
+    #expect(pagination.chapters.map(\.title) == ["第一章", "第二章"])
+    #expect(pagination.chapters.map(\.startIndex) == [0, 2])
+    #expect(pagination.pages[0].blocks.compactMap(\.textContent) == ["开头", "继续"])
+    #expect(pagination.pages[0].textRanges == [
+        ReaderRenderedTextRange(segmentIndex: 0, startOffset: 0, endOffset: 2),
+        ReaderRenderedTextRange(segmentIndex: 1, startOffset: 0, endOffset: 2)
+    ])
+    #expect(pagination.pages[1].blocks == [.image(imageURL, chapterTitle: "第一章")])
+    #expect(pagination.pages[2].segmentIndex == 3)
+    #expect(pagination.pages[2].textRanges == [
+        ReaderRenderedTextRange(segmentIndex: 3, startOffset: 0, endOffset: 5)
+    ])
+}
+
 #if canImport(AppKit) && !canImport(UIKit)
 @Test func novelTextLayoutEmptyAppKitPagedAdapterThrowsWithoutEstimatedFallback() throws {
     let text = String(repeating: "Empty AppKit adapter output must not fall back to estimated slicing. ", count: 20)

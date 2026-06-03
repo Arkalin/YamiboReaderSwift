@@ -83,7 +83,7 @@ public final class ReaderContainerModel: ObservableObject {
     public init(
         context: ReaderLaunchContext,
         appContext: YamiboAppContext,
-        pagination: @escaping NovelTextPagination = ReaderPaginator.paginateNovelTextLayout
+        pagination: @escaping NovelTextPagination = NovelTextLayout.renderedPages
     ) {
         self.context = context
         self.appContext = appContext
