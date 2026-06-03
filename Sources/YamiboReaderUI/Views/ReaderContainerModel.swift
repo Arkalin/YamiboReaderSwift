@@ -55,6 +55,7 @@ public final class ReaderContainerModel: ObservableObject {
     private var currentDocumentPageCount = 0
     private var prefetchedStartIndex: Int?
     private var usesPadPresentation = false
+    private let pagination: NovelTextPagination
     private let progressSync: ProgressSyncModule
     private lazy var chapterCommentsModule = ReaderChapterCommentsModule(
         adapter: ReaderChapterCommentsModule.Adapter(
@@ -79,9 +80,14 @@ public final class ReaderContainerModel: ObservableObject {
     )
     private let cacheOperationModule = ReaderCacheOperationModule()
 
-    public init(context: ReaderLaunchContext, appContext: YamiboAppContext) {
+    public init(
+        context: ReaderLaunchContext,
+        appContext: YamiboAppContext,
+        pagination: @escaping NovelTextPagination = ReaderPaginator.paginateNovelTextLayout
+    ) {
         self.context = context
         self.appContext = appContext
+        self.pagination = pagination
         progressSync = ProgressSyncModule(
             adapter: FavoriteLibraryProgressSyncAdapter(favoriteStore: appContext.favoriteStore)
         )
@@ -355,7 +361,8 @@ public final class ReaderContainerModel: ObservableObject {
                     settings: settings,
                     layout: layout,
                     repository: repository,
-                    usesPadPresentation: usesPadPresentation
+                    usesPadPresentation: usesPadPresentation,
+                    pagination: pagination
                 )
             }
         }
@@ -814,7 +821,8 @@ public final class ReaderContainerModel: ObservableObject {
                 settings: settings,
                 layout: layout,
                 repository: repository,
-                usesPadPresentation: usesPadPresentation
+                usesPadPresentation: usesPadPresentation,
+                pagination: pagination
             )
         }
         readingWorkflow?.updateSettings(settings)

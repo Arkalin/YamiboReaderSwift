@@ -1,6 +1,23 @@
 import Foundation
 import CoreGraphics
 
+public enum NovelTextLayoutFailure: LocalizedError, Equatable, Sendable {
+    case unableToLayoutText
+
+    public var errorDescription: String? {
+        switch self {
+        case .unableToLayoutText:
+            return "Novel Text Layout could not produce rendered text."
+        }
+    }
+}
+
+public typealias NovelTextPagination = @Sendable (
+    _ document: ReaderPageDocument,
+    _ settings: ReaderAppearanceSettings,
+    _ layout: ReaderContainerLayout
+) throws -> ReaderPaginationResult
+
 public enum ReaderPaginator {
     public static func paginate(
         document: ReaderPageDocument,
@@ -165,6 +182,28 @@ public enum ReaderPaginator {
         }
 
         return ReaderPaginationResult(pages: pages, chapters: chapters)
+    }
+
+    public static func paginateNovelTextLayout(
+        document: ReaderPageDocument,
+        settings: ReaderAppearanceSettings,
+        layout: ReaderContainerLayout
+    ) throws -> ReaderPaginationResult {
+        let result = paginate(document: document, settings: settings, layout: layout)
+        let hasVisibleText = result.pages.contains { page in
+            page.blocks.contains { block in
+                guard case let .text(text, _, _) = block else { return false }
+                return !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            }
+        }
+        let hasInputText = document.segments.contains { segment in
+            guard case let .text(text, _) = segment else { return false }
+            return !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+        guard !hasInputText || hasVisibleText else {
+            throw NovelTextLayoutFailure.unableToLayoutText
+        }
+        return result
     }
 
     private static func appendTextSliceToPreviousPageIfPossible(
