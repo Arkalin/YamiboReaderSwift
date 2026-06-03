@@ -265,12 +265,14 @@ private struct ReaderBooksPreviewMaskedContent: View {
         ZStack(alignment: .topLeading) {
             Color.clear
             VStack(alignment: .leading, spacing: 20) {
-                ReaderRichTextView(
+                NativeNovelTextDisplayView(
+                    surface: .settingsPreview,
                     text: previewText,
                     chapterTitle: nil,
                     settings: settings,
                     baseFontSize: 22,
-                    textColor: UIColor(palette.primaryText)
+                    textColor: UIColor(palette.primaryText),
+                    textColorToken: .settingsPreviewPrimaryText
                 )
             }
             .padding(.top, 4)
