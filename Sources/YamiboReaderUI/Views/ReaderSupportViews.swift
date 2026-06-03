@@ -543,58 +543,6 @@ private struct ReaderBlockView: View {
     }
 }
 
-struct ReaderRichTextView: UIViewRepresentable {
-    let text: String
-    let chapterTitle: String?
-    var startsAtParagraphBoundary: Bool = true
-    let settings: ReaderAppearanceSettings
-    let baseFontSize: Double
-    let textColor: UIColor
-    var titleWeight: UIFont.Weight = .regular
-
-    func makeUIView(context: Context) -> UITextView {
-        let textView = UITextView()
-        textView.isEditable = false
-        textView.isSelectable = false
-        textView.isScrollEnabled = false
-        textView.adjustsFontForContentSizeCategory = true
-        textView.backgroundColor = .clear
-        textView.textContainerInset = .zero
-        textView.textContainer.lineFragmentPadding = 0
-        textView.textContainer.lineBreakMode = .byWordWrapping
-        return textView
-    }
-
-    func updateUIView(_ uiView: UITextView, context: Context) {
-        uiView.attributedText = makeAttributedText()
-    }
-
-    func sizeThatFits(_ proposal: ProposedViewSize, uiView: UITextView, context: Context) -> CGSize? {
-        let targetWidth = proposal.width ?? UIScreen.main.bounds.width
-        let height = NovelTextLayout.measuredTextHeight(
-            text,
-            chapterTitle: chapterTitle,
-            startsAtParagraphBoundary: startsAtParagraphBoundary,
-            settings: settings,
-            width: targetWidth,
-            baseFontSize: baseFontSize
-        )
-        return CGSize(width: targetWidth, height: height)
-    }
-
-    private func makeAttributedText() -> NSAttributedString {
-        ReaderAttributedTextFactory.makeAttributedText(
-            text: text,
-            chapterTitle: chapterTitle,
-            startsAtParagraphBoundary: startsAtParagraphBoundary,
-            settings: settings,
-            baseFontSize: baseFontSize,
-            textColor: textColor,
-            titleWeight: titleWeight
-        )
-    }
-}
-
 @MainActor
 private final class ReaderImageLoader: ObservableObject {
     @Published var image: UIImage?
