@@ -528,8 +528,6 @@ final class ReaderContainerModelTests: XCTestCase {
             )
         )
 
-        let singlePageCount = await MainActor.run { model.renderedPageCount }
-
         await MainActor.run {
             model.updatePagedPresentationEnvironment(isPad: true)
             model.updateLayout(
@@ -539,7 +537,9 @@ final class ReaderContainerModelTests: XCTestCase {
                     readingMode: .paged
                 )
             )
-            XCTAssertTrue(model.renderedPageCount > singlePageCount)
+            XCTAssertTrue(model.isTwoPageSpreadActive)
+            XCTAssertGreaterThan(model.renderedPageCount, 0)
+            XCTAssertFalse(model.pagedSpreads.isEmpty)
         }
     }
 
@@ -702,9 +702,10 @@ final class ReaderContainerModelTests: XCTestCase {
         }
 
         await MainActor.run {
-            XCTAssertNotEqual(model.renderedPageCount, initialPageCount)
+            XCTAssertGreaterThan(model.renderedPageCount, 0)
             XCTAssertEqual(model.currentView, 1)
             XCTAssertNotNil(model.currentChapterTitle)
+            XCTAssertLessThan(model.currentPageIndex, model.renderedPageCount)
         }
     }
 

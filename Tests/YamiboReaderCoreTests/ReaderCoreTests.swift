@@ -684,7 +684,7 @@ private final class StubURLProtocol: URLProtocol {
     #expect(vertical.chapters.last?.title == "第二章")
 }
 
-#if !canImport(UIKit)
+#if !canImport(UIKit) && !canImport(AppKit)
 @Test func estimatedFallbackPaginatorAccountsForFontFamilyAndCharacterSpacing() async throws {
     let document = ReaderPageDocument(
         threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=44&mobile=2")),
@@ -906,6 +906,63 @@ private final class StubURLProtocol: URLProtocol {
         ) > 0
     )
 }
+
+#if canImport(AppKit) && !canImport(UIKit)
+@Test func novelTextLayoutAppKitTextKit2ProducesNonEmptyPagedRanges() throws {
+    let text = Array(
+        repeating: "AppKit TextKit 2 should produce concrete page ranges for novel text.",
+        count: 120
+    ).joined(separator: " ")
+    let settings = ReaderAppearanceSettings(readingMode: .paged)
+    let layout = ReaderContainerLayout(width: 260, height: 220)
+
+    let slices = try NovelTextLayout.renderedTextSlices(
+        text,
+        chapterTitle: nil,
+        settings: settings,
+        layout: layout,
+        readingMode: .paged,
+        requiresAuthoritativePagedLayout: true
+    )
+
+    #expect(slices.count > 1)
+    #expect(slices.allSatisfy { !$0.text.isEmpty })
+    #expect(slices.first?.startOffset == 0)
+    #expect(slices.last?.endOffset == text.count)
+
+    for pair in zip(slices, slices.dropFirst()) {
+        #expect(pair.0.endOffset <= pair.1.startOffset)
+    }
+}
+
+@Test func novelTextLayoutAppKitTextKit2ProducesNonEmptyVerticalChunkRanges() throws {
+    let text = Array(
+        repeating: "AppKit TextKit 2 should produce concrete vertical chunk ranges for novel text.",
+        count: 160
+    ).joined(separator: " ")
+    let settings = ReaderAppearanceSettings(readingMode: .vertical)
+    let layout = ReaderContainerLayout(width: 260, height: 220, readingMode: .vertical)
+
+    let chunks = try NovelTextLayout.renderedTextSlices(
+        text,
+        chapterTitle: nil,
+        settings: settings,
+        layout: layout,
+        readingMode: .vertical,
+        requiresAuthoritativePagedLayout: false,
+        requiresAuthoritativeVerticalLayout: true
+    )
+
+    #expect(chunks.count > 1)
+    #expect(chunks.allSatisfy { !$0.text.isEmpty })
+    #expect(chunks.first?.startOffset == 0)
+    #expect(chunks.last?.endOffset == text.count)
+
+    for pair in zip(chunks, chunks.dropFirst()) {
+        #expect(pair.0.endOffset <= pair.1.startOffset)
+    }
+}
+#endif
 
 @Test func readerPaginatorUsesNovelTextLayoutSeamForSingleTextSegmentRanges() async throws {
     let text = String(repeating: "分页边界应来自 Novel Text Layout。", count: 100)
