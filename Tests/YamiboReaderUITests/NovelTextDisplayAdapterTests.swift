@@ -103,4 +103,22 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertEqual(blockPlan?.measurementBackend, previewPlan.measurementBackend)
         XCTAssertEqual(blockPlan?.surface, .novelReadingSessionTextBlock)
     }
+
+    func testNovelReadingSessionDisplayPathDoesNotRetainUIKitTextViewFallback() throws {
+        let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let readerSupportSource = try String(
+            contentsOf: repositoryRoot
+                .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderSupportViews.swift"),
+            encoding: .utf8
+        )
+        let settingsSource = try String(
+            contentsOf: repositoryRoot
+                .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderSettingsViews.swift"),
+            encoding: .utf8
+        )
+        let productionDisplaySources = readerSupportSource + "\n" + settingsSource
+
+        XCTAssertFalse(productionDisplaySources.contains("ReaderRichTextView"))
+        XCTAssertFalse(productionDisplaySources.contains("UITextView"))
+    }
 }
