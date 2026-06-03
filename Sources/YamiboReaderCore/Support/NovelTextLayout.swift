@@ -8,6 +8,13 @@ typealias NovelPagedTextLayout = @Sendable (
     _ layout: ReaderContainerLayout
 ) -> [TextSlice]
 
+typealias NovelVerticalTextLayout = @Sendable (
+    _ text: String,
+    _ chapterTitle: String?,
+    _ settings: ReaderAppearanceSettings,
+    _ layout: ReaderContainerLayout
+) -> [TextSlice]
+
 public enum NovelTextLayout {
     static func renderedTextSlices(
         _ text: String,
@@ -33,7 +40,9 @@ public enum NovelTextLayout {
         layout: ReaderContainerLayout,
         readingMode: ReaderReadingMode,
         requiresAuthoritativePagedLayout: Bool,
-        pagedLayout: NovelPagedTextLayout? = nil
+        requiresAuthoritativeVerticalLayout: Bool = false,
+        pagedLayout: NovelPagedTextLayout? = nil,
+        verticalLayout: NovelVerticalTextLayout? = nil
     ) throws -> [TextSlice] {
         switch readingMode {
         case .paged:
@@ -46,10 +55,13 @@ public enum NovelTextLayout {
                 pagedLayout: pagedLayout
             )
         case .vertical:
-            return verticalTextChunks(
-                from: text,
+            return try verticalTextChunks(
+                text,
+                chapterTitle: chapterTitle,
                 settings: settings,
-                layout: layout
+                layout: layout,
+                requiresAuthoritativeLayout: requiresAuthoritativeVerticalLayout,
+                verticalLayout: verticalLayout
             )
         }
     }
@@ -142,10 +154,35 @@ public enum NovelTextLayout {
     }
 
     private static func verticalTextChunks(
-        from text: String,
+        _ text: String,
+        chapterTitle: String?,
         settings: ReaderAppearanceSettings,
-        layout: ReaderContainerLayout
-    ) -> [TextSlice] {
+        layout: ReaderContainerLayout,
+        requiresAuthoritativeLayout: Bool,
+        verticalLayout: NovelVerticalTextLayout?
+    ) throws -> [TextSlice] {
+#if canImport(UIKit)
+        let authoritativeLayout = verticalLayout ?? ReaderPagedLayoutEngine.verticalTextChunks
+        let slices = authoritativeLayout(
+            text,
+            chapterTitle,
+            settings,
+            layout
+        )
+        if !slices.isEmpty {
+            return slices
+        }
+#else
+        if let verticalLayout {
+            let slices = verticalLayout(text, chapterTitle, settings, layout)
+            if !slices.isEmpty {
+                return slices
+            }
+        }
+#endif
+        if requiresAuthoritativeLayout {
+            throw NovelTextLayoutFailure.unableToLayoutText
+        }
         let metrics = textMetrics(settings: settings)
         let readableFrame = layout.readableFrame
         let charsPerLine = max(10, Int(readableFrame.width / max(metrics.characterWidth, 1)))

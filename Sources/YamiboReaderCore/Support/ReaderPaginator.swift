@@ -72,7 +72,9 @@ public enum ReaderPaginator {
             settings: settings,
             layout: layout,
             pagedLayout: nil,
-            requiresAuthoritativePagedLayout: nil
+            verticalLayout: nil,
+            requiresAuthoritativePagedLayout: nil,
+            requiresAuthoritativeVerticalLayout: nil
         )
     }
 
@@ -80,8 +82,10 @@ public enum ReaderPaginator {
         document: ReaderPageDocument,
         settings: ReaderAppearanceSettings,
         layout: ReaderContainerLayout,
-        pagedLayout: NovelPagedTextLayout?,
-        requiresAuthoritativePagedLayout: Bool? = nil
+        pagedLayout: NovelPagedTextLayout? = nil,
+        verticalLayout: NovelVerticalTextLayout? = nil,
+        requiresAuthoritativePagedLayout: Bool? = nil,
+        requiresAuthoritativeVerticalLayout: Bool? = nil
     ) throws -> ReaderPaginationResult {
         let annotatedSegments = annotatedSegments(from: document, settings: settings)
         let result = try paginate(
@@ -97,7 +101,9 @@ public enum ReaderPaginator {
                     layout: layout,
                     readingMode: settings.readingMode,
                     requiresAuthoritativePagedLayout: requiresAuthoritativePagedLayout ?? Self.requiresAuthoritativePagedLayout(for: settings),
-                    pagedLayout: pagedLayout
+                    requiresAuthoritativeVerticalLayout: requiresAuthoritativeVerticalLayout ?? Self.requiresAuthoritativeVerticalLayout(for: settings),
+                    pagedLayout: pagedLayout,
+                    verticalLayout: verticalLayout
                 )
             }
         )
@@ -120,6 +126,14 @@ public enum ReaderPaginator {
     private static func requiresAuthoritativePagedLayout(for settings: ReaderAppearanceSettings) -> Bool {
 #if canImport(UIKit)
         settings.readingMode == .paged
+#else
+        false
+#endif
+    }
+
+    private static func requiresAuthoritativeVerticalLayout(for settings: ReaderAppearanceSettings) -> Bool {
+#if canImport(UIKit)
+        settings.readingMode == .vertical
 #else
         false
 #endif

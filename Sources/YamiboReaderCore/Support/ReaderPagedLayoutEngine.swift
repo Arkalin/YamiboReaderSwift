@@ -50,6 +50,29 @@ enum ReaderPagedLayoutEngine {
         return paginateTextWithTextKit2(attributedText, pageSize: pageSize)
     }
 
+    static func verticalTextChunks(
+        _ text: String,
+        chapterTitle: String?,
+        settings: ReaderAppearanceSettings,
+        layout: ReaderContainerLayout
+    ) -> [TextSlice] {
+        let readableFrame = layout.readableFrame
+        let chunkSize = CGSize(width: readableFrame.width, height: readableFrame.height * 1.8)
+        guard chunkSize.width > 0, chunkSize.height > 0 else {
+            return []
+        }
+        guard chunkSize.width >= 120, readableFrame.height >= minimumUsablePageHeight(settings: settings) else {
+            return []
+        }
+
+        let attributedText = ReaderAttributedTextFactory.makeAttributedText(
+            text: text,
+            chapterTitle: chapterTitle,
+            settings: settings
+        )
+        return paginateTextWithTextKit2(attributedText, pageSize: chunkSize)
+    }
+
     private static func paginateTextWithTextKit2(_ attributedText: NSAttributedString, pageSize: CGSize) -> [TextSlice] {
         let textContentStorage = NSTextContentStorage()
         let textLayoutManager = NSTextLayoutManager()
