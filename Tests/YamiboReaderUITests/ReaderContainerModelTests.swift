@@ -650,6 +650,34 @@ final class ReaderContainerModelTests: XCTestCase {
         }
     }
 
+    func testChapterDirectoryPreviewSurfacesNovelTextLayoutFailure() async throws {
+        let failure = NovelTextLayoutFailure.unableToLayoutText
+        let model = try await makeModel(
+            documents: [
+                makeDocument(view: 1, maxView: 2, chapterTitles: ["第一章"]),
+                makeDocument(view: 2, maxView: 2, chapterTitles: ["第二章"])
+            ],
+            pagination: { document, settings, layout in
+                guard document.view == 1 else { throw failure }
+                return try ReaderPaginator.paginateNovelTextLayout(
+                    document: document,
+                    settings: settings,
+                    layout: layout
+                )
+            }
+        )
+
+        await model.previewChapterDirectoryWebView(2)
+
+        await MainActor.run {
+            XCTAssertEqual(model.chapterDirectoryError, failure.localizedDescription)
+            XCTAssertEqual(model.visibleChapterDirectoryView, 2)
+            XCTAssertTrue(model.visibleChapterDirectoryChapters.isEmpty)
+            XCTAssertEqual(model.chapterDirectoryPageCount, 0)
+            XCTAssertFalse(model.isLoadingChapterDirectory)
+        }
+    }
+
     func testUpdatingLayoutRepaginatesPagedContentAndKeepsCurrentSegment() async throws {
         let model = try await makeModel(
             documents: [

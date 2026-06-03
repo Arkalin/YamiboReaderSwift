@@ -79,7 +79,7 @@ public struct NovelReadingSession: Sendable {
     private var pendingResumeRequiresLayoutSync = false
     private let pagination: NovelTextPagination
 
-    public init(
+    init(
         document: ReaderPageDocument,
         settings: ReaderAppearanceSettings,
         layout: ReaderContainerLayout,
@@ -160,8 +160,10 @@ public struct NovelReadingSession: Sendable {
             layout.width > layout.height
     }
 
-    public mutating func applySettings(_ newSettings: ReaderAppearanceSettings) {
+    public mutating func applySettings(_ newSettings: ReaderAppearanceSettings) throws {
         let oldSettings = settings
+        let oldPendingResumePoint = pendingResumePoint
+        let oldPendingResumeRequiresLayoutSync = pendingResumeRequiresLayoutSync
         let shouldRepaginate = oldSettings != newSettings
         let resumePoint = shouldRepaginate ? captureNovelReadingPosition() : nil
         if shouldRepaginate {
@@ -170,23 +172,46 @@ public struct NovelReadingSession: Sendable {
         }
         settings = newSettings
         guard shouldRepaginate else { return }
-        applyPaginationIgnoringFailure(for: currentDocument, preferredPage: snapshot.currentPageIndex, preferredResumePoint: resumePoint)
+        do {
+            try applyPagination(for: currentDocument, preferredPage: snapshot.currentPageIndex, preferredResumePoint: resumePoint)
+        } catch {
+            settings = oldSettings
+            pendingResumePoint = oldPendingResumePoint
+            pendingResumeRequiresLayoutSync = oldPendingResumeRequiresLayoutSync
+            throw error
+        }
         clearPendingResumePointIfSettled()
     }
 
-    public mutating func updateLayout(_ layout: ReaderContainerLayout) {
+    public mutating func updateLayout(_ layout: ReaderContainerLayout) throws {
         guard self.layout != layout else { return }
         let resumePoint = pendingResumePoint ?? captureNovelReadingPosition()
+        let oldLayout = self.layout
         self.layout = layout
-        applyPaginationIgnoringFailure(for: currentDocument, preferredPage: snapshot.currentPageIndex, preferredResumePoint: resumePoint)
+        do {
+            try applyPagination(for: currentDocument, preferredPage: snapshot.currentPageIndex, preferredResumePoint: resumePoint)
+        } catch {
+            self.layout = oldLayout
+            throw error
+        }
         clearPendingResumePointIfSettled()
     }
 
-    public mutating func updatePagedPresentationEnvironment(isPad: Bool) {
+    public mutating func updatePagedPresentationEnvironment(isPad: Bool) throws {
         guard usesPadPresentation != isPad else { return }
+        let oldUsesPadPresentation = usesPadPresentation
         usesPadPresentation = isPad
         guard settings.readingMode == .paged else { return }
-        applyPaginationIgnoringFailure(for: currentDocument, preferredPage: snapshot.currentPageIndex, preferredResumePoint: captureNovelReadingPosition())
+        do {
+            try applyPagination(
+                for: currentDocument,
+                preferredPage: snapshot.currentPageIndex,
+                preferredResumePoint: captureNovelReadingPosition()
+            )
+        } catch {
+            usesPadPresentation = oldUsesPadPresentation
+            throw error
+        }
     }
 
     public mutating func jumpToRenderedPage(_ pageIndex: Int) {
@@ -248,12 +273,20 @@ public struct NovelReadingSession: Sendable {
     public mutating func promotePrefetchedDocument(
         preferredPage: Int = 0,
         resumePoint: ReaderResumePoint? = nil
-    ) {
+    ) throws {
         guard let nextDocument = prefetchedDocument else { return }
+        let previousDocument = currentDocument
+        let previousPrefetchedDocument = prefetchedDocument
         currentDocument = nextDocument
         prefetchedDocument = nil
         let effectiveResumePoint = resumePoint?.view == nextDocument.view ? resumePoint : nil
-        applyPaginationIgnoringFailure(for: nextDocument, preferredPage: preferredPage, preferredResumePoint: effectiveResumePoint)
+        do {
+            try applyPagination(for: nextDocument, preferredPage: preferredPage, preferredResumePoint: effectiveResumePoint)
+        } catch {
+            currentDocument = previousDocument
+            prefetchedDocument = previousPrefetchedDocument
+            throw error
+        }
     }
 
     public func captureNovelReadingPosition() -> ReaderResumePoint? {

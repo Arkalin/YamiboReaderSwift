@@ -243,8 +243,11 @@ public final class ReaderContainerModel: ObservableObject {
         guard usesPadPresentation != isPad else { return }
         usesPadPresentation = isPad
         guard settings.readingMode == .paged else { return }
-        if let state = readingWorkflow?.updatePagedPresentationEnvironment(isPad: isPad) {
+        do {
+            guard let state = try readingWorkflow?.updatePagedPresentationEnvironment(isPad: isPad) else { return }
             syncFromWorkflowState(state)
+        } catch {
+            errorMessage = error.localizedDescription
         }
     }
 
@@ -373,7 +376,7 @@ public final class ReaderContainerModel: ObservableObject {
                 favoriteAuthorID: favorite?.authorID
             )
         } else {
-            if let state = readingWorkflow?.updateLayout(layout) {
+            if let state = try? readingWorkflow?.updateLayout(layout) {
                 syncFromWorkflowState(state)
             }
             await refreshCachedState()
@@ -383,8 +386,11 @@ public final class ReaderContainerModel: ObservableObject {
     public func updateLayout(_ layout: ReaderContainerLayout) {
         guard self.layout != layout else { return }
         self.layout = layout
-        if let state = readingWorkflow?.updateLayout(layout) {
+        do {
+            guard let state = try readingWorkflow?.updateLayout(layout) else { return }
             syncFromWorkflowState(state)
+        } catch {
+            errorMessage = error.localizedDescription
         }
     }
 
@@ -482,8 +488,11 @@ public final class ReaderContainerModel: ObservableObject {
             applePencilPageTurnSettings: newApplePencilPageTurnSettings
         )
         guard shouldRepaginate else { return }
-        if let state = readingWorkflow?.updateSettings(newSettings) {
+        do {
+            guard let state = try readingWorkflow?.updateSettings(newSettings) else { return }
             syncFromWorkflowState(state)
+        } catch {
+            errorMessage = error.localizedDescription
         }
     }
 
@@ -618,12 +627,13 @@ public final class ReaderContainerModel: ObservableObject {
                     authorID: context.authorID
                 )
             )
-            let session = NovelReadingSession(
-                document: document,
+            let session = try NovelReadingSession(
+                validating: document,
                 settings: settings,
                 layout: layout,
                 usesPadPresentation: usesPadPresentation,
-                currentAuthorID: document.resolvedAuthorID ?? currentAuthorID ?? self.context.authorID
+                currentAuthorID: document.resolvedAuthorID ?? currentAuthorID ?? self.context.authorID,
+                pagination: pagination
             )
             chapterDirectoryChapters = session.snapshot.chapters
             chapterDirectoryPageCount = session.snapshot.pages.count
@@ -825,8 +835,12 @@ public final class ReaderContainerModel: ObservableObject {
                 pagination: pagination
             )
         }
-        readingWorkflow?.updateSettings(settings)
-        readingWorkflow?.updateLayout(layout)
+        do {
+            try readingWorkflow?.updateSettings(settings)
+            try readingWorkflow?.updateLayout(layout)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
         return readingWorkflow
     }
 
@@ -1174,13 +1188,16 @@ public final class ReaderContainerModel: ObservableObject {
     }
 
     private func promotePrefetchedDocument(startingAt preferredPage: Int, preferredResumePoint: ReaderResumePoint?) async {
-        let workflowState = await readingWorkflow?.promotePrefetchedDocument(
-            preferredPage: preferredPage,
-            resumePoint: preferredResumePoint
-        )
-        guard let workflowState else { return }
-        syncFromWorkflowState(workflowState)
-        await prefetchIfNeeded(for: currentPageIndex)
+        do {
+            guard let workflowState = try await readingWorkflow?.promotePrefetchedDocument(
+                preferredPage: preferredPage,
+                resumePoint: preferredResumePoint
+            ) else { return }
+            syncFromWorkflowState(workflowState)
+            await prefetchIfNeeded(for: currentPageIndex)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 
     private func persistSettings(
