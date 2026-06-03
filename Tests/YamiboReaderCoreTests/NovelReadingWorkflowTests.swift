@@ -79,6 +79,47 @@ final class NovelReadingWorkflowTests: XCTestCase {
         XCTAssertEqual(state.currentAuthorID, "favorite-author")
     }
 
+    func testUpdatingSettingsThrowsWhenAuthoritativeLayoutFailsAndKeepsSnapshot() async throws {
+        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9110&mobile=2")!
+        let repository = RecordingNovelReadingRepository(documents: [
+            1: makeNovelDocument(threadURL: threadURL, view: 1, maxView: 1, authorID: "author-1")
+        ])
+        let workflow = NovelReadingWorkflow(
+            context: ReaderLaunchContext(
+                threadURL: threadURL,
+                threadTitle: "Thread",
+                source: .forum,
+                initialView: 1,
+                authorID: "author-1"
+            ),
+            settings: ReaderAppearanceSettings(readingMode: .paged),
+            layout: ReaderContainerLayout(width: 320, height: 568),
+            repository: repository,
+            pagination: { document, settings, layout in
+                if settings.fontScale > 1 {
+                    throw NovelTextLayoutFailure.unableToLayoutText
+                }
+                return try ReaderPaginator.paginateNovelTextLayout(
+                    document: document,
+                    settings: settings,
+                    layout: layout
+                )
+            }
+        )
+        let initialState = try await workflow.start(initial: NovelReadingInitialPosition())
+
+        do {
+            _ = try workflow.updateSettings(
+                ReaderAppearanceSettings(fontScale: 1.2, readingMode: .paged)
+            )
+            XCTFail("Expected Novel Text Layout failure")
+        } catch let failure as NovelTextLayoutFailure {
+            XCTAssertEqual(failure, .unableToLayoutText)
+        }
+
+        XCTAssertEqual(workflow.state, initialState)
+    }
+
     func testLoadCurrentForceRefreshDeletesOnlyCurrentVariantAndReloadsIgnoringCache() async throws {
         let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9102&mobile=2")!
         let repository = RecordingNovelReadingRepository(documents: [
@@ -176,7 +217,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
         let initialState = try await workflow.start(initial: NovelReadingInitialPosition())
         _ = await workflow.prefetchIfNeeded(forPageIndex: max(initialState.snapshot.pages.count - 2, 0))
 
-        let promotedStateOptional = await workflow.promotePrefetchedDocument(preferredPage: 0, resumePoint: nil)
+        let promotedStateOptional = try await workflow.promotePrefetchedDocument(preferredPage: 0, resumePoint: nil)
         let promotedState = try XCTUnwrap(promotedStateOptional)
 
         XCTAssertEqual(promotedState.snapshot.currentView, 2)

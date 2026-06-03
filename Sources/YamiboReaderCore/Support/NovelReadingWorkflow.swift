@@ -154,24 +154,42 @@ public final class NovelReadingWorkflow {
     }
 
     @discardableResult
-    public func updateSettings(_ settings: ReaderAppearanceSettings) -> NovelReadingWorkflowState? {
+    public func updateSettings(_ settings: ReaderAppearanceSettings) throws -> NovelReadingWorkflowState? {
+        let oldSettings = self.settings
         self.settings = settings
-        session?.applySettings(settings)
-        return updateStateFromSession(cachedViews: state?.cachedViews ?? [])
+        do {
+            try session?.applySettings(settings)
+            return updateStateFromSession(cachedViews: state?.cachedViews ?? [])
+        } catch {
+            self.settings = oldSettings
+            throw error
+        }
     }
 
     @discardableResult
-    public func updateLayout(_ layout: ReaderContainerLayout) -> NovelReadingWorkflowState? {
+    public func updateLayout(_ layout: ReaderContainerLayout) throws -> NovelReadingWorkflowState? {
+        let oldLayout = self.layout
         self.layout = layout
-        session?.updateLayout(layout)
-        return updateStateFromSession(cachedViews: state?.cachedViews ?? [])
+        do {
+            try session?.updateLayout(layout)
+            return updateStateFromSession(cachedViews: state?.cachedViews ?? [])
+        } catch {
+            self.layout = oldLayout
+            throw error
+        }
     }
 
     @discardableResult
-    public func updatePagedPresentationEnvironment(isPad: Bool) -> NovelReadingWorkflowState? {
+    public func updatePagedPresentationEnvironment(isPad: Bool) throws -> NovelReadingWorkflowState? {
+        let oldUsesPadPresentation = usesPadPresentation
         usesPadPresentation = isPad
-        session?.updatePagedPresentationEnvironment(isPad: isPad)
-        return updateStateFromSession(cachedViews: state?.cachedViews ?? [])
+        do {
+            try session?.updatePagedPresentationEnvironment(isPad: isPad)
+            return updateStateFromSession(cachedViews: state?.cachedViews ?? [])
+        } catch {
+            usesPadPresentation = oldUsesPadPresentation
+            throw error
+        }
     }
 
     @discardableResult
@@ -247,14 +265,24 @@ public final class NovelReadingWorkflow {
     public func promotePrefetchedDocument(
         preferredPage: Int,
         resumePoint: ReaderResumePoint?
-    ) async -> NovelReadingWorkflowState? {
+    ) async throws -> NovelReadingWorkflowState? {
         guard let nextDocument = prefetchedDocument else { return nil }
+        let previousDocument = currentDocument
+        let previousPrefetchedDocument = prefetchedDocument
+        let previousAuthorID = currentAuthorID
         currentDocument = nextDocument
         prefetchedDocument = nil
         currentAuthorID = nextDocument.resolvedAuthorID ?? currentAuthorID ?? context.authorID
         let resumePoint = resumePoint?.view == nextDocument.view ? resumePoint : nil
-        session?.promotePrefetchedDocument(preferredPage: preferredPage, resumePoint: resumePoint)
-        return updateStateFromSession(cachedViews: state?.cachedViews ?? [])
+        do {
+            try session?.promotePrefetchedDocument(preferredPage: preferredPage, resumePoint: resumePoint)
+            return updateStateFromSession(cachedViews: state?.cachedViews ?? [])
+        } catch {
+            currentDocument = previousDocument
+            prefetchedDocument = previousPrefetchedDocument
+            currentAuthorID = previousAuthorID
+            throw error
+        }
     }
 
     private func load(

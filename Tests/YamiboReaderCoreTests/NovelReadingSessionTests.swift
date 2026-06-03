@@ -61,7 +61,7 @@ final class NovelReadingSessionTests: XCTestCase {
         let targetOffset = targetPage.segmentStartOffset + max(1, (targetPage.segmentEndOffset - targetPage.segmentStartOffset) / 2)
 
         session.updateVerticalViewportPosition(pageIndex: targetPage.index, intraPageProgress: 0.5)
-        session.applySettings(ReaderAppearanceSettings(readingMode: .vertical))
+        try session.applySettings(ReaderAppearanceSettings(readingMode: .vertical))
 
         let restoredPage = session.snapshot.pages[session.snapshot.currentPageIndex]
         XCTAssertEqual(restoredPage.chapterTitle, "第一章")
@@ -85,7 +85,7 @@ final class NovelReadingSessionTests: XCTestCase {
         let targetOffset = targetPage.segmentStartOffset + max(1, (targetPage.segmentEndOffset - targetPage.segmentStartOffset) / 2)
 
         session.updateVerticalViewportPosition(pageIndex: targetPage.index, intraPageProgress: 0.5)
-        session.applySettings(
+        try session.applySettings(
             ReaderAppearanceSettings(
                 indentsParagraphFirstLine: true,
                 readingMode: .paged
@@ -118,7 +118,7 @@ final class NovelReadingSessionTests: XCTestCase {
         session.updateVerticalViewportPosition(pageIndex: 1, intraPageProgress: 0.5)
         let savedPosition = try XCTUnwrap(session.captureNovelReadingPosition())
 
-        session.applySettings(
+        try session.applySettings(
             ReaderAppearanceSettings(
                 fontScale: 1.25,
                 lineHeightScale: 1.7,
@@ -161,7 +161,7 @@ final class NovelReadingSessionTests: XCTestCase {
         session.updateVerticalViewportPosition(pageIndex: 0, intraPageProgress: 0.25)
         let savedPosition = try XCTUnwrap(session.captureNovelReadingPosition())
 
-        session.updateLayout(
+        try session.updateLayout(
             ReaderContainerLayout(
                 containerSize: CGSize(width: 390, height: 844),
                 safeAreaInsets: ReaderLayoutInsets(top: 59, bottom: 34),
@@ -199,7 +199,7 @@ final class NovelReadingSessionTests: XCTestCase {
         XCTAssertEqual(session.snapshot.chapters.map(\.title), ["第一章"])
     }
 
-    func testPromotesPrefetchedReaderPageDocument() {
+    func testPromotesPrefetchedReaderPageDocument() throws {
         let current = makeNovelDocument(view: 1, maxView: 2, segments: [("第一章", "当前页正文")])
         let prefetched = makeNovelDocument(view: 2, maxView: 2, segments: [("第二章", "预取页正文")])
         var session = NovelReadingSession(
@@ -209,7 +209,7 @@ final class NovelReadingSessionTests: XCTestCase {
         )
         session.acceptPrefetchedDocument(prefetched)
 
-        session.promotePrefetchedDocument()
+        try session.promotePrefetchedDocument()
 
         XCTAssertEqual(session.snapshot.currentView, 2)
         XCTAssertEqual(session.snapshot.maxView, 2)
@@ -218,7 +218,7 @@ final class NovelReadingSessionTests: XCTestCase {
         XCTAssertEqual(session.snapshot.currentChapterTitle, "第二章")
     }
 
-    func testTwoPageSpreadNormalizesSelectionToLeftPage() {
+    func testTwoPageSpreadNormalizesSelectionToLeftPage() throws {
         let document = ReaderPageDocument(
             threadURL: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9002&mobile=2")!,
             view: 1,
@@ -235,8 +235,8 @@ final class NovelReadingSessionTests: XCTestCase {
             layout: ReaderContainerLayout(width: 320, height: 568)
         )
 
-        session.updatePagedPresentationEnvironment(isPad: true)
-        session.updateLayout(ReaderContainerLayout(width: 844, height: 390, readingMode: .paged))
+        try session.updatePagedPresentationEnvironment(isPad: true)
+        try session.updateLayout(ReaderContainerLayout(width: 844, height: 390, readingMode: .paged))
         session.jumpToRenderedPage(3)
 
         XCTAssertEqual(
