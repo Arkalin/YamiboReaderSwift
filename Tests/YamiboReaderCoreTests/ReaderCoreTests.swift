@@ -684,7 +684,8 @@ private final class StubURLProtocol: URLProtocol {
     #expect(vertical.chapters.last?.title == "第二章")
 }
 
-@Test func readerPaginatorAccountsForFontFamilyAndCharacterSpacing() async throws {
+#if !canImport(UIKit)
+@Test func estimatedFallbackPaginatorAccountsForFontFamilyAndCharacterSpacing() async throws {
     let document = ReaderPageDocument(
         threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=44&mobile=2")),
         view: 1,
@@ -758,7 +759,7 @@ private final class StubURLProtocol: URLProtocol {
     #expect(layout.readableFrame.height == 559)
 }
 
-@Test func readerPaginatorUsesReadableFrameForPagedTextRanges() async throws {
+@Test func estimatedFallbackPaginatorUsesReadableFrameForPagedTextRanges() async throws {
     let text = Array(repeating: "第一段内容。\n第二段内容 with English words and spacing。\nかな混じりの文章。", count: 28).joined(separator: "\n\n")
     let document = ReaderPageDocument(
         threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=55&mobile=2")),
@@ -814,7 +815,7 @@ private final class StubURLProtocol: URLProtocol {
     #expect(textPages.last?.segmentEndOffset == text.count)
 }
 
-@Test func readerPaginatorMarksOnlyRealParagraphStartsForFirstLineIndent() async throws {
+@Test func estimatedFallbackPaginatorMarksOnlyRealParagraphStartsForFirstLineIndent() async throws {
     let text = String(repeating: "这是一个会横跨多个分页的长段落。", count: 160)
     let document = ReaderPageDocument(
         threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=57&mobile=2")),
@@ -842,7 +843,7 @@ private final class StubURLProtocol: URLProtocol {
     #expect(textBlocks.dropFirst().allSatisfy { $0.startsAtParagraphBoundary == false })
 }
 
-@Test func readerPaginatorPacksShortAdjacentTextSegmentsInPagedMode() async throws {
+@Test func estimatedFallbackPaginatorPacksShortAdjacentTextSegmentsInPagedMode() async throws {
     let document = ReaderPageDocument(
         threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=56&mobile=2")),
         view: 1,
@@ -868,6 +869,7 @@ private final class StubURLProtocol: URLProtocol {
     #expect(pagination.pages.count == 1)
     #expect(pagination.pages.first?.blocks.count == 3)
 }
+#endif
 
 @Test func novelTextLayoutProducesPagedAndVerticalRangesAtModuleSeam() {
     let text = String(repeating: "这是用于模块边界测试的正文。", count: 120)
