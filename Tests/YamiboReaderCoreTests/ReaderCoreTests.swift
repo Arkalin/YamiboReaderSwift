@@ -869,6 +869,66 @@ private final class StubURLProtocol: URLProtocol {
     #expect(pagination.pages.first?.blocks.count == 3)
 }
 
+@Test func novelTextLayoutProducesPagedAndVerticalRangesAtModuleSeam() {
+    let text = String(repeating: "这是用于模块边界测试的正文。", count: 120)
+    let layout = ReaderContainerLayout(width: 320, height: 568)
+    let settings = ReaderAppearanceSettings(readingMode: .paged)
+
+    let pagedSlices = NovelTextLayout.renderedTextSlices(
+        text,
+        chapterTitle: "第一章",
+        settings: settings,
+        layout: layout,
+        readingMode: .paged
+    )
+    let verticalSlices = NovelTextLayout.renderedTextSlices(
+        text,
+        chapterTitle: "第一章",
+        settings: ReaderAppearanceSettings(readingMode: .vertical),
+        layout: layout,
+        readingMode: .vertical
+    )
+
+    #expect(!pagedSlices.isEmpty)
+    #expect(!verticalSlices.isEmpty)
+    #expect(pagedSlices.first?.startOffset == 0)
+    #expect(pagedSlices.last?.endOffset == text.count)
+    #expect(verticalSlices.first?.startOffset == 0)
+    #expect(verticalSlices.last?.endOffset == text.count)
+    #expect(
+        NovelTextLayout.measuredTextHeight(
+            text,
+            chapterTitle: "第一章",
+            settings: settings,
+            width: layout.readableFrame.width
+        ) > 0
+    )
+}
+
+@Test func readerPaginatorUsesNovelTextLayoutSeamForSingleTextSegmentRanges() async throws {
+    let text = String(repeating: "分页边界应来自 Novel Text Layout。", count: 100)
+    let document = ReaderPageDocument(
+        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=58&mobile=2")),
+        view: 1,
+        maxView: 1,
+        segments: [.text(text, chapterTitle: "第一章")]
+    )
+    let settings = ReaderAppearanceSettings(readingMode: .paged)
+    let layout = ReaderContainerLayout(width: 320, height: 568)
+
+    let expectedSlices = NovelTextLayout.renderedTextSlices(
+        text,
+        chapterTitle: "第一章",
+        settings: settings,
+        layout: layout,
+        readingMode: .paged
+    )
+    let pagination = ReaderPaginator.paginate(document: document, settings: settings, layout: layout)
+
+    #expect(pagination.pages.map(\.segmentStartOffset) == expectedSlices.map(\.startOffset))
+    #expect(pagination.pages.map(\.segmentEndOffset) == expectedSlices.map(\.endOffset))
+}
+
 @Test func readerParagraphIndentPlannerKeepsContinuationFirstParagraphUnindentedOnly() {
     let text = "续页正文。\n\n新段落正文。\n第三段正文。"
     let ranges = ReaderParagraphIndentPlanner.indentedParagraphRangesAfterFirst(in: text)
