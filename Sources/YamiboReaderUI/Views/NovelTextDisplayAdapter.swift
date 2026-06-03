@@ -100,10 +100,25 @@ import UIKit
 extension NovelTextDisplayAdapter {
     static func measuredHeight(
         width: CGFloat,
-        attributedText: NSAttributedString,
-        displayView: NovelTextKit2DisplayUIView
+        displayView: NovelTextKit2DisplayUIView,
+        text: String,
+        chapterTitle: String?,
+        startsAtParagraphBoundary: Bool,
+        settings: ReaderAppearanceSettings,
+        baseFontSize: Double,
+        textColor: UIColor,
+        titleWeight: UIFont.Weight
     ) -> CGFloat {
-        displayView.measuredHeight(width: width, attributedText: attributedText)
+        displayView.measuredHeight(
+            width: width,
+            text: text,
+            chapterTitle: chapterTitle,
+            startsAtParagraphBoundary: startsAtParagraphBoundary,
+            settings: settings,
+            baseFontSize: baseFontSize,
+            textColor: textColor,
+            titleWeight: titleWeight
+        )
     }
 }
 
@@ -150,8 +165,14 @@ struct NativeNovelTextDisplayView: UIViewRepresentable {
         let targetWidth = proposal.width ?? UIScreen.main.bounds.width
         let height = NovelTextDisplayAdapter.measuredHeight(
             width: targetWidth,
-            attributedText: makeAttributedText(),
-            displayView: uiView
+            displayView: uiView,
+            text: text,
+            chapterTitle: chapterTitle,
+            startsAtParagraphBoundary: startsAtParagraphBoundary,
+            settings: settings,
+            baseFontSize: baseFontSize,
+            textColor: textColor,
+            titleWeight: titleWeight
         )
         return CGSize(width: targetWidth, height: height)
     }
@@ -193,7 +214,25 @@ final class NovelTextKit2DisplayUIView: UIView {
         setNeedsDisplay()
     }
 
-    func measuredHeight(width: CGFloat, attributedText: NSAttributedString) -> CGFloat {
+    func measuredHeight(
+        width: CGFloat,
+        text: String,
+        chapterTitle: String?,
+        startsAtParagraphBoundary: Bool,
+        settings: ReaderAppearanceSettings,
+        baseFontSize: Double,
+        textColor: UIColor,
+        titleWeight: UIFont.Weight
+    ) -> CGFloat {
+        let attributedText = ReaderAttributedTextFactory.makeAttributedText(
+            text: text,
+            chapterTitle: chapterTitle,
+            startsAtParagraphBoundary: startsAtParagraphBoundary,
+            settings: settings,
+            baseFontSize: baseFontSize,
+            textColor: textColor,
+            titleWeight: titleWeight
+        )
         guard width > 0, attributedText.length > 0 else { return 0 }
         textContainer.size = CGSize(width: width, height: .greatestFiniteMagnitude)
         textContentStorage.textStorage?.setAttributedString(attributedText)
