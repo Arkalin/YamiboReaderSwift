@@ -652,7 +652,7 @@ private final class StubURLProtocol: URLProtocol {
     }
 }
 
-@Test func readerPaginatorProducesChaptersForBothModes() async throws {
+@Test func novelTextLayoutProducesChaptersForBothModes() async throws {
     let document = ReaderPageDocument(
         threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=1&mobile=2")),
         view: 1,
@@ -663,7 +663,7 @@ private final class StubURLProtocol: URLProtocol {
         ]
     )
 
-    let paged = ReaderPaginator.paginate(
+    let paged = try NovelTextLayout.renderedPages(
         document: document,
         settings: ReaderAppearanceSettings(readingMode: .paged),
         layout: ReaderContainerLayout(width: 320, height: 568)
@@ -674,7 +674,7 @@ private final class StubURLProtocol: URLProtocol {
     #expect(paged.chapters.last?.title == "第二章")
     #expect((paged.chapters.last?.startIndex ?? 0) > 0)
 
-    let vertical = ReaderPaginator.paginate(
+    let vertical = try NovelTextLayout.renderedPages(
         document: document,
         settings: ReaderAppearanceSettings(readingMode: .vertical),
         layout: ReaderContainerLayout(width: 320, height: 568)
@@ -699,41 +699,40 @@ private final class StubURLProtocol: URLProtocol {
     #expect(layout.readableFrame.height == 559)
 }
 
-@Test func novelTextLayoutProducesPagedAndVerticalRangesAtModuleSeam() throws {
+@Test func novelTextLayoutProducesPagedAndVerticalPagesAtModuleSeam() throws {
     let text = String(repeating: "这是用于模块边界测试的正文。", count: 120)
-    let layout = ReaderContainerLayout(width: 320, height: 568)
-    let settings = ReaderAppearanceSettings(readingMode: .paged)
-
-    let pagedSlices = try NovelTextLayout.renderedTextSlices(
-        text,
-        chapterTitle: "第一章",
-        settings: settings,
-        layout: layout,
-        readingMode: .paged,
-        requiresAuthoritativePagedLayout: true
+    let document = ReaderPageDocument(
+        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=58&mobile=2")),
+        view: 1,
+        maxView: 1,
+        segments: [.text(text, chapterTitle: "第一章")]
     )
-    let verticalSlices = try NovelTextLayout.renderedTextSlices(
-        text,
-        chapterTitle: "第一章",
+
+    let paged = try NovelTextLayout.renderedPages(
+        document: document,
+        settings: ReaderAppearanceSettings(readingMode: .paged),
+        layout: ReaderContainerLayout(width: 320, height: 568)
+    )
+    let vertical = try NovelTextLayout.renderedPages(
+        document: document,
         settings: ReaderAppearanceSettings(readingMode: .vertical),
-        layout: layout,
-        readingMode: .vertical,
-        requiresAuthoritativePagedLayout: false,
-        requiresAuthoritativeVerticalLayout: true
+        layout: ReaderContainerLayout(width: 320, height: 568)
     )
 
-    #expect(!pagedSlices.isEmpty)
-    #expect(!verticalSlices.isEmpty)
-    #expect(pagedSlices.first?.startOffset == 0)
-    #expect(pagedSlices.last?.endOffset == text.count)
-    #expect(verticalSlices.first?.startOffset == 0)
-    #expect(verticalSlices.last?.endOffset == text.count)
+    #expect(!paged.pages.isEmpty)
+    #expect(!vertical.pages.isEmpty)
+    #expect(paged.pages.first?.textRanges.first?.startOffset == 0)
+    #expect(paged.pages.last?.textRanges.last?.endOffset == text.count)
+    #expect(vertical.pages.first?.textRanges.first?.startOffset == 0)
+    #expect(vertical.pages.last?.textRanges.last?.endOffset == text.count)
+    #expect(paged.chapters.first?.title == "第一章")
+    #expect(vertical.chapters.first?.title == "第一章")
     #expect(
         NovelTextLayout.measuredTextHeight(
             text,
             chapterTitle: "第一章",
-            settings: settings,
-            width: layout.readableFrame.width
+            settings: ReaderAppearanceSettings(readingMode: .paged),
+            width: ReaderContainerLayout(width: 320, height: 568).readableFrame.width
         ) > 0
     )
 }
@@ -780,14 +779,18 @@ private final class StubURLProtocol: URLProtocol {
 #if canImport(AppKit) && !canImport(UIKit)
 @Test func novelTextLayoutEmptyAppKitPagedAdapterThrowsWithoutEstimatedFallback() throws {
     let text = String(repeating: "Empty AppKit adapter output must not fall back to estimated slicing. ", count: 20)
+    let document = ReaderPageDocument(
+        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=61&mobile=2")),
+        view: 1,
+        maxView: 1,
+        segments: [.text(text, chapterTitle: nil)]
+    )
 
     #expect(throws: NovelTextLayoutFailure.unableToLayoutText) {
-        _ = try NovelTextLayout.renderedTextSlices(
-            text,
-            chapterTitle: nil,
+        _ = try NovelTextLayout.renderedPages(
+            document: document,
             settings: ReaderAppearanceSettings(readingMode: .paged),
             layout: ReaderContainerLayout(width: 320, height: 568),
-            readingMode: .paged,
             requiresAuthoritativePagedLayout: false,
             pagedLayout: { _, _, _, _ in [] }
         )
@@ -796,14 +799,18 @@ private final class StubURLProtocol: URLProtocol {
 
 @Test func novelTextLayoutEmptyAppKitVerticalAdapterThrowsWithoutEstimatedFallback() throws {
     let text = String(repeating: "Empty AppKit adapter output must not fall back to estimated vertical slicing. ", count: 20)
+    let document = ReaderPageDocument(
+        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=62&mobile=2")),
+        view: 1,
+        maxView: 1,
+        segments: [.text(text, chapterTitle: nil)]
+    )
 
     #expect(throws: NovelTextLayoutFailure.unableToLayoutText) {
-        _ = try NovelTextLayout.renderedTextSlices(
-            text,
-            chapterTitle: nil,
+        _ = try NovelTextLayout.renderedPages(
+            document: document,
             settings: ReaderAppearanceSettings(readingMode: .vertical),
             layout: ReaderContainerLayout(width: 320, height: 568, readingMode: .vertical),
-            readingMode: .vertical,
             requiresAuthoritativePagedLayout: false,
             requiresAuthoritativeVerticalLayout: false,
             verticalLayout: { _, _, _, _ in [] }
@@ -816,24 +823,28 @@ private final class StubURLProtocol: URLProtocol {
         repeating: "AppKit TextKit 2 should produce concrete page ranges for novel text.",
         count: 120
     ).joined(separator: " ")
+    let document = ReaderPageDocument(
+        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=63&mobile=2")),
+        view: 1,
+        maxView: 1,
+        segments: [.text(text, chapterTitle: nil)]
+    )
     let settings = ReaderAppearanceSettings(readingMode: .paged)
     let layout = ReaderContainerLayout(width: 260, height: 220)
 
-    let slices = try NovelTextLayout.renderedTextSlices(
-        text,
-        chapterTitle: nil,
+    let pagination = try NovelTextLayout.renderedPages(
+        document: document,
         settings: settings,
-        layout: layout,
-        readingMode: .paged,
-        requiresAuthoritativePagedLayout: true
+        layout: layout
     )
+    let ranges = pagination.pages.flatMap(\.textRanges)
 
-    #expect(slices.count > 1)
-    #expect(slices.allSatisfy { !$0.text.isEmpty })
-    #expect(slices.first?.startOffset == 0)
-    #expect(slices.last?.endOffset == text.count)
+    #expect(pagination.pages.count > 1)
+    #expect(pagination.pages.allSatisfy { !$0.blocks.compactMap(\.textContent).joined().isEmpty })
+    #expect(ranges.first?.startOffset == 0)
+    #expect(ranges.last?.endOffset == text.count)
 
-    for pair in zip(slices, slices.dropFirst()) {
+    for pair in zip(ranges, ranges.dropFirst()) {
         #expect(pair.0.endOffset <= pair.1.startOffset)
     }
 }
@@ -843,31 +854,34 @@ private final class StubURLProtocol: URLProtocol {
         repeating: "AppKit TextKit 2 should produce concrete vertical chunk ranges for novel text.",
         count: 160
     ).joined(separator: " ")
+    let document = ReaderPageDocument(
+        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=64&mobile=2")),
+        view: 1,
+        maxView: 1,
+        segments: [.text(text, chapterTitle: nil)]
+    )
     let settings = ReaderAppearanceSettings(readingMode: .vertical)
     let layout = ReaderContainerLayout(width: 260, height: 220, readingMode: .vertical)
 
-    let chunks = try NovelTextLayout.renderedTextSlices(
-        text,
-        chapterTitle: nil,
+    let pagination = try NovelTextLayout.renderedPages(
+        document: document,
         settings: settings,
-        layout: layout,
-        readingMode: .vertical,
-        requiresAuthoritativePagedLayout: false,
-        requiresAuthoritativeVerticalLayout: true
+        layout: layout
     )
+    let ranges = pagination.pages.flatMap(\.textRanges)
 
-    #expect(chunks.count > 1)
-    #expect(chunks.allSatisfy { !$0.text.isEmpty })
-    #expect(chunks.first?.startOffset == 0)
-    #expect(chunks.last?.endOffset == text.count)
+    #expect(pagination.pages.count > 1)
+    #expect(pagination.pages.allSatisfy { !$0.blocks.compactMap(\.textContent).joined().isEmpty })
+    #expect(ranges.first?.startOffset == 0)
+    #expect(ranges.last?.endOffset == text.count)
 
-    for pair in zip(chunks, chunks.dropFirst()) {
+    for pair in zip(ranges, ranges.dropFirst()) {
         #expect(pair.0.endOffset <= pair.1.startOffset)
     }
 }
 #endif
 
-@Test func readerPaginatorUsesNovelTextLayoutSeamForSingleTextSegmentRanges() async throws {
+@Test func novelTextLayoutPreservesSingleTextSegmentRanges() async throws {
     let text = String(repeating: "分页边界应来自 Novel Text Layout。", count: 100)
     let document = ReaderPageDocument(
         threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=58&mobile=2")),
@@ -878,37 +892,38 @@ private final class StubURLProtocol: URLProtocol {
     let settings = ReaderAppearanceSettings(readingMode: .paged)
     let layout = ReaderContainerLayout(width: 320, height: 568)
 
-    let expectedSlices = try NovelTextLayout.renderedTextSlices(
-        text,
-        chapterTitle: "第一章",
-        settings: settings,
-        layout: layout,
-        readingMode: .paged,
-        requiresAuthoritativePagedLayout: true
-    )
-    let pagination = ReaderPaginator.paginate(document: document, settings: settings, layout: layout)
+    let pagination = try NovelTextLayout.renderedPages(document: document, settings: settings, layout: layout)
+    let ranges = pagination.pages.flatMap(\.textRanges)
 
-    #expect(pagination.pages.map(\.segmentStartOffset) == expectedSlices.map(\.startOffset))
-    #expect(pagination.pages.map(\.segmentEndOffset) == expectedSlices.map(\.endOffset))
+    #expect(ranges.first?.startOffset == 0)
+    #expect(ranges.last?.endOffset == text.count)
+    for pair in zip(ranges, ranges.dropFirst()) {
+        #expect(pair.0.endOffset <= pair.1.startOffset)
+    }
+    #expect(Set(ranges.map(\.segmentIndex)) == [0])
 }
 
 @Test func novelTextLayoutPagedAuthoritativeFailureDoesNotUseEstimatedFallback() async throws {
     let text = String(repeating: "TextKit 2 failure should not fall back. ", count: 40)
+    let document = ReaderPageDocument(
+        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=65&mobile=2")),
+        view: 1,
+        maxView: 1,
+        segments: [.text(text, chapterTitle: "第一章")]
+    )
 
     #expect(throws: NovelTextLayoutFailure.unableToLayoutText) {
-        _ = try NovelTextLayout.renderedTextSlices(
-            text,
-            chapterTitle: "第一章",
+        _ = try NovelTextLayout.renderedPages(
+            document: document,
             settings: ReaderAppearanceSettings(readingMode: .paged),
             layout: ReaderContainerLayout(width: 320, height: 568),
-            readingMode: .paged,
             requiresAuthoritativePagedLayout: true,
             pagedLayout: { _, _, _, _ in [] }
         )
     }
 }
 
-@Test func readerPaginatorNovelTextLayoutPagedFailureThrowsInsteadOfPublishingFallbackPage() async throws {
+@Test func novelTextLayoutPagedFailureThrowsInsteadOfPublishingFallbackPage() async throws {
     let document = ReaderPageDocument(
         threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=59&mobile=2")),
         view: 1,
@@ -919,26 +934,30 @@ private final class StubURLProtocol: URLProtocol {
     )
 
     #expect(throws: NovelTextLayoutFailure.unableToLayoutText) {
-        _ = try ReaderPaginator.paginateNovelTextLayout(
+        _ = try NovelTextLayout.renderedPages(
             document: document,
             settings: ReaderAppearanceSettings(readingMode: .paged),
             layout: ReaderContainerLayout(width: 320, height: 568),
-            pagedLayout: { _, _, _, _ in [] },
-            requiresAuthoritativePagedLayout: true
+            requiresAuthoritativePagedLayout: true,
+            pagedLayout: { _, _, _, _ in [] }
         )
     }
 }
 
 @Test func novelTextLayoutVerticalAuthoritativeFailureDoesNotUseEstimatedFallback() async throws {
     let text = String(repeating: "Vertical TextKit 2 failure should not fall back. ", count: 40)
+    let document = ReaderPageDocument(
+        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=66&mobile=2")),
+        view: 1,
+        maxView: 1,
+        segments: [.text(text, chapterTitle: "第一章")]
+    )
 
     #expect(throws: NovelTextLayoutFailure.unableToLayoutText) {
-        _ = try NovelTextLayout.renderedTextSlices(
-            text,
-            chapterTitle: "第一章",
+        _ = try NovelTextLayout.renderedPages(
+            document: document,
             settings: ReaderAppearanceSettings(readingMode: .vertical),
             layout: ReaderContainerLayout(width: 320, height: 568),
-            readingMode: .vertical,
             requiresAuthoritativePagedLayout: false,
             requiresAuthoritativeVerticalLayout: true,
             verticalLayout: { _, _, _, _ in [] }
@@ -946,7 +965,7 @@ private final class StubURLProtocol: URLProtocol {
     }
 }
 
-@Test func readerPaginatorNovelTextLayoutVerticalFailureThrowsInsteadOfPublishingFallbackPage() async throws {
+@Test func novelTextLayoutVerticalFailureThrowsInsteadOfPublishingFallbackPage() async throws {
     let document = ReaderPageDocument(
         threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=60&mobile=2")),
         view: 1,
@@ -957,12 +976,12 @@ private final class StubURLProtocol: URLProtocol {
     )
 
     #expect(throws: NovelTextLayoutFailure.unableToLayoutText) {
-        _ = try ReaderPaginator.paginateNovelTextLayout(
+        _ = try NovelTextLayout.renderedPages(
             document: document,
             settings: ReaderAppearanceSettings(readingMode: .vertical),
             layout: ReaderContainerLayout(width: 320, height: 568),
-            verticalLayout: { _, _, _, _ in [] },
-            requiresAuthoritativeVerticalLayout: true
+            requiresAuthoritativeVerticalLayout: true,
+            verticalLayout: { _, _, _, _ in [] }
         )
     }
 }

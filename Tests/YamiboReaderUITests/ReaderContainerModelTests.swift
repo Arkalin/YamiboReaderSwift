@@ -659,7 +659,7 @@ final class ReaderContainerModelTests: XCTestCase {
             ],
             pagination: { document, settings, layout in
                 guard document.view == 1 else { throw failure }
-                return try ReaderPaginator.paginateNovelTextLayout(
+                return try NovelTextLayout.renderedPages(
                     document: document,
                     settings: settings,
                     layout: layout
@@ -1006,7 +1006,7 @@ final class ReaderContainerModelTests: XCTestCase {
                 .text(String(repeating: "第三章 内容。", count: 120), chapterTitle: "第三章")
             ]
         )
-        let pagination = ReaderPaginator.paginate(
+        let pagination = NovelTextLayout.renderedPagesOrEmpty(
             document: document,
             settings: ReaderAppearanceSettings(readingMode: .vertical),
             layout: ReaderContainerLayout(width: 320, height: 568)
@@ -1157,7 +1157,7 @@ final class ReaderContainerModelTests: XCTestCase {
                 .text(String(repeating: "第三章 内容。", count: 160), chapterTitle: "第三章")
             ]
         )
-        let pagination = ReaderPaginator.paginate(
+        let pagination = NovelTextLayout.renderedPagesOrEmpty(
             document: document,
             settings: ReaderAppearanceSettings(readingMode: .vertical),
             layout: ReaderContainerLayout(width: 320, height: 568)
@@ -1856,7 +1856,7 @@ private func makeModel(
     launchContext: ReaderLaunchContext? = nil,
     session: URLSession = .shared,
     cacheStore: ReaderCacheStore? = nil,
-    pagination: @escaping NovelTextPagination = ReaderPaginator.paginateNovelTextLayout
+    pagination: @escaping NovelTextPagination = NovelTextLayout.renderedPages
 ) async throws -> ReaderContainerModel {
     let keyPrefix = UUID().uuidString
     let sessionStore = SessionStore(key: "\(keyPrefix).session")
