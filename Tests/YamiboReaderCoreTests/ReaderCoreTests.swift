@@ -929,6 +929,43 @@ private final class StubURLProtocol: URLProtocol {
     #expect(pagination.pages.map(\.segmentEndOffset) == expectedSlices.map(\.endOffset))
 }
 
+@Test func novelTextLayoutPagedAuthoritativeFailureDoesNotUseEstimatedFallback() async throws {
+    let text = String(repeating: "TextKit 2 failure should not fall back. ", count: 40)
+
+    #expect(throws: NovelTextLayoutFailure.unableToLayoutText) {
+        _ = try NovelTextLayout.renderedTextSlices(
+            text,
+            chapterTitle: "第一章",
+            settings: ReaderAppearanceSettings(readingMode: .paged),
+            layout: ReaderContainerLayout(width: 320, height: 568),
+            readingMode: .paged,
+            requiresAuthoritativePagedLayout: true,
+            pagedLayout: { _, _, _, _ in [] }
+        )
+    }
+}
+
+@Test func readerPaginatorNovelTextLayoutPagedFailureThrowsInsteadOfPublishingFallbackPage() async throws {
+    let document = ReaderPageDocument(
+        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=59&mobile=2")),
+        view: 1,
+        maxView: 1,
+        segments: [
+            .text(String(repeating: "TextKit 2 failure should stop pagination. ", count: 40), chapterTitle: "第一章")
+        ]
+    )
+
+    #expect(throws: NovelTextLayoutFailure.unableToLayoutText) {
+        _ = try ReaderPaginator.paginateNovelTextLayout(
+            document: document,
+            settings: ReaderAppearanceSettings(readingMode: .paged),
+            layout: ReaderContainerLayout(width: 320, height: 568),
+            pagedLayout: { _, _, _, _ in [] },
+            requiresAuthoritativePagedLayout: true
+        )
+    }
+}
+
 @Test func readerParagraphIndentPlannerKeepsContinuationFirstParagraphUnindentedOnly() {
     let text = "续页正文。\n\n新段落正文。\n第三段正文。"
     let ranges = ReaderParagraphIndentPlanner.indentedParagraphRangesAfterFirst(in: text)

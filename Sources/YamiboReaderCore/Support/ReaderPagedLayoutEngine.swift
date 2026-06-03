@@ -47,66 +47,96 @@ enum ReaderPagedLayoutEngine {
             chapterTitle: chapterTitle,
             settings: settings
         )
-        let textStorage = NSTextStorage(attributedString: attributedText)
-        let layoutManager = NSLayoutManager()
-        layoutManager.usesFontLeading = true
-        layoutManager.allowsNonContiguousLayout = false
-        textStorage.addLayoutManager(layoutManager)
+        return paginateTextWithTextKit2(attributedText, pageSize: pageSize)
+    }
 
-        var slices: [TextSlice] = []
-        var previousCharacterEnd = 0
-        let textLength = attributedText.string.count
+    private static func paginateTextWithTextKit2(_ attributedText: NSAttributedString, pageSize: CGSize) -> [TextSlice] {
+        let textContentStorage = NSTextContentStorage()
+        let textLayoutManager = NSTextLayoutManager()
+        textContentStorage.addTextLayoutManager(textLayoutManager)
+        textContentStorage.textStorage?.setAttributedString(attributedText)
 
-        while previousCharacterEnd < textLength || slices.isEmpty {
-            let container = NSTextContainer(size: pageSize)
-            container.lineFragmentPadding = 0
-            container.maximumNumberOfLines = 0
-            container.lineBreakMode = .byWordWrapping
-            layoutManager.addTextContainer(container)
+        let textContainer = NSTextContainer(size: CGSize(width: pageSize.width, height: .greatestFiniteMagnitude))
+        textContainer.lineFragmentPadding = 0
+        textContainer.maximumNumberOfLines = 0
+        textContainer.lineBreakMode = .byWordWrapping
+        textLayoutManager.textContainer = textContainer
 
-            let glyphRange = layoutManager.glyphRange(for: container)
-            guard glyphRange.length > 0 else { break }
-            let characterRange = layoutManager.characterRange(forGlyphRange: glyphRange, actualGlyphRange: nil)
-            let pageCharacterStart = max(previousCharacterEnd, min(characterRange.location, textLength))
-            let nextCharacterEnd = min(characterRange.location + characterRange.length, textLength)
-            let trimmedEnd = max(
-                trimmedCharacterBoundary(in: attributedText.string, from: pageCharacterStart, to: nextCharacterEnd),
-                pageCharacterStart
-            )
+        let documentRange = textContentStorage.documentRange
+        textLayoutManager.ensureLayout(for: documentRange)
 
-            if trimmedEnd > pageCharacterStart {
-                let candidateText = attributedText.attributedSubstring(
-                    from: NSRange(location: pageCharacterStart, length: trimmedEnd - pageCharacterStart)
-                ).string
-                if !candidateText.isEmpty {
-                    let trimmedLeadingText = candidateText.trimmingLeadingPaginationWhitespace()
-                    let leadingTrimmed = candidateText.count - trimmedLeadingText.count
-                    let effectiveStart = pageCharacterStart + leadingTrimmed
-                    let sliceText = effectiveStart < trimmedEnd ? attributedText.attributedSubstring(
-                        from: NSRange(location: effectiveStart, length: trimmedEnd - effectiveStart)
-                    ).string : ""
-                    guard !sliceText.isEmpty else {
-                        previousCharacterEnd = max(nextCharacterEnd, previousCharacterEnd + 1)
-                        continue
-                    }
-                    slices.append(
-                        TextSlice(
-                            text: sliceText,
-                            startOffset: effectiveStart,
-                            endOffset: trimmedEnd,
-                            startsAtParagraphBoundary: effectiveStart == 0 || isParagraphBoundary(in: attributedText.string, at: effectiveStart)
-                        )
-                    )
-                }
+        var pageRanges: [Int: NSRange] = [:]
+        textLayoutManager.enumerateTextSegments(
+            in: documentRange,
+            type: .standard,
+            options: []
+        ) { textRange, rect, _, _ in
+            guard let textRange,
+                  let characterRange = nsRange(for: textRange, in: textContentStorage),
+                  characterRange.length > 0,
+                  rect.origin.x.isFinite,
+                  rect.origin.y.isFinite,
+                  rect.width.isFinite,
+                  rect.height.isFinite,
+                  rect.height > 0 else {
+                return true
             }
-
-            previousCharacterEnd = max(nextCharacterEnd, previousCharacterEnd + 1)
-            if nextCharacterEnd >= textLength {
-                break
+            let pageIndex = max(0, Int(floor(rect.midY / pageSize.height)))
+            if let existingRange = pageRanges[pageIndex] {
+                pageRanges[pageIndex] = existingRange.union(characterRange)
+            } else {
+                pageRanges[pageIndex] = characterRange
             }
+            return true
         }
 
-        return slices
+        return pageRanges.keys.sorted().compactMap { pageIndex in
+            guard let pageRange = pageRanges[pageIndex] else { return nil }
+            return textSlice(
+                from: attributedText,
+                range: pageRange,
+                isFirstPage: pageIndex == 0
+            )
+        }
+    }
+
+    private static func nsRange(for textRange: NSTextRange, in contentManager: NSTextContentManager) -> NSRange? {
+        let documentStart = contentManager.documentRange.location
+        let start = contentManager.offset(from: documentStart, to: textRange.location)
+        let end = contentManager.offset(from: documentStart, to: textRange.endLocation)
+        guard start != NSNotFound, end != NSNotFound, end >= start else { return nil }
+        return NSRange(location: start, length: end - start)
+    }
+
+    private static func textSlice(from attributedText: NSAttributedString, range: NSRange, isFirstPage: Bool) -> TextSlice? {
+        let textLength = attributedText.string.count
+        let pageCharacterStart = max(0, min(range.location, textLength))
+        let nextCharacterEnd = min(range.location + range.length, textLength)
+        let trimmedEnd = max(
+            trimmedCharacterBoundary(in: attributedText.string, from: pageCharacterStart, to: nextCharacterEnd),
+            pageCharacterStart
+        )
+        guard trimmedEnd > pageCharacterStart else { return nil }
+
+        let candidateText = attributedText.attributedSubstring(
+            from: NSRange(location: pageCharacterStart, length: trimmedEnd - pageCharacterStart)
+        ).string
+        guard !candidateText.isEmpty else { return nil }
+
+        let trimmedLeadingText = candidateText.trimmingLeadingPaginationWhitespace()
+        let leadingTrimmed = candidateText.count - trimmedLeadingText.count
+        let effectiveStart = pageCharacterStart + leadingTrimmed
+        let sliceText = effectiveStart < trimmedEnd ? attributedText.attributedSubstring(
+            from: NSRange(location: effectiveStart, length: trimmedEnd - effectiveStart)
+        ).string : ""
+        guard !sliceText.isEmpty else { return nil }
+
+        return TextSlice(
+            text: sliceText,
+            startOffset: effectiveStart,
+            endOffset: trimmedEnd,
+            startsAtParagraphBoundary: isFirstPage || isParagraphBoundary(in: attributedText.string, at: effectiveStart)
+        )
     }
 
     private static func trimmedCharacterBoundary(in text: String, from start: Int, to candidateEnd: Int) -> Int {

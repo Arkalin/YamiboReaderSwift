@@ -1,6 +1,13 @@
 import CoreGraphics
 import Foundation
 
+typealias NovelPagedTextLayout = @Sendable (
+    _ text: String,
+    _ chapterTitle: String?,
+    _ settings: ReaderAppearanceSettings,
+    _ layout: ReaderContainerLayout
+) -> [TextSlice]
+
 public enum NovelTextLayout {
     static func renderedTextSlices(
         _ text: String,
@@ -9,13 +16,34 @@ public enum NovelTextLayout {
         layout: ReaderContainerLayout,
         readingMode: ReaderReadingMode
     ) -> [TextSlice] {
+        (try? renderedTextSlices(
+            text,
+            chapterTitle: chapterTitle,
+            settings: settings,
+            layout: layout,
+            readingMode: readingMode,
+            requiresAuthoritativePagedLayout: false
+        )) ?? []
+    }
+
+    static func renderedTextSlices(
+        _ text: String,
+        chapterTitle: String?,
+        settings: ReaderAppearanceSettings,
+        layout: ReaderContainerLayout,
+        readingMode: ReaderReadingMode,
+        requiresAuthoritativePagedLayout: Bool,
+        pagedLayout: NovelPagedTextLayout? = nil
+    ) throws -> [TextSlice] {
         switch readingMode {
         case .paged:
-            return pagedTextSlices(
+            return try pagedTextSlices(
                 text,
                 chapterTitle: chapterTitle,
                 settings: settings,
-                layout: layout
+                layout: layout,
+                requiresAuthoritativeLayout: requiresAuthoritativePagedLayout,
+                pagedLayout: pagedLayout
             )
         case .vertical:
             return verticalTextChunks(
@@ -79,19 +107,32 @@ public enum NovelTextLayout {
         _ text: String,
         chapterTitle: String?,
         settings: ReaderAppearanceSettings,
-        layout: ReaderContainerLayout
-    ) -> [TextSlice] {
+        layout: ReaderContainerLayout,
+        requiresAuthoritativeLayout: Bool,
+        pagedLayout: NovelPagedTextLayout?
+    ) throws -> [TextSlice] {
 #if canImport(UIKit)
-        let slices = ReaderPagedLayoutEngine.paginateText(
+        let authoritativeLayout = pagedLayout ?? ReaderPagedLayoutEngine.paginateText
+        let slices = authoritativeLayout(
             text,
-            chapterTitle: chapterTitle,
-            settings: settings,
-            layout: layout
+            chapterTitle,
+            settings,
+            layout
         )
         if !slices.isEmpty {
             return slices
         }
+#else
+        if let pagedLayout {
+            let slices = pagedLayout(text, chapterTitle, settings, layout)
+            if !slices.isEmpty {
+                return slices
+            }
+        }
 #endif
+        if requiresAuthoritativeLayout {
+            throw NovelTextLayoutFailure.unableToLayoutText
+        }
         let metrics = textMetrics(settings: settings)
         let readableFrame = layout.readableFrame
         let charsPerLine = max(10, Int(readableFrame.width / max(metrics.characterWidth, 1)))
