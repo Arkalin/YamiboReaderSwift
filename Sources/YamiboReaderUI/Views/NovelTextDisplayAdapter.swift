@@ -19,12 +19,14 @@ enum NovelTextDisplayColor: Equatable {
 struct NovelTextDisplayStyle: Equatable {
     var fontScale: Double
     var fontFamily: ReaderFontFamily
+    var pointSize: Double
     var lineHeightScale: Double
     var characterSpacingScale: Double
     var indentsParagraphFirstLine: Bool
     var usesJustifiedText: Bool
     var baseFontSize: Double
     var textColor: NovelTextDisplayColor
+    var includesChapterTitle: Bool
 }
 
 struct NovelTextDisplayPlan: Equatable {
@@ -57,12 +59,14 @@ enum NovelTextDisplayAdapter {
             style: NovelTextDisplayStyle(
                 fontScale: settings.fontScale,
                 fontFamily: settings.fontFamily,
+                pointSize: baseFontSize * settings.fontScale,
                 lineHeightScale: settings.lineHeightScale,
                 characterSpacingScale: settings.characterSpacingScale,
                 indentsParagraphFirstLine: settings.indentsParagraphFirstLine,
                 usesJustifiedText: settings.usesJustifiedText,
                 baseFontSize: baseFontSize,
-                textColor: textColor
+                textColor: textColor,
+                includesChapterTitle: chapterTitle?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
             )
         )
     }
