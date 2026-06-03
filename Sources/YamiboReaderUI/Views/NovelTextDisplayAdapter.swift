@@ -66,6 +66,27 @@ enum NovelTextDisplayAdapter {
     }
 }
 
+enum ReaderBlockTextDisplayPlanner {
+    static func displayPlan(
+        for block: ReaderRenderedBlock,
+        settings: ReaderAppearanceSettings,
+        baseFontSize: Double = 22
+    ) -> NovelTextDisplayPlan? {
+        guard case let .text(text, chapterTitle, startsAtParagraphBoundary) = block else {
+            return nil
+        }
+        return NovelTextDisplayAdapter.displayPlan(
+            surface: .novelReadingSessionTextBlock,
+            text: text,
+            chapterTitle: chapterTitle,
+            startsAtParagraphBoundary: startsAtParagraphBoundary,
+            settings: settings,
+            baseFontSize: baseFontSize,
+            textColor: .primaryReaderText
+        )
+    }
+}
+
 #if canImport(UIKit)
 import SwiftUI
 import UIKit

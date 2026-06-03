@@ -35,4 +35,41 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertEqual(plan.style.textColor, .settingsPreviewPrimaryText)
         XCTAssertNil(plan.chapterTitle)
     }
+
+    func testNovelReadingSessionTextBlockUsesSameNovelTextLayoutDisplayAdapterAsSettingsPreview() {
+        let settings = ReaderAppearanceSettings(
+            fontScale: 1.1,
+            fontFamily: .rounded,
+            lineHeightScale: 1.6,
+            characterSpacingScale: 0.08,
+            indentsParagraphFirstLine: true,
+            readingMode: .vertical
+        )
+        let textBlock = ReaderRenderedBlock.text(
+            "正文文本块应该由 Novel Text Layout 绘制。",
+            chapterTitle: "第一章",
+            startsAtParagraphBoundary: false
+        )
+
+        let plan = ReaderBlockTextDisplayPlanner.displayPlan(
+            for: textBlock,
+            settings: settings
+        )
+        let previewPlan = NovelTextDisplayAdapter.displayPlan(
+            surface: .settingsPreview,
+            text: "设置预览文本。",
+            chapterTitle: nil,
+            startsAtParagraphBoundary: true,
+            settings: settings,
+            baseFontSize: 22,
+            textColor: .settingsPreviewPrimaryText
+        )
+
+        XCTAssertEqual(plan?.surface, .novelReadingSessionTextBlock)
+        XCTAssertEqual(plan?.backend, previewPlan.backend)
+        XCTAssertEqual(plan?.style.fontFamily, .rounded)
+        XCTAssertEqual(plan?.style.lineHeightScale, 1.6)
+        XCTAssertEqual(plan?.chapterTitle, "第一章")
+        XCTAssertEqual(plan?.startsAtParagraphBoundary, false)
+    }
 }

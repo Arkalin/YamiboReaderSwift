@@ -513,13 +513,15 @@ private struct ReaderBlockView: View {
     var body: some View {
         switch block {
         case let .text(text, chapterTitle, startsAtParagraphBoundary):
-            ReaderRichTextView(
+            NativeNovelTextDisplayView(
+                surface: .novelReadingSessionTextBlock,
                 text: text,
                 chapterTitle: chapterTitle,
                 startsAtParagraphBoundary: startsAtParagraphBoundary,
                 settings: settings,
                 baseFontSize: 22,
-                textColor: UIColor(readerTextColor)
+                textColor: UIColor(readerTextColor),
+                textColorToken: .primaryReaderText
             )
         case let .image(url, _):
             AuthenticatedReaderImage(
