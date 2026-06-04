@@ -404,35 +404,30 @@ final class NovelTextViewportDisplayUIView: UIView, @MainActor NSTextViewportLay
         updateTextContainerSizeForCurrentBounds()
         textLayoutManager.ensureLayout(for: textContentStorage.documentRange)
         let documentStart = textContentStorage.documentRange.location
-        var best: (distance: CGFloat, offset: Int)?
-
-        textLayoutManager.enumerateTextLayoutFragments(
-            from: documentStart,
-            options: []
-        ) { fragment in
-            let frame = fragment.layoutFragmentFrame
-            let distance = Self.distance(from: point, to: frame)
-            let range = fragment.rangeInElement
-            let rangeStart = textContentStorage.offset(from: documentStart, to: range.location)
-            let rangeEnd = textContentStorage.offset(from: documentStart, to: range.endLocation)
-            guard rangeStart != NSNotFound, rangeEnd != NSNotFound, rangeEnd >= rangeStart else {
-                return true
-            }
-
-            let progress: CGFloat = if frame.height > 0 {
-                min(max((point.y - frame.minY) / frame.height, 0), 1)
-            } else {
-                0
-            }
-            let fragmentLength = max(rangeEnd - rangeStart, 0)
-            let offset = rangeStart + min(max(Int((CGFloat(fragmentLength) * progress).rounded(.towardZero)), 0), fragmentLength)
-            if best == nil || distance < best!.distance {
-                best = (distance, offset)
-            }
-            return true
+        guard let fragment = closestLayoutFragment(to: point),
+              let fragmentStart = displayOffset(for: fragment.rangeInElement.location, from: documentStart) else {
+            return nil
         }
-
-        return best?.offset
+        let fragmentPoint = CGPoint(
+            x: point.x - fragment.layoutFragmentFrame.minX,
+            y: point.y - fragment.layoutFragmentFrame.minY
+        )
+        guard let lineFragment = fragment.textLineFragment(
+            forVerticalOffset: fragmentPoint.y,
+            requiresExactMatch: false
+        ) else {
+            return fragmentStart
+        }
+        let linePoint = CGPoint(
+            x: fragmentPoint.x - lineFragment.typographicBounds.minX,
+            y: fragmentPoint.y - lineFragment.typographicBounds.minY
+        )
+        let lineCharacterIndex = lineFragment.characterIndex(for: linePoint)
+        let localCharacterOffset = min(
+            max(lineCharacterIndex, lineFragment.characterRange.location),
+            lineFragment.characterRange.location + lineFragment.characterRange.length
+        )
+        return min(max(fragmentStart + localCharacterOffset, 0), attributedText.length)
     }
 
     func textFragmentReferenceY(containingDisplayOffset displayOffset: Int) -> CGFloat? {
@@ -441,41 +436,41 @@ final class NovelTextViewportDisplayUIView: UIView, @MainActor NSTextViewportLay
         textLayoutManager.ensureLayout(for: textContentStorage.documentRange)
         let documentStart = textContentStorage.documentRange.location
         let normalizedOffset = min(max(displayOffset, 0), attributedText.length)
-        var best: (distance: Int, y: CGFloat)?
+        guard let location = textContentStorage.location(documentStart, offsetBy: normalizedOffset),
+              let fragment = textLayoutManager.textLayoutFragment(for: location),
+              let lineFragment = fragment.textLineFragment(for: location, isUpstreamAffinity: true) else {
+            return nil
+        }
+        return fragment.layoutFragmentFrame.minY + lineFragment.typographicBounds.midY
+    }
 
+    private func closestLayoutFragment(to point: CGPoint) -> NSTextLayoutFragment? {
+        if let fragment = textLayoutManager.textLayoutFragment(for: point) {
+            return fragment
+        }
+
+        let documentStart = textContentStorage.documentRange.location
+        var best: (distance: CGFloat, fragment: NSTextLayoutFragment)?
         textLayoutManager.enumerateTextLayoutFragments(
             from: documentStart,
             options: []
         ) { fragment in
-            let range = fragment.rangeInElement
-            let rangeStart = textContentStorage.offset(from: documentStart, to: range.location)
-            let rangeEnd = textContentStorage.offset(from: documentStart, to: range.endLocation)
-            guard rangeStart != NSNotFound, rangeEnd != NSNotFound, rangeEnd >= rangeStart else {
-                return true
-            }
-            let distance: Int
-            if normalizedOffset >= rangeStart && normalizedOffset <= rangeEnd {
-                distance = 0
-            } else if normalizedOffset < rangeStart {
-                distance = rangeStart - normalizedOffset
-            } else {
-                distance = normalizedOffset - rangeEnd
-            }
-            let frame = fragment.layoutFragmentFrame
-            let fragmentLength = max(rangeEnd - rangeStart, 0)
-            let progress: CGFloat = if fragmentLength > 0 {
-                CGFloat(min(max(normalizedOffset - rangeStart, 0), fragmentLength)) / CGFloat(fragmentLength)
-            } else {
-                0
-            }
-            let y = frame.minY + progress * frame.height
+            let distance = Self.distance(from: point, to: fragment.layoutFragmentFrame)
             if best == nil || distance < best!.distance {
-                best = (distance, y)
+                best = (distance, fragment)
             }
             return true
         }
+        return best?.fragment
+    }
 
-        return best?.y
+    private func displayOffset(
+        for location: NSTextLocation,
+        from documentStart: NSTextLocation
+    ) -> Int? {
+        let offset = textContentStorage.offset(from: documentStart, to: location)
+        guard offset != NSNotFound else { return nil }
+        return offset
     }
 
     override func draw(_ rect: CGRect) {
