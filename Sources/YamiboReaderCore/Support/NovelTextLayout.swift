@@ -56,11 +56,18 @@ public enum NovelTextLayout {
             return cachedResult
         }
         let annotatedSegments = annotatedSegments(from: document, settings: settings)
+        let viewportContextSeed = makeViewportContext(
+            annotatedSegments: annotatedSegments,
+            document: document,
+            settings: settings,
+            layout: layout
+        )
         let result = try render(
             annotatedSegments: annotatedSegments,
             document: document,
             settings: settings,
             layout: layout,
+            viewportContextSeed: viewportContextSeed,
             chunker: { annotatedSegment, settings, layout in
                 try renderedTextSlices(
                     annotatedSegment.textContent,
@@ -147,6 +154,7 @@ public enum NovelTextLayout {
         document: ReaderPageDocument,
         settings: ReaderAppearanceSettings,
         layout: ReaderContainerLayout,
+        viewportContextSeed: NovelTextViewportContext,
         chunker: (NovelAnnotatedSegment, ReaderAppearanceSettings, ReaderContainerLayout) throws -> [TextSlice]
     ) throws -> ReaderPaginationResult {
         var pages: [ReaderRenderedPage] = []
@@ -249,15 +257,99 @@ public enum NovelTextLayout {
             ]
         }
 
+        let viewportIndex = makeViewportIndex(
+            document: document,
+            settings: settings,
+            pages: pages,
+            chapters: chapters
+        )
+        let viewportContext = NovelTextViewportContext(
+            identity: viewportContextSeed.identity,
+            document: viewportContextSeed.document,
+            externalBlocks: viewportContextSeed.externalBlocks,
+            diagnostics: NovelTextViewportDiagnostics(
+                indexBuildCount: viewportContextSeed.diagnostics.indexBuildCount,
+                visibleLayoutPassCount: viewportContextSeed.diagnostics.visibleLayoutPassCount,
+                compatibilityRenderedPageCount: pages.count,
+                compatibilityTextDisplayValueCount: pages.reduce(0) { $0 + $1.novelTextDisplayValues.count }
+            )
+        )
+
         return ReaderPaginationResult(
             pages: pages,
             chapters: chapters,
-            viewportIndex: makeViewportIndex(
-                document: document,
-                settings: settings,
-                pages: pages,
-                chapters: chapters
-            )
+            viewportIndex: viewportIndex,
+            viewportContext: viewportContext
+        )
+    }
+
+    private static func makeViewportContext(
+        annotatedSegments: [NovelAnnotatedSegment],
+        document: ReaderPageDocument,
+        settings: ReaderAppearanceSettings,
+        layout: ReaderContainerLayout
+    ) -> NovelTextViewportContext {
+        var composedText = ""
+        var textRangesBySegment: [Int: ReaderRenderedTextRange] = [:]
+        var insertedSeparatorRanges: [ReaderRenderedTextRange] = []
+        var externalBlocks: [NovelTextViewportExternalBlock] = []
+        var lastTextSegmentIndex: Int?
+
+        for annotatedSegment in annotatedSegments {
+            switch annotatedSegment.segment {
+            case let .text(text, _):
+                if !composedText.isEmpty {
+                    let separatorStart = composedText.count
+                    composedText.append("\n\n")
+                    if let lastTextSegmentIndex {
+                        insertedSeparatorRanges.append(
+                            ReaderRenderedTextRange(
+                                segmentIndex: lastTextSegmentIndex,
+                                startOffset: separatorStart,
+                                endOffset: composedText.count
+                            )
+                        )
+                    }
+                }
+                let startOffset = composedText.count
+                composedText.append(text)
+                textRangesBySegment[annotatedSegment.index] = ReaderRenderedTextRange(
+                    segmentIndex: annotatedSegment.index,
+                    startOffset: startOffset,
+                    endOffset: composedText.count
+                )
+                lastTextSegmentIndex = annotatedSegment.index
+
+            case let .image(url, _):
+                externalBlocks.append(
+                    NovelTextViewportExternalBlock(
+                        segmentIndex: annotatedSegment.index,
+                        url: url,
+                        chapterOrdinal: annotatedSegment.chapterOrdinal,
+                        chapterTitle: annotatedSegment.chapterTitle,
+                        chapterCommentTarget: chapterCommentTarget(for: annotatedSegment, document: document)
+                    )
+                )
+            }
+        }
+
+        return NovelTextViewportContext(
+            identity: NovelTextViewportIdentity(
+                threadURL: document.threadURL,
+                documentView: document.view,
+                maxView: document.maxView,
+                fetchedAt: document.fetchedAt,
+                contentSource: document.contentSource,
+                appearance: settings,
+                layout: layout
+            ),
+            document: NovelTextViewportDocument(
+                text: composedText,
+                textRangesBySegment: textRangesBySegment,
+                insertedSeparatorRanges: insertedSeparatorRanges
+            ),
+            externalBlocks: externalBlocks,
+            diagnostics: NovelTextViewportDiagnostics(indexBuildCount: 1)
         )
     }
 

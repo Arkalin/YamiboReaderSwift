@@ -601,19 +601,126 @@ public struct NovelTextViewportIndex: Hashable, Sendable {
     }
 }
 
+public struct NovelTextViewportIdentity: Hashable, Sendable {
+    public var threadURL: URL
+    public var documentView: Int
+    public var maxView: Int
+    public var fetchedAt: Date
+    public var contentSource: ReaderContentSource
+    public var appearance: ReaderAppearanceSettings
+    public var layout: ReaderContainerLayout
+
+    public init(
+        threadURL: URL,
+        documentView: Int,
+        maxView: Int,
+        fetchedAt: Date,
+        contentSource: ReaderContentSource,
+        appearance: ReaderAppearanceSettings,
+        layout: ReaderContainerLayout
+    ) {
+        self.threadURL = threadURL
+        self.documentView = max(1, documentView)
+        self.maxView = max(self.documentView, maxView)
+        self.fetchedAt = fetchedAt
+        self.contentSource = contentSource
+        self.appearance = appearance
+        self.layout = layout
+    }
+}
+
+public struct NovelTextViewportDocument: Hashable, Sendable {
+    public var text: String
+    public var textRangesBySegment: [Int: ReaderRenderedTextRange]
+    public var insertedSeparatorRanges: [ReaderRenderedTextRange]
+
+    public init(
+        text: String,
+        textRangesBySegment: [Int: ReaderRenderedTextRange],
+        insertedSeparatorRanges: [ReaderRenderedTextRange]
+    ) {
+        self.text = text
+        self.textRangesBySegment = textRangesBySegment
+        self.insertedSeparatorRanges = insertedSeparatorRanges
+    }
+}
+
+public struct NovelTextViewportExternalBlock: Hashable, Sendable {
+    public var segmentIndex: Int
+    public var url: URL
+    public var chapterOrdinal: Int?
+    public var chapterTitle: String?
+    public var chapterCommentTarget: ReaderChapterCommentTarget?
+
+    public init(
+        segmentIndex: Int,
+        url: URL,
+        chapterOrdinal: Int?,
+        chapterTitle: String?,
+        chapterCommentTarget: ReaderChapterCommentTarget? = nil
+    ) {
+        self.segmentIndex = max(0, segmentIndex)
+        self.url = url
+        self.chapterOrdinal = chapterOrdinal
+        self.chapterTitle = chapterTitle
+        self.chapterCommentTarget = chapterCommentTarget
+    }
+}
+
+public struct NovelTextViewportDiagnostics: Hashable, Sendable {
+    public var indexBuildCount: Int
+    public var visibleLayoutPassCount: Int
+    public var compatibilityRenderedPageCount: Int
+    public var compatibilityTextDisplayValueCount: Int
+
+    public init(
+        indexBuildCount: Int,
+        visibleLayoutPassCount: Int = 0,
+        compatibilityRenderedPageCount: Int = 0,
+        compatibilityTextDisplayValueCount: Int = 0
+    ) {
+        self.indexBuildCount = max(0, indexBuildCount)
+        self.visibleLayoutPassCount = max(0, visibleLayoutPassCount)
+        self.compatibilityRenderedPageCount = max(0, compatibilityRenderedPageCount)
+        self.compatibilityTextDisplayValueCount = max(0, compatibilityTextDisplayValueCount)
+    }
+}
+
+public struct NovelTextViewportContext: Hashable, Sendable {
+    public var identity: NovelTextViewportIdentity
+    public var document: NovelTextViewportDocument
+    public var externalBlocks: [NovelTextViewportExternalBlock]
+    public var diagnostics: NovelTextViewportDiagnostics
+
+    public init(
+        identity: NovelTextViewportIdentity,
+        document: NovelTextViewportDocument,
+        externalBlocks: [NovelTextViewportExternalBlock],
+        diagnostics: NovelTextViewportDiagnostics
+    ) {
+        self.identity = identity
+        self.document = document
+        self.externalBlocks = externalBlocks
+        self.diagnostics = diagnostics
+    }
+}
+
 public struct ReaderPaginationResult: Hashable, Sendable {
     public var pages: [ReaderRenderedPage]
     public var chapters: [ReaderChapter]
     public var viewportIndex: NovelTextViewportIndex?
+    public var viewportContext: NovelTextViewportContext?
 
     public init(
         pages: [ReaderRenderedPage],
         chapters: [ReaderChapter],
-        viewportIndex: NovelTextViewportIndex? = nil
+        viewportIndex: NovelTextViewportIndex? = nil,
+        viewportContext: NovelTextViewportContext? = nil
     ) {
         self.pages = pages
         self.chapters = chapters
         self.viewportIndex = viewportIndex
+        self.viewportContext = viewportContext
     }
 }
 
