@@ -20,6 +20,8 @@ typealias NovelVerticalTextLayout = @Sendable (
 ) -> [TextSlice]
 
 public enum NovelTextLayout {
+    private static let viewportIndexCache = NovelTextViewportIndexCache()
+
     public static func renderedPages(
         document: ReaderPageDocument,
         settings: ReaderAppearanceSettings,
@@ -41,8 +43,18 @@ public enum NovelTextLayout {
         requiresAuthoritativePagedLayout: Bool? = nil,
         requiresAuthoritativeVerticalLayout: Bool? = nil,
         pagedLayout: NovelPagedTextLayout? = nil,
-        verticalLayout: NovelVerticalTextLayout? = nil
+        verticalLayout: NovelVerticalTextLayout? = nil,
+        usesViewportIndexCache: Bool? = nil
     ) throws -> ReaderPaginationResult {
+        let cacheKey = NovelTextViewportIndexCacheKey(
+            document: document,
+            settings: settings,
+            layout: layout
+        )
+        let shouldUseCache = usesViewportIndexCache ?? (pagedLayout == nil && verticalLayout == nil)
+        if shouldUseCache, let cachedResult = viewportIndexCache.result(for: cacheKey) {
+            return cachedResult
+        }
         let annotatedSegments = annotatedSegments(from: document, settings: settings)
         let result = try render(
             annotatedSegments: annotatedSegments,
@@ -74,6 +86,9 @@ public enum NovelTextLayout {
         }
         guard !hasInputText || hasVisibleText else {
             throw NovelTextLayoutFailure.unableToLayoutText
+        }
+        if shouldUseCache {
+            viewportIndexCache.store(result, for: cacheKey)
         }
         return result
     }
@@ -1016,5 +1031,46 @@ private struct NovelAnnotatedSegment {
     var textContent: String {
         guard case let .text(text, _) = segment else { return "" }
         return text
+    }
+}
+
+private struct NovelTextViewportIndexCacheKey: Hashable {
+    var document: ReaderPageDocument
+    var settings: ReaderAppearanceSettings
+    var layout: ReaderContainerLayout
+}
+
+private final class NovelTextViewportIndexCache: @unchecked Sendable {
+    private let lock = NSLock()
+    private var entries: [NovelTextViewportIndexCacheKey: ReaderPaginationResult] = [:]
+    private var accessOrder: [NovelTextViewportIndexCacheKey] = []
+    private let capacity = 16
+
+    func result(for key: NovelTextViewportIndexCacheKey) -> ReaderPaginationResult? {
+        lock.withLock {
+            guard let result = entries[key] else { return nil }
+            markRecentlyUsed(key)
+            return result
+        }
+    }
+
+    func store(_ result: ReaderPaginationResult, for key: NovelTextViewportIndexCacheKey) {
+        lock.withLock {
+            entries[key] = result
+            markRecentlyUsed(key)
+            trimIfNeeded()
+        }
+    }
+
+    private func markRecentlyUsed(_ key: NovelTextViewportIndexCacheKey) {
+        accessOrder.removeAll { $0 == key }
+        accessOrder.append(key)
+    }
+
+    private func trimIfNeeded() {
+        while accessOrder.count > capacity, let oldestKey = accessOrder.first {
+            accessOrder.removeFirst()
+            entries.removeValue(forKey: oldestKey)
+        }
     }
 }
