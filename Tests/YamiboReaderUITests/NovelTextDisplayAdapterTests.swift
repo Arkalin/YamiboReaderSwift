@@ -29,7 +29,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         )
 
         XCTAssertEqual(materialization.surface, .settingsPreview)
-        XCTAssertEqual(materialization.backend, .textKit2DisplayAdapter)
+        XCTAssertEqual(materialization.backend, .novelTextViewport)
         XCTAssertEqual(materialization.style.fontFamily, .systemSerif)
         XCTAssertEqual(materialization.style.fontScale, 1.25)
         XCTAssertEqual(materialization.style.lineHeightScale, 1.7)
@@ -181,7 +181,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         )
         let displayValueBody = try XCTUnwrap(typeBody(named: "NovelTextDisplayValue", in: readerModelsSource))
         let updateUIViewBody = try XCTUnwrap(functionBody(named: "updateUIView", in: adapterSource))
-        let displayUIViewBody = try XCTUnwrap(typeBody(named: "NovelTextKit2DisplayUIView", in: adapterSource))
+        let displayUIViewBody = try XCTUnwrap(typeBody(named: "NovelTextViewportDisplayUIView", in: adapterSource))
 
         XCTAssertFalse(displayValueBody.contains("NSAttributedString"))
         XCTAssertFalse(displayValueBody.contains("NSText"))
@@ -189,6 +189,8 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertFalse(displayValueBody.contains("NSView"))
         XCTAssertTrue(updateUIViewBody.contains("NovelTextKit2PlatformAdapter.makeAttributedText"))
         XCTAssertFalse(displayUIViewBody.contains("func measuredHeight"))
+        XCTAssertTrue(adapterSource.contains("NovelTextViewportDisplayUIView: UIView, NSTextViewportLayoutControllerDelegate"))
+        XCTAssertTrue(displayUIViewBody.contains("textViewportLayoutController.layoutViewport()"))
     }
 
     func testSettingsPreviewAndReadingSessionUseSameAdapterBackedMaterialization() throws {
@@ -208,7 +210,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
             settings: settings
         ))
 
-        XCTAssertEqual(preview.backend, .textKit2DisplayAdapter)
+        XCTAssertEqual(preview.backend, .novelTextViewport)
         XCTAssertEqual(block.backend, preview.backend)
         XCTAssertEqual(block.measurementBackend, preview.measurementBackend)
     }
