@@ -229,6 +229,29 @@ final class ReaderContainerModelTests: XCTestCase {
         }
     }
 
+    func testSelectingPreviewedChapterDirectoryChapterKeepsPagedSelectionOnTargetPage() async throws {
+        let model = try await makeModel(
+            documents: [
+                makeDocument(view: 1, maxView: 2, chapterTitles: ["第一章", "第二章"]),
+                makeDocument(view: 2, maxView: 2, chapterTitles: ["第三章", "第四章", "第五章"]),
+            ],
+            settings: ReaderAppearanceSettings(readingMode: .paged)
+        )
+
+        await model.previewChapterDirectoryWebView(2)
+        let target = try await MainActor.run {
+            try XCTUnwrap(model.visibleChapterDirectoryChapters.first(where: { $0.title == "第五章" }))
+        }
+        await model.jumpToChapterDirectoryChapter(target)
+
+        await MainActor.run {
+            XCTAssertEqual(model.currentView, 2)
+            XCTAssertEqual(model.currentChapterTitle, "第五章")
+            XCTAssertGreaterThan(model.pagedSelectionIndex, 0)
+            XCTAssertEqual(model.pages[model.currentPageIndex].chapterTitle, "第五章")
+        }
+    }
+
     func testChapterTitleHelperResolvesRenderedPageChapter() async throws {
         let model = try await makeModel(
             documents: [
@@ -1298,6 +1321,117 @@ final class ReaderContainerModelTests: XCTestCase {
         }
     }
 
+    func testPagedFavoriteLaunchKeepsSelectionOnSavedResumePoint() async throws {
+        let keyPrefix = UUID().uuidString
+        let settingsStore = SettingsStore(key: "\(keyPrefix).settings")
+        let favoriteStore = FavoriteStore(key: "\(keyPrefix).favorites")
+        let cacheStore = ReaderCacheStore(
+            baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        )
+        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=909&mobile=2")!
+        let document = ReaderPageDocument(
+            threadURL: threadURL,
+            view: 1,
+            maxView: 1,
+            contentSource: .fallbackUnfilteredPage,
+            segments: [
+                .text(String(repeating: "第一章 内容。", count: 520), chapterTitle: "第一章")
+            ]
+        )
+        let pagination = try NovelTextLayout.renderedPages(
+            document: document,
+            settings: ReaderAppearanceSettings(readingMode: .paged),
+            layout: ReaderContainerLayout(width: 320, height: 568)
+        )
+        let savedPage = try XCTUnwrap(pagination.pages.dropFirst().last { $0.segmentIndex != nil })
+        let savedResumePoint = ReaderResumePoint(
+            view: 1,
+            chapterOrdinal: try XCTUnwrap(savedPage.chapterOrdinal),
+            chapterTitle: savedPage.chapterTitle,
+            segmentIndex: try XCTUnwrap(savedPage.segmentIndex),
+            segmentOffset: savedPage.segmentStartOffset,
+            segmentProgress: 0,
+            authorID: nil,
+            readingModeHint: .paged
+        )
+
+        try await settingsStore.save(AppSettings(reader: ReaderAppearanceSettings(readingMode: .paged)))
+        try await cacheStore.save(document)
+        try await favoriteStore.saveFavorites([
+            Favorite(
+                title: "测试线程",
+                url: threadURL,
+                lastPage: savedPage.index,
+                lastView: 1,
+                lastChapter: "第一章",
+                novelResumePoint: savedResumePoint,
+                type: .novel
+            )
+        ])
+
+        let appContext = YamiboAppContext(
+            sessionStore: SessionStore(key: "\(keyPrefix).session"),
+            settingsStore: settingsStore,
+            favoriteStore: favoriteStore,
+            readerCacheStore: cacheStore
+        )
+        let model = await MainActor.run {
+            ReaderContainerModel(
+                context: ReaderLaunchContext(
+                    threadURL: threadURL,
+                    threadTitle: "测试线程",
+                    source: .favorites
+                ),
+                appContext: appContext
+            )
+        }
+
+        await model.prepare(layout: ReaderContainerLayout(width: 320, height: 568))
+
+        await MainActor.run {
+            XCTAssertEqual(model.currentPageIndex, savedPage.index)
+            XCTAssertEqual(model.pagedSelectionIndex, savedPage.index)
+            XCTAssertGreaterThan(model.pagedSelectionIndex, 0)
+            XCTAssertEqual(model.pages[model.currentPageIndex].segmentIndex, savedPage.segmentIndex)
+        }
+    }
+
+    func testPagedDirectLaunchKeepsSelectionOnInitialPage() async throws {
+        let document = ReaderPageDocument(
+            threadURL: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=910&mobile=2")!,
+            view: 1,
+            maxView: 1,
+            contentSource: .fallbackUnfilteredPage,
+            segments: [
+                .text(String(repeating: "第一章 内容。", count: 520), chapterTitle: "第一章")
+            ]
+        )
+        let pagination = try NovelTextLayout.renderedPages(
+            document: document,
+            settings: ReaderAppearanceSettings(readingMode: .paged),
+            layout: ReaderContainerLayout(width: 320, height: 568)
+        )
+        let targetPage = try XCTUnwrap(pagination.pages.dropFirst().last { $0.segmentIndex != nil })
+        let model = try await makeModel(
+            documents: [document],
+            settings: ReaderAppearanceSettings(readingMode: .paged),
+            launchContext: ReaderLaunchContext(
+                threadURL: document.threadURL,
+                threadTitle: "测试线程",
+                source: .resume,
+                initialView: 1,
+                initialPage: targetPage.index
+            )
+        )
+
+        await MainActor.run {
+            XCTAssertEqual(model.currentPageIndex, targetPage.index)
+            XCTAssertEqual(model.pagedSelectionIndex, targetPage.index)
+            XCTAssertGreaterThan(model.pagedSelectionIndex, 0)
+            XCTAssertEqual(model.pages[model.currentPageIndex].segmentIndex, targetPage.segmentIndex)
+        }
+    }
+
     func testLaunchPageIsUsedWhenNoStoredResumePointExists() async throws {
         let document = ReaderPageDocument(
             threadURL: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=905&mobile=2")!,
@@ -1465,6 +1599,40 @@ final class ReaderContainerModelTests: XCTestCase {
         }
 
         await MainActor.run {
+            let page = model.pages[model.currentPageIndex]
+            XCTAssertTrue(pageContainsSegmentOffset(page, segmentIndex: 0, offset: originalOffset))
+        }
+    }
+
+    func testVerticalToPagedModeSwitchDoesNotTemporarilyShowFirstPageBeforeLayoutSync() async throws {
+        let document = ReaderPageDocument(
+            threadURL: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=908&mobile=2")!,
+            view: 1,
+            maxView: 1,
+            contentSource: .fallbackUnfilteredPage,
+            segments: [
+                .text(String(repeating: "第一章 内容。", count: 520), chapterTitle: "第一章")
+            ]
+        )
+        let model = try await makeModel(
+            documents: [document],
+            settings: ReaderAppearanceSettings(readingMode: .vertical)
+        )
+
+        let originalOffset = try await MainActor.run {
+            let page = try XCTUnwrap(model.pages.dropFirst().last { $0.segmentIndex != nil })
+            let offset = page.segmentStartOffset + max(1, (page.segmentEndOffset - page.segmentStartOffset) / 2)
+            model.updateVerticalViewportPosition(pageIndex: page.index, intraPageProgress: 0.5)
+            return offset
+        }
+
+        await MainActor.run {
+            XCTAssertGreaterThan(model.currentPageIndex, 0)
+            model.applySettings(ReaderAppearanceSettings(readingMode: .paged))
+        }
+
+        await MainActor.run {
+            XCTAssertGreaterThan(model.currentPageIndex, 0)
             let page = model.pages[model.currentPageIndex]
             XCTAssertTrue(pageContainsSegmentOffset(page, segmentIndex: 0, offset: originalOffset))
         }
