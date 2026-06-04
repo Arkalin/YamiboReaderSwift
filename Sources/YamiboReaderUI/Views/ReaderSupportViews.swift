@@ -1321,8 +1321,17 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
         }
 
         func handle(_ request: ReaderVerticalScrollRequest?, in collectionView: UICollectionView) {
-            guard let request,
-                  parent.pages.indices.contains(request.pageIndex) else {
+            guard let request else {
+                handledScrollRequest = nil
+                return
+            }
+            guard parent.pages.indices.contains(request.pageIndex) else {
+                handledScrollRequest = nil
+                return
+            }
+            guard collectionView.bounds.width > 0,
+                  collectionView.bounds.height > 0,
+                  collectionView.contentSize.height > 0 else {
                 handledScrollRequest = nil
                 return
             }
@@ -1374,7 +1383,7 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
                 onPageFramesChange(frames)
             }
 
-            let referenceLineY = scrollView.bounds.midY
+            let referenceLineY = ReaderVerticalPositioning.viewportReferenceLineY(in: scrollView.bounds)
             let textSample = collectionView.indexPathsForVisibleItems
                 .compactMap { indexPath -> (distance: CGFloat, sample: NovelTextViewportSample)? in
                     guard parent.pages.indices.contains(indexPath.item),
@@ -1480,7 +1489,7 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
             ) else {
                 return false
             }
-            let referenceLineY = min(max(collectionView.bounds.height * 0.22, 72), 160)
+            let referenceLineY = ReaderVerticalPositioning.viewportReferenceLineY(in: collectionView.bounds)
             let desiredY = collectionView.contentOffset.y + anchorY - referenceLineY
             let minOffsetY = -collectionView.adjustedContentInset.top
             let maxOffsetY = max(
@@ -1619,10 +1628,10 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
                     for: anchor,
                     displayValue: displayValue
                   ),
-                  let fragmentRect = textView.textFragmentRect(containingDisplayOffset: displayOffset) else {
+                  let referenceY = textView.textFragmentReferenceY(containingDisplayOffset: displayOffset) else {
                 continue
             }
-            return pageFrame.minY + textView.frame.minY + fragmentRect.minY
+            return pageFrame.minY + textView.frame.minY + referenceY
         }
         return nil
     }

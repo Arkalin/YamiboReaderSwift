@@ -4,6 +4,19 @@ import YamiboReaderCore
 @testable import YamiboReaderUI
 
 final class ReaderVerticalPositioningTests: XCTestCase {
+    func testViewportReferenceLineMatchesSaveAndRestoreAnchor() {
+        let bounds = CGRect(x: 0, y: 12, width: 393, height: 852)
+
+        XCTAssertEqual(ReaderVerticalPositioning.viewportReferenceLineY(in: bounds), 426)
+    }
+
+    func testViewportReferenceLineIgnoresScrollOffsetOrigin() {
+        let scrolledBounds = CGRect(x: 0, y: 7_403, width: 393, height: 852)
+
+        XCTAssertEqual(ReaderVerticalPositioning.viewportReferenceLineY(in: scrolledBounds), 426)
+        XCTAssertNotEqual(ReaderVerticalPositioning.viewportReferenceLineY(in: scrolledBounds), scrolledBounds.midY)
+    }
+
     func testPageDistanceReportsZeroOnlyWhenReferenceLineCrossesFrame() {
         let containingFrame = CGRect(x: 0, y: 120, width: 320, height: 500)
         let aboveFrame = CGRect(x: 0, y: 240, width: 320, height: 500)

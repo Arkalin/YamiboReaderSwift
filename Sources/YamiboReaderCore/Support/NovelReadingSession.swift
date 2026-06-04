@@ -691,22 +691,29 @@ public struct NovelReadingSession: Sendable {
         }) else {
             return nil
         }
-        guard let range = textRanges(for: page).first(where: {
-            $0.segmentIndex == sample.segmentIndex && contains(offset: sample.segmentOffset, in: $0)
-        }) else {
-            return nil
+        let ranges = textRanges(for: page)
+        guard !ranges.isEmpty else { return nil }
+
+        let totalLength = ranges.reduce(0) { $0 + max($1.length, 1) }
+        var runningLength = 0
+
+        for range in ranges {
+            let length = max(range.length, 1)
+            defer { runningLength += length }
+            guard range.segmentIndex == sample.segmentIndex,
+                  contains(offset: sample.segmentOffset, in: range) else {
+                continue
+            }
+            let localOffset = min(max(sample.segmentOffset - range.startOffset, 0), length)
+            let progress = Double(runningLength + localOffset) / Double(max(totalLength, 1))
+            return ReaderResolvedTarget(
+                pageIndex: page.index,
+                intraPageProgress: min(max(progress, 0), 1),
+                documentView: page.documentView
+            )
         }
-        let progress: Double
-        if range.length > 0 {
-            progress = Double(sample.segmentOffset - range.startOffset) / Double(range.length)
-        } else {
-            progress = 0
-        }
-        return ReaderResolvedTarget(
-            pageIndex: page.index,
-            intraPageProgress: min(max(progress, 0), 1),
-            documentView: page.documentView
-        )
+
+        return nil
     }
 
     private func contains(offset: Int, in page: ReaderRenderedPage) -> Bool {

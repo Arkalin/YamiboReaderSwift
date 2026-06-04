@@ -412,62 +412,74 @@ public struct ReaderContainerView: View {
     }
 
     private func verticalContent(topInset: CGFloat, bottomInset: CGFloat) -> some View {
-        ReaderVerticalViewportScrollView(
-            pages: model.pages,
-            viewportContext: model.viewportContext,
-            viewportIndex: model.viewportIndex,
-            settings: model.settings,
-            refererURL: model.forumURL,
-            sessionState: model.sessionState,
-            topInset: topInset,
-            bottomInset: bottomInset,
-            scrollRequest: verticalScrollRequest,
-            onScrollRequestHandled: { request in
-                guard verticalRestoreController.scrollingRequest == request else { return }
-                verticalScrollRequest = nil
-                tryAdvanceVerticalRestore()
-            },
-            onScrollViewReady: { scrollView in
-                verticalScrollCoordinator.attach(scrollView: scrollView)
-                verticalScrollCoordinator.onBoundaryPullRelease = { direction in
-                    Task { @MainActor in
-                        await handleVerticalBoundaryPullRelease(direction)
+        ZStack {
+            ReaderVerticalViewportScrollView(
+                pages: model.pages,
+                viewportContext: model.viewportContext,
+                viewportIndex: model.viewportIndex,
+                settings: model.settings,
+                refererURL: model.forumURL,
+                sessionState: model.sessionState,
+                topInset: topInset,
+                bottomInset: bottomInset,
+                scrollRequest: verticalScrollRequest,
+                onScrollRequestHandled: { request in
+                    guard verticalRestoreController.scrollingRequest == request else {
+                        if verticalScrollRequest == request {
+                            verticalScrollRequest = nil
+                        }
+                        return
                     }
-                }
-                verticalScrollCoordinator.onViewportMetricsChange = {
-                    Task { @MainActor in
-                        tryAdvanceVerticalRestore()
-                        scheduleVerticalViewportPositionUpdate()
+                    verticalScrollRequest = nil
+                    tryAdvanceVerticalRestore()
+                },
+                onScrollViewReady: { scrollView in
+                    verticalScrollCoordinator.attach(scrollView: scrollView)
+                    verticalScrollCoordinator.onBoundaryPullRelease = { direction in
+                        Task { @MainActor in
+                            await handleVerticalBoundaryPullRelease(direction)
+                        }
                     }
-                }
-                verticalScrollCoordinator.onBoundaryPullStateChange = { state in
-                    Task { @MainActor in
-                        updateVerticalBoundaryPullState(state)
+                    verticalScrollCoordinator.onViewportMetricsChange = {
+                        Task { @MainActor in
+                            tryAdvanceVerticalRestore()
+                            scheduleVerticalViewportPositionUpdate()
+                        }
                     }
+                    verticalScrollCoordinator.onBoundaryPullStateChange = { state in
+                        Task { @MainActor in
+                            updateVerticalBoundaryPullState(state)
+                        }
+                    }
+                },
+                onPageFramesChange: { frames in
+                    verticalPageFrames = frames
+                    tryAdvanceVerticalRestore()
+                    scheduleVerticalViewportPositionUpdate()
+                },
+                onTextViewportSampleChange: { sample in
+                    verticalTextViewportSample = sample
+                    scheduleVerticalViewportPositionUpdate()
+                },
+                onViewportChange: {
+                    scheduleVerticalViewportPositionUpdate()
+                },
+                onScrollSettled: {
+                    updateVerticalViewportPosition()
+                },
+                onTap: {
+                    handleVerticalTap()
                 }
-            },
-            onPageFramesChange: { frames in
-                verticalPageFrames = frames
-                tryAdvanceVerticalRestore()
-                scheduleVerticalViewportPositionUpdate()
-            },
-            onTextViewportSampleChange: { sample in
-                verticalTextViewportSample = sample
-                scheduleVerticalViewportPositionUpdate()
-            },
-            onViewportChange: {
-                scheduleVerticalViewportPositionUpdate()
-            },
-            onScrollSettled: {
-                updateVerticalViewportPosition()
-            },
-            onTap: {
-                handleVerticalTap()
+            )
+            .contentShape(Rectangle())
+            .opacity(verticalRestoreController.shouldConcealViewportContent ? 0 : 1)
+            .simultaneousGesture(verticalScrollSuppressionGesture)
+
+            if verticalRestoreController.shouldConcealViewportContent {
+                ProgressView(L10n.string("common.loading"))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-        )
-        .contentShape(Rectangle())
-        .opacity(verticalRestoreController.shouldConcealViewportContent ? 0 : 1)
-        .simultaneousGesture(verticalScrollSuppressionGesture)
+        }
     }
 
     private var backgroundColor: Color {
@@ -989,12 +1001,13 @@ public struct ReaderContainerView: View {
                 )
             }
             : nil
-        return ReaderVerticalScrollRequest(
+        let request = ReaderVerticalScrollRequest(
             view: model.visibleView,
             pageIndex: model.currentPageIndex,
             intraPageProgress: model.currentPageIntraProgress,
             textAnchor: textAnchor
         )
+        return request
     }
 
     private func requestVerticalScrollToCurrentPage() {
@@ -1028,15 +1041,21 @@ public struct ReaderContainerView: View {
     }
 
     private func applyVerticalFineTune(for request: ReaderVerticalScrollRequest) {
-        guard verticalRestoreController.scrollingRequest == request else { return }
-        guard request.view == nil || request.view == model.visibleView else { return }
+        guard verticalRestoreController.scrollingRequest == request else {
+            return
+        }
+        guard request.view == nil || request.view == model.visibleView else {
+            return
+        }
         if request.textAnchor != nil {
             verticalRestoreController.beginSettling(request, now: CACurrentMediaTime())
             verticalRestoreRetryTask?.cancel()
             verticalRestoreRetryTask = nil
             return
         }
-        guard let frame = currentVerticalPageFrames[request.pageIndex] else { return }
+        guard let frame = currentVerticalPageFrames[request.pageIndex] else {
+            return
+        }
         verticalRestoreController.beginFineTuning(request)
         guard verticalScrollCoordinator.restoreOffset(
             to: frame,
@@ -1053,7 +1072,9 @@ public struct ReaderContainerView: View {
     private func tryAdvanceVerticalRestore() {
         refreshVerticalRestorePhase()
         guard let request = verticalRestoreController.scrollingRequest else { return }
-        guard request.view == nil || request.view == model.visibleView else { return }
+        guard request.view == nil || request.view == model.visibleView else {
+            return
+        }
         guard verticalScrollCoordinator.hasAttachedScrollView else {
             return
         }
@@ -1096,8 +1117,19 @@ public struct ReaderContainerView: View {
     private func cancelVerticalRestoreForUserScroll() {
         guard verticalRestoreController.activeRequest != nil else { return }
         verticalRestoreController.cancel(now: CACurrentMediaTime())
+        verticalScrollRequest = nil
         verticalRestoreRetryTask?.cancel()
         verticalRestoreRetryTask = nil
+    }
+
+    private func reissueVerticalScrollRequest(_ request: ReaderVerticalScrollRequest) {
+        guard verticalRestoreController.scrollingRequest == request else { return }
+        verticalScrollRequest = nil
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(1))
+            guard verticalRestoreController.scrollingRequest == request else { return }
+            verticalScrollRequest = request
+        }
     }
 
     private func scheduleVerticalRestoreRetry(for request: ReaderVerticalScrollRequest) {
@@ -1110,7 +1142,7 @@ public struct ReaderContainerView: View {
                     guard verticalRestoreController.scrollingRequest == request else { return }
                     tryAdvanceVerticalRestore()
                     if verticalRestoreController.scrollingRequest == request, attempt == 3 || attempt == 6 || attempt == 9 {
-                        verticalScrollRequest = request
+                        reissueVerticalScrollRequest(request)
                     }
                 }
             }
