@@ -262,6 +262,23 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertTrue(displayUIViewBody.contains("textViewportLayoutController.layoutViewport()"))
     }
 
+    func testNovelTextViewportDisplayInvalidatesDrawingWhenBoundsChange() throws {
+        let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let adapterSource = try String(
+            contentsOf: repositoryRoot
+                .appendingPathComponent("Sources/YamiboReaderUI/Views/NovelTextDisplayAdapter.swift"),
+            encoding: .utf8
+        )
+        let displayUIViewBody = try XCTUnwrap(typeBody(named: "NovelTextViewportDisplayUIView", in: adapterSource))
+        let layoutSubviewsBody = try XCTUnwrap(functionBody(named: "layoutSubviews", in: adapterSource))
+        let configureTextKit2Body = try XCTUnwrap(functionBody(named: "configureTextKit2", in: adapterSource))
+
+        XCTAssertTrue(configureTextKit2Body.contains("contentMode = .redraw"))
+        XCTAssertTrue(displayUIViewBody.contains("lastLaidOutBoundsSize"))
+        XCTAssertTrue(layoutSubviewsBody.contains("updateTextContainerSizeForCurrentBounds()"))
+        XCTAssertTrue(layoutSubviewsBody.contains("setNeedsDisplay()"))
+    }
+
     func testSettingsPreviewAndReadingSessionUseSameAdapterBackedMaterialization() throws {
         let settings = ReaderAppearanceSettings(fontScale: 1.2, readingMode: .paged)
         let preview = NovelTextDisplayAdapter.materialization(
@@ -488,6 +505,25 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertFalse(spreadBody.contains("ForEach(parent.pages"))
         XCTAssertFalse(spreadBody.contains("ReaderBlockNovelTextDisplayMaterializer"))
         XCTAssertFalse(spreadBody.contains("NovelTextKit2Representable("))
+    }
+
+    func testPagedViewportsRetrySelectionScrollAfterInitialZeroWidthLayout() throws {
+        let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let supportSource = try String(
+            contentsOf: repositoryRoot
+                .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderSupportViews.swift"),
+            encoding: .utf8
+        )
+        let singlePageBody = try XCTUnwrap(typeBody(named: "ReaderPagedCollectionViewport", in: supportSource))
+        let spreadBody = try XCTUnwrap(typeBody(named: "ReaderPagedSpreadCollectionViewport", in: supportSource))
+
+        XCTAssertTrue(supportSource.contains("final class ReaderPagedViewportCollectionView: UICollectionView"))
+        XCTAssertTrue(supportSource.contains("override func layoutSubviews()"))
+        for body in [singlePageBody, spreadBody] {
+            XCTAssertTrue(body.contains("onLayoutSubviews"))
+            XCTAssertTrue(body.contains("requestSelectionScroll(in: collectionView, animated: false)"))
+            XCTAssertTrue(body.contains("scrollToPendingSelectionIfPossible(in: collectionView, animated: animated)"))
+        }
     }
 
     func testVerticalViewportUsesExplicitFlowLayoutSizingForScrollableFullWidthCells() throws {
