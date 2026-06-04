@@ -485,7 +485,8 @@ public struct ReaderRenderedPage: Hashable, Identifiable, Sendable {
         let resolvedTextRanges: [ReaderRenderedTextRange]
         if let textRanges {
             resolvedTextRanges = textRanges
-        } else if let segmentIndex {
+        } else if blocks.flatMap({ $0.novelTextDisplayValue?.ranges ?? [] }).isEmpty,
+                  let segmentIndex {
             resolvedTextRanges = [
                 ReaderRenderedTextRange(
                     segmentIndex: segmentIndex,

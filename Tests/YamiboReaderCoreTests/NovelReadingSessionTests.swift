@@ -3,6 +3,64 @@ import XCTest
 @testable import YamiboReaderCore
 
 final class NovelReadingSessionTests: XCTestCase {
+    func testRestoresNovelReadingPositionFromNovelTextDisplayValueRanges() throws {
+        let document = makeNovelDocument(
+            view: 1,
+            maxView: 1,
+            segments: [
+                ("第一章", String(repeating: "第一章 内容。", count: 20)),
+                ("第二章", String(repeating: "第二章 内容。", count: 20)),
+            ]
+        )
+        let resumePoint = ReaderResumePoint(
+            view: 1,
+            chapterOrdinal: 1,
+            chapterTitle: "第二章",
+            segmentIndex: 1,
+            segmentOffset: 15,
+            segmentProgress: 0.4,
+            readingModeHint: .paged
+        )
+
+        let session = try NovelReadingSession(
+            validating: document,
+            settings: ReaderAppearanceSettings(readingMode: .paged),
+            layout: ReaderContainerLayout(width: 320, height: 568),
+            resumePoint: resumePoint,
+            pagination: { document, _, _ in
+                ReaderPaginationResult(
+                    pages: [
+                        ReaderRenderedPage(
+                            index: 0,
+                            blocks: [
+                                .text(
+                                    "第二章 display value text",
+                                    chapterTitle: "第二章",
+                                    ranges: [
+                                        ReaderRenderedTextRange(segmentIndex: 1, startOffset: 10, endOffset: 20)
+                                    ]
+                                )
+                            ],
+                            documentView: document.view,
+                            chapterOrdinal: 1,
+                            chapterTitle: "第二章",
+                            segmentIndex: 99,
+                            segmentStartOffset: 0,
+                            segmentEndOffset: 0
+                        )
+                    ],
+                    chapters: [
+                        ReaderChapter(ordinal: 1, title: "第二章", startIndex: 0)
+                    ]
+                )
+            }
+        )
+
+        XCTAssertEqual(session.snapshot.currentPageIndex, 0)
+        XCTAssertEqual(session.snapshot.currentChapterTitle, "第二章")
+        XCTAssertEqual(session.snapshot.currentPageIntraProgress, 0.5, accuracy: 0.001)
+    }
+
     func testRestoresNovelReadingPositionWithinChapter() throws {
         let document = makeNovelDocument(
             view: 2,
