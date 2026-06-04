@@ -1223,7 +1223,7 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
     final class Coordinator: NSObject, UICollectionViewDataSource, UICollectionViewDelegateFlowLayout, UIScrollViewDelegate {
         var parent: ReaderVerticalViewportScrollView
         let callbackScheduler = SwiftUIViewUpdateCallbackScheduler()
-        private let textRuntimeStore = NovelTextViewportRuntimeStore()
+        private let textRuntimeStore = NovelTextLayoutLiveSurfaceStore()
         private var contentIdentity: ReaderVerticalViewportContentIdentity?
         private var handledScrollRequest: ReaderVerticalScrollRequest?
         lazy var tapGesture = UITapGestureRecognizer(target: self, action: #selector(handleTap))
@@ -1517,7 +1517,7 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
     private struct BlockView {
         let view: UIView
         let height: CGFloat
-        let textSurface: NovelTextViewportTextSurface?
+        let textSurface: NovelTextLayoutLiveSurface?
     }
 
     private var blockViews: [BlockView] = []
@@ -1527,7 +1527,7 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
     private var currentSessionState = SessionState()
     private var currentContentWidth: CGFloat = 0
     private var currentTopPadding: CGFloat = 0
-    private var currentTextRuntimeStore: NovelTextViewportRuntimeStore?
+    private var currentTextRuntimeStore: NovelTextLayoutLiveSurfaceStore?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -1577,7 +1577,7 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
         sessionState: SessionState,
         contentWidth: CGFloat,
         topPadding: CGFloat,
-        textRuntimeStore: NovelTextViewportRuntimeStore
+        textRuntimeStore: NovelTextLayoutLiveSurfaceStore
     ) {
         currentPage = page
         currentSettings = settings
@@ -1655,7 +1655,7 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
         contentWidth: CGFloat,
         refererURL: URL,
         sessionState: SessionState,
-        textRuntimeStore: NovelTextViewportRuntimeStore
+        textRuntimeStore: NovelTextLayoutLiveSurfaceStore
     ) -> BlockView {
         switch block {
         case let .text(displayValue):
@@ -1678,10 +1678,10 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
         blockIndex: Int,
         page: ReaderRenderedPage,
         contentWidth: CGFloat,
-        textRuntimeStore: NovelTextViewportRuntimeStore
+        textRuntimeStore: NovelTextLayoutLiveSurfaceStore
     ) -> BlockView {
         let titleWeight = UIFont.Weight.regular
-        let identity = NovelTextViewportTextSurfaceIdentity(
+        let identity = NovelTextLayoutLiveSurfaceIdentity(
             documentView: page.documentView,
             pageIndex: page.index,
             blockIndex: blockIndex,
