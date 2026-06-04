@@ -84,6 +84,7 @@ public struct NovelReadingSession: Sendable {
     private var pendingResumePoint: ReaderResumePoint?
     private var pendingResumeRequiresLayoutSync = false
     private var currentViewportIndex: NovelTextViewportIndex?
+    private var preservedTextResumePoint: ReaderResumePoint?
     private let pagination: NovelTextPagination
 
     init(
@@ -103,6 +104,7 @@ public struct NovelReadingSession: Sendable {
             currentAuthorID: currentAuthorID,
             pagination: NovelTextLayout.renderedPages
         )
+        preservedTextResumePoint = resumePoint
         applyPaginationIgnoringFailure(for: document, preferredPage: preferredPage, preferredResumePoint: resumePoint)
     }
 
@@ -124,6 +126,7 @@ public struct NovelReadingSession: Sendable {
             currentAuthorID: currentAuthorID,
             pagination: pagination
         )
+        preservedTextResumePoint = resumePoint
         try applyPagination(for: document, preferredPage: preferredPage, preferredResumePoint: resumePoint)
     }
 
@@ -141,6 +144,7 @@ public struct NovelReadingSession: Sendable {
         self.usesPadPresentation = usesPadPresentation
         self.pendingResumePoint = nil
         self.currentViewportIndex = nil
+        self.preservedTextResumePoint = nil
         self.pagination = pagination
         self.snapshot = NovelReadingSnapshot(
             pages: [],
@@ -271,6 +275,7 @@ public struct NovelReadingSession: Sendable {
 
     public mutating func updateVerticalViewportPosition(pageIndex: Int, intraPageProgress: Double) {
         updateLocation(pageIndex: pageIndex, intraPageProgress: intraPageProgress)
+        preserveCurrentTextResumePointIfAvailable()
     }
 
     public mutating func updateVerticalViewportPosition(sample: NovelTextViewportSample) {
@@ -283,6 +288,7 @@ public struct NovelReadingSession: Sendable {
             return
         }
         setCurrentLocation(target)
+        preserveCurrentTextResumePointIfAvailable()
     }
 
     public mutating func acceptPrefetchedDocument(_ document: ReaderPageDocument) {
@@ -310,6 +316,10 @@ public struct NovelReadingSession: Sendable {
     }
 
     public func captureNovelReadingPosition() -> ReaderResumePoint? {
+        currentNovelReadingPosition() ?? preservedTextResumePoint
+    }
+
+    private func currentNovelReadingPosition() -> ReaderResumePoint? {
         guard let page = currentRenderedPage,
               let chapterOrdinal = page.chapterOrdinal,
               let position = textPosition(for: snapshot.currentPageIntraProgress, in: page) else {
@@ -506,6 +516,12 @@ public struct NovelReadingSession: Sendable {
             viewportContext: pagination.viewportContext,
             viewportIndex: pagination.viewportIndex
         )
+        preserveCurrentTextResumePointIfAvailable()
+    }
+
+    private mutating func preserveCurrentTextResumePointIfAvailable() {
+        guard let resumePoint = currentNovelReadingPosition() else { return }
+        preservedTextResumePoint = resumePoint
     }
 
     private static func readerChapters(from viewportIndex: NovelTextViewportIndex) -> [ReaderChapter] {

@@ -360,12 +360,13 @@ public final class NovelReadingWorkflow {
         currentDocument = document
         prefetchedDocument = nil
         currentAuthorID = document.resolvedAuthorID ?? currentAuthorID ?? context.authorID
+        let preservedResumePoint = preferredResumePoint ?? captureNovelReadingPosition()
         session = try NovelReadingSession(
             validating: document,
             settings: settings,
             layout: layout,
             preferredPage: preferredPage,
-            resumePoint: preferredResumePoint,
+            resumePoint: preservedResumePoint,
             usesPadPresentation: usesPadPresentation,
             currentAuthorID: currentAuthorID,
             pagination: pagination
