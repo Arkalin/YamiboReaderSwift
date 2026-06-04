@@ -576,6 +576,18 @@ struct ReaderViewportPageContent: View {
         )
     }
 
+    static func visibleSurfaceDiagnostics(
+        viewportContext: NovelTextViewportContext?,
+        viewportPage: NovelTextViewportIndexPage?,
+        compatibilityBlocks: [ReaderRenderedBlock]
+    ) -> NovelTextViewportVisibleSurfaceDiagnostics {
+        NovelTextViewportVisibleSurfaceDiagnostics(
+            viewportContext: viewportContext,
+            viewportPage: viewportPage,
+            compatibilityBlocks: compatibilityBlocks
+        )
+    }
+
     private static func viewportAggregateRange(from ranges: [ReaderRenderedTextRange]) -> ReaderRenderedTextRange? {
         guard let first = ranges.first else { return nil }
         let last = ranges.last ?? first

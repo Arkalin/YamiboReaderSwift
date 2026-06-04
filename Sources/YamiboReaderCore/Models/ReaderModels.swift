@@ -691,6 +691,26 @@ public struct NovelTextViewportDiagnostics: Hashable, Sendable {
     }
 }
 
+public struct NovelTextViewportVisibleSurfaceDiagnostics: Hashable, Sendable {
+    public var indexBuildCount: Int
+    public var visibleSurfaceLayoutPassCount: Int
+    public var perBlockTextKitDocumentCount: Int
+    public var compatibilityTextDisplayValueCount: Int
+    public var usesSharedViewportContext: Bool
+
+    public init(
+        viewportContext: NovelTextViewportContext?,
+        viewportPage: NovelTextViewportIndexPage?,
+        compatibilityBlocks: [ReaderRenderedBlock]
+    ) {
+        self.indexBuildCount = viewportContext?.diagnostics.indexBuildCount ?? 0
+        self.visibleSurfaceLayoutPassCount = viewportContext != nil && viewportPage?.ranges.isEmpty == false ? 1 : 0
+        self.perBlockTextKitDocumentCount = compatibilityBlocks.compactMap(\.novelTextDisplayValue).count
+        self.compatibilityTextDisplayValueCount = compatibilityBlocks.compactMap(\.novelTextDisplayValue).count
+        self.usesSharedViewportContext = viewportContext != nil && viewportPage?.ranges.isEmpty == false
+    }
+}
+
 public struct NovelTextViewportContext: Hashable, Sendable {
     public var identity: NovelTextViewportIdentity
     public var document: NovelTextViewportDocument

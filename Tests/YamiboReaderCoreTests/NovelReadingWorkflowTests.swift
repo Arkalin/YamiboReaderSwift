@@ -649,6 +649,114 @@ final class NovelReadingWorkflowTests: XCTestCase {
         XCTAssertEqual(currentContext, NovelReadingCacheContext(authorID: nil, contentSource: .fallbackUnfilteredPage))
         XCTAssertEqual(prefetchedContext, NovelReadingCacheContext(authorID: "author-2", contentSource: .authorFilteredPage))
     }
+
+    func testLongCurrentWebpageViewportPublishesExactIndexAndRestoresAcrossReaderChanges() async throws {
+        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=1520&mobile=2")!
+        let chapterTitles = (1...6).map { "第\($0)章" }
+        let document = ReaderPageDocument(
+            threadURL: threadURL,
+            view: 1,
+            maxView: 1,
+            resolvedAuthorID: "author-152",
+            contentSource: .fallbackUnfilteredPage,
+            segments: chapterTitles.map { title in
+                .text(String(repeating: "\(title) 长篇当前页正文。", count: 50), chapterTitle: title)
+            }
+        )
+        let repository = RecordingNovelReadingRepository(documents: [1: document])
+        let workflow = NovelReadingWorkflow(
+            context: ReaderLaunchContext(
+                threadURL: threadURL,
+                threadTitle: "测试线程",
+                source: .forum,
+                initialView: 1,
+                authorID: "author-152"
+            ),
+            settings: ReaderAppearanceSettings(readingMode: .paged),
+            layout: ReaderContainerLayout(width: 320, height: 568),
+            repository: repository,
+            pagination: currentWebpageViewportPagination
+        )
+
+        let initialState = try await workflow.start(initial: NovelReadingInitialPosition())
+        assertLongCurrentWebpageViewportState(
+            initialState,
+            chapterTitles: chapterTitles,
+            currentPageIndex: 0,
+            currentChapterTitle: "第1章"
+        )
+        XCTAssertEqual(initialState.snapshot.pages.map(\.blocks).filter(\.isEmpty).count, 6)
+        XCTAssertEqual(initialState.snapshot.viewportContext?.diagnostics.indexBuildCount, 1)
+        XCTAssertEqual(initialState.snapshot.viewportContext?.diagnostics.visibleLayoutPassCount, 0)
+        XCTAssertEqual(initialState.snapshot.viewportContext?.diagnostics.compatibilityTextDisplayValueCount, 0)
+
+        let movedState = try XCTUnwrap(
+            workflow.updateVerticalViewportPosition(pageIndex: 4, intraPageProgress: 0.5)
+        )
+        assertLongCurrentWebpageViewportState(
+            movedState,
+            chapterTitles: chapterTitles,
+            currentPageIndex: 4,
+            currentChapterTitle: "第5章"
+        )
+        let resumePoint = try XCTUnwrap(workflow.captureNovelReadingPosition())
+        let fifthChapterLength: Int
+        if case let .text(text, _) = document.segments[4] {
+            fifthChapterLength = text.count
+        } else {
+            throw XCTSkip("Expected text segment")
+        }
+        XCTAssertEqual(resumePoint.view, 1)
+        XCTAssertEqual(resumePoint.chapterOrdinal, 4)
+        XCTAssertEqual(resumePoint.chapterTitle, "第5章")
+        XCTAssertEqual(resumePoint.segmentIndex, 4)
+        XCTAssertEqual(resumePoint.segmentOffset, fifthChapterLength / 2)
+        XCTAssertEqual(resumePoint.authorID, "author-152")
+        XCTAssertEqual(resumePoint.readingModeHint, .paged)
+
+        let appearanceState = try XCTUnwrap(
+            workflow.updateSettings(ReaderAppearanceSettings(fontScale: 1.2, readingMode: .paged))
+        )
+        assertLongCurrentWebpageViewportState(
+            appearanceState,
+            chapterTitles: chapterTitles,
+            currentPageIndex: 4,
+            currentChapterTitle: "第5章"
+        )
+
+        let rotatedState = try XCTUnwrap(
+            workflow.updateLayout(ReaderContainerLayout(width: 568, height: 320, readingMode: .paged))
+        )
+        assertLongCurrentWebpageViewportState(
+            rotatedState,
+            chapterTitles: chapterTitles,
+            currentPageIndex: 4,
+            currentChapterTitle: "第5章"
+        )
+
+        let verticalState = try XCTUnwrap(
+            workflow.updateSettings(ReaderAppearanceSettings(fontScale: 1.2, readingMode: .vertical))
+        )
+        assertLongCurrentWebpageViewportState(
+            verticalState,
+            chapterTitles: chapterTitles,
+            currentPageIndex: 4,
+            currentChapterTitle: "第5章"
+        )
+
+        let translatedState = try XCTUnwrap(
+            workflow.updateSettings(
+                ReaderAppearanceSettings(fontScale: 1.2, readingMode: .vertical, translationMode: .simplified)
+            )
+        )
+        assertLongCurrentWebpageViewportState(
+            translatedState,
+            chapterTitles: chapterTitles,
+            currentPageIndex: 4,
+            currentChapterTitle: "第5章"
+        )
+        XCTAssertEqual(translatedState.snapshot.viewportIndex?.pages[4].ranges.first?.segmentIndex, 4)
+    }
 }
 
 private final class RecordingNovelReadingRepository: NovelReadingPageRepository, @unchecked Sendable {
@@ -814,4 +922,57 @@ private func workflowRepaginationRanges(
             ]
         )
     }
+}
+
+private func currentWebpageViewportPagination(
+    document: ReaderPageDocument,
+    settings: ReaderAppearanceSettings,
+    layout: ReaderContainerLayout
+) throws -> ReaderPaginationResult {
+    try NovelTextLayout.renderedPages(
+        document: document,
+        settings: settings,
+        layout: layout,
+        requiresAuthoritativePagedLayout: false,
+        requiresAuthoritativeVerticalLayout: false,
+        pagedLayout: { text, _, _, _ in
+            [TextSlice(text: text, startOffset: 0, endOffset: text.count)]
+        },
+        verticalLayout: { text, _, _, _ in
+            [TextSlice(text: text, startOffset: 0, endOffset: text.count)]
+        },
+        usesViewportIndexCache: false
+    )
+}
+
+private func assertLongCurrentWebpageViewportState(
+    _ state: NovelReadingWorkflowState,
+    chapterTitles: [String],
+    currentPageIndex: Int,
+    currentChapterTitle: String,
+    file: StaticString = #filePath,
+    line: UInt = #line
+) {
+    XCTAssertEqual(state.snapshot.pages.count, chapterTitles.count, file: file, line: line)
+    XCTAssertTrue(state.snapshot.pages.allSatisfy { $0.blocks.isEmpty }, file: file, line: line)
+    XCTAssertEqual(state.snapshot.chapters.map(\.title), chapterTitles, file: file, line: line)
+    XCTAssertEqual(state.snapshot.chapters.map(\.startIndex), Array(chapterTitles.indices), file: file, line: line)
+    XCTAssertEqual(state.snapshot.currentPageIndex, currentPageIndex, file: file, line: line)
+    XCTAssertEqual(state.snapshot.currentChapterTitle, currentChapterTitle, file: file, line: line)
+    XCTAssertEqual(state.snapshot.viewportContext?.identity.documentView, 1, file: file, line: line)
+    XCTAssertEqual(state.snapshot.viewportContext?.diagnostics.indexBuildCount, 1, file: file, line: line)
+    XCTAssertEqual(state.snapshot.viewportContext?.diagnostics.visibleLayoutPassCount, 0, file: file, line: line)
+    XCTAssertEqual(
+        state.snapshot.viewportContext?.diagnostics.compatibilityTextDisplayValueCount,
+        0,
+        file: file,
+        line: line
+    )
+    XCTAssertEqual(state.snapshot.viewportIndex?.pages.count, chapterTitles.count, file: file, line: line)
+    XCTAssertEqual(
+        state.snapshot.viewportIndex?.pages[currentPageIndex].ranges.first?.segmentIndex,
+        currentPageIndex,
+        file: file,
+        line: line
+    )
 }
