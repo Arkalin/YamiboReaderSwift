@@ -350,6 +350,61 @@ final class NovelReadingWorkflowTests: XCTestCase {
         XCTAssertEqual(position.resumePoint?.segmentOffset, 40)
     }
 
+    func testCurrentProgressPositionSurvivesNavigationSettingsAndLayoutChanges() async throws {
+        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9115&mobile=2")!
+        let repository = RecordingNovelReadingRepository(documents: [
+            1: ReaderPageDocument(
+                threadURL: threadURL,
+                view: 1,
+                maxView: 1,
+                resolvedAuthorID: "author-1",
+                contentSource: .authorFilteredPage,
+                segments: [
+                    .text(String(repeating: "第一章 内容。", count: 120), chapterTitle: "第一章")
+                ]
+            )
+        ])
+        let workflow = NovelReadingWorkflow(
+            context: ReaderLaunchContext(
+                threadURL: threadURL,
+                threadTitle: "Thread",
+                source: .forum,
+                initialView: 1,
+                authorID: "author-1"
+            ),
+            settings: ReaderAppearanceSettings(readingMode: .paged),
+            layout: ReaderContainerLayout(width: 320, height: 568),
+            repository: repository,
+            pagination: workflowRepaginationRanges(
+                defaultRanges: [0 ..< 100, 100 ..< 200, 200 ..< 300],
+                repaginatedRanges: [0 ..< 60, 60 ..< 120, 120 ..< 180, 180 ..< 240, 240 ..< 300]
+            )
+        )
+        _ = try await workflow.start(initial: NovelReadingInitialPosition())
+
+        _ = workflow.jumpToRenderedPage(1)
+        let navigatedPosition = workflow.currentProgressPosition()
+
+        XCTAssertEqual(navigatedPosition.threadURL, threadURL)
+        XCTAssertEqual(navigatedPosition.view, 1)
+        XCTAssertEqual(navigatedPosition.page, 1)
+        XCTAssertEqual(navigatedPosition.chapterTitle, "第一章")
+        XCTAssertEqual(navigatedPosition.authorID, "author-1")
+        XCTAssertEqual(navigatedPosition.resumePoint?.segmentOffset, 100)
+
+        _ = try workflow.updateSettings(ReaderAppearanceSettings(fontScale: 1.25, readingMode: .paged))
+        let settingsPosition = workflow.currentProgressPosition()
+
+        XCTAssertEqual(settingsPosition.resumePoint?.segmentOffset, 100)
+        XCTAssertEqual(settingsPosition.page, 1)
+
+        _ = try workflow.updateLayout(ReaderContainerLayout(width: 390, height: 844, readingMode: .paged))
+        let layoutPosition = workflow.currentProgressPosition()
+
+        XCTAssertEqual(layoutPosition.resumePoint?.segmentOffset, 100)
+        XCTAssertEqual(layoutPosition.page, 1)
+    }
+
     func testPreviewSourceTextStartsAtRestoredNovelReadingPosition() async throws {
         let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9113&mobile=2")!
         let document = ReaderPageDocument(
@@ -719,4 +774,44 @@ private func previewSourcePagination(
             )
         }
     )
+}
+
+private func workflowRepaginationRanges(
+    defaultRanges: [Range<Int>],
+    repaginatedRanges: [Range<Int>]
+) -> NovelTextPagination {
+    { document, settings, layout in
+        let ranges = settings.fontScale > 1 || layout.width > 320
+            ? repaginatedRanges
+            : defaultRanges
+        return ReaderPaginationResult(
+            pages: ranges.enumerated().map { index, range in
+                ReaderRenderedPage(
+                    index: index,
+                    blocks: [
+                        .text(
+                            "slice-\(range.lowerBound)-\(range.upperBound)",
+                            chapterTitle: "第一章",
+                            ranges: [
+                                ReaderRenderedTextRange(
+                                    segmentIndex: 0,
+                                    startOffset: range.lowerBound,
+                                    endOffset: range.upperBound
+                                )
+                            ]
+                        )
+                    ],
+                    documentView: document.view,
+                    chapterOrdinal: 0,
+                    chapterTitle: "第一章",
+                    segmentIndex: 0,
+                    segmentStartOffset: range.lowerBound,
+                    segmentEndOffset: range.upperBound
+                )
+            },
+            chapters: [
+                ReaderChapter(ordinal: 0, title: "第一章", startIndex: 0)
+            ]
+        )
+    }
 }

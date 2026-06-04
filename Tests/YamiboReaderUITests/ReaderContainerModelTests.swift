@@ -814,6 +814,22 @@ final class ReaderContainerModelTests: XCTestCase {
         XCTAssertEqual(favorite?.lastPage, 2)
     }
 
+    func testReaderContainerModelDoesNotOwnNovelReadingPositionRangeSemantics() throws {
+        let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let modelSource = try String(
+            contentsOf: repositoryRoot
+                .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderContainerModel.swift"),
+            encoding: .utf8
+        )
+
+        XCTAssertFalse(modelSource.contains("ReaderResumePoint("))
+        XCTAssertFalse(modelSource.contains("flatMap(\\.ranges)"))
+        XCTAssertFalse(modelSource.contains("ReaderPageTextPosition"))
+        XCTAssertFalse(modelSource.contains("segmentOffset:"))
+        XCTAssertTrue(modelSource.contains("readingWorkflow?.currentProgressPosition()"))
+        XCTAssertTrue(modelSource.contains("readingWorkflow?.currentPreviewSourceText()"))
+    }
+
     func testForumNovelProgressDoesNotCreateFavorite() async throws {
         let keyPrefix = UUID().uuidString
         let settingsStore = SettingsStore(key: "\(keyPrefix).settings")

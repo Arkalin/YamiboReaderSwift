@@ -61,6 +61,62 @@ final class NovelReadingSessionTests: XCTestCase {
         XCTAssertEqual(session.snapshot.currentPageIntraProgress, 0.5, accuracy: 0.001)
     }
 
+    func testCapturesNovelReadingPositionFromRenderedPageDisplayValueRanges() throws {
+        let document = makeNovelDocument(
+            view: 1,
+            maxView: 1,
+            segments: [
+                ("第一章", "第一段正文"),
+                ("第一章", "第二段正文"),
+                ("第一章", "第三段正文")
+            ]
+        )
+        var session = try NovelReadingSession(
+            validating: document,
+            settings: ReaderAppearanceSettings(readingMode: .vertical),
+            layout: ReaderContainerLayout(width: 320, height: 568),
+            pagination: { document, _, _ in
+                ReaderPaginationResult(
+                    pages: [
+                        ReaderRenderedPage(
+                            index: 0,
+                            blocks: [
+                                .text(
+                                    "display value from multiple source ranges",
+                                    chapterTitle: "第一章",
+                                    ranges: [
+                                        ReaderRenderedTextRange(segmentIndex: 1, startOffset: 10, endOffset: 30),
+                                        ReaderRenderedTextRange(segmentIndex: 2, startOffset: 4, endOffset: 24)
+                                    ]
+                                )
+                            ],
+                            documentView: document.view,
+                            chapterOrdinal: 0,
+                            chapterTitle: "第一章",
+                            segmentIndex: 99,
+                            segmentStartOffset: 900,
+                            segmentEndOffset: 950
+                        )
+                    ],
+                    chapters: [
+                        ReaderChapter(ordinal: 0, title: "第一章", startIndex: 0)
+                    ]
+                )
+            }
+        )
+
+        session.updateVerticalViewportPosition(pageIndex: 0, intraPageProgress: 0.75)
+        let position = try XCTUnwrap(session.captureNovelReadingPosition())
+
+        XCTAssertEqual(position.view, 1)
+        XCTAssertEqual(position.chapterOrdinal, 0)
+        XCTAssertEqual(position.chapterTitle, "第一章")
+        XCTAssertEqual(position.segmentIndex, 2)
+        XCTAssertEqual(position.segmentOffset, 14)
+        XCTAssertEqual(position.segmentProgress, 0.75, accuracy: 0.001)
+        XCTAssertEqual(position.readingModeHint, .vertical)
+    }
+
     func testRestoresNovelReadingPositionWithinChapter() throws {
         let document = makeNovelDocument(
             view: 2,
