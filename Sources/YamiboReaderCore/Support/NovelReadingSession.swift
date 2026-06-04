@@ -487,7 +487,8 @@ public struct NovelReadingSession: Sendable {
                 segmentIndex: aggregateRange?.segmentIndex,
                 segmentStartOffset: aggregateRange?.startOffset ?? 0,
                 segmentEndOffset: aggregateRange?.endOffset ?? 0,
-                chapterCommentTarget: indexedPage?.chapterCommentTarget ?? page.chapterCommentTarget
+                chapterCommentTarget: indexedPage?.chapterCommentTarget ?? page.chapterCommentTarget,
+                derivesViewportTextRangesFromBlocks: indexedPage == nil
             )
         }
         let fallbackTarget = ReaderResolvedTarget(
@@ -816,7 +817,7 @@ public struct NovelReadingSession: Sendable {
         if !indexedRanges.isEmpty {
             return indexedRanges
         }
-        return page.viewportTextRanges
+        return viewportIndex == nil ? page.viewportTextRanges : []
     }
 }
 

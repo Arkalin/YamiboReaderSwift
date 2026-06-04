@@ -463,14 +463,15 @@ public struct ReaderRenderedPage: Hashable, Identifiable, Sendable {
         segmentIndex: Int? = nil,
         segmentStartOffset: Int = 0,
         segmentEndOffset: Int = 0,
-        chapterCommentTarget: ReaderChapterCommentTarget? = nil
+        chapterCommentTarget: ReaderChapterCommentTarget? = nil,
+        derivesViewportTextRangesFromBlocks: Bool = true
     ) {
         self.index = index
         self.blocks = blocks
         self.documentView = max(1, documentView)
         self.chapterOrdinal = chapterOrdinal
         self.chapterTitle = chapterTitle
-        self.viewportTextRanges = viewportTextRanges.isEmpty
+        self.viewportTextRanges = derivesViewportTextRangesFromBlocks && viewportTextRanges.isEmpty
             ? blocks.compactMap(\.novelTextDisplayValue).flatMap(\.ranges)
             : viewportTextRanges
         self.segmentIndex = segmentIndex
