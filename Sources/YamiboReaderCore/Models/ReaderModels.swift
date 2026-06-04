@@ -344,11 +344,6 @@ public struct NovelTextDisplayValue: Hashable, Sendable {
         self.ranges = ranges
     }
 
-    public func replacingRanges(_ ranges: [ReaderRenderedTextRange]) -> NovelTextDisplayValue {
-        var copy = self
-        copy.ranges = ranges
-        return copy
-    }
 }
 
 public enum ReaderRenderedBlock: Hashable, Identifiable, Sendable {
@@ -457,10 +452,6 @@ public struct ReaderRenderedPage: Hashable, Identifiable, Sendable {
         blocks.compactMap(\.novelTextDisplayValue)
     }
 
-    public var textRanges: [ReaderRenderedTextRange] {
-        novelTextDisplayValues.flatMap(\.ranges)
-    }
-
     public init(
         index: Int,
         blocks: [ReaderRenderedBlock],
@@ -470,7 +461,6 @@ public struct ReaderRenderedPage: Hashable, Identifiable, Sendable {
         segmentIndex: Int? = nil,
         segmentStartOffset: Int = 0,
         segmentEndOffset: Int = 0,
-        textRanges: [ReaderRenderedTextRange]? = nil,
         chapterCommentTarget: ReaderChapterCommentTarget? = nil
     ) {
         self.index = index
@@ -482,43 +472,6 @@ public struct ReaderRenderedPage: Hashable, Identifiable, Sendable {
         self.segmentStartOffset = max(0, segmentStartOffset)
         self.segmentEndOffset = max(self.segmentStartOffset, segmentEndOffset)
         self.chapterCommentTarget = chapterCommentTarget
-        let resolvedTextRanges: [ReaderRenderedTextRange]
-        if let textRanges {
-            resolvedTextRanges = textRanges
-        } else if blocks.flatMap({ $0.novelTextDisplayValue?.ranges ?? [] }).isEmpty,
-                  let segmentIndex {
-            resolvedTextRanges = [
-                ReaderRenderedTextRange(
-                    segmentIndex: segmentIndex,
-                    startOffset: self.segmentStartOffset,
-                    endOffset: self.segmentEndOffset
-                )
-            ]
-        } else {
-            resolvedTextRanges = []
-        }
-        self.blocks = Self.blocksByApplyingTextRanges(resolvedTextRanges, to: blocks)
-    }
-
-    private static func blocksByApplyingTextRanges(
-        _ textRanges: [ReaderRenderedTextRange],
-        to blocks: [ReaderRenderedBlock]
-    ) -> [ReaderRenderedBlock] {
-        guard !textRanges.isEmpty else { return blocks }
-        let textBlockIndexes = blocks.indices.filter { blocks[$0].isTextBlock }
-        guard !textBlockIndexes.isEmpty else { return blocks }
-
-        var updated = blocks
-        if textBlockIndexes.count == textRanges.count {
-            for (blockIndex, range) in zip(textBlockIndexes, textRanges) {
-                guard let displayValue = updated[blockIndex].novelTextDisplayValue else { continue }
-                updated[blockIndex] = .text(displayValue: displayValue.replacingRanges([range]))
-            }
-        } else if let firstTextBlockIndex = textBlockIndexes.first,
-                  let displayValue = updated[firstTextBlockIndex].novelTextDisplayValue {
-            updated[firstTextBlockIndex] = .text(displayValue: displayValue.replacingRanges(textRanges))
-        }
-        return updated
     }
 }
 

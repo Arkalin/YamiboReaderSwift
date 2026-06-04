@@ -366,20 +366,25 @@ private func textRangePagination(
             pages: ranges.enumerated().map { index, range in
                 ReaderRenderedPage(
                     index: index,
-                    blocks: [.text("slice-\(range.lowerBound)-\(range.upperBound)", chapterTitle: "第一章")],
+                    blocks: [
+                        .text(
+                            "slice-\(range.lowerBound)-\(range.upperBound)",
+                            chapterTitle: "第一章",
+                            ranges: [
+                                ReaderRenderedTextRange(
+                                    segmentIndex: 0,
+                                    startOffset: range.lowerBound,
+                                    endOffset: range.upperBound
+                                )
+                            ]
+                        )
+                    ],
                     documentView: document.view,
                     chapterOrdinal: 0,
                     chapterTitle: "第一章",
                     segmentIndex: 0,
                     segmentStartOffset: range.lowerBound,
-                    segmentEndOffset: range.upperBound,
-                    textRanges: [
-                        ReaderRenderedTextRange(
-                            segmentIndex: 0,
-                            startOffset: range.lowerBound,
-                            endOffset: range.upperBound
-                        )
-                    ]
+                    segmentEndOffset: range.upperBound
                 )
             },
             chapters: [
