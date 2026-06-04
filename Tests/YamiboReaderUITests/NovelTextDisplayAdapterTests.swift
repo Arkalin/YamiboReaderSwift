@@ -48,7 +48,8 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         let textBlock = ReaderRenderedBlock.text(
             "正文文本块应该由 Novel Text Layout 绘制。",
             chapterTitle: "第一章",
-            startsAtParagraphBoundary: false
+            startsAtParagraphBoundary: false,
+            settings: settings
         )
 
         let plan = ReaderBlockTextDisplayPlanner.displayPlan(
@@ -71,6 +72,46 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertEqual(plan?.style.lineHeightScale, 1.6)
         XCTAssertEqual(plan?.chapterTitle, "第一章")
         XCTAssertEqual(plan?.startsAtParagraphBoundary, false)
+    }
+
+    func testNovelReadingSessionTextBlockDisplayPlanUsesSnapshotDisplayValueSemantics() throws {
+        let snapshotSettings = ReaderAppearanceSettings(
+            fontScale: 1.4,
+            fontFamily: .systemSerif,
+            lineHeightScale: 1.85,
+            characterSpacingScale: 0.14,
+            usesJustifiedText: true,
+            indentsParagraphFirstLine: true,
+            readingMode: .paged
+        )
+        let liveSettings = ReaderAppearanceSettings(
+            fontScale: 0.85,
+            fontFamily: .rounded,
+            lineHeightScale: 1.1,
+            characterSpacingScale: 0,
+            usesJustifiedText: false,
+            indentsParagraphFirstLine: false,
+            readingMode: .vertical
+        )
+        let block = ReaderRenderedBlock.text(
+            "已经排版的阅读会话文本块必须使用快照中的显示语义。",
+            chapterTitle: "第一章",
+            settings: snapshotSettings
+        )
+
+        let plan = try XCTUnwrap(ReaderBlockTextDisplayPlanner.displayPlan(
+            for: block,
+            settings: liveSettings,
+            baseFontSize: 20
+        ))
+
+        XCTAssertEqual(plan.style.fontScale, 1.4)
+        XCTAssertEqual(plan.style.fontFamily, .systemSerif)
+        XCTAssertEqual(plan.style.pointSize, 28, accuracy: 0.001)
+        XCTAssertEqual(plan.style.lineHeightScale, 1.85)
+        XCTAssertEqual(plan.style.characterSpacingScale, 0.14)
+        XCTAssertTrue(plan.style.usesJustifiedText)
+        XCTAssertTrue(plan.style.indentsParagraphFirstLine)
     }
 
     func testNovelTextLayoutDisplayMeasurementUsesSameTextKit2DisplayAdapterForPreviewAndReadingSessionBlocks() {
@@ -122,6 +163,18 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertFalse(productionDisplaySources.contains("UITextView"))
     }
 
+    func testNovelReadingSessionBlockPassesDisplayValueIntoNativeTextKitAdapter() throws {
+        let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let readerSupportSource = try String(
+            contentsOf: repositoryRoot
+                .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderSupportViews.swift"),
+            encoding: .utf8
+        )
+
+        XCTAssertTrue(readerSupportSource.contains("displayValue: displayValue"))
+        XCTAssertFalse(readerSupportSource.contains("text: displayValue.text"))
+    }
+
     func testNovelTextLayoutDisplayStyleCoversFontSizeSpacingIndentAndChapterTitleForNovelReadingSession() throws {
         let settings = ReaderAppearanceSettings(
             fontScale: 1.3,
@@ -136,7 +189,8 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
             for: .text(
                 "第一章\n正文需要覆盖字体、字号、行距、字距和段首缩进。",
                 chapterTitle: "第一章",
-                startsAtParagraphBoundary: true
+                startsAtParagraphBoundary: true,
+                settings: settings
             ),
             settings: settings
         ))
