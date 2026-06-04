@@ -657,6 +657,41 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertFalse(verticalCellBody.contains("NovelTextLayout.measuredTextHeight"))
     }
 
+    func testVerticalViewportCellsSampleAndRestoreThroughTextKitSurfaces() throws {
+        let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let supportSource = try String(
+            contentsOf: repositoryRoot
+                .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderSupportViews.swift"),
+            encoding: .utf8
+        )
+        let verticalBody = try XCTUnwrap(typeBody(named: "ReaderVerticalViewportScrollView", in: supportSource))
+        let verticalCellBody = try XCTUnwrap(typeBody(named: "ReaderVerticalViewportCell", in: supportSource))
+        let displayPageBody = try XCTUnwrap(functionBody(named: "displayPage", in: verticalBody))
+        let itemHeightBody = try XCTUnwrap(functionBody(named: "verticalItemHeight", in: verticalBody))
+        let publishFramesBody = try XCTUnwrap(functionBody(named: "publishFrames", in: verticalBody))
+        let restoreTextAnchorBody = try XCTUnwrap(functionBody(named: "restoreTextAnchorIfPossible", in: verticalBody))
+        let sampleBody = try XCTUnwrap(functionBody(named: "textViewportSample", in: verticalCellBody))
+        let anchorBody = try XCTUnwrap(functionBody(named: "textViewportAnchorY", in: verticalCellBody))
+        let makeImageBlockBody = try XCTUnwrap(functionBody(named: "makeImageBlockView", in: verticalCellBody))
+
+        XCTAssertTrue(displayPageBody.contains("viewportIndex?.pages.first"))
+        XCTAssertTrue(displayPageBody.contains("ReaderViewportPageContent.viewportBackedPage"))
+        XCTAssertTrue(itemHeightBody.contains("displayPage(for: item)"))
+        XCTAssertTrue(itemHeightBody.contains("textRuntimeStore.measuredHeight"))
+        XCTAssertTrue(publishFramesBody.contains("cell.textViewportSample("))
+        XCTAssertTrue(publishFramesBody.contains("ReaderVerticalPositioning.pageDistance"))
+        XCTAssertTrue(restoreTextAnchorBody.contains("request.textAnchor"))
+        XCTAssertTrue(restoreTextAnchorBody.contains("cell.textViewportAnchorY("))
+        XCTAssertTrue(restoreTextAnchorBody.contains("ReaderVerticalPositioning.viewportReferenceLineY"))
+        XCTAssertTrue(sampleBody.contains("block.textSurface"))
+        XCTAssertTrue(sampleBody.contains("textSurface.viewportSample("))
+        XCTAssertTrue(sampleBody.contains("ReaderVerticalPositioning.pageDistance"))
+        XCTAssertTrue(anchorBody.contains("textSurface.referenceY(for: anchor)"))
+        XCTAssertTrue(makeImageBlockBody.contains("textSurface: nil"))
+        XCTAssertFalse(sampleBody.contains("intraPageProgress"))
+        XCTAssertFalse(restoreTextAnchorBody.contains("request.intraPageProgress"))
+    }
+
     func testVerticalTextViewportPositioningUsesTextKitLineFragmentsInsteadOfGeometryProgress() throws {
         let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let adapterSource = try String(
