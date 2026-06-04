@@ -442,6 +442,9 @@ public struct ReaderContainerView: View {
             onViewportChange: {
                 scheduleVerticalViewportPositionUpdate()
             },
+            onScrollSettled: {
+                updateVerticalViewportPosition(force: true)
+            },
             onTap: {
                 handleVerticalTap()
             }
@@ -986,14 +989,15 @@ public struct ReaderContainerView: View {
         ) else { return }
         model.updateVerticalViewportPosition(
             pageIndex: sample.pageIndex,
-            intraPageProgress: sample.intraPageProgress
+            intraPageProgress: sample.intraPageProgress,
+            force: force
         )
     }
 
     private func scheduleVerticalViewportPositionUpdate() {
         verticalViewportPositionUpdateTask?.cancel()
         verticalViewportPositionUpdateTask = Task {
-            try? await Task.sleep(for: .milliseconds(16))
+            try? await Task.sleep(for: .milliseconds(100))
             guard !Task.isCancelled else { return }
             await MainActor.run {
                 updateVerticalViewportPosition()

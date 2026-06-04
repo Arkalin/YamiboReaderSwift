@@ -520,10 +520,11 @@ public final class ReaderContainerModel: ObservableObject {
         promoteIfNeededAfterLocationUpdate()
     }
 
-    public func updateVerticalViewportPosition(pageIndex: Int, intraPageProgress: Double) {
+    public func updateVerticalViewportPosition(pageIndex: Int, intraPageProgress: Double, force: Bool = false) {
         let normalizedProgress = min(max(intraPageProgress, 0), 1)
+        let progressUpdateThreshold = force ? 0.002 : 0.02
         guard pageIndex != currentPageIndex ||
-            abs(normalizedProgress - currentPageIntraProgress) >= 0.002 else {
+            abs(normalizedProgress - currentPageIntraProgress) >= progressUpdateThreshold else {
             return
         }
         if let state = readingWorkflow?.updateVerticalViewportPosition(
