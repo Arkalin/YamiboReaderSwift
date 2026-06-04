@@ -722,6 +722,15 @@ struct ReaderViewportPageContent: View {
 }
 
 #if os(iOS)
+final class ReaderPagedViewportCollectionView: UICollectionView {
+    var onLayoutSubviews: (() -> Void)?
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        onLayoutSubviews?()
+    }
+}
+
 struct ReaderPagedCollectionViewport: UIViewRepresentable {
     let pages: [ReaderRenderedPage]
     let viewportContext: NovelTextViewportContext?
@@ -744,7 +753,7 @@ struct ReaderPagedCollectionViewport: UIViewRepresentable {
         layout.minimumLineSpacing = 0
         layout.minimumInteritemSpacing = 0
 
-        let collectionView = UICollectionView(frame: .zero, collectionViewLayout: layout)
+        let collectionView = ReaderPagedViewportCollectionView(frame: .zero, collectionViewLayout: layout)
         collectionView.isPagingEnabled = true
         collectionView.showsHorizontalScrollIndicator = false
         collectionView.showsVerticalScrollIndicator = false
@@ -752,14 +761,18 @@ struct ReaderPagedCollectionViewport: UIViewRepresentable {
         collectionView.dataSource = context.coordinator
         collectionView.delegate = context.coordinator
         collectionView.register(UICollectionViewCell.self, forCellWithReuseIdentifier: Coordinator.reuseIdentifier)
+        let coordinator = context.coordinator
+        collectionView.onLayoutSubviews = { [weak coordinator, weak collectionView] in
+            guard let collectionView else { return }
+            coordinator?.scrollToPendingSelectionIfPossible(in: collectionView, animated: false)
+        }
         return collectionView
     }
 
     func updateUIView(_ collectionView: UICollectionView, context: Context) {
         context.coordinator.parent = self
         context.coordinator.callbackScheduler.performViewUpdate {
-            collectionView.reloadData()
-            context.coordinator.scrollToSelection(in: collectionView, animated: false)
+            context.coordinator.reloadDataAndRequestSelectionScroll(in: collectionView, animated: false)
         }
     }
 
@@ -768,6 +781,9 @@ struct ReaderPagedCollectionViewport: UIViewRepresentable {
 
         var parent: ReaderPagedCollectionViewport
         let callbackScheduler = SwiftUIViewUpdateCallbackScheduler()
+        private var pendingSelectionIndex: Int?
+        private var isReloadingDataForSelectionScroll = false
+        private var isPendingSelectionScrollRetryScheduled = false
 
         init(parent: ReaderPagedCollectionViewport) {
             self.parent = parent
@@ -824,14 +840,65 @@ struct ReaderPagedCollectionViewport: UIViewRepresentable {
             updateSelection(from: scrollView)
         }
 
-        func scrollToSelection(in collectionView: UICollectionView, animated: Bool) {
-            guard !parent.pages.isEmpty,
-                  collectionView.bounds.width > 0 else {
+        func reloadDataAndRequestSelectionScroll(in collectionView: UICollectionView, animated: Bool) {
+            pendingSelectionIndex = parent.selectionIndex
+            isReloadingDataForSelectionScroll = true
+            collectionView.reloadData()
+            collectionView.performBatchUpdates(nil) { [weak self, weak collectionView] _ in
+                guard let collectionView else { return }
+                self?.isReloadingDataForSelectionScroll = false
+                self?.requestSelectionScroll(in: collectionView, animated: animated)
+                self?.scrollToPendingSelectionIfPossible(in: collectionView, animated: animated)
+            }
+        }
+
+        func requestSelectionScroll(in collectionView: UICollectionView, animated: Bool) {
+            pendingSelectionIndex = parent.selectionIndex
+            scrollToPendingSelectionIfPossible(in: collectionView, animated: animated)
+        }
+
+        func scrollToPendingSelectionIfPossible(in collectionView: UICollectionView, animated: Bool) {
+            guard let pendingSelectionIndex,
+                  !isReloadingDataForSelectionScroll,
+                  !parent.pages.isEmpty,
+                  collectionView.bounds.width > 0,
+                  collectionView.window != nil else {
                 return
             }
-            let item = min(max(parent.selectionIndex, 0), max(parent.pages.count - 1, 0))
-            let indexPath = IndexPath(item: item, section: 0)
-            collectionView.scrollToItem(at: indexPath, at: .centeredHorizontally, animated: animated)
+            let item = min(max(pendingSelectionIndex, 0), max(parent.pages.count - 1, 0))
+            guard collectionView.numberOfSections > 0,
+                  collectionView.numberOfItems(inSection: 0) > item else {
+                schedulePendingSelectionScrollRetry(in: collectionView, animated: animated)
+                return
+            }
+
+            collectionView.layoutIfNeeded()
+            let targetContentOffsetX = CGFloat(item) * collectionView.bounds.width
+            guard collectionView.contentSize.width >= targetContentOffsetX + collectionView.bounds.width else {
+                schedulePendingSelectionScrollRetry(in: collectionView, animated: animated)
+                return
+            }
+
+            collectionView.setContentOffset(
+                CGPoint(x: targetContentOffsetX, y: collectionView.contentOffset.y),
+                animated: animated
+            )
+            if animated || abs(collectionView.contentOffset.x - targetContentOffsetX) <= 1 {
+                self.pendingSelectionIndex = nil
+            } else {
+                schedulePendingSelectionScrollRetry(in: collectionView, animated: animated)
+            }
+        }
+
+        private func schedulePendingSelectionScrollRetry(in collectionView: UICollectionView, animated: Bool) {
+            guard !isPendingSelectionScrollRetryScheduled else { return }
+            isPendingSelectionScrollRetryScheduled = true
+            DispatchQueue.main.async { [weak self, weak collectionView] in
+                guard let self else { return }
+                self.isPendingSelectionScrollRetryScheduled = false
+                guard let collectionView else { return }
+                self.scrollToPendingSelectionIfPossible(in: collectionView, animated: animated)
+            }
         }
 
         private func updateSelection(from scrollView: UIScrollView) {
@@ -870,7 +937,7 @@ struct ReaderPagedSpreadCollectionViewport: UIViewRepresentable {
         layout.minimumLineSpacing = 0
         layout.minimumInteritemSpacing = 0
 
-        let collectionView = UICollectionView(frame: .zero, collectionViewLayout: layout)
+        let collectionView = ReaderPagedViewportCollectionView(frame: .zero, collectionViewLayout: layout)
         collectionView.isPagingEnabled = true
         collectionView.showsHorizontalScrollIndicator = false
         collectionView.showsVerticalScrollIndicator = false
@@ -878,14 +945,18 @@ struct ReaderPagedSpreadCollectionViewport: UIViewRepresentable {
         collectionView.dataSource = context.coordinator
         collectionView.delegate = context.coordinator
         collectionView.register(UICollectionViewCell.self, forCellWithReuseIdentifier: Coordinator.reuseIdentifier)
+        let coordinator = context.coordinator
+        collectionView.onLayoutSubviews = { [weak coordinator, weak collectionView] in
+            guard let collectionView else { return }
+            coordinator?.scrollToPendingSelectionIfPossible(in: collectionView, animated: false)
+        }
         return collectionView
     }
 
     func updateUIView(_ collectionView: UICollectionView, context: Context) {
         context.coordinator.parent = self
         context.coordinator.callbackScheduler.performViewUpdate {
-            collectionView.reloadData()
-            context.coordinator.scrollToSelection(in: collectionView, animated: false)
+            context.coordinator.reloadDataAndRequestSelectionScroll(in: collectionView, animated: false)
         }
     }
 
@@ -894,6 +965,9 @@ struct ReaderPagedSpreadCollectionViewport: UIViewRepresentable {
 
         var parent: ReaderPagedSpreadCollectionViewport
         let callbackScheduler = SwiftUIViewUpdateCallbackScheduler()
+        private var pendingSelectionIndex: Int?
+        private var isReloadingDataForSelectionScroll = false
+        private var isPendingSelectionScrollRetryScheduled = false
 
         init(parent: ReaderPagedSpreadCollectionViewport) {
             self.parent = parent
@@ -946,14 +1020,65 @@ struct ReaderPagedSpreadCollectionViewport: UIViewRepresentable {
             updateSelection(from: scrollView)
         }
 
-        func scrollToSelection(in collectionView: UICollectionView, animated: Bool) {
-            guard !parent.spreads.isEmpty,
-                  collectionView.bounds.width > 0 else {
+        func reloadDataAndRequestSelectionScroll(in collectionView: UICollectionView, animated: Bool) {
+            pendingSelectionIndex = parent.selectionIndex
+            isReloadingDataForSelectionScroll = true
+            collectionView.reloadData()
+            collectionView.performBatchUpdates(nil) { [weak self, weak collectionView] _ in
+                guard let collectionView else { return }
+                self?.isReloadingDataForSelectionScroll = false
+                self?.requestSelectionScroll(in: collectionView, animated: animated)
+                self?.scrollToPendingSelectionIfPossible(in: collectionView, animated: animated)
+            }
+        }
+
+        func requestSelectionScroll(in collectionView: UICollectionView, animated: Bool) {
+            pendingSelectionIndex = parent.selectionIndex
+            scrollToPendingSelectionIfPossible(in: collectionView, animated: animated)
+        }
+
+        func scrollToPendingSelectionIfPossible(in collectionView: UICollectionView, animated: Bool) {
+            guard let pendingSelectionIndex,
+                  !isReloadingDataForSelectionScroll,
+                  !parent.spreads.isEmpty,
+                  collectionView.bounds.width > 0,
+                  collectionView.window != nil else {
                 return
             }
-            let item = min(max(parent.selectionIndex, 0), max(parent.spreads.count - 1, 0))
-            let indexPath = IndexPath(item: item, section: 0)
-            collectionView.scrollToItem(at: indexPath, at: .centeredHorizontally, animated: animated)
+            let item = min(max(pendingSelectionIndex, 0), max(parent.spreads.count - 1, 0))
+            guard collectionView.numberOfSections > 0,
+                  collectionView.numberOfItems(inSection: 0) > item else {
+                schedulePendingSelectionScrollRetry(in: collectionView, animated: animated)
+                return
+            }
+
+            collectionView.layoutIfNeeded()
+            let targetContentOffsetX = CGFloat(item) * collectionView.bounds.width
+            guard collectionView.contentSize.width >= targetContentOffsetX + collectionView.bounds.width else {
+                schedulePendingSelectionScrollRetry(in: collectionView, animated: animated)
+                return
+            }
+
+            collectionView.setContentOffset(
+                CGPoint(x: targetContentOffsetX, y: collectionView.contentOffset.y),
+                animated: animated
+            )
+            if animated || abs(collectionView.contentOffset.x - targetContentOffsetX) <= 1 {
+                self.pendingSelectionIndex = nil
+            } else {
+                schedulePendingSelectionScrollRetry(in: collectionView, animated: animated)
+            }
+        }
+
+        private func schedulePendingSelectionScrollRetry(in collectionView: UICollectionView, animated: Bool) {
+            guard !isPendingSelectionScrollRetryScheduled else { return }
+            isPendingSelectionScrollRetryScheduled = true
+            DispatchQueue.main.async { [weak self, weak collectionView] in
+                guard let self else { return }
+                self.isPendingSelectionScrollRetryScheduled = false
+                guard let collectionView else { return }
+                self.scrollToPendingSelectionIfPossible(in: collectionView, animated: animated)
+            }
         }
 
         private func updateSelection(from scrollView: UIScrollView) {
