@@ -381,6 +381,83 @@ final class NovelReadingWorkflowTests: XCTestCase {
         XCTAssertNotEqual(resumePoint.segmentOffset, 50)
     }
 
+    func testVerticalViewportSamplePreservesExactOffsetInsideMultiRangePage() async throws {
+        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9157&mobile=2")!
+        let repository = RecordingNovelReadingRepository(documents: [
+            1: makeNovelDocument(threadURL: threadURL, view: 1, maxView: 1, authorID: "author-1")
+        ])
+        let workflow = NovelReadingWorkflow(
+            context: ReaderLaunchContext(
+                threadURL: threadURL,
+                threadTitle: "Thread",
+                source: .forum,
+                initialView: 1,
+                authorID: "author-1"
+            ),
+            settings: ReaderAppearanceSettings(readingMode: .vertical),
+            layout: ReaderContainerLayout(width: 320, height: 568),
+            repository: repository,
+            pagination: { document, _, _ in
+                let ranges = [
+                    ReaderRenderedTextRange(segmentIndex: 15, startOffset: 0, endOffset: 2_000),
+                    ReaderRenderedTextRange(segmentIndex: 16, startOffset: 1_101, endOffset: 2_000)
+                ]
+                return ReaderPaginationResult(
+                    pages: [
+                        ReaderRenderedPage(
+                            index: 0,
+                            blocks: [
+                                .text(
+                                    "第六十页",
+                                    chapterTitle: "第二章",
+                                    ranges: ranges
+                                )
+                            ],
+                            documentView: document.view,
+                            chapterOrdinal: 1,
+                            chapterTitle: "第二章",
+                            viewportTextRanges: ranges
+                        )
+                    ],
+                    chapters: [
+                        ReaderChapter(ordinal: 1, title: "第二章", startIndex: 0)
+                    ],
+                    viewportIndex: NovelTextViewportIndex(
+                        documentView: document.view,
+                        readingMode: .vertical,
+                        pages: [
+                            NovelTextViewportIndexPage(
+                                pageIndex: 0,
+                                documentView: document.view,
+                                chapterOrdinal: 1,
+                                chapterTitle: "第二章",
+                                ranges: ranges
+                            )
+                        ],
+                        chapters: [
+                            NovelTextViewportIndexChapter(ordinal: 1, title: "第二章", startPageIndex: 0)
+                        ]
+                    )
+                )
+            }
+        )
+        _ = try await workflow.start(initial: NovelReadingInitialPosition())
+
+        _ = workflow.updateVerticalViewportPosition(
+            sample: NovelTextViewportSample(
+                documentView: 1,
+                pageIndex: 0,
+                segmentIndex: 16,
+                segmentOffset: 1_256
+            )
+        )
+        let resumePoint = try XCTUnwrap(workflow.captureNovelReadingPosition())
+
+        XCTAssertEqual(resumePoint.segmentIndex, 16)
+        XCTAssertEqual(resumePoint.segmentOffset, 1_256)
+        XCTAssertNotEqual(resumePoint.segmentOffset, 1_101)
+    }
+
     func testExternalBlockViewportMovementPreservesTextOnlyResumeUntilNextTextSample() async throws {
         let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9154&mobile=2")!
         let repository = RecordingNovelReadingRepository(documents: [

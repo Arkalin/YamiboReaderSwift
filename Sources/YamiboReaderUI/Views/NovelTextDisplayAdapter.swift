@@ -272,13 +272,13 @@ final class NovelTextViewportDisplayUIView: UIView, @MainActor NSTextViewportLay
         return best?.offset
     }
 
-    func textFragmentRect(containingDisplayOffset displayOffset: Int) -> CGRect? {
+    func textFragmentReferenceY(containingDisplayOffset displayOffset: Int) -> CGFloat? {
         guard bounds.width > 0, attributedText.length > 0 else { return nil }
         updateTextContainerSizeForCurrentBounds()
         textLayoutManager.ensureLayout(for: textContentStorage.documentRange)
         let documentStart = textContentStorage.documentRange.location
         let normalizedOffset = min(max(displayOffset, 0), attributedText.length)
-        var best: (distance: Int, rect: CGRect)?
+        var best: (distance: Int, y: CGFloat)?
 
         textLayoutManager.enumerateTextLayoutFragments(
             from: documentStart,
@@ -298,13 +298,21 @@ final class NovelTextViewportDisplayUIView: UIView, @MainActor NSTextViewportLay
             } else {
                 distance = normalizedOffset - rangeEnd
             }
+            let frame = fragment.layoutFragmentFrame
+            let fragmentLength = max(rangeEnd - rangeStart, 0)
+            let progress: CGFloat = if fragmentLength > 0 {
+                CGFloat(min(max(normalizedOffset - rangeStart, 0), fragmentLength)) / CGFloat(fragmentLength)
+            } else {
+                0
+            }
+            let y = frame.minY + progress * frame.height
             if best == nil || distance < best!.distance {
-                best = (distance, fragment.layoutFragmentFrame)
+                best = (distance, y)
             }
             return true
         }
 
-        return best?.rect
+        return best?.y
     }
 
     override func draw(_ rect: CGRect) {

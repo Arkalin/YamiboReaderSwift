@@ -551,8 +551,20 @@ public final class ReaderContainerModel: ObservableObject {
     }
 
     public func updateVerticalViewportPosition(sample: NovelTextViewportSample) {
+        let oldPageIndex = currentPageIndex
+        let oldProgress = currentPageIntraProgress
+        let oldResumePoint = currentNovelResumePoint
         if let state = readingWorkflow?.updateVerticalViewportPosition(sample: sample) {
             syncFromWorkflowState(state)
+            let newResumePoint = currentNovelResumePoint
+            let didChangePosition = oldPageIndex != currentPageIndex ||
+                oldProgress != currentPageIntraProgress ||
+                oldResumePoint != newResumePoint
+            guard didChangePosition else {
+                return
+            }
+        } else {
+            return
         }
         scheduleProgressSync()
 

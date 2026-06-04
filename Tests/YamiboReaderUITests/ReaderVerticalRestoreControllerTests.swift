@@ -32,7 +32,7 @@ final class ReaderVerticalRestoreControllerTests: XCTestCase {
         XCTAssertNil(controller.activeRequest)
     }
 
-    func testTextAnchorScrollingRestoreDoesNotConcealViewportWhileWaitingForLateLayout() {
+    func testTextAnchorScrollingRestoreConcealsViewportWhileWaitingForLateLayout() {
         var controller = ReaderVerticalRestoreController()
         let request = ReaderVerticalScrollRequest(
             pageIndex: 12,
@@ -42,9 +42,12 @@ final class ReaderVerticalRestoreControllerTests: XCTestCase {
 
         controller.beginScrolling(to: request)
 
-        XCTAssertFalse(controller.shouldConcealViewportContent)
+        XCTAssertTrue(controller.shouldConcealViewportContent)
         XCTAssertFalse(controller.canSampleViewport(now: 10))
         XCTAssertEqual(controller.scrollingRequest, request)
+
+        controller.beginSettling(request, now: 10, duration: 0.45)
+        XCTAssertFalse(controller.shouldConcealViewportContent)
     }
 
     func testUserScrollCancelSuppressesViewportSamplingUntilCooldownEnds() {
