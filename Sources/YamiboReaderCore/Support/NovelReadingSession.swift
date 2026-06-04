@@ -77,6 +77,7 @@ public struct NovelReadingSession: Sendable {
     private var usesPadPresentation: Bool
     private var pendingResumePoint: ReaderResumePoint?
     private var pendingResumeRequiresLayoutSync = false
+    private var currentViewportIndex: NovelTextViewportIndex?
     private let pagination: NovelTextPagination
 
     init(
@@ -133,6 +134,7 @@ public struct NovelReadingSession: Sendable {
         self.currentDocument = document
         self.usesPadPresentation = usesPadPresentation
         self.pendingResumePoint = nil
+        self.currentViewportIndex = nil
         self.pagination = pagination
         self.snapshot = NovelReadingSnapshot(
             pages: [],
@@ -434,20 +436,26 @@ public struct NovelReadingSession: Sendable {
         let paginationLayout = effectivePaginationLayout
         let pagination = try pagination(document, settings, paginationLayout)
         let renderedPages = pagination.pages
-        let renderedChapters = pagination.chapters
+        let viewportPages = pagination.viewportIndex?.pages ?? []
+        let renderedChapters = pagination.viewportIndex.map(Self.readerChapters) ?? pagination.chapters
         let prefetchedStartIndex: Int? = nil
 
         let pages = renderedPages.enumerated().map { index, page in
-            ReaderRenderedPage(
+            let indexedPage = viewportPages.first {
+                $0.pageIndex == index && $0.documentView == page.documentView
+            }
+            let indexedRanges = indexedPage?.ranges ?? []
+            let aggregateRange = Self.aggregateRange(from: indexedRanges)
+            return ReaderRenderedPage(
                 index: index,
                 blocks: page.blocks,
                 documentView: page.documentView,
-                chapterOrdinal: page.chapterOrdinal,
-                chapterTitle: page.chapterTitle,
-                segmentIndex: page.segmentIndex,
-                segmentStartOffset: page.segmentStartOffset,
-                segmentEndOffset: page.segmentEndOffset,
-                chapterCommentTarget: page.chapterCommentTarget
+                chapterOrdinal: indexedPage?.chapterOrdinal ?? page.chapterOrdinal,
+                chapterTitle: indexedPage?.chapterTitle ?? page.chapterTitle,
+                segmentIndex: aggregateRange?.segmentIndex ?? page.segmentIndex,
+                segmentStartOffset: aggregateRange?.startOffset ?? page.segmentStartOffset,
+                segmentEndOffset: aggregateRange?.endOffset ?? page.segmentEndOffset,
+                chapterCommentTarget: indexedPage?.chapterCommentTarget ?? page.chapterCommentTarget
             )
         }
         let fallbackTarget = ReaderResolvedTarget(
@@ -456,6 +464,7 @@ public struct NovelReadingSession: Sendable {
             documentView: displayedViewCandidate(for: preferredPage, pages: pages)
         )
         let effectiveResumePoint = pendingResumePoint ?? preferredResumePoint
+        currentViewportIndex = pagination.viewportIndex
         let resolvedTarget = effectiveResumePoint.flatMap { resolveResumePoint($0, in: pages) } ?? fallbackTarget
         let normalizedPageIndex = normalizedPagedPageIndex(resolvedTarget.pageIndex, pages: pages, pagedSpreads: makePagedSpreads(from: pages))
         snapshot = NovelReadingSnapshot(
@@ -472,6 +481,28 @@ public struct NovelReadingSession: Sendable {
             pagedSpreads: makePagedSpreads(from: pages),
             prefetchedStartIndex: prefetchedStartIndex,
             currentAuthorID: document.resolvedAuthorID ?? snapshot.currentAuthorID
+        )
+    }
+
+    private static func readerChapters(from viewportIndex: NovelTextViewportIndex) -> [ReaderChapter] {
+        viewportIndex.chapters.map { chapter in
+            ReaderChapter(
+                ordinal: chapter.ordinal,
+                title: chapter.title,
+                startIndex: chapter.startPageIndex,
+                chapterCommentTarget: chapter.chapterCommentTarget
+            )
+        }
+    }
+
+    private static func aggregateRange(from ranges: [ReaderRenderedTextRange]) -> ReaderRenderedTextRange? {
+        guard let first = ranges.first else { return nil }
+        let last = ranges.last ?? first
+        guard first.segmentIndex == last.segmentIndex else { return first }
+        return ReaderRenderedTextRange(
+            segmentIndex: first.segmentIndex,
+            startOffset: first.startOffset,
+            endOffset: last.endOffset
         )
     }
 
@@ -615,7 +646,7 @@ public struct NovelReadingSession: Sendable {
     }
 
     private func contains(offset: Int, in page: ReaderRenderedPage) -> Bool {
-        let ranges = page.novelTextDisplayValues.flatMap(\.ranges)
+        let ranges = textRanges(for: page)
         if !ranges.isEmpty,
            ranges.contains(where: { contains(offset: offset, in: $0) }) {
             return true
@@ -627,9 +658,7 @@ public struct NovelReadingSession: Sendable {
     }
 
     private func contains(offset: Int, segmentIndex: Int, in page: ReaderRenderedPage) -> Bool {
-        let matchingRanges = page.novelTextDisplayValues
-            .flatMap(\.ranges)
-            .filter { $0.segmentIndex == segmentIndex }
+        let matchingRanges = textRanges(for: page).filter { $0.segmentIndex == segmentIndex }
         if !matchingRanges.isEmpty {
             return matchingRanges.contains { contains(offset: offset, in: $0) }
         }
@@ -638,7 +667,7 @@ public struct NovelReadingSession: Sendable {
     }
 
     private func contains(segmentIndex: Int, in page: ReaderRenderedPage) -> Bool {
-        page.novelTextDisplayValues.flatMap(\.ranges).contains { $0.segmentIndex == segmentIndex }
+        textRanges(for: page).contains { $0.segmentIndex == segmentIndex }
             || page.segmentIndex == segmentIndex
     }
 
@@ -650,7 +679,7 @@ public struct NovelReadingSession: Sendable {
     }
 
     private func distance(from offset: Int, to page: ReaderRenderedPage) -> Int {
-        let ranges = page.novelTextDisplayValues.flatMap(\.ranges)
+        let ranges = textRanges(for: page)
         if !ranges.isEmpty {
             return ranges.map { distance(from: offset, to: $0) }.min() ?? 0
         }
@@ -661,9 +690,7 @@ public struct NovelReadingSession: Sendable {
     }
 
     private func distance(from offset: Int, segmentIndex: Int, to page: ReaderRenderedPage) -> Int {
-        let matchingRanges = page.novelTextDisplayValues
-            .flatMap(\.ranges)
-            .filter { $0.segmentIndex == segmentIndex }
+        let matchingRanges = textRanges(for: page).filter { $0.segmentIndex == segmentIndex }
         if !matchingRanges.isEmpty {
             return matchingRanges.map { distance(from: offset, to: $0) }.min() ?? 0
         }
@@ -681,7 +708,7 @@ public struct NovelReadingSession: Sendable {
     }
 
     private func intraPageProgress(for resumePoint: ReaderResumePoint, in page: ReaderRenderedPage) -> Double {
-        let ranges = page.novelTextDisplayValues.flatMap(\.ranges)
+        let ranges = textRanges(for: page)
         if !ranges.isEmpty {
             let totalLength = ranges.reduce(0) { $0 + max($1.length, 1) }
             var runningLength = 0
@@ -704,7 +731,7 @@ public struct NovelReadingSession: Sendable {
     }
 
     private func textPosition(for intraPageProgress: Double, in page: ReaderRenderedPage) -> ReaderPageTextPosition? {
-        let ranges = page.novelTextDisplayValues.flatMap(\.ranges)
+        let ranges = textRanges(for: page)
         guard !ranges.isEmpty else { return nil }
         guard ranges.count > 1 else {
             return ranges.first.map {
@@ -731,6 +758,16 @@ public struct NovelReadingSession: Sendable {
         return ranges.last.map {
             ReaderPageTextPosition(range: $0, progressInRange: 1)
         }
+    }
+
+    private func textRanges(for page: ReaderRenderedPage) -> [ReaderRenderedTextRange] {
+        let indexedRanges = currentViewportIndex?.pages.first {
+            $0.pageIndex == page.index && $0.documentView == page.documentView
+        }?.ranges ?? []
+        if !indexedRanges.isEmpty {
+            return indexedRanges
+        }
+        return page.novelTextDisplayValues.flatMap(\.ranges)
     }
 }
 
