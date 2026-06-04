@@ -236,7 +236,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
             settings: settings
         ))
 
-        XCTAssertTrue(spreadContentBody.contains("ReaderPageContent("))
+        XCTAssertTrue(spreadContentBody.contains("ReaderViewportPageContent("))
         XCTAssertFalse(spreadContentBody.contains("Text(displayValue.text"))
         XCTAssertEqual(block.backend, .novelTextViewport)
     }
@@ -261,6 +261,31 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertTrue(collectionViewportBody.contains("UICollectionView"))
         XCTAssertTrue(collectionViewportBody.contains("viewportContext"))
         XCTAssertTrue(collectionViewportBody.contains("viewportIndex"))
+    }
+
+    func testTwoPageSpreadReadingUsesUIKitCollectionViewportWithSharedViewportContext() throws {
+        let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let containerSource = try String(
+            contentsOf: repositoryRoot
+                .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderContainerView.swift"),
+            encoding: .utf8
+        )
+        let supportSource = try String(
+            contentsOf: repositoryRoot
+                .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderSupportViews.swift"),
+            encoding: .utf8
+        )
+        let pagedContentBody = try XCTUnwrap(functionBody(named: "pagedContent", in: containerSource))
+        let spreadViewportBody = try XCTUnwrap(typeBody(named: "ReaderPagedSpreadCollectionViewport", in: supportSource))
+        let spreadContentBody = try XCTUnwrap(typeBody(named: "ReaderPagedSpreadContent", in: supportSource))
+
+        XCTAssertTrue(pagedContentBody.contains("ReaderPagedSpreadCollectionViewport("))
+        XCTAssertTrue(supportSource.contains("struct ReaderPagedSpreadCollectionViewport: UIViewRepresentable"))
+        XCTAssertTrue(spreadViewportBody.contains("UICollectionView"))
+        XCTAssertTrue(spreadViewportBody.contains("viewportContext"))
+        XCTAssertTrue(spreadViewportBody.contains("viewportIndex"))
+        XCTAssertTrue(spreadContentBody.contains("spread.leftPageIndex"))
+        XCTAssertTrue(spreadContentBody.contains("spread.rightPageIndex"))
     }
 
     func testVerticalReadingUsesViewportBackedReaderPageContentInsteadOfSwiftUITextChunks() throws {

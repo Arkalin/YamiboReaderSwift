@@ -321,21 +321,21 @@ public struct ReaderContainerView: View {
     private func pagedContent(topInset: CGFloat, bottomInset: CGFloat, layout: ReaderContainerLayout) -> some View {
         Group {
             if model.isTwoPageSpreadActive {
-                TabView(selection: pagedSelection) {
-                ForEach(model.pagedSpreads) { spread in
-                    ReaderPagedSpreadContent(
-                        spread: spread,
-                        pages: model.pages,
-                        settings: model.settings,
-                        refererURL: model.forumURL,
-                        sessionState: model.sessionState,
-                        topInset: topInset,
-                        bottomInset: bottomInset
-                    )
-                    .tag(ReaderPagedSelectionTag(view: pagedSpreadView(spread), index: spread.index))
-                }
-                }
-                .tabViewStyle(.page(indexDisplayMode: .never))
+                ReaderPagedSpreadCollectionViewport(
+                    spreads: model.pagedSpreads,
+                    pages: model.pages,
+                    viewportContext: model.viewportContext,
+                    viewportIndex: model.viewportIndex,
+                    settings: model.settings,
+                    refererURL: model.forumURL,
+                    sessionState: model.sessionState,
+                    topInset: topInset,
+                    bottomInset: bottomInset,
+                    selectionIndex: model.pagedSelectionIndex,
+                    onSelectionChange: { selectionIndex in
+                        model.updatePagedSelection(selectionIndex)
+                    }
+                )
             } else {
                 ReaderPagedCollectionViewport(
                     pages: model.pages,

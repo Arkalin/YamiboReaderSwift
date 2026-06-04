@@ -466,6 +466,8 @@ struct ReaderPageContent: View {
 struct ReaderPagedSpreadContent: View {
     let spread: ReaderPagedSpread
     let pages: [ReaderRenderedPage]
+    let viewportContext: NovelTextViewportContext?
+    let viewportIndex: NovelTextViewportIndex?
     let settings: ReaderAppearanceSettings
     let refererURL: URL
     let sessionState: SessionState
@@ -484,8 +486,13 @@ struct ReaderPagedSpreadContent: View {
     private func spreadColumn(pageIndex: Int?) -> some View {
         Group {
             if let pageIndex, pages.indices.contains(pageIndex) {
-                ReaderPageContent(
+                let page = pages[pageIndex]
+                ReaderViewportPageContent(
                     page: pages[pageIndex],
+                    viewportContext: viewportContext,
+                    viewportPage: viewportIndex?.pages.first {
+                        $0.pageIndex == page.index && $0.documentView == page.documentView
+                    },
                     settings: settings,
                     refererURL: refererURL,
                     sessionState: sessionState
@@ -642,6 +649,122 @@ struct ReaderPagedCollectionViewport: UIViewRepresentable {
             guard scrollView.bounds.width > 0 else { return }
             let item = Int((scrollView.contentOffset.x / scrollView.bounds.width).rounded())
             let clampedItem = min(max(item, 0), max(parent.pages.count - 1, 0))
+            guard clampedItem != parent.selectionIndex else { return }
+            parent.onSelectionChange(clampedItem)
+        }
+    }
+}
+
+struct ReaderPagedSpreadCollectionViewport: UIViewRepresentable {
+    let spreads: [ReaderPagedSpread]
+    let pages: [ReaderRenderedPage]
+    let viewportContext: NovelTextViewportContext?
+    let viewportIndex: NovelTextViewportIndex?
+    let settings: ReaderAppearanceSettings
+    let refererURL: URL
+    let sessionState: SessionState
+    let topInset: CGFloat
+    let bottomInset: CGFloat
+    let selectionIndex: Int
+    let onSelectionChange: (Int) -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(parent: self)
+    }
+
+    func makeUIView(context: Context) -> UICollectionView {
+        let layout = UICollectionViewFlowLayout()
+        layout.scrollDirection = .horizontal
+        layout.minimumLineSpacing = 0
+        layout.minimumInteritemSpacing = 0
+
+        let collectionView = UICollectionView(frame: .zero, collectionViewLayout: layout)
+        collectionView.isPagingEnabled = true
+        collectionView.showsHorizontalScrollIndicator = false
+        collectionView.showsVerticalScrollIndicator = false
+        collectionView.backgroundColor = .clear
+        collectionView.dataSource = context.coordinator
+        collectionView.delegate = context.coordinator
+        collectionView.register(UICollectionViewCell.self, forCellWithReuseIdentifier: Coordinator.reuseIdentifier)
+        return collectionView
+    }
+
+    func updateUIView(_ collectionView: UICollectionView, context: Context) {
+        context.coordinator.parent = self
+        collectionView.reloadData()
+        context.coordinator.scrollToSelection(in: collectionView, animated: false)
+    }
+
+    final class Coordinator: NSObject, UICollectionViewDataSource, UICollectionViewDelegateFlowLayout, UIScrollViewDelegate {
+        static let reuseIdentifier = "ReaderPagedSpreadCollectionViewportCell"
+
+        var parent: ReaderPagedSpreadCollectionViewport
+
+        init(parent: ReaderPagedSpreadCollectionViewport) {
+            self.parent = parent
+        }
+
+        func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int {
+            parent.spreads.count
+        }
+
+        func collectionView(
+            _ collectionView: UICollectionView,
+            cellForItemAt indexPath: IndexPath
+        ) -> UICollectionViewCell {
+            let cell = collectionView.dequeueReusableCell(
+                withReuseIdentifier: Self.reuseIdentifier,
+                for: indexPath
+            )
+            let spread = parent.spreads[indexPath.item]
+            cell.backgroundColor = .clear
+            cell.contentConfiguration = UIHostingConfiguration {
+                ReaderPagedSpreadContent(
+                    spread: spread,
+                    pages: parent.pages,
+                    viewportContext: parent.viewportContext,
+                    viewportIndex: parent.viewportIndex,
+                    settings: parent.settings,
+                    refererURL: parent.refererURL,
+                    sessionState: parent.sessionState,
+                    topInset: parent.topInset,
+                    bottomInset: parent.bottomInset
+                )
+            }
+            .margins(.all, 0)
+            return cell
+        }
+
+        func collectionView(
+            _ collectionView: UICollectionView,
+            layout collectionViewLayout: UICollectionViewLayout,
+            sizeForItemAt indexPath: IndexPath
+        ) -> CGSize {
+            collectionView.bounds.size
+        }
+
+        func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) {
+            updateSelection(from: scrollView)
+        }
+
+        func scrollViewDidEndScrollingAnimation(_ scrollView: UIScrollView) {
+            updateSelection(from: scrollView)
+        }
+
+        func scrollToSelection(in collectionView: UICollectionView, animated: Bool) {
+            guard !parent.spreads.isEmpty,
+                  collectionView.bounds.width > 0 else {
+                return
+            }
+            let item = min(max(parent.selectionIndex, 0), max(parent.spreads.count - 1, 0))
+            let indexPath = IndexPath(item: item, section: 0)
+            collectionView.scrollToItem(at: indexPath, at: .centeredHorizontally, animated: animated)
+        }
+
+        private func updateSelection(from scrollView: UIScrollView) {
+            guard scrollView.bounds.width > 0 else { return }
+            let item = Int((scrollView.contentOffset.x / scrollView.bounds.width).rounded())
+            let clampedItem = min(max(item, 0), max(parent.spreads.count - 1, 0))
             guard clampedItem != parent.selectionIndex else { return }
             parent.onSelectionChange(clampedItem)
         }
