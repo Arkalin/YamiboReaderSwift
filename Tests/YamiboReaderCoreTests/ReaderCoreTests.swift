@@ -930,6 +930,122 @@ private final class StubURLProtocol: URLProtocol {
     #expect(index.position(forSegmentIndex: 0, offset: 5)?.pageIndex == 1)
 }
 
+@Test func novelTextLayoutReusesCachedNovelTextViewportIndexForMatchingInputs() async throws {
+    let document = ReaderPageDocument(
+        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=102&mobile=2")),
+        view: 1,
+        maxView: 1,
+        segments: [.text("重复打开时应该复用精确索引", chapterTitle: "第一章")],
+        fetchedAt: Date(timeIntervalSince1970: 1)
+    )
+    let settings = ReaderAppearanceSettings(readingMode: .paged)
+    let layout = ReaderContainerLayout(width: 390, height: 844)
+    let layoutPassCount = LockedCounter()
+    let pagedLayout: NovelPagedTextLayout = { text, _, _, _ in
+        layoutPassCount.increment()
+        return [TextSlice(text: text, startOffset: 0, endOffset: text.count)]
+    }
+
+    let first = try NovelTextLayout.renderedPages(
+        document: document,
+        settings: settings,
+        layout: layout,
+        requiresAuthoritativePagedLayout: false,
+        pagedLayout: pagedLayout,
+        usesViewportIndexCache: true
+    )
+    let second = try NovelTextLayout.renderedPages(
+        document: document,
+        settings: settings,
+        layout: layout,
+        requiresAuthoritativePagedLayout: false,
+        pagedLayout: pagedLayout,
+        usesViewportIndexCache: true
+    )
+
+    #expect(layoutPassCount.value == 1)
+    #expect(first.viewportIndex == second.viewportIndex)
+    #expect(first.pages == second.pages)
+}
+
+@Test func novelTextLayoutInvalidatesCachedNovelTextViewportIndexForSettingsAndLayoutChanges() async throws {
+    let document = ReaderPageDocument(
+        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=103&mobile=2")),
+        view: 1,
+        maxView: 1,
+        segments: [.text("设置和布局改变必须重建索引", chapterTitle: "第一章")],
+        fetchedAt: Date(timeIntervalSince1970: 1)
+    )
+    let layoutPassCount = LockedCounter()
+    let pagedLayout: NovelPagedTextLayout = { text, _, _, _ in
+        layoutPassCount.increment()
+        return [TextSlice(text: text, startOffset: 0, endOffset: text.count)]
+    }
+
+    _ = try NovelTextLayout.renderedPages(
+        document: document,
+        settings: ReaderAppearanceSettings(readingMode: .paged),
+        layout: ReaderContainerLayout(width: 390, height: 844),
+        requiresAuthoritativePagedLayout: false,
+        pagedLayout: pagedLayout,
+        usesViewportIndexCache: true
+    )
+    _ = try NovelTextLayout.renderedPages(
+        document: document,
+        settings: ReaderAppearanceSettings(fontScale: 1.2, readingMode: .paged),
+        layout: ReaderContainerLayout(width: 390, height: 844),
+        requiresAuthoritativePagedLayout: false,
+        pagedLayout: pagedLayout,
+        usesViewportIndexCache: true
+    )
+    _ = try NovelTextLayout.renderedPages(
+        document: document,
+        settings: ReaderAppearanceSettings(readingMode: .paged),
+        layout: ReaderContainerLayout(width: 320, height: 568),
+        requiresAuthoritativePagedLayout: false,
+        pagedLayout: pagedLayout,
+        usesViewportIndexCache: true
+    )
+
+    #expect(layoutPassCount.value == 3)
+}
+
+@Test func novelTextLayoutDoesNotCacheFailedNovelTextViewportIndexBuilds() async throws {
+    let document = ReaderPageDocument(
+        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=104&mobile=2")),
+        view: 1,
+        maxView: 1,
+        segments: [.text("失败的索引构建不能污染缓存", chapterTitle: "第一章")],
+        fetchedAt: Date(timeIntervalSince1970: 1)
+    )
+    let settings = ReaderAppearanceSettings(readingMode: .paged)
+    let layout = ReaderContainerLayout(width: 390, height: 844)
+
+    #expect(throws: NovelTextLayoutFailure.unableToLayoutText) {
+        _ = try NovelTextLayout.renderedPages(
+            document: document,
+            settings: settings,
+            layout: layout,
+            requiresAuthoritativePagedLayout: false,
+            pagedLayout: { _, _, _, _ in [] },
+            usesViewportIndexCache: true
+        )
+    }
+
+    let pagination = try NovelTextLayout.renderedPages(
+        document: document,
+        settings: settings,
+        layout: layout,
+        requiresAuthoritativePagedLayout: false,
+        pagedLayout: { text, _, _, _ in
+            [TextSlice(text: text, startOffset: 0, endOffset: text.count)]
+        },
+        usesViewportIndexCache: true
+    )
+
+    #expect(pagination.viewportIndex?.pages.count == 1)
+}
+
 #if canImport(AppKit) && !canImport(UIKit)
 @Test func novelTextLayoutEmptyAppKitPagedAdapterThrowsWithoutEstimatedFallback() throws {
     let text = String(repeating: "Empty AppKit adapter output must not fall back to estimated slicing. ", count: 20)
@@ -1605,4 +1721,19 @@ private func functionBody(named name: String, in source: String) -> String? {
         index = source.index(after: index)
     }
     return nil
+}
+
+private final class LockedCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+
+    var value: Int {
+        lock.withLock { count }
+    }
+
+    func increment() {
+        lock.withLock {
+            count += 1
+        }
+    }
 }
