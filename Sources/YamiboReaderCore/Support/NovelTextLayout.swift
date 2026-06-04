@@ -652,16 +652,15 @@ private enum AppKitNovelTextLayoutAdapter {
             return false
         }
 
-        let attributedText = makeAttributedText(
-            text: text,
+        let height = measuredTextHeight(
+            text,
             chapterTitle: chapterTitle,
-            settings: settings
+            startsAtParagraphBoundary: true,
+            settings: settings,
+            width: pageSize.width,
+            baseFontSize: defaultBaseFontSize
         )
-        let boundingRect = attributedText.boundingRect(
-            with: CGSize(width: pageSize.width, height: .greatestFiniteMagnitude),
-            options: [.usesLineFragmentOrigin, .usesFontLeading]
-        )
-        return ceil(boundingRect.height) <= pageSize.height
+        return height > 0 && height <= pageSize.height
     }
 
     static func measuredTextHeight(
