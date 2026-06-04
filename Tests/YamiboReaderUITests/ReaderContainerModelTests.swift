@@ -745,6 +745,75 @@ final class ReaderContainerModelTests: XCTestCase {
         }
     }
 
+    func testWorkflowBackedPreviewAndProgressStayAlignedAfterVerticalViewportMovement() async throws {
+        let keyPrefix = UUID().uuidString
+        let settingsStore = SettingsStore(key: "\(keyPrefix).settings")
+        let favoriteStore = FavoriteStore(key: "\(keyPrefix).favorites")
+        let cacheStore = ReaderCacheStore(
+            baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        )
+        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9013&mobile=2")!
+        let document = ReaderPageDocument(
+            threadURL: threadURL,
+            view: 1,
+            maxView: 1,
+            resolvedAuthorID: "author-1",
+            contentSource: .authorFilteredPage,
+            segments: [
+                .text("第一段不应预览", chapterTitle: "第一章"),
+                .text("第二段不应预览", chapterTitle: "第一章"),
+                .text("0123456789第三段预览", chapterTitle: "第一章")
+            ]
+        )
+
+        try await settingsStore.save(AppSettings(reader: ReaderAppearanceSettings(readingMode: .vertical)))
+        try await cacheStore.save(document)
+        try await favoriteStore.saveFavorites([
+            Favorite(title: "测试线程", url: threadURL, authorID: "author-1", type: .novel)
+        ])
+
+        let appContext = YamiboAppContext(
+            sessionStore: SessionStore(key: "\(keyPrefix).session"),
+            settingsStore: settingsStore,
+            favoriteStore: favoriteStore,
+            readerCacheStore: cacheStore
+        )
+        let model = await MainActor.run {
+            ReaderContainerModel(
+                context: ReaderLaunchContext(
+                    threadURL: threadURL,
+                    threadTitle: "测试线程",
+                    source: .favorites,
+                    authorID: "author-1"
+                ),
+                appContext: appContext,
+                pagination: readerModelPreviewSourcePagination
+            )
+        }
+
+        await model.prepare(layout: ReaderContainerLayout(width: 320, height: 568))
+        await MainActor.run {
+            model.updateVerticalViewportPosition(
+                pageIndex: 2,
+                intraPageProgress: Double("0123456789".count) / Double("0123456789第三段预览".count)
+            )
+        }
+
+        await MainActor.run {
+            let preview = model.previewText(translationMode: .none, characterCount: 40, fallback: "")
+            XCTAssertTrue(preview.hasPrefix("第三段预览"))
+            XCTAssertFalse(preview.contains("第一段不应预览"))
+            XCTAssertFalse(preview.contains("第二段不应预览"))
+        }
+
+        await model.saveProgress()
+
+        let favorite = await favoriteStore.favorite(for: threadURL)
+        XCTAssertEqual(favorite?.novelResumePoint?.segmentIndex, 2)
+        XCTAssertEqual(favorite?.novelResumePoint?.segmentOffset, 10)
+        XCTAssertEqual(favorite?.lastPage, 2)
+    }
+
     func testForumNovelProgressDoesNotCreateFavorite() async throws {
         let keyPrefix = UUID().uuidString
         let settingsStore = SettingsStore(key: "\(keyPrefix).settings")
@@ -1969,6 +2038,50 @@ private func makeImageDocument(
         maxView: maxView,
         contentSource: .fallbackUnfilteredPage,
         segments: segments
+    )
+}
+
+private func readerModelPreviewSourcePagination(
+    document: ReaderPageDocument,
+    settings: ReaderAppearanceSettings,
+    layout: ReaderContainerLayout
+) -> ReaderPaginationResult {
+    ReaderPaginationResult(
+        pages: document.segments.enumerated().map { index, segment in
+            let text: String
+            switch segment {
+            case let .text(value, _):
+                text = value
+            case .image:
+                text = ""
+            }
+            return ReaderRenderedPage(
+                index: index,
+                blocks: [
+                    .text(
+                        text,
+                        chapterTitle: segment.chapterTitle,
+                        ranges: [
+                            ReaderRenderedTextRange(
+                                segmentIndex: index,
+                                startOffset: 0,
+                                endOffset: text.count
+                            )
+                        ]
+                    )
+                ],
+                documentView: document.view,
+                chapterOrdinal: 0,
+                chapterTitle: segment.chapterTitle
+            )
+        },
+        chapters: [
+            ReaderChapter(
+                ordinal: 0,
+                title: document.segments.first?.chapterTitle ?? "Chapter",
+                startIndex: 0
+            )
+        ]
     )
 }
 
