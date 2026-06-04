@@ -8,7 +8,7 @@ enum NovelTextDisplaySurface: Equatable {
 }
 
 enum NovelTextDisplayBackend: Equatable {
-    case textKit2DisplayAdapter
+    case novelTextViewport
     case novelTextLayoutMeasurement
 }
 
@@ -50,7 +50,7 @@ enum NovelTextDisplayAdapter {
         let semantics = displayValue.semantics
         return NovelTextDisplayMaterialization(
             surface: surface,
-            backend: .textKit2DisplayAdapter,
+            backend: .novelTextViewport,
             measurementBackend: .novelTextLayoutMeasurement,
             text: displayValue.text,
             chapterTitle: displayValue.chapterTitle,
@@ -140,15 +140,15 @@ struct NativeNovelTextDisplayView: UIViewRepresentable {
         )
     }
 
-    func makeUIView(context: Context) -> NovelTextKit2DisplayUIView {
-        let view = NovelTextKit2DisplayUIView()
+    func makeUIView(context: Context) -> NovelTextViewportDisplayUIView {
+        let view = NovelTextViewportDisplayUIView()
         view.backgroundColor = .clear
         view.isOpaque = false
         view.isUserInteractionEnabled = false
         return view
     }
 
-    func updateUIView(_ uiView: NovelTextKit2DisplayUIView, context: Context) {
+    func updateUIView(_ uiView: NovelTextViewportDisplayUIView, context: Context) {
         uiView.update(attributedText: NovelTextKit2PlatformAdapter.makeAttributedText(
             displayValue: displayValue,
             baseFontSize: baseFontSize,
@@ -159,7 +159,7 @@ struct NativeNovelTextDisplayView: UIViewRepresentable {
 
     func sizeThatFits(
         _ proposal: ProposedViewSize,
-        uiView: NovelTextKit2DisplayUIView,
+        uiView: NovelTextViewportDisplayUIView,
         context: Context
     ) -> CGSize? {
         let targetWidth = proposal.width ?? UIScreen.main.bounds.width
@@ -193,7 +193,7 @@ enum NovelTextKit2PlatformAdapter {
     }
 }
 
-final class NovelTextKit2DisplayUIView: UIView {
+final class NovelTextViewportDisplayUIView: UIView, NSTextViewportLayoutControllerDelegate {
     private let textContentStorage = NSTextContentStorage()
     private let textLayoutManager = NSTextLayoutManager()
     private let textContainer = NSTextContainer(size: .zero)
@@ -219,16 +219,28 @@ final class NovelTextKit2DisplayUIView: UIView {
 
     override func draw(_ rect: CGRect) {
         guard let context = UIGraphicsGetCurrentContext(), bounds.width > 0 else { return }
-        textContainer.size = CGSize(width: bounds.width, height: .greatestFiniteMagnitude)
-        textLayoutManager.ensureLayout(for: textContentStorage.documentRange)
+        textContainer.size = CGSize(width: bounds.width, height: max(bounds.height, 1))
+        textLayoutManager.textViewportLayoutController.layoutViewport()
         textLayoutManager.enumerateTextLayoutFragments(
             from: textContentStorage.documentRange.location,
             options: []
         ) { fragment in
+            guard fragment.layoutFragmentFrame.intersects(bounds) else {
+                return true
+            }
             fragment.draw(at: fragment.layoutFragmentFrame.origin, in: context)
             return true
         }
     }
+
+    func viewportBounds(for textViewportLayoutController: NSTextViewportLayoutController) -> CGRect {
+        bounds
+    }
+
+    func textViewportLayoutController(
+        _ textViewportLayoutController: NSTextViewportLayoutController,
+        configureRenderingSurfaceFor textLayoutFragment: NSTextLayoutFragment
+    ) {}
 
     private func configureTextKit2() {
         textContainer.lineFragmentPadding = 0
@@ -236,6 +248,7 @@ final class NovelTextKit2DisplayUIView: UIView {
         textContainer.lineBreakMode = .byWordWrapping
         textContentStorage.addTextLayoutManager(textLayoutManager)
         textLayoutManager.textContainer = textContainer
+        textLayoutManager.textViewportLayoutController.delegate = self
     }
 }
 
