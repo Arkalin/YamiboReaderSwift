@@ -273,6 +273,18 @@ public struct NovelReadingSession: Sendable {
         updateLocation(pageIndex: pageIndex, intraPageProgress: intraPageProgress)
     }
 
+    public mutating func updateVerticalViewportPosition(sample: NovelTextViewportSample) {
+        guard settings.readingMode == .vertical,
+              let target = resolveViewportSample(sample) else {
+            updateVerticalViewportPosition(
+                pageIndex: sample.pageIndex,
+                intraPageProgress: 0
+            )
+            return
+        }
+        setCurrentLocation(target)
+    }
+
     public mutating func acceptPrefetchedDocument(_ document: ReaderPageDocument) {
         prefetchedDocument = document
         snapshot.maxView = max(snapshot.maxView, document.maxView)
@@ -655,6 +667,30 @@ public struct NovelReadingSession: Sendable {
 
         guard let firstPage = pagesInView.first else { return nil }
         return ReaderResolvedTarget(pageIndex: firstPage.index, intraPageProgress: 0, documentView: firstPage.documentView)
+    }
+
+    private func resolveViewportSample(_ sample: NovelTextViewportSample) -> ReaderResolvedTarget? {
+        guard let page = snapshot.pages.first(where: {
+            $0.index == sample.pageIndex && $0.documentView == sample.documentView
+        }) else {
+            return nil
+        }
+        guard let range = textRanges(for: page).first(where: {
+            $0.segmentIndex == sample.segmentIndex && contains(offset: sample.segmentOffset, in: $0)
+        }) else {
+            return nil
+        }
+        let progress: Double
+        if range.length > 0 {
+            progress = Double(sample.segmentOffset - range.startOffset) / Double(range.length)
+        } else {
+            progress = 0
+        }
+        return ReaderResolvedTarget(
+            pageIndex: page.index,
+            intraPageProgress: min(max(progress, 0), 1),
+            documentView: page.documentView
+        )
     }
 
     private func contains(offset: Int, in page: ReaderRenderedPage) -> Bool {

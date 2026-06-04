@@ -546,6 +546,19 @@ public final class ReaderContainerModel: ObservableObject {
         promoteIfNeededAfterLocationUpdate()
     }
 
+    public func updateVerticalViewportPosition(sample: NovelTextViewportSample) {
+        if let state = readingWorkflow?.updateVerticalViewportPosition(sample: sample) {
+            syncFromWorkflowState(state)
+        }
+        scheduleProgressSync()
+
+        Task {
+            await prefetchIfNeeded(for: currentPageIndex)
+        }
+
+        promoteIfNeededAfterLocationUpdate()
+    }
+
     public func jumpToChapter(_ chapter: ReaderChapter) {
         jumpToRenderedPage(chapter.startIndex)
     }

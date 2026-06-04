@@ -276,6 +276,111 @@ final class NovelReadingWorkflowTests: XCTestCase {
         XCTAssertEqual(resumePoint.readingModeHint, .vertical)
     }
 
+    func testVerticalViewportSampleUsesTextKitIndexPositionInsteadOfFrameProgress() async throws {
+        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9153&mobile=2")!
+        let repository = RecordingNovelReadingRepository(documents: [
+            1: makeNovelDocument(threadURL: threadURL, view: 1, maxView: 1, authorID: "author-1")
+        ])
+        let workflow = NovelReadingWorkflow(
+            context: ReaderLaunchContext(
+                threadURL: threadURL,
+                threadTitle: "Thread",
+                source: .forum,
+                initialView: 1,
+                authorID: "author-1"
+            ),
+            settings: ReaderAppearanceSettings(readingMode: .vertical),
+            layout: ReaderContainerLayout(width: 320, height: 568),
+            repository: repository,
+            pagination: { document, _, _ in
+                ReaderPaginationResult(
+                    pages: [
+                        ReaderRenderedPage(
+                            index: 0,
+                            blocks: [
+                                .text(
+                                    "第一页",
+                                    chapterTitle: "第一章",
+                                    ranges: [
+                                        ReaderRenderedTextRange(segmentIndex: 0, startOffset: 0, endOffset: 20)
+                                    ]
+                                )
+                            ],
+                            documentView: document.view,
+                            chapterOrdinal: 0,
+                            chapterTitle: "第一章"
+                        ),
+                        ReaderRenderedPage(
+                            index: 1,
+                            blocks: [
+                                .text(
+                                    "第二页",
+                                    chapterTitle: "第一章",
+                                    ranges: [
+                                        ReaderRenderedTextRange(segmentIndex: 2, startOffset: 40, endOffset: 80)
+                                    ]
+                                )
+                            ],
+                            documentView: document.view,
+                            chapterOrdinal: 0,
+                            chapterTitle: "第一章"
+                        )
+                    ],
+                    chapters: [
+                        ReaderChapter(ordinal: 0, title: "第一章", startIndex: 0)
+                    ],
+                    viewportIndex: NovelTextViewportIndex(
+                        documentView: document.view,
+                        readingMode: .vertical,
+                        pages: [
+                            NovelTextViewportIndexPage(
+                                pageIndex: 0,
+                                documentView: document.view,
+                                chapterOrdinal: 0,
+                                chapterTitle: "第一章",
+                                ranges: [
+                                    ReaderRenderedTextRange(segmentIndex: 0, startOffset: 0, endOffset: 20)
+                                ]
+                            ),
+                            NovelTextViewportIndexPage(
+                                pageIndex: 1,
+                                documentView: document.view,
+                                chapterOrdinal: 0,
+                                chapterTitle: "第一章",
+                                ranges: [
+                                    ReaderRenderedTextRange(segmentIndex: 2, startOffset: 40, endOffset: 80)
+                                ]
+                            )
+                        ],
+                        chapters: [
+                            NovelTextViewportIndexChapter(ordinal: 0, title: "第一章", startPageIndex: 0)
+                        ]
+                    )
+                )
+            }
+        )
+        _ = try await workflow.start(initial: NovelReadingInitialPosition())
+        _ = workflow.updateVerticalViewportPosition(pageIndex: 1, intraPageProgress: 0.25)
+
+        let state = try XCTUnwrap(
+            workflow.updateVerticalViewportPosition(
+                sample: NovelTextViewportSample(
+                    documentView: 1,
+                    pageIndex: 1,
+                    segmentIndex: 2,
+                    segmentOffset: 68
+                )
+            )
+        )
+        let resumePoint = try XCTUnwrap(workflow.captureNovelReadingPosition())
+
+        XCTAssertEqual(state.snapshot.currentPageIndex, 1)
+        XCTAssertEqual(state.snapshot.currentPageIntraProgress, 0.7, accuracy: 0.001)
+        XCTAssertEqual(resumePoint.segmentIndex, 2)
+        XCTAssertEqual(resumePoint.segmentOffset, 68)
+        XCTAssertNotEqual(resumePoint.segmentOffset, 50)
+    }
+
     func testCurrentProgressPositionUsesSessionBackedResumePoint() async throws {
         let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9112&mobile=2")!
         let repository = RecordingNovelReadingRepository(documents: [

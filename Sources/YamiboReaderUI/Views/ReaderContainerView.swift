@@ -121,6 +121,7 @@ public struct ReaderContainerView: View {
     @State private var verticalRestoreRetryTask: Task<Void, Never>?
     @State private var verticalViewportPositionUpdateTask: Task<Void, Never>?
     @State private var verticalPageFrames: [Int: ReaderVerticalPageFrameValue] = [:]
+    @State private var verticalTextViewportSample: NovelTextViewportSample?
     @State private var lastVerticalPositioningFingerprint: ReaderVerticalPositioningFingerprint?
     @State private var verticalProgressScrubState = ReaderProgressScrubState()
     @State private var verticalProgressStartFeedbackGenerator = UIImpactFeedbackGenerator(style: .light)
@@ -448,6 +449,10 @@ public struct ReaderContainerView: View {
             onPageFramesChange: { frames in
                 verticalPageFrames = frames
                 tryAdvanceVerticalRestore()
+                scheduleVerticalViewportPositionUpdate()
+            },
+            onTextViewportSampleChange: { sample in
+                verticalTextViewportSample = sample
                 scheduleVerticalViewportPositionUpdate()
             },
             onViewportChange: {
@@ -993,6 +998,11 @@ public struct ReaderContainerView: View {
         let frames = currentVerticalPageFrames
         guard model.settings.readingMode == .vertical, !frames.isEmpty else { return }
         guard verticalRestoreController.canSampleViewport(now: CACurrentMediaTime()) else {
+            return
+        }
+
+        if let sample = verticalTextViewportSample {
+            model.updateVerticalViewportPosition(sample: sample)
             return
         }
 
