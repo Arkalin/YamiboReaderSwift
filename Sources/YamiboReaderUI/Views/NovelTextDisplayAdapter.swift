@@ -70,12 +70,41 @@ enum NovelTextDisplayAdapter {
             )
         )
     }
+
+    static func displayPlan(
+        surface: NovelTextDisplaySurface,
+        displayValue: NovelTextDisplayValue,
+        baseFontSize: Double,
+        textColor: NovelTextDisplayColor
+    ) -> NovelTextDisplayPlan {
+        let semantics = displayValue.semantics
+        return NovelTextDisplayPlan(
+            surface: surface,
+            backend: .textKit2DisplayAdapter,
+            measurementBackend: .textKit2DisplayAdapter,
+            text: displayValue.text,
+            chapterTitle: displayValue.chapterTitle,
+            startsAtParagraphBoundary: displayValue.startsAtParagraphBoundary,
+            style: NovelTextDisplayStyle(
+                fontScale: semantics.fontScale,
+                fontFamily: semantics.fontFamily,
+                pointSize: baseFontSize * semantics.fontScale,
+                lineHeightScale: semantics.lineHeightScale,
+                characterSpacingScale: semantics.characterSpacingScale,
+                indentsParagraphFirstLine: semantics.indentsParagraphFirstLine,
+                usesJustifiedText: semantics.usesJustifiedText,
+                baseFontSize: baseFontSize,
+                textColor: textColor,
+                includesChapterTitle: displayValue.chapterTitle?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+            )
+        )
+    }
 }
 
 enum ReaderBlockTextDisplayPlanner {
     static func displayPlan(
         for block: ReaderRenderedBlock,
-        settings: ReaderAppearanceSettings,
+        settings _: ReaderAppearanceSettings,
         baseFontSize: Double = 22
     ) -> NovelTextDisplayPlan? {
         guard let displayValue = block.novelTextDisplayValue else {
@@ -83,10 +112,7 @@ enum ReaderBlockTextDisplayPlanner {
         }
         return NovelTextDisplayAdapter.displayPlan(
             surface: .novelReadingSessionTextBlock,
-            text: displayValue.text,
-            chapterTitle: displayValue.chapterTitle,
-            startsAtParagraphBoundary: displayValue.startsAtParagraphBoundary,
-            settings: settings,
+            displayValue: displayValue,
             baseFontSize: baseFontSize,
             textColor: .primaryReaderText
         )
@@ -101,20 +127,14 @@ extension NovelTextDisplayAdapter {
     static func measuredHeight(
         width: CGFloat,
         displayView: NovelTextKit2DisplayUIView,
-        text: String,
-        chapterTitle: String?,
-        startsAtParagraphBoundary: Bool,
-        settings: ReaderAppearanceSettings,
+        displayValue: NovelTextDisplayValue,
         baseFontSize: Double,
         textColor: UIColor,
         titleWeight: UIFont.Weight
     ) -> CGFloat {
         displayView.measuredHeight(
             width: width,
-            text: text,
-            chapterTitle: chapterTitle,
-            startsAtParagraphBoundary: startsAtParagraphBoundary,
-            settings: settings,
+            displayValue: displayValue,
             baseFontSize: baseFontSize,
             textColor: textColor,
             titleWeight: titleWeight
@@ -124,22 +144,58 @@ extension NovelTextDisplayAdapter {
 
 struct NativeNovelTextDisplayView: UIViewRepresentable {
     let surface: NovelTextDisplaySurface
-    let text: String
-    let chapterTitle: String?
-    var startsAtParagraphBoundary: Bool = true
-    let settings: ReaderAppearanceSettings
+    let displayValue: NovelTextDisplayValue
     let baseFontSize: Double
     let textColor: UIColor
     let textColorToken: NovelTextDisplayColor
     var titleWeight: UIFont.Weight = .regular
 
+    init(
+        surface: NovelTextDisplaySurface,
+        displayValue: NovelTextDisplayValue,
+        baseFontSize: Double,
+        textColor: UIColor,
+        textColorToken: NovelTextDisplayColor,
+        titleWeight: UIFont.Weight = .regular
+    ) {
+        self.surface = surface
+        self.displayValue = displayValue
+        self.baseFontSize = baseFontSize
+        self.textColor = textColor
+        self.textColorToken = textColorToken
+        self.titleWeight = titleWeight
+    }
+
+    init(
+        surface: NovelTextDisplaySurface,
+        text: String,
+        chapterTitle: String?,
+        startsAtParagraphBoundary: Bool = true,
+        settings: ReaderAppearanceSettings,
+        baseFontSize: Double,
+        textColor: UIColor,
+        textColorToken: NovelTextDisplayColor,
+        titleWeight: UIFont.Weight = .regular
+    ) {
+        self.init(
+            surface: surface,
+            displayValue: NovelTextDisplayValue(
+                text: text,
+                chapterTitle: chapterTitle,
+                startsAtParagraphBoundary: startsAtParagraphBoundary,
+                settings: settings
+            ),
+            baseFontSize: baseFontSize,
+            textColor: textColor,
+            textColorToken: textColorToken,
+            titleWeight: titleWeight
+        )
+    }
+
     var displayPlan: NovelTextDisplayPlan {
         NovelTextDisplayAdapter.displayPlan(
             surface: surface,
-            text: text,
-            chapterTitle: chapterTitle,
-            startsAtParagraphBoundary: startsAtParagraphBoundary,
-            settings: settings,
+            displayValue: displayValue,
             baseFontSize: baseFontSize,
             textColor: textColorToken
         )
@@ -166,10 +222,7 @@ struct NativeNovelTextDisplayView: UIViewRepresentable {
         let height = NovelTextDisplayAdapter.measuredHeight(
             width: targetWidth,
             displayView: uiView,
-            text: text,
-            chapterTitle: chapterTitle,
-            startsAtParagraphBoundary: startsAtParagraphBoundary,
-            settings: settings,
+            displayValue: displayValue,
             baseFontSize: baseFontSize,
             textColor: textColor,
             titleWeight: titleWeight
@@ -179,10 +232,10 @@ struct NativeNovelTextDisplayView: UIViewRepresentable {
 
     private func makeAttributedText() -> NSAttributedString {
         ReaderAttributedTextFactory.makeAttributedText(
-            text: text,
-            chapterTitle: chapterTitle,
-            startsAtParagraphBoundary: startsAtParagraphBoundary,
-            settings: settings,
+            text: displayValue.text,
+            chapterTitle: displayValue.chapterTitle,
+            startsAtParagraphBoundary: displayValue.startsAtParagraphBoundary,
+            settings: ReaderAppearanceSettings(displaySemantics: displayValue.semantics),
             baseFontSize: baseFontSize,
             textColor: textColor,
             titleWeight: titleWeight
@@ -216,19 +269,16 @@ final class NovelTextKit2DisplayUIView: UIView {
 
     func measuredHeight(
         width: CGFloat,
-        text: String,
-        chapterTitle: String?,
-        startsAtParagraphBoundary: Bool,
-        settings: ReaderAppearanceSettings,
+        displayValue: NovelTextDisplayValue,
         baseFontSize: Double,
         textColor: UIColor,
         titleWeight: UIFont.Weight
     ) -> CGFloat {
         let attributedText = ReaderAttributedTextFactory.makeAttributedText(
-            text: text,
-            chapterTitle: chapterTitle,
-            startsAtParagraphBoundary: startsAtParagraphBoundary,
-            settings: settings,
+            text: displayValue.text,
+            chapterTitle: displayValue.chapterTitle,
+            startsAtParagraphBoundary: displayValue.startsAtParagraphBoundary,
+            settings: ReaderAppearanceSettings(displaySemantics: displayValue.semantics),
             baseFontSize: baseFontSize,
             textColor: textColor,
             titleWeight: titleWeight
@@ -268,6 +318,19 @@ final class NovelTextKit2DisplayUIView: UIView {
         textContainer.lineBreakMode = .byWordWrapping
         textContentStorage.addTextLayoutManager(textLayoutManager)
         textLayoutManager.textContainer = textContainer
+    }
+}
+
+private extension ReaderAppearanceSettings {
+    init(displaySemantics: NovelTextDisplaySemantics) {
+        self.init(
+            fontScale: displaySemantics.fontScale,
+            fontFamily: displaySemantics.fontFamily,
+            lineHeightScale: displaySemantics.lineHeightScale,
+            characterSpacingScale: displaySemantics.characterSpacingScale,
+            usesJustifiedText: displaySemantics.usesJustifiedText,
+            indentsParagraphFirstLine: displaySemantics.indentsParagraphFirstLine
+        )
     }
 }
 #endif

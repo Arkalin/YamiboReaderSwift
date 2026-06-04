@@ -515,10 +515,7 @@ private struct ReaderBlockView: View {
         case let .text(displayValue):
             NativeNovelTextDisplayView(
                 surface: .novelReadingSessionTextBlock,
-                text: displayValue.text,
-                chapterTitle: displayValue.chapterTitle,
-                startsAtParagraphBoundary: displayValue.startsAtParagraphBoundary,
-                settings: settings,
+                displayValue: displayValue,
                 baseFontSize: 22,
                 textColor: UIColor(readerTextColor),
                 textColorToken: .primaryReaderText
