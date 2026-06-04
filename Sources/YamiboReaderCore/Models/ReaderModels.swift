@@ -549,6 +549,20 @@ public struct NovelTextViewportIndexPosition: Hashable, Sendable {
     }
 }
 
+public struct NovelTextViewportSample: Hashable, Sendable {
+    public var documentView: Int
+    public var pageIndex: Int
+    public var segmentIndex: Int
+    public var segmentOffset: Int
+
+    public init(documentView: Int, pageIndex: Int, segmentIndex: Int, segmentOffset: Int) {
+        self.documentView = max(1, documentView)
+        self.pageIndex = max(0, pageIndex)
+        self.segmentIndex = max(0, segmentIndex)
+        self.segmentOffset = max(0, segmentOffset)
+    }
+}
+
 public struct NovelTextViewportIndex: Hashable, Sendable {
     public var documentView: Int
     public var readingMode: ReaderReadingMode

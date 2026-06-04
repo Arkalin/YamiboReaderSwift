@@ -466,6 +466,41 @@ enum ReaderViewportParagraphBoundaryResolver {
     }
 }
 
+struct ReaderVerticalViewportTextOffsetMapper {
+    static func sample(
+        displayOffset: Int,
+        displayValue: NovelTextDisplayValue,
+        documentView: Int,
+        pageIndex: Int
+    ) -> NovelTextViewportSample? {
+        guard !displayValue.ranges.isEmpty else { return nil }
+        let normalizedOffset = max(0, displayOffset)
+        var runningOffset = 0
+
+        for range in displayValue.ranges {
+            let length = max(range.length, 0)
+            let rangeEnd = runningOffset + length
+            if normalizedOffset <= rangeEnd {
+                return NovelTextViewportSample(
+                    documentView: documentView,
+                    pageIndex: pageIndex,
+                    segmentIndex: range.segmentIndex,
+                    segmentOffset: range.startOffset + min(max(normalizedOffset - runningOffset, 0), length)
+                )
+            }
+            runningOffset = rangeEnd + 2
+        }
+
+        guard let lastRange = displayValue.ranges.last else { return nil }
+        return NovelTextViewportSample(
+            documentView: documentView,
+            pageIndex: pageIndex,
+            segmentIndex: lastRange.segmentIndex,
+            segmentOffset: lastRange.endOffset
+        )
+    }
+}
+
 #if os(iOS)
 import UIKit
 
@@ -1117,6 +1152,7 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
     let onScrollRequestHandled: (ReaderVerticalScrollRequest) -> Void
     let onScrollViewReady: (UIScrollView) -> Void
     let onPageFramesChange: ([Int: ReaderVerticalPageFrameValue]) -> Void
+    let onTextViewportSampleChange: (NovelTextViewportSample?) -> Void
     let onViewportChange: () -> Void
     let onScrollSettled: () -> Void
     let onTap: () -> Void
@@ -1312,6 +1348,35 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
             callbackScheduler.publish {
                 onPageFramesChange(frames)
             }
+
+            let referenceLineY = scrollView.bounds.midY
+            let textSample = collectionView.indexPathsForVisibleItems
+                .compactMap { indexPath -> (distance: CGFloat, sample: NovelTextViewportSample)? in
+                    guard parent.pages.indices.contains(indexPath.item),
+                          let cell = collectionView.cellForItem(at: indexPath) as? ReaderVerticalViewportCell,
+                          let attributes = collectionView.layoutAttributesForItem(at: indexPath) else {
+                        return nil
+                    }
+                    let page = parent.pages[indexPath.item]
+                    let visibleFrame = attributes.frame.offsetBy(
+                        dx: -collectionView.contentOffset.x,
+                        dy: -collectionView.contentOffset.y
+                    )
+                    guard let sample = cell.textViewportSample(
+                        referenceLineY: referenceLineY,
+                        pageFrame: visibleFrame,
+                        documentView: page.documentView,
+                        pageIndex: page.index
+                    ) else {
+                        return nil
+                    }
+                    return (ReaderVerticalPositioning.pageDistance(from: referenceLineY, to: visibleFrame), sample)
+                }
+                .min { $0.distance < $1.distance }?.sample
+            let onTextViewportSampleChange = parent.onTextViewportSampleChange
+            callbackScheduler.publish {
+                onTextViewportSampleChange(textSample)
+            }
         }
 
         private func publishScrollSettled(from scrollView: UIScrollView) {
@@ -1378,6 +1443,7 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
     private struct BlockView {
         let view: UIView
         let height: CGFloat
+        let displayValue: NovelTextDisplayValue?
     }
 
     private var blockViews: [BlockView] = []
@@ -1456,6 +1522,33 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
         layoutBlockSubviews()
     }
 
+    func textViewportSample(
+        referenceLineY: CGFloat,
+        pageFrame: CGRect,
+        documentView: Int,
+        pageIndex: Int
+    ) -> NovelTextViewportSample? {
+        let contentY = referenceLineY - pageFrame.minY
+        let candidates = blockViews.compactMap { block -> (distance: CGFloat, sample: NovelTextViewportSample)? in
+            guard let textView = block.view as? NovelTextViewportDisplayUIView,
+                  let displayValue = block.displayValue else {
+                return nil
+            }
+            let referencePoint = CGPoint(x: textView.bounds.midX, y: contentY - textView.frame.minY)
+            guard let displayOffset = textView.closestTextOffset(to: referencePoint),
+                  let sample = ReaderVerticalViewportTextOffsetMapper.sample(
+                    displayOffset: displayOffset,
+                    displayValue: displayValue,
+                    documentView: documentView,
+                    pageIndex: pageIndex
+                  ) else {
+                return nil
+            }
+            return (ReaderVerticalPositioning.pageDistance(from: contentY, to: textView.frame), sample)
+        }
+        return candidates.min { $0.distance < $1.distance }?.sample
+    }
+
     private func configureViewHierarchy() {
         backgroundColor = .clear
         contentView.backgroundColor = .clear
@@ -1495,7 +1588,7 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
             titleWeight: .regular
         ))
         textView.prepareForDisplay(size: CGSize(width: contentWidth, height: height))
-        return BlockView(view: textView, height: height)
+        return BlockView(view: textView, height: height, displayValue: displayValue)
     }
 
     private func makeImageBlockView(
@@ -1507,7 +1600,7 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
         let height = min(max(contentWidth * 0.65, 160), max(bounds.height, 160))
         let imageView = ReaderVerticalViewportImageView()
         imageView.configure(url: url, refererURL: refererURL, sessionState: sessionState)
-        return BlockView(view: imageView, height: height)
+        return BlockView(view: imageView, height: height, displayValue: nil)
     }
 
     private func makeFooterBlockView(_ text: String) -> BlockView {
@@ -1517,7 +1610,7 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
         label.textColor = .secondaryLabel
         label.font = .preferredFont(forTextStyle: .caption1)
         label.numberOfLines = 0
-        return BlockView(view: label, height: 44)
+        return BlockView(view: label, height: 44, displayValue: nil)
     }
 
     private var readerTextUIColor: UIColor {

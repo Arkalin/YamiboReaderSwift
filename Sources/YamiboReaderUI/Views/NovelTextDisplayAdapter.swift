@@ -236,6 +236,42 @@ final class NovelTextViewportDisplayUIView: UIView, @MainActor NSTextViewportLay
         setNeedsDisplay()
     }
 
+    func closestTextOffset(to point: CGPoint) -> Int? {
+        guard bounds.width > 0, attributedText.length > 0 else { return nil }
+        updateTextContainerSizeForCurrentBounds()
+        textLayoutManager.ensureLayout(for: textContentStorage.documentRange)
+        let documentStart = textContentStorage.documentRange.location
+        var best: (distance: CGFloat, offset: Int)?
+
+        textLayoutManager.enumerateTextLayoutFragments(
+            from: documentStart,
+            options: []
+        ) { fragment in
+            let frame = fragment.layoutFragmentFrame
+            let distance = Self.distance(from: point, to: frame)
+            let range = fragment.rangeInElement
+            let rangeStart = textContentStorage.offset(from: documentStart, to: range.location)
+            let rangeEnd = textContentStorage.offset(from: documentStart, to: range.endLocation)
+            guard rangeStart != NSNotFound, rangeEnd != NSNotFound, rangeEnd >= rangeStart else {
+                return true
+            }
+
+            let progress: CGFloat = if frame.height > 0 {
+                min(max((point.y - frame.minY) / frame.height, 0), 1)
+            } else {
+                0
+            }
+            let fragmentLength = max(rangeEnd - rangeStart, 0)
+            let offset = rangeStart + min(max(Int((CGFloat(fragmentLength) * progress).rounded(.towardZero)), 0), fragmentLength)
+            if best == nil || distance < best!.distance {
+                best = (distance, offset)
+            }
+            return true
+        }
+
+        return best?.offset
+    }
+
     override func draw(_ rect: CGRect) {
         guard let context = UIGraphicsGetCurrentContext(), bounds.width > 0 else { return }
         updateTextContainerSizeForCurrentBounds()
@@ -269,6 +305,29 @@ final class NovelTextViewportDisplayUIView: UIView, @MainActor NSTextViewportLay
         textContentStorage.addTextLayoutManager(textLayoutManager)
         textLayoutManager.textContainer = textContainer
         textLayoutManager.textViewportLayoutController.delegate = self
+    }
+
+    private static func distance(from point: CGPoint, to rect: CGRect) -> CGFloat {
+        if rect.contains(point) {
+            return 0
+        }
+        let dx: CGFloat
+        if point.x < rect.minX {
+            dx = rect.minX - point.x
+        } else if point.x > rect.maxX {
+            dx = point.x - rect.maxX
+        } else {
+            dx = 0
+        }
+        let dy: CGFloat
+        if point.y < rect.minY {
+            dy = rect.minY - point.y
+        } else if point.y > rect.maxY {
+            dy = point.y - rect.maxY
+        } else {
+            dy = 0
+        }
+        return hypot(dx, dy)
     }
 
     @discardableResult

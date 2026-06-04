@@ -211,6 +211,14 @@ public final class NovelReadingWorkflow {
     }
 
     @discardableResult
+    public func updateVerticalViewportPosition(
+        sample: NovelTextViewportSample
+    ) -> NovelReadingWorkflowState? {
+        session?.updateVerticalViewportPosition(sample: sample)
+        return updateStateFromSession(cachedViews: state?.cachedViews ?? [])
+    }
+
+    @discardableResult
     public func jumpRelativePage(_ delta: Int) -> (state: NovelReadingWorkflowState, request: NovelReadingNavigationRequest?)? {
         guard session != nil else { return nil }
         let request = session?.jumpRelativePage(delta)
