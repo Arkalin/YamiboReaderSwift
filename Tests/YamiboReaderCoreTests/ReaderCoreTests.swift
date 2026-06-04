@@ -994,6 +994,108 @@ private final class StubURLProtocol: URLProtocol {
     #expect(index.pages.flatMap(\.ranges).map(\.segmentIndex) == [0, 1, 3])
 }
 
+@Test func novelTextLayoutMaterializesViewportPageDisplayValueFromMultiRangeIndexPage() async throws {
+    let settings = ReaderAppearanceSettings(
+        fontScale: 1.25,
+        fontFamily: .systemSerif,
+        lineHeightScale: 1.7,
+        characterSpacingScale: 0.12,
+        usesJustifiedText: true,
+        indentsParagraphFirstLine: true,
+        readingMode: .paged
+    )
+    let context = NovelTextViewportContext(
+        identity: NovelTextViewportIdentity(
+            threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=159&mobile=2")),
+            documentView: 2,
+            maxView: 3,
+            fetchedAt: Date(timeIntervalSince1970: 159),
+            contentSource: .fallbackUnfilteredPage,
+            appearance: settings,
+            layout: ReaderContainerLayout(width: 390, height: 844)
+        ),
+        document: NovelTextViewportDocument(
+            text: "第一段正文很长\n\n第二段正文继续",
+            textRangesBySegment: [
+                0: ReaderRenderedTextRange(segmentIndex: 0, startOffset: 0, endOffset: 7),
+                1: ReaderRenderedTextRange(segmentIndex: 1, startOffset: 9, endOffset: 16)
+            ],
+            insertedSeparatorRanges: [
+                ReaderRenderedTextRange(segmentIndex: 0, startOffset: 7, endOffset: 9)
+            ]
+        ),
+        externalBlocks: [],
+        diagnostics: NovelTextViewportDiagnostics(indexBuildCount: 1)
+    )
+    let ranges = [
+        ReaderRenderedTextRange(segmentIndex: 0, startOffset: 2, endOffset: 7),
+        ReaderRenderedTextRange(segmentIndex: 1, startOffset: 0, endOffset: 4)
+    ]
+    let viewportPage = NovelTextViewportIndexPage(
+        pageIndex: 4,
+        documentView: 2,
+        chapterOrdinal: 0,
+        chapterTitle: "第一章",
+        ranges: ranges
+    )
+
+    let displayValue = try NovelTextLayout.displayValue(
+        viewportContext: context,
+        viewportPage: viewportPage,
+        settings: settings
+    )
+
+    #expect(displayValue.text == "段正文很长\n\n第二段正")
+    #expect(displayValue.chapterTitle == "第一章")
+    #expect(displayValue.startsAtParagraphBoundary == false)
+    #expect(displayValue.ranges == ranges)
+    #expect(displayValue.semantics.fontScale == 1.25)
+    #expect(displayValue.semantics.fontFamily == .systemSerif)
+    #expect(displayValue.semantics.lineHeightScale == 1.7)
+    #expect(displayValue.semantics.characterSpacingScale == 0.12)
+    #expect(displayValue.semantics.usesJustifiedText)
+    #expect(displayValue.semantics.indentsParagraphFirstLine)
+}
+
+@Test func novelTextLayoutDisplayValueFailsWhenViewportPageRangeIsMissingFromContext() async throws {
+    let settings = ReaderAppearanceSettings(readingMode: .paged)
+    let context = NovelTextViewportContext(
+        identity: NovelTextViewportIdentity(
+            threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=159-missing&mobile=2")),
+            documentView: 1,
+            maxView: 1,
+            fetchedAt: Date(timeIntervalSince1970: 159),
+            contentSource: .fallbackUnfilteredPage,
+            appearance: settings,
+            layout: ReaderContainerLayout(width: 390, height: 844)
+        ),
+        document: NovelTextViewportDocument(
+            text: "第一段正文",
+            textRangesBySegment: [
+                0: ReaderRenderedTextRange(segmentIndex: 0, startOffset: 0, endOffset: 5)
+            ],
+            insertedSeparatorRanges: []
+        ),
+        externalBlocks: [],
+        diagnostics: NovelTextViewportDiagnostics(indexBuildCount: 1)
+    )
+    let viewportPage = NovelTextViewportIndexPage(
+        pageIndex: 0,
+        documentView: 1,
+        chapterOrdinal: nil,
+        chapterTitle: nil,
+        ranges: [ReaderRenderedTextRange(segmentIndex: 9, startOffset: 0, endOffset: 2)]
+    )
+
+    #expect(throws: NovelTextLayoutFailure.unableToLayoutText) {
+        _ = try NovelTextLayout.displayValue(
+            viewportContext: context,
+            viewportPage: viewportPage,
+            settings: settings
+        )
+    }
+}
+
 @Test func novelTextLayoutReusesCachedNovelTextViewportIndexForMatchingInputs() async throws {
     let document = ReaderPageDocument(
         threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=102&mobile=2")),

@@ -424,48 +424,6 @@ struct ReaderPagedPagerIdentity: Hashable {
     }
 }
 
-enum ReaderViewportParagraphBoundaryResolver {
-    static func startsAtParagraphBoundary(
-        viewportContext: NovelTextViewportContext,
-        viewportPage: NovelTextViewportIndexPage
-    ) -> Bool {
-        guard let firstRange = viewportPage.ranges.first,
-              let segmentRange = viewportContext.document.textRangesBySegment[firstRange.segmentIndex] else {
-            return true
-        }
-        guard firstRange.startOffset > 0 else {
-            return true
-        }
-        let globalStart = segmentRange.startOffset + firstRange.startOffset
-        return isParagraphBoundary(in: viewportContext.document.text, at: globalStart)
-    }
-
-    private static func isParagraphBoundary(in text: String, at offset: Int) -> Bool {
-        guard offset > 0, offset <= text.count else { return offset == 0 }
-        let nsText = text as NSString
-        var index = offset - 1
-        var newlineCount = 0
-
-        while index >= 0 {
-            let character = nsText.substring(with: NSRange(location: index, length: 1))
-            if character == "\n" || character == "\r" {
-                newlineCount += 1
-                if newlineCount >= 2 {
-                    return true
-                }
-            } else if character.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                index -= 1
-                continue
-            } else {
-                return false
-            }
-            index -= 1
-        }
-
-        return false
-    }
-}
-
 struct ReaderVerticalViewportTextOffsetMapper {
     static func sample(
         displayOffset: Int,
@@ -697,7 +655,7 @@ struct ReaderViewportPageContent: View {
         guard let viewportContext,
               let viewportPage,
               !viewportPage.ranges.isEmpty,
-              let displayValue = viewportDisplayValue(
+              let displayValue = try? NovelTextLayout.displayValue(
                 viewportContext: viewportContext,
                 viewportPage: viewportPage,
                 settings: settings
@@ -742,48 +700,6 @@ struct ReaderViewportPageContent: View {
         )
     }
 
-    private static func viewportDisplayValue(
-        viewportContext: NovelTextViewportContext,
-        viewportPage: NovelTextViewportIndexPage,
-        settings: ReaderAppearanceSettings
-    ) -> NovelTextDisplayValue? {
-        let text = viewportPage.ranges.compactMap { range -> String? in
-            guard let segmentRange = viewportContext.document.textRangesBySegment[range.segmentIndex] else {
-                return nil
-            }
-            let globalStart = segmentRange.startOffset + range.startOffset
-            let globalEnd = segmentRange.startOffset + range.endOffset
-            return viewportSubstring(
-                in: viewportContext.document.text,
-                startOffset: globalStart,
-                endOffset: globalEnd
-            )
-        }
-        .filter { !$0.isEmpty }
-        .joined(separator: "\n\n")
-        guard !text.isEmpty else { return nil }
-        return NovelTextDisplayValue(
-            text: text,
-            chapterTitle: viewportPage.chapterTitle,
-            startsAtParagraphBoundary: ReaderViewportParagraphBoundaryResolver.startsAtParagraphBoundary(
-                viewportContext: viewportContext,
-                viewportPage: viewportPage
-            ),
-            settings: settings,
-            ranges: viewportPage.ranges
-        )
-    }
-
-    private static func viewportSubstring(in text: String, startOffset: Int, endOffset: Int) -> String {
-        let clampedStart = min(max(startOffset, 0), text.count)
-        let clampedEnd = min(max(endOffset, clampedStart), text.count)
-        guard clampedEnd > clampedStart,
-              let startIndex = text.index(text.startIndex, offsetBy: clampedStart, limitedBy: text.endIndex),
-              let endIndex = text.index(text.startIndex, offsetBy: clampedEnd, limitedBy: text.endIndex) else {
-            return ""
-        }
-        return String(text[startIndex..<endIndex])
-    }
 }
 
 #if os(iOS)

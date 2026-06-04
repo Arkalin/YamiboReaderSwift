@@ -43,12 +43,13 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
             endOffset: firstParagraph.count
         )
 
-        let startsAtParagraphBoundary = ReaderViewportParagraphBoundaryResolver.startsAtParagraphBoundary(
+        let displayValue = try NovelTextLayout.displayValue(
             viewportContext: context,
             viewportPage: viewportTestIndexPage(index: 1, range: continuationRange),
+            settings: settings
         )
 
-        XCTAssertFalse(startsAtParagraphBoundary)
+        XCTAssertFalse(displayValue.startsAtParagraphBoundary)
     }
 
     func testViewportPageContentIndentsSliceStartingAtRealParagraphBoundary() throws {
@@ -64,12 +65,13 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
             endOffset: sourceText.count
         )
 
-        let startsAtParagraphBoundary = ReaderViewportParagraphBoundaryResolver.startsAtParagraphBoundary(
+        let displayValue = try NovelTextLayout.displayValue(
             viewportContext: context,
             viewportPage: viewportTestIndexPage(index: 2, range: paragraphRange),
+            settings: settings
         )
 
-        XCTAssertTrue(startsAtParagraphBoundary)
+        XCTAssertTrue(displayValue.startsAtParagraphBoundary)
     }
 
     func testNovelTextLayoutSettingsPreviewUsesTextKit2DisplayAdapterWithDraftReadingSettings() {
@@ -657,7 +659,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertFalse(referenceYBody.contains("progress * frame.height"))
     }
 
-    func testViewportPageContentDerivesNormalTextFromViewportContextAndIndexBeforeCompatibilityPageBlocks() throws {
+    func testViewportPageContentRequestsNormalTextDisplayValueFromNovelTextLayoutBeforeCompatibilityPageBlocks() throws {
         let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let supportSource = try String(
             contentsOf: repositoryRoot
@@ -667,11 +669,13 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         let viewportPageContentBody = try XCTUnwrap(typeBody(named: "ReaderViewportPageContent", in: supportSource))
 
         XCTAssertTrue(viewportPageContentBody.contains("viewportBackedPage("))
-        XCTAssertTrue(viewportPageContentBody.contains("viewportContext.document.textRangesBySegment"))
+        XCTAssertTrue(viewportPageContentBody.contains("NovelTextLayout.displayValue("))
         XCTAssertTrue(viewportPageContentBody.contains("viewportPage.ranges"))
         XCTAssertTrue(viewportPageContentBody.contains("compatibilityBlocks"))
         XCTAssertTrue(viewportPageContentBody.contains("visibleSurfaceDiagnostics("))
         XCTAssertTrue(viewportPageContentBody.contains("NovelTextViewportVisibleSurfaceDiagnostics"))
+        XCTAssertFalse(viewportPageContentBody.contains("viewportContext.document.textRangesBySegment"))
+        XCTAssertFalse(viewportPageContentBody.contains("viewportContext.document.text"))
         XCTAssertFalse(viewportPageContentBody.contains("page.novelTextDisplayValues.first"))
     }
 
