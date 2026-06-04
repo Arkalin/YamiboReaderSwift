@@ -149,7 +149,12 @@ struct NativeNovelTextDisplayView: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: NovelTextKit2DisplayUIView, context: Context) {
-        uiView.update(attributedText: makeAttributedText())
+        uiView.update(attributedText: NovelTextKit2PlatformAdapter.makeAttributedText(
+            displayValue: displayValue,
+            baseFontSize: baseFontSize,
+            textColor: textColor,
+            titleWeight: titleWeight
+        ))
     }
 
     func sizeThatFits(
@@ -167,8 +172,15 @@ struct NativeNovelTextDisplayView: UIViewRepresentable {
         }
         return CGSize(width: targetWidth, height: height)
     }
+}
 
-    private func makeAttributedText() -> NSAttributedString {
+enum NovelTextKit2PlatformAdapter {
+    static func makeAttributedText(
+        displayValue: NovelTextDisplayValue,
+        baseFontSize: Double,
+        textColor: UIColor,
+        titleWeight: UIFont.Weight
+    ) -> NSAttributedString {
         ReaderAttributedTextFactory.makeAttributedText(
             text: displayValue.text,
             chapterTitle: displayValue.chapterTitle,
@@ -203,38 +215,6 @@ final class NovelTextKit2DisplayUIView: UIView {
         textContentStorage.textStorage?.setAttributedString(attributedText)
         invalidateIntrinsicContentSize()
         setNeedsDisplay()
-    }
-
-    func measuredHeight(
-        width: CGFloat,
-        displayValue: NovelTextDisplayValue,
-        baseFontSize: Double,
-        textColor: UIColor,
-        titleWeight: UIFont.Weight
-    ) -> CGFloat {
-        let attributedText = ReaderAttributedTextFactory.makeAttributedText(
-            text: displayValue.text,
-            chapterTitle: displayValue.chapterTitle,
-            startsAtParagraphBoundary: displayValue.startsAtParagraphBoundary,
-            settings: ReaderAppearanceSettings(displaySemantics: displayValue.semantics),
-            baseFontSize: baseFontSize,
-            textColor: textColor,
-            titleWeight: titleWeight
-        )
-        guard width > 0, attributedText.length > 0 else { return 0 }
-        textContainer.size = CGSize(width: width, height: .greatestFiniteMagnitude)
-        textContentStorage.textStorage?.setAttributedString(attributedText)
-        textLayoutManager.ensureLayout(for: textContentStorage.documentRange)
-
-        var maxY: CGFloat = 0
-        textLayoutManager.enumerateTextLayoutFragments(
-            from: textContentStorage.documentRange.location,
-            options: []
-        ) { fragment in
-            maxY = max(maxY, fragment.layoutFragmentFrame.maxY)
-            return true
-        }
-        return ceil(maxY)
     }
 
     override func draw(_ rect: CGRect) {
