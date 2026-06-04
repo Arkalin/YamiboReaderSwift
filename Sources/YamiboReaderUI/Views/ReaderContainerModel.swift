@@ -398,7 +398,7 @@ public final class ReaderContainerModel: ObservableObject {
         await load(
             view: displayedView,
             preferredPage: displayedPageIndex,
-            preferredResumePoint: captureCurrentResumePoint(),
+            preferredResumePoint: readingWorkflow?.captureNovelReadingPosition(),
             forceRefresh: forceRefresh
         )
     }
@@ -972,43 +972,13 @@ public final class ReaderContainerModel: ObservableObject {
     }
 
     private func currentProgressSnapshot() -> NovelReadingPosition {
-        let resumePoint = captureCurrentResumePoint()
-        return NovelReadingPosition(
+        readingWorkflow?.currentProgressPosition() ?? NovelReadingPosition(
             threadURL: context.threadURL,
-            view: resumePoint?.view ?? displayedView,
+            view: displayedView,
             page: displayedPageIndex,
-            chapterTitle: resumePoint?.chapterTitle ?? currentChapterTitle,
-            authorID: resumePoint?.authorID ?? currentAuthorID ?? context.authorID,
-            resumePoint: resumePoint
+            chapterTitle: currentChapterTitle,
+            authorID: currentAuthorID ?? context.authorID
         )
-    }
-
-    private func captureCurrentResumePoint() -> ReaderResumePoint? {
-        if let resumePoint = readingWorkflow?.captureNovelReadingPosition() {
-            return resumePoint
-        }
-        guard let page = currentRenderedPageMetadata,
-              let chapterOrdinal = page.chapterOrdinal,
-              let position = textPosition(for: currentPageIntraProgress, in: page) else {
-            return nil
-        }
-
-        let range = position.range
-        let segmentLength = range.length
-        let offsetWithinSegment = segmentLength > 0
-            ? Int((Double(segmentLength) * position.progressInRange).rounded(.towardZero))
-            : 0
-        let resumePoint = ReaderResumePoint(
-            view: page.documentView,
-            chapterOrdinal: chapterOrdinal,
-            chapterTitle: page.chapterTitle,
-            segmentIndex: range.segmentIndex,
-            segmentOffset: range.startOffset + min(offsetWithinSegment, segmentLength),
-            segmentProgress: currentPageIntraProgress,
-            authorID: currentAuthorID ?? context.authorID,
-            readingModeHint: settings.readingMode
-        )
-        return resumePoint
     }
 
     private func promoteIfNeededAfterLocationUpdate() {
@@ -1054,19 +1024,19 @@ public final class ReaderContainerModel: ObservableObject {
 
     private func scheduleProgressSync() {
         let snapshot = currentProgressSnapshot()
-        persistReaderResumeRoute(snapshot)
-        Task { [progressSync] in
+        Task { [weak self, progressSync] in
+            await self?.persistReaderResumeRoute(snapshot)
             await progressSync.queue(.novel(snapshot))
         }
     }
 
     private func flushProgress() async {
         let snapshot = currentProgressSnapshot()
-        persistReaderResumeRoute(snapshot)
+        await persistReaderResumeRoute(snapshot)
         try? await progressSync.flush(.novel(snapshot))
     }
 
-    private func persistReaderResumeRoute(_ snapshot: NovelReadingPosition) {
+    private func persistReaderResumeRoute(_ snapshot: NovelReadingPosition) async {
         let resumeContext = ReaderLaunchContext(
             threadURL: context.threadURL,
             threadTitle: context.threadTitle,
@@ -1076,9 +1046,7 @@ public final class ReaderContainerModel: ObservableObject {
             authorID: snapshot.authorID ?? context.authorID,
             initialResumePoint: snapshot.resumePoint
         )
-        Task { [appContext] in
-            try? await appContext.readerResumeRouteStore.saveReadingPosition(.novel(resumeContext))
-        }
+        try? await appContext.readerResumeRouteStore.saveReadingPosition(.novel(resumeContext))
     }
 
     private func spreadIndex(forPageIndex pageIndex: Int) -> Int {

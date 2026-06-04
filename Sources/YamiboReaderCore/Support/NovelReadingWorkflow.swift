@@ -222,6 +222,20 @@ public final class NovelReadingWorkflow {
         session?.captureNovelReadingPosition()
     }
 
+    public func currentProgressPosition() -> NovelReadingPosition {
+        let resumePoint = captureNovelReadingPosition()
+        let snapshot = state?.snapshot
+        let view = resumePoint?.view ?? currentDisplayedView(in: snapshot) ?? context.initialView ?? 1
+        return NovelReadingPosition(
+            threadURL: context.threadURL,
+            view: view,
+            page: currentDisplayedPageIndex(in: snapshot, view: view),
+            chapterTitle: resumePoint?.chapterTitle ?? snapshot?.currentChapterTitle,
+            authorID: resumePoint?.authorID ?? snapshot?.currentAuthorID ?? currentAuthorID ?? context.authorID,
+            resumePoint: resumePoint
+        )
+    }
+
     private func cacheContext(for document: ReaderPageDocument) -> NovelReadingCacheContext {
         switch document.contentSource {
         case .authorFilteredPage:
@@ -236,6 +250,28 @@ public final class NovelReadingWorkflow {
                 contentSource: inferredContentSource(for: authorID)
             )
         }
+    }
+
+    private func currentDisplayedView(in snapshot: NovelReadingSnapshot?) -> Int? {
+        guard let snapshot else { return nil }
+        let normalizedIndex = currentPageIndex(in: snapshot)
+        guard snapshot.pages.indices.contains(normalizedIndex) else {
+            return snapshot.currentView
+        }
+        return snapshot.pages[normalizedIndex].documentView
+    }
+
+    private func currentDisplayedPageIndex(in snapshot: NovelReadingSnapshot?, view: Int) -> Int {
+        guard let snapshot else { return max(context.initialPage ?? 0, 0) }
+        let normalizedIndex = currentPageIndex(in: snapshot)
+        guard let firstIndex = snapshot.pages.firstIndex(where: { $0.documentView == view }) else {
+            return max(normalizedIndex, 0)
+        }
+        return max(normalizedIndex - firstIndex, 0)
+    }
+
+    private func currentPageIndex(in snapshot: NovelReadingSnapshot) -> Int {
+        max(0, min(snapshot.currentPageIndex, max(snapshot.pages.count - 1, 0)))
     }
 
     @discardableResult
