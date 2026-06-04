@@ -400,7 +400,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         ))
 
         XCTAssertTrue(verticalContentBody.contains("ReaderVerticalViewportScrollView("))
-        XCTAssertTrue(scrollViewBody.contains("ReaderViewportPageContent("))
+        XCTAssertTrue(scrollViewBody.contains("ReaderViewportPageContent.viewportBackedPage("))
         XCTAssertTrue(readerBlockBody.contains("NativeNovelTextDisplayView("))
         XCTAssertFalse(readerBlockBody.contains("Text(displayValue.text"))
         XCTAssertEqual(block.backend, .novelTextViewport)
@@ -485,7 +485,6 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         for body in [singlePageBody, verticalBody] {
             XCTAssertTrue(body.contains("UICollectionViewDataSource"))
             XCTAssertTrue(body.contains("cellForItemAt"))
-            XCTAssertTrue(body.contains("UIHostingConfiguration"))
             XCTAssertTrue(body.contains("ReaderViewportPageContent"))
             XCTAssertTrue(body.contains("parent.viewportContext"))
             XCTAssertTrue(body.contains("parent.viewportIndex"))
@@ -493,6 +492,8 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
             XCTAssertFalse(body.contains("ReaderBlockNovelTextDisplayMaterializer"))
             XCTAssertFalse(body.contains("NovelTextKit2Representable("))
         }
+        XCTAssertTrue(singlePageBody.contains("UIHostingConfiguration"))
+        XCTAssertTrue(verticalBody.contains("ReaderVerticalViewportCell"))
         XCTAssertTrue(spreadBody.contains("UICollectionViewDataSource"))
         XCTAssertTrue(spreadBody.contains("cellForItemAt"))
         XCTAssertTrue(spreadBody.contains("UIHostingConfiguration"))
