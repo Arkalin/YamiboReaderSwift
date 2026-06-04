@@ -503,6 +503,152 @@ struct ReaderPagedSpreadContent: View {
     }
 }
 
+struct ReaderViewportPageContent: View {
+    let page: ReaderRenderedPage
+    let viewportContext: NovelTextViewportContext?
+    let viewportPage: NovelTextViewportIndexPage?
+    let settings: ReaderAppearanceSettings
+    let refererURL: URL
+    let sessionState: SessionState
+
+    var body: some View {
+        ReaderPageContent(
+            page: page,
+            settings: settings,
+            refererURL: refererURL,
+            sessionState: sessionState
+        )
+        .accessibilityIdentifier(accessibilityIdentifier)
+    }
+
+    private var accessibilityIdentifier: String {
+        let contextView = viewportContext?.identity.documentView ?? page.documentView
+        let pageIndex = viewportPage?.pageIndex ?? page.index
+        return "novel-viewport-page-\(contextView)-\(pageIndex)"
+    }
+}
+
+#if os(iOS)
+struct ReaderPagedCollectionViewport: UIViewRepresentable {
+    let pages: [ReaderRenderedPage]
+    let viewportContext: NovelTextViewportContext?
+    let viewportIndex: NovelTextViewportIndex?
+    let settings: ReaderAppearanceSettings
+    let refererURL: URL
+    let sessionState: SessionState
+    let topInset: CGFloat
+    let bottomInset: CGFloat
+    let selectionIndex: Int
+    let onSelectionChange: (Int) -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(parent: self)
+    }
+
+    func makeUIView(context: Context) -> UICollectionView {
+        let layout = UICollectionViewFlowLayout()
+        layout.scrollDirection = .horizontal
+        layout.minimumLineSpacing = 0
+        layout.minimumInteritemSpacing = 0
+
+        let collectionView = UICollectionView(frame: .zero, collectionViewLayout: layout)
+        collectionView.isPagingEnabled = true
+        collectionView.showsHorizontalScrollIndicator = false
+        collectionView.showsVerticalScrollIndicator = false
+        collectionView.backgroundColor = .clear
+        collectionView.dataSource = context.coordinator
+        collectionView.delegate = context.coordinator
+        collectionView.register(UICollectionViewCell.self, forCellWithReuseIdentifier: Coordinator.reuseIdentifier)
+        return collectionView
+    }
+
+    func updateUIView(_ collectionView: UICollectionView, context: Context) {
+        context.coordinator.parent = self
+        collectionView.reloadData()
+        context.coordinator.scrollToSelection(in: collectionView, animated: false)
+    }
+
+    final class Coordinator: NSObject, UICollectionViewDataSource, UICollectionViewDelegateFlowLayout, UIScrollViewDelegate {
+        static let reuseIdentifier = "ReaderPagedCollectionViewportCell"
+
+        var parent: ReaderPagedCollectionViewport
+
+        init(parent: ReaderPagedCollectionViewport) {
+            self.parent = parent
+        }
+
+        func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int {
+            parent.pages.count
+        }
+
+        func collectionView(
+            _ collectionView: UICollectionView,
+            cellForItemAt indexPath: IndexPath
+        ) -> UICollectionViewCell {
+            let cell = collectionView.dequeueReusableCell(
+                withReuseIdentifier: Self.reuseIdentifier,
+                for: indexPath
+            )
+            let page = parent.pages[indexPath.item]
+            let viewportPage = parent.viewportIndex?.pages.first {
+                $0.pageIndex == page.index && $0.documentView == page.documentView
+            }
+            cell.backgroundColor = .clear
+            cell.contentConfiguration = UIHostingConfiguration {
+                ReaderViewportPageContent(
+                    page: page,
+                    viewportContext: parent.viewportContext,
+                    viewportPage: viewportPage,
+                    settings: parent.settings,
+                    refererURL: parent.refererURL,
+                    sessionState: parent.sessionState
+                )
+                .padding(.horizontal, parent.settings.horizontalPadding)
+                .padding(.top, parent.topInset)
+                .padding(.bottom, parent.bottomInset)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            }
+            .margins(.all, 0)
+            return cell
+        }
+
+        func collectionView(
+            _ collectionView: UICollectionView,
+            layout collectionViewLayout: UICollectionViewLayout,
+            sizeForItemAt indexPath: IndexPath
+        ) -> CGSize {
+            collectionView.bounds.size
+        }
+
+        func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) {
+            updateSelection(from: scrollView)
+        }
+
+        func scrollViewDidEndScrollingAnimation(_ scrollView: UIScrollView) {
+            updateSelection(from: scrollView)
+        }
+
+        func scrollToSelection(in collectionView: UICollectionView, animated: Bool) {
+            guard !parent.pages.isEmpty,
+                  collectionView.bounds.width > 0 else {
+                return
+            }
+            let item = min(max(parent.selectionIndex, 0), max(parent.pages.count - 1, 0))
+            let indexPath = IndexPath(item: item, section: 0)
+            collectionView.scrollToItem(at: indexPath, at: .centeredHorizontally, animated: animated)
+        }
+
+        private func updateSelection(from scrollView: UIScrollView) {
+            guard scrollView.bounds.width > 0 else { return }
+            let item = Int((scrollView.contentOffset.x / scrollView.bounds.width).rounded())
+            let clampedItem = min(max(item, 0), max(parent.pages.count - 1, 0))
+            guard clampedItem != parent.selectionIndex else { return }
+            parent.onSelectionChange(clampedItem)
+        }
+    }
+}
+#endif
+
 private struct ReaderBlockView: View {
     let block: ReaderRenderedBlock
     let settings: ReaderAppearanceSettings

@@ -241,6 +241,28 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertEqual(block.backend, .novelTextViewport)
     }
 
+    func testSinglePagePagedReadingUsesUIKitCollectionViewportInsteadOfSwiftUITabView() throws {
+        let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let containerSource = try String(
+            contentsOf: repositoryRoot
+                .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderContainerView.swift"),
+            encoding: .utf8
+        )
+        let supportSource = try String(
+            contentsOf: repositoryRoot
+                .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderSupportViews.swift"),
+            encoding: .utf8
+        )
+        let pagedContentBody = try XCTUnwrap(functionBody(named: "pagedContent", in: containerSource))
+        let collectionViewportBody = try XCTUnwrap(typeBody(named: "ReaderPagedCollectionViewport", in: supportSource))
+
+        XCTAssertTrue(pagedContentBody.contains("ReaderPagedCollectionViewport("))
+        XCTAssertTrue(supportSource.contains("struct ReaderPagedCollectionViewport: UIViewRepresentable"))
+        XCTAssertTrue(collectionViewportBody.contains("UICollectionView"))
+        XCTAssertTrue(collectionViewportBody.contains("viewportContext"))
+        XCTAssertTrue(collectionViewportBody.contains("viewportIndex"))
+    }
+
     func testVerticalReadingUsesViewportBackedReaderPageContentInsteadOfSwiftUITextChunks() throws {
         let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let containerSource = try String(
