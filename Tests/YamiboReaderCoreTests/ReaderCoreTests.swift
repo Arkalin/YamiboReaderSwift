@@ -721,10 +721,10 @@ private final class StubURLProtocol: URLProtocol {
 
     #expect(!paged.pages.isEmpty)
     #expect(!vertical.pages.isEmpty)
-    #expect(paged.pages.first?.textRanges.first?.startOffset == 0)
-    #expect(paged.pages.last?.textRanges.last?.endOffset == text.count)
-    #expect(vertical.pages.first?.textRanges.first?.startOffset == 0)
-    #expect(vertical.pages.last?.textRanges.last?.endOffset == text.count)
+    #expect(paged.pages.first?.novelTextDisplayValues.first?.ranges.first?.startOffset == 0)
+    #expect(paged.pages.last?.novelTextDisplayValues.last?.ranges.last?.endOffset == text.count)
+    #expect(vertical.pages.first?.novelTextDisplayValues.first?.ranges.first?.startOffset == 0)
+    #expect(vertical.pages.last?.novelTextDisplayValues.last?.ranges.last?.endOffset == text.count)
     #expect(paged.chapters.first?.title == "第一章")
     #expect(vertical.chapters.first?.title == "第一章")
     #expect(
@@ -737,7 +737,7 @@ private final class StubURLProtocol: URLProtocol {
     )
 }
 
-@Test func novelTextLayoutAssemblesDocumentPagesChaptersImagesAndTextRanges() async throws {
+@Test func novelTextLayoutAssemblesDocumentPagesChaptersImagesAndTextDisplayValues() async throws {
     let imageURL = try #require(URL(string: "https://example.com/image.jpg"))
     let document = ReaderPageDocument(
         threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=99&mobile=2")),
@@ -765,13 +765,17 @@ private final class StubURLProtocol: URLProtocol {
     #expect(pagination.chapters.map(\.title) == ["第一章", "第二章"])
     #expect(pagination.chapters.map(\.startIndex) == [0, 2])
     #expect(pagination.pages[0].blocks.compactMap(\.textContent) == ["开头", "继续"])
-    #expect(pagination.pages[0].textRanges == [
+    #expect(pagination.pages[0].novelTextDisplayValues.flatMap(\.ranges) == [
         ReaderRenderedTextRange(segmentIndex: 0, startOffset: 0, endOffset: 2),
         ReaderRenderedTextRange(segmentIndex: 1, startOffset: 0, endOffset: 2)
     ])
+    #expect(pagination.pages[0].novelTextDisplayValues.map(\.semantics.fontFamily) == [
+        ReaderAppearanceSettings().fontFamily,
+        ReaderAppearanceSettings().fontFamily
+    ])
     #expect(pagination.pages[1].blocks == [.image(imageURL, chapterTitle: "第一章")])
     #expect(pagination.pages[2].segmentIndex == 3)
-    #expect(pagination.pages[2].textRanges == [
+    #expect(pagination.pages[2].novelTextDisplayValues.flatMap(\.ranges) == [
         ReaderRenderedTextRange(segmentIndex: 3, startOffset: 0, endOffset: 5)
     ])
 }
@@ -837,7 +841,7 @@ private final class StubURLProtocol: URLProtocol {
         settings: settings,
         layout: layout
     )
-    let ranges = pagination.pages.flatMap(\.textRanges)
+    let ranges = pagination.pages.flatMap { $0.novelTextDisplayValues.flatMap(\.ranges) }
 
     #expect(pagination.pages.count > 1)
     #expect(pagination.pages.allSatisfy { !$0.blocks.compactMap(\.textContent).joined().isEmpty })
@@ -868,7 +872,7 @@ private final class StubURLProtocol: URLProtocol {
         settings: settings,
         layout: layout
     )
-    let ranges = pagination.pages.flatMap(\.textRanges)
+    let ranges = pagination.pages.flatMap { $0.novelTextDisplayValues.flatMap(\.ranges) }
 
     #expect(pagination.pages.count > 1)
     #expect(pagination.pages.allSatisfy { !$0.blocks.compactMap(\.textContent).joined().isEmpty })
@@ -893,7 +897,7 @@ private final class StubURLProtocol: URLProtocol {
     let layout = ReaderContainerLayout(width: 320, height: 568)
 
     let pagination = try NovelTextLayout.renderedPages(document: document, settings: settings, layout: layout)
-    let ranges = pagination.pages.flatMap(\.textRanges)
+    let ranges = pagination.pages.flatMap { $0.novelTextDisplayValues.flatMap(\.ranges) }
 
     #expect(ranges.first?.startOffset == 0)
     #expect(ranges.last?.endOffset == text.count)

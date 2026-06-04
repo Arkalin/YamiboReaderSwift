@@ -305,15 +305,61 @@ public struct ReaderProgress: Codable, Hashable, Sendable {
     }
 }
 
+public struct NovelTextDisplaySemantics: Hashable, Sendable {
+    public var fontScale: Double
+    public var fontFamily: ReaderFontFamily
+    public var lineHeightScale: Double
+    public var characterSpacingScale: Double
+    public var indentsParagraphFirstLine: Bool
+    public var usesJustifiedText: Bool
+
+    public init(settings: ReaderAppearanceSettings) {
+        self.fontScale = settings.fontScale
+        self.fontFamily = settings.fontFamily
+        self.lineHeightScale = settings.lineHeightScale
+        self.characterSpacingScale = settings.characterSpacingScale
+        self.indentsParagraphFirstLine = settings.indentsParagraphFirstLine
+        self.usesJustifiedText = settings.usesJustifiedText
+    }
+}
+
+public struct NovelTextDisplayValue: Hashable, Sendable {
+    public var text: String
+    public var chapterTitle: String?
+    public var startsAtParagraphBoundary: Bool
+    public var semantics: NovelTextDisplaySemantics
+    public var ranges: [ReaderRenderedTextRange]
+
+    public init(
+        text: String,
+        chapterTitle: String?,
+        startsAtParagraphBoundary: Bool = true,
+        settings: ReaderAppearanceSettings = ReaderAppearanceSettings(),
+        ranges: [ReaderRenderedTextRange] = []
+    ) {
+        self.text = text
+        self.chapterTitle = chapterTitle
+        self.startsAtParagraphBoundary = startsAtParagraphBoundary
+        self.semantics = NovelTextDisplaySemantics(settings: settings)
+        self.ranges = ranges
+    }
+
+    public func replacingRanges(_ ranges: [ReaderRenderedTextRange]) -> NovelTextDisplayValue {
+        var copy = self
+        copy.ranges = ranges
+        return copy
+    }
+}
+
 public enum ReaderRenderedBlock: Hashable, Identifiable, Sendable {
-    case text(String, chapterTitle: String?, startsAtParagraphBoundary: Bool = true)
+    case text(displayValue: NovelTextDisplayValue)
     case image(URL, chapterTitle: String?)
     case footer(String)
 
     public var id: String {
         switch self {
-        case let .text(text, chapterTitle, startsAtParagraphBoundary):
-            return "text:\(chapterTitle ?? ""):\(startsAtParagraphBoundary):\(text.hashValue)"
+        case let .text(displayValue):
+            return "text:\(displayValue.chapterTitle ?? ""):\(displayValue.startsAtParagraphBoundary):\(displayValue.text.hashValue)"
         case let .image(url, chapterTitle):
             return "image:\(chapterTitle ?? ""):\(url.absoluteString)"
         case let .footer(text):
@@ -323,7 +369,9 @@ public enum ReaderRenderedBlock: Hashable, Identifiable, Sendable {
 
     public var chapterTitle: String? {
         switch self {
-        case let .text(_, chapterTitle, _), let .image(_, chapterTitle):
+        case let .text(displayValue):
+            return displayValue.chapterTitle
+        case let .image(_, chapterTitle):
             return chapterTitle
         case .footer:
             return nil
@@ -338,17 +386,42 @@ public enum ReaderRenderedBlock: Hashable, Identifiable, Sendable {
     }
 
     public var textContent: String? {
-        if case let .text(text, _, _) = self {
-            return text
+        if case let .text(displayValue) = self {
+            return displayValue.text
         }
         return nil
     }
 
     public var startsAtParagraphBoundary: Bool {
-        if case let .text(_, _, startsAtParagraphBoundary) = self {
-            return startsAtParagraphBoundary
+        if case let .text(displayValue) = self {
+            return displayValue.startsAtParagraphBoundary
         }
         return false
+    }
+
+    public var novelTextDisplayValue: NovelTextDisplayValue? {
+        if case let .text(displayValue) = self {
+            return displayValue
+        }
+        return nil
+    }
+
+    public static func text(
+        _ text: String,
+        chapterTitle: String?,
+        startsAtParagraphBoundary: Bool = true,
+        settings: ReaderAppearanceSettings = ReaderAppearanceSettings(),
+        ranges: [ReaderRenderedTextRange] = []
+    ) -> ReaderRenderedBlock {
+        .text(
+            displayValue: NovelTextDisplayValue(
+                text: text,
+                chapterTitle: chapterTitle,
+                startsAtParagraphBoundary: startsAtParagraphBoundary,
+                settings: settings,
+                ranges: ranges
+            )
+        )
     }
 }
 
@@ -377,10 +450,16 @@ public struct ReaderRenderedPage: Hashable, Identifiable, Sendable {
     public var segmentIndex: Int?
     public var segmentStartOffset: Int
     public var segmentEndOffset: Int
-    public var textRanges: [ReaderRenderedTextRange]
     public var chapterCommentTarget: ReaderChapterCommentTarget?
 
     public var id: Int { index }
+    public var novelTextDisplayValues: [NovelTextDisplayValue] {
+        blocks.compactMap(\.novelTextDisplayValue)
+    }
+
+    public var textRanges: [ReaderRenderedTextRange] {
+        novelTextDisplayValues.flatMap(\.ranges)
+    }
 
     public init(
         index: Int,
@@ -403,10 +482,11 @@ public struct ReaderRenderedPage: Hashable, Identifiable, Sendable {
         self.segmentStartOffset = max(0, segmentStartOffset)
         self.segmentEndOffset = max(self.segmentStartOffset, segmentEndOffset)
         self.chapterCommentTarget = chapterCommentTarget
+        let resolvedTextRanges: [ReaderRenderedTextRange]
         if let textRanges {
-            self.textRanges = textRanges
+            resolvedTextRanges = textRanges
         } else if let segmentIndex {
-            self.textRanges = [
+            resolvedTextRanges = [
                 ReaderRenderedTextRange(
                     segmentIndex: segmentIndex,
                     startOffset: self.segmentStartOffset,
@@ -414,8 +494,30 @@ public struct ReaderRenderedPage: Hashable, Identifiable, Sendable {
                 )
             ]
         } else {
-            self.textRanges = []
+            resolvedTextRanges = []
         }
+        self.blocks = Self.blocksByApplyingTextRanges(resolvedTextRanges, to: blocks)
+    }
+
+    private static func blocksByApplyingTextRanges(
+        _ textRanges: [ReaderRenderedTextRange],
+        to blocks: [ReaderRenderedBlock]
+    ) -> [ReaderRenderedBlock] {
+        guard !textRanges.isEmpty else { return blocks }
+        let textBlockIndexes = blocks.indices.filter { blocks[$0].isTextBlock }
+        guard !textBlockIndexes.isEmpty else { return blocks }
+
+        var updated = blocks
+        if textBlockIndexes.count == textRanges.count {
+            for (blockIndex, range) in zip(textBlockIndexes, textRanges) {
+                guard let displayValue = updated[blockIndex].novelTextDisplayValue else { continue }
+                updated[blockIndex] = .text(displayValue: displayValue.replacingRanges([range]))
+            }
+        } else if let firstTextBlockIndex = textBlockIndexes.first,
+                  let displayValue = updated[firstTextBlockIndex].novelTextDisplayValue {
+            updated[firstTextBlockIndex] = .text(displayValue: displayValue.replacingRanges(textRanges))
+        }
+        return updated
     }
 }
 
