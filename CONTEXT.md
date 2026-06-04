@@ -79,6 +79,8 @@ _Avoid_: favorite store, favorites snapshot, favorites list
 - In vertical reading mode, SwiftUI hosts a UIKit-backed **Novel Text Viewport** scroll view through `UIViewRepresentable`; SwiftUI must not host text chunks or sample text positions from view-frame heuristics.
 - A **Novel Text Viewport** context is owned by **Novel Text Layout** and the **Novel Reading Session** lifecycle; UIKit pagers and cells hold display references only.
 - A **Novel Reading Position** segment offset is measured in the current displayed text after translation-mode transformation; changing translation mode restores by nearest indexed range, chapter, and intra-page progress rather than promising source-text character identity.
+- **Novel Reading Position** is text-only; when a vertical **Novel Text Viewport** reference line falls on an inline image or other external block, save and restore logic snaps to the nearest indexed text range rather than saving an external block identity.
+- If a reader page document has no indexed text range, save and restore logic preserves the previous text-only **Novel Reading Position** while the visible web view page may still advance.
 - A **Novel Text Display Value** belongs to rendered text blocks in a **Novel Reading Session** and carries text style semantics plus rendered text ranges.
 - **Novel Reading Session** derives page-level text ranges from the **Novel Text Display Values** inside a rendered page; rendered pages must not store a separate aggregate text range list.
 - A **Novel Text Display Value** must not contain live TextKit objects such as `NSTextLayoutManager`, UIKit/AppKit views, or mutable platform text storage.
