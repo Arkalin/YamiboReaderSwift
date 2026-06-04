@@ -21,22 +21,22 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
             settings: settings
         )
 
-        let plan = NovelTextDisplayAdapter.displayPlan(
+        let materialization = NovelTextDisplayAdapter.materialization(
             surface: .settingsPreview,
             displayValue: displayValue,
             baseFontSize: 22,
             textColor: .settingsPreviewPrimaryText
         )
 
-        XCTAssertEqual(plan.surface, .settingsPreview)
-        XCTAssertEqual(plan.backend, .textKit2DisplayAdapter)
-        XCTAssertEqual(plan.style.fontFamily, .systemSerif)
-        XCTAssertEqual(plan.style.fontScale, 1.25)
-        XCTAssertEqual(plan.style.lineHeightScale, 1.7)
-        XCTAssertEqual(plan.style.characterSpacingScale, 0.18)
-        XCTAssertTrue(plan.style.indentsParagraphFirstLine)
-        XCTAssertEqual(plan.style.textColor, .settingsPreviewPrimaryText)
-        XCTAssertNil(plan.chapterTitle)
+        XCTAssertEqual(materialization.surface, .settingsPreview)
+        XCTAssertEqual(materialization.backend, .textKit2DisplayAdapter)
+        XCTAssertEqual(materialization.style.fontFamily, .systemSerif)
+        XCTAssertEqual(materialization.style.fontScale, 1.25)
+        XCTAssertEqual(materialization.style.lineHeightScale, 1.7)
+        XCTAssertEqual(materialization.style.characterSpacingScale, 0.18)
+        XCTAssertTrue(materialization.style.indentsParagraphFirstLine)
+        XCTAssertEqual(materialization.style.textColor, .settingsPreviewPrimaryText)
+        XCTAssertNil(materialization.chapterTitle)
     }
 
     func testNovelReadingSessionTextBlockUsesSameNovelTextLayoutDisplayAdapterAsSettingsPreview() {
@@ -55,7 +55,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
             settings: settings
         )
 
-        let plan = ReaderBlockTextDisplayPlanner.displayPlan(
+        let materialization = ReaderBlockNovelTextDisplayMaterializer.materialization(
             for: textBlock,
             settings: settings
         )
@@ -64,22 +64,22 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
             chapterTitle: nil,
             settings: settings
         )
-        let previewPlan = NovelTextDisplayAdapter.displayPlan(
+        let previewMaterialization = NovelTextDisplayAdapter.materialization(
             surface: .settingsPreview,
             displayValue: previewDisplayValue,
             baseFontSize: 22,
             textColor: .settingsPreviewPrimaryText
         )
 
-        XCTAssertEqual(plan?.surface, .novelReadingSessionTextBlock)
-        XCTAssertEqual(plan?.backend, previewPlan.backend)
-        XCTAssertEqual(plan?.style.fontFamily, .rounded)
-        XCTAssertEqual(plan?.style.lineHeightScale, 1.6)
-        XCTAssertEqual(plan?.chapterTitle, "第一章")
-        XCTAssertEqual(plan?.startsAtParagraphBoundary, false)
+        XCTAssertEqual(materialization?.surface, .novelReadingSessionTextBlock)
+        XCTAssertEqual(materialization?.backend, previewMaterialization.backend)
+        XCTAssertEqual(materialization?.style.fontFamily, .rounded)
+        XCTAssertEqual(materialization?.style.lineHeightScale, 1.6)
+        XCTAssertEqual(materialization?.chapterTitle, "第一章")
+        XCTAssertEqual(materialization?.startsAtParagraphBoundary, false)
     }
 
-    func testNovelReadingSessionTextBlockDisplayPlanUsesSnapshotDisplayValueSemantics() throws {
+    func testNovelReadingSessionTextBlockMaterializationUsesSnapshotDisplayValueSemantics() throws {
         let snapshotSettings = ReaderAppearanceSettings(
             fontScale: 1.4,
             fontFamily: .systemSerif,
@@ -104,19 +104,19 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
             settings: snapshotSettings
         )
 
-        let plan = try XCTUnwrap(ReaderBlockTextDisplayPlanner.displayPlan(
+        let materialization = try XCTUnwrap(ReaderBlockNovelTextDisplayMaterializer.materialization(
             for: block,
             settings: liveSettings,
             baseFontSize: 20
         ))
 
-        XCTAssertEqual(plan.style.fontScale, 1.4)
-        XCTAssertEqual(plan.style.fontFamily, .systemSerif)
-        XCTAssertEqual(plan.style.pointSize, 28, accuracy: 0.001)
-        XCTAssertEqual(plan.style.lineHeightScale, 1.85)
-        XCTAssertEqual(plan.style.characterSpacingScale, 0.14)
-        XCTAssertTrue(plan.style.usesJustifiedText)
-        XCTAssertTrue(plan.style.indentsParagraphFirstLine)
+        XCTAssertEqual(materialization.style.fontScale, 1.4)
+        XCTAssertEqual(materialization.style.fontFamily, .systemSerif)
+        XCTAssertEqual(materialization.style.pointSize, 28, accuracy: 0.001)
+        XCTAssertEqual(materialization.style.lineHeightScale, 1.85)
+        XCTAssertEqual(materialization.style.characterSpacingScale, 0.14)
+        XCTAssertTrue(materialization.style.usesJustifiedText)
+        XCTAssertTrue(materialization.style.indentsParagraphFirstLine)
     }
 
     func testNovelTextLayoutDisplayMeasurementUsesSameTextKit2DisplayAdapterForPreviewAndReadingSessionBlocks() {
@@ -132,13 +132,13 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
             chapterTitle: nil,
             settings: settings
         )
-        let previewPlan = NovelTextDisplayAdapter.displayPlan(
+        let previewMaterialization = NovelTextDisplayAdapter.materialization(
             surface: .settingsPreview,
             displayValue: previewDisplayValue,
             baseFontSize: 22,
             textColor: .settingsPreviewPrimaryText
         )
-        let blockPlan = ReaderBlockTextDisplayPlanner.displayPlan(
+        let blockMaterialization = ReaderBlockNovelTextDisplayMaterializer.materialization(
             for: .text(
                 "纵向阅读正文块测高也不能回退到独立 text view fitting。",
                 chapterTitle: "第一章",
@@ -147,9 +147,9 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
             settings: settings
         )
 
-        XCTAssertEqual(previewPlan.measurementBackend, .textKit2DisplayAdapter)
-        XCTAssertEqual(blockPlan?.measurementBackend, previewPlan.measurementBackend)
-        XCTAssertEqual(blockPlan?.surface, .novelReadingSessionTextBlock)
+        XCTAssertEqual(previewMaterialization.measurementBackend, .textKit2DisplayAdapter)
+        XCTAssertEqual(blockMaterialization?.measurementBackend, previewMaterialization.measurementBackend)
+        XCTAssertEqual(blockMaterialization?.surface, .novelReadingSessionTextBlock)
     }
 
     func testNovelReadingSessionDisplayPathDoesNotRetainUIKitTextViewFallback() throws {
@@ -204,7 +204,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
             readingMode: .paged
         )
 
-        let plan = try XCTUnwrap(ReaderBlockTextDisplayPlanner.displayPlan(
+        let materialization = try XCTUnwrap(ReaderBlockNovelTextDisplayMaterializer.materialization(
             for: .text(
                 "第一章\n正文需要覆盖字体、字号、行距、字距和段首缩进。",
                 chapterTitle: "第一章",
@@ -214,12 +214,12 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
             settings: settings
         ))
 
-        XCTAssertEqual(plan.style.fontFamily, .systemSerif)
-        XCTAssertEqual(plan.style.pointSize, 28.6, accuracy: 0.001)
-        XCTAssertEqual(plan.style.lineHeightScale, 1.8)
-        XCTAssertEqual(plan.style.characterSpacingScale, 0.16)
-        XCTAssertTrue(plan.style.indentsParagraphFirstLine)
-        XCTAssertTrue(plan.style.includesChapterTitle)
+        XCTAssertEqual(materialization.style.fontFamily, .systemSerif)
+        XCTAssertEqual(materialization.style.pointSize, 28.6, accuracy: 0.001)
+        XCTAssertEqual(materialization.style.lineHeightScale, 1.8)
+        XCTAssertEqual(materialization.style.characterSpacingScale, 0.16)
+        XCTAssertTrue(materialization.style.indentsParagraphFirstLine)
+        XCTAssertTrue(materialization.style.includesChapterTitle)
     }
 
     func testNovelReadingPositionDisplayFailureDoesNotPublishUIKitOrEstimatedFallback() throws {

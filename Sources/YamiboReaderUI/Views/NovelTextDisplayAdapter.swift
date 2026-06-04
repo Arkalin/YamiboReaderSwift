@@ -29,7 +29,7 @@ struct NovelTextDisplayStyle: Equatable {
     var includesChapterTitle: Bool
 }
 
-struct NovelTextDisplayPlan: Equatable {
+struct NovelTextDisplayMaterialization: Equatable {
     var surface: NovelTextDisplaySurface
     var backend: NovelTextDisplayBackend
     var measurementBackend: NovelTextDisplayBackend
@@ -40,14 +40,14 @@ struct NovelTextDisplayPlan: Equatable {
 }
 
 enum NovelTextDisplayAdapter {
-    static func displayPlan(
+    static func materialization(
         surface: NovelTextDisplaySurface,
         displayValue: NovelTextDisplayValue,
         baseFontSize: Double,
         textColor: NovelTextDisplayColor
-    ) -> NovelTextDisplayPlan {
+    ) -> NovelTextDisplayMaterialization {
         let semantics = displayValue.semantics
-        return NovelTextDisplayPlan(
+        return NovelTextDisplayMaterialization(
             surface: surface,
             backend: .textKit2DisplayAdapter,
             measurementBackend: .textKit2DisplayAdapter,
@@ -70,16 +70,16 @@ enum NovelTextDisplayAdapter {
     }
 }
 
-enum ReaderBlockTextDisplayPlanner {
-    static func displayPlan(
+enum ReaderBlockNovelTextDisplayMaterializer {
+    static func materialization(
         for block: ReaderRenderedBlock,
         settings _: ReaderAppearanceSettings,
         baseFontSize: Double = 22
-    ) -> NovelTextDisplayPlan? {
+    ) -> NovelTextDisplayMaterialization? {
         guard let displayValue = block.novelTextDisplayValue else {
             return nil
         }
-        return NovelTextDisplayAdapter.displayPlan(
+        return NovelTextDisplayAdapter.materialization(
             surface: .novelReadingSessionTextBlock,
             displayValue: displayValue,
             baseFontSize: baseFontSize,
@@ -135,8 +135,8 @@ struct NativeNovelTextDisplayView: UIViewRepresentable {
         self.titleWeight = titleWeight
     }
 
-    var displayPlan: NovelTextDisplayPlan {
-        NovelTextDisplayAdapter.displayPlan(
+    var materialization: NovelTextDisplayMaterialization {
+        NovelTextDisplayAdapter.materialization(
             surface: surface,
             displayValue: displayValue,
             baseFontSize: baseFontSize,
