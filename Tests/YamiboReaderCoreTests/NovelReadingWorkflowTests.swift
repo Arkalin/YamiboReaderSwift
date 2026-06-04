@@ -196,6 +196,86 @@ final class NovelReadingWorkflowTests: XCTestCase {
         XCTAssertEqual(Set(state.snapshot.pages.map(\.documentView)), [1])
     }
 
+    func testVerticalViewportSampleUpdatesSessionBackedNovelReadingPosition() async throws {
+        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9111&mobile=2")!
+        let repository = RecordingNovelReadingRepository(documents: [
+            1: makeNovelDocument(threadURL: threadURL, view: 1, maxView: 1, authorID: "author-1")
+        ])
+        let workflow = NovelReadingWorkflow(
+            context: ReaderLaunchContext(
+                threadURL: threadURL,
+                threadTitle: "Thread",
+                source: .forum,
+                initialView: 1,
+                authorID: "author-1"
+            ),
+            settings: ReaderAppearanceSettings(readingMode: .vertical),
+            layout: ReaderContainerLayout(width: 320, height: 568),
+            repository: repository,
+            pagination: { document, _, _ in
+                ReaderPaginationResult(
+                    pages: [
+                        ReaderRenderedPage(
+                            index: 0,
+                            blocks: [
+                                .text(
+                                    "第一页",
+                                    chapterTitle: "第一章",
+                                    ranges: [
+                                        ReaderRenderedTextRange(segmentIndex: 0, startOffset: 0, endOffset: 20)
+                                    ]
+                                )
+                            ],
+                            documentView: document.view,
+                            chapterOrdinal: 0,
+                            chapterTitle: "第一章",
+                            segmentIndex: 99,
+                            segmentStartOffset: 900,
+                            segmentEndOffset: 950
+                        ),
+                        ReaderRenderedPage(
+                            index: 1,
+                            blocks: [
+                                .text(
+                                    "第二页",
+                                    chapterTitle: "第一章",
+                                    ranges: [
+                                        ReaderRenderedTextRange(segmentIndex: 2, startOffset: 40, endOffset: 80)
+                                    ]
+                                )
+                            ],
+                            documentView: document.view,
+                            chapterOrdinal: 0,
+                            chapterTitle: "第一章",
+                            segmentIndex: 99,
+                            segmentStartOffset: 950,
+                            segmentEndOffset: 990
+                        )
+                    ],
+                    chapters: [
+                        ReaderChapter(ordinal: 0, title: "第一章", startIndex: 0)
+                    ]
+                )
+            }
+        )
+        _ = try await workflow.start(initial: NovelReadingInitialPosition())
+
+        let state = try XCTUnwrap(
+            workflow.updateVerticalViewportPosition(pageIndex: 1, intraPageProgress: 0.25)
+        )
+        let resumePoint = try XCTUnwrap(workflow.captureNovelReadingPosition())
+
+        XCTAssertEqual(state.snapshot.currentPageIndex, 1)
+        XCTAssertEqual(state.snapshot.currentPageIntraProgress, 0.25, accuracy: 0.001)
+        XCTAssertEqual(resumePoint.view, 1)
+        XCTAssertEqual(resumePoint.chapterOrdinal, 0)
+        XCTAssertEqual(resumePoint.chapterTitle, "第一章")
+        XCTAssertEqual(resumePoint.segmentIndex, 2)
+        XCTAssertEqual(resumePoint.segmentOffset, 50)
+        XCTAssertEqual(resumePoint.authorID, "author-1")
+        XCTAssertEqual(resumePoint.readingModeHint, .vertical)
+    }
+
     func testPromotingPrefetchedViewPublishesRequestedPageImmediately() async throws {
         let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9109&mobile=2")!
         let repository = RecordingNovelReadingRepository(documents: [
