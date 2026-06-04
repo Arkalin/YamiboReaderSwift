@@ -262,6 +262,23 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertTrue(displayUIViewBody.contains("textViewportLayoutController.layoutViewport()"))
     }
 
+    func testNovelTextViewportDisplayInvalidatesDrawingWhenBoundsChange() throws {
+        let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let adapterSource = try String(
+            contentsOf: repositoryRoot
+                .appendingPathComponent("Sources/YamiboReaderUI/Views/NovelTextDisplayAdapter.swift"),
+            encoding: .utf8
+        )
+        let displayUIViewBody = try XCTUnwrap(typeBody(named: "NovelTextViewportDisplayUIView", in: adapterSource))
+        let layoutSubviewsBody = try XCTUnwrap(functionBody(named: "layoutSubviews", in: adapterSource))
+        let configureTextKit2Body = try XCTUnwrap(functionBody(named: "configureTextKit2", in: adapterSource))
+
+        XCTAssertTrue(configureTextKit2Body.contains("contentMode = .redraw"))
+        XCTAssertTrue(displayUIViewBody.contains("lastLaidOutBoundsSize"))
+        XCTAssertTrue(layoutSubviewsBody.contains("updateTextContainerSizeForCurrentBounds()"))
+        XCTAssertTrue(layoutSubviewsBody.contains("setNeedsDisplay()"))
+    }
+
     func testSettingsPreviewAndReadingSessionUseSameAdapterBackedMaterialization() throws {
         let settings = ReaderAppearanceSettings(fontScale: 1.2, readingMode: .paged)
         let preview = NovelTextDisplayAdapter.materialization(
