@@ -241,6 +241,36 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertEqual(block.backend, .novelTextViewport)
     }
 
+    func testVerticalReadingUsesViewportBackedReaderPageContentInsteadOfSwiftUITextChunks() throws {
+        let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let containerSource = try String(
+            contentsOf: repositoryRoot
+                .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderContainerView.swift"),
+            encoding: .utf8
+        )
+        let supportSource = try String(
+            contentsOf: repositoryRoot
+                .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderSupportViews.swift"),
+            encoding: .utf8
+        )
+        let verticalContentBody = try XCTUnwrap(functionBody(named: "verticalContent", in: containerSource))
+        let readerBlockBody = try XCTUnwrap(typeBody(named: "ReaderBlockView", in: supportSource))
+        let settings = ReaderAppearanceSettings(readingMode: .vertical)
+        let block = try XCTUnwrap(ReaderBlockNovelTextDisplayMaterializer.materialization(
+            for: .text(
+                "纵向阅读的可见正文必须由 Novel Text Viewport 绘制。",
+                chapterTitle: "第一章",
+                settings: settings
+            ),
+            settings: settings
+        ))
+
+        XCTAssertTrue(verticalContentBody.contains("ReaderPageContent("))
+        XCTAssertTrue(readerBlockBody.contains("NativeNovelTextDisplayView("))
+        XCTAssertFalse(readerBlockBody.contains("Text(displayValue.text"))
+        XCTAssertEqual(block.backend, .novelTextViewport)
+    }
+
     func testNovelReadingSessionDisplayPathDoesNotRetainUIKitTextViewFallback() throws {
         let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let readerSupportSource = try String(
