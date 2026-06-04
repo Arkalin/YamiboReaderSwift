@@ -198,6 +198,7 @@ final class NovelTextViewportDisplayUIView: UIView, @MainActor NSTextViewportLay
     private let textLayoutManager = NSTextLayoutManager()
     private let textContainer = NSTextContainer(size: .zero)
     private var attributedText = NSAttributedString()
+    private var lastLaidOutBoundsSize = CGSize.zero
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -209,9 +210,17 @@ final class NovelTextViewportDisplayUIView: UIView, @MainActor NSTextViewportLay
         configureTextKit2()
     }
 
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        guard updateTextContainerSizeForCurrentBounds() else { return }
+        textLayoutManager.textViewportLayoutController.layoutViewport()
+        setNeedsDisplay()
+    }
+
     func update(attributedText: NSAttributedString) {
         guard self.attributedText != attributedText else { return }
         self.attributedText = attributedText
+        updateTextContainerSizeForCurrentBounds()
         textContentStorage.textStorage?.setAttributedString(attributedText)
         invalidateIntrinsicContentSize()
         setNeedsDisplay()
@@ -219,7 +228,7 @@ final class NovelTextViewportDisplayUIView: UIView, @MainActor NSTextViewportLay
 
     override func draw(_ rect: CGRect) {
         guard let context = UIGraphicsGetCurrentContext(), bounds.width > 0 else { return }
-        textContainer.size = CGSize(width: bounds.width, height: max(bounds.height, 1))
+        updateTextContainerSizeForCurrentBounds()
         textLayoutManager.textViewportLayoutController.layoutViewport()
         textLayoutManager.enumerateTextLayoutFragments(
             from: textContentStorage.documentRange.location,
@@ -243,12 +252,24 @@ final class NovelTextViewportDisplayUIView: UIView, @MainActor NSTextViewportLay
     ) {}
 
     private func configureTextKit2() {
+        contentMode = .redraw
         textContainer.lineFragmentPadding = 0
         textContainer.maximumNumberOfLines = 0
         textContainer.lineBreakMode = .byWordWrapping
         textContentStorage.addTextLayoutManager(textLayoutManager)
         textLayoutManager.textContainer = textContainer
         textLayoutManager.textViewportLayoutController.delegate = self
+    }
+
+    @discardableResult
+    private func updateTextContainerSizeForCurrentBounds() -> Bool {
+        let nextSize = CGSize(width: bounds.width, height: max(bounds.height, 1))
+        guard nextSize != lastLaidOutBoundsSize || textContainer.size != nextSize else {
+            return false
+        }
+        lastLaidOutBoundsSize = nextSize
+        textContainer.size = nextSize
+        return true
     }
 }
 
