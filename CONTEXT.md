@@ -65,10 +65,20 @@ _Avoid_: favorite store, favorites snapshot, favorites list
 - On supported Apple platforms, **Novel Text Layout** uses TextKit 2 as the authoritative layout implementation and does not fall back to estimated text slicing when layout fails.
 - **Novel Text Layout** exposes layout failures explicitly so the **Novel Reading Session** can surface them instead of treating them as empty content.
 - **Novel Text Layout** must preserve **Novel Reading Position** semantics by returning segment offsets and intra-page progress rather than TextKit-internal positions.
+- **Novel Text Viewport Index** build failure is a reader error; native novel reading may retry indexing or open the source web view, but must not fall back to old pagination, estimated slicing, SwiftUI text chunks, or page-level offset fallbacks.
 - A **Novel Text Viewport** belongs to **Novel Text Layout** and owns the live TextKit 2 viewport object graph; SwiftUI observes it through platform adapters rather than hosting text chunks directly.
 - A **Novel Text Viewport** must keep page counts, chapter starts, and **Novel Reading Position** restoration exact when the reader opens, even if drawing of text fragments remains viewport-lazy.
 - A **Novel Text Viewport Index** must be complete before the **Novel Reading Session** publishes readable content; loading UI is preferable to showing approximate page counts or chapter positions.
 - A **Novel Text Viewport Index** is cacheable by reader page document identity, text-affecting appearance settings, container layout, reading mode, and two-page spread presentation.
+- A **Novel Text Viewport Index** may be stored on disk, but live TextKit objects stay in memory under the **Novel Reading Session** or a short-lived runtime cache; cached indexes must carry text and layout fingerprints.
+- A **Novel Text Viewport Index** has one top-level identity for a current reader page document, with mode-specific paged and vertical projections that share one semantic map from TextKit document ranges to **Novel Reading Position** ranges.
+- A **Novel Text Viewport** owns the current reader page document's text flow first; inline images remain index-aware external blocks unless a later decision explicitly moves them into TextKit attachments.
+- A **Novel Text Viewport** preserves original reader page document segment boundaries when composing its TextKit document; inserted separators are layout glue and must not become saved **Novel Reading Position** offsets.
+- In paged reading mode, SwiftUI hosts a UIKit collection-view pager through `UIViewRepresentable`; collection-view cells are page or spread surfaces that share one current-reader-page-document **Novel Text Viewport** context.
+- Paged collection-view cells consume **Novel Text Viewport Index** page and spread identities only; they do not compute page ranges, chapter starts, spread pairing, or **Novel Reading Position** offsets.
+- In vertical reading mode, SwiftUI hosts a UIKit-backed **Novel Text Viewport** scroll view through `UIViewRepresentable`; SwiftUI must not host text chunks or sample text positions from view-frame heuristics.
+- A **Novel Text Viewport** context is owned by **Novel Text Layout** and the **Novel Reading Session** lifecycle; UIKit pagers and cells hold display references only.
+- A **Novel Reading Position** segment offset is measured in the current displayed text after translation-mode transformation; changing translation mode restores by nearest indexed range, chapter, and intra-page progress rather than promising source-text character identity.
 - A **Novel Text Display Value** belongs to rendered text blocks in a **Novel Reading Session** and carries text style semantics plus rendered text ranges.
 - **Novel Reading Session** derives page-level text ranges from the **Novel Text Display Values** inside a rendered page; rendered pages must not store a separate aggregate text range list.
 - A **Novel Text Display Value** must not contain live TextKit objects such as `NSTextLayoutManager`, UIKit/AppKit views, or mutable platform text storage.
