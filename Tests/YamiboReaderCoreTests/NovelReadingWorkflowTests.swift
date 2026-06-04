@@ -350,6 +350,94 @@ final class NovelReadingWorkflowTests: XCTestCase {
         XCTAssertEqual(position.resumePoint?.segmentOffset, 40)
     }
 
+    func testPreviewSourceTextStartsAtRestoredNovelReadingPosition() async throws {
+        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9113&mobile=2")!
+        let document = ReaderPageDocument(
+            threadURL: threadURL,
+            view: 1,
+            maxView: 1,
+            resolvedAuthorID: "author-1",
+            contentSource: .authorFilteredPage,
+            segments: [
+                .text("前文不应进入预览", chapterTitle: "第一章"),
+                .text("0123456789目标预览文本", chapterTitle: "第二章"),
+                .text("后续段落", chapterTitle: "第二章")
+            ]
+        )
+        let repository = RecordingNovelReadingRepository(documents: [1: document])
+        let workflow = NovelReadingWorkflow(
+            context: ReaderLaunchContext(
+                threadURL: threadURL,
+                threadTitle: "Thread",
+                source: .favorites,
+                initialView: 1,
+                authorID: "author-1"
+            ),
+            settings: ReaderAppearanceSettings(readingMode: .vertical),
+            layout: ReaderContainerLayout(width: 320, height: 568),
+            repository: repository,
+            pagination: previewSourcePagination
+        )
+        let resumePoint = ReaderResumePoint(
+            view: 1,
+            chapterOrdinal: 1,
+            chapterTitle: "第二章",
+            segmentIndex: 1,
+            segmentOffset: 10,
+            segmentProgress: 0,
+            authorID: "author-1",
+            readingModeHint: .vertical
+        )
+        _ = try await workflow.start(initial: NovelReadingInitialPosition(resumePoint: resumePoint))
+
+        let previewText = workflow.currentPreviewSourceText()
+
+        XCTAssertTrue(previewText.hasPrefix("目标预览文本"))
+        XCTAssertTrue(previewText.contains("后续段落"))
+        XCTAssertFalse(previewText.contains("前文不应进入预览"))
+    }
+
+    func testPreviewSourceTextFollowsVerticalViewportMovement() async throws {
+        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9114&mobile=2")!
+        let document = ReaderPageDocument(
+            threadURL: threadURL,
+            view: 1,
+            maxView: 1,
+            resolvedAuthorID: "author-1",
+            contentSource: .authorFilteredPage,
+            segments: [
+                .text("第一段预览", chapterTitle: "第一章"),
+                .text("第二段预览", chapterTitle: "第一章"),
+                .text("0123456789第三段预览", chapterTitle: "第一章")
+            ]
+        )
+        let repository = RecordingNovelReadingRepository(documents: [1: document])
+        let workflow = NovelReadingWorkflow(
+            context: ReaderLaunchContext(
+                threadURL: threadURL,
+                threadTitle: "Thread",
+                source: .forum,
+                initialView: 1,
+                authorID: "author-1"
+            ),
+            settings: ReaderAppearanceSettings(readingMode: .vertical),
+            layout: ReaderContainerLayout(width: 320, height: 568),
+            repository: repository,
+            pagination: previewSourcePagination
+        )
+        _ = try await workflow.start(initial: NovelReadingInitialPosition())
+
+        _ = workflow.updateVerticalViewportPosition(
+            pageIndex: 2,
+            intraPageProgress: Double("0123456789".count) / Double("0123456789第三段预览".count)
+        )
+        let previewText = workflow.currentPreviewSourceText()
+
+        XCTAssertTrue(previewText.hasPrefix("第三段预览"))
+        XCTAssertFalse(previewText.contains("第一段预览"))
+        XCTAssertFalse(previewText.contains("第二段预览"))
+    }
+
     func testPromotingPrefetchedViewPublishesRequestedPageImmediately() async throws {
         let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9109&mobile=2")!
         let repository = RecordingNovelReadingRepository(documents: [
@@ -586,5 +674,49 @@ private func makeNovelDocument(
         segments: [
             .text(String(repeating: "第\(view)页正文。", count: 80), chapterTitle: "第\(view)章")
         ]
+    )
+}
+
+private func previewSourcePagination(
+    document: ReaderPageDocument,
+    settings: ReaderAppearanceSettings,
+    layout: ReaderContainerLayout
+) -> ReaderPaginationResult {
+    ReaderPaginationResult(
+        pages: document.segments.enumerated().map { index, segment in
+            let text: String
+            switch segment {
+            case let .text(value, _):
+                text = value
+            case .image:
+                text = ""
+            }
+            return ReaderRenderedPage(
+                index: index,
+                blocks: [
+                    .text(
+                        text,
+                        chapterTitle: segment.chapterTitle,
+                        ranges: [
+                            ReaderRenderedTextRange(
+                                segmentIndex: index,
+                                startOffset: 0,
+                                endOffset: text.count
+                            )
+                        ]
+                    )
+                ],
+                documentView: document.view,
+                chapterOrdinal: index,
+                chapterTitle: segment.chapterTitle
+            )
+        },
+        chapters: document.segments.enumerated().map { index, segment in
+            ReaderChapter(
+                ordinal: index,
+                title: segment.chapterTitle ?? "Chapter \(index + 1)",
+                startIndex: index
+            )
+        }
     )
 }

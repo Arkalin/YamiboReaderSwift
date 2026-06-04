@@ -313,6 +313,43 @@ public struct NovelReadingSession: Sendable {
         )
     }
 
+    public func currentPreviewSourceText() -> String {
+        guard let page = currentRenderedPage,
+              let document = document(for: page.documentView),
+              !document.segments.isEmpty else {
+            return ""
+        }
+
+        let currentPosition = textPosition(for: snapshot.currentPageIntraProgress, in: page)
+        let currentRange = currentPosition?.range
+        let startSegmentIndex = min(
+            max(currentRange?.segmentIndex ?? page.segmentIndex ?? 0, 0),
+            max(document.segments.count - 1, 0)
+        )
+        let startOffset = currentPosition.map(sourceOffset) ?? page.segmentStartOffset
+
+        let fragments = document.segments[startSegmentIndex...].enumerated().compactMap { offset, segment -> String? in
+            guard case let .text(text, _) = segment else { return nil }
+
+            let previewText = offset == 0
+                ? text.droppingReaderPreviewCharacters(startOffset)
+                : text
+            let trimmed = previewText.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? nil : trimmed
+        }
+
+        return fragments.joined(separator: "\n\n")
+    }
+
+    private func sourceOffset(for position: ReaderPageTextPosition) -> Int {
+        let range = position.range
+        let segmentLength = range.length
+        let offsetWithinSegment = segmentLength > 0
+            ? Int((Double(segmentLength) * position.progressInRange).rounded(.towardZero))
+            : 0
+        return range.startOffset + min(offsetWithinSegment, segmentLength)
+    }
+
     private var effectivePaginationLayout: ReaderContainerLayout {
         guard isTwoPageSpreadActive else { return layout }
 
@@ -343,6 +380,16 @@ public struct NovelReadingSession: Sendable {
         )
         guard snapshot.pages.indices.contains(normalizedIndex) else { return nil }
         return snapshot.pages[normalizedIndex]
+    }
+
+    private func document(for view: Int) -> ReaderPageDocument? {
+        if view == prefetchedDocument?.view {
+            return prefetchedDocument
+        }
+        if view == currentDocument.view {
+            return currentDocument
+        }
+        return nil
     }
 
     private mutating func updateLocation(pageIndex: Int, intraPageProgress: Double) {
@@ -698,4 +745,14 @@ private struct ReaderResolvedTarget {
 private struct ReaderPageTextPosition {
     let range: ReaderRenderedTextRange
     let progressInRange: Double
+}
+
+private extension String {
+    func droppingReaderPreviewCharacters(_ count: Int) -> String {
+        guard count > 0 else { return self }
+        guard count < self.count else { return "" }
+
+        let start = index(startIndex, offsetBy: count)
+        return String(self[start...])
+    }
 }
