@@ -543,6 +543,25 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         }
     }
 
+    func testPagedViewportsKeepPendingSelectionUntilCollectionViewCanRepresentTargetOffset() throws {
+        let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let supportSource = try String(
+            contentsOf: repositoryRoot
+                .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderSupportViews.swift"),
+            encoding: .utf8
+        )
+        let singlePageBody = try XCTUnwrap(typeBody(named: "ReaderPagedCollectionViewport", in: supportSource))
+        let spreadBody = try XCTUnwrap(typeBody(named: "ReaderPagedSpreadCollectionViewport", in: supportSource))
+
+        for body in [singlePageBody, spreadBody] {
+            XCTAssertTrue(body.contains("collectionView.window != nil"))
+            XCTAssertTrue(body.contains("collectionView.contentSize.width >= targetContentOffsetX + collectionView.bounds.width"))
+            XCTAssertTrue(body.contains("schedulePendingSelectionScrollRetry(in: collectionView, animated: animated)"))
+            XCTAssertTrue(body.contains("collectionView.setContentOffset"))
+            XCTAssertFalse(body.contains("collectionView.scrollToItem"))
+        }
+    }
+
     func testVerticalViewportUsesExplicitFlowLayoutSizingForScrollableFullWidthCells() throws {
         let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let supportSource = try String(
