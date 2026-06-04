@@ -520,7 +520,12 @@ struct ReaderViewportPageContent: View {
 
     var body: some View {
         ReaderPageContent(
-            page: page,
+            page: Self.viewportBackedPage(
+                page: page,
+                viewportContext: viewportContext,
+                viewportPage: viewportPage,
+                settings: settings
+            ),
             settings: settings,
             refererURL: refererURL,
             sessionState: sessionState
@@ -532,6 +537,80 @@ struct ReaderViewportPageContent: View {
         let contextView = viewportContext?.identity.documentView ?? page.documentView
         let pageIndex = viewportPage?.pageIndex ?? page.index
         return "novel-viewport-page-\(contextView)-\(pageIndex)"
+    }
+
+    static func viewportBackedPage(
+        page: ReaderRenderedPage,
+        viewportContext: NovelTextViewportContext?,
+        viewportPage: NovelTextViewportIndexPage?,
+        settings: ReaderAppearanceSettings
+    ) -> ReaderRenderedPage {
+        let compatibilityBlocks = page.blocks.filter { block in
+            if case .text = block {
+                return false
+            }
+            return true
+        }
+        guard let viewportContext,
+              let viewportPage,
+              !viewportPage.ranges.isEmpty,
+              let displayValue = viewportDisplayValue(
+                viewportContext: viewportContext,
+                viewportPage: viewportPage,
+                settings: settings
+              ) else {
+            return page
+        }
+        return ReaderRenderedPage(
+            index: page.index,
+            blocks: [.text(displayValue: displayValue)] + compatibilityBlocks,
+            documentView: viewportPage.documentView,
+            chapterOrdinal: viewportPage.chapterOrdinal,
+            chapterTitle: viewportPage.chapterTitle,
+            segmentIndex: page.segmentIndex,
+            segmentStartOffset: page.segmentStartOffset,
+            segmentEndOffset: page.segmentEndOffset,
+            chapterCommentTarget: viewportPage.chapterCommentTarget ?? page.chapterCommentTarget
+        )
+    }
+
+    private static func viewportDisplayValue(
+        viewportContext: NovelTextViewportContext,
+        viewportPage: NovelTextViewportIndexPage,
+        settings: ReaderAppearanceSettings
+    ) -> NovelTextDisplayValue? {
+        let text = viewportPage.ranges.compactMap { range -> String? in
+            guard let segmentRange = viewportContext.document.textRangesBySegment[range.segmentIndex] else {
+                return nil
+            }
+            let globalStart = segmentRange.startOffset + range.startOffset
+            let globalEnd = segmentRange.startOffset + range.endOffset
+            return viewportSubstring(
+                in: viewportContext.document.text,
+                startOffset: globalStart,
+                endOffset: globalEnd
+            )
+        }
+        .filter { !$0.isEmpty }
+        .joined(separator: "\n\n")
+        guard !text.isEmpty else { return nil }
+        return NovelTextDisplayValue(
+            text: text,
+            chapterTitle: viewportPage.chapterTitle,
+            settings: settings,
+            ranges: viewportPage.ranges
+        )
+    }
+
+    private static func viewportSubstring(in text: String, startOffset: Int, endOffset: Int) -> String {
+        let clampedStart = min(max(startOffset, 0), text.count)
+        let clampedEnd = min(max(endOffset, clampedStart), text.count)
+        guard clampedEnd > clampedStart,
+              let startIndex = text.index(text.startIndex, offsetBy: clampedStart, limitedBy: text.endIndex),
+              let endIndex = text.index(text.startIndex, offsetBy: clampedEnd, limitedBy: text.endIndex) else {
+            return ""
+        }
+        return String(text[startIndex..<endIndex])
     }
 }
 
