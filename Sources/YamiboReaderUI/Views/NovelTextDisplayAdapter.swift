@@ -78,14 +78,14 @@ enum ReaderBlockTextDisplayPlanner {
         settings: ReaderAppearanceSettings,
         baseFontSize: Double = 22
     ) -> NovelTextDisplayPlan? {
-        guard case let .text(text, chapterTitle, startsAtParagraphBoundary) = block else {
+        guard let displayValue = block.novelTextDisplayValue else {
             return nil
         }
         return NovelTextDisplayAdapter.displayPlan(
             surface: .novelReadingSessionTextBlock,
-            text: text,
-            chapterTitle: chapterTitle,
-            startsAtParagraphBoundary: startsAtParagraphBoundary,
+            text: displayValue.text,
+            chapterTitle: displayValue.chapterTitle,
+            startsAtParagraphBoundary: displayValue.startsAtParagraphBoundary,
             settings: settings,
             baseFontSize: baseFontSize,
             textColor: .primaryReaderText

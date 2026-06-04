@@ -74,8 +74,7 @@ public enum NovelTextLayout {
         )
         let hasVisibleText = result.pages.contains { page in
             page.blocks.contains { block in
-                guard case let .text(text, _, _) = block else { return false }
-                return !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                block.textContent?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
             }
         }
         let hasInputText = document.segments.contains { segment in
@@ -172,7 +171,15 @@ public enum NovelTextLayout {
                             .text(
                                 slice.text,
                                 chapterTitle: chapterTitle,
-                                startsAtParagraphBoundary: slice.startsAtParagraphBoundary
+                                startsAtParagraphBoundary: slice.startsAtParagraphBoundary,
+                                settings: settings,
+                                ranges: [
+                                    ReaderRenderedTextRange(
+                                        segmentIndex: annotatedSegment.index,
+                                        startOffset: slice.startOffset,
+                                        endOffset: slice.endOffset
+                                    )
+                                ]
                             ),
                         ],
                         documentView: document.view,
@@ -181,13 +188,6 @@ public enum NovelTextLayout {
                         segmentIndex: annotatedSegment.index,
                         segmentStartOffset: slice.startOffset,
                         segmentEndOffset: slice.endOffset,
-                        textRanges: [
-                            ReaderRenderedTextRange(
-                                segmentIndex: annotatedSegment.index,
-                                startOffset: slice.startOffset,
-                                endOffset: slice.endOffset
-                            )
-                        ],
                         chapterCommentTarget: chapterCommentTarget(for: annotatedSegment, document: document)
                     )
                     if let chapterOrdinal = annotatedSegment.chapterOrdinal,
@@ -209,20 +209,26 @@ public enum NovelTextLayout {
                     pages.append(
                         ReaderRenderedPage(
                             index: 0,
-                            blocks: [.text(text, chapterTitle: chapterTitle)],
+                            blocks: [
+                                .text(
+                                    text,
+                                    chapterTitle: chapterTitle,
+                                    settings: settings,
+                                    ranges: [
+                                        ReaderRenderedTextRange(
+                                            segmentIndex: annotatedSegment.index,
+                                            startOffset: 0,
+                                            endOffset: text.count
+                                        )
+                                    ]
+                                )
+                            ],
                             documentView: document.view,
                             chapterOrdinal: annotatedSegment.chapterOrdinal,
                             chapterTitle: annotatedSegment.chapterTitle,
                             segmentIndex: annotatedSegment.index,
                             segmentStartOffset: 0,
                             segmentEndOffset: text.count,
-                            textRanges: [
-                                ReaderRenderedTextRange(
-                                    segmentIndex: annotatedSegment.index,
-                                    startOffset: 0,
-                                    endOffset: text.count
-                                )
-                            ],
                             chapterCommentTarget: chapterCommentTarget(for: annotatedSegment, document: document)
                         )
                     )
@@ -317,14 +323,15 @@ public enum NovelTextLayout {
             .text(
                 slice.text,
                 chapterTitle: chapterTitle,
-                startsAtParagraphBoundary: slice.startsAtParagraphBoundary
-            )
-        )
-        previousPage.textRanges.append(
-            ReaderRenderedTextRange(
-                segmentIndex: annotatedSegment.index,
-                startOffset: slice.startOffset,
-                endOffset: slice.endOffset
+                startsAtParagraphBoundary: slice.startsAtParagraphBoundary,
+                settings: settings,
+                ranges: [
+                    ReaderRenderedTextRange(
+                        segmentIndex: annotatedSegment.index,
+                        startOffset: slice.startOffset,
+                        endOffset: slice.endOffset
+                    )
+                ]
             )
         )
         previousPage.segmentEndOffset = max(previousPage.segmentEndOffset, slice.endOffset)

@@ -726,8 +726,7 @@ final class ReaderContainerModelTests: XCTestCase {
 
         await MainActor.run {
             let renderedText = model.pages.flatMap(\.blocks).compactMap { block -> String? in
-                if case let .text(text, _, _) = block { return text }
-                return nil
+                block.textContent
             }.joined()
 
             XCTAssertTrue(renderedText.contains("听到弓莉这么说"))
@@ -1327,10 +1326,11 @@ final class ReaderContainerModelTests: XCTestCase {
         )
 
         let target = try await MainActor.run {
-            let mergedPage = try XCTUnwrap(model.pages.first { $0.textRanges.count >= 2 })
-            let targetRange = try XCTUnwrap(mergedPage.textRanges.first { $0.segmentIndex == 1 })
-            let totalLength = mergedPage.textRanges.reduce(0) { $0 + max($1.length, 1) }
-            let precedingLength = mergedPage.textRanges
+            let mergedPage = try XCTUnwrap(model.pages.first { $0.novelTextDisplayValues.flatMap(\.ranges).count >= 2 })
+            let ranges = mergedPage.novelTextDisplayValues.flatMap(\.ranges)
+            let targetRange = try XCTUnwrap(ranges.first { $0.segmentIndex == 1 })
+            let totalLength = ranges.reduce(0) { $0 + max($1.length, 1) }
+            let precedingLength = ranges
                 .prefix { $0.segmentIndex != targetRange.segmentIndex }
                 .reduce(0) { $0 + max($1.length, 1) }
             let targetOffset = targetRange.startOffset + max(1, targetRange.length / 2)
@@ -1917,7 +1917,7 @@ private func pageContainsOffset(_ page: ReaderRenderedPage, offset: Int) -> Bool
 }
 
 private func pageContainsSegmentOffset(_ page: ReaderRenderedPage, segmentIndex: Int, offset: Int) -> Bool {
-    let matchingRanges = page.textRanges.filter { $0.segmentIndex == segmentIndex }
+    let matchingRanges = page.novelTextDisplayValues.flatMap(\.ranges).filter { $0.segmentIndex == segmentIndex }
     if !matchingRanges.isEmpty {
         return matchingRanges.contains { range in
             if range.startOffset == range.endOffset {

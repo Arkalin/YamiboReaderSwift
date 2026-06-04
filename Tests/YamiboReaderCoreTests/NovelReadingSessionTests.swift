@@ -280,7 +280,7 @@ private func makeNovelDocument(
 }
 
 private func pageContainsSegmentOffset(_ page: ReaderRenderedPage, segmentIndex: Int, offset: Int) -> Bool {
-    let matchingRanges = page.textRanges.filter { $0.segmentIndex == segmentIndex }
+    let matchingRanges = page.novelTextDisplayValues.flatMap(\.ranges).filter { $0.segmentIndex == segmentIndex }
     if !matchingRanges.isEmpty {
         return matchingRanges.contains { range in
             if range.startOffset == range.endOffset {
