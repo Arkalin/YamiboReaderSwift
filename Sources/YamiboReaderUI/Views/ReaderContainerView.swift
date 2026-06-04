@@ -22,7 +22,7 @@ private struct ReaderVerticalBoundaryPullState: Equatable {
     static let idle = ReaderVerticalBoundaryPullState()
 }
 
-private struct ReaderVerticalPageFrameValue: Equatable {
+struct ReaderVerticalPageFrameValue: Equatable {
     let documentView: Int
     let frame: CGRect
 }
@@ -400,92 +400,52 @@ public struct ReaderContainerView: View {
     }
 
     private func verticalContent(topInset: CGFloat, bottomInset: CGFloat) -> some View {
-        ScrollViewReader { scrollProxy in
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 16) {
-                    ForEach(model.pages) { page in
-                        ReaderPageContent(
-                            page: page,
-                            settings: model.settings,
-                            refererURL: model.forumURL,
-                            sessionState: model.sessionState
-                        )
-                        .id(page.index)
-                        .padding(.horizontal, model.settings.horizontalPadding)
-                        .padding(.top, page.index == 0 ? 16 : 0)
-                        .background(
-                            GeometryReader { geometry in
-                                Color.clear.preference(
-                                    key: ReaderVerticalPageFramePreferenceKey.self,
-                                    value: [
-                                        page.index: ReaderVerticalPageFrameValue(
-                                            documentView: page.documentView,
-                                            frame: geometry.frame(in: .named("readerVerticalViewport"))
-                                        )
-                                    ]
-                                )
-                            }
-                        )
+        ReaderVerticalViewportScrollView(
+            pages: model.pages,
+            viewportContext: model.viewportContext,
+            viewportIndex: model.viewportIndex,
+            settings: model.settings,
+            refererURL: model.forumURL,
+            sessionState: model.sessionState,
+            scrollRequest: verticalScrollRequest,
+            onScrollRequestHandled: { request in
+                guard verticalRestoreController.scrollingRequest == request else { return }
+                verticalScrollRequest = nil
+                tryAdvanceVerticalRestore()
+            },
+            onScrollViewReady: { scrollView in
+                verticalScrollCoordinator.attach(scrollView: scrollView)
+                verticalScrollCoordinator.onBoundaryPullRelease = { direction in
+                    Task { @MainActor in
+                        await handleVerticalBoundaryPullRelease(direction)
                     }
                 }
-                .padding(.bottom, 24)
+                verticalScrollCoordinator.onViewportMetricsChange = {
+                    Task { @MainActor in
+                        tryAdvanceVerticalRestore()
+                        scheduleVerticalViewportPositionUpdate()
+                    }
+                }
+                verticalScrollCoordinator.onBoundaryPullStateChange = { state in
+                    Task { @MainActor in
+                        updateVerticalBoundaryPullState(state)
+                    }
+                }
+            },
+            onPageFramesChange: { frames in
+                verticalPageFrames = frames
+                tryAdvanceVerticalRestore()
+                scheduleVerticalViewportPositionUpdate()
+            },
+            onViewportChange: {
+                scheduleVerticalViewportPositionUpdate()
+            },
+            onTap: {
+                handleVerticalTap()
             }
-            .background(
-                ReaderScrollViewResolver { scrollView in
-                    verticalScrollCoordinator.attach(scrollView: scrollView)
-                    verticalScrollCoordinator.onBoundaryPullRelease = { direction in
-                        Task { @MainActor in
-                            await handleVerticalBoundaryPullRelease(direction)
-                        }
-                    }
-                    verticalScrollCoordinator.onViewportMetricsChange = {
-                        Task { @MainActor in
-                            tryAdvanceVerticalRestore()
-                            scheduleVerticalViewportPositionUpdate()
-                        }
-                    }
-                    verticalScrollCoordinator.onBoundaryPullStateChange = { state in
-                        Task { @MainActor in
-                            updateVerticalBoundaryPullState(state)
-                        }
-                    }
-                }
-                .frame(width: 0, height: 0)
-                .accessibilityHidden(true)
-            )
-            .coordinateSpace(name: "readerVerticalViewport")
-            .contentShape(Rectangle())
-            .simultaneousGesture(
-                verticalScrollSuppressionGesture
-            )
-            .simultaneousGesture(
-                TapGesture().onEnded {
-                    handleVerticalTap()
-                }
-            )
-            .onChange(of: verticalScrollRequest) { _, request in
-                guard let request else { return }
-                Task { @MainActor in
-                    try? await Task.sleep(for: .milliseconds(1))
-                    guard verticalRestoreController.scrollingRequest == request else { return }
-                    guard request.view == nil || request.view == model.visibleView else { return }
-                    var transaction = Transaction()
-                    transaction.disablesAnimations = true
-                    withTransaction(transaction) {
-                        scrollProxy.scrollTo(request.pageIndex, anchor: .top)
-                    }
-                    verticalScrollRequest = nil
-                    tryAdvanceVerticalRestore()
-                }
-            }
-            .onPreferenceChange(ReaderVerticalPageFramePreferenceKey.self) { frames in
-                Task { @MainActor in
-                    verticalPageFrames = frames
-                    tryAdvanceVerticalRestore()
-                    scheduleVerticalViewportPositionUpdate()
-                }
-            }
-        }
+        )
+        .contentShape(Rectangle())
+        .simultaneousGesture(verticalScrollSuppressionGesture)
     }
 
     private var backgroundColor: Color {

@@ -770,6 +770,144 @@ struct ReaderPagedSpreadCollectionViewport: UIViewRepresentable {
         }
     }
 }
+
+struct ReaderVerticalViewportScrollView: UIViewRepresentable {
+    let pages: [ReaderRenderedPage]
+    let viewportContext: NovelTextViewportContext?
+    let viewportIndex: NovelTextViewportIndex?
+    let settings: ReaderAppearanceSettings
+    let refererURL: URL
+    let sessionState: SessionState
+    let scrollRequest: ReaderVerticalScrollRequest?
+    let onScrollRequestHandled: (ReaderVerticalScrollRequest) -> Void
+    let onScrollViewReady: (UIScrollView) -> Void
+    let onPageFramesChange: ([Int: ReaderVerticalPageFrameValue]) -> Void
+    let onViewportChange: () -> Void
+    let onTap: () -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(parent: self)
+    }
+
+    func makeUIView(context: Context) -> UICollectionView {
+        let layout = UICollectionViewFlowLayout()
+        layout.scrollDirection = .vertical
+        layout.minimumLineSpacing = 16
+        layout.minimumInteritemSpacing = 0
+        layout.estimatedItemSize = UICollectionViewFlowLayout.automaticSize
+
+        let collectionView = UICollectionView(frame: .zero, collectionViewLayout: layout)
+        collectionView.alwaysBounceVertical = true
+        collectionView.showsVerticalScrollIndicator = false
+        collectionView.backgroundColor = .clear
+        collectionView.dataSource = context.coordinator
+        collectionView.delegate = context.coordinator
+        collectionView.register(UICollectionViewCell.self, forCellWithReuseIdentifier: Coordinator.reuseIdentifier)
+        collectionView.addGestureRecognizer(context.coordinator.tapGesture)
+        onScrollViewReady(collectionView)
+        return collectionView
+    }
+
+    func updateUIView(_ collectionView: UICollectionView, context: Context) {
+        context.coordinator.parent = self
+        collectionView.reloadData()
+        context.coordinator.handle(scrollRequest, in: collectionView)
+    }
+
+    final class Coordinator: NSObject, UICollectionViewDataSource, UICollectionViewDelegateFlowLayout, UIScrollViewDelegate {
+        static let reuseIdentifier = "ReaderVerticalViewportScrollCell"
+
+        var parent: ReaderVerticalViewportScrollView
+        lazy var tapGesture = UITapGestureRecognizer(target: self, action: #selector(handleTap))
+
+        init(parent: ReaderVerticalViewportScrollView) {
+            self.parent = parent
+            super.init()
+        }
+
+        func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int {
+            parent.pages.count
+        }
+
+        func collectionView(
+            _ collectionView: UICollectionView,
+            cellForItemAt indexPath: IndexPath
+        ) -> UICollectionViewCell {
+            let cell = collectionView.dequeueReusableCell(
+                withReuseIdentifier: Self.reuseIdentifier,
+                for: indexPath
+            )
+            let page = parent.pages[indexPath.item]
+            let viewportPage = parent.viewportIndex?.pages.first {
+                $0.pageIndex == page.index && $0.documentView == page.documentView
+            }
+            cell.backgroundColor = .clear
+            cell.contentConfiguration = UIHostingConfiguration {
+                ReaderViewportPageContent(
+                    page: page,
+                    viewportContext: parent.viewportContext,
+                    viewportPage: viewportPage,
+                    settings: parent.settings,
+                    refererURL: parent.refererURL,
+                    sessionState: parent.sessionState
+                )
+                .padding(.horizontal, parent.settings.horizontalPadding)
+                .padding(.top, page.index == 0 ? 16 : 0)
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+            }
+            .margins(.all, 0)
+            return cell
+        }
+
+        func scrollViewDidScroll(_ scrollView: UIScrollView) {
+            publishFrames(from: scrollView)
+            parent.onViewportChange()
+        }
+
+        func scrollViewDidLayoutSubviews(_ scrollView: UIScrollView) {
+            publishFrames(from: scrollView)
+        }
+
+        func handle(_ request: ReaderVerticalScrollRequest?, in collectionView: UICollectionView) {
+            guard let request,
+                  parent.pages.indices.contains(request.pageIndex) else {
+                return
+            }
+            collectionView.scrollToItem(
+                at: IndexPath(item: request.pageIndex, section: 0),
+                at: .top,
+                animated: false
+            )
+            parent.onScrollRequestHandled(request)
+            publishFrames(from: collectionView)
+            parent.onViewportChange()
+        }
+
+        @objc private func handleTap() {
+            parent.onTap()
+        }
+
+        private func publishFrames(from scrollView: UIScrollView) {
+            guard let collectionView = scrollView as? UICollectionView else { return }
+            let frames = collectionView.indexPathsForVisibleItems.reduce(into: [Int: ReaderVerticalPageFrameValue]()) { result, indexPath in
+                guard parent.pages.indices.contains(indexPath.item),
+                      let attributes = collectionView.layoutAttributesForItem(at: indexPath) else {
+                    return
+                }
+                let page = parent.pages[indexPath.item]
+                let visibleFrame = attributes.frame.offsetBy(
+                    dx: -collectionView.contentOffset.x,
+                    dy: -collectionView.contentOffset.y
+                )
+                result[page.index] = ReaderVerticalPageFrameValue(
+                    documentView: page.documentView,
+                    frame: visibleFrame
+                )
+            }
+            parent.onPageFramesChange(frames)
+        }
+    }
+}
 #endif
 
 private struct ReaderBlockView: View {
