@@ -521,8 +521,25 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertTrue(supportSource.contains("override func layoutSubviews()"))
         for body in [singlePageBody, spreadBody] {
             XCTAssertTrue(body.contains("onLayoutSubviews"))
-            XCTAssertTrue(body.contains("requestSelectionScroll(in: collectionView, animated: false)"))
+            XCTAssertTrue(body.contains("reloadDataAndRequestSelectionScroll(in: collectionView, animated: false)"))
             XCTAssertTrue(body.contains("scrollToPendingSelectionIfPossible(in: collectionView, animated: animated)"))
+        }
+    }
+
+    func testPagedViewportsRetrySelectionScrollAfterReloadLayoutCompletes() throws {
+        let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let supportSource = try String(
+            contentsOf: repositoryRoot
+                .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderSupportViews.swift"),
+            encoding: .utf8
+        )
+        let singlePageBody = try XCTUnwrap(typeBody(named: "ReaderPagedCollectionViewport", in: supportSource))
+        let spreadBody = try XCTUnwrap(typeBody(named: "ReaderPagedSpreadCollectionViewport", in: supportSource))
+
+        for body in [singlePageBody, spreadBody] {
+            XCTAssertTrue(body.contains("reloadDataAndRequestSelectionScroll(in: collectionView, animated: false)"))
+            XCTAssertTrue(body.contains("collectionView.performBatchUpdates(nil)"))
+            XCTAssertTrue(body.contains("self?.scrollToPendingSelectionIfPossible(in: collectionView, animated: animated)"))
         }
     }
 
