@@ -99,7 +99,7 @@ extension NovelTextDisplayAdapter {
         displayValue: NovelTextDisplayValue,
         baseFontSize: Double
     ) throws -> CGFloat {
-        try NovelTextLayout.measuredTextHeight(
+        try NovelTextLayout.measuredDisplayHeight(
             displayValue: displayValue,
             width: width,
             baseFontSize: baseFontSize
@@ -141,20 +141,17 @@ struct NativeNovelTextDisplayView: UIViewRepresentable {
     }
 
     func makeUIView(context: Context) -> NovelTextViewportDisplayUIView {
-        let view = NovelTextViewportDisplayUIView()
-        view.backgroundColor = .clear
-        view.isOpaque = false
-        view.isUserInteractionEnabled = false
-        return view
+        NovelTextLayout.makeDisplayView()
     }
 
     func updateUIView(_ uiView: NovelTextViewportDisplayUIView, context: Context) {
-        uiView.update(attributedText: NovelTextKit2PlatformAdapter.makeAttributedText(
+        NovelTextLayout.updateDisplayView(
+            uiView,
             displayValue: displayValue,
             baseFontSize: baseFontSize,
             textColor: textColor,
             titleWeight: titleWeight
-        ))
+        )
     }
 
     func sizeThatFits(
@@ -174,7 +171,44 @@ struct NativeNovelTextDisplayView: UIViewRepresentable {
     }
 }
 
-enum NovelTextKit2PlatformAdapter {
+extension NovelTextLayout {
+    static func measuredDisplayHeight(
+        displayValue: NovelTextDisplayValue,
+        width: CGFloat,
+        baseFontSize: Double
+    ) throws -> CGFloat {
+        try measuredTextHeight(
+            displayValue: displayValue,
+            width: width,
+            baseFontSize: baseFontSize
+        )
+    }
+
+    @MainActor
+    static func makeDisplayView() -> NovelTextViewportDisplayUIView {
+        let view = NovelTextViewportDisplayUIView()
+        view.backgroundColor = .clear
+        view.isOpaque = false
+        view.isUserInteractionEnabled = false
+        return view
+    }
+
+    @MainActor
+    static func updateDisplayView(
+        _ displayView: NovelTextViewportDisplayUIView,
+        displayValue: NovelTextDisplayValue,
+        baseFontSize: Double,
+        textColor: UIColor,
+        titleWeight: UIFont.Weight
+    ) {
+        displayView.update(attributedText: makeAttributedText(
+            displayValue: displayValue,
+            baseFontSize: baseFontSize,
+            textColor: textColor,
+            titleWeight: titleWeight
+        ))
+    }
+
     static func makeAttributedText(
         displayValue: NovelTextDisplayValue,
         baseFontSize: Double,
@@ -194,9 +228,9 @@ enum NovelTextKit2PlatformAdapter {
 }
 
 @MainActor
-final class NovelTextViewportRuntimeStore {
-    private var textSurfaces: [NovelTextViewportTextSurfaceIdentity: NovelTextViewportTextSurface] = [:]
-    private var surfaceAccessOrder: [NovelTextViewportTextSurfaceIdentity] = []
+final class NovelTextLayoutLiveSurfaceStore {
+    private var textSurfaces: [NovelTextLayoutLiveSurfaceIdentity: NovelTextLayoutLiveSurface] = [:]
+    private var surfaceAccessOrder: [NovelTextLayoutLiveSurfaceIdentity] = []
     private let surfaceCapacity = 48
 
     func measuredHeight(
@@ -212,14 +246,14 @@ final class NovelTextViewportRuntimeStore {
     }
 
     func textSurface(
-        identity: NovelTextViewportTextSurfaceIdentity,
+        identity: NovelTextLayoutLiveSurfaceIdentity,
         displayValue: NovelTextDisplayValue,
         width: CGFloat,
         baseFontSize: Double,
         textColor: UIColor,
         titleWeight: UIFont.Weight = .regular,
         fallbackHeight: CGFloat
-    ) -> NovelTextViewportTextSurface {
+    ) -> NovelTextLayoutLiveSurface {
         if let cachedSurface = textSurfaces[identity] {
             markRecentlyUsed(identity)
             cachedSurface.prepareForDisplay(size: CGSize(width: width, height: cachedSurface.height))
@@ -231,18 +265,16 @@ final class NovelTextViewportRuntimeStore {
             width: width,
             baseFontSize: baseFontSize
         )) ?? fallbackHeight
-        let displayView = NovelTextViewportDisplayUIView()
-        displayView.backgroundColor = .clear
-        displayView.isOpaque = false
-        displayView.isUserInteractionEnabled = false
+        let displayView = NovelTextLayout.makeDisplayView()
         displayView.frame = CGRect(x: 0, y: 0, width: width, height: height)
-        displayView.update(attributedText: NovelTextKit2PlatformAdapter.makeAttributedText(
+        NovelTextLayout.updateDisplayView(
+            displayView,
             displayValue: displayValue,
             baseFontSize: baseFontSize,
             textColor: textColor,
             titleWeight: titleWeight
-        ))
-        let surface = NovelTextViewportTextSurface(
+        )
+        let surface = NovelTextLayoutLiveSurface(
             identity: identity,
             displayValue: displayValue,
             displayView: displayView,
@@ -260,7 +292,7 @@ final class NovelTextViewportRuntimeStore {
         surfaceAccessOrder.removeAll()
     }
 
-    private func markRecentlyUsed(_ identity: NovelTextViewportTextSurfaceIdentity) {
+    private func markRecentlyUsed(_ identity: NovelTextLayoutLiveSurfaceIdentity) {
         surfaceAccessOrder.removeAll { $0 == identity }
         surfaceAccessOrder.append(identity)
     }
@@ -273,7 +305,7 @@ final class NovelTextViewportRuntimeStore {
     }
 }
 
-struct NovelTextViewportTextSurfaceIdentity: Hashable {
+struct NovelTextLayoutLiveSurfaceIdentity: Hashable {
     let documentView: Int
     let pageIndex: Int
     let blockIndex: Int
@@ -305,15 +337,15 @@ struct NovelTextViewportTextSurfaceIdentity: Hashable {
 }
 
 @MainActor
-final class NovelTextViewportTextSurface {
-    let identity: NovelTextViewportTextSurfaceIdentity
+final class NovelTextLayoutLiveSurface {
+    let identity: NovelTextLayoutLiveSurfaceIdentity
     let displayValue: NovelTextDisplayValue
     let view: UIView
     let height: CGFloat
     private let displayView: NovelTextViewportDisplayUIView
 
     init(
-        identity: NovelTextViewportTextSurfaceIdentity,
+        identity: NovelTextLayoutLiveSurfaceIdentity,
         displayValue: NovelTextDisplayValue,
         displayView: NovelTextViewportDisplayUIView,
         height: CGFloat
