@@ -19,7 +19,7 @@ import Testing
         request: request,
         contentSource: .authorFilteredPage
     )
-    let pagination = NovelTextLayout.renderedPagesOrEmpty(
+    let pagination = try NovelTextLayout.renderedPages(
         document: document,
         settings: ReaderAppearanceSettings(),
         layout: ReaderContainerLayout(width: 390, height: 844)
@@ -51,7 +51,7 @@ import Testing
         request: request,
         contentSource: .authorFilteredPage
     )
-    let pagination = NovelTextLayout.renderedPagesOrEmpty(
+    let pagination = try NovelTextLayout.renderedPages(
         document: document,
         settings: ReaderAppearanceSettings(),
         layout: ReaderContainerLayout(width: 390, height: 844)
@@ -81,7 +81,7 @@ import Testing
         request: request,
         contentSource: .authorFilteredPage
     )
-    let pagination = NovelTextLayout.renderedPagesOrEmpty(
+    let pagination = try NovelTextLayout.renderedPages(
         document: document,
         settings: ReaderAppearanceSettings(),
         layout: ReaderContainerLayout(width: 390, height: 844)

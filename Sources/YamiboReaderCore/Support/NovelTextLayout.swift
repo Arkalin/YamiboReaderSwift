@@ -34,15 +34,6 @@ public enum NovelTextLayout {
         )
     }
 
-    public static func renderedPagesOrEmpty(
-        document: ReaderPageDocument,
-        settings: ReaderAppearanceSettings,
-        layout: ReaderContainerLayout
-    ) -> ReaderPaginationResult {
-        (try? renderedPages(document: document, settings: settings, layout: layout))
-            ?? emptyPagination(documentView: document.view)
-    }
-
     static func renderedPages(
         document: ReaderPageDocument,
         settings: ReaderAppearanceSettings,
@@ -149,7 +140,7 @@ public enum NovelTextLayout {
 
         for annotatedSegment in annotatedSegments {
             switch annotatedSegment.segment {
-            case let .text(text, chapterTitle):
+            case let .text(_, chapterTitle):
                 let slices = try chunker(annotatedSegment, settings, layout)
                 for slice in slices where !slice.text.isEmpty {
                     if settings.readingMode == .paged,
@@ -205,34 +196,6 @@ public enum NovelTextLayout {
                     pages.append(page)
                 }
 
-                if pages.isEmpty, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    pages.append(
-                        ReaderRenderedPage(
-                            index: 0,
-                            blocks: [
-                                .text(
-                                    text,
-                                    chapterTitle: chapterTitle,
-                                    settings: settings,
-                                    ranges: [
-                                        ReaderRenderedTextRange(
-                                            segmentIndex: annotatedSegment.index,
-                                            startOffset: 0,
-                                            endOffset: text.count
-                                        )
-                                    ]
-                                )
-                            ],
-                            documentView: document.view,
-                            chapterOrdinal: annotatedSegment.chapterOrdinal,
-                            chapterTitle: annotatedSegment.chapterTitle,
-                            segmentIndex: annotatedSegment.index,
-                            segmentStartOffset: 0,
-                            segmentEndOffset: text.count,
-                            chapterCommentTarget: chapterCommentTarget(for: annotatedSegment, document: document)
-                        )
-                    )
-                }
             case let .image(url, chapterTitle):
                 let page = ReaderRenderedPage(
                     index: pages.count,
@@ -272,19 +235,6 @@ public enum NovelTextLayout {
         }
 
         return ReaderPaginationResult(pages: pages, chapters: chapters)
-    }
-
-    private static func emptyPagination(documentView: Int) -> ReaderPaginationResult {
-        ReaderPaginationResult(
-            pages: [
-                ReaderRenderedPage(
-                    index: 0,
-                    blocks: [.footer(L10n.string("reader.empty_content"))],
-                    documentView: documentView
-                )
-            ],
-            chapters: []
-        )
     }
 
     private static func appendTextSliceToPreviousPageIfPossible(
@@ -425,7 +375,7 @@ public enum NovelTextLayout {
             layout: layout
         )
 #else
-        text.count < 180
+        false
 #endif
     }
 
@@ -480,50 +430,6 @@ public enum NovelTextLayout {
             throw NovelTextLayoutFailure.unableToLayoutText
         }
         return height
-    }
-
-    public static func estimatedTextHeight(
-        _ text: String,
-        chapterTitle: String?,
-        startsAtParagraphBoundary: Bool = true,
-        settings: ReaderAppearanceSettings,
-        width: CGFloat,
-        baseFontSize: Double = 22
-    ) -> CGFloat {
-        guard width > 0 else { return 0 }
-#if canImport(UIKit)
-        let attributedText = ReaderAttributedTextFactory.makeAttributedText(
-            text: text,
-            chapterTitle: chapterTitle,
-            startsAtParagraphBoundary: startsAtParagraphBoundary,
-            settings: settings,
-            baseFontSize: baseFontSize
-        )
-        let boundingRect = attributedText.boundingRect(
-            with: CGSize(width: width, height: .greatestFiniteMagnitude),
-            options: [.usesLineFragmentOrigin, .usesFontLeading],
-            context: nil
-        )
-        return ceil(boundingRect.height)
-#elseif canImport(AppKit)
-        let attributedText = AppKitNovelTextLayoutAdapter.makeAttributedText(
-            text: text,
-            chapterTitle: chapterTitle,
-            startsAtParagraphBoundary: startsAtParagraphBoundary,
-            settings: settings,
-            baseFontSize: baseFontSize
-        )
-        let boundingRect = attributedText.boundingRect(
-            with: CGSize(width: width, height: .greatestFiniteMagnitude),
-            options: [.usesLineFragmentOrigin, .usesFontLeading]
-        )
-        return ceil(boundingRect.height)
-#else
-        let metrics = textMetrics(settings: settings, baseFontSize: baseFontSize)
-        let charsPerLine = max(1, Int(width / max(metrics.characterWidth, 1)))
-        let lineCount = max(1, Int(ceil(Double(text.count) / Double(charsPerLine))))
-        return ceil(CGFloat(lineCount) * metrics.lineHeight)
-#endif
     }
 
     private static func pagedTextSlices(
@@ -608,20 +514,6 @@ public enum NovelTextLayout {
         throw NovelTextLayoutFailure.unableToLayoutText
     }
 
-    private static func textMetrics(
-        settings: ReaderAppearanceSettings,
-        baseFontSize: Double = 22
-    ) -> ReaderTextMetrics {
-        let fontSize = max(14, baseFontSize * settings.fontScale)
-        let lineHeight = max(fontSize * settings.lineHeightScale, fontSize * 1.35)
-        let characterSpacing = fontSize * settings.characterSpacingScale * 0.45
-        let characterWidth = fontSize * settings.fontFamily.paginationWidthFactor + characterSpacing
-        return ReaderTextMetrics(
-            fontSize: CGFloat(fontSize),
-            lineHeight: CGFloat(lineHeight),
-            characterWidth: CGFloat(characterWidth)
-        )
-    }
 }
 
 private extension ReaderAppearanceSettings {
@@ -1054,12 +946,6 @@ private extension String {
     }
 }
 #endif
-
-private struct ReaderTextMetrics {
-    let fontSize: CGFloat
-    let lineHeight: CGFloat
-    let characterWidth: CGFloat
-}
 
 struct TextSlice {
     let text: String
