@@ -233,7 +233,7 @@ public final class NovelReadingWorkflow {
     public func currentProgressPosition() -> NovelReadingPosition {
         let resumePoint = captureNovelReadingPosition()
         let snapshot = state?.snapshot
-        let view = resumePoint?.view ?? currentDisplayedView(in: snapshot) ?? context.initialView ?? 1
+        let view = currentDisplayedView(in: snapshot) ?? resumePoint?.view ?? context.initialView ?? 1
         return NovelReadingPosition(
             threadURL: context.threadURL,
             view: view,
