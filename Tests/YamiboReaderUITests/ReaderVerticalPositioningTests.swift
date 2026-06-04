@@ -4,19 +4,21 @@ import YamiboReaderCore
 @testable import YamiboReaderUI
 
 final class ReaderVerticalPositioningTests: XCTestCase {
-    func testSamplesNearestVerticalPageAtReferenceLine() {
-        let frames = [
-            0: CGRect(x: 0, y: -300, width: 320, height: 400),
-            1: CGRect(x: 0, y: 120, width: 320, height: 500)
-        ]
+    func testPageDistanceReportsZeroOnlyWhenReferenceLineCrossesFrame() {
+        let containingFrame = CGRect(x: 0, y: 120, width: 320, height: 500)
+        let aboveFrame = CGRect(x: 0, y: 240, width: 320, height: 500)
+        let belowFrame = CGRect(x: 0, y: -300, width: 320, height: 400)
 
-        let sample = ReaderVerticalPositioning.sample(
-            frames: frames,
-            referenceLineY: 160
-        )
+        XCTAssertEqual(ReaderVerticalPositioning.pageDistance(from: 160, to: containingFrame), 0)
+        XCTAssertEqual(ReaderVerticalPositioning.pageDistance(from: 160, to: aboveFrame), 80)
+        XCTAssertEqual(ReaderVerticalPositioning.pageDistance(from: 160, to: belowFrame), 60)
+    }
 
-        XCTAssertEqual(sample?.pageIndex, 1)
-        XCTAssertEqual(sample?.intraPageProgress ?? -1, 0.08, accuracy: 0.001)
+    func testReaderContainerViewDoesNotUseFrameSamplerForVerticalTextPosition() throws {
+        let source = try String(contentsOfFile: projectFilePath("Sources/YamiboReaderUI/Views/ReaderContainerView.swift"))
+
+        XCTAssertFalse(source.contains("ReaderVerticalPositioning.sample("))
+        XCTAssertFalse(source.contains("intraPageProgress: sample.intraPageProgress"))
     }
 
     func testTextKitDisplayOffsetMapsToSegmentLocalNovelTextViewportSample() {
@@ -59,4 +61,13 @@ final class ReaderVerticalPositioningTests: XCTestCase {
 
         XCTAssertEqual(displayOffset, 9)
     }
+}
+
+private func projectFilePath(_ relativePath: String) -> String {
+    URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .appendingPathComponent(relativePath)
+        .path
 }

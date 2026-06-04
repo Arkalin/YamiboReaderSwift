@@ -459,7 +459,7 @@ public struct ReaderContainerView: View {
                 scheduleVerticalViewportPositionUpdate()
             },
             onScrollSettled: {
-                updateVerticalViewportPosition(force: true)
+                updateVerticalViewportPosition()
             },
             onTap: {
                 handleVerticalTap()
@@ -1004,27 +1004,15 @@ public struct ReaderContainerView: View {
         scheduleVerticalRestoreRetry(for: request)
     }
 
-    private func updateVerticalViewportPosition(force: Bool = false) {
-        let frames = currentVerticalPageFrames
-        guard model.settings.readingMode == .vertical, !frames.isEmpty else { return }
+    private func updateVerticalViewportPosition() {
+        guard model.settings.readingMode == .vertical else { return }
         guard verticalRestoreController.canSampleViewport(now: CACurrentMediaTime()) else {
             return
         }
 
         if let sample = verticalTextViewportSample {
             model.updateVerticalViewportPosition(sample: sample)
-            return
         }
-
-        guard let sample = ReaderVerticalPositioning.sample(
-            frames: frames,
-            referenceLineY: verticalScrollCoordinator.referenceLineY
-        ) else { return }
-        model.updateVerticalViewportPosition(
-            pageIndex: sample.pageIndex,
-            intraPageProgress: sample.intraPageProgress,
-            force: force
-        )
     }
 
     private func scheduleVerticalViewportPositionUpdate() {
@@ -1088,7 +1076,7 @@ public struct ReaderContainerView: View {
         guard verticalRestoreController.canSampleViewport(now: CACurrentMediaTime()) else {
             return
         }
-        updateVerticalViewportPosition(force: true)
+        updateVerticalViewportPosition()
     }
 
     private func beginVerticalRestoreScrolling(for request: ReaderVerticalScrollRequest) {
