@@ -229,6 +229,29 @@ final class ReaderContainerModelTests: XCTestCase {
         }
     }
 
+    func testSelectingPreviewedChapterDirectoryChapterKeepsPagedSelectionOnTargetPage() async throws {
+        let model = try await makeModel(
+            documents: [
+                makeDocument(view: 1, maxView: 2, chapterTitles: ["第一章", "第二章"]),
+                makeDocument(view: 2, maxView: 2, chapterTitles: ["第三章", "第四章", "第五章"]),
+            ],
+            settings: ReaderAppearanceSettings(readingMode: .paged)
+        )
+
+        await model.previewChapterDirectoryWebView(2)
+        let target = try await MainActor.run {
+            try XCTUnwrap(model.visibleChapterDirectoryChapters.first(where: { $0.title == "第五章" }))
+        }
+        await model.jumpToChapterDirectoryChapter(target)
+
+        await MainActor.run {
+            XCTAssertEqual(model.currentView, 2)
+            XCTAssertEqual(model.currentChapterTitle, "第五章")
+            XCTAssertGreaterThan(model.pagedSelectionIndex, 0)
+            XCTAssertEqual(model.pages[model.currentPageIndex].chapterTitle, "第五章")
+        }
+    }
+
     func testChapterTitleHelperResolvesRenderedPageChapter() async throws {
         let model = try await makeModel(
             documents: [
