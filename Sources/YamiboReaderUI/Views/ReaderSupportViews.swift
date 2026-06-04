@@ -1118,6 +1118,7 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
     let onScrollViewReady: (UIScrollView) -> Void
     let onPageFramesChange: ([Int: ReaderVerticalPageFrameValue]) -> Void
     let onViewportChange: () -> Void
+    let onScrollSettled: () -> Void
     let onTap: () -> Void
 
     private var contentIdentity: ReaderVerticalViewportContentIdentity {
@@ -1148,7 +1149,7 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
         collectionView.backgroundColor = .clear
         collectionView.dataSource = context.coordinator
         collectionView.delegate = context.coordinator
-        collectionView.register(UICollectionViewCell.self, forCellWithReuseIdentifier: Coordinator.reuseIdentifier)
+        collectionView.register(ReaderVerticalViewportCell.self, forCellWithReuseIdentifier: ReaderVerticalViewportCell.reuseIdentifier)
         context.coordinator.tapGesture.cancelsTouchesInView = false
         collectionView.addGestureRecognizer(context.coordinator.tapGesture)
         onScrollViewReady(collectionView)
@@ -1164,8 +1165,6 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
     }
 
     final class Coordinator: NSObject, UICollectionViewDataSource, UICollectionViewDelegateFlowLayout, UIScrollViewDelegate {
-        static let reuseIdentifier = "ReaderVerticalViewportScrollCell"
-
         var parent: ReaderVerticalViewportScrollView
         let callbackScheduler = SwiftUIViewUpdateCallbackScheduler()
         private var contentIdentity: ReaderVerticalViewportContentIdentity?
@@ -1211,28 +1210,21 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
             cellForItemAt indexPath: IndexPath
         ) -> UICollectionViewCell {
             let cell = collectionView.dequeueReusableCell(
-                withReuseIdentifier: Self.reuseIdentifier,
+                withReuseIdentifier: ReaderVerticalViewportCell.reuseIdentifier,
                 for: indexPath
             )
+            guard let cell = cell as? ReaderVerticalViewportCell else {
+                return cell
+            }
             let page = parent.pages[indexPath.item]
-            let viewportPage = parent.viewportIndex?.pages.first {
-                $0.pageIndex == page.index && $0.documentView == page.documentView
-            }
-            cell.backgroundColor = .clear
-            cell.contentConfiguration = UIHostingConfiguration {
-                ReaderViewportPageContent(
-                    page: page,
-                    viewportContext: parent.viewportContext,
-                    viewportPage: viewportPage,
-                    settings: parent.settings,
-                    refererURL: parent.refererURL,
-                    sessionState: parent.sessionState
-                )
-                .padding(.horizontal, parent.settings.horizontalPadding)
-                .padding(.top, page.index == 0 ? 16 : 0)
-                .frame(maxWidth: .infinity, alignment: .topLeading)
-            }
-            .margins(.all, 0)
+            cell.configure(
+                page: displayPage(for: indexPath.item),
+                settings: parent.settings,
+                refererURL: parent.refererURL,
+                sessionState: parent.sessionState,
+                contentWidth: max(verticalItemWidth(in: collectionView) - parent.settings.horizontalPadding * 2, 1),
+                topPadding: page.index == 0 ? 16 : 0
+            )
             return cell
         }
 
@@ -1253,6 +1245,19 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
             callbackScheduler.publish {
                 onViewportChange()
             }
+        }
+
+        func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {
+            guard !decelerate else { return }
+            publishScrollSettled(from: scrollView)
+        }
+
+        func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) {
+            publishScrollSettled(from: scrollView)
+        }
+
+        func scrollViewDidEndScrollingAnimation(_ scrollView: UIScrollView) {
+            publishScrollSettled(from: scrollView)
         }
 
         func scrollViewDidLayoutSubviews(_ scrollView: UIScrollView) {
@@ -1276,11 +1281,7 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
             callbackScheduler.publish {
                 onScrollRequestHandled(request)
             }
-            publishFrames(from: collectionView)
-            let onViewportChange = parent.onViewportChange
-            callbackScheduler.publish {
-                onViewportChange()
-            }
+            publishScrollSettled(from: collectionView)
         }
 
         @objc private func handleTap() {
@@ -1313,6 +1314,14 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
             }
         }
 
+        private func publishScrollSettled(from scrollView: UIScrollView) {
+            publishFrames(from: scrollView)
+            let onScrollSettled = parent.onScrollSettled
+            callbackScheduler.publish {
+                onScrollSettled()
+            }
+        }
+
         private func verticalItemWidth(in collectionView: UICollectionView) -> CGFloat {
             max(
                 collectionView.bounds.width
@@ -1326,16 +1335,7 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
             guard parent.pages.indices.contains(item) else {
                 return max(collectionView.bounds.height, 1)
             }
-            let page = parent.pages[item]
-            let viewportPage = parent.viewportIndex?.pages.first {
-                $0.pageIndex == page.index && $0.documentView == page.documentView
-            }
-            let displayPage = ReaderViewportPageContent.viewportBackedPage(
-                page: page,
-                viewportContext: parent.viewportContext,
-                viewportPage: viewportPage,
-                settings: parent.settings
-            )
+            let displayPage = displayPage(for: item)
             let contentWidth = max(verticalItemWidth(in: collectionView) - parent.settings.horizontalPadding * 2, 1)
             let blockHeights = displayPage.blocks.map { block -> CGFloat in
                 switch block {
@@ -1353,9 +1353,297 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
             }
             let contentHeight = blockHeights.reduce(CGFloat.zero, +)
             let spacingHeight = CGFloat(max(displayPage.blocks.count - 1, 0)) * 14
-            let topPadding = page.index == 0 ? CGFloat(16) : 0
+            let topPadding = displayPage.index == 0 ? CGFloat(16) : 0
             return max(ceil(contentHeight + spacingHeight + topPadding), 1)
         }
+
+        private func displayPage(for item: Int) -> ReaderRenderedPage {
+            let page = parent.pages[item]
+            let viewportPage = parent.viewportIndex?.pages.first {
+                $0.pageIndex == page.index && $0.documentView == page.documentView
+            }
+            return ReaderViewportPageContent.viewportBackedPage(
+                page: page,
+                viewportContext: parent.viewportContext,
+                viewportPage: viewportPage,
+                settings: parent.settings
+            )
+        }
+    }
+}
+
+private final class ReaderVerticalViewportCell: UICollectionViewCell {
+    static let reuseIdentifier = "ReaderVerticalViewportScrollCell"
+
+    private struct BlockView {
+        let view: UIView
+        let height: CGFloat
+    }
+
+    private var blockViews: [BlockView] = []
+    private var currentPage: ReaderRenderedPage?
+    private var currentSettings = ReaderAppearanceSettings()
+    private var currentRefererURL: URL?
+    private var currentSessionState = SessionState()
+    private var currentContentWidth: CGFloat = 0
+    private var currentTopPadding: CGFloat = 0
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        configureViewHierarchy()
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func prepareForReuse() {
+        super.prepareForReuse()
+        currentPage = nil
+        removeBlockSubviews()
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        layoutBlockSubviews()
+    }
+
+    override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+        super.traitCollectionDidChange(previousTraitCollection)
+        guard previousTraitCollection?.userInterfaceStyle != traitCollection.userInterfaceStyle,
+              let currentPage,
+              let currentRefererURL else {
+            return
+        }
+        configure(
+            page: currentPage,
+            settings: currentSettings,
+            refererURL: currentRefererURL,
+            sessionState: currentSessionState,
+            contentWidth: currentContentWidth,
+            topPadding: currentTopPadding
+        )
+    }
+
+    func configure(
+        page: ReaderRenderedPage,
+        settings: ReaderAppearanceSettings,
+        refererURL: URL,
+        sessionState: SessionState,
+        contentWidth: CGFloat,
+        topPadding: CGFloat
+    ) {
+        currentPage = page
+        currentSettings = settings
+        currentRefererURL = refererURL
+        currentSessionState = sessionState
+        currentContentWidth = contentWidth
+        currentTopPadding = topPadding
+
+        removeBlockSubviews()
+
+        for block in page.blocks {
+            let blockView = makeBlockView(
+                for: block,
+                contentWidth: contentWidth,
+                refererURL: refererURL,
+                sessionState: sessionState
+            )
+            blockViews.append(blockView)
+            contentView.addSubview(blockView.view)
+        }
+        layoutBlockSubviews()
+    }
+
+    private func configureViewHierarchy() {
+        backgroundColor = .clear
+        contentView.backgroundColor = .clear
+    }
+
+    private func makeBlockView(
+        for block: ReaderRenderedBlock,
+        contentWidth: CGFloat,
+        refererURL: URL,
+        sessionState: SessionState
+    ) -> BlockView {
+        switch block {
+        case let .text(displayValue):
+            return makeTextBlockView(displayValue: displayValue, contentWidth: contentWidth)
+        case let .image(url, _):
+            return makeImageBlockView(url: url, contentWidth: contentWidth, refererURL: refererURL, sessionState: sessionState)
+        case let .footer(text):
+            return makeFooterBlockView(text)
+        }
+    }
+
+    private func makeTextBlockView(displayValue: NovelTextDisplayValue, contentWidth: CGFloat) -> BlockView {
+        let height = (try? NovelTextLayout.measuredTextHeight(
+            displayValue: displayValue,
+            width: contentWidth,
+            baseFontSize: 22
+        )) ?? bounds.height
+        let textView = NovelTextViewportDisplayUIView()
+        textView.backgroundColor = .clear
+        textView.isOpaque = false
+        textView.isUserInteractionEnabled = false
+        textView.frame = CGRect(x: 0, y: 0, width: contentWidth, height: height)
+        textView.update(attributedText: NovelTextKit2PlatformAdapter.makeAttributedText(
+            displayValue: displayValue,
+            baseFontSize: 22,
+            textColor: readerTextUIColor,
+            titleWeight: .regular
+        ))
+        textView.prepareForDisplay(size: CGSize(width: contentWidth, height: height))
+        return BlockView(view: textView, height: height)
+    }
+
+    private func makeImageBlockView(
+        url: URL,
+        contentWidth: CGFloat,
+        refererURL: URL,
+        sessionState: SessionState
+    ) -> BlockView {
+        let height = min(max(contentWidth * 0.65, 160), max(bounds.height, 160))
+        let imageView = ReaderVerticalViewportImageView()
+        imageView.configure(url: url, refererURL: refererURL, sessionState: sessionState)
+        return BlockView(view: imageView, height: height)
+    }
+
+    private func makeFooterBlockView(_ text: String) -> BlockView {
+        let label = UILabel()
+        label.text = text
+        label.textAlignment = .center
+        label.textColor = .secondaryLabel
+        label.font = .preferredFont(forTextStyle: .caption1)
+        label.numberOfLines = 0
+        return BlockView(view: label, height: 44)
+    }
+
+    private var readerTextUIColor: UIColor {
+        UIColor { traitCollection in
+            traitCollection.userInterfaceStyle == .dark
+                ? UIColor.white.withAlphaComponent(0.92)
+                : UIColor.label
+        }
+    }
+
+    private func layoutBlockSubviews() {
+        let x = currentSettings.horizontalPadding
+        let width = max(contentView.bounds.width - currentSettings.horizontalPadding * 2, currentContentWidth, 1)
+        var y = currentTopPadding
+        for blockView in blockViews {
+            let height = max(ceil(blockView.height), 1)
+            blockView.view.frame = CGRect(x: x, y: y, width: width, height: height)
+            if let textView = blockView.view as? NovelTextViewportDisplayUIView {
+                textView.prepareForDisplay(size: CGSize(width: width, height: height))
+            }
+            y += height + 14
+        }
+    }
+
+    private func removeBlockSubviews() {
+        for blockView in blockViews {
+            blockView.view.removeFromSuperview()
+        }
+        blockViews.removeAll()
+    }
+}
+
+private final class ReaderVerticalViewportImageView: UIView {
+    private let imageView = UIImageView()
+    private let activityIndicator = UIActivityIndicatorView(style: .medium)
+    private let failureLabel = UILabel()
+    private var task: Task<Void, Never>?
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        configureViewHierarchy()
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    deinit {
+        task?.cancel()
+    }
+
+    func configure(url: URL, refererURL: URL, sessionState: SessionState) {
+        task?.cancel()
+        imageView.image = nil
+        failureLabel.isHidden = true
+        activityIndicator.startAnimating()
+        task = Task { [weak self] in
+            var request = URLRequest(url: url)
+            request.setValue(sessionState.userAgent, forHTTPHeaderField: "User-Agent")
+            if !sessionState.cookie.isEmpty {
+                request.setValue(sessionState.cookie, forHTTPHeaderField: "Cookie")
+            }
+            request.setValue(refererURL.absoluteString, forHTTPHeaderField: "Referer")
+
+            do {
+                let (data, response) = try await URLSession.shared.data(for: request)
+                guard !Task.isCancelled,
+                      let http = response as? HTTPURLResponse,
+                      200 ..< 300 ~= http.statusCode,
+                      let image = UIImage(data: data) else {
+                    await self?.showFailure()
+                    return
+                }
+                await self?.show(image: image)
+            } catch {
+                guard !Task.isCancelled else { return }
+                await self?.showFailure()
+            }
+        }
+    }
+
+    private func configureViewHierarchy() {
+        backgroundColor = .clear
+
+        imageView.contentMode = .scaleAspectFit
+        imageView.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(imageView)
+
+        activityIndicator.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(activityIndicator)
+
+        failureLabel.text = L10n.string("image.load_failed")
+        failureLabel.textColor = .secondaryLabel
+        failureLabel.font = .preferredFont(forTextStyle: .caption1)
+        failureLabel.textAlignment = .center
+        failureLabel.isHidden = true
+        failureLabel.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(failureLabel)
+
+        NSLayoutConstraint.activate([
+            imageView.topAnchor.constraint(equalTo: topAnchor),
+            imageView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            imageView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            imageView.bottomAnchor.constraint(equalTo: bottomAnchor),
+            activityIndicator.centerXAnchor.constraint(equalTo: centerXAnchor),
+            activityIndicator.centerYAnchor.constraint(equalTo: centerYAnchor),
+            failureLabel.centerXAnchor.constraint(equalTo: centerXAnchor),
+            failureLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
+            failureLabel.leadingAnchor.constraint(greaterThanOrEqualTo: leadingAnchor, constant: 12),
+            failureLabel.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -12)
+        ])
+    }
+
+    @MainActor
+    private func show(image: UIImage) {
+        activityIndicator.stopAnimating()
+        failureLabel.isHidden = true
+        imageView.image = image
+    }
+
+    @MainActor
+    private func showFailure() {
+        activityIndicator.stopAnimating()
+        failureLabel.isHidden = false
+        imageView.image = nil
     }
 }
 

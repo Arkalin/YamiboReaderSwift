@@ -212,7 +212,8 @@ final class NovelTextViewportDisplayUIView: UIView, @MainActor NSTextViewportLay
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        guard updateTextContainerSizeForCurrentBounds() else { return }
+        let didUpdateContainerSize = updateTextContainerSizeForCurrentBounds()
+        guard didUpdateContainerSize else { return }
         textLayoutManager.textViewportLayoutController.layoutViewport()
         setNeedsDisplay()
     }
@@ -223,6 +224,15 @@ final class NovelTextViewportDisplayUIView: UIView, @MainActor NSTextViewportLay
         updateTextContainerSizeForCurrentBounds()
         textContentStorage.textStorage?.setAttributedString(attributedText)
         invalidateIntrinsicContentSize()
+        setNeedsDisplay()
+    }
+
+    func prepareForDisplay(size: CGSize) {
+        if bounds.size != size {
+            bounds = CGRect(origin: .zero, size: size)
+        }
+        updateTextContainerSizeForCurrentBounds()
+        textLayoutManager.textViewportLayoutController.layoutViewport()
         setNeedsDisplay()
     }
 
