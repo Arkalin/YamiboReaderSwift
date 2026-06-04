@@ -41,4 +41,22 @@ final class ReaderVerticalPositioningTests: XCTestCase {
         XCTAssertEqual(sample?.segmentIndex, 2)
         XCTAssertEqual(sample?.segmentOffset, 42)
     }
+
+    func testTextAnchorMapsBackToDisplayOffsetForTextKitRestore() {
+        let displayValue = NovelTextDisplayValue(
+            text: "第一段正文\n\n第二段正文",
+            chapterTitle: "第一章",
+            ranges: [
+                ReaderRenderedTextRange(segmentIndex: 0, startOffset: 10, endOffset: 15),
+                ReaderRenderedTextRange(segmentIndex: 2, startOffset: 40, endOffset: 45)
+            ]
+        )
+
+        let displayOffset = ReaderVerticalViewportTextOffsetMapper.displayOffset(
+            for: ReaderVerticalTextAnchor(segmentIndex: 2, segmentOffset: 42),
+            displayValue: displayValue
+        )
+
+        XCTAssertEqual(displayOffset, 9)
+    }
 }

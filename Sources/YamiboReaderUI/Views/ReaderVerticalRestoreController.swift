@@ -1,14 +1,31 @@
 import Foundation
 
+struct ReaderVerticalTextAnchor: Equatable, Sendable {
+    let segmentIndex: Int
+    let segmentOffset: Int
+
+    init(segmentIndex: Int, segmentOffset: Int) {
+        self.segmentIndex = max(0, segmentIndex)
+        self.segmentOffset = max(0, segmentOffset)
+    }
+}
+
 struct ReaderVerticalScrollRequest: Equatable, Sendable {
     let view: Int?
     let pageIndex: Int
     let intraPageProgress: Double
+    let textAnchor: ReaderVerticalTextAnchor?
 
-    init(view: Int? = nil, pageIndex: Int, intraPageProgress: Double) {
+    init(
+        view: Int? = nil,
+        pageIndex: Int,
+        intraPageProgress: Double,
+        textAnchor: ReaderVerticalTextAnchor? = nil
+    ) {
         self.view = view
         self.pageIndex = pageIndex
         self.intraPageProgress = intraPageProgress
+        self.textAnchor = textAnchor
     }
 }
 

@@ -980,10 +980,20 @@ public struct ReaderContainerView: View {
     }
 
     private func makeVerticalScrollRequest() -> ReaderVerticalScrollRequest {
-        ReaderVerticalScrollRequest(
+        let resumePoint = model.currentNovelResumePoint
+        let textAnchor = resumePoint?.view == model.visibleView
+            ? resumePoint.map {
+                ReaderVerticalTextAnchor(
+                    segmentIndex: $0.segmentIndex,
+                    segmentOffset: $0.segmentOffset
+                )
+            }
+            : nil
+        return ReaderVerticalScrollRequest(
             view: model.visibleView,
             pageIndex: model.currentPageIndex,
-            intraPageProgress: model.currentPageIntraProgress
+            intraPageProgress: model.currentPageIntraProgress,
+            textAnchor: textAnchor
         )
     }
 
@@ -1032,6 +1042,12 @@ public struct ReaderContainerView: View {
     private func applyVerticalFineTune(for request: ReaderVerticalScrollRequest) {
         guard verticalRestoreController.scrollingRequest == request else { return }
         guard request.view == nil || request.view == model.visibleView else { return }
+        if request.textAnchor != nil {
+            verticalRestoreController.beginSettling(request, now: CACurrentMediaTime())
+            verticalRestoreRetryTask?.cancel()
+            verticalRestoreRetryTask = nil
+            return
+        }
         guard let frame = currentVerticalPageFrames[request.pageIndex] else { return }
         verticalRestoreController.beginFineTuning(request)
         guard verticalScrollCoordinator.restoreOffset(
