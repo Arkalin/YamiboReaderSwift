@@ -261,6 +261,7 @@ public struct ReaderBottomChromeLayoutPresentation: Equatable, Sendable {
     public var directoryCapsuleContentUsesAccentColor: Bool { true }
     public var bottomProgressSummaryUsesPageCenter: Bool { true }
     public var verticalProgressSummaryUsesLiquidGlass: Bool { true }
+    public var pagedProgressSummaryMovesBelowContentText: Bool { true }
     public var verticalChapterTitleCapsuleWrapsContent: Bool { true }
     public var verticalScrubberActionRowBottomOffset: CGFloat { 46 }
     public var capsuleChapterTickRoundedEdgeInset: CGFloat { 6 }
@@ -279,6 +280,15 @@ public struct ReaderBottomChromeLayoutPresentation: Equatable, Sendable {
         if position <= 0 { return 0 }
         if position >= 1 { return max(length, 0) }
         return capsuleChapterTickCoordinate(position: position, length: length, edgeInset: edgeInset)
+    }
+
+    public func bottomChromeBottomPadding(readingMode: ReaderReadingMode, bottomInset: CGFloat) -> CGFloat {
+        switch readingMode {
+        case .paged:
+            max(bottomInset - 18, 8)
+        case .vertical:
+            max(bottomInset, 12)
+        }
     }
 }
 
@@ -1600,7 +1610,7 @@ struct ReaderBottomChrome: View {
                 .padding(.horizontal, 12)
         }
         .padding(.top, 8)
-        .padding(.bottom, max(bottomInset, 12))
+        .padding(.bottom, chromeLayout.bottomChromeBottomPadding(readingMode: model.settings.readingMode, bottomInset: bottomInset))
         .onAppear {
             sliderState.reset(to: sliderSnapshot)
         }
