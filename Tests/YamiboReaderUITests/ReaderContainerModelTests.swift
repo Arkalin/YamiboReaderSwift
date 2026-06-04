@@ -1470,6 +1470,40 @@ final class ReaderContainerModelTests: XCTestCase {
         }
     }
 
+    func testVerticalToPagedModeSwitchDoesNotTemporarilyShowFirstPageBeforeLayoutSync() async throws {
+        let document = ReaderPageDocument(
+            threadURL: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=908&mobile=2")!,
+            view: 1,
+            maxView: 1,
+            contentSource: .fallbackUnfilteredPage,
+            segments: [
+                .text(String(repeating: "第一章 内容。", count: 520), chapterTitle: "第一章")
+            ]
+        )
+        let model = try await makeModel(
+            documents: [document],
+            settings: ReaderAppearanceSettings(readingMode: .vertical)
+        )
+
+        let originalOffset = try await MainActor.run {
+            let page = try XCTUnwrap(model.pages.dropFirst().last { $0.segmentIndex != nil })
+            let offset = page.segmentStartOffset + max(1, (page.segmentEndOffset - page.segmentStartOffset) / 2)
+            model.updateVerticalViewportPosition(pageIndex: page.index, intraPageProgress: 0.5)
+            return offset
+        }
+
+        await MainActor.run {
+            XCTAssertGreaterThan(model.currentPageIndex, 0)
+            model.applySettings(ReaderAppearanceSettings(readingMode: .paged))
+        }
+
+        await MainActor.run {
+            XCTAssertGreaterThan(model.currentPageIndex, 0)
+            let page = model.pages[model.currentPageIndex]
+            XCTAssertTrue(pageContainsSegmentOffset(page, segmentIndex: 0, offset: originalOffset))
+        }
+    }
+
     func testCachedViewsTrackCurrentVariant() async throws {
         let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=556677&mobile=2")!
         let unfilteredDocument = makeDocument(
