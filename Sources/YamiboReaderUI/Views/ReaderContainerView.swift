@@ -319,8 +319,9 @@ public struct ReaderContainerView: View {
     }
 
     private func pagedContent(topInset: CGFloat, bottomInset: CGFloat, layout: ReaderContainerLayout) -> some View {
-        TabView(selection: pagedSelection) {
+        Group {
             if model.isTwoPageSpreadActive {
+                TabView(selection: pagedSelection) {
                 ForEach(model.pagedSpreads) { spread in
                     ReaderPagedSpreadContent(
                         spread: spread,
@@ -333,23 +334,25 @@ public struct ReaderContainerView: View {
                     )
                     .tag(ReaderPagedSelectionTag(view: pagedSpreadView(spread), index: spread.index))
                 }
-            } else {
-                ForEach(model.pages) { page in
-                    ReaderPageContent(
-                        page: page,
-                        settings: model.settings,
-                        refererURL: model.forumURL,
-                        sessionState: model.sessionState
-                    )
-                    .tag(ReaderPagedSelectionTag(view: page.documentView, index: page.index))
-                    .padding(.horizontal, model.settings.horizontalPadding)
-                    .padding(.top, topInset)
-                    .padding(.bottom, bottomInset)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 }
+                .tabViewStyle(.page(indexDisplayMode: .never))
+            } else {
+                ReaderPagedCollectionViewport(
+                    pages: model.pages,
+                    viewportContext: model.viewportContext,
+                    viewportIndex: model.viewportIndex,
+                    settings: model.settings,
+                    refererURL: model.forumURL,
+                    sessionState: model.sessionState,
+                    topInset: topInset,
+                    bottomInset: bottomInset,
+                    selectionIndex: model.pagedSelectionIndex,
+                    onSelectionChange: { selectionIndex in
+                        model.updatePagedSelection(selectionIndex)
+                    }
+                )
             }
         }
-        .tabViewStyle(.page(indexDisplayMode: .never))
         .id(
             ReaderPagedPagerIdentity(
                 visibleView: model.visibleView,

@@ -31,6 +31,7 @@ public struct NovelReadingSnapshot: Equatable, Sendable {
     public var prefetchedStartIndex: Int?
     public var currentAuthorID: String?
     public var viewportContext: NovelTextViewportContext?
+    public var viewportIndex: NovelTextViewportIndex?
 
     public init(
         pages: [ReaderRenderedPage],
@@ -46,7 +47,8 @@ public struct NovelReadingSnapshot: Equatable, Sendable {
         pagedSpreads: [ReaderPagedSpread],
         prefetchedStartIndex: Int?,
         currentAuthorID: String?,
-        viewportContext: NovelTextViewportContext? = nil
+        viewportContext: NovelTextViewportContext? = nil,
+        viewportIndex: NovelTextViewportIndex? = nil
     ) {
         self.pages = pages
         self.chapters = chapters
@@ -62,6 +64,7 @@ public struct NovelReadingSnapshot: Equatable, Sendable {
         self.prefetchedStartIndex = prefetchedStartIndex
         self.currentAuthorID = currentAuthorID
         self.viewportContext = viewportContext
+        self.viewportIndex = viewportIndex
     }
 }
 
@@ -153,7 +156,8 @@ public struct NovelReadingSession: Sendable {
             pagedSpreads: [],
             prefetchedStartIndex: nil,
             currentAuthorID: document.resolvedAuthorID ?? currentAuthorID,
-            viewportContext: nil
+            viewportContext: nil,
+            viewportIndex: nil
         )
     }
 
@@ -485,7 +489,8 @@ public struct NovelReadingSession: Sendable {
             pagedSpreads: makePagedSpreads(from: pages),
             prefetchedStartIndex: prefetchedStartIndex,
             currentAuthorID: document.resolvedAuthorID ?? snapshot.currentAuthorID,
-            viewportContext: pagination.viewportContext
+            viewportContext: pagination.viewportContext,
+            viewportIndex: pagination.viewportIndex
         )
     }
 
