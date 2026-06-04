@@ -267,9 +267,11 @@ private struct ReaderBooksPreviewMaskedContent: View {
             VStack(alignment: .leading, spacing: 20) {
                 NativeNovelTextDisplayView(
                     surface: .settingsPreview,
-                    text: previewText,
-                    chapterTitle: nil,
-                    settings: settings,
+                    displayValue: NovelTextDisplayValue(
+                        text: previewText,
+                        chapterTitle: nil,
+                        settings: settings
+                    ),
                     baseFontSize: 22,
                     textColor: UIColor(palette.primaryText),
                     textColorToken: .settingsPreviewPrimaryText

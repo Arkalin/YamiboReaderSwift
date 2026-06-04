@@ -15,12 +15,15 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
             readingMode: .paged
         )
 
-        let plan = NovelTextDisplayAdapter.displayPlan(
-            surface: .settingsPreview,
+        let displayValue = NovelTextDisplayValue(
             text: "设置预览应该直接显示草稿正文。",
             chapterTitle: nil,
-            startsAtParagraphBoundary: true,
-            settings: settings,
+            settings: settings
+        )
+
+        let plan = NovelTextDisplayAdapter.displayPlan(
+            surface: .settingsPreview,
+            displayValue: displayValue,
             baseFontSize: 22,
             textColor: .settingsPreviewPrimaryText
         )
@@ -56,12 +59,14 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
             for: textBlock,
             settings: settings
         )
-        let previewPlan = NovelTextDisplayAdapter.displayPlan(
-            surface: .settingsPreview,
+        let previewDisplayValue = NovelTextDisplayValue(
             text: "设置预览文本。",
             chapterTitle: nil,
-            startsAtParagraphBoundary: true,
-            settings: settings,
+            settings: settings
+        )
+        let previewPlan = NovelTextDisplayAdapter.displayPlan(
+            surface: .settingsPreview,
+            displayValue: previewDisplayValue,
             baseFontSize: 22,
             textColor: .settingsPreviewPrimaryText
         )
@@ -122,12 +127,14 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
             indentsParagraphFirstLine: true,
             readingMode: .vertical
         )
-        let previewPlan = NovelTextDisplayAdapter.displayPlan(
-            surface: .settingsPreview,
+        let previewDisplayValue = NovelTextDisplayValue(
             text: "设置预览测高应该跟显示走同一条 Novel Text Layout 路径。",
             chapterTitle: nil,
-            startsAtParagraphBoundary: true,
-            settings: settings,
+            settings: settings
+        )
+        let previewPlan = NovelTextDisplayAdapter.displayPlan(
+            surface: .settingsPreview,
+            displayValue: previewDisplayValue,
             baseFontSize: 22,
             textColor: .settingsPreviewPrimaryText
         )
@@ -173,6 +180,18 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
 
         XCTAssertTrue(readerSupportSource.contains("displayValue: displayValue"))
         XCTAssertFalse(readerSupportSource.contains("text: displayValue.text"))
+    }
+
+    func testSettingsPreviewPassesDisplayValueIntoNativeTextKitAdapter() throws {
+        let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let settingsSource = try String(
+            contentsOf: repositoryRoot
+                .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderSettingsViews.swift"),
+            encoding: .utf8
+        )
+
+        XCTAssertTrue(settingsSource.contains("displayValue: NovelTextDisplayValue"))
+        XCTAssertFalse(settingsSource.contains("surface: .settingsPreview,\n                    text:"))
     }
 
     func testNovelTextLayoutDisplayStyleCoversFontSizeSpacingIndentAndChapterTitleForNovelReadingSession() throws {
