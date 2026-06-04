@@ -64,7 +64,9 @@ struct ReaderVerticalRestoreController: Equatable, Sendable {
 
     var shouldConcealViewportContent: Bool {
         switch phase {
-        case .scrolling, .fineTuning:
+        case let .scrolling(request):
+            return request.textAnchor == nil
+        case .fineTuning:
             return true
         case .idle, .settling:
             return false
