@@ -475,13 +475,164 @@ public struct ReaderRenderedPage: Hashable, Identifiable, Sendable {
     }
 }
 
+public struct NovelTextViewportIndexPage: Hashable, Sendable {
+    public var pageIndex: Int
+    public var documentView: Int
+    public var chapterOrdinal: Int?
+    public var chapterTitle: String?
+    public var ranges: [ReaderRenderedTextRange]
+    public var chapterCommentTarget: ReaderChapterCommentTarget?
+
+    public init(
+        pageIndex: Int,
+        documentView: Int,
+        chapterOrdinal: Int?,
+        chapterTitle: String?,
+        ranges: [ReaderRenderedTextRange],
+        chapterCommentTarget: ReaderChapterCommentTarget? = nil
+    ) {
+        self.pageIndex = max(0, pageIndex)
+        self.documentView = max(1, documentView)
+        self.chapterOrdinal = chapterOrdinal
+        self.chapterTitle = chapterTitle
+        self.ranges = ranges
+        self.chapterCommentTarget = chapterCommentTarget
+    }
+}
+
+public struct NovelTextViewportIndexChapter: Hashable, Sendable {
+    public var ordinal: Int
+    public var title: String
+    public var startPageIndex: Int
+    public var chapterCommentTarget: ReaderChapterCommentTarget?
+
+    public init(
+        ordinal: Int,
+        title: String,
+        startPageIndex: Int,
+        chapterCommentTarget: ReaderChapterCommentTarget? = nil
+    ) {
+        self.ordinal = max(0, ordinal)
+        self.title = title
+        self.startPageIndex = max(0, startPageIndex)
+        self.chapterCommentTarget = chapterCommentTarget
+    }
+}
+
+public struct NovelTextViewportIndexPosition: Hashable, Sendable {
+    public var pageIndex: Int
+    public var documentView: Int
+    public var chapterOrdinal: Int?
+    public var chapterTitle: String?
+    public var range: ReaderRenderedTextRange
+    public var chapterCommentTarget: ReaderChapterCommentTarget?
+
+    public init(
+        pageIndex: Int,
+        documentView: Int,
+        chapterOrdinal: Int?,
+        chapterTitle: String?,
+        range: ReaderRenderedTextRange,
+        chapterCommentTarget: ReaderChapterCommentTarget? = nil
+    ) {
+        self.pageIndex = max(0, pageIndex)
+        self.documentView = max(1, documentView)
+        self.chapterOrdinal = chapterOrdinal
+        self.chapterTitle = chapterTitle
+        self.range = range
+        self.chapterCommentTarget = chapterCommentTarget
+    }
+}
+
+public struct NovelTextViewportIndex: Hashable, Sendable {
+    public var documentView: Int
+    public var readingMode: ReaderReadingMode
+    public var pages: [NovelTextViewportIndexPage]
+    public var chapters: [NovelTextViewportIndexChapter]
+
+    public init(
+        documentView: Int,
+        readingMode: ReaderReadingMode,
+        pages: [NovelTextViewportIndexPage],
+        chapters: [NovelTextViewportIndexChapter]
+    ) {
+        self.documentView = max(1, documentView)
+        self.readingMode = readingMode
+        self.pages = pages
+        self.chapters = chapters
+    }
+
+    public func position(forSegmentIndex segmentIndex: Int, offset: Int) -> NovelTextViewportIndexPosition? {
+        let normalizedSegmentIndex = max(0, segmentIndex)
+        let normalizedOffset = max(0, offset)
+        for page in pages {
+            if let range = page.ranges.first(where: { range in
+                range.segmentIndex == normalizedSegmentIndex && range.contains(offset: normalizedOffset)
+            }) {
+                return NovelTextViewportIndexPosition(
+                    pageIndex: page.pageIndex,
+                    documentView: page.documentView,
+                    chapterOrdinal: page.chapterOrdinal,
+                    chapterTitle: page.chapterTitle,
+                    range: range,
+                    chapterCommentTarget: page.chapterCommentTarget
+                )
+            }
+        }
+
+        let candidates = pages.flatMap { page in
+            page.ranges
+                .filter { $0.segmentIndex == normalizedSegmentIndex }
+                .map { range in (page: page, range: range) }
+        }
+        guard let nearest = candidates.min(by: {
+            $0.range.distance(toOffset: normalizedOffset) < $1.range.distance(toOffset: normalizedOffset)
+        }) else {
+            return nil
+        }
+        return NovelTextViewportIndexPosition(
+            pageIndex: nearest.page.pageIndex,
+            documentView: nearest.page.documentView,
+            chapterOrdinal: nearest.page.chapterOrdinal,
+            chapterTitle: nearest.page.chapterTitle,
+            range: nearest.range,
+            chapterCommentTarget: nearest.page.chapterCommentTarget
+        )
+    }
+}
+
 public struct ReaderPaginationResult: Hashable, Sendable {
     public var pages: [ReaderRenderedPage]
     public var chapters: [ReaderChapter]
+    public var viewportIndex: NovelTextViewportIndex?
 
-    public init(pages: [ReaderRenderedPage], chapters: [ReaderChapter]) {
+    public init(
+        pages: [ReaderRenderedPage],
+        chapters: [ReaderChapter],
+        viewportIndex: NovelTextViewportIndex? = nil
+    ) {
         self.pages = pages
         self.chapters = chapters
+        self.viewportIndex = viewportIndex
+    }
+}
+
+private extension ReaderRenderedTextRange {
+    func contains(offset: Int) -> Bool {
+        if startOffset == endOffset {
+            return offset <= startOffset
+        }
+        return offset >= startOffset && offset < endOffset
+    }
+
+    func distance(toOffset offset: Int) -> Int {
+        if contains(offset: offset) {
+            return 0
+        }
+        if offset < startOffset {
+            return startOffset - offset
+        }
+        return offset - endOffset
     }
 }
 
