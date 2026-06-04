@@ -628,6 +628,31 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertFalse(verticalCellBody.contains("NovelTextLayout.measuredTextHeight"))
     }
 
+    func testVerticalTextViewportPositioningUsesTextKitLineFragmentsInsteadOfGeometryProgress() throws {
+        let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let adapterSource = try String(
+            contentsOf: repositoryRoot
+                .appendingPathComponent("Sources/YamiboReaderUI/Views/NovelTextDisplayAdapter.swift"),
+            encoding: .utf8
+        )
+        let displayUIViewBody = try XCTUnwrap(typeBody(named: "NovelTextViewportDisplayUIView", in: adapterSource))
+        let closestTextOffsetBody = try XCTUnwrap(functionBody(named: "closestTextOffset", in: displayUIViewBody))
+        let referenceYBody = try XCTUnwrap(functionBody(named: "textFragmentReferenceY", in: displayUIViewBody))
+
+        XCTAssertTrue(closestTextOffsetBody.contains("textLineFragment("))
+        XCTAssertTrue(closestTextOffsetBody.contains("forVerticalOffset:"))
+        XCTAssertTrue(closestTextOffsetBody.contains("characterIndex(for:"))
+        XCTAssertTrue(referenceYBody.contains("location(documentStart, offsetBy: normalizedOffset)"))
+        XCTAssertTrue(referenceYBody.contains("textLayoutFragment(for: location)"))
+        XCTAssertTrue(referenceYBody.contains("textLineFragment(for: location"))
+        XCTAssertTrue(displayUIViewBody.contains("private func closestLayoutFragment"))
+        XCTAssertFalse(closestTextOffsetBody.contains("progress"))
+        XCTAssertFalse(closestTextOffsetBody.contains("fragmentLength"))
+        XCTAssertFalse(referenceYBody.contains("progress"))
+        XCTAssertFalse(referenceYBody.contains("fragmentLength"))
+        XCTAssertFalse(referenceYBody.contains("progress * frame.height"))
+    }
+
     func testViewportPageContentDerivesNormalTextFromViewportContextAndIndexBeforeCompatibilityPageBlocks() throws {
         let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let supportSource = try String(
