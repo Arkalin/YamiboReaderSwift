@@ -330,6 +330,10 @@ public final class ReaderContainerModel: ObservableObject {
         displayedView
     }
 
+    public var currentNovelResumePoint: ReaderResumePoint? {
+        readingWorkflow?.captureNovelReadingPosition()
+    }
+
     public var currentChapterIndex: Int? {
         chapters.lastIndex(where: { $0.startIndex <= currentPageIndex })
     }

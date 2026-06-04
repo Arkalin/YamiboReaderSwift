@@ -499,6 +499,26 @@ struct ReaderVerticalViewportTextOffsetMapper {
             segmentOffset: lastRange.endOffset
         )
     }
+
+    static func displayOffset(
+        for anchor: ReaderVerticalTextAnchor,
+        displayValue: NovelTextDisplayValue
+    ) -> Int? {
+        var runningOffset = 0
+
+        for range in displayValue.ranges {
+            let length = max(range.length, 0)
+            defer { runningOffset += length + 2 }
+            guard range.segmentIndex == anchor.segmentIndex,
+                  anchor.segmentOffset >= range.startOffset,
+                  anchor.segmentOffset <= range.endOffset else {
+                continue
+            }
+            return runningOffset + min(max(anchor.segmentOffset - range.startOffset, 0), length)
+        }
+
+        return nil
+    }
 }
 
 #if os(iOS)
@@ -1313,6 +1333,11 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
                 at: .top,
                 animated: false
             )
+            let didRestoreTextAnchor = restoreTextAnchorIfPossible(for: request, in: collectionView)
+            guard request.textAnchor == nil || didRestoreTextAnchor else {
+                handledScrollRequest = nil
+                return
+            }
             let onScrollRequestHandled = parent.onScrollRequestHandled
             callbackScheduler.publish {
                 onScrollRequestHandled(request)
@@ -1434,6 +1459,40 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
                 settings: parent.settings
             )
         }
+
+        private func restoreTextAnchorIfPossible(
+            for request: ReaderVerticalScrollRequest,
+            in collectionView: UICollectionView
+        ) -> Bool {
+            guard let textAnchor = request.textAnchor,
+                  parent.pages.indices.contains(request.pageIndex),
+                  let cell = collectionView.cellForItem(at: IndexPath(item: request.pageIndex, section: 0)) as? ReaderVerticalViewportCell,
+                  let attributes = collectionView.layoutAttributesForItem(at: IndexPath(item: request.pageIndex, section: 0)) else {
+                return request.textAnchor == nil
+            }
+            let visibleFrame = attributes.frame.offsetBy(
+                dx: -collectionView.contentOffset.x,
+                dy: -collectionView.contentOffset.y
+            )
+            guard let anchorY = cell.textViewportAnchorY(
+                for: textAnchor,
+                pageFrame: visibleFrame
+            ) else {
+                return false
+            }
+            let referenceLineY = min(max(collectionView.bounds.height * 0.22, 72), 160)
+            let desiredY = collectionView.contentOffset.y + anchorY - referenceLineY
+            let minOffsetY = -collectionView.adjustedContentInset.top
+            let maxOffsetY = max(
+                minOffsetY,
+                collectionView.contentSize.height - collectionView.bounds.height + collectionView.adjustedContentInset.bottom
+            )
+            collectionView.setContentOffset(
+                CGPoint(x: collectionView.contentOffset.x, y: min(max(desiredY, minOffsetY), maxOffsetY)),
+                animated: false
+            )
+            return true
+        }
     }
 }
 
@@ -1547,6 +1606,25 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
             return (ReaderVerticalPositioning.pageDistance(from: contentY, to: textView.frame), sample)
         }
         return candidates.min { $0.distance < $1.distance }?.sample
+    }
+
+    func textViewportAnchorY(
+        for anchor: ReaderVerticalTextAnchor,
+        pageFrame: CGRect
+    ) -> CGFloat? {
+        for block in blockViews {
+            guard let textView = block.view as? NovelTextViewportDisplayUIView,
+                  let displayValue = block.displayValue,
+                  let displayOffset = ReaderVerticalViewportTextOffsetMapper.displayOffset(
+                    for: anchor,
+                    displayValue: displayValue
+                  ),
+                  let fragmentRect = textView.textFragmentRect(containingDisplayOffset: displayOffset) else {
+                continue
+            }
+            return pageFrame.minY + textView.frame.minY + fragmentRect.minY
+        }
+        return nil
     }
 
     private func configureViewHierarchy() {
