@@ -770,6 +770,30 @@ private final class StubURLProtocol: URLProtocol {
     }
 }
 
+@Test func novelTextLayoutCoreTextFitUsesTextKit2MeasurementInsteadOfBoundingFallback() throws {
+    let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+    let layoutEngineSource = try String(
+        contentsOf: repositoryRoot
+            .appendingPathComponent("Sources/YamiboReaderCore/Support/ReaderPagedLayoutEngine.swift"),
+        encoding: .utf8
+    )
+    let layoutSource = try String(
+        contentsOf: repositoryRoot
+            .appendingPathComponent("Sources/YamiboReaderCore/Support/NovelTextLayout.swift"),
+        encoding: .utf8
+    )
+    let appKitAdapterSource = try #require(
+        layoutSource.range(of: "private enum AppKitNovelTextLayoutAdapter").map { String(layoutSource[$0.lowerBound...]) }
+    )
+    let uiKitTextFitsBody = try #require(functionBody(named: "textFits", in: layoutEngineSource))
+    let appKitTextFitsBody = try #require(functionBody(named: "textFits", in: appKitAdapterSource))
+
+    #expect(uiKitTextFitsBody.contains("measuredTextHeight"))
+    #expect(appKitTextFitsBody.contains("measuredTextHeight"))
+    #expect(!uiKitTextFitsBody.contains("boundingRect"))
+    #expect(!appKitTextFitsBody.contains("boundingRect"))
+}
+
 @Test func novelTextLayoutAssemblesDocumentPagesChaptersImagesAndTextDisplayValues() async throws {
     let imageURL = try #require(URL(string: "https://example.com/image.jpg"))
     let document = ReaderPageDocument(
@@ -1464,4 +1488,28 @@ final class YamiboRepositoryDeleteTests: XCTestCase {
             client: YamiboClient(session: session, cookie: cookie, userAgent: "Test-UA")
         )
     }
+}
+
+private func functionBody(named name: String, in source: String) -> String? {
+    guard let nameRange = source.range(of: "static func \(name)") ?? source.range(of: "func \(name)") else {
+        return nil
+    }
+    guard let bodyStart = source[nameRange.upperBound...].firstIndex(of: "{") else {
+        return nil
+    }
+
+    var depth = 0
+    var index = bodyStart
+    while index < source.endIndex {
+        if source[index] == "{" {
+            depth += 1
+        } else if source[index] == "}" {
+            depth -= 1
+            if depth == 0 {
+                return String(source[bodyStart...index])
+            }
+        }
+        index = source.index(after: index)
+    }
+    return nil
 }
