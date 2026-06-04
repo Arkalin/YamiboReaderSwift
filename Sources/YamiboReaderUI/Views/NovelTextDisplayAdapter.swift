@@ -42,37 +42,6 @@ struct NovelTextDisplayPlan: Equatable {
 enum NovelTextDisplayAdapter {
     static func displayPlan(
         surface: NovelTextDisplaySurface,
-        text: String,
-        chapterTitle: String?,
-        startsAtParagraphBoundary: Bool,
-        settings: ReaderAppearanceSettings,
-        baseFontSize: Double,
-        textColor: NovelTextDisplayColor
-    ) -> NovelTextDisplayPlan {
-        NovelTextDisplayPlan(
-            surface: surface,
-            backend: .textKit2DisplayAdapter,
-            measurementBackend: .textKit2DisplayAdapter,
-            text: text,
-            chapterTitle: chapterTitle,
-            startsAtParagraphBoundary: startsAtParagraphBoundary,
-            style: NovelTextDisplayStyle(
-                fontScale: settings.fontScale,
-                fontFamily: settings.fontFamily,
-                pointSize: baseFontSize * settings.fontScale,
-                lineHeightScale: settings.lineHeightScale,
-                characterSpacingScale: settings.characterSpacingScale,
-                indentsParagraphFirstLine: settings.indentsParagraphFirstLine,
-                usesJustifiedText: settings.usesJustifiedText,
-                baseFontSize: baseFontSize,
-                textColor: textColor,
-                includesChapterTitle: chapterTitle?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
-            )
-        )
-    }
-
-    static func displayPlan(
-        surface: NovelTextDisplaySurface,
         displayValue: NovelTextDisplayValue,
         baseFontSize: Double,
         textColor: NovelTextDisplayColor
@@ -164,32 +133,6 @@ struct NativeNovelTextDisplayView: UIViewRepresentable {
         self.textColor = textColor
         self.textColorToken = textColorToken
         self.titleWeight = titleWeight
-    }
-
-    init(
-        surface: NovelTextDisplaySurface,
-        text: String,
-        chapterTitle: String?,
-        startsAtParagraphBoundary: Bool = true,
-        settings: ReaderAppearanceSettings,
-        baseFontSize: Double,
-        textColor: UIColor,
-        textColorToken: NovelTextDisplayColor,
-        titleWeight: UIFont.Weight = .regular
-    ) {
-        self.init(
-            surface: surface,
-            displayValue: NovelTextDisplayValue(
-                text: text,
-                chapterTitle: chapterTitle,
-                startsAtParagraphBoundary: startsAtParagraphBoundary,
-                settings: settings
-            ),
-            baseFontSize: baseFontSize,
-            textColor: textColor,
-            textColorToken: textColorToken,
-            titleWeight: titleWeight
-        )
     }
 
     var displayPlan: NovelTextDisplayPlan {
