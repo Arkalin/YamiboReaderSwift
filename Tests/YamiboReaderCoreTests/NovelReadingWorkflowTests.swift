@@ -381,6 +381,193 @@ final class NovelReadingWorkflowTests: XCTestCase {
         XCTAssertNotEqual(resumePoint.segmentOffset, 50)
     }
 
+    func testExternalBlockViewportMovementPreservesTextOnlyResumeUntilNextTextSample() async throws {
+        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9154&mobile=2")!
+        let repository = RecordingNovelReadingRepository(documents: [
+            1: ReaderPageDocument(
+                threadURL: threadURL,
+                view: 1,
+                maxView: 1,
+                resolvedAuthorID: "author-1",
+                segments: [
+                    .text("前文正文", chapterTitle: "第一章"),
+                    .image(URL(string: "https://example.com/image.jpg")!, chapterTitle: "第一章"),
+                    .text("后文正文", chapterTitle: "第一章")
+                ]
+            )
+        ])
+        let workflow = NovelReadingWorkflow(
+            context: ReaderLaunchContext(
+                threadURL: threadURL,
+                threadTitle: "Thread",
+                source: .forum,
+                initialView: 1,
+                authorID: "author-1"
+            ),
+            settings: ReaderAppearanceSettings(readingMode: .vertical),
+            layout: ReaderContainerLayout(width: 320, height: 568),
+            repository: repository,
+            pagination: { document, _, _ in
+                ReaderPaginationResult(
+                    pages: [
+                        ReaderRenderedPage(
+                            index: 0,
+                            blocks: [
+                                .text(
+                                    "前文正文",
+                                    chapterTitle: "第一章",
+                                    ranges: [
+                                        ReaderRenderedTextRange(segmentIndex: 0, startOffset: 0, endOffset: 30)
+                                    ]
+                                )
+                            ],
+                            documentView: document.view,
+                            chapterOrdinal: 0,
+                            chapterTitle: "第一章"
+                        ),
+                        ReaderRenderedPage(
+                            index: 1,
+                            blocks: [
+                                .image(URL(string: "https://example.com/image.jpg")!, chapterTitle: "第一章")
+                            ],
+                            documentView: document.view,
+                            chapterOrdinal: 0,
+                            chapterTitle: "第一章"
+                        ),
+                        ReaderRenderedPage(
+                            index: 2,
+                            blocks: [
+                                .text(
+                                    "后文正文",
+                                    chapterTitle: "第一章",
+                                    ranges: [
+                                        ReaderRenderedTextRange(segmentIndex: 2, startOffset: 40, endOffset: 80)
+                                    ]
+                                )
+                            ],
+                            documentView: document.view,
+                            chapterOrdinal: 0,
+                            chapterTitle: "第一章"
+                        )
+                    ],
+                    chapters: [
+                        ReaderChapter(ordinal: 0, title: "第一章", startIndex: 0)
+                    ]
+                )
+            }
+        )
+        _ = try await workflow.start(initial: NovelReadingInitialPosition())
+
+        _ = workflow.updateVerticalViewportPosition(
+            sample: NovelTextViewportSample(documentView: 1, pageIndex: 0, segmentIndex: 0, segmentOffset: 15)
+        )
+        let beforeImage = try XCTUnwrap(workflow.captureNovelReadingPosition())
+        _ = workflow.updateVerticalViewportPosition(pageIndex: 1, intraPageProgress: 0.5)
+        let onImage = try XCTUnwrap(workflow.captureNovelReadingPosition())
+        _ = workflow.updateVerticalViewportPosition(
+            sample: NovelTextViewportSample(documentView: 1, pageIndex: 2, segmentIndex: 2, segmentOffset: 64)
+        )
+        let afterImage = try XCTUnwrap(workflow.captureNovelReadingPosition())
+
+        XCTAssertEqual(beforeImage.segmentIndex, 0)
+        XCTAssertEqual(beforeImage.segmentOffset, 15)
+        XCTAssertEqual(onImage.segmentIndex, 0)
+        XCTAssertEqual(onImage.segmentOffset, 15)
+        XCTAssertEqual(afterImage.segmentIndex, 2)
+        XCTAssertEqual(afterImage.segmentOffset, 64)
+    }
+
+    func testNoTextReaderPageDocumentPreservesPreviousTextOnlyResumePoint() async throws {
+        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9254&mobile=2")!
+        let repository = RecordingNovelReadingRepository(documents: [
+            1: ReaderPageDocument(
+                threadURL: threadURL,
+                view: 1,
+                maxView: 2,
+                resolvedAuthorID: "author-1",
+                segments: [
+                    .text("有正文的网页", chapterTitle: "第一章")
+                ]
+            ),
+            2: ReaderPageDocument(
+                threadURL: threadURL,
+                view: 2,
+                maxView: 2,
+                resolvedAuthorID: "author-1",
+                segments: [
+                    .image(URL(string: "https://example.com/only-image.jpg")!, chapterTitle: "第二章")
+                ]
+            )
+        ])
+        let workflow = NovelReadingWorkflow(
+            context: ReaderLaunchContext(
+                threadURL: threadURL,
+                threadTitle: "Thread",
+                source: .forum,
+                initialView: 1,
+                authorID: "author-1"
+            ),
+            settings: ReaderAppearanceSettings(readingMode: .vertical),
+            layout: ReaderContainerLayout(width: 320, height: 568),
+            repository: repository,
+            pagination: { document, _, _ in
+                if document.view == 1 {
+                    return ReaderPaginationResult(
+                        pages: [
+                            ReaderRenderedPage(
+                                index: 0,
+                                blocks: [
+                                    .text(
+                                        "有正文的网页",
+                                        chapterTitle: "第一章",
+                                        ranges: [
+                                            ReaderRenderedTextRange(segmentIndex: 0, startOffset: 0, endOffset: 40)
+                                        ]
+                                    )
+                                ],
+                                documentView: document.view,
+                                chapterOrdinal: 0,
+                                chapterTitle: "第一章"
+                            )
+                        ],
+                        chapters: [
+                            ReaderChapter(ordinal: 0, title: "第一章", startIndex: 0)
+                        ]
+                    )
+                }
+                return ReaderPaginationResult(
+                    pages: [
+                        ReaderRenderedPage(
+                            index: 0,
+                            blocks: [
+                                .image(URL(string: "https://example.com/only-image.jpg")!, chapterTitle: "第二章")
+                            ],
+                            documentView: document.view,
+                            chapterOrdinal: 1,
+                            chapterTitle: "第二章"
+                        )
+                    ],
+                    chapters: [
+                        ReaderChapter(ordinal: 1, title: "第二章", startIndex: 0)
+                    ]
+                )
+            }
+        )
+        _ = try await workflow.start(initial: NovelReadingInitialPosition())
+        _ = workflow.updateVerticalViewportPosition(
+            sample: NovelTextViewportSample(documentView: 1, pageIndex: 0, segmentIndex: 0, segmentOffset: 24)
+        )
+
+        _ = try await workflow.loadView(2, preferredPage: 0, preferredResumePoint: nil, forceRefresh: false)
+        let resumePoint = try XCTUnwrap(workflow.captureNovelReadingPosition())
+
+        XCTAssertEqual(resumePoint.view, 1)
+        XCTAssertEqual(resumePoint.chapterOrdinal, 0)
+        XCTAssertEqual(resumePoint.chapterTitle, "第一章")
+        XCTAssertEqual(resumePoint.segmentIndex, 0)
+        XCTAssertEqual(resumePoint.segmentOffset, 24)
+    }
+
     func testCurrentProgressPositionUsesSessionBackedResumePoint() async throws {
         let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9112&mobile=2")!
         let repository = RecordingNovelReadingRepository(documents: [
