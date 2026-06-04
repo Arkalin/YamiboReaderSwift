@@ -5,6 +5,42 @@ import YamiboReaderCore
 import UIKit
 #endif
 
+final class SwiftUIViewUpdateCallbackScheduler: @unchecked Sendable {
+    private var viewUpdateDepth = 0
+    private var isFlushScheduled = false
+    private var pendingCallbacks: [() -> Void] = []
+
+    func performViewUpdate(_ body: () -> Void) {
+        viewUpdateDepth += 1
+        defer { viewUpdateDepth = max(viewUpdateDepth - 1, 0) }
+        body()
+    }
+
+    func publish(_ callback: @escaping () -> Void) {
+        guard viewUpdateDepth > 0 || isFlushScheduled else {
+            callback()
+            return
+        }
+        pendingCallbacks.append(callback)
+        scheduleFlush()
+    }
+
+    private func scheduleFlush() {
+        guard !isFlushScheduled else { return }
+        isFlushScheduled = true
+        DispatchQueue.main.async { [weak self] in
+            self?.flush()
+        }
+    }
+
+    private func flush() {
+        isFlushScheduled = false
+        let callbacks = pendingCallbacks
+        pendingCallbacks.removeAll()
+        callbacks.forEach { $0() }
+    }
+}
+
 public enum ReaderProgressScrubPhase: Equatable, Sendable {
     case idle
     case pressed
@@ -378,6 +414,48 @@ struct ReaderPagedPagerIdentity: Hashable {
     }
 }
 
+enum ReaderViewportParagraphBoundaryResolver {
+    static func startsAtParagraphBoundary(
+        viewportContext: NovelTextViewportContext,
+        viewportPage: NovelTextViewportIndexPage
+    ) -> Bool {
+        guard let firstRange = viewportPage.ranges.first,
+              let segmentRange = viewportContext.document.textRangesBySegment[firstRange.segmentIndex] else {
+            return true
+        }
+        guard firstRange.startOffset > 0 else {
+            return true
+        }
+        let globalStart = segmentRange.startOffset + firstRange.startOffset
+        return isParagraphBoundary(in: viewportContext.document.text, at: globalStart)
+    }
+
+    private static func isParagraphBoundary(in text: String, at offset: Int) -> Bool {
+        guard offset > 0, offset <= text.count else { return offset == 0 }
+        let nsText = text as NSString
+        var index = offset - 1
+        var newlineCount = 0
+
+        while index >= 0 {
+            let character = nsText.substring(with: NSRange(location: index, length: 1))
+            if character == "\n" || character == "\r" {
+                newlineCount += 1
+                if newlineCount >= 2 {
+                    return true
+                }
+            } else if character.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                index -= 1
+                continue
+            } else {
+                return false
+            }
+            index -= 1
+        }
+
+        return false
+    }
+}
+
 #if os(iOS)
 import UIKit
 
@@ -622,6 +700,10 @@ struct ReaderViewportPageContent: View {
         return NovelTextDisplayValue(
             text: text,
             chapterTitle: viewportPage.chapterTitle,
+            startsAtParagraphBoundary: ReaderViewportParagraphBoundaryResolver.startsAtParagraphBoundary(
+                viewportContext: viewportContext,
+                viewportPage: viewportPage
+            ),
             settings: settings,
             ranges: viewportPage.ranges
         )
@@ -675,14 +757,17 @@ struct ReaderPagedCollectionViewport: UIViewRepresentable {
 
     func updateUIView(_ collectionView: UICollectionView, context: Context) {
         context.coordinator.parent = self
-        collectionView.reloadData()
-        context.coordinator.scrollToSelection(in: collectionView, animated: false)
+        context.coordinator.callbackScheduler.performViewUpdate {
+            collectionView.reloadData()
+            context.coordinator.scrollToSelection(in: collectionView, animated: false)
+        }
     }
 
     final class Coordinator: NSObject, UICollectionViewDataSource, UICollectionViewDelegateFlowLayout, UIScrollViewDelegate {
         static let reuseIdentifier = "ReaderPagedCollectionViewportCell"
 
         var parent: ReaderPagedCollectionViewport
+        let callbackScheduler = SwiftUIViewUpdateCallbackScheduler()
 
         init(parent: ReaderPagedCollectionViewport) {
             self.parent = parent
@@ -754,7 +839,10 @@ struct ReaderPagedCollectionViewport: UIViewRepresentable {
             let item = Int((scrollView.contentOffset.x / scrollView.bounds.width).rounded())
             let clampedItem = min(max(item, 0), max(parent.pages.count - 1, 0))
             guard clampedItem != parent.selectionIndex else { return }
-            parent.onSelectionChange(clampedItem)
+            let onSelectionChange = parent.onSelectionChange
+            callbackScheduler.publish {
+                onSelectionChange(clampedItem)
+            }
         }
     }
 }
@@ -795,14 +883,17 @@ struct ReaderPagedSpreadCollectionViewport: UIViewRepresentable {
 
     func updateUIView(_ collectionView: UICollectionView, context: Context) {
         context.coordinator.parent = self
-        collectionView.reloadData()
-        context.coordinator.scrollToSelection(in: collectionView, animated: false)
+        context.coordinator.callbackScheduler.performViewUpdate {
+            collectionView.reloadData()
+            context.coordinator.scrollToSelection(in: collectionView, animated: false)
+        }
     }
 
     final class Coordinator: NSObject, UICollectionViewDataSource, UICollectionViewDelegateFlowLayout, UIScrollViewDelegate {
         static let reuseIdentifier = "ReaderPagedSpreadCollectionViewportCell"
 
         var parent: ReaderPagedSpreadCollectionViewport
+        let callbackScheduler = SwiftUIViewUpdateCallbackScheduler()
 
         init(parent: ReaderPagedSpreadCollectionViewport) {
             self.parent = parent
@@ -870,7 +961,10 @@ struct ReaderPagedSpreadCollectionViewport: UIViewRepresentable {
             let item = Int((scrollView.contentOffset.x / scrollView.bounds.width).rounded())
             let clampedItem = min(max(item, 0), max(parent.spreads.count - 1, 0))
             guard clampedItem != parent.selectionIndex else { return }
-            parent.onSelectionChange(clampedItem)
+            let onSelectionChange = parent.onSelectionChange
+            callbackScheduler.publish {
+                onSelectionChange(clampedItem)
+            }
         }
     }
 }
@@ -914,14 +1008,17 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
 
     func updateUIView(_ collectionView: UICollectionView, context: Context) {
         context.coordinator.parent = self
-        collectionView.reloadData()
-        context.coordinator.handle(scrollRequest, in: collectionView)
+        context.coordinator.callbackScheduler.performViewUpdate {
+            collectionView.reloadData()
+            context.coordinator.handle(scrollRequest, in: collectionView)
+        }
     }
 
     final class Coordinator: NSObject, UICollectionViewDataSource, UICollectionViewDelegateFlowLayout, UIScrollViewDelegate {
         static let reuseIdentifier = "ReaderVerticalViewportScrollCell"
 
         var parent: ReaderVerticalViewportScrollView
+        let callbackScheduler = SwiftUIViewUpdateCallbackScheduler()
         lazy var tapGesture = UITapGestureRecognizer(target: self, action: #selector(handleTap))
 
         init(parent: ReaderVerticalViewportScrollView) {
@@ -965,7 +1062,10 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
 
         func scrollViewDidScroll(_ scrollView: UIScrollView) {
             publishFrames(from: scrollView)
-            parent.onViewportChange()
+            let onViewportChange = parent.onViewportChange
+            callbackScheduler.publish {
+                onViewportChange()
+            }
         }
 
         func scrollViewDidLayoutSubviews(_ scrollView: UIScrollView) {
@@ -982,13 +1082,22 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
                 at: .top,
                 animated: false
             )
-            parent.onScrollRequestHandled(request)
+            let onScrollRequestHandled = parent.onScrollRequestHandled
+            callbackScheduler.publish {
+                onScrollRequestHandled(request)
+            }
             publishFrames(from: collectionView)
-            parent.onViewportChange()
+            let onViewportChange = parent.onViewportChange
+            callbackScheduler.publish {
+                onViewportChange()
+            }
         }
 
         @objc private func handleTap() {
-            parent.onTap()
+            let onTap = parent.onTap
+            callbackScheduler.publish {
+                onTap()
+            }
         }
 
         private func publishFrames(from scrollView: UIScrollView) {
@@ -1008,7 +1117,10 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
                     frame: visibleFrame
                 )
             }
-            parent.onPageFramesChange(frames)
+            let onPageFramesChange = parent.onPageFramesChange
+            callbackScheduler.publish {
+                onPageFramesChange(frames)
+            }
         }
     }
 }

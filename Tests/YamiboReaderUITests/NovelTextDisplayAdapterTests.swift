@@ -3,6 +3,75 @@ import XCTest
 @testable import YamiboReaderUI
 
 final class NovelTextDisplayAdapterTests: XCTestCase {
+    func testSwiftUIViewUpdateCallbackSchedulerDefersCallbacksDuringViewUpdate() {
+        let scheduler = SwiftUIViewUpdateCallbackScheduler()
+        var events: [String] = []
+
+        scheduler.publish {
+            events.append("immediate")
+        }
+
+        XCTAssertEqual(events, ["immediate"])
+
+        let deferredCallback = expectation(description: "Deferred callback")
+        scheduler.performViewUpdate {
+            scheduler.publish {
+                events.append("deferred")
+                deferredCallback.fulfill()
+            }
+            XCTAssertEqual(events, ["immediate"])
+        }
+
+        XCTAssertEqual(events, ["immediate"])
+        scheduler.publish {
+            events.append("queued-after-update")
+        }
+        XCTAssertEqual(events, ["immediate"])
+        wait(for: [deferredCallback], timeout: 1)
+        XCTAssertEqual(events, ["immediate", "deferred", "queued-after-update"])
+    }
+
+    func testViewportPageContentDoesNotIndentContinuationSliceFromSameParagraph() throws {
+        let firstParagraph = "第一段正文很长，需要横向分页后继续显示。"
+        let secondParagraph = "第二段应该仍然作为新段落缩进。"
+        let sourceText = firstParagraph + "\n\n" + secondParagraph
+        let settings = ReaderAppearanceSettings(indentsParagraphFirstLine: true, readingMode: .paged)
+        let context = viewportContext(text: sourceText, settings: settings)
+        let continuationRange = ReaderRenderedTextRange(
+            segmentIndex: 0,
+            startOffset: 8,
+            endOffset: firstParagraph.count
+        )
+
+        let startsAtParagraphBoundary = ReaderViewportParagraphBoundaryResolver.startsAtParagraphBoundary(
+            viewportContext: context,
+            viewportPage: viewportTestIndexPage(index: 1, range: continuationRange),
+        )
+
+        XCTAssertFalse(startsAtParagraphBoundary)
+    }
+
+    func testViewportPageContentIndentsSliceStartingAtRealParagraphBoundary() throws {
+        let firstParagraph = "第一段正文很长，需要横向分页后继续显示。"
+        let secondParagraph = "第二段应该仍然作为新段落缩进。"
+        let sourceText = firstParagraph + "\n\n" + secondParagraph
+        let settings = ReaderAppearanceSettings(indentsParagraphFirstLine: true, readingMode: .paged)
+        let context = viewportContext(text: sourceText, settings: settings)
+        let paragraphBoundaryOffset = firstParagraph.count + "\n\n".count
+        let paragraphRange = ReaderRenderedTextRange(
+            segmentIndex: 0,
+            startOffset: paragraphBoundaryOffset,
+            endOffset: sourceText.count
+        )
+
+        let startsAtParagraphBoundary = ReaderViewportParagraphBoundaryResolver.startsAtParagraphBoundary(
+            viewportContext: context,
+            viewportPage: viewportTestIndexPage(index: 2, range: paragraphRange),
+        )
+
+        XCTAssertTrue(startsAtParagraphBoundary)
+    }
+
     func testNovelTextLayoutSettingsPreviewUsesTextKit2DisplayAdapterWithDraftReadingSettings() {
         let settings = ReaderAppearanceSettings(
             fontScale: 1.25,
@@ -551,6 +620,42 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
             XCTAssertEqual(error as? NovelTextLayoutFailure, .unableToLayoutText)
         }
     }
+}
+
+private func viewportContext(
+    text: String,
+    settings: ReaderAppearanceSettings
+) -> NovelTextViewportContext {
+    NovelTextViewportContext(
+        identity: NovelTextViewportIdentity(
+            threadURL: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=indent&mobile=2")!,
+            documentView: 1,
+            maxView: 1,
+            fetchedAt: Date(timeIntervalSince1970: 0),
+            contentSource: .fallbackUnfilteredPage,
+            appearance: settings,
+            layout: ReaderContainerLayout(width: 320, height: 568)
+        ),
+        document: NovelTextViewportDocument(
+            text: text,
+            textRangesBySegment: [
+                0: ReaderRenderedTextRange(segmentIndex: 0, startOffset: 0, endOffset: text.count)
+            ],
+            insertedSeparatorRanges: []
+        ),
+        externalBlocks: [],
+        diagnostics: NovelTextViewportDiagnostics(indexBuildCount: 1)
+    )
+}
+
+private func viewportTestIndexPage(index: Int, range: ReaderRenderedTextRange) -> NovelTextViewportIndexPage {
+    NovelTextViewportIndexPage(
+        pageIndex: index,
+        documentView: 1,
+        chapterOrdinal: 0,
+        chapterTitle: "第一章",
+        ranges: [range]
+    )
 }
 
 private func functionBody(named name: String, in source: String) -> String? {
