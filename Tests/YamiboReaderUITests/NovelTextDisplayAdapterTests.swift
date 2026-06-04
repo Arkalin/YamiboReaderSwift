@@ -189,7 +189,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertFalse(displayValueBody.contains("NSView"))
         XCTAssertTrue(updateUIViewBody.contains("NovelTextKit2PlatformAdapter.makeAttributedText"))
         XCTAssertFalse(displayUIViewBody.contains("func measuredHeight"))
-        XCTAssertTrue(adapterSource.contains("NovelTextViewportDisplayUIView: UIView, NSTextViewportLayoutControllerDelegate"))
+        XCTAssertTrue(adapterSource.contains("NovelTextViewportDisplayUIView: UIView, @MainActor NSTextViewportLayoutControllerDelegate"))
         XCTAssertTrue(displayUIViewBody.contains("textViewportLayoutController.layoutViewport()"))
     }
 
