@@ -561,16 +561,29 @@ struct ReaderViewportPageContent: View {
               ) else {
             return page
         }
+        let aggregateRange = viewportAggregateRange(from: viewportPage.ranges)
         return ReaderRenderedPage(
             index: page.index,
             blocks: [.text(displayValue: displayValue)] + compatibilityBlocks,
             documentView: viewportPage.documentView,
             chapterOrdinal: viewportPage.chapterOrdinal,
             chapterTitle: viewportPage.chapterTitle,
-            segmentIndex: page.segmentIndex,
-            segmentStartOffset: page.segmentStartOffset,
-            segmentEndOffset: page.segmentEndOffset,
+            viewportTextRanges: viewportPage.ranges,
+            segmentIndex: aggregateRange?.segmentIndex,
+            segmentStartOffset: aggregateRange?.startOffset ?? 0,
+            segmentEndOffset: aggregateRange?.endOffset ?? 0,
             chapterCommentTarget: viewportPage.chapterCommentTarget ?? page.chapterCommentTarget
+        )
+    }
+
+    private static func viewportAggregateRange(from ranges: [ReaderRenderedTextRange]) -> ReaderRenderedTextRange? {
+        guard let first = ranges.first else { return nil }
+        let last = ranges.last ?? first
+        guard first.segmentIndex == last.segmentIndex else { return first }
+        return ReaderRenderedTextRange(
+            segmentIndex: first.segmentIndex,
+            startOffset: first.startOffset,
+            endOffset: last.endOffset
         )
     }
 

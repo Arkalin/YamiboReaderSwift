@@ -328,13 +328,14 @@ public struct NovelReadingSession: Sendable {
             return ""
         }
 
-        let currentPosition = textPosition(for: snapshot.currentPageIntraProgress, in: page)
-        let currentRange = currentPosition?.range
+        guard let currentPosition = textPosition(for: snapshot.currentPageIntraProgress, in: page) else {
+            return ""
+        }
         let startSegmentIndex = min(
-            max(currentRange?.segmentIndex ?? page.segmentIndex ?? 0, 0),
+            max(currentPosition.range.segmentIndex, 0),
             max(document.segments.count - 1, 0)
         )
-        let startOffset = currentPosition.map(sourceOffset) ?? page.segmentStartOffset
+        let startOffset = sourceOffset(for: currentPosition)
 
         let fragments = document.segments[startSegmentIndex...].enumerated().compactMap { offset, segment -> String? in
             guard case let .text(text, _) = segment else { return nil }
@@ -452,7 +453,7 @@ public struct NovelReadingSession: Sendable {
             let indexedPage = viewportPages.first {
                 $0.pageIndex == index && $0.documentView == page.documentView
             }
-            let indexedRanges = indexedPage?.ranges ?? []
+            let indexedRanges = indexedPage?.ranges ?? page.viewportTextRanges
             let aggregateRange = Self.aggregateRange(from: indexedRanges)
             return ReaderRenderedPage(
                 index: index,
@@ -460,9 +461,10 @@ public struct NovelReadingSession: Sendable {
                 documentView: page.documentView,
                 chapterOrdinal: indexedPage?.chapterOrdinal ?? page.chapterOrdinal,
                 chapterTitle: indexedPage?.chapterTitle ?? page.chapterTitle,
-                segmentIndex: aggregateRange?.segmentIndex ?? page.segmentIndex,
-                segmentStartOffset: aggregateRange?.startOffset ?? page.segmentStartOffset,
-                segmentEndOffset: aggregateRange?.endOffset ?? page.segmentEndOffset,
+                viewportTextRanges: indexedRanges,
+                segmentIndex: aggregateRange?.segmentIndex,
+                segmentStartOffset: aggregateRange?.startOffset ?? 0,
+                segmentEndOffset: aggregateRange?.endOffset ?? 0,
                 chapterCommentTarget: indexedPage?.chapterCommentTarget ?? page.chapterCommentTarget
             )
         }
@@ -657,28 +659,16 @@ public struct NovelReadingSession: Sendable {
 
     private func contains(offset: Int, in page: ReaderRenderedPage) -> Bool {
         let ranges = textRanges(for: page)
-        if !ranges.isEmpty,
-           ranges.contains(where: { contains(offset: offset, in: $0) }) {
-            return true
-        }
-        if page.segmentStartOffset == page.segmentEndOffset {
-            return offset <= page.segmentStartOffset
-        }
-        return offset >= page.segmentStartOffset && offset < page.segmentEndOffset
+        return ranges.contains(where: { contains(offset: offset, in: $0) })
     }
 
     private func contains(offset: Int, segmentIndex: Int, in page: ReaderRenderedPage) -> Bool {
         let matchingRanges = textRanges(for: page).filter { $0.segmentIndex == segmentIndex }
-        if !matchingRanges.isEmpty {
-            return matchingRanges.contains { contains(offset: offset, in: $0) }
-        }
-        guard page.segmentIndex == segmentIndex else { return false }
-        return contains(offset: offset, in: page)
+        return matchingRanges.contains { contains(offset: offset, in: $0) }
     }
 
     private func contains(segmentIndex: Int, in page: ReaderRenderedPage) -> Bool {
         textRanges(for: page).contains { $0.segmentIndex == segmentIndex }
-            || page.segmentIndex == segmentIndex
     }
 
     private func contains(offset: Int, in range: ReaderRenderedTextRange) -> Bool {
@@ -690,13 +680,7 @@ public struct NovelReadingSession: Sendable {
 
     private func distance(from offset: Int, to page: ReaderRenderedPage) -> Int {
         let ranges = textRanges(for: page)
-        if !ranges.isEmpty {
-            return ranges.map { distance(from: offset, to: $0) }.min() ?? 0
-        }
-        if offset < page.segmentStartOffset {
-            return page.segmentStartOffset - offset
-        }
-        return offset - page.segmentEndOffset
+        return ranges.map { distance(from: offset, to: $0) }.min() ?? 0
     }
 
     private func distance(from offset: Int, segmentIndex: Int, to page: ReaderRenderedPage) -> Int {
@@ -704,7 +688,7 @@ public struct NovelReadingSession: Sendable {
         if !matchingRanges.isEmpty {
             return matchingRanges.map { distance(from: offset, to: $0) }.min() ?? 0
         }
-        return distance(from: offset, to: page)
+        return Int.max
     }
 
     private func distance(from offset: Int, to range: ReaderRenderedTextRange) -> Int {
@@ -732,12 +716,7 @@ public struct NovelReadingSession: Sendable {
                 return min(max(progress, 0), 1)
             }
         }
-        let length = max(page.segmentEndOffset - page.segmentStartOffset, 0)
-        guard length > 0 else {
-            return min(max(resumePoint.segmentProgress, 0), 1)
-        }
-        let progress = Double(resumePoint.segmentOffset - page.segmentStartOffset) / Double(length)
-        return min(max(progress, 0), 1)
+        return min(max(resumePoint.segmentProgress, 0), 1)
     }
 
     private func textPosition(for intraPageProgress: Double, in page: ReaderRenderedPage) -> ReaderPageTextPosition? {
@@ -771,13 +750,14 @@ public struct NovelReadingSession: Sendable {
     }
 
     private func textRanges(for page: ReaderRenderedPage) -> [ReaderRenderedTextRange] {
-        let indexedRanges = currentViewportIndex?.pages.first {
+        let viewportIndex = currentViewportIndex ?? snapshot.viewportIndex
+        let indexedRanges = viewportIndex?.pages.first {
             $0.pageIndex == page.index && $0.documentView == page.documentView
         }?.ranges ?? []
         if !indexedRanges.isEmpty {
             return indexedRanges
         }
-        return page.novelTextDisplayValues.flatMap(\.ranges)
+        return page.viewportTextRanges
     }
 }
 
