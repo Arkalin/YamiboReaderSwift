@@ -193,6 +193,169 @@ enum NovelTextKit2PlatformAdapter {
     }
 }
 
+@MainActor
+final class NovelTextViewportRuntimeStore {
+    private var textSurfaces: [NovelTextViewportTextSurfaceIdentity: NovelTextViewportTextSurface] = [:]
+    private var surfaceAccessOrder: [NovelTextViewportTextSurfaceIdentity] = []
+    private let surfaceCapacity = 48
+
+    func measuredHeight(
+        displayValue: NovelTextDisplayValue,
+        width: CGFloat,
+        baseFontSize: Double
+    ) throws -> CGFloat {
+        try NovelTextDisplayAdapter.measuredHeight(
+            width: width,
+            displayValue: displayValue,
+            baseFontSize: baseFontSize
+        )
+    }
+
+    func textSurface(
+        identity: NovelTextViewportTextSurfaceIdentity,
+        displayValue: NovelTextDisplayValue,
+        width: CGFloat,
+        baseFontSize: Double,
+        textColor: UIColor,
+        titleWeight: UIFont.Weight = .regular,
+        fallbackHeight: CGFloat
+    ) -> NovelTextViewportTextSurface {
+        if let cachedSurface = textSurfaces[identity] {
+            markRecentlyUsed(identity)
+            cachedSurface.prepareForDisplay(size: CGSize(width: width, height: cachedSurface.height))
+            return cachedSurface
+        }
+
+        let height = (try? measuredHeight(
+            displayValue: displayValue,
+            width: width,
+            baseFontSize: baseFontSize
+        )) ?? fallbackHeight
+        let displayView = NovelTextViewportDisplayUIView()
+        displayView.backgroundColor = .clear
+        displayView.isOpaque = false
+        displayView.isUserInteractionEnabled = false
+        displayView.frame = CGRect(x: 0, y: 0, width: width, height: height)
+        displayView.update(attributedText: NovelTextKit2PlatformAdapter.makeAttributedText(
+            displayValue: displayValue,
+            baseFontSize: baseFontSize,
+            textColor: textColor,
+            titleWeight: titleWeight
+        ))
+        let surface = NovelTextViewportTextSurface(
+            identity: identity,
+            displayValue: displayValue,
+            displayView: displayView,
+            height: height
+        )
+        surface.prepareForDisplay(size: CGSize(width: width, height: height))
+        textSurfaces[identity] = surface
+        markRecentlyUsed(identity)
+        trimSurfacesIfNeeded()
+        return surface
+    }
+
+    func removeAllTextSurfaces() {
+        textSurfaces.removeAll()
+        surfaceAccessOrder.removeAll()
+    }
+
+    private func markRecentlyUsed(_ identity: NovelTextViewportTextSurfaceIdentity) {
+        surfaceAccessOrder.removeAll { $0 == identity }
+        surfaceAccessOrder.append(identity)
+    }
+
+    private func trimSurfacesIfNeeded() {
+        while textSurfaces.count > surfaceCapacity, let identity = surfaceAccessOrder.first {
+            surfaceAccessOrder.removeFirst()
+            textSurfaces[identity] = nil
+        }
+    }
+}
+
+struct NovelTextViewportTextSurfaceIdentity: Hashable {
+    let documentView: Int
+    let pageIndex: Int
+    let blockIndex: Int
+    let displayValue: NovelTextDisplayValue
+    let widthBucket: Int
+    let baseFontSizeBucket: Int
+    let titleWeightBucket: Int
+    let textColorSignature: Int
+
+    init(
+        documentView: Int,
+        pageIndex: Int,
+        blockIndex: Int,
+        displayValue: NovelTextDisplayValue,
+        width: CGFloat,
+        baseFontSize: Double,
+        titleWeight: UIFont.Weight = .regular,
+        textColorSignature: Int
+    ) {
+        self.documentView = documentView
+        self.pageIndex = pageIndex
+        self.blockIndex = blockIndex
+        self.displayValue = displayValue
+        self.widthBucket = Int((max(width, 0) * 100).rounded())
+        self.baseFontSizeBucket = Int((max(baseFontSize, 0) * 100).rounded())
+        self.titleWeightBucket = Int((titleWeight.rawValue * 1000).rounded())
+        self.textColorSignature = textColorSignature
+    }
+}
+
+@MainActor
+final class NovelTextViewportTextSurface {
+    let identity: NovelTextViewportTextSurfaceIdentity
+    let displayValue: NovelTextDisplayValue
+    let view: UIView
+    let height: CGFloat
+    private let displayView: NovelTextViewportDisplayUIView
+
+    init(
+        identity: NovelTextViewportTextSurfaceIdentity,
+        displayValue: NovelTextDisplayValue,
+        displayView: NovelTextViewportDisplayUIView,
+        height: CGFloat
+    ) {
+        self.identity = identity
+        self.displayValue = displayValue
+        self.displayView = displayView
+        self.view = displayView
+        self.height = height
+    }
+
+    func prepareForDisplay(size: CGSize) {
+        displayView.prepareForDisplay(size: size)
+    }
+
+    func viewportSample(
+        referencePoint: CGPoint,
+        documentView: Int,
+        pageIndex: Int
+    ) -> NovelTextViewportSample? {
+        guard let displayOffset = displayView.closestTextOffset(to: referencePoint) else {
+            return nil
+        }
+        return ReaderVerticalViewportTextOffsetMapper.sample(
+            displayOffset: displayOffset,
+            displayValue: displayValue,
+            documentView: documentView,
+            pageIndex: pageIndex
+        )
+    }
+
+    func referenceY(for anchor: ReaderVerticalTextAnchor) -> CGFloat? {
+        guard let displayOffset = ReaderVerticalViewportTextOffsetMapper.displayOffset(
+            for: anchor,
+            displayValue: displayValue
+        ) else {
+            return nil
+        }
+        return displayView.textFragmentReferenceY(containingDisplayOffset: displayOffset)
+    }
+}
+
 final class NovelTextViewportDisplayUIView: UIView, @MainActor NSTextViewportLayoutControllerDelegate {
     private let textContentStorage = NSTextContentStorage()
     private let textLayoutManager = NSTextLayoutManager()

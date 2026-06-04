@@ -577,7 +577,8 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertTrue(verticalBody.contains("verticalItemWidth(in: collectionView)"))
         XCTAssertTrue(verticalBody.contains("verticalItemHeight(for: indexPath.item"))
         XCTAssertTrue(verticalBody.contains("ReaderViewportPageContent.viewportBackedPage"))
-        XCTAssertTrue(verticalBody.contains("NovelTextLayout.measuredTextHeight"))
+        XCTAssertTrue(verticalBody.contains("textRuntimeStore.measuredHeight"))
+        XCTAssertFalse(verticalBody.contains("NovelTextLayout.measuredTextHeight"))
         XCTAssertTrue(verticalBody.contains("topInset: CGFloat"))
         XCTAssertTrue(verticalBody.contains("bottomInset: CGFloat"))
         XCTAssertTrue(verticalBody.contains("collectionView.contentInset = contentInset"))
@@ -586,6 +587,45 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertTrue(verticalBody.contains("tapGesture.cancelsTouchesInView = false"))
         XCTAssertFalse(verticalBody.contains("collectionView.reloadData()\n            context.coordinator.handle"))
         XCTAssertFalse(verticalBody.contains("UICollectionViewFlowLayout.automaticSize"))
+    }
+
+    func testVerticalViewportCellsUseRuntimeStoreForTextKitSurfaces() throws {
+        let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let supportSource = try String(
+            contentsOf: repositoryRoot
+                .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderSupportViews.swift"),
+            encoding: .utf8
+        )
+        let adapterSource = try String(
+            contentsOf: repositoryRoot
+                .appendingPathComponent("Sources/YamiboReaderUI/Views/NovelTextDisplayAdapter.swift"),
+            encoding: .utf8
+        )
+        let verticalBody = try XCTUnwrap(typeBody(named: "ReaderVerticalViewportScrollView", in: supportSource))
+        let verticalCellBody = try XCTUnwrap(typeBody(named: "ReaderVerticalViewportCell", in: supportSource))
+        let runtimeStoreBody = try XCTUnwrap(typeBody(named: "NovelTextViewportRuntimeStore", in: adapterSource))
+
+        XCTAssertTrue(adapterSource.contains("@MainActor\nfinal class NovelTextViewportRuntimeStore"))
+        XCTAssertTrue(adapterSource.contains("@MainActor\nfinal class NovelTextViewportTextSurface"))
+        XCTAssertTrue(adapterSource.contains("struct NovelTextViewportTextSurfaceIdentity: Hashable"))
+        XCTAssertTrue(verticalBody.contains("private let textRuntimeStore = NovelTextViewportRuntimeStore()"))
+        XCTAssertTrue(verticalBody.contains("textRuntimeStore.measuredHeight"))
+        XCTAssertTrue(verticalBody.contains("textRuntimeStore.removeAllTextSurfaces()"))
+        XCTAssertTrue(verticalCellBody.contains("NovelTextViewportTextSurface?"))
+        XCTAssertTrue(verticalCellBody.contains("NovelTextViewportTextSurfaceIdentity("))
+        XCTAssertTrue(verticalCellBody.contains("textRuntimeStore.textSurface("))
+        XCTAssertTrue(runtimeStoreBody.contains("textSurfaces: [NovelTextViewportTextSurfaceIdentity: NovelTextViewportTextSurface]"))
+        XCTAssertTrue(runtimeStoreBody.contains("if let cachedSurface = textSurfaces[identity]"))
+        XCTAssertTrue(runtimeStoreBody.contains("return cachedSurface"))
+        XCTAssertTrue(runtimeStoreBody.contains("markRecentlyUsed"))
+        XCTAssertTrue(runtimeStoreBody.contains("trimSurfacesIfNeeded"))
+        XCTAssertTrue(runtimeStoreBody.contains("func removeAllTextSurfaces()"))
+        XCTAssertTrue(runtimeStoreBody.contains("NovelTextViewportDisplayUIView()"))
+        XCTAssertTrue(runtimeStoreBody.contains("NovelTextKit2PlatformAdapter.makeAttributedText"))
+        XCTAssertFalse(runtimeStoreBody.contains("func makeTextSurface"))
+        XCTAssertFalse(verticalCellBody.contains("NovelTextViewportDisplayUIView()"))
+        XCTAssertFalse(verticalCellBody.contains("NovelTextKit2PlatformAdapter.makeAttributedText"))
+        XCTAssertFalse(verticalCellBody.contains("NovelTextLayout.measuredTextHeight"))
     }
 
     func testViewportPageContentDerivesNormalTextFromViewportContextAndIndexBeforeCompatibilityPageBlocks() throws {
