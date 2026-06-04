@@ -215,6 +215,32 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertEqual(block.measurementBackend, preview.measurementBackend)
     }
 
+    func testTwoPagePagedSpreadUsesViewportBackedReaderPageContent() throws {
+        let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let readerSupportSource = try String(
+            contentsOf: repositoryRoot
+                .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderSupportViews.swift"),
+            encoding: .utf8
+        )
+        let spreadContentBody = try XCTUnwrap(typeBody(named: "ReaderPagedSpreadContent", in: readerSupportSource))
+        let settings = ReaderAppearanceSettings(
+            showsTwoPagesInLandscapeOnPad: true,
+            readingMode: .paged
+        )
+        let block = try XCTUnwrap(ReaderBlockNovelTextDisplayMaterializer.materialization(
+            for: .text(
+                "双页横屏展示中的左右页都必须复用 viewport-backed page content。",
+                chapterTitle: "第一章",
+                settings: settings
+            ),
+            settings: settings
+        ))
+
+        XCTAssertTrue(spreadContentBody.contains("ReaderPageContent("))
+        XCTAssertFalse(spreadContentBody.contains("Text(displayValue.text"))
+        XCTAssertEqual(block.backend, .novelTextViewport)
+    }
+
     func testNovelReadingSessionDisplayPathDoesNotRetainUIKitTextViewFallback() throws {
         let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let readerSupportSource = try String(
