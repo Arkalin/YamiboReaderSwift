@@ -193,7 +193,7 @@ enum NovelTextKit2PlatformAdapter {
     }
 }
 
-final class NovelTextViewportDisplayUIView: UIView, NSTextViewportLayoutControllerDelegate {
+final class NovelTextViewportDisplayUIView: UIView, @MainActor NSTextViewportLayoutControllerDelegate {
     private let textContentStorage = NSTextContentStorage()
     private let textLayoutManager = NSTextLayoutManager()
     private let textContainer = NSTextContainer(size: .zero)
