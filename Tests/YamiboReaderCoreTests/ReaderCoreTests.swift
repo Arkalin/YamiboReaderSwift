@@ -854,6 +854,82 @@ private final class StubURLProtocol: URLProtocol {
     ])
 }
 
+@Test func novelTextLayoutPublishesNovelTextViewportIndexForRenderedPages() async throws {
+    let document = ReaderPageDocument(
+        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100&mobile=2")),
+        view: 2,
+        maxView: 3,
+        segments: [
+            .text("第一章前半", chapterTitle: "第一章"),
+            .text("第一章后半", chapterTitle: "第一章"),
+            .text("第二章正文", chapterTitle: "第二章")
+        ],
+        segmentSources: [
+            ReaderSegmentSource(ownerPostID: "post-1"),
+            ReaderSegmentSource(ownerPostID: "post-1"),
+            ReaderSegmentSource(ownerPostID: "post-2")
+        ]
+    )
+
+    let pagination = try NovelTextLayout.renderedPages(
+        document: document,
+        settings: ReaderAppearanceSettings(readingMode: .paged),
+        layout: ReaderContainerLayout(width: 390, height: 844),
+        requiresAuthoritativePagedLayout: false,
+        pagedLayout: { text, _, _, _ in
+            [TextSlice(text: text, startOffset: 0, endOffset: text.count)]
+        }
+    )
+
+    let index = try #require(pagination.viewportIndex)
+    #expect(index.documentView == 2)
+    #expect(index.readingMode == .paged)
+    #expect(index.pages.map(\.pageIndex) == [0, 1])
+    #expect(index.pages[0].ranges == [
+        ReaderRenderedTextRange(segmentIndex: 0, startOffset: 0, endOffset: 5),
+        ReaderRenderedTextRange(segmentIndex: 1, startOffset: 0, endOffset: 5)
+    ])
+    #expect(index.pages[1].ranges == [
+        ReaderRenderedTextRange(segmentIndex: 2, startOffset: 0, endOffset: 5)
+    ])
+    #expect(index.chapters.map(\.title) == ["第一章", "第二章"])
+    #expect(index.chapters.map(\.startPageIndex) == [0, 1])
+    #expect(index.position(forSegmentIndex: 1, offset: 3)?.pageIndex == 0)
+    #expect(index.position(forSegmentIndex: 2, offset: 2)?.chapterCommentTarget?.ownerPostID == "post-2")
+}
+
+@Test func novelTextLayoutPublishesNovelTextViewportIndexForVerticalChunks() async throws {
+    let document = ReaderPageDocument(
+        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=101&mobile=2")),
+        view: 1,
+        maxView: 1,
+        segments: [
+            .text("纵向阅读第一段", chapterTitle: "第一章")
+        ]
+    )
+
+    let pagination = try NovelTextLayout.renderedPages(
+        document: document,
+        settings: ReaderAppearanceSettings(readingMode: .vertical),
+        layout: ReaderContainerLayout(width: 390, height: 844, readingMode: .vertical),
+        requiresAuthoritativeVerticalLayout: false,
+        verticalLayout: { _, _, _, _ in
+            [
+                TextSlice(text: "纵向阅读", startOffset: 0, endOffset: 4),
+                TextSlice(text: "第一段", startOffset: 4, endOffset: 7)
+            ]
+        }
+    )
+
+    let index = try #require(pagination.viewportIndex)
+    #expect(index.readingMode == .vertical)
+    #expect(index.pages.map(\.ranges) == [
+        [ReaderRenderedTextRange(segmentIndex: 0, startOffset: 0, endOffset: 4)],
+        [ReaderRenderedTextRange(segmentIndex: 0, startOffset: 4, endOffset: 7)]
+    ])
+    #expect(index.position(forSegmentIndex: 0, offset: 5)?.pageIndex == 1)
+}
+
 #if canImport(AppKit) && !canImport(UIKit)
 @Test func novelTextLayoutEmptyAppKitPagedAdapterThrowsWithoutEstimatedFallback() throws {
     let text = String(repeating: "Empty AppKit adapter output must not fall back to estimated slicing. ", count: 20)

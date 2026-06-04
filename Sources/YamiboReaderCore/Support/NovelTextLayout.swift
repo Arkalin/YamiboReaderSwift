@@ -234,7 +234,48 @@ public enum NovelTextLayout {
             ]
         }
 
-        return ReaderPaginationResult(pages: pages, chapters: chapters)
+        return ReaderPaginationResult(
+            pages: pages,
+            chapters: chapters,
+            viewportIndex: makeViewportIndex(
+                document: document,
+                settings: settings,
+                pages: pages,
+                chapters: chapters
+            )
+        )
+    }
+
+    private static func makeViewportIndex(
+        document: ReaderPageDocument,
+        settings: ReaderAppearanceSettings,
+        pages: [ReaderRenderedPage],
+        chapters: [ReaderChapter]
+    ) -> NovelTextViewportIndex {
+        let indexPages = pages.map { page in
+            NovelTextViewportIndexPage(
+                pageIndex: page.index,
+                documentView: page.documentView,
+                chapterOrdinal: page.chapterOrdinal,
+                chapterTitle: page.chapterTitle,
+                ranges: page.novelTextDisplayValues.flatMap(\.ranges),
+                chapterCommentTarget: page.chapterCommentTarget
+            )
+        }
+        let indexChapters = chapters.map { chapter in
+            NovelTextViewportIndexChapter(
+                ordinal: chapter.ordinal,
+                title: chapter.title,
+                startPageIndex: chapter.startIndex,
+                chapterCommentTarget: chapter.chapterCommentTarget
+            )
+        }
+        return NovelTextViewportIndex(
+            documentView: document.view,
+            readingMode: settings.readingMode,
+            pages: indexPages,
+            chapters: indexChapters
+        )
     }
 
     private static func appendTextSliceToPreviousPageIfPossible(
