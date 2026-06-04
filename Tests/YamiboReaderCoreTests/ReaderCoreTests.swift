@@ -930,6 +930,57 @@ private final class StubURLProtocol: URLProtocol {
     #expect(index.position(forSegmentIndex: 0, offset: 5)?.pageIndex == 1)
 }
 
+@Test func novelTextLayoutBuildsCurrentWebpageViewportContextBeforePublishingReadablePages() async throws {
+    let imageURL = try #require(URL(string: "https://example.com/inline.jpg"))
+    let document = ReaderPageDocument(
+        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=146&mobile=2")),
+        view: 3,
+        maxView: 4,
+        segments: [
+            .text("第一章正文", chapterTitle: "第一章"),
+            .text("第二段正文", chapterTitle: "第一章"),
+            .image(imageURL, chapterTitle: "第一章"),
+            .text("第二章正文", chapterTitle: "第二章")
+        ],
+        segmentSources: [
+            ReaderSegmentSource(ownerPostID: "post-1"),
+            ReaderSegmentSource(ownerPostID: "post-1"),
+            ReaderSegmentSource(ownerPostID: "post-image"),
+            ReaderSegmentSource(ownerPostID: "post-2")
+        ],
+        fetchedAt: Date(timeIntervalSince1970: 146)
+    )
+
+    let pagination = try NovelTextLayout.renderedPages(
+        document: document,
+        settings: ReaderAppearanceSettings(readingMode: .paged),
+        layout: ReaderContainerLayout(width: 390, height: 844),
+        requiresAuthoritativePagedLayout: false,
+        pagedLayout: { text, _, _, _ in
+            [TextSlice(text: text, startOffset: 0, endOffset: text.count)]
+        }
+    )
+
+    let context = try #require(pagination.viewportContext)
+    let index = try #require(pagination.viewportIndex)
+
+    #expect(context.identity.documentView == 3)
+    #expect(context.identity.threadURL == document.threadURL)
+    #expect(context.identity.fetchedAt == document.fetchedAt)
+    #expect(context.document.text == "第一章正文\n\n第二段正文\n\n第二章正文")
+    #expect(context.document.textRangesBySegment[0] == ReaderRenderedTextRange(segmentIndex: 0, startOffset: 0, endOffset: 5))
+    #expect(context.document.textRangesBySegment[1] == ReaderRenderedTextRange(segmentIndex: 1, startOffset: 7, endOffset: 12))
+    #expect(context.document.textRangesBySegment[3] == ReaderRenderedTextRange(segmentIndex: 3, startOffset: 14, endOffset: 19))
+    #expect(context.document.insertedSeparatorRanges == [
+        ReaderRenderedTextRange(segmentIndex: 0, startOffset: 5, endOffset: 7),
+        ReaderRenderedTextRange(segmentIndex: 1, startOffset: 12, endOffset: 14)
+    ])
+    #expect(context.externalBlocks.map(\.segmentIndex) == [2])
+    #expect(context.diagnostics.indexBuildCount == 1)
+    #expect(context.diagnostics.visibleLayoutPassCount == 0)
+    #expect(index.pages.flatMap(\.ranges).map(\.segmentIndex) == [0, 1, 3])
+}
+
 @Test func novelTextLayoutReusesCachedNovelTextViewportIndexForMatchingInputs() async throws {
     let document = ReaderPageDocument(
         threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=102&mobile=2")),

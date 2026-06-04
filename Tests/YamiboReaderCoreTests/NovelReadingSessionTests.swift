@@ -3,6 +3,84 @@ import XCTest
 @testable import YamiboReaderCore
 
 final class NovelReadingSessionTests: XCTestCase {
+    func testPublishesNovelTextViewportContextAfterSuccessfulIndexBuild() throws {
+        let document = makeNovelDocument(
+            view: 2,
+            maxView: 3,
+            segments: [
+                ("第一章", "第一章正文"),
+                ("第二章", "第二章正文")
+            ]
+        )
+        let context = NovelTextViewportContext(
+            identity: NovelTextViewportIdentity(
+                threadURL: document.threadURL,
+                documentView: document.view,
+                maxView: document.maxView,
+                fetchedAt: document.fetchedAt,
+                contentSource: document.contentSource,
+                appearance: ReaderAppearanceSettings(readingMode: .paged),
+                layout: ReaderContainerLayout(width: 320, height: 568)
+            ),
+            document: NovelTextViewportDocument(
+                text: "第一章正文\n\n第二章正文",
+                textRangesBySegment: [
+                    0: ReaderRenderedTextRange(segmentIndex: 0, startOffset: 0, endOffset: 5),
+                    1: ReaderRenderedTextRange(segmentIndex: 1, startOffset: 7, endOffset: 12)
+                ],
+                insertedSeparatorRanges: [
+                    ReaderRenderedTextRange(segmentIndex: 0, startOffset: 5, endOffset: 7)
+                ]
+            ),
+            externalBlocks: [],
+            diagnostics: NovelTextViewportDiagnostics(indexBuildCount: 1)
+        )
+
+        let session = try NovelReadingSession(
+            validating: document,
+            settings: ReaderAppearanceSettings(readingMode: .paged),
+            layout: ReaderContainerLayout(width: 320, height: 568),
+            pagination: { document, _, _ in
+                ReaderPaginationResult(
+                    pages: [
+                        ReaderRenderedPage(
+                            index: 0,
+                            blocks: [.text("第一章正文", chapterTitle: "第一章")],
+                            documentView: document.view,
+                            chapterOrdinal: 0,
+                            chapterTitle: "第一章"
+                        )
+                    ],
+                    chapters: [
+                        ReaderChapter(ordinal: 0, title: "第一章", startIndex: 0)
+                    ],
+                    viewportIndex: NovelTextViewportIndex(
+                        documentView: document.view,
+                        readingMode: .paged,
+                        pages: [
+                            NovelTextViewportIndexPage(
+                                pageIndex: 0,
+                                documentView: document.view,
+                                chapterOrdinal: 0,
+                                chapterTitle: "第一章",
+                                ranges: [
+                                    ReaderRenderedTextRange(segmentIndex: 0, startOffset: 0, endOffset: 5)
+                                ]
+                            )
+                        ],
+                        chapters: [
+                            NovelTextViewportIndexChapter(ordinal: 0, title: "第一章", startPageIndex: 0)
+                        ]
+                    ),
+                    viewportContext: context
+                )
+            }
+        )
+
+        XCTAssertEqual(session.snapshot.viewportContext, context)
+        XCTAssertEqual(session.snapshot.viewportContext?.diagnostics.indexBuildCount, 1)
+    }
+
     func testRestoresNovelReadingPositionFromNovelTextViewportIndexRanges() throws {
         let document = makeNovelDocument(
             view: 1,
