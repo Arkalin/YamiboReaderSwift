@@ -9,6 +9,7 @@ enum NovelTextDisplaySurface: Equatable {
 
 enum NovelTextDisplayBackend: Equatable {
     case textKit2DisplayAdapter
+    case novelTextLayoutMeasurement
 }
 
 enum NovelTextDisplayColor: Equatable {
@@ -50,7 +51,7 @@ enum NovelTextDisplayAdapter {
         return NovelTextDisplayMaterialization(
             surface: surface,
             backend: .textKit2DisplayAdapter,
-            measurementBackend: .textKit2DisplayAdapter,
+            measurementBackend: .novelTextLayoutMeasurement,
             text: displayValue.text,
             chapterTitle: displayValue.chapterTitle,
             startsAtParagraphBoundary: displayValue.startsAtParagraphBoundary,
@@ -95,18 +96,13 @@ import UIKit
 extension NovelTextDisplayAdapter {
     static func measuredHeight(
         width: CGFloat,
-        displayView: NovelTextKit2DisplayUIView,
         displayValue: NovelTextDisplayValue,
-        baseFontSize: Double,
-        textColor: UIColor,
-        titleWeight: UIFont.Weight
-    ) -> CGFloat {
-        displayView.measuredHeight(
-            width: width,
+        baseFontSize: Double
+    ) throws -> CGFloat {
+        try NovelTextLayout.measuredTextHeight(
             displayValue: displayValue,
-            baseFontSize: baseFontSize,
-            textColor: textColor,
-            titleWeight: titleWeight
+            width: width,
+            baseFontSize: baseFontSize
         )
     }
 }
@@ -162,14 +158,13 @@ struct NativeNovelTextDisplayView: UIViewRepresentable {
         context: Context
     ) -> CGSize? {
         let targetWidth = proposal.width ?? UIScreen.main.bounds.width
-        let height = NovelTextDisplayAdapter.measuredHeight(
+        guard let height = try? NovelTextDisplayAdapter.measuredHeight(
             width: targetWidth,
-            displayView: uiView,
             displayValue: displayValue,
-            baseFontSize: baseFontSize,
-            textColor: textColor,
-            titleWeight: titleWeight
-        )
+            baseFontSize: baseFontSize
+        ) else {
+            return nil
+        }
         return CGSize(width: targetWidth, height: height)
     }
 

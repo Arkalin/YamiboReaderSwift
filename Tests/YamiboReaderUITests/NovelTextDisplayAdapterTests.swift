@@ -147,9 +147,24 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
             settings: settings
         )
 
-        XCTAssertEqual(previewMaterialization.measurementBackend, .textKit2DisplayAdapter)
+        XCTAssertEqual(previewMaterialization.measurementBackend, .novelTextLayoutMeasurement)
         XCTAssertEqual(blockMaterialization?.measurementBackend, previewMaterialization.measurementBackend)
         XCTAssertEqual(blockMaterialization?.surface, .novelReadingSessionTextBlock)
+    }
+
+    func testSwiftUIDisplaySizingRequestsHeightFromNovelTextLayoutMeasurement() throws {
+        let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let adapterSource = try String(
+            contentsOf: repositoryRoot
+                .appendingPathComponent("Sources/YamiboReaderUI/Views/NovelTextDisplayAdapter.swift"),
+            encoding: .utf8
+        )
+        let sizeThatFitsBody = try XCTUnwrap(functionBody(named: "sizeThatFits", in: adapterSource))
+        let measuredHeightBody = try XCTUnwrap(functionBody(named: "measuredHeight", in: adapterSource))
+
+        XCTAssertTrue(sizeThatFitsBody.contains("NovelTextDisplayAdapter.measuredHeight"))
+        XCTAssertTrue(measuredHeightBody.contains("NovelTextLayout.measuredTextHeight"))
+        XCTAssertFalse(sizeThatFitsBody.contains("displayView.measuredHeight"))
     }
 
     func testNovelReadingSessionDisplayPathDoesNotRetainUIKitTextViewFallback() throws {
@@ -243,4 +258,28 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
             XCTAssertEqual(error as? NovelTextLayoutFailure, .unableToLayoutText)
         }
     }
+}
+
+private func functionBody(named name: String, in source: String) -> String? {
+    guard let nameRange = source.range(of: "func \(name)") ?? source.range(of: "static func \(name)") else {
+        return nil
+    }
+    guard let bodyStart = source[nameRange.upperBound...].firstIndex(of: "{") else {
+        return nil
+    }
+
+    var depth = 0
+    var index = bodyStart
+    while index < source.endIndex {
+        if source[index] == "{" {
+            depth += 1
+        } else if source[index] == "}" {
+            depth -= 1
+            if depth == 0 {
+                return String(source[bodyStart...index])
+            }
+        }
+        index = source.index(after: index)
+    }
+    return nil
 }
