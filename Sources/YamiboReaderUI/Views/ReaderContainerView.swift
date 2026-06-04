@@ -407,6 +407,8 @@ public struct ReaderContainerView: View {
             settings: model.settings,
             refererURL: model.forumURL,
             sessionState: model.sessionState,
+            topInset: topInset,
+            bottomInset: bottomInset,
             scrollRequest: verticalScrollRequest,
             onScrollRequestHandled: { request in
                 guard verticalRestoreController.scrollingRequest == request else { return }

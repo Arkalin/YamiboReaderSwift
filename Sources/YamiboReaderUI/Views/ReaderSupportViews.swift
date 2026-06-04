@@ -976,12 +976,25 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
     let settings: ReaderAppearanceSettings
     let refererURL: URL
     let sessionState: SessionState
+    let topInset: CGFloat
+    let bottomInset: CGFloat
     let scrollRequest: ReaderVerticalScrollRequest?
     let onScrollRequestHandled: (ReaderVerticalScrollRequest) -> Void
     let onScrollViewReady: (UIScrollView) -> Void
     let onPageFramesChange: ([Int: ReaderVerticalPageFrameValue]) -> Void
     let onViewportChange: () -> Void
     let onTap: () -> Void
+
+    private var contentIdentity: ReaderVerticalViewportContentIdentity {
+        ReaderVerticalViewportContentIdentity(
+            pages: pages,
+            viewportContext: viewportContext,
+            viewportIndex: viewportIndex,
+            settings: settings,
+            topInset: topInset,
+            bottomInset: bottomInset
+        )
+    }
 
     func makeCoordinator() -> Coordinator {
         Coordinator(parent: self)
@@ -992,7 +1005,7 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
         layout.scrollDirection = .vertical
         layout.minimumLineSpacing = 16
         layout.minimumInteritemSpacing = 0
-        layout.estimatedItemSize = UICollectionViewFlowLayout.automaticSize
+        layout.estimatedItemSize = .zero
 
         let collectionView = UICollectionView(frame: .zero, collectionViewLayout: layout)
         collectionView.alwaysBounceVertical = true
@@ -1001,6 +1014,7 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
         collectionView.dataSource = context.coordinator
         collectionView.delegate = context.coordinator
         collectionView.register(UICollectionViewCell.self, forCellWithReuseIdentifier: Coordinator.reuseIdentifier)
+        context.coordinator.tapGesture.cancelsTouchesInView = false
         collectionView.addGestureRecognizer(context.coordinator.tapGesture)
         onScrollViewReady(collectionView)
         return collectionView
@@ -1009,7 +1023,7 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
     func updateUIView(_ collectionView: UICollectionView, context: Context) {
         context.coordinator.parent = self
         context.coordinator.callbackScheduler.performViewUpdate {
-            collectionView.reloadData()
+            context.coordinator.reloadDataIfNeeded(in: collectionView, contentIdentity: contentIdentity)
             context.coordinator.handle(scrollRequest, in: collectionView)
         }
     }
@@ -1019,11 +1033,38 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
 
         var parent: ReaderVerticalViewportScrollView
         let callbackScheduler = SwiftUIViewUpdateCallbackScheduler()
+        private var contentIdentity: ReaderVerticalViewportContentIdentity?
+        private var handledScrollRequest: ReaderVerticalScrollRequest?
         lazy var tapGesture = UITapGestureRecognizer(target: self, action: #selector(handleTap))
 
         init(parent: ReaderVerticalViewportScrollView) {
             self.parent = parent
             super.init()
+        }
+
+        fileprivate func reloadDataIfNeeded(
+            in collectionView: UICollectionView,
+            contentIdentity nextContentIdentity: ReaderVerticalViewportContentIdentity
+        ) {
+            let insetsChanged = updateInsets(in: collectionView)
+            guard contentIdentity != nextContentIdentity || insetsChanged else { return }
+            contentIdentity = nextContentIdentity
+            collectionView.collectionViewLayout.invalidateLayout()
+            collectionView.reloadData()
+        }
+
+        @discardableResult
+        private func updateInsets(in collectionView: UICollectionView) -> Bool {
+            let contentInset = UIEdgeInsets(
+                top: parent.topInset,
+                left: 0,
+                bottom: parent.bottomInset,
+                right: 0
+            )
+            guard collectionView.contentInset != contentInset else { return false }
+            collectionView.contentInset = contentInset
+            collectionView.scrollIndicatorInsets = contentInset
+            return true
         }
 
         func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int {
@@ -1060,6 +1101,17 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
             return cell
         }
 
+        func collectionView(
+            _ collectionView: UICollectionView,
+            layout collectionViewLayout: UICollectionViewLayout,
+            sizeForItemAt indexPath: IndexPath
+        ) -> CGSize {
+            CGSize(
+                width: verticalItemWidth(in: collectionView),
+                height: verticalItemHeight(for: indexPath.item, in: collectionView)
+            )
+        }
+
         func scrollViewDidScroll(_ scrollView: UIScrollView) {
             publishFrames(from: scrollView)
             let onViewportChange = parent.onViewportChange
@@ -1075,8 +1127,11 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
         func handle(_ request: ReaderVerticalScrollRequest?, in collectionView: UICollectionView) {
             guard let request,
                   parent.pages.indices.contains(request.pageIndex) else {
+                handledScrollRequest = nil
                 return
             }
+            guard handledScrollRequest != request else { return }
+            handledScrollRequest = request
             collectionView.scrollToItem(
                 at: IndexPath(item: request.pageIndex, section: 0),
                 at: .top,
@@ -1122,7 +1177,60 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
                 onPageFramesChange(frames)
             }
         }
+
+        private func verticalItemWidth(in collectionView: UICollectionView) -> CGFloat {
+            max(
+                collectionView.bounds.width
+                    - collectionView.adjustedContentInset.left
+                    - collectionView.adjustedContentInset.right,
+                1
+            )
+        }
+
+        private func verticalItemHeight(for item: Int, in collectionView: UICollectionView) -> CGFloat {
+            guard parent.pages.indices.contains(item) else {
+                return max(collectionView.bounds.height, 1)
+            }
+            let page = parent.pages[item]
+            let viewportPage = parent.viewportIndex?.pages.first {
+                $0.pageIndex == page.index && $0.documentView == page.documentView
+            }
+            let displayPage = ReaderViewportPageContent.viewportBackedPage(
+                page: page,
+                viewportContext: parent.viewportContext,
+                viewportPage: viewportPage,
+                settings: parent.settings
+            )
+            let contentWidth = max(verticalItemWidth(in: collectionView) - parent.settings.horizontalPadding * 2, 1)
+            let blockHeights = displayPage.blocks.map { block -> CGFloat in
+                switch block {
+                case let .text(displayValue):
+                    return (try? NovelTextLayout.measuredTextHeight(
+                        displayValue: displayValue,
+                        width: contentWidth,
+                        baseFontSize: 22
+                    )) ?? max(collectionView.bounds.height, 1)
+                case .image:
+                    return min(max(contentWidth * 0.65, 160), max(collectionView.bounds.height, 160))
+                case .footer:
+                    return 44
+                }
+            }
+            let contentHeight = blockHeights.reduce(CGFloat.zero, +)
+            let spacingHeight = CGFloat(max(displayPage.blocks.count - 1, 0)) * 14
+            let topPadding = page.index == 0 ? CGFloat(16) : 0
+            return max(ceil(contentHeight + spacingHeight + topPadding), 1)
+        }
     }
+}
+
+private struct ReaderVerticalViewportContentIdentity: Hashable {
+    var pages: [ReaderRenderedPage]
+    var viewportContext: NovelTextViewportContext?
+    var viewportIndex: NovelTextViewportIndex?
+    var settings: ReaderAppearanceSettings
+    var topInset: CGFloat
+    var bottomInset: CGFloat
 }
 #endif
 
