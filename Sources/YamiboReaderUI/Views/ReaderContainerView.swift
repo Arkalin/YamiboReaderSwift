@@ -135,7 +135,15 @@ public struct ReaderContainerView: View {
     private let appModel: YamiboAppModel
 
     public init(context: ReaderLaunchContext, appModel: YamiboAppModel) {
-        _model = StateObject(wrappedValue: ReaderContainerModel(context: context, appContext: appModel.appContext))
+        let initialSettings = appModel.bootstrapState?.settings.reader
+        _model = StateObject(wrappedValue: ReaderContainerModel(
+            context: context,
+            appContext: appModel.appContext,
+            initialSettings: initialSettings
+        ))
+        _chromeState = State(initialValue: ReaderChromeState(
+            showsChrome: initialSettings?.readingMode != .vertical
+        ))
         self.appModel = appModel
     }
 
@@ -178,7 +186,7 @@ public struct ReaderContainerView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-                if chromeState.mode.showsChrome {
+                if chromeState.showsChrome {
                     VStack(spacing: 0) {
                         topChrome(topInset: topInset)
                         Spacer(minLength: 0)
@@ -260,6 +268,9 @@ public struct ReaderContainerView: View {
                 updateChromeForContentState()
             }
             .onChange(of: model.pages.count) { _, _ in
+                updateChromeForContentState()
+            }
+            .onChange(of: model.settings.readingMode) { _, _ in
                 updateChromeForContentState()
             }
             .onChange(of: showingSettings) { _, _ in
@@ -362,7 +373,7 @@ public struct ReaderContainerView: View {
                 layout: layout
             )
         )
-        .scrollDisabled(chromeState.mode.showsChrome)
+        .scrollDisabled(chromeState.showsChrome)
         .overlay {
             if !model.pages.isEmpty {
                 ReaderPagedTapZones(
@@ -503,12 +514,12 @@ public struct ReaderContainerView: View {
     }
 
     private func verticalBoundaryPullTopPadding(topInset: CGFloat) -> CGFloat {
-        let chromeAvoidance = chromeState.mode.showsChrome ? max(topChromeHeight, topInset + 140) : 0
+        let chromeAvoidance = chromeState.showsChrome ? max(topChromeHeight, topInset + 140) : 0
         return max(chromeAvoidance, topInset, 24) + 8
     }
 
     private func verticalBoundaryPullBottomPadding(bottomInset: CGFloat) -> CGFloat {
-        let chromeAvoidance = chromeState.mode.showsChrome ? max(bottomChromeHeight, bottomInset + 210) + 55 : 0
+        let chromeAvoidance = chromeState.showsChrome ? max(bottomChromeHeight, bottomInset + 210) + 55 : 0
         return max(chromeAvoidance, bottomInset, 24) + 8
     }
 
@@ -578,7 +589,7 @@ public struct ReaderContainerView: View {
     private func verticalProgressScrubber(topInset: CGFloat, bottomInset: CGFloat) -> some View {
         let presentation = ReaderProgressChromePresentation(
             readingMode: model.settings.readingMode,
-            isChromeVisible: chromeState.mode.showsChrome
+            isChromeVisible: chromeState.showsChrome
         )
         let layout = ReaderBottomChromeLayoutPresentation()
         if presentation.showsVerticalScrubber {
@@ -688,7 +699,7 @@ public struct ReaderContainerView: View {
     }
 
     private func handlePagedContentTap(pageDelta: Int? = nil) {
-        guard !chromeState.mode.showsChrome else {
+        guard !chromeState.showsChrome else {
             enterImmersiveMode()
             return
         }
@@ -758,9 +769,10 @@ public struct ReaderContainerView: View {
             isLoading: model.isLoading,
             errorMessage: model.errorMessage,
             hasPages: !model.pages.isEmpty,
-            hasPresentedOverlay: hasPresentedOverlay
+            hasPresentedOverlay: hasPresentedOverlay,
+            usesVerticalReadingMode: model.settings.readingMode == .vertical
         )
-        if previousState.mode != nextState.mode {
+        if previousState != nextState {
             withAnimation(.easeInOut(duration: 0.2)) {
                 chromeState = nextState
             }
@@ -897,7 +909,7 @@ public struct ReaderContainerView: View {
             !model.pages.isEmpty &&
             !hasPresentedOverlay &&
             !isDismissing &&
-            !chromeState.mode.showsChrome
+            !chromeState.showsChrome
     }
 
     private var verticalProgressScrubContext: ReaderProgressScrubContext {
