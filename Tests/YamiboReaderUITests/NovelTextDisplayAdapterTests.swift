@@ -343,6 +343,84 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertTrue(scrollViewBody.contains("viewportIndex"))
     }
 
+    func testVisibleSurfaceDiagnosticsSeparateIndexBuildFromViewportDrawing() throws {
+        let context = NovelTextViewportContext(
+            identity: NovelTextViewportIdentity(
+                threadURL: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=152&mobile=2")!,
+                documentView: 1,
+                maxView: 1,
+                fetchedAt: Date(timeIntervalSince1970: 0),
+                contentSource: .fallbackUnfilteredPage,
+                appearance: ReaderAppearanceSettings(),
+                layout: ReaderContainerLayout(width: 320, height: 568)
+            ),
+            document: NovelTextViewportDocument(
+                text: "visible viewport text",
+                textRangesBySegment: [0: ReaderRenderedTextRange(segmentIndex: 0, startOffset: 0, endOffset: 21)],
+                insertedSeparatorRanges: []
+            ),
+            externalBlocks: [],
+            diagnostics: NovelTextViewportDiagnostics(indexBuildCount: 1)
+        )
+        let viewportPage = NovelTextViewportIndexPage(
+            pageIndex: 0,
+            documentView: 1,
+            chapterOrdinal: 0,
+            chapterTitle: "第一章",
+            ranges: [ReaderRenderedTextRange(segmentIndex: 0, startOffset: 0, endOffset: 21)],
+            chapterCommentTarget: nil
+        )
+
+        let diagnostics = NovelTextViewportVisibleSurfaceDiagnostics(
+            viewportContext: context,
+            viewportPage: viewportPage,
+            compatibilityBlocks: []
+        )
+
+        XCTAssertEqual(diagnostics.indexBuildCount, 1)
+        XCTAssertEqual(diagnostics.visibleSurfaceLayoutPassCount, 1)
+        XCTAssertEqual(diagnostics.perBlockTextKitDocumentCount, 0)
+        XCTAssertEqual(diagnostics.compatibilityTextDisplayValueCount, 0)
+        XCTAssertTrue(diagnostics.usesSharedViewportContext)
+    }
+
+    func testAllVisibleViewportModesRenderSharedContextThroughLazyCollectionCells() throws {
+        let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let supportSource = try String(
+            contentsOf: repositoryRoot
+                .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderSupportViews.swift"),
+            encoding: .utf8
+        )
+        let singlePageBody = try XCTUnwrap(typeBody(named: "ReaderPagedCollectionViewport", in: supportSource))
+        let spreadBody = try XCTUnwrap(typeBody(named: "ReaderPagedSpreadCollectionViewport", in: supportSource))
+        let spreadContentBody = try XCTUnwrap(typeBody(named: "ReaderPagedSpreadContent", in: supportSource))
+        let verticalBody = try XCTUnwrap(typeBody(named: "ReaderVerticalViewportScrollView", in: supportSource))
+
+        for body in [singlePageBody, verticalBody] {
+            XCTAssertTrue(body.contains("UICollectionViewDataSource"))
+            XCTAssertTrue(body.contains("cellForItemAt"))
+            XCTAssertTrue(body.contains("UIHostingConfiguration"))
+            XCTAssertTrue(body.contains("ReaderViewportPageContent"))
+            XCTAssertTrue(body.contains("parent.viewportContext"))
+            XCTAssertTrue(body.contains("parent.viewportIndex"))
+            XCTAssertFalse(body.contains("ForEach(parent.pages"))
+            XCTAssertFalse(body.contains("ReaderBlockNovelTextDisplayMaterializer"))
+            XCTAssertFalse(body.contains("NovelTextKit2Representable("))
+        }
+        XCTAssertTrue(spreadBody.contains("UICollectionViewDataSource"))
+        XCTAssertTrue(spreadBody.contains("cellForItemAt"))
+        XCTAssertTrue(spreadBody.contains("UIHostingConfiguration"))
+        XCTAssertTrue(spreadBody.contains("ReaderPagedSpreadContent"))
+        XCTAssertTrue(spreadBody.contains("parent.viewportContext"))
+        XCTAssertTrue(spreadBody.contains("parent.viewportIndex"))
+        XCTAssertTrue(spreadContentBody.contains("ReaderViewportPageContent"))
+        XCTAssertTrue(spreadContentBody.contains("viewportContext"))
+        XCTAssertTrue(spreadContentBody.contains("viewportIndex"))
+        XCTAssertFalse(spreadBody.contains("ForEach(parent.pages"))
+        XCTAssertFalse(spreadBody.contains("ReaderBlockNovelTextDisplayMaterializer"))
+        XCTAssertFalse(spreadBody.contains("NovelTextKit2Representable("))
+    }
+
     func testViewportPageContentDerivesNormalTextFromViewportContextAndIndexBeforeCompatibilityPageBlocks() throws {
         let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let supportSource = try String(
@@ -356,6 +434,8 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertTrue(viewportPageContentBody.contains("viewportContext.document.textRangesBySegment"))
         XCTAssertTrue(viewportPageContentBody.contains("viewportPage.ranges"))
         XCTAssertTrue(viewportPageContentBody.contains("compatibilityBlocks"))
+        XCTAssertTrue(viewportPageContentBody.contains("visibleSurfaceDiagnostics("))
+        XCTAssertTrue(viewportPageContentBody.contains("NovelTextViewportVisibleSurfaceDiagnostics"))
         XCTAssertFalse(viewportPageContentBody.contains("page.novelTextDisplayValues.first"))
     }
 
