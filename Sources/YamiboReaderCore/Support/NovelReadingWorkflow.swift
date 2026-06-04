@@ -236,6 +236,10 @@ public final class NovelReadingWorkflow {
         )
     }
 
+    public func currentPreviewSourceText() -> String {
+        session?.currentPreviewSourceText() ?? ""
+    }
+
     private func cacheContext(for document: ReaderPageDocument) -> NovelReadingCacheContext {
         switch document.contentSource {
         case .authorFilteredPage:

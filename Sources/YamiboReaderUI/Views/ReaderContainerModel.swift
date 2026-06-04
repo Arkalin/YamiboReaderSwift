@@ -121,7 +121,7 @@ public final class ReaderContainerModel: ObservableObject {
         characterCount: Int,
         fallback: String
     ) -> String {
-        let sourceText = rawPreviewTextForCurrentLocation().trimmingCharacters(in: .whitespacesAndNewlines)
+        let sourceText = readingWorkflow?.currentPreviewSourceText().trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let previewSource = sourceText.isEmpty ? fallback : sourceText
         let transformed = ReaderTextTransformer.transform(previewSource, mode: translationMode)
         return String(transformed.prefix(max(characterCount, 0)))
@@ -927,44 +927,6 @@ public final class ReaderContainerModel: ObservableObject {
         return currentDocument
     }
 
-    private func rawPreviewTextForCurrentLocation() -> String {
-        guard let document = document(for: currentRenderedPageMetadata?.documentView) ?? currentDocument else {
-            return ""
-        }
-        guard !document.segments.isEmpty else { return "" }
-
-        let currentRange = currentRenderedPageMetadata.flatMap {
-            textPosition(for: currentPageIntraProgress, in: $0)?.range
-        }
-        let startSegmentIndex = min(
-            max(currentRange?.segmentIndex ?? currentRenderedPageMetadata?.segmentIndex ?? 0, 0),
-            max(document.segments.count - 1, 0)
-        )
-        let startOffset = currentRange?.startOffset ?? currentRenderedPageMetadata?.segmentStartOffset ?? 0
-
-        let fragments = document.segments[startSegmentIndex...].enumerated().compactMap { offset, segment -> String? in
-            guard case let .text(text, _) = segment else { return nil }
-
-            let previewText = offset == 0
-                ? text.droppingReaderPreviewCharacters(startOffset)
-                : text
-            let trimmed = previewText.trimmingCharacters(in: .whitespacesAndNewlines)
-            return trimmed.isEmpty ? nil : trimmed
-        }
-
-        return fragments.joined(separator: "\n\n")
-    }
-
-    private func document(for view: Int?) -> ReaderPageDocument? {
-        if view == prefetchedDocument?.view {
-            return prefetchedDocument
-        }
-        if view == currentDocument?.view {
-            return currentDocument
-        }
-        return nil
-    }
-
     private var currentRenderedPageMetadata: ReaderRenderedPage? {
         let normalizedIndex = normalizedPagedPageIndex(currentPageIndex)
         guard pages.indices.contains(normalizedIndex) else { return nil }
@@ -989,36 +951,6 @@ public final class ReaderContainerModel: ObservableObject {
             Task {
                 await promotePrefetchedDocument(startingAt: 0, preferredResumePoint: nil)
             }
-        }
-    }
-
-    private func textPosition(for intraPageProgress: Double, in page: ReaderRenderedPage) -> ReaderPageTextPosition? {
-        let ranges = page.novelTextDisplayValues.flatMap(\.ranges)
-        guard !ranges.isEmpty else { return nil }
-        guard ranges.count > 1 else {
-            return ranges.first.map {
-                ReaderPageTextPosition(range: $0, progressInRange: min(max(intraPageProgress, 0), 1))
-            }
-        }
-
-        let totalLength = ranges.reduce(0) { $0 + max($1.length, 1) }
-        let targetOffset = Int((Double(totalLength) * min(max(intraPageProgress, 0), 1)).rounded(.towardZero))
-        var runningLength = 0
-
-        for range in ranges {
-            let length = max(range.length, 1)
-            if targetOffset < runningLength + length {
-                let progressInRange = Double(targetOffset - runningLength) / Double(length)
-                return ReaderPageTextPosition(
-                    range: range,
-                    progressInRange: min(max(progressInRange, 0), 1)
-                )
-            }
-            runningLength += length
-        }
-
-        return ranges.last.map {
-            ReaderPageTextPosition(range: $0, progressInRange: 1)
         }
     }
 
@@ -1187,20 +1119,5 @@ public final class ReaderContainerModel: ObservableObject {
 
     private func syncCachedViews(_ views: Set<Int>) {
         cacheOperationModule.syncCachedViews(views)
-    }
-}
-
-private struct ReaderPageTextPosition {
-    let range: ReaderRenderedTextRange
-    let progressInRange: Double
-}
-
-private extension String {
-    func droppingReaderPreviewCharacters(_ count: Int) -> String {
-        guard count > 0 else { return self }
-        guard count < self.count else { return "" }
-
-        let start = index(startIndex, offsetBy: count)
-        return String(self[start...])
     }
 }
