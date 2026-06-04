@@ -23,8 +23,8 @@ public enum ReaderPaginator {
         document: ReaderPageDocument,
         settings: ReaderAppearanceSettings,
         layout: ReaderContainerLayout
-    ) -> ReaderPaginationResult {
-        NovelTextLayout.renderedPagesOrEmpty(document: document, settings: settings, layout: layout)
+    ) throws -> ReaderPaginationResult {
+        try NovelTextLayout.renderedPages(document: document, settings: settings, layout: layout)
     }
 
     public static func paginateNovelTextLayout(

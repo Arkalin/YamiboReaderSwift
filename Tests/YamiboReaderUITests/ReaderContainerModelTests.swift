@@ -1090,7 +1090,7 @@ final class ReaderContainerModelTests: XCTestCase {
                 .text(String(repeating: "第三章 内容。", count: 120), chapterTitle: "第三章")
             ]
         )
-        let pagination = NovelTextLayout.renderedPagesOrEmpty(
+        let pagination = try NovelTextLayout.renderedPages(
             document: document,
             settings: ReaderAppearanceSettings(readingMode: .vertical),
             layout: ReaderContainerLayout(width: 320, height: 568)
@@ -1241,7 +1241,7 @@ final class ReaderContainerModelTests: XCTestCase {
                 .text(String(repeating: "第三章 内容。", count: 160), chapterTitle: "第三章")
             ]
         )
-        let pagination = NovelTextLayout.renderedPagesOrEmpty(
+        let pagination = try NovelTextLayout.renderedPages(
             document: document,
             settings: ReaderAppearanceSettings(readingMode: .vertical),
             layout: ReaderContainerLayout(width: 320, height: 568)

@@ -94,9 +94,7 @@ public struct NovelReadingSession: Sendable {
             layout: layout,
             usesPadPresentation: usesPadPresentation,
             currentAuthorID: currentAuthorID,
-            pagination: { document, settings, layout in
-                NovelTextLayout.renderedPagesOrEmpty(document: document, settings: settings, layout: layout)
-            }
+            pagination: NovelTextLayout.renderedPages
         )
         applyPaginationIgnoringFailure(for: document, preferredPage: preferredPage, preferredResumePoint: resumePoint)
     }

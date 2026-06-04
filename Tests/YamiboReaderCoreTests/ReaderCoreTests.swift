@@ -794,6 +794,23 @@ private final class StubURLProtocol: URLProtocol {
     #expect(!appKitTextFitsBody.contains("boundingRect"))
 }
 
+@Test func novelTextLayoutDoesNotExposeStaleMeasurementFallbackSurfaces() throws {
+    let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+    let sourceFiles = [
+        "Sources/YamiboReaderCore/Support/NovelTextLayout.swift",
+        "Sources/YamiboReaderCore/Support/NovelReadingSession.swift",
+        "Sources/YamiboReaderCore/Support/ReaderPaginator.swift",
+    ]
+    let productionSource = try sourceFiles.map { path in
+        try String(contentsOf: repositoryRoot.appendingPathComponent(path), encoding: .utf8)
+    }.joined(separator: "\n")
+
+    #expect(!productionSource.contains("renderedPagesOrEmpty"))
+    #expect(!productionSource.contains("emptyPagination"))
+    #expect(!productionSource.contains("estimatedTextHeight"))
+    #expect(!productionSource.contains("text.count < 180"))
+}
+
 @Test func novelTextLayoutAssemblesDocumentPagesChaptersImagesAndTextDisplayValues() async throws {
     let imageURL = try #require(URL(string: "https://example.com/image.jpg"))
     let document = ReaderPageDocument(

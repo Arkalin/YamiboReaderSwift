@@ -129,7 +129,7 @@ final class NovelReadingSessionTests: XCTestCase {
         )
         let settings = ReaderAppearanceSettings(readingMode: .vertical)
         let layout = ReaderContainerLayout(width: 320, height: 568)
-        let pagination = NovelTextLayout.renderedPagesOrEmpty(document: document, settings: settings, layout: layout)
+        let pagination = try NovelTextLayout.renderedPages(document: document, settings: settings, layout: layout)
         let savedPage = try XCTUnwrap(
             pagination.pages.first { $0.chapterTitle == "第三章" && $0.segmentIndex != nil }
         )
