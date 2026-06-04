@@ -17,7 +17,7 @@ public struct NovelReadingPosition: Hashable, Sendable {
         resumePoint: ReaderResumePoint? = nil
     ) {
         self.threadURL = threadURL
-        self.view = max(1, resumePoint?.view ?? view)
+        self.view = max(1, view)
         self.page = max(0, page)
         self.chapterTitle = resumePoint?.chapterTitle ?? chapterTitle
         self.authorID = resumePoint?.authorID ?? authorID

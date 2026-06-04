@@ -560,12 +560,17 @@ final class NovelReadingWorkflowTests: XCTestCase {
 
         _ = try await workflow.loadView(2, preferredPage: 0, preferredResumePoint: nil, forceRefresh: false)
         let resumePoint = try XCTUnwrap(workflow.captureNovelReadingPosition())
+        let progressPosition = workflow.currentProgressPosition()
 
         XCTAssertEqual(resumePoint.view, 1)
         XCTAssertEqual(resumePoint.chapterOrdinal, 0)
         XCTAssertEqual(resumePoint.chapterTitle, "第一章")
         XCTAssertEqual(resumePoint.segmentIndex, 0)
         XCTAssertEqual(resumePoint.segmentOffset, 24)
+        XCTAssertEqual(progressPosition.view, 2)
+        XCTAssertEqual(progressPosition.page, 0)
+        XCTAssertEqual(progressPosition.resumePoint?.view, 1)
+        XCTAssertEqual(progressPosition.resumePoint?.segmentOffset, 24)
     }
 
     func testCurrentProgressPositionUsesSessionBackedResumePoint() async throws {
