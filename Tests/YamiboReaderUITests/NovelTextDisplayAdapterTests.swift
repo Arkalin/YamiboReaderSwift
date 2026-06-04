@@ -343,6 +343,22 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertTrue(scrollViewBody.contains("viewportIndex"))
     }
 
+    func testViewportPageContentDerivesNormalTextFromViewportContextAndIndexBeforeCompatibilityPageBlocks() throws {
+        let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let supportSource = try String(
+            contentsOf: repositoryRoot
+                .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderSupportViews.swift"),
+            encoding: .utf8
+        )
+        let viewportPageContentBody = try XCTUnwrap(typeBody(named: "ReaderViewportPageContent", in: supportSource))
+
+        XCTAssertTrue(viewportPageContentBody.contains("viewportBackedPage("))
+        XCTAssertTrue(viewportPageContentBody.contains("viewportContext.document.textRangesBySegment"))
+        XCTAssertTrue(viewportPageContentBody.contains("viewportPage.ranges"))
+        XCTAssertTrue(viewportPageContentBody.contains("compatibilityBlocks"))
+        XCTAssertFalse(viewportPageContentBody.contains("page.novelTextDisplayValues.first"))
+    }
+
     func testNovelReadingSessionDisplayPathDoesNotRetainUIKitTextViewFallback() throws {
         let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let readerSupportSource = try String(
