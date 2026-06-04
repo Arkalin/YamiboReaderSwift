@@ -442,16 +442,9 @@ public struct ReaderRenderedPage: Hashable, Identifiable, Sendable {
     public var documentView: Int
     public var chapterOrdinal: Int?
     public var chapterTitle: String?
-    public var viewportTextRanges: [ReaderRenderedTextRange]
-    public var segmentIndex: Int?
-    public var segmentStartOffset: Int
-    public var segmentEndOffset: Int
     public var chapterCommentTarget: ReaderChapterCommentTarget?
 
     public var id: Int { index }
-    public var novelTextDisplayValues: [NovelTextDisplayValue] {
-        blocks.compactMap(\.novelTextDisplayValue)
-    }
 
     public init(
         index: Int,
@@ -459,24 +452,13 @@ public struct ReaderRenderedPage: Hashable, Identifiable, Sendable {
         documentView: Int = 1,
         chapterOrdinal: Int? = nil,
         chapterTitle: String? = nil,
-        viewportTextRanges: [ReaderRenderedTextRange] = [],
-        segmentIndex: Int? = nil,
-        segmentStartOffset: Int = 0,
-        segmentEndOffset: Int = 0,
-        chapterCommentTarget: ReaderChapterCommentTarget? = nil,
-        derivesViewportTextRangesFromBlocks: Bool = true
+        chapterCommentTarget: ReaderChapterCommentTarget? = nil
     ) {
         self.index = index
         self.blocks = blocks
         self.documentView = max(1, documentView)
         self.chapterOrdinal = chapterOrdinal
         self.chapterTitle = chapterTitle
-        self.viewportTextRanges = derivesViewportTextRangesFromBlocks && viewportTextRanges.isEmpty
-            ? blocks.compactMap(\.novelTextDisplayValue).flatMap(\.ranges)
-            : viewportTextRanges
-        self.segmentIndex = segmentIndex
-        self.segmentStartOffset = max(0, segmentStartOffset)
-        self.segmentEndOffset = max(self.segmentStartOffset, segmentEndOffset)
         self.chapterCommentTarget = chapterCommentTarget
     }
 }

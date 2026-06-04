@@ -127,10 +127,7 @@ final class NovelReadingSessionTests: XCTestCase {
                             ],
                             documentView: document.view,
                             chapterOrdinal: 1,
-                            chapterTitle: "第二章",
-                            segmentIndex: 99,
-                            segmentStartOffset: 0,
-                            segmentEndOffset: 1
+                            chapterTitle: "第二章"
                         )
                     ],
                     chapters: [
@@ -202,10 +199,7 @@ final class NovelReadingSessionTests: XCTestCase {
                             ],
                             documentView: document.view,
                             chapterOrdinal: 0,
-                            chapterTitle: "第一章",
-                            segmentIndex: 99,
-                            segmentStartOffset: 900,
-                            segmentEndOffset: 950
+                            chapterTitle: "第一章"
                         )
                     ],
                     chapters: [
@@ -275,10 +269,7 @@ final class NovelReadingSessionTests: XCTestCase {
                             ],
                             documentView: document.view,
                             chapterOrdinal: 0,
-                            chapterTitle: "第一章",
-                            segmentIndex: 99,
-                            segmentStartOffset: 0,
-                            segmentEndOffset: 1
+                            chapterTitle: "第一章"
                         )
                     ],
                     chapters: [
@@ -319,7 +310,7 @@ final class NovelReadingSessionTests: XCTestCase {
         XCTAssertEqual(restoredPosition.segmentProgress, savedPosition.segmentProgress)
     }
 
-    func testRestoresNovelReadingPositionFromNovelTextDisplayValueRanges() throws {
+    func testRestoresNovelReadingPositionFromViewportIndexRangesWithoutRenderedPageMetadata() throws {
         let document = makeNovelDocument(
             view: 1,
             maxView: 1,
@@ -359,15 +350,30 @@ final class NovelReadingSessionTests: XCTestCase {
                             ],
                             documentView: document.view,
                             chapterOrdinal: 1,
-                            chapterTitle: "第二章",
-                            segmentIndex: 99,
-                            segmentStartOffset: 0,
-                            segmentEndOffset: 0
+                            chapterTitle: "第二章"
                         )
                     ],
                     chapters: [
                         ReaderChapter(ordinal: 1, title: "第二章", startIndex: 0)
-                    ]
+                    ],
+                    viewportIndex: NovelTextViewportIndex(
+                        documentView: document.view,
+                        readingMode: .paged,
+                        pages: [
+                            NovelTextViewportIndexPage(
+                                pageIndex: 0,
+                                documentView: document.view,
+                                chapterOrdinal: 1,
+                                chapterTitle: "第二章",
+                                ranges: [
+                                    ReaderRenderedTextRange(segmentIndex: 1, startOffset: 10, endOffset: 20)
+                                ]
+                            )
+                        ],
+                        chapters: [
+                            NovelTextViewportIndexChapter(ordinal: 1, title: "第二章", startPageIndex: 0)
+                        ]
+                    )
                 )
             }
         )
@@ -377,7 +383,7 @@ final class NovelReadingSessionTests: XCTestCase {
         XCTAssertEqual(session.snapshot.currentPageIntraProgress, 0.5, accuracy: 0.001)
     }
 
-    func testCapturesNovelReadingPositionFromRenderedPageDisplayValueRanges() throws {
+    func testCapturesNovelReadingPositionFromViewportIndexRangesWithoutRenderedPageMetadata() throws {
         let document = makeNovelDocument(
             view: 1,
             maxView: 1,
@@ -408,15 +414,31 @@ final class NovelReadingSessionTests: XCTestCase {
                             ],
                             documentView: document.view,
                             chapterOrdinal: 0,
-                            chapterTitle: "第一章",
-                            segmentIndex: 99,
-                            segmentStartOffset: 900,
-                            segmentEndOffset: 950
+                            chapterTitle: "第一章"
                         )
                     ],
                     chapters: [
                         ReaderChapter(ordinal: 0, title: "第一章", startIndex: 0)
-                    ]
+                    ],
+                    viewportIndex: NovelTextViewportIndex(
+                        documentView: document.view,
+                        readingMode: .vertical,
+                        pages: [
+                            NovelTextViewportIndexPage(
+                                pageIndex: 0,
+                                documentView: document.view,
+                                chapterOrdinal: 0,
+                                chapterTitle: "第一章",
+                                ranges: [
+                                    ReaderRenderedTextRange(segmentIndex: 1, startOffset: 10, endOffset: 30),
+                                    ReaderRenderedTextRange(segmentIndex: 2, startOffset: 4, endOffset: 24)
+                                ]
+                            )
+                        ],
+                        chapters: [
+                            NovelTextViewportIndexChapter(ordinal: 0, title: "第一章", startPageIndex: 0)
+                        ]
+                    )
                 )
             }
         )
@@ -446,15 +468,16 @@ final class NovelReadingSessionTests: XCTestCase {
         let settings = ReaderAppearanceSettings(readingMode: .vertical)
         let layout = ReaderContainerLayout(width: 320, height: 568)
         let pagination = try NovelTextLayout.renderedPages(document: document, settings: settings, layout: layout)
-        let savedPage = try XCTUnwrap(
-            pagination.pages.first { $0.chapterTitle == "第三章" && $0.segmentIndex != nil }
+        let savedViewportPage = try XCTUnwrap(
+            pagination.viewportIndex?.pages.first { $0.chapterTitle == "第三章" && !$0.ranges.isEmpty }
         )
-        let savedOffset = savedPage.segmentStartOffset + max(1, (savedPage.segmentEndOffset - savedPage.segmentStartOffset) / 2)
+        let savedRange = try XCTUnwrap(savedViewportPage.ranges.first)
+        let savedOffset = savedRange.startOffset + max(1, savedRange.length / 2)
         let resumePoint = ReaderResumePoint(
             view: 2,
-            chapterOrdinal: try XCTUnwrap(savedPage.chapterOrdinal),
-            chapterTitle: savedPage.chapterTitle,
-            segmentIndex: try XCTUnwrap(savedPage.segmentIndex),
+            chapterOrdinal: try XCTUnwrap(savedViewportPage.chapterOrdinal),
+            chapterTitle: savedViewportPage.chapterTitle,
+            segmentIndex: savedRange.segmentIndex,
             segmentOffset: savedOffset,
             segmentProgress: 0.5,
             readingModeHint: .vertical
@@ -469,8 +492,8 @@ final class NovelReadingSessionTests: XCTestCase {
 
         XCTAssertEqual(session.snapshot.currentView, 2)
         XCTAssertEqual(session.snapshot.currentChapterTitle, "第三章")
-        XCTAssertEqual(session.snapshot.currentPageIndex, savedPage.index)
-        XCTAssertEqual(session.snapshot.pages[session.snapshot.currentPageIndex].segmentIndex, savedPage.segmentIndex)
+        XCTAssertEqual(session.snapshot.currentPageIndex, savedViewportPage.pageIndex)
+        XCTAssertEqual(session.snapshot.viewportIndex?.pages[session.snapshot.currentPageIndex].ranges.first?.segmentIndex, savedRange.segmentIndex)
         XCTAssertGreaterThan(session.snapshot.currentPageIntraProgress, 0.2)
     }
 
@@ -487,15 +510,17 @@ final class NovelReadingSessionTests: XCTestCase {
             settings: ReaderAppearanceSettings(readingMode: .paged),
             layout: ReaderContainerLayout(width: 320, height: 568)
         )
-        let targetPage = try XCTUnwrap(session.snapshot.pages.dropFirst().first { $0.segmentIndex != nil })
-        let targetOffset = targetPage.segmentStartOffset + max(1, (targetPage.segmentEndOffset - targetPage.segmentStartOffset) / 2)
+        let targetViewportPage = try XCTUnwrap(session.snapshot.viewportIndex?.pages.dropFirst().first { !$0.ranges.isEmpty })
+        let targetRange = try XCTUnwrap(targetViewportPage.ranges.first)
+        let targetOffset = targetRange.startOffset + max(1, targetRange.length / 2)
 
-        session.updateVerticalViewportPosition(pageIndex: targetPage.index, intraPageProgress: 0.5)
+        session.updateVerticalViewportPosition(pageIndex: targetViewportPage.pageIndex, intraPageProgress: 0.5)
         try session.applySettings(ReaderAppearanceSettings(readingMode: .vertical))
 
-        let restoredPage = session.snapshot.pages[session.snapshot.currentPageIndex]
+        let restoredViewportPage = try XCTUnwrap(session.snapshot.viewportIndex?.pages[session.snapshot.currentPageIndex])
+        let restoredPage = session.snapshot.pages[restoredViewportPage.pageIndex]
         XCTAssertEqual(restoredPage.chapterTitle, "第一章")
-        XCTAssertTrue(pageContainsSegmentOffset(restoredPage, segmentIndex: try XCTUnwrap(targetPage.segmentIndex), offset: targetOffset))
+        XCTAssertTrue(viewportPageContainsSegmentOffset(restoredViewportPage, segmentIndex: targetRange.segmentIndex, offset: targetOffset))
     }
 
     func testEnablingParagraphFirstLineIndentPreservesNovelReadingPositionOffset() throws {
@@ -511,10 +536,11 @@ final class NovelReadingSessionTests: XCTestCase {
             settings: ReaderAppearanceSettings(readingMode: .paged),
             layout: ReaderContainerLayout(width: 320, height: 568)
         )
-        let targetPage = try XCTUnwrap(session.snapshot.pages.dropFirst().first { $0.segmentIndex != nil })
-        let targetOffset = targetPage.segmentStartOffset + max(1, (targetPage.segmentEndOffset - targetPage.segmentStartOffset) / 2)
+        let targetViewportPage = try XCTUnwrap(session.snapshot.viewportIndex?.pages.dropFirst().first { !$0.ranges.isEmpty })
+        let targetRange = try XCTUnwrap(targetViewportPage.ranges.first)
+        let targetOffset = targetRange.startOffset + max(1, targetRange.length / 2)
 
-        session.updateVerticalViewportPosition(pageIndex: targetPage.index, intraPageProgress: 0.5)
+        session.updateVerticalViewportPosition(pageIndex: targetViewportPage.pageIndex, intraPageProgress: 0.5)
         try session.applySettings(
             ReaderAppearanceSettings(
                 indentsParagraphFirstLine: true,
@@ -522,9 +548,10 @@ final class NovelReadingSessionTests: XCTestCase {
             )
         )
 
-        let restoredPage = session.snapshot.pages[session.snapshot.currentPageIndex]
+        let restoredViewportPage = try XCTUnwrap(session.snapshot.viewportIndex?.pages[session.snapshot.currentPageIndex])
+        let restoredPage = session.snapshot.pages[restoredViewportPage.pageIndex]
         XCTAssertEqual(restoredPage.chapterTitle, "第一章")
-        XCTAssertTrue(pageContainsSegmentOffset(restoredPage, segmentIndex: try XCTUnwrap(targetPage.segmentIndex), offset: targetOffset))
+        XCTAssertTrue(viewportPageContainsSegmentOffset(restoredViewportPage, segmentIndex: targetRange.segmentIndex, offset: targetOffset))
     }
 
     func testPagedTextKitRepaginationPreservesSemanticReadingPosition() throws {
@@ -557,16 +584,16 @@ final class NovelReadingSessionTests: XCTestCase {
             )
         )
 
-        let restoredPage = session.snapshot.pages[session.snapshot.currentPageIndex]
+        let restoredViewportPage = try XCTUnwrap(session.snapshot.viewportIndex?.pages[session.snapshot.currentPageIndex])
         XCTAssertEqual(savedPosition.view, 1)
         XCTAssertEqual(savedPosition.chapterOrdinal, 0)
         XCTAssertEqual(savedPosition.chapterTitle, "第一章")
         XCTAssertEqual(savedPosition.segmentIndex, 0)
         XCTAssertEqual(savedPosition.segmentOffset, 150)
         XCTAssertEqual(savedPosition.readingModeHint, .paged)
-        XCTAssertTrue(pageContainsSegmentOffset(restoredPage, segmentIndex: 0, offset: savedPosition.segmentOffset))
-        XCTAssertEqual(restoredPage.segmentStartOffset, 120)
-        XCTAssertEqual(restoredPage.segmentEndOffset, 180)
+        XCTAssertTrue(viewportPageContainsSegmentOffset(restoredViewportPage, segmentIndex: 0, offset: savedPosition.segmentOffset))
+        XCTAssertEqual(restoredViewportPage.ranges.first?.startOffset, 120)
+        XCTAssertEqual(restoredViewportPage.ranges.first?.endOffset, 180)
         XCTAssertEqual(session.snapshot.currentPageIntraProgress, 0.5, accuracy: 0.001)
     }
 
@@ -601,13 +628,13 @@ final class NovelReadingSessionTests: XCTestCase {
             )
         )
 
-        let restoredPage = session.snapshot.pages[session.snapshot.currentPageIndex]
+        let restoredViewportPage = try XCTUnwrap(session.snapshot.viewportIndex?.pages[session.snapshot.currentPageIndex])
         XCTAssertEqual(savedPosition.segmentOffset, 50)
         XCTAssertEqual(savedPosition.segmentProgress, 0.25, accuracy: 0.001)
         XCTAssertEqual(savedPosition.readingModeHint, .vertical)
-        XCTAssertTrue(pageContainsSegmentOffset(restoredPage, segmentIndex: 0, offset: savedPosition.segmentOffset))
-        XCTAssertEqual(restoredPage.segmentStartOffset, 40)
-        XCTAssertEqual(restoredPage.segmentEndOffset, 80)
+        XCTAssertTrue(viewportPageContainsSegmentOffset(restoredViewportPage, segmentIndex: 0, offset: savedPosition.segmentOffset))
+        XCTAssertEqual(restoredViewportPage.ranges.first?.startOffset, 40)
+        XCTAssertEqual(restoredViewportPage.ranges.first?.endOffset, 80)
         XCTAssertEqual(session.snapshot.currentPageIntraProgress, 0.25, accuracy: 0.001)
     }
 
@@ -709,21 +736,13 @@ private func makeNovelDocument(
     )
 }
 
-private func pageContainsSegmentOffset(_ page: ReaderRenderedPage, segmentIndex: Int, offset: Int) -> Bool {
-    let matchingRanges = page.novelTextDisplayValues.flatMap(\.ranges).filter { $0.segmentIndex == segmentIndex }
-    if !matchingRanges.isEmpty {
-        return matchingRanges.contains { range in
-            if range.startOffset == range.endOffset {
-                return offset <= range.startOffset
-            }
-            return offset >= range.startOffset && offset < range.endOffset
+private func viewportPageContainsSegmentOffset(_ page: NovelTextViewportIndexPage, segmentIndex: Int, offset: Int) -> Bool {
+    page.ranges.filter { $0.segmentIndex == segmentIndex }.contains { range in
+        if range.startOffset == range.endOffset {
+            return offset <= range.startOffset
         }
+        return offset >= range.startOffset && offset < range.endOffset
     }
-    guard page.segmentIndex == segmentIndex else { return false }
-    if page.segmentStartOffset == page.segmentEndOffset {
-        return offset <= page.segmentStartOffset
-    }
-    return offset >= page.segmentStartOffset && offset < page.segmentEndOffset
 }
 
 private func textRangePagination(
@@ -738,30 +757,37 @@ private func textRangePagination(
             pages: ranges.enumerated().map { index, range in
                 ReaderRenderedPage(
                     index: index,
-                    blocks: [
-                        .text(
-                            "slice-\(range.lowerBound)-\(range.upperBound)",
-                            chapterTitle: "第一章",
-                            ranges: [
-                                ReaderRenderedTextRange(
-                                    segmentIndex: 0,
-                                    startOffset: range.lowerBound,
-                                    endOffset: range.upperBound
-                                )
-                            ]
-                        )
-                    ],
+                    blocks: [],
                     documentView: document.view,
                     chapterOrdinal: 0,
-                    chapterTitle: "第一章",
-                    segmentIndex: 0,
-                    segmentStartOffset: range.lowerBound,
-                    segmentEndOffset: range.upperBound
+                    chapterTitle: "第一章"
                 )
             },
             chapters: [
                 ReaderChapter(ordinal: 0, title: "第一章", startIndex: 0)
-            ]
+            ],
+            viewportIndex: NovelTextViewportIndex(
+                documentView: document.view,
+                readingMode: settings.readingMode,
+                pages: ranges.enumerated().map { index, range in
+                    NovelTextViewportIndexPage(
+                        pageIndex: index,
+                        documentView: document.view,
+                        chapterOrdinal: 0,
+                        chapterTitle: "第一章",
+                        ranges: [
+                            ReaderRenderedTextRange(
+                                segmentIndex: 0,
+                                startOffset: range.lowerBound,
+                                endOffset: range.upperBound
+                            )
+                        ]
+                    )
+                },
+                chapters: [
+                    NovelTextViewportIndexChapter(ordinal: 0, title: "第一章", startPageIndex: 0)
+                ]
+            )
         )
     }
 }
