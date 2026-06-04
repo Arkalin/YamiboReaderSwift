@@ -1023,18 +1023,19 @@ public final class ReaderContainerModel: ObservableObject {
     }
 
     private func textPosition(for intraPageProgress: Double, in page: ReaderRenderedPage) -> ReaderPageTextPosition? {
-        guard !page.textRanges.isEmpty else { return nil }
-        guard page.textRanges.count > 1 else {
-            return page.textRanges.first.map {
+        let ranges = page.novelTextDisplayValues.flatMap(\.ranges)
+        guard !ranges.isEmpty else { return nil }
+        guard ranges.count > 1 else {
+            return ranges.first.map {
                 ReaderPageTextPosition(range: $0, progressInRange: min(max(intraPageProgress, 0), 1))
             }
         }
 
-        let totalLength = page.textRanges.reduce(0) { $0 + max($1.length, 1) }
+        let totalLength = ranges.reduce(0) { $0 + max($1.length, 1) }
         let targetOffset = Int((Double(totalLength) * min(max(intraPageProgress, 0), 1)).rounded(.towardZero))
         var runningLength = 0
 
-        for range in page.textRanges {
+        for range in ranges {
             let length = max(range.length, 1)
             if targetOffset < runningLength + length {
                 let progressInRange = Double(targetOffset - runningLength) / Double(length)
@@ -1046,7 +1047,7 @@ public final class ReaderContainerModel: ObservableObject {
             runningLength += length
         }
 
-        return page.textRanges.last.map {
+        return ranges.last.map {
             ReaderPageTextPosition(range: $0, progressInRange: 1)
         }
     }

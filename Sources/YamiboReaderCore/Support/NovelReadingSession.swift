@@ -402,7 +402,6 @@ public struct NovelReadingSession: Sendable {
                 segmentIndex: page.segmentIndex,
                 segmentStartOffset: page.segmentStartOffset,
                 segmentEndOffset: page.segmentEndOffset,
-                textRanges: page.textRanges,
                 chapterCommentTarget: page.chapterCommentTarget
             )
         }
@@ -571,8 +570,9 @@ public struct NovelReadingSession: Sendable {
     }
 
     private func contains(offset: Int, in page: ReaderRenderedPage) -> Bool {
-        if !page.textRanges.isEmpty,
-           page.textRanges.contains(where: { contains(offset: offset, in: $0) }) {
+        let ranges = page.novelTextDisplayValues.flatMap(\.ranges)
+        if !ranges.isEmpty,
+           ranges.contains(where: { contains(offset: offset, in: $0) }) {
             return true
         }
         if page.segmentStartOffset == page.segmentEndOffset {
@@ -582,7 +582,9 @@ public struct NovelReadingSession: Sendable {
     }
 
     private func contains(offset: Int, segmentIndex: Int, in page: ReaderRenderedPage) -> Bool {
-        let matchingRanges = page.textRanges.filter { $0.segmentIndex == segmentIndex }
+        let matchingRanges = page.novelTextDisplayValues
+            .flatMap(\.ranges)
+            .filter { $0.segmentIndex == segmentIndex }
         if !matchingRanges.isEmpty {
             return matchingRanges.contains { contains(offset: offset, in: $0) }
         }
@@ -591,7 +593,8 @@ public struct NovelReadingSession: Sendable {
     }
 
     private func contains(segmentIndex: Int, in page: ReaderRenderedPage) -> Bool {
-        page.textRanges.contains { $0.segmentIndex == segmentIndex } || page.segmentIndex == segmentIndex
+        page.novelTextDisplayValues.flatMap(\.ranges).contains { $0.segmentIndex == segmentIndex }
+            || page.segmentIndex == segmentIndex
     }
 
     private func contains(offset: Int, in range: ReaderRenderedTextRange) -> Bool {
@@ -602,8 +605,9 @@ public struct NovelReadingSession: Sendable {
     }
 
     private func distance(from offset: Int, to page: ReaderRenderedPage) -> Int {
-        if !page.textRanges.isEmpty {
-            return page.textRanges.map { distance(from: offset, to: $0) }.min() ?? 0
+        let ranges = page.novelTextDisplayValues.flatMap(\.ranges)
+        if !ranges.isEmpty {
+            return ranges.map { distance(from: offset, to: $0) }.min() ?? 0
         }
         if offset < page.segmentStartOffset {
             return page.segmentStartOffset - offset
@@ -612,7 +616,9 @@ public struct NovelReadingSession: Sendable {
     }
 
     private func distance(from offset: Int, segmentIndex: Int, to page: ReaderRenderedPage) -> Int {
-        let matchingRanges = page.textRanges.filter { $0.segmentIndex == segmentIndex }
+        let matchingRanges = page.novelTextDisplayValues
+            .flatMap(\.ranges)
+            .filter { $0.segmentIndex == segmentIndex }
         if !matchingRanges.isEmpty {
             return matchingRanges.map { distance(from: offset, to: $0) }.min() ?? 0
         }
@@ -630,11 +636,12 @@ public struct NovelReadingSession: Sendable {
     }
 
     private func intraPageProgress(for resumePoint: ReaderResumePoint, in page: ReaderRenderedPage) -> Double {
-        if !page.textRanges.isEmpty {
-            let totalLength = page.textRanges.reduce(0) { $0 + max($1.length, 1) }
+        let ranges = page.novelTextDisplayValues.flatMap(\.ranges)
+        if !ranges.isEmpty {
+            let totalLength = ranges.reduce(0) { $0 + max($1.length, 1) }
             var runningLength = 0
 
-            for range in page.textRanges {
+            for range in ranges {
                 let length = max(range.length, 1)
                 defer { runningLength += length }
                 guard range.segmentIndex == resumePoint.segmentIndex else { continue }
@@ -652,18 +659,19 @@ public struct NovelReadingSession: Sendable {
     }
 
     private func textPosition(for intraPageProgress: Double, in page: ReaderRenderedPage) -> ReaderPageTextPosition? {
-        guard !page.textRanges.isEmpty else { return nil }
-        guard page.textRanges.count > 1 else {
-            return page.textRanges.first.map {
+        let ranges = page.novelTextDisplayValues.flatMap(\.ranges)
+        guard !ranges.isEmpty else { return nil }
+        guard ranges.count > 1 else {
+            return ranges.first.map {
                 ReaderPageTextPosition(range: $0, progressInRange: min(max(intraPageProgress, 0), 1))
             }
         }
 
-        let totalLength = page.textRanges.reduce(0) { $0 + max($1.length, 1) }
+        let totalLength = ranges.reduce(0) { $0 + max($1.length, 1) }
         let targetOffset = Int((Double(totalLength) * min(max(intraPageProgress, 0), 1)).rounded(.towardZero))
         var runningLength = 0
 
-        for range in page.textRanges {
+        for range in ranges {
             let length = max(range.length, 1)
             if targetOffset < runningLength + length {
                 let progressInRange = Double(targetOffset - runningLength) / Double(length)
@@ -675,7 +683,7 @@ public struct NovelReadingSession: Sendable {
             runningLength += length
         }
 
-        return page.textRanges.last.map {
+        return ranges.last.map {
             ReaderPageTextPosition(range: $0, progressInRange: 1)
         }
     }
