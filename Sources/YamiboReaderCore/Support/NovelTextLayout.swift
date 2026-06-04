@@ -109,7 +109,7 @@ public enum NovelTextLayout {
                 )
             }
         )
-        let hasVisibleText = result.pages.contains { !$0.viewportTextRanges.isEmpty }
+        let hasVisibleText = result.viewportIndex?.pages.contains { !$0.ranges.isEmpty } ?? false
         let hasInputText = document.segments.contains { segment in
             guard case let .text(text, _) = segment else { return false }
             return !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -183,6 +183,7 @@ public enum NovelTextLayout {
         var pages: [ReaderRenderedPage] = []
         var chapters: [ReaderChapter] = []
         var seenChapterOrdinals = Set<Int>()
+        var viewportRangesByPageIndex: [Int: [ReaderRenderedTextRange]] = [:]
         let annotatedTextBySegment = Dictionary(
             uniqueKeysWithValues: annotatedSegments.map { ($0.index, $0.textContent) }
         )
@@ -205,7 +206,8 @@ public enum NovelTextLayout {
                            settings: settings,
                            layout: layout,
                            annotatedTextBySegment: annotatedTextBySegment,
-                           pages: &pages
+                           pages: &pages,
+                           viewportRangesByPageIndex: &viewportRangesByPageIndex
                        ) {
                         continue
                     }
@@ -216,12 +218,9 @@ public enum NovelTextLayout {
                         documentView: document.view,
                         chapterOrdinal: annotatedSegment.chapterOrdinal,
                         chapterTitle: annotatedSegment.chapterTitle,
-                        viewportTextRanges: [range],
-                        segmentIndex: annotatedSegment.index,
-                        segmentStartOffset: slice.startOffset,
-                        segmentEndOffset: slice.endOffset,
                         chapterCommentTarget: chapterCommentTarget(for: annotatedSegment, document: document)
                     )
+                    viewportRangesByPageIndex[page.index] = [range]
                     if let chapterOrdinal = annotatedSegment.chapterOrdinal,
                        let chapterTitle = annotatedSegment.chapterTitle,
                        seenChapterOrdinals.insert(chapterOrdinal).inserted {
@@ -244,9 +243,6 @@ public enum NovelTextLayout {
                     documentView: document.view,
                     chapterOrdinal: annotatedSegment.chapterOrdinal,
                     chapterTitle: annotatedSegment.chapterTitle,
-                    segmentIndex: annotatedSegment.index,
-                    segmentStartOffset: 0,
-                    segmentEndOffset: 0,
                     chapterCommentTarget: chapterCommentTarget(for: annotatedSegment, document: document)
                 )
                 if let chapterOrdinal = annotatedSegment.chapterOrdinal,
@@ -279,7 +275,8 @@ public enum NovelTextLayout {
             document: document,
             settings: settings,
             pages: pages,
-            chapters: chapters
+            chapters: chapters,
+            viewportRangesByPageIndex: viewportRangesByPageIndex
         )
         let viewportContext = NovelTextViewportContext(
             identity: viewportContextSeed.identity,
@@ -289,7 +286,7 @@ public enum NovelTextLayout {
                 indexBuildCount: viewportContextSeed.diagnostics.indexBuildCount,
                 visibleLayoutPassCount: viewportContextSeed.diagnostics.visibleLayoutPassCount,
                 compatibilityRenderedPageCount: pages.count,
-                compatibilityTextDisplayValueCount: pages.reduce(0) { $0 + $1.novelTextDisplayValues.count }
+                compatibilityTextDisplayValueCount: 0
             )
         )
 
@@ -375,7 +372,8 @@ public enum NovelTextLayout {
         document: ReaderPageDocument,
         settings: ReaderAppearanceSettings,
         pages: [ReaderRenderedPage],
-        chapters: [ReaderChapter]
+        chapters: [ReaderChapter],
+        viewportRangesByPageIndex: [Int: [ReaderRenderedTextRange]]
     ) -> NovelTextViewportIndex {
         let indexPages = pages.map { page in
             NovelTextViewportIndexPage(
@@ -383,7 +381,7 @@ public enum NovelTextLayout {
                 documentView: page.documentView,
                 chapterOrdinal: page.chapterOrdinal,
                 chapterTitle: page.chapterTitle,
-                ranges: page.viewportTextRanges,
+                ranges: viewportRangesByPageIndex[page.index] ?? [],
                 chapterCommentTarget: page.chapterCommentTarget
             )
         }
@@ -410,20 +408,23 @@ public enum NovelTextLayout {
         settings: ReaderAppearanceSettings,
         layout: ReaderContainerLayout,
         annotatedTextBySegment: [Int: String],
-        pages: inout [ReaderRenderedPage]
+        pages: inout [ReaderRenderedPage],
+        viewportRangesByPageIndex: inout [Int: [ReaderRenderedTextRange]]
     ) -> Bool {
         guard !pages.isEmpty else { return false }
         let previousIndex = pages.count - 1
-        var previousPage = pages[previousIndex]
+        let previousPage = pages[previousIndex]
+        let previousRanges = viewportRangesByPageIndex[previousPage.index] ?? []
         guard previousPage.documentView > 0,
               previousPage.chapterOrdinal == annotatedSegment.chapterOrdinal,
               previousPage.chapterTitle == annotatedSegment.chapterTitle,
               previousPage.chapterCommentTarget == chapterCommentTarget(for: annotatedSegment, document: document),
-              previousPage.blocks.isEmpty else {
+              previousPage.blocks.isEmpty,
+              !previousRanges.isEmpty else {
             return false
         }
 
-        let combinedText = (previousPage.viewportTextRanges + [range])
+        let combinedText = (previousRanges + [range])
             .compactMap { text(for: $0, annotatedTextBySegment: annotatedTextBySegment) }
             .joined(separator: "\n\n")
 
@@ -436,9 +437,7 @@ public enum NovelTextLayout {
             return false
         }
 
-        previousPage.viewportTextRanges.append(range)
-        previousPage.segmentEndOffset = max(previousPage.segmentEndOffset, range.endOffset)
-        pages[previousIndex] = previousPage
+        viewportRangesByPageIndex[previousPage.index] = previousRanges + [range]
         return true
     }
 

@@ -844,7 +844,7 @@ private final class StubURLProtocol: URLProtocol {
         ReaderRenderedTextRange(segmentIndex: 1, startOffset: 0, endOffset: 2)
     ])
     #expect(pagination.pages[1].blocks == [.image(imageURL, chapterTitle: "第一章")])
-    #expect(pagination.pages[2].segmentIndex == 3)
+    #expect(pagination.viewportIndex?.pages[2].ranges.first?.segmentIndex == 3)
     #expect(pagination.pages[2].blocks.isEmpty)
     #expect(pagination.viewportIndex?.pages[2].ranges == [
         ReaderRenderedTextRange(segmentIndex: 3, startOffset: 0, endOffset: 5)

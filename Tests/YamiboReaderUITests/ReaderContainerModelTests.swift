@@ -1070,7 +1070,10 @@ final class ReaderContainerModelTests: XCTestCase {
         await model.prepare(layout: ReaderContainerLayout(width: 320, height: 568))
 
         let targetIndex = await MainActor.run { min(2, max(model.renderedPageCount - 1, 0)) }
-        let targetPage = await MainActor.run { model.pages[targetIndex] }
+        let targetViewportPage = try await MainActor.run {
+            try viewportPage(in: model.viewportIndex, pageIndex: targetIndex)
+        }
+        let targetRange = try XCTUnwrap(targetViewportPage.ranges.first)
         await MainActor.run {
             model.updateVerticalViewportPosition(pageIndex: targetIndex, intraPageProgress: 0.55)
         }
@@ -1084,8 +1087,8 @@ final class ReaderContainerModelTests: XCTestCase {
         XCTAssertEqual(favorite?.lastView, 1)
         XCTAssertEqual(favorite?.lastChapter, "第一章")
         XCTAssertEqual(favorite?.novelResumePoint?.view, 1)
-        XCTAssertEqual(favorite?.novelResumePoint?.segmentIndex, targetPage.segmentIndex)
-        XCTAssertTrue((favorite?.novelResumePoint?.segmentOffset ?? 0) > targetPage.segmentStartOffset)
+        XCTAssertEqual(favorite?.novelResumePoint?.segmentIndex, targetRange.segmentIndex)
+        XCTAssertTrue((favorite?.novelResumePoint?.segmentOffset ?? 0) > targetRange.startOffset)
         XCTAssertEqual(favorite?.novelResumePoint?.chapterTitle, "第一章")
     }
 
@@ -1113,15 +1116,16 @@ final class ReaderContainerModelTests: XCTestCase {
             settings: ReaderAppearanceSettings(readingMode: .vertical),
             layout: ReaderContainerLayout(width: 320, height: 568)
         )
-        let savedPage = try XCTUnwrap(
-            pagination.pages.first(where: { $0.chapterTitle == "第三章" && $0.segmentIndex != nil })
+        let savedViewportPage = try XCTUnwrap(
+            pagination.viewportIndex?.pages.first(where: { $0.chapterTitle == "第三章" && !$0.ranges.isEmpty })
         )
-        let savedOffset = savedPage.segmentStartOffset + max(1, (savedPage.segmentEndOffset - savedPage.segmentStartOffset) / 2)
+        let savedRange = try XCTUnwrap(savedViewportPage.ranges.first)
+        let savedOffset = midpoint(in: savedRange)
         let savedResumePoint = ReaderResumePoint(
             view: 2,
-            chapterOrdinal: try XCTUnwrap(savedPage.chapterOrdinal),
-            chapterTitle: savedPage.chapterTitle,
-            segmentIndex: try XCTUnwrap(savedPage.segmentIndex),
+            chapterOrdinal: try XCTUnwrap(savedViewportPage.chapterOrdinal),
+            chapterTitle: savedViewportPage.chapterTitle,
+            segmentIndex: savedRange.segmentIndex,
             segmentOffset: savedOffset,
             segmentProgress: 0.5,
             authorID: nil,
@@ -1134,7 +1138,7 @@ final class ReaderContainerModelTests: XCTestCase {
             Favorite(
                 title: "测试线程",
                 url: threadURL,
-                lastPage: savedPage.index,
+                lastPage: savedViewportPage.pageIndex,
                 lastView: 2,
                 lastChapter: "第三章",
                 novelResumePoint: savedResumePoint,
@@ -1164,8 +1168,8 @@ final class ReaderContainerModelTests: XCTestCase {
         await MainActor.run {
             XCTAssertEqual(model.currentView, 2)
             XCTAssertEqual(model.currentChapterTitle, "第三章")
-            XCTAssertEqual(model.currentPageIndex, savedPage.index)
-            XCTAssertEqual(model.pages[model.currentPageIndex].segmentIndex, savedPage.segmentIndex)
+            XCTAssertEqual(model.currentPageIndex, savedViewportPage.pageIndex)
+            XCTAssertEqual(model.viewportIndex?.pages[model.currentPageIndex].ranges.first?.segmentIndex, savedRange.segmentIndex)
             XCTAssertGreaterThan(model.currentPageIntraProgress, 0.2)
         }
     }
@@ -1213,17 +1217,17 @@ final class ReaderContainerModelTests: XCTestCase {
 
         let targetPage = try await MainActor.run {
             try XCTUnwrap(
-                model.pages.first {
-                    $0.segmentIndex != nil && $0.segmentEndOffset - $0.segmentStartOffset > 50
+                model.viewportIndex?.pages.first { page in
+                    page.ranges.contains { $0.length > 50 }
                 }
             )
         }
         await MainActor.run {
-            model.updateVerticalViewportPosition(pageIndex: targetPage.index, intraPageProgress: 0.50)
+            model.updateVerticalViewportPosition(pageIndex: targetPage.pageIndex, intraPageProgress: 0.50)
         }
         await model.saveProgress()
         await MainActor.run {
-            model.updateVerticalViewportPosition(pageIndex: targetPage.index, intraPageProgress: 0.59)
+            model.updateVerticalViewportPosition(pageIndex: targetPage.pageIndex, intraPageProgress: 0.59)
         }
         await model.saveProgress()
 
@@ -1234,8 +1238,8 @@ final class ReaderContainerModelTests: XCTestCase {
         await restoredModel.prepare(layout: ReaderContainerLayout(width: 320, height: 568))
 
         await MainActor.run {
-            XCTAssertEqual(restoredModel.currentPageIndex, targetPage.index)
-            XCTAssertEqual(restoredModel.pages[restoredModel.currentPageIndex].segmentIndex, targetPage.segmentIndex)
+            XCTAssertEqual(restoredModel.currentPageIndex, targetPage.pageIndex)
+            XCTAssertEqual(restoredModel.viewportIndex?.pages[restoredModel.currentPageIndex].ranges.first?.segmentIndex, targetPage.ranges.first?.segmentIndex)
             XCTAssertEqual(restoredModel.currentPageIntraProgress, 0.59, accuracy: 0.02)
         }
     }
@@ -1264,15 +1268,16 @@ final class ReaderContainerModelTests: XCTestCase {
             settings: ReaderAppearanceSettings(readingMode: .vertical),
             layout: ReaderContainerLayout(width: 320, height: 568)
         )
-        let savedPage = try XCTUnwrap(
-            pagination.pages.first(where: { $0.chapterTitle == "第二章" && $0.segmentIndex != nil })
+        let savedViewportPage = try XCTUnwrap(
+            pagination.viewportIndex?.pages.first(where: { $0.chapterTitle == "第二章" && !$0.ranges.isEmpty })
         )
+        let savedRange = try XCTUnwrap(savedViewportPage.ranges.first)
         let savedResumePoint = ReaderResumePoint(
             view: 2,
-            chapterOrdinal: try XCTUnwrap(savedPage.chapterOrdinal),
-            chapterTitle: savedPage.chapterTitle,
-            segmentIndex: try XCTUnwrap(savedPage.segmentIndex),
-            segmentOffset: savedPage.segmentStartOffset,
+            chapterOrdinal: try XCTUnwrap(savedViewportPage.chapterOrdinal),
+            chapterTitle: savedViewportPage.chapterTitle,
+            segmentIndex: savedRange.segmentIndex,
+            segmentOffset: savedRange.startOffset,
             segmentProgress: 0,
             authorID: nil,
             readingModeHint: .vertical
@@ -1316,8 +1321,8 @@ final class ReaderContainerModelTests: XCTestCase {
         await MainActor.run {
             XCTAssertEqual(model.currentView, 2)
             XCTAssertEqual(model.currentChapterTitle, "第二章")
-            XCTAssertEqual(model.currentPageIndex, savedPage.index)
-            XCTAssertEqual(model.pages[model.currentPageIndex].segmentIndex, savedPage.segmentIndex)
+            XCTAssertEqual(model.currentPageIndex, savedViewportPage.pageIndex)
+            XCTAssertEqual(model.viewportIndex?.pages[model.currentPageIndex].ranges.first?.segmentIndex, savedRange.segmentIndex)
         }
     }
 
@@ -1343,13 +1348,14 @@ final class ReaderContainerModelTests: XCTestCase {
             settings: ReaderAppearanceSettings(readingMode: .paged),
             layout: ReaderContainerLayout(width: 320, height: 568)
         )
-        let savedPage = try XCTUnwrap(pagination.pages.dropFirst().last { $0.segmentIndex != nil })
+        let savedViewportPage = try XCTUnwrap(pagination.viewportIndex?.pages.dropFirst().last { !$0.ranges.isEmpty })
+        let savedRange = try XCTUnwrap(savedViewportPage.ranges.first)
         let savedResumePoint = ReaderResumePoint(
             view: 1,
-            chapterOrdinal: try XCTUnwrap(savedPage.chapterOrdinal),
-            chapterTitle: savedPage.chapterTitle,
-            segmentIndex: try XCTUnwrap(savedPage.segmentIndex),
-            segmentOffset: savedPage.segmentStartOffset,
+            chapterOrdinal: try XCTUnwrap(savedViewportPage.chapterOrdinal),
+            chapterTitle: savedViewportPage.chapterTitle,
+            segmentIndex: savedRange.segmentIndex,
+            segmentOffset: savedRange.startOffset,
             segmentProgress: 0,
             authorID: nil,
             readingModeHint: .paged
@@ -1361,7 +1367,7 @@ final class ReaderContainerModelTests: XCTestCase {
             Favorite(
                 title: "测试线程",
                 url: threadURL,
-                lastPage: savedPage.index,
+                lastPage: savedViewportPage.pageIndex,
                 lastView: 1,
                 lastChapter: "第一章",
                 novelResumePoint: savedResumePoint,
@@ -1389,10 +1395,10 @@ final class ReaderContainerModelTests: XCTestCase {
         await model.prepare(layout: ReaderContainerLayout(width: 320, height: 568))
 
         await MainActor.run {
-            XCTAssertEqual(model.currentPageIndex, savedPage.index)
-            XCTAssertEqual(model.pagedSelectionIndex, savedPage.index)
+            XCTAssertEqual(model.currentPageIndex, savedViewportPage.pageIndex)
+            XCTAssertEqual(model.pagedSelectionIndex, savedViewportPage.pageIndex)
             XCTAssertGreaterThan(model.pagedSelectionIndex, 0)
-            XCTAssertEqual(model.pages[model.currentPageIndex].segmentIndex, savedPage.segmentIndex)
+            XCTAssertEqual(model.viewportIndex?.pages[model.currentPageIndex].ranges.first?.segmentIndex, savedRange.segmentIndex)
         }
     }
 
@@ -1411,7 +1417,7 @@ final class ReaderContainerModelTests: XCTestCase {
             settings: ReaderAppearanceSettings(readingMode: .paged),
             layout: ReaderContainerLayout(width: 320, height: 568)
         )
-        let targetPage = try XCTUnwrap(pagination.pages.dropFirst().last { $0.segmentIndex != nil })
+        let targetViewportPage = try XCTUnwrap(pagination.viewportIndex?.pages.dropFirst().last { !$0.ranges.isEmpty })
         let model = try await makeModel(
             documents: [document],
             settings: ReaderAppearanceSettings(readingMode: .paged),
@@ -1420,15 +1426,15 @@ final class ReaderContainerModelTests: XCTestCase {
                 threadTitle: "测试线程",
                 source: .resume,
                 initialView: 1,
-                initialPage: targetPage.index
+                initialPage: targetViewportPage.pageIndex
             )
         )
 
         await MainActor.run {
-            XCTAssertEqual(model.currentPageIndex, targetPage.index)
-            XCTAssertEqual(model.pagedSelectionIndex, targetPage.index)
+            XCTAssertEqual(model.currentPageIndex, targetViewportPage.pageIndex)
+            XCTAssertEqual(model.pagedSelectionIndex, targetViewportPage.pageIndex)
             XCTAssertGreaterThan(model.pagedSelectionIndex, 0)
-            XCTAssertEqual(model.pages[model.currentPageIndex].segmentIndex, targetPage.segmentIndex)
+            XCTAssertEqual(model.viewportIndex?.pages[model.currentPageIndex].ranges.first?.segmentIndex, targetViewportPage.ranges.first?.segmentIndex)
         }
     }
 
@@ -1497,8 +1503,8 @@ final class ReaderContainerModelTests: XCTestCase {
         let originalOffset = await MainActor.run { () -> Int in
             let targetIndex = min(1, max(model.renderedPageCount - 1, 0))
             model.updateVerticalViewportPosition(pageIndex: targetIndex, intraPageProgress: 0.5)
-            let page = model.pages[targetIndex]
-            return page.segmentStartOffset + max(1, (page.segmentEndOffset - page.segmentStartOffset) / 2)
+            let page = model.viewportIndex?.pages[targetIndex]
+            return page?.ranges.first.map(midpoint(in:)) ?? 0
         }
 
         await MainActor.run {
@@ -1507,8 +1513,10 @@ final class ReaderContainerModelTests: XCTestCase {
 
         await MainActor.run {
             let page = model.pages[model.currentPageIndex]
+            let viewportPage = try? viewportPage(in: model.viewportIndex, pageIndex: model.currentPageIndex)
             XCTAssertEqual(page.chapterTitle, "第一章")
-            XCTAssertTrue(pageContainsOffset(page, offset: originalOffset))
+            XCTAssertEqual(viewportPage?.ranges.first?.segmentIndex, 0)
+            XCTAssertTrue(viewportPage.map { viewportPageContainsOffset($0, offset: originalOffset) } ?? false)
         }
 
         await MainActor.run {
@@ -1517,8 +1525,10 @@ final class ReaderContainerModelTests: XCTestCase {
 
         await MainActor.run {
             let page = model.pages[model.currentPageIndex]
+            let viewportPage = try? viewportPage(in: model.viewportIndex, pageIndex: model.currentPageIndex)
             XCTAssertEqual(page.chapterTitle, "第一章")
-            XCTAssertTrue(pageContainsOffset(page, offset: originalOffset))
+            XCTAssertEqual(viewportPage?.ranges.first?.segmentIndex, 0)
+            XCTAssertTrue(viewportPage.map { viewportPageContainsOffset($0, offset: originalOffset) } ?? false)
         }
     }
 
@@ -1540,8 +1550,8 @@ final class ReaderContainerModelTests: XCTestCase {
         )
 
         let target = try await MainActor.run {
-            let mergedPage = try XCTUnwrap(model.pages.first { $0.viewportTextRanges.count >= 2 })
-            let ranges = mergedPage.viewportTextRanges
+            let mergedPage = try XCTUnwrap(model.viewportIndex?.pages.first { $0.ranges.count >= 2 })
+            let ranges = mergedPage.ranges
             let targetRange = try XCTUnwrap(ranges.first { $0.segmentIndex == 1 })
             let totalLength = ranges.reduce(0) { $0 + max($1.length, 1) }
             let precedingLength = ranges
@@ -1549,7 +1559,7 @@ final class ReaderContainerModelTests: XCTestCase {
                 .reduce(0) { $0 + max($1.length, 1) }
             let targetOffset = targetRange.startOffset + max(1, targetRange.length / 2)
             let progress = Double(precedingLength + max(1, targetRange.length / 2)) / Double(max(totalLength, 1))
-            model.updateVerticalViewportPosition(pageIndex: mergedPage.index, intraPageProgress: progress)
+            model.updateVerticalViewportPosition(pageIndex: mergedPage.pageIndex, intraPageProgress: progress)
             return (segmentIndex: targetRange.segmentIndex, offset: targetOffset)
         }
 
@@ -1559,7 +1569,8 @@ final class ReaderContainerModelTests: XCTestCase {
 
         await MainActor.run {
             let page = model.pages[model.currentPageIndex]
-            XCTAssertTrue(pageContainsSegmentOffset(page, segmentIndex: target.segmentIndex, offset: target.offset))
+            let viewportPage = try? viewportPage(in: model.viewportIndex, pageIndex: page.index)
+            XCTAssertTrue(viewportPage.map { viewportPageContainsSegmentOffset($0, segmentIndex: target.segmentIndex, offset: target.offset) } ?? false)
         }
     }
 
@@ -1579,9 +1590,9 @@ final class ReaderContainerModelTests: XCTestCase {
         )
 
         let originalOffset = try await MainActor.run {
-            let page = try XCTUnwrap(model.pages.dropFirst().first { $0.segmentIndex != nil })
-            let offset = page.segmentStartOffset + max(1, (page.segmentEndOffset - page.segmentStartOffset) / 2)
-            model.updateVerticalViewportPosition(pageIndex: page.index, intraPageProgress: 0.5)
+            let page = try XCTUnwrap(model.viewportIndex?.pages.dropFirst().first { !$0.ranges.isEmpty })
+            let offset = try midpoint(in: XCTUnwrap(page.ranges.first))
+            model.updateVerticalViewportPosition(pageIndex: page.pageIndex, intraPageProgress: 0.5)
             return offset
         }
 
@@ -1600,7 +1611,8 @@ final class ReaderContainerModelTests: XCTestCase {
 
         await MainActor.run {
             let page = model.pages[model.currentPageIndex]
-            XCTAssertTrue(pageContainsSegmentOffset(page, segmentIndex: 0, offset: originalOffset))
+            let viewportPage = try? viewportPage(in: model.viewportIndex, pageIndex: page.index)
+            XCTAssertTrue(viewportPage.map { viewportPageContainsSegmentOffset($0, segmentIndex: 0, offset: originalOffset) } ?? false)
         }
     }
 
@@ -1620,9 +1632,9 @@ final class ReaderContainerModelTests: XCTestCase {
         )
 
         let originalOffset = try await MainActor.run {
-            let page = try XCTUnwrap(model.pages.dropFirst().last { $0.segmentIndex != nil })
-            let offset = page.segmentStartOffset + max(1, (page.segmentEndOffset - page.segmentStartOffset) / 2)
-            model.updateVerticalViewportPosition(pageIndex: page.index, intraPageProgress: 0.5)
+            let page = try XCTUnwrap(model.viewportIndex?.pages.dropFirst().last { !$0.ranges.isEmpty })
+            let offset = try midpoint(in: XCTUnwrap(page.ranges.first))
+            model.updateVerticalViewportPosition(pageIndex: page.pageIndex, intraPageProgress: 0.5)
             return offset
         }
 
@@ -1634,7 +1646,8 @@ final class ReaderContainerModelTests: XCTestCase {
         await MainActor.run {
             XCTAssertGreaterThan(model.currentPageIndex, 0)
             let page = model.pages[model.currentPageIndex]
-            XCTAssertTrue(pageContainsSegmentOffset(page, segmentIndex: 0, offset: originalOffset))
+            let viewportPage = try? viewportPage(in: model.viewportIndex, pageIndex: page.index)
+            XCTAssertTrue(viewportPage.map { viewportPageContainsSegmentOffset($0, segmentIndex: 0, offset: originalOffset) } ?? false)
         }
     }
 
@@ -2157,25 +2170,36 @@ private func waitFor(
     XCTFail("Timed out waiting for condition")
 }
 
-private func pageContainsOffset(_ page: ReaderRenderedPage, offset: Int) -> Bool {
-    if page.segmentStartOffset == page.segmentEndOffset {
-        return offset <= page.segmentStartOffset
-    }
-    return offset >= page.segmentStartOffset && offset < page.segmentEndOffset
+private func viewportPage(
+    in viewportIndex: NovelTextViewportIndex?,
+    pageIndex: Int
+) throws -> NovelTextViewportIndexPage {
+    try XCTUnwrap(viewportIndex?.pages.first { $0.pageIndex == pageIndex })
 }
 
-private func pageContainsSegmentOffset(_ page: ReaderRenderedPage, segmentIndex: Int, offset: Int) -> Bool {
-    let matchingRanges = page.novelTextDisplayValues.flatMap(\.ranges).filter { $0.segmentIndex == segmentIndex }
-    if !matchingRanges.isEmpty {
-        return matchingRanges.contains { range in
-            if range.startOffset == range.endOffset {
-                return offset <= range.startOffset
-            }
-            return offset >= range.startOffset && offset < range.endOffset
-        }
+private func midpoint(in range: ReaderRenderedTextRange) -> Int {
+    range.startOffset + max(1, range.length / 2)
+}
+
+private func viewportPageContainsOffset(_ page: NovelTextViewportIndexPage, offset: Int) -> Bool {
+    page.ranges.contains { rangeContainsOffset($0, offset: offset) }
+}
+
+private func viewportPageContainsSegmentOffset(
+    _ page: NovelTextViewportIndexPage,
+    segmentIndex: Int,
+    offset: Int
+) -> Bool {
+    page.ranges.filter { $0.segmentIndex == segmentIndex }.contains {
+        rangeContainsOffset($0, offset: offset)
     }
-    guard page.segmentIndex == segmentIndex else { return false }
-    return pageContainsOffset(page, offset: offset)
+}
+
+private func rangeContainsOffset(_ range: ReaderRenderedTextRange, offset: Int) -> Bool {
+    if range.startOffset == range.endOffset {
+        return offset <= range.startOffset
+    }
+    return offset >= range.startOffset && offset < range.endOffset
 }
 
 private func makeDocument(
@@ -2227,28 +2251,9 @@ private func readerModelPreviewSourcePagination(
 ) -> ReaderPaginationResult {
     ReaderPaginationResult(
         pages: document.segments.enumerated().map { index, segment in
-            let text: String
-            switch segment {
-            case let .text(value, _):
-                text = value
-            case .image:
-                text = ""
-            }
             return ReaderRenderedPage(
                 index: index,
-                blocks: [
-                    .text(
-                        text,
-                        chapterTitle: segment.chapterTitle,
-                        ranges: [
-                            ReaderRenderedTextRange(
-                                segmentIndex: index,
-                                startOffset: 0,
-                                endOffset: text.count
-                            )
-                        ]
-                    )
-                ],
+                blocks: [],
                 documentView: document.view,
                 chapterOrdinal: 0,
                 chapterTitle: segment.chapterTitle
@@ -2260,7 +2265,35 @@ private func readerModelPreviewSourcePagination(
                 title: document.segments.first?.chapterTitle ?? "Chapter",
                 startIndex: 0
             )
-        ]
+        ],
+        viewportIndex: NovelTextViewportIndex(
+            documentView: document.view,
+            readingMode: settings.readingMode,
+            pages: document.segments.enumerated().map { index, segment in
+                let text: String
+                if case let .text(value, _) = segment {
+                    text = value
+                } else {
+                    text = ""
+                }
+                return NovelTextViewportIndexPage(
+                    pageIndex: index,
+                    documentView: document.view,
+                    chapterOrdinal: 0,
+                    chapterTitle: segment.chapterTitle,
+                    ranges: text.isEmpty
+                        ? []
+                        : [ReaderRenderedTextRange(segmentIndex: index, startOffset: 0, endOffset: text.count)]
+                )
+            },
+            chapters: [
+                NovelTextViewportIndexChapter(
+                    ordinal: 0,
+                    title: document.segments.first?.chapterTitle ?? "Chapter",
+                    startPageIndex: 0
+                )
+            ]
+        )
     )
 }
 

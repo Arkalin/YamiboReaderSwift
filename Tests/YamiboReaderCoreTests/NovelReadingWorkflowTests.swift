@@ -228,10 +228,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
                             ],
                             documentView: document.view,
                             chapterOrdinal: 0,
-                            chapterTitle: "第一章",
-                            segmentIndex: 99,
-                            segmentStartOffset: 900,
-                            segmentEndOffset: 950
+                            chapterTitle: "第一章"
                         ),
                         ReaderRenderedPage(
                             index: 1,
@@ -246,15 +243,39 @@ final class NovelReadingWorkflowTests: XCTestCase {
                             ],
                             documentView: document.view,
                             chapterOrdinal: 0,
-                            chapterTitle: "第一章",
-                            segmentIndex: 99,
-                            segmentStartOffset: 950,
-                            segmentEndOffset: 990
+                            chapterTitle: "第一章"
                         )
                     ],
                     chapters: [
                         ReaderChapter(ordinal: 0, title: "第一章", startIndex: 0)
-                    ]
+                    ],
+                    viewportIndex: NovelTextViewportIndex(
+                        documentView: document.view,
+                        readingMode: .vertical,
+                        pages: [
+                            NovelTextViewportIndexPage(
+                                pageIndex: 0,
+                                documentView: document.view,
+                                chapterOrdinal: 0,
+                                chapterTitle: "第一章",
+                                ranges: [
+                                    ReaderRenderedTextRange(segmentIndex: 0, startOffset: 0, endOffset: 20)
+                                ]
+                            ),
+                            NovelTextViewportIndexPage(
+                                pageIndex: 1,
+                                documentView: document.view,
+                                chapterOrdinal: 0,
+                                chapterTitle: "第一章",
+                                ranges: [
+                                    ReaderRenderedTextRange(segmentIndex: 2, startOffset: 40, endOffset: 80)
+                                ]
+                            )
+                        ],
+                        chapters: [
+                            NovelTextViewportIndexChapter(ordinal: 0, title: "第一章", startPageIndex: 0)
+                        ]
+                    )
                 )
             }
         )
@@ -415,8 +436,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
                             ],
                             documentView: document.view,
                             chapterOrdinal: 1,
-                            chapterTitle: "第二章",
-                            viewportTextRanges: ranges
+                            chapterTitle: "第二章"
                         )
                     ],
                     chapters: [
@@ -529,7 +549,41 @@ final class NovelReadingWorkflowTests: XCTestCase {
                     ],
                     chapters: [
                         ReaderChapter(ordinal: 0, title: "第一章", startIndex: 0)
-                    ]
+                    ],
+                    viewportIndex: NovelTextViewportIndex(
+                        documentView: document.view,
+                        readingMode: .vertical,
+                        pages: [
+                            NovelTextViewportIndexPage(
+                                pageIndex: 0,
+                                documentView: document.view,
+                                chapterOrdinal: 0,
+                                chapterTitle: "第一章",
+                                ranges: [
+                                    ReaderRenderedTextRange(segmentIndex: 0, startOffset: 0, endOffset: 30)
+                                ]
+                            ),
+                            NovelTextViewportIndexPage(
+                                pageIndex: 1,
+                                documentView: document.view,
+                                chapterOrdinal: 0,
+                                chapterTitle: "第一章",
+                                ranges: []
+                            ),
+                            NovelTextViewportIndexPage(
+                                pageIndex: 2,
+                                documentView: document.view,
+                                chapterOrdinal: 0,
+                                chapterTitle: "第一章",
+                                ranges: [
+                                    ReaderRenderedTextRange(segmentIndex: 2, startOffset: 40, endOffset: 80)
+                                ]
+                            )
+                        ],
+                        chapters: [
+                            NovelTextViewportIndexChapter(ordinal: 0, title: "第一章", startPageIndex: 0)
+                        ]
+                    )
                 )
             }
         )
@@ -609,7 +663,25 @@ final class NovelReadingWorkflowTests: XCTestCase {
                         ],
                         chapters: [
                             ReaderChapter(ordinal: 0, title: "第一章", startIndex: 0)
-                        ]
+                        ],
+                        viewportIndex: NovelTextViewportIndex(
+                            documentView: document.view,
+                            readingMode: .vertical,
+                            pages: [
+                                NovelTextViewportIndexPage(
+                                    pageIndex: 0,
+                                    documentView: document.view,
+                                    chapterOrdinal: 0,
+                                    chapterTitle: "第一章",
+                                    ranges: [
+                                        ReaderRenderedTextRange(segmentIndex: 0, startOffset: 0, endOffset: 40)
+                                    ]
+                                )
+                            ],
+                            chapters: [
+                                NovelTextViewportIndexChapter(ordinal: 0, title: "第一章", startPageIndex: 0)
+                            ]
+                        )
                     )
                 }
                 return ReaderPaginationResult(
@@ -703,7 +775,35 @@ final class NovelReadingWorkflowTests: XCTestCase {
                     chapters: [
                         ReaderChapter(ordinal: 0, title: "第一章", startIndex: 0),
                         ReaderChapter(ordinal: 1, title: "第二章", startIndex: 1)
-                    ]
+                    ],
+                    viewportIndex: NovelTextViewportIndex(
+                        documentView: document.view,
+                        readingMode: .vertical,
+                        pages: [
+                            NovelTextViewportIndexPage(
+                                pageIndex: 0,
+                                documentView: document.view,
+                                chapterOrdinal: 0,
+                                chapterTitle: "第一章",
+                                ranges: [
+                                    ReaderRenderedTextRange(segmentIndex: 0, startOffset: 0, endOffset: 20)
+                                ]
+                            ),
+                            NovelTextViewportIndexPage(
+                                pageIndex: 1,
+                                documentView: document.view,
+                                chapterOrdinal: 1,
+                                chapterTitle: "第二章",
+                                ranges: [
+                                    ReaderRenderedTextRange(segmentIndex: 1, startOffset: 20, endOffset: 60)
+                                ]
+                            )
+                        ],
+                        chapters: [
+                            NovelTextViewportIndexChapter(ordinal: 0, title: "第一章", startPageIndex: 0),
+                            NovelTextViewportIndexChapter(ordinal: 1, title: "第二章", startPageIndex: 1)
+                        ]
+                    )
                 )
             }
         )
@@ -1221,28 +1321,9 @@ private func previewSourcePagination(
 ) -> ReaderPaginationResult {
     ReaderPaginationResult(
         pages: document.segments.enumerated().map { index, segment in
-            let text: String
-            switch segment {
-            case let .text(value, _):
-                text = value
-            case .image:
-                text = ""
-            }
             return ReaderRenderedPage(
                 index: index,
-                blocks: [
-                    .text(
-                        text,
-                        chapterTitle: segment.chapterTitle,
-                        ranges: [
-                            ReaderRenderedTextRange(
-                                segmentIndex: index,
-                                startOffset: 0,
-                                endOffset: text.count
-                            )
-                        ]
-                    )
-                ],
+                blocks: [],
                 documentView: document.view,
                 chapterOrdinal: index,
                 chapterTitle: segment.chapterTitle
@@ -1254,7 +1335,35 @@ private func previewSourcePagination(
                 title: segment.chapterTitle ?? "Chapter \(index + 1)",
                 startIndex: index
             )
-        }
+        },
+        viewportIndex: NovelTextViewportIndex(
+            documentView: document.view,
+            readingMode: settings.readingMode,
+            pages: document.segments.enumerated().map { index, segment in
+                let text: String
+                if case let .text(value, _) = segment {
+                    text = value
+                } else {
+                    text = ""
+                }
+                return NovelTextViewportIndexPage(
+                    pageIndex: index,
+                    documentView: document.view,
+                    chapterOrdinal: index,
+                    chapterTitle: segment.chapterTitle,
+                    ranges: text.isEmpty
+                        ? []
+                        : [ReaderRenderedTextRange(segmentIndex: index, startOffset: 0, endOffset: text.count)]
+                )
+            },
+            chapters: document.segments.enumerated().map { index, segment in
+                NovelTextViewportIndexChapter(
+                    ordinal: index,
+                    title: segment.chapterTitle ?? "Chapter \(index + 1)",
+                    startPageIndex: index
+                )
+            }
+        )
     )
 }
 
@@ -1270,30 +1379,37 @@ private func workflowRepaginationRanges(
             pages: ranges.enumerated().map { index, range in
                 ReaderRenderedPage(
                     index: index,
-                    blocks: [
-                        .text(
-                            "slice-\(range.lowerBound)-\(range.upperBound)",
-                            chapterTitle: "第一章",
-                            ranges: [
-                                ReaderRenderedTextRange(
-                                    segmentIndex: 0,
-                                    startOffset: range.lowerBound,
-                                    endOffset: range.upperBound
-                                )
-                            ]
-                        )
-                    ],
+                    blocks: [],
                     documentView: document.view,
                     chapterOrdinal: 0,
-                    chapterTitle: "第一章",
-                    segmentIndex: 0,
-                    segmentStartOffset: range.lowerBound,
-                    segmentEndOffset: range.upperBound
+                    chapterTitle: "第一章"
                 )
             },
             chapters: [
                 ReaderChapter(ordinal: 0, title: "第一章", startIndex: 0)
-            ]
+            ],
+            viewportIndex: NovelTextViewportIndex(
+                documentView: document.view,
+                readingMode: settings.readingMode,
+                pages: ranges.enumerated().map { index, range in
+                    NovelTextViewportIndexPage(
+                        pageIndex: index,
+                        documentView: document.view,
+                        chapterOrdinal: 0,
+                        chapterTitle: "第一章",
+                        ranges: [
+                            ReaderRenderedTextRange(
+                                segmentIndex: 0,
+                                startOffset: range.lowerBound,
+                                endOffset: range.upperBound
+                            )
+                        ]
+                    )
+                },
+                chapters: [
+                    NovelTextViewportIndexChapter(ordinal: 0, title: "第一章", startPageIndex: 0)
+                ]
+            )
         )
     }
 }

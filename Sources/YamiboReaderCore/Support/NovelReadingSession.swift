@@ -475,20 +475,13 @@ public struct NovelReadingSession: Sendable {
             let indexedPage = viewportPages.first {
                 $0.pageIndex == index && $0.documentView == page.documentView
             }
-            let indexedRanges = indexedPage?.ranges ?? page.viewportTextRanges
-            let aggregateRange = Self.aggregateRange(from: indexedRanges)
             return ReaderRenderedPage(
                 index: index,
                 blocks: page.blocks,
                 documentView: page.documentView,
                 chapterOrdinal: indexedPage?.chapterOrdinal ?? page.chapterOrdinal,
                 chapterTitle: indexedPage?.chapterTitle ?? page.chapterTitle,
-                viewportTextRanges: indexedRanges,
-                segmentIndex: aggregateRange?.segmentIndex,
-                segmentStartOffset: aggregateRange?.startOffset ?? 0,
-                segmentEndOffset: aggregateRange?.endOffset ?? 0,
-                chapterCommentTarget: indexedPage?.chapterCommentTarget ?? page.chapterCommentTarget,
-                derivesViewportTextRangesFromBlocks: indexedPage == nil
+                chapterCommentTarget: indexedPage?.chapterCommentTarget ?? page.chapterCommentTarget
             )
         }
         let fallbackTarget = ReaderResolvedTarget(
@@ -534,17 +527,6 @@ public struct NovelReadingSession: Sendable {
                 chapterCommentTarget: chapter.chapterCommentTarget
             )
         }
-    }
-
-    private static func aggregateRange(from ranges: [ReaderRenderedTextRange]) -> ReaderRenderedTextRange? {
-        guard let first = ranges.first else { return nil }
-        let last = ranges.last ?? first
-        guard first.segmentIndex == last.segmentIndex else { return first }
-        return ReaderRenderedTextRange(
-            segmentIndex: first.segmentIndex,
-            startOffset: first.startOffset,
-            endOffset: last.endOffset
-        )
     }
 
     private mutating func applyPaginationIgnoringFailure(
@@ -817,7 +799,7 @@ public struct NovelReadingSession: Sendable {
         if !indexedRanges.isEmpty {
             return indexedRanges
         }
-        return viewportIndex == nil ? page.viewportTextRanges : []
+        return []
     }
 }
 
