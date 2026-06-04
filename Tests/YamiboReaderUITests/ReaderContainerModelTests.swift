@@ -725,11 +725,6 @@ final class ReaderContainerModelTests: XCTestCase {
         )
 
         await MainActor.run {
-            let renderedText = model.pages.flatMap(\.blocks).compactMap { block -> String? in
-                block.textContent
-            }.joined()
-
-            XCTAssertTrue(renderedText.contains("听到弓莉这么说"))
             XCTAssertTrue(
                 model.previewText(translationMode: .none, characterCount: 80, fallback: "")
                     .contains("聽到弓莉這麼說")
@@ -1411,8 +1406,8 @@ final class ReaderContainerModelTests: XCTestCase {
         )
 
         let target = try await MainActor.run {
-            let mergedPage = try XCTUnwrap(model.pages.first { $0.novelTextDisplayValues.flatMap(\.ranges).count >= 2 })
-            let ranges = mergedPage.novelTextDisplayValues.flatMap(\.ranges)
+            let mergedPage = try XCTUnwrap(model.pages.first { $0.viewportTextRanges.count >= 2 })
+            let ranges = mergedPage.viewportTextRanges
             let targetRange = try XCTUnwrap(ranges.first { $0.segmentIndex == 1 })
             let totalLength = ranges.reduce(0) { $0 + max($1.length, 1) }
             let precedingLength = ranges

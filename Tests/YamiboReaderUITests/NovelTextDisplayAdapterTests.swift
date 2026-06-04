@@ -359,6 +359,27 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertFalse(viewportPageContentBody.contains("page.novelTextDisplayValues.first"))
     }
 
+    func testNovelReadingSessionPositioningUsesViewportIndexWithoutPageSegmentFallbacks() throws {
+        let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let sessionSource = try String(
+            contentsOf: repositoryRoot
+                .appendingPathComponent("Sources/YamiboReaderCore/Support/NovelReadingSession.swift"),
+            encoding: .utf8
+        )
+        let applyPaginationBody = try XCTUnwrap(functionBody(named: "applyPagination", in: sessionSource))
+        let textRangesBody = try XCTUnwrap(functionBody(named: "textRanges", in: sessionSource))
+        let containsSegmentBody = try XCTUnwrap(functionBody(named: "contains(segmentIndex", in: sessionSource))
+        let intraPageProgressBody = try XCTUnwrap(functionBody(named: "intraPageProgress", in: sessionSource))
+
+        XCTAssertFalse(applyPaginationBody.contains("page.segmentIndex"))
+        XCTAssertFalse(applyPaginationBody.contains("page.segmentStartOffset"))
+        XCTAssertFalse(applyPaginationBody.contains("page.segmentEndOffset"))
+        XCTAssertFalse(textRangesBody.contains("page.novelTextDisplayValues"))
+        XCTAssertFalse(containsSegmentBody.contains("page.segmentIndex"))
+        XCTAssertFalse(intraPageProgressBody.contains("page.segmentStartOffset"))
+        XCTAssertFalse(intraPageProgressBody.contains("page.segmentEndOffset"))
+    }
+
     func testNovelReadingSessionDisplayPathDoesNotRetainUIKitTextViewFallback() throws {
         let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let readerSupportSource = try String(

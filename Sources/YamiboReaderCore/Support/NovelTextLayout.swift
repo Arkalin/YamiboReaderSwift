@@ -82,11 +82,7 @@ public enum NovelTextLayout {
                 )
             }
         )
-        let hasVisibleText = result.pages.contains { page in
-            page.blocks.contains { block in
-                block.textContent?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
-            }
-        }
+        let hasVisibleText = result.pages.contains { !$0.viewportTextRanges.isEmpty }
         let hasInputText = document.segments.contains { segment in
             guard case let .text(text, _) = segment else { return false }
             return !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -160,20 +156,28 @@ public enum NovelTextLayout {
         var pages: [ReaderRenderedPage] = []
         var chapters: [ReaderChapter] = []
         var seenChapterOrdinals = Set<Int>()
+        let annotatedTextBySegment = Dictionary(
+            uniqueKeysWithValues: annotatedSegments.map { ($0.index, $0.textContent) }
+        )
 
         for annotatedSegment in annotatedSegments {
             switch annotatedSegment.segment {
-            case let .text(_, chapterTitle):
+            case .text:
                 let slices = try chunker(annotatedSegment, settings, layout)
                 for slice in slices where !slice.text.isEmpty {
+                    let range = ReaderRenderedTextRange(
+                        segmentIndex: annotatedSegment.index,
+                        startOffset: slice.startOffset,
+                        endOffset: slice.endOffset
+                    )
                     if settings.readingMode == .paged,
-                       appendTextSliceToPreviousPageIfPossible(
-                           slice,
-                           chapterTitle: chapterTitle,
+                       appendViewportRangeToPreviousPageIfPossible(
+                           range,
                            annotatedSegment: annotatedSegment,
                            document: document,
                            settings: settings,
                            layout: layout,
+                           annotatedTextBySegment: annotatedTextBySegment,
                            pages: &pages
                        ) {
                         continue
@@ -181,24 +185,11 @@ public enum NovelTextLayout {
 
                     let page = ReaderRenderedPage(
                         index: pages.count,
-                        blocks: [
-                            .text(
-                                slice.text,
-                                chapterTitle: chapterTitle,
-                                startsAtParagraphBoundary: slice.startsAtParagraphBoundary,
-                                settings: settings,
-                                ranges: [
-                                    ReaderRenderedTextRange(
-                                        segmentIndex: annotatedSegment.index,
-                                        startOffset: slice.startOffset,
-                                        endOffset: slice.endOffset
-                                    )
-                                ]
-                            ),
-                        ],
+                        blocks: [],
                         documentView: document.view,
                         chapterOrdinal: annotatedSegment.chapterOrdinal,
                         chapterTitle: annotatedSegment.chapterTitle,
+                        viewportTextRanges: [range],
                         segmentIndex: annotatedSegment.index,
                         segmentStartOffset: slice.startOffset,
                         segmentEndOffset: slice.endOffset,
@@ -365,7 +356,7 @@ public enum NovelTextLayout {
                 documentView: page.documentView,
                 chapterOrdinal: page.chapterOrdinal,
                 chapterTitle: page.chapterTitle,
-                ranges: page.novelTextDisplayValues.flatMap(\.ranges),
+                ranges: page.viewportTextRanges,
                 chapterCommentTarget: page.chapterCommentTarget
             )
         }
@@ -385,13 +376,13 @@ public enum NovelTextLayout {
         )
     }
 
-    private static func appendTextSliceToPreviousPageIfPossible(
-        _ slice: TextSlice,
-        chapterTitle: String?,
+    private static func appendViewportRangeToPreviousPageIfPossible(
+        _ range: ReaderRenderedTextRange,
         annotatedSegment: NovelAnnotatedSegment,
         document: ReaderPageDocument,
         settings: ReaderAppearanceSettings,
         layout: ReaderContainerLayout,
+        annotatedTextBySegment: [Int: String],
         pages: inout [ReaderRenderedPage]
     ) -> Bool {
         guard !pages.isEmpty else { return false }
@@ -401,11 +392,12 @@ public enum NovelTextLayout {
               previousPage.chapterOrdinal == annotatedSegment.chapterOrdinal,
               previousPage.chapterTitle == annotatedSegment.chapterTitle,
               previousPage.chapterCommentTarget == chapterCommentTarget(for: annotatedSegment, document: document),
-              previousPage.blocks.allSatisfy(\.isTextBlock) else {
+              previousPage.blocks.isEmpty else {
             return false
         }
 
-        let combinedText = (previousPage.blocks.compactMap(\.textContent) + [slice.text])
+        let combinedText = (previousPage.viewportTextRanges + [range])
+            .compactMap { text(for: $0, annotatedTextBySegment: annotatedTextBySegment) }
             .joined(separator: "\n\n")
 
         guard textFits(
@@ -417,24 +409,25 @@ public enum NovelTextLayout {
             return false
         }
 
-        previousPage.blocks.append(
-            .text(
-                slice.text,
-                chapterTitle: chapterTitle,
-                startsAtParagraphBoundary: slice.startsAtParagraphBoundary,
-                settings: settings,
-                ranges: [
-                    ReaderRenderedTextRange(
-                        segmentIndex: annotatedSegment.index,
-                        startOffset: slice.startOffset,
-                        endOffset: slice.endOffset
-                    )
-                ]
-            )
-        )
-        previousPage.segmentEndOffset = max(previousPage.segmentEndOffset, slice.endOffset)
+        previousPage.viewportTextRanges.append(range)
+        previousPage.segmentEndOffset = max(previousPage.segmentEndOffset, range.endOffset)
         pages[previousIndex] = previousPage
         return true
+    }
+
+    private static func text(
+        for range: ReaderRenderedTextRange,
+        annotatedTextBySegment: [Int: String]
+    ) -> String? {
+        guard let text = annotatedTextBySegment[range.segmentIndex] else { return nil }
+        let startOffset = min(max(range.startOffset, 0), text.count)
+        let endOffset = min(max(range.endOffset, startOffset), text.count)
+        guard endOffset > startOffset,
+              let startIndex = text.index(text.startIndex, offsetBy: startOffset, limitedBy: text.endIndex),
+              let endIndex = text.index(text.startIndex, offsetBy: endOffset, limitedBy: text.endIndex) else {
+            return nil
+        }
+        return String(text[startIndex..<endIndex])
     }
 
     private static func annotatedSegments(
