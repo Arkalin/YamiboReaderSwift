@@ -728,13 +728,46 @@ private final class StubURLProtocol: URLProtocol {
     #expect(paged.chapters.first?.title == "第一章")
     #expect(vertical.chapters.first?.title == "第一章")
     #expect(
-        NovelTextLayout.measuredTextHeight(
+        try NovelTextLayout.measuredTextHeight(
             text,
             chapterTitle: "第一章",
             settings: ReaderAppearanceSettings(readingMode: .paged),
             width: ReaderContainerLayout(width: 320, height: 568).readableFrame.width
         ) > 0
     )
+}
+
+@Test func novelTextLayoutMeasuresNovelTextDisplayValueThroughModuleSeam() throws {
+    let settings = ReaderAppearanceSettings(
+        fontScale: 1.1,
+        lineHeightScale: 1.6,
+        characterSpacingScale: 0.04,
+        indentsParagraphFirstLine: true,
+        readingMode: .vertical
+    )
+    let displayValue = NovelTextDisplayValue(
+        text: String(repeating: "Novel Text Display Value should be measured by Novel Text Layout. ", count: 8),
+        chapterTitle: "第一章",
+        settings: settings
+    )
+
+    let height = try NovelTextLayout.measuredTextHeight(
+        displayValue: displayValue,
+        width: ReaderContainerLayout(width: 320, height: 568).readableFrame.width
+    )
+
+    #expect(height > 0)
+}
+
+@Test func novelTextLayoutMeasurementFailureThrowsInsteadOfReturningEmptyHeight() throws {
+    let displayValue = NovelTextDisplayValue(
+        text: "Invalid measurement width must be an explicit Novel Text Layout failure.",
+        chapterTitle: nil
+    )
+
+    #expect(throws: NovelTextLayoutFailure.unableToLayoutText) {
+        _ = try NovelTextLayout.measuredTextHeight(displayValue: displayValue, width: 0)
+    }
 }
 
 @Test func novelTextLayoutAssemblesDocumentPagesChaptersImagesAndTextDisplayValues() async throws {

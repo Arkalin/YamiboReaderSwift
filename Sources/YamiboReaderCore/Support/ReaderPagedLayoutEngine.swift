@@ -28,6 +28,25 @@ enum ReaderPagedLayoutEngine {
         return ceil(boundingRect.height) <= pageSize.height
     }
 
+    static func measuredTextHeight(
+        _ text: String,
+        chapterTitle: String?,
+        startsAtParagraphBoundary: Bool,
+        settings: ReaderAppearanceSettings,
+        width: CGFloat,
+        baseFontSize: Double
+    ) -> CGFloat {
+        let attributedText = ReaderAttributedTextFactory.makeAttributedText(
+            text: text,
+            chapterTitle: chapterTitle,
+            startsAtParagraphBoundary: startsAtParagraphBoundary,
+            settings: settings,
+            baseFontSize: baseFontSize
+        )
+        guard width > 0, attributedText.length > 0 else { return 0 }
+        return measuredTextHeightWithTextKit2(attributedText, width: width)
+    }
+
     static func paginateText(
         _ text: String,
         chapterTitle: String?,
@@ -121,6 +140,31 @@ enum ReaderPagedLayoutEngine {
                 isFirstPage: pageIndex == 0
             )
         }
+    }
+
+    private static func measuredTextHeightWithTextKit2(_ attributedText: NSAttributedString, width: CGFloat) -> CGFloat {
+        let textContentStorage = NSTextContentStorage()
+        let textLayoutManager = NSTextLayoutManager()
+        textContentStorage.addTextLayoutManager(textLayoutManager)
+        textContentStorage.textStorage?.setAttributedString(attributedText)
+
+        let textContainer = NSTextContainer(size: CGSize(width: width, height: .greatestFiniteMagnitude))
+        textContainer.lineFragmentPadding = 0
+        textContainer.maximumNumberOfLines = 0
+        textContainer.lineBreakMode = .byWordWrapping
+        textLayoutManager.textContainer = textContainer
+
+        textLayoutManager.ensureLayout(for: textContentStorage.documentRange)
+
+        var maxY: CGFloat = 0
+        textLayoutManager.enumerateTextLayoutFragments(
+            from: textContentStorage.documentRange.location,
+            options: []
+        ) { fragment in
+            maxY = max(maxY, fragment.layoutFragmentFrame.maxY)
+            return true
+        }
+        return ceil(maxY)
     }
 
     private static func nsRange(for textRange: NSTextRange, in contentManager: NSTextContentManager) -> NSRange? {

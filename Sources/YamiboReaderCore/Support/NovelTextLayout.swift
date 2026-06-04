@@ -430,6 +430,59 @@ public enum NovelTextLayout {
     }
 
     public static func measuredTextHeight(
+        displayValue: NovelTextDisplayValue,
+        width: CGFloat,
+        baseFontSize: Double = 22
+    ) throws -> CGFloat {
+        try measuredTextHeight(
+            displayValue.text,
+            chapterTitle: displayValue.chapterTitle,
+            startsAtParagraphBoundary: displayValue.startsAtParagraphBoundary,
+            settings: ReaderAppearanceSettings(displaySemantics: displayValue.semantics),
+            width: width,
+            baseFontSize: baseFontSize
+        )
+    }
+
+    public static func measuredTextHeight(
+        _ text: String,
+        chapterTitle: String?,
+        startsAtParagraphBoundary: Bool = true,
+        settings: ReaderAppearanceSettings,
+        width: CGFloat,
+        baseFontSize: Double = 22
+    ) throws -> CGFloat {
+        guard width > 0 else {
+            throw NovelTextLayoutFailure.unableToLayoutText
+        }
+#if canImport(UIKit)
+        let height = ReaderPagedLayoutEngine.measuredTextHeight(
+            text,
+            chapterTitle: chapterTitle,
+            startsAtParagraphBoundary: startsAtParagraphBoundary,
+            settings: settings,
+            width: width,
+            baseFontSize: baseFontSize
+        )
+#elseif canImport(AppKit)
+        let height = AppKitNovelTextLayoutAdapter.measuredTextHeight(
+            text,
+            chapterTitle: chapterTitle,
+            startsAtParagraphBoundary: startsAtParagraphBoundary,
+            settings: settings,
+            width: width,
+            baseFontSize: baseFontSize
+        )
+#else
+        throw NovelTextLayoutFailure.unableToLayoutText
+#endif
+        guard height > 0, height.isFinite else {
+            throw NovelTextLayoutFailure.unableToLayoutText
+        }
+        return height
+    }
+
+    public static func estimatedTextHeight(
         _ text: String,
         chapterTitle: String?,
         startsAtParagraphBoundary: Bool = true,
@@ -571,6 +624,19 @@ public enum NovelTextLayout {
     }
 }
 
+private extension ReaderAppearanceSettings {
+    init(displaySemantics: NovelTextDisplaySemantics) {
+        self.init(
+            fontScale: displaySemantics.fontScale,
+            fontFamily: displaySemantics.fontFamily,
+            lineHeightScale: displaySemantics.lineHeightScale,
+            characterSpacingScale: displaySemantics.characterSpacingScale,
+            usesJustifiedText: displaySemantics.usesJustifiedText,
+            indentsParagraphFirstLine: displaySemantics.indentsParagraphFirstLine
+        )
+    }
+}
+
 #if canImport(AppKit) && !canImport(UIKit)
 private enum AppKitNovelTextLayoutAdapter {
     private static let defaultBaseFontSize: Double = 22
@@ -598,6 +664,25 @@ private enum AppKitNovelTextLayoutAdapter {
         return ceil(boundingRect.height) <= pageSize.height
     }
 
+    static func measuredTextHeight(
+        _ text: String,
+        chapterTitle: String?,
+        startsAtParagraphBoundary: Bool,
+        settings: ReaderAppearanceSettings,
+        width: CGFloat,
+        baseFontSize: Double
+    ) -> CGFloat {
+        let attributedText = makeAttributedText(
+            text: text,
+            chapterTitle: chapterTitle,
+            startsAtParagraphBoundary: startsAtParagraphBoundary,
+            settings: settings,
+            baseFontSize: baseFontSize
+        )
+        guard width > 0, attributedText.length > 0 else { return 0 }
+        return measuredTextHeightWithTextKit2(attributedText, width: width)
+    }
+
     static func paginateText(
         _ text: String,
         chapterTitle: String?,
@@ -618,6 +703,31 @@ private enum AppKitNovelTextLayoutAdapter {
             settings: settings
         )
         return paginateTextWithTextKit2(attributedText, pageSize: pageSize)
+    }
+
+    private static func measuredTextHeightWithTextKit2(_ attributedText: NSAttributedString, width: CGFloat) -> CGFloat {
+        let textContentStorage = NSTextContentStorage()
+        let textLayoutManager = NSTextLayoutManager()
+        textContentStorage.addTextLayoutManager(textLayoutManager)
+        textContentStorage.textStorage?.setAttributedString(attributedText)
+
+        let textContainer = NSTextContainer(size: CGSize(width: width, height: .greatestFiniteMagnitude))
+        textContainer.lineFragmentPadding = 0
+        textContainer.maximumNumberOfLines = 0
+        textContainer.lineBreakMode = .byWordWrapping
+        textLayoutManager.textContainer = textContainer
+
+        textLayoutManager.ensureLayout(for: textContentStorage.documentRange)
+
+        var maxY: CGFloat = 0
+        textLayoutManager.enumerateTextLayoutFragments(
+            from: textContentStorage.documentRange.location,
+            options: []
+        ) { fragment in
+            maxY = max(maxY, fragment.layoutFragmentFrame.maxY)
+            return true
+        }
+        return ceil(maxY)
     }
 
     static func verticalTextChunks(
