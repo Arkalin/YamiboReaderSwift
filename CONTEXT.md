@@ -32,6 +32,18 @@ _Avoid_: page index, progress, scroll position
 The native text layout process that turns a novel reader page document's text segments into rendered page ranges, vertical chunk ranges, measured heights, display layouts, and chapter starts.
 _Avoid_: layout engine, textkit wrapper, paginator internals, reader paginator, text view fallback
 
+**Novel Text Viewport**:
+The stateful TextKit 2 viewport inside **Novel Text Layout** that lazily lays out visible text fragments while maintaining exact page, chapter, and position indexes for native novel reading.
+_Avoid_: scroll view text cache, lazy text view, visible text renderer, viewport wrapper
+
+**Novel Text Viewport Index**:
+The exact, cacheable page, chapter, range, and position map built by **Novel Text Layout** before a **Novel Text Viewport** is published to the **Novel Reading Session**.
+_Avoid_: estimated page cache, lazy page count, progress approximation, scroll offset index
+
+**Novel Text Display Value**:
+The cross-platform rendered text value produced by **Novel Text Layout** for platform adapters to materialize into native TextKit 2 drawing.
+_Avoid_: display recipe, display plan, attributed string cache, layout manager, text view model
+
 **Favorite Library**:
 The local projection of Yamibo remote favorites plus user-owned reading metadata, display names, hidden state, and collections.
 _Avoid_: favorite store, favorites snapshot, favorites list
@@ -53,6 +65,14 @@ _Avoid_: favorite store, favorites snapshot, favorites list
 - On supported Apple platforms, **Novel Text Layout** uses TextKit 2 as the authoritative layout implementation and does not fall back to estimated text slicing when layout fails.
 - **Novel Text Layout** exposes layout failures explicitly so the **Novel Reading Session** can surface them instead of treating them as empty content.
 - **Novel Text Layout** must preserve **Novel Reading Position** semantics by returning segment offsets and intra-page progress rather than TextKit-internal positions.
+- A **Novel Text Viewport** belongs to **Novel Text Layout** and owns the live TextKit 2 viewport object graph; SwiftUI observes it through platform adapters rather than hosting text chunks directly.
+- A **Novel Text Viewport** must keep page counts, chapter starts, and **Novel Reading Position** restoration exact when the reader opens, even if drawing of text fragments remains viewport-lazy.
+- A **Novel Text Viewport Index** must be complete before the **Novel Reading Session** publishes readable content; loading UI is preferable to showing approximate page counts or chapter positions.
+- A **Novel Text Viewport Index** is cacheable by reader page document identity, text-affecting appearance settings, container layout, reading mode, and two-page spread presentation.
+- A **Novel Text Display Value** belongs to rendered text blocks in a **Novel Reading Session** and carries text style semantics plus rendered text ranges.
+- **Novel Reading Session** derives page-level text ranges from the **Novel Text Display Values** inside a rendered page; rendered pages must not store a separate aggregate text range list.
+- A **Novel Text Display Value** must not contain live TextKit objects such as `NSTextLayoutManager`, UIKit/AppKit views, or mutable platform text storage.
+- SwiftUI and platform adapters materialize a **Novel Text Display Value** into TextKit 2 drawing objects; they do not decide **Novel Reading Position** ranges or text style semantics.
 - In paged reading mode, SwiftUI hosts fixed-size page views whose text is drawn from **Novel Text Layout**; text views must not resize the page using their own fitting pass.
 - **Novel Text Layout** display failures are reader errors, not opportunities to fall back to SwiftUI text, UIKit text views, AppKit text views, or estimated slicing.
 - `ReaderPaginator` is only a compatibility shim; do not reintroduce it, text view fitting, or estimated slicing as a production alternative to **Novel Text Layout**.
