@@ -85,10 +85,14 @@ public final class ReaderContainerModel: ObservableObject {
     public init(
         context: ReaderLaunchContext,
         appContext: YamiboAppContext,
+        initialSettings: ReaderAppearanceSettings? = nil,
         pagination: @escaping NovelTextPagination = NovelTextLayout.renderedPages
     ) {
         self.context = context
         self.appContext = appContext
+        if let initialSettings {
+            settings = initialSettings
+        }
         self.pagination = pagination
         progressSync = ProgressSyncModule(
             adapter: FavoriteLibraryProgressSyncAdapter(favoriteStore: appContext.favoriteStore)

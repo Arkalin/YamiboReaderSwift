@@ -12,6 +12,7 @@ final class ReaderChromeStateTests: XCTestCase {
             hasPresentedOverlay: false
         )
         XCTAssertEqual(state.mode, .loading)
+        XCTAssertTrue(state.showsChrome)
 
         state.update(
             isLoading: false,
@@ -29,6 +30,21 @@ final class ReaderChromeStateTests: XCTestCase {
             hasPresentedOverlay: false
         )
         XCTAssertEqual(state.mode, .immersiveHidden)
+    }
+
+    func testVerticalInitialLoadHidesChrome() {
+        var state = ReaderChromeState()
+
+        state.update(
+            isLoading: true,
+            errorMessage: nil,
+            hasPages: false,
+            hasPresentedOverlay: false,
+            usesVerticalReadingMode: true
+        )
+
+        XCTAssertEqual(state.mode, .loading)
+        XCTAssertFalse(state.showsChrome)
     }
 
     func testManualVisibleStateSurvivesRepeatedContentUpdates() {
