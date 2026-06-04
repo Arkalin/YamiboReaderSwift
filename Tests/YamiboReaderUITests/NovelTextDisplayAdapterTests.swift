@@ -301,6 +301,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
             encoding: .utf8
         )
         let verticalContentBody = try XCTUnwrap(functionBody(named: "verticalContent", in: containerSource))
+        let scrollViewBody = try XCTUnwrap(typeBody(named: "ReaderVerticalViewportScrollView", in: supportSource))
         let readerBlockBody = try XCTUnwrap(typeBody(named: "ReaderBlockView", in: supportSource))
         let settings = ReaderAppearanceSettings(readingMode: .vertical)
         let block = try XCTUnwrap(ReaderBlockNovelTextDisplayMaterializer.materialization(
@@ -312,10 +313,34 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
             settings: settings
         ))
 
-        XCTAssertTrue(verticalContentBody.contains("ReaderPageContent("))
+        XCTAssertTrue(verticalContentBody.contains("ReaderVerticalViewportScrollView("))
+        XCTAssertTrue(scrollViewBody.contains("ReaderViewportPageContent("))
         XCTAssertTrue(readerBlockBody.contains("NativeNovelTextDisplayView("))
         XCTAssertFalse(readerBlockBody.contains("Text(displayValue.text"))
         XCTAssertEqual(block.backend, .novelTextViewport)
+    }
+
+    func testVerticalReadingUsesUIKitViewportScrollViewInsteadOfSwiftUILazyTextHost() throws {
+        let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let containerSource = try String(
+            contentsOf: repositoryRoot
+                .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderContainerView.swift"),
+            encoding: .utf8
+        )
+        let supportSource = try String(
+            contentsOf: repositoryRoot
+                .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderSupportViews.swift"),
+            encoding: .utf8
+        )
+        let verticalContentBody = try XCTUnwrap(functionBody(named: "verticalContent", in: containerSource))
+        let scrollViewBody = try XCTUnwrap(typeBody(named: "ReaderVerticalViewportScrollView", in: supportSource))
+
+        XCTAssertTrue(verticalContentBody.contains("ReaderVerticalViewportScrollView("))
+        XCTAssertFalse(verticalContentBody.contains("LazyVStack"))
+        XCTAssertTrue(supportSource.contains("struct ReaderVerticalViewportScrollView: UIViewRepresentable"))
+        XCTAssertTrue(scrollViewBody.contains("UICollectionView"))
+        XCTAssertTrue(scrollViewBody.contains("viewportContext"))
+        XCTAssertTrue(scrollViewBody.contains("viewportIndex"))
     }
 
     func testNovelReadingSessionDisplayPathDoesNotRetainUIKitTextViewFallback() throws {
