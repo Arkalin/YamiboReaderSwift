@@ -167,6 +167,52 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertFalse(sizeThatFitsBody.contains("displayView.measuredHeight"))
     }
 
+    func testNovelTextDisplayValueStaysPureAndDisplayMaterializationUsesPlatformAdapter() throws {
+        let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let readerModelsSource = try String(
+            contentsOf: repositoryRoot
+                .appendingPathComponent("Sources/YamiboReaderCore/Models/ReaderModels.swift"),
+            encoding: .utf8
+        )
+        let adapterSource = try String(
+            contentsOf: repositoryRoot
+                .appendingPathComponent("Sources/YamiboReaderUI/Views/NovelTextDisplayAdapter.swift"),
+            encoding: .utf8
+        )
+        let displayValueBody = try XCTUnwrap(typeBody(named: "NovelTextDisplayValue", in: readerModelsSource))
+        let updateUIViewBody = try XCTUnwrap(functionBody(named: "updateUIView", in: adapterSource))
+        let displayUIViewBody = try XCTUnwrap(typeBody(named: "NovelTextKit2DisplayUIView", in: adapterSource))
+
+        XCTAssertFalse(displayValueBody.contains("NSAttributedString"))
+        XCTAssertFalse(displayValueBody.contains("NSText"))
+        XCTAssertFalse(displayValueBody.contains("UIView"))
+        XCTAssertFalse(displayValueBody.contains("NSView"))
+        XCTAssertTrue(updateUIViewBody.contains("NovelTextKit2PlatformAdapter.makeAttributedText"))
+        XCTAssertFalse(displayUIViewBody.contains("func measuredHeight"))
+    }
+
+    func testSettingsPreviewAndReadingSessionUseSameAdapterBackedMaterialization() throws {
+        let settings = ReaderAppearanceSettings(fontScale: 1.2, readingMode: .paged)
+        let preview = NovelTextDisplayAdapter.materialization(
+            surface: .settingsPreview,
+            displayValue: NovelTextDisplayValue(
+                text: "设置预览",
+                chapterTitle: nil,
+                settings: settings
+            ),
+            baseFontSize: 22,
+            textColor: .settingsPreviewPrimaryText
+        )
+        let block = try XCTUnwrap(ReaderBlockNovelTextDisplayMaterializer.materialization(
+            for: .text("正文块", chapterTitle: "第一章", settings: settings),
+            settings: settings
+        ))
+
+        XCTAssertEqual(preview.backend, .textKit2DisplayAdapter)
+        XCTAssertEqual(block.backend, preview.backend)
+        XCTAssertEqual(block.measurementBackend, preview.measurementBackend)
+    }
+
     func testNovelReadingSessionDisplayPathDoesNotRetainUIKitTextViewFallback() throws {
         let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let readerSupportSource = try String(
@@ -262,6 +308,30 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
 
 private func functionBody(named name: String, in source: String) -> String? {
     guard let nameRange = source.range(of: "func \(name)") ?? source.range(of: "static func \(name)") else {
+        return nil
+    }
+    guard let bodyStart = source[nameRange.upperBound...].firstIndex(of: "{") else {
+        return nil
+    }
+
+    var depth = 0
+    var index = bodyStart
+    while index < source.endIndex {
+        if source[index] == "{" {
+            depth += 1
+        } else if source[index] == "}" {
+            depth -= 1
+            if depth == 0 {
+                return String(source[bodyStart...index])
+            }
+        }
+        index = source.index(after: index)
+    }
+    return nil
+}
+
+private func typeBody(named name: String, in source: String) -> String? {
+    guard let nameRange = source.range(of: "struct \(name)") ?? source.range(of: "final class \(name)") else {
         return nil
     }
     guard let bodyStart = source[nameRange.upperBound...].firstIndex(of: "{") else {
