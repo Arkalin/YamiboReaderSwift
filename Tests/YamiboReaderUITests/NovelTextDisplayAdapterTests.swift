@@ -333,6 +333,29 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertEqual(block.backend, .novelTextViewport)
     }
 
+    func testPagedCellsResolveViewportPageIdentityBeforeRenderingNormalText() throws {
+        let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let supportSource = try String(
+            contentsOf: repositoryRoot
+                .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderSupportViews.swift"),
+            encoding: .utf8
+        )
+        let singlePageBody = try XCTUnwrap(typeBody(named: "ReaderPagedCollectionViewport", in: supportSource))
+        let spreadContentBody = try XCTUnwrap(typeBody(named: "ReaderPagedSpreadContent", in: supportSource))
+        let viewportContentBody = try XCTUnwrap(typeBody(named: "ReaderViewportPageContent", in: supportSource))
+
+        for body in [singlePageBody, spreadContentBody] {
+            XCTAssertTrue(body.contains("viewportIndex?.pages.first"))
+            XCTAssertTrue(body.contains("$0.pageIndex == page.index"))
+            XCTAssertTrue(body.contains("$0.documentView == page.documentView"))
+            XCTAssertTrue(body.contains("ReaderViewportPageContent("))
+            XCTAssertFalse(body.contains("page.blocks.compactMap(\\.novelTextDisplayValue)"))
+            XCTAssertFalse(body.contains("page.novelTextDisplayValues.first"))
+        }
+        XCTAssertTrue(viewportContentBody.contains("NovelTextLayout.displayValue("))
+        XCTAssertTrue(viewportContentBody.contains("compatibilityBlocks"))
+    }
+
     func testSinglePagePagedReadingUsesUIKitCollectionViewportInsteadOfSwiftUITabView() throws {
         let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let containerSource = try String(
