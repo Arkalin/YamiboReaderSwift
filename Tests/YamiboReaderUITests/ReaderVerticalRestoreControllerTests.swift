@@ -17,13 +17,16 @@ final class ReaderVerticalRestoreControllerTests: XCTestCase {
         let request = ReaderVerticalScrollRequest(pageIndex: 81, intraPageProgress: 0.0194)
 
         controller.beginScrolling(to: request)
+        XCTAssertTrue(controller.shouldConcealViewportContent)
         controller.refresh(now: 100)
         XCTAssertEqual(controller.scrollingRequest, request)
 
         controller.beginFineTuning(request)
+        XCTAssertTrue(controller.shouldConcealViewportContent)
         XCTAssertFalse(controller.canSampleViewport(now: 101))
 
         controller.beginSettling(request, now: 101, duration: 0.45)
+        XCTAssertFalse(controller.shouldConcealViewportContent)
         XCTAssertFalse(controller.canSampleViewport(now: 101.44))
         XCTAssertTrue(controller.canSampleViewport(now: 101.45))
         XCTAssertNil(controller.activeRequest)

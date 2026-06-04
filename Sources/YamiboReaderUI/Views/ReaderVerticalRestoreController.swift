@@ -45,6 +45,15 @@ struct ReaderVerticalRestoreController: Equatable, Sendable {
         activeRequest != nil || viewportSamplingSuppressedUntil != nil
     }
 
+    var shouldConcealViewportContent: Bool {
+        switch phase {
+        case .scrolling, .fineTuning:
+            return true
+        case .idle, .settling:
+            return false
+        }
+    }
+
     mutating func beginScrolling(to request: ReaderVerticalScrollRequest) {
         viewportSamplingSuppressedUntil = nil
         phase = .scrolling(request: request)

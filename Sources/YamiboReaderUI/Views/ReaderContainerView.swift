@@ -450,6 +450,7 @@ public struct ReaderContainerView: View {
             }
         )
         .contentShape(Rectangle())
+        .opacity(verticalRestoreController.shouldConcealViewportContent ? 0 : 1)
         .simultaneousGesture(verticalScrollSuppressionGesture)
     }
 
