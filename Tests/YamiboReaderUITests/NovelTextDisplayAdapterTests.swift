@@ -490,6 +490,31 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertFalse(spreadBody.contains("NovelTextKit2Representable("))
     }
 
+    func testVerticalViewportUsesExplicitFlowLayoutSizingForScrollableFullWidthCells() throws {
+        let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let supportSource = try String(
+            contentsOf: repositoryRoot
+                .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderSupportViews.swift"),
+            encoding: .utf8
+        )
+        let verticalBody = try XCTUnwrap(typeBody(named: "ReaderVerticalViewportScrollView", in: supportSource))
+
+        XCTAssertTrue(verticalBody.contains("layout.estimatedItemSize = .zero"))
+        XCTAssertTrue(verticalBody.contains("sizeForItemAt indexPath"))
+        XCTAssertTrue(verticalBody.contains("verticalItemWidth(in: collectionView)"))
+        XCTAssertTrue(verticalBody.contains("verticalItemHeight(for: indexPath.item"))
+        XCTAssertTrue(verticalBody.contains("ReaderViewportPageContent.viewportBackedPage"))
+        XCTAssertTrue(verticalBody.contains("NovelTextLayout.measuredTextHeight"))
+        XCTAssertTrue(verticalBody.contains("topInset: CGFloat"))
+        XCTAssertTrue(verticalBody.contains("bottomInset: CGFloat"))
+        XCTAssertTrue(verticalBody.contains("collectionView.contentInset = contentInset"))
+        XCTAssertTrue(verticalBody.contains("reloadDataIfNeeded(in: collectionView"))
+        XCTAssertTrue(verticalBody.contains("handledScrollRequest != request"))
+        XCTAssertTrue(verticalBody.contains("tapGesture.cancelsTouchesInView = false"))
+        XCTAssertFalse(verticalBody.contains("collectionView.reloadData()\n            context.coordinator.handle"))
+        XCTAssertFalse(verticalBody.contains("UICollectionViewFlowLayout.automaticSize"))
+    }
+
     func testViewportPageContentDerivesNormalTextFromViewportContextAndIndexBeforeCompatibilityPageBlocks() throws {
         let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let supportSource = try String(
