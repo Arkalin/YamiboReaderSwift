@@ -859,6 +859,7 @@ public struct NovelTextViewportExternalBlock: Hashable, Sendable {
     public var url: URL
     public var chapterOrdinal: Int?
     public var chapterTitle: String?
+    public var frozenFrame: NovelTextViewportExternalBlockFrame?
     public var chapterCommentTarget: ReaderChapterCommentTarget?
 
     public init(
@@ -866,13 +867,29 @@ public struct NovelTextViewportExternalBlock: Hashable, Sendable {
         url: URL,
         chapterOrdinal: Int?,
         chapterTitle: String?,
+        frozenFrame: NovelTextViewportExternalBlockFrame? = nil,
         chapterCommentTarget: ReaderChapterCommentTarget? = nil
     ) {
         self.segmentIndex = max(0, segmentIndex)
         self.url = url
         self.chapterOrdinal = chapterOrdinal
         self.chapterTitle = chapterTitle
+        self.frozenFrame = frozenFrame
         self.chapterCommentTarget = chapterCommentTarget
+    }
+}
+
+public struct NovelTextViewportExternalBlockFrame: Hashable, Sendable {
+    public var x: CGFloat
+    public var y: CGFloat
+    public var width: CGFloat
+    public var height: CGFloat
+
+    public init(x: CGFloat, y: CGFloat, width: CGFloat, height: CGFloat) {
+        self.x = x.isFinite ? x : 0
+        self.y = y.isFinite ? y : 0
+        self.width = max(0, width.isFinite ? width : 0)
+        self.height = max(0, height.isFinite ? height : 0)
     }
 }
 
