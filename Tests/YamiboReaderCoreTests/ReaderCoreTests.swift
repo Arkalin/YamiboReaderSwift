@@ -1156,23 +1156,51 @@ private final class StubURLProtocol: URLProtocol {
 }
 
 @Test func novelTextViewportUpdatePublishesPageLayoutMetrics() throws {
+#if canImport(UIKit)
+    let repetitionCount = 400
+    let layout = ReaderContainerLayout(width: 320, height: 568, readingMode: .vertical)
+#else
+    let repetitionCount = 10
+    let layout = ReaderContainerLayout(width: 320, height: 568)
+#endif
     let document = ReaderPageDocument(
         threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=63&mobile=2")),
         view: 1,
         maxView: 1,
         segments: [
-            .text(String(repeating: "Viewport update metrics should size native novel text. ", count: 10), chapterTitle: "第一章")
+            .text(
+                String(repeating: "Viewport update metrics should size native novel text. ", count: repetitionCount),
+                chapterTitle: "第一章"
+            )
         ]
     )
 
     let result = try NovelTextLayout.makeViewport(
         document: document,
         settings: ReaderAppearanceSettings(readingMode: .vertical),
-        layout: ReaderContainerLayout(width: 320, height: 568)
+        layout: layout
     )
-    let pageIndex = try #require(result.viewportIndex.pages.first?.pageIndex)
 
-    #expect((result.layoutMetrics.pageHeight(for: pageIndex) ?? 0) > 0)
+#if canImport(UIKit)
+    #expect(result.viewportIndex.pages.count > 2)
+    for page in result.viewportIndex.pages {
+        let geometry = try #require(page.frozenGeometry)
+        let textHeight = try #require(result.layoutMetrics.pageMetrics[page.pageIndex]?.textHeight)
+        #expect(textHeight == geometry.clipHeight)
+        #expect(textHeight > 0)
+        #expect(textHeight <= layout.readableFrame.height * 2)
+    }
+#else
+    #expect(!result.viewportIndex.pages.isEmpty)
+#endif
+}
+
+@Test func novelTextViewportFrozenGeometryUsesSurfaceClipHeight() {
+    let clipRect = CGRect(x: 0, y: 2_400, width: 320, height: 780)
+
+    #expect(
+        NovelTextViewportFrozenGeometry.surfaceContentHeight(forDocumentClipRect: clipRect) == 780
+    )
 }
 
 @Test func novelTextLayoutConvertsDisplayOffsetsUsingSwiftCharacterRanges() throws {

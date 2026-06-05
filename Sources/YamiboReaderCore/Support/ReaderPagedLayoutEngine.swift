@@ -108,7 +108,6 @@ enum ReaderPagedLayoutEngine {
 
         var pageRanges: [Int: NSRange] = [:]
         var pageClipRects: [Int: CGRect] = [:]
-        var documentContentHeight: CGFloat = 0
         textLayoutManager.enumerateTextSegments(
             in: documentRange,
             type: .standard,
@@ -135,7 +134,6 @@ enum ReaderPagedLayoutEngine {
             } else {
                 pageClipRects[pageIndex] = rect
             }
-            documentContentHeight = max(documentContentHeight, rect.maxY)
             return true
         }
 
@@ -144,9 +142,7 @@ enum ReaderPagedLayoutEngine {
             return viewportDocumentPageRange(
                 from: attributedText,
                 range: pageRange,
-                clipRect: pageClipRects[pageIndex],
-                contentHeight: documentContentHeight,
-                isFirstPage: pageIndex == 0
+                clipRect: pageClipRects[pageIndex]
             )
         }
     }
@@ -187,9 +183,7 @@ enum ReaderPagedLayoutEngine {
     private static func viewportDocumentPageRange(
         from attributedText: NSAttributedString,
         range: NSRange,
-        clipRect: CGRect?,
-        contentHeight: CGFloat,
-        isFirstPage: Bool
+        clipRect: CGRect?
     ) -> NovelTextViewportDocumentPageRange? {
         let textLength = attributedText.string.count
         let pageCharacterStart = max(0, min(range.location, textLength))
@@ -222,7 +216,9 @@ enum ReaderPagedLayoutEngine {
                     documentEndOffset: trimmedEnd,
                     documentClipMinY: clipRect.minY,
                     documentClipMaxY: clipRect.maxY,
-                    contentHeight: contentHeight
+                    contentHeight: NovelTextViewportFrozenGeometry.surfaceContentHeight(
+                        forDocumentClipRect: clipRect
+                    )
                 )
             }
         )
