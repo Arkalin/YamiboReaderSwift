@@ -344,6 +344,9 @@ public struct ReaderContainerView: View {
                     topInset: topInset,
                     bottomInset: bottomInset,
                     selectionIndex: model.pagedSelectionIndex,
+                    displayReferenceProvider: { pageIdentity in
+                        model.novelTextViewportDisplayReference(for: pageIdentity)
+                    },
                     onSelectionChange: { selectionIndex in
                         model.updatePagedSelection(selectionIndex)
                     }

@@ -542,6 +542,7 @@ struct ReaderPagedSpreadContent: View {
     let sessionState: SessionState
     let topInset: CGFloat
     let bottomInset: CGFloat
+    let displayReferenceProvider: @MainActor (Int) -> NovelTextViewportDisplayReference?
 
     var body: some View {
         HStack(spacing: 0) {
@@ -558,9 +559,11 @@ struct ReaderPagedSpreadContent: View {
                 let viewportPage = viewportIndex?.pages.first {
                     $0.pageIndex == pageIndex
                 }
+                let displayReference = displayReferenceProvider(pageIndex)
                 ReaderViewportPageContent(
                     viewportContext: viewportContext,
                     viewportPage: viewportPage,
+                    displayReference: displayReference,
                     fallbackDocumentView: viewportPage?.documentView,
                     fallbackPageIndex: pageIndex,
                     settings: settings,
@@ -885,6 +888,7 @@ struct ReaderPagedSpreadCollectionViewport: UIViewRepresentable {
     let topInset: CGFloat
     let bottomInset: CGFloat
     let selectionIndex: Int
+    let displayReferenceProvider: @MainActor (Int) -> NovelTextViewportDisplayReference?
     let onSelectionChange: (Int) -> Void
 
     func makeCoordinator() -> Coordinator {
@@ -957,7 +961,8 @@ struct ReaderPagedSpreadCollectionViewport: UIViewRepresentable {
                     refererURL: parent.refererURL,
                     sessionState: parent.sessionState,
                     topInset: parent.topInset,
-                    bottomInset: parent.bottomInset
+                    bottomInset: parent.bottomInset,
+                    displayReferenceProvider: parent.displayReferenceProvider
                 )
             }
             .margins(.all, 0)

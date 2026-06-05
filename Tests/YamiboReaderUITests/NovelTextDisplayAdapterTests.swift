@@ -354,6 +354,26 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertEqual(block.backend, .novelTextViewport)
     }
 
+    func testTwoPageSpreadInstallsOpaqueReferencesForLeftAndRightPages() throws {
+        let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let supportSource = try String(
+            contentsOf: repositoryRoot
+                .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderSupportViews.swift"),
+            encoding: .utf8
+        )
+        let spreadViewportBody = try XCTUnwrap(
+            typeBody(named: "ReaderPagedSpreadCollectionViewport", in: supportSource)
+        )
+        let spreadContentBody = try XCTUnwrap(typeBody(named: "ReaderPagedSpreadContent", in: supportSource))
+
+        XCTAssertTrue(spreadViewportBody.contains("displayReferenceProvider"))
+        XCTAssertTrue(spreadContentBody.contains("displayReferenceProvider(pageIndex)"))
+        XCTAssertTrue(spreadContentBody.contains("displayReference: displayReference"))
+        XCTAssertFalse(spreadContentBody.contains("NovelTextViewportDisplayUIView()"))
+        XCTAssertFalse(spreadContentBody.contains("NSTextContentStorage"))
+        XCTAssertFalse(spreadContentBody.contains("NSTextLayoutManager"))
+    }
+
     func testPagedCellsResolveViewportPageIdentityBeforeRenderingNormalText() throws {
         let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let supportSource = try String(
