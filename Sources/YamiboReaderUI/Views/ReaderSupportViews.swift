@@ -537,7 +537,6 @@ struct ReaderPagedSpreadContent: View {
     let pages: [NovelTextViewportIndexPage]
     let viewportContext: NovelTextViewportContext?
     let viewportIndex: NovelTextViewportIndex?
-    let viewportLayoutMetrics: NovelTextViewportLayoutMetrics?
     let settings: ReaderAppearanceSettings
     let refererURL: URL
     let sessionState: SessionState
@@ -1054,6 +1053,7 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
     let pages: [NovelTextViewportIndexPage]
     let viewportContext: NovelTextViewportContext?
     let viewportIndex: NovelTextViewportIndex?
+    let viewportLayoutMetrics: NovelTextViewportLayoutMetrics?
     let settings: ReaderAppearanceSettings
     let refererURL: URL
     let sessionState: SessionState
