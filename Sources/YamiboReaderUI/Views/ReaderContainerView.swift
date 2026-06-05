@@ -221,11 +221,19 @@ public struct ReaderContainerView: View {
             .onChange(of: currentLayout) { _, newValue in
                 model.updateLayout(newValue)
             }
+            .onReceive(NotificationCenter.default.publisher(
+                for: UIApplication.didReceiveMemoryWarningNotification
+            )) { _ in
+                model.handleMemoryPressure()
+            }
             .onDisappear {
                 verticalRestoreRetryTask?.cancel()
                 verticalViewportPositionUpdateTask?.cancel()
                 syncVerticalViewportBeforeSave()
-                Task { await model.saveProgress() }
+                Task {
+                    await model.saveProgress()
+                    model.close()
+                }
             }
             .sheet(isPresented: $showingSettings) {
                 ReaderSettingsPanel(model: model)

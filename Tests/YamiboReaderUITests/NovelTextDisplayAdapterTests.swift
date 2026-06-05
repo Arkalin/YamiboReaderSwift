@@ -374,6 +374,27 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertFalse(spreadContentBody.contains("NSTextLayoutManager"))
     }
 
+    func testReaderLifecycleClosesWorkflowAndForwardsMemoryWarnings() throws {
+        let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let containerSource = try String(
+            contentsOf: repositoryRoot
+                .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderContainerView.swift"),
+            encoding: .utf8
+        )
+        let modelSource = try String(
+            contentsOf: repositoryRoot
+                .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderContainerModel.swift"),
+            encoding: .utf8
+        )
+
+        XCTAssertTrue(containerSource.contains("UIApplication.didReceiveMemoryWarningNotification"))
+        XCTAssertTrue(containerSource.contains("model.handleMemoryPressure()"))
+        XCTAssertTrue(containerSource.contains("await model.saveProgress()"))
+        XCTAssertTrue(containerSource.contains("model.close()"))
+        XCTAssertTrue(modelSource.contains("readingWorkflow?.handleMemoryPressure()"))
+        XCTAssertTrue(modelSource.contains("readingWorkflow?.close()"))
+    }
+
     func testPagedCellsResolveViewportPageIdentityBeforeRenderingNormalText() throws {
         let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let supportSource = try String(
