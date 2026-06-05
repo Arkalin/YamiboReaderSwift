@@ -1090,6 +1090,37 @@ private final class StubURLProtocol: URLProtocol {
     #expect((result.layoutMetrics.pageHeight(for: pageIndex) ?? 0) > 0)
 }
 
+@Test func novelTextLayoutConvertsDisplayOffsetsUsingSwiftCharacterRanges() throws {
+    let displayValue = NovelTextDisplayValue(
+        text: "👩‍❤️‍👩a\n\n第二段",
+        chapterTitle: "第一章",
+        ranges: [
+            ReaderRenderedTextRange(segmentIndex: 0, startOffset: 10, endOffset: 12),
+            ReaderRenderedTextRange(segmentIndex: 2, startOffset: 40, endOffset: 43)
+        ]
+    )
+
+    let sample = try #require(
+        NovelTextLayout.viewportSample(
+            displayOffset: 5,
+            displayValue: displayValue,
+            documentView: 3,
+            pageIndex: 7
+        )
+    )
+    let displayOffset = try #require(
+        NovelTextLayout.displayOffset(
+            forSegmentIndex: 2,
+            segmentOffset: 41,
+            displayValue: displayValue
+        )
+    )
+
+    #expect(sample.segmentIndex == 2)
+    #expect(sample.segmentOffset == 41)
+    #expect(displayOffset == 5)
+}
+
 @Test func novelTextViewportIndexPagePublishesImageExternalBlockPlacement() async throws {
     let imageURL = try #require(URL(string: "https://example.com/viewport-image.jpg"))
     let document = ReaderPageDocument(
