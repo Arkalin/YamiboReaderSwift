@@ -424,33 +424,6 @@ struct ReaderPagedPagerIdentity: Hashable {
     }
 }
 
-struct ReaderVerticalViewportTextOffsetMapper {
-    static func sample(
-        displayOffset: Int,
-        displayValue: NovelTextDisplayValue,
-        documentView: Int,
-        pageIndex: Int
-    ) -> NovelTextViewportSample? {
-        NovelTextLayout.viewportSample(
-            displayOffset: displayOffset,
-            displayValue: displayValue,
-            documentView: documentView,
-            pageIndex: pageIndex
-        )
-    }
-
-    static func displayOffset(
-        for anchor: ReaderVerticalTextAnchor,
-        displayValue: NovelTextDisplayValue
-    ) -> Int? {
-        NovelTextLayout.displayOffset(
-            forSegmentIndex: anchor.segmentIndex,
-            segmentOffset: anchor.segmentOffset,
-            displayValue: displayValue
-        )
-    }
-}
-
 #if os(iOS)
 import UIKit
 
@@ -516,14 +489,14 @@ extension View {
 }
 
 private enum ReaderViewportDisplayBlock: Identifiable {
-    case text(NovelTextDisplayValue)
+    case text
     case image(URL)
     case footer(String)
 
     var id: String {
         switch self {
-        case let .text(displayValue):
-            return "text:\(displayValue.chapterTitle ?? ""):\(displayValue.startsAtParagraphBoundary):\(displayValue.text.hashValue)"
+        case .text:
+            return "text"
         case let .image(url):
             return "image:\(url.absoluteString)"
         case let .footer(text):
@@ -615,24 +588,19 @@ struct ReaderViewportPageContent: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            if let displayReference, !displayReference.isStale, viewportPage?.ranges.isEmpty == false {
-                NativeNovelTextViewportReferenceView(displayReference: displayReference)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            } else {
-                ForEach(
-                    Self.viewportBlocks(
-                        viewportContext: viewportContext,
-                        viewportPage: viewportPage,
-                        settings: settings
-                    )
-                ) { block in
-                    ReaderViewportBlockView(
-                        block: block,
-                        settings: settings,
-                        refererURL: refererURL,
-                        sessionState: sessionState
-                    )
-                }
+            ForEach(
+                Self.viewportBlocks(
+                    viewportContext: viewportContext,
+                    viewportPage: viewportPage,
+                    settings: settings
+                )
+            ) { block in
+                ReaderViewportBlockView(
+                    block: block,
+                    displayReference: displayReference,
+                    refererURL: refererURL,
+                    sessionState: sessionState
+                )
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -654,18 +622,17 @@ struct ReaderViewportPageContent: View {
             ReaderViewportDisplayBlock.image($0.url)
         } ?? []
         var blocks: [ReaderViewportDisplayBlock] = []
-        guard let viewportContext,
-              let viewportPage,
-              !viewportPage.ranges.isEmpty,
-              let displayValue = try? NovelTextLayout.displayValue(
-                viewportContext: viewportContext,
-                viewportPage: viewportPage,
-                settings: settings
-              ) else {
+        guard viewportContext != nil,
+              let viewportPage else {
             return externalBlockImages.isEmpty ? [.footer(L10n.string("reader.empty_content"))] : externalBlockImages
         }
-        blocks.append(.text(displayValue))
+        if !viewportPage.ranges.isEmpty {
+            blocks.append(.text)
+        }
         blocks.append(contentsOf: externalBlockImages)
+        if blocks.isEmpty {
+            blocks.append(.footer(L10n.string("reader.empty_content")))
+        }
         return blocks
     }
 
@@ -1781,21 +1748,19 @@ private struct ReaderVerticalViewportContentIdentity: Hashable {
 
 private struct ReaderViewportBlockView: View {
     let block: ReaderViewportDisplayBlock
-    let settings: ReaderAppearanceSettings
+    let displayReference: NovelTextViewportDisplayReference?
     let refererURL: URL
     let sessionState: SessionState
-    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         switch block {
-        case let .text(displayValue):
-            NativeNovelTextDisplayView(
-                surface: .novelReadingSessionTextBlock,
-                displayValue: displayValue,
-                baseFontSize: 22,
-                textColor: UIColor(readerTextColor),
-                textColorToken: .primaryReaderText
-            )
+        case .text:
+            if let displayReference, !displayReference.isStale {
+                NativeNovelTextViewportReferenceView(displayReference: displayReference)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            } else {
+                Color.clear.frame(height: 1)
+            }
         case let .image(url):
             AuthenticatedReaderImage(
                 url: url,
@@ -1811,9 +1776,6 @@ private struct ReaderViewportBlockView: View {
         }
     }
 
-    private var readerTextColor: Color {
-        colorScheme == .dark ? Color.white.opacity(0.92) : .primary
-    }
 }
 
 @MainActor

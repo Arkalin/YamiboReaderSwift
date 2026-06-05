@@ -3,6 +3,40 @@ import XCTest
 @testable import YamiboReaderUI
 
 final class NovelTextDisplayAdapterTests: XCTestCase {
+    func testMigrationGateRejectsUIOwnedTextKitGraphsAndDisplayValueFallbacks() throws {
+        let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let adapterSource = try String(
+            contentsOf: repositoryRoot
+                .appendingPathComponent("Sources/YamiboReaderUI/Views/NovelTextDisplayAdapter.swift"),
+            encoding: .utf8
+        )
+        let supportSource = try String(
+            contentsOf: repositoryRoot
+                .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderSupportViews.swift"),
+            encoding: .utf8
+        )
+        let sessionSource = try String(
+            contentsOf: repositoryRoot
+                .appendingPathComponent("Sources/YamiboReaderCore/Support/NovelReadingSession.swift"),
+            encoding: .utf8
+        )
+
+        XCTAssertFalse(adapterSource.contains("NovelTextLayoutLiveSurfaceStore"))
+        XCTAssertFalse(adapterSource.contains("NovelTextLayoutLiveSurface"))
+        XCTAssertFalse(adapterSource.contains("NovelTextViewportDisplayUIView"))
+        XCTAssertFalse(adapterSource.contains("NativeNovelTextDisplayView"))
+        XCTAssertFalse(adapterSource.contains("NovelTextDisplayValue"))
+        XCTAssertFalse(adapterSource.contains("NovelTextDisplayAdapter"))
+        XCTAssertFalse(adapterSource.contains("NSTextContentStorage"))
+        XCTAssertFalse(adapterSource.contains("NSTextLayoutManager"))
+        XCTAssertFalse(supportSource.contains("NovelTextLayout.displayValue("))
+        XCTAssertFalse(supportSource.contains("NovelTextDisplayValue"))
+        XCTAssertFalse(supportSource.contains("NativeNovelTextDisplayView"))
+        XCTAssertFalse(sessionSource.contains("import UIKit"))
+        XCTAssertFalse(sessionSource.contains("import AppKit"))
+        XCTAssertTrue(sessionSource.contains("public struct NovelReadingSession: Sendable"))
+    }
+
     func testSinglePagePagedCellUsesOpaqueWorkflowDisplayReference() throws {
         let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let supportSource = try String(
@@ -98,164 +132,22 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertTrue(displayValue.startsAtParagraphBoundary)
     }
 
-    func testNovelTextLayoutSettingsPreviewUsesTextKit2DisplayAdapterWithDraftReadingSettings() {
-        let settings = ReaderAppearanceSettings(
-            fontScale: 1.25,
-            fontFamily: .systemSerif,
-            lineHeightScale: 1.7,
-            characterSpacingScale: 0.18,
-            horizontalPadding: 28,
-            usesJustifiedText: true,
-            indentsParagraphFirstLine: true,
-            readingMode: .paged
-        )
-
-        let displayValue = NovelTextDisplayValue(
-            text: "设置预览应该直接显示草稿正文。",
-            chapterTitle: nil,
-            settings: settings
-        )
-
-        let materialization = NovelTextDisplayAdapter.materialization(
-            surface: .settingsPreview,
-            displayValue: displayValue,
-            baseFontSize: 22,
-            textColor: .settingsPreviewPrimaryText
-        )
-
-        XCTAssertEqual(materialization.surface, .settingsPreview)
-        XCTAssertEqual(materialization.backend, .novelTextViewport)
-        XCTAssertEqual(materialization.style.fontFamily, .systemSerif)
-        XCTAssertEqual(materialization.style.fontScale, 1.25)
-        XCTAssertEqual(materialization.style.lineHeightScale, 1.7)
-        XCTAssertEqual(materialization.style.characterSpacingScale, 0.18)
-        XCTAssertTrue(materialization.style.indentsParagraphFirstLine)
-        XCTAssertEqual(materialization.style.textColor, .settingsPreviewPrimaryText)
-        XCTAssertNil(materialization.chapterTitle)
-    }
-
-    func testNovelReadingSessionTextBlockUsesSameNovelTextLayoutDisplayAdapterAsSettingsPreview() {
-        let settings = ReaderAppearanceSettings(
-            fontScale: 1.1,
-            fontFamily: .rounded,
-            lineHeightScale: 1.6,
-            characterSpacingScale: 0.08,
-            indentsParagraphFirstLine: true,
-            readingMode: .vertical
-        )
-        let materialization = NovelTextDisplayAdapter.materialization(
-            surface: .novelReadingSessionTextBlock,
-            displayValue: NovelTextDisplayValue(
-                text: "正文文本块应该由 Novel Text Layout 绘制。",
-                chapterTitle: "第一章",
-                startsAtParagraphBoundary: false,
-                settings: settings
-            ),
-            baseFontSize: 22,
-            textColor: .primaryReaderText
-        )
-        let previewDisplayValue = NovelTextDisplayValue(
-            text: "设置预览文本。",
-            chapterTitle: nil,
-            settings: settings
-        )
-        let previewMaterialization = NovelTextDisplayAdapter.materialization(
-            surface: .settingsPreview,
-            displayValue: previewDisplayValue,
-            baseFontSize: 22,
-            textColor: .settingsPreviewPrimaryText
-        )
-
-        XCTAssertEqual(materialization.surface, .novelReadingSessionTextBlock)
-        XCTAssertEqual(materialization.backend, previewMaterialization.backend)
-        XCTAssertEqual(materialization.style.fontFamily, .rounded)
-        XCTAssertEqual(materialization.style.lineHeightScale, 1.6)
-        XCTAssertEqual(materialization.chapterTitle, "第一章")
-        XCTAssertEqual(materialization.startsAtParagraphBoundary, false)
-    }
-
-    func testNovelReadingSessionTextBlockMaterializationUsesSnapshotDisplayValueSemantics() throws {
-        let snapshotSettings = ReaderAppearanceSettings(
-            fontScale: 1.4,
-            fontFamily: .systemSerif,
-            lineHeightScale: 1.85,
-            characterSpacingScale: 0.14,
-            usesJustifiedText: true,
-            indentsParagraphFirstLine: true,
-            readingMode: .paged
-        )
-        let materialization = NovelTextDisplayAdapter.materialization(
-            surface: .novelReadingSessionTextBlock,
-            displayValue: NovelTextDisplayValue(
-                text: "已经排版的阅读会话文本块必须使用快照中的显示语义。",
-                chapterTitle: "第一章",
-                settings: snapshotSettings
-            ),
-            baseFontSize: 20,
-            textColor: .primaryReaderText
-        )
-
-        XCTAssertEqual(materialization.style.fontScale, 1.4)
-        XCTAssertEqual(materialization.style.fontFamily, .systemSerif)
-        XCTAssertEqual(materialization.style.pointSize, 28, accuracy: 0.001)
-        XCTAssertEqual(materialization.style.lineHeightScale, 1.85)
-        XCTAssertEqual(materialization.style.characterSpacingScale, 0.14)
-        XCTAssertTrue(materialization.style.usesJustifiedText)
-        XCTAssertTrue(materialization.style.indentsParagraphFirstLine)
-    }
-
-    func testNovelTextLayoutDisplayMeasurementUsesSameTextKit2DisplayAdapterForPreviewAndReadingSessionBlocks() {
-        let settings = ReaderAppearanceSettings(
-            fontScale: 1.05,
-            lineHeightScale: 1.55,
-            characterSpacingScale: 0.05,
-            indentsParagraphFirstLine: true,
-            readingMode: .vertical
-        )
-        let previewDisplayValue = NovelTextDisplayValue(
-            text: "设置预览测高应该跟显示走同一条 Novel Text Layout 路径。",
-            chapterTitle: nil,
-            settings: settings
-        )
-        let previewMaterialization = NovelTextDisplayAdapter.materialization(
-            surface: .settingsPreview,
-            displayValue: previewDisplayValue,
-            baseFontSize: 22,
-            textColor: .settingsPreviewPrimaryText
-        )
-        let blockMaterialization = NovelTextDisplayAdapter.materialization(
-            surface: .novelReadingSessionTextBlock,
-            displayValue: NovelTextDisplayValue(
-                text: "纵向阅读正文块测高也不能回退到独立 text view fitting。",
-                chapterTitle: "第一章",
-                startsAtParagraphBoundary: true,
-                settings: settings
-            ),
-            baseFontSize: 22,
-            textColor: .primaryReaderText
-        )
-
-        XCTAssertEqual(previewMaterialization.measurementBackend, .novelTextLayoutMeasurement)
-        XCTAssertEqual(blockMaterialization.measurementBackend, previewMaterialization.measurementBackend)
-        XCTAssertEqual(blockMaterialization.surface, .novelReadingSessionTextBlock)
-    }
-
-    func testSwiftUIDisplaySizingRequestsHeightFromNovelTextLayoutMeasurement() throws {
+    func testSettingsPreviewUsesSwiftUITextWithoutUILayoutMeasurement() throws {
         let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        let adapterSource = try String(
+        let settingsSource = try String(
             contentsOf: repositoryRoot
-                .appendingPathComponent("Sources/YamiboReaderUI/Views/NovelTextDisplayAdapter.swift"),
+                .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderSettingsViews.swift"),
             encoding: .utf8
         )
-        let sizeThatFitsBody = try XCTUnwrap(functionBody(named: "sizeThatFits", in: adapterSource))
-        let measuredHeightBody = try XCTUnwrap(functionBody(named: "measuredHeight", in: adapterSource))
+        let previewBody = try XCTUnwrap(typeBody(named: "ReaderBooksPreviewMaskedContent", in: settingsSource))
 
-        XCTAssertTrue(sizeThatFitsBody.contains("NovelTextDisplayAdapter.measuredHeight"))
-        XCTAssertTrue(measuredHeightBody.contains("NovelTextLayout.measuredDisplayHeight"))
-        XCTAssertFalse(sizeThatFitsBody.contains("displayView.measuredHeight"))
+        XCTAssertTrue(previewBody.contains("Text(previewText)"))
+        XCTAssertTrue(previewBody.contains(".font(previewFont)"))
+        XCTAssertFalse(previewBody.contains("sizeThatFits"))
+        XCTAssertFalse(previewBody.contains("measuredHeight"))
     }
 
-    func testNovelTextDisplayValueStaysPureAndDisplayMaterializationUsesPlatformAdapter() throws {
+    func testNovelTextDisplayValueStaysPureAndReferenceSurfaceOwnsNoTextKitGraph() throws {
         let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let readerModelsSource = try String(
             contentsOf: repositoryRoot
@@ -268,62 +160,36 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
             encoding: .utf8
         )
         let displayValueBody = try XCTUnwrap(typeBody(named: "NovelTextDisplayValue", in: readerModelsSource))
-        let makeUIViewBody = try XCTUnwrap(functionBody(named: "makeUIView", in: adapterSource))
-        let updateUIViewBody = try XCTUnwrap(functionBody(named: "updateUIView", in: adapterSource))
-        let displayUIViewBody = try XCTUnwrap(typeBody(named: "NovelTextViewportDisplayUIView", in: adapterSource))
+        let referenceSurfaceBody = try XCTUnwrap(
+            typeBody(named: "NovelTextViewportReferenceUIView", in: adapterSource)
+        )
 
         XCTAssertFalse(displayValueBody.contains("NSAttributedString"))
         XCTAssertFalse(displayValueBody.contains("NSText"))
         XCTAssertFalse(displayValueBody.contains("UIView"))
         XCTAssertFalse(displayValueBody.contains("NSView"))
-        XCTAssertTrue(makeUIViewBody.contains("NovelTextLayout.makeDisplayView()"))
-        XCTAssertFalse(makeUIViewBody.contains("NovelTextViewportDisplayUIView()"))
-        XCTAssertTrue(updateUIViewBody.contains("NovelTextLayout.updateDisplayView"))
-        XCTAssertFalse(updateUIViewBody.contains("NovelTextKit2PlatformAdapter.makeAttributedText"))
-        XCTAssertFalse(displayUIViewBody.contains("func measuredHeight"))
-        XCTAssertTrue(adapterSource.contains("NovelTextViewportDisplayUIView: UIView, @MainActor NSTextViewportLayoutControllerDelegate"))
-        XCTAssertTrue(displayUIViewBody.contains("textViewportLayoutController.layoutViewport()"))
+        XCTAssertTrue(referenceSurfaceBody.contains("NovelTextViewportDisplayReference?"))
+        XCTAssertTrue(referenceSurfaceBody.contains("displayReference.draw("))
+        XCTAssertFalse(referenceSurfaceBody.contains("NSTextContentStorage"))
+        XCTAssertFalse(referenceSurfaceBody.contains("NSTextLayoutManager"))
+        XCTAssertFalse(referenceSurfaceBody.contains("NSAttributedString"))
     }
 
-    func testNovelTextViewportDisplayInvalidatesDrawingWhenBoundsChange() throws {
+    func testNovelTextViewportReferenceInvalidatesDrawingWhenReferenceChanges() throws {
         let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let adapterSource = try String(
             contentsOf: repositoryRoot
                 .appendingPathComponent("Sources/YamiboReaderUI/Views/NovelTextDisplayAdapter.swift"),
             encoding: .utf8
         )
-        let displayUIViewBody = try XCTUnwrap(typeBody(named: "NovelTextViewportDisplayUIView", in: adapterSource))
-        let layoutSubviewsBody = try XCTUnwrap(functionBody(named: "layoutSubviews", in: adapterSource))
-        let configureTextKit2Body = try XCTUnwrap(functionBody(named: "configureTextKit2", in: adapterSource))
-
-        XCTAssertTrue(configureTextKit2Body.contains("contentMode = .redraw"))
-        XCTAssertTrue(displayUIViewBody.contains("lastLaidOutBoundsSize"))
-        XCTAssertTrue(layoutSubviewsBody.contains("updateTextContainerSizeForCurrentBounds()"))
-        XCTAssertTrue(layoutSubviewsBody.contains("setNeedsDisplay()"))
-    }
-
-    func testSettingsPreviewAndReadingSessionUseSameAdapterBackedMaterialization() throws {
-        let settings = ReaderAppearanceSettings(fontScale: 1.2, readingMode: .paged)
-        let preview = NovelTextDisplayAdapter.materialization(
-            surface: .settingsPreview,
-            displayValue: NovelTextDisplayValue(
-                text: "设置预览",
-                chapterTitle: nil,
-                settings: settings
-            ),
-            baseFontSize: 22,
-            textColor: .settingsPreviewPrimaryText
-        )
-        let block = NovelTextDisplayAdapter.materialization(
-            surface: .novelReadingSessionTextBlock,
-            displayValue: NovelTextDisplayValue(text: "正文块", chapterTitle: "第一章", settings: settings),
-            baseFontSize: 22,
-            textColor: .primaryReaderText
+        let referenceSurfaceBody = try XCTUnwrap(
+            typeBody(named: "NovelTextViewportReferenceUIView", in: adapterSource)
         )
 
-        XCTAssertEqual(preview.backend, .novelTextViewport)
-        XCTAssertEqual(block.backend, preview.backend)
-        XCTAssertEqual(block.measurementBackend, preview.measurementBackend)
+        XCTAssertTrue(referenceSurfaceBody.contains("guard oldValue !== displayReference"))
+        XCTAssertTrue(referenceSurfaceBody.contains("setNeedsDisplay()"))
+        XCTAssertTrue(referenceSurfaceBody.contains("contentMode = .redraw"))
+        XCTAssertFalse(referenceSurfaceBody.contains("layoutSubviews"))
     }
 
     func testTwoPagePagedSpreadUsesViewportBackedReaderPageContent() throws {
@@ -334,24 +200,11 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
             encoding: .utf8
         )
         let spreadContentBody = try XCTUnwrap(typeBody(named: "ReaderPagedSpreadContent", in: readerSupportSource))
-        let settings = ReaderAppearanceSettings(
-            showsTwoPagesInLandscapeOnPad: true,
-            readingMode: .paged
-        )
-        let block = NovelTextDisplayAdapter.materialization(
-            surface: .novelReadingSessionTextBlock,
-            displayValue: NovelTextDisplayValue(
-                text: "双页横屏展示中的左右页都必须复用 viewport-backed page content。",
-                chapterTitle: "第一章",
-                settings: settings
-            ),
-            baseFontSize: 22,
-            textColor: .primaryReaderText
-        )
 
         XCTAssertTrue(spreadContentBody.contains("ReaderViewportPageContent("))
+        XCTAssertTrue(spreadContentBody.contains("displayReference: displayReference"))
         XCTAssertFalse(spreadContentBody.contains("Text(displayValue.text"))
-        XCTAssertEqual(block.backend, .novelTextViewport)
+        XCTAssertFalse(spreadContentBody.contains("NovelTextDisplayValue"))
     }
 
     func testTwoPageSpreadInstallsOpaqueReferencesForLeftAndRightPages() throws {
@@ -416,8 +269,10 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertTrue(spreadContentBody.contains("$0.pageIndex == pageIndex"))
         XCTAssertFalse(singlePageBody.contains("$0.documentView == page.documentView"))
         XCTAssertFalse(spreadContentBody.contains("$0.documentView == page.documentView"))
-        XCTAssertTrue(viewportContentBody.contains("NovelTextLayout.displayValue("))
         XCTAssertTrue(viewportContentBody.contains("viewportBlocks("))
+        XCTAssertTrue(viewportContentBody.contains("displayReference: displayReference"))
+        XCTAssertFalse(viewportContentBody.contains("NovelTextLayout.displayValue("))
+        XCTAssertFalse(viewportContentBody.contains("NovelTextDisplayValue"))
         XCTAssertFalse(viewportContentBody.contains("compatibilityBlocks"))
     }
 
@@ -483,24 +338,13 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         let verticalContentBody = try XCTUnwrap(functionBody(named: "verticalContent", in: containerSource))
         let scrollViewBody = try XCTUnwrap(typeBody(named: "ReaderVerticalViewportScrollView", in: supportSource))
         let readerBlockBody = try XCTUnwrap(typeBody(named: "ReaderViewportBlockView", in: supportSource))
-        let settings = ReaderAppearanceSettings(readingMode: .vertical)
-        let block = NovelTextDisplayAdapter.materialization(
-            surface: .novelReadingSessionTextBlock,
-            displayValue: NovelTextDisplayValue(
-                text: "纵向阅读的可见正文必须由 Novel Text Viewport 绘制。",
-                chapterTitle: "第一章",
-                settings: settings
-            ),
-            baseFontSize: 22,
-            textColor: .primaryReaderText
-        )
-
         XCTAssertTrue(verticalContentBody.contains("ReaderVerticalViewportScrollView("))
         XCTAssertTrue(scrollViewBody.contains("verticalDisplayPage(for: indexPath.item)"))
         XCTAssertFalse(scrollViewBody.contains("ReaderViewportPageContent.viewportBackedPage("))
-        XCTAssertTrue(readerBlockBody.contains("NativeNovelTextDisplayView("))
-        XCTAssertFalse(readerBlockBody.contains("Text(displayValue.text"))
-        XCTAssertEqual(block.backend, .novelTextViewport)
+        XCTAssertTrue(readerBlockBody.contains("NativeNovelTextViewportReferenceView("))
+        XCTAssertTrue(readerBlockBody.contains("displayReference"))
+        XCTAssertFalse(readerBlockBody.contains("NativeNovelTextDisplayView("))
+        XCTAssertFalse(readerBlockBody.contains("NovelTextDisplayValue"))
     }
 
     func testVerticalReadingUsesUIKitViewportScrollViewInsteadOfSwiftUILazyTextHost() throws {
@@ -777,7 +621,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertFalse(restoreTextAnchorBody.contains("request.intraPageProgress"))
     }
 
-    func testVerticalViewportSizingSamplingAndRestoreUseNovelTextLayoutViewportAPIs() throws {
+    func testVerticalViewportSizingSamplingAndRestoreUseWorkflowReferences() throws {
         let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let supportSource = try String(
             contentsOf: repositoryRoot
@@ -786,7 +630,6 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         )
         let verticalBody = try XCTUnwrap(typeBody(named: "ReaderVerticalViewportScrollView", in: supportSource))
         let pagedSpreadBody = try XCTUnwrap(typeBody(named: "ReaderPagedSpreadContent", in: supportSource))
-        let mapperBody = try XCTUnwrap(typeBody(named: "ReaderVerticalViewportTextOffsetMapper", in: supportSource))
         let itemHeightBody = try XCTUnwrap(functionBody(named: "verticalItemHeight", in: verticalBody))
 
         XCTAssertTrue(
@@ -796,38 +639,32 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         )
         XCTAssertFalse(pagedSpreadBody.contains("viewportLayoutMetrics"))
         XCTAssertTrue(itemHeightBody.contains("viewportLayoutMetrics?.pageHeight(for: displayPage.pageIndex)"))
-        XCTAssertTrue(mapperBody.contains("NovelTextLayout.viewportSample"))
-        XCTAssertTrue(mapperBody.contains("NovelTextLayout.displayOffset"))
-        XCTAssertFalse(mapperBody.contains("var runningOffset"))
-        XCTAssertFalse(mapperBody.contains("range.startOffset +"))
+        XCTAssertTrue(verticalBody.contains("displayReferenceProvider"))
+        XCTAssertFalse(supportSource.contains("ReaderVerticalViewportTextOffsetMapper"))
+        XCTAssertFalse(supportSource.contains("NovelTextLayout.viewportSample"))
+        XCTAssertFalse(supportSource.contains("NovelTextLayout.displayOffset"))
     }
 
-    func testVerticalTextViewportPositioningUsesTextKitLineFragmentsInsteadOfGeometryProgress() throws {
+    func testVerticalTextViewportPositioningLivesInCoreRuntime() throws {
         let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        let adapterSource = try String(
+        let runtimeSource = try String(
             contentsOf: repositoryRoot
-                .appendingPathComponent("Sources/YamiboReaderUI/Views/NovelTextDisplayAdapter.swift"),
+                .appendingPathComponent("Sources/YamiboReaderCore/Support/NovelTextViewportRuntime.swift"),
             encoding: .utf8
         )
-        let displayUIViewBody = try XCTUnwrap(typeBody(named: "NovelTextViewportDisplayUIView", in: adapterSource))
-        let closestTextOffsetBody = try XCTUnwrap(functionBody(named: "closestTextOffset", in: displayUIViewBody))
-        let referenceYBody = try XCTUnwrap(functionBody(named: "textFragmentReferenceY", in: displayUIViewBody))
+        let runtimeBody = try XCTUnwrap(
+            typeBody(named: "NovelTextViewportRuntimeOwner", in: runtimeSource)
+        )
 
-        XCTAssertTrue(closestTextOffsetBody.contains("textLineFragment("))
-        XCTAssertTrue(closestTextOffsetBody.contains("forVerticalOffset:"))
-        XCTAssertTrue(closestTextOffsetBody.contains("characterIndex(for:"))
-        XCTAssertTrue(referenceYBody.contains("location(documentStart, offsetBy: normalizedOffset)"))
-        XCTAssertTrue(referenceYBody.contains("textLayoutFragment(for: location)"))
-        XCTAssertTrue(referenceYBody.contains("textLineFragment(for: location"))
-        XCTAssertTrue(displayUIViewBody.contains("private func closestLayoutFragment"))
-        XCTAssertFalse(closestTextOffsetBody.contains("progress"))
-        XCTAssertFalse(closestTextOffsetBody.contains("fragmentLength"))
-        XCTAssertFalse(referenceYBody.contains("progress"))
-        XCTAssertFalse(referenceYBody.contains("fragmentLength"))
-        XCTAssertFalse(referenceYBody.contains("progress * frame.height"))
+        XCTAssertTrue(runtimeBody.contains("textLineFragment("))
+        XCTAssertTrue(runtimeBody.contains("forVerticalOffset:"))
+        XCTAssertTrue(runtimeBody.contains("characterIndex(for:"))
+        XCTAssertTrue(runtimeBody.contains("textLayoutFragment(for: location)"))
+        XCTAssertTrue(runtimeBody.contains("private func closestLayoutFragment"))
+        XCTAssertFalse(runtimeBody.contains("progress * frame.height"))
     }
 
-    func testViewportPageContentRequestsNormalTextDisplayValueFromNovelTextLayout() throws {
+    func testViewportPageContentUsesReferenceMarkerWithoutRebuildingDisplayValue() throws {
         let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let supportSource = try String(
             contentsOf: repositoryRoot
@@ -838,11 +675,11 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
 
         XCTAssertTrue(viewportPageContentBody.contains("viewportBlocks("))
         XCTAssertFalse(viewportPageContentBody.contains("viewportBackedPage("))
-        XCTAssertTrue(viewportPageContentBody.contains("NovelTextLayout.displayValue("))
+        XCTAssertTrue(viewportPageContentBody.contains("displayReference: displayReference"))
+        XCTAssertFalse(viewportPageContentBody.contains("NovelTextLayout.displayValue("))
+        XCTAssertFalse(viewportPageContentBody.contains("NovelTextDisplayValue"))
         XCTAssertTrue(viewportPageContentBody.contains("viewportPage.ranges"))
         XCTAssertFalse(viewportPageContentBody.contains("compatibilityBlocks"))
-        XCTAssertTrue(viewportPageContentBody.contains("visibleSurfaceDiagnostics("))
-        XCTAssertTrue(viewportPageContentBody.contains("NovelTextViewportVisibleSurfaceDiagnostics"))
         XCTAssertFalse(viewportPageContentBody.contains("viewportContext.document.textRangesBySegment"))
         XCTAssertFalse(viewportPageContentBody.contains("viewportContext.document.text"))
         XCTAssertFalse(viewportPageContentBody.contains("page.novelTextDisplayValues.first"))
@@ -887,7 +724,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertFalse(productionDisplaySources.contains("UITextView"))
     }
 
-    func testNovelReadingSessionBlockPassesDisplayValueIntoNativeTextKitAdapter() throws {
+    func testNovelReadingSessionBlockPassesOpaqueDisplayReference() throws {
         let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let readerSupportSource = try String(
             contentsOf: repositoryRoot
@@ -895,11 +732,13 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
             encoding: .utf8
         )
 
-        XCTAssertTrue(readerSupportSource.contains("displayValue: displayValue"))
-        XCTAssertFalse(readerSupportSource.contains("text: displayValue.text"))
+        XCTAssertTrue(readerSupportSource.contains("displayReference: displayReference"))
+        XCTAssertTrue(readerSupportSource.contains("NativeNovelTextViewportReferenceView("))
+        XCTAssertFalse(readerSupportSource.contains("NativeNovelTextDisplayView("))
+        XCTAssertFalse(readerSupportSource.contains("NovelTextLayout.displayValue("))
     }
 
-    func testSettingsPreviewPassesDisplayValueIntoNativeTextKitAdapter() throws {
+    func testSettingsPreviewUsesSwiftUITextInsteadOfNativeTextKitAdapter() throws {
         let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let settingsSource = try String(
             contentsOf: repositoryRoot
@@ -907,38 +746,10 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
             encoding: .utf8
         )
 
-        XCTAssertTrue(settingsSource.contains("displayValue: NovelTextDisplayValue"))
-        XCTAssertFalse(settingsSource.contains("surface: .settingsPreview,\n                    text:"))
-    }
-
-    func testNovelTextLayoutDisplayStyleCoversFontSizeSpacingIndentAndChapterTitleForNovelReadingSession() throws {
-        let settings = ReaderAppearanceSettings(
-            fontScale: 1.3,
-            fontFamily: .systemSerif,
-            lineHeightScale: 1.8,
-            characterSpacingScale: 0.16,
-            indentsParagraphFirstLine: true,
-            readingMode: .paged
-        )
-
-        let materialization = NovelTextDisplayAdapter.materialization(
-            surface: .novelReadingSessionTextBlock,
-            displayValue: NovelTextDisplayValue(
-                text: "第一章\n正文需要覆盖字体、字号、行距、字距和段首缩进。",
-                chapterTitle: "第一章",
-                startsAtParagraphBoundary: true,
-                settings: settings
-            ),
-            baseFontSize: 22,
-            textColor: .primaryReaderText
-        )
-
-        XCTAssertEqual(materialization.style.fontFamily, .systemSerif)
-        XCTAssertEqual(materialization.style.pointSize, 28.6, accuracy: 0.001)
-        XCTAssertEqual(materialization.style.lineHeightScale, 1.8)
-        XCTAssertEqual(materialization.style.characterSpacingScale, 0.16)
-        XCTAssertTrue(materialization.style.indentsParagraphFirstLine)
-        XCTAssertTrue(materialization.style.includesChapterTitle)
+        XCTAssertTrue(settingsSource.contains("Text(previewText)"))
+        XCTAssertTrue(settingsSource.contains(".font(previewFont)"))
+        XCTAssertFalse(settingsSource.contains("NativeNovelTextDisplayView("))
+        XCTAssertFalse(settingsSource.contains("NovelTextDisplayValue"))
     }
 
     func testNovelReadingPositionDisplayFailureDoesNotPublishUIKitOrEstimatedFallback() throws {
