@@ -315,6 +315,7 @@ public enum NovelTextLayout {
                     url: url,
                     chapterOrdinal: annotatedSegment.chapterOrdinal,
                     chapterTitle: annotatedSegment.chapterTitle,
+                    frozenFrame: frozenExternalBlockFrame(layout: layout),
                     chapterCommentTarget: chapterCommentTarget(for: annotatedSegment, document: document)
                 )
                 pageDrafts.append(
@@ -462,6 +463,17 @@ public enum NovelTextLayout {
             }
         )
         return NovelTextViewportLayoutMetrics(pageMetrics: pageMetrics)
+    }
+
+    private static func frozenExternalBlockFrame(layout: ReaderContainerLayout) -> NovelTextViewportExternalBlockFrame {
+        let contentWidth = max(layout.readableFrame.width, 1)
+        let height = min(max(contentWidth * 0.65, 160), max(layout.readableFrame.height, 160))
+        return NovelTextViewportExternalBlockFrame(
+            x: 0,
+            y: 0,
+            width: contentWidth,
+            height: height
+        )
     }
 
     private static func makeViewportContext(

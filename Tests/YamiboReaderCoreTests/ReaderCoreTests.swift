@@ -1232,6 +1232,12 @@ private final class StubURLProtocol: URLProtocol {
             url: imageURL,
             chapterOrdinal: 0,
             chapterTitle: "第一章",
+            frozenFrame: NovelTextViewportExternalBlockFrame(
+                x: 0,
+                y: 0,
+                width: 390,
+                height: 253.5
+            ),
             chapterCommentTarget: ReaderChapterCommentTarget(
                 threadURL: document.threadURL,
                 view: 2,

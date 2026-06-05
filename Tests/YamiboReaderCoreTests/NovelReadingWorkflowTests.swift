@@ -1669,6 +1669,45 @@ final class NovelReadingWorkflowTests: XCTestCase {
         XCTAssertEqual(workflow.runtimeDiagnostics.activeLayoutManagerCount, 1)
     }
 
+    func testPureExternalBlockDocumentPublishesFrozenExternalBlockSurfacesWithoutTextResume() async throws {
+        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9193&mobile=2")!
+        let imageURL = URL(string: "https://example.com/only-image.jpg")!
+        let repository = RecordingNovelReadingRepository(documents: [
+            1: ReaderPageDocument(
+                threadURL: threadURL,
+                view: 1,
+                maxView: 1,
+                resolvedAuthorID: "author-1",
+                contentSource: .authorFilteredPage,
+                segments: [.image(imageURL, chapterTitle: "插图")]
+            )
+        ])
+        let workflow = NovelReadingWorkflow(
+            context: ReaderLaunchContext(
+                threadURL: threadURL,
+                threadTitle: "Thread",
+                source: .forum,
+                initialView: 1,
+                authorID: "author-1"
+            ),
+            settings: ReaderAppearanceSettings(readingMode: .paged),
+            layout: ReaderContainerLayout(width: 320, height: 568),
+            repository: repository
+        )
+
+        let state = try await workflow.start(initial: NovelReadingInitialPosition())
+        let presentation = try XCTUnwrap(state.presentation)
+        let surface = try XCTUnwrap(presentation.surfaces.first)
+        let externalBlock = try XCTUnwrap(surface.viewportPage.externalBlocks.first)
+        let frame = try XCTUnwrap(externalBlock.frozenFrame)
+
+        XCTAssertEqual(surface.kind, .externalBlock)
+        XCTAssertEqual(externalBlock.url, imageURL)
+        XCTAssertGreaterThan(frame.width, 0)
+        XCTAssertGreaterThan(frame.height, 0)
+        XCTAssertNil(workflow.captureNovelReadingPosition())
+    }
+
     func testFailedPrefetchedPromotionKeepsCurrentRuntimeAndReadingPosition() async throws {
         let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9186&mobile=2")!
         let repository = RecordingNovelReadingRepository(documents: [
