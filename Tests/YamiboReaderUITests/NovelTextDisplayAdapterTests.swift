@@ -346,12 +346,14 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
 
         for body in [singlePageBody, spreadContentBody] {
             XCTAssertTrue(body.contains("viewportIndex?.pages.first"))
-            XCTAssertTrue(body.contains("$0.pageIndex == page.index"))
-            XCTAssertTrue(body.contains("$0.documentView == page.documentView"))
             XCTAssertTrue(body.contains("ReaderViewportPageContent("))
             XCTAssertFalse(body.contains("page.blocks.compactMap(\\.novelTextDisplayValue)"))
             XCTAssertFalse(body.contains("page.novelTextDisplayValues.first"))
         }
+        XCTAssertTrue(singlePageBody.contains("$0.pageIndex == indexPath.item"))
+        XCTAssertTrue(spreadContentBody.contains("$0.pageIndex == pageIndex"))
+        XCTAssertFalse(singlePageBody.contains("$0.documentView == page.documentView"))
+        XCTAssertFalse(spreadContentBody.contains("$0.documentView == page.documentView"))
         XCTAssertTrue(viewportContentBody.contains("NovelTextLayout.displayValue("))
         XCTAssertTrue(viewportContentBody.contains("compatibilityBlocks"))
     }
@@ -535,6 +537,26 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertFalse(spreadBody.contains("ForEach(parent.pages"))
         XCTAssertFalse(spreadBody.contains("ReaderBlockNovelTextDisplayMaterializer"))
         XCTAssertFalse(spreadBody.contains("NovelTextKit2Representable("))
+    }
+
+    func testPagedViewportCellsRenderFromViewportIndexPageIdentity() throws {
+        let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let supportSource = try String(
+            contentsOf: repositoryRoot
+                .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderSupportViews.swift"),
+            encoding: .utf8
+        )
+        let singlePageBody = try XCTUnwrap(typeBody(named: "ReaderPagedCollectionViewport", in: supportSource))
+        let spreadContentBody = try XCTUnwrap(typeBody(named: "ReaderPagedSpreadContent", in: supportSource))
+
+        XCTAssertTrue(singlePageBody.contains("$0.pageIndex == indexPath.item"))
+        XCTAssertTrue(singlePageBody.contains("compatibilityBlocks: compatibilityBlocks"))
+        XCTAssertFalse(singlePageBody.contains("let page = parent.pages[indexPath.item]"))
+        XCTAssertFalse(singlePageBody.contains("viewportBackedPage("))
+        XCTAssertTrue(spreadContentBody.contains("$0.pageIndex == pageIndex"))
+        XCTAssertTrue(spreadContentBody.contains("compatibilityBlocks: pages.indices.contains(pageIndex) ? pages[pageIndex].blocks : []"))
+        XCTAssertFalse(spreadContentBody.contains("let page = pages[pageIndex]"))
+        XCTAssertFalse(spreadContentBody.contains("viewportBackedPage("))
     }
 
     func testPagedViewportsRetrySelectionScrollAfterInitialZeroWidthLayout() throws {
