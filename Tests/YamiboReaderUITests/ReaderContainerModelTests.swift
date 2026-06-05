@@ -103,6 +103,43 @@ final class ReaderContainerModelTests: XCTestCase {
         }
     }
 
+    func testPublishesPresentationAndRequestsDisplayReferencesBySurfaceIdentity() async throws {
+        let model = try await makeModel(
+            documents: [
+                makeDocument(view: 1, maxView: 1, chapterTitles: ["第一章", "第二章"]),
+            ],
+            settings: ReaderAppearanceSettings(readingMode: .paged)
+        )
+
+        let initialPresentation = try await MainActor.run {
+            try XCTUnwrap(model.readerPresentation)
+        }
+        let initialSurface = try XCTUnwrap(initialPresentation.selectedSurfaceIdentity)
+        let initialReference = await MainActor.run {
+            model.novelTextViewportDisplayReference(for: initialSurface)
+        }
+        let initialReferenceGeneration = await MainActor.run {
+            initialReference?.generation
+        }
+        let modelPageIdentities = await MainActor.run {
+            model.pages.map(\.pageIndex)
+        }
+
+        XCTAssertEqual(initialReferenceGeneration, initialPresentation.generation)
+        XCTAssertEqual(initialPresentation.surfaces.map(\.identity.ordinal), modelPageIdentities)
+
+        await MainActor.run {
+            model.jumpToRenderedPage(min(1, max(model.renderedPageCount - 1, 0)))
+        }
+
+        let navigatedPresentation = try await MainActor.run {
+            try XCTUnwrap(model.readerPresentation)
+        }
+
+        XCTAssertEqual(navigatedPresentation.generation, initialPresentation.generation)
+        XCTAssertEqual(navigatedPresentation.revision, initialPresentation.revision + 1)
+    }
+
     func testTracksChapterBoundaries() async throws {
         let model = try await makeModel(
             documents: [

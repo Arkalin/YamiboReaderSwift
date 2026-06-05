@@ -45,6 +45,7 @@ public final class ReaderContainerModel: ObservableObject {
     @Published public private(set) var viewportContext: NovelTextViewportContext?
     @Published public private(set) var viewportIndex: NovelTextViewportIndex?
     @Published public private(set) var viewportLayoutMetrics: NovelTextViewportLayoutMetrics?
+    @Published public private(set) var readerPresentation: NovelReaderPresentation?
 
     public let context: ReaderLaunchContext
 
@@ -271,6 +272,12 @@ public final class ReaderContainerModel: ObservableObject {
         readingWorkflow?.displayReference(for: pageIdentity)
     }
 
+    public func novelTextViewportDisplayReference(
+        for surfaceIdentity: NovelReaderSurfaceIdentity
+    ) -> NovelTextViewportDisplayReference? {
+        readingWorkflow?.displayReference(for: surfaceIdentity)
+    }
+
     public func updateNovelTextViewportVisiblePageIdentities(_ pageIdentities: [Int]) {
         readingWorkflow?.updateVisiblePageIdentities(pageIdentities)
     }
@@ -355,6 +362,7 @@ public final class ReaderContainerModel: ObservableObject {
         currentDocument = nil
         prefetchedDocument = nil
         prefetchedStartIndex = nil
+        readerPresentation = nil
     }
 
     public var currentChapterIndex: Int? {
@@ -914,22 +922,36 @@ public final class ReaderContainerModel: ObservableObject {
         currentDocument = state.currentDocument
         prefetchedDocument = state.prefetchedDocument
         currentAuthorID = state.currentAuthorID
+        readerPresentation = state.presentation
         syncFromWorkflowSnapshot(state.snapshot)
         syncCachedViews(state.cachedViews)
     }
 
     private func syncFromWorkflowSnapshot(_ snapshot: NovelReadingSnapshot) {
-        pages = snapshot.pages
+        pages = readerPresentation?.surfaces.map(\.viewportPage) ?? snapshot.pages
         chapters = snapshot.chapters
-        currentPageIndex = snapshot.currentPageIndex
-        currentPageIntraProgress = snapshot.currentPageIntraProgress
-        currentView = snapshot.currentView
-        maxView = snapshot.maxView
-        currentChapterTitle = snapshot.currentChapterTitle
-        currentContentSource = snapshot.currentContentSource
-        retainedChapterCount = snapshot.retainedChapterCount
-        filteredChapterCandidateCount = snapshot.filteredChapterCandidateCount
         pagedSpreads = snapshot.pagedSpreads
+        if let readerPresentation {
+            currentPageIndex = normalizedPagedPageIndex(
+                readerPresentation.selectedSurfaceIdentity?.ordinal ?? snapshot.currentPageIndex
+            )
+            currentPageIntraProgress = readerPresentation.readingState.currentPageIntraProgress
+            currentView = readerPresentation.readingState.currentView
+            maxView = readerPresentation.readingState.maxView
+            currentChapterTitle = readerPresentation.readingState.currentChapterTitle
+            currentContentSource = readerPresentation.currentContentSource
+            retainedChapterCount = readerPresentation.retainedChapterCount
+            filteredChapterCandidateCount = readerPresentation.filteredChapterCandidateCount
+        } else {
+            currentPageIndex = snapshot.currentPageIndex
+            currentPageIntraProgress = snapshot.currentPageIntraProgress
+            currentView = snapshot.currentView
+            maxView = snapshot.maxView
+            currentChapterTitle = snapshot.currentChapterTitle
+            currentContentSource = snapshot.currentContentSource
+            retainedChapterCount = snapshot.retainedChapterCount
+            filteredChapterCandidateCount = snapshot.filteredChapterCandidateCount
+        }
         prefetchedStartIndex = snapshot.prefetchedStartIndex
         viewportContext = snapshot.viewportContext
         viewportIndex = snapshot.viewportIndex
