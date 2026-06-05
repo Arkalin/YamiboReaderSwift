@@ -467,22 +467,26 @@ public struct NovelReadingSession: Sendable {
         let paginationLayout = effectivePaginationLayout
         let pagination = try pagination(document, settings, paginationLayout)
         let renderedPages = pagination.pages
-        let viewportPages = pagination.viewportIndex?.pages ?? []
+        let viewportPages = pagination.viewportIndex?.pages
         let renderedChapters = pagination.viewportIndex.map(Self.readerChapters) ?? pagination.chapters
         let prefetchedStartIndex: Int? = nil
 
-        let pages = renderedPages.enumerated().map { index, page in
-            let indexedPage = viewportPages.first {
-                $0.pageIndex == index && $0.documentView == page.documentView
+        let pages = if let viewportPages {
+            viewportPages.map { indexedPage in
+                let compatibilityPage = renderedPages.first {
+                    $0.index == indexedPage.pageIndex && $0.documentView == indexedPage.documentView
+                }
+                return ReaderRenderedPage(
+                    index: indexedPage.pageIndex,
+                    blocks: compatibilityPage?.blocks ?? compatibilityBlocks(for: indexedPage),
+                    documentView: indexedPage.documentView,
+                    chapterOrdinal: indexedPage.chapterOrdinal,
+                    chapterTitle: indexedPage.chapterTitle,
+                    chapterCommentTarget: indexedPage.chapterCommentTarget
+                )
             }
-            return ReaderRenderedPage(
-                index: index,
-                blocks: page.blocks,
-                documentView: page.documentView,
-                chapterOrdinal: indexedPage?.chapterOrdinal ?? page.chapterOrdinal,
-                chapterTitle: indexedPage?.chapterTitle ?? page.chapterTitle,
-                chapterCommentTarget: indexedPage?.chapterCommentTarget ?? page.chapterCommentTarget
-            )
+        } else {
+            renderedPages
         }
         let fallbackTarget = ReaderResolvedTarget(
             pageIndex: max(0, min(preferredPage, max(pages.count - 1, 0))),
@@ -526,6 +530,12 @@ public struct NovelReadingSession: Sendable {
                 startIndex: chapter.startPageIndex,
                 chapterCommentTarget: chapter.chapterCommentTarget
             )
+        }
+    }
+
+    private func compatibilityBlocks(for page: NovelTextViewportIndexPage) -> [ReaderRenderedBlock] {
+        page.externalBlocks.map { externalBlock in
+            .image(externalBlock.url, chapterTitle: externalBlock.chapterTitle)
         }
     }
 

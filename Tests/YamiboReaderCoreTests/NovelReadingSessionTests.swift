@@ -455,6 +455,73 @@ final class NovelReadingSessionTests: XCTestCase {
         XCTAssertEqual(position.readingModeHint, .vertical)
     }
 
+    func testPageCountAndChaptersComeFromViewportIndexWhenCompatibilityPagesAreStale() throws {
+        let document = makeNovelDocument(
+            view: 1,
+            maxView: 1,
+            segments: [
+                ("第一章", "第一章正文"),
+                ("第二章", "第二章正文")
+            ]
+        )
+
+        let session = try NovelReadingSession(
+            validating: document,
+            settings: ReaderAppearanceSettings(readingMode: .paged),
+            layout: ReaderContainerLayout(width: 320, height: 568),
+            preferredPage: 1,
+            pagination: { document, _, _ in
+                ReaderPaginationResult(
+                    pages: [
+                        ReaderRenderedPage(
+                            index: 0,
+                            blocks: [.text("stale compatibility page", chapterTitle: "第一章")],
+                            documentView: document.view,
+                            chapterOrdinal: 0,
+                            chapterTitle: "第一章"
+                        )
+                    ],
+                    chapters: [
+                        ReaderChapter(ordinal: 0, title: "兼容章节", startIndex: 0)
+                    ],
+                    viewportIndex: NovelTextViewportIndex(
+                        documentView: document.view,
+                        readingMode: .paged,
+                        pages: [
+                            NovelTextViewportIndexPage(
+                                pageIndex: 0,
+                                documentView: document.view,
+                                chapterOrdinal: 0,
+                                chapterTitle: "第一章",
+                                ranges: [
+                                    ReaderRenderedTextRange(segmentIndex: 0, startOffset: 0, endOffset: 5)
+                                ]
+                            ),
+                            NovelTextViewportIndexPage(
+                                pageIndex: 1,
+                                documentView: document.view,
+                                chapterOrdinal: 1,
+                                chapterTitle: "第二章",
+                                ranges: [
+                                    ReaderRenderedTextRange(segmentIndex: 1, startOffset: 0, endOffset: 5)
+                                ]
+                            )
+                        ],
+                        chapters: [
+                            NovelTextViewportIndexChapter(ordinal: 0, title: "第一章", startPageIndex: 0),
+                            NovelTextViewportIndexChapter(ordinal: 1, title: "第二章", startPageIndex: 1)
+                        ]
+                    )
+                )
+            }
+        )
+
+        XCTAssertEqual(session.snapshot.pages.count, 2)
+        XCTAssertEqual(session.snapshot.chapters.map(\.title), ["第一章", "第二章"])
+        XCTAssertEqual(session.snapshot.currentPageIndex, 1)
+        XCTAssertEqual(session.snapshot.currentChapterTitle, "第二章")
+    }
+
     func testRestoresNovelReadingPositionWithinChapter() throws {
         let document = makeNovelDocument(
             view: 2,
