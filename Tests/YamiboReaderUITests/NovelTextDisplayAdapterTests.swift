@@ -298,6 +298,19 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertTrue(collectionViewportBody.contains("viewportIndex"))
     }
 
+    func testPagedViewportUsesChromeInsetsBecauseHostingCellAlreadyAppliesSafeArea() throws {
+        let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let containerSource = try String(
+            contentsOf: repositoryRoot
+                .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderContainerView.swift"),
+            encoding: .utf8
+        )
+        let pagedContentBody = try XCTUnwrap(functionBody(named: "pagedContent", in: containerSource))
+
+        XCTAssertTrue(pagedContentBody.contains("topInset: layout.chromeInsets.top"))
+        XCTAssertTrue(pagedContentBody.contains("bottomInset: layout.chromeInsets.bottom"))
+    }
+
     func testTwoPageSpreadReadingUsesUIKitCollectionViewportWithSharedViewportContext() throws {
         let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let containerSource = try String(

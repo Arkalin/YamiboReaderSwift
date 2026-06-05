@@ -325,11 +325,7 @@ public struct ReaderContainerView: View {
             .padding(24)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if model.settings.readingMode == .paged {
-            pagedContent(
-                topInset: topInset,
-                bottomInset: bottomInset,
-                layout: layout
-            )
+            pagedContent(layout: layout)
         } else {
             verticalContent(
                 topInset: topInset,
@@ -338,7 +334,7 @@ public struct ReaderContainerView: View {
         }
     }
 
-    private func pagedContent(topInset: CGFloat, bottomInset: CGFloat, layout: ReaderContainerLayout) -> some View {
+    private func pagedContent(layout: ReaderContainerLayout) -> some View {
         Group {
             if model.isTwoPageSpreadActive {
                 ReaderPagedSpreadCollectionViewport(
@@ -349,8 +345,8 @@ public struct ReaderContainerView: View {
                     settings: model.settings,
                     refererURL: model.forumURL,
                     sessionState: model.sessionState,
-                    topInset: topInset,
-                    bottomInset: bottomInset,
+                    topInset: layout.chromeInsets.top,
+                    bottomInset: layout.chromeInsets.bottom,
                     selectionIndex: model.pagedSelectionIndex,
                     displayReferenceProvider: { pageIdentity in
                         model.novelTextViewportDisplayReference(for: pageIdentity)
@@ -367,8 +363,8 @@ public struct ReaderContainerView: View {
                     settings: model.settings,
                     refererURL: model.forumURL,
                     sessionState: model.sessionState,
-                    topInset: topInset,
-                    bottomInset: bottomInset,
+                    topInset: layout.chromeInsets.top,
+                    bottomInset: layout.chromeInsets.bottom,
                     selectionIndex: model.pagedSelectionIndex,
                     displayReferenceProvider: { pageIdentity in
                         model.novelTextViewportDisplayReference(for: pageIdentity)
@@ -668,7 +664,7 @@ public struct ReaderContainerView: View {
             trailing: horizontalPadding
         )
         let chromeInsets = model.settings.readingMode == .paged
-            ? ReaderLayoutInsets(top: 48, bottom: 42)
+            ? ReaderLayoutInsets(top: 48)
             : .zero
         return ReaderContainerLayout(
             containerSize: proxy.size,

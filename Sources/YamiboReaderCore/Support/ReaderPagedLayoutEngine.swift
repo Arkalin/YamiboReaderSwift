@@ -1,6 +1,64 @@
 import CoreGraphics
 import Foundation
 
+struct ReaderPagedLayoutSegment: Equatable {
+    let characterRange: NSRange
+    let rect: CGRect
+}
+
+struct ReaderPagedLayoutPage: Equatable {
+    let characterRange: NSRange
+    let clipRect: CGRect
+}
+
+enum ReaderPagedFragmentPartitioner {
+    static func partition(
+        _ segments: [ReaderPagedLayoutSegment],
+        pageHeight: CGFloat
+    ) -> [ReaderPagedLayoutPage] {
+        guard pageHeight > 0 else { return [] }
+
+        var pages: [ReaderPagedLayoutPage] = []
+        var currentRange: NSRange?
+        var currentClipRect: CGRect?
+
+        for segment in segments {
+            guard let existingRange = currentRange,
+                  let existingClipRect = currentClipRect else {
+                currentRange = segment.characterRange
+                currentClipRect = segment.rect
+                continue
+            }
+
+            let candidateClipRect = existingClipRect.union(segment.rect)
+            // Keep each TextKit segment intact; unused space is preferable to clipping a line.
+            if candidateClipRect.height > pageHeight {
+                pages.append(
+                    ReaderPagedLayoutPage(
+                        characterRange: existingRange,
+                        clipRect: existingClipRect
+                    )
+                )
+                currentRange = segment.characterRange
+                currentClipRect = segment.rect
+            } else {
+                currentRange = existingRange.union(segment.characterRange)
+                currentClipRect = candidateClipRect
+            }
+        }
+
+        if let currentRange, let currentClipRect {
+            pages.append(
+                ReaderPagedLayoutPage(
+                    characterRange: currentRange,
+                    clipRect: currentClipRect
+                )
+            )
+        }
+        return pages
+    }
+}
+
 #if canImport(UIKit)
 import UIKit
 
@@ -106,8 +164,7 @@ enum ReaderPagedLayoutEngine {
         let documentRange = textContentStorage.documentRange
         textLayoutManager.ensureLayout(for: documentRange)
 
-        var pageRanges: [Int: NSRange] = [:]
-        var pageClipRects: [Int: CGRect] = [:]
+        var segments: [ReaderPagedLayoutSegment] = []
         textLayoutManager.enumerateTextSegments(
             in: documentRange,
             type: .standard,
@@ -123,28 +180,26 @@ enum ReaderPagedLayoutEngine {
                   rect.height > 0 else {
                 return true
             }
-            let pageIndex = max(0, Int(floor(rect.midY / pageSize.height)))
-            if let existingRange = pageRanges[pageIndex] {
-                pageRanges[pageIndex] = existingRange.union(characterRange)
-            } else {
-                pageRanges[pageIndex] = characterRange
-            }
-            if let existingClip = pageClipRects[pageIndex] {
-                pageClipRects[pageIndex] = existingClip.union(rect)
-            } else {
-                pageClipRects[pageIndex] = rect
-            }
+            segments.append(
+                ReaderPagedLayoutSegment(
+                    characterRange: characterRange,
+                    rect: rect
+                )
+            )
             return true
         }
 
-        return pageRanges.keys.sorted().compactMap { pageIndex in
-            guard let pageRange = pageRanges[pageIndex] else { return nil }
-            return viewportDocumentPageRange(
+        let pages: [NovelTextViewportDocumentPageRange] = ReaderPagedFragmentPartitioner.partition(
+            segments,
+            pageHeight: pageSize.height
+        ).compactMap { page in
+            viewportDocumentPageRange(
                 from: attributedText,
-                range: pageRange,
-                clipRect: pageClipRects[pageIndex]
+                range: page.characterRange,
+                clipRect: page.clipRect
             )
         }
+        return pages
     }
 
     private static func measuredTextHeightWithTextKit2(_ attributedText: NSAttributedString, width: CGFloat) -> CGFloat {

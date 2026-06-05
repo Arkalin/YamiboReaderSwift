@@ -1680,6 +1680,52 @@ private final class StubURLProtocol: URLProtocol {
     }
 }
 
+@Test func readerPagedFragmentPartitionerMovesCrossingLineToNextPage() throws {
+    let pages = ReaderPagedFragmentPartitioner.partition(
+        [
+            ReaderPagedLayoutSegment(
+                characterRange: NSRange(location: 0, length: 10),
+                rect: CGRect(x: 0, y: 0, width: 200, height: 35)
+            ),
+            ReaderPagedLayoutSegment(
+                characterRange: NSRange(location: 10, length: 10),
+                rect: CGRect(x: 0, y: 40, width: 200, height: 35)
+            ),
+            ReaderPagedLayoutSegment(
+                characterRange: NSRange(location: 20, length: 10),
+                rect: CGRect(x: 0, y: 80, width: 200, height: 35)
+            )
+        ],
+        pageHeight: 100
+    )
+
+    #expect(pages.count == 2)
+    #expect(pages.allSatisfy { $0.clipRect.height <= 100 })
+    let firstPage = try #require(pages.first)
+    let secondPage = try #require(pages.dropFirst().first)
+    #expect(firstPage.characterRange == NSRange(location: 0, length: 20))
+    #expect(secondPage.characterRange == NSRange(location: 20, length: 10))
+}
+
+@Test func novelTextViewportDrawingClipsToFrozenPageGeometry() {
+    let clipRect = NovelTextViewportDrawingGeometry.clipRect(
+        bounds: CGRect(x: 0, y: 0, width: 361, height: 669),
+        pageOriginY: 1_000,
+        documentClipMaxY: 1_629.64
+    )
+
+    #expect(clipRect.origin == .zero)
+    #expect(clipRect.width == 361)
+    #expect(abs(clipRect.height - 629.64) < 0.001)
+    #expect(
+        NovelTextViewportDrawingGeometry.clipRect(
+            bounds: CGRect(x: 0, y: 0, width: 361, height: 669),
+            pageOriginY: 1_000,
+            documentClipMaxY: nil
+        ) == CGRect(x: 0, y: 0, width: 361, height: 669)
+    )
+}
+
 @Test func novelTextLayoutPagedViewportPageRangeFailureDoesNotUseEstimatedFallback() async throws {
     let text = String(repeating: "TextKit 2 failure should not fall back. ", count: 40)
     let document = ReaderPageDocument(

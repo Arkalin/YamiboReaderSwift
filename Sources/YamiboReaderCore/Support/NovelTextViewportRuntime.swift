@@ -1,6 +1,26 @@
 import CoreGraphics
 import Foundation
 
+enum NovelTextViewportDrawingGeometry {
+    static func clipRect(
+        bounds: CGRect,
+        pageOriginY: CGFloat,
+        documentClipMaxY: CGFloat?
+    ) -> CGRect {
+        guard let documentClipMaxY else { return bounds }
+        let clipHeight = min(
+            max(documentClipMaxY - pageOriginY, 0),
+            max(bounds.height, 0)
+        )
+        return CGRect(
+            x: bounds.minX,
+            y: bounds.minY,
+            width: bounds.width,
+            height: clipHeight
+        )
+    }
+}
+
 #if canImport(UIKit)
 import UIKit
 #endif
@@ -801,9 +821,14 @@ final class NovelTextViewportRuntimeOwner {
             return
         }
         let clipMaxY = page.frozenGeometry?.documentClipMaxY ?? pageOriginY + bounds.height
+        let pageClipRect = NovelTextViewportDrawingGeometry.clipRect(
+            bounds: bounds,
+            pageOriginY: pageOriginY,
+            documentClipMaxY: page.frozenGeometry?.documentClipMaxY
+        )
 
         context.saveGState()
-        context.clip(to: bounds)
+        context.clip(to: pageClipRect)
         context.translateBy(x: bounds.minX, y: bounds.minY - pageOriginY)
         textLayoutManager.enumerateTextLayoutFragments(
             from: pageLocation,
