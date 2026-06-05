@@ -11,15 +11,18 @@ public struct NovelTextViewportRuntimeDiagnostics: Equatable, Sendable {
     public var contentStorageCount: Int
     public var activeLayoutManagerCount: Int
     public var perPageTextKitDocumentCount: Int
+    public var semanticAttributedDocumentCacheCount: Int
 
     public init(
         contentStorageCount: Int,
         activeLayoutManagerCount: Int,
-        perPageTextKitDocumentCount: Int
+        perPageTextKitDocumentCount: Int,
+        semanticAttributedDocumentCacheCount: Int = 0
     ) {
         self.contentStorageCount = max(0, contentStorageCount)
         self.activeLayoutManagerCount = max(0, activeLayoutManagerCount)
         self.perPageTextKitDocumentCount = max(0, perPageTextKitDocumentCount)
+        self.semanticAttributedDocumentCacheCount = max(0, semanticAttributedDocumentCacheCount)
     }
 }
 
@@ -91,6 +94,7 @@ final class NovelTextViewportRuntimeOwner {
     private var settings = ReaderAppearanceSettings()
     private var layout = ReaderContainerLayout(width: 1, height: 1)
     private var visiblePageIdentities = Set<Int>()
+    private var semanticAttributedDocumentCache: NSAttributedString?
 
 #if canImport(UIKit) || canImport(AppKit)
     private var textContentStorage: NSTextContentStorage?
@@ -102,7 +106,8 @@ final class NovelTextViewportRuntimeOwner {
         NovelTextViewportRuntimeDiagnostics(
             contentStorageCount: textContentStorage == nil ? 0 : 1,
             activeLayoutManagerCount: textLayoutManager == nil ? 0 : 1,
-            perPageTextKitDocumentCount: 0
+            perPageTextKitDocumentCount: 0,
+            semanticAttributedDocumentCacheCount: semanticAttributedDocumentCache == nil ? 0 : 1
         )
     }
 
@@ -128,28 +133,44 @@ final class NovelTextViewportRuntimeOwner {
         contentStorage.addTextLayoutManager(layoutManager)
         layoutManager.textContainer = container
 #if canImport(UIKit)
-        contentStorage.textStorage?.setAttributedString(
-            ReaderAttributedTextFactory.makeAttributedText(
-                text: result.viewportContext.document.text,
-                chapterTitle: nil,
-                settings: settings
-            )
+        let attributedDocument = ReaderAttributedTextFactory.makeAttributedText(
+            text: result.viewportContext.document.text,
+            chapterTitle: nil,
+            settings: settings
         )
 #else
-        contentStorage.textStorage?.setAttributedString(
-            NSAttributedString(string: result.viewportContext.document.text)
-        )
+        let attributedDocument = NSAttributedString(string: result.viewportContext.document.text)
 #endif
+        contentStorage.textStorage?.setAttributedString(attributedDocument)
         layoutManager.ensureLayout(for: contentStorage.documentRange)
         textContentStorage = contentStorage
         textLayoutManager = layoutManager
         textContainer = container
+        semanticAttributedDocumentCache = attributedDocument
 #endif
 
         self.result = result
         self.settings = settings
         self.layout = layout
         generation &+= 1
+    }
+
+    func release() {
+        result = nil
+        visiblePageIdentities.removeAll(keepingCapacity: false)
+        semanticAttributedDocumentCache = nil
+#if canImport(UIKit) || canImport(AppKit)
+        textContentStorage = nil
+        textLayoutManager = nil
+        textContainer = nil
+#endif
+        generation &+= 1
+    }
+
+    func handleMemoryPressure() {
+        // The live TextKit graph owns everything needed to keep the current
+        // generation drawable. This extra attributed document is rebuildable.
+        semanticAttributedDocumentCache = nil
     }
 
     func displayReference(for pageIdentity: Int) -> NovelTextViewportDisplayReference? {

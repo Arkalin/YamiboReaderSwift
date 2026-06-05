@@ -345,6 +345,18 @@ public final class ReaderContainerModel: ObservableObject {
         readingWorkflow?.captureNovelReadingPosition()
     }
 
+    public func handleMemoryPressure() {
+        readingWorkflow?.handleMemoryPressure()
+    }
+
+    public func close() {
+        readingWorkflow?.close()
+        readingWorkflow = nil
+        currentDocument = nil
+        prefetchedDocument = nil
+        prefetchedStartIndex = nil
+    }
+
     public var currentChapterIndex: Int? {
         chapters.lastIndex(where: { $0.startIndex <= currentPageIndex })
     }

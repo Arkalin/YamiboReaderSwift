@@ -261,6 +261,20 @@ public final class NovelReadingWorkflow {
         viewportRuntime.updateVisiblePageIdentities(pageIdentities)
     }
 
+    public func handleMemoryPressure() {
+        viewportRuntime.handleMemoryPressure()
+    }
+
+    public func close() {
+        viewportRuntime.release()
+        session = nil
+        currentDocument = nil
+        prefetchedDocument = nil
+        currentAuthorID = nil
+        currentDocumentPageCount = 0
+        state = nil
+    }
+
     private func cacheContext(for document: ReaderPageDocument) -> NovelReadingCacheContext {
         switch document.contentSource {
         case .authorFilteredPage:

@@ -34,7 +34,8 @@ final class NovelReadingWorkflowTests: XCTestCase {
             NovelTextViewportRuntimeDiagnostics(
                 contentStorageCount: 1,
                 activeLayoutManagerCount: 1,
-                perPageTextKitDocumentCount: 0
+                perPageTextKitDocumentCount: 0,
+                semanticAttributedDocumentCacheCount: 1
             )
         )
     }
@@ -89,7 +90,8 @@ final class NovelReadingWorkflowTests: XCTestCase {
             NovelTextViewportRuntimeDiagnostics(
                 contentStorageCount: 1,
                 activeLayoutManagerCount: 1,
-                perPageTextKitDocumentCount: 0
+                perPageTextKitDocumentCount: 0,
+                semanticAttributedDocumentCacheCount: 1
             )
         )
     }
@@ -135,6 +137,103 @@ final class NovelReadingWorkflowTests: XCTestCase {
         XCTAssertNotEqual(leftReference.pageIdentity, rightReference.pageIdentity)
         XCTAssertFalse(leftReference.isStale)
         XCTAssertFalse(rightReference.isStale)
+    }
+
+    func testPrefetchDoesNotCreateASecondViewportRuntime() async throws {
+        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9181&mobile=2")!
+        let repository = RecordingNovelReadingRepository(documents: [
+            1: makeNovelDocument(threadURL: threadURL, view: 1, maxView: 2, authorID: "author-1"),
+            2: makeNovelDocument(threadURL: threadURL, view: 2, maxView: 2, authorID: "author-1")
+        ])
+        let workflow = makeWorkflow(threadURL: threadURL, repository: repository)
+
+        let initialState = try await workflow.start(initial: NovelReadingInitialPosition())
+        let pageIdentity = try XCTUnwrap(initialState.snapshot.viewportIndex?.pages.first?.pageIndex)
+        let reference = try XCTUnwrap(workflow.displayReference(for: pageIdentity))
+        let diagnostics = workflow.runtimeDiagnostics
+
+        _ = await workflow.prefetchIfNeeded(
+            forPageIndex: max(initialState.snapshot.pages.count - 2, 0)
+        )
+
+        XCTAssertEqual(workflow.runtimeDiagnostics, diagnostics)
+        XCTAssertFalse(reference.isStale)
+        XCTAssertEqual(workflow.displayReference(for: pageIdentity)?.generation, reference.generation)
+    }
+
+    func testCloseReleasesRuntimeAndAllowsWorkflowToReopen() async throws {
+        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9182&mobile=2")!
+        let repository = RecordingNovelReadingRepository(documents: [
+            1: makeNovelDocument(threadURL: threadURL, view: 1, maxView: 1, authorID: "author-1")
+        ])
+        let workflow = makeWorkflow(threadURL: threadURL, repository: repository)
+
+        let initialState = try await workflow.start(initial: NovelReadingInitialPosition())
+        let pageIdentity = try XCTUnwrap(initialState.snapshot.viewportIndex?.pages.first?.pageIndex)
+        let oldReference = try XCTUnwrap(workflow.displayReference(for: pageIdentity))
+
+        workflow.close()
+
+        XCTAssertNil(workflow.state)
+        XCTAssertNil(workflow.displayReference(for: pageIdentity))
+        XCTAssertTrue(oldReference.isStale)
+        XCTAssertEqual(
+            workflow.runtimeDiagnostics,
+            NovelTextViewportRuntimeDiagnostics(
+                contentStorageCount: 0,
+                activeLayoutManagerCount: 0,
+                perPageTextKitDocumentCount: 0,
+                semanticAttributedDocumentCacheCount: 0
+            )
+        )
+
+        let reopenedState = try await workflow.start(initial: NovelReadingInitialPosition())
+        let reopenedPageIdentity = try XCTUnwrap(reopenedState.snapshot.viewportIndex?.pages.first?.pageIndex)
+        let reopenedReference = try XCTUnwrap(workflow.displayReference(for: reopenedPageIdentity))
+
+        XCTAssertFalse(reopenedReference.isStale)
+        XCTAssertNotEqual(reopenedReference.generation, oldReference.generation)
+    }
+
+    func testMemoryPressureClearsSemanticCacheWithoutInvalidatingCurrentGeneration() async throws {
+        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9183&mobile=2")!
+        let repository = RecordingNovelReadingRepository(documents: [
+            1: makeNovelDocument(threadURL: threadURL, view: 1, maxView: 1, authorID: "author-1")
+        ])
+        let workflow = makeWorkflow(threadURL: threadURL, repository: repository)
+
+        let state = try await workflow.start(initial: NovelReadingInitialPosition())
+        let pageIdentity = try XCTUnwrap(state.snapshot.viewportIndex?.pages.first?.pageIndex)
+        let reference = try XCTUnwrap(workflow.displayReference(for: pageIdentity))
+        XCTAssertEqual(workflow.runtimeDiagnostics.semanticAttributedDocumentCacheCount, 1)
+
+        workflow.handleMemoryPressure()
+
+        XCTAssertEqual(workflow.runtimeDiagnostics.semanticAttributedDocumentCacheCount, 0)
+        XCTAssertEqual(workflow.runtimeDiagnostics.contentStorageCount, 1)
+        XCTAssertEqual(workflow.runtimeDiagnostics.activeLayoutManagerCount, 1)
+        XCTAssertFalse(reference.isStale)
+        XCTAssertEqual(workflow.displayReference(for: pageIdentity)?.generation, reference.generation)
+    }
+
+    func testWorkflowDeinitDoesNotRetainRuntimeThroughDisplayReferences() async throws {
+        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9184&mobile=2")!
+        let repository = RecordingNovelReadingRepository(documents: [
+            1: makeNovelDocument(threadURL: threadURL, view: 1, maxView: 1, authorID: "author-1")
+        ])
+        weak var weakWorkflow: NovelReadingWorkflow?
+        var reference: NovelTextViewportDisplayReference?
+
+        do {
+            let workflow = makeWorkflow(threadURL: threadURL, repository: repository)
+            weakWorkflow = workflow
+            let state = try await workflow.start(initial: NovelReadingInitialPosition())
+            let pageIdentity = try XCTUnwrap(state.snapshot.viewportIndex?.pages.first?.pageIndex)
+            reference = try XCTUnwrap(workflow.displayReference(for: pageIdentity))
+        }
+
+        XCTAssertNil(weakWorkflow)
+        XCTAssertTrue(try XCTUnwrap(reference).isStale)
     }
 
     func testStartUsesStoredResumePointBeforeLaunchPage() async throws {
@@ -1364,6 +1463,25 @@ final class NovelReadingWorkflowTests: XCTestCase {
         )
         XCTAssertEqual(translatedState.snapshot.viewportIndex?.pages[4].ranges.first?.segmentIndex, 4)
     }
+}
+
+@MainActor
+private func makeWorkflow(
+    threadURL: URL,
+    repository: RecordingNovelReadingRepository
+) -> NovelReadingWorkflow {
+    NovelReadingWorkflow(
+        context: ReaderLaunchContext(
+            threadURL: threadURL,
+            threadTitle: "Thread",
+            source: .forum,
+            initialView: 1,
+            authorID: "author-1"
+        ),
+        settings: ReaderAppearanceSettings(readingMode: .paged),
+        layout: ReaderContainerLayout(width: 320, height: 568),
+        repository: repository
+    )
 }
 
 private final class RecordingNovelReadingRepository: NovelReadingPageRepository, @unchecked Sendable {
