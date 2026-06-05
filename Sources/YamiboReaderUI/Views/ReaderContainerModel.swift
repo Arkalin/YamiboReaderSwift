@@ -525,18 +525,41 @@ public final class ReaderContainerModel: ObservableObject {
         applePencilPageTurnSettings newApplePencilPageTurnSettings: ApplePencilPageTurnSettings
     ) {
         let oldSettings = settings
-        let shouldRepaginate = oldSettings != newSettings
-        settings = newSettings
-        applePencilPageTurnSettings = newApplePencilPageTurnSettings
-        persistSettings(
-            readerSettings: newSettings,
-            applePencilPageTurnSettings: newApplePencilPageTurnSettings
-        )
-        guard shouldRepaginate else { return }
+        let oldApplePencilPageTurnSettings = applePencilPageTurnSettings
+        let readerSettingsChanged = oldSettings != newSettings
+        let applePencilSettingsChanged = oldApplePencilPageTurnSettings != newApplePencilPageTurnSettings
+        guard readerSettingsChanged else {
+            guard applePencilSettingsChanged else { return }
+            applePencilPageTurnSettings = newApplePencilPageTurnSettings
+            persistSettings(applePencilPageTurnSettings: newApplePencilPageTurnSettings)
+            return
+        }
+
+        if oldSettings.isSurfaceOnlyAppearanceChange(to: newSettings) {
+            settings = newSettings
+            applePencilPageTurnSettings = newApplePencilPageTurnSettings
+            if let state = readingWorkflow?.updateSurfaceAppearanceSettings(newSettings) {
+                syncFromWorkflowState(state)
+            }
+            persistSettings(
+                readerSettings: newSettings,
+                applePencilPageTurnSettings: applePencilSettingsChanged ? newApplePencilPageTurnSettings : nil
+            )
+            return
+        }
+
         do {
             guard let state = try readingWorkflow?.updateSettings(newSettings) else { return }
+            settings = newSettings
+            applePencilPageTurnSettings = newApplePencilPageTurnSettings
             syncFromWorkflowState(state)
+            persistSettings(
+                readerSettings: newSettings,
+                applePencilPageTurnSettings: applePencilSettingsChanged ? newApplePencilPageTurnSettings : nil
+            )
         } catch {
+            settings = oldSettings
+            applePencilPageTurnSettings = oldApplePencilPageTurnSettings
             errorMessage = error.localizedDescription
         }
     }
@@ -1193,7 +1216,8 @@ public final class ReaderContainerModel: ObservableObject {
         readerSettings: ReaderAppearanceSettings? = nil,
         applePencilPageTurnSettings: ApplePencilPageTurnSettings? = nil
     ) {
-        Task {
+        Task { [weak self] in
+            guard let self else { return }
             var appSettings = await appContext.settingsStore.load()
             if let readerSettings {
                 appSettings.reader = readerSettings
@@ -1201,11 +1225,27 @@ public final class ReaderContainerModel: ObservableObject {
             if let applePencilPageTurnSettings {
                 appSettings.applePencilPageTurn = applePencilPageTurnSettings
             }
-            try? await appContext.settingsStore.save(appSettings)
+            do {
+                try await appContext.settingsStore.save(appSettings)
+            } catch {
+                await MainActor.run {
+                    self.errorMessage = error.localizedDescription
+                }
+            }
         }
     }
 
     private func syncCachedViews(_ views: Set<Int>) {
         cacheOperationModule.syncCachedViews(views)
+    }
+}
+
+private extension ReaderAppearanceSettings {
+    func isSurfaceOnlyAppearanceChange(to other: ReaderAppearanceSettings) -> Bool {
+        var lhs = self
+        var rhs = other
+        lhs.backgroundStyle = .system
+        rhs.backgroundStyle = .system
+        return lhs == rhs && backgroundStyle != other.backgroundStyle
     }
 }

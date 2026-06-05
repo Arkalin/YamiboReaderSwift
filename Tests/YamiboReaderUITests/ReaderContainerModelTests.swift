@@ -628,6 +628,103 @@ final class ReaderContainerModelTests: XCTestCase {
         }
     }
 
+    func testLayoutSettingsFailureKeepsCommittedSettingsAndDoesNotPersistDraft() async throws {
+        let keyPrefix = UUID().uuidString
+        let settingsStore = SettingsStore(key: "\(keyPrefix).settings")
+        let cacheStore = ReaderCacheStore(
+            baseDirectory: FileManager.default.temporaryDirectory
+                .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        )
+        let initialSettings = ReaderAppearanceSettings(fontScale: 1.0, readingMode: .paged)
+        let document = makeDocument(view: 1, maxView: 1, chapterTitles: ["第一章", "第二章"])
+        try await settingsStore.save(AppSettings(reader: initialSettings))
+        try await cacheStore.save(document)
+
+        let appContext = YamiboAppContext(
+            sessionStore: SessionStore(key: "\(keyPrefix).session"),
+            settingsStore: settingsStore,
+            favoriteStore: FavoriteStore(key: "\(keyPrefix).favorites"),
+            readerCacheStore: cacheStore
+        )
+        let model = await MainActor.run {
+            ReaderContainerModel(
+                context: ReaderLaunchContext(
+                    threadURL: document.threadURL,
+                    threadTitle: "测试线程",
+                    source: .forum
+                ),
+                appContext: appContext,
+                pagination: { document, settings, layout in
+                    if settings.fontScale > 1.1 {
+                        throw NovelTextLayoutFailure.unableToLayoutText
+                    }
+                    return try NovelTextLayout.layout(document: document, settings: settings, layout: layout)
+                }
+            )
+        }
+        await model.prepare(layout: ReaderContainerLayout(width: 320, height: 568))
+
+        var failedSettings = initialSettings
+        failedSettings.fontScale = 1.2
+
+        await MainActor.run {
+            model.applySettings(failedSettings)
+            XCTAssertEqual(model.settings, initialSettings)
+            XCTAssertEqual(model.errorMessage, NovelTextLayoutFailure.unableToLayoutText.localizedDescription)
+        }
+
+        try await Task.sleep(nanoseconds: 100_000_000)
+        let loaded = await settingsStore.load()
+        XCTAssertEqual(loaded.reader, initialSettings)
+    }
+
+    func testSurfaceOnlyAppearanceSettingsPublishRevisionWithoutRuntimeRebuild() async throws {
+        let keyPrefix = UUID().uuidString
+        let settingsStore = SettingsStore(key: "\(keyPrefix).settings")
+        let cacheStore = ReaderCacheStore(
+            baseDirectory: FileManager.default.temporaryDirectory
+                .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        )
+        let initialSettings = ReaderAppearanceSettings(backgroundStyle: .system, readingMode: .paged)
+        let document = makeDocument(view: 1, maxView: 1, chapterTitles: ["第一章", "第二章"])
+        try await settingsStore.save(AppSettings(reader: initialSettings))
+        try await cacheStore.save(document)
+        let appContext = YamiboAppContext(
+            sessionStore: SessionStore(key: "\(keyPrefix).session"),
+            settingsStore: settingsStore,
+            favoriteStore: FavoriteStore(key: "\(keyPrefix).favorites"),
+            readerCacheStore: cacheStore
+        )
+        let model = await MainActor.run {
+            ReaderContainerModel(
+                context: ReaderLaunchContext(
+                    threadURL: document.threadURL,
+                    threadTitle: "测试线程",
+                    source: .forum
+                ),
+                appContext: appContext
+            )
+        }
+        await model.prepare(layout: ReaderContainerLayout(width: 320, height: 568))
+
+        let initialPresentation = try await MainActor.run { try XCTUnwrap(model.readerPresentation) }
+        var updatedSettings = initialSettings
+        updatedSettings.backgroundStyle = .paper
+
+        await MainActor.run {
+            model.applySettings(updatedSettings)
+        }
+        let updatedPresentation = try await MainActor.run { try XCTUnwrap(model.readerPresentation) }
+
+        XCTAssertEqual(updatedPresentation.generation, initialPresentation.generation)
+        XCTAssertEqual(updatedPresentation.revision, initialPresentation.revision + 1)
+        XCTAssertEqual(updatedPresentation.committedSettings, updatedSettings)
+
+        try await waitFor {
+            await settingsStore.load().reader == updatedSettings
+        }
+    }
+
     func testApplySettingsPersistsSharedApplePencilSettingsWithoutOverwritingMangaSettings() async throws {
         let keyPrefix = UUID().uuidString
         let settingsStore = SettingsStore(key: "\(keyPrefix).settings")
