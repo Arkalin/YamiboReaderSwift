@@ -302,6 +302,10 @@ final class NovelTextViewportRuntimeOwner {
         transactionDiagnostics
     }
 
+    var currentGeneration: UInt64 {
+        activeGeneration
+    }
+
     func commit(
         result: NovelTextLayoutResult,
         settings: ReaderAppearanceSettings,
@@ -412,6 +416,13 @@ final class NovelTextViewportRuntimeOwner {
             documentView: page.documentView,
             pageIdentity: page.pageIndex
         )
+    }
+
+    func displayReference(for surfaceIdentity: NovelReaderSurfaceIdentity) -> NovelTextViewportDisplayReference? {
+        guard surfaceIdentity.generation == activeGeneration else {
+            return nil
+        }
+        return displayReference(for: surfaceIdentity.ordinal)
     }
 
     func updateVisiblePageIdentities(_ pageIdentities: [Int]) {

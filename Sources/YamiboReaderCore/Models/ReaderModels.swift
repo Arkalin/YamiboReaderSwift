@@ -984,6 +984,121 @@ public struct NovelTextLayoutResult: Hashable, Sendable {
     }
 }
 
+public struct NovelReaderSurfaceIdentity: Hashable, Sendable {
+    public var generation: UInt64
+    public var ordinal: Int
+
+    public init(generation: UInt64, ordinal: Int) {
+        self.generation = generation
+        self.ordinal = max(0, ordinal)
+    }
+}
+
+public enum NovelReaderSurfaceKind: Hashable, Sendable {
+    case text
+    case externalBlock
+}
+
+public struct NovelReaderSurface: Hashable, Sendable {
+    public var identity: NovelReaderSurfaceIdentity
+    public var kind: NovelReaderSurfaceKind
+    public var documentView: Int
+    public var chapterTitle: String?
+    public var presentationSize: CGSize
+    public var viewportPage: NovelTextViewportIndexPage
+
+    public init(
+        identity: NovelReaderSurfaceIdentity,
+        kind: NovelReaderSurfaceKind,
+        documentView: Int,
+        chapterTitle: String?,
+        presentationSize: CGSize,
+        viewportPage: NovelTextViewportIndexPage
+    ) {
+        self.identity = identity
+        self.kind = kind
+        self.documentView = max(1, documentView)
+        self.chapterTitle = chapterTitle
+        self.presentationSize = presentationSize
+        self.viewportPage = viewportPage
+    }
+}
+
+public struct NovelReaderPresentationSpread: Hashable, Sendable {
+    public var index: Int
+    public var leftSurfaceIdentity: NovelReaderSurfaceIdentity
+    public var rightSurfaceIdentity: NovelReaderSurfaceIdentity?
+    public var chapterTitle: String?
+
+    public init(
+        index: Int,
+        leftSurfaceIdentity: NovelReaderSurfaceIdentity,
+        rightSurfaceIdentity: NovelReaderSurfaceIdentity?,
+        chapterTitle: String?
+    ) {
+        self.index = max(0, index)
+        self.leftSurfaceIdentity = leftSurfaceIdentity
+        self.rightSurfaceIdentity = rightSurfaceIdentity
+        self.chapterTitle = chapterTitle
+    }
+}
+
+public struct NovelReaderReadingState: Hashable, Sendable {
+    public var currentView: Int
+    public var maxView: Int
+    public var currentChapterTitle: String?
+    public var currentPageIntraProgress: Double
+
+    public init(
+        currentView: Int,
+        maxView: Int,
+        currentChapterTitle: String?,
+        currentPageIntraProgress: Double
+    ) {
+        self.currentView = max(1, currentView)
+        self.maxView = max(self.currentView, maxView)
+        self.currentChapterTitle = currentChapterTitle
+        self.currentPageIntraProgress = min(max(currentPageIntraProgress, 0), 1)
+    }
+}
+
+public struct NovelReaderPresentation: Hashable, Sendable {
+    public var generation: UInt64
+    public var revision: UInt64
+    public var surfaces: [NovelReaderSurface]
+    public var selectedSurfaceIdentity: NovelReaderSurfaceIdentity?
+    public var spreads: [NovelReaderPresentationSpread]
+    public var committedSettings: ReaderAppearanceSettings
+    public var readingState: NovelReaderReadingState
+    public var currentContentSource: ReaderContentSource
+    public var retainedChapterCount: Int
+    public var filteredChapterCandidateCount: Int
+
+    public init(
+        generation: UInt64,
+        revision: UInt64,
+        surfaces: [NovelReaderSurface],
+        selectedSurfaceIdentity: NovelReaderSurfaceIdentity?,
+        spreads: [NovelReaderPresentationSpread],
+        committedSettings: ReaderAppearanceSettings,
+        readingState: NovelReaderReadingState,
+        currentContentSource: ReaderContentSource,
+        retainedChapterCount: Int,
+        filteredChapterCandidateCount: Int
+    ) {
+        self.generation = generation
+        self.revision = revision
+        self.surfaces = surfaces
+        self.selectedSurfaceIdentity = selectedSurfaceIdentity
+        self.spreads = spreads
+        self.committedSettings = committedSettings
+        self.readingState = readingState
+        self.currentContentSource = currentContentSource
+        self.retainedChapterCount = max(0, retainedChapterCount)
+        self.filteredChapterCandidateCount = max(0, filteredChapterCandidateCount)
+    }
+}
+
 private extension ReaderRenderedTextRange {
     func contains(offset: Int) -> Bool {
         if startOffset == endOffset {
