@@ -17,7 +17,7 @@ public struct ReaderProgressChapterTick: Equatable, Sendable {
 public final class ReaderContainerModel: ObservableObject {
     @Published public private(set) var isLoading = false
     @Published public private(set) var errorMessage: String?
-    @Published public private(set) var pages: [ReaderRenderedPage] = []
+    @Published public private(set) var pages: [NovelTextViewportIndexPage] = []
     @Published public private(set) var chapters: [ReaderChapter] = []
     @Published public private(set) var cachedViews: Set<Int> = []
     @Published public private(set) var currentView = 1
@@ -965,7 +965,7 @@ public final class ReaderContainerModel: ObservableObject {
         return currentDocument
     }
 
-    private var currentRenderedPageMetadata: ReaderRenderedPage? {
+    private var currentRenderedPageMetadata: NovelTextViewportIndexPage? {
         let normalizedIndex = normalizedPagedPageIndex(currentPageIndex)
         guard pages.indices.contains(normalizedIndex) else { return nil }
         return pages[normalizedIndex]

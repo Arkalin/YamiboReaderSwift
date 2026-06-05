@@ -215,7 +215,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
             pagination: { document, _, _ in
                 layoutResult(
                     pages: [
-                        ReaderRenderedPage(
+                        viewportTestPage(
                             index: 0,
                             blocks: [
                                 .text(
@@ -230,7 +230,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
                             chapterOrdinal: 0,
                             chapterTitle: "第一章"
                         ),
-                        ReaderRenderedPage(
+                        viewportTestPage(
                             index: 1,
                             blocks: [
                                 .text(
@@ -316,7 +316,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
             pagination: { document, _, _ in
                 layoutResult(
                     pages: [
-                        ReaderRenderedPage(
+                        viewportTestPage(
                             index: 0,
                             blocks: [
                                 .text(
@@ -331,7 +331,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
                             chapterOrdinal: 0,
                             chapterTitle: "第一章"
                         ),
-                        ReaderRenderedPage(
+                        viewportTestPage(
                             index: 1,
                             blocks: [
                                 .text(
@@ -425,7 +425,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
                 ]
                 return layoutResult(
                     pages: [
-                        ReaderRenderedPage(
+                        viewportTestPage(
                             index: 0,
                             blocks: [
                                 .text(
@@ -507,7 +507,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
             pagination: { document, _, _ in
                 layoutResult(
                     pages: [
-                        ReaderRenderedPage(
+                        viewportTestPage(
                             index: 0,
                             blocks: [
                                 .text(
@@ -522,7 +522,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
                             chapterOrdinal: 0,
                             chapterTitle: "第一章"
                         ),
-                        ReaderRenderedPage(
+                        viewportTestPage(
                             index: 1,
                             blocks: [
                                 .image(URL(string: "https://example.com/image.jpg")!, chapterTitle: "第一章")
@@ -531,7 +531,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
                             chapterOrdinal: 0,
                             chapterTitle: "第一章"
                         ),
-                        ReaderRenderedPage(
+                        viewportTestPage(
                             index: 2,
                             blocks: [
                                 .text(
@@ -645,7 +645,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
                 if document.view == 1 {
                     return layoutResult(
                         pages: [
-                            ReaderRenderedPage(
+                            viewportTestPage(
                                 index: 0,
                                 blocks: [
                                     .text(
@@ -686,7 +686,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
                 }
                 return layoutResult(
                     pages: [
-                        ReaderRenderedPage(
+                        viewportTestPage(
                             index: 0,
                             blocks: [
                                 .image(URL(string: "https://example.com/only-image.jpg")!, chapterTitle: "第二章")
@@ -741,7 +741,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
             pagination: { document, _, _ in
                 layoutResult(
                     pages: [
-                        ReaderRenderedPage(
+                        viewportTestPage(
                             index: 0,
                             blocks: [
                                 .text(
@@ -756,7 +756,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
                             chapterOrdinal: 0,
                             chapterTitle: "第一章"
                         ),
-                        ReaderRenderedPage(
+                        viewportTestPage(
                             index: 1,
                             blocks: [
                                 .text(
@@ -1159,7 +1159,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
             currentPageIndex: 0,
             currentChapterTitle: "第1章"
         )
-        XCTAssertEqual(initialState.snapshot.pages.map(\.blocks).filter(\.isEmpty).count, 6)
+        XCTAssertEqual(initialState.snapshot.pages.filter { !$0.ranges.isEmpty }.count, 6)
         XCTAssertEqual(initialState.snapshot.viewportContext?.diagnostics.indexBuildCount, 1)
         XCTAssertEqual(initialState.snapshot.viewportContext?.diagnostics.visibleLayoutPassCount, 0)
         XCTAssertEqual(initialState.snapshot.viewportContext?.diagnostics.compatibilityTextDisplayValueCount, 0)
@@ -1315,7 +1315,7 @@ private func makeNovelDocument(
 }
 
 private func layoutResult(
-    pages: [ReaderRenderedPage],
+    pages: [NovelTextViewportIndexPage],
     chapters: [ReaderChapter],
     viewportIndex: NovelTextViewportIndex? = nil,
     viewportContext: NovelTextViewportContext? = nil
@@ -1325,7 +1325,7 @@ private func layoutResult(
         readingMode: viewportContext?.identity.appearance.readingMode ?? .paged,
         pages: pages.map { page in
             NovelTextViewportIndexPage(
-                pageIndex: page.index,
+                pageIndex: page.pageIndex,
                 documentView: page.documentView,
                 chapterOrdinal: page.chapterOrdinal,
                 chapterTitle: page.chapterTitle,
@@ -1360,9 +1360,47 @@ private func layoutResult(
     )
     return NovelTextLayoutResult(
         viewportContext: context,
-        viewportIndex: index,
-        compatibilityPages: pages,
-        compatibilityChapters: chapters
+        viewportIndex: index
+    )
+}
+
+private enum ViewportTestBlock {
+    case text(String, chapterTitle: String?, ranges: [ReaderRenderedTextRange] = [])
+    case image(URL, chapterTitle: String?)
+}
+
+private func viewportTestPage(
+    index: Int,
+    blocks: [ViewportTestBlock] = [],
+    documentView: Int = 1,
+    chapterOrdinal: Int? = nil,
+    chapterTitle: String? = nil,
+    chapterCommentTarget: ReaderChapterCommentTarget? = nil
+) -> NovelTextViewportIndexPage {
+    let ranges = blocks.flatMap { block -> [ReaderRenderedTextRange] in
+        if case let .text(_, _, ranges) = block {
+            return ranges
+        }
+        return []
+    }
+    let externalBlocks = blocks.compactMap { block -> NovelTextViewportExternalBlock? in
+        guard case let .image(url, imageChapterTitle) = block else { return nil }
+        return NovelTextViewportExternalBlock(
+            segmentIndex: index,
+            url: url,
+            chapterOrdinal: chapterOrdinal,
+            chapterTitle: imageChapterTitle ?? chapterTitle,
+            chapterCommentTarget: chapterCommentTarget
+        )
+    }
+    return NovelTextViewportIndexPage(
+        pageIndex: index,
+        documentView: documentView,
+        chapterOrdinal: chapterOrdinal,
+        chapterTitle: chapterTitle,
+        ranges: ranges,
+        externalBlocks: externalBlocks,
+        chapterCommentTarget: chapterCommentTarget
     )
 }
 
@@ -1373,7 +1411,7 @@ private func previewSourcePagination(
 ) -> NovelTextLayoutResult {
     layoutResult(
         pages: document.segments.enumerated().map { index, segment in
-            return ReaderRenderedPage(
+            return viewportTestPage(
                 index: index,
                 blocks: [],
                 documentView: document.view,
@@ -1429,7 +1467,7 @@ private func workflowRepaginationRanges(
             : defaultRanges
         return layoutResult(
             pages: ranges.enumerated().map { index, range in
-                ReaderRenderedPage(
+                viewportTestPage(
                     index: index,
                     blocks: [],
                     documentView: document.view,
@@ -1496,7 +1534,7 @@ private func assertLongCurrentWebpageViewportState(
     line: UInt = #line
 ) {
     XCTAssertEqual(state.snapshot.pages.count, chapterTitles.count, file: file, line: line)
-    XCTAssertTrue(state.snapshot.pages.allSatisfy { $0.blocks.isEmpty }, file: file, line: line)
+    XCTAssertTrue(state.snapshot.pages.allSatisfy { !$0.ranges.isEmpty }, file: file, line: line)
     XCTAssertEqual(state.snapshot.chapters.map(\.title), chapterTitles, file: file, line: line)
     XCTAssertEqual(state.snapshot.chapters.map(\.startIndex), Array(chapterTitles.indices), file: file, line: line)
     XCTAssertEqual(state.snapshot.currentPageIndex, currentPageIndex, file: file, line: line)

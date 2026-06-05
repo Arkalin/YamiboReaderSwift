@@ -53,14 +53,14 @@ public enum NovelTextLayout {
         document: ReaderPageDocument,
         settings: ReaderAppearanceSettings,
         layout: ReaderContainerLayout
-    ) throws -> ReaderPaginationResult {
+    ) throws -> NovelTextLayoutResult {
         try self.layout(
             document: document,
             settings: settings,
             layout: layout,
             requiresAuthoritativePagedLayout: nil,
             requiresAuthoritativeVerticalLayout: nil
-        ).compatibility
+        )
     }
 
     public static func layout(
@@ -86,7 +86,7 @@ public enum NovelTextLayout {
         pagedLayout: NovelPagedTextLayout? = nil,
         verticalLayout: NovelVerticalTextLayout? = nil,
         usesViewportIndexCache: Bool? = nil
-    ) throws -> ReaderPaginationResult {
+    ) throws -> NovelTextLayoutResult {
         try self.layout(
             document: document,
             settings: settings,
@@ -96,7 +96,7 @@ public enum NovelTextLayout {
             pagedLayout: pagedLayout,
             verticalLayout: verticalLayout,
             usesViewportIndexCache: usesViewportIndexCache
-        ).compatibility
+        )
     }
 
     static func layout(
@@ -216,11 +216,9 @@ public enum NovelTextLayout {
         viewportContextSeed: NovelTextViewportContext,
         chunker: (String, String?, ReaderAppearanceSettings, ReaderContainerLayout) throws -> [TextSlice]
     ) throws -> NovelTextLayoutResult {
-        var pages: [ReaderRenderedPage] = []
-        var chapters: [ReaderChapter] = []
+        var pages: [NovelTextViewportIndexPage] = []
+        var chapters: [NovelTextViewportIndexChapter] = []
         var seenChapterOrdinals = Set<Int>()
-        var viewportRangesByPageIndex: [Int: [ReaderRenderedTextRange]] = [:]
-        var viewportExternalBlocksByPageIndex: [Int: [NovelTextViewportExternalBlock]] = [:]
         let annotatedSegmentByIndex = Dictionary(
             uniqueKeysWithValues: annotatedSegments.map { ($0.index, $0) }
         )
@@ -294,47 +292,47 @@ public enum NovelTextLayout {
                       let annotatedSegment = annotatedSegmentByIndex[firstRange.segmentIndex] else {
                     continue
                 }
-                let page = ReaderRenderedPage(
-                    index: pages.count,
-                    blocks: [],
+                let page = NovelTextViewportIndexPage(
+                    pageIndex: pages.count,
                     documentView: document.view,
                     chapterOrdinal: annotatedSegment.chapterOrdinal,
                     chapterTitle: annotatedSegment.chapterTitle,
+                    ranges: ranges,
+                    externalBlocks: [],
                     chapterCommentTarget: chapterCommentTarget(for: annotatedSegment, document: document)
                 )
-                viewportRangesByPageIndex[page.index] = ranges
                 if let chapterOrdinal = annotatedSegment.chapterOrdinal,
                    let chapterTitle = annotatedSegment.chapterTitle,
                    seenChapterOrdinals.insert(chapterOrdinal).inserted {
                     chapters.append(
-                        ReaderChapter(
+                        NovelTextViewportIndexChapter(
                             ordinal: chapterOrdinal,
                             title: chapterTitle,
-                            startIndex: page.index,
+                            startPageIndex: page.pageIndex,
                             chapterCommentTarget: page.chapterCommentTarget
                         )
                     )
                 }
                 pages.append(page)
 
-            case let .image(url, chapterTitle, externalBlock):
-                let page = ReaderRenderedPage(
-                    index: pages.count,
-                    blocks: [.image(url, chapterTitle: chapterTitle)],
+            case let .image(_, _, externalBlock):
+                let page = NovelTextViewportIndexPage(
+                    pageIndex: pages.count,
                     documentView: document.view,
                     chapterOrdinal: externalBlock.chapterOrdinal,
                     chapterTitle: externalBlock.chapterTitle,
+                    ranges: [],
+                    externalBlocks: [externalBlock],
                     chapterCommentTarget: externalBlock.chapterCommentTarget
                 )
-                viewportExternalBlocksByPageIndex[page.index] = [externalBlock]
                 if let chapterOrdinal = externalBlock.chapterOrdinal,
                    let chapterTitle = externalBlock.chapterTitle,
                    seenChapterOrdinals.insert(chapterOrdinal).inserted {
                     chapters.append(
-                        ReaderChapter(
+                        NovelTextViewportIndexChapter(
                             ordinal: chapterOrdinal,
                             title: chapterTitle,
-                            startIndex: page.index,
+                            startPageIndex: page.pageIndex,
                             chapterCommentTarget: page.chapterCommentTarget
                         )
                     )
@@ -345,21 +343,21 @@ public enum NovelTextLayout {
 
         if pages.isEmpty {
             pages = [
-                ReaderRenderedPage(
-                    index: 0,
-                    blocks: [.footer(L10n.string("reader.empty_content"))],
-                    documentView: document.view
+                NovelTextViewportIndexPage(
+                    pageIndex: 0,
+                    documentView: document.view,
+                    chapterOrdinal: nil,
+                    chapterTitle: nil,
+                    ranges: []
                 )
             ]
         }
 
-        let viewportIndex = makeViewportIndex(
-            document: document,
-            settings: settings,
+        let viewportIndex = NovelTextViewportIndex(
+            documentView: document.view,
+            readingMode: settings.readingMode,
             pages: pages,
-            chapters: chapters,
-            viewportRangesByPageIndex: viewportRangesByPageIndex,
-            viewportExternalBlocksByPageIndex: viewportExternalBlocksByPageIndex
+            chapters: chapters
         )
         let viewportContext = NovelTextViewportContext(
             identity: viewportContextSeed.identity,
@@ -375,9 +373,7 @@ public enum NovelTextLayout {
 
         return NovelTextLayoutResult(
             viewportContext: viewportContext,
-            viewportIndex: viewportIndex,
-            compatibilityPages: pages,
-            compatibilityChapters: chapters
+            viewportIndex: viewportIndex
         )
     }
 
@@ -526,81 +522,6 @@ public enum NovelTextLayout {
             previousSegment?.chapterTitle != nextSegment?.chapterTitle ||
             previousSegment.flatMap { chapterCommentTarget(for: $0, document: document) } !=
             nextSegment.flatMap { chapterCommentTarget(for: $0, document: document) }
-    }
-
-    private static func makeViewportIndex(
-        document: ReaderPageDocument,
-        settings: ReaderAppearanceSettings,
-        pages: [ReaderRenderedPage],
-        chapters: [ReaderChapter],
-        viewportRangesByPageIndex: [Int: [ReaderRenderedTextRange]],
-        viewportExternalBlocksByPageIndex: [Int: [NovelTextViewportExternalBlock]]
-    ) -> NovelTextViewportIndex {
-        let indexPages = pages.map { page in
-            NovelTextViewportIndexPage(
-                pageIndex: page.index,
-                documentView: page.documentView,
-                chapterOrdinal: page.chapterOrdinal,
-                chapterTitle: page.chapterTitle,
-                ranges: viewportRangesByPageIndex[page.index] ?? [],
-                externalBlocks: viewportExternalBlocksByPageIndex[page.index] ?? [],
-                chapterCommentTarget: page.chapterCommentTarget
-            )
-        }
-        let indexChapters = chapters.map { chapter in
-            NovelTextViewportIndexChapter(
-                ordinal: chapter.ordinal,
-                title: chapter.title,
-                startPageIndex: chapter.startIndex,
-                chapterCommentTarget: chapter.chapterCommentTarget
-            )
-        }
-        return NovelTextViewportIndex(
-            documentView: document.view,
-            readingMode: settings.readingMode,
-            pages: indexPages,
-            chapters: indexChapters
-        )
-    }
-
-    private static func appendViewportRangeToPreviousPageIfPossible(
-        _ range: ReaderRenderedTextRange,
-        annotatedSegment: NovelAnnotatedSegment,
-        document: ReaderPageDocument,
-        settings: ReaderAppearanceSettings,
-        layout: ReaderContainerLayout,
-        annotatedTextBySegment: [Int: String],
-        pages: inout [ReaderRenderedPage],
-        viewportRangesByPageIndex: inout [Int: [ReaderRenderedTextRange]]
-    ) -> Bool {
-        guard !pages.isEmpty else { return false }
-        let previousIndex = pages.count - 1
-        let previousPage = pages[previousIndex]
-        let previousRanges = viewportRangesByPageIndex[previousPage.index] ?? []
-        guard previousPage.documentView > 0,
-              previousPage.chapterOrdinal == annotatedSegment.chapterOrdinal,
-              previousPage.chapterTitle == annotatedSegment.chapterTitle,
-              previousPage.chapterCommentTarget == chapterCommentTarget(for: annotatedSegment, document: document),
-              previousPage.blocks.isEmpty,
-              !previousRanges.isEmpty else {
-            return false
-        }
-
-        let combinedText = (previousRanges + [range])
-            .compactMap { text(for: $0, annotatedTextBySegment: annotatedTextBySegment) }
-            .joined(separator: "\n\n")
-
-        guard textFits(
-            combinedText,
-            chapterTitle: previousPage.chapterTitle,
-            settings: settings,
-            layout: layout
-        ) else {
-            return false
-        }
-
-        viewportRangesByPageIndex[previousPage.index] = previousRanges + [range]
-        return true
     }
 
     private static func text(

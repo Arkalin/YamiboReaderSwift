@@ -543,30 +543,26 @@ extension View {
     }
 }
 
-struct ReaderPageContent: View {
-    let page: ReaderRenderedPage
-    let settings: ReaderAppearanceSettings
-    let refererURL: URL
-    let sessionState: SessionState
+private enum ReaderViewportDisplayBlock: Identifiable {
+    case text(NovelTextDisplayValue)
+    case image(URL)
+    case footer(String)
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            ForEach(page.blocks) { block in
-                ReaderBlockView(
-                    block: block,
-                    settings: settings,
-                    refererURL: refererURL,
-                    sessionState: sessionState
-                )
-            }
+    var id: String {
+        switch self {
+        case let .text(displayValue):
+            return "text:\(displayValue.chapterTitle ?? ""):\(displayValue.startsAtParagraphBoundary):\(displayValue.text.hashValue)"
+        case let .image(url):
+            return "image:\(url.absoluteString)"
+        case let .footer(text):
+            return "footer:\(text)"
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
 struct ReaderPagedSpreadContent: View {
     let spread: ReaderPagedSpread
-    let pages: [ReaderRenderedPage]
+    let pages: [NovelTextViewportIndexPage]
     let viewportContext: NovelTextViewportContext?
     let viewportIndex: NovelTextViewportIndex?
     let settings: ReaderAppearanceSettings
@@ -593,10 +589,8 @@ struct ReaderPagedSpreadContent: View {
                 ReaderViewportPageContent(
                     viewportContext: viewportContext,
                     viewportPage: viewportPage,
-                    compatibilityBlocks: pages.indices.contains(pageIndex) ? pages[pageIndex].blocks : [],
                     fallbackDocumentView: viewportPage?.documentView,
                     fallbackPageIndex: pageIndex,
-                    fallbackChapterCommentTarget: pages.indices.contains(pageIndex) ? pages[pageIndex].chapterCommentTarget : nil,
                     settings: settings,
                     refererURL: refererURL,
                     sessionState: sessionState
@@ -617,50 +611,25 @@ struct ReaderPagedSpreadContent: View {
 struct ReaderViewportPageContent: View {
     let viewportContext: NovelTextViewportContext?
     let viewportPage: NovelTextViewportIndexPage?
-    let compatibilityBlocks: [ReaderRenderedBlock]
     let fallbackDocumentView: Int?
     let fallbackPageIndex: Int?
-    let fallbackChapterCommentTarget: ReaderChapterCommentTarget?
     let settings: ReaderAppearanceSettings
     let refererURL: URL
     let sessionState: SessionState
 
     init(
-        page: ReaderRenderedPage,
         viewportContext: NovelTextViewportContext?,
         viewportPage: NovelTextViewportIndexPage?,
-        settings: ReaderAppearanceSettings,
-        refererURL: URL,
-        sessionState: SessionState
-    ) {
-        self.viewportContext = viewportContext
-        self.viewportPage = viewportPage
-        self.compatibilityBlocks = page.blocks
-        self.fallbackDocumentView = page.documentView
-        self.fallbackPageIndex = page.index
-        self.fallbackChapterCommentTarget = page.chapterCommentTarget
-        self.settings = settings
-        self.refererURL = refererURL
-        self.sessionState = sessionState
-    }
-
-    init(
-        viewportContext: NovelTextViewportContext?,
-        viewportPage: NovelTextViewportIndexPage?,
-        compatibilityBlocks: [ReaderRenderedBlock],
         fallbackDocumentView: Int?,
         fallbackPageIndex: Int?,
-        fallbackChapterCommentTarget: ReaderChapterCommentTarget?,
         settings: ReaderAppearanceSettings,
         refererURL: URL,
         sessionState: SessionState
     ) {
         self.viewportContext = viewportContext
         self.viewportPage = viewportPage
-        self.compatibilityBlocks = compatibilityBlocks
         self.fallbackDocumentView = fallbackDocumentView
         self.fallbackPageIndex = fallbackPageIndex
-        self.fallbackChapterCommentTarget = fallbackChapterCommentTarget
         self.settings = settings
         self.refererURL = refererURL
         self.sessionState = sessionState
@@ -669,14 +638,13 @@ struct ReaderViewportPageContent: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             ForEach(
-                Self.viewportBackedBlocks(
-                    compatibilityBlocks: compatibilityBlocks,
+                Self.viewportBlocks(
                     viewportContext: viewportContext,
                     viewportPage: viewportPage,
                     settings: settings
                 )
             ) { block in
-                ReaderBlockView(
+                ReaderViewportBlockView(
                     block: block,
                     settings: settings,
                     refererURL: refererURL,
@@ -694,22 +662,15 @@ struct ReaderViewportPageContent: View {
         return "novel-viewport-page-\(contextView)-\(pageIndex)"
     }
 
-    static func viewportBackedBlocks(
-        compatibilityBlocks: [ReaderRenderedBlock],
+    static func viewportBlocks(
         viewportContext: NovelTextViewportContext?,
         viewportPage: NovelTextViewportIndexPage?,
         settings: ReaderAppearanceSettings
-    ) -> [ReaderRenderedBlock] {
-        let nonTextCompatibilityBlocks = compatibilityBlocks.filter { block in
-            if case .text = block {
-                return false
-            }
-            return true
-        }
+    ) -> [ReaderViewportDisplayBlock] {
         let externalBlockImages = viewportPage?.externalBlocks.map {
-            ReaderRenderedBlock.image($0.url, chapterTitle: $0.chapterTitle)
+            ReaderViewportDisplayBlock.image($0.url)
         } ?? []
-        let nonTextBlocks = nonTextCompatibilityBlocks.isEmpty ? externalBlockImages : nonTextCompatibilityBlocks
+        var blocks: [ReaderViewportDisplayBlock] = []
         guard let viewportContext,
               let viewportPage,
               !viewportPage.ranges.isEmpty,
@@ -718,47 +679,20 @@ struct ReaderViewportPageContent: View {
                 viewportPage: viewportPage,
                 settings: settings
               ) else {
-            return nonTextBlocks.isEmpty ? compatibilityBlocks : nonTextBlocks
+            return externalBlockImages.isEmpty ? [.footer(L10n.string("reader.empty_content"))] : externalBlockImages
         }
-        return [.text(displayValue: displayValue)] + nonTextBlocks
-    }
-
-    static func viewportBackedPage(
-        page: ReaderRenderedPage,
-        viewportContext: NovelTextViewportContext?,
-        viewportPage: NovelTextViewportIndexPage?,
-        settings: ReaderAppearanceSettings
-    ) -> ReaderRenderedPage {
-        let compatibilityBlocks = page.blocks.filter { block in
-            if case .text = block {
-                return false
-            }
-            return true
-        }
-        return ReaderRenderedPage(
-            index: page.index,
-            blocks: viewportBackedBlocks(
-                compatibilityBlocks: compatibilityBlocks,
-                viewportContext: viewportContext,
-                viewportPage: viewportPage,
-                settings: settings
-            ),
-            documentView: viewportPage?.documentView ?? page.documentView,
-            chapterOrdinal: viewportPage?.chapterOrdinal ?? page.chapterOrdinal,
-            chapterTitle: viewportPage?.chapterTitle ?? page.chapterTitle,
-            chapterCommentTarget: viewportPage?.chapterCommentTarget ?? page.chapterCommentTarget
-        )
+        blocks.append(.text(displayValue))
+        blocks.append(contentsOf: externalBlockImages)
+        return blocks
     }
 
     static func visibleSurfaceDiagnostics(
         viewportContext: NovelTextViewportContext?,
-        viewportPage: NovelTextViewportIndexPage?,
-        compatibilityBlocks: [ReaderRenderedBlock]
+        viewportPage: NovelTextViewportIndexPage?
     ) -> NovelTextViewportVisibleSurfaceDiagnostics {
         NovelTextViewportVisibleSurfaceDiagnostics(
             viewportContext: viewportContext,
-            viewportPage: viewportPage,
-            compatibilityBlocks: compatibilityBlocks
+            viewportPage: viewportPage
         )
     }
 
@@ -775,7 +709,7 @@ final class ReaderPagedViewportCollectionView: UICollectionView {
 }
 
 struct ReaderPagedCollectionViewport: UIViewRepresentable {
-    let pages: [ReaderRenderedPage]
+    let pages: [NovelTextViewportIndexPage]
     let viewportContext: NovelTextViewportContext?
     let viewportIndex: NovelTextViewportIndex?
     let settings: ReaderAppearanceSettings
@@ -847,20 +781,13 @@ struct ReaderPagedCollectionViewport: UIViewRepresentable {
             let viewportPage = parent.viewportIndex?.pages.first {
                 $0.pageIndex == indexPath.item
             }
-            let compatibilityBlocks = parent.pages.indices.contains(indexPath.item)
-                ? parent.pages[indexPath.item].blocks
-                : []
             cell.backgroundColor = .clear
             cell.contentConfiguration = UIHostingConfiguration {
                 ReaderViewportPageContent(
                     viewportContext: parent.viewportContext,
                     viewportPage: viewportPage,
-                    compatibilityBlocks: compatibilityBlocks,
                     fallbackDocumentView: viewportPage?.documentView,
                     fallbackPageIndex: indexPath.item,
-                    fallbackChapterCommentTarget: parent.pages.indices.contains(indexPath.item)
-                        ? parent.pages[indexPath.item].chapterCommentTarget
-                        : nil,
                     settings: parent.settings,
                     refererURL: parent.refererURL,
                     sessionState: parent.sessionState
@@ -966,7 +893,7 @@ struct ReaderPagedCollectionViewport: UIViewRepresentable {
 
 struct ReaderPagedSpreadCollectionViewport: UIViewRepresentable {
     let spreads: [ReaderPagedSpread]
-    let pages: [ReaderRenderedPage]
+    let pages: [NovelTextViewportIndexPage]
     let viewportContext: NovelTextViewportContext?
     let viewportIndex: NovelTextViewportIndex?
     let settings: ReaderAppearanceSettings
@@ -1147,11 +1074,11 @@ struct ReaderPagedSpreadCollectionViewport: UIViewRepresentable {
 private struct ReaderVerticalViewportDisplayPage {
     let pageIndex: Int
     let documentView: Int
-    let blocks: [ReaderRenderedBlock]
+    let blocks: [ReaderViewportDisplayBlock]
 }
 
 struct ReaderVerticalViewportScrollView: UIViewRepresentable {
-    let pages: [ReaderRenderedPage]
+    let pages: [NovelTextViewportIndexPage]
     let viewportContext: NovelTextViewportContext?
     let viewportIndex: NovelTextViewportIndex?
     let settings: ReaderAppearanceSettings
@@ -1464,7 +1391,7 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
                 return nil
             }
             let page = parent.pages[item]
-            return (page.index, page.documentView)
+            return (page.pageIndex, page.documentView)
         }
 
         private func verticalDisplayPage(for item: Int) -> ReaderVerticalViewportDisplayPage? {
@@ -1472,8 +1399,7 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
                 return ReaderVerticalViewportDisplayPage(
                     pageIndex: viewportPage.pageIndex,
                     documentView: viewportPage.documentView,
-                    blocks: ReaderViewportPageContent.viewportBackedBlocks(
-                        compatibilityBlocks: [],
+                    blocks: ReaderViewportPageContent.viewportBlocks(
                         viewportContext: parent.viewportContext,
                         viewportPage: viewportPage,
                         settings: parent.settings
@@ -1485,9 +1411,13 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
             }
             let page = parent.pages[item]
             return ReaderVerticalViewportDisplayPage(
-                pageIndex: page.index,
+                pageIndex: page.pageIndex,
                 documentView: page.documentView,
-                blocks: page.blocks
+                blocks: ReaderViewportPageContent.viewportBlocks(
+                    viewportContext: parent.viewportContext,
+                    viewportPage: page,
+                    settings: parent.settings
+                )
             )
         }
 
@@ -1666,7 +1596,7 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
     }
 
     private func makeBlockView(
-        for block: ReaderRenderedBlock,
+        for block: ReaderViewportDisplayBlock,
         blockIndex: Int,
         page: ReaderVerticalViewportDisplayPage,
         contentWidth: CGFloat,
@@ -1683,7 +1613,7 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
                 contentWidth: contentWidth,
                 textRuntimeStore: textRuntimeStore
             )
-        case let .image(url, _):
+        case let .image(url):
             return makeImageBlockView(url: url, contentWidth: contentWidth, refererURL: refererURL, sessionState: sessionState)
         case let .footer(text):
             return makeFooterBlockView(text)
@@ -1872,7 +1802,7 @@ private final class ReaderVerticalViewportImageView: UIView {
 }
 
 private struct ReaderVerticalViewportContentIdentity: Hashable {
-    var pages: [ReaderRenderedPage]
+    var pages: [NovelTextViewportIndexPage]
     var viewportContext: NovelTextViewportContext?
     var viewportIndex: NovelTextViewportIndex?
     var settings: ReaderAppearanceSettings
@@ -1881,8 +1811,8 @@ private struct ReaderVerticalViewportContentIdentity: Hashable {
 }
 #endif
 
-private struct ReaderBlockView: View {
-    let block: ReaderRenderedBlock
+private struct ReaderViewportBlockView: View {
+    let block: ReaderViewportDisplayBlock
     let settings: ReaderAppearanceSettings
     let refererURL: URL
     let sessionState: SessionState
@@ -1898,7 +1828,7 @@ private struct ReaderBlockView: View {
                 textColor: UIColor(readerTextColor),
                 textColorToken: .primaryReaderText
             )
-        case let .image(url, _):
+        case let .image(url):
             AuthenticatedReaderImage(
                 url: url,
                 refererURL: refererURL,

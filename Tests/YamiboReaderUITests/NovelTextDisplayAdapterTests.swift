@@ -119,16 +119,16 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
             indentsParagraphFirstLine: true,
             readingMode: .vertical
         )
-        let textBlock = ReaderRenderedBlock.text(
-            "正文文本块应该由 Novel Text Layout 绘制。",
-            chapterTitle: "第一章",
-            startsAtParagraphBoundary: false,
-            settings: settings
-        )
-
-        let materialization = ReaderBlockNovelTextDisplayMaterializer.materialization(
-            for: textBlock,
-            settings: settings
+        let materialization = NovelTextDisplayAdapter.materialization(
+            surface: .novelReadingSessionTextBlock,
+            displayValue: NovelTextDisplayValue(
+                text: "正文文本块应该由 Novel Text Layout 绘制。",
+                chapterTitle: "第一章",
+                startsAtParagraphBoundary: false,
+                settings: settings
+            ),
+            baseFontSize: 22,
+            textColor: .primaryReaderText
         )
         let previewDisplayValue = NovelTextDisplayValue(
             text: "设置预览文本。",
@@ -142,12 +142,12 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
             textColor: .settingsPreviewPrimaryText
         )
 
-        XCTAssertEqual(materialization?.surface, .novelReadingSessionTextBlock)
-        XCTAssertEqual(materialization?.backend, previewMaterialization.backend)
-        XCTAssertEqual(materialization?.style.fontFamily, .rounded)
-        XCTAssertEqual(materialization?.style.lineHeightScale, 1.6)
-        XCTAssertEqual(materialization?.chapterTitle, "第一章")
-        XCTAssertEqual(materialization?.startsAtParagraphBoundary, false)
+        XCTAssertEqual(materialization.surface, .novelReadingSessionTextBlock)
+        XCTAssertEqual(materialization.backend, previewMaterialization.backend)
+        XCTAssertEqual(materialization.style.fontFamily, .rounded)
+        XCTAssertEqual(materialization.style.lineHeightScale, 1.6)
+        XCTAssertEqual(materialization.chapterTitle, "第一章")
+        XCTAssertEqual(materialization.startsAtParagraphBoundary, false)
     }
 
     func testNovelReadingSessionTextBlockMaterializationUsesSnapshotDisplayValueSemantics() throws {
@@ -160,26 +160,16 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
             indentsParagraphFirstLine: true,
             readingMode: .paged
         )
-        let liveSettings = ReaderAppearanceSettings(
-            fontScale: 0.85,
-            fontFamily: .rounded,
-            lineHeightScale: 1.1,
-            characterSpacingScale: 0,
-            usesJustifiedText: false,
-            indentsParagraphFirstLine: false,
-            readingMode: .vertical
+        let materialization = NovelTextDisplayAdapter.materialization(
+            surface: .novelReadingSessionTextBlock,
+            displayValue: NovelTextDisplayValue(
+                text: "已经排版的阅读会话文本块必须使用快照中的显示语义。",
+                chapterTitle: "第一章",
+                settings: snapshotSettings
+            ),
+            baseFontSize: 20,
+            textColor: .primaryReaderText
         )
-        let block = ReaderRenderedBlock.text(
-            "已经排版的阅读会话文本块必须使用快照中的显示语义。",
-            chapterTitle: "第一章",
-            settings: snapshotSettings
-        )
-
-        let materialization = try XCTUnwrap(ReaderBlockNovelTextDisplayMaterializer.materialization(
-            for: block,
-            settings: liveSettings,
-            baseFontSize: 20
-        ))
 
         XCTAssertEqual(materialization.style.fontScale, 1.4)
         XCTAssertEqual(materialization.style.fontFamily, .systemSerif)
@@ -209,18 +199,21 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
             baseFontSize: 22,
             textColor: .settingsPreviewPrimaryText
         )
-        let blockMaterialization = ReaderBlockNovelTextDisplayMaterializer.materialization(
-            for: .text(
-                "纵向阅读正文块测高也不能回退到独立 text view fitting。",
+        let blockMaterialization = NovelTextDisplayAdapter.materialization(
+            surface: .novelReadingSessionTextBlock,
+            displayValue: NovelTextDisplayValue(
+                text: "纵向阅读正文块测高也不能回退到独立 text view fitting。",
                 chapterTitle: "第一章",
-                startsAtParagraphBoundary: true
+                startsAtParagraphBoundary: true,
+                settings: settings
             ),
-            settings: settings
+            baseFontSize: 22,
+            textColor: .primaryReaderText
         )
 
         XCTAssertEqual(previewMaterialization.measurementBackend, .novelTextLayoutMeasurement)
-        XCTAssertEqual(blockMaterialization?.measurementBackend, previewMaterialization.measurementBackend)
-        XCTAssertEqual(blockMaterialization?.surface, .novelReadingSessionTextBlock)
+        XCTAssertEqual(blockMaterialization.measurementBackend, previewMaterialization.measurementBackend)
+        XCTAssertEqual(blockMaterialization.surface, .novelReadingSessionTextBlock)
     }
 
     func testSwiftUIDisplaySizingRequestsHeightFromNovelTextLayoutMeasurement() throws {
@@ -297,10 +290,12 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
             baseFontSize: 22,
             textColor: .settingsPreviewPrimaryText
         )
-        let block = try XCTUnwrap(ReaderBlockNovelTextDisplayMaterializer.materialization(
-            for: .text("正文块", chapterTitle: "第一章", settings: settings),
-            settings: settings
-        ))
+        let block = NovelTextDisplayAdapter.materialization(
+            surface: .novelReadingSessionTextBlock,
+            displayValue: NovelTextDisplayValue(text: "正文块", chapterTitle: "第一章", settings: settings),
+            baseFontSize: 22,
+            textColor: .primaryReaderText
+        )
 
         XCTAssertEqual(preview.backend, .novelTextViewport)
         XCTAssertEqual(block.backend, preview.backend)
@@ -319,14 +314,16 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
             showsTwoPagesInLandscapeOnPad: true,
             readingMode: .paged
         )
-        let block = try XCTUnwrap(ReaderBlockNovelTextDisplayMaterializer.materialization(
-            for: .text(
-                "双页横屏展示中的左右页都必须复用 viewport-backed page content。",
+        let block = NovelTextDisplayAdapter.materialization(
+            surface: .novelReadingSessionTextBlock,
+            displayValue: NovelTextDisplayValue(
+                text: "双页横屏展示中的左右页都必须复用 viewport-backed page content。",
                 chapterTitle: "第一章",
                 settings: settings
             ),
-            settings: settings
-        ))
+            baseFontSize: 22,
+            textColor: .primaryReaderText
+        )
 
         XCTAssertTrue(spreadContentBody.contains("ReaderViewportPageContent("))
         XCTAssertFalse(spreadContentBody.contains("Text(displayValue.text"))
@@ -355,7 +352,8 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertFalse(singlePageBody.contains("$0.documentView == page.documentView"))
         XCTAssertFalse(spreadContentBody.contains("$0.documentView == page.documentView"))
         XCTAssertTrue(viewportContentBody.contains("NovelTextLayout.displayValue("))
-        XCTAssertTrue(viewportContentBody.contains("compatibilityBlocks"))
+        XCTAssertTrue(viewportContentBody.contains("viewportBlocks("))
+        XCTAssertFalse(viewportContentBody.contains("compatibilityBlocks"))
     }
 
     func testSinglePagePagedReadingUsesUIKitCollectionViewportInsteadOfSwiftUITabView() throws {
@@ -419,16 +417,18 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         )
         let verticalContentBody = try XCTUnwrap(functionBody(named: "verticalContent", in: containerSource))
         let scrollViewBody = try XCTUnwrap(typeBody(named: "ReaderVerticalViewportScrollView", in: supportSource))
-        let readerBlockBody = try XCTUnwrap(typeBody(named: "ReaderBlockView", in: supportSource))
+        let readerBlockBody = try XCTUnwrap(typeBody(named: "ReaderViewportBlockView", in: supportSource))
         let settings = ReaderAppearanceSettings(readingMode: .vertical)
-        let block = try XCTUnwrap(ReaderBlockNovelTextDisplayMaterializer.materialization(
-            for: .text(
-                "纵向阅读的可见正文必须由 Novel Text Viewport 绘制。",
+        let block = NovelTextDisplayAdapter.materialization(
+            surface: .novelReadingSessionTextBlock,
+            displayValue: NovelTextDisplayValue(
+                text: "纵向阅读的可见正文必须由 Novel Text Viewport 绘制。",
                 chapterTitle: "第一章",
                 settings: settings
             ),
-            settings: settings
-        ))
+            baseFontSize: 22,
+            textColor: .primaryReaderText
+        )
 
         XCTAssertTrue(verticalContentBody.contains("ReaderVerticalViewportScrollView("))
         XCTAssertTrue(scrollViewBody.contains("verticalDisplayPage(for: indexPath.item)"))
@@ -491,8 +491,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
 
         let diagnostics = NovelTextViewportVisibleSurfaceDiagnostics(
             viewportContext: context,
-            viewportPage: viewportPage,
-            compatibilityBlocks: []
+            viewportPage: viewportPage
         )
 
         XCTAssertEqual(diagnostics.indexBuildCount, 1)
@@ -557,11 +556,11 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         let spreadContentBody = try XCTUnwrap(typeBody(named: "ReaderPagedSpreadContent", in: supportSource))
 
         XCTAssertTrue(singlePageBody.contains("$0.pageIndex == indexPath.item"))
-        XCTAssertTrue(singlePageBody.contains("compatibilityBlocks: compatibilityBlocks"))
+        XCTAssertFalse(singlePageBody.contains("compatibilityBlocks"))
         XCTAssertFalse(singlePageBody.contains("let page = parent.pages[indexPath.item]"))
         XCTAssertFalse(singlePageBody.contains("viewportBackedPage("))
         XCTAssertTrue(spreadContentBody.contains("$0.pageIndex == pageIndex"))
-        XCTAssertTrue(spreadContentBody.contains("compatibilityBlocks: pages.indices.contains(pageIndex) ? pages[pageIndex].blocks : []"))
+        XCTAssertFalse(spreadContentBody.contains("compatibilityBlocks"))
         XCTAssertFalse(spreadContentBody.contains("let page = pages[pageIndex]"))
         XCTAssertFalse(spreadContentBody.contains("viewportBackedPage("))
     }
@@ -705,7 +704,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         let makeImageBlockBody = try XCTUnwrap(functionBody(named: "makeImageBlockView", in: verticalCellBody))
 
         XCTAssertTrue(displayPageBody.contains("viewportIndex?.pages.first"))
-        XCTAssertTrue(displayPageBody.contains("ReaderViewportPageContent.viewportBackedBlocks"))
+        XCTAssertTrue(displayPageBody.contains("ReaderViewportPageContent.viewportBlocks"))
         XCTAssertFalse(displayPageBody.contains("ReaderViewportPageContent.viewportBackedPage"))
         XCTAssertTrue(itemHeightBody.contains("verticalDisplayPage(for: item)"))
         XCTAssertTrue(itemHeightBody.contains("textRuntimeStore.measuredHeight"))
@@ -748,7 +747,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertFalse(referenceYBody.contains("progress * frame.height"))
     }
 
-    func testViewportPageContentRequestsNormalTextDisplayValueFromNovelTextLayoutBeforeCompatibilityPageBlocks() throws {
+    func testViewportPageContentRequestsNormalTextDisplayValueFromNovelTextLayout() throws {
         let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let supportSource = try String(
             contentsOf: repositoryRoot
@@ -757,10 +756,11 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         )
         let viewportPageContentBody = try XCTUnwrap(typeBody(named: "ReaderViewportPageContent", in: supportSource))
 
-        XCTAssertTrue(viewportPageContentBody.contains("viewportBackedPage("))
+        XCTAssertTrue(viewportPageContentBody.contains("viewportBlocks("))
+        XCTAssertFalse(viewportPageContentBody.contains("viewportBackedPage("))
         XCTAssertTrue(viewportPageContentBody.contains("NovelTextLayout.displayValue("))
         XCTAssertTrue(viewportPageContentBody.contains("viewportPage.ranges"))
-        XCTAssertTrue(viewportPageContentBody.contains("compatibilityBlocks"))
+        XCTAssertFalse(viewportPageContentBody.contains("compatibilityBlocks"))
         XCTAssertTrue(viewportPageContentBody.contains("visibleSurfaceDiagnostics("))
         XCTAssertTrue(viewportPageContentBody.contains("NovelTextViewportVisibleSurfaceDiagnostics"))
         XCTAssertFalse(viewportPageContentBody.contains("viewportContext.document.textRangesBySegment"))
@@ -841,15 +841,17 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
             readingMode: .paged
         )
 
-        let materialization = try XCTUnwrap(ReaderBlockNovelTextDisplayMaterializer.materialization(
-            for: .text(
-                "第一章\n正文需要覆盖字体、字号、行距、字距和段首缩进。",
+        let materialization = NovelTextDisplayAdapter.materialization(
+            surface: .novelReadingSessionTextBlock,
+            displayValue: NovelTextDisplayValue(
+                text: "第一章\n正文需要覆盖字体、字号、行距、字距和段首缩进。",
                 chapterTitle: "第一章",
                 startsAtParagraphBoundary: true,
                 settings: settings
             ),
-            settings: settings
-        ))
+            baseFontSize: 22,
+            textColor: .primaryReaderText
+        )
 
         XCTAssertEqual(materialization.style.fontFamily, .systemSerif)
         XCTAssertEqual(materialization.style.pointSize, 28.6, accuracy: 0.001)
