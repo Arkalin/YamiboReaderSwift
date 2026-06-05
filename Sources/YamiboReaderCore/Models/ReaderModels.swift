@@ -346,80 +346,6 @@ public struct NovelTextDisplayValue: Hashable, Sendable {
 
 }
 
-public enum ReaderRenderedBlock: Hashable, Identifiable, Sendable {
-    case text(displayValue: NovelTextDisplayValue)
-    case image(URL, chapterTitle: String?)
-    case footer(String)
-
-    public var id: String {
-        switch self {
-        case let .text(displayValue):
-            return "text:\(displayValue.chapterTitle ?? ""):\(displayValue.startsAtParagraphBoundary):\(displayValue.text.hashValue)"
-        case let .image(url, chapterTitle):
-            return "image:\(chapterTitle ?? ""):\(url.absoluteString)"
-        case let .footer(text):
-            return "footer:\(text)"
-        }
-    }
-
-    public var chapterTitle: String? {
-        switch self {
-        case let .text(displayValue):
-            return displayValue.chapterTitle
-        case let .image(_, chapterTitle):
-            return chapterTitle
-        case .footer:
-            return nil
-        }
-    }
-
-    public var isTextBlock: Bool {
-        if case .text = self {
-            return true
-        }
-        return false
-    }
-
-    public var textContent: String? {
-        if case let .text(displayValue) = self {
-            return displayValue.text
-        }
-        return nil
-    }
-
-    public var startsAtParagraphBoundary: Bool {
-        if case let .text(displayValue) = self {
-            return displayValue.startsAtParagraphBoundary
-        }
-        return false
-    }
-
-    public var novelTextDisplayValue: NovelTextDisplayValue? {
-        if case let .text(displayValue) = self {
-            return displayValue
-        }
-        return nil
-    }
-
-    public static func text(
-        _ text: String,
-        chapterTitle: String?,
-        startsAtParagraphBoundary: Bool = true,
-        settings: ReaderAppearanceSettings = ReaderAppearanceSettings(),
-        ranges: [ReaderRenderedTextRange] = []
-    ) -> ReaderRenderedBlock {
-        .text(
-            displayValue: NovelTextDisplayValue(
-                text: text,
-                chapterTitle: chapterTitle,
-                startsAtParagraphBoundary: startsAtParagraphBoundary,
-                settings: settings,
-                ranges: ranges
-            )
-        )
-    }
-}
-
 public struct ReaderRenderedTextRange: Hashable, Sendable {
     public var segmentIndex: Int
     public var startOffset: Int
@@ -433,33 +359,6 @@ public struct ReaderRenderedTextRange: Hashable, Sendable {
 
     public var length: Int {
         max(endOffset - startOffset, 0)
-    }
-}
-
-public struct ReaderRenderedPage: Hashable, Identifiable, Sendable {
-    public var index: Int
-    public var blocks: [ReaderRenderedBlock]
-    public var documentView: Int
-    public var chapterOrdinal: Int?
-    public var chapterTitle: String?
-    public var chapterCommentTarget: ReaderChapterCommentTarget?
-
-    public var id: Int { index }
-
-    public init(
-        index: Int,
-        blocks: [ReaderRenderedBlock],
-        documentView: Int = 1,
-        chapterOrdinal: Int? = nil,
-        chapterTitle: String? = nil,
-        chapterCommentTarget: ReaderChapterCommentTarget? = nil
-    ) {
-        self.index = index
-        self.blocks = blocks
-        self.documentView = max(1, documentView)
-        self.chapterOrdinal = chapterOrdinal
-        self.chapterTitle = chapterTitle
-        self.chapterCommentTarget = chapterCommentTarget
     }
 }
 
@@ -700,13 +599,12 @@ public struct NovelTextViewportVisibleSurfaceDiagnostics: Hashable, Sendable {
 
     public init(
         viewportContext: NovelTextViewportContext?,
-        viewportPage: NovelTextViewportIndexPage?,
-        compatibilityBlocks: [ReaderRenderedBlock]
+        viewportPage: NovelTextViewportIndexPage?
     ) {
         self.indexBuildCount = viewportContext?.diagnostics.indexBuildCount ?? 0
         self.visibleSurfaceLayoutPassCount = viewportContext != nil && viewportPage?.ranges.isEmpty == false ? 1 : 0
-        self.perBlockTextKitDocumentCount = compatibilityBlocks.compactMap(\.novelTextDisplayValue).count
-        self.compatibilityTextDisplayValueCount = compatibilityBlocks.compactMap(\.novelTextDisplayValue).count
+        self.perBlockTextKitDocumentCount = 0
+        self.compatibilityTextDisplayValueCount = 0
         self.usesSharedViewportContext = viewportContext != nil && viewportPage?.ranges.isEmpty == false
     }
 }
@@ -733,47 +631,13 @@ public struct NovelTextViewportContext: Hashable, Sendable {
 public struct NovelTextLayoutResult: Hashable, Sendable {
     public var viewportContext: NovelTextViewportContext
     public var viewportIndex: NovelTextViewportIndex
-    public var compatibilityPages: [ReaderRenderedPage]
-    public var compatibilityChapters: [ReaderChapter]
-
-    public var compatibility: ReaderPaginationResult {
-        ReaderPaginationResult(
-            pages: compatibilityPages,
-            chapters: compatibilityChapters,
-            viewportIndex: viewportIndex,
-            viewportContext: viewportContext
-        )
-    }
 
     public init(
         viewportContext: NovelTextViewportContext,
-        viewportIndex: NovelTextViewportIndex,
-        compatibilityPages: [ReaderRenderedPage],
-        compatibilityChapters: [ReaderChapter]
+        viewportIndex: NovelTextViewportIndex
     ) {
         self.viewportContext = viewportContext
         self.viewportIndex = viewportIndex
-        self.compatibilityPages = compatibilityPages
-        self.compatibilityChapters = compatibilityChapters
-    }
-}
-
-public struct ReaderPaginationResult: Hashable, Sendable {
-    public var pages: [ReaderRenderedPage]
-    public var chapters: [ReaderChapter]
-    public var viewportIndex: NovelTextViewportIndex?
-    public var viewportContext: NovelTextViewportContext?
-
-    public init(
-        pages: [ReaderRenderedPage],
-        chapters: [ReaderChapter],
-        viewportIndex: NovelTextViewportIndex? = nil,
-        viewportContext: NovelTextViewportContext? = nil
-    ) {
-        self.pages = pages
-        self.chapters = chapters
-        self.viewportIndex = viewportIndex
-        self.viewportContext = viewportContext
     }
 }
 

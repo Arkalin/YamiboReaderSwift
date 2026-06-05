@@ -17,7 +17,7 @@ public struct ReaderPagedSpread: Identifiable, Equatable, Sendable {
 }
 
 public struct NovelReadingSnapshot: Equatable, Sendable {
-    public var pages: [ReaderRenderedPage]
+    public var pages: [NovelTextViewportIndexPage]
     public var chapters: [ReaderChapter]
     public var currentPageIndex: Int
     public var currentPageIntraProgress: Double
@@ -34,7 +34,7 @@ public struct NovelReadingSnapshot: Equatable, Sendable {
     public var viewportIndex: NovelTextViewportIndex?
 
     public init(
-        pages: [ReaderRenderedPage],
+        pages: [NovelTextViewportIndexPage],
         chapters: [ReaderChapter],
         currentPageIndex: Int,
         currentPageIntraProgress: Double,
@@ -396,14 +396,14 @@ public struct NovelReadingSession: Sendable {
         )
     }
 
-    private func chapterTitle(for pageIndex: Int, pages: [ReaderRenderedPage], chapters: [ReaderChapter]) -> String? {
+    private func chapterTitle(for pageIndex: Int, pages: [NovelTextViewportIndexPage], chapters: [ReaderChapter]) -> String? {
         guard pages.indices.contains(pageIndex) else {
             return chapters.last(where: { $0.startIndex <= pageIndex })?.title
         }
         return pages[pageIndex].chapterTitle ?? chapters.last(where: { $0.startIndex <= pageIndex })?.title
     }
 
-    private var currentRenderedPage: ReaderRenderedPage? {
+    private var currentRenderedPage: NovelTextViewportIndexPage? {
         let normalizedIndex = normalizedPagedPageIndex(
             snapshot.currentPageIndex,
             pages: snapshot.pages,
@@ -470,16 +470,7 @@ public struct NovelReadingSession: Sendable {
         let renderedChapters = Self.readerChapters(from: layoutResult.viewportIndex)
         let prefetchedStartIndex: Int? = nil
 
-        let pages = viewportPages.map { indexedPage in
-            return ReaderRenderedPage(
-                index: indexedPage.pageIndex,
-                blocks: compatibilityBlocks(for: indexedPage),
-                documentView: indexedPage.documentView,
-                chapterOrdinal: indexedPage.chapterOrdinal,
-                chapterTitle: indexedPage.chapterTitle,
-                chapterCommentTarget: indexedPage.chapterCommentTarget
-            )
-        }
+        let pages = viewportPages
         let fallbackTarget = ReaderResolvedTarget(
             pageIndex: max(0, min(preferredPage, max(pages.count - 1, 0))),
             intraPageProgress: 0,
@@ -525,12 +516,6 @@ public struct NovelReadingSession: Sendable {
         }
     }
 
-    private func compatibilityBlocks(for page: NovelTextViewportIndexPage) -> [ReaderRenderedBlock] {
-        page.externalBlocks.map { externalBlock in
-            .image(externalBlock.url, chapterTitle: externalBlock.chapterTitle)
-        }
-    }
-
     private mutating func applyPaginationIgnoringFailure(
         for document: ReaderPageDocument,
         preferredPage: Int,
@@ -543,7 +528,7 @@ public struct NovelReadingSession: Sendable {
         )
     }
 
-    private func displayedViewCandidate(for preferredPage: Int, pages: [ReaderRenderedPage]) -> Int {
+    private func displayedViewCandidate(for preferredPage: Int, pages: [NovelTextViewportIndexPage]) -> Int {
         let spreads = makePagedSpreads(from: pages)
         let normalizedIndex = normalizedPagedPageIndex(preferredPage, pages: pages, pagedSpreads: spreads)
         guard pages.indices.contains(normalizedIndex) else {
@@ -552,7 +537,7 @@ public struct NovelReadingSession: Sendable {
         return pages[normalizedIndex].documentView
     }
 
-    private func makePagedSpreads(from pages: [ReaderRenderedPage]) -> [ReaderPagedSpread] {
+    private func makePagedSpreads(from pages: [NovelTextViewportIndexPage]) -> [ReaderPagedSpread] {
         guard !pages.isEmpty else { return [] }
 
         var spreads: [ReaderPagedSpread] = []
@@ -571,7 +556,7 @@ public struct NovelReadingSession: Sendable {
             spreads.append(
                 ReaderPagedSpread(
                     index: spreads.count,
-                    leftPageIndex: leftPage.index,
+                    leftPageIndex: leftPage.pageIndex,
                     rightPageIndex: rightPageIndex,
                     chapterTitle: leftPage.chapterTitle
                 )
@@ -584,7 +569,7 @@ public struct NovelReadingSession: Sendable {
 
     private func spreadIndex(
         forPageIndex pageIndex: Int,
-        pages: [ReaderRenderedPage],
+        pages: [NovelTextViewportIndexPage],
         pagedSpreads: [ReaderPagedSpread]
     ) -> Int {
         guard isTwoPageSpreadActive else {
@@ -606,7 +591,7 @@ public struct NovelReadingSession: Sendable {
 
     private func normalizedPagedPageIndex(
         _ pageIndex: Int,
-        pages: [ReaderRenderedPage],
+        pages: [NovelTextViewportIndexPage],
         pagedSpreads: [ReaderPagedSpread]
     ) -> Int {
         let clampedIndex = max(0, min(pageIndex, max(pages.count - 1, 0)))
@@ -619,7 +604,7 @@ public struct NovelReadingSession: Sendable {
 
     private func resolveResumePoint(
         _ resumePoint: ReaderResumePoint,
-        in renderedPages: [ReaderRenderedPage]
+        in renderedPages: [NovelTextViewportIndexPage]
     ) -> ReaderResolvedTarget? {
         let pagesInView = renderedPages.filter { $0.documentView == resumePoint.view }
         guard !pagesInView.isEmpty else {
@@ -633,7 +618,7 @@ public struct NovelReadingSession: Sendable {
 
         if let containingPage {
             return ReaderResolvedTarget(
-                pageIndex: containingPage.index,
+                pageIndex: containingPage.pageIndex,
                 intraPageProgress: intraPageProgress(for: resumePoint, in: containingPage),
                 documentView: containingPage.documentView
             )
@@ -644,7 +629,7 @@ public struct NovelReadingSession: Sendable {
                 < distance(from: resumePoint.segmentOffset, segmentIndex: resumePoint.segmentIndex, to: $1)
         }) {
             return ReaderResolvedTarget(
-                pageIndex: nearestPage.index,
+                pageIndex: nearestPage.pageIndex,
                 intraPageProgress: intraPageProgress(for: resumePoint, in: nearestPage),
                 documentView: nearestPage.documentView
             )
@@ -652,7 +637,7 @@ public struct NovelReadingSession: Sendable {
 
         if let chapterPage = pagesInView.first(where: { $0.chapterOrdinal == resumePoint.chapterOrdinal }) {
             return ReaderResolvedTarget(
-                pageIndex: chapterPage.index,
+                pageIndex: chapterPage.pageIndex,
                 intraPageProgress: min(max(resumePoint.segmentProgress, 0), 1),
                 documentView: chapterPage.documentView
             )
@@ -660,19 +645,19 @@ public struct NovelReadingSession: Sendable {
 
         if let titlePage = pagesInView.first(where: { $0.chapterTitle == resumePoint.chapterTitle }) {
             return ReaderResolvedTarget(
-                pageIndex: titlePage.index,
+                pageIndex: titlePage.pageIndex,
                 intraPageProgress: min(max(resumePoint.segmentProgress, 0), 1),
                 documentView: titlePage.documentView
             )
         }
 
         guard let firstPage = pagesInView.first else { return nil }
-        return ReaderResolvedTarget(pageIndex: firstPage.index, intraPageProgress: 0, documentView: firstPage.documentView)
+        return ReaderResolvedTarget(pageIndex: firstPage.pageIndex, intraPageProgress: 0, documentView: firstPage.documentView)
     }
 
     private func resolveViewportSample(_ sample: NovelTextViewportSample) -> ReaderResolvedTarget? {
         guard let page = snapshot.pages.first(where: {
-            $0.index == sample.pageIndex && $0.documentView == sample.documentView
+            $0.pageIndex == sample.pageIndex && $0.documentView == sample.documentView
         }) else {
             return nil
         }
@@ -692,7 +677,7 @@ public struct NovelReadingSession: Sendable {
             let localOffset = min(max(sample.segmentOffset - range.startOffset, 0), length)
             let progress = Double(runningLength + localOffset) / Double(max(totalLength, 1))
             return ReaderResolvedTarget(
-                pageIndex: page.index,
+                pageIndex: page.pageIndex,
                 intraPageProgress: min(max(progress, 0), 1),
                 documentView: page.documentView
             )
@@ -701,17 +686,17 @@ public struct NovelReadingSession: Sendable {
         return nil
     }
 
-    private func contains(offset: Int, in page: ReaderRenderedPage) -> Bool {
+    private func contains(offset: Int, in page: NovelTextViewportIndexPage) -> Bool {
         let ranges = textRanges(for: page)
         return ranges.contains(where: { contains(offset: offset, in: $0) })
     }
 
-    private func contains(offset: Int, segmentIndex: Int, in page: ReaderRenderedPage) -> Bool {
+    private func contains(offset: Int, segmentIndex: Int, in page: NovelTextViewportIndexPage) -> Bool {
         let matchingRanges = textRanges(for: page).filter { $0.segmentIndex == segmentIndex }
         return matchingRanges.contains { contains(offset: offset, in: $0) }
     }
 
-    private func contains(segmentIndex: Int, in page: ReaderRenderedPage) -> Bool {
+    private func contains(segmentIndex: Int, in page: NovelTextViewportIndexPage) -> Bool {
         textRanges(for: page).contains { $0.segmentIndex == segmentIndex }
     }
 
@@ -722,12 +707,12 @@ public struct NovelReadingSession: Sendable {
         return offset >= range.startOffset && offset < range.endOffset
     }
 
-    private func distance(from offset: Int, to page: ReaderRenderedPage) -> Int {
+    private func distance(from offset: Int, to page: NovelTextViewportIndexPage) -> Int {
         let ranges = textRanges(for: page)
         return ranges.map { distance(from: offset, to: $0) }.min() ?? 0
     }
 
-    private func distance(from offset: Int, segmentIndex: Int, to page: ReaderRenderedPage) -> Int {
+    private func distance(from offset: Int, segmentIndex: Int, to page: NovelTextViewportIndexPage) -> Int {
         let matchingRanges = textRanges(for: page).filter { $0.segmentIndex == segmentIndex }
         if !matchingRanges.isEmpty {
             return matchingRanges.map { distance(from: offset, to: $0) }.min() ?? 0
@@ -745,7 +730,7 @@ public struct NovelReadingSession: Sendable {
         return offset - range.endOffset
     }
 
-    private func intraPageProgress(for resumePoint: ReaderResumePoint, in page: ReaderRenderedPage) -> Double {
+    private func intraPageProgress(for resumePoint: ReaderResumePoint, in page: NovelTextViewportIndexPage) -> Double {
         let ranges = textRanges(for: page)
         if !ranges.isEmpty {
             let totalLength = ranges.reduce(0) { $0 + max($1.length, 1) }
@@ -763,7 +748,7 @@ public struct NovelReadingSession: Sendable {
         return min(max(resumePoint.segmentProgress, 0), 1)
     }
 
-    private func textPosition(for intraPageProgress: Double, in page: ReaderRenderedPage) -> ReaderPageTextPosition? {
+    private func textPosition(for intraPageProgress: Double, in page: NovelTextViewportIndexPage) -> ReaderPageTextPosition? {
         let ranges = textRanges(for: page)
         guard !ranges.isEmpty else { return nil }
         guard ranges.count > 1 else {
@@ -793,15 +778,8 @@ public struct NovelReadingSession: Sendable {
         }
     }
 
-    private func textRanges(for page: ReaderRenderedPage) -> [ReaderRenderedTextRange] {
-        let viewportIndex = currentViewportIndex ?? snapshot.viewportIndex
-        let indexedRanges = viewportIndex?.pages.first {
-            $0.pageIndex == page.index && $0.documentView == page.documentView
-        }?.ranges ?? []
-        if !indexedRanges.isEmpty {
-            return indexedRanges
-        }
-        return []
+    private func textRanges(for page: NovelTextViewportIndexPage) -> [ReaderRenderedTextRange] {
+        page.ranges
     }
 }
 

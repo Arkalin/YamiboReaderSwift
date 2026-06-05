@@ -71,24 +71,6 @@ enum NovelTextDisplayAdapter {
     }
 }
 
-enum ReaderBlockNovelTextDisplayMaterializer {
-    static func materialization(
-        for block: ReaderRenderedBlock,
-        settings _: ReaderAppearanceSettings,
-        baseFontSize: Double = 22
-    ) -> NovelTextDisplayMaterialization? {
-        guard let displayValue = block.novelTextDisplayValue else {
-            return nil
-        }
-        return NovelTextDisplayAdapter.materialization(
-            surface: .novelReadingSessionTextBlock,
-            displayValue: displayValue,
-            baseFontSize: baseFontSize,
-            textColor: .primaryReaderText
-        )
-    }
-}
-
 #if canImport(UIKit)
 import SwiftUI
 import UIKit

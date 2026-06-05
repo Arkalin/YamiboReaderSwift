@@ -1117,7 +1117,7 @@ final class ReaderContainerModelTests: XCTestCase {
             layout: ReaderContainerLayout(width: 320, height: 568)
         )
         let savedViewportPage = try XCTUnwrap(
-            pagination.viewportIndex?.pages.first(where: { $0.chapterTitle == "第三章" && !$0.ranges.isEmpty })
+            pagination.viewportIndex.pages.first(where: { $0.chapterTitle == "第三章" && !$0.ranges.isEmpty })
         )
         let savedRange = try XCTUnwrap(savedViewportPage.ranges.first)
         let savedOffset = midpoint(in: savedRange)
@@ -1269,7 +1269,7 @@ final class ReaderContainerModelTests: XCTestCase {
             layout: ReaderContainerLayout(width: 320, height: 568)
         )
         let savedViewportPage = try XCTUnwrap(
-            pagination.viewportIndex?.pages.first(where: { $0.chapterTitle == "第二章" && !$0.ranges.isEmpty })
+            pagination.viewportIndex.pages.first(where: { $0.chapterTitle == "第二章" && !$0.ranges.isEmpty })
         )
         let savedRange = try XCTUnwrap(savedViewportPage.ranges.first)
         let savedResumePoint = ReaderResumePoint(
@@ -1348,7 +1348,7 @@ final class ReaderContainerModelTests: XCTestCase {
             settings: ReaderAppearanceSettings(readingMode: .paged),
             layout: ReaderContainerLayout(width: 320, height: 568)
         )
-        let savedViewportPage = try XCTUnwrap(pagination.viewportIndex?.pages.dropFirst().last { !$0.ranges.isEmpty })
+        let savedViewportPage = try XCTUnwrap(pagination.viewportIndex.pages.dropFirst().last { !$0.ranges.isEmpty })
         let savedRange = try XCTUnwrap(savedViewportPage.ranges.first)
         let savedResumePoint = ReaderResumePoint(
             view: 1,
@@ -1417,7 +1417,7 @@ final class ReaderContainerModelTests: XCTestCase {
             settings: ReaderAppearanceSettings(readingMode: .paged),
             layout: ReaderContainerLayout(width: 320, height: 568)
         )
-        let targetViewportPage = try XCTUnwrap(pagination.viewportIndex?.pages.dropFirst().last { !$0.ranges.isEmpty })
+        let targetViewportPage = try XCTUnwrap(pagination.viewportIndex.pages.dropFirst().last { !$0.ranges.isEmpty })
         let model = try await makeModel(
             documents: [document],
             settings: ReaderAppearanceSettings(readingMode: .paged),
@@ -1569,7 +1569,7 @@ final class ReaderContainerModelTests: XCTestCase {
 
         await MainActor.run {
             let page = model.pages[model.currentPageIndex]
-            let viewportPage = try? viewportPage(in: model.viewportIndex, pageIndex: page.index)
+            let viewportPage = try? viewportPage(in: model.viewportIndex, pageIndex: page.pageIndex)
             XCTAssertTrue(viewportPage.map { viewportPageContainsSegmentOffset($0, segmentIndex: target.segmentIndex, offset: target.offset) } ?? false)
         }
     }
@@ -1611,7 +1611,7 @@ final class ReaderContainerModelTests: XCTestCase {
 
         await MainActor.run {
             let page = model.pages[model.currentPageIndex]
-            let viewportPage = try? viewportPage(in: model.viewportIndex, pageIndex: page.index)
+            let viewportPage = try? viewportPage(in: model.viewportIndex, pageIndex: page.pageIndex)
             XCTAssertTrue(viewportPage.map { viewportPageContainsSegmentOffset($0, segmentIndex: 0, offset: originalOffset) } ?? false)
         }
     }
@@ -1646,7 +1646,7 @@ final class ReaderContainerModelTests: XCTestCase {
         await MainActor.run {
             XCTAssertGreaterThan(model.currentPageIndex, 0)
             let page = model.pages[model.currentPageIndex]
-            let viewportPage = try? viewportPage(in: model.viewportIndex, pageIndex: page.index)
+            let viewportPage = try? viewportPage(in: model.viewportIndex, pageIndex: page.pageIndex)
             XCTAssertTrue(viewportPage.map { viewportPageContainsSegmentOffset($0, segmentIndex: 0, offset: originalOffset) } ?? false)
         }
     }
@@ -2245,7 +2245,7 @@ private func makeImageDocument(
 }
 
 private func layoutResult(
-    pages: [ReaderRenderedPage],
+    pages: [NovelTextViewportIndexPage],
     chapters: [ReaderChapter],
     viewportIndex: NovelTextViewportIndex? = nil,
     viewportContext: NovelTextViewportContext? = nil
@@ -2255,7 +2255,7 @@ private func layoutResult(
         readingMode: viewportContext?.identity.appearance.readingMode ?? .paged,
         pages: pages.map { page in
             NovelTextViewportIndexPage(
-                pageIndex: page.index,
+                pageIndex: page.pageIndex,
                 documentView: page.documentView,
                 chapterOrdinal: page.chapterOrdinal,
                 chapterTitle: page.chapterTitle,
@@ -2290,9 +2290,47 @@ private func layoutResult(
     )
     return NovelTextLayoutResult(
         viewportContext: context,
-        viewportIndex: index,
-        compatibilityPages: pages,
-        compatibilityChapters: chapters
+        viewportIndex: index
+    )
+}
+
+private enum ViewportTestBlock {
+    case text(String, chapterTitle: String?, ranges: [ReaderRenderedTextRange] = [])
+    case image(URL, chapterTitle: String?)
+}
+
+private func viewportTestPage(
+    index: Int,
+    blocks: [ViewportTestBlock] = [],
+    documentView: Int = 1,
+    chapterOrdinal: Int? = nil,
+    chapterTitle: String? = nil,
+    chapterCommentTarget: ReaderChapterCommentTarget? = nil
+) -> NovelTextViewportIndexPage {
+    let ranges = blocks.flatMap { block -> [ReaderRenderedTextRange] in
+        if case let .text(_, _, ranges) = block {
+            return ranges
+        }
+        return []
+    }
+    let externalBlocks = blocks.compactMap { block -> NovelTextViewportExternalBlock? in
+        guard case let .image(url, imageChapterTitle) = block else { return nil }
+        return NovelTextViewportExternalBlock(
+            segmentIndex: index,
+            url: url,
+            chapterOrdinal: chapterOrdinal,
+            chapterTitle: imageChapterTitle ?? chapterTitle,
+            chapterCommentTarget: chapterCommentTarget
+        )
+    }
+    return NovelTextViewportIndexPage(
+        pageIndex: index,
+        documentView: documentView,
+        chapterOrdinal: chapterOrdinal,
+        chapterTitle: chapterTitle,
+        ranges: ranges,
+        externalBlocks: externalBlocks,
+        chapterCommentTarget: chapterCommentTarget
     )
 }
 
@@ -2303,7 +2341,7 @@ private func readerModelPreviewSourcePagination(
 ) -> NovelTextLayoutResult {
     layoutResult(
         pages: document.segments.enumerated().map { index, segment in
-            return ReaderRenderedPage(
+            return viewportTestPage(
                 index: index,
                 blocks: [],
                 documentView: document.view,

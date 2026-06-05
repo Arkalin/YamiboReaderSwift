@@ -43,7 +43,7 @@ final class NovelReadingSessionTests: XCTestCase {
             pagination: { document, _, _ in
                 layoutResult(
                     pages: [
-                        ReaderRenderedPage(
+                        viewportTestPage(
                             index: 0,
                             blocks: [.text("第一章正文", chapterTitle: "第一章")],
                             documentView: document.view,
@@ -114,7 +114,7 @@ final class NovelReadingSessionTests: XCTestCase {
             pagination: { document, _, _ in
                 layoutResult(
                     pages: [
-                        ReaderRenderedPage(
+                        viewportTestPage(
                             index: 0,
                             blocks: [
                                 .text(
@@ -186,7 +186,7 @@ final class NovelReadingSessionTests: XCTestCase {
             pagination: { document, _, _ in
                 layoutResult(
                     pages: [
-                        ReaderRenderedPage(
+                        viewportTestPage(
                             index: 0,
                             blocks: [
                                 .text(
@@ -256,7 +256,7 @@ final class NovelReadingSessionTests: XCTestCase {
                     : []
                 return layoutResult(
                     pages: [
-                        ReaderRenderedPage(
+                        viewportTestPage(
                             index: 0,
                             blocks: [
                                 .text(
@@ -337,7 +337,7 @@ final class NovelReadingSessionTests: XCTestCase {
             pagination: { document, _, _ in
                 layoutResult(
                     pages: [
-                        ReaderRenderedPage(
+                        viewportTestPage(
                             index: 0,
                             blocks: [
                                 .text(
@@ -400,7 +400,7 @@ final class NovelReadingSessionTests: XCTestCase {
             pagination: { document, _, _ in
                 layoutResult(
                     pages: [
-                        ReaderRenderedPage(
+                        viewportTestPage(
                             index: 0,
                             blocks: [
                                 .text(
@@ -473,7 +473,7 @@ final class NovelReadingSessionTests: XCTestCase {
             pagination: { document, _, _ in
                 layoutResult(
                     pages: [
-                        ReaderRenderedPage(
+                        viewportTestPage(
                             index: 0,
                             blocks: [.text("stale compatibility page", chapterTitle: "第一章")],
                             documentView: document.view,
@@ -536,7 +536,7 @@ final class NovelReadingSessionTests: XCTestCase {
         let layout = ReaderContainerLayout(width: 320, height: 568)
         let pagination = try NovelTextLayout.renderedPages(document: document, settings: settings, layout: layout)
         let savedViewportPage = try XCTUnwrap(
-            pagination.viewportIndex?.pages.first { $0.chapterTitle == "第三章" && !$0.ranges.isEmpty }
+            pagination.viewportIndex.pages.first { $0.chapterTitle == "第三章" && !$0.ranges.isEmpty }
         )
         let savedRange = try XCTUnwrap(savedViewportPage.ranges.first)
         let savedOffset = savedRange.startOffset + max(1, savedRange.length / 2)
@@ -813,7 +813,7 @@ private func viewportPageContainsSegmentOffset(_ page: NovelTextViewportIndexPag
 }
 
 private func layoutResult(
-    pages: [ReaderRenderedPage],
+    pages: [NovelTextViewportIndexPage],
     chapters: [ReaderChapter],
     viewportIndex: NovelTextViewportIndex? = nil,
     viewportContext: NovelTextViewportContext? = nil
@@ -823,7 +823,7 @@ private func layoutResult(
         readingMode: viewportContext?.identity.appearance.readingMode ?? .paged,
         pages: pages.map { page in
             NovelTextViewportIndexPage(
-                pageIndex: page.index,
+                pageIndex: page.pageIndex,
                 documentView: page.documentView,
                 chapterOrdinal: page.chapterOrdinal,
                 chapterTitle: page.chapterTitle,
@@ -858,9 +858,47 @@ private func layoutResult(
     )
     return NovelTextLayoutResult(
         viewportContext: context,
-        viewportIndex: index,
-        compatibilityPages: pages,
-        compatibilityChapters: chapters
+        viewportIndex: index
+    )
+}
+
+private enum ViewportTestBlock {
+    case text(String, chapterTitle: String?, ranges: [ReaderRenderedTextRange] = [])
+    case image(URL, chapterTitle: String?)
+}
+
+private func viewportTestPage(
+    index: Int,
+    blocks: [ViewportTestBlock] = [],
+    documentView: Int = 1,
+    chapterOrdinal: Int? = nil,
+    chapterTitle: String? = nil,
+    chapterCommentTarget: ReaderChapterCommentTarget? = nil
+) -> NovelTextViewportIndexPage {
+    let ranges = blocks.flatMap { block -> [ReaderRenderedTextRange] in
+        if case let .text(_, _, ranges) = block {
+            return ranges
+        }
+        return []
+    }
+    let externalBlocks = blocks.compactMap { block -> NovelTextViewportExternalBlock? in
+        guard case let .image(url, imageChapterTitle) = block else { return nil }
+        return NovelTextViewportExternalBlock(
+            segmentIndex: index,
+            url: url,
+            chapterOrdinal: chapterOrdinal,
+            chapterTitle: imageChapterTitle ?? chapterTitle,
+            chapterCommentTarget: chapterCommentTarget
+        )
+    }
+    return NovelTextViewportIndexPage(
+        pageIndex: index,
+        documentView: documentView,
+        chapterOrdinal: chapterOrdinal,
+        chapterTitle: chapterTitle,
+        ranges: ranges,
+        externalBlocks: externalBlocks,
+        chapterCommentTarget: chapterCommentTarget
     )
 }
 
@@ -874,7 +912,7 @@ private func textRangePagination(
             : defaultRanges
         return layoutResult(
             pages: ranges.enumerated().map { index, range in
-                ReaderRenderedPage(
+                viewportTestPage(
                     index: index,
                     blocks: [],
                     documentView: document.view,

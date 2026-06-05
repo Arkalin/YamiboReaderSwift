@@ -668,20 +668,20 @@ private final class StubURLProtocol: URLProtocol {
         settings: ReaderAppearanceSettings(readingMode: .paged),
         layout: ReaderContainerLayout(width: 320, height: 568)
     )
-    #expect(paged.pages.count >= 2)
-    #expect(paged.chapters.count == 2)
-    #expect(paged.chapters.first?.title == "第一章")
-    #expect(paged.chapters.last?.title == "第二章")
-    #expect((paged.chapters.last?.startIndex ?? 0) > 0)
+    #expect(paged.viewportIndex.pages.count >= 2)
+    #expect(paged.viewportIndex.chapters.count == 2)
+    #expect(paged.viewportIndex.chapters.first?.title == "第一章")
+    #expect(paged.viewportIndex.chapters.last?.title == "第二章")
+    #expect((paged.viewportIndex.chapters.last?.startPageIndex ?? 0) > 0)
 
     let vertical = try NovelTextLayout.renderedPages(
         document: document,
         settings: ReaderAppearanceSettings(readingMode: .vertical),
         layout: ReaderContainerLayout(width: 320, height: 568)
     )
-    #expect(vertical.pages.count >= 2)
-    #expect(vertical.chapters.first?.title == "第一章")
-    #expect(vertical.chapters.last?.title == "第二章")
+    #expect(vertical.viewportIndex.pages.count >= 2)
+    #expect(vertical.viewportIndex.chapters.first?.title == "第一章")
+    #expect(vertical.viewportIndex.chapters.last?.title == "第二章")
 }
 
 @Test func readerContainerLayoutComputesReadableFrameFromSafeAreaAndChrome() async throws {
@@ -719,14 +719,14 @@ private final class StubURLProtocol: URLProtocol {
         layout: ReaderContainerLayout(width: 320, height: 568)
     )
 
-    #expect(!paged.pages.isEmpty)
-    #expect(!vertical.pages.isEmpty)
-    #expect(paged.viewportIndex?.pages.first?.ranges.first?.startOffset == 0)
-    #expect(paged.viewportIndex?.pages.last?.ranges.last?.endOffset == text.count)
-    #expect(vertical.viewportIndex?.pages.first?.ranges.first?.startOffset == 0)
-    #expect(vertical.viewportIndex?.pages.last?.ranges.last?.endOffset == text.count)
-    #expect(paged.chapters.first?.title == "第一章")
-    #expect(vertical.chapters.first?.title == "第一章")
+    #expect(!paged.viewportIndex.pages.isEmpty)
+    #expect(!vertical.viewportIndex.pages.isEmpty)
+    #expect(paged.viewportIndex.pages.first?.ranges.first?.startOffset == 0)
+    #expect(paged.viewportIndex.pages.last?.ranges.last?.endOffset == text.count)
+    #expect(vertical.viewportIndex.pages.first?.ranges.first?.startOffset == 0)
+    #expect(vertical.viewportIndex.pages.last?.ranges.last?.endOffset == text.count)
+    #expect(paged.viewportIndex.chapters.first?.title == "第一章")
+    #expect(vertical.viewportIndex.chapters.first?.title == "第一章")
     #expect(
         try NovelTextLayout.measuredTextHeight(
             text,
@@ -835,18 +835,19 @@ private final class StubURLProtocol: URLProtocol {
         }
     )
 
-    #expect(pagination.pages.count == 3)
-    #expect(pagination.chapters.map(\.title) == ["第一章", "第二章"])
-    #expect(pagination.chapters.map(\.startIndex) == [0, 2])
-    #expect(pagination.pages[0].blocks.isEmpty)
-    #expect(pagination.viewportIndex?.pages[0].ranges == [
+    #expect(pagination.viewportIndex.pages.count == 3)
+    #expect(pagination.viewportIndex.chapters.map(\.title) == ["第一章", "第二章"])
+    #expect(pagination.viewportIndex.chapters.map(\.startPageIndex) == [0, 2])
+    #expect(pagination.viewportIndex.pages[0].externalBlocks.isEmpty)
+    #expect(pagination.viewportIndex.pages[0].ranges == [
         ReaderRenderedTextRange(segmentIndex: 0, startOffset: 0, endOffset: 2),
         ReaderRenderedTextRange(segmentIndex: 1, startOffset: 0, endOffset: 2)
     ])
-    #expect(pagination.pages[1].blocks == [.image(imageURL, chapterTitle: "第一章")])
-    #expect(pagination.viewportIndex?.pages[2].ranges.first?.segmentIndex == 3)
-    #expect(pagination.pages[2].blocks.isEmpty)
-    #expect(pagination.viewportIndex?.pages[2].ranges == [
+    #expect(pagination.viewportIndex.pages[1].externalBlocks.map(\.url) == [imageURL])
+    #expect(pagination.viewportIndex.pages[1].externalBlocks.map(\.chapterTitle) == ["第一章"])
+    #expect(pagination.viewportIndex.pages[2].ranges.first?.segmentIndex == 3)
+    #expect(pagination.viewportIndex.pages[2].externalBlocks.isEmpty)
+    #expect(pagination.viewportIndex.pages[2].ranges == [
         ReaderRenderedTextRange(segmentIndex: 3, startOffset: 0, endOffset: 5)
     ])
 }
@@ -894,7 +895,7 @@ private final class StubURLProtocol: URLProtocol {
         }
     )
 
-    let index = try #require(pagination.viewportIndex)
+    let index = pagination.viewportIndex
     #expect(index.documentView == 2)
     #expect(index.readingMode == .paged)
     #expect(index.pages.map(\.pageIndex) == [0, 1])
@@ -934,7 +935,7 @@ private final class StubURLProtocol: URLProtocol {
         }
     )
 
-    let index = try #require(pagination.viewportIndex)
+    let index = pagination.viewportIndex
     #expect(index.readingMode == .vertical)
     #expect(index.pages.map(\.ranges) == [
         [ReaderRenderedTextRange(segmentIndex: 0, startOffset: 0, endOffset: 4)],
@@ -974,8 +975,8 @@ private final class StubURLProtocol: URLProtocol {
         }
     )
 
-    let context = try #require(pagination.viewportContext)
-    let index = try #require(pagination.viewportIndex)
+    let context = pagination.viewportContext
+    let index = pagination.viewportIndex
 
     #expect(context.identity.documentView == 3)
     #expect(context.identity.threadURL == document.threadURL)
@@ -994,7 +995,7 @@ private final class StubURLProtocol: URLProtocol {
     #expect(index.pages.flatMap(\.ranges).map(\.segmentIndex) == [0, 1, 3])
 }
 
-@Test func novelTextLayoutResultIsViewportFirstAndDerivesCompatibilityPages() async throws {
+@Test func novelTextLayoutResultIsViewportFirstWithoutRenderedPageCompatibility() async throws {
     let document = ReaderPageDocument(
         threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=163&mobile=2")),
         view: 1,
@@ -1022,10 +1023,8 @@ private final class StubURLProtocol: URLProtocol {
             ReaderRenderedTextRange(segmentIndex: 1, startOffset: 0, endOffset: 3)
         ]
     ])
-    #expect(layoutResult.compatibility.pages.map(\.index) == layoutResult.viewportIndex.pages.map(\.pageIndex))
-    #expect(layoutResult.compatibility.pages.first?.blocks.isEmpty == true)
-    #expect(layoutResult.compatibility.viewportIndex == layoutResult.viewportIndex)
-    #expect(layoutResult.compatibility.viewportContext == layoutResult.viewportContext)
+    #expect(layoutResult.viewportIndex.pages.map(\.pageIndex) == [0])
+    #expect(layoutResult.viewportIndex.pages.first?.externalBlocks.isEmpty == true)
 }
 
 @Test func novelTextViewportIndexPagePublishesImageExternalBlockPlacement() async throws {
@@ -1070,7 +1069,7 @@ private final class StubURLProtocol: URLProtocol {
             )
         )
     ])
-    #expect(layoutResult.compatibility.pages[imagePage.pageIndex].blocks == [.image(imageURL, chapterTitle: "第一章")])
+    #expect(layoutResult.viewportIndex.pages[imagePage.pageIndex].externalBlocks.map(\.url) == [imageURL])
 }
 
 @Test func novelTextLayoutDerivesPageRangesFromComposedViewportDocument() async throws {
@@ -1247,7 +1246,7 @@ private final class StubURLProtocol: URLProtocol {
 
     #expect(layoutPassCount.value == 1)
     #expect(first.viewportIndex == second.viewportIndex)
-    #expect(first.pages == second.pages)
+    #expect(first.viewportIndex.pages == second.viewportIndex.pages)
 }
 
 @Test func novelTextLayoutInvalidatesCachedNovelTextViewportIndexForSettingsAndLayoutChanges() async throws {
@@ -1325,7 +1324,7 @@ private final class StubURLProtocol: URLProtocol {
         usesViewportIndexCache: true
     )
 
-    #expect(pagination.viewportIndex?.pages.count == 1)
+    #expect(pagination.viewportIndex.pages.count == 1)
 }
 
 #if canImport(AppKit) && !canImport(UIKit)
@@ -1389,10 +1388,10 @@ private final class StubURLProtocol: URLProtocol {
         settings: settings,
         layout: layout
     )
-    let ranges = pagination.viewportIndex?.pages.flatMap(\.ranges) ?? []
+    let ranges = pagination.viewportIndex.pages.flatMap(\.ranges)
 
-    #expect(pagination.pages.count > 1)
-    #expect(pagination.pages.allSatisfy { $0.blocks.isEmpty })
+    #expect(pagination.viewportIndex.pages.count > 1)
+    #expect(pagination.viewportIndex.pages.allSatisfy { $0.externalBlocks.isEmpty })
     #expect(ranges.first?.startOffset == 0)
     #expect(ranges.last?.endOffset == text.count)
 
@@ -1420,10 +1419,10 @@ private final class StubURLProtocol: URLProtocol {
         settings: settings,
         layout: layout
     )
-    let ranges = pagination.viewportIndex?.pages.flatMap(\.ranges) ?? []
+    let ranges = pagination.viewportIndex.pages.flatMap(\.ranges)
 
-    #expect(pagination.pages.count > 1)
-    #expect(pagination.pages.allSatisfy { $0.blocks.isEmpty })
+    #expect(pagination.viewportIndex.pages.count > 1)
+    #expect(pagination.viewportIndex.pages.allSatisfy { $0.externalBlocks.isEmpty })
     #expect(ranges.first?.startOffset == 0)
     #expect(ranges.last?.endOffset == text.count)
 
@@ -1445,7 +1444,7 @@ private final class StubURLProtocol: URLProtocol {
     let layout = ReaderContainerLayout(width: 320, height: 568)
 
     let pagination = try NovelTextLayout.renderedPages(document: document, settings: settings, layout: layout)
-    let ranges = pagination.viewportIndex?.pages.flatMap(\.ranges) ?? []
+    let ranges = pagination.viewportIndex.pages.flatMap(\.ranges)
 
     #expect(ranges.first?.startOffset == 0)
     #expect(ranges.last?.endOffset == text.count)
