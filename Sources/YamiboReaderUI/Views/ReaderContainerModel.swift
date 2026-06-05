@@ -86,7 +86,7 @@ public final class ReaderContainerModel: ObservableObject {
         context: ReaderLaunchContext,
         appContext: YamiboAppContext,
         initialSettings: ReaderAppearanceSettings? = nil,
-        pagination: @escaping NovelTextPagination = NovelTextLayout.renderedPages
+        pagination: @escaping NovelTextPagination = NovelTextLayout.layout
     ) {
         self.context = context
         self.appContext = appContext

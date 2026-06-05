@@ -16,23 +16,23 @@ public typealias NovelTextPagination = @Sendable (
     _ document: ReaderPageDocument,
     _ settings: ReaderAppearanceSettings,
     _ layout: ReaderContainerLayout
-) throws -> ReaderPaginationResult
+) throws -> NovelTextLayoutResult
 
 public enum ReaderPaginator {
     public static func paginate(
         document: ReaderPageDocument,
         settings: ReaderAppearanceSettings,
         layout: ReaderContainerLayout
-    ) throws -> ReaderPaginationResult {
-        try NovelTextLayout.renderedPages(document: document, settings: settings, layout: layout)
+    ) throws -> NovelTextLayoutResult {
+        try NovelTextLayout.layout(document: document, settings: settings, layout: layout)
     }
 
     public static func paginateNovelTextLayout(
         document: ReaderPageDocument,
         settings: ReaderAppearanceSettings,
         layout: ReaderContainerLayout
-    ) throws -> ReaderPaginationResult {
-        try NovelTextLayout.renderedPages(document: document, settings: settings, layout: layout)
+    ) throws -> NovelTextLayoutResult {
+        try NovelTextLayout.layout(document: document, settings: settings, layout: layout)
     }
 
     static func paginateNovelTextLayout(
@@ -43,8 +43,8 @@ public enum ReaderPaginator {
         verticalLayout: NovelVerticalTextLayout? = nil,
         requiresAuthoritativePagedLayout: Bool? = nil,
         requiresAuthoritativeVerticalLayout: Bool? = nil
-    ) throws -> ReaderPaginationResult {
-        try NovelTextLayout.renderedPages(
+    ) throws -> NovelTextLayoutResult {
+        try NovelTextLayout.layout(
             document: document,
             settings: settings,
             layout: layout,

@@ -102,7 +102,7 @@ public struct NovelReadingSession: Sendable {
             layout: layout,
             usesPadPresentation: usesPadPresentation,
             currentAuthorID: currentAuthorID,
-            pagination: NovelTextLayout.renderedPages
+            pagination: NovelTextLayout.layout
         )
         preservedTextResumePoint = resumePoint
         applyPaginationIgnoringFailure(for: document, preferredPage: preferredPage, preferredResumePoint: resumePoint)
@@ -116,7 +116,7 @@ public struct NovelReadingSession: Sendable {
         resumePoint: ReaderResumePoint? = nil,
         usesPadPresentation: Bool = false,
         currentAuthorID: String? = nil,
-        pagination: @escaping NovelTextPagination = NovelTextLayout.renderedPages
+        pagination: @escaping NovelTextPagination = NovelTextLayout.layout
     ) throws {
         self.init(
             unpaginatedDocument: document,
@@ -465,28 +465,20 @@ public struct NovelReadingSession: Sendable {
         preferredResumePoint: ReaderResumePoint?
     ) throws {
         let paginationLayout = effectivePaginationLayout
-        let pagination = try pagination(document, settings, paginationLayout)
-        let renderedPages = pagination.pages
-        let viewportPages = pagination.viewportIndex?.pages
-        let renderedChapters = pagination.viewportIndex.map(Self.readerChapters) ?? pagination.chapters
+        let layoutResult = try pagination(document, settings, paginationLayout)
+        let viewportPages = layoutResult.viewportIndex.pages
+        let renderedChapters = Self.readerChapters(from: layoutResult.viewportIndex)
         let prefetchedStartIndex: Int? = nil
 
-        let pages = if let viewportPages {
-            viewportPages.map { indexedPage in
-                let compatibilityPage = renderedPages.first {
-                    $0.index == indexedPage.pageIndex && $0.documentView == indexedPage.documentView
-                }
-                return ReaderRenderedPage(
-                    index: indexedPage.pageIndex,
-                    blocks: compatibilityPage?.blocks ?? compatibilityBlocks(for: indexedPage),
-                    documentView: indexedPage.documentView,
-                    chapterOrdinal: indexedPage.chapterOrdinal,
-                    chapterTitle: indexedPage.chapterTitle,
-                    chapterCommentTarget: indexedPage.chapterCommentTarget
-                )
-            }
-        } else {
-            renderedPages
+        let pages = viewportPages.map { indexedPage in
+            return ReaderRenderedPage(
+                index: indexedPage.pageIndex,
+                blocks: compatibilityBlocks(for: indexedPage),
+                documentView: indexedPage.documentView,
+                chapterOrdinal: indexedPage.chapterOrdinal,
+                chapterTitle: indexedPage.chapterTitle,
+                chapterCommentTarget: indexedPage.chapterCommentTarget
+            )
         }
         let fallbackTarget = ReaderResolvedTarget(
             pageIndex: max(0, min(preferredPage, max(pages.count - 1, 0))),
@@ -494,7 +486,7 @@ public struct NovelReadingSession: Sendable {
             documentView: displayedViewCandidate(for: preferredPage, pages: pages)
         )
         let effectiveResumePoint = pendingResumePoint ?? preferredResumePoint
-        currentViewportIndex = pagination.viewportIndex
+        currentViewportIndex = layoutResult.viewportIndex
         let resolvedTarget = effectiveResumePoint.flatMap { resolveResumePoint($0, in: pages) } ?? fallbackTarget
         let normalizedPageIndex = normalizedPagedPageIndex(resolvedTarget.pageIndex, pages: pages, pagedSpreads: makePagedSpreads(from: pages))
         snapshot = NovelReadingSnapshot(
@@ -511,8 +503,8 @@ public struct NovelReadingSession: Sendable {
             pagedSpreads: makePagedSpreads(from: pages),
             prefetchedStartIndex: prefetchedStartIndex,
             currentAuthorID: document.resolvedAuthorID ?? snapshot.currentAuthorID,
-            viewportContext: pagination.viewportContext,
-            viewportIndex: pagination.viewportIndex
+            viewportContext: layoutResult.viewportContext,
+            viewportIndex: layoutResult.viewportIndex
         )
         preserveCurrentTextResumePointIfAvailable()
     }

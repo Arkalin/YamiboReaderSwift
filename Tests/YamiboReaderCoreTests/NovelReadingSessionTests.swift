@@ -41,7 +41,7 @@ final class NovelReadingSessionTests: XCTestCase {
             settings: ReaderAppearanceSettings(readingMode: .paged),
             layout: ReaderContainerLayout(width: 320, height: 568),
             pagination: { document, _, _ in
-                ReaderPaginationResult(
+                layoutResult(
                     pages: [
                         ReaderRenderedPage(
                             index: 0,
@@ -112,7 +112,7 @@ final class NovelReadingSessionTests: XCTestCase {
             layout: ReaderContainerLayout(width: 320, height: 568),
             resumePoint: resumePoint,
             pagination: { document, _, _ in
-                ReaderPaginationResult(
+                layoutResult(
                     pages: [
                         ReaderRenderedPage(
                             index: 0,
@@ -184,7 +184,7 @@ final class NovelReadingSessionTests: XCTestCase {
             settings: ReaderAppearanceSettings(readingMode: .vertical),
             layout: ReaderContainerLayout(width: 320, height: 568),
             pagination: { document, _, _ in
-                ReaderPaginationResult(
+                layoutResult(
                     pages: [
                         ReaderRenderedPage(
                             index: 0,
@@ -254,7 +254,7 @@ final class NovelReadingSessionTests: XCTestCase {
                 let indexedRanges = hasIndexedText
                     ? [ReaderRenderedTextRange(segmentIndex: 0, startOffset: 0, endOffset: 100)]
                     : []
-                return ReaderPaginationResult(
+                return layoutResult(
                     pages: [
                         ReaderRenderedPage(
                             index: 0,
@@ -335,7 +335,7 @@ final class NovelReadingSessionTests: XCTestCase {
             layout: ReaderContainerLayout(width: 320, height: 568),
             resumePoint: resumePoint,
             pagination: { document, _, _ in
-                ReaderPaginationResult(
+                layoutResult(
                     pages: [
                         ReaderRenderedPage(
                             index: 0,
@@ -398,7 +398,7 @@ final class NovelReadingSessionTests: XCTestCase {
             settings: ReaderAppearanceSettings(readingMode: .vertical),
             layout: ReaderContainerLayout(width: 320, height: 568),
             pagination: { document, _, _ in
-                ReaderPaginationResult(
+                layoutResult(
                     pages: [
                         ReaderRenderedPage(
                             index: 0,
@@ -471,7 +471,7 @@ final class NovelReadingSessionTests: XCTestCase {
             layout: ReaderContainerLayout(width: 320, height: 568),
             preferredPage: 1,
             pagination: { document, _, _ in
-                ReaderPaginationResult(
+                layoutResult(
                     pages: [
                         ReaderRenderedPage(
                             index: 0,
@@ -812,6 +812,58 @@ private func viewportPageContainsSegmentOffset(_ page: NovelTextViewportIndexPag
     }
 }
 
+private func layoutResult(
+    pages: [ReaderRenderedPage],
+    chapters: [ReaderChapter],
+    viewportIndex: NovelTextViewportIndex? = nil,
+    viewportContext: NovelTextViewportContext? = nil
+) -> NovelTextLayoutResult {
+    let index = viewportIndex ?? NovelTextViewportIndex(
+        documentView: pages.first?.documentView ?? 1,
+        readingMode: viewportContext?.identity.appearance.readingMode ?? .paged,
+        pages: pages.map { page in
+            NovelTextViewportIndexPage(
+                pageIndex: page.index,
+                documentView: page.documentView,
+                chapterOrdinal: page.chapterOrdinal,
+                chapterTitle: page.chapterTitle,
+                ranges: []
+            )
+        },
+        chapters: chapters.map {
+            NovelTextViewportIndexChapter(
+                ordinal: $0.ordinal,
+                title: $0.title,
+                startPageIndex: $0.startIndex
+            )
+        }
+    )
+    let context = viewportContext ?? NovelTextViewportContext(
+        identity: NovelTextViewportIdentity(
+            threadURL: URL(string: "https://example.com/thread")!,
+            documentView: index.documentView,
+            maxView: index.documentView,
+            fetchedAt: Date(timeIntervalSince1970: 0),
+            contentSource: .fallbackUnfilteredPage,
+            appearance: ReaderAppearanceSettings(readingMode: index.readingMode),
+            layout: ReaderContainerLayout(width: 320, height: 568, readingMode: index.readingMode)
+        ),
+        document: NovelTextViewportDocument(
+            text: "",
+            textRangesBySegment: [:],
+            insertedSeparatorRanges: []
+        ),
+        externalBlocks: [],
+        diagnostics: NovelTextViewportDiagnostics(indexBuildCount: 1)
+    )
+    return NovelTextLayoutResult(
+        viewportContext: context,
+        viewportIndex: index,
+        compatibilityPages: pages,
+        compatibilityChapters: chapters
+    )
+}
+
 private func textRangePagination(
     defaultRanges: [Range<Int>],
     repaginatedRanges: [Range<Int>]
@@ -820,7 +872,7 @@ private func textRangePagination(
         let ranges = settings.fontScale > 1 || settings.lineHeightScale > 1.45 || settings.horizontalPadding > 16 || layout.width > 320
             ? repaginatedRanges
             : defaultRanges
-        return ReaderPaginationResult(
+        return layoutResult(
             pages: ranges.enumerated().map { index, range in
                 ReaderRenderedPage(
                     index: index,

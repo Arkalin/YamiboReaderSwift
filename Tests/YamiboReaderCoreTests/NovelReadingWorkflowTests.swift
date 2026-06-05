@@ -99,7 +99,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
                 if settings.fontScale > 1 {
                     throw NovelTextLayoutFailure.unableToLayoutText
                 }
-                return try NovelTextLayout.renderedPages(
+                return try NovelTextLayout.layout(
                     document: document,
                     settings: settings,
                     layout: layout
@@ -213,7 +213,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
             layout: ReaderContainerLayout(width: 320, height: 568),
             repository: repository,
             pagination: { document, _, _ in
-                ReaderPaginationResult(
+                layoutResult(
                     pages: [
                         ReaderRenderedPage(
                             index: 0,
@@ -314,7 +314,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
             layout: ReaderContainerLayout(width: 320, height: 568),
             repository: repository,
             pagination: { document, _, _ in
-                ReaderPaginationResult(
+                layoutResult(
                     pages: [
                         ReaderRenderedPage(
                             index: 0,
@@ -423,7 +423,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
                     ReaderRenderedTextRange(segmentIndex: 15, startOffset: 0, endOffset: 2_000),
                     ReaderRenderedTextRange(segmentIndex: 16, startOffset: 1_101, endOffset: 2_000)
                 ]
-                return ReaderPaginationResult(
+                return layoutResult(
                     pages: [
                         ReaderRenderedPage(
                             index: 0,
@@ -505,7 +505,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
             layout: ReaderContainerLayout(width: 320, height: 568),
             repository: repository,
             pagination: { document, _, _ in
-                ReaderPaginationResult(
+                layoutResult(
                     pages: [
                         ReaderRenderedPage(
                             index: 0,
@@ -643,7 +643,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
             repository: repository,
             pagination: { document, _, _ in
                 if document.view == 1 {
-                    return ReaderPaginationResult(
+                    return layoutResult(
                         pages: [
                             ReaderRenderedPage(
                                 index: 0,
@@ -684,7 +684,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
                         )
                     )
                 }
-                return ReaderPaginationResult(
+                return layoutResult(
                     pages: [
                         ReaderRenderedPage(
                             index: 0,
@@ -739,7 +739,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
             layout: ReaderContainerLayout(width: 320, height: 568),
             repository: repository,
             pagination: { document, _, _ in
-                ReaderPaginationResult(
+                layoutResult(
                     pages: [
                         ReaderRenderedPage(
                             index: 0,
@@ -1314,12 +1314,64 @@ private func makeNovelDocument(
     )
 }
 
+private func layoutResult(
+    pages: [ReaderRenderedPage],
+    chapters: [ReaderChapter],
+    viewportIndex: NovelTextViewportIndex? = nil,
+    viewportContext: NovelTextViewportContext? = nil
+) -> NovelTextLayoutResult {
+    let index = viewportIndex ?? NovelTextViewportIndex(
+        documentView: pages.first?.documentView ?? 1,
+        readingMode: viewportContext?.identity.appearance.readingMode ?? .paged,
+        pages: pages.map { page in
+            NovelTextViewportIndexPage(
+                pageIndex: page.index,
+                documentView: page.documentView,
+                chapterOrdinal: page.chapterOrdinal,
+                chapterTitle: page.chapterTitle,
+                ranges: []
+            )
+        },
+        chapters: chapters.map {
+            NovelTextViewportIndexChapter(
+                ordinal: $0.ordinal,
+                title: $0.title,
+                startPageIndex: $0.startIndex
+            )
+        }
+    )
+    let context = viewportContext ?? NovelTextViewportContext(
+        identity: NovelTextViewportIdentity(
+            threadURL: URL(string: "https://example.com/thread")!,
+            documentView: index.documentView,
+            maxView: index.documentView,
+            fetchedAt: Date(timeIntervalSince1970: 0),
+            contentSource: .fallbackUnfilteredPage,
+            appearance: ReaderAppearanceSettings(readingMode: index.readingMode),
+            layout: ReaderContainerLayout(width: 320, height: 568, readingMode: index.readingMode)
+        ),
+        document: NovelTextViewportDocument(
+            text: "",
+            textRangesBySegment: [:],
+            insertedSeparatorRanges: []
+        ),
+        externalBlocks: [],
+        diagnostics: NovelTextViewportDiagnostics(indexBuildCount: 1)
+    )
+    return NovelTextLayoutResult(
+        viewportContext: context,
+        viewportIndex: index,
+        compatibilityPages: pages,
+        compatibilityChapters: chapters
+    )
+}
+
 private func previewSourcePagination(
     document: ReaderPageDocument,
     settings: ReaderAppearanceSettings,
     layout: ReaderContainerLayout
-) -> ReaderPaginationResult {
-    ReaderPaginationResult(
+) -> NovelTextLayoutResult {
+    layoutResult(
         pages: document.segments.enumerated().map { index, segment in
             return ReaderRenderedPage(
                 index: index,
@@ -1375,7 +1427,7 @@ private func workflowRepaginationRanges(
         let ranges = settings.fontScale > 1 || layout.width > 320
             ? repaginatedRanges
             : defaultRanges
-        return ReaderPaginationResult(
+        return layoutResult(
             pages: ranges.enumerated().map { index, range in
                 ReaderRenderedPage(
                     index: index,
@@ -1418,8 +1470,8 @@ private func currentWebpageViewportPagination(
     document: ReaderPageDocument,
     settings: ReaderAppearanceSettings,
     layout: ReaderContainerLayout
-) throws -> ReaderPaginationResult {
-    try NovelTextLayout.renderedPages(
+) throws -> NovelTextLayoutResult {
+    try NovelTextLayout.layout(
         document: document,
         settings: settings,
         layout: layout,
