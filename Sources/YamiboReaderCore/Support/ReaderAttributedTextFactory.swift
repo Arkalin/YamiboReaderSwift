@@ -69,6 +69,7 @@ private extension Character {
 #if canImport(UIKit)
 import UIKit
 
+@_spi(NovelTextAttributedDocument)
 public enum ReaderAttributedTextFactory {
     public static let defaultBaseFontSize: Double = 22
 

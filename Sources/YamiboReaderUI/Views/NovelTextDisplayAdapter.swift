@@ -1,6 +1,6 @@
 import CoreGraphics
 import Foundation
-import YamiboReaderCore
+@_spi(NovelTextAttributedDocument) import YamiboReaderCore
 
 enum NovelTextDisplaySurface: Equatable {
     case settingsPreview
