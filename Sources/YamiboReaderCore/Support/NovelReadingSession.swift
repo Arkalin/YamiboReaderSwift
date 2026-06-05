@@ -97,7 +97,8 @@ public struct NovelReadingSession: Sendable {
         preferredPage: Int = 0,
         resumePoint: ReaderResumePoint? = nil,
         usesPadPresentation: Bool = false,
-        currentAuthorID: String? = nil
+        currentAuthorID: String? = nil,
+        pagination: @escaping NovelTextPagination = NovelTextLayout.layout
     ) {
         self.init(
             unpaginatedDocument: document,
@@ -105,7 +106,7 @@ public struct NovelReadingSession: Sendable {
             layout: layout,
             usesPadPresentation: usesPadPresentation,
             currentAuthorID: currentAuthorID,
-            pagination: NovelTextLayout.layout
+            pagination: pagination
         )
         preservedTextResumePoint = resumePoint
         applyPaginationIgnoringFailure(for: document, preferredPage: preferredPage, preferredResumePoint: resumePoint)

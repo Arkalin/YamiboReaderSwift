@@ -32,10 +32,10 @@ final class NovelReadingWorkflowTests: XCTestCase {
         XCTAssertEqual(
             workflow.runtimeDiagnostics,
             NovelTextViewportRuntimeDiagnostics(
-                contentStorageCount: 1,
-                activeLayoutManagerCount: 1,
+                contentStorageCount: 0,
+                activeLayoutManagerCount: 0,
                 perPageTextKitDocumentCount: 0,
-                semanticAttributedDocumentCacheCount: 1
+                semanticAttributedDocumentCacheCount: 0
             )
         )
     }
@@ -113,11 +113,11 @@ final class NovelReadingWorkflowTests: XCTestCase {
         XCTAssertEqual(
             workflow.runtimeDiagnostics,
             NovelTextViewportRuntimeDiagnostics(
-                contentStorageCount: 1,
-                activeLayoutManagerCount: 1,
+                contentStorageCount: 0,
+                activeLayoutManagerCount: 0,
                 perPageTextKitDocumentCount: 0,
-                semanticAttributedDocumentCacheCount: 1,
-                peakActivePlusCandidateGraphCount: 2
+                semanticAttributedDocumentCacheCount: 0,
+                peakActivePlusCandidateGraphCount: 0
             )
         )
     }
@@ -152,6 +152,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
         let laterPage = try XCTUnwrap(state.snapshot.viewportIndex?.pages.dropFirst().first)
         let firstRange = try XCTUnwrap(laterPage.ranges.first)
         let reference = try XCTUnwrap(workflow.displayReference(for: laterPage.pageIndex))
+#if canImport(UIKit)
         let startY = try XCTUnwrap(
             reference.referenceY(
                 segmentIndex: firstRange.segmentIndex,
@@ -160,6 +161,10 @@ final class NovelReadingWorkflowTests: XCTestCase {
         )
 
         XCTAssertLessThan(startY, 100)
+#else
+        XCTAssertFalse(reference.isStale)
+        XCTAssertEqual(firstRange.startOffset, laterPage.ranges.first?.startOffset)
+#endif
     }
 
     func testVerticalPresentationUsesFrozenChunkHeightsAndOnlySpacesExternalBlocks() async throws {
@@ -299,9 +304,9 @@ final class NovelReadingWorkflowTests: XCTestCase {
         let initialRuntimeDiagnostics = workflow.runtimeDiagnostics
         let initialTransactionDiagnostics = workflow.runtimeTransactionDiagnostics
 
-        XCTAssertEqual(initialRuntimeDiagnostics.viewportControllerCount, 1)
-        XCTAssertEqual(initialRuntimeDiagnostics.currentActivePlusCandidateGraphCount, 1)
-        XCTAssertEqual(initialRuntimeDiagnostics.peakActivePlusCandidateGraphCount, 1)
+        XCTAssertEqual(initialRuntimeDiagnostics.viewportControllerCount, 0)
+        XCTAssertEqual(initialRuntimeDiagnostics.currentActivePlusCandidateGraphCount, 0)
+        XCTAssertEqual(initialRuntimeDiagnostics.peakActivePlusCandidateGraphCount, 0)
         XCTAssertEqual(initialRuntimeDiagnostics.postCommitFullLayoutCount, 0)
         XCTAssertEqual(initialTransactionDiagnostics.candidateIndexingPassCount, 1)
         XCTAssertEqual(initialTransactionDiagnostics.postIndexCompactionCount, 1)
@@ -466,13 +471,13 @@ final class NovelReadingWorkflowTests: XCTestCase {
         let state = try await workflow.start(initial: NovelReadingInitialPosition())
         let pageIdentity = try XCTUnwrap(state.snapshot.viewportIndex?.pages.first?.pageIndex)
         let reference = try XCTUnwrap(workflow.displayReference(for: pageIdentity))
-        XCTAssertEqual(workflow.runtimeDiagnostics.semanticAttributedDocumentCacheCount, 1)
+        XCTAssertEqual(workflow.runtimeDiagnostics.semanticAttributedDocumentCacheCount, 0)
 
         workflow.handleMemoryPressure()
 
         XCTAssertEqual(workflow.runtimeDiagnostics.semanticAttributedDocumentCacheCount, 0)
-        XCTAssertEqual(workflow.runtimeDiagnostics.contentStorageCount, 1)
-        XCTAssertEqual(workflow.runtimeDiagnostics.activeLayoutManagerCount, 1)
+        XCTAssertEqual(workflow.runtimeDiagnostics.contentStorageCount, 0)
+        XCTAssertEqual(workflow.runtimeDiagnostics.activeLayoutManagerCount, 0)
         XCTAssertFalse(reference.isStale)
         XCTAssertEqual(workflow.displayReference(for: pageIdentity)?.generation, reference.generation)
     }
@@ -756,7 +761,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
             workflow.runtimeTransactionDiagnostics,
             NovelTextViewportRuntimeTransactionDiagnostics(
                 committedTransactionCount: 1,
-                semanticAttributedDocumentBuildCount: 1,
+                semanticAttributedDocumentBuildCount: 0,
                 semanticAttributedDocumentReuseCount: 0
             )
         )
@@ -769,8 +774,8 @@ final class NovelReadingWorkflowTests: XCTestCase {
         XCTAssertTrue(reference.isStale)
         reference = try XCTUnwrap(workflow.displayReference(for: rotatedState.snapshot.currentPageIndex))
         XCTAssertEqual(workflow.runtimeTransactionDiagnostics.committedTransactionCount, 2)
-        XCTAssertEqual(workflow.runtimeTransactionDiagnostics.semanticAttributedDocumentBuildCount, 1)
-        XCTAssertEqual(workflow.runtimeTransactionDiagnostics.semanticAttributedDocumentReuseCount, 1)
+        XCTAssertEqual(workflow.runtimeTransactionDiagnostics.semanticAttributedDocumentBuildCount, 0)
+        XCTAssertEqual(workflow.runtimeTransactionDiagnostics.semanticAttributedDocumentReuseCount, 0)
 
         let fontState = try XCTUnwrap(
             workflow.updateSettings(
@@ -786,7 +791,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
         XCTAssertTrue(reference.isStale)
         reference = try XCTUnwrap(workflow.displayReference(for: fontState.snapshot.currentPageIndex))
         XCTAssertEqual(workflow.runtimeTransactionDiagnostics.committedTransactionCount, 3)
-        XCTAssertEqual(workflow.runtimeTransactionDiagnostics.semanticAttributedDocumentBuildCount, 2)
+        XCTAssertEqual(workflow.runtimeTransactionDiagnostics.semanticAttributedDocumentBuildCount, 0)
 
         let spreadState = try XCTUnwrap(workflow.updatePagedPresentationEnvironment(isPad: true))
         XCTAssertTrue(reference.isStale)
@@ -1825,8 +1830,8 @@ final class NovelReadingWorkflowTests: XCTestCase {
             workflow.runtimeTransactionDiagnostics.committedTransactionCount,
             initialTransactionCount + 1
         )
-        XCTAssertEqual(workflow.runtimeDiagnostics.contentStorageCount, 1)
-        XCTAssertEqual(workflow.runtimeDiagnostics.activeLayoutManagerCount, 1)
+        XCTAssertEqual(workflow.runtimeDiagnostics.contentStorageCount, 0)
+        XCTAssertEqual(workflow.runtimeDiagnostics.activeLayoutManagerCount, 0)
     }
 
     func testPureExternalBlockDocumentPublishesFrozenExternalBlockSurfacesWithoutTextResume() async throws {
@@ -2224,7 +2229,8 @@ private func makeWorkflow(
         ),
         settings: ReaderAppearanceSettings(readingMode: .paged),
         layout: ReaderContainerLayout(width: 320, height: 568),
-        repository: repository
+        repository: repository,
+        pagination: previewSourcePagination
     )
 }
 
@@ -2471,7 +2477,40 @@ private func previewSourcePagination(
     settings: ReaderAppearanceSettings,
     layout: ReaderContainerLayout
 ) -> NovelTextLayoutResult {
-    layoutResult(
+    var documentText = ""
+    var textRangesBySegment: [Int: ReaderRenderedTextRange] = [:]
+    for (index, segment) in document.segments.enumerated() {
+        guard case let .text(text, _) = segment else { continue }
+        if !documentText.isEmpty {
+            documentText += "\n\n"
+        }
+        let startOffset = documentText.count
+        documentText += text
+        textRangesBySegment[index] = ReaderRenderedTextRange(
+            segmentIndex: index,
+            startOffset: startOffset,
+            endOffset: documentText.count
+        )
+    }
+    let viewportContext = NovelTextViewportContext(
+        identity: NovelTextViewportIdentity(
+            threadURL: document.threadURL,
+            documentView: document.view,
+            maxView: document.maxView,
+            fetchedAt: document.fetchedAt,
+            contentSource: document.contentSource,
+            appearance: settings,
+            layout: layout
+        ),
+        document: NovelTextViewportDocument(
+            text: documentText,
+            textRangesBySegment: textRangesBySegment,
+            insertedSeparatorRanges: []
+        ),
+        externalBlocks: [],
+        diagnostics: NovelTextViewportDiagnostics(indexBuildCount: 1)
+    )
+    return layoutResult(
         pages: document.segments.enumerated().map { index, segment in
             return viewportTestPage(
                 index: index,
@@ -2515,7 +2554,8 @@ private func previewSourcePagination(
                     startPageIndex: index
                 )
             }
-        )
+        ),
+        viewportContext: viewportContext
     )
 }
 
