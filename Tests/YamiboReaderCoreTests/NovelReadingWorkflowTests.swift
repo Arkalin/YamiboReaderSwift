@@ -339,6 +339,10 @@ final class NovelReadingWorkflowTests: XCTestCase {
             }
         )
         let initialState = try await workflow.start(initial: NovelReadingInitialPosition())
+        let pageIdentity = try XCTUnwrap(initialState.snapshot.viewportIndex?.pages.first?.pageIndex)
+        let reference = try XCTUnwrap(workflow.displayReference(for: pageIdentity))
+        let initialPosition = workflow.currentProgressPosition()
+        let initialTransactions = workflow.runtimeTransactionDiagnostics
 
         do {
             _ = try workflow.updateSettings(
@@ -350,6 +354,95 @@ final class NovelReadingWorkflowTests: XCTestCase {
         }
 
         XCTAssertEqual(workflow.state, initialState)
+        XCTAssertEqual(workflow.currentProgressPosition(), initialPosition)
+        XCTAssertEqual(workflow.runtimeTransactionDiagnostics, initialTransactions)
+        XCTAssertEqual(workflow.displayReference(for: pageIdentity)?.generation, reference.generation)
+        XCTAssertFalse(reference.isStale)
+    }
+
+    func testAppearanceLayoutSpreadAndModeUpdatesCommitOneRuntimeTransaction() async throws {
+        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9185&mobile=2")!
+        let repository = RecordingNovelReadingRepository(documents: [
+            1: makeNovelDocument(threadURL: threadURL, view: 1, maxView: 1, authorID: "author-1")
+        ])
+        let workflow = NovelReadingWorkflow(
+            context: ReaderLaunchContext(
+                threadURL: threadURL,
+                threadTitle: "Thread",
+                source: .forum,
+                initialView: 1,
+                authorID: "author-1"
+            ),
+            settings: ReaderAppearanceSettings(readingMode: .paged),
+            layout: ReaderContainerLayout(width: 320, height: 568, readingMode: .paged),
+            repository: repository,
+            usesPadPresentation: false,
+            pagination: currentWebpageViewportPagination
+        )
+
+        let initialState = try await workflow.start(initial: NovelReadingInitialPosition())
+        let pageIdentity = try XCTUnwrap(initialState.snapshot.viewportIndex?.pages.first?.pageIndex)
+        var reference = try XCTUnwrap(workflow.displayReference(for: pageIdentity))
+        XCTAssertEqual(
+            workflow.runtimeTransactionDiagnostics,
+            NovelTextViewportRuntimeTransactionDiagnostics(
+                committedTransactionCount: 1,
+                semanticAttributedDocumentBuildCount: 1,
+                semanticAttributedDocumentReuseCount: 0
+            )
+        )
+
+        let rotatedState = try XCTUnwrap(
+            workflow.updateLayout(
+                ReaderContainerLayout(width: 568, height: 320, readingMode: .paged)
+            )
+        )
+        XCTAssertTrue(reference.isStale)
+        reference = try XCTUnwrap(workflow.displayReference(for: rotatedState.snapshot.currentPageIndex))
+        XCTAssertEqual(workflow.runtimeTransactionDiagnostics.committedTransactionCount, 2)
+        XCTAssertEqual(workflow.runtimeTransactionDiagnostics.semanticAttributedDocumentBuildCount, 1)
+        XCTAssertEqual(workflow.runtimeTransactionDiagnostics.semanticAttributedDocumentReuseCount, 1)
+
+        let fontState = try XCTUnwrap(
+            workflow.updateSettings(
+                ReaderAppearanceSettings(
+                    fontScale: 1.15,
+                    fontFamily: .systemSerif,
+                    lineHeightScale: 1.6,
+                    showsTwoPagesInLandscapeOnPad: true,
+                    readingMode: .paged
+                )
+            )
+        )
+        XCTAssertTrue(reference.isStale)
+        reference = try XCTUnwrap(workflow.displayReference(for: fontState.snapshot.currentPageIndex))
+        XCTAssertEqual(workflow.runtimeTransactionDiagnostics.committedTransactionCount, 3)
+        XCTAssertEqual(workflow.runtimeTransactionDiagnostics.semanticAttributedDocumentBuildCount, 2)
+
+        let spreadState = try XCTUnwrap(workflow.updatePagedPresentationEnvironment(isPad: true))
+        XCTAssertTrue(reference.isStale)
+        reference = try XCTUnwrap(workflow.displayReference(for: spreadState.snapshot.currentPageIndex))
+        XCTAssertFalse(spreadState.snapshot.pagedSpreads.isEmpty)
+        XCTAssertEqual(workflow.runtimeTransactionDiagnostics.committedTransactionCount, 4)
+
+        let verticalState = try XCTUnwrap(
+            workflow.updateSettings(
+                ReaderAppearanceSettings(
+                    fontScale: 1.15,
+                    fontFamily: .systemSerif,
+                    lineHeightScale: 1.6,
+                    showsTwoPagesInLandscapeOnPad: true,
+                    readingMode: .vertical
+                )
+            )
+        )
+        XCTAssertTrue(reference.isStale)
+        let verticalReference = try XCTUnwrap(
+            workflow.displayReference(for: verticalState.snapshot.currentPageIndex)
+        )
+        XCTAssertFalse(verticalReference.isStale)
+        XCTAssertEqual(verticalState.snapshot.viewportIndex?.readingMode, .vertical)
+        XCTAssertEqual(workflow.runtimeTransactionDiagnostics.committedTransactionCount, 5)
     }
 
     func testLoadCurrentForceRefreshDeletesOnlyCurrentVariantAndReloadsIgnoringCache() async throws {

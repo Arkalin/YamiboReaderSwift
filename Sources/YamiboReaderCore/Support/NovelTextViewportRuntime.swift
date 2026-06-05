@@ -26,6 +26,22 @@ public struct NovelTextViewportRuntimeDiagnostics: Equatable, Sendable {
     }
 }
 
+public struct NovelTextViewportRuntimeTransactionDiagnostics: Equatable, Sendable {
+    public var committedTransactionCount: Int
+    public var semanticAttributedDocumentBuildCount: Int
+    public var semanticAttributedDocumentReuseCount: Int
+
+    public init(
+        committedTransactionCount: Int = 0,
+        semanticAttributedDocumentBuildCount: Int = 0,
+        semanticAttributedDocumentReuseCount: Int = 0
+    ) {
+        self.committedTransactionCount = max(0, committedTransactionCount)
+        self.semanticAttributedDocumentBuildCount = max(0, semanticAttributedDocumentBuildCount)
+        self.semanticAttributedDocumentReuseCount = max(0, semanticAttributedDocumentReuseCount)
+    }
+}
+
 @MainActor
 public final class NovelTextViewportDisplayReference {
     public let generation: UInt64
@@ -88,6 +104,53 @@ public final class NovelTextViewportDisplayReference {
 }
 
 @MainActor
+final class NovelTextViewportRuntimeTransaction {
+    let result: NovelTextLayoutResult
+    let settings: ReaderAppearanceSettings
+    let layout: ReaderContainerLayout
+    let semanticAttributedDocument: NSAttributedString?
+    let reusedSemanticAttributedDocument: Bool
+
+#if canImport(UIKit) || canImport(AppKit)
+    let textContentStorage: NSTextContentStorage
+    let textLayoutManager: NSTextLayoutManager
+    let textContainer: NSTextContainer
+
+    init(
+        result: NovelTextLayoutResult,
+        settings: ReaderAppearanceSettings,
+        layout: ReaderContainerLayout,
+        semanticAttributedDocument: NSAttributedString?,
+        reusedSemanticAttributedDocument: Bool,
+        textContentStorage: NSTextContentStorage,
+        textLayoutManager: NSTextLayoutManager,
+        textContainer: NSTextContainer
+    ) {
+        self.result = result
+        self.settings = settings
+        self.layout = layout
+        self.semanticAttributedDocument = semanticAttributedDocument
+        self.reusedSemanticAttributedDocument = reusedSemanticAttributedDocument
+        self.textContentStorage = textContentStorage
+        self.textLayoutManager = textLayoutManager
+        self.textContainer = textContainer
+    }
+#else
+    init(
+        result: NovelTextLayoutResult,
+        settings: ReaderAppearanceSettings,
+        layout: ReaderContainerLayout
+    ) {
+        self.result = result
+        self.settings = settings
+        self.layout = layout
+        semanticAttributedDocument = nil
+        reusedSemanticAttributedDocument = false
+    }
+#endif
+}
+
+@MainActor
 final class NovelTextViewportRuntimeOwner {
     private var generation: UInt64 = 0
     private var result: NovelTextLayoutResult?
@@ -95,6 +158,7 @@ final class NovelTextViewportRuntimeOwner {
     private var layout = ReaderContainerLayout(width: 1, height: 1)
     private var visiblePageIdentities = Set<Int>()
     private var semanticAttributedDocumentCache: NSAttributedString?
+    private var transactionDiagnostics = NovelTextViewportRuntimeTransactionDiagnostics()
 
 #if canImport(UIKit) || canImport(AppKit)
     private var textContentStorage: NSTextContentStorage?
@@ -111,16 +175,37 @@ final class NovelTextViewportRuntimeOwner {
         )
     }
 
+    var runtimeTransactionDiagnostics: NovelTextViewportRuntimeTransactionDiagnostics {
+        transactionDiagnostics
+    }
+
     func commit(
         result: NovelTextLayoutResult,
         settings: ReaderAppearanceSettings,
         layout: ReaderContainerLayout
     ) {
+        guard let transaction = prepareTransaction(
+            result: result,
+            settings: settings,
+            layout: layout
+        ) else { return }
+        commit(transaction)
+    }
+
+    func prepareTransaction(
+        result: NovelTextLayoutResult,
+        settings: ReaderAppearanceSettings,
+        layout: ReaderContainerLayout
+    ) -> NovelTextViewportRuntimeTransaction? {
         guard self.result != result || self.settings != settings || self.layout != layout else {
-            return
+            return nil
         }
 
 #if canImport(UIKit) || canImport(AppKit)
+        let reusesSemanticDocument =
+            self.result?.viewportContext.document == result.viewportContext.document &&
+            self.settings == settings &&
+            semanticAttributedDocumentCache != nil
         let contentStorage = NSTextContentStorage()
         let layoutManager = NSTextLayoutManager()
         let contentWidth = max(layout.readableFrame.width - settings.horizontalPadding * 2, 1)
@@ -132,27 +217,58 @@ final class NovelTextViewportRuntimeOwner {
         container.lineBreakMode = .byWordWrapping
         contentStorage.addTextLayoutManager(layoutManager)
         layoutManager.textContainer = container
+        let attributedDocument: NSAttributedString
+        if reusesSemanticDocument, let semanticAttributedDocumentCache {
+            attributedDocument = semanticAttributedDocumentCache
+        } else {
 #if canImport(UIKit)
-        let attributedDocument = ReaderAttributedTextFactory.makeAttributedText(
-            text: result.viewportContext.document.text,
-            chapterTitle: nil,
-            settings: settings
-        )
+            attributedDocument = ReaderAttributedTextFactory.makeAttributedText(
+                text: result.viewportContext.document.text,
+                chapterTitle: nil,
+                settings: settings
+            )
 #else
-        let attributedDocument = NSAttributedString(string: result.viewportContext.document.text)
+            attributedDocument = NSAttributedString(string: result.viewportContext.document.text)
 #endif
+        }
         contentStorage.textStorage?.setAttributedString(attributedDocument)
         layoutManager.ensureLayout(for: contentStorage.documentRange)
-        textContentStorage = contentStorage
-        textLayoutManager = layoutManager
-        textContainer = container
-        semanticAttributedDocumentCache = attributedDocument
+        return NovelTextViewportRuntimeTransaction(
+            result: result,
+            settings: settings,
+            layout: layout,
+            semanticAttributedDocument: attributedDocument,
+            reusedSemanticAttributedDocument: reusesSemanticDocument,
+            textContentStorage: contentStorage,
+            textLayoutManager: layoutManager,
+            textContainer: container
+        )
+#else
+        return NovelTextViewportRuntimeTransaction(
+            result: result,
+            settings: settings,
+            layout: layout
+        )
 #endif
+    }
 
-        self.result = result
-        self.settings = settings
-        self.layout = layout
+    func commit(_ transaction: NovelTextViewportRuntimeTransaction) {
+        result = transaction.result
+        settings = transaction.settings
+        layout = transaction.layout
+        semanticAttributedDocumentCache = transaction.semanticAttributedDocument
+#if canImport(UIKit) || canImport(AppKit)
+        textContentStorage = transaction.textContentStorage
+        textLayoutManager = transaction.textLayoutManager
+        textContainer = transaction.textContainer
+#endif
         generation &+= 1
+        transactionDiagnostics.committedTransactionCount += 1
+        if transaction.reusedSemanticAttributedDocument {
+            transactionDiagnostics.semanticAttributedDocumentReuseCount += 1
+        } else if transaction.semanticAttributedDocument != nil {
+            transactionDiagnostics.semanticAttributedDocumentBuildCount += 1
+        }
     }
 
     func release() {
