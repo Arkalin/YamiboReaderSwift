@@ -25,7 +25,7 @@ The state machine for native novel reading, holding the current reader page docu
 _Avoid_: reader container state, reader model state, document buffer
 
 **Novel Reading Position**:
-The reader's semantic position in a novel thread, identified by web view page, chapter, segment index, segment offset, and intra-page progress.
+The reader's semantic position in a novel thread, identified by web view page, chapter, segment index, Swift `Character` segment offset, and intra-page progress.
 _Avoid_: page index, progress, scroll position
 
 **Novel Text Layout**:
@@ -43,6 +43,10 @@ _Avoid_: estimated page cache, lazy page count, progress approximation, scroll o
 **Novel Text Display Value**:
 The cross-platform rendered text value produced by **Novel Text Layout** for platform adapters to materialize into native TextKit 2 drawing.
 _Avoid_: display recipe, display plan, attributed string cache, layout manager, text view model
+
+**Novel Text Attributed Document**:
+The attributed document semantics owned by **Novel Text Layout** for TextKit 2 measurement and drawing, including chapter title styling, paragraph indentation, font family, kerning, line height, and justification.
+_Avoid_: attributed string helper, UI text style factory, platform text builder, display adapter styling
 
 **Favorite Library**:
 The local projection of Yamibo remote favorites plus user-owned reading metadata, display names, hidden state, and collections.
@@ -76,7 +80,14 @@ _Avoid_: favorite store, favorites snapshot, favorites list
 - A **Novel Text Viewport** owns the current reader page document's text flow first; inline images remain index-aware external blocks and are not TextKit attachments unless a later decision explicitly changes that.
 - **Novel Text Viewport Index** page entries may contain text ranges and index-aware external block references; SwiftUI and platform adapters render image external blocks through image adapters rather than through rendered-page compatibility blocks.
 - A **Novel Text Viewport** preserves original reader page document segment boundaries when composing its TextKit document; inserted separators are layout glue and must not become saved **Novel Reading Position** offsets.
+- Persisted **Novel Reading Position** segment offsets use Swift `Character` offsets in the displayed text after translation-mode transformation.
+- TextKit adapters may use `NSTextLocation`, `NSTextRange`, `NSRange`, or UTF-16 offsets internally, but conversion to and from persisted **Novel Reading Position** offsets belongs inside **Novel Text Layout** and must not leak into SwiftUI.
 - Production **Novel Text Layout** derives page ranges and chunk ranges from the complete composed **Novel Text Viewport** document through TextKit 2; `TextSlice` is a temporary internal compatibility or test Adapter shape and the final migration target is to remove `TextSlice`.
+- **Novel Text Layout** owns the **Novel Text Attributed Document** semantics; `AttributedString` is shorthand for that ownership, not a requirement that callers traffic in Swift `AttributedString` values.
+- **Novel Text Attributed Document** is an internal Module behind the **Novel Text Layout** seam; callers must not receive or provide `AttributedString`, `NSAttributedString`, platform text storage, or `NSTextLayoutManager` objects.
+- The external drawing Interface of **Novel Text Layout** is high-level **Novel Text Viewport** creation and update; SwiftUI and platform adapters ask **Novel Text Layout** to create or update viewport surfaces rather than materializing attributed documents themselves.
+- Text measurement belongs to the same **Novel Text Viewport** creation and update path; callers must not use a separate text-height measurement Interface such as measuring a **Novel Text Display Value** directly.
+- UIKit and AppKit TextKit 2 adapters materialize the **Novel Text Attributed Document** into platform text storage for `NSTextLayoutManager`; SwiftUI must not assemble chapter title styling, paragraph indentation, font family, kerning, line height, or justification itself.
 - In paged reading mode, SwiftUI hosts a UIKit collection-view pager through `UIViewRepresentable`; collection-view cells are page or spread surfaces that share one current-reader-page-document **Novel Text Viewport** context.
 - Paged collection-view cells consume **Novel Text Viewport Index** page and spread identities only; they do not compute page ranges, chapter starts, spread pairing, or **Novel Reading Position** offsets.
 - In vertical reading mode, SwiftUI hosts a UIKit-backed **Novel Text Viewport** scroll view through `UIViewRepresentable`; SwiftUI must not host text chunks or sample text positions from view-frame heuristics.
