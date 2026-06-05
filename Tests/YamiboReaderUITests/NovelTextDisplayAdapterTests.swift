@@ -725,6 +725,24 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertFalse(restoreTextAnchorBody.contains("request.intraPageProgress"))
     }
 
+    func testVerticalViewportSizingSamplingAndRestoreUseNovelTextLayoutViewportAPIs() throws {
+        let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let supportSource = try String(
+            contentsOf: repositoryRoot
+                .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderSupportViews.swift"),
+            encoding: .utf8
+        )
+        let verticalBody = try XCTUnwrap(typeBody(named: "ReaderVerticalViewportScrollView", in: supportSource))
+        let mapperBody = try XCTUnwrap(typeBody(named: "ReaderVerticalViewportTextOffsetMapper", in: supportSource))
+        let itemHeightBody = try XCTUnwrap(functionBody(named: "verticalItemHeight", in: verticalBody))
+
+        XCTAssertTrue(itemHeightBody.contains("viewportLayoutMetrics?.pageHeight(for: displayPage.pageIndex)"))
+        XCTAssertTrue(mapperBody.contains("NovelTextLayout.viewportSample"))
+        XCTAssertTrue(mapperBody.contains("NovelTextLayout.displayOffset"))
+        XCTAssertFalse(mapperBody.contains("var runningOffset"))
+        XCTAssertFalse(mapperBody.contains("range.startOffset +"))
+    }
+
     func testVerticalTextViewportPositioningUsesTextKitLineFragmentsInsteadOfGeometryProgress() throws {
         let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let adapterSource = try String(
