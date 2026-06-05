@@ -811,6 +811,21 @@ private final class StubURLProtocol: URLProtocol {
     #expect(!productionSource.contains("text.count < 180"))
 }
 
+@Test func novelTextAttributedDocumentFactoryIsNotOrdinaryPublicAPI() throws {
+    let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+    let attributedDocumentSource = try String(
+        contentsOf: repositoryRoot
+            .appendingPathComponent("Sources/YamiboReaderCore/Support/ReaderAttributedTextFactory.swift"),
+        encoding: .utf8
+    )
+
+    #expect(
+        attributedDocumentSource.contains(
+            "@_spi(NovelTextAttributedDocument)\npublic enum ReaderAttributedTextFactory"
+        )
+    )
+}
+
 @Test func novelTextLayoutAssemblesDocumentPagesChaptersImagesAndViewportIndex() async throws {
     let imageURL = try #require(URL(string: "https://example.com/image.jpg"))
     let document = ReaderPageDocument(
