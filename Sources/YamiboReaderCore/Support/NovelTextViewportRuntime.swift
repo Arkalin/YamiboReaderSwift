@@ -436,7 +436,13 @@ final class NovelTextViewportRuntimeOwner {
               let firstFragment = textLayoutManager.textLayoutFragment(for: pageLocation) else {
             return nil
         }
-        return firstFragment.layoutFragmentFrame.minY
+        guard let firstLineFragment = firstFragment.textLineFragment(
+            for: pageLocation,
+            isUpstreamAffinity: false
+        ) else {
+            return firstFragment.layoutFragmentFrame.minY
+        }
+        return firstFragment.layoutFragmentFrame.minY + firstLineFragment.typographicBounds.minY
     }
 
     private func closestLayoutFragment(

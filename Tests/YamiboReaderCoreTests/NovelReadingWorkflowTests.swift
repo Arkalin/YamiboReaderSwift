@@ -121,6 +121,46 @@ final class NovelReadingWorkflowTests: XCTestCase {
         )
     }
 
+    func testVerticalDisplayReferencePositionsLaterChunkStartNearSurfaceTop() async throws {
+        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9188&mobile=2")!
+        let text = String(repeating: "最终得出的结论，利用对方的体重来刺穿喉咙是最有效率的。", count: 160)
+        let repository = RecordingNovelReadingRepository(documents: [
+            1: ReaderPageDocument(
+                threadURL: threadURL,
+                view: 1,
+                maxView: 1,
+                resolvedAuthorID: "author-1",
+                contentSource: .authorFilteredPage,
+                segments: [.text(text, chapterTitle: "第一章")]
+            )
+        ])
+        let workflow = NovelReadingWorkflow(
+            context: ReaderLaunchContext(
+                threadURL: threadURL,
+                threadTitle: "Thread",
+                source: .forum,
+                initialView: 1,
+                authorID: "author-1"
+            ),
+            settings: ReaderAppearanceSettings(readingMode: .vertical),
+            layout: ReaderContainerLayout(width: 393, height: 852, readingMode: .vertical),
+            repository: repository
+        )
+
+        let state = try await workflow.start(initial: NovelReadingInitialPosition())
+        let laterPage = try XCTUnwrap(state.snapshot.viewportIndex?.pages.dropFirst().first)
+        let firstRange = try XCTUnwrap(laterPage.ranges.first)
+        let reference = try XCTUnwrap(workflow.displayReference(for: laterPage.pageIndex))
+        let startY = try XCTUnwrap(
+            reference.referenceY(
+                segmentIndex: firstRange.segmentIndex,
+                segmentOffset: firstRange.startOffset
+            )
+        )
+
+        XCTAssertLessThan(startY, 100)
+    }
+
     func testTwoPageSpreadReferencesShareRuntimeGeneration() async throws {
         let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9180&mobile=2")!
         let document = ReaderPageDocument(
