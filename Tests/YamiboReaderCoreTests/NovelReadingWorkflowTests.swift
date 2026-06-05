@@ -4,6 +4,56 @@ import XCTest
 
 @MainActor
 final class NovelReadingWorkflowTests: XCTestCase {
+    func testStartCreatesOneWorkflowOwnedViewportRuntimeAndPublishesPagedDisplayReference() async throws {
+        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9178&mobile=2")!
+        let repository = RecordingNovelReadingRepository(documents: [
+            1: makeNovelDocument(threadURL: threadURL, view: 1, maxView: 1, authorID: "author-1")
+        ])
+        let workflow = NovelReadingWorkflow(
+            context: ReaderLaunchContext(
+                threadURL: threadURL,
+                threadTitle: "Thread",
+                source: .forum,
+                initialView: 1,
+                authorID: "author-1"
+            ),
+            settings: ReaderAppearanceSettings(readingMode: .paged),
+            layout: ReaderContainerLayout(width: 320, height: 568),
+            repository: repository
+        )
+
+        let state = try await workflow.start(initial: NovelReadingInitialPosition())
+        let page = try XCTUnwrap(state.snapshot.viewportIndex?.pages.first)
+        let reference = try XCTUnwrap(workflow.displayReference(for: page.pageIndex))
+
+        XCTAssertEqual(reference.pageIdentity, page.pageIndex)
+        XCTAssertEqual(reference.documentView, page.documentView)
+        XCTAssertFalse(reference.isStale)
+        XCTAssertEqual(
+            workflow.runtimeDiagnostics,
+            NovelTextViewportRuntimeDiagnostics(
+                contentStorageCount: 1,
+                activeLayoutManagerCount: 1,
+                perPageTextKitDocumentCount: 0
+            )
+        )
+    }
+
+    func testNovelReadingSessionRemainsPlatformIndependentPureValueState() throws {
+        let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let source = try String(
+            contentsOf: repositoryRoot
+                .appendingPathComponent("Sources/YamiboReaderCore/Support/NovelReadingSession.swift"),
+            encoding: .utf8
+        )
+
+        XCTAssertFalse(source.contains("import UIKit"))
+        XCTAssertFalse(source.contains("import AppKit"))
+        XCTAssertFalse(source.contains("NSTextContentStorage"))
+        XCTAssertFalse(source.contains("NSTextLayoutManager"))
+        XCTAssertTrue(source.contains("public struct NovelReadingSession: Sendable"))
+    }
+
     func testStartUsesStoredResumePointBeforeLaunchPage() async throws {
         let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9101&mobile=2")!
         let repository = RecordingNovelReadingRepository(documents: [

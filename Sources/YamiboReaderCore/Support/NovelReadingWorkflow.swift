@@ -75,6 +75,11 @@ public final class NovelReadingWorkflow {
     private var currentDocumentPageCount = 0
     private var usesPadPresentation: Bool
     private let pagination: NovelTextPagination
+    private let viewportRuntime = NovelTextViewportRuntimeOwner()
+
+    public var runtimeDiagnostics: NovelTextViewportRuntimeDiagnostics {
+        viewportRuntime.diagnostics
+    }
 
     public init(
         context: ReaderLaunchContext,
@@ -248,6 +253,10 @@ public final class NovelReadingWorkflow {
         session?.currentPreviewSourceText() ?? ""
     }
 
+    public func displayReference(for pageIdentity: Int) -> NovelTextViewportDisplayReference? {
+        viewportRuntime.displayReference(for: pageIdentity)
+    }
+
     private func cacheContext(for document: ReaderPageDocument) -> NovelReadingCacheContext {
         switch document.contentSource {
         case .authorFilteredPage:
@@ -400,6 +409,18 @@ public final class NovelReadingWorkflow {
         guard let snapshot = session?.snapshot,
               let currentDocument else {
             return nil
+        }
+        if let viewportContext = snapshot.viewportContext,
+           let viewportIndex = snapshot.viewportIndex {
+            viewportRuntime.commit(
+                result: NovelTextLayoutResult(
+                    viewportContext: viewportContext,
+                    viewportIndex: viewportIndex,
+                    layoutMetrics: snapshot.viewportLayoutMetrics ?? NovelTextViewportLayoutMetrics()
+                ),
+                settings: settings,
+                layout: layout
+            )
         }
         currentAuthorID = snapshot.currentAuthorID ?? currentAuthorID
         currentDocumentPageCount = snapshot.pages.filter { $0.documentView == snapshot.currentView }.count

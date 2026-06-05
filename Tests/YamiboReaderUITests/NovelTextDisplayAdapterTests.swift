@@ -3,6 +3,30 @@ import XCTest
 @testable import YamiboReaderUI
 
 final class NovelTextDisplayAdapterTests: XCTestCase {
+    func testSinglePagePagedCellUsesOpaqueWorkflowDisplayReference() throws {
+        let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let supportSource = try String(
+            contentsOf: repositoryRoot
+                .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderSupportViews.swift"),
+            encoding: .utf8
+        )
+        let adapterSource = try String(
+            contentsOf: repositoryRoot
+                .appendingPathComponent("Sources/YamiboReaderUI/Views/NovelTextDisplayAdapter.swift"),
+            encoding: .utf8
+        )
+        let singlePageBody = try XCTUnwrap(typeBody(named: "ReaderPagedCollectionViewport", in: supportSource))
+        let surfaceBody = try XCTUnwrap(typeBody(named: "NovelTextViewportReferenceUIView", in: adapterSource))
+
+        XCTAssertTrue(singlePageBody.contains("displayReferenceProvider(indexPath.item)"))
+        XCTAssertTrue(singlePageBody.contains("displayReference: displayReference"))
+        XCTAssertTrue(adapterSource.contains("NativeNovelTextViewportReferenceView"))
+        XCTAssertTrue(surfaceBody.contains("NovelTextViewportDisplayReference?"))
+        XCTAssertFalse(surfaceBody.contains("NSTextContentStorage"))
+        XCTAssertFalse(surfaceBody.contains("NSTextLayoutManager"))
+        XCTAssertFalse(surfaceBody.contains("NSAttributedString"))
+    }
+
     func testSwiftUIViewUpdateCallbackSchedulerDefersCallbacksDuringViewUpdate() {
         let scheduler = SwiftUIViewUpdateCallbackScheduler()
         var events: [String] = []
