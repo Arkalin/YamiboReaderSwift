@@ -586,14 +586,17 @@ struct ReaderPagedSpreadContent: View {
     @ViewBuilder
     private func spreadColumn(pageIndex: Int?) -> some View {
         Group {
-            if let pageIndex, pages.indices.contains(pageIndex) {
-                let page = pages[pageIndex]
+            if let pageIndex {
+                let viewportPage = viewportIndex?.pages.first {
+                    $0.pageIndex == pageIndex
+                }
                 ReaderViewportPageContent(
-                    page: pages[pageIndex],
                     viewportContext: viewportContext,
-                    viewportPage: viewportIndex?.pages.first {
-                        $0.pageIndex == page.index && $0.documentView == page.documentView
-                    },
+                    viewportPage: viewportPage,
+                    compatibilityBlocks: pages.indices.contains(pageIndex) ? pages[pageIndex].blocks : [],
+                    fallbackDocumentView: viewportPage?.documentView,
+                    fallbackPageIndex: pageIndex,
+                    fallbackChapterCommentTarget: pages.indices.contains(pageIndex) ? pages[pageIndex].chapterCommentTarget : nil,
                     settings: settings,
                     refererURL: refererURL,
                     sessionState: sessionState
@@ -612,32 +615,112 @@ struct ReaderPagedSpreadContent: View {
 }
 
 struct ReaderViewportPageContent: View {
-    let page: ReaderRenderedPage
     let viewportContext: NovelTextViewportContext?
     let viewportPage: NovelTextViewportIndexPage?
+    let compatibilityBlocks: [ReaderRenderedBlock]
+    let fallbackDocumentView: Int?
+    let fallbackPageIndex: Int?
+    let fallbackChapterCommentTarget: ReaderChapterCommentTarget?
     let settings: ReaderAppearanceSettings
     let refererURL: URL
     let sessionState: SessionState
 
+    init(
+        page: ReaderRenderedPage,
+        viewportContext: NovelTextViewportContext?,
+        viewportPage: NovelTextViewportIndexPage?,
+        settings: ReaderAppearanceSettings,
+        refererURL: URL,
+        sessionState: SessionState
+    ) {
+        self.viewportContext = viewportContext
+        self.viewportPage = viewportPage
+        self.compatibilityBlocks = page.blocks
+        self.fallbackDocumentView = page.documentView
+        self.fallbackPageIndex = page.index
+        self.fallbackChapterCommentTarget = page.chapterCommentTarget
+        self.settings = settings
+        self.refererURL = refererURL
+        self.sessionState = sessionState
+    }
+
+    init(
+        viewportContext: NovelTextViewportContext?,
+        viewportPage: NovelTextViewportIndexPage?,
+        compatibilityBlocks: [ReaderRenderedBlock],
+        fallbackDocumentView: Int?,
+        fallbackPageIndex: Int?,
+        fallbackChapterCommentTarget: ReaderChapterCommentTarget?,
+        settings: ReaderAppearanceSettings,
+        refererURL: URL,
+        sessionState: SessionState
+    ) {
+        self.viewportContext = viewportContext
+        self.viewportPage = viewportPage
+        self.compatibilityBlocks = compatibilityBlocks
+        self.fallbackDocumentView = fallbackDocumentView
+        self.fallbackPageIndex = fallbackPageIndex
+        self.fallbackChapterCommentTarget = fallbackChapterCommentTarget
+        self.settings = settings
+        self.refererURL = refererURL
+        self.sessionState = sessionState
+    }
+
     var body: some View {
-        ReaderPageContent(
-            page: Self.viewportBackedPage(
-                page: page,
-                viewportContext: viewportContext,
-                viewportPage: viewportPage,
-                settings: settings
-            ),
-            settings: settings,
-            refererURL: refererURL,
-            sessionState: sessionState
-        )
+        VStack(alignment: .leading, spacing: 14) {
+            ForEach(
+                Self.viewportBackedBlocks(
+                    compatibilityBlocks: compatibilityBlocks,
+                    viewportContext: viewportContext,
+                    viewportPage: viewportPage,
+                    settings: settings
+                )
+            ) { block in
+                ReaderBlockView(
+                    block: block,
+                    settings: settings,
+                    refererURL: refererURL,
+                    sessionState: sessionState
+                )
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityIdentifier(accessibilityIdentifier)
     }
 
     private var accessibilityIdentifier: String {
-        let contextView = viewportContext?.identity.documentView ?? page.documentView
-        let pageIndex = viewportPage?.pageIndex ?? page.index
+        let contextView = viewportContext?.identity.documentView ?? viewportPage?.documentView ?? fallbackDocumentView ?? 1
+        let pageIndex = viewportPage?.pageIndex ?? fallbackPageIndex ?? 0
         return "novel-viewport-page-\(contextView)-\(pageIndex)"
+    }
+
+    static func viewportBackedBlocks(
+        compatibilityBlocks: [ReaderRenderedBlock],
+        viewportContext: NovelTextViewportContext?,
+        viewportPage: NovelTextViewportIndexPage?,
+        settings: ReaderAppearanceSettings
+    ) -> [ReaderRenderedBlock] {
+        let nonTextCompatibilityBlocks = compatibilityBlocks.filter { block in
+            if case .text = block {
+                return false
+            }
+            return true
+        }
+        let externalBlockImages = viewportPage?.externalBlocks.map {
+            ReaderRenderedBlock.image($0.url, chapterTitle: $0.chapterTitle)
+        } ?? []
+        let nonTextBlocks = nonTextCompatibilityBlocks.isEmpty ? externalBlockImages : nonTextCompatibilityBlocks
+        guard let viewportContext,
+              let viewportPage,
+              !viewportPage.ranges.isEmpty,
+              let displayValue = try? NovelTextLayout.displayValue(
+                viewportContext: viewportContext,
+                viewportPage: viewportPage,
+                settings: settings
+              ) else {
+            return nonTextBlocks.isEmpty ? compatibilityBlocks : nonTextBlocks
+        }
+        return [.text(displayValue: displayValue)] + nonTextBlocks
     }
 
     static func viewportBackedPage(
@@ -652,23 +735,18 @@ struct ReaderViewportPageContent: View {
             }
             return true
         }
-        guard let viewportContext,
-              let viewportPage,
-              !viewportPage.ranges.isEmpty,
-              let displayValue = try? NovelTextLayout.displayValue(
+        return ReaderRenderedPage(
+            index: page.index,
+            blocks: viewportBackedBlocks(
+                compatibilityBlocks: compatibilityBlocks,
                 viewportContext: viewportContext,
                 viewportPage: viewportPage,
                 settings: settings
-              ) else {
-            return page
-        }
-        return ReaderRenderedPage(
-            index: page.index,
-            blocks: [.text(displayValue: displayValue)] + compatibilityBlocks,
-            documentView: viewportPage.documentView,
-            chapterOrdinal: viewportPage.chapterOrdinal,
-            chapterTitle: viewportPage.chapterTitle,
-            chapterCommentTarget: viewportPage.chapterCommentTarget ?? page.chapterCommentTarget
+            ),
+            documentView: viewportPage?.documentView ?? page.documentView,
+            chapterOrdinal: viewportPage?.chapterOrdinal ?? page.chapterOrdinal,
+            chapterTitle: viewportPage?.chapterTitle ?? page.chapterTitle,
+            chapterCommentTarget: viewportPage?.chapterCommentTarget ?? page.chapterCommentTarget
         )
     }
 
@@ -766,16 +844,23 @@ struct ReaderPagedCollectionViewport: UIViewRepresentable {
                 withReuseIdentifier: Self.reuseIdentifier,
                 for: indexPath
             )
-            let page = parent.pages[indexPath.item]
             let viewportPage = parent.viewportIndex?.pages.first {
-                $0.pageIndex == page.index && $0.documentView == page.documentView
+                $0.pageIndex == indexPath.item
             }
+            let compatibilityBlocks = parent.pages.indices.contains(indexPath.item)
+                ? parent.pages[indexPath.item].blocks
+                : []
             cell.backgroundColor = .clear
             cell.contentConfiguration = UIHostingConfiguration {
                 ReaderViewportPageContent(
-                    page: page,
                     viewportContext: parent.viewportContext,
                     viewportPage: viewportPage,
+                    compatibilityBlocks: compatibilityBlocks,
+                    fallbackDocumentView: viewportPage?.documentView,
+                    fallbackPageIndex: indexPath.item,
+                    fallbackChapterCommentTarget: parent.pages.indices.contains(indexPath.item)
+                        ? parent.pages[indexPath.item].chapterCommentTarget
+                        : nil,
                     settings: parent.settings,
                     refererURL: parent.refererURL,
                     sessionState: parent.sessionState
