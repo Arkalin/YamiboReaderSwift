@@ -680,6 +680,10 @@ public struct NovelTextViewportFrozenGeometry: Hashable, Sendable {
     public var clipHeight: CGFloat {
         max(0, documentClipMaxY - documentClipMinY)
     }
+
+    static func surfaceContentHeight(forDocumentClipRect clipRect: CGRect) -> CGFloat {
+        max(0, clipRect.height.isFinite ? clipRect.height : 0)
+    }
 }
 
 public struct NovelTextViewportIndexChapter: Hashable, Sendable {
