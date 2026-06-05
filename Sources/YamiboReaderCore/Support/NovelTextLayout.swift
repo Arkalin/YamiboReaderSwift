@@ -54,7 +54,21 @@ public enum NovelTextLayout {
         settings: ReaderAppearanceSettings,
         layout: ReaderContainerLayout
     ) throws -> ReaderPaginationResult {
-        try renderedPages(
+        try self.layout(
+            document: document,
+            settings: settings,
+            layout: layout,
+            requiresAuthoritativePagedLayout: nil,
+            requiresAuthoritativeVerticalLayout: nil
+        ).compatibility
+    }
+
+    public static func layout(
+        document: ReaderPageDocument,
+        settings: ReaderAppearanceSettings,
+        layout: ReaderContainerLayout
+    ) throws -> NovelTextLayoutResult {
+        try self.layout(
             document: document,
             settings: settings,
             layout: layout,
@@ -73,6 +87,28 @@ public enum NovelTextLayout {
         verticalLayout: NovelVerticalTextLayout? = nil,
         usesViewportIndexCache: Bool? = nil
     ) throws -> ReaderPaginationResult {
+        try self.layout(
+            document: document,
+            settings: settings,
+            layout: layout,
+            requiresAuthoritativePagedLayout: requiresAuthoritativePagedLayout,
+            requiresAuthoritativeVerticalLayout: requiresAuthoritativeVerticalLayout,
+            pagedLayout: pagedLayout,
+            verticalLayout: verticalLayout,
+            usesViewportIndexCache: usesViewportIndexCache
+        ).compatibility
+    }
+
+    static func layout(
+        document: ReaderPageDocument,
+        settings: ReaderAppearanceSettings,
+        layout: ReaderContainerLayout,
+        requiresAuthoritativePagedLayout: Bool? = nil,
+        requiresAuthoritativeVerticalLayout: Bool? = nil,
+        pagedLayout: NovelPagedTextLayout? = nil,
+        verticalLayout: NovelVerticalTextLayout? = nil,
+        usesViewportIndexCache: Bool? = nil
+    ) throws -> NovelTextLayoutResult {
         let cacheKey = NovelTextViewportIndexCacheKey(
             document: document,
             settings: settings,
@@ -109,7 +145,7 @@ public enum NovelTextLayout {
                 )
             }
         )
-        let hasVisibleText = result.viewportIndex?.pages.contains { !$0.ranges.isEmpty } ?? false
+        let hasVisibleText = result.viewportIndex.pages.contains { !$0.ranges.isEmpty }
         let hasInputText = document.segments.contains { segment in
             guard case let .text(text, _) = segment else { return false }
             return !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -179,7 +215,7 @@ public enum NovelTextLayout {
         layout: ReaderContainerLayout,
         viewportContextSeed: NovelTextViewportContext,
         chunker: (NovelAnnotatedSegment, ReaderAppearanceSettings, ReaderContainerLayout) throws -> [TextSlice]
-    ) throws -> ReaderPaginationResult {
+    ) throws -> NovelTextLayoutResult {
         var pages: [ReaderRenderedPage] = []
         var chapters: [ReaderChapter] = []
         var seenChapterOrdinals = Set<Int>()
@@ -290,11 +326,11 @@ public enum NovelTextLayout {
             )
         )
 
-        return ReaderPaginationResult(
-            pages: pages,
-            chapters: chapters,
+        return NovelTextLayoutResult(
+            viewportContext: viewportContext,
             viewportIndex: viewportIndex,
-            viewportContext: viewportContext
+            compatibilityPages: pages,
+            compatibilityChapters: chapters
         )
     }
 
@@ -1228,11 +1264,11 @@ private struct NovelTextViewportIndexCacheKey: Hashable {
 
 private final class NovelTextViewportIndexCache: @unchecked Sendable {
     private let lock = NSLock()
-    private var entries: [NovelTextViewportIndexCacheKey: ReaderPaginationResult] = [:]
+    private var entries: [NovelTextViewportIndexCacheKey: NovelTextLayoutResult] = [:]
     private var accessOrder: [NovelTextViewportIndexCacheKey] = []
     private let capacity = 16
 
-    func result(for key: NovelTextViewportIndexCacheKey) -> ReaderPaginationResult? {
+    func result(for key: NovelTextViewportIndexCacheKey) -> NovelTextLayoutResult? {
         lock.withLock {
             guard let result = entries[key] else { return nil }
             markRecentlyUsed(key)
@@ -1240,7 +1276,7 @@ private final class NovelTextViewportIndexCache: @unchecked Sendable {
         }
     }
 
-    func store(_ result: ReaderPaginationResult, for key: NovelTextViewportIndexCacheKey) {
+    func store(_ result: NovelTextLayoutResult, for key: NovelTextViewportIndexCacheKey) {
         lock.withLock {
             entries[key] = result
             markRecentlyUsed(key)
