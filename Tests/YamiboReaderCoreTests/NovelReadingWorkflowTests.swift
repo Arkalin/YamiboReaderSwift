@@ -54,6 +54,46 @@ final class NovelReadingWorkflowTests: XCTestCase {
         XCTAssertTrue(source.contains("public struct NovelReadingSession: Sendable"))
     }
 
+    func testVerticalDisplayReferenceBecomesStaleAfterRuntimeGenerationChanges() async throws {
+        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9179&mobile=2")!
+        let repository = RecordingNovelReadingRepository(documents: [
+            1: makeNovelDocument(threadURL: threadURL, view: 1, maxView: 1, authorID: "author-1")
+        ])
+        let workflow = NovelReadingWorkflow(
+            context: ReaderLaunchContext(
+                threadURL: threadURL,
+                threadTitle: "Thread",
+                source: .forum,
+                initialView: 1,
+                authorID: "author-1"
+            ),
+            settings: ReaderAppearanceSettings(readingMode: .vertical),
+            layout: ReaderContainerLayout(width: 320, height: 568, readingMode: .vertical),
+            repository: repository
+        )
+
+        let initialState = try await workflow.start(initial: NovelReadingInitialPosition())
+        let pageIdentity = try XCTUnwrap(initialState.snapshot.viewportIndex?.pages.first?.pageIndex)
+        let oldReference = try XCTUnwrap(workflow.displayReference(for: pageIdentity))
+
+        _ = try workflow.updateSettings(
+            ReaderAppearanceSettings(fontScale: 1.15, readingMode: .vertical)
+        )
+        let currentReference = try XCTUnwrap(workflow.displayReference(for: pageIdentity))
+
+        XCTAssertTrue(oldReference.isStale)
+        XCTAssertFalse(currentReference.isStale)
+        XCTAssertNotEqual(oldReference.generation, currentReference.generation)
+        XCTAssertEqual(
+            workflow.runtimeDiagnostics,
+            NovelTextViewportRuntimeDiagnostics(
+                contentStorageCount: 1,
+                activeLayoutManagerCount: 1,
+                perPageTextKitDocumentCount: 0
+            )
+        )
+    }
+
     func testStartUsesStoredResumePointBeforeLaunchPage() async throws {
         let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9101&mobile=2")!
         let repository = RecordingNovelReadingRepository(documents: [

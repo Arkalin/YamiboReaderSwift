@@ -257,6 +257,10 @@ public final class NovelReadingWorkflow {
         viewportRuntime.displayReference(for: pageIdentity)
     }
 
+    public func updateVisiblePageIdentities(_ pageIdentities: [Int]) {
+        viewportRuntime.updateVisiblePageIdentities(pageIdentities)
+    }
+
     private func cacheContext(for document: ReaderPageDocument) -> NovelReadingCacheContext {
         switch document.contentSource {
         case .authorFilteredPage:

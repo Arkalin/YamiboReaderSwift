@@ -661,7 +661,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertFalse(verticalBody.contains("ReaderViewportPageContent.viewportBackedPage"))
         XCTAssertTrue(verticalBody.contains("viewportLayoutMetrics"))
         XCTAssertTrue(verticalBody.contains("pageHeight(for: displayPage.pageIndex)"))
-        XCTAssertTrue(verticalBody.contains("textRuntimeStore.measuredHeight"))
+        XCTAssertFalse(verticalBody.contains("textRuntimeStore.measuredHeight"))
         XCTAssertFalse(verticalBody.contains("NovelTextLayout.measuredTextHeight"))
         XCTAssertTrue(verticalBody.contains("topInset: CGFloat"))
         XCTAssertTrue(verticalBody.contains("bottomInset: CGFloat"))
@@ -673,40 +673,27 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertFalse(verticalBody.contains("UICollectionViewFlowLayout.automaticSize"))
     }
 
-    func testVerticalViewportCellsUseRuntimeStoreForTextKitSurfaces() throws {
+    func testVerticalViewportCellsUseWorkflowOwnedDisplayReferences() throws {
         let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let supportSource = try String(
             contentsOf: repositoryRoot
                 .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderSupportViews.swift"),
             encoding: .utf8
         )
-        let adapterSource = try String(
-            contentsOf: repositoryRoot
-                .appendingPathComponent("Sources/YamiboReaderUI/Views/NovelTextDisplayAdapter.swift"),
-            encoding: .utf8
-        )
         let verticalBody = try XCTUnwrap(typeBody(named: "ReaderVerticalViewportScrollView", in: supportSource))
         let verticalCellBody = try XCTUnwrap(typeBody(named: "ReaderVerticalViewportCell", in: supportSource))
-        let runtimeStoreBody = try XCTUnwrap(typeBody(named: "NovelTextLayoutLiveSurfaceStore", in: adapterSource))
 
-        XCTAssertTrue(adapterSource.contains("@MainActor\nfinal class NovelTextLayoutLiveSurfaceStore"))
-        XCTAssertTrue(adapterSource.contains("@MainActor\nfinal class NovelTextLayoutLiveSurface"))
-        XCTAssertTrue(adapterSource.contains("struct NovelTextLayoutLiveSurfaceIdentity: Hashable"))
-        XCTAssertTrue(verticalBody.contains("private let textRuntimeStore = NovelTextLayoutLiveSurfaceStore()"))
-        XCTAssertTrue(verticalBody.contains("textRuntimeStore.measuredHeight"))
-        XCTAssertTrue(verticalBody.contains("textRuntimeStore.removeAllTextSurfaces()"))
-        XCTAssertTrue(verticalCellBody.contains("NovelTextLayoutLiveSurface?"))
-        XCTAssertTrue(verticalCellBody.contains("NovelTextLayoutLiveSurfaceIdentity("))
-        XCTAssertTrue(verticalCellBody.contains("textRuntimeStore.textSurface("))
-        XCTAssertTrue(runtimeStoreBody.contains("textSurfaces: [NovelTextLayoutLiveSurfaceIdentity: NovelTextLayoutLiveSurface]"))
-        XCTAssertTrue(runtimeStoreBody.contains("if let cachedSurface = textSurfaces[identity]"))
-        XCTAssertTrue(runtimeStoreBody.contains("return cachedSurface"))
-        XCTAssertTrue(runtimeStoreBody.contains("markRecentlyUsed"))
-        XCTAssertTrue(runtimeStoreBody.contains("trimSurfacesIfNeeded"))
-        XCTAssertTrue(runtimeStoreBody.contains("func removeAllTextSurfaces()"))
-        XCTAssertTrue(runtimeStoreBody.contains("NovelTextLayout.makeDisplayView()"))
-        XCTAssertTrue(runtimeStoreBody.contains("NovelTextLayout.updateDisplayView("))
-        XCTAssertFalse(runtimeStoreBody.contains("func makeTextSurface"))
+        XCTAssertTrue(verticalBody.contains("displayReferenceProvider"))
+        XCTAssertTrue(verticalBody.contains("visiblePageIdentities"))
+        XCTAssertFalse(verticalBody.contains("NovelTextLayoutLiveSurfaceStore"))
+        XCTAssertFalse(verticalBody.contains("removeAllTextSurfaces"))
+        XCTAssertTrue(verticalCellBody.contains("NovelTextViewportDisplayReference?"))
+        XCTAssertTrue(verticalCellBody.contains("NovelTextViewportReferenceUIView"))
+        XCTAssertTrue(verticalCellBody.contains("displayReference.viewportSample"))
+        XCTAssertTrue(verticalCellBody.contains("displayReference.referenceY"))
+        XCTAssertFalse(verticalCellBody.contains("NovelTextLayoutLiveSurface"))
+        XCTAssertFalse(verticalCellBody.contains("NovelTextLayoutLiveSurfaceIdentity("))
+        XCTAssertFalse(verticalCellBody.contains("textRuntimeStore.textSurface("))
         XCTAssertFalse(verticalCellBody.contains("NovelTextViewportDisplayUIView()"))
         XCTAssertFalse(verticalCellBody.contains("NovelTextKit2PlatformAdapter.makeAttributedText"))
         XCTAssertFalse(verticalCellBody.contains("NovelTextLayout.measuredTextHeight"))
@@ -734,17 +721,17 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertFalse(displayPageBody.contains("ReaderViewportPageContent.viewportBackedPage"))
         XCTAssertTrue(itemHeightBody.contains("verticalDisplayPage(for: item)"))
         XCTAssertTrue(itemHeightBody.contains("viewportLayoutMetrics?.pageHeight(for: displayPage.pageIndex)"))
-        XCTAssertTrue(itemHeightBody.contains("textRuntimeStore.measuredHeight"))
+        XCTAssertFalse(itemHeightBody.contains("textRuntimeStore.measuredHeight"))
+        XCTAssertFalse(itemHeightBody.contains("NovelTextLayout.measuredTextHeight"))
         XCTAssertTrue(publishFramesBody.contains("cell.textViewportSample("))
         XCTAssertTrue(publishFramesBody.contains("ReaderVerticalPositioning.pageDistance"))
         XCTAssertTrue(restoreTextAnchorBody.contains("request.textAnchor"))
         XCTAssertTrue(restoreTextAnchorBody.contains("cell.textViewportAnchorY("))
         XCTAssertTrue(restoreTextAnchorBody.contains("ReaderVerticalPositioning.viewportReferenceLineY"))
-        XCTAssertTrue(sampleBody.contains("block.textSurface"))
-        XCTAssertTrue(sampleBody.contains("textSurface.viewportSample("))
+        XCTAssertTrue(sampleBody.contains("displayReference.viewportSample("))
         XCTAssertTrue(sampleBody.contains("ReaderVerticalPositioning.pageDistance"))
-        XCTAssertTrue(anchorBody.contains("textSurface.referenceY(for: anchor)"))
-        XCTAssertTrue(makeImageBlockBody.contains("textSurface: nil"))
+        XCTAssertTrue(anchorBody.contains("displayReference.referenceY("))
+        XCTAssertTrue(makeImageBlockBody.contains("displayReference: nil"))
         XCTAssertFalse(sampleBody.contains("intraPageProgress"))
         XCTAssertFalse(restoreTextAnchorBody.contains("request.intraPageProgress"))
     }

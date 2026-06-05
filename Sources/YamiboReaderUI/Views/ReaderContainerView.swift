@@ -427,6 +427,12 @@ public struct ReaderContainerView: View {
                 topInset: topInset,
                 bottomInset: bottomInset,
                 scrollRequest: verticalScrollRequest,
+                displayReferenceProvider: { pageIdentity in
+                    model.novelTextViewportDisplayReference(for: pageIdentity)
+                },
+                onVisiblePageIdentitiesChange: { pageIdentities in
+                    model.updateNovelTextViewportVisiblePageIdentities(pageIdentities)
+                },
                 onScrollRequestHandled: { request in
                     guard verticalRestoreController.scrollingRequest == request else {
                         if verticalScrollRequest == request {
