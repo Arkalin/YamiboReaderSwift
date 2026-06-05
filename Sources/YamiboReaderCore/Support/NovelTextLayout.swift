@@ -95,6 +95,60 @@ public enum NovelTextLayout {
         )
     }
 
+    public static func viewportSample(
+        displayOffset: Int,
+        displayValue: NovelTextDisplayValue,
+        documentView: Int,
+        pageIndex: Int
+    ) -> NovelTextViewportSample? {
+        guard !displayValue.ranges.isEmpty else { return nil }
+        let normalizedOffset = max(0, displayOffset)
+        var runningOffset = 0
+
+        for range in displayValue.ranges {
+            let length = max(range.length, 0)
+            let rangeEnd = runningOffset + length
+            if normalizedOffset <= rangeEnd {
+                return NovelTextViewportSample(
+                    documentView: documentView,
+                    pageIndex: pageIndex,
+                    segmentIndex: range.segmentIndex,
+                    segmentOffset: range.startOffset + min(max(normalizedOffset - runningOffset, 0), length)
+                )
+            }
+            runningOffset = rangeEnd + 2
+        }
+
+        guard let lastRange = displayValue.ranges.last else { return nil }
+        return NovelTextViewportSample(
+            documentView: documentView,
+            pageIndex: pageIndex,
+            segmentIndex: lastRange.segmentIndex,
+            segmentOffset: lastRange.endOffset
+        )
+    }
+
+    public static func displayOffset(
+        forSegmentIndex segmentIndex: Int,
+        segmentOffset: Int,
+        displayValue: NovelTextDisplayValue
+    ) -> Int? {
+        var runningOffset = 0
+
+        for range in displayValue.ranges {
+            let length = max(range.length, 0)
+            defer { runningOffset += length + 2 }
+            guard range.segmentIndex == segmentIndex,
+                  segmentOffset >= range.startOffset,
+                  segmentOffset <= range.endOffset else {
+                continue
+            }
+            return runningOffset + min(max(segmentOffset - range.startOffset, 0), length)
+        }
+
+        return nil
+    }
+
     static func renderedPages(
         document: ReaderPageDocument,
         settings: ReaderAppearanceSettings,
