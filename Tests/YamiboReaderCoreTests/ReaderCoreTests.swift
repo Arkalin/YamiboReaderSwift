@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 import XCTest
-@testable import YamiboReaderCore
+@_spi(NovelTextLayoutMeasurement) @testable import YamiboReaderCore
 
 #if canImport(UIKit)
 import UIKit
@@ -824,6 +824,17 @@ private final class StubURLProtocol: URLProtocol {
             "@_spi(NovelTextAttributedDocument)\npublic enum ReaderAttributedTextFactory"
         )
     )
+}
+
+@Test func novelTextMeasurementHelpersAreSPIOnly() throws {
+    let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+    let layoutSource = try String(
+        contentsOf: repositoryRoot
+            .appendingPathComponent("Sources/YamiboReaderCore/Support/NovelTextLayout.swift"),
+        encoding: .utf8
+    )
+
+    #expect(layoutSource.contains("@_spi(NovelTextLayoutMeasurement)\n    public static func measuredTextHeight"))
 }
 
 @Test func novelTextLayoutAssemblesDocumentPagesChaptersImagesAndViewportIndex() async throws {

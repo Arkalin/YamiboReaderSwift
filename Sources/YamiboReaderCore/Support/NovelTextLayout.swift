@@ -790,6 +790,7 @@ public enum NovelTextLayout {
 #endif
     }
 
+    @_spi(NovelTextLayoutMeasurement)
     public static func measuredTextHeight(
         displayValue: NovelTextDisplayValue,
         width: CGFloat,
@@ -805,6 +806,7 @@ public enum NovelTextLayout {
         )
     }
 
+    @_spi(NovelTextLayoutMeasurement)
     public static func measuredTextHeight(
         _ text: String,
         chapterTitle: String?,
