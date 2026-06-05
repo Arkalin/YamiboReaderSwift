@@ -131,10 +131,10 @@ public enum NovelTextLayout {
             settings: settings,
             layout: layout,
             viewportContextSeed: viewportContextSeed,
-            chunker: { annotatedSegment, settings, layout in
+            chunker: { text, chapterTitle, settings, layout in
                 try renderedTextSlices(
-                    annotatedSegment.textContent,
-                    chapterTitle: annotatedSegment.chapterTitle,
+                    text,
+                    chapterTitle: chapterTitle,
                     settings: settings,
                     layout: layout,
                     readingMode: settings.readingMode,
@@ -214,64 +214,54 @@ public enum NovelTextLayout {
         settings: ReaderAppearanceSettings,
         layout: ReaderContainerLayout,
         viewportContextSeed: NovelTextViewportContext,
-        chunker: (NovelAnnotatedSegment, ReaderAppearanceSettings, ReaderContainerLayout) throws -> [TextSlice]
+        chunker: (String, String?, ReaderAppearanceSettings, ReaderContainerLayout) throws -> [TextSlice]
     ) throws -> NovelTextLayoutResult {
         var pages: [ReaderRenderedPage] = []
         var chapters: [ReaderChapter] = []
         var seenChapterOrdinals = Set<Int>()
         var viewportRangesByPageIndex: [Int: [ReaderRenderedTextRange]] = [:]
         var viewportExternalBlocksByPageIndex: [Int: [NovelTextViewportExternalBlock]] = [:]
-        let annotatedTextBySegment = Dictionary(
-            uniqueKeysWithValues: annotatedSegments.map { ($0.index, $0.textContent) }
+        let annotatedSegmentByIndex = Dictionary(
+            uniqueKeysWithValues: annotatedSegments.map { ($0.index, $0) }
         )
+        let imageSegmentIndexes = Set(annotatedSegments.compactMap { annotatedSegment in
+            if case .image = annotatedSegment.segment {
+                return annotatedSegment.index
+            }
+            return nil
+        })
+        var pageDrafts: [NovelViewportPageDraft] = []
+        var nextDraftOrdinal = 0
+
+        if !viewportContextSeed.document.text.isEmpty {
+            let slices = try chunker(viewportContextSeed.document.text, nil, settings, layout)
+            for slice in slices where !slice.text.isEmpty {
+                let ranges = segmentRanges(
+                    for: slice,
+                    viewportDocument: viewportContextSeed.document
+                )
+                for group in splitTextRanges(
+                    ranges,
+                    aroundImageSegmentIndexes: imageSegmentIndexes,
+                    annotatedSegmentByIndex: annotatedSegmentByIndex,
+                    document: document
+                ) where !group.isEmpty {
+                    pageDrafts.append(
+                        NovelViewportPageDraft(
+                            orderSegmentIndex: group[0].segmentIndex,
+                            ordinal: nextDraftOrdinal,
+                            kind: .text(group)
+                        )
+                    )
+                    nextDraftOrdinal += 1
+                }
+            }
+        }
 
         for annotatedSegment in annotatedSegments {
             switch annotatedSegment.segment {
             case .text:
-                let slices = try chunker(annotatedSegment, settings, layout)
-                for slice in slices where !slice.text.isEmpty {
-                    let range = ReaderRenderedTextRange(
-                        segmentIndex: annotatedSegment.index,
-                        startOffset: slice.startOffset,
-                        endOffset: slice.endOffset
-                    )
-                    if settings.readingMode == .paged,
-                       appendViewportRangeToPreviousPageIfPossible(
-                           range,
-                           annotatedSegment: annotatedSegment,
-                           document: document,
-                           settings: settings,
-                           layout: layout,
-                           annotatedTextBySegment: annotatedTextBySegment,
-                           pages: &pages,
-                           viewportRangesByPageIndex: &viewportRangesByPageIndex
-                       ) {
-                        continue
-                    }
-
-                    let page = ReaderRenderedPage(
-                        index: pages.count,
-                        blocks: [],
-                        documentView: document.view,
-                        chapterOrdinal: annotatedSegment.chapterOrdinal,
-                        chapterTitle: annotatedSegment.chapterTitle,
-                        chapterCommentTarget: chapterCommentTarget(for: annotatedSegment, document: document)
-                    )
-                    viewportRangesByPageIndex[page.index] = [range]
-                    if let chapterOrdinal = annotatedSegment.chapterOrdinal,
-                       let chapterTitle = annotatedSegment.chapterTitle,
-                       seenChapterOrdinals.insert(chapterOrdinal).inserted {
-                        chapters.append(
-                            ReaderChapter(
-                                ordinal: chapterOrdinal,
-                                title: chapterTitle,
-                                startIndex: page.index,
-                                chapterCommentTarget: page.chapterCommentTarget
-                            )
-                        )
-                    }
-                    pages.append(page)
-                }
+                continue
 
             case let .image(url, chapterTitle):
                 let externalBlock = NovelTextViewportExternalBlock(
@@ -281,17 +271,64 @@ public enum NovelTextLayout {
                     chapterTitle: annotatedSegment.chapterTitle,
                     chapterCommentTarget: chapterCommentTarget(for: annotatedSegment, document: document)
                 )
+                pageDrafts.append(
+                    NovelViewportPageDraft(
+                        orderSegmentIndex: annotatedSegment.index,
+                        ordinal: nextDraftOrdinal,
+                        kind: .image(url: url, chapterTitle: chapterTitle, externalBlock: externalBlock)
+                    )
+                )
+                nextDraftOrdinal += 1
+            }
+        }
+
+        for draft in pageDrafts.sorted(by: {
+            if $0.orderSegmentIndex != $1.orderSegmentIndex {
+                return $0.orderSegmentIndex < $1.orderSegmentIndex
+            }
+            return $0.ordinal < $1.ordinal
+        }) {
+            switch draft.kind {
+            case let .text(ranges):
+                guard let firstRange = ranges.first,
+                      let annotatedSegment = annotatedSegmentByIndex[firstRange.segmentIndex] else {
+                    continue
+                }
+                let page = ReaderRenderedPage(
+                    index: pages.count,
+                    blocks: [],
+                    documentView: document.view,
+                    chapterOrdinal: annotatedSegment.chapterOrdinal,
+                    chapterTitle: annotatedSegment.chapterTitle,
+                    chapterCommentTarget: chapterCommentTarget(for: annotatedSegment, document: document)
+                )
+                viewportRangesByPageIndex[page.index] = ranges
+                if let chapterOrdinal = annotatedSegment.chapterOrdinal,
+                   let chapterTitle = annotatedSegment.chapterTitle,
+                   seenChapterOrdinals.insert(chapterOrdinal).inserted {
+                    chapters.append(
+                        ReaderChapter(
+                            ordinal: chapterOrdinal,
+                            title: chapterTitle,
+                            startIndex: page.index,
+                            chapterCommentTarget: page.chapterCommentTarget
+                        )
+                    )
+                }
+                pages.append(page)
+
+            case let .image(url, chapterTitle, externalBlock):
                 let page = ReaderRenderedPage(
                     index: pages.count,
                     blocks: [.image(url, chapterTitle: chapterTitle)],
                     documentView: document.view,
-                    chapterOrdinal: annotatedSegment.chapterOrdinal,
-                    chapterTitle: annotatedSegment.chapterTitle,
+                    chapterOrdinal: externalBlock.chapterOrdinal,
+                    chapterTitle: externalBlock.chapterTitle,
                     chapterCommentTarget: externalBlock.chapterCommentTarget
                 )
                 viewportExternalBlocksByPageIndex[page.index] = [externalBlock]
-                if let chapterOrdinal = annotatedSegment.chapterOrdinal,
-                   let chapterTitle = annotatedSegment.chapterTitle,
+                if let chapterOrdinal = externalBlock.chapterOrdinal,
+                   let chapterTitle = externalBlock.chapterTitle,
                    seenChapterOrdinals.insert(chapterOrdinal).inserted {
                     chapters.append(
                         ReaderChapter(
@@ -412,6 +449,83 @@ public enum NovelTextLayout {
             externalBlocks: externalBlocks,
             diagnostics: NovelTextViewportDiagnostics(indexBuildCount: 1)
         )
+    }
+
+    private static func segmentRanges(
+        for slice: TextSlice,
+        viewportDocument: NovelTextViewportDocument
+    ) -> [ReaderRenderedTextRange] {
+        let sliceStart = max(0, slice.startOffset)
+        let sliceEnd = max(sliceStart, slice.endOffset)
+        guard sliceEnd > sliceStart else { return [] }
+
+        return viewportDocument.textRangesBySegment
+            .sorted { $0.value.startOffset < $1.value.startOffset }
+            .compactMap { segmentIndex, segmentRange in
+                let intersectionStart = max(sliceStart, segmentRange.startOffset)
+                let intersectionEnd = min(sliceEnd, segmentRange.endOffset)
+                guard intersectionEnd > intersectionStart else { return nil }
+                return ReaderRenderedTextRange(
+                    segmentIndex: segmentIndex,
+                    startOffset: intersectionStart - segmentRange.startOffset,
+                    endOffset: intersectionEnd - segmentRange.startOffset
+                )
+            }
+    }
+
+    private static func splitTextRanges(
+        _ ranges: [ReaderRenderedTextRange],
+        aroundImageSegmentIndexes imageSegmentIndexes: Set<Int>,
+        annotatedSegmentByIndex: [Int: NovelAnnotatedSegment],
+        document: ReaderPageDocument
+    ) -> [[ReaderRenderedTextRange]] {
+        guard !ranges.isEmpty else { return [] }
+
+        var groups: [[ReaderRenderedTextRange]] = []
+        var currentGroup: [ReaderRenderedTextRange] = []
+        var previousSegmentIndex: Int?
+
+        for range in ranges {
+            if let previousSegmentIndex,
+               !currentGroup.isEmpty,
+               shouldStartNewTextRangeGroup(
+                   previousSegmentIndex: previousSegmentIndex,
+                   nextSegmentIndex: range.segmentIndex,
+                   imageSegmentIndexes: imageSegmentIndexes,
+                   annotatedSegmentByIndex: annotatedSegmentByIndex,
+                   document: document
+               ) {
+                groups.append(currentGroup)
+                currentGroup = []
+            }
+            currentGroup.append(range)
+            previousSegmentIndex = range.segmentIndex
+        }
+
+        if !currentGroup.isEmpty {
+            groups.append(currentGroup)
+        }
+        return groups
+    }
+
+    private static func shouldStartNewTextRangeGroup(
+        previousSegmentIndex: Int,
+        nextSegmentIndex: Int,
+        imageSegmentIndexes: Set<Int>,
+        annotatedSegmentByIndex: [Int: NovelAnnotatedSegment],
+        document: ReaderPageDocument
+    ) -> Bool {
+        if imageSegmentIndexes.contains(where: { imageSegmentIndex in
+            imageSegmentIndex > previousSegmentIndex && imageSegmentIndex < nextSegmentIndex
+        }) {
+            return true
+        }
+        let previousSegment = annotatedSegmentByIndex[previousSegmentIndex]
+        let nextSegment = annotatedSegmentByIndex[nextSegmentIndex]
+        return previousSegment?.chapterOrdinal != nextSegment?.chapterOrdinal ||
+            previousSegment?.chapterTitle != nextSegment?.chapterTitle ||
+            previousSegment.flatMap { chapterCommentTarget(for: $0, document: document) } !=
+            nextSegment.flatMap { chapterCommentTarget(for: $0, document: document) }
     }
 
     private static func makeViewportIndex(
@@ -1266,6 +1380,17 @@ private struct NovelAnnotatedSegment {
         guard case let .text(text, _) = segment else { return "" }
         return text
     }
+}
+
+private struct NovelViewportPageDraft {
+    let orderSegmentIndex: Int
+    let ordinal: Int
+    let kind: NovelViewportPageDraftKind
+}
+
+private enum NovelViewportPageDraftKind {
+    case text([ReaderRenderedTextRange])
+    case image(url: URL, chapterTitle: String?, externalBlock: NovelTextViewportExternalBlock)
 }
 
 private struct NovelTextViewportIndexCacheKey: Hashable {
