@@ -1073,6 +1073,43 @@ private final class StubURLProtocol: URLProtocol {
     #expect(layoutResult.compatibility.pages[imagePage.pageIndex].blocks == [.image(imageURL, chapterTitle: "第一章")])
 }
 
+@Test func novelTextLayoutDerivesPageRangesFromComposedViewportDocument() async throws {
+    let document = ReaderPageDocument(
+        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=165&mobile=2")),
+        view: 1,
+        maxView: 1,
+        segments: [
+            .text("第一段", chapterTitle: "第一章"),
+            .text("第二段", chapterTitle: "第一章")
+        ]
+    )
+    let layoutInputCount = LockedCounter()
+
+    let layoutResult = try NovelTextLayout.layout(
+        document: document,
+        settings: ReaderAppearanceSettings(readingMode: .paged),
+        layout: ReaderContainerLayout(width: 390, height: 844),
+        requiresAuthoritativePagedLayout: false,
+        pagedLayout: { text, _, _, _ in
+            layoutInputCount.increment()
+            #expect(text == "第一段\n\n第二段")
+            return [TextSlice(text: text, startOffset: 0, endOffset: text.count)]
+        }
+    )
+
+    #expect(layoutInputCount.value == 1)
+    #expect(layoutResult.viewportContext.document.insertedSeparatorRanges == [
+        ReaderRenderedTextRange(segmentIndex: 0, startOffset: 3, endOffset: 5)
+    ])
+    #expect(layoutResult.viewportIndex.pages.map(\.ranges) == [
+        [
+            ReaderRenderedTextRange(segmentIndex: 0, startOffset: 0, endOffset: 3),
+            ReaderRenderedTextRange(segmentIndex: 1, startOffset: 0, endOffset: 3)
+        ]
+    ])
+    #expect(layoutResult.viewportIndex.position(forSegmentIndex: 1, offset: 1)?.pageIndex == 0)
+}
+
 @Test func novelTextLayoutMaterializesViewportPageDisplayValueFromMultiRangeIndexPage() async throws {
     let settings = ReaderAppearanceSettings(
         fontScale: 1.25,
