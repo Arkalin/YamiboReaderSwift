@@ -94,6 +94,49 @@ final class NovelReadingWorkflowTests: XCTestCase {
         )
     }
 
+    func testTwoPageSpreadReferencesShareRuntimeGeneration() async throws {
+        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9180&mobile=2")!
+        let document = ReaderPageDocument(
+            threadURL: threadURL,
+            view: 1,
+            maxView: 1,
+            resolvedAuthorID: "author-1",
+            contentSource: .authorFilteredPage,
+            segments: (0..<4).map { index in
+                .text("第\(index + 1)章正文", chapterTitle: "第\(index + 1)章")
+            }
+        )
+        let repository = RecordingNovelReadingRepository(documents: [1: document])
+        let workflow = NovelReadingWorkflow(
+            context: ReaderLaunchContext(
+                threadURL: threadURL,
+                threadTitle: "Thread",
+                source: .forum,
+                initialView: 1,
+                authorID: "author-1"
+            ),
+            settings: ReaderAppearanceSettings(
+                showsTwoPagesInLandscapeOnPad: true,
+                readingMode: .paged
+            ),
+            layout: ReaderContainerLayout(width: 1024, height: 768, readingMode: .paged),
+            repository: repository,
+            usesPadPresentation: true,
+            pagination: currentWebpageViewportPagination
+        )
+
+        let state = try await workflow.start(initial: NovelReadingInitialPosition())
+        let spread = try XCTUnwrap(state.snapshot.pagedSpreads.first(where: { $0.rightPageIndex != nil }))
+        let rightPageIdentity = try XCTUnwrap(spread.rightPageIndex)
+        let leftReference = try XCTUnwrap(workflow.displayReference(for: spread.leftPageIndex))
+        let rightReference = try XCTUnwrap(workflow.displayReference(for: rightPageIdentity))
+
+        XCTAssertEqual(leftReference.generation, rightReference.generation)
+        XCTAssertNotEqual(leftReference.pageIdentity, rightReference.pageIdentity)
+        XCTAssertFalse(leftReference.isStale)
+        XCTAssertFalse(rightReference.isStale)
+    }
+
     func testStartUsesStoredResumePointBeforeLaunchPage() async throws {
         let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9101&mobile=2")!
         let repository = RecordingNovelReadingRepository(documents: [
