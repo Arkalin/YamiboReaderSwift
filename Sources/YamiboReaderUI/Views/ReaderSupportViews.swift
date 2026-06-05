@@ -1144,6 +1144,12 @@ struct ReaderPagedSpreadCollectionViewport: UIViewRepresentable {
     }
 }
 
+private struct ReaderVerticalViewportDisplayPage {
+    let pageIndex: Int
+    let documentView: Int
+    let blocks: [ReaderRenderedBlock]
+}
+
 struct ReaderVerticalViewportScrollView: UIViewRepresentable {
     let pages: [ReaderRenderedPage]
     let viewportContext: NovelTextViewportContext?
@@ -1248,7 +1254,7 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
         }
 
         func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int {
-            parent.pages.count
+            verticalPageCount
         }
 
         func collectionView(
@@ -1262,14 +1268,16 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
             guard let cell = cell as? ReaderVerticalViewportCell else {
                 return cell
             }
-            let page = parent.pages[indexPath.item]
+            guard let displayPage = verticalDisplayPage(for: indexPath.item) else {
+                return cell
+            }
             cell.configure(
-                page: displayPage(for: indexPath.item),
+                page: displayPage,
                 settings: parent.settings,
                 refererURL: parent.refererURL,
                 sessionState: parent.sessionState,
                 contentWidth: max(verticalItemWidth(in: collectionView) - parent.settings.horizontalPadding * 2, 1),
-                topPadding: page.index == 0 ? 16 : 0,
+                topPadding: displayPage.pageIndex == 0 ? 16 : 0,
                 textRuntimeStore: textRuntimeStore
             )
             return cell
@@ -1316,7 +1324,7 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
                 handledScrollRequest = nil
                 return
             }
-            guard parent.pages.indices.contains(request.pageIndex) else {
+            guard request.pageIndex >= 0, request.pageIndex < verticalPageCount else {
                 handledScrollRequest = nil
                 return
             }
@@ -1355,17 +1363,16 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
         private func publishFrames(from scrollView: UIScrollView) {
             guard let collectionView = scrollView as? UICollectionView else { return }
             let frames = collectionView.indexPathsForVisibleItems.reduce(into: [Int: ReaderVerticalPageFrameValue]()) { result, indexPath in
-                guard parent.pages.indices.contains(indexPath.item),
+                guard let pageIdentity = verticalPageIdentity(for: indexPath.item),
                       let attributes = collectionView.layoutAttributesForItem(at: indexPath) else {
                     return
                 }
-                let page = parent.pages[indexPath.item]
                 let visibleFrame = attributes.frame.offsetBy(
                     dx: -collectionView.contentOffset.x,
                     dy: -collectionView.contentOffset.y
                 )
-                result[page.index] = ReaderVerticalPageFrameValue(
-                    documentView: page.documentView,
+                result[pageIdentity.pageIndex] = ReaderVerticalPageFrameValue(
+                    documentView: pageIdentity.documentView,
                     frame: visibleFrame
                 )
             }
@@ -1377,12 +1384,11 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
             let referenceLineY = ReaderVerticalPositioning.viewportReferenceLineY(in: scrollView.bounds)
             let textSample = collectionView.indexPathsForVisibleItems
                 .compactMap { indexPath -> (distance: CGFloat, sample: NovelTextViewportSample)? in
-                    guard parent.pages.indices.contains(indexPath.item),
+                    guard let pageIdentity = verticalPageIdentity(for: indexPath.item),
                           let cell = collectionView.cellForItem(at: indexPath) as? ReaderVerticalViewportCell,
                           let attributes = collectionView.layoutAttributesForItem(at: indexPath) else {
                         return nil
                     }
-                    let page = parent.pages[indexPath.item]
                     let visibleFrame = attributes.frame.offsetBy(
                         dx: -collectionView.contentOffset.x,
                         dy: -collectionView.contentOffset.y
@@ -1390,8 +1396,8 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
                     guard let sample = cell.textViewportSample(
                         referenceLineY: referenceLineY,
                         pageFrame: visibleFrame,
-                        documentView: page.documentView,
-                        pageIndex: page.index
+                        documentView: pageIdentity.documentView,
+                        pageIndex: pageIdentity.pageIndex
                     ) else {
                         return nil
                     }
@@ -1422,10 +1428,9 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
         }
 
         private func verticalItemHeight(for item: Int, in collectionView: UICollectionView) -> CGFloat {
-            guard parent.pages.indices.contains(item) else {
+            guard let displayPage = verticalDisplayPage(for: item) else {
                 return max(collectionView.bounds.height, 1)
             }
-            let displayPage = displayPage(for: item)
             let contentWidth = max(verticalItemWidth(in: collectionView) - parent.settings.horizontalPadding * 2, 1)
             let blockHeights = displayPage.blocks.map { block -> CGFloat in
                 switch block {
@@ -1443,20 +1448,46 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
             }
             let contentHeight = blockHeights.reduce(CGFloat.zero, +)
             let spacingHeight = CGFloat(max(displayPage.blocks.count - 1, 0)) * 14
-            let topPadding = displayPage.index == 0 ? CGFloat(16) : 0
+            let topPadding = displayPage.pageIndex == 0 ? CGFloat(16) : 0
             return max(ceil(contentHeight + spacingHeight + topPadding), 1)
         }
 
-        private func displayPage(for item: Int) -> ReaderRenderedPage {
-            let page = parent.pages[item]
-            let viewportPage = parent.viewportIndex?.pages.first {
-                $0.pageIndex == page.index && $0.documentView == page.documentView
+        private var verticalPageCount: Int {
+            parent.viewportIndex?.pages.count ?? parent.pages.count
+        }
+
+        private func verticalPageIdentity(for item: Int) -> (pageIndex: Int, documentView: Int)? {
+            if let viewportPage = parent.viewportIndex?.pages.first(where: { $0.pageIndex == item }) {
+                return (viewportPage.pageIndex, viewportPage.documentView)
             }
-            return ReaderViewportPageContent.viewportBackedPage(
-                page: page,
-                viewportContext: parent.viewportContext,
-                viewportPage: viewportPage,
-                settings: parent.settings
+            guard parent.pages.indices.contains(item) else {
+                return nil
+            }
+            let page = parent.pages[item]
+            return (page.index, page.documentView)
+        }
+
+        private func verticalDisplayPage(for item: Int) -> ReaderVerticalViewportDisplayPage? {
+            if let viewportPage = parent.viewportIndex?.pages.first(where: { $0.pageIndex == item }) {
+                return ReaderVerticalViewportDisplayPage(
+                    pageIndex: viewportPage.pageIndex,
+                    documentView: viewportPage.documentView,
+                    blocks: ReaderViewportPageContent.viewportBackedBlocks(
+                        compatibilityBlocks: [],
+                        viewportContext: parent.viewportContext,
+                        viewportPage: viewportPage,
+                        settings: parent.settings
+                    )
+                )
+            }
+            guard parent.pages.indices.contains(item) else {
+                return nil
+            }
+            let page = parent.pages[item]
+            return ReaderVerticalViewportDisplayPage(
+                pageIndex: page.index,
+                documentView: page.documentView,
+                blocks: page.blocks
             )
         }
 
@@ -1465,7 +1496,8 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
             in collectionView: UICollectionView
         ) -> Bool {
             guard let textAnchor = request.textAnchor,
-                  parent.pages.indices.contains(request.pageIndex),
+                  request.pageIndex >= 0,
+                  request.pageIndex < verticalPageCount,
                   let cell = collectionView.cellForItem(at: IndexPath(item: request.pageIndex, section: 0)) as? ReaderVerticalViewportCell,
                   let attributes = collectionView.layoutAttributesForItem(at: IndexPath(item: request.pageIndex, section: 0)) else {
                 return request.textAnchor == nil
@@ -1506,7 +1538,7 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
     }
 
     private var blockViews: [BlockView] = []
-    private var currentPage: ReaderRenderedPage?
+    private var currentPage: ReaderVerticalViewportDisplayPage?
     private var currentSettings = ReaderAppearanceSettings()
     private var currentRefererURL: URL?
     private var currentSessionState = SessionState()
@@ -1556,7 +1588,7 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
     }
 
     func configure(
-        page: ReaderRenderedPage,
+        page: ReaderVerticalViewportDisplayPage,
         settings: ReaderAppearanceSettings,
         refererURL: URL,
         sessionState: SessionState,
@@ -1636,7 +1668,7 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
     private func makeBlockView(
         for block: ReaderRenderedBlock,
         blockIndex: Int,
-        page: ReaderRenderedPage,
+        page: ReaderVerticalViewportDisplayPage,
         contentWidth: CGFloat,
         refererURL: URL,
         sessionState: SessionState,
@@ -1661,14 +1693,14 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
     private func makeTextBlockView(
         displayValue: NovelTextDisplayValue,
         blockIndex: Int,
-        page: ReaderRenderedPage,
+        page: ReaderVerticalViewportDisplayPage,
         contentWidth: CGFloat,
         textRuntimeStore: NovelTextLayoutLiveSurfaceStore
     ) -> BlockView {
         let titleWeight = UIFont.Weight.regular
         let identity = NovelTextLayoutLiveSurfaceIdentity(
             documentView: page.documentView,
-            pageIndex: page.index,
+            pageIndex: page.pageIndex,
             blockIndex: blockIndex,
             displayValue: displayValue,
             width: contentWidth,
