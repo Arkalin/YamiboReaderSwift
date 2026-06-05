@@ -223,6 +223,33 @@ public final class NovelReadingWorkflow {
     }
 
     @discardableResult
+    public func updateSurfaceAppearanceSettings(_ settings: ReaderAppearanceSettings) -> NovelReadingWorkflowState? {
+        guard let state,
+              let session,
+              state.presentation?.generation == viewportRuntime.currentGeneration else {
+            self.settings = settings
+            return nil
+        }
+        self.settings = settings
+        let revision = (state.presentation?.revision ?? 0) + 1
+        let nextState = NovelReadingWorkflowState(
+            snapshot: session.snapshot,
+            presentation: makePresentation(
+                snapshot: session.snapshot,
+                generation: viewportRuntime.currentGeneration,
+                revision: revision,
+                settings: settings
+            ),
+            currentAuthorID: state.currentAuthorID,
+            cachedViews: state.cachedViews,
+            currentDocument: state.currentDocument,
+            prefetchedDocument: state.prefetchedDocument
+        )
+        self.state = nextState
+        return nextState
+    }
+
+    @discardableResult
     public func updateLayout(_ layout: ReaderContainerLayout) throws -> NovelReadingWorkflowState? {
         supersedePendingRuntimeUpdate()
         guard var candidateSession = session else {
