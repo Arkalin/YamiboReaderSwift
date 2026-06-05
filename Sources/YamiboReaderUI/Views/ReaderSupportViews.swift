@@ -583,6 +583,7 @@ struct ReaderPagedSpreadContent: View {
 struct ReaderViewportPageContent: View {
     let viewportContext: NovelTextViewportContext?
     let viewportPage: NovelTextViewportIndexPage?
+    let displayReference: NovelTextViewportDisplayReference?
     let fallbackDocumentView: Int?
     let fallbackPageIndex: Int?
     let settings: ReaderAppearanceSettings
@@ -592,6 +593,7 @@ struct ReaderViewportPageContent: View {
     init(
         viewportContext: NovelTextViewportContext?,
         viewportPage: NovelTextViewportIndexPage?,
+        displayReference: NovelTextViewportDisplayReference? = nil,
         fallbackDocumentView: Int?,
         fallbackPageIndex: Int?,
         settings: ReaderAppearanceSettings,
@@ -600,6 +602,7 @@ struct ReaderViewportPageContent: View {
     ) {
         self.viewportContext = viewportContext
         self.viewportPage = viewportPage
+        self.displayReference = displayReference
         self.fallbackDocumentView = fallbackDocumentView
         self.fallbackPageIndex = fallbackPageIndex
         self.settings = settings
@@ -609,19 +612,24 @@ struct ReaderViewportPageContent: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            ForEach(
-                Self.viewportBlocks(
-                    viewportContext: viewportContext,
-                    viewportPage: viewportPage,
-                    settings: settings
-                )
-            ) { block in
-                ReaderViewportBlockView(
-                    block: block,
-                    settings: settings,
-                    refererURL: refererURL,
-                    sessionState: sessionState
-                )
+            if let displayReference, !displayReference.isStale, viewportPage?.ranges.isEmpty == false {
+                NativeNovelTextViewportReferenceView(displayReference: displayReference)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            } else {
+                ForEach(
+                    Self.viewportBlocks(
+                        viewportContext: viewportContext,
+                        viewportPage: viewportPage,
+                        settings: settings
+                    )
+                ) { block in
+                    ReaderViewportBlockView(
+                        block: block,
+                        settings: settings,
+                        refererURL: refererURL,
+                        sessionState: sessionState
+                    )
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -690,6 +698,7 @@ struct ReaderPagedCollectionViewport: UIViewRepresentable {
     let topInset: CGFloat
     let bottomInset: CGFloat
     let selectionIndex: Int
+    let displayReferenceProvider: @MainActor (Int) -> NovelTextViewportDisplayReference?
     let onSelectionChange: (Int) -> Void
 
     func makeCoordinator() -> Coordinator {
@@ -753,11 +762,13 @@ struct ReaderPagedCollectionViewport: UIViewRepresentable {
             let viewportPage = parent.viewportIndex?.pages.first {
                 $0.pageIndex == indexPath.item
             }
+            let displayReference = parent.displayReferenceProvider(indexPath.item)
             cell.backgroundColor = .clear
             cell.contentConfiguration = UIHostingConfiguration {
                 ReaderViewportPageContent(
                     viewportContext: parent.viewportContext,
                     viewportPage: viewportPage,
+                    displayReference: displayReference,
                     fallbackDocumentView: viewportPage?.documentView,
                     fallbackPageIndex: indexPath.item,
                     settings: parent.settings,
