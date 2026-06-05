@@ -74,7 +74,7 @@ _Avoid_: favorite store, favorites snapshot, favorites list
 - A **Novel Text Viewport** must keep page counts, chapter starts, and **Novel Reading Position** restoration exact when the reader opens, even if drawing of text fragments remains viewport-lazy.
 - A **Novel Text Viewport Index** must be complete before the **Novel Reading Session** publishes readable content; loading UI is preferable to showing approximate page counts or chapter positions.
 - A **Novel Text Viewport Index** is cacheable by reader page document identity, text-affecting appearance settings, container layout, reading mode, and two-page spread presentation.
-- A **Novel Text Viewport Index** may be stored on disk, but live TextKit objects stay in memory under the **Novel Reading Session** or a short-lived runtime cache; cached indexes must carry text and layout fingerprints.
+- A **Novel Text Viewport Index** may be stored on disk, but live TextKit objects stay in memory under a session-scoped `@MainActor` runtime owner held by the **Novel Reading Workflow**; cached indexes must carry text and layout fingerprints.
 - A **Novel Text Viewport Index** has one top-level identity for a current reader page document, with mode-specific paged and vertical projections that share one semantic map from TextKit document ranges to **Novel Reading Position** ranges.
 - The primary **Novel Text Layout** Interface is viewport-first: it publishes a **Novel Text Viewport** context, a **Novel Text Viewport Index**, and index-aware external blocks before any rendered-page compatibility output is derived.
 - A **Novel Text Viewport** owns the current reader page document's text flow first; inline images remain index-aware external blocks and are not TextKit attachments unless a later decision explicitly changes that.
@@ -91,7 +91,52 @@ _Avoid_: favorite store, favorites snapshot, favorites list
 - In paged reading mode, SwiftUI hosts a UIKit collection-view pager through `UIViewRepresentable`; collection-view cells are page or spread surfaces that share one current-reader-page-document **Novel Text Viewport** context.
 - Paged collection-view cells consume **Novel Text Viewport Index** page and spread identities only; they do not compute page ranges, chapter starts, spread pairing, or **Novel Reading Position** offsets.
 - In vertical reading mode, SwiftUI hosts a UIKit-backed **Novel Text Viewport** scroll view through `UIViewRepresentable`; SwiftUI must not host text chunks or sample text positions from view-frame heuristics.
-- A **Novel Text Viewport** context is owned by **Novel Text Layout** and the **Novel Reading Session** lifecycle; UIKit pagers and cells hold display references only.
+- **Novel Reading Session** remains a pure-value `Sendable` state machine and must not own live TextKit objects or become main-actor isolated.
+- A session-scoped `@MainActor` runtime owner is held by the **Novel Reading Workflow** for the current **Novel Reading Session** lifecycle; all live TextKit 2 object graphs remain hidden inside the **Novel Text Layout** Implementation.
+- The runtime owner and its UIKit/AppKit TextKit 2 adapters live in `YamiboReaderCore`, preserving the dependency direction in which `YamiboReaderUI` depends on Core.
+- The **Novel Reading Workflow** creates, updates, and releases the runtime owner; the runtime owner is not stored in **Novel Reading Snapshot** or any other pure-value `Sendable` state.
+- `YamiboReaderUI` consumes opaque **Novel Text Viewport** display references issued by Core and does not access the runtime owner itself.
+- A **Novel Text Viewport** display reference is a main-actor-isolated opaque reference containing only a weak runtime-owner reference, a runtime generation, and a **Novel Text Viewport Index** page identity.
+- A display reference does not retain `NSTextLayoutManager`, text fragments, attributed documents, or platform views.
+- Changes to the reader page document, reading mode, container layout, or text display semantics increment the runtime generation and make previously issued display references explicitly stale.
+- A stale display reference must report staleness and must not draw previous content, rebuild a TextKit object graph, or silently resolve itself against a newer runtime generation.
+- `YamiboReaderUI` requests current display references through the **Novel Reading Workflow** by **Novel Text Viewport Index** page identity; attributed-document reuse remains an internal runtime-owner decision across generation changes.
+- A **Novel Text Viewport** update is an atomic runtime transaction: the runtime owner builds the next attributed document or layout projection, complete **Novel Text Viewport Index**, layout metrics, and runtime generation from one TextKit 2 object graph.
+- The **Novel Reading Workflow** publishes the resulting pure-value **Novel Text Layout** result to the **Novel Reading Session** only after the runtime transaction succeeds completely.
+- If an update transaction fails, the **Novel Reading Workflow** preserves the previous **Novel Reading Snapshot**, runtime generation, and drawable **Novel Text Viewport**; an initial transaction failure publishes no readable content and surfaces a reader error.
+- **Novel Reading Session** consumes successful pure-value **Novel Text Layout** results for position resolution and state transitions; it does not invoke a pagination or layout closure and does not independently rebuild a **Novel Text Viewport Index**.
+- The **Novel Text Viewport Index**, layout metrics, display references, and drawn fragments for one published generation must all derive from the same active TextKit 2 layout projection.
+- HTML text transformation, chapter annotation, and semantic attributed-document preparation may run off the main actor when their outputs remain pure-value and `Sendable`.
+- Creating or mutating `NSTextContentStorage`, `NSTextLayoutManager`, TextKit layout fragments, the complete **Novel Text Viewport Index**, and the committed runtime generation occurs inside the main-actor runtime transaction.
+- An initial runtime transaction shows loading UI until the complete **Novel Text Viewport Index** is ready; it does not publish approximate page counts or readable content.
+- When a readable generation already exists, a settings, layout, or reading-mode update may keep displaying that generation until the replacement transaction commits atomically.
+- Runtime update transactions are cancellable and latest-wins: superseded appearance, rotation, container-layout, or reading-mode requests must not commit after a newer request.
+- Prefetch prepares only pure-value reader page documents and semantic inputs; it does not create a second live TextKit runtime.
+- Each **Novel Reading Workflow** owns at most one live **Novel Text Viewport** runtime owner, and that runtime represents only the current reader page document.
+- Promoting a prefetched reader page document performs an atomic replacement transaction on the existing runtime owner; success invalidates the previous generation and its display references, while failure preserves the current document, generation, and readable content.
+- Closing the reader or releasing the **Novel Reading Workflow** releases the live TextKit object graph immediately.
+- Memory pressure may remove semantic attributed-document caches and non-current generation data, but it must not invalidate the currently drawable generation.
+- Live TextKit runtimes are not retained in an LRU across reader page documents; only pure-value **Novel Text Viewport Index** data and semantic inputs may be cached across documents.
+- One current reader page document has one shared TextKit 2 content storage inside that runtime owner.
+- The runtime owner has one active TextKit 2 layout projection for the current reading mode and container layout; paged and vertical projections do not stay live concurrently.
+- Changing reading mode or container layout rebuilds the active layout projection while reusing the reader page document's semantic attributed document when its text-affecting appearance settings have not changed.
+- Page, spread, and vertical chunk surfaces must not create per-surface `NSTextContentStorage`, `NSTextLayoutManager`, or attributed document copies.
+- The runtime owner is the only `NSTextViewportLayoutControllerDelegate` for the active layout projection.
+- Page, spread, and vertical chunk surfaces hold opaque display references identified by runtime generation and **Novel Text Viewport Index** page identity; they do not hold **Novel Text Display Values** or live TextKit objects.
+- Platform coordinators report visible **Novel Text Viewport Index** page identities to the runtime owner; they do not directly request TextKit layout fragments or invalidate TextKit caches.
+- The runtime owner converts visible page identities into the active TextKit document viewport, performs viewport-lazy layout, draws visible fragments, samples **Novel Reading Position**, and resolves restoration anchors.
+- UIKit and AppKit expose lightweight **Novel Text Viewport** surface adapters backed only by an opaque display reference.
+- A surface adapter passes its page-local bounds, graphics context, sampling points, and restoration requests through the display reference; it does not own TextKit objects, perform text measurement, or decide layout invalidation.
+- The runtime owner maps page-local surface coordinates into the shared TextKit document layout, performs viewport-lazy fragment drawing, and maps sampling or restoration results back into **Novel Reading Position** semantics.
+- Reusing a page or chunk cell replaces its display reference without rebuilding the shared TextKit object graph.
+- A surface presented with a stale display reference draws no previous text and reports that the caller must request a current display reference.
+- SwiftUI, UIKit, and AppKit platform adapters hold short-lived display references only; coordinators, pagers, and cells must not own the **Novel Text Viewport** runtime or decide its cache invalidation.
+- The live-runtime migration is complete only when Core tests cover atomic commit, failed-update rollback, latest-wins cancellation, generation invalidation, and prefetched-document promotion.
+- UI tests must verify that reused cells replace only their opaque display reference and that stale display references never draw previous content.
+- Integration tests must verify that paged, vertical, two-page spread, rotation, appearance changes, and reading-mode changes publish indexes and draw surfaces from one runtime generation.
+- Runtime diagnostics for one **Novel Reading Workflow** must report one `NSTextContentStorage`, one active `NSTextLayoutManager`, and zero per-page TextKit document object graphs.
+- Completion requires deleting `NovelTextLayoutLiveSurfaceStore`, `NovelTextLayoutLiveSurface`, the per-page `NovelTextViewportDisplayUIView` TextKit object graph, and UI-owned text measurement or TextKit cache invalidation.
+- Completion also requires **Novel Reading Session** to remain pure-value and `Sendable`, with no TextKit or platform UI imports.
 - A **Novel Reading Position** segment offset is measured in the current displayed text after translation-mode transformation; changing translation mode restores by nearest indexed range, chapter, and intra-page progress rather than promising source-text character identity.
 - **Novel Reading Position** is text-only; when a vertical **Novel Text Viewport** reference line falls on an inline image or other external block, save and restore logic snaps to the nearest indexed text range rather than saving an external block identity.
 - If a reader page document has no indexed text range, save and restore logic preserves the previous text-only **Novel Reading Position** while the visible web view page may still advance.
