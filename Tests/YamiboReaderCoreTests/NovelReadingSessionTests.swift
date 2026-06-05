@@ -765,7 +765,11 @@ final class NovelReadingSessionTests: XCTestCase {
         var session = NovelReadingSession(
             document: document,
             settings: ReaderAppearanceSettings(readingMode: .paged),
-            layout: ReaderContainerLayout(width: 320, height: 568)
+            layout: ReaderContainerLayout(width: 320, height: 568),
+            pagination: textRangePagination(
+                defaultRanges: [0..<40, 40..<80, 80..<120],
+                repaginatedRanges: [0..<40, 40..<80, 80..<120]
+            )
         )
         let targetViewportPage = try XCTUnwrap(session.snapshot.viewportIndex?.pages.dropFirst().first { !$0.ranges.isEmpty })
         let targetRange = try XCTUnwrap(targetViewportPage.ranges.first)
@@ -791,7 +795,11 @@ final class NovelReadingSessionTests: XCTestCase {
         var session = NovelReadingSession(
             document: document,
             settings: ReaderAppearanceSettings(readingMode: .paged),
-            layout: ReaderContainerLayout(width: 320, height: 568)
+            layout: ReaderContainerLayout(width: 320, height: 568),
+            pagination: textRangePagination(
+                defaultRanges: [0..<40, 40..<80, 80..<120],
+                repaginatedRanges: [0..<40, 40..<80, 80..<120]
+            )
         )
         let targetViewportPage = try XCTUnwrap(session.snapshot.viewportIndex?.pages.dropFirst().first { !$0.ranges.isEmpty })
         let targetRange = try XCTUnwrap(targetViewportPage.ranges.first)
@@ -901,7 +909,11 @@ final class NovelReadingSessionTests: XCTestCase {
         var session = NovelReadingSession(
             document: current,
             settings: ReaderAppearanceSettings(readingMode: .vertical),
-            layout: ReaderContainerLayout(width: 320, height: 568)
+            layout: ReaderContainerLayout(width: 320, height: 568),
+            pagination: textRangePagination(
+                defaultRanges: [0..<5],
+                repaginatedRanges: [0..<5]
+            )
         )
 
         session.acceptPrefetchedDocument(prefetched)
@@ -919,7 +931,11 @@ final class NovelReadingSessionTests: XCTestCase {
         var session = NovelReadingSession(
             document: current,
             settings: ReaderAppearanceSettings(readingMode: .vertical),
-            layout: ReaderContainerLayout(width: 320, height: 568)
+            layout: ReaderContainerLayout(width: 320, height: 568),
+            pagination: textRangePagination(
+                defaultRanges: [0..<5],
+                repaginatedRanges: [0..<5]
+            )
         )
         session.acceptPrefetchedDocument(prefetched)
 
@@ -1100,6 +1116,7 @@ private func textRangePagination(
         let ranges = settings.fontScale > 1 || settings.lineHeightScale > 1.45 || settings.horizontalPadding > 16 || layout.width > 320
             ? repaginatedRanges
             : defaultRanges
+        let chapterTitle = document.segments.first?.chapterTitle ?? "第一章"
         return layoutResult(
             pages: ranges.enumerated().map { index, range in
                 viewportTestPage(
@@ -1107,11 +1124,11 @@ private func textRangePagination(
                     blocks: [],
                     documentView: document.view,
                     chapterOrdinal: 0,
-                    chapterTitle: "第一章"
+                    chapterTitle: chapterTitle
                 )
             },
             chapters: [
-                ReaderChapter(ordinal: 0, title: "第一章", startIndex: 0)
+                ReaderChapter(ordinal: 0, title: chapterTitle, startIndex: 0)
             ],
             viewportIndex: NovelTextViewportIndex(
                 documentView: document.view,
@@ -1121,7 +1138,7 @@ private func textRangePagination(
                         pageIndex: index,
                         documentView: document.view,
                         chapterOrdinal: 0,
-                        chapterTitle: "第一章",
+                        chapterTitle: chapterTitle,
                         ranges: [
                             ReaderRenderedTextRange(
                                 segmentIndex: 0,

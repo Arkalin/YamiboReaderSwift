@@ -702,7 +702,8 @@ final class ReaderContainerModelTests: XCTestCase {
                     threadTitle: "测试线程",
                     source: .forum
                 ),
-                appContext: appContext
+                appContext: appContext,
+                pagination: readerModelPreviewSourcePagination
             )
         }
         await model.prepare(layout: ReaderContainerLayout(width: 320, height: 568))
@@ -955,8 +956,7 @@ final class ReaderContainerModelTests: XCTestCase {
                     source: .favorites,
                     authorID: "author-1"
                 ),
-                appContext: appContext,
-                pagination: readerModelPreviewSourcePagination
+                appContext: appContext
             )
         }
 
@@ -1648,7 +1648,8 @@ final class ReaderContainerModelTests: XCTestCase {
         )
         let model = try await makeModel(
             documents: [document],
-            settings: ReaderAppearanceSettings(readingMode: .paged)
+            settings: ReaderAppearanceSettings(readingMode: .paged),
+            pagination: readerModelMergedTextPagination
         )
 
         let originalOffset = await MainActor.run { () -> Int in
@@ -1697,7 +1698,8 @@ final class ReaderContainerModelTests: XCTestCase {
         )
         let model = try await makeModel(
             documents: [document],
-            settings: ReaderAppearanceSettings(readingMode: .paged)
+            settings: ReaderAppearanceSettings(readingMode: .paged),
+            pagination: readerModelMergedTextPagination
         )
 
         let target = try await MainActor.run {
@@ -2551,6 +2553,64 @@ private func readerModelPreviewSourcePagination(
                         : [ReaderRenderedTextRange(segmentIndex: index, startOffset: 0, endOffset: text.count)]
                 )
             },
+            chapters: [
+                NovelTextViewportIndexChapter(
+                    ordinal: 0,
+                    title: document.segments.first?.chapterTitle ?? "Chapter",
+                    startPageIndex: 0
+                )
+            ]
+        )
+    )
+}
+
+private func readerModelMergedTextPagination(
+    document: ReaderPageDocument,
+    settings: ReaderAppearanceSettings,
+    layout: ReaderContainerLayout
+) -> NovelTextLayoutResult {
+    let ranges = document.segments.enumerated().compactMap { index, segment -> ReaderRenderedTextRange? in
+        guard case let .text(text, _) = segment else { return nil }
+        return ReaderRenderedTextRange(segmentIndex: index, startOffset: 0, endOffset: text.count)
+    }
+    return layoutResult(
+        pages: [
+            viewportTestPage(
+                index: 0,
+                blocks: [
+                    .text(
+                        document.segments.compactMap { segment in
+                            if case let .text(text, _) = segment { return text }
+                            return nil
+                        }.joined(separator: "\n\n"),
+                        chapterTitle: document.segments.first?.chapterTitle,
+                        ranges: ranges
+                    )
+                ],
+                documentView: document.view,
+                chapterOrdinal: 0,
+                chapterTitle: document.segments.first?.chapterTitle
+            )
+        ],
+        chapters: [
+            ReaderChapter(
+                ordinal: 0,
+                title: document.segments.first?.chapterTitle ?? "Chapter",
+                startIndex: 0
+            )
+        ],
+        viewportIndex: NovelTextViewportIndex(
+            documentView: document.view,
+            readingMode: settings.readingMode,
+            pages: [
+                NovelTextViewportIndexPage(
+                    pageIndex: 0,
+                    documentView: document.view,
+                    chapterOrdinal: 0,
+                    chapterTitle: document.segments.first?.chapterTitle,
+                    ranges: ranges
+                )
+            ],
             chapters: [
                 NovelTextViewportIndexChapter(
                     ordinal: 0,

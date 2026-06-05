@@ -827,7 +827,7 @@ private final class StubURLProtocol: URLProtocol {
     )
 }
 
-@Test func novelTextLayoutCoreTextFitUsesTextKit2MeasurementInsteadOfBoundingFallback() throws {
+@Test func novelTextLayoutUsesUIKitTextKit2MeasurementAndRejectsAppKitShim() throws {
     let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
     let layoutEngineSource = try String(
         contentsOf: repositoryRoot
@@ -839,16 +839,12 @@ private final class StubURLProtocol: URLProtocol {
             .appendingPathComponent("Sources/YamiboReaderCore/Support/NovelTextLayout.swift"),
         encoding: .utf8
     )
-    let appKitAdapterSource = try #require(
-        layoutSource.range(of: "private enum AppKitNovelTextLayoutAdapter").map { String(layoutSource[$0.lowerBound...]) }
-    )
     let uiKitTextFitsBody = try #require(functionBody(named: "textFits", in: layoutEngineSource))
-    let appKitTextFitsBody = try #require(functionBody(named: "textFits", in: appKitAdapterSource))
 
     #expect(uiKitTextFitsBody.contains("measuredTextHeight"))
-    #expect(appKitTextFitsBody.contains("measuredTextHeight"))
     #expect(!uiKitTextFitsBody.contains("boundingRect"))
-    #expect(!appKitTextFitsBody.contains("boundingRect"))
+    #expect(!layoutSource.contains("AppKitNovelTextLayoutAdapter"))
+    #expect(!layoutSource.contains("import AppKit"))
 }
 
 @Test func novelTextLayoutDoesNotExposeStaleMeasurementFallbackSurfaces() throws {
@@ -856,16 +852,27 @@ private final class StubURLProtocol: URLProtocol {
     let sourceFiles = [
         "Sources/YamiboReaderCore/Support/NovelTextLayout.swift",
         "Sources/YamiboReaderCore/Support/NovelReadingSession.swift",
-        "Sources/YamiboReaderCore/Support/ReaderPaginator.swift",
+        "Sources/YamiboReaderCore/Support",
     ]
     let productionSource = try sourceFiles.map { path in
-        try String(contentsOf: repositoryRoot.appendingPathComponent(path), encoding: .utf8)
+        let url = repositoryRoot.appendingPathComponent(path)
+        if url.hasDirectoryPath {
+            return try FileManager.default.contentsOfDirectory(at: url, includingPropertiesForKeys: nil)
+                .filter { $0.pathExtension == "swift" }
+                .map { try String(contentsOf: $0, encoding: .utf8) }
+                .joined(separator: "\n")
+        }
+        return try String(contentsOf: url, encoding: .utf8)
     }.joined(separator: "\n")
 
     #expect(!productionSource.contains("renderedPagesOrEmpty"))
     #expect(!productionSource.contains("emptyPagination"))
     #expect(!productionSource.contains("estimatedTextHeight"))
     #expect(!productionSource.contains("text.count < 180"))
+    #expect(!productionSource.contains("public enum ReaderPaginator"))
+    #expect(!productionSource.contains("public struct NovelTextDisplayValue"))
+    #expect(!productionSource.contains("AppKitNovelTextLayoutAdapter"))
+    #expect(!productionSource.contains("import AppKit"))
 }
 
 @Test func novelTextRuntimeAndMetricsConsumeReadableFrameAsFinalTextBox() throws {
@@ -1535,9 +1542,9 @@ private final class StubURLProtocol: URLProtocol {
     }
 }
 
-@Test func novelTextLayoutAppKitTextKit2ProducesNonEmptyPagedRanges() throws {
+@Test func novelTextLayoutAppKitPagedLayoutUsesPureValueRangesUntilRuntimeAdapterExists() throws {
     let text = Array(
-        repeating: "AppKit TextKit 2 should produce concrete page ranges for novel text.",
+        repeating: "AppKit layout should wait for a full runtime adapter instead of a shallow shim.",
         count: 120
     ).joined(separator: " ")
     let document = ReaderPageDocument(
@@ -1556,19 +1563,14 @@ private final class StubURLProtocol: URLProtocol {
     )
     let ranges = pagination.viewportIndex.pages.flatMap(\.ranges)
 
-    #expect(pagination.viewportIndex.pages.count > 1)
-    #expect(pagination.viewportIndex.pages.allSatisfy { $0.externalBlocks.isEmpty })
+    #expect(!ranges.isEmpty)
     #expect(ranges.first?.startOffset == 0)
     #expect(ranges.last?.endOffset == text.count)
-
-    for pair in zip(ranges, ranges.dropFirst()) {
-        #expect(pair.0.endOffset <= pair.1.startOffset)
-    }
 }
 
-@Test func novelTextLayoutAppKitTextKit2ProducesNonEmptyVerticalChunkRanges() throws {
+@Test func novelTextLayoutAppKitVerticalLayoutUsesPureValueRangesUntilRuntimeAdapterExists() throws {
     let text = Array(
-        repeating: "AppKit TextKit 2 should produce concrete vertical chunk ranges for novel text.",
+        repeating: "AppKit vertical layout should wait for a full runtime adapter instead of a shallow shim.",
         count: 160
     ).joined(separator: " ")
     let document = ReaderPageDocument(
@@ -1587,14 +1589,9 @@ private final class StubURLProtocol: URLProtocol {
     )
     let ranges = pagination.viewportIndex.pages.flatMap(\.ranges)
 
-    #expect(pagination.viewportIndex.pages.count > 1)
-    #expect(pagination.viewportIndex.pages.allSatisfy { $0.externalBlocks.isEmpty })
+    #expect(!ranges.isEmpty)
     #expect(ranges.first?.startOffset == 0)
     #expect(ranges.last?.endOffset == text.count)
-
-    for pair in zip(ranges, ranges.dropFirst()) {
-        #expect(pair.0.endOffset <= pair.1.startOffset)
-    }
 }
 #endif
 

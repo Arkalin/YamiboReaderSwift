@@ -581,14 +581,14 @@ public struct NovelTextDisplaySemantics: Hashable, Sendable {
     }
 }
 
-public struct NovelTextDisplayValue: Hashable, Sendable {
-    public var text: String
-    public var chapterTitle: String?
-    public var startsAtParagraphBoundary: Bool
-    public var semantics: NovelTextDisplaySemantics
-    public var ranges: [ReaderRenderedTextRange]
+struct NovelTextDisplayValue: Hashable, Sendable {
+    var text: String
+    var chapterTitle: String?
+    var startsAtParagraphBoundary: Bool
+    var semantics: NovelTextDisplaySemantics
+    var ranges: [ReaderRenderedTextRange]
 
-    public init(
+    init(
         text: String,
         chapterTitle: String?,
         startsAtParagraphBoundary: Bool = true,
