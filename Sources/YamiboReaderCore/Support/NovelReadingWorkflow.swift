@@ -60,9 +60,30 @@ public struct NovelReadingWorkflowState: Equatable, Sendable {
     }
 }
 
+public struct NovelReadingWorkflowRuntimeUpdate: Equatable, Sendable {
+    public var settings: ReaderAppearanceSettings
+    public var layout: ReaderContainerLayout
+    public var usesPadPresentation: Bool
+
+    public init(
+        settings: ReaderAppearanceSettings,
+        layout: ReaderContainerLayout,
+        usesPadPresentation: Bool
+    ) {
+        self.settings = settings
+        self.layout = layout
+        self.usesPadPresentation = usesPadPresentation
+    }
+}
+
+public typealias NovelReadingWorkflowRuntimeUpdatePreparation = @Sendable (
+    _ update: NovelReadingWorkflowRuntimeUpdate
+) async throws -> NovelReadingWorkflowRuntimeUpdate
+
 @MainActor
 public final class NovelReadingWorkflow {
     public private(set) var state: NovelReadingWorkflowState?
+    public private(set) var runtimeUpdateRequestSequence: UInt64 = 0
 
     private let context: ReaderLaunchContext
     private var settings: ReaderAppearanceSettings
@@ -76,6 +97,7 @@ public final class NovelReadingWorkflow {
     private var usesPadPresentation: Bool
     private let pagination: NovelTextPagination
     private let viewportRuntime = NovelTextViewportRuntimeOwner()
+    private var pendingRuntimeUpdateTask: Task<NovelReadingWorkflowState?, Error>?
 
     public var runtimeDiagnostics: NovelTextViewportRuntimeDiagnostics {
         viewportRuntime.diagnostics
@@ -164,6 +186,7 @@ public final class NovelReadingWorkflow {
 
     @discardableResult
     public func updateSettings(_ settings: ReaderAppearanceSettings) throws -> NovelReadingWorkflowState? {
+        supersedePendingRuntimeUpdate()
         guard var candidateSession = session else {
             self.settings = settings
             return nil
@@ -179,6 +202,7 @@ public final class NovelReadingWorkflow {
 
     @discardableResult
     public func updateLayout(_ layout: ReaderContainerLayout) throws -> NovelReadingWorkflowState? {
+        supersedePendingRuntimeUpdate()
         guard var candidateSession = session else {
             self.layout = layout
             return nil
@@ -194,6 +218,7 @@ public final class NovelReadingWorkflow {
 
     @discardableResult
     public func updatePagedPresentationEnvironment(isPad: Bool) throws -> NovelReadingWorkflowState? {
+        supersedePendingRuntimeUpdate()
         guard var candidateSession = session else {
             usesPadPresentation = isPad
             return nil
@@ -205,6 +230,73 @@ public final class NovelReadingWorkflow {
             layout: layout,
             usesPadPresentation: isPad
         )
+    }
+
+    @discardableResult
+    public func requestRuntimeUpdate(
+        _ update: NovelReadingWorkflowRuntimeUpdate,
+        preparation: @escaping NovelReadingWorkflowRuntimeUpdatePreparation = { $0 }
+    ) async throws -> NovelReadingWorkflowState? {
+        runtimeUpdateRequestSequence &+= 1
+        pendingRuntimeUpdateTask?.cancel()
+        pendingRuntimeUpdateTask = nil
+        let requestSequence = runtimeUpdateRequestSequence
+        let task = Task { [weak self] () throws -> NovelReadingWorkflowState? in
+            let preparedUpdate = try await preparation(update)
+            try Task.checkCancellation()
+            guard let self else { return nil }
+            return try self.commitRuntimeUpdateRequest(
+                preparedUpdate,
+                requestSequence: requestSequence
+            )
+        }
+        pendingRuntimeUpdateTask = task
+        do {
+            let result = try await task.value
+            if runtimeUpdateRequestSequence == requestSequence {
+                pendingRuntimeUpdateTask = nil
+            }
+            return result
+        } catch {
+            if runtimeUpdateRequestSequence == requestSequence {
+                pendingRuntimeUpdateTask = nil
+            }
+            throw error
+        }
+    }
+
+    private func commitRuntimeUpdateRequest(
+        _ update: NovelReadingWorkflowRuntimeUpdate,
+        requestSequence: UInt64
+    ) throws -> NovelReadingWorkflowState? {
+        guard requestSequence == runtimeUpdateRequestSequence,
+              !Task.isCancelled,
+              var candidateSession = session,
+              state != nil else {
+            return nil
+        }
+        try candidateSession.applySettings(update.settings)
+        try candidateSession.updateLayout(update.layout)
+        try candidateSession.updatePagedPresentationEnvironment(
+            isPad: update.usesPadPresentation
+        )
+        guard requestSequence == runtimeUpdateRequestSequence,
+              !Task.isCancelled else {
+            return nil
+        }
+        return commitRuntimeTransaction(
+            candidateSession: candidateSession,
+            settings: update.settings,
+            layout: update.layout,
+            usesPadPresentation: update.usesPadPresentation
+        )
+    }
+
+    private func supersedePendingRuntimeUpdate() {
+        guard pendingRuntimeUpdateTask != nil else { return }
+        runtimeUpdateRequestSequence &+= 1
+        pendingRuntimeUpdateTask?.cancel()
+        pendingRuntimeUpdateTask = nil
     }
 
     private func commitRuntimeTransaction(
@@ -326,6 +418,7 @@ public final class NovelReadingWorkflow {
     }
 
     public func close() {
+        supersedePendingRuntimeUpdate()
         viewportRuntime.release()
         session = nil
         currentDocument = nil
@@ -400,6 +493,7 @@ public final class NovelReadingWorkflow {
         preferredPage: Int,
         resumePoint: ReaderResumePoint?
     ) async throws -> NovelReadingWorkflowState? {
+        supersedePendingRuntimeUpdate()
         guard let nextDocument = prefetchedDocument,
               var candidateSession = session else {
             return nil
@@ -445,6 +539,7 @@ public final class NovelReadingWorkflow {
         preferredResumePoint: ReaderResumePoint?,
         forceRefresh: Bool
     ) async throws -> NovelReadingWorkflowState {
+        supersedePendingRuntimeUpdate()
         if forceRefresh {
             let context = cacheContext(forView: view)
             try await repository.deleteCachedViews(

@@ -445,6 +445,129 @@ final class NovelReadingWorkflowTests: XCTestCase {
         XCTAssertEqual(workflow.runtimeTransactionDiagnostics.committedTransactionCount, 5)
     }
 
+    func testRuntimeUpdateRequestsAreLatestWinsWhenPreparationCompletesOutOfOrder() async throws {
+        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9188&mobile=2")!
+        let repository = RecordingNovelReadingRepository(documents: [
+            1: makeNovelDocument(threadURL: threadURL, view: 1, maxView: 1, authorID: "author-1")
+        ])
+        let workflow = makeWorkflow(threadURL: threadURL, repository: repository)
+        _ = try await workflow.start(initial: NovelReadingInitialPosition())
+        let initialTransactionCount = workflow.runtimeTransactionDiagnostics.committedTransactionCount
+        let firstUpdate = NovelReadingWorkflowRuntimeUpdate(
+            settings: ReaderAppearanceSettings(fontScale: 1.1, readingMode: .paged),
+            layout: ReaderContainerLayout(width: 390, height: 844, readingMode: .paged),
+            usesPadPresentation: false
+        )
+        let latestUpdate = NovelReadingWorkflowRuntimeUpdate(
+            settings: ReaderAppearanceSettings(
+                fontScale: 1.3,
+                lineHeightScale: 1.7,
+                readingMode: .vertical
+            ),
+            layout: ReaderContainerLayout(width: 844, height: 390, readingMode: .vertical),
+            usesPadPresentation: true
+        )
+        let preparationGate = RuntimeUpdatePreparationGate()
+
+        let firstTask = Task {
+            try? await workflow.requestRuntimeUpdate(firstUpdate) { update in
+                await preparationGate.wait()
+                return update
+            }
+        }
+        await preparationGate.waitUntilSuspended()
+        let latestState = try await workflow.requestRuntimeUpdate(latestUpdate) { update in
+            await Task.yield()
+            return update
+        }
+        await preparationGate.resume()
+        _ = await firstTask.value
+
+        XCTAssertEqual(workflow.runtimeUpdateRequestSequence, 2)
+        XCTAssertEqual(latestState?.snapshot.viewportContext?.identity.appearance, latestUpdate.settings)
+        XCTAssertEqual(latestState?.snapshot.viewportContext?.identity.layout, latestUpdate.layout)
+        XCTAssertEqual(workflow.state, latestState)
+        XCTAssertEqual(
+            workflow.runtimeTransactionDiagnostics.committedTransactionCount,
+            initialTransactionCount + 1
+        )
+    }
+
+    func testLatestRuntimeUpdateFailureDoesNotCommitSupersededOrFailedRequest() async throws {
+        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9189&mobile=2")!
+        let repository = RecordingNovelReadingRepository(documents: [
+            1: makeNovelDocument(threadURL: threadURL, view: 1, maxView: 1, authorID: "author-1")
+        ])
+        let workflow = makeWorkflow(threadURL: threadURL, repository: repository)
+        let initialState = try await workflow.start(initial: NovelReadingInitialPosition())
+        let initialTransactions = workflow.runtimeTransactionDiagnostics
+        let preparationGate = RuntimeUpdatePreparationGate()
+        let firstTask = Task {
+            try? await workflow.requestRuntimeUpdate(
+                NovelReadingWorkflowRuntimeUpdate(
+                    settings: ReaderAppearanceSettings(fontScale: 1.1, readingMode: .paged),
+                    layout: ReaderContainerLayout(width: 390, height: 844),
+                    usesPadPresentation: false
+                )
+            ) { update in
+                await preparationGate.wait()
+                return update
+            }
+        }
+        await preparationGate.waitUntilSuspended()
+
+        do {
+            _ = try await workflow.requestRuntimeUpdate(
+                NovelReadingWorkflowRuntimeUpdate(
+                    settings: ReaderAppearanceSettings(fontScale: 1.4, readingMode: .vertical),
+                    layout: ReaderContainerLayout(width: 844, height: 390, readingMode: .vertical),
+                    usesPadPresentation: true
+                )
+            ) { _ in
+                throw NovelTextLayoutFailure.unableToLayoutText
+            }
+            XCTFail("Expected semantic preparation failure")
+        } catch let failure as NovelTextLayoutFailure {
+            XCTAssertEqual(failure, .unableToLayoutText)
+        }
+        await preparationGate.resume()
+        _ = await firstTask.value
+
+        XCTAssertEqual(workflow.state, initialState)
+        XCTAssertEqual(workflow.runtimeTransactionDiagnostics, initialTransactions)
+    }
+
+    func testWorkflowCloseRejectsLateRuntimeUpdatePreparation() async throws {
+        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9190&mobile=2")!
+        let repository = RecordingNovelReadingRepository(documents: [
+            1: makeNovelDocument(threadURL: threadURL, view: 1, maxView: 1, authorID: "author-1")
+        ])
+        let workflow = makeWorkflow(threadURL: threadURL, repository: repository)
+        _ = try await workflow.start(initial: NovelReadingInitialPosition())
+        let preparationGate = RuntimeUpdatePreparationGate()
+        let updateTask = Task {
+            try? await workflow.requestRuntimeUpdate(
+                NovelReadingWorkflowRuntimeUpdate(
+                    settings: ReaderAppearanceSettings(fontScale: 1.5, readingMode: .vertical),
+                    layout: ReaderContainerLayout(width: 844, height: 390, readingMode: .vertical),
+                    usesPadPresentation: true
+                )
+            ) { update in
+                await preparationGate.wait()
+                return update
+            }
+        }
+        await preparationGate.waitUntilSuspended()
+
+        workflow.close()
+        await preparationGate.resume()
+        _ = await updateTask.value
+
+        XCTAssertNil(workflow.state)
+        XCTAssertEqual(workflow.runtimeDiagnostics.contentStorageCount, 0)
+        XCTAssertEqual(workflow.runtimeDiagnostics.activeLayoutManagerCount, 0)
+    }
+
     func testLoadCurrentForceRefreshDeletesOnlyCurrentVariantAndReloadsIgnoringCache() async throws {
         let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9102&mobile=2")!
         let repository = RecordingNovelReadingRepository(documents: [
@@ -1717,6 +1840,27 @@ private func workflowFunctionBody(named name: String, in source: String) -> Stri
         }
     }
     return nil
+}
+
+private actor RuntimeUpdatePreparationGate {
+    private var continuation: CheckedContinuation<Void, Never>?
+
+    func wait() async {
+        await withCheckedContinuation { continuation in
+            self.continuation = continuation
+        }
+    }
+
+    func waitUntilSuspended() async {
+        while continuation == nil {
+            await Task.yield()
+        }
+    }
+
+    func resume() {
+        continuation?.resume()
+        continuation = nil
+    }
 }
 
 private final class RecordingNovelReadingRepository: NovelReadingPageRepository, @unchecked Sendable {
