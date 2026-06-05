@@ -14,14 +14,20 @@ public enum ReaderHTMLParser {
         }
 
         let context = try ReaderHTMLDOMParser.parse(html: html)
-        let parsed = parseSegments(from: context)
+        let canonicalThreadURL = canonicalThreadURL(from: request.threadURL)
+        let parsed = parseSegments(
+            from: context,
+            threadURL: canonicalThreadURL,
+            view: request.view,
+            contentSource: contentSource
+        )
         let segments = parsed.segments
         guard !segments.isEmpty else {
             throw YamiboError.parsingFailed(context: L10n.string("context.novel_body"))
         }
 
         return ReaderPageDocument(
-            threadURL: canonicalThreadURL(from: request.threadURL),
+            threadURL: canonicalThreadURL,
             view: request.view,
             maxView: (try? ReaderHTMLDOMParser.parseMaxView(in: context, request: request)) ?? max(1, request.view),
             resolvedAuthorID: extractAuthorID(from: html) ?? request.authorID,
@@ -29,7 +35,8 @@ public enum ReaderHTMLParser {
             retainedChapterCount: parsed.retainedChapterCount,
             filteredChapterCandidateCount: parsed.filteredChapterCandidateCount,
             segments: segments,
-            segmentSources: parsed.segmentSources
+            segmentSources: parsed.segmentSources,
+            segmentSemantics: parsed.segmentSemantics
         )
     }
 
@@ -37,7 +44,12 @@ public enum ReaderHTMLParser {
         guard let context = try? ReaderHTMLDOMParser.parse(html: html) else {
             return ReaderParsedContent()
         }
-        return parseSegments(from: context)
+        return parseSegments(
+            from: context,
+            threadURL: URL(string: "yamibo-reader://parsed-content")!,
+            view: 1,
+            contentSource: .allPostsPage
+        )
     }
 
     public static func isFloodControlOrError(_ html: String) -> Bool {
@@ -106,9 +118,26 @@ public enum ReaderHTMLParser {
         return title.isEmpty ? nil : title
     }
 
-    private static func parseSegments(from context: ReaderHTMLDOMParser.Context) -> ReaderParsedContent {
+    private static func parseSegments(
+        from context: ReaderHTMLDOMParser.Context,
+        threadURL: URL,
+        view: Int,
+        contentSource: ReaderContentSource
+    ) -> ReaderParsedContent {
         let messages = (try? ReaderHTMLDOMParser.parseMessages(in: context)) ?? []
+        var sourceOccurrence = 0
+        var textOccurrenceByChapter: [NovelChapterIdentity: Int] = [:]
         return messages.reduce(into: ReaderParsedContent()) { partial, message in
+            let chapterIdentity = chapterIdentity(
+                message: message,
+                threadURL: threadURL,
+                view: view,
+                contentSource: contentSource,
+                sourceOccurrence: sourceOccurrence
+            )
+            if message.ownerPostID == nil, chapterIdentity != nil {
+                sourceOccurrence += 1
+            }
             partial.segments.append(contentsOf: message.segments)
             partial.segmentSources.append(
                 contentsOf: Array(
@@ -116,8 +145,63 @@ public enum ReaderHTMLParser {
                     count: message.segments.count
                 )
             )
+            partial.segmentSemantics.append(
+                contentsOf: message.segments.map { segment in
+                    segmentSemantics(
+                        segment: segment,
+                        chapterIdentity: chapterIdentity,
+                        textOccurrenceByChapter: &textOccurrenceByChapter
+                    )
+                }
+            )
             partial.retainedChapterCount += message.chapterTitle == nil ? 0 : 1
         }
+    }
+
+    private static func chapterIdentity(
+        message: ReaderHTMLDOMParser.ParsedMessage,
+        threadURL: URL,
+        view: Int,
+        contentSource: ReaderContentSource,
+        sourceOccurrence: Int
+    ) -> NovelChapterIdentity? {
+        guard message.chapterTitle != nil else { return nil }
+        if let ownerPostID = message.ownerPostID, !ownerPostID.isEmpty {
+            return NovelChapterIdentity(rawValue: "post:\(ownerPostID)#chapter:0")
+        }
+        return NovelChapterIdentity(
+            rawValue: "document:\(threadURL.absoluteString)#view:\(max(1, view))#source:\(contentSource.rawValue)#chapter:\(sourceOccurrence)"
+        )
+    }
+
+    private static func segmentSemantics(
+        segment: ReaderSegment,
+        chapterIdentity: NovelChapterIdentity?,
+        textOccurrenceByChapter: inout [NovelChapterIdentity: Int]
+    ) -> ReaderSegmentSemantics? {
+        guard let chapterIdentity else { return nil }
+        switch segment {
+        case let .text(text, chapterTitle):
+            let textOccurrence = textOccurrenceByChapter[chapterIdentity] ?? 0
+            textOccurrenceByChapter[chapterIdentity] = textOccurrence + 1
+            return ReaderSegmentSemantics(
+                chapterIdentity: chapterIdentity,
+                textSegmentIdentity: NovelTextSegmentIdentity(rawValue: "\(chapterIdentity.rawValue)#text:\(textOccurrence)"),
+                chapterTitleRange: chapterTitleRange(chapterTitle: chapterTitle, text: text)
+            )
+
+        case .image:
+            return ReaderSegmentSemantics(chapterIdentity: chapterIdentity)
+        }
+    }
+
+    private static func chapterTitleRange(chapterTitle: String?, text: String) -> ReaderCharacterRange? {
+        guard let chapterTitle = ReaderChapterTitleNormalizer.normalize(chapterTitle),
+              !chapterTitle.isEmpty,
+              text.hasPrefix(chapterTitle) else {
+            return nil
+        }
+        return ReaderCharacterRange(location: 0, length: chapterTitle.count)
     }
 
     private static func canonicalThreadURL(from url: URL) -> URL {
@@ -158,17 +242,20 @@ public enum ReaderHTMLParser {
 public struct ReaderParsedContent: Hashable, Sendable {
     public var segments: [ReaderSegment]
     public var segmentSources: [ReaderSegmentSource?]
+    public var segmentSemantics: [ReaderSegmentSemantics?]
     public var retainedChapterCount: Int
     public var filteredChapterCandidateCount: Int
 
     public init(
         segments: [ReaderSegment] = [],
         segmentSources: [ReaderSegmentSource?] = [],
+        segmentSemantics: [ReaderSegmentSemantics?] = [],
         retainedChapterCount: Int = 0,
         filteredChapterCandidateCount: Int = 0
     ) {
         self.segments = segments
         self.segmentSources = segmentSources
+        self.segmentSemantics = segmentSemantics
         self.retainedChapterCount = retainedChapterCount
         self.filteredChapterCandidateCount = filteredChapterCandidateCount
     }
