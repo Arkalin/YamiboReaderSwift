@@ -204,6 +204,42 @@ final class NovelReadingWorkflowTests: XCTestCase {
         XCTAssertFalse(rightReference.isStale)
     }
 
+    func testWorkflowPublishesPresentationWithGenerationScopedSurfaceIdentities() async throws {
+        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9192&mobile=2")!
+        let repository = RecordingNovelReadingRepository(documents: [
+            1: makeNovelDocument(threadURL: threadURL, view: 1, maxView: 1, authorID: "author-1")
+        ])
+        let workflow = makeWorkflow(threadURL: threadURL, repository: repository)
+
+        let initialState = try await workflow.start(initial: NovelReadingInitialPosition())
+        let initialPresentation = try XCTUnwrap(initialState.presentation)
+        let initialSurface = try XCTUnwrap(initialPresentation.selectedSurfaceIdentity)
+        let initialReference = try XCTUnwrap(workflow.displayReference(for: initialSurface))
+
+        XCTAssertEqual(initialPresentation.generation, initialSurface.generation)
+        XCTAssertEqual(initialPresentation.revision, 0)
+        XCTAssertEqual(initialPresentation.surfaces.map(\.identity.ordinal), initialState.snapshot.pages.map(\.pageIndex))
+        XCTAssertEqual(initialReference.generation, initialPresentation.generation)
+        XCTAssertFalse(initialReference.isStale)
+
+        let navigated = try XCTUnwrap(workflow.jumpRelativePage(1)?.state)
+        let navigatedPresentation = try XCTUnwrap(navigated.presentation)
+
+        XCTAssertEqual(navigatedPresentation.generation, initialPresentation.generation)
+        XCTAssertEqual(navigatedPresentation.revision, initialPresentation.revision + 1)
+        XCTAssertEqual(workflow.displayReference(for: initialSurface)?.generation, initialPresentation.generation)
+
+        let replacement = try XCTUnwrap(
+            workflow.updateSettings(ReaderAppearanceSettings(fontScale: 1.1, readingMode: .paged))
+        )
+        let replacementPresentation = try XCTUnwrap(replacement.presentation)
+
+        XCTAssertGreaterThan(replacementPresentation.generation, initialPresentation.generation)
+        XCTAssertEqual(replacementPresentation.revision, 0)
+        XCTAssertNotEqual(replacementPresentation.surfaces.first?.identity, initialPresentation.surfaces.first?.identity)
+        XCTAssertNil(workflow.displayReference(for: initialSurface))
+    }
+
     func testPrefetchDoesNotCreateASecondViewportRuntime() async throws {
         let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9181&mobile=2")!
         let repository = RecordingNovelReadingRepository(documents: [

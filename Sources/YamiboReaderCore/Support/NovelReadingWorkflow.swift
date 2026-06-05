@@ -40,6 +40,7 @@ public struct NovelReadingCacheContext: Equatable, Sendable {
 
 public struct NovelReadingWorkflowState: Equatable, Sendable {
     public var snapshot: NovelReadingSnapshot
+    public var presentation: NovelReaderPresentation?
     public var currentAuthorID: String?
     public var cachedViews: Set<Int>
     public var currentDocument: ReaderPageDocument
@@ -47,12 +48,14 @@ public struct NovelReadingWorkflowState: Equatable, Sendable {
 
     public init(
         snapshot: NovelReadingSnapshot,
+        presentation: NovelReaderPresentation? = nil,
         currentAuthorID: String?,
         cachedViews: Set<Int> = [],
         currentDocument: ReaderPageDocument,
         prefetchedDocument: ReaderPageDocument? = nil
     ) {
         self.snapshot = snapshot
+        self.presentation = presentation
         self.currentAuthorID = currentAuthorID
         self.cachedViews = cachedViews
         self.currentDocument = currentDocument
@@ -336,6 +339,12 @@ public final class NovelReadingWorkflow {
         guard let transaction else { return nil }
         let nextState = NovelReadingWorkflowState(
             snapshot: snapshot,
+            presentation: makePresentation(
+                snapshot: snapshot,
+                generation: transaction.generation,
+                revision: 0,
+                settings: settings
+            ),
             currentAuthorID: snapshot.currentAuthorID ?? currentAuthorID,
             cachedViews: state?.cachedViews ?? [],
             currentDocument: currentDocument,
@@ -425,6 +434,10 @@ public final class NovelReadingWorkflow {
 
     public func displayReference(for pageIdentity: Int) -> NovelTextViewportDisplayReference? {
         viewportRuntime.displayReference(for: pageIdentity)
+    }
+
+    public func displayReference(for surfaceIdentity: NovelReaderSurfaceIdentity) -> NovelTextViewportDisplayReference? {
+        viewportRuntime.displayReference(for: surfaceIdentity)
     }
 
     public func updateVisiblePageIdentities(_ pageIdentities: [Int]) {
@@ -533,6 +546,12 @@ public final class NovelReadingWorkflow {
         let nextAuthorID = nextDocument.resolvedAuthorID ?? currentAuthorID ?? context.authorID
         let nextState = NovelReadingWorkflowState(
             snapshot: snapshot,
+            presentation: makePresentation(
+                snapshot: snapshot,
+                generation: transaction.generation,
+                revision: 0,
+                settings: settings
+            ),
             currentAuthorID: snapshot.currentAuthorID ?? nextAuthorID,
             cachedViews: state?.cachedViews ?? [],
             currentDocument: nextDocument,
@@ -634,8 +653,19 @@ public final class NovelReadingWorkflow {
         }
         currentAuthorID = snapshot.currentAuthorID ?? currentAuthorID
         currentDocumentPageCount = snapshot.pages.filter { $0.documentView == snapshot.currentView }.count
+        let generation = viewportRuntime.currentGeneration
+        let previousPresentation = state?.presentation
+        let revision = previousPresentation?.generation == generation
+            ? (previousPresentation?.revision ?? 0) + 1
+            : 0
         let nextState = NovelReadingWorkflowState(
             snapshot: snapshot,
+            presentation: makePresentation(
+                snapshot: snapshot,
+                generation: generation,
+                revision: revision,
+                settings: settings
+            ),
             currentAuthorID: currentAuthorID,
             cachedViews: cachedViews,
             currentDocument: currentDocument,
@@ -643,6 +673,59 @@ public final class NovelReadingWorkflow {
         )
         state = nextState
         return nextState
+    }
+
+    private func makePresentation(
+        snapshot: NovelReadingSnapshot,
+        generation: UInt64,
+        revision: UInt64,
+        settings: ReaderAppearanceSettings
+    ) -> NovelReaderPresentation {
+        let surfaceSize = snapshot.viewportContext?.identity.layout.readableFrame.size ?? layout.readableFrame.size
+        let surfaces = snapshot.pages.map { page in
+            NovelReaderSurface(
+                identity: NovelReaderSurfaceIdentity(
+                    generation: generation,
+                    ordinal: page.pageIndex
+                ),
+                kind: page.externalBlocks.isEmpty ? .text : .externalBlock,
+                documentView: page.documentView,
+                chapterTitle: page.chapterTitle,
+                presentationSize: surfaceSize,
+                viewportPage: page
+            )
+        }
+        let surfaceIdentityByOrdinal = Dictionary(
+            uniqueKeysWithValues: surfaces.map { ($0.identity.ordinal, $0.identity) }
+        )
+        let spreads = snapshot.pagedSpreads.compactMap { spread -> NovelReaderPresentationSpread? in
+            guard let leftIdentity = surfaceIdentityByOrdinal[spread.leftPageIndex] else {
+                return nil
+            }
+            return NovelReaderPresentationSpread(
+                index: spread.index,
+                leftSurfaceIdentity: leftIdentity,
+                rightSurfaceIdentity: spread.rightPageIndex.flatMap { surfaceIdentityByOrdinal[$0] },
+                chapterTitle: spread.chapterTitle
+            )
+        }
+        return NovelReaderPresentation(
+            generation: generation,
+            revision: revision,
+            surfaces: surfaces,
+            selectedSurfaceIdentity: surfaceIdentityByOrdinal[snapshot.currentPageIndex],
+            spreads: spreads,
+            committedSettings: settings,
+            readingState: NovelReaderReadingState(
+                currentView: snapshot.currentView,
+                maxView: snapshot.maxView,
+                currentChapterTitle: snapshot.currentChapterTitle,
+                currentPageIntraProgress: snapshot.currentPageIntraProgress
+            ),
+            currentContentSource: snapshot.currentContentSource,
+            retainedChapterCount: snapshot.retainedChapterCount,
+            filteredChapterCandidateCount: snapshot.filteredChapterCandidateCount
+        )
     }
 
     private func inferredContentSource(for authorID: String?) -> ReaderContentSource {
