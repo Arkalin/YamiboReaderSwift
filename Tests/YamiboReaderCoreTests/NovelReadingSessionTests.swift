@@ -169,6 +169,196 @@ final class NovelReadingSessionTests: XCTestCase {
         XCTAssertEqual(session.snapshot.pages.first?.chapterCommentTarget?.ownerPostID, "viewport-post")
     }
 
+    func testRestoresExactNovelReadingPositionByTextSegmentIdentityBeforeLegacyHints() throws {
+        let document = makeNovelDocument(
+            view: 1,
+            maxView: 1,
+            segments: [
+                ("同名章", "同名章 第一处正文"),
+                ("同名章", "同名章 第二处正文")
+            ]
+        )
+        let secondSemantics = try XCTUnwrap(document.semantics(forSegmentIndex: 1))
+        let resumePoint = ReaderResumePoint(
+            view: 1,
+            chapterIdentity: secondSemantics.chapterIdentity,
+            textSegmentIdentity: secondSemantics.textSegmentIdentity,
+            displayedTextOffset: 3,
+            chapterOrdinal: 0,
+            chapterTitle: "同名章",
+            segmentIndex: 0,
+            segmentOffset: 0,
+            segmentProgress: 0,
+            readingModeHint: .paged
+        )
+
+        let session = try NovelReadingSession(
+            validating: document,
+            settings: ReaderAppearanceSettings(readingMode: .paged),
+            layout: ReaderContainerLayout(width: 320, height: 568),
+            resumePoint: resumePoint,
+            pagination: { document, _, _ in
+                layoutResult(
+                    pages: [
+                        NovelTextViewportIndexPage(
+                            pageIndex: 0,
+                            documentView: document.view,
+                            chapterOrdinal: 0,
+                            chapterTitle: "同名章",
+                            ranges: [ReaderRenderedTextRange(segmentIndex: 0, startOffset: 0, endOffset: 8)]
+                        ),
+                        NovelTextViewportIndexPage(
+                            pageIndex: 1,
+                            documentView: document.view,
+                            chapterOrdinal: 1,
+                            chapterTitle: "同名章",
+                            ranges: [ReaderRenderedTextRange(segmentIndex: 1, startOffset: 0, endOffset: 8)]
+                        )
+                    ],
+                    chapters: [
+                        ReaderChapter(ordinal: 0, title: "同名章", startIndex: 0),
+                        ReaderChapter(ordinal: 1, title: "同名章", startIndex: 1)
+                    ],
+                    viewportIndex: NovelTextViewportIndex(
+                        documentView: document.view,
+                        readingMode: .paged,
+                        pages: [
+                            NovelTextViewportIndexPage(
+                                pageIndex: 0,
+                                documentView: document.view,
+                                chapterOrdinal: 0,
+                                chapterTitle: "同名章",
+                                ranges: [ReaderRenderedTextRange(segmentIndex: 0, startOffset: 0, endOffset: 8)]
+                            ),
+                            NovelTextViewportIndexPage(
+                                pageIndex: 1,
+                                documentView: document.view,
+                                chapterOrdinal: 1,
+                                chapterTitle: "同名章",
+                                ranges: [ReaderRenderedTextRange(segmentIndex: 1, startOffset: 0, endOffset: 8)]
+                            )
+                        ],
+                        chapters: [
+                            NovelTextViewportIndexChapter(ordinal: 0, title: "同名章", startPageIndex: 0),
+                            NovelTextViewportIndexChapter(ordinal: 1, title: "同名章", startPageIndex: 1)
+                        ]
+                    )
+                )
+            }
+        )
+
+        XCTAssertEqual(session.snapshot.currentPageIndex, 1)
+        let captured = try XCTUnwrap(session.captureNovelReadingPosition())
+        XCTAssertEqual(captured.textSegmentIdentity, secondSemantics.textSegmentIdentity)
+        XCTAssertEqual(captured.chapterIdentity, secondSemantics.chapterIdentity)
+    }
+
+    func testRestoreFallsBackFromRemovedTextSegmentIdentityToChapterIdentity() throws {
+        let originalDocument = makeNovelDocument(
+            view: 1,
+            maxView: 1,
+            segments: [
+                ("第一章", "删除段"),
+                ("第一章", "保留段")
+            ]
+        )
+        let retainedChapterIdentity = try XCTUnwrap(originalDocument.semantics(forSegmentIndex: 1)?.chapterIdentity)
+        let removedTextIdentity = NovelTextSegmentIdentity(rawValue: "\(retainedChapterIdentity.rawValue)#removed")
+        let resumePoint = ReaderResumePoint(
+            view: 1,
+            chapterIdentity: retainedChapterIdentity,
+            textSegmentIdentity: removedTextIdentity,
+            displayedTextOffset: 100,
+            chapterOrdinal: 0,
+            chapterTitle: "第一章",
+            segmentIndex: 99,
+            segmentOffset: 100,
+            segmentProgress: 0.5,
+            readingModeHint: .paged
+        )
+        let refreshedDocument = ReaderPageDocument(
+            threadURL: originalDocument.threadURL,
+            view: 1,
+            maxView: 1,
+            contentSource: originalDocument.contentSource,
+            segments: [.text("保留段", chapterTitle: "第一章")],
+            segmentSemantics: [
+                ReaderSegmentSemantics(
+                    chapterIdentity: retainedChapterIdentity,
+                    textSegmentIdentity: NovelTextSegmentIdentity(rawValue: "\(retainedChapterIdentity.rawValue)#text:retained")
+                )
+            ]
+        )
+
+        let session = try NovelReadingSession(
+            validating: refreshedDocument,
+            settings: ReaderAppearanceSettings(readingMode: .paged),
+            layout: ReaderContainerLayout(width: 320, height: 568),
+            resumePoint: resumePoint,
+            pagination: { document, _, _ in
+                layoutResult(
+                    pages: [
+                        NovelTextViewportIndexPage(
+                            pageIndex: 0,
+                            documentView: document.view,
+                            chapterOrdinal: 0,
+                            chapterTitle: "第一章",
+                            ranges: [ReaderRenderedTextRange(segmentIndex: 0, startOffset: 0, endOffset: 3)]
+                        )
+                    ],
+                    chapters: [
+                        ReaderChapter(ordinal: 0, title: "第一章", startIndex: 0)
+                    ],
+                    viewportIndex: NovelTextViewportIndex(
+                        documentView: document.view,
+                        readingMode: .paged,
+                        pages: [
+                            NovelTextViewportIndexPage(
+                                pageIndex: 0,
+                                documentView: document.view,
+                                chapterOrdinal: 0,
+                                chapterTitle: "第一章",
+                                ranges: [ReaderRenderedTextRange(segmentIndex: 0, startOffset: 0, endOffset: 3)]
+                            )
+                        ],
+                        chapters: [
+                            NovelTextViewportIndexChapter(ordinal: 0, title: "第一章", startPageIndex: 0)
+                        ]
+                    )
+                )
+            }
+        )
+
+        XCTAssertEqual(session.snapshot.currentPageIndex, 0)
+    }
+
+    func testReaderResumePointEncodesSemanticSchemaWithoutRuntimeFields() throws {
+        let resumePoint = ReaderResumePoint(
+            view: 2,
+            chapterIdentity: NovelChapterIdentity(rawValue: "post:10#chapter:0"),
+            textSegmentIdentity: NovelTextSegmentIdentity(rawValue: "post:10#chapter:0#text:1"),
+            displayedTextOffset: 12,
+            chapterOrdinal: 9,
+            chapterTitle: "legacy hint",
+            segmentIndex: 4,
+            segmentOffset: 12,
+            segmentProgress: 0.25,
+            authorID: "77",
+            readingModeHint: .vertical
+        )
+
+        let data = try JSONEncoder().encode(resumePoint)
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+
+        XCTAssertEqual(object["schemaVersion"] as? Int, ReaderResumePoint.schemaVersion)
+        XCTAssertNotNil(object["chapterIdentity"])
+        XCTAssertNotNil(object["textSegmentIdentity"])
+        XCTAssertEqual(object["displayedTextOffset"] as? Int, 12)
+        XCTAssertNil(object["runtimeGeneration"])
+        XCTAssertNil(object["surfaceIdentity"])
+        XCTAssertNil(object["displayedPageNumber"])
+    }
+
     func testCapturesNovelReadingPositionFromNovelTextViewportIndexRanges() throws {
         let document = makeNovelDocument(
             view: 1,

@@ -335,12 +335,17 @@ public struct NovelReadingSession: Sendable {
         let offsetWithinSegment = segmentLength > 0
             ? Int((Double(segmentLength) * position.progressInRange).rounded(.towardZero))
             : 0
+        let displayedTextOffset = range.startOffset + min(offsetWithinSegment, segmentLength)
+        let semantics = currentDocument.semantics(forSegmentIndex: range.segmentIndex)
         return ReaderResumePoint(
             view: page.documentView,
+            chapterIdentity: semantics?.chapterIdentity,
+            textSegmentIdentity: semantics?.textSegmentIdentity,
+            displayedTextOffset: displayedTextOffset,
             chapterOrdinal: chapterOrdinal,
             chapterTitle: page.chapterTitle,
             segmentIndex: range.segmentIndex,
-            segmentOffset: range.startOffset + min(offsetWithinSegment, segmentLength),
+            segmentOffset: displayedTextOffset,
             segmentProgress: snapshot.currentPageIntraProgress,
             authorID: snapshot.currentAuthorID,
             readingModeHint: settings.readingMode
@@ -593,6 +598,25 @@ public struct NovelReadingSession: Sendable {
             return nil
         }
 
+        if let textSegmentIdentity = resumePoint.textSegmentIdentity,
+           let target = resolveTextSegmentIdentity(
+            textSegmentIdentity,
+            displayedTextOffset: resumePoint.displayedTextOffset,
+            resumePoint: resumePoint,
+            pagesInView: pagesInView
+           ) {
+            return target
+        }
+
+        if let chapterIdentity = resumePoint.chapterIdentity,
+           let target = resolveChapterIdentity(
+            chapterIdentity,
+            resumePoint: resumePoint,
+            pagesInView: pagesInView
+           ) {
+            return target
+        }
+
         let candidatePages = pagesInView.filter { contains(segmentIndex: resumePoint.segmentIndex, in: $0) }
         let containingPage = candidatePages.first {
             contains(offset: resumePoint.segmentOffset, segmentIndex: resumePoint.segmentIndex, in: $0)
@@ -625,16 +649,91 @@ public struct NovelReadingSession: Sendable {
             )
         }
 
-        if let titlePage = pagesInView.first(where: { $0.chapterTitle == resumePoint.chapterTitle }) {
+        if let firstTextPage = pagesInView.first(where: { !textRanges(for: $0).isEmpty }) {
             return ReaderResolvedTarget(
-                pageIndex: titlePage.pageIndex,
-                intraPageProgress: min(max(resumePoint.segmentProgress, 0), 1),
-                documentView: titlePage.documentView
+                pageIndex: firstTextPage.pageIndex,
+                intraPageProgress: 0,
+                documentView: firstTextPage.documentView
             )
         }
 
         guard let firstPage = pagesInView.first else { return nil }
         return ReaderResolvedTarget(pageIndex: firstPage.pageIndex, intraPageProgress: 0, documentView: firstPage.documentView)
+    }
+
+    private func resolveTextSegmentIdentity(
+        _ textSegmentIdentity: NovelTextSegmentIdentity,
+        displayedTextOffset: Int,
+        resumePoint: ReaderResumePoint,
+        pagesInView: [NovelTextViewportIndexPage]
+    ) -> ReaderResolvedTarget? {
+        let candidatePages = pagesInView.filter { page in
+            textRanges(for: page).contains { range in
+                currentDocument.semantics(forSegmentIndex: range.segmentIndex)?.textSegmentIdentity == textSegmentIdentity
+            }
+        }
+        let containingPage = candidatePages.first { page in
+            textRanges(for: page).contains { range in
+                currentDocument.semantics(forSegmentIndex: range.segmentIndex)?.textSegmentIdentity == textSegmentIdentity &&
+                    contains(offset: displayedTextOffset, in: range)
+            }
+        }
+        if let containingPage {
+            return ReaderResolvedTarget(
+                pageIndex: containingPage.pageIndex,
+                intraPageProgress: intraPageProgress(
+                    displayedTextOffset: displayedTextOffset,
+                    textSegmentIdentity: textSegmentIdentity,
+                    fallback: resumePoint,
+                    in: containingPage
+                ),
+                documentView: containingPage.documentView
+            )
+        }
+        guard let nearestPage = candidatePages.min(by: {
+            distance(
+                from: displayedTextOffset,
+                textSegmentIdentity: textSegmentIdentity,
+                to: $0
+            ) < distance(
+                from: displayedTextOffset,
+                textSegmentIdentity: textSegmentIdentity,
+                to: $1
+            )
+        }) else {
+            return nil
+        }
+        return ReaderResolvedTarget(
+            pageIndex: nearestPage.pageIndex,
+            intraPageProgress: intraPageProgress(
+                displayedTextOffset: displayedTextOffset,
+                textSegmentIdentity: textSegmentIdentity,
+                fallback: resumePoint,
+                in: nearestPage
+            ),
+            documentView: nearestPage.documentView
+        )
+    }
+
+    private func resolveChapterIdentity(
+        _ chapterIdentity: NovelChapterIdentity,
+        resumePoint: ReaderResumePoint,
+        pagesInView: [NovelTextViewportIndexPage]
+    ) -> ReaderResolvedTarget? {
+        guard let chapterPage = pagesInView.first(where: { page in
+            textRanges(for: page).contains { range in
+                currentDocument.semantics(forSegmentIndex: range.segmentIndex)?.chapterIdentity == chapterIdentity
+            } || page.externalBlocks.contains { block in
+                currentDocument.semantics(forSegmentIndex: block.segmentIndex)?.chapterIdentity == chapterIdentity
+            }
+        }) else {
+            return nil
+        }
+        return ReaderResolvedTarget(
+            pageIndex: chapterPage.pageIndex,
+            intraPageProgress: min(max(resumePoint.segmentProgress, 0), 1),
+            documentView: chapterPage.documentView
+        )
     }
 
     private func resolveViewportSample(_ sample: NovelTextViewportSample) -> ReaderResolvedTarget? {
@@ -702,6 +801,20 @@ public struct NovelReadingSession: Sendable {
         return Int.max
     }
 
+    private func distance(
+        from offset: Int,
+        textSegmentIdentity: NovelTextSegmentIdentity,
+        to page: NovelTextViewportIndexPage
+    ) -> Int {
+        let matchingRanges = textRanges(for: page).filter { range in
+            currentDocument.semantics(forSegmentIndex: range.segmentIndex)?.textSegmentIdentity == textSegmentIdentity
+        }
+        if !matchingRanges.isEmpty {
+            return matchingRanges.map { distance(from: offset, to: $0) }.min() ?? 0
+        }
+        return Int.max
+    }
+
     private func distance(from offset: Int, to range: ReaderRenderedTextRange) -> Int {
         if contains(offset: offset, in: range) {
             return 0
@@ -723,6 +836,31 @@ public struct NovelReadingSession: Sendable {
                 defer { runningLength += length }
                 guard range.segmentIndex == resumePoint.segmentIndex else { continue }
                 let localOffset = min(max(resumePoint.segmentOffset - range.startOffset, 0), length)
+                let progress = Double(runningLength + localOffset) / Double(max(totalLength, 1))
+                return min(max(progress, 0), 1)
+            }
+        }
+        return min(max(resumePoint.segmentProgress, 0), 1)
+    }
+
+    private func intraPageProgress(
+        displayedTextOffset: Int,
+        textSegmentIdentity: NovelTextSegmentIdentity,
+        fallback resumePoint: ReaderResumePoint,
+        in page: NovelTextViewportIndexPage
+    ) -> Double {
+        let ranges = textRanges(for: page)
+        if !ranges.isEmpty {
+            let totalLength = ranges.reduce(0) { $0 + max($1.length, 1) }
+            var runningLength = 0
+
+            for range in ranges {
+                let length = max(range.length, 1)
+                defer { runningLength += length }
+                guard currentDocument.semantics(forSegmentIndex: range.segmentIndex)?.textSegmentIdentity == textSegmentIdentity else {
+                    continue
+                }
+                let localOffset = min(max(displayedTextOffset - range.startOffset, 0), length)
                 let progress = Double(runningLength + localOffset) / Double(max(totalLength, 1))
                 return min(max(progress, 0), 1)
             }
