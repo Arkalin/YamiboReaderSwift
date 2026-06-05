@@ -829,9 +829,8 @@ private final class StubURLProtocol: URLProtocol {
         document: document,
         settings: ReaderAppearanceSettings(readingMode: .paged),
         layout: ReaderContainerLayout(width: 390, height: 844),
-        requiresAuthoritativePagedLayout: false,
-        pagedLayout: { text, _, _, _ in
-            [TextSlice(text: text, startOffset: 0, endOffset: text.count)]
+        viewportPageLayout: { context, _, _ in
+            [NovelTextViewportDocumentPageRange(startOffset: 0, endOffset: context.document.text.count)]
         }
     )
 
@@ -863,9 +862,11 @@ private final class StubURLProtocol: URLProtocol {
     let textCaseBody = try #require(textCase.range(of: "case let .image").map { String(textCase[..<$0.lowerBound]) })
 
     #expect(!textCaseBody.contains("blocks: [\n                            .text"))
-    #expect(!textCaseBody.contains("slice.text,"))
+    #expect(!layoutSource.contains("Text" + "Slice"))
+    #expect(!layoutSource.contains("paged" + "Layout"))
+    #expect(!layoutSource.contains("vertical" + "Layout"))
     #expect(!textCaseBody.contains("NovelTextDisplayValue"))
-    #expect(!textCaseBody.contains("appendTextSliceToPreviousPageIfPossible"))
+    #expect(!textCaseBody.contains("appendText" + "SliceToPreviousPageIfPossible"))
 }
 
 @Test func novelTextLayoutPublishesNovelTextViewportIndexForRenderedPages() async throws {
@@ -889,9 +890,8 @@ private final class StubURLProtocol: URLProtocol {
         document: document,
         settings: ReaderAppearanceSettings(readingMode: .paged),
         layout: ReaderContainerLayout(width: 390, height: 844),
-        requiresAuthoritativePagedLayout: false,
-        pagedLayout: { text, _, _, _ in
-            [TextSlice(text: text, startOffset: 0, endOffset: text.count)]
+        viewportPageLayout: { context, _, _ in
+            [NovelTextViewportDocumentPageRange(startOffset: 0, endOffset: context.document.text.count)]
         }
     )
 
@@ -926,11 +926,10 @@ private final class StubURLProtocol: URLProtocol {
         document: document,
         settings: ReaderAppearanceSettings(readingMode: .vertical),
         layout: ReaderContainerLayout(width: 390, height: 844, readingMode: .vertical),
-        requiresAuthoritativeVerticalLayout: false,
-        verticalLayout: { _, _, _, _ in
+        viewportPageLayout: { _, _, _ in
             [
-                TextSlice(text: "纵向阅读", startOffset: 0, endOffset: 4),
-                TextSlice(text: "第一段", startOffset: 4, endOffset: 7)
+                NovelTextViewportDocumentPageRange(startOffset: 0, endOffset: 4),
+                NovelTextViewportDocumentPageRange(startOffset: 4, endOffset: 7)
             ]
         }
     )
@@ -969,9 +968,8 @@ private final class StubURLProtocol: URLProtocol {
         document: document,
         settings: ReaderAppearanceSettings(readingMode: .paged),
         layout: ReaderContainerLayout(width: 390, height: 844),
-        requiresAuthoritativePagedLayout: false,
-        pagedLayout: { text, _, _, _ in
-            [TextSlice(text: text, startOffset: 0, endOffset: text.count)]
+        viewportPageLayout: { context, _, _ in
+            [NovelTextViewportDocumentPageRange(startOffset: 0, endOffset: context.document.text.count)]
         }
     )
 
@@ -1010,9 +1008,8 @@ private final class StubURLProtocol: URLProtocol {
         document: document,
         settings: ReaderAppearanceSettings(readingMode: .paged),
         layout: ReaderContainerLayout(width: 390, height: 844),
-        requiresAuthoritativePagedLayout: false,
-        pagedLayout: { text, _, _, _ in
-            [TextSlice(text: text, startOffset: 0, endOffset: text.count)]
+        viewportPageLayout: { context, _, _ in
+            [NovelTextViewportDocumentPageRange(startOffset: 0, endOffset: context.document.text.count)]
         }
     )
 
@@ -1047,9 +1044,8 @@ private final class StubURLProtocol: URLProtocol {
         document: document,
         settings: ReaderAppearanceSettings(readingMode: .paged),
         layout: ReaderContainerLayout(width: 390, height: 844),
-        requiresAuthoritativePagedLayout: false,
-        pagedLayout: { text, _, _, _ in
-            [TextSlice(text: text, startOffset: 0, endOffset: text.count)]
+        viewportPageLayout: { context, _, _ in
+            [NovelTextViewportDocumentPageRange(startOffset: 0, endOffset: context.document.text.count)]
         }
     )
 
@@ -1088,11 +1084,10 @@ private final class StubURLProtocol: URLProtocol {
         document: document,
         settings: ReaderAppearanceSettings(readingMode: .paged),
         layout: ReaderContainerLayout(width: 390, height: 844),
-        requiresAuthoritativePagedLayout: false,
-        pagedLayout: { text, _, _, _ in
+        viewportPageLayout: { context, _, _ in
             layoutInputCount.increment()
-            #expect(text == "第一段\n\n第二段")
-            return [TextSlice(text: text, startOffset: 0, endOffset: text.count)]
+            #expect(context.document.text == "第一段\n\n第二段")
+            return [NovelTextViewportDocumentPageRange(startOffset: 0, endOffset: context.document.text.count)]
         }
     )
 
@@ -1222,25 +1217,23 @@ private final class StubURLProtocol: URLProtocol {
     let settings = ReaderAppearanceSettings(readingMode: .paged)
     let layout = ReaderContainerLayout(width: 390, height: 844)
     let layoutPassCount = LockedCounter()
-    let pagedLayout: NovelPagedTextLayout = { text, _, _, _ in
+    let viewportPageLayout: NovelTextViewportPageLayout = { context, _, _ in
         layoutPassCount.increment()
-        return [TextSlice(text: text, startOffset: 0, endOffset: text.count)]
+        return [NovelTextViewportDocumentPageRange(startOffset: 0, endOffset: context.document.text.count)]
     }
 
     let first = try NovelTextLayout.renderedPages(
         document: document,
         settings: settings,
         layout: layout,
-        requiresAuthoritativePagedLayout: false,
-        pagedLayout: pagedLayout,
+        viewportPageLayout: viewportPageLayout,
         usesViewportIndexCache: true
     )
     let second = try NovelTextLayout.renderedPages(
         document: document,
         settings: settings,
         layout: layout,
-        requiresAuthoritativePagedLayout: false,
-        pagedLayout: pagedLayout,
+        viewportPageLayout: viewportPageLayout,
         usesViewportIndexCache: true
     )
 
@@ -1258,33 +1251,30 @@ private final class StubURLProtocol: URLProtocol {
         fetchedAt: Date(timeIntervalSince1970: 1)
     )
     let layoutPassCount = LockedCounter()
-    let pagedLayout: NovelPagedTextLayout = { text, _, _, _ in
+    let viewportPageLayout: NovelTextViewportPageLayout = { context, _, _ in
         layoutPassCount.increment()
-        return [TextSlice(text: text, startOffset: 0, endOffset: text.count)]
+        return [NovelTextViewportDocumentPageRange(startOffset: 0, endOffset: context.document.text.count)]
     }
 
     _ = try NovelTextLayout.renderedPages(
         document: document,
         settings: ReaderAppearanceSettings(readingMode: .paged),
         layout: ReaderContainerLayout(width: 390, height: 844),
-        requiresAuthoritativePagedLayout: false,
-        pagedLayout: pagedLayout,
+        viewportPageLayout: viewportPageLayout,
         usesViewportIndexCache: true
     )
     _ = try NovelTextLayout.renderedPages(
         document: document,
         settings: ReaderAppearanceSettings(fontScale: 1.2, readingMode: .paged),
         layout: ReaderContainerLayout(width: 390, height: 844),
-        requiresAuthoritativePagedLayout: false,
-        pagedLayout: pagedLayout,
+        viewportPageLayout: viewportPageLayout,
         usesViewportIndexCache: true
     )
     _ = try NovelTextLayout.renderedPages(
         document: document,
         settings: ReaderAppearanceSettings(readingMode: .paged),
         layout: ReaderContainerLayout(width: 320, height: 568),
-        requiresAuthoritativePagedLayout: false,
-        pagedLayout: pagedLayout,
+        viewportPageLayout: viewportPageLayout,
         usesViewportIndexCache: true
     )
 
@@ -1307,8 +1297,7 @@ private final class StubURLProtocol: URLProtocol {
             document: document,
             settings: settings,
             layout: layout,
-            requiresAuthoritativePagedLayout: false,
-            pagedLayout: { _, _, _, _ in [] },
+            viewportPageLayout: { _, _, _ in [] },
             usesViewportIndexCache: true
         )
     }
@@ -1317,9 +1306,8 @@ private final class StubURLProtocol: URLProtocol {
         document: document,
         settings: settings,
         layout: layout,
-        requiresAuthoritativePagedLayout: false,
-        pagedLayout: { text, _, _, _ in
-            [TextSlice(text: text, startOffset: 0, endOffset: text.count)]
+        viewportPageLayout: { context, _, _ in
+            [NovelTextViewportDocumentPageRange(startOffset: 0, endOffset: context.document.text.count)]
         },
         usesViewportIndexCache: true
     )
@@ -1328,8 +1316,8 @@ private final class StubURLProtocol: URLProtocol {
 }
 
 #if canImport(AppKit) && !canImport(UIKit)
-@Test func novelTextLayoutEmptyAppKitPagedAdapterThrowsWithoutEstimatedFallback() throws {
-    let text = String(repeating: "Empty AppKit adapter output must not fall back to estimated slicing. ", count: 20)
+@Test func novelTextLayoutEmptyPagedViewportPageRangeThrowsWithoutEstimatedFallback() throws {
+    let text = String(repeating: "Empty viewport page range output must not fall back to estimated slicing. ", count: 20)
     let document = ReaderPageDocument(
         threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=61&mobile=2")),
         view: 1,
@@ -1342,14 +1330,13 @@ private final class StubURLProtocol: URLProtocol {
             document: document,
             settings: ReaderAppearanceSettings(readingMode: .paged),
             layout: ReaderContainerLayout(width: 320, height: 568),
-            requiresAuthoritativePagedLayout: false,
-            pagedLayout: { _, _, _, _ in [] }
+            viewportPageLayout: { _, _, _ in [] }
         )
     }
 }
 
-@Test func novelTextLayoutEmptyAppKitVerticalAdapterThrowsWithoutEstimatedFallback() throws {
-    let text = String(repeating: "Empty AppKit adapter output must not fall back to estimated vertical slicing. ", count: 20)
+@Test func novelTextLayoutEmptyVerticalViewportPageRangeThrowsWithoutEstimatedFallback() throws {
+    let text = String(repeating: "Empty viewport page range output must not fall back to estimated vertical slicing. ", count: 20)
     let document = ReaderPageDocument(
         threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=62&mobile=2")),
         view: 1,
@@ -1362,9 +1349,7 @@ private final class StubURLProtocol: URLProtocol {
             document: document,
             settings: ReaderAppearanceSettings(readingMode: .vertical),
             layout: ReaderContainerLayout(width: 320, height: 568, readingMode: .vertical),
-            requiresAuthoritativePagedLayout: false,
-            requiresAuthoritativeVerticalLayout: false,
-            verticalLayout: { _, _, _, _ in [] }
+            viewportPageLayout: { _, _, _ in [] }
         )
     }
 }
@@ -1454,7 +1439,7 @@ private final class StubURLProtocol: URLProtocol {
     #expect(Set(ranges.map(\.segmentIndex)) == [0])
 }
 
-@Test func novelTextLayoutPagedAuthoritativeFailureDoesNotUseEstimatedFallback() async throws {
+@Test func novelTextLayoutPagedViewportPageRangeFailureDoesNotUseEstimatedFallback() async throws {
     let text = String(repeating: "TextKit 2 failure should not fall back. ", count: 40)
     let document = ReaderPageDocument(
         threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=65&mobile=2")),
@@ -1468,8 +1453,7 @@ private final class StubURLProtocol: URLProtocol {
             document: document,
             settings: ReaderAppearanceSettings(readingMode: .paged),
             layout: ReaderContainerLayout(width: 320, height: 568),
-            requiresAuthoritativePagedLayout: true,
-            pagedLayout: { _, _, _, _ in [] }
+            viewportPageLayout: { _, _, _ in [] }
         )
     }
 }
@@ -1489,13 +1473,12 @@ private final class StubURLProtocol: URLProtocol {
             document: document,
             settings: ReaderAppearanceSettings(readingMode: .paged),
             layout: ReaderContainerLayout(width: 320, height: 568),
-            requiresAuthoritativePagedLayout: true,
-            pagedLayout: { _, _, _, _ in [] }
+            viewportPageLayout: { _, _, _ in [] }
         )
     }
 }
 
-@Test func novelTextLayoutVerticalAuthoritativeFailureDoesNotUseEstimatedFallback() async throws {
+@Test func novelTextLayoutVerticalViewportPageRangeFailureDoesNotUseEstimatedFallback() async throws {
     let text = String(repeating: "Vertical TextKit 2 failure should not fall back. ", count: 40)
     let document = ReaderPageDocument(
         threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=66&mobile=2")),
@@ -1509,9 +1492,7 @@ private final class StubURLProtocol: URLProtocol {
             document: document,
             settings: ReaderAppearanceSettings(readingMode: .vertical),
             layout: ReaderContainerLayout(width: 320, height: 568),
-            requiresAuthoritativePagedLayout: false,
-            requiresAuthoritativeVerticalLayout: true,
-            verticalLayout: { _, _, _, _ in [] }
+            viewportPageLayout: { _, _, _ in [] }
         )
     }
 }
@@ -1531,8 +1512,7 @@ private final class StubURLProtocol: URLProtocol {
             document: document,
             settings: ReaderAppearanceSettings(readingMode: .vertical),
             layout: ReaderContainerLayout(width: 320, height: 568),
-            requiresAuthoritativeVerticalLayout: true,
-            verticalLayout: { _, _, _, _ in [] }
+            viewportPageLayout: { _, _, _ in [] }
         )
     }
 }

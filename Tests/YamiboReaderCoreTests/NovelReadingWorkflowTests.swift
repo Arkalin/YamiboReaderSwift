@@ -79,7 +79,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
         XCTAssertEqual(state.currentAuthorID, "favorite-author")
     }
 
-    func testUpdatingSettingsThrowsWhenAuthoritativeLayoutFailsAndKeepsSnapshot() async throws {
+    func testUpdatingSettingsThrowsWhenViewportLayoutFailsAndKeepsSnapshot() async throws {
         let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9110&mobile=2")!
         let repository = RecordingNovelReadingRepository(documents: [
             1: makeNovelDocument(threadURL: threadURL, view: 1, maxView: 1, authorID: "author-1")
@@ -1513,13 +1513,8 @@ private func currentWebpageViewportPagination(
         document: document,
         settings: settings,
         layout: layout,
-        requiresAuthoritativePagedLayout: false,
-        requiresAuthoritativeVerticalLayout: false,
-        pagedLayout: { text, _, _, _ in
-            [TextSlice(text: text, startOffset: 0, endOffset: text.count)]
-        },
-        verticalLayout: { text, _, _, _ in
-            [TextSlice(text: text, startOffset: 0, endOffset: text.count)]
+        viewportPageLayout: { context, _, _ in
+            [NovelTextViewportDocumentPageRange(startOffset: 0, endOffset: context.document.text.count)]
         },
         usesViewportIndexCache: false
     )

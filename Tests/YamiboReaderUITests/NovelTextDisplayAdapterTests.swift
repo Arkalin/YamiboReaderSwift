@@ -875,8 +875,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
                 document: document,
                 settings: ReaderAppearanceSettings(readingMode: .paged),
                 layout: ReaderContainerLayout(width: 320, height: 568),
-                requiresAuthoritativePagedLayout: true,
-                pagedLayout: { _, _, _, _ in [] }
+                viewportPageLayout: { _, _, _ in [] }
             )
         ) { error in
             XCTAssertEqual(error as? NovelTextLayoutFailure, .unableToLayoutText)
