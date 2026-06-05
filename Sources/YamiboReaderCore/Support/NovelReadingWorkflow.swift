@@ -391,7 +391,6 @@ public final class NovelReadingWorkflow {
         guard let nextDocument = try? await repository.loadPage(nextRequest) else { return nil }
 
         prefetchedDocument = nextDocument
-        currentAuthorID = nextDocument.resolvedAuthorID ?? currentAuthorID ?? context.authorID
         session?.acceptPrefetchedDocument(nextDocument)
         return await updateStateFromSession(refreshCachedViews: false)
     }
@@ -401,23 +400,43 @@ public final class NovelReadingWorkflow {
         preferredPage: Int,
         resumePoint: ReaderResumePoint?
     ) async throws -> NovelReadingWorkflowState? {
-        guard let nextDocument = prefetchedDocument else { return nil }
-        let previousDocument = currentDocument
-        let previousPrefetchedDocument = prefetchedDocument
-        let previousAuthorID = currentAuthorID
+        guard let nextDocument = prefetchedDocument,
+              var candidateSession = session else {
+            return nil
+        }
+        let effectiveResumePoint = resumePoint?.view == nextDocument.view ? resumePoint : nil
+        try candidateSession.promotePrefetchedDocument(
+            preferredPage: preferredPage,
+            resumePoint: effectiveResumePoint
+        )
+        let snapshot = candidateSession.snapshot
+        guard let result = layoutResult(from: snapshot),
+              let transaction = viewportRuntime.prepareTransaction(
+                result: result,
+                settings: settings,
+                layout: layout
+              ) else {
+            return nil
+        }
+        let nextAuthorID = nextDocument.resolvedAuthorID ?? currentAuthorID ?? context.authorID
+        let nextState = NovelReadingWorkflowState(
+            snapshot: snapshot,
+            currentAuthorID: snapshot.currentAuthorID ?? nextAuthorID,
+            cachedViews: state?.cachedViews ?? [],
+            currentDocument: nextDocument,
+            prefetchedDocument: nil
+        )
+
         currentDocument = nextDocument
         prefetchedDocument = nil
-        currentAuthorID = nextDocument.resolvedAuthorID ?? currentAuthorID ?? context.authorID
-        let resumePoint = resumePoint?.view == nextDocument.view ? resumePoint : nil
-        do {
-            try session?.promotePrefetchedDocument(preferredPage: preferredPage, resumePoint: resumePoint)
-            return updateStateFromSession(cachedViews: state?.cachedViews ?? [])
-        } catch {
-            currentDocument = previousDocument
-            prefetchedDocument = previousPrefetchedDocument
-            currentAuthorID = previousAuthorID
-            throw error
-        }
+        currentAuthorID = nextState.currentAuthorID
+        currentDocumentPageCount = snapshot.pages.filter {
+            $0.documentView == snapshot.currentView
+        }.count
+        session = candidateSession
+        viewportRuntime.commit(transaction)
+        state = nextState
+        return nextState
     }
 
     private func load(
