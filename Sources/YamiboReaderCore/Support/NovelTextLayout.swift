@@ -442,11 +442,11 @@ public enum NovelTextLayout {
         let contentWidth = max(layout.readableFrame.width, 1)
         let pageMetrics = Dictionary(
             uniqueKeysWithValues: viewportIndex.pages.map { page in
-                let textHeight = try? displayValue(
+                let textHeight = page.frozenGeometry?.contentHeight ?? (try? displayValue(
                     viewportContext: viewportContext,
                     viewportPage: page,
                     settings: settings
-                ).heightForViewportMetrics(width: contentWidth)
+                ).heightForViewportMetrics(width: contentWidth))
                 let externalBlockHeight = CGFloat(page.externalBlocks.count) *
                     min(max(contentWidth * 0.65, 160), max(layout.readableFrame.height, 160))
                 let blockCount = (textHeight == nil ? 0 : 1) + page.externalBlocks.count

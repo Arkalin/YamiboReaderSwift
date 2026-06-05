@@ -161,6 +161,83 @@ final class NovelReadingWorkflowTests: XCTestCase {
         XCTAssertLessThan(startY, 100)
     }
 
+    func testVerticalPresentationUsesFrozenChunkHeightsAndOnlySpacesExternalBlocks() async throws {
+        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9196&mobile=2")!
+        let imageURL = URL(string: "https://example.com/image.jpg")!
+        let document = ReaderPageDocument(
+            threadURL: threadURL,
+            view: 1,
+            maxView: 1,
+            resolvedAuthorID: "author-1",
+            contentSource: .authorFilteredPage,
+            segments: [
+                .text("第一段第二段第三段", chapterTitle: "第一章"),
+                .image(imageURL, chapterTitle: "插图"),
+                .text("第四段第五段第六段", chapterTitle: "第二章")
+            ]
+        )
+        let repository = RecordingNovelReadingRepository(documents: [1: document])
+        let layout = ReaderContainerLayout(width: 320, height: 500, readingMode: .vertical)
+        let workflow = NovelReadingWorkflow(
+            context: ReaderLaunchContext(
+                threadURL: threadURL,
+                threadTitle: "Thread",
+                source: .forum,
+                initialView: 1,
+                authorID: "author-1"
+            ),
+            settings: ReaderAppearanceSettings(readingMode: .vertical),
+            layout: layout,
+            repository: repository,
+            pagination: { document, settings, layout in
+                try NovelTextLayout.layout(
+                    document: document,
+                    settings: settings,
+                    layout: layout,
+                    viewportPageLayout: { _, _, _ in
+                        [
+                            NovelTextViewportDocumentPageRange(
+                                startOffset: 0,
+                                endOffset: 6,
+                                frozenGeometry: NovelTextViewportFrozenGeometry(
+                                    documentStartOffset: 0,
+                                    documentEndOffset: 6,
+                                    documentClipMinY: 0,
+                                    documentClipMaxY: 180,
+                                    contentHeight: 180
+                                )
+                            ),
+                            NovelTextViewportDocumentPageRange(
+                                startOffset: 6,
+                                endOffset: 12,
+                                frozenGeometry: NovelTextViewportFrozenGeometry(
+                                    documentStartOffset: 6,
+                                    documentEndOffset: 12,
+                                    documentClipMinY: 180,
+                                    documentClipMaxY: 420,
+                                    contentHeight: 240
+                                )
+                            )
+                        ]
+                    },
+                    usesViewportIndexCache: false
+                )
+            }
+        )
+
+        let state = try await workflow.start(initial: NovelReadingInitialPosition())
+        let presentation = try XCTUnwrap(state.presentation)
+        let surfaces = presentation.surfaces
+
+        XCTAssertEqual(surfaces.map(\.kind), [.text, .text, .externalBlock, .text])
+        XCTAssertEqual(surfaces[0].presentationSize.height, 180)
+        XCTAssertEqual(surfaces[1].presentationSize.height, 240)
+        XCTAssertEqual(surfaces[0].presentationSpacingAfter, 0)
+        XCTAssertEqual(surfaces[1].presentationSpacingAfter, 14)
+        XCTAssertEqual(surfaces[2].presentationSpacingAfter, 14)
+        XCTAssertEqual(surfaces[3].presentationSpacingAfter, 0)
+    }
+
     func testTwoPageSpreadReferencesShareRuntimeGeneration() async throws {
         let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9180&mobile=2")!
         let document = ReaderPageDocument(

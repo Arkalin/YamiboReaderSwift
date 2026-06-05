@@ -1022,6 +1022,7 @@ public struct NovelReaderSurface: Hashable, Sendable {
     public var documentView: Int
     public var chapterTitle: String?
     public var presentationSize: CGSize
+    public var presentationSpacingAfter: CGFloat
     public var viewportPage: NovelTextViewportIndexPage
 
     public init(
@@ -1030,6 +1031,7 @@ public struct NovelReaderSurface: Hashable, Sendable {
         documentView: Int,
         chapterTitle: String?,
         presentationSize: CGSize,
+        presentationSpacingAfter: CGFloat = 0,
         viewportPage: NovelTextViewportIndexPage
     ) {
         self.identity = identity
@@ -1037,6 +1039,7 @@ public struct NovelReaderSurface: Hashable, Sendable {
         self.documentView = max(1, documentView)
         self.chapterTitle = chapterTitle
         self.presentationSize = presentationSize
+        self.presentationSpacingAfter = max(0, presentationSpacingAfter)
         self.viewportPage = viewportPage
     }
 }

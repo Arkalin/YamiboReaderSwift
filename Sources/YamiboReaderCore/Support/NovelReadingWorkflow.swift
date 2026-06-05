@@ -444,6 +444,10 @@ public final class NovelReadingWorkflow {
         viewportRuntime.updateVisiblePageIdentities(pageIdentities)
     }
 
+    public func updateVisibleSurfaceIdentities(_ surfaceIdentities: [NovelReaderSurfaceIdentity]) {
+        viewportRuntime.updateVisibleSurfaceIdentities(surfaceIdentities)
+    }
+
     public func handleMemoryPressure() {
         viewportRuntime.handleMemoryPressure()
     }
@@ -681,9 +685,15 @@ public final class NovelReadingWorkflow {
         revision: UInt64,
         settings: ReaderAppearanceSettings
     ) -> NovelReaderPresentation {
-        let surfaceSize = snapshot.viewportContext?.identity.layout.readableFrame.size ?? layout.readableFrame.size
-        let surfaces = snapshot.pages.map { page in
-            NovelReaderSurface(
+        let readableSize = snapshot.viewportContext?.identity.layout.readableFrame.size ?? layout.readableFrame.size
+        let surfaces = snapshot.pages.enumerated().map { index, page in
+            let presentationHeight = snapshot.viewportLayoutMetrics?.pageHeight(for: page.pageIndex) ?? readableSize.height
+            let nextPage = snapshot.pages.indices.contains(index + 1) ? snapshot.pages[index + 1] : nil
+            let spacingAfter: CGFloat = {
+                guard let nextPage else { return 0 }
+                return page.externalBlocks.isEmpty && nextPage.externalBlocks.isEmpty ? 0 : 14
+            }()
+            return NovelReaderSurface(
                 identity: NovelReaderSurfaceIdentity(
                     generation: generation,
                     ordinal: page.pageIndex
@@ -691,7 +701,8 @@ public final class NovelReadingWorkflow {
                 kind: page.externalBlocks.isEmpty ? .text : .externalBlock,
                 documentView: page.documentView,
                 chapterTitle: page.chapterTitle,
-                presentationSize: surfaceSize,
+                presentationSize: CGSize(width: readableSize.width, height: presentationHeight),
+                presentationSpacingAfter: spacingAfter,
                 viewportPage: page
             )
         }
