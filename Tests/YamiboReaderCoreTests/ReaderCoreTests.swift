@@ -994,6 +994,40 @@ private final class StubURLProtocol: URLProtocol {
     #expect(index.pages.flatMap(\.ranges).map(\.segmentIndex) == [0, 1, 3])
 }
 
+@Test func novelTextLayoutResultIsViewportFirstAndDerivesCompatibilityPages() async throws {
+    let document = ReaderPageDocument(
+        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=163&mobile=2")),
+        view: 1,
+        maxView: 1,
+        segments: [
+            .text("第一段", chapterTitle: "第一章"),
+            .text("第二段", chapterTitle: "第一章")
+        ]
+    )
+
+    let layoutResult = try NovelTextLayout.layout(
+        document: document,
+        settings: ReaderAppearanceSettings(readingMode: .paged),
+        layout: ReaderContainerLayout(width: 390, height: 844),
+        requiresAuthoritativePagedLayout: false,
+        pagedLayout: { text, _, _, _ in
+            [TextSlice(text: text, startOffset: 0, endOffset: text.count)]
+        }
+    )
+
+    #expect(layoutResult.viewportContext.document.text == "第一段\n\n第二段")
+    #expect(layoutResult.viewportIndex.pages.map(\.ranges) == [
+        [
+            ReaderRenderedTextRange(segmentIndex: 0, startOffset: 0, endOffset: 3),
+            ReaderRenderedTextRange(segmentIndex: 1, startOffset: 0, endOffset: 3)
+        ]
+    ])
+    #expect(layoutResult.compatibility.pages.map(\.index) == layoutResult.viewportIndex.pages.map(\.pageIndex))
+    #expect(layoutResult.compatibility.pages.first?.blocks.isEmpty == true)
+    #expect(layoutResult.compatibility.viewportIndex == layoutResult.viewportIndex)
+    #expect(layoutResult.compatibility.viewportContext == layoutResult.viewportContext)
+}
+
 @Test func novelTextLayoutMaterializesViewportPageDisplayValueFromMultiRangeIndexPage() async throws {
     let settings = ReaderAppearanceSettings(
         fontScale: 1.25,

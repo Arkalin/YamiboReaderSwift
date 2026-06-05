@@ -727,6 +727,34 @@ public struct NovelTextViewportContext: Hashable, Sendable {
     }
 }
 
+public struct NovelTextLayoutResult: Hashable, Sendable {
+    public var viewportContext: NovelTextViewportContext
+    public var viewportIndex: NovelTextViewportIndex
+    public var compatibilityPages: [ReaderRenderedPage]
+    public var compatibilityChapters: [ReaderChapter]
+
+    public var compatibility: ReaderPaginationResult {
+        ReaderPaginationResult(
+            pages: compatibilityPages,
+            chapters: compatibilityChapters,
+            viewportIndex: viewportIndex,
+            viewportContext: viewportContext
+        )
+    }
+
+    public init(
+        viewportContext: NovelTextViewportContext,
+        viewportIndex: NovelTextViewportIndex,
+        compatibilityPages: [ReaderRenderedPage],
+        compatibilityChapters: [ReaderChapter]
+    ) {
+        self.viewportContext = viewportContext
+        self.viewportIndex = viewportIndex
+        self.compatibilityPages = compatibilityPages
+        self.compatibilityChapters = compatibilityChapters
+    }
+}
+
 public struct ReaderPaginationResult: Hashable, Sendable {
     public var pages: [ReaderRenderedPage]
     public var chapters: [ReaderChapter]
