@@ -682,7 +682,7 @@ final class ReaderContainerModelTests: XCTestCase {
             ],
             pagination: { document, settings, layout in
                 guard document.view == 1 else { throw failure }
-                return try NovelTextLayout.renderedPages(
+                return try NovelTextLayout.layout(
                     document: document,
                     settings: settings,
                     layout: layout
@@ -2117,7 +2117,7 @@ private func makeModel(
     launchContext: ReaderLaunchContext? = nil,
     session: URLSession = .shared,
     cacheStore: ReaderCacheStore? = nil,
-    pagination: @escaping NovelTextPagination = NovelTextLayout.renderedPages
+    pagination: @escaping NovelTextPagination = NovelTextLayout.layout
 ) async throws -> ReaderContainerModel {
     let keyPrefix = UUID().uuidString
     let sessionStore = SessionStore(key: "\(keyPrefix).session")
@@ -2244,12 +2244,64 @@ private func makeImageDocument(
     )
 }
 
+private func layoutResult(
+    pages: [ReaderRenderedPage],
+    chapters: [ReaderChapter],
+    viewportIndex: NovelTextViewportIndex? = nil,
+    viewportContext: NovelTextViewportContext? = nil
+) -> NovelTextLayoutResult {
+    let index = viewportIndex ?? NovelTextViewportIndex(
+        documentView: pages.first?.documentView ?? 1,
+        readingMode: viewportContext?.identity.appearance.readingMode ?? .paged,
+        pages: pages.map { page in
+            NovelTextViewportIndexPage(
+                pageIndex: page.index,
+                documentView: page.documentView,
+                chapterOrdinal: page.chapterOrdinal,
+                chapterTitle: page.chapterTitle,
+                ranges: []
+            )
+        },
+        chapters: chapters.map {
+            NovelTextViewportIndexChapter(
+                ordinal: $0.ordinal,
+                title: $0.title,
+                startPageIndex: $0.startIndex
+            )
+        }
+    )
+    let context = viewportContext ?? NovelTextViewportContext(
+        identity: NovelTextViewportIdentity(
+            threadURL: URL(string: "https://example.com/thread")!,
+            documentView: index.documentView,
+            maxView: index.documentView,
+            fetchedAt: Date(timeIntervalSince1970: 0),
+            contentSource: .fallbackUnfilteredPage,
+            appearance: ReaderAppearanceSettings(readingMode: index.readingMode),
+            layout: ReaderContainerLayout(width: 320, height: 568, readingMode: index.readingMode)
+        ),
+        document: NovelTextViewportDocument(
+            text: "",
+            textRangesBySegment: [:],
+            insertedSeparatorRanges: []
+        ),
+        externalBlocks: [],
+        diagnostics: NovelTextViewportDiagnostics(indexBuildCount: 1)
+    )
+    return NovelTextLayoutResult(
+        viewportContext: context,
+        viewportIndex: index,
+        compatibilityPages: pages,
+        compatibilityChapters: chapters
+    )
+}
+
 private func readerModelPreviewSourcePagination(
     document: ReaderPageDocument,
     settings: ReaderAppearanceSettings,
     layout: ReaderContainerLayout
-) -> ReaderPaginationResult {
-    ReaderPaginationResult(
+) -> NovelTextLayoutResult {
+    layoutResult(
         pages: document.segments.enumerated().map { index, segment in
             return ReaderRenderedPage(
                 index: index,
