@@ -662,7 +662,7 @@ struct ReaderViewportPageContent: View {
         return "novel-viewport-page-\(contextView)-\(pageIndex)"
     }
 
-    static func viewportBlocks(
+    fileprivate static func viewportBlocks(
         viewportContext: NovelTextViewportContext?,
         viewportPage: NovelTextViewportIndexPage?,
         settings: ReaderAppearanceSettings
@@ -686,7 +686,7 @@ struct ReaderViewportPageContent: View {
         return blocks
     }
 
-    static func visibleSurfaceDiagnostics(
+    fileprivate static func visibleSurfaceDiagnostics(
         viewportContext: NovelTextViewportContext?,
         viewportPage: NovelTextViewportIndexPage?
     ) -> NovelTextViewportVisibleSurfaceDiagnostics {
