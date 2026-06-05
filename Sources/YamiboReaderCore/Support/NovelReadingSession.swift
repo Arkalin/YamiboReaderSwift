@@ -385,21 +385,6 @@ public struct NovelReadingSession: Sendable {
         return range.startOffset + min(offsetWithinSegment, segmentLength)
     }
 
-    private var effectivePaginationLayout: ReaderContainerLayout {
-        guard isTwoPageSpreadActive else { return layout }
-
-        return ReaderContainerLayout(
-            containerSize: CGSize(width: layout.width / 2, height: layout.height),
-            safeAreaInsets: ReaderLayoutInsets(
-                top: layout.safeAreaInsets.top,
-                bottom: layout.safeAreaInsets.bottom
-            ),
-            contentInsets: layout.contentInsets,
-            chromeInsets: layout.chromeInsets,
-            readingMode: layout.readingMode
-        )
-    }
-
     private func chapterTitle(for pageIndex: Int, pages: [NovelTextViewportIndexPage], chapters: [ReaderChapter]) -> String? {
         guard pages.indices.contains(pageIndex) else {
             return chapters.last(where: { $0.startIndex <= pageIndex })?.title
@@ -468,10 +453,13 @@ public struct NovelReadingSession: Sendable {
         preferredPage: Int,
         preferredResumePoint: ReaderResumePoint?
     ) throws {
-        let paginationLayout = effectivePaginationLayout
+        let paginationLayout = layout.novelTextBoxLayout(
+            settings: settings,
+            usesPadPresentation: usesPadPresentation
+        )
         let layoutResult = try pagination(document, settings, paginationLayout)
         let viewportPages = layoutResult.viewportIndex.pages
-        let renderedChapters = Self.readerChapters(from: layoutResult.viewportIndex)
+        let renderedChapters = layoutResult.viewportIndex.readerChapters
         let prefetchedStartIndex: Int? = nil
 
         let pages = viewportPages
@@ -508,17 +496,6 @@ public struct NovelReadingSession: Sendable {
     private mutating func preserveCurrentTextResumePointIfAvailable() {
         guard let resumePoint = currentNovelReadingPosition() else { return }
         preservedTextResumePoint = resumePoint
-    }
-
-    private static func readerChapters(from viewportIndex: NovelTextViewportIndex) -> [ReaderChapter] {
-        viewportIndex.chapters.map { chapter in
-            ReaderChapter(
-                ordinal: chapter.ordinal,
-                title: chapter.title,
-                startIndex: chapter.startPageIndex,
-                chapterCommentTarget: chapter.chapterCommentTarget
-            )
-        }
     }
 
     private mutating func applyPaginationIgnoringFailure(

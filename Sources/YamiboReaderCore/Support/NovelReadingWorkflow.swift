@@ -311,7 +311,7 @@ public final class NovelReadingWorkflow {
             viewportRuntime.prepareTransaction(
                 result: result,
                 settings: settings,
-                layout: layout
+                layout: result.viewportContext.identity.layout
             )
         }
         let nextState = NovelReadingWorkflowState(
@@ -508,7 +508,7 @@ public final class NovelReadingWorkflow {
               let transaction = viewportRuntime.prepareTransaction(
                 result: result,
                 settings: settings,
-                layout: layout
+                layout: result.viewportContext.identity.layout
               ) else {
             return nil
         }
@@ -611,7 +611,7 @@ public final class NovelReadingWorkflow {
                     layoutMetrics: snapshot.viewportLayoutMetrics ?? NovelTextViewportLayoutMetrics()
                 ),
                 settings: settings,
-                layout: layout
+                layout: viewportContext.identity.layout
             )
         }
         currentAuthorID = snapshot.currentAuthorID ?? currentAuthorID

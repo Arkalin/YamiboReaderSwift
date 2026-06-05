@@ -686,16 +686,16 @@ public final class ReaderContainerModel: ObservableObject {
                     authorID: context.authorID
                 )
             )
-            let session = try NovelReadingSession(
-                validating: document,
-                settings: settings,
-                layout: layout,
-                usesPadPresentation: usesPadPresentation,
-                currentAuthorID: document.resolvedAuthorID ?? currentAuthorID ?? self.context.authorID,
-                pagination: pagination
+            let layoutResult = try pagination(
+                document,
+                settings,
+                layout.novelTextBoxLayout(
+                    settings: settings,
+                    usesPadPresentation: usesPadPresentation
+                )
             )
-            chapterDirectoryChapters = session.snapshot.chapters
-            chapterDirectoryPageCount = session.snapshot.pages.count
+            chapterDirectoryChapters = layoutResult.viewportIndex.readerChapters
+            chapterDirectoryPageCount = layoutResult.viewportIndex.pages.count
             isLoadingChapterDirectory = false
         } catch {
             chapterDirectoryError = error.localizedDescription

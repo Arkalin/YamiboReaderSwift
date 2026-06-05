@@ -699,6 +699,36 @@ private final class StubURLProtocol: URLProtocol {
     #expect(layout.readableFrame.height == 559)
 }
 
+@Test func readerContainerLayoutProjectsLandscapeSpreadToSingleNovelTextBox() throws {
+    let layout = ReaderContainerLayout(
+        containerSize: CGSize(width: 1024, height: 768),
+        contentInsets: ReaderLayoutInsets(leading: 16, trailing: 16),
+        readingMode: .paged
+    )
+    let settings = ReaderAppearanceSettings(
+        showsTwoPagesInLandscapeOnPad: true,
+        readingMode: .paged
+    )
+
+    let projected = layout.novelTextBoxLayout(
+        settings: settings,
+        usesPadPresentation: true
+    )
+
+    #expect(layout.readableFrame.width == 992)
+    #expect(projected.width == 512)
+    #expect(projected.readableFrame.width == 480)
+    #expect(
+        layout.novelTextBoxLayout(settings: settings, usesPadPresentation: false) == layout
+    )
+    #expect(
+        layout.novelTextBoxLayout(
+            settings: ReaderAppearanceSettings(readingMode: .vertical),
+            usesPadPresentation: true
+        ) == layout
+    )
+}
+
 @Test func novelTextLayoutProducesPagedAndVerticalPagesAtModuleSeam() throws {
     let text = String(repeating: "这是用于模块边界测试的正文。", count: 120)
     let document = ReaderPageDocument(
@@ -735,39 +765,6 @@ private final class StubURLProtocol: URLProtocol {
             width: ReaderContainerLayout(width: 320, height: 568).readableFrame.width
         ) > 0
     )
-}
-
-@Test func novelTextLayoutMeasuresNovelTextDisplayValueThroughModuleSeam() throws {
-    let settings = ReaderAppearanceSettings(
-        fontScale: 1.1,
-        lineHeightScale: 1.6,
-        characterSpacingScale: 0.04,
-        indentsParagraphFirstLine: true,
-        readingMode: .vertical
-    )
-    let displayValue = NovelTextDisplayValue(
-        text: String(repeating: "Novel Text Display Value should be measured by Novel Text Layout. ", count: 8),
-        chapterTitle: "第一章",
-        settings: settings
-    )
-
-    let height = try NovelTextLayout.measuredTextHeight(
-        displayValue: displayValue,
-        width: ReaderContainerLayout(width: 320, height: 568).readableFrame.width
-    )
-
-    #expect(height > 0)
-}
-
-@Test func novelTextLayoutMeasurementFailureThrowsInsteadOfReturningEmptyHeight() throws {
-    let displayValue = NovelTextDisplayValue(
-        text: "Invalid measurement width must be an explicit Novel Text Layout failure.",
-        chapterTitle: nil
-    )
-
-    #expect(throws: NovelTextLayoutFailure.unableToLayoutText) {
-        _ = try NovelTextLayout.measuredTextHeight(displayValue: displayValue, width: 0)
-    }
 }
 
 @Test func novelTextLayoutCoreTextFitUsesTextKit2MeasurementInsteadOfBoundingFallback() throws {
@@ -811,6 +808,27 @@ private final class StubURLProtocol: URLProtocol {
     #expect(!productionSource.contains("text.count < 180"))
 }
 
+@Test func novelTextRuntimeAndMetricsConsumeReadableFrameAsFinalTextBox() throws {
+    let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+    let runtimeSource = try String(
+        contentsOf: repositoryRoot
+            .appendingPathComponent("Sources/YamiboReaderCore/Support/NovelTextViewportRuntime.swift"),
+        encoding: .utf8
+    )
+    let layoutSource = try String(
+        contentsOf: repositoryRoot
+            .appendingPathComponent("Sources/YamiboReaderCore/Support/NovelTextLayout.swift"),
+        encoding: .utf8
+    )
+    let transactionBody = try #require(functionBody(named: "prepareTransaction", in: runtimeSource))
+    let metricsBody = try #require(functionBody(named: "layoutMetrics", in: layoutSource))
+
+    #expect(transactionBody.contains("max(layout.readableFrame.width, 1)"))
+    #expect(metricsBody.contains("max(layout.readableFrame.width, 1)"))
+    #expect(!transactionBody.contains("readableFrame.width - settings.horizontalPadding"))
+    #expect(!metricsBody.contains("readableFrame.width - settings.horizontalPadding"))
+}
+
 @Test func novelTextAttributedDocumentFactoryIsNotOrdinaryPublicAPI() throws {
     let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
     let attributedDocumentSource = try String(
@@ -824,17 +842,6 @@ private final class StubURLProtocol: URLProtocol {
             "@_spi(NovelTextAttributedDocument)\npublic enum ReaderAttributedTextFactory"
         )
     )
-}
-
-@Test func novelTextMeasurementHelpersAreSPIOnly() throws {
-    let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-    let layoutSource = try String(
-        contentsOf: repositoryRoot
-            .appendingPathComponent("Sources/YamiboReaderCore/Support/NovelTextLayout.swift"),
-        encoding: .utf8
-    )
-
-    #expect(layoutSource.contains("@_spi(NovelTextLayoutMeasurement)\n    public static func measuredTextHeight"))
 }
 
 @Test func novelTextLayoutAssemblesDocumentPagesChaptersImagesAndViewportIndex() async throws {

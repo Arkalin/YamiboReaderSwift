@@ -208,7 +208,7 @@ final class NovelTextViewportRuntimeOwner {
             semanticAttributedDocumentCache != nil
         let contentStorage = NSTextContentStorage()
         let layoutManager = NSTextLayoutManager()
-        let contentWidth = max(layout.readableFrame.width - settings.horizontalPadding * 2, 1)
+        let contentWidth = max(layout.readableFrame.width, 1)
         let container = NSTextContainer(
             size: CGSize(width: contentWidth, height: .greatestFiniteMagnitude)
         )
