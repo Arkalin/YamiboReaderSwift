@@ -271,6 +271,10 @@ public final class ReaderContainerModel: ObservableObject {
         readingWorkflow?.displayReference(for: pageIdentity)
     }
 
+    public func updateNovelTextViewportVisiblePageIdentities(_ pageIdentities: [Int]) {
+        readingWorkflow?.updateVisiblePageIdentities(pageIdentities)
+    }
+
     public func chapterTitle(forRenderedPageIndex pageIndex: Int) -> String? {
         guard !pages.isEmpty else { return nil }
         let clampedIndex = min(max(pageIndex, 0), max(pages.count - 1, 0))

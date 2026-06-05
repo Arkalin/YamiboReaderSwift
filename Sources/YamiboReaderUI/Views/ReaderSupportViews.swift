@@ -1071,6 +1071,8 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
     let topInset: CGFloat
     let bottomInset: CGFloat
     let scrollRequest: ReaderVerticalScrollRequest?
+    let displayReferenceProvider: @MainActor (Int) -> NovelTextViewportDisplayReference?
+    let onVisiblePageIdentitiesChange: ([Int]) -> Void
     let onScrollRequestHandled: (ReaderVerticalScrollRequest) -> Void
     let onScrollViewReady: (UIScrollView) -> Void
     let onPageFramesChange: ([Int: ReaderVerticalPageFrameValue]) -> Void
@@ -1126,7 +1128,6 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
     final class Coordinator: NSObject, UICollectionViewDataSource, UICollectionViewDelegateFlowLayout, UIScrollViewDelegate {
         var parent: ReaderVerticalViewportScrollView
         let callbackScheduler = SwiftUIViewUpdateCallbackScheduler()
-        private let textRuntimeStore = NovelTextLayoutLiveSurfaceStore()
         private var contentIdentity: ReaderVerticalViewportContentIdentity?
         private var handledScrollRequest: ReaderVerticalScrollRequest?
         lazy var tapGesture = UITapGestureRecognizer(target: self, action: #selector(handleTap))
@@ -1143,9 +1144,6 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
             let contentIdentityChanged = contentIdentity != nextContentIdentity
             let insetsChanged = updateInsets(in: collectionView)
             guard contentIdentityChanged || insetsChanged else { return }
-            if contentIdentityChanged {
-                textRuntimeStore.removeAllTextSurfaces()
-            }
             contentIdentity = nextContentIdentity
             collectionView.collectionViewLayout.invalidateLayout()
             collectionView.reloadData()
@@ -1185,12 +1183,13 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
             }
             cell.configure(
                 page: displayPage,
+                displayReference: parent.displayReferenceProvider(displayPage.pageIndex),
+                textHeight: parent.viewportLayoutMetrics?.pageMetrics[displayPage.pageIndex]?.textHeight,
                 settings: parent.settings,
                 refererURL: parent.refererURL,
                 sessionState: parent.sessionState,
                 contentWidth: max(verticalItemWidth(in: collectionView) - parent.settings.horizontalPadding * 2, 1),
-                topPadding: displayPage.pageIndex == 0 ? 16 : 0,
-                textRuntimeStore: textRuntimeStore
+                topPadding: displayPage.pageIndex == 0 ? 16 : 0
             )
             return cell
         }
@@ -1292,6 +1291,11 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
             callbackScheduler.publish {
                 onPageFramesChange(frames)
             }
+            let visiblePageIdentities = frames.keys.sorted()
+            let onVisiblePageIdentitiesChange = parent.onVisiblePageIdentitiesChange
+            callbackScheduler.publish {
+                onVisiblePageIdentitiesChange(visiblePageIdentities)
+            }
 
             let referenceLineY = ReaderVerticalPositioning.viewportReferenceLineY(in: scrollView.bounds)
             let textSample = collectionView.indexPathsForVisibleItems
@@ -1350,12 +1354,8 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
             let contentWidth = max(verticalItemWidth(in: collectionView) - parent.settings.horizontalPadding * 2, 1)
             let blockHeights = displayPage.blocks.map { block -> CGFloat in
                 switch block {
-                case let .text(displayValue):
-                    return (try? textRuntimeStore.measuredHeight(
-                        displayValue: displayValue,
-                        width: contentWidth,
-                        baseFontSize: 22
-                    )) ?? max(collectionView.bounds.height, 1)
+                case .text:
+                    return max(collectionView.bounds.height, 1)
                 case .image:
                     return min(max(contentWidth * 0.65, 160), max(collectionView.bounds.height, 160))
                 case .footer:
@@ -1452,7 +1452,7 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
     private struct BlockView {
         let view: UIView
         let height: CGFloat
-        let textSurface: NovelTextLayoutLiveSurface?
+        let displayReference: NovelTextViewportDisplayReference?
     }
 
     private var blockViews: [BlockView] = []
@@ -1462,7 +1462,8 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
     private var currentSessionState = SessionState()
     private var currentContentWidth: CGFloat = 0
     private var currentTopPadding: CGFloat = 0
-    private var currentTextRuntimeStore: NovelTextLayoutLiveSurfaceStore?
+    private var currentDisplayReference: NovelTextViewportDisplayReference?
+    private var currentTextHeight: CGFloat?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -1477,7 +1478,8 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
     override func prepareForReuse() {
         super.prepareForReuse()
         currentPage = nil
-        currentTextRuntimeStore = nil
+        currentDisplayReference = nil
+        currentTextHeight = nil
         removeBlockSubviews()
     }
 
@@ -1490,37 +1492,39 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
         super.traitCollectionDidChange(previousTraitCollection)
         guard previousTraitCollection?.userInterfaceStyle != traitCollection.userInterfaceStyle,
               let currentPage,
-              let currentRefererURL,
-              let currentTextRuntimeStore else {
+              let currentRefererURL else {
             return
         }
         configure(
             page: currentPage,
+            displayReference: currentDisplayReference,
+            textHeight: currentTextHeight,
             settings: currentSettings,
             refererURL: currentRefererURL,
             sessionState: currentSessionState,
             contentWidth: currentContentWidth,
-            topPadding: currentTopPadding,
-            textRuntimeStore: currentTextRuntimeStore
+            topPadding: currentTopPadding
         )
     }
 
     func configure(
         page: ReaderVerticalViewportDisplayPage,
+        displayReference: NovelTextViewportDisplayReference?,
+        textHeight: CGFloat?,
         settings: ReaderAppearanceSettings,
         refererURL: URL,
         sessionState: SessionState,
         contentWidth: CGFloat,
-        topPadding: CGFloat,
-        textRuntimeStore: NovelTextLayoutLiveSurfaceStore
+        topPadding: CGFloat
     ) {
         currentPage = page
+        currentDisplayReference = displayReference
+        currentTextHeight = textHeight
         currentSettings = settings
         currentRefererURL = refererURL
         currentSessionState = sessionState
         currentContentWidth = contentWidth
         currentTopPadding = topPadding
-        currentTextRuntimeStore = textRuntimeStore
 
         removeBlockSubviews()
 
@@ -1532,7 +1536,8 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
                 contentWidth: contentWidth,
                 refererURL: refererURL,
                 sessionState: sessionState,
-                textRuntimeStore: textRuntimeStore
+                displayReference: displayReference,
+                textHeight: textHeight
             )
             blockViews.append(blockView)
             contentView.addSubview(blockView.view)
@@ -1548,18 +1553,14 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
     ) -> NovelTextViewportSample? {
         let contentY = referenceLineY - pageFrame.minY
         let candidates = blockViews.compactMap { block -> (distance: CGFloat, sample: NovelTextViewportSample)? in
-            guard let textSurface = block.textSurface else {
+            guard let displayReference = block.displayReference else {
                 return nil
             }
-            let referencePoint = CGPoint(x: textSurface.view.bounds.midX, y: contentY - textSurface.view.frame.minY)
-            guard let sample = textSurface.viewportSample(
-                referencePoint: referencePoint,
-                documentView: documentView,
-                pageIndex: pageIndex
-            ) else {
+            let referencePoint = CGPoint(x: block.view.bounds.midX, y: contentY - block.view.frame.minY)
+            guard let sample = displayReference.viewportSample(referencePoint: referencePoint) else {
                 return nil
             }
-            return (ReaderVerticalPositioning.pageDistance(from: contentY, to: textSurface.view.frame), sample)
+            return (ReaderVerticalPositioning.pageDistance(from: contentY, to: block.view.frame), sample)
         }
         return candidates.min { $0.distance < $1.distance }?.sample
     }
@@ -1569,11 +1570,14 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
         pageFrame: CGRect
     ) -> CGFloat? {
         for block in blockViews {
-            guard let textSurface = block.textSurface,
-                  let referenceY = textSurface.referenceY(for: anchor) else {
+            guard let displayReference = block.displayReference,
+                  let referenceY = displayReference.referenceY(
+                    segmentIndex: anchor.segmentIndex,
+                    segmentOffset: anchor.segmentOffset
+                  ) else {
                 continue
             }
-            return pageFrame.minY + textSurface.view.frame.minY + referenceY
+            return pageFrame.minY + block.view.frame.minY + referenceY
         }
         return nil
     }
@@ -1590,16 +1594,15 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
         contentWidth: CGFloat,
         refererURL: URL,
         sessionState: SessionState,
-        textRuntimeStore: NovelTextLayoutLiveSurfaceStore
+        displayReference: NovelTextViewportDisplayReference?,
+        textHeight: CGFloat?
     ) -> BlockView {
         switch block {
-        case let .text(displayValue):
+        case .text:
             return makeTextBlockView(
-                displayValue: displayValue,
-                blockIndex: blockIndex,
-                page: page,
                 contentWidth: contentWidth,
-                textRuntimeStore: textRuntimeStore
+                displayReference: displayReference,
+                textHeight: textHeight
             )
         case let .image(url):
             return makeImageBlockView(url: url, contentWidth: contentWidth, refererURL: refererURL, sessionState: sessionState)
@@ -1609,33 +1612,17 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
     }
 
     private func makeTextBlockView(
-        displayValue: NovelTextDisplayValue,
-        blockIndex: Int,
-        page: ReaderVerticalViewportDisplayPage,
         contentWidth: CGFloat,
-        textRuntimeStore: NovelTextLayoutLiveSurfaceStore
+        displayReference: NovelTextViewportDisplayReference?,
+        textHeight: CGFloat?
     ) -> BlockView {
-        let titleWeight = UIFont.Weight.regular
-        let identity = NovelTextLayoutLiveSurfaceIdentity(
-            documentView: page.documentView,
-            pageIndex: page.pageIndex,
-            blockIndex: blockIndex,
-            displayValue: displayValue,
-            width: contentWidth,
-            baseFontSize: 22,
-            titleWeight: titleWeight,
-            textColorSignature: readerTextColorSignature
+        let surface = NovelTextViewportReferenceUIView()
+        surface.displayReference = displayReference
+        return BlockView(
+            view: surface,
+            height: max(textHeight ?? bounds.height, 1),
+            displayReference: displayReference
         )
-        let textSurface = textRuntimeStore.textSurface(
-            identity: identity,
-            displayValue: displayValue,
-            width: contentWidth,
-            baseFontSize: 22,
-            textColor: readerTextUIColor,
-            titleWeight: titleWeight,
-            fallbackHeight: bounds.height
-        )
-        return BlockView(view: textSurface.view, height: textSurface.height, textSurface: textSurface)
     }
 
     private func makeImageBlockView(
@@ -1647,7 +1634,7 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
         let height = min(max(contentWidth * 0.65, 160), max(bounds.height, 160))
         let imageView = ReaderVerticalViewportImageView()
         imageView.configure(url: url, refererURL: refererURL, sessionState: sessionState)
-        return BlockView(view: imageView, height: height, textSurface: nil)
+        return BlockView(view: imageView, height: height, displayReference: nil)
     }
 
     private func makeFooterBlockView(_ text: String) -> BlockView {
@@ -1657,19 +1644,7 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
         label.textColor = .secondaryLabel
         label.font = .preferredFont(forTextStyle: .caption1)
         label.numberOfLines = 0
-        return BlockView(view: label, height: 44, textSurface: nil)
-    }
-
-    private var readerTextUIColor: UIColor {
-        UIColor { traitCollection in
-            traitCollection.userInterfaceStyle == .dark
-                ? UIColor.white.withAlphaComponent(0.92)
-                : UIColor.label
-        }
-    }
-
-    private var readerTextColorSignature: Int {
-        traitCollection.userInterfaceStyle.rawValue
+        return BlockView(view: label, height: 44, displayReference: nil)
     }
 
     private func layoutBlockSubviews() {
@@ -1679,7 +1654,6 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
         for blockView in blockViews {
             let height = max(ceil(blockView.height), 1)
             blockView.view.frame = CGRect(x: x, y: y, width: width, height: height)
-            blockView.textSurface?.prepareForDisplay(size: CGSize(width: width, height: height))
             y += height + 14
         }
     }
