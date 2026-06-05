@@ -628,16 +628,54 @@ public struct NovelTextViewportContext: Hashable, Sendable {
     }
 }
 
+public struct NovelTextViewportPageLayoutMetrics: Hashable, Sendable {
+    public var pageIndex: Int
+    public var textHeight: CGFloat?
+    public var externalBlockHeight: CGFloat
+    public var spacingHeight: CGFloat
+
+    public init(
+        pageIndex: Int,
+        textHeight: CGFloat? = nil,
+        externalBlockHeight: CGFloat = 0,
+        spacingHeight: CGFloat = 0
+    ) {
+        self.pageIndex = max(0, pageIndex)
+        self.textHeight = textHeight
+        self.externalBlockHeight = max(0, externalBlockHeight)
+        self.spacingHeight = max(0, spacingHeight)
+    }
+
+    public var contentHeight: CGFloat {
+        max(0, textHeight ?? 0) + externalBlockHeight + spacingHeight
+    }
+}
+
+public struct NovelTextViewportLayoutMetrics: Hashable, Sendable {
+    public var pageMetrics: [Int: NovelTextViewportPageLayoutMetrics]
+
+    public init(pageMetrics: [Int: NovelTextViewportPageLayoutMetrics] = [:]) {
+        self.pageMetrics = pageMetrics
+    }
+
+    public func pageHeight(for pageIndex: Int) -> CGFloat? {
+        pageMetrics[max(0, pageIndex)]?.contentHeight
+    }
+}
+
 public struct NovelTextLayoutResult: Hashable, Sendable {
     public var viewportContext: NovelTextViewportContext
     public var viewportIndex: NovelTextViewportIndex
+    public var layoutMetrics: NovelTextViewportLayoutMetrics
 
     public init(
         viewportContext: NovelTextViewportContext,
-        viewportIndex: NovelTextViewportIndex
+        viewportIndex: NovelTextViewportIndex,
+        layoutMetrics: NovelTextViewportLayoutMetrics = NovelTextViewportLayoutMetrics()
     ) {
         self.viewportContext = viewportContext
         self.viewportIndex = viewportIndex
+        self.layoutMetrics = layoutMetrics
     }
 }
 

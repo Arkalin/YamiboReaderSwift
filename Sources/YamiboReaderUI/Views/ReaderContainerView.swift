@@ -417,6 +417,7 @@ public struct ReaderContainerView: View {
                 pages: model.pages,
                 viewportContext: model.viewportContext,
                 viewportIndex: model.viewportIndex,
+                viewportLayoutMetrics: model.viewportLayoutMetrics,
                 settings: model.settings,
                 refererURL: model.forumURL,
                 sessionState: model.sessionState,

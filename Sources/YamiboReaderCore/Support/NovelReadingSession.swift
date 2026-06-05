@@ -32,6 +32,7 @@ public struct NovelReadingSnapshot: Equatable, Sendable {
     public var currentAuthorID: String?
     public var viewportContext: NovelTextViewportContext?
     public var viewportIndex: NovelTextViewportIndex?
+    public var viewportLayoutMetrics: NovelTextViewportLayoutMetrics?
 
     public init(
         pages: [NovelTextViewportIndexPage],
@@ -48,7 +49,8 @@ public struct NovelReadingSnapshot: Equatable, Sendable {
         prefetchedStartIndex: Int?,
         currentAuthorID: String?,
         viewportContext: NovelTextViewportContext? = nil,
-        viewportIndex: NovelTextViewportIndex? = nil
+        viewportIndex: NovelTextViewportIndex? = nil,
+        viewportLayoutMetrics: NovelTextViewportLayoutMetrics? = nil
     ) {
         self.pages = pages
         self.chapters = chapters
@@ -65,6 +67,7 @@ public struct NovelReadingSnapshot: Equatable, Sendable {
         self.currentAuthorID = currentAuthorID
         self.viewportContext = viewportContext
         self.viewportIndex = viewportIndex
+        self.viewportLayoutMetrics = viewportLayoutMetrics
     }
 }
 
@@ -161,7 +164,8 @@ public struct NovelReadingSession: Sendable {
             prefetchedStartIndex: nil,
             currentAuthorID: document.resolvedAuthorID ?? currentAuthorID,
             viewportContext: nil,
-            viewportIndex: nil
+            viewportIndex: nil,
+            viewportLayoutMetrics: nil
         )
     }
 
@@ -495,7 +499,8 @@ public struct NovelReadingSession: Sendable {
             prefetchedStartIndex: prefetchedStartIndex,
             currentAuthorID: document.resolvedAuthorID ?? snapshot.currentAuthorID,
             viewportContext: layoutResult.viewportContext,
-            viewportIndex: layoutResult.viewportIndex
+            viewportIndex: layoutResult.viewportIndex,
+            viewportLayoutMetrics: layoutResult.layoutMetrics
         )
         preserveCurrentTextResumePointIfAvailable()
     }

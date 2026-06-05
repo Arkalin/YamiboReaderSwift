@@ -44,6 +44,7 @@ public final class ReaderContainerModel: ObservableObject {
     @Published public private(set) var chapterDirectoryError: String?
     @Published public private(set) var viewportContext: NovelTextViewportContext?
     @Published public private(set) var viewportIndex: NovelTextViewportIndex?
+    @Published public private(set) var viewportLayoutMetrics: NovelTextViewportLayoutMetrics?
 
     public let context: ReaderLaunchContext
 
@@ -910,6 +911,7 @@ public final class ReaderContainerModel: ObservableObject {
         prefetchedStartIndex = snapshot.prefetchedStartIndex
         viewportContext = snapshot.viewportContext
         viewportIndex = snapshot.viewportIndex
+        viewportLayoutMetrics = snapshot.viewportLayoutMetrics
         currentAuthorID = snapshot.currentAuthorID ?? currentAuthorID
         currentDocumentPageCount = snapshot.pages.filter { $0.documentView == snapshot.currentView }.count
     }

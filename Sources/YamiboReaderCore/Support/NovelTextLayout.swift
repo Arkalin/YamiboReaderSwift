@@ -86,7 +86,8 @@ public enum NovelTextLayout {
         settings: ReaderAppearanceSettings,
         layout: ReaderContainerLayout
     ) throws -> NovelTextLayoutResult {
-        try makeViewport(
+        _ = viewport
+        return try makeViewport(
             document: document,
             settings: settings,
             layout: layout,
@@ -366,8 +367,46 @@ public enum NovelTextLayout {
 
         return NovelTextLayoutResult(
             viewportContext: viewportContext,
-            viewportIndex: viewportIndex
+            viewportIndex: viewportIndex,
+            layoutMetrics: layoutMetrics(
+                viewportContext: viewportContext,
+                viewportIndex: viewportIndex,
+                settings: settings,
+                layout: layout
+            )
         )
+    }
+
+    private static func layoutMetrics(
+        viewportContext: NovelTextViewportContext,
+        viewportIndex: NovelTextViewportIndex,
+        settings: ReaderAppearanceSettings,
+        layout: ReaderContainerLayout
+    ) -> NovelTextViewportLayoutMetrics {
+        let contentWidth = max(layout.readableFrame.width - settings.horizontalPadding * 2, 1)
+        let pageMetrics = Dictionary(
+            uniqueKeysWithValues: viewportIndex.pages.map { page in
+                let textHeight = try? displayValue(
+                    viewportContext: viewportContext,
+                    viewportPage: page,
+                    settings: settings
+                ).heightForViewportMetrics(width: contentWidth)
+                let externalBlockHeight = CGFloat(page.externalBlocks.count) *
+                    min(max(contentWidth * 0.65, 160), max(layout.readableFrame.height, 160))
+                let blockCount = (textHeight == nil ? 0 : 1) + page.externalBlocks.count
+                let spacingHeight = CGFloat(max(blockCount - 1, 0)) * 14
+                return (
+                    page.pageIndex,
+                    NovelTextViewportPageLayoutMetrics(
+                        pageIndex: page.pageIndex,
+                        textHeight: textHeight,
+                        externalBlockHeight: externalBlockHeight,
+                        spacingHeight: spacingHeight
+                    )
+                )
+            }
+        )
+        return NovelTextViewportLayoutMetrics(pageMetrics: pageMetrics)
     }
 
     private static func makeViewportContext(
@@ -816,6 +855,12 @@ private extension ReaderAppearanceSettings {
             usesJustifiedText: displaySemantics.usesJustifiedText,
             indentsParagraphFirstLine: displaySemantics.indentsParagraphFirstLine
         )
+    }
+}
+
+private extension NovelTextDisplayValue {
+    func heightForViewportMetrics(width: CGFloat) throws -> CGFloat {
+        try NovelTextLayout.measuredTextHeight(displayValue: self, width: width)
     }
 }
 
