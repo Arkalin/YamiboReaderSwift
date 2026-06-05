@@ -265,17 +265,12 @@ private struct ReaderBooksPreviewMaskedContent: View {
         ZStack(alignment: .topLeading) {
             Color.clear
             VStack(alignment: .leading, spacing: 20) {
-                NativeNovelTextDisplayView(
-                    surface: .settingsPreview,
-                    displayValue: NovelTextDisplayValue(
-                        text: previewText,
-                        chapterTitle: nil,
-                        settings: settings
-                    ),
-                    baseFontSize: 22,
-                    textColor: UIColor(palette.primaryText),
-                    textColorToken: .settingsPreviewPrimaryText
-                )
+                Text(previewText)
+                    .font(previewFont)
+                    .tracking(22 * settings.fontScale * settings.characterSpacingScale)
+                    .lineSpacing(max(22 * settings.fontScale * (settings.lineHeightScale - 1), 0))
+                    .foregroundStyle(palette.primaryText)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding(.top, 4)
             .padding(.horizontal, settings.horizontalPadding)
@@ -296,6 +291,18 @@ private struct ReaderBooksPreviewMaskedContent: View {
             )
         )
         .clipped()
+    }
+
+    private var previewFont: Font {
+        let size = 22 * settings.fontScale
+        switch settings.fontFamily {
+        case .systemSans:
+            return .system(size: size, design: .default)
+        case .systemSerif:
+            return .system(size: size, design: .serif)
+        case .rounded:
+            return .system(size: size, design: .rounded)
+        }
     }
 }
 
