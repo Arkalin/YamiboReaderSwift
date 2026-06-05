@@ -46,7 +46,7 @@ public enum NovelTextLayout {
         settings: ReaderAppearanceSettings,
         layout: ReaderContainerLayout
     ) throws -> NovelTextLayoutResult {
-        try self.layout(
+        try makeViewport(
             document: document,
             settings: settings,
             layout: layout,
@@ -59,7 +59,34 @@ public enum NovelTextLayout {
         settings: ReaderAppearanceSettings,
         layout: ReaderContainerLayout
     ) throws -> NovelTextLayoutResult {
-        try self.layout(
+        try makeViewport(
+            document: document,
+            settings: settings,
+            layout: layout,
+            viewportPageLayout: nil
+        )
+    }
+
+    public static func makeViewport(
+        document: ReaderPageDocument,
+        settings: ReaderAppearanceSettings,
+        layout: ReaderContainerLayout
+    ) throws -> NovelTextLayoutResult {
+        try makeViewport(
+            document: document,
+            settings: settings,
+            layout: layout,
+            viewportPageLayout: nil
+        )
+    }
+
+    public static func updateViewport(
+        _ viewport: NovelTextLayoutResult,
+        document: ReaderPageDocument,
+        settings: ReaderAppearanceSettings,
+        layout: ReaderContainerLayout
+    ) throws -> NovelTextLayoutResult {
+        try makeViewport(
             document: document,
             settings: settings,
             layout: layout,
@@ -74,7 +101,7 @@ public enum NovelTextLayout {
         viewportPageLayout: NovelTextViewportPageLayout? = nil,
         usesViewportIndexCache: Bool? = nil
     ) throws -> NovelTextLayoutResult {
-        try self.layout(
+        try makeViewport(
             document: document,
             settings: settings,
             layout: layout,
@@ -84,6 +111,22 @@ public enum NovelTextLayout {
     }
 
     static func layout(
+        document: ReaderPageDocument,
+        settings: ReaderAppearanceSettings,
+        layout: ReaderContainerLayout,
+        viewportPageLayout: NovelTextViewportPageLayout? = nil,
+        usesViewportIndexCache: Bool? = nil
+    ) throws -> NovelTextLayoutResult {
+        try makeViewport(
+            document: document,
+            settings: settings,
+            layout: layout,
+            viewportPageLayout: viewportPageLayout,
+            usesViewportIndexCache: usesViewportIndexCache
+        )
+    }
+
+    static func makeViewport(
         document: ReaderPageDocument,
         settings: ReaderAppearanceSettings,
         layout: ReaderContainerLayout,

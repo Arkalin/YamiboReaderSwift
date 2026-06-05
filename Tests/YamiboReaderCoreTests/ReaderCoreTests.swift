@@ -1039,6 +1039,37 @@ private final class StubURLProtocol: URLProtocol {
     #expect(layoutResult.viewportIndex.pages.first?.externalBlocks.isEmpty == true)
 }
 
+@Test func novelTextLayoutCreatesAndUpdatesNovelTextViewportThroughHighLevelInterface() throws {
+    let document = ReaderPageDocument(
+        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=62&mobile=2")),
+        view: 1,
+        maxView: 1,
+        segments: [
+            .text(String(repeating: "High level Novel Text Viewport creation should publish exact ranges. ", count: 8), chapterTitle: "第一章")
+        ]
+    )
+    let compactLayout = ReaderContainerLayout(width: 320, height: 568)
+    let expandedLayout = ReaderContainerLayout(width: 414, height: 896)
+
+    let created = try NovelTextLayout.makeViewport(
+        document: document,
+        settings: ReaderAppearanceSettings(readingMode: .paged),
+        layout: compactLayout
+    )
+    let updated = try NovelTextLayout.updateViewport(
+        created,
+        document: document,
+        settings: ReaderAppearanceSettings(readingMode: .vertical),
+        layout: expandedLayout
+    )
+
+    #expect(created.viewportContext.identity.layout == compactLayout)
+    #expect(created.viewportIndex.readingMode == .paged)
+    #expect(updated.viewportContext.identity.layout == expandedLayout)
+    #expect(updated.viewportIndex.readingMode == .vertical)
+    #expect(updated.viewportContext.document == created.viewportContext.document)
+}
+
 @Test func novelTextViewportIndexPagePublishesImageExternalBlockPlacement() async throws {
     let imageURL = try #require(URL(string: "https://example.com/viewport-image.jpg"))
     let document = ReaderPageDocument(
