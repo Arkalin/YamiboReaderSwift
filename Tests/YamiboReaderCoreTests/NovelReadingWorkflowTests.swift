@@ -1311,14 +1311,134 @@ final class NovelReadingWorkflowTests: XCTestCase {
             repository: repository
         )
         let initialState = try await workflow.start(initial: NovelReadingInitialPosition())
+        let initialPageIdentity = try XCTUnwrap(initialState.snapshot.viewportIndex?.pages.first?.pageIndex)
+        let initialReference = try XCTUnwrap(workflow.displayReference(for: initialPageIdentity))
+        let initialTransactionCount = workflow.runtimeTransactionDiagnostics.committedTransactionCount
         _ = await workflow.prefetchIfNeeded(forPageIndex: max(initialState.snapshot.pages.count - 2, 0))
 
         let promotedStateOptional = try await workflow.promotePrefetchedDocument(preferredPage: 0, resumePoint: nil)
         let promotedState = try XCTUnwrap(promotedStateOptional)
+        let promotedReference = try XCTUnwrap(
+            workflow.displayReference(for: promotedState.snapshot.currentPageIndex)
+        )
 
         XCTAssertEqual(promotedState.snapshot.currentView, 2)
         XCTAssertEqual(promotedState.snapshot.currentPageIndex, 0)
         XCTAssertEqual(Set(promotedState.snapshot.pages.map(\.documentView)), [2])
+        XCTAssertEqual(promotedState.snapshot.viewportContext?.identity.documentView, 2)
+        XCTAssertEqual(promotedState.snapshot.viewportIndex?.documentView, 2)
+        XCTAssertTrue(initialReference.isStale)
+        XCTAssertFalse(promotedReference.isStale)
+        XCTAssertEqual(
+            workflow.runtimeTransactionDiagnostics.committedTransactionCount,
+            initialTransactionCount + 1
+        )
+        XCTAssertEqual(workflow.runtimeDiagnostics.contentStorageCount, 1)
+        XCTAssertEqual(workflow.runtimeDiagnostics.activeLayoutManagerCount, 1)
+    }
+
+    func testFailedPrefetchedPromotionKeepsCurrentRuntimeAndReadingPosition() async throws {
+        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9186&mobile=2")!
+        let repository = RecordingNovelReadingRepository(documents: [
+            1: makeNovelDocument(threadURL: threadURL, view: 1, maxView: 2, authorID: "author-1"),
+            2: makeNovelDocument(threadURL: threadURL, view: 2, maxView: 2, authorID: "author-1")
+        ])
+        let workflow = NovelReadingWorkflow(
+            context: ReaderLaunchContext(
+                threadURL: threadURL,
+                threadTitle: "Thread",
+                source: .forum,
+                initialView: 1,
+                authorID: "author-1"
+            ),
+            settings: ReaderAppearanceSettings(readingMode: .paged),
+            layout: ReaderContainerLayout(width: 320, height: 568),
+            repository: repository,
+            pagination: { document, settings, layout in
+                guard document.view == 1 else {
+                    throw NovelTextLayoutFailure.unableToLayoutText
+                }
+                return try NovelTextLayout.layout(
+                    document: document,
+                    settings: settings,
+                    layout: layout
+                )
+            }
+        )
+        let initialState = try await workflow.start(initial: NovelReadingInitialPosition())
+        _ = workflow.jumpToRenderedPage(max(initialState.snapshot.pages.count - 1, 0))
+        let currentState = try XCTUnwrap(workflow.state)
+        let pageIdentity = currentState.snapshot.currentPageIndex
+        let reference = try XCTUnwrap(workflow.displayReference(for: pageIdentity))
+        let position = workflow.currentProgressPosition()
+        let transactions = workflow.runtimeTransactionDiagnostics
+        _ = await workflow.prefetchIfNeeded(
+            forPageIndex: max(currentState.snapshot.pages.count - 2, 0)
+        )
+
+        do {
+            _ = try await workflow.promotePrefetchedDocument(preferredPage: 0, resumePoint: nil)
+            XCTFail("Expected prefetched promotion to fail")
+        } catch let failure as NovelTextLayoutFailure {
+            XCTAssertEqual(failure, .unableToLayoutText)
+        }
+
+        XCTAssertEqual(workflow.state?.snapshot, currentState.snapshot)
+        XCTAssertEqual(workflow.currentProgressPosition(), position)
+        XCTAssertEqual(workflow.runtimeTransactionDiagnostics, transactions)
+        XCTAssertEqual(workflow.displayReference(for: pageIdentity)?.generation, reference.generation)
+        XCTAssertFalse(reference.isStale)
+        XCTAssertEqual(workflow.state?.prefetchedDocument?.view, 2)
+    }
+
+    func testRepeatedPromotionAndCloseDoNotCreateAdditionalRuntimeGenerations() async throws {
+        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9187&mobile=2")!
+        let repository = RecordingNovelReadingRepository(documents: [
+            1: makeNovelDocument(threadURL: threadURL, view: 1, maxView: 2, authorID: "author-1"),
+            2: makeNovelDocument(threadURL: threadURL, view: 2, maxView: 2, authorID: "author-1")
+        ])
+        let workflow = makeWorkflow(threadURL: threadURL, repository: repository)
+        let initialState = try await workflow.start(initial: NovelReadingInitialPosition())
+        _ = await workflow.prefetchIfNeeded(
+            forPageIndex: max(initialState.snapshot.pages.count - 2, 0)
+        )
+        _ = try await workflow.promotePrefetchedDocument(preferredPage: 0, resumePoint: nil)
+        let committedTransactions = workflow.runtimeTransactionDiagnostics
+
+        let repeatedPromotion = try await workflow.promotePrefetchedDocument(
+            preferredPage: 0,
+            resumePoint: nil
+        )
+        XCTAssertNil(repeatedPromotion)
+        XCTAssertEqual(workflow.runtimeTransactionDiagnostics, committedTransactions)
+
+        workflow.close()
+
+        let closedPromotion = try await workflow.promotePrefetchedDocument(
+            preferredPage: 0,
+            resumePoint: nil
+        )
+        XCTAssertNil(closedPromotion)
+        XCTAssertEqual(workflow.runtimeDiagnostics.contentStorageCount, 0)
+        XCTAssertEqual(workflow.runtimeDiagnostics.activeLayoutManagerCount, 0)
+    }
+
+    func testPromotionUsesCandidateSessionAndPreparedRuntimeTransaction() throws {
+        let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let source = try String(
+            contentsOf: repositoryRoot
+                .appendingPathComponent("Sources/YamiboReaderCore/Support/NovelReadingWorkflow.swift"),
+            encoding: .utf8
+        )
+        let promotionBody = try XCTUnwrap(
+            workflowFunctionBody(named: "promotePrefetchedDocument", in: source)
+        )
+
+        XCTAssertTrue(promotionBody.contains("var candidateSession"))
+        XCTAssertTrue(promotionBody.contains("viewportRuntime.prepareTransaction"))
+        XCTAssertTrue(promotionBody.contains("viewportRuntime.commit"))
+        XCTAssertFalse(promotionBody.contains("previousDocument"))
+        XCTAssertFalse(promotionBody.contains("previousPrefetchedDocument"))
     }
 
     func testPrefetchNearEndDoesNotMergeNextViewInPagedMode() async throws {
@@ -1575,6 +1695,28 @@ private func makeWorkflow(
         layout: ReaderContainerLayout(width: 320, height: 568),
         repository: repository
     )
+}
+
+private func workflowFunctionBody(named name: String, in source: String) -> String? {
+    guard let signatureRange = source.range(of: "public func \(name)("),
+          let openingBrace = source[signatureRange.lowerBound...].firstIndex(of: "{") else {
+        return nil
+    }
+    var depth = 0
+    for index in source.indices[openingBrace...] {
+        switch source[index] {
+        case "{":
+            depth += 1
+        case "}":
+            depth -= 1
+            if depth == 0 {
+                return String(source[openingBrace...index])
+            }
+        default:
+            break
+        }
+    }
+    return nil
 }
 
 private final class RecordingNovelReadingRepository: NovelReadingPageRepository, @unchecked Sendable {
