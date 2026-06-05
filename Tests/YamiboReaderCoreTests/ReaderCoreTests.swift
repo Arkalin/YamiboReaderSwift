@@ -1614,6 +1614,41 @@ private final class StubURLProtocol: URLProtocol {
     #expect(Set(ranges.map(\.segmentIndex)) == [0])
 }
 
+@Test func novelTextLayoutFreezesPagedSurfaceGeometryFromTextKitDocument() async throws {
+    let text = String(repeating: "Frozen paged geometry must be committed with the surface. ", count: 160)
+    let layout = ReaderContainerLayout(width: 320, height: 568)
+    let document = ReaderPageDocument(
+        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=189&mobile=2")),
+        view: 1,
+        maxView: 1,
+        segments: [.text(text, chapterTitle: "第一章")]
+    )
+
+    let result = try NovelTextLayout.layout(
+        document: document,
+        settings: ReaderAppearanceSettings(readingMode: .paged),
+        layout: layout
+    )
+    let textPages = result.viewportIndex.pages.filter { !$0.ranges.isEmpty }
+
+    #expect(textPages.count > 1)
+    for page in textPages {
+        let geometry = try #require(page.frozenGeometry)
+        #expect(geometry.documentStartOffset < geometry.documentEndOffset)
+        #expect(geometry.clipHeight > 0)
+        #expect(geometry.documentClipMinY.isFinite)
+        #expect(geometry.documentClipMaxY.isFinite)
+        #expect(geometry.contentHeight >= geometry.clipHeight)
+    }
+
+    for pair in zip(textPages, textPages.dropFirst()) {
+        let previous = try #require(pair.0.frozenGeometry)
+        let next = try #require(pair.1.frozenGeometry)
+        #expect(previous.documentEndOffset <= next.documentStartOffset)
+        #expect(previous.documentClipMaxY <= next.documentClipMinY)
+    }
+}
+
 @Test func novelTextLayoutPagedViewportPageRangeFailureDoesNotUseEstimatedFallback() async throws {
     let text = String(repeating: "TextKit 2 failure should not fall back. ", count: 40)
     let document = ReaderPageDocument(

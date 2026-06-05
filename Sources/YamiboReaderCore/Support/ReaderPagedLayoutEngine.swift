@@ -107,6 +107,8 @@ enum ReaderPagedLayoutEngine {
         textLayoutManager.ensureLayout(for: documentRange)
 
         var pageRanges: [Int: NSRange] = [:]
+        var pageClipRects: [Int: CGRect] = [:]
+        var documentContentHeight: CGFloat = 0
         textLayoutManager.enumerateTextSegments(
             in: documentRange,
             type: .standard,
@@ -128,6 +130,12 @@ enum ReaderPagedLayoutEngine {
             } else {
                 pageRanges[pageIndex] = characterRange
             }
+            if let existingClip = pageClipRects[pageIndex] {
+                pageClipRects[pageIndex] = existingClip.union(rect)
+            } else {
+                pageClipRects[pageIndex] = rect
+            }
+            documentContentHeight = max(documentContentHeight, rect.maxY)
             return true
         }
 
@@ -136,6 +144,8 @@ enum ReaderPagedLayoutEngine {
             return viewportDocumentPageRange(
                 from: attributedText,
                 range: pageRange,
+                clipRect: pageClipRects[pageIndex],
+                contentHeight: documentContentHeight,
                 isFirstPage: pageIndex == 0
             )
         }
@@ -177,6 +187,8 @@ enum ReaderPagedLayoutEngine {
     private static func viewportDocumentPageRange(
         from attributedText: NSAttributedString,
         range: NSRange,
+        clipRect: CGRect?,
+        contentHeight: CGFloat,
         isFirstPage: Bool
     ) -> NovelTextViewportDocumentPageRange? {
         let textLength = attributedText.string.count
@@ -203,7 +215,16 @@ enum ReaderPagedLayoutEngine {
 
         return NovelTextViewportDocumentPageRange(
             startOffset: effectiveStart,
-            endOffset: trimmedEnd
+            endOffset: trimmedEnd,
+            frozenGeometry: clipRect.map { clipRect in
+                NovelTextViewportFrozenGeometry(
+                    documentStartOffset: effectiveStart,
+                    documentEndOffset: trimmedEnd,
+                    documentClipMinY: clipRect.minY,
+                    documentClipMaxY: clipRect.maxY,
+                    contentHeight: contentHeight
+                )
+            }
         )
     }
 
