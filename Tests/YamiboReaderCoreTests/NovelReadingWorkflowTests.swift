@@ -55,6 +55,31 @@ final class NovelReadingWorkflowTests: XCTestCase {
         XCTAssertTrue(source.contains("public struct NovelReadingSession: Sendable"))
     }
 
+    func testWorkflowCommitsRuntimeWithIndexTransactionLayout() throws {
+        let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let source = try String(
+            contentsOf: repositoryRoot
+                .appendingPathComponent("Sources/YamiboReaderCore/Support/NovelReadingWorkflow.swift"),
+            encoding: .utf8
+        )
+
+        let preparedTransactionCommitCount = source
+            .components(separatedBy: "layout: result.viewportContext.identity.layout")
+            .count - 1
+        XCTAssertEqual(preparedTransactionCommitCount, 2)
+        XCTAssertTrue(source.contains("layout: viewportContext.identity.layout"))
+        XCTAssertFalse(
+            source.contains(
+                """
+                viewportRuntime.prepareTransaction(
+                                result: result,
+                                settings: settings,
+                                layout: layout
+                """
+            )
+        )
+    }
+
     func testVerticalDisplayReferenceBecomesStaleAfterRuntimeGenerationChanges() async throws {
         let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9179&mobile=2")!
         let repository = RecordingNovelReadingRepository(documents: [

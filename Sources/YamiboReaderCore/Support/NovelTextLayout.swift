@@ -437,7 +437,7 @@ public enum NovelTextLayout {
         settings: ReaderAppearanceSettings,
         layout: ReaderContainerLayout
     ) -> NovelTextViewportLayoutMetrics {
-        let contentWidth = max(layout.readableFrame.width - settings.horizontalPadding * 2, 1)
+        let contentWidth = max(layout.readableFrame.width, 1)
         let pageMetrics = Dictionary(
             uniqueKeysWithValues: viewportIndex.pages.map { page in
                 let textHeight = try? displayValue(

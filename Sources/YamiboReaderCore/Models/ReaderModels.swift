@@ -505,6 +505,19 @@ public struct NovelTextViewportIndex: Hashable, Sendable {
     }
 }
 
+public extension NovelTextViewportIndex {
+    var readerChapters: [ReaderChapter] {
+        chapters.map { chapter in
+            ReaderChapter(
+                ordinal: chapter.ordinal,
+                title: chapter.title,
+                startIndex: chapter.startPageIndex,
+                chapterCommentTarget: chapter.chapterCommentTarget
+            )
+        }
+    }
+}
+
 public struct NovelTextViewportIdentity: Hashable, Sendable {
     public var threadURL: URL
     public var documentView: Int
@@ -752,6 +765,29 @@ public struct ReaderContainerLayout: Hashable, Sendable {
     }
 
     public static let zero = ReaderContainerLayout(containerSize: .zero)
+
+    public func novelTextBoxLayout(
+        settings: ReaderAppearanceSettings,
+        usesPadPresentation: Bool
+    ) -> ReaderContainerLayout {
+        guard settings.readingMode == .paged,
+              settings.showsTwoPagesInLandscapeOnPad,
+              usesPadPresentation,
+              width > height else {
+            return self
+        }
+
+        return ReaderContainerLayout(
+            containerSize: CGSize(width: width / 2, height: height),
+            safeAreaInsets: ReaderLayoutInsets(
+                top: safeAreaInsets.top,
+                bottom: safeAreaInsets.bottom
+            ),
+            contentInsets: contentInsets,
+            chromeInsets: chromeInsets,
+            readingMode: readingMode
+        )
+    }
 }
 
 public struct ReaderLayoutInsets: Hashable, Sendable {

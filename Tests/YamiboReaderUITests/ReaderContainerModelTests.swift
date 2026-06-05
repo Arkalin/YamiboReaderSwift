@@ -701,6 +701,23 @@ final class ReaderContainerModelTests: XCTestCase {
         }
     }
 
+    func testChapterDirectoryPreviewUsesPureIndexTransaction() throws {
+        let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let modelSource = try String(
+            contentsOf: repositoryRoot
+                .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderContainerModel.swift"),
+            encoding: .utf8
+        )
+        let previewBody = try XCTUnwrap(functionBody(named: "previewChapterDirectoryWebView", in: modelSource))
+
+        XCTAssertTrue(previewBody.contains("let layoutResult = try pagination("))
+        XCTAssertTrue(previewBody.contains("layout.novelTextBoxLayout("))
+        XCTAssertTrue(previewBody.contains("layoutResult.viewportIndex.readerChapters"))
+        XCTAssertTrue(previewBody.contains("layoutResult.viewportIndex.pages.count"))
+        XCTAssertFalse(previewBody.contains("NovelReadingSession("))
+        XCTAssertFalse(previewBody.contains(".snapshot.chapters"))
+    }
+
     func testUpdatingLayoutRepaginatesPagedContentAndKeepsCurrentSegment() async throws {
         let model = try await makeModel(
             documents: [
@@ -2200,6 +2217,30 @@ private func rangeContainsOffset(_ range: ReaderRenderedTextRange, offset: Int) 
         return offset <= range.startOffset
     }
     return offset >= range.startOffset && offset < range.endOffset
+}
+
+private func functionBody(named name: String, in source: String) -> String? {
+    guard let nameRange = source.range(of: "func \(name)") ?? source.range(of: "static func \(name)") else {
+        return nil
+    }
+    guard let bodyStart = source[nameRange.upperBound...].firstIndex(of: "{") else {
+        return nil
+    }
+
+    var depth = 0
+    var index = bodyStart
+    while index < source.endIndex {
+        if source[index] == "{" {
+            depth += 1
+        } else if source[index] == "}" {
+            depth -= 1
+            if depth == 0 {
+                return String(source[bodyStart...index])
+            }
+        }
+        index = source.index(after: index)
+    }
+    return nil
 }
 
 private func makeDocument(
