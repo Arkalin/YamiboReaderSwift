@@ -733,9 +733,16 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
             encoding: .utf8
         )
         let verticalBody = try XCTUnwrap(typeBody(named: "ReaderVerticalViewportScrollView", in: supportSource))
+        let pagedSpreadBody = try XCTUnwrap(typeBody(named: "ReaderPagedSpreadContent", in: supportSource))
         let mapperBody = try XCTUnwrap(typeBody(named: "ReaderVerticalViewportTextOffsetMapper", in: supportSource))
         let itemHeightBody = try XCTUnwrap(functionBody(named: "verticalItemHeight", in: verticalBody))
 
+        XCTAssertTrue(
+            verticalBody.contains(
+                "let viewportIndex: NovelTextViewportIndex?\n    let viewportLayoutMetrics: NovelTextViewportLayoutMetrics?"
+            )
+        )
+        XCTAssertFalse(pagedSpreadBody.contains("viewportLayoutMetrics"))
         XCTAssertTrue(itemHeightBody.contains("viewportLayoutMetrics?.pageHeight(for: displayPage.pageIndex)"))
         XCTAssertTrue(mapperBody.contains("NovelTextLayout.viewportSample"))
         XCTAssertTrue(mapperBody.contains("NovelTextLayout.displayOffset"))
