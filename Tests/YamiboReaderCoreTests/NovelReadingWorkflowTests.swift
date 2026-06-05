@@ -116,7 +116,8 @@ final class NovelReadingWorkflowTests: XCTestCase {
                 contentStorageCount: 1,
                 activeLayoutManagerCount: 1,
                 perPageTextKitDocumentCount: 0,
-                semanticAttributedDocumentCacheCount: 1
+                semanticAttributedDocumentCacheCount: 1,
+                peakActivePlusCandidateGraphCount: 2
             )
         )
     }
@@ -236,6 +237,88 @@ final class NovelReadingWorkflowTests: XCTestCase {
         XCTAssertEqual(surfaces[1].presentationSpacingAfter, 14)
         XCTAssertEqual(surfaces[2].presentationSpacingAfter, 14)
         XCTAssertEqual(surfaces[3].presentationSpacingAfter, 0)
+    }
+
+    func testRuntimeDiagnosticsRecordCompactionAndSurfaceIdentityPreheat() async throws {
+        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9197&mobile=2")!
+        let document = ReaderPageDocument(
+            threadURL: threadURL,
+            view: 1,
+            maxView: 1,
+            resolvedAuthorID: "author-1",
+            contentSource: .authorFilteredPage,
+            segments: [
+                .text("第一章正文", chapterTitle: "第一章"),
+                .text("第二章正文", chapterTitle: "第二章"),
+                .text("第三章正文", chapterTitle: "第三章"),
+                .text("第四章正文", chapterTitle: "第四章"),
+                .text("第五章正文", chapterTitle: "第五章")
+            ]
+        )
+        let repository = RecordingNovelReadingRepository(documents: [1: document])
+        let workflow = NovelReadingWorkflow(
+            context: ReaderLaunchContext(
+                threadURL: threadURL,
+                threadTitle: "Thread",
+                source: .forum,
+                initialView: 1,
+                authorID: "author-1"
+            ),
+            settings: ReaderAppearanceSettings(readingMode: .vertical),
+            layout: ReaderContainerLayout(width: 320, height: 568, readingMode: .vertical),
+            repository: repository,
+            pagination: { document, settings, layout in
+                try NovelTextLayout.layout(
+                    document: document,
+                    settings: settings,
+                    layout: layout,
+                    viewportPageLayout: { context, _, _ in
+                        context.document.textRangesBySegment.values
+                            .sorted { $0.startOffset < $1.startOffset }
+                            .map {
+                                NovelTextViewportDocumentPageRange(
+                                    startOffset: $0.startOffset,
+                                    endOffset: $0.endOffset,
+                                    frozenGeometry: NovelTextViewportFrozenGeometry(
+                                        documentStartOffset: $0.startOffset,
+                                        documentEndOffset: $0.endOffset,
+                                        documentClipMinY: CGFloat($0.startOffset * 10),
+                                        documentClipMaxY: CGFloat($0.endOffset * 10),
+                                        contentHeight: 120
+                                    )
+                                )
+                            }
+                    },
+                    usesViewportIndexCache: false
+                )
+            }
+        )
+
+        let state = try await workflow.start(initial: NovelReadingInitialPosition())
+        let surfaces = try XCTUnwrap(state.presentation?.surfaces)
+        let initialRuntimeDiagnostics = workflow.runtimeDiagnostics
+        let initialTransactionDiagnostics = workflow.runtimeTransactionDiagnostics
+
+        XCTAssertEqual(initialRuntimeDiagnostics.viewportControllerCount, 1)
+        XCTAssertEqual(initialRuntimeDiagnostics.currentActivePlusCandidateGraphCount, 1)
+        XCTAssertEqual(initialRuntimeDiagnostics.peakActivePlusCandidateGraphCount, 1)
+        XCTAssertEqual(initialRuntimeDiagnostics.postCommitFullLayoutCount, 0)
+        XCTAssertEqual(initialTransactionDiagnostics.candidateIndexingPassCount, 1)
+        XCTAssertEqual(initialTransactionDiagnostics.postIndexCompactionCount, 1)
+        XCTAssertEqual(initialTransactionDiagnostics.geometryDeviationCount, 0)
+
+        workflow.updateVisibleSurfaceIdentities(Array(surfaces[1...2].map(\.identity)))
+        let updatedDiagnostics = workflow.runtimeDiagnostics
+
+        XCTAssertEqual(updatedDiagnostics.viewportUpdateCount, 1)
+        XCTAssertEqual(updatedDiagnostics.rematerializedSurfaceCount, 4)
+
+        workflow.updateVisibleSurfaceIdentities([
+            NovelReaderSurfaceIdentity(generation: surfaces[1].identity.generation - 1, ordinal: 1)
+        ])
+
+        XCTAssertEqual(workflow.runtimeDiagnostics.viewportUpdateCount, 2)
+        XCTAssertEqual(workflow.runtimeDiagnostics.rematerializedSurfaceCount, 0)
     }
 
     func testTwoPageSpreadReferencesShareRuntimeGeneration() async throws {

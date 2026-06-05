@@ -12,17 +12,35 @@ public struct NovelTextViewportRuntimeDiagnostics: Equatable, Sendable {
     public var activeLayoutManagerCount: Int
     public var perPageTextKitDocumentCount: Int
     public var semanticAttributedDocumentCacheCount: Int
+    public var viewportControllerCount: Int
+    public var currentActivePlusCandidateGraphCount: Int
+    public var peakActivePlusCandidateGraphCount: Int
+    public var postCommitFullLayoutCount: Int
+    public var viewportUpdateCount: Int
+    public var rematerializedSurfaceCount: Int
 
     public init(
         contentStorageCount: Int,
         activeLayoutManagerCount: Int,
         perPageTextKitDocumentCount: Int,
-        semanticAttributedDocumentCacheCount: Int = 0
+        semanticAttributedDocumentCacheCount: Int = 0,
+        viewportControllerCount: Int? = nil,
+        currentActivePlusCandidateGraphCount: Int? = nil,
+        peakActivePlusCandidateGraphCount: Int? = nil,
+        postCommitFullLayoutCount: Int = 0,
+        viewportUpdateCount: Int = 0,
+        rematerializedSurfaceCount: Int = 0
     ) {
         self.contentStorageCount = max(0, contentStorageCount)
         self.activeLayoutManagerCount = max(0, activeLayoutManagerCount)
         self.perPageTextKitDocumentCount = max(0, perPageTextKitDocumentCount)
         self.semanticAttributedDocumentCacheCount = max(0, semanticAttributedDocumentCacheCount)
+        self.viewportControllerCount = max(0, viewportControllerCount ?? activeLayoutManagerCount)
+        self.currentActivePlusCandidateGraphCount = max(0, currentActivePlusCandidateGraphCount ?? contentStorageCount)
+        self.peakActivePlusCandidateGraphCount = max(0, peakActivePlusCandidateGraphCount ?? contentStorageCount)
+        self.postCommitFullLayoutCount = max(0, postCommitFullLayoutCount)
+        self.viewportUpdateCount = max(0, viewportUpdateCount)
+        self.rematerializedSurfaceCount = max(0, rematerializedSurfaceCount)
     }
 }
 
@@ -30,15 +48,24 @@ public struct NovelTextViewportRuntimeTransactionDiagnostics: Equatable, Sendabl
     public var committedTransactionCount: Int
     public var semanticAttributedDocumentBuildCount: Int
     public var semanticAttributedDocumentReuseCount: Int
+    public var candidateIndexingPassCount: Int
+    public var postIndexCompactionCount: Int
+    public var geometryDeviationCount: Int
 
     public init(
         committedTransactionCount: Int = 0,
         semanticAttributedDocumentBuildCount: Int = 0,
-        semanticAttributedDocumentReuseCount: Int = 0
+        semanticAttributedDocumentReuseCount: Int = 0,
+        candidateIndexingPassCount: Int? = nil,
+        postIndexCompactionCount: Int? = nil,
+        geometryDeviationCount: Int = 0
     ) {
         self.committedTransactionCount = max(0, committedTransactionCount)
         self.semanticAttributedDocumentBuildCount = max(0, semanticAttributedDocumentBuildCount)
         self.semanticAttributedDocumentReuseCount = max(0, semanticAttributedDocumentReuseCount)
+        self.candidateIndexingPassCount = max(0, candidateIndexingPassCount ?? committedTransactionCount)
+        self.postIndexCompactionCount = max(0, postIndexCompactionCount ?? committedTransactionCount)
+        self.geometryDeviationCount = max(0, geometryDeviationCount)
     }
 }
 
@@ -54,6 +81,9 @@ struct NovelTextLayoutRuntimeAdapterInput {
 final class NovelTextLayoutRuntimeCandidate {
     let semanticAttributedDocument: NSAttributedString?
     let reusedSemanticAttributedDocument: Bool
+    let fullDocumentLayoutPassCount: Int
+    let postIndexCompactionCount: Int
+    let geometryDeviationCount: Int
 
 #if canImport(UIKit) || canImport(AppKit)
     let textContentStorage: NSTextContentStorage?
@@ -63,10 +93,16 @@ final class NovelTextLayoutRuntimeCandidate {
 
     init(
         semanticAttributedDocument: NSAttributedString? = nil,
-        reusedSemanticAttributedDocument: Bool = false
+        reusedSemanticAttributedDocument: Bool = false,
+        fullDocumentLayoutPassCount: Int = 1,
+        postIndexCompactionCount: Int = 1,
+        geometryDeviationCount: Int = 0
     ) {
         self.semanticAttributedDocument = semanticAttributedDocument
         self.reusedSemanticAttributedDocument = reusedSemanticAttributedDocument
+        self.fullDocumentLayoutPassCount = max(0, fullDocumentLayoutPassCount)
+        self.postIndexCompactionCount = max(0, postIndexCompactionCount)
+        self.geometryDeviationCount = max(0, geometryDeviationCount)
 #if canImport(UIKit) || canImport(AppKit)
         textContentStorage = nil
         textLayoutManager = nil
@@ -78,17 +114,33 @@ final class NovelTextLayoutRuntimeCandidate {
     init(
         semanticAttributedDocument: NSAttributedString? = nil,
         reusedSemanticAttributedDocument: Bool = false,
+        fullDocumentLayoutPassCount: Int = 1,
+        postIndexCompactionCount: Int = 1,
+        geometryDeviationCount: Int = 0,
         textContentStorage: NSTextContentStorage?,
         textLayoutManager: NSTextLayoutManager?,
         textContainer: NSTextContainer?
     ) {
         self.semanticAttributedDocument = semanticAttributedDocument
         self.reusedSemanticAttributedDocument = reusedSemanticAttributedDocument
+        self.fullDocumentLayoutPassCount = max(0, fullDocumentLayoutPassCount)
+        self.postIndexCompactionCount = max(0, postIndexCompactionCount)
+        self.geometryDeviationCount = max(0, geometryDeviationCount)
         self.textContentStorage = textContentStorage
         self.textLayoutManager = textLayoutManager
         self.textContainer = textContainer
     }
 #endif
+}
+
+private extension NovelTextLayoutRuntimeCandidate {
+    var textKitGraphCount: Int {
+#if canImport(UIKit) || canImport(AppKit)
+        textContentStorage == nil ? 0 : 1
+#else
+        0
+#endif
+    }
 }
 
 @MainActor
@@ -135,6 +187,8 @@ final class DefaultNovelTextLayoutRuntimeAdapter: NovelTextLayoutRuntimeAdapter 
         return NovelTextLayoutRuntimeCandidate(
             semanticAttributedDocument: attributedDocument,
             reusedSemanticAttributedDocument: reusesSemanticDocument,
+            fullDocumentLayoutPassCount: 1,
+            postIndexCompactionCount: 1,
             textContentStorage: contentStorage,
             textLayoutManager: layoutManager,
             textContainer: container
@@ -220,6 +274,9 @@ final class NovelTextViewportRuntimeTransaction {
     let layout: ReaderContainerLayout
     private(set) var semanticAttributedDocument: NSAttributedString?
     let reusedSemanticAttributedDocument: Bool
+    let fullDocumentLayoutPassCount: Int
+    let postIndexCompactionCount: Int
+    let geometryDeviationCount: Int
     private var state = State.pending
 
 #if canImport(UIKit) || canImport(AppKit)
@@ -241,6 +298,9 @@ final class NovelTextViewportRuntimeTransaction {
         self.layout = layout
         semanticAttributedDocument = candidate.semanticAttributedDocument
         reusedSemanticAttributedDocument = candidate.reusedSemanticAttributedDocument
+        fullDocumentLayoutPassCount = candidate.fullDocumentLayoutPassCount
+        postIndexCompactionCount = candidate.postIndexCompactionCount
+        geometryDeviationCount = candidate.geometryDeviationCount
 #if canImport(UIKit) || canImport(AppKit)
         textContentStorage = candidate.textContentStorage
         textLayoutManager = candidate.textLayoutManager
@@ -266,6 +326,16 @@ final class NovelTextViewportRuntimeTransaction {
     }
 }
 
+private extension NovelTextViewportRuntimeTransaction {
+    var textKitGraphCount: Int {
+#if canImport(UIKit) || canImport(AppKit)
+        textContentStorage == nil ? 0 : 1
+#else
+        0
+#endif
+    }
+}
+
 @MainActor
 final class NovelTextViewportRuntimeOwner {
     private var activeGeneration: UInt64 = 0
@@ -276,6 +346,9 @@ final class NovelTextViewportRuntimeOwner {
     private var visiblePageIdentities = Set<Int>()
     private var semanticAttributedDocumentCache: NSAttributedString?
     private var transactionDiagnostics = NovelTextViewportRuntimeTransactionDiagnostics()
+    private var peakActivePlusCandidateGraphCount = 0
+    private var viewportUpdateCount = 0
+    private var rematerializedSurfaceCount = 0
     private let adapter: any NovelTextLayoutRuntimeAdapter
     private var pendingTransaction: NovelTextViewportRuntimeTransaction?
 
@@ -294,7 +367,12 @@ final class NovelTextViewportRuntimeOwner {
             contentStorageCount: textContentStorage == nil ? 0 : 1,
             activeLayoutManagerCount: textLayoutManager == nil ? 0 : 1,
             perPageTextKitDocumentCount: 0,
-            semanticAttributedDocumentCacheCount: semanticAttributedDocumentCache == nil ? 0 : 1
+            semanticAttributedDocumentCacheCount: semanticAttributedDocumentCache == nil ? 0 : 1,
+            currentActivePlusCandidateGraphCount: activeTextKitGraphCount + pendingTextKitGraphCount,
+            peakActivePlusCandidateGraphCount: peakActivePlusCandidateGraphCount,
+            postCommitFullLayoutCount: 0,
+            viewportUpdateCount: viewportUpdateCount,
+            rematerializedSurfaceCount: rematerializedSurfaceCount
         )
     }
 
@@ -304,6 +382,18 @@ final class NovelTextViewportRuntimeOwner {
 
     var currentGeneration: UInt64 {
         activeGeneration
+    }
+
+    private var activeTextKitGraphCount: Int {
+#if canImport(UIKit) || canImport(AppKit)
+        textContentStorage == nil ? 0 : 1
+#else
+        0
+#endif
+    }
+
+    private var pendingTextKitGraphCount: Int {
+        pendingTransaction?.textKitGraphCount ?? 0
     }
 
     func commit(
@@ -343,6 +433,10 @@ final class NovelTextViewportRuntimeOwner {
                 )
             )
         )
+        peakActivePlusCandidateGraphCount = max(
+            peakActivePlusCandidateGraphCount,
+            activeTextKitGraphCount + candidate.textKitGraphCount
+        )
         let transaction = NovelTextViewportRuntimeTransaction(
             generation: generation,
             result: result,
@@ -374,6 +468,10 @@ final class NovelTextViewportRuntimeOwner {
         } else if transaction.semanticAttributedDocument != nil {
             transactionDiagnostics.semanticAttributedDocumentBuildCount += 1
         }
+        transactionDiagnostics.candidateIndexingPassCount += transaction.fullDocumentLayoutPassCount
+        transactionDiagnostics.postIndexCompactionCount += transaction.postIndexCompactionCount
+        transactionDiagnostics.geometryDeviationCount += transaction.geometryDeviationCount
+        peakActivePlusCandidateGraphCount = max(peakActivePlusCandidateGraphCount, activeTextKitGraphCount)
     }
 
     private func reusableSemanticAttributedDocument(
@@ -393,6 +491,9 @@ final class NovelTextViewportRuntimeOwner {
         result = nil
         visiblePageIdentities.removeAll(keepingCapacity: false)
         semanticAttributedDocumentCache = nil
+        peakActivePlusCandidateGraphCount = 0
+        viewportUpdateCount = 0
+        rematerializedSurfaceCount = 0
 #if canImport(UIKit) || canImport(AppKit)
         textContentStorage = nil
         textLayoutManager = nil
@@ -432,13 +533,29 @@ final class NovelTextViewportRuntimeOwner {
     }
 
     func updateVisibleSurfaceIdentities(_ surfaceIdentities: [NovelReaderSurfaceIdentity]) {
-        visiblePageIdentities = Set(surfaceIdentities.compactMap { surfaceIdentity in
+        let visibleOrdinals = Set<Int>(surfaceIdentities.compactMap { surfaceIdentity -> Int? in
             guard surfaceIdentity.generation == activeGeneration,
                   result?.viewportIndex.pages.contains(where: { $0.pageIndex == surfaceIdentity.ordinal }) == true else {
                 return nil
             }
             return surfaceIdentity.ordinal
         })
+        visiblePageIdentities = preheatedPageIdentities(around: visibleOrdinals)
+        viewportUpdateCount += 1
+        rematerializedSurfaceCount = visiblePageIdentities.count
+    }
+
+    private func preheatedPageIdentities(around visibleOrdinals: Set<Int>) -> Set<Int> {
+        guard let pages = result?.viewportIndex.pages, !visibleOrdinals.isEmpty else { return [] }
+        let validOrdinals = Set(pages.map(\.pageIndex))
+        var preheated = visibleOrdinals.intersection(validOrdinals)
+        if let first = visibleOrdinals.min(), validOrdinals.contains(first - 1) {
+            preheated.insert(first - 1)
+        }
+        if let last = visibleOrdinals.max(), validOrdinals.contains(last + 1) {
+            preheated.insert(last + 1)
+        }
+        return preheated
     }
 
     func isCurrent(generation: UInt64, documentView: Int, pageIdentity: Int) -> Bool {
