@@ -82,6 +82,52 @@ public struct ReaderSegmentSource: Codable, Hashable, Sendable {
     }
 }
 
+public struct NovelChapterIdentity: Codable, Hashable, Sendable {
+    public var rawValue: String
+
+    public init(rawValue: String) {
+        self.rawValue = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}
+
+public struct NovelTextSegmentIdentity: Codable, Hashable, Sendable {
+    public var rawValue: String
+
+    public init(rawValue: String) {
+        self.rawValue = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}
+
+public struct ReaderCharacterRange: Codable, Hashable, Sendable {
+    public var location: Int
+    public var length: Int
+
+    public init(location: Int, length: Int) {
+        self.location = max(0, location)
+        self.length = max(0, length)
+    }
+
+    public var upperBound: Int {
+        location + length
+    }
+}
+
+public struct ReaderSegmentSemantics: Codable, Hashable, Sendable {
+    public var chapterIdentity: NovelChapterIdentity?
+    public var textSegmentIdentity: NovelTextSegmentIdentity?
+    public var chapterTitleRange: ReaderCharacterRange?
+
+    public init(
+        chapterIdentity: NovelChapterIdentity? = nil,
+        textSegmentIdentity: NovelTextSegmentIdentity? = nil,
+        chapterTitleRange: ReaderCharacterRange? = nil
+    ) {
+        self.chapterIdentity = chapterIdentity
+        self.textSegmentIdentity = textSegmentIdentity
+        self.chapterTitleRange = chapterTitleRange
+    }
+}
+
 public struct ReaderChapterCommentTarget: Codable, Hashable, Sendable {
     public var threadURL: URL
     public var view: Int
@@ -146,6 +192,8 @@ extension ReaderSegment: Codable {
 }
 
 public struct ReaderPageDocument: Codable, Hashable, Sendable {
+    public static let schemaVersion = 3
+
     public var threadURL: URL
     public var view: Int
     public var maxView: Int
@@ -155,6 +203,7 @@ public struct ReaderPageDocument: Codable, Hashable, Sendable {
     public var filteredChapterCandidateCount: Int
     public var segments: [ReaderSegment]
     public var segmentSources: [ReaderSegmentSource?]
+    public var segmentSemantics: [ReaderSegmentSemantics?]
     public var fetchedAt: Date
 
     public init(
@@ -167,6 +216,7 @@ public struct ReaderPageDocument: Codable, Hashable, Sendable {
         filteredChapterCandidateCount: Int = 0,
         segments: [ReaderSegment],
         segmentSources: [ReaderSegmentSource?]? = nil,
+        segmentSemantics: [ReaderSegmentSemantics?]? = nil,
         fetchedAt: Date = .now
     ) {
         self.threadURL = threadURL
@@ -178,12 +228,24 @@ public struct ReaderPageDocument: Codable, Hashable, Sendable {
         self.filteredChapterCandidateCount = filteredChapterCandidateCount
         self.segments = segments
         self.segmentSources = segmentSources ?? Array(repeating: nil, count: segments.count)
+        self.segmentSemantics = segmentSemantics ?? Self.legacySegmentSemantics(
+            segments: segments,
+            segmentSources: self.segmentSources,
+            threadURL: self.threadURL,
+            view: self.view,
+            contentSource: self.contentSource
+        )
         self.fetchedAt = fetchedAt
     }
 
     public func source(forSegmentIndex index: Int) -> ReaderSegmentSource? {
         guard segmentSources.indices.contains(index) else { return nil }
         return segmentSources[index]
+    }
+
+    public func semantics(forSegmentIndex index: Int) -> ReaderSegmentSemantics? {
+        guard segmentSemantics.indices.contains(index) else { return nil }
+        return segmentSemantics[index]
     }
 }
 
@@ -198,28 +260,61 @@ extension ReaderPageDocument {
         case filteredChapterCandidateCount
         case segments
         case segmentSources
+        case segmentSemantics
         case fetchedAt
+        case schemaVersion
     }
 
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let segments = try container.decode([ReaderSegment].self, forKey: .segments)
+        let sourceValues = try container.decodeIfPresent([ReaderSegmentSource?].self, forKey: .segmentSources)
+        let threadURL = try container.decode(URL.self, forKey: .threadURL)
+        let view = try container.decode(Int.self, forKey: .view)
+        let contentSource = try container.decodeIfPresent(ReaderContentSource.self, forKey: .contentSource) ?? .allPostsPage
+        let schemaVersion = try container.decodeIfPresent(Int.self, forKey: .schemaVersion)
+        let segmentSemantics = try container.decodeIfPresent([ReaderSegmentSemantics?].self, forKey: .segmentSemantics)
+        let resolvedSemantics: [ReaderSegmentSemantics?]
+        if let segmentSemantics {
+            try Self.validate(
+                segmentSemantics: segmentSemantics,
+                segments: segments,
+                requiresExplicitTextIdentities: schemaVersion != nil
+            )
+            resolvedSemantics = segmentSemantics
+        } else {
+            let sources = sourceValues ?? Array(repeating: nil, count: segments.count)
+            resolvedSemantics = Self.legacySegmentSemantics(
+                segments: segments,
+                segmentSources: sources,
+                threadURL: threadURL,
+                view: view,
+                contentSource: contentSource
+            )
+        }
         self.init(
-            threadURL: try container.decode(URL.self, forKey: .threadURL),
-            view: try container.decode(Int.self, forKey: .view),
+            threadURL: threadURL,
+            view: view,
             maxView: try container.decode(Int.self, forKey: .maxView),
             resolvedAuthorID: try container.decodeIfPresent(String.self, forKey: .resolvedAuthorID),
-            contentSource: try container.decodeIfPresent(ReaderContentSource.self, forKey: .contentSource) ?? .allPostsPage,
+            contentSource: contentSource,
             retainedChapterCount: try container.decodeIfPresent(Int.self, forKey: .retainedChapterCount) ?? 0,
             filteredChapterCandidateCount: try container.decodeIfPresent(Int.self, forKey: .filteredChapterCandidateCount) ?? 0,
             segments: segments,
-            segmentSources: try container.decodeIfPresent([ReaderSegmentSource?].self, forKey: .segmentSources),
+            segmentSources: sourceValues,
+            segmentSemantics: resolvedSemantics,
             fetchedAt: try container.decodeIfPresent(Date.self, forKey: .fetchedAt) ?? .distantPast
         )
     }
 
     public func encode(to encoder: any Encoder) throws {
+        try Self.validate(
+            segmentSemantics: segmentSemantics,
+            segments: segments,
+            requiresExplicitTextIdentities: true
+        )
         var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(Self.schemaVersion, forKey: .schemaVersion)
         try container.encode(threadURL, forKey: .threadURL)
         try container.encode(view, forKey: .view)
         try container.encode(maxView, forKey: .maxView)
@@ -229,7 +324,108 @@ extension ReaderPageDocument {
         try container.encode(filteredChapterCandidateCount, forKey: .filteredChapterCandidateCount)
         try container.encode(segments, forKey: .segments)
         try container.encode(segmentSources, forKey: .segmentSources)
+        try container.encode(segmentSemantics, forKey: .segmentSemantics)
         try container.encode(fetchedAt, forKey: .fetchedAt)
+    }
+}
+
+extension ReaderPageDocument {
+    static func legacySegmentSemantics(
+        segments: [ReaderSegment],
+        segmentSources: [ReaderSegmentSource?],
+        threadURL: URL,
+        view: Int,
+        contentSource: ReaderContentSource
+    ) -> [ReaderSegmentSemantics?] {
+        var occurrenceByPostID: [String: Int] = [:]
+        var sourceOccurrence = 0
+        var textOccurrenceByChapter: [NovelChapterIdentity: Int] = [:]
+
+        return segments.enumerated().map { index, segment in
+            guard let chapterTitle = segment.chapterTitle?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !chapterTitle.isEmpty else {
+                return nil
+            }
+            let source = segmentSources.indices.contains(index) ? segmentSources[index] : nil
+            let chapterIdentity: NovelChapterIdentity
+            if let ownerPostID = source?.ownerPostID, !ownerPostID.isEmpty {
+                let postOccurrence = occurrenceByPostID[ownerPostID] ?? 0
+                occurrenceByPostID[ownerPostID] = postOccurrence + 1
+                chapterIdentity = NovelChapterIdentity(rawValue: "post:\(ownerPostID)#chapter:\(postOccurrence)")
+            } else {
+                chapterIdentity = NovelChapterIdentity(
+                    rawValue: "document:\(threadURL.absoluteString)#view:\(max(1, view))#source:\(contentSource.rawValue)#chapter:\(sourceOccurrence)"
+                )
+                sourceOccurrence += 1
+            }
+
+            switch segment {
+            case let .text(text, _):
+                let textOccurrence = textOccurrenceByChapter[chapterIdentity] ?? 0
+                textOccurrenceByChapter[chapterIdentity] = textOccurrence + 1
+                return ReaderSegmentSemantics(
+                    chapterIdentity: chapterIdentity,
+                    textSegmentIdentity: NovelTextSegmentIdentity(
+                        rawValue: "\(chapterIdentity.rawValue)#text:\(textOccurrence)"
+                    ),
+                    chapterTitleRange: legacyChapterTitleRange(chapterTitle: chapterTitle, text: text)
+                )
+            case .image:
+                return ReaderSegmentSemantics(chapterIdentity: chapterIdentity)
+            }
+        }
+    }
+
+    private static func legacyChapterTitleRange(chapterTitle: String, text: String) -> ReaderCharacterRange? {
+        let normalizedTitle = ReaderChapterTitleNormalizer.normalize(chapterTitle)
+        guard let normalizedTitle,
+              !normalizedTitle.isEmpty,
+              text.hasPrefix(normalizedTitle) else {
+            return nil
+        }
+        return ReaderCharacterRange(location: 0, length: normalizedTitle.count)
+    }
+
+    private static func validate(
+        segmentSemantics: [ReaderSegmentSemantics?],
+        segments: [ReaderSegment],
+        requiresExplicitTextIdentities: Bool
+    ) throws {
+        guard segmentSemantics.count == segments.count else {
+            throw DecodingError.dataCorrupted(
+                DecodingError.Context(codingPath: [], debugDescription: "Reader segment semantics count does not match segments.")
+            )
+        }
+
+        for (index, segment) in segments.enumerated() {
+            let semantics = segmentSemantics[index]
+            switch segment {
+            case let .text(text, chapterTitle):
+                if requiresExplicitTextIdentities,
+                   chapterTitle != nil,
+                   (semantics?.chapterIdentity == nil || semantics?.textSegmentIdentity == nil) {
+                    throw DecodingError.dataCorrupted(
+                        DecodingError.Context(codingPath: [], debugDescription: "Text segment is missing explicit semantic identity.")
+                    )
+                }
+                if let range = semantics?.chapterTitleRange {
+                    guard range.location >= 0,
+                          range.length >= 0,
+                          range.upperBound <= text.count else {
+                        throw DecodingError.dataCorrupted(
+                            DecodingError.Context(codingPath: [], debugDescription: "Chapter title range is outside segment text.")
+                        )
+                    }
+                }
+
+            case .image:
+                if semantics?.textSegmentIdentity != nil {
+                    throw DecodingError.dataCorrupted(
+                        DecodingError.Context(codingPath: [], debugDescription: "Image segment cannot carry a text segment identity.")
+                    )
+                }
+            }
+        }
     }
 }
 

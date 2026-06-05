@@ -362,6 +362,66 @@ private final class StubURLProtocol: URLProtocol {
     #expect(document.segments[2] == .text("第二章\n第二段内容", chapterTitle: "第二章"))
 }
 
+@Test func readerHTMLParserAssignsStableChapterAndTextSegmentIdentities() async throws {
+    let html = #"""
+    <html>
+      <body>
+        <div class="message" id="postmessage_101">
+          第一章<br>第一段。<img src="images/first.jpg" />第二段。
+        </div>
+        <div class="message" id="postmessage_102">
+          第一章<br>另一个同名章节。
+        </div>
+      </body>
+    </html>
+    """#
+    let request = ReaderPageRequest(
+        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=186&mobile=2")),
+        view: 1
+    )
+
+    let document = try ReaderHTMLParser.parseDocument(html: html, request: request)
+
+    #expect(document.segmentSemantics.count == document.segments.count)
+    let firstText = try #require(document.semantics(forSegmentIndex: 0))
+    let image = try #require(document.semantics(forSegmentIndex: 1))
+    let secondTextInFirstChapter = try #require(document.semantics(forSegmentIndex: 2))
+    let repeatedTitleText = try #require(document.semantics(forSegmentIndex: 3))
+
+    #expect(firstText.chapterIdentity?.rawValue == "post:101#chapter:0")
+    #expect(firstText.textSegmentIdentity?.rawValue == "post:101#chapter:0#text:0")
+    #expect(firstText.chapterTitleRange == ReaderCharacterRange(location: 0, length: "第一章".count))
+    #expect(image.chapterIdentity == firstText.chapterIdentity)
+    #expect(image.textSegmentIdentity == nil)
+    #expect(secondTextInFirstChapter.chapterIdentity == firstText.chapterIdentity)
+    #expect(secondTextInFirstChapter.textSegmentIdentity?.rawValue == "post:101#chapter:0#text:1")
+    #expect(repeatedTitleText.chapterIdentity?.rawValue == "post:102#chapter:0")
+    #expect(repeatedTitleText.chapterIdentity != firstText.chapterIdentity)
+}
+
+@Test func readerHTMLParserUsesDocumentOccurrenceWhenOwnerPostIdentityIsMissing() async throws {
+    let html = #"""
+    <html>
+      <body>
+        <div class="message">同名章<br>第一处。</div>
+        <div class="message">同名章<br>第二处。</div>
+      </body>
+    </html>
+    """#
+    let request = ReaderPageRequest(
+        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=187&mobile=2")),
+        view: 2
+    )
+
+    let document = try ReaderHTMLParser.parseDocument(html: html, request: request)
+    let first = try #require(document.semantics(forSegmentIndex: 0)?.chapterIdentity?.rawValue)
+    let second = try #require(document.semantics(forSegmentIndex: 1)?.chapterIdentity?.rawValue)
+
+    #expect(first.contains("#view:2#source:allPostsPage#chapter:0"))
+    #expect(second.contains("#view:2#source:allPostsPage#chapter:1"))
+    #expect(first != second)
+}
+
 @Test func readerHTMLParserPreservesInlineImagePositionWithinMessage() async throws {
     let html = #"""
     <html>
@@ -1742,6 +1802,161 @@ private final class StubURLProtocol: URLProtocol {
     try await store.deleteViews([3], for: threadURL, authorID: "12", contentSource: .authorFilteredPage)
     let deleted = await store.loadDocument(for: ReaderPageRequest(threadURL: threadURL, view: 3, authorID: "12"))
     #expect(deleted == nil)
+}
+
+@Test func readerCacheStoreWritesDocumentSchemaVersionAndSemanticIdentities() async throws {
+    let directory = URL(fileURLWithPath: NSTemporaryDirectory())
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    let store = ReaderCacheStore(baseDirectory: directory)
+    let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=18601&mobile=2"))
+    let document = ReaderPageDocument(
+        threadURL: threadURL,
+        view: 1,
+        maxView: 1,
+        segments: [.text("第一章\n正文", chapterTitle: "第一章")]
+    )
+
+    try await store.save(document)
+
+    let cacheFile = try #require(
+        FileManager.default.enumerator(at: directory, includingPropertiesForKeys: nil)?
+            .compactMap { $0 as? URL }
+            .first { $0.lastPathComponent.hasPrefix("reader_") && $0.pathExtension == "json" }
+    )
+    let object = try #require(
+        JSONSerialization.jsonObject(with: try Data(contentsOf: cacheFile)) as? [String: Any]
+    )
+    let semantics = try #require(object["segmentSemantics"] as? [[String: Any]])
+    let firstSemantics = try #require(semantics.first)
+    let chapterIdentity = try #require(firstSemantics["chapterIdentity"] as? [String: Any])
+    let textSegmentIdentity = try #require(firstSemantics["textSegmentIdentity"] as? [String: Any])
+    let titleRange = try #require(firstSemantics["chapterTitleRange"] as? [String: Any])
+
+    #expect(object["schemaVersion"] as? Int == ReaderPageDocument.schemaVersion)
+    #expect(chapterIdentity["rawValue"] as? String != nil)
+    #expect(textSegmentIdentity["rawValue"] as? String != nil)
+    #expect(titleRange["location"] as? Int == 0)
+    #expect(titleRange["length"] as? Int == "第一章".count)
+}
+
+@Test func readerPageDocumentLegacyDecodeSynthesizesIdentitiesWithoutGroupingEqualTitles() async throws {
+    let json = #"""
+    {
+      "threadURL": "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=18602",
+      "view": 1,
+      "maxView": 1,
+      "contentSource": "allPostsPage",
+      "retainedChapterCount": 2,
+      "filteredChapterCandidateCount": 0,
+      "segments": [
+        {"kind": "text", "text": "同名章\n第一处。", "chapterTitle": "同名章"},
+        {"kind": "text", "text": "同名章\n第二处。", "chapterTitle": "同名章"}
+      ],
+      "segmentSources": [null, null],
+      "fetchedAt": "2026-06-05T00:00:00Z"
+    }
+    """#.data(using: .utf8)!
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+
+    let document = try decoder.decode(ReaderPageDocument.self, from: json)
+    let first = try #require(document.semantics(forSegmentIndex: 0))
+    let second = try #require(document.semantics(forSegmentIndex: 1))
+
+    #expect(first.chapterIdentity != second.chapterIdentity)
+    #expect(first.textSegmentIdentity != second.textSegmentIdentity)
+    #expect(first.chapterTitleRange == ReaderCharacterRange(location: 0, length: "同名章".count))
+    #expect(second.chapterTitleRange == ReaderCharacterRange(location: 0, length: "同名章".count))
+}
+
+@Test func readerPageDocumentLegacyDecodePreservesAmbiguousTitleTextWithoutStylingRange() async throws {
+    let json = #"""
+    {
+      "threadURL": "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=18603",
+      "view": 1,
+      "maxView": 1,
+      "contentSource": "allPostsPage",
+      "retainedChapterCount": 1,
+      "filteredChapterCandidateCount": 0,
+      "segments": [
+        {"kind": "text", "text": "正文里才出现同名章", "chapterTitle": "同名章"}
+      ],
+      "segmentSources": [null],
+      "fetchedAt": "2026-06-05T00:00:00Z"
+    }
+    """#.data(using: .utf8)!
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+
+    let document = try decoder.decode(ReaderPageDocument.self, from: json)
+    let semantics = try #require(document.semantics(forSegmentIndex: 0))
+
+    #expect(document.segments == [.text("正文里才出现同名章", chapterTitle: "同名章")])
+    #expect(semantics.chapterIdentity != nil)
+    #expect(semantics.textSegmentIdentity != nil)
+    #expect(semantics.chapterTitleRange == nil)
+}
+
+@Test func readerCacheStoreInvalidatesDocumentWithCorruptExplicitTitleRange() async throws {
+    let directory = URL(fileURLWithPath: NSTemporaryDirectory())
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=18604&mobile=2"))
+    let identity = ReaderCacheIdentity(threadURL: threadURL, view: 1, authorID: nil, contentSource: .fallbackUnfilteredPage)
+    let documentFileName = "bad-reader-document.json"
+    let index = """
+    {
+      "version": 2,
+      "threads": {
+        "\(identity.threadKey)": {
+          "threadURL": "\(identity.threadURL.absoluteString)",
+          "variants": {
+            "\(identity.variantKey)": {
+              "pages": {
+                "1": {
+                  "fileName": "\(documentFileName)",
+                  "fetchedAt": "2026-06-05T00:00:00Z"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    """
+    let document = #"""
+    {
+      "schemaVersion": 3,
+      "threadURL": "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=18604",
+      "view": 1,
+      "maxView": 1,
+      "contentSource": "fallbackUnfilteredPage",
+      "retainedChapterCount": 1,
+      "filteredChapterCandidateCount": 0,
+      "segments": [
+        {"kind": "text", "text": "短文", "chapterTitle": "短文"}
+      ],
+      "segmentSources": [null],
+      "segmentSemantics": [
+        {
+          "chapterIdentity": {"rawValue": "post:1#chapter:0"},
+          "textSegmentIdentity": {"rawValue": "post:1#chapter:0#text:0"},
+          "chapterTitleRange": {"location": 0, "length": 20}
+        }
+      ],
+      "fetchedAt": "2026-06-05T00:00:00Z"
+    }
+    """#
+    try Data(index.utf8).write(to: directory.appendingPathComponent("index.json"))
+    try Data(document.utf8).write(to: directory.appendingPathComponent(documentFileName))
+
+    let store = ReaderCacheStore(baseDirectory: directory)
+    let loaded = await store.loadDocument(
+        for: ReaderPageRequest(threadURL: threadURL, view: 1),
+        contentSource: .fallbackUnfilteredPage
+    )
+
+    #expect(loaded == nil)
 }
 
 @Test func readerCacheStoreSeparatesAuthorFilteredAndUnfilteredVariants() async throws {
