@@ -540,6 +540,9 @@ final class NovelTextViewportRuntimeOwner {
         textContentStorage: NSTextContentStorage,
         textLayoutManager: NSTextLayoutManager
     ) -> CGFloat? {
+        if let frozenGeometry = page.frozenGeometry {
+            return frozenGeometry.pageLocalOriginY
+        }
         guard let firstRange = page.ranges.first,
               let documentRange = result.viewportContext.document.textRangesBySegment[firstRange.segmentIndex],
               let pageLocation = textContentStorage.location(
@@ -632,14 +635,14 @@ final class NovelTextViewportRuntimeOwner {
             textContentStorage: textContentStorage,
             textLayoutManager: textLayoutManager
         ),
-        let firstRange = page.ranges.first,
-        let documentRange = result.viewportContext.document.textRangesBySegment[firstRange.segmentIndex],
-        let pageLocation = textContentStorage.location(
-            textContentStorage.documentRange.location,
-            offsetBy: documentRange.startOffset + firstRange.startOffset
+        let pageLocation = pageStartLocation(
+            page: page,
+            result: result,
+            textContentStorage: textContentStorage
         ) else {
             return
         }
+        let clipMaxY = page.frozenGeometry?.documentClipMaxY ?? pageOriginY + bounds.height
 
         context.saveGState()
         context.clip(to: bounds)
@@ -648,13 +651,37 @@ final class NovelTextViewportRuntimeOwner {
             from: pageLocation,
             options: [.ensuresLayout]
         ) { fragment in
-            guard fragment.layoutFragmentFrame.minY < pageOriginY + bounds.height else {
+            guard fragment.layoutFragmentFrame.minY < clipMaxY else {
                 return false
+            }
+            guard fragment.layoutFragmentFrame.maxY >= pageOriginY else {
+                return true
             }
             fragment.draw(at: fragment.layoutFragmentFrame.origin, in: context)
             return true
         }
         context.restoreGState()
+    }
+
+    private func pageStartLocation(
+        page: NovelTextViewportIndexPage,
+        result: NovelTextLayoutResult,
+        textContentStorage: NSTextContentStorage
+    ) -> NSTextLocation? {
+        if let frozenGeometry = page.frozenGeometry {
+            return textContentStorage.location(
+                textContentStorage.documentRange.location,
+                offsetBy: frozenGeometry.documentStartOffset
+            )
+        }
+        guard let firstRange = page.ranges.first,
+              let documentRange = result.viewportContext.document.textRangesBySegment[firstRange.segmentIndex] else {
+            return nil
+        }
+        return textContentStorage.location(
+            textContentStorage.documentRange.location,
+            offsetBy: documentRange.startOffset + firstRange.startOffset
+        )
     }
 #endif
 }

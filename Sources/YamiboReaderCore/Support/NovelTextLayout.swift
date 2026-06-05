@@ -296,7 +296,7 @@ public enum NovelTextLayout {
                         NovelViewportPageDraft(
                             orderSegmentIndex: group[0].segmentIndex,
                             ordinal: nextDraftOrdinal,
-                            kind: .text(group)
+                            kind: .text(group, frozenGeometry: pageRange.frozenGeometry)
                         )
                     )
                     nextDraftOrdinal += 1
@@ -335,7 +335,7 @@ public enum NovelTextLayout {
             return $0.ordinal < $1.ordinal
         }) {
             switch draft.kind {
-            case let .text(ranges):
+            case let .text(ranges, frozenGeometry):
                 guard let firstRange = ranges.first,
                       let annotatedSegment = annotatedSegmentByIndex[firstRange.segmentIndex] else {
                     continue
@@ -347,6 +347,7 @@ public enum NovelTextLayout {
                     chapterTitle: annotatedSegment.chapterTitle,
                     ranges: ranges,
                     externalBlocks: [],
+                    frozenGeometry: frozenGeometry,
                     chapterCommentTarget: chapterCommentTarget(for: annotatedSegment, document: document)
                 )
                 if let chapterOrdinal = annotatedSegment.chapterOrdinal,
@@ -1112,6 +1113,8 @@ private enum AppKitNovelTextLayoutAdapter {
         textLayoutManager.ensureLayout(for: documentRange)
 
         var pageRanges: [Int: NSRange] = [:]
+        var pageClipRects: [Int: CGRect] = [:]
+        var documentContentHeight: CGFloat = 0
         textLayoutManager.enumerateTextSegments(
             in: documentRange,
             type: .standard,
@@ -1133,6 +1136,12 @@ private enum AppKitNovelTextLayoutAdapter {
             } else {
                 pageRanges[pageIndex] = characterRange
             }
+            if let existingClip = pageClipRects[pageIndex] {
+                pageClipRects[pageIndex] = existingClip.union(rect)
+            } else {
+                pageClipRects[pageIndex] = rect
+            }
+            documentContentHeight = max(documentContentHeight, rect.maxY)
             return true
         }
 
@@ -1152,6 +1161,8 @@ private enum AppKitNovelTextLayoutAdapter {
             return viewportDocumentPageRange(
                 from: attributedText,
                 range: pageRange,
+                clipRect: pageClipRects[pageIndex],
+                contentHeight: documentContentHeight,
                 isFirstPage: pageIndex == 0
             )
         }
@@ -1206,6 +1217,8 @@ private enum AppKitNovelTextLayoutAdapter {
     private static func viewportDocumentPageRange(
         from attributedText: NSAttributedString,
         range: NSRange,
+        clipRect: CGRect?,
+        contentHeight: CGFloat,
         isFirstPage: Bool
     ) -> NovelTextViewportDocumentPageRange? {
         let textLength = attributedText.string.count
@@ -1232,7 +1245,16 @@ private enum AppKitNovelTextLayoutAdapter {
 
         return NovelTextViewportDocumentPageRange(
             startOffset: effectiveStart,
-            endOffset: trimmedEnd
+            endOffset: trimmedEnd,
+            frozenGeometry: clipRect.map { clipRect in
+                NovelTextViewportFrozenGeometry(
+                    documentStartOffset: effectiveStart,
+                    documentEndOffset: trimmedEnd,
+                    documentClipMinY: clipRect.minY,
+                    documentClipMaxY: clipRect.maxY,
+                    contentHeight: contentHeight
+                )
+            }
         )
     }
 
@@ -1344,6 +1366,7 @@ private extension String {
 struct NovelTextViewportDocumentPageRange: Hashable, Sendable {
     let startOffset: Int
     let endOffset: Int
+    let frozenGeometry: NovelTextViewportFrozenGeometry?
 
     var isEmpty: Bool {
         endOffset <= startOffset
@@ -1351,10 +1374,12 @@ struct NovelTextViewportDocumentPageRange: Hashable, Sendable {
 
     init(
         startOffset: Int,
-        endOffset: Int
+        endOffset: Int,
+        frozenGeometry: NovelTextViewportFrozenGeometry? = nil
     ) {
         self.startOffset = startOffset
         self.endOffset = endOffset
+        self.frozenGeometry = frozenGeometry
     }
 }
 
@@ -1377,7 +1402,7 @@ private struct NovelViewportPageDraft {
 }
 
 private enum NovelViewportPageDraftKind {
-    case text([ReaderRenderedTextRange])
+    case text([ReaderRenderedTextRange], frozenGeometry: NovelTextViewportFrozenGeometry?)
     case image(url: URL, chapterTitle: String?, externalBlock: NovelTextViewportExternalBlock)
 }
 

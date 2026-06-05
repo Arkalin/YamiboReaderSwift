@@ -627,6 +627,7 @@ public struct NovelTextViewportIndexPage: Hashable, Sendable {
     public var chapterTitle: String?
     public var ranges: [ReaderRenderedTextRange]
     public var externalBlocks: [NovelTextViewportExternalBlock]
+    public var frozenGeometry: NovelTextViewportFrozenGeometry?
     public var chapterCommentTarget: ReaderChapterCommentTarget?
 
     public init(
@@ -636,6 +637,7 @@ public struct NovelTextViewportIndexPage: Hashable, Sendable {
         chapterTitle: String?,
         ranges: [ReaderRenderedTextRange],
         externalBlocks: [NovelTextViewportExternalBlock] = [],
+        frozenGeometry: NovelTextViewportFrozenGeometry? = nil,
         chapterCommentTarget: ReaderChapterCommentTarget? = nil
     ) {
         self.pageIndex = max(0, pageIndex)
@@ -644,7 +646,39 @@ public struct NovelTextViewportIndexPage: Hashable, Sendable {
         self.chapterTitle = chapterTitle
         self.ranges = ranges
         self.externalBlocks = externalBlocks
+        self.frozenGeometry = frozenGeometry
         self.chapterCommentTarget = chapterCommentTarget
+    }
+}
+
+public struct NovelTextViewportFrozenGeometry: Hashable, Sendable {
+    public var documentStartOffset: Int
+    public var documentEndOffset: Int
+    public var documentClipMinY: CGFloat
+    public var documentClipMaxY: CGFloat
+    public var contentHeight: CGFloat
+    public var pageLocalOriginY: CGFloat
+
+    public init(
+        documentStartOffset: Int,
+        documentEndOffset: Int,
+        documentClipMinY: CGFloat,
+        documentClipMaxY: CGFloat,
+        contentHeight: CGFloat,
+        pageLocalOriginY: CGFloat? = nil
+    ) {
+        self.documentStartOffset = max(0, documentStartOffset)
+        self.documentEndOffset = max(self.documentStartOffset, documentEndOffset)
+        let minY = documentClipMinY.isFinite ? documentClipMinY : 0
+        let maxY = documentClipMaxY.isFinite ? documentClipMaxY : minY
+        self.documentClipMinY = min(minY, maxY)
+        self.documentClipMaxY = max(minY, maxY)
+        self.contentHeight = max(0, contentHeight.isFinite ? contentHeight : 0)
+        self.pageLocalOriginY = pageLocalOriginY ?? self.documentClipMinY
+    }
+
+    public var clipHeight: CGFloat {
+        max(0, documentClipMaxY - documentClipMinY)
     }
 }
 
