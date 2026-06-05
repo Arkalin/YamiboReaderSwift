@@ -469,6 +469,7 @@ public struct NovelTextViewportIndexPage: Hashable, Sendable {
     public var chapterOrdinal: Int?
     public var chapterTitle: String?
     public var ranges: [ReaderRenderedTextRange]
+    public var externalBlocks: [NovelTextViewportExternalBlock]
     public var chapterCommentTarget: ReaderChapterCommentTarget?
 
     public init(
@@ -477,6 +478,7 @@ public struct NovelTextViewportIndexPage: Hashable, Sendable {
         chapterOrdinal: Int?,
         chapterTitle: String?,
         ranges: [ReaderRenderedTextRange],
+        externalBlocks: [NovelTextViewportExternalBlock] = [],
         chapterCommentTarget: ReaderChapterCommentTarget? = nil
     ) {
         self.pageIndex = max(0, pageIndex)
@@ -484,6 +486,7 @@ public struct NovelTextViewportIndexPage: Hashable, Sendable {
         self.chapterOrdinal = chapterOrdinal
         self.chapterTitle = chapterTitle
         self.ranges = ranges
+        self.externalBlocks = externalBlocks
         self.chapterCommentTarget = chapterCommentTarget
     }
 }

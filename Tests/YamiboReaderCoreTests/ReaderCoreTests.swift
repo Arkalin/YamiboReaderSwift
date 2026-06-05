@@ -1028,6 +1028,51 @@ private final class StubURLProtocol: URLProtocol {
     #expect(layoutResult.compatibility.viewportContext == layoutResult.viewportContext)
 }
 
+@Test func novelTextViewportIndexPagePublishesImageExternalBlockPlacement() async throws {
+    let imageURL = try #require(URL(string: "https://example.com/viewport-image.jpg"))
+    let document = ReaderPageDocument(
+        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=164&mobile=2")),
+        view: 2,
+        maxView: 2,
+        segments: [
+            .text("第一章正文", chapterTitle: "第一章"),
+            .image(imageURL, chapterTitle: "第一章")
+        ],
+        segmentSources: [
+            ReaderSegmentSource(ownerPostID: "text-post"),
+            ReaderSegmentSource(ownerPostID: "image-post")
+        ]
+    )
+
+    let layoutResult = try NovelTextLayout.layout(
+        document: document,
+        settings: ReaderAppearanceSettings(readingMode: .paged),
+        layout: ReaderContainerLayout(width: 390, height: 844),
+        requiresAuthoritativePagedLayout: false,
+        pagedLayout: { text, _, _, _ in
+            [TextSlice(text: text, startOffset: 0, endOffset: text.count)]
+        }
+    )
+
+    let imagePage = try #require(layoutResult.viewportIndex.pages.first { !$0.externalBlocks.isEmpty })
+    #expect(imagePage.ranges.isEmpty)
+    #expect(imagePage.externalBlocks == [
+        NovelTextViewportExternalBlock(
+            segmentIndex: 1,
+            url: imageURL,
+            chapterOrdinal: 0,
+            chapterTitle: "第一章",
+            chapterCommentTarget: ReaderChapterCommentTarget(
+                threadURL: document.threadURL,
+                view: 2,
+                ownerPostID: "image-post",
+                title: "第一章"
+            )
+        )
+    ])
+    #expect(layoutResult.compatibility.pages[imagePage.pageIndex].blocks == [.image(imageURL, chapterTitle: "第一章")])
+}
+
 @Test func novelTextLayoutMaterializesViewportPageDisplayValueFromMultiRangeIndexPage() async throws {
     let settings = ReaderAppearanceSettings(
         fontScale: 1.25,

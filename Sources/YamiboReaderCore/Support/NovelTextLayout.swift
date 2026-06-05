@@ -220,6 +220,7 @@ public enum NovelTextLayout {
         var chapters: [ReaderChapter] = []
         var seenChapterOrdinals = Set<Int>()
         var viewportRangesByPageIndex: [Int: [ReaderRenderedTextRange]] = [:]
+        var viewportExternalBlocksByPageIndex: [Int: [NovelTextViewportExternalBlock]] = [:]
         let annotatedTextBySegment = Dictionary(
             uniqueKeysWithValues: annotatedSegments.map { ($0.index, $0.textContent) }
         )
@@ -273,14 +274,22 @@ public enum NovelTextLayout {
                 }
 
             case let .image(url, chapterTitle):
+                let externalBlock = NovelTextViewportExternalBlock(
+                    segmentIndex: annotatedSegment.index,
+                    url: url,
+                    chapterOrdinal: annotatedSegment.chapterOrdinal,
+                    chapterTitle: annotatedSegment.chapterTitle,
+                    chapterCommentTarget: chapterCommentTarget(for: annotatedSegment, document: document)
+                )
                 let page = ReaderRenderedPage(
                     index: pages.count,
                     blocks: [.image(url, chapterTitle: chapterTitle)],
                     documentView: document.view,
                     chapterOrdinal: annotatedSegment.chapterOrdinal,
                     chapterTitle: annotatedSegment.chapterTitle,
-                    chapterCommentTarget: chapterCommentTarget(for: annotatedSegment, document: document)
+                    chapterCommentTarget: externalBlock.chapterCommentTarget
                 )
+                viewportExternalBlocksByPageIndex[page.index] = [externalBlock]
                 if let chapterOrdinal = annotatedSegment.chapterOrdinal,
                    let chapterTitle = annotatedSegment.chapterTitle,
                    seenChapterOrdinals.insert(chapterOrdinal).inserted {
@@ -312,7 +321,8 @@ public enum NovelTextLayout {
             settings: settings,
             pages: pages,
             chapters: chapters,
-            viewportRangesByPageIndex: viewportRangesByPageIndex
+            viewportRangesByPageIndex: viewportRangesByPageIndex,
+            viewportExternalBlocksByPageIndex: viewportExternalBlocksByPageIndex
         )
         let viewportContext = NovelTextViewportContext(
             identity: viewportContextSeed.identity,
@@ -409,7 +419,8 @@ public enum NovelTextLayout {
         settings: ReaderAppearanceSettings,
         pages: [ReaderRenderedPage],
         chapters: [ReaderChapter],
-        viewportRangesByPageIndex: [Int: [ReaderRenderedTextRange]]
+        viewportRangesByPageIndex: [Int: [ReaderRenderedTextRange]],
+        viewportExternalBlocksByPageIndex: [Int: [NovelTextViewportExternalBlock]]
     ) -> NovelTextViewportIndex {
         let indexPages = pages.map { page in
             NovelTextViewportIndexPage(
@@ -418,6 +429,7 @@ public enum NovelTextLayout {
                 chapterOrdinal: page.chapterOrdinal,
                 chapterTitle: page.chapterTitle,
                 ranges: viewportRangesByPageIndex[page.index] ?? [],
+                externalBlocks: viewportExternalBlocksByPageIndex[page.index] ?? [],
                 chapterCommentTarget: page.chapterCommentTarget
             )
         }
