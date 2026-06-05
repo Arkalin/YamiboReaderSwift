@@ -438,11 +438,16 @@ public struct ReaderContainerView: View {
                 topInset: topInset,
                 bottomInset: bottomInset,
                 scrollRequest: verticalScrollRequest,
-                displayReferenceProvider: { pageIdentity in
-                    model.novelTextViewportDisplayReference(for: pageIdentity)
+                surfaceIdentityByPageIndex: Dictionary(
+                    uniqueKeysWithValues: (model.readerPresentation?.surfaces ?? []).map {
+                        ($0.identity.ordinal, $0.identity)
+                    }
+                ),
+                displayReferenceProvider: { surfaceIdentity in
+                    model.novelTextViewportDisplayReference(for: surfaceIdentity)
                 },
-                onVisiblePageIdentitiesChange: { pageIdentities in
-                    model.updateNovelTextViewportVisiblePageIdentities(pageIdentities)
+                onVisibleSurfaceIdentitiesChange: { surfaceIdentities in
+                    model.updateNovelTextViewportVisibleSurfaceIdentities(surfaceIdentities)
                 },
                 onScrollRequestHandled: { request in
                     guard verticalRestoreController.scrollingRequest == request else {

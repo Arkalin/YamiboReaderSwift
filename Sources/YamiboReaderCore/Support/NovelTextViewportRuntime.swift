@@ -431,6 +431,16 @@ final class NovelTextViewportRuntimeOwner {
         })
     }
 
+    func updateVisibleSurfaceIdentities(_ surfaceIdentities: [NovelReaderSurfaceIdentity]) {
+        visiblePageIdentities = Set(surfaceIdentities.compactMap { surfaceIdentity in
+            guard surfaceIdentity.generation == activeGeneration,
+                  result?.viewportIndex.pages.contains(where: { $0.pageIndex == surfaceIdentity.ordinal }) == true else {
+                return nil
+            }
+            return surfaceIdentity.ordinal
+        })
+    }
+
     func isCurrent(generation: UInt64, documentView: Int, pageIdentity: Int) -> Bool {
         guard generation == activeGeneration,
               let page = result?.viewportIndex.pages.first(where: { $0.pageIndex == pageIdentity }) else {

@@ -1043,8 +1043,9 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
     let topInset: CGFloat
     let bottomInset: CGFloat
     let scrollRequest: ReaderVerticalScrollRequest?
-    let displayReferenceProvider: @MainActor (Int) -> NovelTextViewportDisplayReference?
-    let onVisiblePageIdentitiesChange: ([Int]) -> Void
+    let surfaceIdentityByPageIndex: [Int: NovelReaderSurfaceIdentity]
+    let displayReferenceProvider: @MainActor (NovelReaderSurfaceIdentity) -> NovelTextViewportDisplayReference?
+    let onVisibleSurfaceIdentitiesChange: ([NovelReaderSurfaceIdentity]) -> Void
     let onScrollRequestHandled: (ReaderVerticalScrollRequest) -> Void
     let onScrollViewReady: (UIScrollView) -> Void
     let onPageFramesChange: ([Int: ReaderVerticalPageFrameValue]) -> Void
@@ -1155,7 +1156,8 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
             }
             cell.configure(
                 page: displayPage,
-                displayReference: parent.displayReferenceProvider(displayPage.pageIndex),
+                displayReference: parent.surfaceIdentityByPageIndex[displayPage.pageIndex]
+                    .flatMap { parent.displayReferenceProvider($0) },
                 textHeight: parent.viewportLayoutMetrics?.pageMetrics[displayPage.pageIndex]?.textHeight,
                 settings: parent.settings,
                 refererURL: parent.refererURL,
@@ -1263,10 +1265,12 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
             callbackScheduler.publish {
                 onPageFramesChange(frames)
             }
-            let visiblePageIdentities = frames.keys.sorted()
-            let onVisiblePageIdentitiesChange = parent.onVisiblePageIdentitiesChange
+            let visibleSurfaceIdentities = frames.keys
+                .compactMap { parent.surfaceIdentityByPageIndex[$0] }
+                .sorted { $0.ordinal < $1.ordinal }
+            let onVisibleSurfaceIdentitiesChange = parent.onVisibleSurfaceIdentitiesChange
             callbackScheduler.publish {
-                onVisiblePageIdentitiesChange(visiblePageIdentities)
+                onVisibleSurfaceIdentitiesChange(visibleSurfaceIdentities)
             }
 
             let referenceLineY = ReaderVerticalPositioning.viewportReferenceLineY(in: scrollView.bounds)

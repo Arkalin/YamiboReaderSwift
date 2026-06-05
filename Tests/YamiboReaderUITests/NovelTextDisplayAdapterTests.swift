@@ -569,7 +569,9 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         let verticalCellBody = try XCTUnwrap(typeBody(named: "ReaderVerticalViewportCell", in: supportSource))
 
         XCTAssertTrue(verticalBody.contains("displayReferenceProvider"))
-        XCTAssertTrue(verticalBody.contains("visiblePageIdentities"))
+        XCTAssertTrue(verticalBody.contains("surfaceIdentityByPageIndex"))
+        XCTAssertTrue(verticalBody.contains("visibleSurfaceIdentities"))
+        XCTAssertFalse(verticalBody.contains("onVisiblePageIdentitiesChange"))
         XCTAssertFalse(verticalBody.contains("NovelTextLayoutLiveSurfaceStore"))
         XCTAssertFalse(verticalBody.contains("removeAllTextSurfaces"))
         XCTAssertTrue(verticalCellBody.contains("NovelTextViewportDisplayReference?"))
