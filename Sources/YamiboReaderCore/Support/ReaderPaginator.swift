@@ -39,19 +39,13 @@ public enum ReaderPaginator {
         document: ReaderPageDocument,
         settings: ReaderAppearanceSettings,
         layout: ReaderContainerLayout,
-        pagedLayout: NovelPagedTextLayout? = nil,
-        verticalLayout: NovelVerticalTextLayout? = nil,
-        requiresAuthoritativePagedLayout: Bool? = nil,
-        requiresAuthoritativeVerticalLayout: Bool? = nil
+        viewportPageLayout: NovelTextViewportPageLayout? = nil
     ) throws -> NovelTextLayoutResult {
         try NovelTextLayout.layout(
             document: document,
             settings: settings,
             layout: layout,
-            requiresAuthoritativePagedLayout: requiresAuthoritativePagedLayout,
-            requiresAuthoritativeVerticalLayout: requiresAuthoritativeVerticalLayout,
-            pagedLayout: pagedLayout,
-            verticalLayout: verticalLayout
+            viewportPageLayout: viewportPageLayout
         )
     }
 

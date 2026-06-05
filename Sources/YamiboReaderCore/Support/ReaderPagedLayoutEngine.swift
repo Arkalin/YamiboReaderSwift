@@ -45,12 +45,11 @@ enum ReaderPagedLayoutEngine {
         return measuredTextHeightWithTextKit2(attributedText, width: width)
     }
 
-    static func paginateText(
+    static func paginateViewportDocument(
         _ text: String,
-        chapterTitle: String?,
         settings: ReaderAppearanceSettings,
         layout: ReaderContainerLayout
-    ) -> [TextSlice] {
+    ) -> [NovelTextViewportDocumentPageRange] {
         let pageSize = layout.readableFrame.size
         guard pageSize.width > 0, pageSize.height > 0 else {
             return []
@@ -61,18 +60,17 @@ enum ReaderPagedLayoutEngine {
 
         let attributedText = ReaderAttributedTextFactory.makeAttributedText(
             text: text,
-            chapterTitle: chapterTitle,
+            chapterTitle: nil,
             settings: settings
         )
         return paginateTextWithTextKit2(attributedText, pageSize: pageSize)
     }
 
-    static func verticalTextChunks(
+    static func verticalViewportDocumentChunks(
         _ text: String,
-        chapterTitle: String?,
         settings: ReaderAppearanceSettings,
         layout: ReaderContainerLayout
-    ) -> [TextSlice] {
+    ) -> [NovelTextViewportDocumentPageRange] {
         let readableFrame = layout.readableFrame
         let chunkSize = CGSize(width: readableFrame.width, height: readableFrame.height * 1.8)
         guard chunkSize.width > 0, chunkSize.height > 0 else {
@@ -84,13 +82,16 @@ enum ReaderPagedLayoutEngine {
 
         let attributedText = ReaderAttributedTextFactory.makeAttributedText(
             text: text,
-            chapterTitle: chapterTitle,
+            chapterTitle: nil,
             settings: settings
         )
         return paginateTextWithTextKit2(attributedText, pageSize: chunkSize)
     }
 
-    private static func paginateTextWithTextKit2(_ attributedText: NSAttributedString, pageSize: CGSize) -> [TextSlice] {
+    private static func paginateTextWithTextKit2(
+        _ attributedText: NSAttributedString,
+        pageSize: CGSize
+    ) -> [NovelTextViewportDocumentPageRange] {
         let textContentStorage = NSTextContentStorage()
         let textLayoutManager = NSTextLayoutManager()
         textContentStorage.addTextLayoutManager(textLayoutManager)
@@ -132,7 +133,7 @@ enum ReaderPagedLayoutEngine {
 
         return pageRanges.keys.sorted().compactMap { pageIndex in
             guard let pageRange = pageRanges[pageIndex] else { return nil }
-            return textSlice(
+            return viewportDocumentPageRange(
                 from: attributedText,
                 range: pageRange,
                 isFirstPage: pageIndex == 0
@@ -173,7 +174,11 @@ enum ReaderPagedLayoutEngine {
         return NSRange(location: start, length: end - start)
     }
 
-    private static func textSlice(from attributedText: NSAttributedString, range: NSRange, isFirstPage: Bool) -> TextSlice? {
+    private static func viewportDocumentPageRange(
+        from attributedText: NSAttributedString,
+        range: NSRange,
+        isFirstPage: Bool
+    ) -> NovelTextViewportDocumentPageRange? {
         let textLength = attributedText.string.count
         let pageCharacterStart = max(0, min(range.location, textLength))
         let nextCharacterEnd = min(range.location + range.length, textLength)
@@ -191,16 +196,14 @@ enum ReaderPagedLayoutEngine {
         let trimmedLeadingText = candidateText.trimmingLeadingPaginationWhitespace()
         let leadingTrimmed = candidateText.count - trimmedLeadingText.count
         let effectiveStart = pageCharacterStart + leadingTrimmed
-        let sliceText = effectiveStart < trimmedEnd ? attributedText.attributedSubstring(
+        let pageText = effectiveStart < trimmedEnd ? attributedText.attributedSubstring(
             from: NSRange(location: effectiveStart, length: trimmedEnd - effectiveStart)
         ).string : ""
-        guard !sliceText.isEmpty else { return nil }
+        guard !pageText.isEmpty else { return nil }
 
-        return TextSlice(
-            text: sliceText,
+        return NovelTextViewportDocumentPageRange(
             startOffset: effectiveStart,
-            endOffset: trimmedEnd,
-            startsAtParagraphBoundary: isFirstPage || isParagraphBoundary(in: attributedText.string, at: effectiveStart)
+            endOffset: trimmedEnd
         )
     }
 

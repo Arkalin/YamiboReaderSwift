@@ -5,19 +5,11 @@ import Foundation
 import AppKit
 #endif
 
-typealias NovelPagedTextLayout = @Sendable (
-    _ text: String,
-    _ chapterTitle: String?,
+typealias NovelTextViewportPageLayout = @Sendable (
+    _ viewportContext: NovelTextViewportContext,
     _ settings: ReaderAppearanceSettings,
     _ layout: ReaderContainerLayout
-) -> [TextSlice]
-
-typealias NovelVerticalTextLayout = @Sendable (
-    _ text: String,
-    _ chapterTitle: String?,
-    _ settings: ReaderAppearanceSettings,
-    _ layout: ReaderContainerLayout
-) -> [TextSlice]
+) -> [NovelTextViewportDocumentPageRange]
 
 public enum NovelTextLayout {
     private static let viewportIndexCache = NovelTextViewportIndexCache()
@@ -58,8 +50,7 @@ public enum NovelTextLayout {
             document: document,
             settings: settings,
             layout: layout,
-            requiresAuthoritativePagedLayout: nil,
-            requiresAuthoritativeVerticalLayout: nil
+            viewportPageLayout: nil
         )
     }
 
@@ -72,8 +63,7 @@ public enum NovelTextLayout {
             document: document,
             settings: settings,
             layout: layout,
-            requiresAuthoritativePagedLayout: nil,
-            requiresAuthoritativeVerticalLayout: nil
+            viewportPageLayout: nil
         )
     }
 
@@ -81,20 +71,14 @@ public enum NovelTextLayout {
         document: ReaderPageDocument,
         settings: ReaderAppearanceSettings,
         layout: ReaderContainerLayout,
-        requiresAuthoritativePagedLayout: Bool? = nil,
-        requiresAuthoritativeVerticalLayout: Bool? = nil,
-        pagedLayout: NovelPagedTextLayout? = nil,
-        verticalLayout: NovelVerticalTextLayout? = nil,
+        viewportPageLayout: NovelTextViewportPageLayout? = nil,
         usesViewportIndexCache: Bool? = nil
     ) throws -> NovelTextLayoutResult {
         try self.layout(
             document: document,
             settings: settings,
             layout: layout,
-            requiresAuthoritativePagedLayout: requiresAuthoritativePagedLayout,
-            requiresAuthoritativeVerticalLayout: requiresAuthoritativeVerticalLayout,
-            pagedLayout: pagedLayout,
-            verticalLayout: verticalLayout,
+            viewportPageLayout: viewportPageLayout,
             usesViewportIndexCache: usesViewportIndexCache
         )
     }
@@ -103,10 +87,7 @@ public enum NovelTextLayout {
         document: ReaderPageDocument,
         settings: ReaderAppearanceSettings,
         layout: ReaderContainerLayout,
-        requiresAuthoritativePagedLayout: Bool? = nil,
-        requiresAuthoritativeVerticalLayout: Bool? = nil,
-        pagedLayout: NovelPagedTextLayout? = nil,
-        verticalLayout: NovelVerticalTextLayout? = nil,
+        viewportPageLayout: NovelTextViewportPageLayout? = nil,
         usesViewportIndexCache: Bool? = nil
     ) throws -> NovelTextLayoutResult {
         let cacheKey = NovelTextViewportIndexCacheKey(
@@ -114,7 +95,7 @@ public enum NovelTextLayout {
             settings: settings,
             layout: layout
         )
-        let shouldUseCache = usesViewportIndexCache ?? (pagedLayout == nil && verticalLayout == nil)
+        let shouldUseCache = usesViewportIndexCache ?? (viewportPageLayout == nil)
         if shouldUseCache, let cachedResult = viewportIndexCache.result(for: cacheKey) {
             return cachedResult
         }
@@ -131,17 +112,14 @@ public enum NovelTextLayout {
             settings: settings,
             layout: layout,
             viewportContextSeed: viewportContextSeed,
-            chunker: { text, chapterTitle, settings, layout in
-                try renderedTextSlices(
-                    text,
-                    chapterTitle: chapterTitle,
+            viewportPageLayout: { viewportContext, settings, layout in
+                if let viewportPageLayout {
+                    return viewportPageLayout(viewportContext, settings, layout)
+                }
+                return try viewportDocumentPageRanges(
+                    viewportContext: viewportContext,
                     settings: settings,
-                    layout: layout,
-                    readingMode: settings.readingMode,
-                    requiresAuthoritativePagedLayout: requiresAuthoritativePagedLayout ?? Self.requiresAuthoritativePagedLayout(for: settings),
-                    requiresAuthoritativeVerticalLayout: requiresAuthoritativeVerticalLayout ?? Self.requiresAuthoritativeVerticalLayout(for: settings),
-                    pagedLayout: pagedLayout,
-                    verticalLayout: verticalLayout
+                    layout: layout
                 )
             }
         )
@@ -159,53 +137,25 @@ public enum NovelTextLayout {
         return result
     }
 
-    static func renderedTextSlices(
-        _ text: String,
-        chapterTitle: String?,
+    static func viewportDocumentPageRanges(
+        viewportContext: NovelTextViewportContext,
         settings: ReaderAppearanceSettings,
-        layout: ReaderContainerLayout,
-        readingMode: ReaderReadingMode,
-        requiresAuthoritativePagedLayout: Bool,
-        requiresAuthoritativeVerticalLayout: Bool = false,
-        pagedLayout: NovelPagedTextLayout? = nil,
-        verticalLayout: NovelVerticalTextLayout? = nil
-    ) throws -> [TextSlice] {
-        switch readingMode {
+        layout: ReaderContainerLayout
+    ) throws -> [NovelTextViewportDocumentPageRange] {
+        switch settings.readingMode {
         case .paged:
-            return try pagedTextSlices(
-                text,
-                chapterTitle: chapterTitle,
+            return try pagedViewportDocumentRanges(
+                viewportContext: viewportContext,
                 settings: settings,
-                layout: layout,
-                requiresAuthoritativeLayout: requiresAuthoritativePagedLayout,
-                pagedLayout: pagedLayout
+                layout: layout
             )
         case .vertical:
-            return try verticalTextChunks(
-                text,
-                chapterTitle: chapterTitle,
+            return try verticalViewportDocumentRanges(
+                viewportContext: viewportContext,
                 settings: settings,
-                layout: layout,
-                requiresAuthoritativeLayout: requiresAuthoritativeVerticalLayout,
-                verticalLayout: verticalLayout
+                layout: layout
             )
         }
-    }
-
-    private static func requiresAuthoritativePagedLayout(for settings: ReaderAppearanceSettings) -> Bool {
-#if canImport(UIKit) || canImport(AppKit)
-        settings.readingMode == .paged
-#else
-        false
-#endif
-    }
-
-    private static func requiresAuthoritativeVerticalLayout(for settings: ReaderAppearanceSettings) -> Bool {
-#if canImport(UIKit) || canImport(AppKit)
-        settings.readingMode == .vertical
-#else
-        false
-#endif
     }
 
     private static func render(
@@ -214,7 +164,7 @@ public enum NovelTextLayout {
         settings: ReaderAppearanceSettings,
         layout: ReaderContainerLayout,
         viewportContextSeed: NovelTextViewportContext,
-        chunker: (String, String?, ReaderAppearanceSettings, ReaderContainerLayout) throws -> [TextSlice]
+        viewportPageLayout: (NovelTextViewportContext, ReaderAppearanceSettings, ReaderContainerLayout) throws -> [NovelTextViewportDocumentPageRange]
     ) throws -> NovelTextLayoutResult {
         var pages: [NovelTextViewportIndexPage] = []
         var chapters: [NovelTextViewportIndexChapter] = []
@@ -232,10 +182,10 @@ public enum NovelTextLayout {
         var nextDraftOrdinal = 0
 
         if !viewportContextSeed.document.text.isEmpty {
-            let slices = try chunker(viewportContextSeed.document.text, nil, settings, layout)
-            for slice in slices where !slice.text.isEmpty {
+            let pageRanges = try viewportPageLayout(viewportContextSeed, settings, layout)
+            for pageRange in pageRanges where !pageRange.isEmpty {
                 let ranges = segmentRanges(
-                    for: slice,
+                    for: pageRange,
                     viewportDocument: viewportContextSeed.document
                 )
                 for group in splitTextRanges(
@@ -448,11 +398,11 @@ public enum NovelTextLayout {
     }
 
     private static func segmentRanges(
-        for slice: TextSlice,
+        for pageRange: NovelTextViewportDocumentPageRange,
         viewportDocument: NovelTextViewportDocument
     ) -> [ReaderRenderedTextRange] {
-        let sliceStart = max(0, slice.startOffset)
-        let sliceEnd = max(sliceStart, slice.endOffset)
+        let sliceStart = max(0, pageRange.startOffset)
+        let sliceEnd = max(sliceStart, pageRange.endOffset)
         guard sliceEnd > sliceStart else { return [] }
 
         return viewportDocument.textRangesBySegment
@@ -757,83 +707,55 @@ public enum NovelTextLayout {
         return height
     }
 
-    private static func pagedTextSlices(
-        _ text: String,
-        chapterTitle: String?,
+    private static func pagedViewportDocumentRanges(
+        viewportContext: NovelTextViewportContext,
         settings: ReaderAppearanceSettings,
-        layout: ReaderContainerLayout,
-        requiresAuthoritativeLayout: Bool,
-        pagedLayout: NovelPagedTextLayout?
-    ) throws -> [TextSlice] {
+        layout: ReaderContainerLayout
+    ) throws -> [NovelTextViewportDocumentPageRange] {
 #if canImport(UIKit)
-        let authoritativeLayout = pagedLayout ?? ReaderPagedLayoutEngine.paginateText
-        let slices = authoritativeLayout(
-            text,
-            chapterTitle,
-            settings,
-            layout
+        let ranges = ReaderPagedLayoutEngine.paginateViewportDocument(
+            viewportContext.document.text,
+            settings: settings,
+            layout: layout
         )
-        if !slices.isEmpty {
-            return slices
+        if !ranges.isEmpty {
+            return ranges
         }
 #elseif canImport(AppKit)
-        let authoritativeLayout = pagedLayout ?? AppKitNovelTextLayoutAdapter.paginateText
-        let slices = authoritativeLayout(
-            text,
-            chapterTitle,
-            settings,
-            layout
+        let ranges = AppKitNovelTextLayoutAdapter.paginateViewportDocument(
+            viewportContext.document.text,
+            settings: settings,
+            layout: layout
         )
-        if !slices.isEmpty {
-            return slices
-        }
-#else
-        if let pagedLayout {
-            let slices = pagedLayout(text, chapterTitle, settings, layout)
-            if !slices.isEmpty {
-                return slices
-            }
+        if !ranges.isEmpty {
+            return ranges
         }
 #endif
         throw NovelTextLayoutFailure.unableToLayoutText
     }
 
-    private static func verticalTextChunks(
-        _ text: String,
-        chapterTitle: String?,
+    private static func verticalViewportDocumentRanges(
+        viewportContext: NovelTextViewportContext,
         settings: ReaderAppearanceSettings,
-        layout: ReaderContainerLayout,
-        requiresAuthoritativeLayout: Bool,
-        verticalLayout: NovelVerticalTextLayout?
-    ) throws -> [TextSlice] {
+        layout: ReaderContainerLayout
+    ) throws -> [NovelTextViewportDocumentPageRange] {
 #if canImport(UIKit)
-        let authoritativeLayout = verticalLayout ?? ReaderPagedLayoutEngine.verticalTextChunks
-        let slices = authoritativeLayout(
-            text,
-            chapterTitle,
-            settings,
-            layout
+        let ranges = ReaderPagedLayoutEngine.verticalViewportDocumentChunks(
+            viewportContext.document.text,
+            settings: settings,
+            layout: layout
         )
-        if !slices.isEmpty {
-            return slices
+        if !ranges.isEmpty {
+            return ranges
         }
 #elseif canImport(AppKit)
-        let authoritativeLayout = verticalLayout ?? AppKitNovelTextLayoutAdapter.verticalTextChunks
-        let slices = authoritativeLayout(
-            text,
-            chapterTitle,
-            settings,
-            layout
+        let ranges = AppKitNovelTextLayoutAdapter.verticalViewportDocumentChunks(
+            viewportContext.document.text,
+            settings: settings,
+            layout: layout
         )
-        if !slices.isEmpty {
-            return slices
-        }
-#else
-        if let verticalLayout {
-            let slices = verticalLayout(text, chapterTitle, settings, layout)
-            if !slices.isEmpty {
-                return slices
-            }
+        if !ranges.isEmpty {
+            return ranges
         }
 #endif
         throw NovelTextLayoutFailure.unableToLayoutText
@@ -899,12 +821,11 @@ private enum AppKitNovelTextLayoutAdapter {
         return measuredTextHeightWithTextKit2(attributedText, width: width)
     }
 
-    static func paginateText(
+    static func paginateViewportDocument(
         _ text: String,
-        chapterTitle: String?,
         settings: ReaderAppearanceSettings,
         layout: ReaderContainerLayout
-    ) -> [TextSlice] {
+    ) -> [NovelTextViewportDocumentPageRange] {
         let pageSize = layout.readableFrame.size
         guard pageSize.width > 0, pageSize.height > 0 else {
             return []
@@ -915,7 +836,7 @@ private enum AppKitNovelTextLayoutAdapter {
 
         let attributedText = makeAttributedText(
             text: text,
-            chapterTitle: chapterTitle,
+            chapterTitle: nil,
             settings: settings
         )
         return paginateTextWithTextKit2(attributedText, pageSize: pageSize)
@@ -946,12 +867,11 @@ private enum AppKitNovelTextLayoutAdapter {
         return ceil(maxY)
     }
 
-    static func verticalTextChunks(
+    static func verticalViewportDocumentChunks(
         _ text: String,
-        chapterTitle: String?,
         settings: ReaderAppearanceSettings,
         layout: ReaderContainerLayout
-    ) -> [TextSlice] {
+    ) -> [NovelTextViewportDocumentPageRange] {
         let readableFrame = layout.readableFrame
         let chunkSize = CGSize(width: readableFrame.width, height: readableFrame.height * 1.8)
         guard chunkSize.width > 0, chunkSize.height > 0 else {
@@ -963,7 +883,7 @@ private enum AppKitNovelTextLayoutAdapter {
 
         let attributedText = makeAttributedText(
             text: text,
-            chapterTitle: chapterTitle,
+            chapterTitle: nil,
             settings: settings
         )
         return paginateTextWithTextKit2(attributedText, pageSize: chunkSize)
@@ -1029,7 +949,10 @@ private enum AppKitNovelTextLayoutAdapter {
         return rendered
     }
 
-    private static func paginateTextWithTextKit2(_ attributedText: NSAttributedString, pageSize: CGSize) -> [TextSlice] {
+    private static func paginateTextWithTextKit2(
+        _ attributedText: NSAttributedString,
+        pageSize: CGSize
+    ) -> [NovelTextViewportDocumentPageRange] {
         let textContentStorage = NSTextContentStorage()
         let textLayoutManager = NSTextLayoutManager()
         textContentStorage.addTextLayoutManager(textLayoutManager)
@@ -1082,7 +1005,7 @@ private enum AppKitNovelTextLayoutAdapter {
 
         return pageRanges.keys.sorted().compactMap { pageIndex in
             guard let pageRange = pageRanges[pageIndex] else { return nil }
-            return textSlice(
+            return viewportDocumentPageRange(
                 from: attributedText,
                 range: pageRange,
                 isFirstPage: pageIndex == 0
@@ -1136,7 +1059,11 @@ private enum AppKitNovelTextLayoutAdapter {
         return NSRange(location: start, length: end - start)
     }
 
-    private static func textSlice(from attributedText: NSAttributedString, range: NSRange, isFirstPage: Bool) -> TextSlice? {
+    private static func viewportDocumentPageRange(
+        from attributedText: NSAttributedString,
+        range: NSRange,
+        isFirstPage: Bool
+    ) -> NovelTextViewportDocumentPageRange? {
         let textLength = attributedText.string.count
         let pageCharacterStart = max(0, min(range.location, textLength))
         let nextCharacterEnd = min(range.location + range.length, textLength)
@@ -1154,16 +1081,14 @@ private enum AppKitNovelTextLayoutAdapter {
         let trimmedLeadingText = candidateText.trimmingLeadingPaginationWhitespace()
         let leadingTrimmed = candidateText.count - trimmedLeadingText.count
         let effectiveStart = pageCharacterStart + leadingTrimmed
-        let sliceText = effectiveStart < trimmedEnd ? attributedText.attributedSubstring(
+        let pageText = effectiveStart < trimmedEnd ? attributedText.attributedSubstring(
             from: NSRange(location: effectiveStart, length: trimmedEnd - effectiveStart)
         ).string : ""
-        guard !sliceText.isEmpty else { return nil }
+        guard !pageText.isEmpty else { return nil }
 
-        return TextSlice(
-            text: sliceText,
+        return NovelTextViewportDocumentPageRange(
             startOffset: effectiveStart,
-            endOffset: trimmedEnd,
-            startsAtParagraphBoundary: isFirstPage || isParagraphBoundary(in: attributedText.string, at: effectiveStart)
+            endOffset: trimmedEnd
         )
     }
 
@@ -1272,22 +1197,20 @@ private extension String {
 }
 #endif
 
-struct TextSlice {
-    let text: String
+struct NovelTextViewportDocumentPageRange: Hashable, Sendable {
     let startOffset: Int
     let endOffset: Int
-    let startsAtParagraphBoundary: Bool
+
+    var isEmpty: Bool {
+        endOffset <= startOffset
+    }
 
     init(
-        text: String,
         startOffset: Int,
-        endOffset: Int,
-        startsAtParagraphBoundary: Bool = true
+        endOffset: Int
     ) {
-        self.text = text
         self.startOffset = startOffset
         self.endOffset = endOffset
-        self.startsAtParagraphBoundary = startsAtParagraphBoundary
     }
 }
 
