@@ -565,6 +565,7 @@ struct ReaderPagedSpreadContent: View {
     let pages: [NovelTextViewportIndexPage]
     let viewportContext: NovelTextViewportContext?
     let viewportIndex: NovelTextViewportIndex?
+    let viewportLayoutMetrics: NovelTextViewportLayoutMetrics?
     let settings: ReaderAppearanceSettings
     let refererURL: URL
     let sessionState: SessionState
@@ -1100,6 +1101,7 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
             pages: pages,
             viewportContext: viewportContext,
             viewportIndex: viewportIndex,
+            viewportLayoutMetrics: viewportLayoutMetrics,
             settings: settings,
             topInset: topInset,
             bottomInset: bottomInset
@@ -1358,6 +1360,10 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
             guard let displayPage = verticalDisplayPage(for: item) else {
                 return max(collectionView.bounds.height, 1)
             }
+            let topPadding = displayPage.pageIndex == 0 ? CGFloat(16) : 0
+            if let viewportMetricHeight = parent.viewportLayoutMetrics?.pageHeight(for: displayPage.pageIndex) {
+                return max(ceil(viewportMetricHeight + topPadding), 1)
+            }
             let contentWidth = max(verticalItemWidth(in: collectionView) - parent.settings.horizontalPadding * 2, 1)
             let blockHeights = displayPage.blocks.map { block -> CGFloat in
                 switch block {
@@ -1375,7 +1381,6 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
             }
             let contentHeight = blockHeights.reduce(CGFloat.zero, +)
             let spacingHeight = CGFloat(max(displayPage.blocks.count - 1, 0)) * 14
-            let topPadding = displayPage.pageIndex == 0 ? CGFloat(16) : 0
             return max(ceil(contentHeight + spacingHeight + topPadding), 1)
         }
 
@@ -1805,6 +1810,7 @@ private struct ReaderVerticalViewportContentIdentity: Hashable {
     var pages: [NovelTextViewportIndexPage]
     var viewportContext: NovelTextViewportContext?
     var viewportIndex: NovelTextViewportIndex?
+    var viewportLayoutMetrics: NovelTextViewportLayoutMetrics?
     var settings: ReaderAppearanceSettings
     var topInset: CGFloat
     var bottomInset: CGFloat
