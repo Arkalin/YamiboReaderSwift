@@ -425,6 +425,114 @@ final class NovelReadingWorkflowTests: XCTestCase {
         XCTAssertFalse(reference.isStale)
     }
 
+    func testRuntimeAdapterFailureConsumesGenerationAndKeepsActiveWorkflowState() async throws {
+        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9191&mobile=2")!
+        let repository = RecordingNovelReadingRepository(documents: [
+            1: makeNovelDocument(threadURL: threadURL, view: 1, maxView: 1, authorID: "author-1")
+        ])
+        let runtimeAdapter = TestNovelTextLayoutRuntimeAdapter()
+        let workflow = NovelReadingWorkflow(
+            context: ReaderLaunchContext(
+                threadURL: threadURL,
+                threadTitle: "Thread",
+                source: .forum,
+                initialView: 1,
+                authorID: "author-1"
+            ),
+            settings: ReaderAppearanceSettings(readingMode: .paged),
+            layout: ReaderContainerLayout(width: 320, height: 568),
+            repository: repository,
+            runtimeAdapter: runtimeAdapter
+        )
+        let initialState = try await workflow.start(initial: NovelReadingInitialPosition())
+        let pageIdentity = try XCTUnwrap(initialState.snapshot.viewportIndex?.pages.first?.pageIndex)
+        let initialReference = try XCTUnwrap(workflow.displayReference(for: pageIdentity))
+
+        runtimeAdapter.failNextCandidate(with: NovelTextLayoutFailure.unableToLayoutText)
+        do {
+            _ = try workflow.updateSettings(
+                ReaderAppearanceSettings(fontScale: 1.2, readingMode: .paged)
+            )
+            XCTFail("Expected runtime adapter failure")
+        } catch let failure as NovelTextLayoutFailure {
+            XCTAssertEqual(failure, .unableToLayoutText)
+        }
+
+        XCTAssertEqual(workflow.state, initialState)
+        XCTAssertFalse(initialReference.isStale)
+        XCTAssertEqual(workflow.displayReference(for: pageIdentity)?.generation, initialReference.generation)
+
+        let replacementState = try XCTUnwrap(
+            workflow.updateSettings(
+                ReaderAppearanceSettings(fontScale: 1.3, readingMode: .paged)
+            )
+        )
+        let replacementIdentity = try XCTUnwrap(replacementState.snapshot.viewportIndex?.pages.first?.pageIndex)
+        let replacementReference = try XCTUnwrap(workflow.displayReference(for: replacementIdentity))
+
+        XCTAssertTrue(initialReference.isStale)
+        XCTAssertEqual(replacementReference.generation, initialReference.generation + 2)
+        XCTAssertEqual(runtimeAdapter.preparedCandidateCount, 3)
+    }
+
+    func testRuntimePreparedTransactionsAreSingleUseAndSupersededByNewerCandidates() throws {
+        let runtimeAdapter = TestNovelTextLayoutRuntimeAdapter()
+        let runtimeOwner = NovelTextViewportRuntimeOwner(adapter: runtimeAdapter)
+        let result = layoutResult(
+            pages: [
+                viewportTestPage(
+                    index: 0,
+                    blocks: [.text("正文", chapterTitle: "第一章")],
+                    documentView: 1,
+                    chapterOrdinal: 0,
+                    chapterTitle: "第一章"
+                )
+            ],
+            chapters: [
+                ReaderChapter(ordinal: 0, title: "第一章", startIndex: 0)
+            ]
+        )
+
+        let initialTransaction = try XCTUnwrap(
+            try runtimeOwner.prepareTransaction(
+                result: result,
+                settings: ReaderAppearanceSettings(readingMode: .paged),
+                layout: ReaderContainerLayout(width: 320, height: 568)
+            )
+        )
+        runtimeOwner.commit(initialTransaction)
+        runtimeOwner.commit(initialTransaction)
+        let initialReference = try XCTUnwrap(runtimeOwner.displayReference(for: 0))
+        XCTAssertEqual(initialReference.generation, 1)
+        XCTAssertEqual(runtimeOwner.runtimeTransactionDiagnostics.committedTransactionCount, 1)
+
+        let supersededTransaction = try XCTUnwrap(
+            try runtimeOwner.prepareTransaction(
+                result: result,
+                settings: ReaderAppearanceSettings(fontScale: 1.1, readingMode: .paged),
+                layout: ReaderContainerLayout(width: 320, height: 568)
+            )
+        )
+        let replacementTransaction = try XCTUnwrap(
+            try runtimeOwner.prepareTransaction(
+                result: result,
+                settings: ReaderAppearanceSettings(fontScale: 1.2, readingMode: .paged),
+                layout: ReaderContainerLayout(width: 320, height: 568)
+            )
+        )
+
+        runtimeOwner.commit(supersededTransaction)
+        XCTAssertFalse(initialReference.isStale)
+        XCTAssertEqual(runtimeOwner.displayReference(for: 0)?.generation, 1)
+
+        runtimeOwner.commit(replacementTransaction)
+        let replacementReference = try XCTUnwrap(runtimeOwner.displayReference(for: 0))
+        XCTAssertTrue(initialReference.isStale)
+        XCTAssertEqual(replacementReference.generation, 3)
+        XCTAssertEqual(runtimeOwner.runtimeTransactionDiagnostics.committedTransactionCount, 2)
+        XCTAssertEqual(runtimeAdapter.preparedCandidateCount, 3)
+    }
+
     func testAppearanceLayoutSpreadAndModeUpdatesCommitOneRuntimeTransaction() async throws {
         let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9185&mobile=2")!
         let repository = RecordingNovelReadingRepository(documents: [
@@ -1925,6 +2033,30 @@ private actor RuntimeUpdatePreparationGate {
     func resume() {
         continuation?.resume()
         continuation = nil
+    }
+}
+
+@MainActor
+private final class TestNovelTextLayoutRuntimeAdapter: NovelTextLayoutRuntimeAdapter {
+    private var nextFailure: Error?
+    private(set) var preparedCandidateCount = 0
+
+    func failNextCandidate(with error: Error) {
+        nextFailure = error
+    }
+
+    func prepareCandidate(
+        input: NovelTextLayoutRuntimeAdapterInput
+    ) throws -> NovelTextLayoutRuntimeCandidate {
+        preparedCandidateCount += 1
+        if let nextFailure {
+            self.nextFailure = nil
+            throw nextFailure
+        }
+        return NovelTextLayoutRuntimeCandidate(
+            semanticAttributedDocument: NSAttributedString(string: input.result.viewportContext.document.text),
+            reusedSemanticAttributedDocument: input.cachedSemanticAttributedDocument != nil
+        )
     }
 }
 

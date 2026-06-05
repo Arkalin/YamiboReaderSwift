@@ -880,12 +880,12 @@ private final class StubURLProtocol: URLProtocol {
             .appendingPathComponent("Sources/YamiboReaderCore/Support/NovelTextLayout.swift"),
         encoding: .utf8
     )
-    let transactionBody = try #require(functionBody(named: "prepareTransaction", in: runtimeSource))
+    let adapterBody = try #require(functionBody(named: "prepareCandidate", in: runtimeSource))
     let metricsBody = try #require(functionBody(named: "layoutMetrics", in: layoutSource))
 
-    #expect(transactionBody.contains("max(layout.readableFrame.width, 1)"))
+    #expect(adapterBody.contains("max(input.layout.readableFrame.width, 1)"))
     #expect(metricsBody.contains("max(layout.readableFrame.width, 1)"))
-    #expect(!transactionBody.contains("readableFrame.width - settings.horizontalPadding"))
+    #expect(!adapterBody.contains("readableFrame.width - settings.horizontalPadding"))
     #expect(!metricsBody.contains("readableFrame.width - settings.horizontalPadding"))
 }
 
