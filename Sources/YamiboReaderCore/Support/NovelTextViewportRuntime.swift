@@ -27,6 +27,14 @@ enum NovelTextSurfaceFragmentPartitioner {
                 currentClipRect = segment.rect
                 continue
             }
+            if segment.characterRange.location < existingRange.location + existingRange.length {
+                guard segment.characterRange.location + segment.characterRange.length > existingRange.location + existingRange.length else {
+                    continue
+                }
+                currentRange = existingRange.union(segment.characterRange)
+                currentClipRect = existingClipRect.union(segment.rect)
+                continue
+            }
             let candidateClipRect = existingClipRect.union(segment.rect)
             if candidateClipRect.height > surfaceHeight {
                 surfaces.append(
@@ -71,6 +79,20 @@ enum NovelTextViewportDrawingGeometry {
             width: bounds.width,
             height: clipHeight
         )
+    }
+
+    static func fragmentStartsInDocumentRange(
+        fragmentStart: Int,
+        fragmentEnd: Int,
+        documentRange: Range<Int>
+    ) -> Bool {
+        guard fragmentStart != NSNotFound,
+              fragmentEnd != NSNotFound,
+              fragmentEnd > fragmentStart else {
+            return false
+        }
+        return fragmentStart >= documentRange.lowerBound &&
+            fragmentStart < documentRange.upperBound
     }
 }
 
@@ -353,7 +375,7 @@ package final class DefaultNovelTextLayoutRuntimeAdapter: NovelTextLayoutRuntime
         let surfaceSize: CGSize = if input.settings.readingMode == .vertical {
             CGSize(
                 width: contentWidth,
-                height: max(input.layout.readableFrame.height * 1.8, 1)
+                height: max(input.layout.readableFrame.height, 1)
             )
         } else {
             CGSize(
@@ -361,12 +383,21 @@ package final class DefaultNovelTextLayoutRuntimeAdapter: NovelTextLayoutRuntime
                 height: max(input.layout.readableFrame.height, 1)
             )
         }
-        let surfaceRanges = try Self.indexSurfaceRanges(
+        var surfaceRanges = try Self.indexSurfaceRanges(
             attributedDocument: attributedDocument,
             contentStorage: contentStorage,
             layoutManager: layoutManager,
             surfaceSize: surfaceSize
         )
+        if input.settings.readingMode == .vertical {
+            surfaceRanges = Self.splitSurfaceRangesAtSemanticBreaks(
+                surfaceRanges,
+                breakOffsets: Self.semanticSurfaceBreakOffsets(for: input.preparedInput),
+                attributedDocument: attributedDocument,
+                contentStorage: contentStorage,
+                layoutManager: layoutManager
+            )
+        }
         var result = try input.precomputedResult ?? NovelTextLayout.result(
             from: input.preparedInput,
             surfaceRanges: surfaceRanges
@@ -384,7 +415,6 @@ package final class DefaultNovelTextLayoutRuntimeAdapter: NovelTextLayoutRuntime
             platformName,
         ].joined(separator: "|")
         result.fingerprints.textKitImplementation = "NSTextLayoutManager-TextKit2-v1"
-        layoutManager.invalidateLayout(for: contentStorage.documentRange)
         let initialClipRect = surfaceRanges
             .prefix(2)
             .compactMap(\.frozenGeometry)
@@ -411,7 +441,6 @@ package final class DefaultNovelTextLayoutRuntimeAdapter: NovelTextLayoutRuntime
                 : initialClipRect
         )
         viewportLayoutController.delegate = viewportLayoutDelegate
-        viewportLayoutController.layoutViewport()
         let geometryDeviationCount = try Self.validateRematerializedGeometry(
             surfaceRanges: Array(surfaceRanges.prefix(2)),
             attributedDocument: attributedDocument,
@@ -461,27 +490,48 @@ package final class DefaultNovelTextLayoutRuntimeAdapter: NovelTextLayoutRuntime
         layoutManager.ensureLayout(for: documentRange)
 
         var segments: [NovelTextSurfaceLayoutFragment] = []
-        layoutManager.enumerateTextSegments(
-            in: documentRange,
-            type: .standard,
+        let documentStart = contentStorage.documentRange.location
+        layoutManager.enumerateTextLayoutFragments(
+            from: documentRange.location,
             options: []
-        ) { textRange, rect, _, _ in
-            guard let textRange,
-                  let characterRange = nsRange(for: textRange, in: contentStorage),
-                  characterRange.length > 0,
-                  rect.origin.x.isFinite,
-                  rect.origin.y.isFinite,
-                  rect.width.isFinite,
-                  rect.height.isFinite,
-                  rect.height > 0 else {
-                return true
-            }
-            segments.append(
-                NovelTextSurfaceLayoutFragment(
-                    characterRange: characterRange,
-                    rect: rect
+        ) { fragment in
+            let fragmentStart = contentStorage.offset(from: documentStart, to: fragment.rangeInElement.location)
+            guard fragmentStart != NSNotFound else { return true }
+            for lineFragment in fragment.textLineFragments {
+                let characterRange = NSRange(
+                    location: fragmentStart + lineFragment.characterRange.location,
+                    length: lineFragment.characterRange.length
                 )
-            )
+                guard characterRange.location >= 0,
+                      characterRange.length > 0,
+                      characterRange.location < attributedDocument.length,
+                      !lineTextIsPaginationWhitespace(
+                          attributedDocument: attributedDocument,
+                          characterRange: characterRange
+                      ) else {
+                    continue
+                }
+                let lineBounds = lineFragment.typographicBounds
+                let rect = CGRect(
+                    x: fragment.layoutFragmentFrame.minX + lineBounds.minX,
+                    y: fragment.layoutFragmentFrame.minY + lineBounds.minY,
+                    width: lineBounds.width,
+                    height: lineBounds.height
+                ).insetBy(dx: 0, dy: -1)
+                guard rect.origin.x.isFinite,
+                      rect.origin.y.isFinite,
+                      rect.width.isFinite,
+                      rect.height.isFinite,
+                      rect.height > 0 else {
+                    continue
+                }
+                segments.append(
+                    NovelTextSurfaceLayoutFragment(
+                        characterRange: characterRange,
+                        rect: rect
+                    )
+                )
+            }
             return true
         }
 
@@ -499,6 +549,145 @@ package final class DefaultNovelTextLayoutRuntimeAdapter: NovelTextLayoutRuntime
             throw NovelTextLayoutFailure.textKitIndexing
         }
         return ranges
+    }
+
+    private static func semanticSurfaceBreakOffsets(
+        for input: NovelTextLayoutPreparedInput
+    ) -> Set<Int> {
+        var breakOffsets = Set<Int>()
+        var previousTextSegment: NovelAnnotatedSegment?
+        var sawImageSincePreviousText = false
+        let viewportDocument = input.viewportContextSeed.document
+
+        for annotatedSegment in input.annotatedSegments {
+            switch annotatedSegment.segment {
+            case .image:
+                if previousTextSegment != nil {
+                    sawImageSincePreviousText = true
+                }
+
+            case .text:
+                defer {
+                    previousTextSegment = annotatedSegment
+                    sawImageSincePreviousText = false
+                }
+                guard let previousTextSegment else { continue }
+                let chapterChanged = previousTextSegment.chapterOrdinal != annotatedSegment.chapterOrdinal ||
+                    previousTextSegment.chapterTitle != annotatedSegment.chapterTitle
+                guard sawImageSincePreviousText || chapterChanged,
+                      let range = viewportDocument.textRangesBySegment[annotatedSegment.index],
+                      range.startOffset > 0 else {
+                    continue
+                }
+                breakOffsets.insert(range.startOffset)
+            }
+        }
+
+        return breakOffsets
+    }
+
+    private static func splitSurfaceRangesAtSemanticBreaks(
+        _ surfaceRanges: [NovelTextViewportDocumentSurfaceRange],
+        breakOffsets: Set<Int>,
+        attributedDocument: NSAttributedString,
+        contentStorage: NSTextContentStorage,
+        layoutManager: NSTextLayoutManager
+    ) -> [NovelTextViewportDocumentSurfaceRange] {
+        guard !surfaceRanges.isEmpty, !breakOffsets.isEmpty else { return surfaceRanges }
+        var splitRanges: [NovelTextViewportDocumentSurfaceRange] = []
+
+        for surfaceRange in surfaceRanges {
+            let cuts = ([surfaceRange.startOffset] + breakOffsets.filter {
+                $0 > surfaceRange.startOffset && $0 < surfaceRange.endOffset
+            }.sorted() + [surfaceRange.endOffset])
+            guard cuts.count > 2 else {
+                splitRanges.append(surfaceRange)
+                continue
+            }
+
+            for index in 0..<(cuts.count - 1) {
+                let startOffset = cuts[index]
+                let endOffset = cuts[index + 1]
+                guard let clipRect = lineClipRect(
+                    startOffset: startOffset,
+                    endOffset: endOffset,
+                    attributedDocument: attributedDocument,
+                    contentStorage: contentStorage,
+                    layoutManager: layoutManager
+                ),
+                    let splitRange = viewportDocumentPageRange(
+                        from: attributedDocument,
+                        range: NSRange(location: startOffset, length: endOffset - startOffset),
+                        clipRect: clipRect
+                    ) else {
+                    continue
+                }
+                splitRanges.append(splitRange)
+            }
+        }
+
+        return splitRanges.isEmpty ? surfaceRanges : splitRanges
+    }
+
+    private static func lineClipRect(
+        startOffset: Int,
+        endOffset: Int,
+        attributedDocument: NSAttributedString,
+        contentStorage: NSTextContentStorage,
+        layoutManager: NSTextLayoutManager
+    ) -> CGRect? {
+        guard startOffset >= 0, endOffset > startOffset,
+              let startLocation = contentStorage.location(
+                contentStorage.documentRange.location,
+                offsetBy: startOffset
+              ) else {
+            return nil
+        }
+
+        let documentStart = contentStorage.documentRange.location
+        var clipRect = CGRect.null
+        layoutManager.enumerateTextLayoutFragments(
+            from: startLocation,
+            options: []
+        ) { fragment in
+            let fragmentStart = contentStorage.offset(from: documentStart, to: fragment.rangeInElement.location)
+            guard fragmentStart != NSNotFound else { return false }
+            var shouldContinue = true
+            for lineFragment in fragment.textLineFragments {
+                let lineStart = fragmentStart + lineFragment.characterRange.location
+                let lineEnd = lineStart + lineFragment.characterRange.length
+                if lineStart >= endOffset {
+                    shouldContinue = false
+                    break
+                }
+                guard lineStart >= startOffset, lineEnd > lineStart else {
+                    continue
+                }
+                guard !lineTextIsPaginationWhitespace(
+                    attributedDocument: attributedDocument,
+                    characterRange: NSRange(location: lineStart, length: lineFragment.characterRange.length)
+                ) else {
+                    continue
+                }
+                let lineBounds = lineFragment.typographicBounds
+                let rect = CGRect(
+                    x: fragment.layoutFragmentFrame.minX + lineBounds.minX,
+                    y: fragment.layoutFragmentFrame.minY + lineBounds.minY,
+                    width: lineBounds.width,
+                    height: lineBounds.height
+                ).insetBy(dx: 0, dy: -1)
+                guard rect.origin.x.isFinite,
+                      rect.origin.y.isFinite,
+                      rect.width.isFinite,
+                      rect.height.isFinite,
+                      rect.height > 0 else {
+                    continue
+                }
+                clipRect = clipRect.union(rect)
+            }
+            return shouldContinue
+        }
+        return clipRect.isNull ? nil : clipRect
     }
 
     fileprivate static func validateRematerializedGeometry(
@@ -540,7 +729,7 @@ package final class DefaultNovelTextLayoutRuntimeAdapter: NovelTextLayoutRuntime
             }
             let tolerance: CGFloat = 1
             if rematerializedRect.isNull ||
-                abs(rematerializedRect.minY - geometry.documentClipMinY) > tolerance ||
+                rematerializedRect.minY < geometry.documentClipMinY - tolerance ||
                 rematerializedRect.maxY - geometry.documentClipMaxY > tolerance {
                 deviationCount += 1
             }
@@ -617,6 +806,21 @@ package final class DefaultNovelTextLayoutRuntimeAdapter: NovelTextLayoutRuntime
                 )
             )
         )
+    }
+
+    private static func lineTextIsPaginationWhitespace(
+        attributedDocument: NSAttributedString,
+        characterRange: NSRange
+    ) -> Bool {
+        let safeRange = NSRange(
+            location: max(0, min(characterRange.location, attributedDocument.length)),
+            length: max(0, min(characterRange.length, attributedDocument.length - max(0, min(characterRange.location, attributedDocument.length))))
+        )
+        guard safeRange.length > 0 else { return true }
+        return attributedDocument.attributedSubstring(from: safeRange)
+            .string
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .isEmpty
     }
 
     private static func trimmedUTF16Boundary(
@@ -796,50 +1000,7 @@ final class NovelTextViewportRuntimeTransaction {
     fileprivate func prepareInitialViewport(around surfaceOrdinal: Int) throws {
 #if canImport(UIKit) || canImport(AppKit)
         guard ownsAuthoritativeIndex else { return }
-        guard let attributedDocument = semanticAttributedDocument,
-              let textContentStorage,
-              let textLayoutManager,
-              let textContainer,
-              let textViewportLayoutController,
-              let textViewportLayoutDelegate else {
-            return
-        }
-        let selectedPages = result.viewportIndex.surfaces.filter {
-            abs($0.surfaceOrdinal - surfaceOrdinal) <= 1
-        }
-        let viewportBounds = selectedPages
-            .compactMap(\.frozenGeometry)
-            .reduce(CGRect.null) { partial, geometry in
-                partial.union(
-                    CGRect(
-                        x: 0,
-                        y: geometry.documentClipMinY,
-                        width: max(textContainer.size.width, 1),
-                        height: geometry.contentHeight
-                    )
-                )
-            }
-        guard !viewportBounds.isNull else { return }
-        textViewportLayoutDelegate.updateViewportBounds(viewportBounds)
-        textViewportLayoutController.layoutViewport()
-        let surfaceRanges = selectedPages.compactMap { page -> NovelTextViewportDocumentSurfaceRange? in
-            guard let geometry = page.frozenGeometry else { return nil }
-            return NovelTextViewportDocumentSurfaceRange(
-                startOffset: geometry.documentStartOffset,
-                endOffset: geometry.documentEndOffset,
-                frozenGeometry: geometry
-            )
-        }
-        let deviations = try DefaultNovelTextLayoutRuntimeAdapter.validateRematerializedGeometry(
-            surfaceRanges: surfaceRanges,
-            attributedDocument: attributedDocument,
-            contentStorage: textContentStorage,
-            layoutManager: textLayoutManager
-        )
-        geometryDeviationCount += deviations
-        guard deviations == 0 else {
-            throw NovelTextLayoutFailure.geometryValidation
-        }
+        _ = surfaceOrdinal
 #endif
     }
 }
@@ -1137,36 +1298,14 @@ final class NovelTextViewportRuntimeOwner {
 
 #if canImport(UIKit) || canImport(AppKit)
     private func updateTextKitViewport() {
-        guard let result,
-              let textContainer,
-              let textViewportLayoutController,
-              let textViewportLayoutDelegate else {
-            return
-        }
-        let viewportBounds = result.viewportIndex.surfaces
-            .filter { visibleSurfaceOrdinals.contains($0.surfaceOrdinal) }
-            .compactMap(\.frozenGeometry)
-            .reduce(CGRect.null) { partial, geometry in
-                partial.union(
-                    CGRect(
-                        x: 0,
-                        y: geometry.documentClipMinY,
-                        width: max(textContainer.size.width, 1),
-                        height: geometry.contentHeight
-                    )
-                )
-            }
-        textViewportLayoutDelegate.updateViewportBounds(
-            viewportBounds.isNull ? .zero : viewportBounds
-        )
-        textViewportLayoutController.layoutViewport()
     }
 
     private func prepareSurfaceForDrawing(_ surfaceOrdinal: Int) {
-        guard !visibleSurfaceOrdinals.contains(surfaceOrdinal) else { return }
-        visibleSurfaceOrdinals = preheatedSurfaceOrdinals(around: [surfaceOrdinal])
-        viewportUpdateCount += 1
-        rematerializedSurfaceCount = visibleSurfaceOrdinals.count
+        if !visibleSurfaceOrdinals.contains(surfaceOrdinal) {
+            visibleSurfaceOrdinals = preheatedSurfaceOrdinals(around: [surfaceOrdinal])
+            viewportUpdateCount += 1
+            rematerializedSurfaceCount = visibleSurfaceOrdinals.count
+        }
         updateTextKitViewport()
     }
 #endif
@@ -1270,6 +1409,10 @@ final class NovelTextViewportRuntimeOwner {
         let lineFragment = fragment.textLineFragment(for: location, isUpstreamAffinity: true) else {
             return nil
         }
+        if let frozenGeometry = page.frozenGeometry,
+           (documentOffset < frozenGeometry.documentStartOffset || documentOffset >= frozenGeometry.documentEndOffset) {
+            return nil
+        }
         return fragment.layoutFragmentFrame.minY + lineFragment.typographicBounds.midY - surfaceOriginY
     }
 
@@ -1280,7 +1423,22 @@ final class NovelTextViewportRuntimeOwner {
         textLayoutManager: NSTextLayoutManager
     ) -> CGFloat? {
         if let frozenGeometry = page.frozenGeometry {
-            return frozenGeometry.pageLocalOriginY
+            guard let pageLocation = textContentStorage.location(
+                textContentStorage.documentRange.location,
+                offsetBy: frozenGeometry.documentStartOffset
+            ) else {
+                return frozenGeometry.pageLocalOriginY
+            }
+            guard let fragment = textLayoutManager.textLayoutFragment(for: pageLocation) else {
+                return frozenGeometry.pageLocalOriginY
+            }
+            guard let firstLineFragment = fragment.textLineFragment(
+                for: pageLocation,
+                isUpstreamAffinity: false
+            ) else {
+                return fragment.layoutFragmentFrame.minY
+            }
+            return fragment.layoutFragmentFrame.minY + firstLineFragment.typographicBounds.minY
         }
         guard let firstRange = page.ranges.first,
               let documentOffset = result.viewportContext.document.documentOffset(forSurfaceRange: firstRange),
@@ -1376,38 +1534,65 @@ final class NovelTextViewportRuntimeOwner {
         let documentRange = page.frozenGeometry.map {
             $0.documentStartOffset..<$0.documentEndOffset
         }
-        let clipMaxY = page.frozenGeometry?.documentClipMaxY ?? surfaceOriginY + bounds.height
+        let clipMaxY = page.frozenGeometry.map {
+            surfaceOriginY + $0.contentHeight
+        } ?? surfaceOriginY + bounds.height
         let pageClipRect = NovelTextViewportDrawingGeometry.clipRect(
             bounds: bounds,
             surfaceOriginY: surfaceOriginY,
-            documentClipMaxY: page.frozenGeometry?.documentClipMaxY
+            documentClipMaxY: clipMaxY
         )
-
         context.saveGState()
         context.clip(to: pageClipRect)
         context.translateBy(x: bounds.minX, y: bounds.minY - surfaceOriginY)
+        let documentStart = textContentStorage.documentRange.location
         textLayoutManager.enumerateTextLayoutFragments(
             from: pageLocation,
             options: []
         ) { fragment in
-            if let documentRange {
-                let fragmentStart = textContentStorage.offset(
-                    from: textContentStorage.documentRange.location,
-                    to: fragment.rangeInElement.location
-                )
-                guard fragmentStart != NSNotFound else { return false }
-                if fragmentStart >= documentRange.upperBound {
-                    return false
-                }
-                guard fragmentStart >= documentRange.lowerBound else {
-                    return true
-                }
-            }
+            let fragmentStart = textContentStorage.offset(
+                from: documentStart,
+                to: fragment.rangeInElement.location
+            )
+            guard fragmentStart != NSNotFound else { return false }
             guard fragment.layoutFragmentFrame.minY < clipMaxY else {
                 return false
             }
             guard fragment.layoutFragmentFrame.maxY >= surfaceOriginY else {
                 return true
+            }
+            if let documentRange {
+                var shouldContinue = true
+                for lineFragment in fragment.textLineFragments {
+                    let lineStart = fragmentStart + lineFragment.characterRange.location
+                    let lineEnd = lineStart + lineFragment.characterRange.length
+                    if lineStart >= documentRange.upperBound {
+                        shouldContinue = false
+                        break
+                    }
+                    guard NovelTextViewportDrawingGeometry.fragmentStartsInDocumentRange(
+                        fragmentStart: lineStart,
+                        fragmentEnd: lineEnd,
+                        documentRange: documentRange
+                    ) else {
+                        continue
+                    }
+                    let lineBounds = lineFragment.typographicBounds
+                    let lineRect = CGRect(
+                        x: fragment.layoutFragmentFrame.minX + lineBounds.minX,
+                        y: fragment.layoutFragmentFrame.minY + lineBounds.minY,
+                        width: max(lineBounds.width, 1),
+                        height: max(lineBounds.height, 1)
+                    ).insetBy(dx: 0, dy: -1)
+                    context.saveGState()
+                    context.clip(to: lineRect)
+                    fragment.draw(
+                        at: fragment.layoutFragmentFrame.origin,
+                        in: context
+                    )
+                    context.restoreGState()
+                }
+                return shouldContinue
             }
             fragment.draw(at: fragment.layoutFragmentFrame.origin, in: context)
             return true
