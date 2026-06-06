@@ -424,6 +424,12 @@ public struct ReaderContainerView: View {
                         return
                     }
                     verticalScrollRequest = nil
+                    if request.textAnchor != nil {
+                        verticalRestoreController.beginSettling(request, now: CACurrentMediaTime())
+                        verticalRestoreRetryTask?.cancel()
+                        verticalRestoreRetryTask = nil
+                        return
+                    }
                     tryAdvanceVerticalRestore()
                 },
                 onScrollViewReady: { scrollView in
@@ -1036,9 +1042,6 @@ public struct ReaderContainerView: View {
             return
         }
         if request.textAnchor != nil {
-            verticalRestoreController.beginSettling(request, now: CACurrentMediaTime())
-            verticalRestoreRetryTask?.cancel()
-            verticalRestoreRetryTask = nil
             return
         }
         guard let frame = currentVerticalSurfaceFrames[request.surfaceIndex] else {
@@ -1217,6 +1220,7 @@ private final class ReaderVerticalScrollCoordinator: NSObject, UIGestureRecogniz
     func restoreOffset(to surfaceFrame: CGRect, intraSurfaceProgress: Double) -> Bool {
         guard let scrollView else { return false }
 
+        let referenceLineY = referenceLineY
         let desiredY = scrollView.contentOffset.y
             + surfaceFrame.minY
             + (surfaceFrame.height * min(max(intraSurfaceProgress, 0), 1))

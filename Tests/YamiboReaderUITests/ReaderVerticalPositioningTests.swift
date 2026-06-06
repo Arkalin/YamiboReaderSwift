@@ -4,10 +4,17 @@ import YamiboReaderCore
 @testable import YamiboReaderUI
 
 final class ReaderVerticalPositioningTests: XCTestCase {
-    func testViewportReferenceLineMatchesSaveAndRestoreAnchor() {
+    func testViewportReferenceLineMatchesProgressSamplingAnchor() {
         let bounds = CGRect(x: 0, y: 12, width: 393, height: 852)
 
         XCTAssertEqual(ReaderVerticalPositioning.viewportReferenceLineY(in: bounds), 426)
+    }
+
+    func testViewportRestoreLineUsesTopReadingArea() {
+        let bounds = CGRect(x: 0, y: 12, width: 393, height: 852)
+
+        XCTAssertEqual(ReaderVerticalPositioning.viewportRestoreLineY(in: bounds), 136.32, accuracy: 0.001)
+        XCTAssertLessThan(ReaderVerticalPositioning.viewportRestoreLineY(in: bounds), ReaderVerticalPositioning.viewportReferenceLineY(in: bounds))
     }
 
     func testViewportReferenceLineIgnoresScrollOffsetOrigin() {

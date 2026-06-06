@@ -154,8 +154,11 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
 
         XCTAssertTrue(referenceSurfaceBody.contains("guard oldValue !== displayReference"))
         XCTAssertTrue(referenceSurfaceBody.contains("setNeedsDisplay()"))
+        XCTAssertTrue(referenceSurfaceBody.contains("context.clear(self.bounds)"))
+        XCTAssertTrue(referenceSurfaceBody.contains("clearsContextBeforeDrawing = true"))
         XCTAssertTrue(referenceSurfaceBody.contains("contentMode = .redraw"))
-        XCTAssertFalse(referenceSurfaceBody.contains("layoutSubviews"))
+        XCTAssertTrue(referenceSurfaceBody.contains("override func layoutSubviews()"))
+        XCTAssertTrue(referenceSurfaceBody.contains("override func didMoveToWindow()"))
     }
 
     func testTwoPagePagedSpreadUsesViewportBackedReaderPageContent() throws {
@@ -445,6 +448,61 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         }
     }
 
+    func testVerticalViewportPublishesVisibleSurfacesAfterLayoutSubviews() throws {
+        let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let supportSource = try String(
+            contentsOf: repositoryRoot
+                .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderSupportViews.swift"),
+            encoding: .utf8
+        )
+        let verticalBody = try XCTUnwrap(typeBody(named: "ReaderVerticalViewportScrollView", in: supportSource))
+
+        XCTAssertTrue(supportSource.contains("private final class ReaderVerticalViewportCollectionView: UICollectionView"))
+        XCTAssertTrue(verticalBody.contains("ReaderVerticalViewportCollectionView(frame: .zero, collectionViewLayout: layout)"))
+        XCTAssertTrue(verticalBody.contains("collectionView.onLayoutSubviews"))
+        XCTAssertTrue(verticalBody.contains("coordinator?.publishLayout(from: collectionView)"))
+        XCTAssertTrue(verticalBody.contains("func publishLayout(from collectionView: UICollectionView)"))
+        XCTAssertFalse(verticalBody.contains("scrollViewDidLayoutSubviews"))
+    }
+
+    func testVerticalViewportRefreshesCellsAfterFinalFlowLayoutSizing() throws {
+        let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let supportSource = try String(
+            contentsOf: repositoryRoot
+                .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderSupportViews.swift"),
+            encoding: .utf8
+        )
+        let verticalBody = try XCTUnwrap(typeBody(named: "ReaderVerticalViewportScrollView", in: supportSource))
+        let coordinatorBody = try XCTUnwrap(typeBody(named: "Coordinator", in: verticalBody))
+        let cellBody = try XCTUnwrap(typeBody(named: "ReaderVerticalViewportCell", in: supportSource))
+        let reloadBody = try XCTUnwrap(functionBody(named: "reloadDataIfNeeded", in: coordinatorBody))
+        let applyBody = try XCTUnwrap(functionBody(named: "apply", in: cellBody))
+        let refreshBody = try XCTUnwrap(functionBody(named: "refreshLayoutForCurrentBounds", in: cellBody))
+        let refreshForSizeBody = try XCTUnwrap(functionBody(named: "refreshLayout(for layoutSize: CGSize)", in: cellBody))
+        let effectiveSizeBody = try XCTUnwrap(functionBody(named: "effectiveLayoutSize", in: cellBody))
+        let applyContentFrameBody = try XCTUnwrap(functionBody(named: "applyContentViewFrame", in: cellBody))
+
+        XCTAssertTrue(reloadBody.contains("collectionView.layoutIfNeeded()"))
+        XCTAssertTrue(reloadBody.contains("publishLayout(from: collectionView)"))
+        XCTAssertTrue(coordinatorBody.contains("willDisplay cell"))
+        XCTAssertTrue(coordinatorBody.contains("layoutAttributesForItem(at: indexPath)"))
+        XCTAssertTrue(coordinatorBody.contains("refreshLayout(for: attributes.size)"))
+        XCTAssertTrue(coordinatorBody.contains("refreshLayoutForCurrentBounds()"))
+        XCTAssertTrue(cellBody.contains("private var lastAppliedLayoutSize = CGSize.zero"))
+        XCTAssertTrue(cellBody.contains("private var preferredLayoutSize = CGSize.zero"))
+        XCTAssertTrue(applyBody.contains("layoutAttributes.size"))
+        XCTAssertTrue(applyBody.contains("effectiveLayoutSize(for: layoutAttributes.size)"))
+        XCTAssertTrue(applyBody.contains("applyContentViewFrame(for: nextSize)"))
+        XCTAssertTrue(applyBody.contains("refreshLayoutForCurrentBounds()"))
+        XCTAssertTrue(refreshBody.contains("layoutBlockSubviews()"))
+        XCTAssertTrue(refreshBody.contains("setNeedsDisplayForTextBlocks()"))
+        XCTAssertTrue(refreshForSizeBody.contains("effectiveLayoutSize(for: layoutSize)"))
+        XCTAssertTrue(refreshForSizeBody.contains("applyContentViewFrame(for: nextSize)"))
+        XCTAssertTrue(effectiveSizeBody.contains("preferredLayoutSize.height"))
+        XCTAssertFalse(applyContentFrameBody.contains("bounds.size = layoutSize"))
+        XCTAssertTrue(applyContentFrameBody.contains("contentView.frame = contentFrame"))
+    }
+
     func testPagedViewportsRetrySelectionScrollAfterReloadLayoutCompletes() throws {
         let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let supportSource = try String(
@@ -554,9 +612,11 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         let displaySurfaceBody = try XCTUnwrap(functionBody(named: "verticalDisplaySurface", in: verticalBody))
         let itemHeightBody = try XCTUnwrap(functionBody(named: "verticalItemHeight", in: verticalBody))
         let publishFramesBody = try XCTUnwrap(functionBody(named: "publishFrames", in: verticalBody))
+        let redrawBody = try XCTUnwrap(functionBody(named: "scheduleVisibleTextRedraw", in: verticalBody))
         let restoreTextAnchorBody = try XCTUnwrap(functionBody(named: "restoreTextAnchorIfPossible", in: verticalBody))
         let sampleBody = try XCTUnwrap(functionBody(named: "textViewportSample", in: verticalCellBody))
         let anchorBody = try XCTUnwrap(functionBody(named: "textViewportAnchorY", in: verticalCellBody))
+        let setNeedsDisplayBody = try XCTUnwrap(functionBody(named: "setNeedsDisplayForTextBlocks", in: verticalCellBody))
         let makeImageBlockBody = try XCTUnwrap(functionBody(named: "makeImageBlockView", in: verticalCellBody))
 
         XCTAssertTrue(displaySurfaceBody.contains("verticalSurface(for: item)"))
@@ -569,12 +629,20 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertFalse(itemHeightBody.contains("NovelTextLayout.measuredTextHeight"))
         XCTAssertTrue(publishFramesBody.contains("cell.textViewportSample("))
         XCTAssertTrue(publishFramesBody.contains("ReaderVerticalPositioning.pageDistance"))
+        XCTAssertTrue(publishFramesBody.contains("scheduleVisibleTextRedraw(in: collectionView)"))
+        XCTAssertTrue(redrawBody.contains("DispatchQueue.main.async"))
+        XCTAssertTrue(redrawBody.contains("refreshLayoutForCurrentBounds()"))
         XCTAssertTrue(restoreTextAnchorBody.contains("request.textAnchor"))
         XCTAssertTrue(restoreTextAnchorBody.contains("cell.textViewportAnchorY("))
-        XCTAssertTrue(restoreTextAnchorBody.contains("ReaderVerticalPositioning.viewportReferenceLineY"))
+        XCTAssertTrue(restoreTextAnchorBody.contains("applyTextAnchorRestore"))
+        XCTAssertTrue(restoreTextAnchorBody.contains("applyProgressFallbackRestore"))
+        XCTAssertTrue(verticalBody.contains("ReaderVerticalPositioning.viewportRestoreLineY"))
         XCTAssertTrue(sampleBody.contains("displayReference.viewportSample("))
         XCTAssertTrue(sampleBody.contains("ReaderVerticalPositioning.pageDistance"))
         XCTAssertTrue(anchorBody.contains("displayReference.referenceY("))
+        XCTAssertTrue(setNeedsDisplayBody.contains("block.displayReference != nil"))
+        XCTAssertTrue(setNeedsDisplayBody.contains("block.view.setNeedsDisplay()"))
+        XCTAssertTrue(verticalCellBody.contains("contentView.clipsToBounds = true"))
         XCTAssertTrue(makeImageBlockBody.contains("displayReference: nil"))
         XCTAssertFalse(sampleBody.contains("intraSurfaceProgress"))
         XCTAssertFalse(restoreTextAnchorBody.contains("request.intraSurfaceProgress"))

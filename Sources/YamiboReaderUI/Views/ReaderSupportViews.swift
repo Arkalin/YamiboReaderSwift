@@ -1043,13 +1043,18 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
         layout.minimumInteritemSpacing = 0
         layout.estimatedItemSize = .zero
 
-        let collectionView = UICollectionView(frame: .zero, collectionViewLayout: layout)
+        let collectionView = ReaderVerticalViewportCollectionView(frame: .zero, collectionViewLayout: layout)
         collectionView.alwaysBounceVertical = true
         collectionView.showsVerticalScrollIndicator = false
         collectionView.backgroundColor = .clear
         collectionView.dataSource = context.coordinator
         collectionView.delegate = context.coordinator
         collectionView.register(ReaderVerticalViewportCell.self, forCellWithReuseIdentifier: ReaderVerticalViewportCell.reuseIdentifier)
+        let coordinator = context.coordinator
+        collectionView.onLayoutSubviews = { [weak coordinator, weak collectionView] in
+            guard let collectionView else { return }
+            coordinator?.publishLayout(from: collectionView)
+        }
         context.coordinator.tapGesture.cancelsTouchesInView = false
         collectionView.addGestureRecognizer(context.coordinator.tapGesture)
         onScrollViewReady(collectionView)
@@ -1086,6 +1091,10 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
             contentIdentity = nextContentIdentity
             collectionView.collectionViewLayout.invalidateLayout()
             collectionView.reloadData()
+            if collectionView.bounds.width > 0, collectionView.bounds.height > 0 {
+                collectionView.layoutIfNeeded()
+                publishLayout(from: collectionView)
+            }
         }
 
         @discardableResult
@@ -1120,9 +1129,10 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
             guard let displaySurface = verticalDisplaySurface(for: indexPath.item) else {
                 return cell
             }
+            let displayReference = parent.displayReferenceProvider(displaySurface.identity)
             cell.configure(
                 page: displaySurface,
-                displayReference: parent.displayReferenceProvider(displaySurface.identity),
+                displayReference: displayReference,
                 textHeight: displaySurface.presentationHeight,
                 settings: parent.settings,
                 refererURL: parent.refererURL,
@@ -1130,7 +1140,24 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
                 contentWidth: max(verticalItemWidth(in: collectionView) - parent.settings.horizontalPadding * 2, 1),
                 topPadding: displaySurface.surfaceIndex == 0 ? 16 : 0
             )
+            if let attributes = collectionView.layoutAttributesForItem(at: indexPath) {
+                cell.refreshLayout(for: attributes.size)
+            }
             return cell
+        }
+
+        func collectionView(
+            _ collectionView: UICollectionView,
+            willDisplay cell: UICollectionViewCell,
+            forItemAt indexPath: IndexPath
+        ) {
+            guard let cell = cell as? ReaderVerticalViewportCell else { return }
+            if let attributes = collectionView.layoutAttributesForItem(at: indexPath) {
+                cell.refreshLayout(for: attributes.size)
+            } else {
+                cell.refreshLayoutForCurrentBounds()
+            }
+            scheduleVisibleTextRedraw(in: collectionView)
         }
 
         func collectionView(
@@ -1165,8 +1192,12 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
             publishScrollSettled(from: scrollView)
         }
 
-        func scrollViewDidLayoutSubviews(_ scrollView: UIScrollView) {
-            publishFrames(from: scrollView)
+        func publishLayout(from collectionView: UICollectionView) {
+            publishFrames(from: collectionView)
+            let onViewportChange = parent.onViewportChange
+            callbackScheduler.publish {
+                onViewportChange()
+            }
         }
 
         func handle(_ request: ReaderVerticalScrollRequest?, in collectionView: UICollectionView) {
@@ -1200,6 +1231,7 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
             callbackScheduler.publish {
                 onScrollRequestHandled(request)
             }
+            scheduleVisibleTextRedraw(in: collectionView)
             publishScrollSettled(from: collectionView)
         }
 
@@ -1237,6 +1269,7 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
             callbackScheduler.publish {
                 onVisibleSurfaceIdentitiesChange(visibleSurfaceIdentities)
             }
+            scheduleVisibleTextRedraw(in: collectionView)
 
             let referenceLineY = ReaderVerticalPositioning.viewportReferenceLineY(in: scrollView.bounds)
             let textSample = collectionView.indexPathsForVisibleItems
@@ -1262,6 +1295,18 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
             let onTextViewportSampleChange = parent.onTextViewportSampleChange
             callbackScheduler.publish {
                 onTextViewportSampleChange(textSample)
+            }
+        }
+
+        private func scheduleVisibleTextRedraw(in collectionView: UICollectionView) {
+            let delays: [TimeInterval] = [0, 0.05, 0.2]
+            for delay in delays {
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak collectionView] in
+                    collectionView?.visibleCells.forEach { cell in
+                        guard let cell = cell as? ReaderVerticalViewportCell else { return }
+                        cell.refreshLayoutForCurrentBounds()
+                    }
+                }
             }
         }
 
@@ -1334,22 +1379,71 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
         ) -> Bool {
             guard let textAnchor = request.textAnchor,
                   request.surfaceIndex >= 0,
-                  request.surfaceIndex < verticalSurfaceCount,
-                  let cell = collectionView.cellForItem(at: IndexPath(item: request.surfaceIndex, section: 0)) as? ReaderVerticalViewportCell,
-                  let attributes = collectionView.layoutAttributesForItem(at: IndexPath(item: request.surfaceIndex, section: 0)) else {
+                  request.surfaceIndex < verticalSurfaceCount else {
                 return request.textAnchor == nil
             }
-            let visibleFrame = attributes.frame.offsetBy(
+
+            let targetIndexPath = IndexPath(item: request.surfaceIndex, section: 0)
+            let visibleItems = collectionView.indexPathsForVisibleItems.map(\.item)
+            let nearbyItems = ((request.surfaceIndex - 2)...(request.surfaceIndex + 2))
+                .filter { $0 >= 0 && $0 < verticalSurfaceCount }
+            var seenItems = Set<Int>()
+            let candidateItems = ([request.surfaceIndex] + visibleItems + nearbyItems)
+                .filter { seenItems.insert($0).inserted }
+                .sorted { lhs, rhs in
+                    abs(lhs - request.surfaceIndex) < abs(rhs - request.surfaceIndex)
+                }
+
+            for item in candidateItems {
+                let indexPath = IndexPath(item: item, section: 0)
+                guard let cell = collectionView.cellForItem(at: indexPath) as? ReaderVerticalViewportCell,
+                      let attributes = collectionView.layoutAttributesForItem(at: indexPath) else {
+                    continue
+                }
+                let visibleFrame = attributes.frame.offsetBy(
+                    dx: -collectionView.contentOffset.x,
+                    dy: -collectionView.contentOffset.y
+                )
+                guard let anchorY = cell.textViewportAnchorY(
+                    for: textAnchor,
+                    surfaceFrame: visibleFrame
+                ) else {
+                    continue
+                }
+                applyTextAnchorRestore(
+                    anchorY: anchorY,
+                    request: request,
+                    collectionView: collectionView,
+                    restoredItem: item,
+                    visibleFrame: visibleFrame
+                )
+                return true
+            }
+
+            guard collectionView.cellForItem(at: targetIndexPath) is ReaderVerticalViewportCell,
+                  let targetAttributes = collectionView.layoutAttributesForItem(at: targetIndexPath) else {
+                return false
+            }
+            let targetFrame = targetAttributes.frame.offsetBy(
                 dx: -collectionView.contentOffset.x,
                 dy: -collectionView.contentOffset.y
             )
-            guard let anchorY = cell.textViewportAnchorY(
-                for: textAnchor,
-                surfaceFrame: visibleFrame
-            ) else {
-                return false
-            }
-            let referenceLineY = ReaderVerticalPositioning.viewportReferenceLineY(in: collectionView.bounds)
+            applyProgressFallbackRestore(
+                request: request,
+                collectionView: collectionView,
+                visibleFrame: targetFrame
+            )
+            return true
+        }
+
+        private func applyTextAnchorRestore(
+            anchorY: CGFloat,
+            request: ReaderVerticalScrollRequest,
+            collectionView: UICollectionView,
+            restoredItem: Int,
+            visibleFrame: CGRect
+        ) {
+            let referenceLineY = ReaderVerticalPositioning.viewportRestoreLineY(in: collectionView.bounds)
             let desiredY = collectionView.contentOffset.y + anchorY - referenceLineY
             let minOffsetY = -collectionView.adjustedContentInset.top
             let maxOffsetY = max(
@@ -1360,8 +1454,37 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
                 CGPoint(x: collectionView.contentOffset.x, y: min(max(desiredY, minOffsetY), maxOffsetY)),
                 animated: false
             )
-            return true
         }
+
+        private func applyProgressFallbackRestore(
+            request: ReaderVerticalScrollRequest,
+            collectionView: UICollectionView,
+            visibleFrame: CGRect
+        ) {
+            let referenceLineY = ReaderVerticalPositioning.viewportRestoreLineY(in: collectionView.bounds)
+            let desiredY = collectionView.contentOffset.y
+                + visibleFrame.minY
+                + visibleFrame.height * min(max(request.intraSurfaceProgress, 0), 1)
+                - referenceLineY
+            let minOffsetY = -collectionView.adjustedContentInset.top
+            let maxOffsetY = max(
+                minOffsetY,
+                collectionView.contentSize.height - collectionView.bounds.height + collectionView.adjustedContentInset.bottom
+            )
+            collectionView.setContentOffset(
+                CGPoint(x: collectionView.contentOffset.x, y: min(max(desiredY, minOffsetY), maxOffsetY)),
+                animated: false
+            )
+        }
+    }
+}
+
+private final class ReaderVerticalViewportCollectionView: UICollectionView {
+    var onLayoutSubviews: (() -> Void)?
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        onLayoutSubviews?()
     }
 }
 
@@ -1383,6 +1506,8 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
     private var currentTopPadding: CGFloat = 0
     private var currentDisplayReference: NovelTextViewportDisplayReference?
     private var currentTextHeight: CGFloat?
+    private var lastAppliedLayoutSize = CGSize.zero
+    private var preferredLayoutSize = CGSize.zero
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -1399,11 +1524,24 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
         currentPage = nil
         currentDisplayReference = nil
         currentTextHeight = nil
+        lastAppliedLayoutSize = .zero
+        preferredLayoutSize = .zero
         removeBlockSubviews()
+    }
+
+    override func apply(_ layoutAttributes: UICollectionViewLayoutAttributes) {
+        let previousSize = lastAppliedLayoutSize
+        super.apply(layoutAttributes)
+        let nextSize = effectiveLayoutSize(for: layoutAttributes.size)
+        guard previousSize != nextSize else { return }
+        lastAppliedLayoutSize = nextSize
+        applyContentViewFrame(for: nextSize)
+        refreshLayoutForCurrentBounds()
     }
 
     override func layoutSubviews() {
         super.layoutSubviews()
+        applyContentViewFrame(for: effectiveLayoutSize(for: bounds.size))
         layoutBlockSubviews()
     }
 
@@ -1461,7 +1599,13 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
             blockViews.append(blockView)
             contentView.addSubview(blockView.view)
         }
-        layoutBlockSubviews()
+        let blockHeight = blockViews.reduce(CGFloat.zero) { $0 + $1.height }
+        let spacingHeight = CGFloat(max(blockViews.count - 1, 0)) * 14
+        preferredLayoutSize = CGSize(
+            width: max(contentWidth + settings.horizontalPadding * 2, bounds.width, 1),
+            height: max(ceil(blockHeight + spacingHeight + topPadding), 1)
+        )
+        refreshLayout(for: preferredLayoutSize)
     }
 
     func textViewportSample(
@@ -1496,9 +1640,29 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
         return nil
     }
 
+    func setNeedsDisplayForTextBlocks() {
+        for block in blockViews where block.displayReference != nil {
+            block.view.setNeedsDisplay()
+        }
+    }
+
+    func refreshLayoutForCurrentBounds() {
+        layoutBlockSubviews()
+        setNeedsDisplayForTextBlocks()
+    }
+
+    func refreshLayout(for layoutSize: CGSize) {
+        let nextSize = effectiveLayoutSize(for: layoutSize)
+        lastAppliedLayoutSize = nextSize
+        applyContentViewFrame(for: nextSize)
+        refreshLayoutForCurrentBounds()
+    }
+
     private func configureViewHierarchy() {
         backgroundColor = .clear
         contentView.backgroundColor = .clear
+        clipsToBounds = true
+        contentView.clipsToBounds = true
     }
 
     private func makeBlockView(
@@ -1569,6 +1733,24 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
             let height = max(ceil(blockView.height), 1)
             blockView.view.frame = CGRect(x: x, y: y, width: width, height: height)
             y += height + 14
+        }
+    }
+
+    private func effectiveLayoutSize(for layoutSize: CGSize) -> CGSize {
+        guard preferredLayoutSize.width > 0, preferredLayoutSize.height > 0 else {
+            return layoutSize
+        }
+        return CGSize(
+            width: max(layoutSize.width, preferredLayoutSize.width, 1),
+            height: preferredLayoutSize.height
+        )
+    }
+
+    private func applyContentViewFrame(for layoutSize: CGSize) {
+        guard layoutSize.width > 0, layoutSize.height > 0 else { return }
+        let contentFrame = CGRect(origin: .zero, size: layoutSize)
+        if contentView.frame != contentFrame {
+            contentView.frame = contentFrame
         }
     }
 

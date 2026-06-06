@@ -323,15 +323,19 @@ public enum NovelTextLayout {
                     frozenGeometry: frozenGeometry,
                     chapterCommentTarget: chapterCommentTarget(for: annotatedSegment, document: document)
                 )
-                if let chapterOrdinal = annotatedSegment.chapterOrdinal,
-                   let chapterTitle = annotatedSegment.chapterTitle,
-                   seenChapterOrdinals.insert(chapterOrdinal).inserted {
+                for range in ranges {
+                    guard let rangeSegment = annotatedSegmentByIndex[range.segmentIndex],
+                          let chapterOrdinal = rangeSegment.chapterOrdinal,
+                          let chapterTitle = rangeSegment.chapterTitle,
+                          seenChapterOrdinals.insert(chapterOrdinal).inserted else {
+                        continue
+                    }
                     chapters.append(
                         NovelTextViewportIndexChapter(
                             ordinal: chapterOrdinal,
                             title: chapterTitle,
                             startSurfaceOrdinal: surface.surfaceOrdinal,
-                            chapterCommentTarget: surface.chapterCommentTarget
+                            chapterCommentTarget: chapterCommentTarget(for: rangeSegment, document: document)
                         )
                     )
                 }

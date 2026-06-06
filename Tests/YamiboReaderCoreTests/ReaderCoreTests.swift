@@ -1332,7 +1332,7 @@ private final class StubURLProtocol: URLProtocol {
         let textHeight = try #require(result.layoutMetrics.surfaceMetrics[page.surfaceOrdinal]?.textHeight)
         #expect(textHeight == geometry.clipHeight)
         #expect(textHeight > 0)
-        #expect(textHeight <= layout.readableFrame.height * 2)
+        #expect(textHeight <= layout.readableFrame.height)
     }
 #else
     #expect(!result.viewportIndex.surfaces.isEmpty)
@@ -1830,6 +1830,28 @@ private final class StubURLProtocol: URLProtocol {
     }
 }
 
+@Test func novelTextLayoutAcceptsRematerializedGeometryWhenPageStartsAfterTrimmedWhitespace() async throws {
+#if canImport(UIKit) || canImport(AppKit)
+    let paragraph = "    页首空白不应使 TextKit 重新物化后的片段几何校验失败。"
+    let text = Array(repeating: paragraph, count: 180).joined(separator: "\n\n")
+    let document = ReaderPageDocument(
+        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=190&mobile=2")),
+        view: 1,
+        maxView: 1,
+        segments: [.text(text, chapterTitle: "第一章")]
+    )
+
+    let result = try NovelTextLayout.layout(
+        document: document,
+        settings: ReaderAppearanceSettings(readingMode: .paged),
+        layout: ReaderContainerLayout(width: 320, height: 568)
+    )
+
+    #expect(result.viewportIndex.surfaces.count > 1)
+    #expect(result.viewportIndex.surfaces.allSatisfy { $0.frozenGeometry != nil })
+#endif
+}
+
 @Test func novelTextSurfaceFragmentPartitionerMovesCrossingLineToNextSurface() throws {
     let surfaces = NovelTextSurfaceFragmentPartitioner.partition(
         [
@@ -1857,6 +1879,29 @@ private final class StubURLProtocol: URLProtocol {
     #expect(secondSurface.characterRange == NSRange(location: 20, length: 10))
 }
 
+@Test func novelTextSurfaceFragmentPartitionerIgnoresAlreadyCoveredOverlappingFragments() throws {
+    let surfaces = NovelTextSurfaceFragmentPartitioner.partition(
+        [
+            NovelTextSurfaceLayoutFragment(
+                characterRange: NSRange(location: 0, length: 10),
+                rect: CGRect(x: 0, y: 0, width: 200, height: 35)
+            ),
+            NovelTextSurfaceLayoutFragment(
+                characterRange: NSRange(location: 10, length: 10),
+                rect: CGRect(x: 0, y: 40, width: 200, height: 35)
+            ),
+            NovelTextSurfaceLayoutFragment(
+                characterRange: NSRange(location: 15, length: 5),
+                rect: CGRect(x: 0, y: 80, width: 200, height: 35)
+            )
+        ],
+        surfaceHeight: 100
+    )
+
+    #expect(surfaces.count == 1)
+    #expect(try #require(surfaces.first).characterRange == NSRange(location: 0, length: 20))
+}
+
 @Test func novelTextViewportDrawingClipsToFrozenPageGeometry() {
     let clipRect = NovelTextViewportDrawingGeometry.clipRect(
         bounds: CGRect(x: 0, y: 0, width: 361, height: 669),
@@ -1874,6 +1919,188 @@ private final class StubURLProtocol: URLProtocol {
             documentClipMaxY: nil
         ) == CGRect(x: 0, y: 0, width: 361, height: 669)
     )
+}
+
+@Test func novelTextViewportDrawingAssignsFragmentsToOneSurfaceByStartOffset() {
+    let surfaceRange = 102 ..< 180
+
+    #expect(!NovelTextViewportDrawingGeometry.fragmentStartsInDocumentRange(
+        fragmentStart: 100,
+        fragmentEnd: 150,
+        documentRange: surfaceRange
+    ))
+    #expect(NovelTextViewportDrawingGeometry.fragmentStartsInDocumentRange(
+        fragmentStart: 102,
+        fragmentEnd: 150,
+        documentRange: surfaceRange
+    ))
+    #expect(!NovelTextViewportDrawingGeometry.fragmentStartsInDocumentRange(
+        fragmentStart: 50,
+        fragmentEnd: 102,
+        documentRange: surfaceRange
+    ))
+    #expect(!NovelTextViewportDrawingGeometry.fragmentStartsInDocumentRange(
+        fragmentStart: 180,
+        fragmentEnd: 220,
+        documentRange: surfaceRange
+    ))
+}
+
+@MainActor
+@Test func novelTextViewportDrawsRestoredVerticalSurfaceAfterInitialFirstPageViewport() throws {
+#if canImport(UIKit) || canImport(AppKit)
+    let text = Array(
+        repeating: "围绕着王位继承权的争夺，距离那场内战的落幕已过去半个月的时间，而今天，是女王陛下的王位继承仪式。",
+        count: 260
+    ).joined(separator: "\n\n")
+    let document = ReaderPageDocument(
+        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=191&mobile=2")),
+        view: 1,
+        maxView: 4,
+        segments: [.text(text, chapterTitle: "第六章 贵穿之物")]
+    )
+    let settings = ReaderAppearanceSettings(readingMode: .vertical)
+    let layout = ReaderContainerLayout(width: 390, height: 844, readingMode: .vertical)
+    let runtime = NovelTextViewportRuntimeOwner()
+    let transaction = try runtime.prepareTransaction(
+        preparedInput: NovelTextLayout.prepareInput(
+            document: document,
+            settings: settings,
+            layout: layout
+        )
+    )
+    let targetSurface = try #require(transaction.result.viewportIndex.surfaces.dropFirst(9).first)
+    try runtime.prepareInitialViewport(for: transaction, around: 0)
+    #expect(runtime.commit(transaction))
+    runtime.updateVisibleSurfaceIdentities(
+        transaction.result.viewportIndex.surfaces
+            .filter { abs($0.surfaceOrdinal - targetSurface.surfaceOrdinal) <= 1 }
+            .map {
+                NovelReaderSurfaceIdentity(
+                    generation: transaction.generation,
+                    ordinal: $0.surfaceOrdinal
+                )
+            }
+    )
+    let displayReference = try #require(runtime.displayReference(for: NovelReaderSurfaceIdentity(
+        generation: transaction.generation,
+        ordinal: targetSurface.surfaceOrdinal
+    )))
+    let width = 390
+    let height = 844
+    let bytesPerRow = width * 4
+    var pixels = [UInt8](repeating: 0, count: height * bytesPerRow)
+    let colorSpace = CGColorSpaceCreateDeviceRGB()
+    let context = try #require(CGContext(
+        data: &pixels,
+        width: width,
+        height: height,
+        bitsPerComponent: 8,
+        bytesPerRow: bytesPerRow,
+        space: colorSpace,
+        bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+    ))
+
+    displayReference.draw(in: context, bounds: CGRect(x: 0, y: 0, width: width, height: height))
+
+    let upperHalfAlphaPixelCount = stride(from: 0, to: (height / 2) * bytesPerRow, by: 4).reduce(0) { count, offset in
+        count + (pixels[offset + 3] > 0 ? 1 : 0)
+    }
+    #expect(upperHalfAlphaPixelCount > 100)
+
+    let inkRows = (0..<height).map { y -> Bool in
+        let rowStart = y * bytesPerRow
+        let alphaPixels = stride(from: rowStart, to: rowStart + bytesPerRow, by: 4).reduce(0) { count, offset in
+            count + (pixels[offset + 3] > 0 ? 1 : 0)
+        }
+        return alphaPixels > 8
+    }
+    let firstInkRow = try #require(inkRows.firstIndex(of: true))
+    let lastInkRow = try #require(inkRows.lastIndex(of: true))
+    var longestBlankBand = 0
+    var currentBlankBand = 0
+    for hasInk in inkRows[firstInkRow...lastInkRow] {
+        if hasInk {
+            longestBlankBand = max(longestBlankBand, currentBlankBand)
+            currentBlankBand = 0
+        } else {
+            currentBlankBand += 1
+        }
+    }
+    longestBlankBand = max(longestBlankBand, currentBlankBand)
+    #expect(longestBlankBand < 220)
+#endif
+}
+
+@MainActor
+@Test func novelTextViewportDrawsLaterSurfaceLinesWhenLayoutFragmentStartsBeforeSurface() throws {
+#if canImport(UIKit) || canImport(AppKit)
+    let text = String(
+        repeating: "库莉茜耶把听到的话认真记在心里，然后继续望向远方闪闪发亮的雪原和村庄。 ",
+        count: 220
+    )
+    let document = ReaderPageDocument(
+        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=192&mobile=2")),
+        view: 1,
+        maxView: 1,
+        segments: [.text(text, chapterTitle: "长段落")]
+    )
+    let settings = ReaderAppearanceSettings(readingMode: .vertical)
+    let layout = ReaderContainerLayout(width: 390, height: 844, readingMode: .vertical)
+    let runtime = NovelTextViewportRuntimeOwner()
+    let transaction = try runtime.prepareTransaction(
+        preparedInput: NovelTextLayout.prepareInput(
+            document: document,
+            settings: settings,
+            layout: layout
+        )
+    )
+    let targetSurface = try #require(transaction.result.viewportIndex.surfaces.first {
+        ($0.frozenGeometry?.documentStartOffset ?? 0) > 0 && !$0.ranges.isEmpty
+    })
+    let geometry = try #require(targetSurface.frozenGeometry)
+    try runtime.prepareInitialViewport(for: transaction, around: 0)
+    #expect(runtime.commit(transaction))
+    runtime.updateVisibleSurfaceIdentities([
+        NovelReaderSurfaceIdentity(
+            generation: transaction.generation,
+            ordinal: targetSurface.surfaceOrdinal
+        )
+    ])
+    let displayReference = try #require(runtime.displayReference(for: NovelReaderSurfaceIdentity(
+        generation: transaction.generation,
+        ordinal: targetSurface.surfaceOrdinal
+    )))
+    let width = 390
+    let height = max(Int(ceil(geometry.contentHeight)), 1)
+    let bytesPerRow = width * 4
+    var pixels = [UInt8](repeating: 0, count: height * bytesPerRow)
+    let context = try #require(CGContext(
+        data: &pixels,
+        width: width,
+        height: height,
+        bitsPerComponent: 8,
+        bytesPerRow: bytesPerRow,
+        space: CGColorSpaceCreateDeviceRGB(),
+        bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+    ))
+
+    displayReference.draw(in: context, bounds: CGRect(x: 0, y: 0, width: width, height: height))
+
+    let inkRows = (0..<height).map { y -> Bool in
+        let rowStart = y * bytesPerRow
+        let alphaPixels = stride(from: rowStart, to: rowStart + bytesPerRow, by: 4).reduce(0) { count, offset in
+            count + (pixels[offset + 3] > 0 ? 1 : 0)
+        }
+        return alphaPixels > 8
+    }
+    let firstInkRow = try #require(inkRows.firstIndex(of: true))
+    let lastInkRow = try #require(inkRows.lastIndex(of: true))
+
+    #expect(firstInkRow < 80)
+    #expect(lastInkRow > height / 2)
+    #expect(height - lastInkRow - 1 < 100)
+#endif
 }
 
 @Test func novelTextLayoutPagedViewportSurfaceRangeFailureDoesNotUseEstimatedFallback() async throws {
