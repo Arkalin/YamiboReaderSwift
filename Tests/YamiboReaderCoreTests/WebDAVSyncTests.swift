@@ -182,7 +182,7 @@ private enum WebDAVTestError: Error {
     let favorite = Favorite(
         title: "远端收藏",
         url: remoteURL,
-        lastPage: 7,
+        mangaPageIndex: 7,
         lastView: 2,
         lastChapter: "第二章",
         isHidden: true,
@@ -243,7 +243,7 @@ private enum WebDAVTestError: Error {
     try await sessionStore.save(SessionState(cookie: "sid=local", isLoggedIn: true, accountUID: "100"))
 
     let remoteURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=903&mobile=2"))
-    let remoteFavorite = Favorite(title: "较新的远端收藏", url: remoteURL, lastPage: 9)
+    let remoteFavorite = Favorite(title: "较新的远端收藏", url: remoteURL, mangaPageIndex: 9)
     let payload = WebDAVSyncPayload(
         updatedAt: Date(timeIntervalSince1970: 2_000),
         library: FavoriteLibrarySnapshot(favorites: [remoteFavorite], collections: [])
@@ -285,7 +285,7 @@ private enum WebDAVTestError: Error {
     let archive = FavoriteMetadataArchiveEntry(
         canonicalThreadURL: ReaderCacheIdentity.canonicalThreadURL(from: archivedURL),
         displayName: "下载归档",
-        lastPage: 4,
+        mangaPageIndex: 4,
         lastView: 1,
         lastChapter: nil,
         authorID: nil,
@@ -497,7 +497,7 @@ private enum WebDAVTestError: Error {
     let archive = FavoriteMetadataArchiveEntry(
         canonicalThreadURL: ReaderCacheIdentity.canonicalThreadURL(from: archivedURL),
         displayName: "同步归档",
-        lastPage: 9,
+        mangaPageIndex: 9,
         lastView: 2,
         lastChapter: "归档章节",
         authorID: "77",
@@ -568,14 +568,14 @@ private enum WebDAVTestError: Error {
         title: "带标签收藏",
         url: favoriteURL,
         remoteFavoriteID: "remote-950",
-        lastPage: 5,
+        mangaPageIndex: 5,
         tagIDs: [shortTag.id, loveTag.id]
     )
     let archiveURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=951&mobile=2"))
     let archive = FavoriteMetadataArchiveEntry(
         canonicalThreadURL: ReaderCacheIdentity.canonicalThreadURL(from: archiveURL),
         displayName: "归档标签",
-        lastPage: 2,
+        mangaPageIndex: 2,
         lastView: 1,
         lastChapter: nil,
         authorID: nil,

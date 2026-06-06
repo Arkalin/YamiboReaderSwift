@@ -1,180 +1,193 @@
 import CoreGraphics
+import Dispatch
 import Foundation
 
-typealias NovelTextViewportPageLayout = @Sendable (
+typealias NovelTextViewportSurfaceLayout = @Sendable (
     _ viewportContext: NovelTextViewportContext,
     _ settings: ReaderAppearanceSettings,
     _ layout: ReaderContainerLayout
-) -> [NovelTextViewportDocumentPageRange]
+) -> [NovelTextViewportDocumentSurfaceRange]
+
+struct NovelTextLayoutPreparedInput: Sendable {
+    let document: ReaderPageDocument
+    let settings: ReaderAppearanceSettings
+    let layout: ReaderContainerLayout
+    let annotatedSegments: [NovelAnnotatedSegment]
+    let viewportContextSeed: NovelTextViewportContext
+}
+
+public enum NovelTextLayoutFailureStage: String, Equatable, Sendable {
+    case semanticDocumentPreparation
+    case offsetMapping
+    case textKitIndexing
+    case geometryValidation
+    case externalBlockProjection
+}
 
 public enum NovelTextLayoutFailure: LocalizedError, Equatable, Sendable {
-    case unableToLayoutText
+    case semanticDocumentPreparation
+    case offsetMapping
+    case textKitIndexing
+    case geometryValidation
+    case externalBlockProjection
+
+    public var stage: NovelTextLayoutFailureStage {
+        switch self {
+        case .semanticDocumentPreparation:
+            return .semanticDocumentPreparation
+        case .offsetMapping:
+            return .offsetMapping
+        case .textKitIndexing:
+            return .textKitIndexing
+        case .geometryValidation:
+            return .geometryValidation
+        case .externalBlockProjection:
+            return .externalBlockProjection
+        }
+    }
 
     public var errorDescription: String? {
         switch self {
-        case .unableToLayoutText:
-            return "Novel Text Layout could not produce rendered text."
+        case .semanticDocumentPreparation:
+            return "Novel Text Layout could not prepare the semantic document."
+        case .offsetMapping:
+            return "Novel Text Layout could not map semantic text offsets."
+        case .textKitIndexing:
+            return "Novel Text Layout could not build the TextKit index."
+        case .geometryValidation:
+            return "Novel Text Layout geometry validation failed."
+        case .externalBlockProjection:
+            return "Novel Text Layout could not project an external block."
         }
     }
 }
 
-public typealias NovelTextPagination = @Sendable (
-    _ document: ReaderPageDocument,
-    _ settings: ReaderAppearanceSettings,
-    _ layout: ReaderContainerLayout
-) throws -> NovelTextLayoutResult
-
 public enum NovelTextLayout {
-    private static let viewportIndexCache = NovelTextViewportIndexCache()
-
-    static func displayValue(
-        viewportContext: NovelTextViewportContext,
-        viewportPage: NovelTextViewportIndexPage,
-        settings: ReaderAppearanceSettings
-    ) throws -> NovelTextDisplayValue {
-        let text = try viewportPage.ranges.map { range in
-            try viewportText(
-                for: range,
-                viewportContext: viewportContext
-            )
+    static func prepareInput(
+        document: ReaderPageDocument,
+        settings: ReaderAppearanceSettings,
+        layout: ReaderContainerLayout
+    ) throws -> NovelTextLayoutPreparedInput {
+        let annotatedSegments = annotatedSegments(from: document, settings: settings)
+        guard annotatedSegments.contains(where: { annotatedSegment in
+            switch annotatedSegment.segment {
+            case let .text(text, _):
+                return !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            case .image:
+                return true
+            }
+        }) else {
+            throw NovelTextLayoutFailure.semanticDocumentPreparation
         }
-        .joined(separator: "\n\n")
-        guard !text.isEmpty else {
-            throw NovelTextLayoutFailure.unableToLayoutText
+        let viewportContext = makeViewportContext(
+            annotatedSegments: annotatedSegments,
+            document: document,
+            settings: settings,
+            layout: layout
+        )
+        try validateOffsetMap(
+            annotatedSegments: annotatedSegments,
+            viewportDocument: viewportContext.document
+        )
+        return NovelTextLayoutPreparedInput(
+            document: document,
+            settings: settings,
+            layout: layout,
+            annotatedSegments: annotatedSegments,
+            viewportContextSeed: viewportContext
+        )
+    }
+
+    static func result(
+        from preparedInput: NovelTextLayoutPreparedInput,
+        surfaceRanges: [NovelTextViewportDocumentSurfaceRange]
+    ) throws -> NovelTextLayoutResult {
+        let result = try render(
+            annotatedSegments: preparedInput.annotatedSegments,
+            document: preparedInput.document,
+            settings: preparedInput.settings,
+            layout: preparedInput.layout,
+            viewportContextSeed: preparedInput.viewportContextSeed,
+            viewportSurfaceLayout: { _, _, _ in surfaceRanges }
+        )
+        let hasVisibleText = result.viewportIndex.surfaces.contains { !$0.ranges.isEmpty }
+        let hasInputText = preparedInput.document.segments.contains { segment in
+            guard case let .text(text, _) = segment else { return false }
+            return !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         }
-        return NovelTextDisplayValue(
-            text: text,
-            chapterTitle: viewportPage.chapterTitle,
-            startsAtParagraphBoundary: startsAtParagraphBoundary(
-                viewportContext: viewportContext,
-                viewportPage: viewportPage
-            ),
-            settings: settings,
-            ranges: viewportPage.ranges
-        )
+        guard !hasInputText || hasVisibleText else {
+            throw NovelTextLayoutFailure.textKitIndexing
+        }
+        return result
     }
 
-    public static func renderedPages(
+    package static func layout(
         document: ReaderPageDocument,
         settings: ReaderAppearanceSettings,
         layout: ReaderContainerLayout
     ) throws -> NovelTextLayoutResult {
-        try makeViewport(
-            document: document,
-            settings: settings,
-            layout: layout,
-            viewportPageLayout: nil
-        )
+        try standaloneRuntimeLayout(document: document, settings: settings, layout: layout)
     }
 
-    public static func layout(
+    private static func standaloneRuntimeLayout(
         document: ReaderPageDocument,
         settings: ReaderAppearanceSettings,
         layout: ReaderContainerLayout
     ) throws -> NovelTextLayoutResult {
-        try makeViewport(
-            document: document,
-            settings: settings,
-            layout: layout,
-            viewportPageLayout: nil
-        )
-    }
-
-    public static func makeViewport(
-        document: ReaderPageDocument,
-        settings: ReaderAppearanceSettings,
-        layout: ReaderContainerLayout
-    ) throws -> NovelTextLayoutResult {
-        try makeViewport(
-            document: document,
-            settings: settings,
-            layout: layout,
-            viewportPageLayout: nil
-        )
-    }
-
-    public static func updateViewport(
-        _ viewport: NovelTextLayoutResult,
-        document: ReaderPageDocument,
-        settings: ReaderAppearanceSettings,
-        layout: ReaderContainerLayout
-    ) throws -> NovelTextLayoutResult {
-        _ = viewport
-        return try makeViewport(
-            document: document,
-            settings: settings,
-            layout: layout,
-            viewportPageLayout: nil
-        )
+        let operation: () throws -> NovelTextLayoutResult = {
+            try MainActor.assumeIsolated {
+                let runtime = NovelTextViewportRuntimeOwner()
+                let transaction = try runtime.prepareTransaction(
+                    preparedInput: try prepareInput(
+                        document: document,
+                        settings: settings,
+                        layout: layout
+                    )
+                )
+                return transaction.result
+            }
+        }
+        if Thread.isMainThread {
+            return try operation()
+        }
+        return try DispatchQueue.main.sync(execute: operation)
     }
 
     static func viewportSample(
         displayOffset: Int,
-        displayValue: NovelTextDisplayValue,
-        documentView: Int,
-        pageIndex: Int
+        ranges: [ReaderRenderedTextRange],
+        document: ReaderPageDocument,
+        surfaceOrdinal: Int
     ) -> NovelTextViewportSample? {
-        guard !displayValue.ranges.isEmpty else { return nil }
-        let normalizedOffset = max(0, displayOffset)
-        var runningOffset = 0
-
-        for range in displayValue.ranges {
-            let length = max(range.length, 0)
-            let rangeEnd = runningOffset + length
-            if normalizedOffset <= rangeEnd {
-                return NovelTextViewportSample(
-                    documentView: documentView,
-                    pageIndex: pageIndex,
-                    segmentIndex: range.segmentIndex,
-                    segmentOffset: range.startOffset + min(max(normalizedOffset - runningOffset, 0), length)
-                )
-            }
-            runningOffset = rangeEnd + 2
-        }
-
-        guard let lastRange = displayValue.ranges.last else { return nil }
-        return NovelTextViewportSample(
-            documentView: documentView,
-            pageIndex: pageIndex,
-            segmentIndex: lastRange.segmentIndex,
-            segmentOffset: lastRange.endOffset
+        NovelTextViewportIndexSurface(
+            surfaceOrdinal: surfaceOrdinal,
+            documentView: document.view,
+            chapterOrdinal: nil,
+            chapterTitle: nil,
+            ranges: ranges,
+            externalBlocks: []
         )
+        .sample(displayOffset: displayOffset, in: document)
     }
 
     static func displayOffset(
-        forSegmentIndex segmentIndex: Int,
-        segmentOffset: Int,
-        displayValue: NovelTextDisplayValue
+        for textSegmentIdentity: NovelTextSegmentIdentity,
+        displayedTextOffset: Int,
+        in document: ReaderPageDocument,
+        ranges: [ReaderRenderedTextRange]
     ) -> Int? {
-        var runningOffset = 0
-
-        for range in displayValue.ranges {
-            let length = max(range.length, 0)
-            defer { runningOffset += length + 2 }
-            guard range.segmentIndex == segmentIndex,
-                  segmentOffset >= range.startOffset,
-                  segmentOffset <= range.endOffset else {
-                continue
-            }
-            return runningOffset + min(max(segmentOffset - range.startOffset, 0), length)
-        }
-
-        return nil
-    }
-
-    static func renderedPages(
-        document: ReaderPageDocument,
-        settings: ReaderAppearanceSettings,
-        layout: ReaderContainerLayout,
-        viewportPageLayout: NovelTextViewportPageLayout? = nil,
-        usesViewportIndexCache: Bool? = nil
-    ) throws -> NovelTextLayoutResult {
-        try makeViewport(
-            document: document,
-            settings: settings,
-            layout: layout,
-            viewportPageLayout: viewportPageLayout,
-            usesViewportIndexCache: usesViewportIndexCache
+        NovelTextViewportIndexSurface(
+            surfaceOrdinal: 0,
+            documentView: document.view,
+            chapterOrdinal: nil,
+            chapterTitle: nil,
+            ranges: ranges,
+            externalBlocks: []
+        )
+        .displayOffset(
+            for: textSegmentIdentity,
+            displayedTextOffset: displayedTextOffset,
+            in: document
         )
     }
 
@@ -182,91 +195,30 @@ public enum NovelTextLayout {
         document: ReaderPageDocument,
         settings: ReaderAppearanceSettings,
         layout: ReaderContainerLayout,
-        viewportPageLayout: NovelTextViewportPageLayout? = nil,
-        usesViewportIndexCache: Bool? = nil
+        viewportSurfaceLayout: NovelTextViewportSurfaceLayout
     ) throws -> NovelTextLayoutResult {
-        try makeViewport(
-            document: document,
-            settings: settings,
-            layout: layout,
-            viewportPageLayout: viewportPageLayout,
-            usesViewportIndexCache: usesViewportIndexCache
-        )
-    }
-
-    static func makeViewport(
-        document: ReaderPageDocument,
-        settings: ReaderAppearanceSettings,
-        layout: ReaderContainerLayout,
-        viewportPageLayout: NovelTextViewportPageLayout? = nil,
-        usesViewportIndexCache: Bool? = nil
-    ) throws -> NovelTextLayoutResult {
-        let cacheKey = NovelTextViewportIndexCacheKey(
-            document: document,
-            settings: settings,
-            layout: layout
-        )
-        let shouldUseCache = usesViewportIndexCache ?? (viewportPageLayout == nil)
-        if shouldUseCache, let cachedResult = viewportIndexCache.result(for: cacheKey) {
-            return cachedResult
-        }
-        let annotatedSegments = annotatedSegments(from: document, settings: settings)
-        let viewportContextSeed = makeViewportContext(
-            annotatedSegments: annotatedSegments,
+        let preparedInput = try prepareInput(
             document: document,
             settings: settings,
             layout: layout
         )
         let result = try render(
-            annotatedSegments: annotatedSegments,
+            annotatedSegments: preparedInput.annotatedSegments,
             document: document,
             settings: settings,
             layout: layout,
-            viewportContextSeed: viewportContextSeed,
-            viewportPageLayout: { viewportContext, settings, layout in
-                if let viewportPageLayout {
-                    return viewportPageLayout(viewportContext, settings, layout)
-                }
-                return try viewportDocumentPageRanges(
-                    viewportContext: viewportContext,
-                    settings: settings,
-                    layout: layout
-                )
-            }
+            viewportContextSeed: preparedInput.viewportContextSeed,
+            viewportSurfaceLayout: viewportSurfaceLayout
         )
-        let hasVisibleText = result.viewportIndex.pages.contains { !$0.ranges.isEmpty }
+        let hasVisibleText = result.viewportIndex.surfaces.contains { !$0.ranges.isEmpty }
         let hasInputText = document.segments.contains { segment in
             guard case let .text(text, _) = segment else { return false }
             return !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         }
         guard !hasInputText || hasVisibleText else {
-            throw NovelTextLayoutFailure.unableToLayoutText
-        }
-        if shouldUseCache {
-            viewportIndexCache.store(result, for: cacheKey)
+            throw NovelTextLayoutFailure.textKitIndexing
         }
         return result
-    }
-
-    static func viewportDocumentPageRanges(
-        viewportContext: NovelTextViewportContext,
-        settings: ReaderAppearanceSettings,
-        layout: ReaderContainerLayout
-    ) throws -> [NovelTextViewportDocumentPageRange] {
-        switch settings.readingMode {
-        case .paged:
-            return try pagedViewportDocumentRanges(
-                viewportContext: viewportContext,
-                settings: settings,
-                layout: layout
-            )
-        case .vertical:
-            return try verticalViewportDocumentRanges(
-                viewportContext: viewportContext,
-                settings: settings,
-                layout: layout
-            )
-        }
     }
 
     private static func render(
@@ -275,9 +227,9 @@ public enum NovelTextLayout {
         settings: ReaderAppearanceSettings,
         layout: ReaderContainerLayout,
         viewportContextSeed: NovelTextViewportContext,
-        viewportPageLayout: (NovelTextViewportContext, ReaderAppearanceSettings, ReaderContainerLayout) throws -> [NovelTextViewportDocumentPageRange]
+        viewportSurfaceLayout: (NovelTextViewportContext, ReaderAppearanceSettings, ReaderContainerLayout) throws -> [NovelTextViewportDocumentSurfaceRange]
     ) throws -> NovelTextLayoutResult {
-        var pages: [NovelTextViewportIndexPage] = []
+        var indexSurfaces: [NovelTextViewportIndexSurface] = []
         var chapters: [NovelTextViewportIndexChapter] = []
         var seenChapterOrdinals = Set<Int>()
         let annotatedSegmentByIndex = Dictionary(
@@ -289,14 +241,14 @@ public enum NovelTextLayout {
             }
             return nil
         })
-        var pageDrafts: [NovelViewportPageDraft] = []
+        var surfaceDrafts: [NovelViewportSurfaceDraft] = []
         var nextDraftOrdinal = 0
 
         if !viewportContextSeed.document.text.isEmpty {
-            let pageRanges = try viewportPageLayout(viewportContextSeed, settings, layout)
-            for pageRange in pageRanges where !pageRange.isEmpty {
+            let surfaceRanges = try viewportSurfaceLayout(viewportContextSeed, settings, layout)
+            for surfaceRange in surfaceRanges where !surfaceRange.isEmpty {
                 let ranges = segmentRanges(
-                    for: pageRange,
+                    for: surfaceRange,
                     viewportDocument: viewportContextSeed.document
                 )
                 for group in splitTextRanges(
@@ -305,11 +257,11 @@ public enum NovelTextLayout {
                     annotatedSegmentByIndex: annotatedSegmentByIndex,
                     document: document
                 ) where !group.isEmpty {
-                    pageDrafts.append(
-                        NovelViewportPageDraft(
+                    surfaceDrafts.append(
+                        NovelViewportSurfaceDraft(
                             orderSegmentIndex: group[0].segmentIndex,
                             ordinal: nextDraftOrdinal,
-                            kind: .text(group, frozenGeometry: pageRange.frozenGeometry)
+                            kind: .text(group, frozenGeometry: surfaceRange.frozenGeometry)
                         )
                     )
                     nextDraftOrdinal += 1
@@ -324,15 +276,22 @@ public enum NovelTextLayout {
 
             case let .image(url, chapterTitle):
                 let externalBlock = NovelTextViewportExternalBlock(
-                    segmentIndex: annotatedSegment.index,
+                    chapterIdentity: annotatedSegment.semantics?.chapterIdentity,
                     url: url,
                     chapterOrdinal: annotatedSegment.chapterOrdinal,
                     chapterTitle: annotatedSegment.chapterTitle,
                     frozenFrame: frozenExternalBlockFrame(layout: layout),
                     chapterCommentTarget: chapterCommentTarget(for: annotatedSegment, document: document)
                 )
-                pageDrafts.append(
-                    NovelViewportPageDraft(
+                guard let frame = externalBlock.frozenFrame,
+                      frame.width.isFinite,
+                      frame.height.isFinite,
+                      frame.width > 0,
+                      frame.height > 0 else {
+                    throw NovelTextLayoutFailure.externalBlockProjection
+                }
+                surfaceDrafts.append(
+                    NovelViewportSurfaceDraft(
                         orderSegmentIndex: annotatedSegment.index,
                         ordinal: nextDraftOrdinal,
                         kind: .image(url: url, chapterTitle: chapterTitle, externalBlock: externalBlock)
@@ -342,7 +301,7 @@ public enum NovelTextLayout {
             }
         }
 
-        for draft in pageDrafts.sorted(by: {
+        for draft in surfaceDrafts.sorted(by: {
             if $0.orderSegmentIndex != $1.orderSegmentIndex {
                 return $0.orderSegmentIndex < $1.orderSegmentIndex
             }
@@ -354,8 +313,8 @@ public enum NovelTextLayout {
                       let annotatedSegment = annotatedSegmentByIndex[firstRange.segmentIndex] else {
                     continue
                 }
-                let page = NovelTextViewportIndexPage(
-                    pageIndex: pages.count,
+                let surface = NovelTextViewportIndexSurface(
+                    surfaceOrdinal: indexSurfaces.count,
                     documentView: document.view,
                     chapterOrdinal: annotatedSegment.chapterOrdinal,
                     chapterTitle: annotatedSegment.chapterTitle,
@@ -371,16 +330,16 @@ public enum NovelTextLayout {
                         NovelTextViewportIndexChapter(
                             ordinal: chapterOrdinal,
                             title: chapterTitle,
-                            startPageIndex: page.pageIndex,
-                            chapterCommentTarget: page.chapterCommentTarget
+                            startSurfaceOrdinal: surface.surfaceOrdinal,
+                            chapterCommentTarget: surface.chapterCommentTarget
                         )
                     )
                 }
-                pages.append(page)
+                indexSurfaces.append(surface)
 
             case let .image(_, _, externalBlock):
-                let page = NovelTextViewportIndexPage(
-                    pageIndex: pages.count,
+                let surface = NovelTextViewportIndexSurface(
+                    surfaceOrdinal: indexSurfaces.count,
                     documentView: document.view,
                     chapterOrdinal: externalBlock.chapterOrdinal,
                     chapterTitle: externalBlock.chapterTitle,
@@ -395,31 +354,23 @@ public enum NovelTextLayout {
                         NovelTextViewportIndexChapter(
                             ordinal: chapterOrdinal,
                             title: chapterTitle,
-                            startPageIndex: page.pageIndex,
-                            chapterCommentTarget: page.chapterCommentTarget
+                            startSurfaceOrdinal: surface.surfaceOrdinal,
+                            chapterCommentTarget: surface.chapterCommentTarget
                         )
                     )
                 }
-                pages.append(page)
+                indexSurfaces.append(surface)
             }
         }
 
-        if pages.isEmpty {
-            pages = [
-                NovelTextViewportIndexPage(
-                    pageIndex: 0,
-                    documentView: document.view,
-                    chapterOrdinal: nil,
-                    chapterTitle: nil,
-                    ranges: []
-                )
-            ]
+        guard !indexSurfaces.isEmpty else {
+            throw NovelTextLayoutFailure.textKitIndexing
         }
 
         let viewportIndex = NovelTextViewportIndex(
             documentView: document.view,
             readingMode: settings.readingMode,
-            pages: pages,
+            surfaces: indexSurfaces,
             chapters: chapters
         )
         let viewportContext = NovelTextViewportContext(
@@ -428,9 +379,7 @@ public enum NovelTextLayout {
             externalBlocks: viewportContextSeed.externalBlocks,
             diagnostics: NovelTextViewportDiagnostics(
                 indexBuildCount: viewportContextSeed.diagnostics.indexBuildCount,
-                visibleLayoutPassCount: viewportContextSeed.diagnostics.visibleLayoutPassCount,
-                compatibilityRenderedPageCount: pages.count,
-                compatibilityTextDisplayValueCount: 0
+                visibleLayoutPassCount: viewportContextSeed.diagnostics.visibleLayoutPassCount
             )
         )
 
@@ -438,36 +387,80 @@ public enum NovelTextLayout {
             viewportContext: viewportContext,
             viewportIndex: viewportIndex,
             layoutMetrics: layoutMetrics(
-                viewportContext: viewportContext,
                 viewportIndex: viewportIndex,
+                layout: layout
+            ),
+            fingerprints: fingerprints(
+                annotatedSegments: annotatedSegments,
+                viewportDocument: viewportContext.document,
                 settings: settings,
                 layout: layout
             )
         )
     }
 
-    private static func layoutMetrics(
-        viewportContext: NovelTextViewportContext,
-        viewportIndex: NovelTextViewportIndex,
+    private static func fingerprints(
+        annotatedSegments: [NovelAnnotatedSegment],
+        viewportDocument: NovelTextViewportDocument,
         settings: ReaderAppearanceSettings,
+        layout: ReaderContainerLayout
+    ) -> NovelTextLayoutFingerprints {
+        let semanticPayload = annotatedSegments.map { segment in
+            return [
+                String(segment.index),
+                segment.semantics?.chapterIdentity?.rawValue ?? "",
+                segment.semantics?.textSegmentIdentity?.rawValue ?? "",
+                segment.chapterTitle ?? "",
+                segment.textContent,
+            ].joined(separator: "\u{1f}")
+        }.joined(separator: "\u{1e}")
+        let layoutPayload = [
+            settings.fontFamily.rawValue,
+            String(settings.fontScale),
+            String(settings.lineHeightScale),
+            String(settings.characterSpacingScale),
+            String(settings.usesJustifiedText),
+            String(settings.indentsParagraphFirstLine),
+            settings.readingMode.rawValue,
+            String(describing: layout.containerSize),
+            String(describing: layout.safeAreaInsets),
+            String(describing: layout.contentInsets),
+            String(describing: layout.chromeInsets),
+        ].joined(separator: "|")
+        return NovelTextLayoutFingerprints(
+            semantic: stableFingerprint(semanticPayload),
+            text: stableFingerprint(viewportDocument.text),
+            layout: stableFingerprint(layoutPayload)
+        )
+    }
+
+    private static func stableFingerprint(_ value: String) -> String {
+        var hash: UInt64 = 14_695_981_039_346_656_037
+        for byte in value.utf8 {
+            hash ^= UInt64(byte)
+            hash &*= 1_099_511_628_211
+        }
+        return String(hash, radix: 16)
+    }
+
+    private static func layoutMetrics(
+        viewportIndex: NovelTextViewportIndex,
         layout: ReaderContainerLayout
     ) -> NovelTextViewportLayoutMetrics {
         let contentWidth = max(layout.readableFrame.width, 1)
-        let pageMetrics = Dictionary(
-            uniqueKeysWithValues: viewportIndex.pages.map { page in
-                let textHeight = page.frozenGeometry?.contentHeight ?? (try? displayValue(
-                    viewportContext: viewportContext,
-                    viewportPage: page,
-                    settings: settings
-                ).heightForViewportMetrics(width: contentWidth))
+        let surfaceMetrics = Dictionary(
+            uniqueKeysWithValues: viewportIndex.surfaces.map { page in
+                let textHeight = textHeightForViewportMetrics(
+                    viewportSurface: page
+                )
                 let externalBlockHeight = CGFloat(page.externalBlocks.count) *
                     min(max(contentWidth * 0.65, 160), max(layout.readableFrame.height, 160))
                 let blockCount = (textHeight == nil ? 0 : 1) + page.externalBlocks.count
                 let spacingHeight = CGFloat(max(blockCount - 1, 0)) * 14
                 return (
-                    page.pageIndex,
-                    NovelTextViewportPageLayoutMetrics(
-                        pageIndex: page.pageIndex,
+                    page.surfaceOrdinal,
+                    NovelTextViewportSurfaceLayoutMetrics(
+                        surfaceOrdinal: page.surfaceOrdinal,
                         textHeight: textHeight,
                         externalBlockHeight: externalBlockHeight,
                         spacingHeight: spacingHeight
@@ -475,7 +468,16 @@ public enum NovelTextLayout {
                 )
             }
         )
-        return NovelTextViewportLayoutMetrics(pageMetrics: pageMetrics)
+        return NovelTextViewportLayoutMetrics(surfaceMetrics: surfaceMetrics)
+    }
+
+    private static func textHeightForViewportMetrics(
+        viewportSurface: NovelTextViewportIndexSurface
+    ) -> CGFloat? {
+        if let frozenGeometry = viewportSurface.frozenGeometry {
+            return frozenGeometry.contentHeight
+        }
+        return nil
     }
 
     private static func frozenExternalBlockFrame(layout: ReaderContainerLayout) -> NovelTextViewportExternalBlockFrame {
@@ -529,7 +531,7 @@ public enum NovelTextLayout {
             case let .image(url, _):
                 externalBlocks.append(
                     NovelTextViewportExternalBlock(
-                        segmentIndex: annotatedSegment.index,
+                        chapterIdentity: annotatedSegment.semantics?.chapterIdentity,
                         url: url,
                         chapterOrdinal: annotatedSegment.chapterOrdinal,
                         chapterTitle: annotatedSegment.chapterTitle,
@@ -559,26 +561,25 @@ public enum NovelTextLayout {
         )
     }
 
+    private static func validateOffsetMap(
+        annotatedSegments: [NovelAnnotatedSegment],
+        viewportDocument: NovelTextViewportDocument
+    ) throws {
+        let textBySegment = Dictionary(uniqueKeysWithValues: annotatedSegments.compactMap {
+            annotatedSegment -> (Int, String)? in
+            guard case let .text(text, _) = annotatedSegment.segment else { return nil }
+            return (annotatedSegment.index, text)
+        })
+        guard viewportDocument.validateOffsetMap(expectedTextBySegment: textBySegment) else {
+            throw NovelTextLayoutFailure.offsetMapping
+        }
+    }
+
     private static func segmentRanges(
-        for pageRange: NovelTextViewportDocumentPageRange,
+        for surfaceRange: NovelTextViewportDocumentSurfaceRange,
         viewportDocument: NovelTextViewportDocument
     ) -> [ReaderRenderedTextRange] {
-        let sliceStart = max(0, pageRange.startOffset)
-        let sliceEnd = max(sliceStart, pageRange.endOffset)
-        guard sliceEnd > sliceStart else { return [] }
-
-        return viewportDocument.textRangesBySegment
-            .sorted { $0.value.startOffset < $1.value.startOffset }
-            .compactMap { segmentIndex, segmentRange in
-                let intersectionStart = max(sliceStart, segmentRange.startOffset)
-                let intersectionEnd = min(sliceEnd, segmentRange.endOffset)
-                guard intersectionEnd > intersectionStart else { return nil }
-                return ReaderRenderedTextRange(
-                    segmentIndex: segmentIndex,
-                    startOffset: intersectionStart - segmentRange.startOffset,
-                    endOffset: intersectionEnd - segmentRange.startOffset
-                )
-            }
+        viewportDocument.surfaceRanges(for: surfaceRange)
     }
 
     private static func splitTextRanges(
@@ -631,7 +632,6 @@ public enum NovelTextLayout {
         let previousSegment = annotatedSegmentByIndex[previousSegmentIndex]
         let nextSegment = annotatedSegmentByIndex[nextSegmentIndex]
         return previousSegment?.chapterOrdinal != nextSegment?.chapterOrdinal ||
-            previousSegment?.chapterTitle != nextSegment?.chapterTitle ||
             previousSegment.flatMap { chapterCommentTarget(for: $0, document: document) } !=
             nextSegment.flatMap { chapterCommentTarget(for: $0, document: document) }
     }
@@ -651,79 +651,11 @@ public enum NovelTextLayout {
         return String(text[startIndex..<endIndex])
     }
 
-    private static func viewportText(
-        for range: ReaderRenderedTextRange,
-        viewportContext: NovelTextViewportContext
-    ) throws -> String {
-        guard let segmentRange = viewportContext.document.textRangesBySegment[range.segmentIndex] else {
-            throw NovelTextLayoutFailure.unableToLayoutText
-        }
-        guard range.startOffset >= 0,
-              range.endOffset > range.startOffset,
-              range.endOffset <= segmentRange.length else {
-            throw NovelTextLayoutFailure.unableToLayoutText
-        }
-        let globalStart = segmentRange.startOffset + range.startOffset
-        let globalEnd = segmentRange.startOffset + range.endOffset
-        return try viewportSubstring(
-            in: viewportContext.document.text,
-            startOffset: globalStart,
-            endOffset: globalEnd
-        )
-    }
-
-    private static func viewportSubstring(
-        in text: String,
-        startOffset: Int,
-        endOffset: Int
-    ) throws -> String {
-        guard startOffset >= 0,
-              endOffset > startOffset,
-              endOffset <= text.count,
-              let startIndex = text.index(text.startIndex, offsetBy: startOffset, limitedBy: text.endIndex),
-              let endIndex = text.index(text.startIndex, offsetBy: endOffset, limitedBy: text.endIndex) else {
-            throw NovelTextLayoutFailure.unableToLayoutText
-        }
-        return String(text[startIndex..<endIndex])
-    }
-
     private static func startsAtParagraphBoundary(
         viewportContext: NovelTextViewportContext,
-        viewportPage: NovelTextViewportIndexPage
+        viewportSurface: NovelTextViewportIndexSurface
     ) -> Bool {
-        guard let firstRange = viewportPage.ranges.first,
-              let segmentRange = viewportContext.document.textRangesBySegment[firstRange.segmentIndex] else {
-            return true
-        }
-        guard firstRange.startOffset > 0 else {
-            return true
-        }
-        let globalStart = segmentRange.startOffset + firstRange.startOffset
-        return isParagraphBoundary(in: viewportContext.document.text, at: globalStart)
-    }
-
-    private static func isParagraphBoundary(in text: String, at offset: Int) -> Bool {
-        guard offset > 0, offset <= text.count else { return offset == 0 }
-        let nsText = text as NSString
-        var index = offset - 1
-        var newlineCount = 0
-
-        while index >= 0 {
-            let character = nsText.substring(with: NSRange(location: index, length: 1))
-            if character == "\n" || character == "\r" {
-                newlineCount += 1
-                if newlineCount >= 2 {
-                    return true
-                }
-            } else if character.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                index -= 1
-                continue
-            } else {
-                return false
-            }
-            index -= 1
-        }
-        return false
+        viewportContext.document.startsAtParagraphBoundary(surface: viewportSurface)
     }
 
     private static func annotatedSegments(
@@ -731,17 +663,45 @@ public enum NovelTextLayout {
         settings: ReaderAppearanceSettings
     ) -> [NovelAnnotatedSegment] {
         var results: [NovelAnnotatedSegment] = []
+        var currentChapterIdentity: NovelChapterIdentity?
         var currentChapterTitle: String?
         var currentChapterOrdinal: Int?
         var nextChapterOrdinal = 0
 
-        for (index, segment) in document.segments.enumerated() {
+        let segmentInputs = zip(
+            document.segments.indices,
+            zip(document.segments, zip(document.segmentSemantics, document.segmentSources))
+        )
+        for (index, input) in segmentInputs {
+            let (segment, semanticAndSource) = input
+            let (semantics, source) = semanticAndSource
             guard let transformedSegment = transformedSegment(from: segment, settings: settings) else {
                 continue
             }
             let explicitChapterTitle = segment.chapterTitle?.trimmingCharacters(in: .whitespacesAndNewlines)
-            if let explicitChapterTitle, !explicitChapterTitle.isEmpty {
+            let semanticChapterIdentity: NovelChapterIdentity? = if case .image = segment,
+                semantics?.textSegmentIdentity == nil,
+                let explicitChapterTitle,
+                !explicitChapterTitle.isEmpty,
+                explicitChapterTitle == currentChapterTitle,
+                let currentChapterIdentity {
+                currentChapterIdentity
+            } else {
+                semantics?.chapterIdentity
+            }
+
+            if let semanticChapterIdentity, !semanticChapterIdentity.rawValue.isEmpty {
+                if currentChapterIdentity != semanticChapterIdentity {
+                    currentChapterIdentity = semanticChapterIdentity
+                    currentChapterOrdinal = nextChapterOrdinal
+                    nextChapterOrdinal += 1
+                }
+                if let explicitChapterTitle, !explicitChapterTitle.isEmpty {
+                    currentChapterTitle = explicitChapterTitle
+                }
+            } else if let explicitChapterTitle, !explicitChapterTitle.isEmpty {
                 if currentChapterTitle != explicitChapterTitle {
+                    currentChapterIdentity = nil
                     currentChapterTitle = explicitChapterTitle
                     currentChapterOrdinal = nextChapterOrdinal
                     nextChapterOrdinal += 1
@@ -752,6 +712,8 @@ public enum NovelTextLayout {
                 NovelAnnotatedSegment(
                     index: index,
                     segment: transformedSegment,
+                    semantics: semantics,
+                    source: source,
                     chapterOrdinal: currentChapterOrdinal,
                     chapterTitle: currentChapterTitle
                 )
@@ -778,7 +740,7 @@ public enum NovelTextLayout {
         for annotatedSegment: NovelAnnotatedSegment,
         document: ReaderPageDocument
     ) -> ReaderChapterCommentTarget? {
-        guard let ownerPostID = document.source(forSegmentIndex: annotatedSegment.index)?.ownerPostID,
+        guard let ownerPostID = annotatedSegment.source?.ownerPostID,
               !ownerPostID.isEmpty else {
             return nil
         }
@@ -797,8 +759,8 @@ public enum NovelTextLayout {
         settings: ReaderAppearanceSettings,
         layout: ReaderContainerLayout
     ) -> Bool {
-#if canImport(UIKit)
-        ReaderPagedLayoutEngine.textFits(
+#if canImport(UIKit) || canImport(AppKit)
+        NovelTextPreviewLayout.textFits(
             text,
             chapterTitle: chapterTitle,
             settings: settings,
@@ -809,146 +771,9 @@ public enum NovelTextLayout {
 #endif
     }
 
-    static func measuredTextHeight(
-        displayValue: NovelTextDisplayValue,
-        width: CGFloat,
-        baseFontSize: Double = 22
-    ) throws -> CGFloat {
-        try measuredTextHeight(
-            displayValue.text,
-            chapterTitle: displayValue.chapterTitle,
-            startsAtParagraphBoundary: displayValue.startsAtParagraphBoundary,
-            settings: ReaderAppearanceSettings(displaySemantics: displayValue.semantics),
-            width: width,
-            baseFontSize: baseFontSize
-        )
-    }
-
-    @_spi(NovelTextLayoutMeasurement)
-    public static func measuredTextHeight(
-        _ text: String,
-        chapterTitle: String?,
-        startsAtParagraphBoundary: Bool = true,
-        settings: ReaderAppearanceSettings,
-        width: CGFloat,
-        baseFontSize: Double = 22
-    ) throws -> CGFloat {
-        guard width > 0 else {
-            throw NovelTextLayoutFailure.unableToLayoutText
-        }
-#if canImport(UIKit)
-        let height = ReaderPagedLayoutEngine.measuredTextHeight(
-            text,
-            chapterTitle: chapterTitle,
-            startsAtParagraphBoundary: startsAtParagraphBoundary,
-            settings: settings,
-            width: width,
-            baseFontSize: baseFontSize
-        )
-        guard height > 0, height.isFinite else {
-            throw NovelTextLayoutFailure.unableToLayoutText
-        }
-        return height
-#else
-        throw NovelTextLayoutFailure.unableToLayoutText
-#endif
-    }
-
-    private static func pagedViewportDocumentRanges(
-        viewportContext: NovelTextViewportContext,
-        settings: ReaderAppearanceSettings,
-        layout: ReaderContainerLayout
-    ) throws -> [NovelTextViewportDocumentPageRange] {
-#if canImport(UIKit)
-        let ranges = ReaderPagedLayoutEngine.paginateViewportDocument(
-            viewportContext.document.text,
-            settings: settings,
-            layout: layout
-        )
-        if !ranges.isEmpty {
-            return ranges
-        }
-#else
-        let ranges = pureValueViewportDocumentRanges(
-            viewportContext: viewportContext,
-            layout: layout
-        )
-        if !ranges.isEmpty {
-            return ranges
-        }
-#endif
-        throw NovelTextLayoutFailure.unableToLayoutText
-    }
-
-    private static func verticalViewportDocumentRanges(
-        viewportContext: NovelTextViewportContext,
-        settings: ReaderAppearanceSettings,
-        layout: ReaderContainerLayout
-    ) throws -> [NovelTextViewportDocumentPageRange] {
-#if canImport(UIKit)
-        let ranges = ReaderPagedLayoutEngine.verticalViewportDocumentChunks(
-            viewportContext.document.text,
-            settings: settings,
-            layout: layout
-        )
-        if !ranges.isEmpty {
-            return ranges
-        }
-#else
-        let ranges = pureValueViewportDocumentRanges(
-            viewportContext: viewportContext,
-            layout: layout
-        )
-        if !ranges.isEmpty {
-            return ranges
-        }
-#endif
-        throw NovelTextLayoutFailure.unableToLayoutText
-    }
-
-    private static func pureValueViewportDocumentRanges(
-        viewportContext: NovelTextViewportContext,
-        layout: ReaderContainerLayout
-    ) -> [NovelTextViewportDocumentPageRange] {
-        let readableHeight = max(layout.readableFrame.height, 1)
-        let chunkLength = max(1, Int(readableHeight / 4))
-        return viewportContext.document.textRangesBySegment
-            .values
-            .sorted { $0.startOffset < $1.startOffset }
-            .flatMap { range -> [NovelTextViewportDocumentPageRange] in
-                guard range.endOffset > range.startOffset else { return [] }
-                return stride(from: range.startOffset, to: range.endOffset, by: chunkLength).map { start in
-                    NovelTextViewportDocumentPageRange(
-                        startOffset: start,
-                        endOffset: min(start + chunkLength, range.endOffset)
-                    )
-                }
-            }
-    }
-
 }
 
-private extension ReaderAppearanceSettings {
-    init(displaySemantics: NovelTextDisplaySemantics) {
-        self.init(
-            fontScale: displaySemantics.fontScale,
-            fontFamily: displaySemantics.fontFamily,
-            lineHeightScale: displaySemantics.lineHeightScale,
-            characterSpacingScale: displaySemantics.characterSpacingScale,
-            usesJustifiedText: displaySemantics.usesJustifiedText,
-            indentsParagraphFirstLine: displaySemantics.indentsParagraphFirstLine
-        )
-    }
-}
-
-private extension NovelTextDisplayValue {
-    func heightForViewportMetrics(width: CGFloat) throws -> CGFloat {
-        try NovelTextLayout.measuredTextHeight(displayValue: self, width: width)
-    }
-}
-
-
-struct NovelTextViewportDocumentPageRange: Hashable, Sendable {
+package struct NovelTextViewportDocumentSurfaceRange: Hashable, Sendable {
     let startOffset: Int
     let endOffset: Int
     let frozenGeometry: NovelTextViewportFrozenGeometry?
@@ -968,9 +793,11 @@ struct NovelTextViewportDocumentPageRange: Hashable, Sendable {
     }
 }
 
-private struct NovelAnnotatedSegment {
+struct NovelAnnotatedSegment: Sendable {
     let index: Int
     let segment: ReaderSegment
+    let semantics: ReaderSegmentSemantics?
+    let source: ReaderSegmentSource?
     let chapterOrdinal: Int?
     let chapterTitle: String?
 
@@ -980,54 +807,13 @@ private struct NovelAnnotatedSegment {
     }
 }
 
-private struct NovelViewportPageDraft {
+private struct NovelViewportSurfaceDraft {
     let orderSegmentIndex: Int
     let ordinal: Int
-    let kind: NovelViewportPageDraftKind
+    let kind: NovelViewportSurfaceDraftKind
 }
 
-private enum NovelViewportPageDraftKind {
+private enum NovelViewportSurfaceDraftKind {
     case text([ReaderRenderedTextRange], frozenGeometry: NovelTextViewportFrozenGeometry?)
     case image(url: URL, chapterTitle: String?, externalBlock: NovelTextViewportExternalBlock)
-}
-
-private struct NovelTextViewportIndexCacheKey: Hashable {
-    var document: ReaderPageDocument
-    var settings: ReaderAppearanceSettings
-    var layout: ReaderContainerLayout
-}
-
-private final class NovelTextViewportIndexCache: @unchecked Sendable {
-    private let lock = NSLock()
-    private var entries: [NovelTextViewportIndexCacheKey: NovelTextLayoutResult] = [:]
-    private var accessOrder: [NovelTextViewportIndexCacheKey] = []
-    private let capacity = 16
-
-    func result(for key: NovelTextViewportIndexCacheKey) -> NovelTextLayoutResult? {
-        lock.withLock {
-            guard let result = entries[key] else { return nil }
-            markRecentlyUsed(key)
-            return result
-        }
-    }
-
-    func store(_ result: NovelTextLayoutResult, for key: NovelTextViewportIndexCacheKey) {
-        lock.withLock {
-            entries[key] = result
-            markRecentlyUsed(key)
-            trimIfNeeded()
-        }
-    }
-
-    private func markRecentlyUsed(_ key: NovelTextViewportIndexCacheKey) {
-        accessOrder.removeAll { $0 == key }
-        accessOrder.append(key)
-    }
-
-    private func trimIfNeeded() {
-        while accessOrder.count > capacity, let oldestKey = accessOrder.first {
-            accessOrder.removeFirst()
-            entries.removeValue(forKey: oldestKey)
-        }
-    }
 }

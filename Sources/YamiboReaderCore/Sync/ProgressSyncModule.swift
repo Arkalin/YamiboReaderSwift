@@ -3,7 +3,6 @@ import Foundation
 public struct NovelReadingPosition: Hashable, Sendable {
     public var threadURL: URL
     public var view: Int
-    public var page: Int
     public var chapterTitle: String?
     public var authorID: String?
     public var resumePoint: ReaderResumePoint?
@@ -11,14 +10,12 @@ public struct NovelReadingPosition: Hashable, Sendable {
     public init(
         threadURL: URL,
         view: Int,
-        page: Int,
         chapterTitle: String? = nil,
         authorID: String? = nil,
         resumePoint: ReaderResumePoint? = nil
     ) {
         self.threadURL = threadURL
         self.view = max(1, view)
-        self.page = max(0, page)
         self.chapterTitle = resumePoint?.chapterTitle ?? chapterTitle
         self.authorID = resumePoint?.authorID ?? authorID
         self.resumePoint = resumePoint
@@ -127,16 +124,8 @@ public struct FavoriteLibraryProgressSyncAdapter: ProgressSyncAdapter {
     }
 
     public func saveNovelReadingPosition(_ position: NovelReadingPosition) async throws {
-        let progress = ReaderProgress(
-            view: position.view,
-            page: position.page,
-            chapterTitle: position.chapterTitle,
-            authorID: position.authorID,
-            resumePoint: position.resumePoint
-        )
-        _ = try await favoriteStore.updateReadingProgress(
-            for: position.threadURL,
-            progress: progress,
+        _ = try await favoriteStore.updateNovelReadingPosition(
+            position,
             createIfMissing: false
         )
     }

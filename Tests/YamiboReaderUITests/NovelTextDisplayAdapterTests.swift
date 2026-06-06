@@ -34,7 +34,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertFalse(supportSource.contains("NativeNovelTextDisplayView"))
         XCTAssertFalse(sessionSource.contains("import UIKit"))
         XCTAssertFalse(sessionSource.contains("import AppKit"))
-        XCTAssertTrue(sessionSource.contains("public struct NovelReadingSession: Sendable"))
+        XCTAssertTrue(sessionSource.contains("package struct NovelReadingSession: Sendable"))
     }
 
     func testSinglePagePagedCellUsesOpaqueWorkflowDisplayReference() throws {
@@ -52,7 +52,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         let singlePageBody = try XCTUnwrap(typeBody(named: "ReaderPagedCollectionViewport", in: supportSource))
         let surfaceBody = try XCTUnwrap(typeBody(named: "NovelTextViewportReferenceUIView", in: adapterSource))
 
-        XCTAssertTrue(singlePageBody.contains("displayReferenceProvider(indexPath.item)"))
+        XCTAssertTrue(singlePageBody.contains("displayReferenceProvider($0.identity)"))
         XCTAssertTrue(singlePageBody.contains("displayReference: displayReference"))
         XCTAssertTrue(adapterSource.contains("NativeNovelTextViewportReferenceView"))
         XCTAssertTrue(surfaceBody.contains("NovelTextViewportDisplayReference?"))
@@ -89,47 +89,17 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertEqual(events, ["immediate", "deferred", "queued-after-update"])
     }
 
-    func testViewportPageContentDoesNotIndentContinuationSliceFromSameParagraph() throws {
-        let firstParagraph = "第一段正文很长，需要横向分页后继续显示。"
-        let secondParagraph = "第二段应该仍然作为新段落缩进。"
-        let sourceText = firstParagraph + "\n\n" + secondParagraph
-        let settings = ReaderAppearanceSettings(indentsParagraphFirstLine: true, readingMode: .paged)
-        let context = viewportContext(text: sourceText, settings: settings)
-        let continuationRange = ReaderRenderedTextRange(
-            segmentIndex: 0,
-            startOffset: 8,
-            endOffset: firstParagraph.count
+    func testViewportSurfaceContentDoesNotMaterializeDisplayValuesForParagraphIndent() throws {
+        let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let supportSource = try String(
+            contentsOf: repositoryRoot
+                .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderSupportViews.swift"),
+            encoding: .utf8
         )
+        let viewportContentBody = try XCTUnwrap(typeBody(named: "ReaderViewportSurfaceContent", in: supportSource))
 
-        let displayValue = try NovelTextLayout.displayValue(
-            viewportContext: context,
-            viewportPage: viewportTestIndexPage(index: 1, range: continuationRange),
-            settings: settings
-        )
-
-        XCTAssertFalse(displayValue.startsAtParagraphBoundary)
-    }
-
-    func testViewportPageContentIndentsSliceStartingAtRealParagraphBoundary() throws {
-        let firstParagraph = "第一段正文很长，需要横向分页后继续显示。"
-        let secondParagraph = "第二段应该仍然作为新段落缩进。"
-        let sourceText = firstParagraph + "\n\n" + secondParagraph
-        let settings = ReaderAppearanceSettings(indentsParagraphFirstLine: true, readingMode: .paged)
-        let context = viewportContext(text: sourceText, settings: settings)
-        let paragraphBoundaryOffset = firstParagraph.count + "\n\n".count
-        let paragraphRange = ReaderRenderedTextRange(
-            segmentIndex: 0,
-            startOffset: paragraphBoundaryOffset,
-            endOffset: sourceText.count
-        )
-
-        let displayValue = try NovelTextLayout.displayValue(
-            viewportContext: context,
-            viewportPage: viewportTestIndexPage(index: 2, range: paragraphRange),
-            settings: settings
-        )
-
-        XCTAssertTrue(displayValue.startsAtParagraphBoundary)
+        XCTAssertFalse(viewportContentBody.contains("NovelTextLayout.displayValue("))
+        XCTAssertFalse(viewportContentBody.contains("NovelTextDisplayValue"))
     }
 
     func testSettingsPreviewUsesSwiftUITextWithoutUILayoutMeasurement() throws {
@@ -147,7 +117,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertFalse(previewBody.contains("measuredHeight"))
     }
 
-    func testNovelTextDisplayValueStaysPureAndReferenceSurfaceOwnsNoTextKitGraph() throws {
+    func testReferenceSurfaceOwnsNoTextKitGraphAndDisplayValueIsRemoved() throws {
         let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let readerModelsSource = try String(
             contentsOf: repositoryRoot
@@ -159,15 +129,11 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
                 .appendingPathComponent("Sources/YamiboReaderUI/Views/NovelTextDisplayAdapter.swift"),
             encoding: .utf8
         )
-        let displayValueBody = try XCTUnwrap(typeBody(named: "NovelTextDisplayValue", in: readerModelsSource))
         let referenceSurfaceBody = try XCTUnwrap(
             typeBody(named: "NovelTextViewportReferenceUIView", in: adapterSource)
         )
 
-        XCTAssertFalse(displayValueBody.contains("NSAttributedString"))
-        XCTAssertFalse(displayValueBody.contains("NSText"))
-        XCTAssertFalse(displayValueBody.contains("UIView"))
-        XCTAssertFalse(displayValueBody.contains("NSView"))
+        XCTAssertFalse(readerModelsSource.contains("NovelTextDisplayValue"))
         XCTAssertTrue(referenceSurfaceBody.contains("NovelTextViewportDisplayReference?"))
         XCTAssertTrue(referenceSurfaceBody.contains("displayReference.draw("))
         XCTAssertFalse(referenceSurfaceBody.contains("NSTextContentStorage"))
@@ -199,10 +165,10 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
                 .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderSupportViews.swift"),
             encoding: .utf8
         )
-        let spreadContentBody = try XCTUnwrap(typeBody(named: "ReaderPagedSpreadContent", in: readerSupportSource))
+        let spreadContentBody = try XCTUnwrap(typeBody(named: "ReaderPresentationSpreadContent", in: readerSupportSource))
 
-        XCTAssertTrue(spreadContentBody.contains("ReaderViewportPageContent("))
-        XCTAssertTrue(spreadContentBody.contains("displayReference: displayReference"))
+        XCTAssertTrue(spreadContentBody.contains("ReaderViewportSurfaceContent("))
+        XCTAssertTrue(spreadContentBody.contains("displayReference: surface.flatMap"))
         XCTAssertFalse(spreadContentBody.contains("Text(displayValue.text"))
         XCTAssertFalse(spreadContentBody.contains("NovelTextDisplayValue"))
     }
@@ -215,13 +181,13 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
             encoding: .utf8
         )
         let spreadViewportBody = try XCTUnwrap(
-            typeBody(named: "ReaderPagedSpreadCollectionViewport", in: supportSource)
+            typeBody(named: "ReaderPresentationSpreadCollectionViewport", in: supportSource)
         )
-        let spreadContentBody = try XCTUnwrap(typeBody(named: "ReaderPagedSpreadContent", in: supportSource))
+        let spreadContentBody = try XCTUnwrap(typeBody(named: "ReaderPresentationSpreadContent", in: supportSource))
 
         XCTAssertTrue(spreadViewportBody.contains("displayReferenceProvider"))
-        XCTAssertTrue(spreadContentBody.contains("displayReferenceProvider(pageIndex)"))
-        XCTAssertTrue(spreadContentBody.contains("displayReference: displayReference"))
+        XCTAssertTrue(spreadContentBody.contains("displayReferenceProvider($0.identity)"))
+        XCTAssertTrue(spreadContentBody.contains("displayReference: surface.flatMap"))
         XCTAssertFalse(spreadContentBody.contains("NovelTextViewportDisplayUIView()"))
         XCTAssertFalse(spreadContentBody.contains("NSTextContentStorage"))
         XCTAssertFalse(spreadContentBody.contains("NSTextLayoutManager"))
@@ -248,7 +214,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertTrue(modelSource.contains("readingWorkflow?.close()"))
     }
 
-    func testPagedCellsResolveViewportPageIdentityBeforeRenderingNormalText() throws {
+    func testPagedCellsResolveViewportSurfaceIdentityBeforeRenderingNormalText() throws {
         let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let supportSource = try String(
             contentsOf: repositoryRoot
@@ -256,21 +222,24 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
             encoding: .utf8
         )
         let singlePageBody = try XCTUnwrap(typeBody(named: "ReaderPagedCollectionViewport", in: supportSource))
-        let spreadContentBody = try XCTUnwrap(typeBody(named: "ReaderPagedSpreadContent", in: supportSource))
-        let viewportContentBody = try XCTUnwrap(typeBody(named: "ReaderViewportPageContent", in: supportSource))
+        let spreadContentBody = try XCTUnwrap(typeBody(named: "ReaderPresentationSpreadContent", in: supportSource))
+        let viewportContentBody = try XCTUnwrap(typeBody(named: "ReaderViewportSurfaceContent", in: supportSource))
 
+        XCTAssertTrue(singlePageBody.contains("parent.surfaces[indexPath.item]"))
+        XCTAssertTrue(spreadContentBody.contains("surfaces.first"))
         for body in [singlePageBody, spreadContentBody] {
-            XCTAssertTrue(body.contains("viewportIndex?.pages.first"))
-            XCTAssertTrue(body.contains("ReaderViewportPageContent("))
+            XCTAssertTrue(body.contains("ReaderViewportSurfaceContent("))
             XCTAssertFalse(body.contains("page.blocks.compactMap(\\.novelTextDisplayValue)"))
             XCTAssertFalse(body.contains("page.novelTextDisplayValues.first"))
+            XCTAssertFalse(body.contains("identity.ordinal =="))
         }
-        XCTAssertTrue(singlePageBody.contains("$0.pageIndex == indexPath.item"))
-        XCTAssertTrue(spreadContentBody.contains("$0.pageIndex == pageIndex"))
+        XCTAssertTrue(spreadContentBody.contains("$0.presentationIndex == surfaceIndex"))
         XCTAssertFalse(singlePageBody.contains("$0.documentView == page.documentView"))
         XCTAssertFalse(spreadContentBody.contains("$0.documentView == page.documentView"))
         XCTAssertTrue(viewportContentBody.contains("viewportBlocks("))
         XCTAssertTrue(viewportContentBody.contains("displayReference: displayReference"))
+        XCTAssertTrue(viewportContentBody.contains("fallbackSurfaceIndex"))
+        XCTAssertFalse(supportSource.contains("fallbackPageIndex"))
         XCTAssertFalse(viewportContentBody.contains("NovelTextLayout.displayValue("))
         XCTAssertFalse(viewportContentBody.contains("NovelTextDisplayValue"))
         XCTAssertFalse(viewportContentBody.contains("compatibilityBlocks"))
@@ -294,8 +263,9 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertTrue(pagedContentBody.contains("ReaderPagedCollectionViewport("))
         XCTAssertTrue(supportSource.contains("struct ReaderPagedCollectionViewport: UIViewRepresentable"))
         XCTAssertTrue(collectionViewportBody.contains("UICollectionView"))
-        XCTAssertTrue(collectionViewportBody.contains("viewportContext"))
-        XCTAssertTrue(collectionViewportBody.contains("viewportIndex"))
+        XCTAssertTrue(collectionViewportBody.contains("surfaces"))
+        XCTAssertFalse(collectionViewportBody.contains("viewportContext"))
+        XCTAssertFalse(collectionViewportBody.contains("viewportIndex"))
     }
 
     func testPagedViewportUsesChromeInsetsBecauseHostingCellAlreadyAppliesSafeArea() throws {
@@ -311,7 +281,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertTrue(pagedContentBody.contains("bottomInset: layout.chromeInsets.bottom"))
     }
 
-    func testTwoPageSpreadReadingUsesUIKitCollectionViewportWithSharedViewportContext() throws {
+    func testTwoPageSpreadReadingUsesUIKitCollectionViewportWithCommittedSurfaces() throws {
         let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let containerSource = try String(
             contentsOf: repositoryRoot
@@ -324,16 +294,17 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
             encoding: .utf8
         )
         let pagedContentBody = try XCTUnwrap(functionBody(named: "pagedContent", in: containerSource))
-        let spreadViewportBody = try XCTUnwrap(typeBody(named: "ReaderPagedSpreadCollectionViewport", in: supportSource))
-        let spreadContentBody = try XCTUnwrap(typeBody(named: "ReaderPagedSpreadContent", in: supportSource))
+        let spreadViewportBody = try XCTUnwrap(typeBody(named: "ReaderPresentationSpreadCollectionViewport", in: supportSource))
+        let spreadContentBody = try XCTUnwrap(typeBody(named: "ReaderPresentationSpreadContent", in: supportSource))
 
-        XCTAssertTrue(pagedContentBody.contains("ReaderPagedSpreadCollectionViewport("))
-        XCTAssertTrue(supportSource.contains("struct ReaderPagedSpreadCollectionViewport: UIViewRepresentable"))
+        XCTAssertTrue(pagedContentBody.contains("ReaderPresentationSpreadCollectionViewport("))
+        XCTAssertTrue(supportSource.contains("struct ReaderPresentationSpreadCollectionViewport: UIViewRepresentable"))
         XCTAssertTrue(spreadViewportBody.contains("UICollectionView"))
-        XCTAssertTrue(spreadViewportBody.contains("viewportContext"))
-        XCTAssertTrue(spreadViewportBody.contains("viewportIndex"))
-        XCTAssertTrue(spreadContentBody.contains("spread.leftPageIndex"))
-        XCTAssertTrue(spreadContentBody.contains("spread.rightPageIndex"))
+        XCTAssertTrue(spreadViewportBody.contains("surfaces"))
+        XCTAssertFalse(spreadViewportBody.contains("viewportContext"))
+        XCTAssertFalse(spreadViewportBody.contains("viewportIndex"))
+        XCTAssertTrue(spreadContentBody.contains("spread.leftSurfaceIndex"))
+        XCTAssertTrue(spreadContentBody.contains("spread.rightSurfaceIndex"))
     }
 
     func testVerticalReadingUsesViewportBackedReaderPageContentInsteadOfSwiftUITextChunks() throws {
@@ -352,8 +323,8 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         let scrollViewBody = try XCTUnwrap(typeBody(named: "ReaderVerticalViewportScrollView", in: supportSource))
         let readerBlockBody = try XCTUnwrap(typeBody(named: "ReaderViewportBlockView", in: supportSource))
         XCTAssertTrue(verticalContentBody.contains("ReaderVerticalViewportScrollView("))
-        XCTAssertTrue(scrollViewBody.contains("verticalDisplayPage(for: indexPath.item)"))
-        XCTAssertFalse(scrollViewBody.contains("ReaderViewportPageContent.viewportBackedPage("))
+        XCTAssertTrue(scrollViewBody.contains("verticalDisplaySurface(for: indexPath.item)"))
+        XCTAssertFalse(scrollViewBody.contains("ReaderViewportSurfaceContent.viewportBackedPage("))
         XCTAssertTrue(readerBlockBody.contains("NativeNovelTextViewportReferenceView("))
         XCTAssertTrue(readerBlockBody.contains("displayReference"))
         XCTAssertFalse(readerBlockBody.contains("NativeNovelTextDisplayView("))
@@ -379,48 +350,10 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertFalse(verticalContentBody.contains("LazyVStack"))
         XCTAssertTrue(supportSource.contains("struct ReaderVerticalViewportScrollView: UIViewRepresentable"))
         XCTAssertTrue(scrollViewBody.contains("UICollectionView"))
-        XCTAssertTrue(scrollViewBody.contains("viewportContext"))
-        XCTAssertTrue(scrollViewBody.contains("viewportIndex"))
-    }
-
-    func testVisibleSurfaceDiagnosticsSeparateIndexBuildFromViewportDrawing() throws {
-        let context = NovelTextViewportContext(
-            identity: NovelTextViewportIdentity(
-                threadURL: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=152&mobile=2")!,
-                documentView: 1,
-                maxView: 1,
-                fetchedAt: Date(timeIntervalSince1970: 0),
-                contentSource: .fallbackUnfilteredPage,
-                appearance: ReaderAppearanceSettings(),
-                layout: ReaderContainerLayout(width: 320, height: 568)
-            ),
-            document: NovelTextViewportDocument(
-                text: "visible viewport text",
-                textRangesBySegment: [0: ReaderRenderedTextRange(segmentIndex: 0, startOffset: 0, endOffset: 21)],
-                insertedSeparatorRanges: []
-            ),
-            externalBlocks: [],
-            diagnostics: NovelTextViewportDiagnostics(indexBuildCount: 1)
-        )
-        let viewportPage = NovelTextViewportIndexPage(
-            pageIndex: 0,
-            documentView: 1,
-            chapterOrdinal: 0,
-            chapterTitle: "第一章",
-            ranges: [ReaderRenderedTextRange(segmentIndex: 0, startOffset: 0, endOffset: 21)],
-            chapterCommentTarget: nil
-        )
-
-        let diagnostics = NovelTextViewportVisibleSurfaceDiagnostics(
-            viewportContext: context,
-            viewportPage: viewportPage
-        )
-
-        XCTAssertEqual(diagnostics.indexBuildCount, 1)
-        XCTAssertEqual(diagnostics.visibleSurfaceLayoutPassCount, 1)
-        XCTAssertEqual(diagnostics.perBlockTextKitDocumentCount, 0)
-        XCTAssertEqual(diagnostics.compatibilityTextDisplayValueCount, 0)
-        XCTAssertTrue(diagnostics.usesSharedViewportContext)
+        XCTAssertTrue(scrollViewBody.contains("surfaces: [NovelReaderSurface]"))
+        XCTAssertTrue(scrollViewBody.contains("displayReferenceProvider: @MainActor (NovelReaderSurfaceIdentity)"))
+        XCTAssertFalse(scrollViewBody.contains("viewportContext"))
+        XCTAssertFalse(scrollViewBody.contains("viewportIndex"))
     }
 
     func testAllVisibleViewportModesRenderSharedContextThroughLazyCollectionCells() throws {
@@ -431,23 +364,25 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
             encoding: .utf8
         )
         let singlePageBody = try XCTUnwrap(typeBody(named: "ReaderPagedCollectionViewport", in: supportSource))
-        let spreadBody = try XCTUnwrap(typeBody(named: "ReaderPagedSpreadCollectionViewport", in: supportSource))
-        let spreadContentBody = try XCTUnwrap(typeBody(named: "ReaderPagedSpreadContent", in: supportSource))
+        let spreadBody = try XCTUnwrap(typeBody(named: "ReaderPresentationSpreadCollectionViewport", in: supportSource))
+        let spreadContentBody = try XCTUnwrap(typeBody(named: "ReaderPresentationSpreadContent", in: supportSource))
         let verticalBody = try XCTUnwrap(typeBody(named: "ReaderVerticalViewportScrollView", in: supportSource))
 
         XCTAssertTrue(singlePageBody.contains("UICollectionViewDataSource"))
         XCTAssertTrue(singlePageBody.contains("cellForItemAt"))
-        XCTAssertTrue(singlePageBody.contains("ReaderViewportPageContent"))
-        XCTAssertTrue(singlePageBody.contains("parent.viewportContext"))
-        XCTAssertTrue(singlePageBody.contains("parent.viewportIndex"))
+        XCTAssertTrue(singlePageBody.contains("ReaderViewportSurfaceContent"))
+        XCTAssertTrue(singlePageBody.contains("parent.surfaces"))
+        XCTAssertFalse(singlePageBody.contains("parent.viewportContext"))
+        XCTAssertFalse(singlePageBody.contains("parent.viewportIndex"))
         XCTAssertFalse(singlePageBody.contains("ForEach(parent.pages"))
         XCTAssertFalse(singlePageBody.contains("ReaderBlockNovelTextDisplayMaterializer"))
         XCTAssertFalse(singlePageBody.contains("NovelTextKit2Representable("))
         XCTAssertTrue(verticalBody.contains("UICollectionViewDataSource"))
         XCTAssertTrue(verticalBody.contains("cellForItemAt"))
-        XCTAssertTrue(verticalBody.contains("ReaderVerticalViewportDisplayPage"))
-        XCTAssertTrue(verticalBody.contains("parent.viewportContext"))
-        XCTAssertTrue(verticalBody.contains("parent.viewportIndex"))
+        XCTAssertTrue(verticalBody.contains("ReaderVerticalViewportDisplaySurface"))
+        XCTAssertTrue(verticalBody.contains("parent.surfaces"))
+        XCTAssertFalse(verticalBody.contains("parent.viewportContext"))
+        XCTAssertFalse(verticalBody.contains("parent.viewportIndex"))
         XCTAssertFalse(verticalBody.contains("ForEach(parent.pages"))
         XCTAssertFalse(verticalBody.contains("ReaderBlockNovelTextDisplayMaterializer"))
         XCTAssertFalse(verticalBody.contains("NovelTextKit2Representable("))
@@ -456,12 +391,14 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertTrue(spreadBody.contains("UICollectionViewDataSource"))
         XCTAssertTrue(spreadBody.contains("cellForItemAt"))
         XCTAssertTrue(spreadBody.contains("UIHostingConfiguration"))
-        XCTAssertTrue(spreadBody.contains("ReaderPagedSpreadContent"))
-        XCTAssertTrue(spreadBody.contains("parent.viewportContext"))
-        XCTAssertTrue(spreadBody.contains("parent.viewportIndex"))
-        XCTAssertTrue(spreadContentBody.contains("ReaderViewportPageContent"))
-        XCTAssertTrue(spreadContentBody.contains("viewportContext"))
-        XCTAssertTrue(spreadContentBody.contains("viewportIndex"))
+        XCTAssertTrue(spreadBody.contains("ReaderPresentationSpreadContent"))
+        XCTAssertTrue(spreadBody.contains("parent.surfaces"))
+        XCTAssertFalse(spreadBody.contains("parent.viewportContext"))
+        XCTAssertFalse(spreadBody.contains("parent.viewportIndex"))
+        XCTAssertTrue(spreadContentBody.contains("ReaderViewportSurfaceContent"))
+        XCTAssertTrue(spreadContentBody.contains("surfaces"))
+        XCTAssertFalse(spreadContentBody.contains("viewportContext"))
+        XCTAssertFalse(spreadContentBody.contains("viewportIndex"))
         XCTAssertFalse(spreadBody.contains("ForEach(parent.pages"))
         XCTAssertFalse(spreadBody.contains("ReaderBlockNovelTextDisplayMaterializer"))
         XCTAssertFalse(spreadBody.contains("NovelTextKit2Representable("))
@@ -475,15 +412,17 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
             encoding: .utf8
         )
         let singlePageBody = try XCTUnwrap(typeBody(named: "ReaderPagedCollectionViewport", in: supportSource))
-        let spreadContentBody = try XCTUnwrap(typeBody(named: "ReaderPagedSpreadContent", in: supportSource))
+        let spreadContentBody = try XCTUnwrap(typeBody(named: "ReaderPresentationSpreadContent", in: supportSource))
 
-        XCTAssertTrue(singlePageBody.contains("$0.pageIndex == indexPath.item"))
+        XCTAssertTrue(singlePageBody.contains("parent.surfaces[indexPath.item]"))
+        XCTAssertFalse(singlePageBody.contains("identity.ordinal =="))
         XCTAssertFalse(singlePageBody.contains("compatibilityBlocks"))
         XCTAssertFalse(singlePageBody.contains("let page = parent.pages[indexPath.item]"))
         XCTAssertFalse(singlePageBody.contains("viewportBackedPage("))
-        XCTAssertTrue(spreadContentBody.contains("$0.pageIndex == pageIndex"))
+        XCTAssertTrue(spreadContentBody.contains("$0.presentationIndex == surfaceIndex"))
+        XCTAssertFalse(spreadContentBody.contains("identity.ordinal =="))
         XCTAssertFalse(spreadContentBody.contains("compatibilityBlocks"))
-        XCTAssertFalse(spreadContentBody.contains("let page = pages[pageIndex]"))
+        XCTAssertFalse(spreadContentBody.contains("let page = pages[surfaceIndex]"))
         XCTAssertFalse(spreadContentBody.contains("viewportBackedPage("))
     }
 
@@ -495,7 +434,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
             encoding: .utf8
         )
         let singlePageBody = try XCTUnwrap(typeBody(named: "ReaderPagedCollectionViewport", in: supportSource))
-        let spreadBody = try XCTUnwrap(typeBody(named: "ReaderPagedSpreadCollectionViewport", in: supportSource))
+        let spreadBody = try XCTUnwrap(typeBody(named: "ReaderPresentationSpreadCollectionViewport", in: supportSource))
 
         XCTAssertTrue(supportSource.contains("final class ReaderPagedViewportCollectionView: UICollectionView"))
         XCTAssertTrue(supportSource.contains("override func layoutSubviews()"))
@@ -514,7 +453,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
             encoding: .utf8
         )
         let singlePageBody = try XCTUnwrap(typeBody(named: "ReaderPagedCollectionViewport", in: supportSource))
-        let spreadBody = try XCTUnwrap(typeBody(named: "ReaderPagedSpreadCollectionViewport", in: supportSource))
+        let spreadBody = try XCTUnwrap(typeBody(named: "ReaderPresentationSpreadCollectionViewport", in: supportSource))
 
         for body in [singlePageBody, spreadBody] {
             XCTAssertTrue(body.contains("reloadDataAndRequestSelectionScroll(in: collectionView, animated: false)"))
@@ -531,7 +470,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
             encoding: .utf8
         )
         let singlePageBody = try XCTUnwrap(typeBody(named: "ReaderPagedCollectionViewport", in: supportSource))
-        let spreadBody = try XCTUnwrap(typeBody(named: "ReaderPagedSpreadCollectionViewport", in: supportSource))
+        let spreadBody = try XCTUnwrap(typeBody(named: "ReaderPresentationSpreadCollectionViewport", in: supportSource))
 
         for body in [singlePageBody, spreadBody] {
             XCTAssertTrue(body.contains("collectionView.window != nil"))
@@ -555,10 +494,12 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertTrue(verticalBody.contains("sizeForItemAt indexPath"))
         XCTAssertTrue(verticalBody.contains("verticalItemWidth(in: collectionView)"))
         XCTAssertTrue(verticalBody.contains("verticalItemHeight(for: indexPath.item"))
-        XCTAssertTrue(verticalBody.contains("verticalDisplayPage(for: item)"))
-        XCTAssertFalse(verticalBody.contains("ReaderViewportPageContent.viewportBackedPage"))
-        XCTAssertTrue(verticalBody.contains("viewportLayoutMetrics"))
-        XCTAssertTrue(verticalBody.contains("pageHeight(for: displayPage.pageIndex)"))
+        XCTAssertTrue(verticalBody.contains("verticalDisplaySurface(for: item)"))
+        XCTAssertFalse(verticalBody.contains("ReaderViewportSurfaceContent.viewportBackedPage"))
+        XCTAssertTrue(verticalBody.contains("presentationHeight"))
+        XCTAssertTrue(verticalBody.contains("displaySurface.presentationHeight"))
+        XCTAssertFalse(verticalBody.contains("viewportLayoutMetrics"))
+        XCTAssertFalse(verticalBody.contains("surfaceHeight(for: displaySurface.surfaceOrdinal)"))
         XCTAssertFalse(verticalBody.contains("textRuntimeStore.measuredHeight"))
         XCTAssertFalse(verticalBody.contains("NovelTextLayout.measuredTextHeight"))
         XCTAssertTrue(verticalBody.contains("topInset: CGFloat"))
@@ -582,9 +523,11 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         let verticalCellBody = try XCTUnwrap(typeBody(named: "ReaderVerticalViewportCell", in: supportSource))
 
         XCTAssertTrue(verticalBody.contains("displayReferenceProvider"))
-        XCTAssertTrue(verticalBody.contains("surfaceIdentityByPageIndex"))
+        XCTAssertTrue(verticalBody.contains("verticalSurface(for:"))
         XCTAssertTrue(verticalBody.contains("visibleSurfaceIdentities"))
+        XCTAssertTrue(verticalBody.contains("onVisibleSurfaceIdentitiesChange"))
         XCTAssertFalse(verticalBody.contains("onVisiblePageIdentitiesChange"))
+        XCTAssertFalse(verticalBody.contains("surfaceIdentityByPageIndex"))
         XCTAssertFalse(verticalBody.contains("NovelTextLayoutLiveSurfaceStore"))
         XCTAssertFalse(verticalBody.contains("removeAllTextSurfaces"))
         XCTAssertTrue(verticalCellBody.contains("NovelTextViewportDisplayReference?"))
@@ -608,7 +551,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         )
         let verticalBody = try XCTUnwrap(typeBody(named: "ReaderVerticalViewportScrollView", in: supportSource))
         let verticalCellBody = try XCTUnwrap(typeBody(named: "ReaderVerticalViewportCell", in: supportSource))
-        let displayPageBody = try XCTUnwrap(functionBody(named: "verticalDisplayPage", in: verticalBody))
+        let displaySurfaceBody = try XCTUnwrap(functionBody(named: "verticalDisplaySurface", in: verticalBody))
         let itemHeightBody = try XCTUnwrap(functionBody(named: "verticalItemHeight", in: verticalBody))
         let publishFramesBody = try XCTUnwrap(functionBody(named: "publishFrames", in: verticalBody))
         let restoreTextAnchorBody = try XCTUnwrap(functionBody(named: "restoreTextAnchorIfPossible", in: verticalBody))
@@ -616,11 +559,12 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         let anchorBody = try XCTUnwrap(functionBody(named: "textViewportAnchorY", in: verticalCellBody))
         let makeImageBlockBody = try XCTUnwrap(functionBody(named: "makeImageBlockView", in: verticalCellBody))
 
-        XCTAssertTrue(displayPageBody.contains("viewportIndex?.pages.first"))
-        XCTAssertTrue(displayPageBody.contains("ReaderViewportPageContent.viewportBlocks"))
-        XCTAssertFalse(displayPageBody.contains("ReaderViewportPageContent.viewportBackedPage"))
-        XCTAssertTrue(itemHeightBody.contains("verticalDisplayPage(for: item)"))
-        XCTAssertTrue(itemHeightBody.contains("viewportLayoutMetrics?.pageHeight(for: displayPage.pageIndex)"))
+        XCTAssertTrue(displaySurfaceBody.contains("verticalSurface(for: item)"))
+        XCTAssertTrue(displaySurfaceBody.contains("ReaderViewportSurfaceContent.viewportBlocks"))
+        XCTAssertFalse(displaySurfaceBody.contains("ReaderViewportSurfaceContent.viewportBackedPage"))
+        XCTAssertTrue(itemHeightBody.contains("verticalDisplaySurface(for: item)"))
+        XCTAssertTrue(itemHeightBody.contains("displaySurface.presentationHeight"))
+        XCTAssertFalse(itemHeightBody.contains("viewportLayoutMetrics"))
         XCTAssertFalse(itemHeightBody.contains("textRuntimeStore.measuredHeight"))
         XCTAssertFalse(itemHeightBody.contains("NovelTextLayout.measuredTextHeight"))
         XCTAssertTrue(publishFramesBody.contains("cell.textViewportSample("))
@@ -632,8 +576,8 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertTrue(sampleBody.contains("ReaderVerticalPositioning.pageDistance"))
         XCTAssertTrue(anchorBody.contains("displayReference.referenceY("))
         XCTAssertTrue(makeImageBlockBody.contains("displayReference: nil"))
-        XCTAssertFalse(sampleBody.contains("intraPageProgress"))
-        XCTAssertFalse(restoreTextAnchorBody.contains("request.intraPageProgress"))
+        XCTAssertFalse(sampleBody.contains("intraSurfaceProgress"))
+        XCTAssertFalse(restoreTextAnchorBody.contains("request.intraSurfaceProgress"))
     }
 
     func testVerticalViewportSizingSamplingAndRestoreUseWorkflowReferences() throws {
@@ -644,17 +588,15 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
             encoding: .utf8
         )
         let verticalBody = try XCTUnwrap(typeBody(named: "ReaderVerticalViewportScrollView", in: supportSource))
-        let pagedSpreadBody = try XCTUnwrap(typeBody(named: "ReaderPagedSpreadContent", in: supportSource))
+        let pagedSpreadBody = try XCTUnwrap(typeBody(named: "ReaderPresentationSpreadContent", in: supportSource))
         let itemHeightBody = try XCTUnwrap(functionBody(named: "verticalItemHeight", in: verticalBody))
 
-        XCTAssertTrue(
-            verticalBody.contains(
-                "let viewportIndex: NovelTextViewportIndex?\n    let viewportLayoutMetrics: NovelTextViewportLayoutMetrics?"
-            )
-        )
+        XCTAssertTrue(verticalBody.contains("let surfaces: [NovelReaderSurface]"))
         XCTAssertFalse(pagedSpreadBody.contains("viewportLayoutMetrics"))
-        XCTAssertTrue(itemHeightBody.contains("viewportLayoutMetrics?.pageHeight(for: displayPage.pageIndex)"))
+        XCTAssertTrue(itemHeightBody.contains("displaySurface.presentationHeight"))
         XCTAssertTrue(verticalBody.contains("displayReferenceProvider"))
+        XCTAssertFalse(verticalBody.contains("viewportIndex"))
+        XCTAssertFalse(verticalBody.contains("viewportLayoutMetrics"))
         XCTAssertFalse(supportSource.contains("ReaderVerticalViewportTextOffsetMapper"))
         XCTAssertFalse(supportSource.contains("NovelTextLayout.viewportSample"))
         XCTAssertFalse(supportSource.contains("NovelTextLayout.displayOffset"))
@@ -677,27 +619,33 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertTrue(runtimeBody.contains("textLayoutFragment(for: location)"))
         XCTAssertTrue(runtimeBody.contains("private func closestLayoutFragment"))
         XCTAssertFalse(runtimeBody.contains("progress * frame.height"))
+        XCTAssertFalse(runtimeBody.contains("textRangesBySegment"))
+        XCTAssertFalse(runtimeBody.contains("semantics(forSegmentIndex"))
+        XCTAssertFalse(runtimeBody.contains("resolvedSegmentIndex"))
+        XCTAssertTrue(runtimeBody.contains("containingDocumentOffset:"))
+        XCTAssertTrue(runtimeBody.contains("nearestTextSample("))
     }
 
-    func testViewportPageContentUsesReferenceMarkerWithoutRebuildingDisplayValue() throws {
+    func testViewportSurfaceContentUsesReferenceMarkerWithoutRebuildingDisplayValue() throws {
         let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let supportSource = try String(
             contentsOf: repositoryRoot
                 .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderSupportViews.swift"),
             encoding: .utf8
         )
-        let viewportPageContentBody = try XCTUnwrap(typeBody(named: "ReaderViewportPageContent", in: supportSource))
+        let viewportSurfaceContentBody = try XCTUnwrap(typeBody(named: "ReaderViewportSurfaceContent", in: supportSource))
 
-        XCTAssertTrue(viewportPageContentBody.contains("viewportBlocks("))
-        XCTAssertFalse(viewportPageContentBody.contains("viewportBackedPage("))
-        XCTAssertTrue(viewportPageContentBody.contains("displayReference: displayReference"))
-        XCTAssertFalse(viewportPageContentBody.contains("NovelTextLayout.displayValue("))
-        XCTAssertFalse(viewportPageContentBody.contains("NovelTextDisplayValue"))
-        XCTAssertTrue(viewportPageContentBody.contains("viewportPage.ranges"))
-        XCTAssertFalse(viewportPageContentBody.contains("compatibilityBlocks"))
-        XCTAssertFalse(viewportPageContentBody.contains("viewportContext.document.textRangesBySegment"))
-        XCTAssertFalse(viewportPageContentBody.contains("viewportContext.document.text"))
-        XCTAssertFalse(viewportPageContentBody.contains("page.novelTextDisplayValues.first"))
+        XCTAssertTrue(viewportSurfaceContentBody.contains("viewportBlocks("))
+        XCTAssertFalse(viewportSurfaceContentBody.contains("viewportBackedPage("))
+        XCTAssertTrue(viewportSurfaceContentBody.contains("displayReference: displayReference"))
+        XCTAssertFalse(viewportSurfaceContentBody.contains("NovelTextLayout.displayValue("))
+        XCTAssertFalse(viewportSurfaceContentBody.contains("NovelTextDisplayValue"))
+        XCTAssertTrue(viewportSurfaceContentBody.contains("surface.kind == .text"))
+        XCTAssertFalse(viewportSurfaceContentBody.contains("viewportSurface"))
+        XCTAssertFalse(viewportSurfaceContentBody.contains("compatibilityBlocks"))
+        XCTAssertFalse(viewportSurfaceContentBody.contains("viewportContext.document.textRangesBySegment"))
+        XCTAssertFalse(viewportSurfaceContentBody.contains("viewportContext.document.text"))
+        XCTAssertFalse(viewportSurfaceContentBody.contains("page.novelTextDisplayValues.first"))
     }
 
     func testNovelReadingSessionPositioningUsesViewportIndexWithoutPageSegmentFallbacks() throws {
@@ -707,18 +655,19 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
                 .appendingPathComponent("Sources/YamiboReaderCore/Support/NovelReadingSession.swift"),
             encoding: .utf8
         )
-        let applyPaginationBody = try XCTUnwrap(functionBody(named: "applyPagination", in: sessionSource))
-        let textRangesBody = try XCTUnwrap(functionBody(named: "textRanges", in: sessionSource))
-        let containsSegmentBody = try XCTUnwrap(functionBody(named: "contains(segmentIndex", in: sessionSource))
-        let intraPageProgressBody = try XCTUnwrap(functionBody(named: "intraPageProgress", in: sessionSource))
+        let committedLayoutBody = try XCTUnwrap(functionBody(named: "applyCommittedLayoutResult", in: sessionSource))
 
-        XCTAssertFalse(applyPaginationBody.contains("page.segmentIndex"))
-        XCTAssertFalse(applyPaginationBody.contains("page.segmentStartOffset"))
-        XCTAssertFalse(applyPaginationBody.contains("page.segmentEndOffset"))
-        XCTAssertFalse(textRangesBody.contains("page.novelTextDisplayValues"))
-        XCTAssertFalse(containsSegmentBody.contains("page.segmentIndex"))
-        XCTAssertFalse(intraPageProgressBody.contains("page.segmentStartOffset"))
-        XCTAssertFalse(intraPageProgressBody.contains("page.segmentEndOffset"))
+        XCTAssertTrue(sessionSource.contains("consumeCommittedLayoutResult("))
+        XCTAssertFalse(sessionSource.contains("func applySettings("))
+        XCTAssertFalse(sessionSource.contains("func updateLayout("))
+        XCTAssertFalse(sessionSource.contains("func updatePagedPresentationEnvironment("))
+        XCTAssertFalse(sessionSource.contains("private let pagination"))
+        XCTAssertFalse(committedLayoutBody.contains("page.segmentIndex"))
+        XCTAssertFalse(committedLayoutBody.contains("page.segmentStartOffset"))
+        XCTAssertFalse(committedLayoutBody.contains("page.segmentEndOffset"))
+        XCTAssertNil(functionBody(named: "textRanges", in: sessionSource))
+        XCTAssertNil(functionBody(named: "contains(segmentIndex", in: sessionSource))
+        XCTAssertNil(functionBody(named: "intraSurfaceProgress", in: sessionSource))
     }
 
     func testNovelReadingSessionDisplayPathDoesNotRetainUIKitTextViewFallback() throws {
@@ -777,14 +726,14 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         )
 
         XCTAssertThrowsError(
-            try NovelTextLayout.renderedPages(
+            try NovelTextLayout.layout(
                 document: document,
                 settings: ReaderAppearanceSettings(readingMode: .paged),
                 layout: ReaderContainerLayout(width: 320, height: 568),
-                viewportPageLayout: { _, _, _ in [] }
+                viewportSurfaceLayout: { _, _, _ in [] }
             )
         ) { error in
-            XCTAssertEqual(error as? NovelTextLayoutFailure, .unableToLayoutText)
+            XCTAssertEqual(error as? NovelTextLayoutFailure, .textKitIndexing)
         }
     }
 }
@@ -815,9 +764,9 @@ private func viewportContext(
     )
 }
 
-private func viewportTestIndexPage(index: Int, range: ReaderRenderedTextRange) -> NovelTextViewportIndexPage {
-    NovelTextViewportIndexPage(
-        pageIndex: index,
+private func viewportTestIndexPage(index: Int, range: ReaderRenderedTextRange) -> NovelTextViewportIndexSurface {
+    NovelTextViewportIndexSurface(
+        surfaceOrdinal: index,
         documentView: 1,
         chapterOrdinal: 0,
         chapterTitle: "第一章",

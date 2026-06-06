@@ -686,8 +686,8 @@ public final class FavoritesViewModel: ObservableObject {
                     threadTitle: latestFavorite.resolvedDisplayTitle,
                     source: .favorites,
                     initialView: mode == .start ? 1 : nil,
-                    initialPage: mode == .start ? 0 : nil,
-                    authorID: latestFavorite.authorID
+                    authorID: latestFavorite.authorID,
+                    initialResumePoint: mode == .start ? nil : latestFavorite.novelResumePoint
                 )
             )
         case .manga:
@@ -697,7 +697,7 @@ public final class FavoritesViewModel: ObservableObject {
                     chapterURL: mode == .start ? latestFavorite.url : (latestFavorite.lastMangaURL ?? latestFavorite.url),
                     displayTitle: latestFavorite.resolvedDisplayTitle,
                     source: .favorites,
-                    initialPage: mode == .start ? 0 : latestFavorite.lastPage
+                    initialPage: mode == .start ? 0 : latestFavorite.mangaPageIndex
                 )
             )
         case .other:
@@ -714,7 +714,7 @@ public final class FavoritesViewModel: ObservableObject {
                     htmlOverride: nil,
                     favoriteType: .unknown,
                     favoriteChapterURL: latestFavorite.lastMangaURL,
-                    initialPage: latestFavorite.lastPage
+                    initialMangaPageIndex: latestFavorite.mangaPageIndex
                 )
 
                 switch target {
@@ -759,7 +759,6 @@ public final class FavoritesViewModel: ObservableObject {
             threadTitle: favorite.resolvedDisplayTitle,
             source: context.source,
             initialView: 1,
-            initialPage: 0,
             authorID: context.authorID
         )
     }
@@ -3534,7 +3533,7 @@ func makeFavoriteTagChipSummary(
 }
 
 func favoriteProgressScore(for favorite: Favorite) -> Int {
-    favorite.lastView * 1000 + favorite.lastPage
+    favorite.lastView * 1000 + favorite.mangaPageIndex
 }
 
 func progressScore(for favorite: Favorite) -> Int {
@@ -3655,25 +3654,30 @@ private func favoriteSearchTextForCollectionMatch(
 }
 
 func favoriteProgressText(for favorite: Favorite) -> String? {
-    if favorite.type == .novel,
-       let chapterTitle = favorite.novelResumePoint?.chapterTitle,
-       !chapterTitle.isEmpty {
-        return chapterTitle
+    if favorite.type == .novel {
+        if let chapterTitle = favorite.novelResumePoint?.chapterTitle,
+           !chapterTitle.isEmpty {
+            return chapterTitle
+        }
+        if let lastChapter = favorite.lastChapter, !lastChapter.isEmpty {
+            return lastChapter
+        }
+        return nil
     }
     if let lastChapter = favorite.lastChapter, !lastChapter.isEmpty {
-        if favorite.type == .manga, favorite.lastPage > 0 {
+        if favorite.type == .manga, favorite.mangaPageIndex > 0 {
             if let chapterLabel = favoriteMangaChapterLabel(from: lastChapter) {
-                return L10n.string("favorites.progress.page_with_chapter", favorite.lastPage + 1, chapterLabel)
+                return L10n.string("favorites.progress.page_with_chapter", favorite.mangaPageIndex + 1, chapterLabel)
             }
-            return L10n.string("favorites.progress.page", favorite.lastPage + 1)
+            return L10n.string("favorites.progress.page", favorite.mangaPageIndex + 1)
         }
         return lastChapter
     }
-    if favorite.type == .manga, favorite.lastPage > 0 {
-        return L10n.string("favorites.progress.page", favorite.lastPage + 1)
+    if favorite.type == .manga, favorite.mangaPageIndex > 0 {
+        return L10n.string("favorites.progress.page", favorite.mangaPageIndex + 1)
     }
-    if favorite.lastPage > 0 || favorite.lastView > 1 {
-        return L10n.string("favorites.progress.page_web", favorite.lastPage + 1, favorite.lastView)
+    if favorite.type == .unknown, favorite.mangaPageIndex > 0 || favorite.lastView > 1 {
+        return L10n.string("favorites.progress.page_web", favorite.mangaPageIndex + 1, favorite.lastView)
     }
     return nil
 }
@@ -3715,11 +3719,8 @@ func favoriteDetailLines(for favorite: Favorite) -> [String] {
         lines.append(lastChapter)
     }
 
-    if favorite.type == .novel {
-        if favorite.lastPage > 0 || favorite.lastView > 1 {
-            lines.append(L10n.string("favorites.progress.page_web_spaced", favorite.lastPage + 1, favorite.lastView))
-        }
-    } else if let progressText = favoriteProgressText(for: favorite),
+    if favorite.type != .novel,
+       let progressText = favoriteProgressText(for: favorite),
               !lines.contains(progressText) {
         lines.append(progressText)
     }

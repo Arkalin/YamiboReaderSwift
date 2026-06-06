@@ -447,7 +447,7 @@ public enum FavoriteLibraryProjection {
     }
 
     private static func progressScore(for favorite: Favorite) -> Int {
-        favorite.lastView * 1000 + favorite.lastPage
+        favorite.lastView * 1000 + favorite.mangaPageIndex
     }
 
     private static func compareRecentReadFavorites(_ lhs: Favorite, _ rhs: Favorite) -> Bool {

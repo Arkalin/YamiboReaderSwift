@@ -13,7 +13,7 @@ public actor ThreadOpenResolver {
         htmlOverride: String? = nil,
         favoriteType: FavoriteType = .unknown,
         favoriteChapterURL: URL? = nil,
-        initialPage: Int = 0
+        initialMangaPageIndex: Int = 0
     ) async throws -> ThreadOpenTarget {
         let canonicalURL = ReaderModeDetector.canonicalThreadURL(from: threadURL) ?? threadURL
         let authorID = Self.authorID(from: canonicalURL)
@@ -25,7 +25,6 @@ public actor ThreadOpenResolver {
                     threadURL: canonicalURL,
                     threadTitle: title ?? L10n.string("reader.title"),
                     source: .favorites,
-                    initialPage: initialPage,
                     authorID: authorID
                 )
             )
@@ -36,7 +35,7 @@ public actor ThreadOpenResolver {
                     chapterURL: favoriteChapterURL ?? canonicalURL,
                     displayTitle: title ?? L10n.string("manga.reader.title"),
                     source: .favorites,
-                    initialPage: initialPage
+                    initialPage: initialMangaPageIndex
                 )
             )
         case .other:
@@ -64,7 +63,7 @@ public actor ThreadOpenResolver {
                     chapterURL: favoriteChapterURL ?? canonicalURL,
                     displayTitle: MangaTitleCleaner.cleanBookName(snapshot.title.isEmpty ? (title ?? L10n.string("manga.reader.title")) : snapshot.title),
                     source: .forum,
-                    initialPage: initialPage
+                    initialPage: initialMangaPageIndex
                 )
             )
         }

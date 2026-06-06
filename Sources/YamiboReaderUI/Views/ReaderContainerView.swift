@@ -22,30 +22,30 @@ private struct ReaderVerticalBoundaryPullState: Equatable {
     static let idle = ReaderVerticalBoundaryPullState()
 }
 
-struct ReaderVerticalPageFrameValue: Equatable {
+struct ReaderVerticalSurfaceFrameValue: Equatable {
     let documentView: Int
     let frame: CGRect
 }
 
 private struct ReaderVerticalPositioningFingerprint: Equatable {
     let view: Int
-    let pageCount: Int
-    let pageIndex: Int
-    let intraPageProgressBucket: Int
+    let surfaceCount: Int
+    let surfaceIndex: Int
+    let intraSurfaceProgressBucket: Int
     let readingMode: ReaderReadingMode
 }
 
-private struct ReaderPagedSelectionTag: Hashable {
+private struct ReaderSurfaceSelectionTag: Hashable {
     let view: Int
     let index: Int
 }
 
 private let readerPadVisibleStatusBarTopInset: CGFloat = 32
 
-private struct ReaderVerticalPageFramePreferenceKey: PreferenceKey {
-    static var defaultValue: [Int: ReaderVerticalPageFrameValue] { [:] }
+private struct ReaderVerticalSurfaceFramePreferenceKey: PreferenceKey {
+    static var defaultValue: [Int: ReaderVerticalSurfaceFrameValue] { [:] }
 
-    static func reduce(value: inout [Int: ReaderVerticalPageFrameValue], nextValue: () -> [Int: ReaderVerticalPageFrameValue]) {
+    static func reduce(value: inout [Int: ReaderVerticalSurfaceFrameValue], nextValue: () -> [Int: ReaderVerticalSurfaceFrameValue]) {
         value.merge(nextValue(), uniquingKeysWith: { _, new in new })
     }
 }
@@ -120,7 +120,7 @@ public struct ReaderContainerView: View {
     @State private var verticalRestoreController = ReaderVerticalRestoreController()
     @State private var verticalRestoreRetryTask: Task<Void, Never>?
     @State private var verticalViewportPositionUpdateTask: Task<Void, Never>?
-    @State private var verticalPageFrames: [Int: ReaderVerticalPageFrameValue] = [:]
+    @State private var verticalSurfaceFrames: [Int: ReaderVerticalSurfaceFrameValue] = [:]
     @State private var verticalTextViewportSample: NovelTextViewportSample?
     @State private var lastVerticalPositioningFingerprint: ReaderVerticalPositioningFingerprint?
     @State private var verticalProgressScrubState = ReaderProgressScrubState()
@@ -214,12 +214,14 @@ public struct ReaderContainerView: View {
                 .zIndex(3)
             }
             .task {
-                model.updatePagedPresentationEnvironment(isPad: isPadDevice)
+                await model.commitNovelTextPresentationEnvironment(isPad: isPadDevice)
                 await model.prepare(layout: currentLayout)
                 updateChromeForContentState()
             }
             .onChange(of: currentLayout) { _, newValue in
-                model.updateLayout(newValue)
+                Task {
+                    await model.commitNovelTextLayout(newValue)
+                }
             }
             .onReceive(NotificationCenter.default.publisher(
                 for: UIApplication.didReceiveMemoryWarningNotification
@@ -276,7 +278,7 @@ public struct ReaderContainerView: View {
             .onChange(of: model.errorMessage) { _, _ in
                 updateChromeForContentState()
             }
-            .onChange(of: model.pages.count) { _, _ in
+            .onChange(of: model.readerSurfaces.count) { _, _ in
                 updateChromeForContentState()
             }
             .onChange(of: model.settings.readingMode) { _, _ in
@@ -308,12 +310,12 @@ public struct ReaderContainerView: View {
 
     @ViewBuilder
     private func content(topInset: CGFloat, bottomInset: CGFloat, layout: ReaderContainerLayout) -> some View {
-        if model.isLoading && model.pages.isEmpty {
+        if model.isLoading && model.readerSurfaces.isEmpty {
             VStack(spacing: 12) {
                 ProgressView(L10n.string("common.loading"))
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if let errorMessage = model.errorMessage, model.pages.isEmpty {
+        } else if let errorMessage = model.errorMessage, model.readerSurfaces.isEmpty {
             VStack(spacing: 12) {
                 Image(systemName: "exclamationmark.triangle")
                     .font(.largeTitle)
@@ -337,40 +339,36 @@ public struct ReaderContainerView: View {
     private func pagedContent(layout: ReaderContainerLayout) -> some View {
         Group {
             if model.isTwoPageSpreadActive {
-                ReaderPagedSpreadCollectionViewport(
-                    spreads: model.pagedSpreads,
-                    pages: model.pages,
-                    viewportContext: model.viewportContext,
-                    viewportIndex: model.viewportIndex,
+                ReaderPresentationSpreadCollectionViewport(
+                    spreads: model.presentationSpreads,
+                    surfaces: model.readerSurfaces,
                     settings: model.settings,
                     refererURL: model.forumURL,
                     sessionState: model.sessionState,
                     topInset: layout.chromeInsets.top,
                     bottomInset: layout.chromeInsets.bottom,
-                    selectionIndex: model.pagedSelectionIndex,
-                    displayReferenceProvider: { pageIdentity in
-                        model.novelTextViewportDisplayReference(for: pageIdentity)
+                    selectionIndex: model.pagedViewportSelectionIndex,
+                    displayReferenceProvider: { surfaceIdentity in
+                        model.novelTextViewportDisplayReference(for: surfaceIdentity)
                     },
                     onSelectionChange: { selectionIndex in
-                        model.updatePagedSelection(selectionIndex)
+                        model.selectPagedViewportIndex(selectionIndex)
                     }
                 )
             } else {
                 ReaderPagedCollectionViewport(
-                    pages: model.pages,
-                    viewportContext: model.viewportContext,
-                    viewportIndex: model.viewportIndex,
+                    surfaces: model.readerSurfaces,
                     settings: model.settings,
                     refererURL: model.forumURL,
                     sessionState: model.sessionState,
                     topInset: layout.chromeInsets.top,
                     bottomInset: layout.chromeInsets.bottom,
-                    selectionIndex: model.pagedSelectionIndex,
-                    displayReferenceProvider: { pageIdentity in
-                        model.novelTextViewportDisplayReference(for: pageIdentity)
+                    selectionIndex: model.pagedViewportSelectionIndex,
+                    displayReferenceProvider: { surfaceIdentity in
+                        model.novelTextViewportDisplayReference(for: surfaceIdentity)
                     },
                     onSelectionChange: { selectionIndex in
-                        model.updatePagedSelection(selectionIndex)
+                        model.selectPagedViewportIndex(selectionIndex)
                     }
                 )
             }
@@ -378,15 +376,15 @@ public struct ReaderContainerView: View {
         .id(
             ReaderPagedPagerIdentity(
                 visibleView: model.visibleView,
-                pageCount: model.pages.count,
-                spreadCount: model.pagedSpreads.count,
+                surfaceCount: model.readerSurfaces.count,
+                spreadCount: model.presentationSpreads.count,
                 usesTwoPageSpread: model.isTwoPageSpreadActive,
                 layout: layout
             )
         )
         .scrollDisabled(chromeState.showsChrome)
         .overlay {
-            if !model.pages.isEmpty {
+            if !model.readerSurfaces.isEmpty {
                 ReaderPagedTapZones(
                     onPrevious: {
                         handlePagedContentTap(pageDelta: -1)
@@ -402,43 +400,16 @@ public struct ReaderContainerView: View {
         }
     }
 
-    private var pagedSelection: Binding<ReaderPagedSelectionTag> {
-        Binding(
-            get: { ReaderPagedSelectionTag(view: model.visibleView, index: model.pagedSelectionIndex) },
-            set: { selection in
-                guard selection.view == model.visibleView else {
-                    return
-                }
-                model.updatePagedSelection(selection.index)
-            }
-        )
-    }
-
-    private func pagedSpreadView(_ spread: ReaderPagedSpread) -> Int {
-        guard model.pages.indices.contains(spread.leftPageIndex) else {
-            return model.visibleView
-        }
-        return model.pages[spread.leftPageIndex].documentView
-    }
-
     private func verticalContent(topInset: CGFloat, bottomInset: CGFloat) -> some View {
         ZStack {
             ReaderVerticalViewportScrollView(
-                pages: model.pages,
-                viewportContext: model.viewportContext,
-                viewportIndex: model.viewportIndex,
-                viewportLayoutMetrics: model.viewportLayoutMetrics,
+                surfaces: model.readerSurfaces,
                 settings: model.settings,
                 refererURL: model.forumURL,
                 sessionState: model.sessionState,
                 topInset: topInset,
                 bottomInset: bottomInset,
                 scrollRequest: verticalScrollRequest,
-                surfaceIdentityByPageIndex: Dictionary(
-                    uniqueKeysWithValues: (model.readerPresentation?.surfaces ?? []).map {
-                        ($0.identity.ordinal, $0.identity)
-                    }
-                ),
                 displayReferenceProvider: { surfaceIdentity in
                     model.novelTextViewportDisplayReference(for: surfaceIdentity)
                 },
@@ -474,8 +445,8 @@ public struct ReaderContainerView: View {
                         }
                     }
                 },
-                onPageFramesChange: { frames in
-                    verticalPageFrames = frames
+                onSurfaceFramesChange: { frames in
+                    verticalSurfaceFrames = frames
                     tryAdvanceVerticalRestore()
                     scheduleVerticalViewportPositionUpdate()
                 },
@@ -609,8 +580,8 @@ public struct ReaderContainerView: View {
             onJumpChapter: { delta in
                 jumpAdjacentChapter(delta)
             },
-            onProgressCommit: { pageIndex in
-                commitProgressSlider(pageIndex)
+            onProgressCommit: { surfaceIndex in
+                commitProgressSlider(surfaceIndex)
             },
             isProgressScrubbing: verticalProgressScrubState.phase == .scrubbing
         )
@@ -722,7 +693,7 @@ public struct ReaderContainerView: View {
     }
 
     private func toggleChrome() {
-        guard !model.pages.isEmpty else { return }
+        guard !model.readerSurfaces.isEmpty else { return }
         guard !hasPresentedOverlay else { return }
         withAnimation(.easeInOut(duration: 0.2)) {
             chromeState.toggleChrome()
@@ -730,7 +701,7 @@ public struct ReaderContainerView: View {
     }
 
     private func enterImmersiveMode() {
-        guard !model.pages.isEmpty else { return }
+        guard !model.readerSurfaces.isEmpty else { return }
         guard !hasPresentedOverlay else { return }
         withAnimation(.easeInOut(duration: 0.2)) {
             chromeState.hideChrome()
@@ -751,7 +722,7 @@ public struct ReaderContainerView: View {
     }
 
     private func handleVerticalTap() {
-        guard !model.pages.isEmpty else { return }
+        guard !model.readerSurfaces.isEmpty else { return }
         let now = CACurrentMediaTime()
         if now <= verticalTapSuppressionUntil {
             verticalTapSuppressionUntil = now + 0.35
@@ -807,7 +778,7 @@ public struct ReaderContainerView: View {
         nextState.update(
             isLoading: model.isLoading,
             errorMessage: model.errorMessage,
-            hasPages: !model.pages.isEmpty,
+            hasPages: !model.readerSurfaces.isEmpty,
             hasPresentedOverlay: hasPresentedOverlay,
             usesVerticalReadingMode: model.settings.readingMode == .vertical
         )
@@ -819,17 +790,17 @@ public struct ReaderContainerView: View {
             chromeState = nextState
         }
 
-        if model.isLoading && model.pages.isEmpty {
+        if model.isLoading && model.readerSurfaces.isEmpty {
             lastVerticalPositioningFingerprint = nil
             return
         }
 
-        if model.errorMessage != nil && model.pages.isEmpty {
+        if model.errorMessage != nil && model.readerSurfaces.isEmpty {
             lastVerticalPositioningFingerprint = nil
             return
         }
 
-        guard !model.pages.isEmpty else {
+        guard !model.readerSurfaces.isEmpty else {
             lastVerticalPositioningFingerprint = nil
             return
         }
@@ -837,9 +808,9 @@ public struct ReaderContainerView: View {
         if model.settings.readingMode == .vertical {
             let fingerprint = ReaderVerticalPositioningFingerprint(
                 view: model.visibleView,
-                pageCount: model.pages.count,
-                pageIndex: model.currentPageIndex,
-                intraPageProgressBucket: Int((model.currentPageIntraProgress * 1000).rounded()),
+                surfaceCount: model.readerSurfaces.count,
+                surfaceIndex: model.selectedSurfaceIndex,
+                intraSurfaceProgressBucket: Int((model.currentSurfaceIntraProgress * 1000).rounded()),
                 readingMode: model.settings.readingMode
             )
             if lastVerticalPositioningFingerprint != fingerprint {
@@ -852,7 +823,7 @@ public struct ReaderContainerView: View {
     }
 
     private func commitProgressSlider(_ targetIndex: Int) {
-        model.jumpToRenderedPage(targetIndex)
+        model.jumpToSurface(targetIndex)
         if model.settings.readingMode == .vertical {
             requestVerticalScrollToCurrentPage()
         }
@@ -880,26 +851,26 @@ public struct ReaderContainerView: View {
     }
 
     private func jumpToWebView(_ view: Int) async {
-        await jumpToWebView(view, preferredPage: 0)
+        await jumpToWebView(view, preferredSurfaceOrdinal: 0)
     }
 
-    private func jumpToWebView(_ view: Int, preferredPage: Int) async {
+    private func jumpToWebView(_ view: Int, preferredSurfaceOrdinal: Int) async {
         chromeState.showChrome()
-        await model.jumpToWebView(view, preferredPage: preferredPage)
+        await model.jumpToWebView(view, preferredSurfaceOrdinal: preferredSurfaceOrdinal)
         if model.settings.readingMode == .vertical {
             requestVerticalScrollToCurrentPage()
         }
     }
 
     private func goRelativePage(_ delta: Int) async {
-        await model.jumpRelativePage(delta)
+        await model.jumpRelativeSurface(delta)
         if model.settings.readingMode == .vertical {
             requestVerticalScrollToCurrentPage()
         }
     }
 
     private func canNavigateVerticalBoundary(_ direction: ReaderVerticalBoundaryDirection) -> Bool {
-        guard model.settings.readingMode == .vertical, !model.pages.isEmpty else { return false }
+        guard model.settings.readingMode == .vertical, !model.readerSurfaces.isEmpty else { return false }
         switch direction {
         case .previous:
             return model.visibleView > 1
@@ -931,9 +902,9 @@ public struct ReaderContainerView: View {
         cancelVerticalRestoreForUserScroll()
         switch direction {
         case .previous:
-            await jumpToWebView(model.visibleView - 1, preferredPage: .max)
+            await jumpToWebView(model.visibleView - 1, preferredSurfaceOrdinal: .max)
         case .next:
-            await jumpToWebView(model.visibleView + 1, preferredPage: 0)
+            await jumpToWebView(model.visibleView + 1, preferredSurfaceOrdinal: 0)
         }
         isHandlingVerticalBoundaryPull = false
     }
@@ -945,7 +916,7 @@ public struct ReaderContainerView: View {
     private var canReceiveApplePencilPageTurn: Bool {
         isPadDevice &&
             model.settings.readingMode == .paged &&
-            !model.pages.isEmpty &&
+            !model.readerSurfaces.isEmpty &&
             !hasPresentedOverlay &&
             !isDismissing &&
             !chromeState.showsChrome
@@ -954,24 +925,24 @@ public struct ReaderContainerView: View {
     private var verticalProgressScrubContext: ReaderProgressScrubContext {
         ReaderProgressScrubContext(
             readingMode: .vertical,
-            pageCount: model.renderedPageCount,
+            surfaceCount: model.surfaceCount,
             currentProgressPercent: model.currentProgressPercent,
-            targetPageIndex: { value in
-                model.targetRenderedPageIndex(forProgressValue: value)
+            targetSurfaceIndex: { value in
+                model.targetSurfaceIndex(forProgressValue: value)
             },
-            chapterTitle: { pageIndex in
-                model.chapterTitle(forRenderedPageIndex: pageIndex)
+            chapterTitle: { surfaceIndex in
+                model.chapterTitle(forSurfaceIndex: surfaceIndex)
             },
-            chapterTickStartIndex: { pageIndex in
-                model.progressChapterTickStartIndex(forRenderedPageIndex: pageIndex)
+            chapterTickStartIndex: { surfaceIndex in
+                model.progressChapterTickStartIndex(forSurfaceIndex: surfaceIndex)
             }
         )
     }
 
     private var verticalDisplayedProgressFraction: Double {
         if verticalProgressScrubState.phase == .scrubbing {
-            guard model.renderedPageCount > 1 else { return 0 }
-            return Double(verticalProgressScrubState.targetRenderedPageIndex) / Double(max(model.renderedPageCount - 1, 1))
+            guard model.surfaceCount > 1 else { return 0 }
+            return Double(verticalProgressScrubState.targetSurfaceIndex) / Double(max(model.surfaceCount - 1, 1))
         }
         return model.currentProgressFraction
     }
@@ -989,8 +960,8 @@ public struct ReaderContainerView: View {
         guard verticalProgressScrubState.phase == .scrubbing else { return }
         let update = verticalProgressScrubState.end()
         triggerVerticalProgressFeedback(update.haptics)
-        if let target = update.committedPageIndex {
-            model.jumpToRenderedPage(target)
+        if let target = update.committedSurfaceIndex {
+            model.jumpToSurface(target)
             requestVerticalScrollToCurrentPage()
         }
         verticalTapSuppressionUntil = CACurrentMediaTime() + 0.5
@@ -1016,17 +987,12 @@ public struct ReaderContainerView: View {
     private func makeVerticalScrollRequest() -> ReaderVerticalScrollRequest {
         let resumePoint = model.currentNovelResumePoint
         let textAnchor = resumePoint?.view == model.visibleView
-            ? resumePoint.map {
-                ReaderVerticalTextAnchor(
-                    segmentIndex: $0.segmentIndex,
-                    segmentOffset: $0.segmentOffset
-                )
-            }
+            ? resumePoint.map(ReaderVerticalTextAnchor.init(position:))
             : nil
         let request = ReaderVerticalScrollRequest(
             view: model.visibleView,
-            pageIndex: model.currentPageIndex,
-            intraPageProgress: model.currentPageIntraProgress,
+            surfaceIndex: model.selectedSurfaceIndex,
+            intraSurfaceProgress: model.currentSurfaceIntraProgress,
             textAnchor: textAnchor
         )
         return request
@@ -1075,13 +1041,13 @@ public struct ReaderContainerView: View {
             verticalRestoreRetryTask = nil
             return
         }
-        guard let frame = currentVerticalPageFrames[request.pageIndex] else {
+        guard let frame = currentVerticalSurfaceFrames[request.surfaceIndex] else {
             return
         }
         verticalRestoreController.beginFineTuning(request)
         guard verticalScrollCoordinator.restoreOffset(
             to: frame,
-            intraPageProgress: request.intraPageProgress
+            intraSurfaceProgress: request.intraSurfaceProgress
         ) else {
             verticalRestoreController.beginScrolling(to: request)
             return
@@ -1100,8 +1066,8 @@ public struct ReaderContainerView: View {
         guard verticalScrollCoordinator.hasAttachedScrollView else {
             return
         }
-        let frames = currentVerticalPageFrames
-        guard let frame = frames[request.pageIndex] else {
+        let frames = currentVerticalSurfaceFrames
+        guard let frame = frames[request.surfaceIndex] else {
             return
         }
         guard frame.height > 0 else {
@@ -1126,8 +1092,8 @@ public struct ReaderContainerView: View {
         verticalRestoreController.beginScrolling(to: request)
     }
 
-    private var currentVerticalPageFrames: [Int: CGRect] {
-        verticalPageFrames.compactMapValues { value in
+    private var currentVerticalSurfaceFrames: [Int: CGRect] {
+        verticalSurfaceFrames.compactMapValues { value in
             value.documentView == model.visibleView ? value.frame : nil
         }
     }
@@ -1248,12 +1214,12 @@ private final class ReaderVerticalScrollCoordinator: NSObject, UIGestureRecogniz
         return true
     }
 
-    func restoreOffset(to pageFrame: CGRect, intraPageProgress: Double) -> Bool {
+    func restoreOffset(to surfaceFrame: CGRect, intraSurfaceProgress: Double) -> Bool {
         guard let scrollView else { return false }
 
         let desiredY = scrollView.contentOffset.y
-            + pageFrame.minY
-            + (pageFrame.height * min(max(intraPageProgress, 0), 1))
+            + surfaceFrame.minY
+            + (surfaceFrame.height * min(max(intraSurfaceProgress, 0), 1))
             - referenceLineY
         let minOffsetY = -scrollView.adjustedContentInset.top
         let maxOffsetY = max(

@@ -19,15 +19,15 @@ import Testing
         request: request,
         contentSource: .authorFilteredPage
     )
-    let pagination = try NovelTextLayout.renderedPages(
+    let pagination = try NovelTextLayout.layout(
         document: document,
         settings: ReaderAppearanceSettings(),
         layout: ReaderContainerLayout(width: 390, height: 844)
     )
 
-    #expect(pagination.viewportIndex.pages.first?.chapterCommentTarget?.ownerPostID == "100")
-    #expect(pagination.viewportIndex.pages.first?.chapterCommentTarget?.view == 3)
-    #expect(pagination.viewportIndex.pages.first?.chapterCommentTarget?.title == "第一章")
+    #expect(pagination.viewportIndex.surfaces.first?.chapterCommentTarget?.ownerPostID == "100")
+    #expect(pagination.viewportIndex.surfaces.first?.chapterCommentTarget?.view == 3)
+    #expect(pagination.viewportIndex.surfaces.first?.chapterCommentTarget?.title == "第一章")
 }
 
 @Test func readerDocumentCarriesNestedOwnerPostIDToRenderedPages() throws {
@@ -51,15 +51,15 @@ import Testing
         request: request,
         contentSource: .authorFilteredPage
     )
-    let pagination = try NovelTextLayout.renderedPages(
+    let pagination = try NovelTextLayout.layout(
         document: document,
         settings: ReaderAppearanceSettings(),
         layout: ReaderContainerLayout(width: 390, height: 844)
     )
 
     #expect(document.segments.count == 1)
-    #expect(pagination.viewportIndex.pages.first?.chapterCommentTarget?.ownerPostID == "595655")
-    #expect(pagination.viewportIndex.pages.first?.chapterCommentTarget?.view == 1)
+    #expect(pagination.viewportIndex.surfaces.first?.chapterCommentTarget?.ownerPostID == "595655")
+    #expect(pagination.viewportIndex.surfaces.first?.chapterCommentTarget?.view == 1)
 }
 
 @Test func readerDocumentCarriesAncestorOwnerPostIDToRenderedPages() throws {
@@ -81,13 +81,13 @@ import Testing
         request: request,
         contentSource: .authorFilteredPage
     )
-    let pagination = try NovelTextLayout.renderedPages(
+    let pagination = try NovelTextLayout.layout(
         document: document,
         settings: ReaderAppearanceSettings(),
         layout: ReaderContainerLayout(width: 390, height: 844)
     )
 
-    #expect(pagination.viewportIndex.pages.first?.chapterCommentTarget?.ownerPostID == "41257246")
+    #expect(pagination.viewportIndex.surfaces.first?.chapterCommentTarget?.ownerPostID == "41257246")
 }
 
 @Test func chapterCommentsParserReadsOwnerPostCommentsAndFilteredRatings() throws {

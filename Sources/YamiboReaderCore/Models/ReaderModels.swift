@@ -12,7 +12,6 @@ public struct ReaderLaunchContext: Codable, Hashable, Identifiable, Sendable {
     public var threadTitle: String
     public var source: ReaderLaunchSource
     public var initialView: Int?
-    public var initialPage: Int?
     public var authorID: String?
     public var initialResumePoint: ReaderResumePoint?
 
@@ -23,7 +22,6 @@ public struct ReaderLaunchContext: Codable, Hashable, Identifiable, Sendable {
         threadTitle: String,
         source: ReaderLaunchSource,
         initialView: Int? = nil,
-        initialPage: Int? = nil,
         authorID: String? = nil,
         initialResumePoint: ReaderResumePoint? = nil
     ) {
@@ -31,7 +29,6 @@ public struct ReaderLaunchContext: Codable, Hashable, Identifiable, Sendable {
         self.threadTitle = threadTitle
         self.source = source
         self.initialView = initialView
-        self.initialPage = initialPage
         self.authorID = authorID
         self.initialResumePoint = initialResumePoint
     }
@@ -238,12 +235,12 @@ public struct ReaderPageDocument: Codable, Hashable, Sendable {
         self.fetchedAt = fetchedAt
     }
 
-    public func source(forSegmentIndex index: Int) -> ReaderSegmentSource? {
+    func source(forSegmentIndex index: Int) -> ReaderSegmentSource? {
         guard segmentSources.indices.contains(index) else { return nil }
         return segmentSources[index]
     }
 
-    public func semantics(forSegmentIndex index: Int) -> ReaderSegmentSemantics? {
+    func semantics(forSegmentIndex index: Int) -> ReaderSegmentSemantics? {
         guard segmentSemantics.indices.contains(index) else { return nil }
         return segmentSemantics[index]
     }
@@ -449,7 +446,7 @@ public struct ReaderChapter: Codable, Hashable, Sendable {
 }
 
 public struct ReaderResumePoint: Codable, Hashable, Sendable {
-    public static let schemaVersion = 2
+    public static let schemaVersion = 3
 
     public var view: Int
     public var chapterIdentity: NovelChapterIdentity?
@@ -457,21 +454,19 @@ public struct ReaderResumePoint: Codable, Hashable, Sendable {
     public var displayedTextOffset: Int
     public var chapterOrdinal: Int
     public var chapterTitle: String?
-    public var segmentIndex: Int
-    public var segmentOffset: Int
     public var segmentProgress: Double
     public var authorID: String?
     public var readingModeHint: ReaderReadingMode
+    package var legacySegmentIndex: Int?
+    package var legacySegmentOffset: Int?
 
     public init(
         view: Int,
         chapterIdentity: NovelChapterIdentity? = nil,
         textSegmentIdentity: NovelTextSegmentIdentity? = nil,
-        displayedTextOffset: Int? = nil,
+        displayedTextOffset: Int,
         chapterOrdinal: Int,
         chapterTitle: String? = nil,
-        segmentIndex: Int,
-        segmentOffset: Int,
         segmentProgress: Double,
         authorID: String? = nil,
         readingModeHint: ReaderReadingMode
@@ -479,14 +474,42 @@ public struct ReaderResumePoint: Codable, Hashable, Sendable {
         self.view = max(1, view)
         self.chapterIdentity = chapterIdentity
         self.textSegmentIdentity = textSegmentIdentity
-        self.displayedTextOffset = max(0, displayedTextOffset ?? segmentOffset)
+        self.displayedTextOffset = max(0, displayedTextOffset)
         self.chapterOrdinal = max(0, chapterOrdinal)
         self.chapterTitle = chapterTitle
-        self.segmentIndex = max(0, segmentIndex)
-        self.segmentOffset = max(0, segmentOffset)
         self.segmentProgress = min(max(segmentProgress, 0), 1)
         self.authorID = authorID
         self.readingModeHint = readingModeHint
+        self.legacySegmentIndex = nil
+        self.legacySegmentOffset = nil
+    }
+
+    package init(
+        view: Int,
+        chapterIdentity: NovelChapterIdentity? = nil,
+        textSegmentIdentity: NovelTextSegmentIdentity? = nil,
+        displayedTextOffset: Int,
+        chapterOrdinal: Int,
+        chapterTitle: String? = nil,
+        segmentProgress: Double,
+        authorID: String? = nil,
+        readingModeHint: ReaderReadingMode,
+        legacySegmentIndex: Int?,
+        legacySegmentOffset: Int?
+    ) {
+        self.init(
+            view: view,
+            chapterIdentity: chapterIdentity,
+            textSegmentIdentity: textSegmentIdentity,
+            displayedTextOffset: displayedTextOffset,
+            chapterOrdinal: chapterOrdinal,
+            chapterTitle: chapterTitle,
+            segmentProgress: segmentProgress,
+            authorID: authorID,
+            readingModeHint: readingModeHint
+        )
+        self.legacySegmentIndex = legacySegmentIndex.map { max(0, $0) }
+        self.legacySegmentOffset = legacySegmentOffset.map { max(0, $0) }
     }
 }
 
@@ -508,19 +531,20 @@ extension ReaderResumePoint {
 
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        let segmentOffset = try container.decode(Int.self, forKey: .segmentOffset)
+        let legacySegmentIndex = try container.decodeIfPresent(Int.self, forKey: .segmentIndex)
+        let legacySegmentOffset = try container.decodeIfPresent(Int.self, forKey: .segmentOffset)
         self.init(
             view: try container.decode(Int.self, forKey: .view),
             chapterIdentity: try container.decodeIfPresent(NovelChapterIdentity.self, forKey: .chapterIdentity),
             textSegmentIdentity: try container.decodeIfPresent(NovelTextSegmentIdentity.self, forKey: .textSegmentIdentity),
-            displayedTextOffset: try container.decodeIfPresent(Int.self, forKey: .displayedTextOffset) ?? segmentOffset,
+            displayedTextOffset: try container.decodeIfPresent(Int.self, forKey: .displayedTextOffset) ?? legacySegmentOffset ?? 0,
             chapterOrdinal: try container.decode(Int.self, forKey: .chapterOrdinal),
             chapterTitle: try container.decodeIfPresent(String.self, forKey: .chapterTitle),
-            segmentIndex: try container.decode(Int.self, forKey: .segmentIndex),
-            segmentOffset: segmentOffset,
             segmentProgress: try container.decode(Double.self, forKey: .segmentProgress),
             authorID: try container.decodeIfPresent(String.self, forKey: .authorID),
-            readingModeHint: try container.decode(ReaderReadingMode.self, forKey: .readingModeHint)
+            readingModeHint: try container.decode(ReaderReadingMode.self, forKey: .readingModeHint),
+            legacySegmentIndex: legacySegmentIndex,
+            legacySegmentOffset: legacySegmentOffset
         )
     }
 
@@ -533,78 +557,17 @@ extension ReaderResumePoint {
         try container.encode(displayedTextOffset, forKey: .displayedTextOffset)
         try container.encode(chapterOrdinal, forKey: .chapterOrdinal)
         try container.encodeIfPresent(chapterTitle, forKey: .chapterTitle)
-        try container.encode(segmentIndex, forKey: .segmentIndex)
-        try container.encode(segmentOffset, forKey: .segmentOffset)
+        if textSegmentIdentity == nil {
+            try container.encodeIfPresent(legacySegmentIndex, forKey: .segmentIndex)
+            try container.encodeIfPresent(legacySegmentOffset, forKey: .segmentOffset)
+        }
         try container.encode(segmentProgress, forKey: .segmentProgress)
         try container.encodeIfPresent(authorID, forKey: .authorID)
         try container.encode(readingModeHint, forKey: .readingModeHint)
     }
 }
 
-public struct ReaderProgress: Codable, Hashable, Sendable {
-    public var view: Int
-    public var page: Int
-    public var chapterTitle: String?
-    public var authorID: String?
-    public var resumePoint: ReaderResumePoint?
-
-    public init(
-        view: Int,
-        page: Int,
-        chapterTitle: String? = nil,
-        authorID: String? = nil,
-        resumePoint: ReaderResumePoint? = nil
-    ) {
-        self.view = max(1, view)
-        self.page = max(0, page)
-        self.chapterTitle = resumePoint?.chapterTitle ?? chapterTitle
-        self.authorID = resumePoint?.authorID ?? authorID
-        self.resumePoint = resumePoint
-    }
-}
-
-public struct NovelTextDisplaySemantics: Hashable, Sendable {
-    public var fontScale: Double
-    public var fontFamily: ReaderFontFamily
-    public var lineHeightScale: Double
-    public var characterSpacingScale: Double
-    public var indentsParagraphFirstLine: Bool
-    public var usesJustifiedText: Bool
-
-    public init(settings: ReaderAppearanceSettings) {
-        self.fontScale = settings.fontScale
-        self.fontFamily = settings.fontFamily
-        self.lineHeightScale = settings.lineHeightScale
-        self.characterSpacingScale = settings.characterSpacingScale
-        self.indentsParagraphFirstLine = settings.indentsParagraphFirstLine
-        self.usesJustifiedText = settings.usesJustifiedText
-    }
-}
-
-struct NovelTextDisplayValue: Hashable, Sendable {
-    var text: String
-    var chapterTitle: String?
-    var startsAtParagraphBoundary: Bool
-    var semantics: NovelTextDisplaySemantics
-    var ranges: [ReaderRenderedTextRange]
-
-    init(
-        text: String,
-        chapterTitle: String?,
-        startsAtParagraphBoundary: Bool = true,
-        settings: ReaderAppearanceSettings = ReaderAppearanceSettings(),
-        ranges: [ReaderRenderedTextRange] = []
-    ) {
-        self.text = text
-        self.chapterTitle = chapterTitle
-        self.startsAtParagraphBoundary = startsAtParagraphBoundary
-        self.semantics = NovelTextDisplaySemantics(settings: settings)
-        self.ranges = ranges
-    }
-
-}
-
-public struct ReaderRenderedTextRange: Hashable, Sendable {
+package struct ReaderRenderedTextRange: Hashable, Sendable {
     public var segmentIndex: Int
     public var startOffset: Int
     public var endOffset: Int
@@ -620,8 +583,8 @@ public struct ReaderRenderedTextRange: Hashable, Sendable {
     }
 }
 
-public struct NovelTextViewportIndexPage: Hashable, Sendable {
-    public var pageIndex: Int
+package struct NovelTextViewportIndexSurface: Hashable, Sendable {
+    public var surfaceOrdinal: Int
     public var documentView: Int
     public var chapterOrdinal: Int?
     public var chapterTitle: String?
@@ -631,7 +594,7 @@ public struct NovelTextViewportIndexPage: Hashable, Sendable {
     public var chapterCommentTarget: ReaderChapterCommentTarget?
 
     public init(
-        pageIndex: Int,
+        surfaceOrdinal: Int,
         documentView: Int,
         chapterOrdinal: Int?,
         chapterTitle: String?,
@@ -640,7 +603,7 @@ public struct NovelTextViewportIndexPage: Hashable, Sendable {
         frozenGeometry: NovelTextViewportFrozenGeometry? = nil,
         chapterCommentTarget: ReaderChapterCommentTarget? = nil
     ) {
-        self.pageIndex = max(0, pageIndex)
+        self.surfaceOrdinal = max(0, surfaceOrdinal)
         self.documentView = max(1, documentView)
         self.chapterOrdinal = chapterOrdinal
         self.chapterTitle = chapterTitle
@@ -651,7 +614,7 @@ public struct NovelTextViewportIndexPage: Hashable, Sendable {
     }
 }
 
-public struct NovelTextViewportFrozenGeometry: Hashable, Sendable {
+package struct NovelTextViewportFrozenGeometry: Hashable, Sendable {
     public var documentStartOffset: Int
     public var documentEndOffset: Int
     public var documentClipMinY: CGFloat
@@ -686,27 +649,27 @@ public struct NovelTextViewportFrozenGeometry: Hashable, Sendable {
     }
 }
 
-public struct NovelTextViewportIndexChapter: Hashable, Sendable {
+package struct NovelTextViewportIndexChapter: Hashable, Sendable {
     public var ordinal: Int
     public var title: String
-    public var startPageIndex: Int
+    public var startSurfaceOrdinal: Int
     public var chapterCommentTarget: ReaderChapterCommentTarget?
 
     public init(
         ordinal: Int,
         title: String,
-        startPageIndex: Int,
+        startSurfaceOrdinal: Int,
         chapterCommentTarget: ReaderChapterCommentTarget? = nil
     ) {
         self.ordinal = max(0, ordinal)
         self.title = title
-        self.startPageIndex = max(0, startPageIndex)
+        self.startSurfaceOrdinal = max(0, startSurfaceOrdinal)
         self.chapterCommentTarget = chapterCommentTarget
     }
 }
 
-public struct NovelTextViewportIndexPosition: Hashable, Sendable {
-    public var pageIndex: Int
+package struct NovelTextViewportIndexSurfacePosition: Hashable, Sendable {
+    public var surfaceOrdinal: Int
     public var documentView: Int
     public var chapterOrdinal: Int?
     public var chapterTitle: String?
@@ -714,14 +677,14 @@ public struct NovelTextViewportIndexPosition: Hashable, Sendable {
     public var chapterCommentTarget: ReaderChapterCommentTarget?
 
     public init(
-        pageIndex: Int,
+        surfaceOrdinal: Int,
         documentView: Int,
         chapterOrdinal: Int?,
         chapterTitle: String?,
         range: ReaderRenderedTextRange,
         chapterCommentTarget: ReaderChapterCommentTarget? = nil
     ) {
-        self.pageIndex = max(0, pageIndex)
+        self.surfaceOrdinal = max(0, surfaceOrdinal)
         self.documentView = max(1, documentView)
         self.chapterOrdinal = chapterOrdinal
         self.chapterTitle = chapterTitle
@@ -730,91 +693,614 @@ public struct NovelTextViewportIndexPosition: Hashable, Sendable {
     }
 }
 
-public struct NovelTextViewportSample: Hashable, Sendable {
-    public var documentView: Int
-    public var pageIndex: Int
-    public var segmentIndex: Int
-    public var segmentOffset: Int
+package struct NovelTextViewportSemanticTextPosition: Hashable, Sendable {
+    public var chapterIdentity: NovelChapterIdentity?
+    public var textSegmentIdentity: NovelTextSegmentIdentity
+    public var displayedTextOffset: Int
+    public var progressInTextRange: Double
 
-    public init(documentView: Int, pageIndex: Int, segmentIndex: Int, segmentOffset: Int) {
-        self.documentView = max(1, documentView)
-        self.pageIndex = max(0, pageIndex)
-        self.segmentIndex = max(0, segmentIndex)
-        self.segmentOffset = max(0, segmentOffset)
+    public init(
+        chapterIdentity: NovelChapterIdentity?,
+        textSegmentIdentity: NovelTextSegmentIdentity,
+        displayedTextOffset: Int,
+        progressInTextRange: Double
+    ) {
+        self.chapterIdentity = chapterIdentity
+        self.textSegmentIdentity = textSegmentIdentity
+        self.displayedTextOffset = max(0, displayedTextOffset)
+        self.progressInTextRange = min(max(progressInTextRange, 0), 1)
     }
 }
 
-public struct NovelTextViewportIndex: Hashable, Sendable {
+package struct NovelTextViewportSample: Hashable, Sendable {
+    public var surfaceIdentity: NovelReaderSurfaceIdentity
+    public var documentView: Int
+    public var textSegmentIdentity: NovelTextSegmentIdentity
+    public var displayedTextOffset: Int
+
+    public init(
+        surfaceIdentity: NovelReaderSurfaceIdentity,
+        documentView: Int,
+        textSegmentIdentity: NovelTextSegmentIdentity,
+        displayedTextOffset: Int
+    ) {
+        self.surfaceIdentity = surfaceIdentity
+        self.documentView = max(1, documentView)
+        self.textSegmentIdentity = textSegmentIdentity
+        self.displayedTextOffset = max(0, displayedTextOffset)
+    }
+}
+
+package struct NovelTextViewportIndex: Hashable, Sendable {
     public var documentView: Int
     public var readingMode: ReaderReadingMode
-    public var pages: [NovelTextViewportIndexPage]
+    public var surfaces: [NovelTextViewportIndexSurface]
     public var chapters: [NovelTextViewportIndexChapter]
 
     public init(
         documentView: Int,
         readingMode: ReaderReadingMode,
-        pages: [NovelTextViewportIndexPage],
+        surfaces: [NovelTextViewportIndexSurface],
         chapters: [NovelTextViewportIndexChapter]
     ) {
         self.documentView = max(1, documentView)
         self.readingMode = readingMode
-        self.pages = pages
+        self.surfaces = surfaces
         self.chapters = chapters
     }
 
-    public func position(forSegmentIndex segmentIndex: Int, offset: Int) -> NovelTextViewportIndexPosition? {
+    public func position(
+        for textSegmentIdentity: NovelTextSegmentIdentity,
+        displayedTextOffset: Int,
+        in document: ReaderPageDocument
+    ) -> NovelTextViewportIndexSurfacePosition? {
+        guard document.view == documentView,
+              let segmentIndex = document.segmentSemantics.firstIndex(where: {
+                  $0?.textSegmentIdentity == textSegmentIdentity
+              }) else {
+            return nil
+        }
         let normalizedSegmentIndex = max(0, segmentIndex)
-        let normalizedOffset = max(0, offset)
-        for page in pages {
-            if let range = page.ranges.first(where: { range in
+        let normalizedOffset = max(0, displayedTextOffset)
+        for surface in surfaces {
+            if let range = surface.ranges.first(where: { range in
                 range.segmentIndex == normalizedSegmentIndex && range.contains(offset: normalizedOffset)
             }) {
-                return NovelTextViewportIndexPosition(
-                    pageIndex: page.pageIndex,
-                    documentView: page.documentView,
-                    chapterOrdinal: page.chapterOrdinal,
-                    chapterTitle: page.chapterTitle,
+                return NovelTextViewportIndexSurfacePosition(
+                    surfaceOrdinal: surface.surfaceOrdinal,
+                    documentView: surface.documentView,
+                    chapterOrdinal: surface.chapterOrdinal,
+                    chapterTitle: surface.chapterTitle,
                     range: range,
-                    chapterCommentTarget: page.chapterCommentTarget
+                    chapterCommentTarget: surface.chapterCommentTarget
                 )
             }
         }
 
-        let candidates = pages.flatMap { page in
-            page.ranges
+        let candidates = surfaces.flatMap { surface in
+            surface.ranges
                 .filter { $0.segmentIndex == normalizedSegmentIndex }
-                .map { range in (page: page, range: range) }
+                .map { range in (surface: surface, range: range) }
         }
         guard let nearest = candidates.min(by: {
             $0.range.distance(toOffset: normalizedOffset) < $1.range.distance(toOffset: normalizedOffset)
         }) else {
             return nil
         }
-        return NovelTextViewportIndexPosition(
-            pageIndex: nearest.page.pageIndex,
-            documentView: nearest.page.documentView,
-            chapterOrdinal: nearest.page.chapterOrdinal,
-            chapterTitle: nearest.page.chapterTitle,
+        return NovelTextViewportIndexSurfacePosition(
+            surfaceOrdinal: nearest.surface.surfaceOrdinal,
+            documentView: nearest.surface.documentView,
+            chapterOrdinal: nearest.surface.chapterOrdinal,
+            chapterTitle: nearest.surface.chapterTitle,
             range: nearest.range,
-            chapterCommentTarget: nearest.page.chapterCommentTarget
+            chapterCommentTarget: nearest.surface.chapterCommentTarget
         )
     }
 }
 
-public extension NovelTextViewportIndex {
+package extension NovelTextViewportIndex {
     var readerChapters: [ReaderChapter] {
         chapters.map { chapter in
             ReaderChapter(
                 ordinal: chapter.ordinal,
                 title: chapter.title,
-                startIndex: chapter.startPageIndex,
+                startIndex: chapter.startSurfaceOrdinal,
                 chapterCommentTarget: chapter.chapterCommentTarget
             )
         }
     }
 }
 
-public struct NovelTextViewportIdentity: Hashable, Sendable {
+package extension NovelTextViewportIndexSurface {
+    var containsText: Bool {
+        !ranges.isEmpty
+    }
+
+    func semanticTextPosition(
+        for intraSurfaceProgress: Double,
+        in document: ReaderPageDocument
+    ) -> NovelTextViewportSemanticTextPosition? {
+        guard let rangePosition = textRangePosition(for: intraSurfaceProgress),
+              let semantics = document.semantics(forSegmentIndex: rangePosition.range.segmentIndex),
+              let textSegmentIdentity = semantics.textSegmentIdentity else {
+            return nil
+        }
+        let range = rangePosition.range
+        let offsetWithinSegment = range.length > 0
+            ? Int((Double(range.length) * rangePosition.progressInRange).rounded(.towardZero))
+            : 0
+        return NovelTextViewportSemanticTextPosition(
+            chapterIdentity: semantics.chapterIdentity,
+            textSegmentIdentity: textSegmentIdentity,
+            displayedTextOffset: range.startOffset + min(offsetWithinSegment, range.length),
+            progressInTextRange: rangePosition.progressInRange
+        )
+    }
+
+    func contains(
+        textSegmentIdentity: NovelTextSegmentIdentity,
+        in document: ReaderPageDocument
+    ) -> Bool {
+        ranges.contains { range in
+            document.semantics(forSegmentIndex: range.segmentIndex)?.textSegmentIdentity == textSegmentIdentity
+        }
+    }
+
+    func contains(
+        textSegmentIdentity: NovelTextSegmentIdentity,
+        displayedTextOffset: Int,
+        in document: ReaderPageDocument
+    ) -> Bool {
+        ranges.contains { range in
+            document.semantics(forSegmentIndex: range.segmentIndex)?.textSegmentIdentity == textSegmentIdentity &&
+                range.contains(offset: displayedTextOffset)
+        }
+    }
+
+    func contains(
+        chapterIdentity: NovelChapterIdentity,
+        in document: ReaderPageDocument
+    ) -> Bool {
+        ranges.contains { range in
+            document.semantics(forSegmentIndex: range.segmentIndex)?.chapterIdentity == chapterIdentity
+        } || externalBlocks.contains { block in
+            block.chapterIdentity == chapterIdentity
+        }
+    }
+
+    func distance(
+        from displayedTextOffset: Int,
+        textSegmentIdentity: NovelTextSegmentIdentity,
+        in document: ReaderPageDocument
+    ) -> Int {
+        let matchingRanges = ranges.filter { range in
+            document.semantics(forSegmentIndex: range.segmentIndex)?.textSegmentIdentity == textSegmentIdentity
+        }
+        guard !matchingRanges.isEmpty else { return Int.max }
+        return matchingRanges.map { $0.distance(toOffset: displayedTextOffset) }.min() ?? Int.max
+    }
+
+    func intraSurfaceProgress(
+        displayedTextOffset: Int,
+        textSegmentIdentity: NovelTextSegmentIdentity,
+        fallbackProgress: Double,
+        in document: ReaderPageDocument
+    ) -> Double {
+        progress(
+            matching: { range in
+                document.semantics(forSegmentIndex: range.segmentIndex)?.textSegmentIdentity == textSegmentIdentity
+            },
+            offset: displayedTextOffset,
+            fallbackProgress: fallbackProgress
+        )
+    }
+
+    func sample(
+        displayOffset: Int,
+        in document: ReaderPageDocument
+    ) -> NovelTextViewportSample? {
+        guard !ranges.isEmpty else { return nil }
+        let normalizedOffset = max(0, displayOffset)
+        var runningOffset = 0
+
+        for range in ranges {
+            let length = max(range.length, 0)
+            let rangeEnd = runningOffset + length
+            if normalizedOffset <= rangeEnd {
+                guard let textSegmentIdentity = document
+                    .semantics(forSegmentIndex: range.segmentIndex)?
+                    .textSegmentIdentity else {
+                    return nil
+                }
+                return NovelTextViewportSample(
+                    surfaceIdentity: NovelReaderSurfaceIdentity(
+                        generation: 0,
+                        ordinal: surfaceOrdinal
+                    ),
+                    documentView: document.view,
+                    textSegmentIdentity: textSegmentIdentity,
+                    displayedTextOffset: range.startOffset + min(max(normalizedOffset - runningOffset, 0), length)
+                )
+            }
+            runningOffset = rangeEnd + 2
+        }
+
+        guard let lastRange = ranges.last,
+              let textSegmentIdentity = document
+                  .semantics(forSegmentIndex: lastRange.segmentIndex)?
+                  .textSegmentIdentity else {
+            return nil
+        }
+        return NovelTextViewportSample(
+            surfaceIdentity: NovelReaderSurfaceIdentity(
+                generation: 0,
+                ordinal: surfaceOrdinal
+            ),
+            documentView: document.view,
+            textSegmentIdentity: textSegmentIdentity,
+            displayedTextOffset: lastRange.endOffset
+        )
+    }
+
+    func displayOffset(
+        for textSegmentIdentity: NovelTextSegmentIdentity,
+        displayedTextOffset: Int,
+        in document: ReaderPageDocument
+    ) -> Int? {
+        guard let segmentIndex = document.segmentSemantics.firstIndex(where: {
+            $0?.textSegmentIdentity == textSegmentIdentity
+        }) else {
+            return nil
+        }
+
+        var runningOffset = 0
+        let normalizedOffset = max(0, displayedTextOffset)
+
+        for range in ranges {
+            let length = max(range.length, 0)
+            defer { runningOffset += length + 2 }
+            guard range.segmentIndex == segmentIndex,
+                  normalizedOffset >= range.startOffset,
+                  normalizedOffset <= range.endOffset else {
+                continue
+            }
+            return runningOffset + min(max(normalizedOffset - range.startOffset, 0), length)
+        }
+
+        return nil
+    }
+
+    func containsLegacyTextSegment(index legacySegmentIndex: Int) -> Bool {
+        ranges.contains { $0.segmentIndex == legacySegmentIndex }
+    }
+
+    func containsLegacyTextSegment(index legacySegmentIndex: Int, offset legacySegmentOffset: Int) -> Bool {
+        ranges.contains { range in
+            range.segmentIndex == legacySegmentIndex && range.contains(offset: legacySegmentOffset)
+        }
+    }
+
+    func distanceFromLegacyTextSegmentOffset(_ legacySegmentOffset: Int, index legacySegmentIndex: Int) -> Int {
+        let matchingRanges = ranges.filter { $0.segmentIndex == legacySegmentIndex }
+        guard !matchingRanges.isEmpty else { return Int.max }
+        return matchingRanges.map { $0.distance(toOffset: legacySegmentOffset) }.min() ?? Int.max
+    }
+
+    func legacyIntraSurfaceProgress(
+        segmentIndex legacySegmentIndex: Int,
+        segmentOffset legacySegmentOffset: Int,
+        fallbackProgress: Double
+    ) -> Double {
+        progress(
+            matching: { $0.segmentIndex == legacySegmentIndex },
+            offset: legacySegmentOffset,
+            fallbackProgress: fallbackProgress
+        )
+    }
+
+    private func textRangePosition(
+        for intraSurfaceProgress: Double
+    ) -> (range: ReaderRenderedTextRange, progressInRange: Double)? {
+        guard !ranges.isEmpty else { return nil }
+        guard ranges.count > 1 else {
+            return ranges.first.map {
+                (range: $0, progressInRange: min(max(intraSurfaceProgress, 0), 1))
+            }
+        }
+
+        let totalLength = ranges.reduce(0) { $0 + max($1.length, 1) }
+        let targetOffset = Int((Double(totalLength) * min(max(intraSurfaceProgress, 0), 1)).rounded(.towardZero))
+        var runningLength = 0
+
+        for range in ranges {
+            let length = max(range.length, 1)
+            if targetOffset < runningLength + length {
+                let progressInRange = Double(targetOffset - runningLength) / Double(length)
+                return (
+                    range: range,
+                    progressInRange: min(max(progressInRange, 0), 1)
+                )
+            }
+            runningLength += length
+        }
+
+        return ranges.last.map {
+            (range: $0, progressInRange: 1)
+        }
+    }
+
+    private func progress(
+        matching predicate: (ReaderRenderedTextRange) -> Bool,
+        offset: Int,
+        fallbackProgress: Double
+    ) -> Double {
+        guard !ranges.isEmpty else {
+            return min(max(fallbackProgress, 0), 1)
+        }
+        let totalLength = ranges.reduce(0) { $0 + max($1.length, 1) }
+        var runningLength = 0
+
+        for range in ranges {
+            let length = max(range.length, 1)
+            defer { runningLength += length }
+            guard predicate(range) else { continue }
+            let localOffset = min(max(offset - range.startOffset, 0), length)
+            let progress = Double(runningLength + localOffset) / Double(max(totalLength, 1))
+            return min(max(progress, 0), 1)
+        }
+
+        return min(max(fallbackProgress, 0), 1)
+    }
+}
+
+package extension ReaderPageDocument {
+    func previewSourceText(from position: NovelTextViewportSemanticTextPosition) -> String {
+        guard let startSegmentIndex = segmentSemantics.firstIndex(where: {
+            $0?.textSegmentIdentity == position.textSegmentIdentity
+        }), segments.indices.contains(startSegmentIndex) else {
+            return ""
+        }
+
+        let fragments = segments[startSegmentIndex...].enumerated().compactMap { offset, segment -> String? in
+            guard case let .text(text, _) = segment else { return nil }
+            let previewText = offset == 0
+                ? String(text.dropFirst(min(max(position.displayedTextOffset, 0), text.count)))
+                : text
+            let trimmed = previewText.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? nil : trimmed
+        }
+
+        return fragments.joined(separator: "\n\n")
+    }
+}
+
+package extension NovelTextViewportDocument {
+    func validateOffsetMap(
+        expectedTextBySegment: [Int: String]
+    ) -> Bool {
+        guard expectedTextBySegment.count == textRangesBySegment.count else {
+            return false
+        }
+        for (segmentIndex, range) in textRangesBySegment {
+            guard let expectedText = expectedTextBySegment[segmentIndex],
+                  range.endOffset <= text.count,
+                  let start = text.index(
+                      text.startIndex,
+                      offsetBy: range.startOffset,
+                      limitedBy: text.endIndex
+                  ),
+                  let end = text.index(
+                      text.startIndex,
+                      offsetBy: range.endOffset,
+                      limitedBy: text.endIndex
+                  ),
+                  String(text[start..<end]) == expectedText else {
+                return false
+            }
+        }
+        return true
+    }
+
+    func surfaceRanges(
+        for surfaceRange: NovelTextViewportDocumentSurfaceRange
+    ) -> [ReaderRenderedTextRange] {
+        let sliceStart = max(0, surfaceRange.startOffset)
+        let sliceEnd = max(sliceStart, surfaceRange.endOffset)
+        guard sliceEnd > sliceStart else { return [] }
+
+        return textRangesBySegment
+            .sorted { $0.value.startOffset < $1.value.startOffset }
+            .compactMap { segmentIndex, segmentRange in
+                let intersectionStart = max(sliceStart, segmentRange.startOffset)
+                let intersectionEnd = min(sliceEnd, segmentRange.endOffset)
+                guard intersectionEnd > intersectionStart else { return nil }
+                return ReaderRenderedTextRange(
+                    segmentIndex: segmentIndex,
+                    startOffset: intersectionStart - segmentRange.startOffset,
+                    endOffset: intersectionEnd - segmentRange.startOffset
+                )
+            }
+    }
+
+    func semanticTextPosition(
+        containingDocumentOffset documentOffset: Int,
+        in document: ReaderPageDocument
+    ) -> NovelTextViewportSemanticTextPosition? {
+        guard let segmentRange = textRangesBySegment.first(where: { _, range in
+            documentOffset >= range.startOffset && documentOffset <= range.endOffset
+        }),
+        let semantics = document.semantics(forSegmentIndex: segmentRange.key),
+        let textSegmentIdentity = semantics.textSegmentIdentity else {
+            return nil
+        }
+
+        return NovelTextViewportSemanticTextPosition(
+            chapterIdentity: semantics.chapterIdentity,
+            textSegmentIdentity: textSegmentIdentity,
+            displayedTextOffset: documentOffset - segmentRange.value.startOffset,
+            progressInTextRange: 0
+        )
+    }
+
+    func documentOffset(
+        for position: ReaderResumePoint,
+        in document: ReaderPageDocument
+    ) -> Int? {
+        guard position.view == document.view else { return nil }
+        if let textSegmentIdentity = position.textSegmentIdentity,
+           let segmentRange = segmentRange(for: textSegmentIdentity, in: document) {
+            return segmentRange.startOffset + min(
+                max(position.displayedTextOffset, 0),
+                segmentRange.length
+            )
+        }
+        guard let legacySegmentIndex = position.legacySegmentIndex,
+              let segmentRange = textRangesBySegment[legacySegmentIndex] else {
+            return nil
+        }
+        return segmentRange.startOffset + min(
+            max(position.displayedTextOffset, 0),
+            segmentRange.length
+        )
+    }
+
+    func documentOffset(forSurfaceRange range: ReaderRenderedTextRange) -> Int? {
+        guard let segmentRange = textRangesBySegment[range.segmentIndex],
+              range.startOffset >= 0,
+              range.startOffset <= segmentRange.length else {
+            return nil
+        }
+        return segmentRange.startOffset + range.startOffset
+    }
+
+    func documentOffsets(forSurfaceRange range: ReaderRenderedTextRange) -> Range<Int>? {
+        guard let segmentRange = textRangesBySegment[range.segmentIndex],
+              range.startOffset >= 0,
+              range.endOffset >= range.startOffset,
+              range.endOffset <= segmentRange.length else {
+            return nil
+        }
+        return (segmentRange.startOffset + range.startOffset)..<(segmentRange.startOffset + range.endOffset)
+    }
+
+    func text(forSurfaceRange range: ReaderRenderedTextRange) -> String? {
+        guard let documentOffsets = documentOffsets(forSurfaceRange: range),
+              documentOffsets.upperBound > documentOffsets.lowerBound,
+              documentOffsets.upperBound <= text.count,
+              let startIndex = text.index(text.startIndex, offsetBy: documentOffsets.lowerBound, limitedBy: text.endIndex),
+              let endIndex = text.index(text.startIndex, offsetBy: documentOffsets.upperBound, limitedBy: text.endIndex) else {
+            return nil
+        }
+        return String(text[startIndex..<endIndex])
+    }
+
+    func text(forSurface surface: NovelTextViewportIndexSurface) -> String? {
+        var fragments: [String] = []
+        for range in surface.ranges {
+            guard let fragment = text(forSurfaceRange: range) else {
+                return nil
+            }
+            fragments.append(fragment)
+        }
+        let text = fragments.joined(separator: "\n\n")
+        return text.isEmpty ? nil : text
+    }
+
+    func startsAtParagraphBoundary(surface: NovelTextViewportIndexSurface) -> Bool {
+        guard let firstRange = surface.ranges.first,
+              firstRange.startOffset > 0,
+              let globalStart = documentOffset(forSurfaceRange: firstRange) else {
+            return true
+        }
+        return isParagraphBoundary(at: globalStart)
+    }
+
+    func sample(
+        containingDocumentOffset documentOffset: Int,
+        surfaceIdentity: NovelReaderSurfaceIdentity,
+        documentView: Int,
+        in document: ReaderPageDocument
+    ) -> NovelTextViewportSample? {
+        guard let position = semanticTextPosition(
+            containingDocumentOffset: documentOffset,
+            in: document
+        ) else {
+            return nil
+        }
+        return NovelTextViewportSample(
+            surfaceIdentity: surfaceIdentity,
+            documentView: documentView,
+            textSegmentIdentity: position.textSegmentIdentity,
+            displayedTextOffset: position.displayedTextOffset
+        )
+    }
+
+    private func segmentRange(
+        for textSegmentIdentity: NovelTextSegmentIdentity,
+        in document: ReaderPageDocument
+    ) -> ReaderRenderedTextRange? {
+        guard let segmentIndex = document.segmentSemantics.firstIndex(where: {
+            $0?.textSegmentIdentity == textSegmentIdentity
+        }) else {
+            return nil
+        }
+        return textRangesBySegment[segmentIndex]
+    }
+
+    private func isParagraphBoundary(at offset: Int) -> Bool {
+        guard offset > 0, offset <= text.count else { return offset == 0 }
+        let nsText = text as NSString
+        var index = offset - 1
+        var newlineCount = 0
+
+        while index >= 0 {
+            let character = nsText.substring(with: NSRange(location: index, length: 1))
+            if character == "\n" || character == "\r" {
+                newlineCount += 1
+                if newlineCount >= 2 {
+                    return true
+                }
+            } else if character.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                // Keep scanning through spaces between the paragraph break and the first visible character.
+            } else {
+                return false
+            }
+            index -= 1
+        }
+        return true
+    }
+}
+
+package extension NovelTextViewportIndexSurface {
+    func nearestTextSample(
+        toDocumentOffset documentOffset: Int,
+        surfaceIdentity: NovelReaderSurfaceIdentity,
+        viewportDocument: NovelTextViewportDocument,
+        sourceDocument: ReaderPageDocument
+    ) -> NovelTextViewportSample? {
+        let candidates = ranges.compactMap { range -> (distance: Int, sample: NovelTextViewportSample)? in
+            guard let documentRange = viewportDocument.documentOffsets(forSurfaceRange: range),
+                  let semantics = sourceDocument.semantics(forSegmentIndex: range.segmentIndex),
+                  let textSegmentIdentity = semantics.textSegmentIdentity else {
+                return nil
+            }
+            let nearestOffset = min(max(documentOffset, documentRange.lowerBound), documentRange.upperBound)
+            return (
+                abs(documentOffset - nearestOffset),
+                NovelTextViewportSample(
+                    surfaceIdentity: surfaceIdentity,
+                    documentView: documentView,
+                    textSegmentIdentity: textSegmentIdentity,
+                    displayedTextOffset: nearestOffset - documentRange.lowerBound + range.startOffset
+                )
+            )
+        }
+
+        return candidates.min { $0.distance < $1.distance }?.sample
+    }
+}
+
+package struct NovelTextViewportIdentity: Hashable, Sendable {
     public var threadURL: URL
     public var documentView: Int
     public var maxView: Int
@@ -842,7 +1328,7 @@ public struct NovelTextViewportIdentity: Hashable, Sendable {
     }
 }
 
-public struct NovelTextViewportDocument: Hashable, Sendable {
+package struct NovelTextViewportDocument: Hashable, Sendable {
     public var text: String
     public var textRangesBySegment: [Int: ReaderRenderedTextRange]
     public var insertedSeparatorRanges: [ReaderRenderedTextRange]
@@ -858,8 +1344,8 @@ public struct NovelTextViewportDocument: Hashable, Sendable {
     }
 }
 
-public struct NovelTextViewportExternalBlock: Hashable, Sendable {
-    public var segmentIndex: Int
+package struct NovelTextViewportExternalBlock: Hashable, Sendable {
+    public var chapterIdentity: NovelChapterIdentity?
     public var url: URL
     public var chapterOrdinal: Int?
     public var chapterTitle: String?
@@ -867,14 +1353,14 @@ public struct NovelTextViewportExternalBlock: Hashable, Sendable {
     public var chapterCommentTarget: ReaderChapterCommentTarget?
 
     public init(
-        segmentIndex: Int,
+        chapterIdentity: NovelChapterIdentity?,
         url: URL,
         chapterOrdinal: Int?,
         chapterTitle: String?,
         frozenFrame: NovelTextViewportExternalBlockFrame? = nil,
         chapterCommentTarget: ReaderChapterCommentTarget? = nil
     ) {
-        self.segmentIndex = max(0, segmentIndex)
+        self.chapterIdentity = chapterIdentity
         self.url = url
         self.chapterOrdinal = chapterOrdinal
         self.chapterTitle = chapterTitle
@@ -883,7 +1369,7 @@ public struct NovelTextViewportExternalBlock: Hashable, Sendable {
     }
 }
 
-public struct NovelTextViewportExternalBlockFrame: Hashable, Sendable {
+package struct NovelTextViewportExternalBlockFrame: Hashable, Sendable {
     public var x: CGFloat
     public var y: CGFloat
     public var width: CGFloat
@@ -897,45 +1383,20 @@ public struct NovelTextViewportExternalBlockFrame: Hashable, Sendable {
     }
 }
 
-public struct NovelTextViewportDiagnostics: Hashable, Sendable {
+package struct NovelTextViewportDiagnostics: Hashable, Sendable {
     public var indexBuildCount: Int
     public var visibleLayoutPassCount: Int
-    public var compatibilityRenderedPageCount: Int
-    public var compatibilityTextDisplayValueCount: Int
 
     public init(
         indexBuildCount: Int,
-        visibleLayoutPassCount: Int = 0,
-        compatibilityRenderedPageCount: Int = 0,
-        compatibilityTextDisplayValueCount: Int = 0
+        visibleLayoutPassCount: Int = 0
     ) {
         self.indexBuildCount = max(0, indexBuildCount)
         self.visibleLayoutPassCount = max(0, visibleLayoutPassCount)
-        self.compatibilityRenderedPageCount = max(0, compatibilityRenderedPageCount)
-        self.compatibilityTextDisplayValueCount = max(0, compatibilityTextDisplayValueCount)
     }
 }
 
-public struct NovelTextViewportVisibleSurfaceDiagnostics: Hashable, Sendable {
-    public var indexBuildCount: Int
-    public var visibleSurfaceLayoutPassCount: Int
-    public var perBlockTextKitDocumentCount: Int
-    public var compatibilityTextDisplayValueCount: Int
-    public var usesSharedViewportContext: Bool
-
-    public init(
-        viewportContext: NovelTextViewportContext?,
-        viewportPage: NovelTextViewportIndexPage?
-    ) {
-        self.indexBuildCount = viewportContext?.diagnostics.indexBuildCount ?? 0
-        self.visibleSurfaceLayoutPassCount = viewportContext != nil && viewportPage?.ranges.isEmpty == false ? 1 : 0
-        self.perBlockTextKitDocumentCount = 0
-        self.compatibilityTextDisplayValueCount = 0
-        self.usesSharedViewportContext = viewportContext != nil && viewportPage?.ranges.isEmpty == false
-    }
-}
-
-public struct NovelTextViewportContext: Hashable, Sendable {
+package struct NovelTextViewportContext: Hashable, Sendable {
     public var identity: NovelTextViewportIdentity
     public var document: NovelTextViewportDocument
     public var externalBlocks: [NovelTextViewportExternalBlock]
@@ -954,19 +1415,19 @@ public struct NovelTextViewportContext: Hashable, Sendable {
     }
 }
 
-public struct NovelTextViewportPageLayoutMetrics: Hashable, Sendable {
-    public var pageIndex: Int
+package struct NovelTextViewportSurfaceLayoutMetrics: Hashable, Sendable {
+    public var surfaceOrdinal: Int
     public var textHeight: CGFloat?
     public var externalBlockHeight: CGFloat
     public var spacingHeight: CGFloat
 
     public init(
-        pageIndex: Int,
+        surfaceOrdinal: Int,
         textHeight: CGFloat? = nil,
         externalBlockHeight: CGFloat = 0,
         spacingHeight: CGFloat = 0
     ) {
-        self.pageIndex = max(0, pageIndex)
+        self.surfaceOrdinal = max(0, surfaceOrdinal)
         self.textHeight = textHeight
         self.externalBlockHeight = max(0, externalBlockHeight)
         self.spacingHeight = max(0, spacingHeight)
@@ -977,39 +1438,67 @@ public struct NovelTextViewportPageLayoutMetrics: Hashable, Sendable {
     }
 }
 
-public struct NovelTextViewportLayoutMetrics: Hashable, Sendable {
-    public var pageMetrics: [Int: NovelTextViewportPageLayoutMetrics]
+package struct NovelTextViewportLayoutMetrics: Hashable, Sendable {
+    public var surfaceMetrics: [Int: NovelTextViewportSurfaceLayoutMetrics]
 
-    public init(pageMetrics: [Int: NovelTextViewportPageLayoutMetrics] = [:]) {
-        self.pageMetrics = pageMetrics
+    public init(surfaceMetrics: [Int: NovelTextViewportSurfaceLayoutMetrics] = [:]) {
+        self.surfaceMetrics = surfaceMetrics
     }
 
-    public func pageHeight(for pageIndex: Int) -> CGFloat? {
-        pageMetrics[max(0, pageIndex)]?.contentHeight
+    public func surfaceHeight(for surfaceOrdinal: Int) -> CGFloat? {
+        surfaceMetrics[max(0, surfaceOrdinal)]?.contentHeight
     }
 }
 
-public struct NovelTextLayoutResult: Hashable, Sendable {
+package struct NovelTextLayoutResult: Hashable, Sendable {
     public var viewportContext: NovelTextViewportContext
     public var viewportIndex: NovelTextViewportIndex
     public var layoutMetrics: NovelTextViewportLayoutMetrics
+    public var fingerprints: NovelTextLayoutFingerprints
 
     public init(
         viewportContext: NovelTextViewportContext,
         viewportIndex: NovelTextViewportIndex,
-        layoutMetrics: NovelTextViewportLayoutMetrics = NovelTextViewportLayoutMetrics()
+        layoutMetrics: NovelTextViewportLayoutMetrics = NovelTextViewportLayoutMetrics(),
+        fingerprints: NovelTextLayoutFingerprints = NovelTextLayoutFingerprints()
     ) {
         self.viewportContext = viewportContext
         self.viewportIndex = viewportIndex
         self.layoutMetrics = layoutMetrics
+        self.fingerprints = fingerprints
+    }
+}
+
+package struct NovelTextLayoutFingerprints: Hashable, Sendable {
+    public var semantic: String
+    public var text: String
+    public var layout: String
+    public var font: String
+    public var platform: String
+    public var textKitImplementation: String
+
+    public init(
+        semantic: String = "",
+        text: String = "",
+        layout: String = "",
+        font: String = "",
+        platform: String = "",
+        textKitImplementation: String = ""
+    ) {
+        self.semantic = semantic
+        self.text = text
+        self.layout = layout
+        self.font = font
+        self.platform = platform
+        self.textKitImplementation = textKitImplementation
     }
 }
 
 public struct NovelReaderSurfaceIdentity: Hashable, Sendable {
     public var generation: UInt64
-    public var ordinal: Int
+    package var ordinal: Int
 
-    public init(generation: UInt64, ordinal: Int) {
+    package init(generation: UInt64, ordinal: Int) {
         self.generation = generation
         self.ordinal = max(0, ordinal)
     }
@@ -1020,48 +1509,70 @@ public enum NovelReaderSurfaceKind: Hashable, Sendable {
     case externalBlock
 }
 
+public struct NovelReaderExternalBlock: Hashable, Sendable {
+    public var url: URL
+    public var frame: CGRect?
+
+    public init(url: URL, frame: CGRect?) {
+        self.url = url
+        self.frame = frame
+    }
+}
+
 public struct NovelReaderSurface: Hashable, Sendable {
     public var identity: NovelReaderSurfaceIdentity
+    public var presentationIndex: Int
     public var kind: NovelReaderSurfaceKind
     public var documentView: Int
     public var chapterTitle: String?
     public var presentationSize: CGSize
     public var presentationSpacingAfter: CGFloat
-    public var viewportPage: NovelTextViewportIndexPage
+    public var externalBlocks: [NovelReaderExternalBlock]
+    public var chapterCommentTarget: ReaderChapterCommentTarget?
 
     public init(
         identity: NovelReaderSurfaceIdentity,
+        presentationIndex: Int = 0,
         kind: NovelReaderSurfaceKind,
         documentView: Int,
         chapterTitle: String?,
         presentationSize: CGSize,
         presentationSpacingAfter: CGFloat = 0,
-        viewportPage: NovelTextViewportIndexPage
+        externalBlocks: [NovelReaderExternalBlock] = [],
+        chapterCommentTarget: ReaderChapterCommentTarget? = nil
     ) {
         self.identity = identity
+        self.presentationIndex = max(0, presentationIndex)
         self.kind = kind
         self.documentView = max(1, documentView)
         self.chapterTitle = chapterTitle
         self.presentationSize = presentationSize
         self.presentationSpacingAfter = max(0, presentationSpacingAfter)
-        self.viewportPage = viewportPage
+        self.externalBlocks = externalBlocks
+        self.chapterCommentTarget = chapterCommentTarget
     }
 }
 
 public struct NovelReaderPresentationSpread: Hashable, Sendable {
     public var index: Int
+    public var leftSurfaceIndex: Int
     public var leftSurfaceIdentity: NovelReaderSurfaceIdentity
+    public var rightSurfaceIndex: Int?
     public var rightSurfaceIdentity: NovelReaderSurfaceIdentity?
     public var chapterTitle: String?
 
     public init(
         index: Int,
+        leftSurfaceIndex: Int = 0,
         leftSurfaceIdentity: NovelReaderSurfaceIdentity,
+        rightSurfaceIndex: Int? = nil,
         rightSurfaceIdentity: NovelReaderSurfaceIdentity?,
         chapterTitle: String?
     ) {
         self.index = max(0, index)
+        self.leftSurfaceIndex = max(0, leftSurfaceIndex)
         self.leftSurfaceIdentity = leftSurfaceIdentity
+        self.rightSurfaceIndex = rightSurfaceIndex.map { max(0, $0) }
         self.rightSurfaceIdentity = rightSurfaceIdentity
         self.chapterTitle = chapterTitle
     }
@@ -1071,18 +1582,21 @@ public struct NovelReaderReadingState: Hashable, Sendable {
     public var currentView: Int
     public var maxView: Int
     public var currentChapterTitle: String?
-    public var currentPageIntraProgress: Double
+    public var authorID: String?
+    public var currentSurfaceIntraProgress: Double
 
     public init(
         currentView: Int,
         maxView: Int,
         currentChapterTitle: String?,
-        currentPageIntraProgress: Double
+        authorID: String?,
+        currentSurfaceIntraProgress: Double
     ) {
         self.currentView = max(1, currentView)
         self.maxView = max(self.currentView, maxView)
         self.currentChapterTitle = currentChapterTitle
-        self.currentPageIntraProgress = min(max(currentPageIntraProgress, 0), 1)
+        self.authorID = authorID
+        self.currentSurfaceIntraProgress = min(max(currentSurfaceIntraProgress, 0), 1)
     }
 }
 
@@ -1092,6 +1606,7 @@ public struct NovelReaderPresentation: Hashable, Sendable {
     public var surfaces: [NovelReaderSurface]
     public var selectedSurfaceIdentity: NovelReaderSurfaceIdentity?
     public var spreads: [NovelReaderPresentationSpread]
+    public var chapters: [ReaderChapter]
     public var committedSettings: ReaderAppearanceSettings
     public var readingState: NovelReaderReadingState
     public var currentContentSource: ReaderContentSource
@@ -1104,6 +1619,7 @@ public struct NovelReaderPresentation: Hashable, Sendable {
         surfaces: [NovelReaderSurface],
         selectedSurfaceIdentity: NovelReaderSurfaceIdentity?,
         spreads: [NovelReaderPresentationSpread],
+        chapters: [ReaderChapter] = [],
         committedSettings: ReaderAppearanceSettings,
         readingState: NovelReaderReadingState,
         currentContentSource: ReaderContentSource,
@@ -1115,11 +1631,21 @@ public struct NovelReaderPresentation: Hashable, Sendable {
         self.surfaces = surfaces
         self.selectedSurfaceIdentity = selectedSurfaceIdentity
         self.spreads = spreads
+        self.chapters = chapters
         self.committedSettings = committedSettings
         self.readingState = readingState
         self.currentContentSource = currentContentSource
         self.retainedChapterCount = max(0, retainedChapterCount)
         self.filteredChapterCandidateCount = max(0, filteredChapterCandidateCount)
+    }
+
+    public var selectedSurfaceIndex: Int? {
+        guard let selectedSurfaceIdentity else { return nil }
+        return surfaces.first(where: { $0.identity == selectedSurfaceIdentity })?.presentationIndex
+    }
+
+    public func surfaceIndex(for identity: NovelReaderSurfaceIdentity) -> Int? {
+        surfaces.first(where: { $0.identity == identity })?.presentationIndex
     }
 }
 

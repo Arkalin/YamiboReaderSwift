@@ -1,10 +1,12 @@
 import Foundation
 import Testing
 import XCTest
-@_spi(NovelTextLayoutMeasurement) @testable import YamiboReaderCore
+@_spi(NovelTextAttributedDocument) @testable import YamiboReaderCore
 
 #if canImport(UIKit)
 import UIKit
+#elseif canImport(AppKit)
+import AppKit
 #endif
 
 private struct StubURLProtocolResponse {
@@ -723,23 +725,23 @@ private final class StubURLProtocol: URLProtocol {
         ]
     )
 
-    let paged = try NovelTextLayout.renderedPages(
+    let paged = try NovelTextLayout.layout(
         document: document,
         settings: ReaderAppearanceSettings(readingMode: .paged),
         layout: ReaderContainerLayout(width: 320, height: 568)
     )
-    #expect(paged.viewportIndex.pages.count >= 2)
+    #expect(paged.viewportIndex.surfaces.count >= 2)
     #expect(paged.viewportIndex.chapters.count == 2)
     #expect(paged.viewportIndex.chapters.first?.title == "第一章")
     #expect(paged.viewportIndex.chapters.last?.title == "第二章")
-    #expect((paged.viewportIndex.chapters.last?.startPageIndex ?? 0) > 0)
+    #expect((paged.viewportIndex.chapters.last?.startSurfaceOrdinal ?? 0) > 0)
 
-    let vertical = try NovelTextLayout.renderedPages(
+    let vertical = try NovelTextLayout.layout(
         document: document,
         settings: ReaderAppearanceSettings(readingMode: .vertical),
         layout: ReaderContainerLayout(width: 320, height: 568)
     )
-    #expect(vertical.viewportIndex.pages.count >= 2)
+    #expect(vertical.viewportIndex.surfaces.count >= 2)
     #expect(vertical.viewportIndex.chapters.first?.title == "第一章")
     #expect(vertical.viewportIndex.chapters.last?.title == "第二章")
 }
@@ -798,32 +800,32 @@ private final class StubURLProtocol: URLProtocol {
         segments: [.text(text, chapterTitle: "第一章")]
     )
 
-    let paged = try NovelTextLayout.renderedPages(
+    let paged = try NovelTextLayout.layout(
         document: document,
         settings: ReaderAppearanceSettings(readingMode: .paged),
         layout: ReaderContainerLayout(width: 320, height: 568)
     )
-    let vertical = try NovelTextLayout.renderedPages(
+    let vertical = try NovelTextLayout.layout(
         document: document,
         settings: ReaderAppearanceSettings(readingMode: .vertical),
         layout: ReaderContainerLayout(width: 320, height: 568)
     )
 
-    #expect(!paged.viewportIndex.pages.isEmpty)
-    #expect(!vertical.viewportIndex.pages.isEmpty)
-    #expect(paged.viewportIndex.pages.first?.ranges.first?.startOffset == 0)
-    #expect(paged.viewportIndex.pages.last?.ranges.last?.endOffset == text.count)
-    #expect(vertical.viewportIndex.pages.first?.ranges.first?.startOffset == 0)
-    #expect(vertical.viewportIndex.pages.last?.ranges.last?.endOffset == text.count)
+    #expect(!paged.viewportIndex.surfaces.isEmpty)
+    #expect(!vertical.viewportIndex.surfaces.isEmpty)
+    #expect(paged.viewportIndex.surfaces.first?.ranges.first?.startOffset == 0)
+    #expect(paged.viewportIndex.surfaces.last?.ranges.last?.endOffset == text.count)
+    #expect(vertical.viewportIndex.surfaces.first?.ranges.first?.startOffset == 0)
+    #expect(vertical.viewportIndex.surfaces.last?.ranges.last?.endOffset == text.count)
     #expect(paged.viewportIndex.chapters.first?.title == "第一章")
     #expect(vertical.viewportIndex.chapters.first?.title == "第一章")
     #expect(
-        try NovelTextLayout.measuredTextHeight(
-            text,
+        NovelTextPreviewLayout.textFits(
+            String(text.prefix(80)),
             chapterTitle: "第一章",
             settings: ReaderAppearanceSettings(readingMode: .paged),
-            width: ReaderContainerLayout(width: 320, height: 568).readableFrame.width
-        ) > 0
+            layout: ReaderContainerLayout(width: 320, height: 568)
+        )
     )
 }
 
@@ -831,7 +833,7 @@ private final class StubURLProtocol: URLProtocol {
     let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
     let layoutEngineSource = try String(
         contentsOf: repositoryRoot
-            .appendingPathComponent("Sources/YamiboReaderCore/Support/ReaderPagedLayoutEngine.swift"),
+            .appendingPathComponent("Sources/YamiboReaderCore/Support/NovelTextPreviewLayout.swift"),
         encoding: .utf8
     )
     let layoutSource = try String(
@@ -850,6 +852,7 @@ private final class StubURLProtocol: URLProtocol {
 @Test func novelTextLayoutDoesNotExposeStaleMeasurementFallbackSurfaces() throws {
     let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
     let sourceFiles = [
+        "Sources/YamiboReaderCore/Models/ReaderModels.swift",
         "Sources/YamiboReaderCore/Support/NovelTextLayout.swift",
         "Sources/YamiboReaderCore/Support/NovelReadingSession.swift",
         "Sources/YamiboReaderCore/Support",
@@ -864,15 +867,94 @@ private final class StubURLProtocol: URLProtocol {
         }
         return try String(contentsOf: url, encoding: .utf8)
     }.joined(separator: "\n")
+    let layoutSource = try String(
+        contentsOf: repositoryRoot.appendingPathComponent("Sources/YamiboReaderCore/Support/NovelTextLayout.swift"),
+        encoding: .utf8
+    )
+    let viewportSampleBody = try #require(functionBody(named: "viewportSample", in: layoutSource))
+    let displayOffsetBody = try #require(functionBody(named: "displayOffset", in: layoutSource))
 
     #expect(!productionSource.contains("renderedPagesOrEmpty"))
     #expect(!productionSource.contains("emptyPagination"))
     #expect(!productionSource.contains("estimatedTextHeight"))
     #expect(!productionSource.contains("text.count < 180"))
     #expect(!productionSource.contains("public enum ReaderPaginator"))
-    #expect(!productionSource.contains("public struct NovelTextDisplayValue"))
+    #expect(!layoutSource.contains("viewportContext.document.textRangesBySegment"))
+    #expect(!layoutSource.contains("viewportDocument.textRangesBySegment"))
+    #expect(!layoutSource.contains("private static func viewportText"))
+    #expect(!layoutSource.contains("private static func viewportSurfaceText"))
+    #expect(!layoutSource.contains("private static func isParagraphBoundary"))
+    #expect(!layoutSource.contains("semantics(forSegmentIndex"))
+    #expect(!layoutSource.contains("source(forSegmentIndex"))
+    #expect(layoutSource.contains("zip(document.segmentSemantics, document.segmentSources)"))
+    #expect(layoutSource.contains("segment.semantics?.textSegmentIdentity"))
+    #expect(!viewportSampleBody.contains("semantics(forSegmentIndex"))
+    #expect(!viewportSampleBody.contains("segmentSemantics"))
+    #expect(viewportSampleBody.contains(".sample(displayOffset:"))
+    #expect(!displayOffsetBody.contains("semantics(forSegmentIndex"))
+    #expect(!displayOffsetBody.contains("segmentSemantics"))
+    #expect(displayOffsetBody.contains(".displayOffset("))
+    #expect(!productionSource.contains("struct NovelTextDisplayValue"))
     #expect(!productionSource.contains("AppKitNovelTextLayoutAdapter"))
-    #expect(!productionSource.contains("import AppKit"))
+    #expect(!productionSource.contains("ReaderPagedLayoutSegment"))
+    #expect(!productionSource.contains("ReaderPagedLayoutPage"))
+    #expect(!productionSource.contains("ReaderPagedFragmentPartitioner"))
+    #expect(!productionSource.contains("typealias NovelTextViewportPageLayout"))
+    #expect(!productionSource.contains("NovelTextViewportDocumentPageRange"))
+    #expect(!productionSource.contains("viewportPageLayout"))
+    #expect(!productionSource.contains("pageRanges"))
+    #expect(!productionSource.contains("pageIdentity"))
+    #expect(!productionSource.contains("visiblePageIdentities"))
+    #expect(!productionSource.contains("NovelTextViewportPageLayoutMetrics"))
+    #expect(!productionSource.contains("pageMetrics"))
+    #expect(!productionSource.contains("pageHeight("))
+    #expect(!productionSource.contains("perPageTextKitDocumentCount"))
+    #expect(!productionSource.contains("public struct ReaderRenderedTextRange"))
+    #expect(!productionSource.contains("public func source(forSegmentIndex"))
+    #expect(!productionSource.contains("public func semantics(forSegmentIndex"))
+    #expect(!productionSource.contains("public var segmentIndex: Int\n    public var url: URL"))
+    #expect(!productionSource.contains("forSegmentIndex segmentIndex"))
+}
+
+@Test func novelReadingPersistenceExposesOnlySemanticPositionInterfaces() throws {
+    let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+    let readerModelsSource = try String(
+        contentsOf: repositoryRoot.appendingPathComponent("Sources/YamiboReaderCore/Models/ReaderModels.swift"),
+        encoding: .utf8
+    )
+    let favoriteSource = try String(
+        contentsOf: repositoryRoot.appendingPathComponent("Sources/YamiboReaderCore/Models/Favorite.swift"),
+        encoding: .utf8
+    )
+    let progressSource = try String(
+        contentsOf: repositoryRoot.appendingPathComponent("Sources/YamiboReaderCore/Sync/ProgressSyncModule.swift"),
+        encoding: .utf8
+    )
+    let favoriteStoreSource = try String(
+        contentsOf: repositoryRoot.appendingPathComponent("Sources/YamiboReaderCore/Stores/FavoriteStore.swift"),
+        encoding: .utf8
+    )
+    let workflowSource = try String(
+        contentsOf: repositoryRoot.appendingPathComponent("Sources/YamiboReaderCore/Support/NovelReadingWorkflow.swift"),
+        encoding: .utf8
+    )
+    let modelSource = try String(
+        contentsOf: repositoryRoot.appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderContainerModel.swift"),
+        encoding: .utf8
+    )
+
+    #expect(!readerModelsSource.contains("public var initialPage"))
+    #expect(!readerModelsSource.contains("struct ReaderProgress"))
+    #expect(!progressSource.contains("public var page: Int"))
+    #expect(!favoriteSource.contains("public var lastPage"))
+    #expect(favoriteSource.contains("public var mangaPageIndex"))
+    #expect(!favoriteStoreSource.contains("updateReadingProgress"))
+    #expect(favoriteStoreSource.contains("updateNovelReadingPosition"))
+    #expect(!workflowSource.contains("currentDisplayedPageIndex"))
+    #expect(!workflowSource.contains("public var currentAuthorID"))
+    #expect(!modelSource.contains("currentAuthorID = state"))
+    #expect(!modelSource.contains("@Published public var settings"))
+    #expect(modelSource.contains("readerPresentation?.committedSettings ?? bootstrapSettings"))
 }
 
 @Test func novelTextRuntimeAndMetricsConsumeReadableFrameAsFinalTextBox() throws {
@@ -922,33 +1004,76 @@ private final class StubURLProtocol: URLProtocol {
             .text("继续", chapterTitle: "第一章"),
             .image(imageURL, chapterTitle: "第一章"),
             .text("第二章正文", chapterTitle: "第二章")
+        ],
+        segmentSemantics: [
+            readerTextSemantics(chapterID: "chapter-1", textID: "chapter-1-text-0"),
+            readerTextSemantics(chapterID: "chapter-1", textID: "chapter-1-text-1"),
+            readerImageSemantics(chapterID: "chapter-1"),
+            readerTextSemantics(chapterID: "chapter-2", textID: "chapter-2-text-0")
         ]
     )
 
-    let pagination = try NovelTextLayout.renderedPages(
+    let pagination = try NovelTextLayout.layout(
         document: document,
         settings: ReaderAppearanceSettings(readingMode: .paged),
         layout: ReaderContainerLayout(width: 390, height: 844),
-        viewportPageLayout: { context, _, _ in
-            [NovelTextViewportDocumentPageRange(startOffset: 0, endOffset: context.document.text.count)]
+        viewportSurfaceLayout: { context, _, _ in
+            [NovelTextViewportDocumentSurfaceRange(startOffset: 0, endOffset: context.document.text.count)]
         }
     )
 
-    #expect(pagination.viewportIndex.pages.count == 3)
+    #expect(pagination.viewportIndex.surfaces.count == 3)
     #expect(pagination.viewportIndex.chapters.map(\.title) == ["第一章", "第二章"])
-    #expect(pagination.viewportIndex.chapters.map(\.startPageIndex) == [0, 2])
-    #expect(pagination.viewportIndex.pages[0].externalBlocks.isEmpty)
-    #expect(pagination.viewportIndex.pages[0].ranges == [
+    #expect(pagination.viewportIndex.chapters.map(\.startSurfaceOrdinal) == [0, 2])
+    #expect(pagination.viewportIndex.surfaces[0].externalBlocks.isEmpty)
+    #expect(pagination.viewportIndex.surfaces[0].ranges == [
         ReaderRenderedTextRange(segmentIndex: 0, startOffset: 0, endOffset: 2),
         ReaderRenderedTextRange(segmentIndex: 1, startOffset: 0, endOffset: 2)
     ])
-    #expect(pagination.viewportIndex.pages[1].externalBlocks.map(\.url) == [imageURL])
-    #expect(pagination.viewportIndex.pages[1].externalBlocks.map(\.chapterTitle) == ["第一章"])
-    #expect(pagination.viewportIndex.pages[2].ranges.first?.segmentIndex == 3)
-    #expect(pagination.viewportIndex.pages[2].externalBlocks.isEmpty)
-    #expect(pagination.viewportIndex.pages[2].ranges == [
+    #expect(pagination.viewportIndex.surfaces[1].externalBlocks.map(\.url) == [imageURL])
+    #expect(pagination.viewportIndex.surfaces[1].externalBlocks.map(\.chapterTitle) == ["第一章"])
+    #expect(pagination.viewportIndex.surfaces[2].ranges.first?.segmentIndex == 3)
+    #expect(pagination.viewportIndex.surfaces[2].externalBlocks.isEmpty)
+    #expect(pagination.viewportIndex.surfaces[2].ranges == [
         ReaderRenderedTextRange(segmentIndex: 3, startOffset: 0, endOffset: 5)
     ])
+}
+
+@Test func novelTextLayoutGroupsSameTitleChaptersBySemanticIdentity() throws {
+    let document = ReaderPageDocument(
+        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100&mobile=2")),
+        view: 1,
+        maxView: 1,
+        segments: [
+            .text("同名章\n第一处。", chapterTitle: "同名章"),
+            .text("同名章\n第二处。", chapterTitle: "同名章")
+        ],
+        segmentSemantics: [
+            ReaderSegmentSemantics(
+                chapterIdentity: NovelChapterIdentity(rawValue: "chapter-a"),
+                textSegmentIdentity: NovelTextSegmentIdentity(rawValue: "text-a"),
+                chapterTitleRange: ReaderCharacterRange(location: 0, length: "同名章".count)
+            ),
+            ReaderSegmentSemantics(
+                chapterIdentity: NovelChapterIdentity(rawValue: "chapter-b"),
+                textSegmentIdentity: NovelTextSegmentIdentity(rawValue: "text-b"),
+                chapterTitleRange: ReaderCharacterRange(location: 0, length: "同名章".count)
+            )
+        ]
+    )
+
+    let pagination = try NovelTextLayout.layout(
+        document: document,
+        settings: ReaderAppearanceSettings(readingMode: .paged),
+        layout: ReaderContainerLayout(width: 390, height: 844),
+        viewportSurfaceLayout: { context, _, _ in
+            [NovelTextViewportDocumentSurfaceRange(startOffset: 0, endOffset: context.document.text.count)]
+        }
+    )
+
+    #expect(pagination.viewportIndex.chapters.map(\.title) == ["同名章", "同名章"])
+    #expect(pagination.viewportIndex.chapters.map(\.startSurfaceOrdinal) == [0, 1])
+    #expect(pagination.viewportIndex.surfaces.map(\.chapterOrdinal) == [0, 1])
 }
 
 @Test func novelTextLayoutDoesNotPreMaterializeNormalTextBlocksForProductionViewportPages() throws {
@@ -983,33 +1108,40 @@ private final class StubURLProtocol: URLProtocol {
             ReaderSegmentSource(ownerPostID: "post-1"),
             ReaderSegmentSource(ownerPostID: "post-1"),
             ReaderSegmentSource(ownerPostID: "post-2")
+        ],
+        segmentSemantics: [
+            readerTextSemantics(chapterID: "post:post-1#chapter:0", textID: "post:post-1#chapter:0#text:0"),
+            readerTextSemantics(chapterID: "post:post-1#chapter:0", textID: "post:post-1#chapter:0#text:1"),
+            readerTextSemantics(chapterID: "post:post-2#chapter:0", textID: "post:post-2#chapter:0#text:0")
         ]
     )
 
-    let pagination = try NovelTextLayout.renderedPages(
+    let pagination = try NovelTextLayout.layout(
         document: document,
         settings: ReaderAppearanceSettings(readingMode: .paged),
         layout: ReaderContainerLayout(width: 390, height: 844),
-        viewportPageLayout: { context, _, _ in
-            [NovelTextViewportDocumentPageRange(startOffset: 0, endOffset: context.document.text.count)]
+        viewportSurfaceLayout: { context, _, _ in
+            [NovelTextViewportDocumentSurfaceRange(startOffset: 0, endOffset: context.document.text.count)]
         }
     )
 
     let index = pagination.viewportIndex
     #expect(index.documentView == 2)
     #expect(index.readingMode == .paged)
-    #expect(index.pages.map(\.pageIndex) == [0, 1])
-    #expect(index.pages[0].ranges == [
+    #expect(index.surfaces.map(\.surfaceOrdinal) == [0, 1])
+    #expect(index.surfaces[0].ranges == [
         ReaderRenderedTextRange(segmentIndex: 0, startOffset: 0, endOffset: 5),
         ReaderRenderedTextRange(segmentIndex: 1, startOffset: 0, endOffset: 5)
     ])
-    #expect(index.pages[1].ranges == [
+    #expect(index.surfaces[1].ranges == [
         ReaderRenderedTextRange(segmentIndex: 2, startOffset: 0, endOffset: 5)
     ])
     #expect(index.chapters.map(\.title) == ["第一章", "第二章"])
-    #expect(index.chapters.map(\.startPageIndex) == [0, 1])
-    #expect(index.position(forSegmentIndex: 1, offset: 3)?.pageIndex == 0)
-    #expect(index.position(forSegmentIndex: 2, offset: 2)?.chapterCommentTarget?.ownerPostID == "post-2")
+    #expect(index.chapters.map(\.startSurfaceOrdinal) == [0, 1])
+    let firstChapterSecondText = try #require(document.semantics(forSegmentIndex: 1)?.textSegmentIdentity)
+    let secondChapterText = try #require(document.semantics(forSegmentIndex: 2)?.textSegmentIdentity)
+    #expect(index.position(for: firstChapterSecondText, displayedTextOffset: 3, in: document)?.surfaceOrdinal == 0)
+    #expect(index.position(for: secondChapterText, displayedTextOffset: 2, in: document)?.chapterCommentTarget?.ownerPostID == "post-2")
 }
 
 @Test func novelTextLayoutPublishesNovelTextViewportIndexForVerticalChunks() async throws {
@@ -1022,25 +1154,26 @@ private final class StubURLProtocol: URLProtocol {
         ]
     )
 
-    let pagination = try NovelTextLayout.renderedPages(
+    let pagination = try NovelTextLayout.layout(
         document: document,
         settings: ReaderAppearanceSettings(readingMode: .vertical),
         layout: ReaderContainerLayout(width: 390, height: 844, readingMode: .vertical),
-        viewportPageLayout: { _, _, _ in
+        viewportSurfaceLayout: { _, _, _ in
             [
-                NovelTextViewportDocumentPageRange(startOffset: 0, endOffset: 4),
-                NovelTextViewportDocumentPageRange(startOffset: 4, endOffset: 7)
+                NovelTextViewportDocumentSurfaceRange(startOffset: 0, endOffset: 4),
+                NovelTextViewportDocumentSurfaceRange(startOffset: 4, endOffset: 7)
             ]
         }
     )
 
     let index = pagination.viewportIndex
     #expect(index.readingMode == .vertical)
-    #expect(index.pages.map(\.ranges) == [
+    #expect(index.surfaces.map(\.ranges) == [
         [ReaderRenderedTextRange(segmentIndex: 0, startOffset: 0, endOffset: 4)],
         [ReaderRenderedTextRange(segmentIndex: 0, startOffset: 4, endOffset: 7)]
     ])
-    #expect(index.position(forSegmentIndex: 0, offset: 5)?.pageIndex == 1)
+    let textSegmentIdentity = try #require(document.semantics(forSegmentIndex: 0)?.textSegmentIdentity)
+    #expect(index.position(for: textSegmentIdentity, displayedTextOffset: 5, in: document)?.surfaceOrdinal == 1)
 }
 
 @Test func novelTextLayoutBuildsCurrentWebpageViewportContextBeforePublishingReadablePages() async throws {
@@ -1061,15 +1194,21 @@ private final class StubURLProtocol: URLProtocol {
             ReaderSegmentSource(ownerPostID: "post-image"),
             ReaderSegmentSource(ownerPostID: "post-2")
         ],
+        segmentSemantics: [
+            readerTextSemantics(chapterID: "post:post-1#chapter:0", textID: "post:post-1#chapter:0#text:0"),
+            readerTextSemantics(chapterID: "post:post-1#chapter:0", textID: "post:post-1#chapter:0#text:1"),
+            readerImageSemantics(chapterID: "post:post-1#chapter:0"),
+            readerTextSemantics(chapterID: "post:post-2#chapter:0", textID: "post:post-2#chapter:0#text:0")
+        ],
         fetchedAt: Date(timeIntervalSince1970: 146)
     )
 
-    let pagination = try NovelTextLayout.renderedPages(
+    let pagination = try NovelTextLayout.layout(
         document: document,
         settings: ReaderAppearanceSettings(readingMode: .paged),
         layout: ReaderContainerLayout(width: 390, height: 844),
-        viewportPageLayout: { context, _, _ in
-            [NovelTextViewportDocumentPageRange(startOffset: 0, endOffset: context.document.text.count)]
+        viewportSurfaceLayout: { context, _, _ in
+            [NovelTextViewportDocumentSurfaceRange(startOffset: 0, endOffset: context.document.text.count)]
         }
     )
 
@@ -1087,10 +1226,12 @@ private final class StubURLProtocol: URLProtocol {
         ReaderRenderedTextRange(segmentIndex: 0, startOffset: 5, endOffset: 7),
         ReaderRenderedTextRange(segmentIndex: 1, startOffset: 12, endOffset: 14)
     ])
-    #expect(context.externalBlocks.map(\.segmentIndex) == [2])
+    #expect(context.externalBlocks.map(\.chapterIdentity) == [
+        NovelChapterIdentity(rawValue: "post:post-1#chapter:0")
+    ])
     #expect(context.diagnostics.indexBuildCount == 1)
     #expect(context.diagnostics.visibleLayoutPassCount == 0)
-    #expect(index.pages.flatMap(\.ranges).map(\.segmentIndex) == [0, 1, 3])
+    #expect(index.surfaces.flatMap(\.ranges).map(\.segmentIndex) == [0, 1, 3])
 }
 
 @Test func novelTextLayoutResultIsViewportFirstWithoutRenderedPageCompatibility() async throws {
@@ -1101,6 +1242,10 @@ private final class StubURLProtocol: URLProtocol {
         segments: [
             .text("第一段", chapterTitle: "第一章"),
             .text("第二段", chapterTitle: "第一章")
+        ],
+        segmentSemantics: [
+            readerTextSemantics(chapterID: "chapter-1", textID: "chapter-1-text-0"),
+            readerTextSemantics(chapterID: "chapter-1", textID: "chapter-1-text-1")
         ]
     )
 
@@ -1108,20 +1253,20 @@ private final class StubURLProtocol: URLProtocol {
         document: document,
         settings: ReaderAppearanceSettings(readingMode: .paged),
         layout: ReaderContainerLayout(width: 390, height: 844),
-        viewportPageLayout: { context, _, _ in
-            [NovelTextViewportDocumentPageRange(startOffset: 0, endOffset: context.document.text.count)]
+        viewportSurfaceLayout: { context, _, _ in
+            [NovelTextViewportDocumentSurfaceRange(startOffset: 0, endOffset: context.document.text.count)]
         }
     )
 
     #expect(layoutResult.viewportContext.document.text == "第一段\n\n第二段")
-    #expect(layoutResult.viewportIndex.pages.map(\.ranges) == [
+    #expect(layoutResult.viewportIndex.surfaces.map(\.ranges) == [
         [
             ReaderRenderedTextRange(segmentIndex: 0, startOffset: 0, endOffset: 3),
             ReaderRenderedTextRange(segmentIndex: 1, startOffset: 0, endOffset: 3)
         ]
     ])
-    #expect(layoutResult.viewportIndex.pages.map(\.pageIndex) == [0])
-    #expect(layoutResult.viewportIndex.pages.first?.externalBlocks.isEmpty == true)
+    #expect(layoutResult.viewportIndex.surfaces.map(\.surfaceOrdinal) == [0])
+    #expect(layoutResult.viewportIndex.surfaces.first?.externalBlocks.isEmpty == true)
 }
 
 @Test func novelTextLayoutCreatesAndUpdatesNovelTextViewportThroughHighLevelInterface() throws {
@@ -1136,13 +1281,12 @@ private final class StubURLProtocol: URLProtocol {
     let compactLayout = ReaderContainerLayout(width: 320, height: 568)
     let expandedLayout = ReaderContainerLayout(width: 414, height: 896)
 
-    let created = try NovelTextLayout.makeViewport(
+    let created = try NovelTextLayout.layout(
         document: document,
         settings: ReaderAppearanceSettings(readingMode: .paged),
         layout: compactLayout
     )
-    let updated = try NovelTextLayout.updateViewport(
-        created,
+    let updated = try NovelTextLayout.layout(
         document: document,
         settings: ReaderAppearanceSettings(readingMode: .vertical),
         layout: expandedLayout
@@ -1156,7 +1300,7 @@ private final class StubURLProtocol: URLProtocol {
 }
 
 @Test func novelTextViewportUpdatePublishesPageLayoutMetrics() throws {
-#if canImport(UIKit)
+#if canImport(UIKit) || canImport(AppKit)
     let repetitionCount = 400
     let layout = ReaderContainerLayout(width: 320, height: 568, readingMode: .vertical)
 #else
@@ -1175,23 +1319,23 @@ private final class StubURLProtocol: URLProtocol {
         ]
     )
 
-    let result = try NovelTextLayout.makeViewport(
+    let result = try NovelTextLayout.layout(
         document: document,
         settings: ReaderAppearanceSettings(readingMode: .vertical),
         layout: layout
     )
 
 #if canImport(UIKit)
-    #expect(result.viewportIndex.pages.count > 2)
-    for page in result.viewportIndex.pages {
+    #expect(result.viewportIndex.surfaces.count > 2)
+    for page in result.viewportIndex.surfaces {
         let geometry = try #require(page.frozenGeometry)
-        let textHeight = try #require(result.layoutMetrics.pageMetrics[page.pageIndex]?.textHeight)
+        let textHeight = try #require(result.layoutMetrics.surfaceMetrics[page.surfaceOrdinal]?.textHeight)
         #expect(textHeight == geometry.clipHeight)
         #expect(textHeight > 0)
         #expect(textHeight <= layout.readableFrame.height * 2)
     }
 #else
-    #expect(!result.viewportIndex.pages.isEmpty)
+    #expect(!result.viewportIndex.surfaces.isEmpty)
 #endif
 }
 
@@ -1204,33 +1348,41 @@ private final class StubURLProtocol: URLProtocol {
 }
 
 @Test func novelTextLayoutConvertsDisplayOffsetsUsingSwiftCharacterRanges() throws {
-    let displayValue = NovelTextDisplayValue(
-        text: "👩‍❤️‍👩a\n\n第二段",
-        chapterTitle: "第一章",
-        ranges: [
-            ReaderRenderedTextRange(segmentIndex: 0, startOffset: 10, endOffset: 12),
-            ReaderRenderedTextRange(segmentIndex: 2, startOffset: 40, endOffset: 43)
+    let document = ReaderPageDocument(
+        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=412&mobile=2")),
+        view: 3,
+        maxView: 3,
+        segments: [
+            .text("第一段文本", chapterTitle: "第一章"),
+            .text("第二段文本", chapterTitle: "第一章"),
+            .text("第三段文本", chapterTitle: "第一章")
         ]
     )
+    let ranges = [
+        ReaderRenderedTextRange(segmentIndex: 0, startOffset: 10, endOffset: 12),
+        ReaderRenderedTextRange(segmentIndex: 2, startOffset: 40, endOffset: 43)
+    ]
 
     let sample = try #require(
         NovelTextLayout.viewportSample(
             displayOffset: 5,
-            displayValue: displayValue,
-            documentView: 3,
-            pageIndex: 7
+            ranges: ranges,
+            document: document,
+            surfaceOrdinal: 7
         )
     )
+    let textSegmentIdentity = try #require(document.semantics(forSegmentIndex: 2)?.textSegmentIdentity)
     let displayOffset = try #require(
         NovelTextLayout.displayOffset(
-            forSegmentIndex: 2,
-            segmentOffset: 41,
-            displayValue: displayValue
+            for: textSegmentIdentity,
+            displayedTextOffset: 41,
+            in: document,
+            ranges: ranges
         )
     )
 
-    #expect(sample.segmentIndex == 2)
-    #expect(sample.segmentOffset == 41)
+    #expect(sample.textSegmentIdentity == textSegmentIdentity)
+    #expect(sample.displayedTextOffset == 41)
     #expect(displayOffset == 5)
 }
 
@@ -1254,16 +1406,16 @@ private final class StubURLProtocol: URLProtocol {
         document: document,
         settings: ReaderAppearanceSettings(readingMode: .paged),
         layout: ReaderContainerLayout(width: 390, height: 844),
-        viewportPageLayout: { context, _, _ in
-            [NovelTextViewportDocumentPageRange(startOffset: 0, endOffset: context.document.text.count)]
+        viewportSurfaceLayout: { context, _, _ in
+            [NovelTextViewportDocumentSurfaceRange(startOffset: 0, endOffset: context.document.text.count)]
         }
     )
 
-    let imagePage = try #require(layoutResult.viewportIndex.pages.first { !$0.externalBlocks.isEmpty })
+    let imagePage = try #require(layoutResult.viewportIndex.surfaces.first { !$0.externalBlocks.isEmpty })
     #expect(imagePage.ranges.isEmpty)
     #expect(imagePage.externalBlocks == [
         NovelTextViewportExternalBlock(
-            segmentIndex: 1,
+            chapterIdentity: document.semantics(forSegmentIndex: 1)?.chapterIdentity,
             url: imageURL,
             chapterOrdinal: 0,
             chapterTitle: "第一章",
@@ -1281,7 +1433,7 @@ private final class StubURLProtocol: URLProtocol {
             )
         )
     ])
-    #expect(layoutResult.viewportIndex.pages[imagePage.pageIndex].externalBlocks.map(\.url) == [imageURL])
+    #expect(layoutResult.viewportIndex.surfaces[imagePage.surfaceOrdinal].externalBlocks.map(\.url) == [imageURL])
 }
 
 @Test func novelTextLayoutDerivesPageRangesFromComposedViewportDocument() async throws {
@@ -1292,6 +1444,10 @@ private final class StubURLProtocol: URLProtocol {
         segments: [
             .text("第一段", chapterTitle: "第一章"),
             .text("第二段", chapterTitle: "第一章")
+        ],
+        segmentSemantics: [
+            readerTextSemantics(chapterID: "chapter-1", textID: "chapter-1-text-0"),
+            readerTextSemantics(chapterID: "chapter-1", textID: "chapter-1-text-1")
         ]
     )
     let layoutInputCount = LockedCounter()
@@ -1300,10 +1456,10 @@ private final class StubURLProtocol: URLProtocol {
         document: document,
         settings: ReaderAppearanceSettings(readingMode: .paged),
         layout: ReaderContainerLayout(width: 390, height: 844),
-        viewportPageLayout: { context, _, _ in
+        viewportSurfaceLayout: { context, _, _ in
             layoutInputCount.increment()
             #expect(context.document.text == "第一段\n\n第二段")
-            return [NovelTextViewportDocumentPageRange(startOffset: 0, endOffset: context.document.text.count)]
+            return [NovelTextViewportDocumentSurfaceRange(startOffset: 0, endOffset: context.document.text.count)]
         }
     )
 
@@ -1311,16 +1467,17 @@ private final class StubURLProtocol: URLProtocol {
     #expect(layoutResult.viewportContext.document.insertedSeparatorRanges == [
         ReaderRenderedTextRange(segmentIndex: 0, startOffset: 3, endOffset: 5)
     ])
-    #expect(layoutResult.viewportIndex.pages.map(\.ranges) == [
+    #expect(layoutResult.viewportIndex.surfaces.map(\.ranges) == [
         [
             ReaderRenderedTextRange(segmentIndex: 0, startOffset: 0, endOffset: 3),
             ReaderRenderedTextRange(segmentIndex: 1, startOffset: 0, endOffset: 3)
         ]
     ])
-    #expect(layoutResult.viewportIndex.position(forSegmentIndex: 1, offset: 1)?.pageIndex == 0)
+    let secondSegmentIdentity = try #require(document.semantics(forSegmentIndex: 1)?.textSegmentIdentity)
+    #expect(layoutResult.viewportIndex.position(for: secondSegmentIdentity, displayedTextOffset: 1, in: document)?.surfaceOrdinal == 0)
 }
 
-@Test func novelTextLayoutMaterializesViewportPageDisplayValueFromMultiRangeIndexPage() async throws {
+@Test func novelTextLayoutPreservesViewportPageRangesWithoutDisplayValueMaterialization() async throws {
     let settings = ReaderAppearanceSettings(
         fontScale: 1.25,
         fontFamily: .systemSerif,
@@ -1357,33 +1514,30 @@ private final class StubURLProtocol: URLProtocol {
         ReaderRenderedTextRange(segmentIndex: 0, startOffset: 2, endOffset: 7),
         ReaderRenderedTextRange(segmentIndex: 1, startOffset: 0, endOffset: 4)
     ]
-    let viewportPage = NovelTextViewportIndexPage(
-        pageIndex: 4,
+    let viewportPage = NovelTextViewportIndexSurface(
+        surfaceOrdinal: 4,
         documentView: 2,
         chapterOrdinal: 0,
         chapterTitle: "第一章",
         ranges: ranges
     )
 
-    let displayValue = try NovelTextLayout.displayValue(
+    let result = NovelTextLayoutResult(
         viewportContext: context,
-        viewportPage: viewportPage,
-        settings: settings
+        viewportIndex: NovelTextViewportIndex(
+            documentView: 2,
+            readingMode: .paged,
+            surfaces: [viewportPage],
+            chapters: []
+        )
     )
 
-    #expect(displayValue.text == "段正文很长\n\n第二段正")
-    #expect(displayValue.chapterTitle == "第一章")
-    #expect(displayValue.startsAtParagraphBoundary == false)
-    #expect(displayValue.ranges == ranges)
-    #expect(displayValue.semantics.fontScale == 1.25)
-    #expect(displayValue.semantics.fontFamily == .systemSerif)
-    #expect(displayValue.semantics.lineHeightScale == 1.7)
-    #expect(displayValue.semantics.characterSpacingScale == 0.12)
-    #expect(displayValue.semantics.usesJustifiedText)
-    #expect(displayValue.semantics.indentsParagraphFirstLine)
+    #expect(result.viewportIndex.surfaces.first?.ranges == ranges)
+    #expect(result.viewportIndex.surfaces.first?.chapterTitle == "第一章")
+    #expect(result.viewportContext.identity.appearance == settings)
 }
 
-@Test func novelTextLayoutDisplayValueFailsWhenViewportPageRangeIsMissingFromContext() async throws {
+@Test func novelTextLayoutDoesNotExposeDisplayValueForMissingViewportPageRange() async throws {
     let settings = ReaderAppearanceSettings(readingMode: .paged)
     let context = NovelTextViewportContext(
         identity: NovelTextViewportIdentity(
@@ -1405,24 +1559,27 @@ private final class StubURLProtocol: URLProtocol {
         externalBlocks: [],
         diagnostics: NovelTextViewportDiagnostics(indexBuildCount: 1)
     )
-    let viewportPage = NovelTextViewportIndexPage(
-        pageIndex: 0,
+    let viewportPage = NovelTextViewportIndexSurface(
+        surfaceOrdinal: 0,
         documentView: 1,
         chapterOrdinal: nil,
         chapterTitle: nil,
         ranges: [ReaderRenderedTextRange(segmentIndex: 9, startOffset: 0, endOffset: 2)]
     )
 
-    #expect(throws: NovelTextLayoutFailure.unableToLayoutText) {
-        _ = try NovelTextLayout.displayValue(
-            viewportContext: context,
-            viewportPage: viewportPage,
-            settings: settings
+    let result = NovelTextLayoutResult(
+        viewportContext: context,
+        viewportIndex: NovelTextViewportIndex(
+            documentView: 1,
+            readingMode: .paged,
+            surfaces: [viewportPage],
+            chapters: []
         )
-    }
+    )
+    #expect(result.viewportIndex.surfaces.first?.ranges.first?.segmentIndex == 9)
 }
 
-@Test func novelTextLayoutReusesCachedNovelTextViewportIndexForMatchingInputs() async throws {
+@Test func novelTextLayoutDoesNotReuseCachedNovelTextViewportIndexForMatchingInputs() async throws {
     let document = ReaderPageDocument(
         threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=102&mobile=2")),
         view: 1,
@@ -1433,29 +1590,27 @@ private final class StubURLProtocol: URLProtocol {
     let settings = ReaderAppearanceSettings(readingMode: .paged)
     let layout = ReaderContainerLayout(width: 390, height: 844)
     let layoutPassCount = LockedCounter()
-    let viewportPageLayout: NovelTextViewportPageLayout = { context, _, _ in
+    let viewportSurfaceLayout: NovelTextViewportSurfaceLayout = { context, _, _ in
         layoutPassCount.increment()
-        return [NovelTextViewportDocumentPageRange(startOffset: 0, endOffset: context.document.text.count)]
+        return [NovelTextViewportDocumentSurfaceRange(startOffset: 0, endOffset: context.document.text.count)]
     }
 
-    let first = try NovelTextLayout.renderedPages(
+    let first = try NovelTextLayout.layout(
         document: document,
         settings: settings,
         layout: layout,
-        viewportPageLayout: viewportPageLayout,
-        usesViewportIndexCache: true
+        viewportSurfaceLayout: viewportSurfaceLayout,
     )
-    let second = try NovelTextLayout.renderedPages(
+    let second = try NovelTextLayout.layout(
         document: document,
         settings: settings,
         layout: layout,
-        viewportPageLayout: viewportPageLayout,
-        usesViewportIndexCache: true
+        viewportSurfaceLayout: viewportSurfaceLayout,
     )
 
-    #expect(layoutPassCount.value == 1)
+    #expect(layoutPassCount.value == 2)
     #expect(first.viewportIndex == second.viewportIndex)
-    #expect(first.viewportIndex.pages == second.viewportIndex.pages)
+    #expect(first.viewportIndex.surfaces == second.viewportIndex.surfaces)
 }
 
 @Test func novelTextLayoutInvalidatesCachedNovelTextViewportIndexForSettingsAndLayoutChanges() async throws {
@@ -1467,31 +1622,28 @@ private final class StubURLProtocol: URLProtocol {
         fetchedAt: Date(timeIntervalSince1970: 1)
     )
     let layoutPassCount = LockedCounter()
-    let viewportPageLayout: NovelTextViewportPageLayout = { context, _, _ in
+    let viewportSurfaceLayout: NovelTextViewportSurfaceLayout = { context, _, _ in
         layoutPassCount.increment()
-        return [NovelTextViewportDocumentPageRange(startOffset: 0, endOffset: context.document.text.count)]
+        return [NovelTextViewportDocumentSurfaceRange(startOffset: 0, endOffset: context.document.text.count)]
     }
 
-    _ = try NovelTextLayout.renderedPages(
+    _ = try NovelTextLayout.layout(
         document: document,
         settings: ReaderAppearanceSettings(readingMode: .paged),
         layout: ReaderContainerLayout(width: 390, height: 844),
-        viewportPageLayout: viewportPageLayout,
-        usesViewportIndexCache: true
+        viewportSurfaceLayout: viewportSurfaceLayout,
     )
-    _ = try NovelTextLayout.renderedPages(
+    _ = try NovelTextLayout.layout(
         document: document,
         settings: ReaderAppearanceSettings(fontScale: 1.2, readingMode: .paged),
         layout: ReaderContainerLayout(width: 390, height: 844),
-        viewportPageLayout: viewportPageLayout,
-        usesViewportIndexCache: true
+        viewportSurfaceLayout: viewportSurfaceLayout,
     )
-    _ = try NovelTextLayout.renderedPages(
+    _ = try NovelTextLayout.layout(
         document: document,
         settings: ReaderAppearanceSettings(readingMode: .paged),
         layout: ReaderContainerLayout(width: 320, height: 568),
-        viewportPageLayout: viewportPageLayout,
-        usesViewportIndexCache: true
+        viewportSurfaceLayout: viewportSurfaceLayout,
     )
 
     #expect(layoutPassCount.value == 3)
@@ -1508,27 +1660,25 @@ private final class StubURLProtocol: URLProtocol {
     let settings = ReaderAppearanceSettings(readingMode: .paged)
     let layout = ReaderContainerLayout(width: 390, height: 844)
 
-    #expect(throws: NovelTextLayoutFailure.unableToLayoutText) {
-        _ = try NovelTextLayout.renderedPages(
+    #expect(throws: NovelTextLayoutFailure.textKitIndexing) {
+        _ = try NovelTextLayout.layout(
             document: document,
             settings: settings,
             layout: layout,
-            viewportPageLayout: { _, _, _ in [] },
-            usesViewportIndexCache: true
+            viewportSurfaceLayout: { _, _, _ in [] },
         )
     }
 
-    let pagination = try NovelTextLayout.renderedPages(
+    let pagination = try NovelTextLayout.layout(
         document: document,
         settings: settings,
         layout: layout,
-        viewportPageLayout: { context, _, _ in
-            [NovelTextViewportDocumentPageRange(startOffset: 0, endOffset: context.document.text.count)]
+        viewportSurfaceLayout: { context, _, _ in
+            [NovelTextViewportDocumentSurfaceRange(startOffset: 0, endOffset: context.document.text.count)]
         },
-        usesViewportIndexCache: true
     )
 
-    #expect(pagination.viewportIndex.pages.count == 1)
+    #expect(pagination.viewportIndex.surfaces.count == 1)
 }
 
 #if canImport(AppKit) && !canImport(UIKit)
@@ -1541,12 +1691,12 @@ private final class StubURLProtocol: URLProtocol {
         segments: [.text(text, chapterTitle: nil)]
     )
 
-    #expect(throws: NovelTextLayoutFailure.unableToLayoutText) {
-        _ = try NovelTextLayout.renderedPages(
+    #expect(throws: NovelTextLayoutFailure.textKitIndexing) {
+        _ = try NovelTextLayout.layout(
             document: document,
             settings: ReaderAppearanceSettings(readingMode: .paged),
             layout: ReaderContainerLayout(width: 320, height: 568),
-            viewportPageLayout: { _, _, _ in [] }
+            viewportSurfaceLayout: { _, _, _ in [] }
         )
     }
 }
@@ -1560,12 +1710,12 @@ private final class StubURLProtocol: URLProtocol {
         segments: [.text(text, chapterTitle: nil)]
     )
 
-    #expect(throws: NovelTextLayoutFailure.unableToLayoutText) {
-        _ = try NovelTextLayout.renderedPages(
+    #expect(throws: NovelTextLayoutFailure.textKitIndexing) {
+        _ = try NovelTextLayout.layout(
             document: document,
             settings: ReaderAppearanceSettings(readingMode: .vertical),
             layout: ReaderContainerLayout(width: 320, height: 568, readingMode: .vertical),
-            viewportPageLayout: { _, _, _ in [] }
+            viewportSurfaceLayout: { _, _, _ in [] }
         )
     }
 }
@@ -1584,12 +1734,12 @@ private final class StubURLProtocol: URLProtocol {
     let settings = ReaderAppearanceSettings(readingMode: .paged)
     let layout = ReaderContainerLayout(width: 260, height: 220)
 
-    let pagination = try NovelTextLayout.renderedPages(
+    let pagination = try NovelTextLayout.layout(
         document: document,
         settings: settings,
         layout: layout
     )
-    let ranges = pagination.viewportIndex.pages.flatMap(\.ranges)
+    let ranges = pagination.viewportIndex.surfaces.flatMap(\.ranges)
 
     #expect(!ranges.isEmpty)
     #expect(ranges.first?.startOffset == 0)
@@ -1610,12 +1760,12 @@ private final class StubURLProtocol: URLProtocol {
     let settings = ReaderAppearanceSettings(readingMode: .vertical)
     let layout = ReaderContainerLayout(width: 260, height: 220, readingMode: .vertical)
 
-    let pagination = try NovelTextLayout.renderedPages(
+    let pagination = try NovelTextLayout.layout(
         document: document,
         settings: settings,
         layout: layout
     )
-    let ranges = pagination.viewportIndex.pages.flatMap(\.ranges)
+    let ranges = pagination.viewportIndex.surfaces.flatMap(\.ranges)
 
     #expect(!ranges.isEmpty)
     #expect(ranges.first?.startOffset == 0)
@@ -1634,8 +1784,8 @@ private final class StubURLProtocol: URLProtocol {
     let settings = ReaderAppearanceSettings(readingMode: .paged)
     let layout = ReaderContainerLayout(width: 320, height: 568)
 
-    let pagination = try NovelTextLayout.renderedPages(document: document, settings: settings, layout: layout)
-    let ranges = pagination.viewportIndex.pages.flatMap(\.ranges)
+    let pagination = try NovelTextLayout.layout(document: document, settings: settings, layout: layout)
+    let ranges = pagination.viewportIndex.surfaces.flatMap(\.ranges)
 
     #expect(ranges.first?.startOffset == 0)
     #expect(ranges.last?.endOffset == text.count)
@@ -1660,7 +1810,7 @@ private final class StubURLProtocol: URLProtocol {
         settings: ReaderAppearanceSettings(readingMode: .paged),
         layout: layout
     )
-    let textPages = result.viewportIndex.pages.filter { !$0.ranges.isEmpty }
+    let textPages = result.viewportIndex.surfaces.filter { !$0.ranges.isEmpty }
 
     #expect(textPages.count > 1)
     for page in textPages {
@@ -1680,37 +1830,37 @@ private final class StubURLProtocol: URLProtocol {
     }
 }
 
-@Test func readerPagedFragmentPartitionerMovesCrossingLineToNextPage() throws {
-    let pages = ReaderPagedFragmentPartitioner.partition(
+@Test func novelTextSurfaceFragmentPartitionerMovesCrossingLineToNextSurface() throws {
+    let surfaces = NovelTextSurfaceFragmentPartitioner.partition(
         [
-            ReaderPagedLayoutSegment(
+            NovelTextSurfaceLayoutFragment(
                 characterRange: NSRange(location: 0, length: 10),
                 rect: CGRect(x: 0, y: 0, width: 200, height: 35)
             ),
-            ReaderPagedLayoutSegment(
+            NovelTextSurfaceLayoutFragment(
                 characterRange: NSRange(location: 10, length: 10),
                 rect: CGRect(x: 0, y: 40, width: 200, height: 35)
             ),
-            ReaderPagedLayoutSegment(
+            NovelTextSurfaceLayoutFragment(
                 characterRange: NSRange(location: 20, length: 10),
                 rect: CGRect(x: 0, y: 80, width: 200, height: 35)
             )
         ],
-        pageHeight: 100
+        surfaceHeight: 100
     )
 
-    #expect(pages.count == 2)
-    #expect(pages.allSatisfy { $0.clipRect.height <= 100 })
-    let firstPage = try #require(pages.first)
-    let secondPage = try #require(pages.dropFirst().first)
-    #expect(firstPage.characterRange == NSRange(location: 0, length: 20))
-    #expect(secondPage.characterRange == NSRange(location: 20, length: 10))
+    #expect(surfaces.count == 2)
+    #expect(surfaces.allSatisfy { $0.clipRect.height <= 100 })
+    let firstSurface = try #require(surfaces.first)
+    let secondSurface = try #require(surfaces.dropFirst().first)
+    #expect(firstSurface.characterRange == NSRange(location: 0, length: 20))
+    #expect(secondSurface.characterRange == NSRange(location: 20, length: 10))
 }
 
 @Test func novelTextViewportDrawingClipsToFrozenPageGeometry() {
     let clipRect = NovelTextViewportDrawingGeometry.clipRect(
         bounds: CGRect(x: 0, y: 0, width: 361, height: 669),
-        pageOriginY: 1_000,
+        surfaceOriginY: 1_000,
         documentClipMaxY: 1_629.64
     )
 
@@ -1720,13 +1870,13 @@ private final class StubURLProtocol: URLProtocol {
     #expect(
         NovelTextViewportDrawingGeometry.clipRect(
             bounds: CGRect(x: 0, y: 0, width: 361, height: 669),
-            pageOriginY: 1_000,
+            surfaceOriginY: 1_000,
             documentClipMaxY: nil
         ) == CGRect(x: 0, y: 0, width: 361, height: 669)
     )
 }
 
-@Test func novelTextLayoutPagedViewportPageRangeFailureDoesNotUseEstimatedFallback() async throws {
+@Test func novelTextLayoutPagedViewportSurfaceRangeFailureDoesNotUseEstimatedFallback() async throws {
     let text = String(repeating: "TextKit 2 failure should not fall back. ", count: 40)
     let document = ReaderPageDocument(
         threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=65&mobile=2")),
@@ -1735,12 +1885,12 @@ private final class StubURLProtocol: URLProtocol {
         segments: [.text(text, chapterTitle: "第一章")]
     )
 
-    #expect(throws: NovelTextLayoutFailure.unableToLayoutText) {
-        _ = try NovelTextLayout.renderedPages(
+    #expect(throws: NovelTextLayoutFailure.textKitIndexing) {
+        _ = try NovelTextLayout.layout(
             document: document,
             settings: ReaderAppearanceSettings(readingMode: .paged),
             layout: ReaderContainerLayout(width: 320, height: 568),
-            viewportPageLayout: { _, _, _ in [] }
+            viewportSurfaceLayout: { _, _, _ in [] }
         )
     }
 }
@@ -1755,12 +1905,12 @@ private final class StubURLProtocol: URLProtocol {
         ]
     )
 
-    #expect(throws: NovelTextLayoutFailure.unableToLayoutText) {
-        _ = try NovelTextLayout.renderedPages(
+    #expect(throws: NovelTextLayoutFailure.textKitIndexing) {
+        _ = try NovelTextLayout.layout(
             document: document,
             settings: ReaderAppearanceSettings(readingMode: .paged),
             layout: ReaderContainerLayout(width: 320, height: 568),
-            viewportPageLayout: { _, _, _ in [] }
+            viewportSurfaceLayout: { _, _, _ in [] }
         )
     }
 }
@@ -1774,12 +1924,12 @@ private final class StubURLProtocol: URLProtocol {
         segments: [.text(text, chapterTitle: "第一章")]
     )
 
-    #expect(throws: NovelTextLayoutFailure.unableToLayoutText) {
-        _ = try NovelTextLayout.renderedPages(
+    #expect(throws: NovelTextLayoutFailure.textKitIndexing) {
+        _ = try NovelTextLayout.layout(
             document: document,
             settings: ReaderAppearanceSettings(readingMode: .vertical),
             layout: ReaderContainerLayout(width: 320, height: 568),
-            viewportPageLayout: { _, _, _ in [] }
+            viewportSurfaceLayout: { _, _, _ in [] }
         )
     }
 }
@@ -1794,12 +1944,12 @@ private final class StubURLProtocol: URLProtocol {
         ]
     )
 
-    #expect(throws: NovelTextLayoutFailure.unableToLayoutText) {
-        _ = try NovelTextLayout.renderedPages(
+    #expect(throws: NovelTextLayoutFailure.textKitIndexing) {
+        _ = try NovelTextLayout.layout(
             document: document,
             settings: ReaderAppearanceSettings(readingMode: .vertical),
             layout: ReaderContainerLayout(width: 320, height: 568),
-            viewportPageLayout: { _, _, _ in [] }
+            viewportSurfaceLayout: { _, _, _ in [] }
         )
     }
 }
@@ -1812,7 +1962,7 @@ private final class StubURLProtocol: URLProtocol {
     #expect(substrings == ["\n\n新段落正文。", "\n第三段正文。"])
 }
 
-#if canImport(UIKit)
+#if canImport(UIKit) || canImport(AppKit)
 @Test func readerAttributedTextFactoryUsesParagraphStyleForTitleAndBody() throws {
     let pointSize = 24.0
     let attributedText = ReaderAttributedTextFactory.makeAttributedText(
@@ -1836,8 +1986,8 @@ private final class StubURLProtocol: URLProtocol {
         ) as? NSParagraphStyle
     )
 
-    #expect(titleStyle.lineSpacing == 9.6)
-    #expect(bodyStyle.lineSpacing == 9.6)
+    #expect(abs(titleStyle.lineSpacing - 9.6) < 0.001)
+    #expect(abs(bodyStyle.lineSpacing - 9.6) < 0.001)
 }
 
 @Test func readerAttributedTextFactoryIndentsBodyButNotTitleOrContinuationSlices() throws {
@@ -1890,6 +2040,120 @@ private final class StubURLProtocol: URLProtocol {
 
     #expect(continuationStyle.firstLineHeadIndent == 0)
     #expect(newParagraphStyle.firstLineHeadIndent == 48)
+}
+
+@Test func novelAttributedDocumentUsesPreparedSemanticRunsAndMatchesViewportText() throws {
+    let document = ReaderPageDocument(
+        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=301&mobile=2")),
+        view: 1,
+        maxView: 1,
+        segments: [
+            .text("第一章\n第一段正文。", chapterTitle: "第一章"),
+            .text("第二段正文。", chapterTitle: nil),
+        ]
+    )
+    let preparedInput = try NovelTextLayout.prepareInput(
+        document: document,
+        settings: ReaderAppearanceSettings(indentsParagraphFirstLine: true),
+        layout: ReaderContainerLayout(width: 390, height: 844)
+    )
+    let attributedDocument = ReaderAttributedTextFactory.makeAttributedDocument(
+        from: preparedInput
+    )
+    let titleStyle = try #require(
+        attributedDocument.attribute(.paragraphStyle, at: 0, effectiveRange: nil) as? NSParagraphStyle
+    )
+    let bodyStyle = try #require(
+        attributedDocument.attribute(
+            .paragraphStyle,
+            at: "第一章\n".count,
+            effectiveRange: nil
+        ) as? NSParagraphStyle
+    )
+
+    #expect(attributedDocument.string == preparedInput.viewportContextSeed.document.text)
+    #expect(titleStyle.firstLineHeadIndent == 0)
+    #expect(bodyStyle.firstLineHeadIndent > 0)
+}
+
+@Test func novelAttributedDocumentStylesChapterTitleFromSemanticRangeOnly() throws {
+    let document = ReaderPageDocument(
+        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=303&mobile=2")),
+        view: 1,
+        maxView: 1,
+        segments: [
+            .text("真正标题\n正文。", chapterTitle: "旧标题不应参与主文档样式")
+        ],
+        segmentSemantics: [
+            ReaderSegmentSemantics(
+                chapterIdentity: NovelChapterIdentity(rawValue: "chapter-1"),
+                textSegmentIdentity: NovelTextSegmentIdentity(rawValue: "text-1"),
+                chapterTitleRange: ReaderCharacterRange(location: 0, length: "真正标题".count)
+            )
+        ]
+    )
+    let preparedInput = try NovelTextLayout.prepareInput(
+        document: document,
+        settings: ReaderAppearanceSettings(indentsParagraphFirstLine: true),
+        layout: ReaderContainerLayout(width: 390, height: 844)
+    )
+    let attributedDocument = ReaderAttributedTextFactory.makeAttributedDocument(
+        from: preparedInput
+    )
+    let titleStyle = try #require(
+        attributedDocument.attribute(.paragraphStyle, at: 0, effectiveRange: nil) as? NSParagraphStyle
+    )
+    let bodyStyle = try #require(
+        attributedDocument.attribute(
+            .paragraphStyle,
+            at: "真正标题\n".count,
+            effectiveRange: nil
+        ) as? NSParagraphStyle
+    )
+
+    #expect(attributedDocument.string == "真正标题\n正文。")
+    #expect(titleStyle.firstLineHeadIndent == 0)
+    #expect(bodyStyle.firstLineHeadIndent > 0)
+}
+#endif
+
+@Test func novelTextLayoutRejectsEmptySemanticDocumentBeforeRuntimeAllocation() throws {
+    let document = ReaderPageDocument(
+        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=302&mobile=2")),
+        view: 1,
+        maxView: 1,
+        segments: [.text(" \n ", chapterTitle: nil)]
+    )
+
+    #expect(throws: NovelTextLayoutFailure.semanticDocumentPreparation) {
+        _ = try NovelTextLayout.prepareInput(
+            document: document,
+            settings: ReaderAppearanceSettings(),
+            layout: ReaderContainerLayout(width: 390, height: 844)
+        )
+    }
+}
+
+#if canImport(UIKit) || canImport(AppKit)
+@Test func novelTextLayoutCommitsSemanticLayoutFontPlatformAndTextKitFingerprints() throws {
+    let document = ReaderPageDocument(
+        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=303&mobile=2")),
+        view: 1,
+        maxView: 1,
+        segments: [.text("第一章\n指纹正文。", chapterTitle: "第一章")]
+    )
+    let result = try NovelTextLayout.layout(
+        document: document,
+        settings: ReaderAppearanceSettings(),
+        layout: ReaderContainerLayout(width: 390, height: 844)
+    )
+
+    #expect(!result.fingerprints.semantic.isEmpty)
+    #expect(!result.fingerprints.text.isEmpty)
+    #expect(!result.fingerprints.layout.isEmpty)
+    #expect(!result.fingerprints.font.isEmpty)
+    #expect(!result.fingerprints.platform.isEmpty)
+    #expect(result.fingerprints.textKitImplementation == "NSTextLayoutManager-TextKit2-v1")
 }
 #endif
 
@@ -2424,6 +2688,24 @@ private func functionBody(named name: String, in source: String) -> String? {
         index = source.index(after: index)
     }
     return nil
+}
+
+private func readerTextSemantics(
+    chapterID: String,
+    textID: String,
+    titleRangeLength: Int? = nil
+) -> ReaderSegmentSemantics {
+    ReaderSegmentSemantics(
+        chapterIdentity: NovelChapterIdentity(rawValue: chapterID),
+        textSegmentIdentity: NovelTextSegmentIdentity(rawValue: textID),
+        chapterTitleRange: titleRangeLength.map { ReaderCharacterRange(location: 0, length: $0) }
+    )
+}
+
+private func readerImageSemantics(chapterID: String) -> ReaderSegmentSemantics {
+    ReaderSegmentSemantics(
+        chapterIdentity: NovelChapterIdentity(rawValue: chapterID)
+    )
 }
 
 private final class LockedCounter: @unchecked Sendable {

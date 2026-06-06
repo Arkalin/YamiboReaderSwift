@@ -52,7 +52,7 @@ final class MangaReaderModelTests: XCTestCase {
 
         let favorite = await modelTestFavoriteStore?.favorite(for: originalURL)
         XCTAssertEqual(favorite?.type, .manga)
-        XCTAssertEqual(favorite?.lastPage, 1)
+        XCTAssertEqual(favorite?.mangaPageIndex, 1)
         XCTAssertEqual(favorite?.lastChapter, "第1话")
     }
 
@@ -1445,7 +1445,7 @@ final class MangaReaderModelTests: XCTestCase {
         let staleFavorite = Favorite(
             title: "漫画收藏",
             url: originalURL,
-            lastPage: 1,
+            mangaPageIndex: 1,
             type: .manga,
             lastMangaURL: staleChapterURL
         )
@@ -1518,16 +1518,15 @@ final class MangaReaderModelTests: XCTestCase {
         let favorite = Favorite(
             title: "小说收藏",
             url: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=813&mobile=2")!,
-            lastPage: 126,
+            mangaPageIndex: 126,
             lastView: 1,
             lastChapter: "第一章",
             authorID: "42",
             novelResumePoint: ReaderResumePoint(
                 view: 1,
+                displayedTextOffset: 127,
                 chapterOrdinal: 0,
                 chapterTitle: "第一章",
-                segmentIndex: 3,
-                segmentOffset: 127,
                 segmentProgress: 0.25,
                 authorID: "42",
                 readingModeHint: .vertical
@@ -1554,17 +1553,17 @@ final class MangaReaderModelTests: XCTestCase {
         }
 
         XCTAssertNil(context.initialView)
-        XCTAssertNil(context.initialPage)
         XCTAssertEqual(context.authorID, "42")
+        XCTAssertEqual(context.initialResumePoint?.displayedTextOffset, 127)
     }
 
-    func testFavoritesViewModelStartsNovelFromFirstPage() async throws {
+    func testFavoritesViewModelStartsNovelWithoutResumePosition() async throws {
         let keyPrefix = UUID().uuidString
         let favoriteStore = FavoriteStore(key: "\(keyPrefix).favorites")
         let favorite = Favorite(
             title: "小说收藏",
             url: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=814&mobile=2")!,
-            lastPage: 126,
+            mangaPageIndex: 126,
             lastView: 3,
             type: .novel
         )
@@ -1588,22 +1587,21 @@ final class MangaReaderModelTests: XCTestCase {
         }
 
         XCTAssertEqual(context.initialView, 1)
-        XCTAssertEqual(context.initialPage, 0)
+        XCTAssertNil(context.initialResumePoint)
     }
 
     func testNovelFavoriteDetailLinesKeepDisplayProgressText() {
         let favorite = Favorite(
             title: "小说收藏",
             url: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=815&mobile=2")!,
-            lastPage: 126,
+            mangaPageIndex: 126,
             lastView: 1,
             lastChapter: "第一章",
             novelResumePoint: ReaderResumePoint(
                 view: 1,
+                displayedTextOffset: 400,
                 chapterOrdinal: 0,
                 chapterTitle: "第一章",
-                segmentIndex: 5,
-                segmentOffset: 400,
                 segmentProgress: 0.4,
                 authorID: nil,
                 readingModeHint: .vertical
@@ -1613,7 +1611,7 @@ final class MangaReaderModelTests: XCTestCase {
 
         XCTAssertEqual(
             favoriteDetailLines(for: favorite),
-            ["第一章", "读至第 127 页 · 网页第 1 页"]
+            ["第一章"]
         )
     }
 
@@ -1759,11 +1757,11 @@ final class MangaReaderModelTests: XCTestCase {
 
         try await waitFor {
             let favorite = await modelTestFavoriteStore?.favorite(for: originalURL)
-            return favorite?.lastPage == 3
+            return favorite?.mangaPageIndex == 3
         }
 
         let favorite = await modelTestFavoriteStore?.favorite(for: originalURL)
-        XCTAssertEqual(favorite?.lastPage, 3)
+        XCTAssertEqual(favorite?.mangaPageIndex, 3)
         XCTAssertEqual(favorite?.lastChapter, "第1话")
     }
 
@@ -2075,7 +2073,7 @@ final class MangaReaderModelTests: XCTestCase {
 
         await model.saveProgress()
         let favorite = await modelTestFavoriteStore?.favorite(for: originalURL)
-        XCTAssertEqual(favorite?.lastPage, 4)
+        XCTAssertEqual(favorite?.mangaPageIndex, 4)
     }
 
     func testRelativePageJumpEmitsViewportRequestsForPagedTapNavigation() async throws {

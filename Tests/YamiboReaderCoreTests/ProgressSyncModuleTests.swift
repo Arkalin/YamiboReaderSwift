@@ -7,13 +7,13 @@ import Testing
     let sync = ProgressSyncModule(adapter: adapter, debounceNanoseconds: 100_000_000)
     let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=2&mobile=2")!
 
-    await sync.queue(.novel(NovelReadingPosition(threadURL: threadURL, view: 1, page: 1)))
-    try await sync.flush(.novel(NovelReadingPosition(threadURL: threadURL, view: 1, page: 3)))
+    await sync.queue(.novel(NovelReadingPosition(threadURL: threadURL, view: 1)))
+    try await sync.flush(.novel(NovelReadingPosition(threadURL: threadURL, view: 3)))
     try await Task.sleep(nanoseconds: 140_000_000)
 
     let saved = await adapter.savedPositions
     #expect(saved == [
-        .novel(NovelReadingPosition(threadURL: threadURL, view: 1, page: 3))
+        .novel(NovelReadingPosition(threadURL: threadURL, view: 3))
     ])
 }
 
@@ -22,7 +22,7 @@ import Testing
     let sync = ProgressSyncModule(adapter: adapter, debounceNanoseconds: 20_000_000)
     let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=3&mobile=2")!
 
-    await sync.queue(.novel(NovelReadingPosition(threadURL: threadURL, view: 1, page: 1)))
+    await sync.queue(.novel(NovelReadingPosition(threadURL: threadURL, view: 1)))
     await sync.cancelPending()
     try await Task.sleep(nanoseconds: 60_000_000)
 
@@ -34,7 +34,7 @@ import Testing
     let adapter = RecordingProgressSyncAdapter()
     let sync = ProgressSyncModule(adapter: adapter, debounceNanoseconds: 20_000_000)
     let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=4&mobile=2")!
-    let position = ProgressSyncPosition.novel(NovelReadingPosition(threadURL: threadURL, view: 1, page: 4))
+    let position = ProgressSyncPosition.novel(NovelReadingPosition(threadURL: threadURL, view: 4))
 
     await sync.queue(position)
     try await Task.sleep(nanoseconds: 60_000_000)
@@ -52,7 +52,7 @@ import Testing
     let sync = ProgressSyncModule(adapter: adapter, debounceNanoseconds: 0)
     let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=6&mobile=2")!
 
-    try await sync.flush(.novel(NovelReadingPosition(threadURL: threadURL, view: 1, page: 6)))
+    try await sync.flush(.novel(NovelReadingPosition(threadURL: threadURL, view: 6)))
 
     let favorites = await favoriteStore.loadFavorites()
     #expect(favorites.isEmpty)
@@ -74,9 +74,17 @@ import Testing
     try await sync.flush(.novel(NovelReadingPosition(
         threadURL: novelURL,
         view: 2,
-        page: 3,
         chapterTitle: "第二章",
-        authorID: "42"
+        authorID: "42",
+        resumePoint: ReaderResumePoint(
+            view: 2,
+            displayedTextOffset: 120,
+            chapterOrdinal: 1,
+            chapterTitle: "第二章",
+            segmentProgress: 0.5,
+            authorID: "42",
+            readingModeHint: .paged
+        )
     )))
     try await sync.flush(.manga(MangaProgressReadingPosition(
         threadURL: mangaURL,
@@ -88,12 +96,13 @@ import Testing
     let novel = await favoriteStore.favorite(for: novelURL)
     let manga = await favoriteStore.favorite(for: mangaURL)
     #expect(novel?.lastView == 2)
-    #expect(novel?.lastPage == 3)
+    #expect(novel?.mangaPageIndex == 0)
     #expect(novel?.lastChapter == "第二章")
     #expect(novel?.authorID == "42")
+    #expect(novel?.novelResumePoint?.displayedTextOffset == 120)
     #expect(manga?.lastMangaURL == chapterURL)
     #expect(manga?.lastChapter == "第9话")
-    #expect(manga?.lastPage == 4)
+    #expect(manga?.mangaPageIndex == 4)
 }
 
 private actor RecordingProgressSyncAdapter: ProgressSyncAdapter {
