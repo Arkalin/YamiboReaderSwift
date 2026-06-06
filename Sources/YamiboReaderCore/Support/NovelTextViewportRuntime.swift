@@ -1161,6 +1161,14 @@ final class NovelTextViewportRuntimeOwner {
         )
         textViewportLayoutController.layoutViewport()
     }
+
+    private func prepareSurfaceForDrawing(_ surfaceOrdinal: Int) {
+        guard !visibleSurfaceOrdinals.contains(surfaceOrdinal) else { return }
+        visibleSurfaceOrdinals = preheatedSurfaceOrdinals(around: [surfaceOrdinal])
+        viewportUpdateCount += 1
+        rematerializedSurfaceCount = visibleSurfaceOrdinals.count
+        updateTextKitViewport()
+    }
 #endif
 
     func isCurrent(_ surfaceIdentity: NovelReaderSurfaceIdentity) -> Bool {
@@ -1346,6 +1354,7 @@ final class NovelTextViewportRuntimeOwner {
             staleDrawingAttemptCount += 1
             return
         }
+        prepareSurfaceForDrawing(surfaceOrdinal)
         guard
         let result,
         let textContentStorage,
