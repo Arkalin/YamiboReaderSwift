@@ -17,18 +17,8 @@ public struct ReaderProgressChapterTick: Equatable, Sendable {
 public final class ReaderContainerModel: ObservableObject {
     @Published public private(set) var isLoading = false
     @Published public private(set) var errorMessage: String?
-    @Published public private(set) var pages: [NovelTextViewportIndexPage] = []
-    @Published public private(set) var chapters: [ReaderChapter] = []
     @Published public private(set) var cachedViews: Set<Int> = []
-    @Published public private(set) var currentView = 1
-    @Published public private(set) var maxView = 1
-    @Published public private(set) var currentChapterTitle: String?
-    @Published public private(set) var currentContentSource: ReaderContentSource = .allPostsPage
-    @Published public private(set) var retainedChapterCount = 0
-    @Published public private(set) var filteredChapterCandidateCount = 0
-    @Published public var currentPageIndex = 0
-    @Published public private(set) var currentPageIntraProgress = 0.0
-    @Published public var settings = ReaderAppearanceSettings()
+    @Published private var bootstrapSettings = ReaderAppearanceSettings()
     @Published public var applePencilPageTurnSettings = ApplePencilPageTurnSettings()
     @Published public private(set) var sessionState = SessionState()
     @Published public private(set) var cacheOperationState = ReaderCacheOperationState()
@@ -36,15 +26,11 @@ public final class ReaderContainerModel: ObservableObject {
     @Published public private(set) var isLoadingMoreChapterComments = false
     @Published public private(set) var chapterCommentsLoadMoreError: String?
     @Published public private(set) var chapterCommentsRefreshError: String?
-    @Published public private(set) var pagedSpreads: [ReaderPagedSpread] = []
     @Published public private(set) var chapterDirectoryView: Int?
     @Published public private(set) var chapterDirectoryChapters: [ReaderChapter] = []
     @Published public private(set) var chapterDirectoryPageCount = 0
     @Published public private(set) var isLoadingChapterDirectory = false
     @Published public private(set) var chapterDirectoryError: String?
-    @Published public private(set) var viewportContext: NovelTextViewportContext?
-    @Published public private(set) var viewportIndex: NovelTextViewportIndex?
-    @Published public private(set) var viewportLayoutMetrics: NovelTextViewportLayoutMetrics?
     @Published public private(set) var readerPresentation: NovelReaderPresentation?
 
     public let context: ReaderLaunchContext
@@ -53,13 +39,9 @@ public final class ReaderContainerModel: ObservableObject {
     private var repository: ReaderRepository?
     private var readingWorkflow: NovelReadingWorkflow?
     private var layout: ReaderContainerLayout = .zero
-    private var currentDocument: ReaderPageDocument?
-    private var prefetchedDocument: ReaderPageDocument?
-    private var currentAuthorID: String?
-    private var currentDocumentPageCount = 0
-    private var prefetchedStartIndex: Int?
     private var usesPadPresentation = false
-    private let pagination: NovelTextPagination
+    private var chapterDirectoryAnchors: [Int: NovelChapterAnchor] = [:]
+    private let runtimeAdapter: (any NovelTextLayoutRuntimeAdapter)?
     private let progressSync: ProgressSyncModule
     private lazy var chapterCommentsModule = ReaderChapterCommentsModule(
         adapter: ReaderChapterCommentsModule.Adapter(
@@ -87,15 +69,35 @@ public final class ReaderContainerModel: ObservableObject {
     public init(
         context: ReaderLaunchContext,
         appContext: YamiboAppContext,
-        initialSettings: ReaderAppearanceSettings? = nil,
-        pagination: @escaping NovelTextPagination = NovelTextLayout.layout
+        initialSettings: ReaderAppearanceSettings? = nil
     ) {
         self.context = context
         self.appContext = appContext
         if let initialSettings {
-            settings = initialSettings
+            bootstrapSettings = initialSettings
         }
-        self.pagination = pagination
+        runtimeAdapter = nil
+        progressSync = ProgressSyncModule(
+            adapter: FavoriteLibraryProgressSyncAdapter(favoriteStore: appContext.favoriteStore)
+        )
+        cacheOperationModule.onChange = { [weak self] cachedViews, state in
+            self?.cachedViews = cachedViews
+            self?.cacheOperationState = state
+        }
+    }
+
+    package init(
+        context: ReaderLaunchContext,
+        appContext: YamiboAppContext,
+        initialSettings: ReaderAppearanceSettings? = nil,
+        runtimeAdapter: any NovelTextLayoutRuntimeAdapter
+    ) {
+        self.context = context
+        self.appContext = appContext
+        if let initialSettings {
+            bootstrapSettings = initialSettings
+        }
+        self.runtimeAdapter = runtimeAdapter
         progressSync = ProgressSyncModule(
             adapter: FavoriteLibraryProgressSyncAdapter(favoriteStore: appContext.favoriteStore)
         )
@@ -109,11 +111,67 @@ public final class ReaderContainerModel: ObservableObject {
         context.threadTitle.isEmpty ? L10n.string("reader.title") : context.threadTitle
     }
 
+    public var settings: ReaderAppearanceSettings {
+        readerPresentation?.committedSettings ?? bootstrapSettings
+    }
+
     public var isTwoPageSpreadActive: Bool {
         settings.readingMode == .paged &&
             settings.showsTwoPagesInLandscapeOnPad &&
             usesPadPresentation &&
             layout.width > layout.height
+    }
+
+    public var readerSurfaces: [NovelReaderSurface] {
+        readerPresentation?.surfaces ?? []
+    }
+
+    public var chapters: [ReaderChapter] {
+        readerPresentation?.chapters ?? []
+    }
+
+    public var currentView: Int {
+        readerPresentation?.readingState.currentView ?? 1
+    }
+
+    public var maxView: Int {
+        readerPresentation?.readingState.maxView ?? 1
+    }
+
+    public var currentChapterTitle: String? {
+        readerPresentation?.readingState.currentChapterTitle
+    }
+
+    private var currentAuthorID: String? {
+        readerPresentation?.readingState.authorID
+    }
+
+    public var currentContentSource: ReaderContentSource {
+        readerPresentation?.currentContentSource ?? .allPostsPage
+    }
+
+    public var retainedChapterCount: Int {
+        readerPresentation?.retainedChapterCount ?? 0
+    }
+
+    public var filteredChapterCandidateCount: Int {
+        readerPresentation?.filteredChapterCandidateCount ?? 0
+    }
+
+    public var selectedSurfaceIndex: Int {
+        normalizedPagedSurfaceIndex(readerPresentation?.selectedSurfaceIndex ?? 0)
+    }
+
+    public var currentSurfaceIntraProgress: Double {
+        readerPresentation?.readingState.currentSurfaceIntraProgress ?? 0
+    }
+
+    package var presentationSpreads: [NovelReaderPresentationSpread] {
+        readerPresentation?.spreads ?? []
+    }
+
+    package var novelReaderDebugState: NovelReadingWorkflowDebugState? {
+        readingWorkflow?.debugState
     }
 
     public var progressText: String {
@@ -135,12 +193,12 @@ public final class ReaderContainerModel: ObservableObject {
         return String(transformed.prefix(max(characterCount, 0)))
     }
 
-    public var renderedPageCount: Int {
-        max(pages.count, 1)
+    public var surfaceCount: Int {
+        max(readerSurfaces.count, 1)
     }
 
-    public var currentRenderedPage: Int {
-        min(max(currentPageIndex + 1, 1), renderedPageCount)
+    public var currentSurfaceNumber: Int {
+        min(max(selectedSurfaceIndex + 1, 1), surfaceCount)
     }
 
     public var currentProgressFraction: Double {
@@ -148,8 +206,8 @@ public final class ReaderContainerModel: ObservableObject {
             guard displayedPageCount > 1 else { return 0 }
             return Double(displayedPageIndex) / Double(displayedPageCount - 1)
         }
-        guard renderedPageCount > 1 else { return 0 }
-        return Double(currentPageIndex) / Double(renderedPageCount - 1)
+        guard surfaceCount > 1 else { return 0 }
+        return Double(selectedSurfaceIndex) / Double(surfaceCount - 1)
     }
 
     public var currentProgressPercent: Int {
@@ -161,10 +219,10 @@ public final class ReaderContainerModel: ObservableObject {
     }
 
     public var progressChapterTicks: [ReaderProgressChapterTick] {
-        guard renderedPageCount > 1, !chapters.isEmpty else { return [] }
+        guard surfaceCount > 1, !chapters.isEmpty else { return [] }
 
         let currentIndex = currentChapterIndex
-        let maxPageIndex = max(renderedPageCount - 1, 1)
+        let maxPageIndex = max(surfaceCount - 1, 1)
         var seenStartIndexes = Set<Int>()
 
         return chapters.enumerated().compactMap { index, chapter in
@@ -181,7 +239,7 @@ public final class ReaderContainerModel: ObservableObject {
     public func progressSliderLabelText(
         isEditing: Bool,
         sliderValue: Double,
-        targetRenderedPageIndex: Int
+        targetSurfaceIndex: Int
     ) -> String {
         if settings.readingMode == .vertical {
             guard isEditing else { return currentProgressPercentText }
@@ -190,14 +248,14 @@ public final class ReaderContainerModel: ObservableObject {
         }
 
         guard isEditing else {
-            return "\(currentRenderedPage) / \(renderedPageCount)"
+            return "\(currentSurfaceNumber) / \(surfaceCount)"
         }
-        let page = min(max(targetRenderedPageIndex + 1, 1), renderedPageCount)
-        return "\(page) / \(renderedPageCount)"
+        let page = min(max(targetSurfaceIndex + 1, 1), surfaceCount)
+        return "\(page) / \(surfaceCount)"
     }
 
     public var currentChapterCommentTarget: ReaderChapterCommentTarget? {
-        currentRenderedPageMetadata?.chapterCommentTarget
+        selectedSurface?.chapterCommentTarget
     }
 
     public var currentWebViewText: String {
@@ -217,7 +275,7 @@ public final class ReaderContainerModel: ObservableObject {
     }
 
     public var visibleChapterDirectoryPageCount: Int {
-        chapterDirectoryView == nil ? renderedPageCount : max(chapterDirectoryPageCount, 1)
+        chapterDirectoryView == nil ? surfaceCount : max(chapterDirectoryPageCount, 1)
     }
 
     public var previousChapterDirectoryWebView: Int? {
@@ -242,34 +300,38 @@ public final class ReaderContainerModel: ObservableObject {
         return currentChapterIndex
     }
 
-    public var pagedSelectionIndex: Int {
-        guard isTwoPageSpreadActive else { return currentPageIndex }
-        return spreadIndex(forPageIndex: currentPageIndex)
+    public var pagedViewportSelectionIndex: Int {
+        guard isTwoPageSpreadActive else { return selectedSurfaceIndex }
+        return spreadIndex(forSurfaceIndex: selectedSurfaceIndex)
     }
 
-    public func updatePagedPresentationEnvironment(isPad: Bool) {
+    public func commitNovelTextPresentationEnvironment(isPad: Bool) async {
         guard usesPadPresentation != isPad else { return }
-        usesPadPresentation = isPad
-        guard settings.readingMode == .paged else { return }
+        let previousUsesPadPresentation = usesPadPresentation
+        guard settings.readingMode == .paged,
+              readingWorkflow?.state != nil else {
+            usesPadPresentation = isPad
+            return
+        }
         do {
-            guard let state = try readingWorkflow?.updatePagedPresentationEnvironment(isPad: isPad) else { return }
+            guard let state = try await requestRuntimeUpdate(
+                settings: settings,
+                layout: layout,
+                usesPadPresentation: isPad
+            ) else { return }
+            usesPadPresentation = isPad
             syncFromWorkflowState(state)
         } catch {
+            usesPadPresentation = previousUsesPadPresentation
             errorMessage = error.localizedDescription
         }
     }
 
-    public func updatePagedSelection(_ selectionIndex: Int) {
-        let targetPageIndex = isTwoPageSpreadActive
-            ? leftPageIndex(forSpreadIndex: selectionIndex)
+    public func selectPagedViewportIndex(_ selectionIndex: Int) {
+        let targetSurfaceIndex = isTwoPageSpreadActive
+            ? leftSurfaceIndex(forSpreadIndex: selectionIndex)
             : selectionIndex
-        updateCurrentPage(targetPageIndex)
-    }
-
-    public func novelTextViewportDisplayReference(
-        for pageIdentity: Int
-    ) -> NovelTextViewportDisplayReference? {
-        readingWorkflow?.displayReference(for: pageIdentity)
+        selectSurface(targetSurfaceIndex)
     }
 
     public func novelTextViewportDisplayReference(
@@ -278,44 +340,40 @@ public final class ReaderContainerModel: ObservableObject {
         readingWorkflow?.displayReference(for: surfaceIdentity)
     }
 
-    public func updateNovelTextViewportVisiblePageIdentities(_ pageIdentities: [Int]) {
-        readingWorkflow?.updateVisiblePageIdentities(pageIdentities)
-    }
-
     public func updateNovelTextViewportVisibleSurfaceIdentities(_ surfaceIdentities: [NovelReaderSurfaceIdentity]) {
         readingWorkflow?.updateVisibleSurfaceIdentities(surfaceIdentities)
     }
 
-    public func chapterTitle(forRenderedPageIndex pageIndex: Int) -> String? {
-        guard !pages.isEmpty else { return nil }
-        let clampedIndex = min(max(pageIndex, 0), max(pages.count - 1, 0))
-        return pages[clampedIndex].chapterTitle ?? chapters.last(where: { $0.startIndex <= clampedIndex })?.title
+    public func chapterTitle(forSurfaceIndex surfaceIndex: Int) -> String? {
+        guard !readerSurfaces.isEmpty else { return nil }
+        let clampedIndex = min(max(surfaceIndex, 0), max(readerSurfaces.count - 1, 0))
+        return readerSurfaces[clampedIndex].chapterTitle ?? chapters.last(where: { $0.startIndex <= clampedIndex })?.title
     }
 
-    public func progressChapterTickStartIndex(forRenderedPageIndex pageIndex: Int) -> Int? {
+    public func progressChapterTickStartIndex(forSurfaceIndex surfaceIndex: Int) -> Int? {
         guard !chapters.isEmpty else { return nil }
-        let clampedIndex = min(max(pageIndex, 0), max(renderedPageCount - 1, 0))
+        let clampedIndex = min(max(surfaceIndex, 0), max(surfaceCount - 1, 0))
         return chapters
-            .map { min(max($0.startIndex, 0), max(renderedPageCount - 1, 0)) }
+            .map { min(max($0.startIndex, 0), max(surfaceCount - 1, 0)) }
             .first { $0 == clampedIndex }
     }
 
-    public func targetRenderedPageIndex(forProgressValue value: Double) -> Int {
-        guard !pages.isEmpty else { return 0 }
+    public func targetSurfaceIndex(forProgressValue value: Double) -> Int {
+        guard !readerSurfaces.isEmpty else { return 0 }
 
         switch settings.readingMode {
         case .paged:
             let target = min(
                 max(Int(value.rounded()), 0),
-                max(pages.count - 1, 0)
+                max(readerSurfaces.count - 1, 0)
             )
-            return normalizedPagedPageIndex(target)
+            return normalizedPagedSurfaceIndex(target)
         case .vertical:
             let view = displayedView
-            let viewPageIndexes = pages.indices.filter { pages[$0].documentView == view }
+            let viewPageIndexes = readerSurfaces.indices.filter { readerSurfaces[$0].documentView == view }
             guard let firstPageIndex = viewPageIndexes.first,
                   viewPageIndexes.count > 1 else {
-                return pages.firstIndex(where: { $0.documentView == view }) ?? 0
+                return readerSurfaces.firstIndex(where: { $0.documentView == view }) ?? 0
             }
             let clampedPercent = min(max(value, 0), 100)
             let localPageIndex = min(
@@ -363,14 +421,11 @@ public final class ReaderContainerModel: ObservableObject {
     public func close() {
         readingWorkflow?.close()
         readingWorkflow = nil
-        currentDocument = nil
-        prefetchedDocument = nil
-        prefetchedStartIndex = nil
         readerPresentation = nil
     }
 
     public var currentChapterIndex: Int? {
-        chapters.lastIndex(where: { $0.startIndex <= currentPageIndex })
+        chapters.lastIndex(where: { $0.startIndex <= selectedSurfaceIndex })
     }
 
     public var hasPreviousChapter: Bool {
@@ -400,39 +455,44 @@ public final class ReaderContainerModel: ObservableObject {
         if repository == nil {
             repository = await appContext.makeReaderRepository()
             let appSettings = await appContext.settingsStore.load()
-            settings = appSettings.reader
+            bootstrapSettings = appSettings.reader
             applePencilPageTurnSettings = appSettings.applePencilPageTurn
             sessionState = await appContext.sessionStore.load()
             if let repository {
-                readingWorkflow = NovelReadingWorkflow(
-                    context: context,
-                    settings: settings,
-                    layout: layout,
-                    repository: repository,
-                    usesPadPresentation: usesPadPresentation,
-                    pagination: pagination
-                )
+                readingWorkflow = makeReadingWorkflow(repository: repository)
             }
         }
-        if pages.isEmpty {
+        if readerSurfaces.isEmpty {
             let favorite = await appContext.favoriteStore.favorite(for: context.threadURL)
             await startReadingWorkflow(
                 resumePoint: context.initialResumePoint ?? favorite?.novelResumePoint,
                 favoriteAuthorID: favorite?.authorID
             )
         } else {
-            if let state = try? readingWorkflow?.updateLayout(layout) {
+            if let state = try? await requestRuntimeUpdate(
+                settings: settings,
+                layout: layout,
+                usesPadPresentation: usesPadPresentation
+            ) {
                 syncFromWorkflowState(state)
             }
             await refreshCachedState()
         }
     }
 
-    public func updateLayout(_ layout: ReaderContainerLayout) {
+    public func commitNovelTextLayout(_ layout: ReaderContainerLayout) async {
         guard self.layout != layout else { return }
-        self.layout = layout
+        guard readingWorkflow?.state != nil else {
+            self.layout = layout
+            return
+        }
         do {
-            guard let state = try readingWorkflow?.updateLayout(layout) else { return }
+            guard let state = try await requestRuntimeUpdate(
+                settings: settings,
+                layout: layout,
+                usesPadPresentation: usesPadPresentation
+            ) else { return }
+            self.layout = layout
             syncFromWorkflowState(state)
         } catch {
             errorMessage = error.localizedDescription
@@ -442,7 +502,7 @@ public final class ReaderContainerModel: ObservableObject {
     public func loadCurrent(forceRefresh: Bool) async {
         await load(
             view: displayedView,
-            preferredPage: displayedPageIndex,
+            preferredSurfaceOrdinal: displayedPageIndex,
             preferredResumePoint: readingWorkflow?.captureNovelReadingPosition(),
             forceRefresh: forceRefresh
         )
@@ -453,77 +513,22 @@ public final class ReaderContainerModel: ObservableObject {
         guard target != displayedView else { return }
 
         if delta > 0,
-           let prefetchedDocument,
-           prefetchedDocument.view == target {
+           readingWorkflow?.canPromotePrefetchedDocument(forView: target) == true {
             await promotePrefetchedDocument(startingAt: 0)
             return
         }
 
-        await load(view: target, preferredPage: 0, preferredResumePoint: nil, forceRefresh: false)
+        await load(view: target, preferredSurfaceOrdinal: 0, preferredResumePoint: nil, forceRefresh: false)
     }
 
-    public func updateReadingMode(_ mode: ReaderReadingMode) {
-        var updatedSettings = settings
-        updatedSettings.readingMode = mode
-        applySettings(updatedSettings)
+    public func commitNovelTextAppearance(_ newSettings: ReaderAppearanceSettings) async {
+        await commitNovelTextAppearance(newSettings, applePencilPageTurnSettings: applePencilPageTurnSettings)
     }
 
-    public func updateImageLoading(_ value: Bool) {
-        var updatedSettings = settings
-        updatedSettings.loadsInlineImages = value
-        applySettings(updatedSettings)
-    }
-
-    public func updateFontScale(_ value: Double) {
-        var updatedSettings = settings
-        updatedSettings.fontScale = value
-        applySettings(updatedSettings)
-    }
-
-    public func updateFontFamily(_ value: ReaderFontFamily) {
-        var updatedSettings = settings
-        updatedSettings.fontFamily = value
-        applySettings(updatedSettings)
-    }
-
-    public func updateLineHeightScale(_ value: Double) {
-        var updatedSettings = settings
-        updatedSettings.lineHeightScale = value
-        applySettings(updatedSettings)
-    }
-
-    public func updateCharacterSpacingScale(_ value: Double) {
-        var updatedSettings = settings
-        updatedSettings.characterSpacingScale = value
-        applySettings(updatedSettings)
-    }
-
-    public func updateHorizontalPadding(_ value: Double) {
-        var updatedSettings = settings
-        updatedSettings.horizontalPadding = value
-        applySettings(updatedSettings)
-    }
-
-    public func updateBackgroundStyle(_ value: ReaderBackgroundStyle) {
-        var updatedSettings = settings
-        updatedSettings.backgroundStyle = value
-        applySettings(updatedSettings)
-    }
-
-    public func updateTranslationMode(_ value: ReaderTranslationMode) {
-        var updatedSettings = settings
-        updatedSettings.translationMode = value
-        applySettings(updatedSettings)
-    }
-
-    public func applySettings(_ newSettings: ReaderAppearanceSettings) {
-        applySettings(newSettings, applePencilPageTurnSettings: applePencilPageTurnSettings)
-    }
-
-    public func applySettings(
+    public func commitNovelTextAppearance(
         _ newSettings: ReaderAppearanceSettings,
         applePencilPageTurnSettings newApplePencilPageTurnSettings: ApplePencilPageTurnSettings
-    ) {
+    ) async {
         let oldSettings = settings
         let oldApplePencilPageTurnSettings = applePencilPageTurnSettings
         let readerSettingsChanged = oldSettings != newSettings
@@ -536,11 +541,21 @@ public final class ReaderContainerModel: ObservableObject {
         }
 
         if oldSettings.isSurfaceOnlyAppearanceChange(to: newSettings) {
-            settings = newSettings
             applePencilPageTurnSettings = newApplePencilPageTurnSettings
-            if let state = readingWorkflow?.updateSurfaceAppearanceSettings(newSettings) {
+            if let state = readingWorkflow?.commitSurfaceAppearance(newSettings) {
                 syncFromWorkflowState(state)
             }
+            bootstrapSettings = newSettings
+            persistSettings(
+                readerSettings: newSettings,
+                applePencilPageTurnSettings: applePencilSettingsChanged ? newApplePencilPageTurnSettings : nil
+            )
+            return
+        }
+
+        guard readingWorkflow?.state != nil else {
+            bootstrapSettings = newSettings
+            applePencilPageTurnSettings = newApplePencilPageTurnSettings
             persistSettings(
                 readerSettings: newSettings,
                 applePencilPageTurnSettings: applePencilSettingsChanged ? newApplePencilPageTurnSettings : nil
@@ -549,16 +564,19 @@ public final class ReaderContainerModel: ObservableObject {
         }
 
         do {
-            guard let state = try readingWorkflow?.updateSettings(newSettings) else { return }
-            settings = newSettings
+            guard let state = try await requestRuntimeUpdate(
+                settings: newSettings,
+                layout: layout,
+                usesPadPresentation: usesPadPresentation
+            ) else { return }
             applePencilPageTurnSettings = newApplePencilPageTurnSettings
             syncFromWorkflowState(state)
+            bootstrapSettings = newSettings
             persistSettings(
                 readerSettings: newSettings,
                 applePencilPageTurnSettings: applePencilSettingsChanged ? newApplePencilPageTurnSettings : nil
             )
         } catch {
-            settings = oldSettings
             applePencilPageTurnSettings = oldApplePencilPageTurnSettings
             errorMessage = error.localizedDescription
         }
@@ -573,50 +591,69 @@ public final class ReaderContainerModel: ObservableObject {
         await flushProgress()
     }
 
-    public func updateCurrentPage(_ pageIndex: Int) {
-        if let state = readingWorkflow?.jumpToRenderedPage(pageIndex) {
-            syncFromWorkflowState(state)
-        }
-        scheduleProgressSync()
-
-        Task {
-            await prefetchIfNeeded(for: currentPageIndex)
-        }
-
-        promoteIfNeededAfterLocationUpdate()
-    }
-
-    public func updateVerticalViewportPosition(pageIndex: Int, intraPageProgress: Double, force: Bool = false) {
-        let normalizedProgress = min(max(intraPageProgress, 0), 1)
-        let progressUpdateThreshold = force ? 0.002 : 0.02
-        guard pageIndex != currentPageIndex ||
-            abs(normalizedProgress - currentPageIntraProgress) >= progressUpdateThreshold else {
+    public func selectSurface(_ surfaceIndex: Int) {
+        guard let presentation = readerPresentation,
+              presentation.surfaces.indices.contains(surfaceIndex) else {
             return
         }
-        if let state = readingWorkflow?.updateVerticalViewportPosition(
-            pageIndex: pageIndex,
-            intraPageProgress: normalizedProgress
+        if let state = readingWorkflow?.selectSurface(
+            presentation.surfaces[surfaceIndex].identity,
+            presentationRevision: presentation.revision
         ) {
             syncFromWorkflowState(state)
         }
         scheduleProgressSync()
 
         Task {
-            await prefetchIfNeeded(for: currentPageIndex)
+            await prefetchIfNeeded(for: selectedSurfaceIndex)
         }
 
         promoteIfNeededAfterLocationUpdate()
     }
 
-    public func updateVerticalViewportPosition(sample: NovelTextViewportSample) {
-        let oldPageIndex = currentPageIndex
-        let oldProgress = currentPageIntraProgress
+    package func updateVerticalViewportPosition(surfaceIndex: Int, intraSurfaceProgress: Double, force: Bool = false) {
+        let normalizedProgress = min(max(intraSurfaceProgress, 0), 1)
+        let progressUpdateThreshold = force ? 0.002 : 0.02
+        guard surfaceIndex != selectedSurfaceIndex ||
+            abs(normalizedProgress - currentSurfaceIntraProgress) >= progressUpdateThreshold else {
+            return
+        }
+        guard let presentation = readerPresentation,
+              presentation.surfaces.indices.contains(surfaceIndex) else { return }
+        if let state = readingWorkflow?.updateVerticalViewportPosition(
+            surfaceIdentity: presentation.surfaces[surfaceIndex].identity,
+            intraSurfaceProgress: normalizedProgress,
+            presentationRevision: presentation.revision
+        ) {
+            syncFromWorkflowState(state)
+        }
+        scheduleProgressSync()
+
+        Task {
+            await prefetchIfNeeded(for: selectedSurfaceIndex)
+        }
+
+        promoteIfNeededAfterLocationUpdate()
+    }
+
+    package func updateVerticalViewportPosition(sample: NovelTextViewportSample) {
+        let oldSurfaceIndex = selectedSurfaceIndex
+        let oldProgress = currentSurfaceIntraProgress
         let oldResumePoint = currentNovelResumePoint
-        if let state = readingWorkflow?.updateVerticalViewportPosition(sample: sample) {
+        guard let presentation = readerPresentation,
+              presentation.surfaces.contains(where: {
+                  $0.identity == sample.surfaceIdentity
+              }) else {
+            return
+        }
+        if let state = readingWorkflow?.updateVerticalViewportPosition(
+            sample: sample,
+            presentationRevision: presentation.revision
+        ) {
             syncFromWorkflowState(state)
             let newResumePoint = currentNovelResumePoint
-            let didChangePosition = oldPageIndex != currentPageIndex ||
-                oldProgress != currentPageIntraProgress ||
+            let didChangePosition = oldSurfaceIndex != selectedSurfaceIndex ||
+                oldProgress != currentSurfaceIntraProgress ||
                 oldResumePoint != newResumePoint
             guard didChangePosition else {
                 return
@@ -627,25 +664,25 @@ public final class ReaderContainerModel: ObservableObject {
         scheduleProgressSync()
 
         Task {
-            await prefetchIfNeeded(for: currentPageIndex)
+            await prefetchIfNeeded(for: selectedSurfaceIndex)
         }
 
         promoteIfNeededAfterLocationUpdate()
     }
 
     public func jumpToChapter(_ chapter: ReaderChapter) {
-        jumpToRenderedPage(chapter.startIndex)
+        jumpToSurface(chapter.startIndex)
     }
 
-    public func jumpToRenderedPage(_ pageIndex: Int) {
-        updateCurrentPage(pageIndex)
+    package func jumpToSurface(_ surfaceIndex: Int) {
+        selectSurface(surfaceIndex)
     }
 
-    public func jumpRelativePage(_ delta: Int) async {
-        guard let result = readingWorkflow?.jumpRelativePage(delta) else {
+    public func jumpRelativeSurface(_ delta: Int) async {
+        guard let result = readingWorkflow?.jumpRelativeSurface(delta) else {
             scheduleProgressSync()
             Task {
-                await prefetchIfNeeded(for: currentPageIndex)
+                await prefetchIfNeeded(for: selectedSurfaceIndex)
             }
             return
         }
@@ -655,12 +692,12 @@ public final class ReaderContainerModel: ObservableObject {
         case nil:
             scheduleProgressSync()
             Task {
-                await prefetchIfNeeded(for: currentPageIndex)
+                await prefetchIfNeeded(for: selectedSurfaceIndex)
             }
-        case let .loadView(view, preferredPage, resumePoint):
-            await load(view: view, preferredPage: preferredPage, preferredResumePoint: resumePoint, forceRefresh: false)
-        case let .promotePrefetched(preferredPage, resumePoint):
-            await promotePrefetchedDocument(startingAt: preferredPage, preferredResumePoint: resumePoint)
+        case let .loadView(view, preferredSurfaceOrdinal, resumePoint):
+            await load(view: view, preferredSurfaceOrdinal: preferredSurfaceOrdinal, preferredResumePoint: resumePoint, forceRefresh: false)
+        case let .promotePrefetched(preferredSurfaceOrdinal, resumePoint):
+            await promotePrefetchedDocument(startingAt: preferredSurfaceOrdinal, preferredResumePoint: resumePoint)
         }
     }
 
@@ -668,33 +705,34 @@ public final class ReaderContainerModel: ObservableObject {
         guard let currentChapterIndex else { return }
         let targetIndex = currentChapterIndex + delta
         guard chapters.indices.contains(targetIndex) else { return }
-        jumpToRenderedPage(chapters[targetIndex].startIndex)
+        jumpToSurface(chapters[targetIndex].startIndex)
     }
 
     public func jumpToWebView(_ view: Int) async {
-        await jumpToWebView(view, preferredPage: 0)
+        await jumpToWebView(view, preferredSurfaceOrdinal: 0)
     }
 
-    public func jumpToWebView(_ view: Int, preferredPage: Int) async {
+    public func jumpToWebView(_ view: Int, preferredSurfaceOrdinal: Int) async {
         let clampedView = max(1, min(maxView, view))
 
-        if clampedView == prefetchedDocument?.view {
-            await promotePrefetchedDocument(startingAt: preferredPage, preferredResumePoint: nil)
+        if readingWorkflow?.canPromotePrefetchedDocument(forView: clampedView) == true {
+            await promotePrefetchedDocument(startingAt: preferredSurfaceOrdinal, preferredResumePoint: nil)
             return
         }
 
         if clampedView == currentView {
-            jumpToRenderedPage(normalizedPagedPageIndex(preferredPage))
+            jumpToSurface(normalizedPagedSurfaceIndex(preferredSurfaceOrdinal))
             return
         }
 
-        await load(view: clampedView, preferredPage: preferredPage, preferredResumePoint: nil, forceRefresh: false)
+        await load(view: clampedView, preferredSurfaceOrdinal: preferredSurfaceOrdinal, preferredResumePoint: nil, forceRefresh: false)
     }
 
     public func resetChapterDirectoryBrowsing() {
         chapterDirectoryView = nil
         chapterDirectoryChapters = []
         chapterDirectoryPageCount = 0
+        chapterDirectoryAnchors = [:]
         isLoadingChapterDirectory = false
         chapterDirectoryError = nil
     }
@@ -706,31 +744,23 @@ public final class ReaderContainerModel: ObservableObject {
             return
         }
 
-        let repository = await ensureReaderRepository()
         chapterDirectoryView = clampedView
         chapterDirectoryChapters = []
         chapterDirectoryPageCount = 0
         isLoadingChapterDirectory = true
         chapterDirectoryError = nil
         do {
-            let context = cacheContext(forView: clampedView)
-            let document = try await repository.loadPage(
-                ReaderPageRequest(
-                    threadURL: self.context.threadURL,
-                    view: clampedView,
-                    authorID: context.authorID
-                )
+            guard let workflow = await ensureReadingWorkflow() else {
+                throw ReaderChapterCommentsUnavailableError()
+            }
+            let entries = try await workflow.previewChapterDirectory(view: clampedView)
+            chapterDirectoryChapters = entries.map(\.chapter)
+            chapterDirectoryAnchors = Dictionary(
+                uniqueKeysWithValues: entries.compactMap { entry in
+                    entry.anchor.map { (entry.chapter.ordinal, $0) }
+                }
             )
-            let layoutResult = try pagination(
-                document,
-                settings,
-                layout.novelTextBoxLayout(
-                    settings: settings,
-                    usesPadPresentation: usesPadPresentation
-                )
-            )
-            chapterDirectoryChapters = layoutResult.viewportIndex.readerChapters
-            chapterDirectoryPageCount = layoutResult.viewportIndex.pages.count
+            chapterDirectoryPageCount = 0
             isLoadingChapterDirectory = false
         } catch {
             chapterDirectoryError = error.localizedDescription
@@ -740,12 +770,33 @@ public final class ReaderContainerModel: ObservableObject {
 
     public func jumpToChapterDirectoryChapter(_ chapter: ReaderChapter) async {
         let targetView = visibleChapterDirectoryView
+        let anchor = chapterDirectoryAnchors[chapter.ordinal]
         resetChapterDirectoryBrowsing()
         if targetView == visibleView {
             jumpToChapter(chapter)
             return
         }
-        await load(view: targetView, preferredPage: chapter.startIndex, preferredResumePoint: nil, forceRefresh: false)
+        guard let anchor,
+              let workflow = await ensureReadingWorkflow() else {
+            await load(
+                view: targetView,
+                preferredSurfaceOrdinal: 0,
+                preferredResumePoint: nil,
+                forceRefresh: false
+            )
+            return
+        }
+        isLoading = true
+        errorMessage = nil
+        do {
+            let state = try await workflow.loadChapter(anchor)
+            syncFromWorkflowState(state)
+            isLoading = false
+            scheduleProgressSync()
+        } catch {
+            errorMessage = error.localizedDescription
+            isLoading = false
+        }
     }
 
     public func refreshCachedState() async {
@@ -858,7 +909,7 @@ public final class ReaderContainerModel: ObservableObject {
 
     private func load(
         view: Int,
-        preferredPage: Int,
+        preferredSurfaceOrdinal: Int,
         preferredResumePoint: ReaderResumePoint?,
         forceRefresh: Bool
     ) async {
@@ -868,7 +919,7 @@ public final class ReaderContainerModel: ObservableObject {
         do {
             let state = try await workflow.loadView(
                 view,
-                preferredPage: preferredPage,
+                preferredSurfaceOrdinal: preferredSurfaceOrdinal,
                 preferredResumePoint: preferredResumePoint,
                 forceRefresh: forceRefresh
             )
@@ -876,7 +927,7 @@ public final class ReaderContainerModel: ObservableObject {
             isLoading = false
 
             Task {
-                await prefetchIfNeeded(for: currentPageIndex)
+                await prefetchIfNeeded(for: selectedSurfaceIndex)
             }
         } catch {
             errorMessage = error.localizedDescription
@@ -899,7 +950,7 @@ public final class ReaderContainerModel: ObservableObject {
             isLoading = false
 
             Task {
-                await prefetchIfNeeded(for: currentPageIndex)
+                await prefetchIfNeeded(for: selectedSurfaceIndex)
             }
         } catch {
             errorMessage = error.localizedDescription
@@ -920,22 +971,43 @@ public final class ReaderContainerModel: ObservableObject {
     private func ensureReadingWorkflow() async -> NovelReadingWorkflow? {
         let repository = await ensureReaderRepository()
         if readingWorkflow == nil {
-            readingWorkflow = NovelReadingWorkflow(
+            readingWorkflow = makeReadingWorkflow(repository: repository)
+        }
+        return readingWorkflow
+    }
+
+    private func makeReadingWorkflow(repository: ReaderRepository) -> NovelReadingWorkflow {
+        if let runtimeAdapter {
+            return NovelReadingWorkflow(
                 context: context,
                 settings: settings,
                 layout: layout,
                 repository: repository,
                 usesPadPresentation: usesPadPresentation,
-                pagination: pagination
+                runtimeAdapter: runtimeAdapter
             )
         }
-        do {
-            try readingWorkflow?.updateSettings(settings)
-            try readingWorkflow?.updateLayout(layout)
-        } catch {
-            errorMessage = error.localizedDescription
-        }
-        return readingWorkflow
+        return NovelReadingWorkflow(
+            context: context,
+            settings: settings,
+            layout: layout,
+            repository: repository,
+            usesPadPresentation: usesPadPresentation
+        )
+    }
+
+    private func requestRuntimeUpdate(
+        settings: ReaderAppearanceSettings,
+        layout: ReaderContainerLayout,
+        usesPadPresentation: Bool
+    ) async throws -> NovelReadingWorkflowState? {
+        try await readingWorkflow?.requestRuntimeUpdate(
+            NovelReadingWorkflowRuntimeUpdate(
+                settings: settings,
+                layout: layout,
+                usesPadPresentation: usesPadPresentation
+            )
+        )
     }
 
     private func syncChapterComments(from module: ReaderChapterCommentsModule) {
@@ -946,109 +1018,67 @@ public final class ReaderContainerModel: ObservableObject {
     }
 
     private func syncFromWorkflowState(_ state: NovelReadingWorkflowState) {
-        currentDocument = state.currentDocument
-        prefetchedDocument = state.prefetchedDocument
-        currentAuthorID = state.currentAuthorID
         readerPresentation = state.presentation
-        syncFromWorkflowSnapshot(state.snapshot)
         syncCachedViews(state.cachedViews)
     }
 
-    private func syncFromWorkflowSnapshot(_ snapshot: NovelReadingSnapshot) {
-        pages = readerPresentation?.surfaces.map(\.viewportPage) ?? snapshot.pages
-        chapters = snapshot.chapters
-        pagedSpreads = snapshot.pagedSpreads
-        if let readerPresentation {
-            currentPageIndex = normalizedPagedPageIndex(
-                readerPresentation.selectedSurfaceIdentity?.ordinal ?? snapshot.currentPageIndex
-            )
-            currentPageIntraProgress = readerPresentation.readingState.currentPageIntraProgress
-            currentView = readerPresentation.readingState.currentView
-            maxView = readerPresentation.readingState.maxView
-            currentChapterTitle = readerPresentation.readingState.currentChapterTitle
-            currentContentSource = readerPresentation.currentContentSource
-            retainedChapterCount = readerPresentation.retainedChapterCount
-            filteredChapterCandidateCount = readerPresentation.filteredChapterCandidateCount
-        } else {
-            currentPageIndex = snapshot.currentPageIndex
-            currentPageIntraProgress = snapshot.currentPageIntraProgress
-            currentView = snapshot.currentView
-            maxView = snapshot.maxView
-            currentChapterTitle = snapshot.currentChapterTitle
-            currentContentSource = snapshot.currentContentSource
-            retainedChapterCount = snapshot.retainedChapterCount
-            filteredChapterCandidateCount = snapshot.filteredChapterCandidateCount
-        }
-        prefetchedStartIndex = snapshot.prefetchedStartIndex
-        viewportContext = snapshot.viewportContext
-        viewportIndex = snapshot.viewportIndex
-        viewportLayoutMetrics = snapshot.viewportLayoutMetrics
-        currentAuthorID = snapshot.currentAuthorID ?? currentAuthorID
-        currentDocumentPageCount = snapshot.pages.filter { $0.documentView == snapshot.currentView }.count
-    }
-
-    private func prefetchIfNeeded(for pageIndex: Int) async {
+    private func prefetchIfNeeded(for surfaceIndex: Int) async {
         guard let workflow = await ensureReadingWorkflow(),
-              let state = await workflow.prefetchIfNeeded(forPageIndex: pageIndex) else { return }
+              let presentation = readerPresentation,
+              presentation.surfaces.indices.contains(surfaceIndex),
+              let state = await workflow.prefetchIfNeeded(near: presentation.surfaces[surfaceIndex].identity) else {
+            return
+        }
         syncFromWorkflowState(state)
     }
 
-    private func chapterTitle(for pageIndex: Int) -> String? {
-        guard pages.indices.contains(pageIndex) else {
-            return chapters.last(where: { $0.startIndex <= pageIndex })?.title
+    private func chapterTitle(for surfaceIndex: Int) -> String? {
+        guard readerSurfaces.indices.contains(surfaceIndex) else {
+            return chapters.last(where: { $0.startIndex <= surfaceIndex })?.title
         }
-        return pages[pageIndex].chapterTitle ?? chapters.last(where: { $0.startIndex <= pageIndex })?.title
+        return readerSurfaces[surfaceIndex].chapterTitle ?? chapters.last(where: { $0.startIndex <= surfaceIndex })?.title
     }
 
     private var displayedPageLabel: String {
-        let leftPageNumber = displayedPageIndex + 1
+        let leftSurfaceNumber = displayedPageIndex + 1
         guard isTwoPageSpreadActive,
-              let spread = pagedSpreads.first(where: { $0.leftPageIndex == currentPageIndex }),
-              let rightPageIndex = spread.rightPageIndex,
-              pages.indices.contains(rightPageIndex),
-              pages[rightPageIndex].documentView == displayedView else {
-            return "\(leftPageNumber)"
+              let spread = presentationSpreads.first(where: { $0.leftSurfaceIndex == selectedSurfaceIndex }),
+              let rightSurfaceIndex = spread.rightSurfaceIndex,
+              readerSurfaces.indices.contains(rightSurfaceIndex),
+              readerSurfaces[rightSurfaceIndex].documentView == displayedView else {
+            return "\(leftSurfaceNumber)"
         }
-        let rightPageNumber = displayedPageIndex + 2
-        return "\(leftPageNumber)-\(min(rightPageNumber, displayedPageCount))"
+        let rightSurfaceNumber = displayedPageIndex + 2
+        return "\(leftSurfaceNumber)-\(min(rightSurfaceNumber, displayedPageCount))"
     }
 
     private var displayedView: Int {
-        currentRenderedPageMetadata?.documentView ?? currentView
+        selectedSurface?.documentView ?? currentView
     }
 
     private var displayedPageIndex: Int {
         let view = displayedView
-        guard let firstIndex = pages.firstIndex(where: { $0.documentView == view }) else {
-            return currentPageIndex
+        guard let firstIndex = readerSurfaces.firstIndex(where: { $0.documentView == view }) else {
+            return selectedSurfaceIndex
         }
-        return max(currentPageIndex - firstIndex, 0)
+        return max(selectedSurfaceIndex - firstIndex, 0)
     }
 
     private var displayedPageCount: Int {
-        let count = pages.filter { $0.documentView == displayedView }.count
+        let count = readerSurfaces.filter { $0.documentView == displayedView }.count
         return max(count, 1)
     }
 
-    private var displayedDocument: ReaderPageDocument? {
-        if displayedView == prefetchedDocument?.view,
-           let prefetchedDocument {
-            return prefetchedDocument
-        }
-        return currentDocument
-    }
-
-    private var currentRenderedPageMetadata: NovelTextViewportIndexPage? {
-        let normalizedIndex = normalizedPagedPageIndex(currentPageIndex)
-        guard pages.indices.contains(normalizedIndex) else { return nil }
-        return pages[normalizedIndex]
+    private var selectedSurface: NovelReaderSurface? {
+        let normalizedIndex = normalizedPagedSurfaceIndex(selectedSurfaceIndex)
+        guard readerSurfaces.indices.contains(normalizedIndex) else { return nil }
+        return readerSurfaces[normalizedIndex]
     }
 
     private func currentProgressSnapshot() -> NovelReadingPosition {
         readingWorkflow?.currentProgressPosition() ?? NovelReadingPosition(
             threadURL: context.threadURL,
             view: displayedView,
-            page: displayedPageIndex,
             chapterTitle: currentChapterTitle,
             authorID: currentAuthorID ?? context.authorID
         )
@@ -1056,9 +1086,8 @@ public final class ReaderContainerModel: ObservableObject {
 
     private func promoteIfNeededAfterLocationUpdate() {
         if settings.readingMode == .paged,
-           let prefetchedDocument,
-           currentPageIndex >= max(currentDocumentPageCount - 1, 0),
-           prefetchedDocument.view == currentView + 1 {
+           selectedSurfaceIndex >= max(readerSurfaces.filter({ $0.documentView == currentView }).count - 1, 0),
+           readingWorkflow?.canPromotePrefetchedDocument(forView: currentView + 1) == true {
             Task {
                 await promotePrefetchedDocument(startingAt: 0, preferredResumePoint: nil)
             }
@@ -1085,74 +1114,42 @@ public final class ReaderContainerModel: ObservableObject {
             threadTitle: context.threadTitle,
             source: .resume,
             initialView: snapshot.view,
-            initialPage: snapshot.page,
             authorID: snapshot.authorID ?? context.authorID,
             initialResumePoint: snapshot.resumePoint
         )
         try? await appContext.readerResumeRouteStore.saveReadingPosition(.novel(resumeContext))
     }
 
-    private func spreadIndex(forPageIndex pageIndex: Int) -> Int {
+    private func spreadIndex(forSurfaceIndex surfaceIndex: Int) -> Int {
         guard isTwoPageSpreadActive else {
-            return max(0, min(pageIndex, max(pages.count - 1, 0)))
+            return max(0, min(surfaceIndex, max(readerSurfaces.count - 1, 0)))
         }
 
-        let normalizedIndex = max(0, min(pageIndex, max(pages.count - 1, 0)))
-        return pagedSpreads.first(where: { spread in
-            spread.leftPageIndex == normalizedIndex || spread.rightPageIndex == normalizedIndex
+        let normalizedIndex = max(0, min(surfaceIndex, max(readerSurfaces.count - 1, 0)))
+        return presentationSpreads.first(where: { spread in
+            spread.leftSurfaceIndex == normalizedIndex || spread.rightSurfaceIndex == normalizedIndex
         })?.index ?? 0
     }
 
-    private func leftPageIndex(forSpreadIndex spreadIndex: Int) -> Int {
-        guard let spread = pagedSpreads.first(where: { $0.index == spreadIndex }) ?? pagedSpreads.last else {
+    private func leftSurfaceIndex(forSpreadIndex spreadIndex: Int) -> Int {
+        guard let spread = presentationSpreads.first(where: { $0.index == spreadIndex }) ?? presentationSpreads.last else {
             return 0
         }
-        return spread.leftPageIndex
+        return spread.leftSurfaceIndex
     }
 
-    private func normalizedPagedPageIndex(_ pageIndex: Int) -> Int {
-        let clampedIndex = max(0, min(pageIndex, max(pages.count - 1, 0)))
+    private func normalizedPagedSurfaceIndex(_ surfaceIndex: Int) -> Int {
+        let clampedIndex = max(0, min(surfaceIndex, max(readerSurfaces.count - 1, 0)))
         guard isTwoPageSpreadActive else { return clampedIndex }
-        return leftPageIndex(forSpreadIndex: spreadIndex(forPageIndex: clampedIndex))
+        return leftSurfaceIndex(forSpreadIndex: spreadIndex(forSurfaceIndex: clampedIndex))
     }
 
     private func cacheContext(forView view: Int) -> (authorID: String?, contentSource: ReaderContentSource?) {
-        if currentDocument?.view == view {
-            return cacheContext(for: currentDocument)
-        }
-
-        if prefetchedDocument?.view == view {
-            return cacheContext(for: prefetchedDocument)
-        }
-
-        let displayedAuthorID = displayedDocument?.resolvedAuthorID ?? currentAuthorID ?? context.authorID
-        let displayedContentSource = displayedDocument?.contentSource ?? currentContentSource
-        return (
-            displayedAuthorID,
-            displayedContentSource == .allPostsPage
-                ? inferredContentSource(for: displayedAuthorID)
-                : displayedContentSource
-        )
-    }
-
-    private func cacheContext(for document: ReaderPageDocument?) -> (authorID: String?, contentSource: ReaderContentSource?) {
-        guard let document else {
+        guard let workflowContext = readingWorkflow?.cacheContext(forView: view) else {
             let authorID = currentAuthorID ?? context.authorID
             return (authorID, inferredContentSource(for: authorID))
         }
-
-        switch document.contentSource {
-        case .authorFilteredPage:
-            return (
-                document.resolvedAuthorID ?? currentAuthorID ?? context.authorID,
-                .authorFilteredPage
-            )
-        case .fallbackUnfilteredPage:
-            return (nil, .fallbackUnfilteredPage)
-        case .allPostsPage:
-            let authorID = document.resolvedAuthorID ?? currentAuthorID ?? context.authorID
-            return (authorID, inferredContentSource(for: authorID))
-        }
+        return (workflowContext.authorID, workflowContext.contentSource)
     }
 
     private func inferredContentSource(for authorID: String?) -> ReaderContentSource {
@@ -1195,18 +1192,18 @@ public final class ReaderContainerModel: ObservableObject {
         return summary
     }
 
-    private func promotePrefetchedDocument(startingAt preferredPage: Int) async {
-        await promotePrefetchedDocument(startingAt: preferredPage, preferredResumePoint: nil)
+    private func promotePrefetchedDocument(startingAt preferredSurfaceOrdinal: Int) async {
+        await promotePrefetchedDocument(startingAt: preferredSurfaceOrdinal, preferredResumePoint: nil)
     }
 
-    private func promotePrefetchedDocument(startingAt preferredPage: Int, preferredResumePoint: ReaderResumePoint?) async {
+    private func promotePrefetchedDocument(startingAt preferredSurfaceOrdinal: Int, preferredResumePoint: ReaderResumePoint?) async {
         do {
             guard let workflowState = try await readingWorkflow?.promotePrefetchedDocument(
-                preferredPage: preferredPage,
+                preferredSurfaceOrdinal: preferredSurfaceOrdinal,
                 resumePoint: preferredResumePoint
             ) else { return }
             syncFromWorkflowState(workflowState)
-            await prefetchIfNeeded(for: currentPageIndex)
+            await prefetchIfNeeded(for: selectedSurfaceIndex)
         } catch {
             errorMessage = error.localizedDescription
         }

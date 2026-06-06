@@ -6,7 +6,7 @@ public struct Favorite: Codable, Hashable, Identifiable, Sendable {
     public var displayName: String?
     public var url: URL
     public var remoteFavoriteID: String?
-    public var lastPage: Int
+    public var mangaPageIndex: Int
     public var lastView: Int
     public var lastChapter: String?
     public var authorID: String?
@@ -25,7 +25,7 @@ public struct Favorite: Codable, Hashable, Identifiable, Sendable {
         case displayName
         case url
         case remoteFavoriteID
-        case lastPage
+        case mangaPageIndex = "lastPage"
         case lastView
         case lastChapter
         case authorID
@@ -45,7 +45,7 @@ public struct Favorite: Codable, Hashable, Identifiable, Sendable {
         displayName: String? = nil,
         url: URL,
         remoteFavoriteID: String? = nil,
-        lastPage: Int = 0,
+        mangaPageIndex: Int = 0,
         lastView: Int = 1,
         lastChapter: String? = nil,
         authorID: String? = nil,
@@ -63,7 +63,7 @@ public struct Favorite: Codable, Hashable, Identifiable, Sendable {
         self.displayName = displayName
         self.url = url
         self.remoteFavoriteID = remoteFavoriteID
-        self.lastPage = lastPage
+        self.mangaPageIndex = max(0, mangaPageIndex)
         self.lastView = lastView
         self.lastChapter = lastChapter
         self.authorID = authorID
@@ -89,7 +89,7 @@ public struct Favorite: Codable, Hashable, Identifiable, Sendable {
         displayName = try container.decodeIfPresent(String.self, forKey: .displayName)
         url = try container.decode(URL.self, forKey: .url)
         remoteFavoriteID = try container.decodeIfPresent(String.self, forKey: .remoteFavoriteID)
-        lastPage = try container.decodeIfPresent(Int.self, forKey: .lastPage) ?? 0
+        mangaPageIndex = max(0, try container.decodeIfPresent(Int.self, forKey: .mangaPageIndex) ?? 0)
         lastView = try container.decodeIfPresent(Int.self, forKey: .lastView) ?? 1
         lastChapter = try container.decodeIfPresent(String.self, forKey: .lastChapter)
         authorID = try container.decodeIfPresent(String.self, forKey: .authorID)

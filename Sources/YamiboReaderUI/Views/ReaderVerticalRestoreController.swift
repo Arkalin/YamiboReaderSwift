@@ -1,46 +1,45 @@
 import Foundation
+import YamiboReaderCore
 
 struct ReaderVerticalTextAnchor: Equatable, Sendable {
-    let segmentIndex: Int
-    let segmentOffset: Int
+    let position: ReaderResumePoint
 
-    init(segmentIndex: Int, segmentOffset: Int) {
-        self.segmentIndex = max(0, segmentIndex)
-        self.segmentOffset = max(0, segmentOffset)
+    init(position: ReaderResumePoint) {
+        self.position = position
     }
 }
 
 struct ReaderVerticalScrollRequest: Equatable, Sendable {
     let view: Int?
-    let pageIndex: Int
-    let intraPageProgress: Double
+    let surfaceIndex: Int
+    let intraSurfaceProgress: Double
     let textAnchor: ReaderVerticalTextAnchor?
 
     init(
         view: Int? = nil,
-        pageIndex: Int,
-        intraPageProgress: Double,
+        surfaceIndex: Int,
+        intraSurfaceProgress: Double,
         textAnchor: ReaderVerticalTextAnchor? = nil
     ) {
         self.view = view
-        self.pageIndex = pageIndex
-        self.intraPageProgress = intraPageProgress
+        self.surfaceIndex = surfaceIndex
+        self.intraSurfaceProgress = intraSurfaceProgress
         self.textAnchor = textAnchor
     }
 }
 
-enum ReaderVerticalRestorePhase: Equatable, Sendable {
+enum VerticalRestorePhase<Request: Equatable & Sendable>: Equatable, Sendable {
     case idle
-    case scrolling(request: ReaderVerticalScrollRequest)
-    case fineTuning(request: ReaderVerticalScrollRequest)
-    case settling(request: ReaderVerticalScrollRequest, deadline: CFTimeInterval)
+    case scrolling(request: Request)
+    case fineTuning(request: Request)
+    case settling(request: Request, deadline: CFTimeInterval)
 }
 
-struct ReaderVerticalRestoreController: Equatable, Sendable {
-    private(set) var phase: ReaderVerticalRestorePhase = .idle
+struct VerticalRestoreController<Request: Equatable & Sendable>: Equatable, Sendable {
+    private(set) var phase: VerticalRestorePhase<Request> = .idle
     private var viewportSamplingSuppressedUntil: CFTimeInterval?
 
-    var activeRequest: ReaderVerticalScrollRequest? {
+    var activeRequest: Request? {
         switch phase {
         case .idle:
             return nil
@@ -51,7 +50,7 @@ struct ReaderVerticalRestoreController: Equatable, Sendable {
         }
     }
 
-    var scrollingRequest: ReaderVerticalScrollRequest? {
+    var scrollingRequest: Request? {
         if case let .scrolling(request) = phase {
             return request
         }
@@ -73,16 +72,16 @@ struct ReaderVerticalRestoreController: Equatable, Sendable {
         }
     }
 
-    mutating func beginScrolling(to request: ReaderVerticalScrollRequest) {
+    mutating func beginScrolling(to request: Request) {
         viewportSamplingSuppressedUntil = nil
         phase = .scrolling(request: request)
     }
 
-    mutating func beginFineTuning(_ request: ReaderVerticalScrollRequest) {
+    mutating func beginFineTuning(_ request: Request) {
         phase = .fineTuning(request: request)
     }
 
-    mutating func beginSettling(_ request: ReaderVerticalScrollRequest, now: CFTimeInterval, duration: CFTimeInterval = 0.45) {
+    mutating func beginSettling(_ request: Request, now: CFTimeInterval, duration: CFTimeInterval = 0.45) {
         phase = .settling(request: request, deadline: now + duration)
     }
 
@@ -109,3 +108,5 @@ struct ReaderVerticalRestoreController: Equatable, Sendable {
         return !shouldSuppressViewportSampling
     }
 }
+
+typealias ReaderVerticalRestoreController = VerticalRestoreController<ReaderVerticalScrollRequest>

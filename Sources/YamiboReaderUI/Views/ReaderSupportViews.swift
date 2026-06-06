@@ -75,24 +75,24 @@ public struct ReaderProgressScrubPreview: Equatable, Sendable {
 
 public struct ReaderProgressScrubContext: Sendable {
     public var readingMode: ReaderReadingMode
-    public var pageCount: Int
+    public var surfaceCount: Int
     public var currentProgressPercent: Int
-    public var targetPageIndex: @Sendable (Double) -> Int
+    public var targetSurfaceIndex: @Sendable (Double) -> Int
     public var chapterTitle: @Sendable (Int) -> String?
     public var chapterTickStartIndex: @Sendable (Int) -> Int?
 
     public init(
         readingMode: ReaderReadingMode,
-        pageCount: Int,
+        surfaceCount: Int,
         currentProgressPercent: Int,
-        targetPageIndex: @escaping @Sendable (Double) -> Int,
+        targetSurfaceIndex: @escaping @Sendable (Double) -> Int,
         chapterTitle: @escaping @Sendable (Int) -> String?,
         chapterTickStartIndex: @escaping @Sendable (Int) -> Int?
     ) {
         self.readingMode = readingMode
-        self.pageCount = max(pageCount, 1)
+        self.surfaceCount = max(surfaceCount, 1)
         self.currentProgressPercent = min(max(currentProgressPercent, 0), 100)
-        self.targetPageIndex = targetPageIndex
+        self.targetSurfaceIndex = targetSurfaceIndex
         self.chapterTitle = chapterTitle
         self.chapterTickStartIndex = chapterTickStartIndex
     }
@@ -100,7 +100,7 @@ public struct ReaderProgressScrubContext: Sendable {
     public var valueRange: ClosedRange<Double> {
         switch readingMode {
         case .paged:
-            0 ... Double(max(pageCount - 1, 0))
+            0 ... Double(max(surfaceCount - 1, 0))
         case .vertical:
             0 ... 100
         }
@@ -118,11 +118,11 @@ public struct ReaderProgressScrubContext: Sendable {
 
 public struct ReaderProgressScrubUpdate: Equatable, Sendable {
     public var haptics: [ReaderProgressScrubHaptic]
-    public var committedPageIndex: Int?
+    public var committedSurfaceIndex: Int?
 
-    public init(haptics: [ReaderProgressScrubHaptic] = [], committedPageIndex: Int? = nil) {
+    public init(haptics: [ReaderProgressScrubHaptic] = [], committedSurfaceIndex: Int? = nil) {
         self.haptics = haptics
-        self.committedPageIndex = committedPageIndex
+        self.committedSurfaceIndex = committedSurfaceIndex
     }
 }
 
@@ -312,7 +312,7 @@ public struct ReaderChromeProgressSummary: Equatable, Sendable {
 public struct ReaderProgressScrubState: Equatable, Sendable {
     public private(set) var phase: ReaderProgressScrubPhase = .idle
     public private(set) var value = 0.0
-    public private(set) var targetRenderedPageIndex = 0
+    public private(set) var targetSurfaceIndex = 0
     public private(set) var preview: ReaderProgressScrubPreview?
     private var lastChapterTickStartIndex: Int?
 
@@ -333,13 +333,13 @@ public struct ReaderProgressScrubState: Equatable, Sendable {
 
         phase = .scrubbing
         value = Self.clamp(newValue, to: context.valueRange)
-        targetRenderedPageIndex = context.targetPageIndex(value)
+        targetSurfaceIndex = context.targetSurfaceIndex(value)
         preview = ReaderProgressScrubPreview(
-            chapterTitle: context.chapterTitle(targetRenderedPageIndex),
-            pageNumber: targetRenderedPageIndex + 1
+            chapterTitle: context.chapterTitle(targetSurfaceIndex),
+            pageNumber: targetSurfaceIndex + 1
         )
 
-        let tickStartIndex = context.chapterTickStartIndex(targetRenderedPageIndex)
+        let tickStartIndex = context.chapterTickStartIndex(targetSurfaceIndex)
         if let tickStartIndex, tickStartIndex != lastChapterTickStartIndex {
             haptics.append(.chapterTick)
         }
@@ -352,13 +352,13 @@ public struct ReaderProgressScrubState: Equatable, Sendable {
     public mutating func end() -> ReaderProgressScrubUpdate {
         phase = .ended
         lastChapterTickStartIndex = nil
-        return ReaderProgressScrubUpdate(haptics: [.commit], committedPageIndex: targetRenderedPageIndex)
+        return ReaderProgressScrubUpdate(haptics: [.commit], committedSurfaceIndex: targetSurfaceIndex)
     }
 
     public mutating func reset(to value: Double = 0) {
         phase = .idle
         self.value = value
-        targetRenderedPageIndex = 0
+        targetSurfaceIndex = 0
         preview = nil
         lastChapterTickStartIndex = nil
     }
@@ -371,8 +371,8 @@ public struct ReaderProgressScrubState: Equatable, Sendable {
 struct ReaderProgressSliderSnapshot: Equatable {
     var readingMode: ReaderReadingMode
     var visibleView: Int
-    var renderedPageCount: Int
-    var currentRenderedPage: Int
+    var surfaceCount: Int
+    var currentSurfaceNumber: Int
     var currentProgressPercent: Int
 
     var modelValue: Double {
@@ -380,7 +380,7 @@ struct ReaderProgressSliderSnapshot: Equatable {
         case .vertical:
             Double(currentProgressPercent)
         case .paged:
-            Double(max(currentRenderedPage - 1, 0))
+            Double(max(currentSurfaceNumber - 1, 0))
         }
     }
 }
@@ -402,7 +402,7 @@ struct ReaderProgressSliderState: Equatable {
 
 struct ReaderPagedPagerIdentity: Hashable {
     let visibleView: Int
-    let pageCount: Int
+    let surfaceCount: Int
     let spreadCount: Int
     let usesTwoPageSpread: Bool
     let layoutWidth: Int
@@ -410,13 +410,13 @@ struct ReaderPagedPagerIdentity: Hashable {
 
     init(
         visibleView: Int,
-        pageCount: Int,
+        surfaceCount: Int,
         spreadCount: Int,
         usesTwoPageSpread: Bool,
         layout: ReaderContainerLayout
     ) {
         self.visibleView = visibleView
-        self.pageCount = pageCount
+        self.surfaceCount = surfaceCount
         self.spreadCount = spreadCount
         self.usesTwoPageSpread = usesTwoPageSpread
         layoutWidth = Int(layout.width.rounded())
@@ -505,40 +505,36 @@ private enum ReaderViewportDisplayBlock: Identifiable {
     }
 }
 
-struct ReaderPagedSpreadContent: View {
-    let spread: ReaderPagedSpread
-    let pages: [NovelTextViewportIndexPage]
-    let viewportContext: NovelTextViewportContext?
-    let viewportIndex: NovelTextViewportIndex?
+struct ReaderPresentationSpreadContent: View {
+    let spread: NovelReaderPresentationSpread
+    let surfaces: [NovelReaderSurface]
     let settings: ReaderAppearanceSettings
     let refererURL: URL
     let sessionState: SessionState
     let topInset: CGFloat
     let bottomInset: CGFloat
-    let displayReferenceProvider: @MainActor (Int) -> NovelTextViewportDisplayReference?
+    let displayReferenceProvider: @MainActor (NovelReaderSurfaceIdentity) -> NovelTextViewportDisplayReference?
 
     var body: some View {
         HStack(spacing: 0) {
-            spreadColumn(pageIndex: spread.leftPageIndex)
-            spreadColumn(pageIndex: spread.rightPageIndex)
+            spreadColumn(surfaceIndex: spread.leftSurfaceIndex)
+            spreadColumn(surfaceIndex: spread.rightSurfaceIndex)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
     @ViewBuilder
-    private func spreadColumn(pageIndex: Int?) -> some View {
+    private func spreadColumn(surfaceIndex: Int?) -> some View {
         Group {
-            if let pageIndex {
-                let viewportPage = viewportIndex?.pages.first {
-                    $0.pageIndex == pageIndex
+            if let surfaceIndex {
+                let surface = surfaces.first {
+                    $0.presentationIndex == surfaceIndex
                 }
-                let displayReference = displayReferenceProvider(pageIndex)
-                ReaderViewportPageContent(
-                    viewportContext: viewportContext,
-                    viewportPage: viewportPage,
-                    displayReference: displayReference,
-                    fallbackDocumentView: viewportPage?.documentView,
-                    fallbackPageIndex: pageIndex,
+                ReaderViewportSurfaceContent(
+                    surface: surface,
+                    displayReference: surface.flatMap { displayReferenceProvider($0.identity) },
+                    fallbackDocumentView: surface?.documentView,
+                    fallbackSurfaceIndex: surfaceIndex,
                     settings: settings,
                     refererURL: refererURL,
                     sessionState: sessionState
@@ -556,31 +552,28 @@ struct ReaderPagedSpreadContent: View {
     }
 }
 
-struct ReaderViewportPageContent: View {
-    let viewportContext: NovelTextViewportContext?
-    let viewportPage: NovelTextViewportIndexPage?
+struct ReaderViewportSurfaceContent: View {
+    let surface: NovelReaderSurface?
     let displayReference: NovelTextViewportDisplayReference?
     let fallbackDocumentView: Int?
-    let fallbackPageIndex: Int?
+    let fallbackSurfaceIndex: Int?
     let settings: ReaderAppearanceSettings
     let refererURL: URL
     let sessionState: SessionState
 
     init(
-        viewportContext: NovelTextViewportContext?,
-        viewportPage: NovelTextViewportIndexPage?,
+        surface: NovelReaderSurface?,
         displayReference: NovelTextViewportDisplayReference? = nil,
         fallbackDocumentView: Int?,
-        fallbackPageIndex: Int?,
+        fallbackSurfaceIndex: Int?,
         settings: ReaderAppearanceSettings,
         refererURL: URL,
         sessionState: SessionState
     ) {
-        self.viewportContext = viewportContext
-        self.viewportPage = viewportPage
+        self.surface = surface
         self.displayReference = displayReference
         self.fallbackDocumentView = fallbackDocumentView
-        self.fallbackPageIndex = fallbackPageIndex
+        self.fallbackSurfaceIndex = fallbackSurfaceIndex
         self.settings = settings
         self.refererURL = refererURL
         self.sessionState = sessionState
@@ -590,9 +583,7 @@ struct ReaderViewportPageContent: View {
         VStack(alignment: .leading, spacing: 14) {
             ForEach(
                 Self.viewportBlocks(
-                    viewportContext: viewportContext,
-                    viewportPage: viewportPage,
-                    settings: settings
+                    surface: surface
                 )
             ) { block in
                 ReaderViewportBlockView(
@@ -608,25 +599,22 @@ struct ReaderViewportPageContent: View {
     }
 
     private var accessibilityIdentifier: String {
-        let contextView = viewportContext?.identity.documentView ?? viewportPage?.documentView ?? fallbackDocumentView ?? 1
-        let pageIndex = viewportPage?.pageIndex ?? fallbackPageIndex ?? 0
-        return "novel-viewport-page-\(contextView)-\(pageIndex)"
+        let contextView = surface?.documentView ?? fallbackDocumentView ?? 1
+        let surfaceIndex = surface?.presentationIndex ?? fallbackSurfaceIndex ?? 0
+        return "novel-viewport-surface-\(contextView)-\(surfaceIndex)"
     }
 
     fileprivate static func viewportBlocks(
-        viewportContext: NovelTextViewportContext?,
-        viewportPage: NovelTextViewportIndexPage?,
-        settings: ReaderAppearanceSettings
+        surface: NovelReaderSurface?
     ) -> [ReaderViewportDisplayBlock] {
-        let externalBlockImages = viewportPage?.externalBlocks.map {
+        let externalBlockImages = surface?.externalBlocks.map {
             ReaderViewportDisplayBlock.image($0.url)
         } ?? []
         var blocks: [ReaderViewportDisplayBlock] = []
-        guard viewportContext != nil,
-              let viewportPage else {
+        guard let surface else {
             return externalBlockImages.isEmpty ? [.footer(L10n.string("reader.empty_content"))] : externalBlockImages
         }
-        if !viewportPage.ranges.isEmpty {
+        if surface.kind == .text {
             blocks.append(.text)
         }
         blocks.append(contentsOf: externalBlockImages)
@@ -634,16 +622,6 @@ struct ReaderViewportPageContent: View {
             blocks.append(.footer(L10n.string("reader.empty_content")))
         }
         return blocks
-    }
-
-    fileprivate static func visibleSurfaceDiagnostics(
-        viewportContext: NovelTextViewportContext?,
-        viewportPage: NovelTextViewportIndexPage?
-    ) -> NovelTextViewportVisibleSurfaceDiagnostics {
-        NovelTextViewportVisibleSurfaceDiagnostics(
-            viewportContext: viewportContext,
-            viewportPage: viewportPage
-        )
     }
 
 }
@@ -659,16 +637,14 @@ final class ReaderPagedViewportCollectionView: UICollectionView {
 }
 
 struct ReaderPagedCollectionViewport: UIViewRepresentable {
-    let pages: [NovelTextViewportIndexPage]
-    let viewportContext: NovelTextViewportContext?
-    let viewportIndex: NovelTextViewportIndex?
+    let surfaces: [NovelReaderSurface]
     let settings: ReaderAppearanceSettings
     let refererURL: URL
     let sessionState: SessionState
     let topInset: CGFloat
     let bottomInset: CGFloat
     let selectionIndex: Int
-    let displayReferenceProvider: @MainActor (Int) -> NovelTextViewportDisplayReference?
+    let displayReferenceProvider: @MainActor (NovelReaderSurfaceIdentity) -> NovelTextViewportDisplayReference?
     let onSelectionChange: (Int) -> Void
 
     func makeCoordinator() -> Coordinator {
@@ -718,7 +694,7 @@ struct ReaderPagedCollectionViewport: UIViewRepresentable {
         }
 
         func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int {
-            parent.pages.count
+            parent.surfaces.count
         }
 
         func collectionView(
@@ -729,18 +705,17 @@ struct ReaderPagedCollectionViewport: UIViewRepresentable {
                 withReuseIdentifier: Self.reuseIdentifier,
                 for: indexPath
             )
-            let viewportPage = parent.viewportIndex?.pages.first {
-                $0.pageIndex == indexPath.item
-            }
-            let displayReference = parent.displayReferenceProvider(indexPath.item)
+            let surface = parent.surfaces.indices.contains(indexPath.item)
+                ? parent.surfaces[indexPath.item]
+                : nil
+            let displayReference = surface.flatMap { parent.displayReferenceProvider($0.identity) }
             cell.backgroundColor = .clear
             cell.contentConfiguration = UIHostingConfiguration {
-                ReaderViewportPageContent(
-                    viewportContext: parent.viewportContext,
-                    viewportPage: viewportPage,
+                ReaderViewportSurfaceContent(
+                    surface: surface,
                     displayReference: displayReference,
-                    fallbackDocumentView: viewportPage?.documentView,
-                    fallbackPageIndex: indexPath.item,
+                    fallbackDocumentView: surface?.documentView,
+                    fallbackSurfaceIndex: indexPath.item,
                     settings: parent.settings,
                     refererURL: parent.refererURL,
                     sessionState: parent.sessionState
@@ -790,12 +765,12 @@ struct ReaderPagedCollectionViewport: UIViewRepresentable {
         func scrollToPendingSelectionIfPossible(in collectionView: UICollectionView, animated: Bool) {
             guard let pendingSelectionIndex,
                   !isReloadingDataForSelectionScroll,
-                  !parent.pages.isEmpty,
+                  !parent.surfaces.isEmpty,
                   collectionView.bounds.width > 0,
                   collectionView.window != nil else {
                 return
             }
-            let item = min(max(pendingSelectionIndex, 0), max(parent.pages.count - 1, 0))
+            let item = min(max(pendingSelectionIndex, 0), max(parent.surfaces.count - 1, 0))
             guard collectionView.numberOfSections > 0,
                   collectionView.numberOfItems(inSection: 0) > item else {
                 schedulePendingSelectionScrollRetry(in: collectionView, animated: animated)
@@ -834,7 +809,7 @@ struct ReaderPagedCollectionViewport: UIViewRepresentable {
         private func updateSelection(from scrollView: UIScrollView) {
             guard scrollView.bounds.width > 0 else { return }
             let item = Int((scrollView.contentOffset.x / scrollView.bounds.width).rounded())
-            let clampedItem = min(max(item, 0), max(parent.pages.count - 1, 0))
+            let clampedItem = min(max(item, 0), max(parent.surfaces.count - 1, 0))
             guard clampedItem != parent.selectionIndex else { return }
             let onSelectionChange = parent.onSelectionChange
             callbackScheduler.publish {
@@ -844,18 +819,16 @@ struct ReaderPagedCollectionViewport: UIViewRepresentable {
     }
 }
 
-struct ReaderPagedSpreadCollectionViewport: UIViewRepresentable {
-    let spreads: [ReaderPagedSpread]
-    let pages: [NovelTextViewportIndexPage]
-    let viewportContext: NovelTextViewportContext?
-    let viewportIndex: NovelTextViewportIndex?
+struct ReaderPresentationSpreadCollectionViewport: UIViewRepresentable {
+    let spreads: [NovelReaderPresentationSpread]
+    let surfaces: [NovelReaderSurface]
     let settings: ReaderAppearanceSettings
     let refererURL: URL
     let sessionState: SessionState
     let topInset: CGFloat
     let bottomInset: CGFloat
     let selectionIndex: Int
-    let displayReferenceProvider: @MainActor (Int) -> NovelTextViewportDisplayReference?
+    let displayReferenceProvider: @MainActor (NovelReaderSurfaceIdentity) -> NovelTextViewportDisplayReference?
     let onSelectionChange: (Int) -> Void
 
     func makeCoordinator() -> Coordinator {
@@ -892,15 +865,15 @@ struct ReaderPagedSpreadCollectionViewport: UIViewRepresentable {
     }
 
     final class Coordinator: NSObject, UICollectionViewDataSource, UICollectionViewDelegateFlowLayout, UIScrollViewDelegate {
-        static let reuseIdentifier = "ReaderPagedSpreadCollectionViewportCell"
+        static let reuseIdentifier = "ReaderPresentationSpreadCollectionViewportCell"
 
-        var parent: ReaderPagedSpreadCollectionViewport
+        var parent: ReaderPresentationSpreadCollectionViewport
         let callbackScheduler = SwiftUIViewUpdateCallbackScheduler()
         private var pendingSelectionIndex: Int?
         private var isReloadingDataForSelectionScroll = false
         private var isPendingSelectionScrollRetryScheduled = false
 
-        init(parent: ReaderPagedSpreadCollectionViewport) {
+        init(parent: ReaderPresentationSpreadCollectionViewport) {
             self.parent = parent
         }
 
@@ -919,11 +892,9 @@ struct ReaderPagedSpreadCollectionViewport: UIViewRepresentable {
             let spread = parent.spreads[indexPath.item]
             cell.backgroundColor = .clear
             cell.contentConfiguration = UIHostingConfiguration {
-                ReaderPagedSpreadContent(
+                ReaderPresentationSpreadContent(
                     spread: spread,
-                    pages: parent.pages,
-                    viewportContext: parent.viewportContext,
-                    viewportIndex: parent.viewportIndex,
+                    surfaces: parent.surfaces,
                     settings: parent.settings,
                     refererURL: parent.refererURL,
                     sessionState: parent.sessionState,
@@ -1026,29 +997,27 @@ struct ReaderPagedSpreadCollectionViewport: UIViewRepresentable {
     }
 }
 
-private struct ReaderVerticalViewportDisplayPage {
-    let pageIndex: Int
+private struct ReaderVerticalViewportDisplaySurface {
+    let identity: NovelReaderSurfaceIdentity
+    let surfaceIndex: Int
     let documentView: Int
+    let presentationHeight: CGFloat?
     let blocks: [ReaderViewportDisplayBlock]
 }
 
 struct ReaderVerticalViewportScrollView: UIViewRepresentable {
-    let pages: [NovelTextViewportIndexPage]
-    let viewportContext: NovelTextViewportContext?
-    let viewportIndex: NovelTextViewportIndex?
-    let viewportLayoutMetrics: NovelTextViewportLayoutMetrics?
+    let surfaces: [NovelReaderSurface]
     let settings: ReaderAppearanceSettings
     let refererURL: URL
     let sessionState: SessionState
     let topInset: CGFloat
     let bottomInset: CGFloat
     let scrollRequest: ReaderVerticalScrollRequest?
-    let surfaceIdentityByPageIndex: [Int: NovelReaderSurfaceIdentity]
     let displayReferenceProvider: @MainActor (NovelReaderSurfaceIdentity) -> NovelTextViewportDisplayReference?
     let onVisibleSurfaceIdentitiesChange: ([NovelReaderSurfaceIdentity]) -> Void
     let onScrollRequestHandled: (ReaderVerticalScrollRequest) -> Void
     let onScrollViewReady: (UIScrollView) -> Void
-    let onPageFramesChange: ([Int: ReaderVerticalPageFrameValue]) -> Void
+    let onSurfaceFramesChange: ([Int: ReaderVerticalSurfaceFrameValue]) -> Void
     let onTextViewportSampleChange: (NovelTextViewportSample?) -> Void
     let onViewportChange: () -> Void
     let onScrollSettled: () -> Void
@@ -1056,10 +1025,7 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
 
     private var contentIdentity: ReaderVerticalViewportContentIdentity {
         ReaderVerticalViewportContentIdentity(
-            pages: pages,
-            viewportContext: viewportContext,
-            viewportIndex: viewportIndex,
-            viewportLayoutMetrics: viewportLayoutMetrics,
+            surfaces: surfaces,
             settings: settings,
             topInset: topInset,
             bottomInset: bottomInset
@@ -1137,7 +1103,7 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
         }
 
         func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int {
-            verticalPageCount
+            verticalSurfaceCount
         }
 
         func collectionView(
@@ -1151,19 +1117,18 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
             guard let cell = cell as? ReaderVerticalViewportCell else {
                 return cell
             }
-            guard let displayPage = verticalDisplayPage(for: indexPath.item) else {
+            guard let displaySurface = verticalDisplaySurface(for: indexPath.item) else {
                 return cell
             }
             cell.configure(
-                page: displayPage,
-                displayReference: parent.surfaceIdentityByPageIndex[displayPage.pageIndex]
-                    .flatMap { parent.displayReferenceProvider($0) },
-                textHeight: parent.viewportLayoutMetrics?.pageMetrics[displayPage.pageIndex]?.textHeight,
+                page: displaySurface,
+                displayReference: parent.displayReferenceProvider(displaySurface.identity),
+                textHeight: displaySurface.presentationHeight,
                 settings: parent.settings,
                 refererURL: parent.refererURL,
                 sessionState: parent.sessionState,
                 contentWidth: max(verticalItemWidth(in: collectionView) - parent.settings.horizontalPadding * 2, 1),
-                topPadding: displayPage.pageIndex == 0 ? 16 : 0
+                topPadding: displaySurface.surfaceIndex == 0 ? 16 : 0
             )
             return cell
         }
@@ -1209,7 +1174,7 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
                 handledScrollRequest = nil
                 return
             }
-            guard request.pageIndex >= 0, request.pageIndex < verticalPageCount else {
+            guard request.surfaceIndex >= 0, request.surfaceIndex < verticalSurfaceCount else {
                 handledScrollRequest = nil
                 return
             }
@@ -1222,7 +1187,7 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
             guard handledScrollRequest != request else { return }
             handledScrollRequest = request
             collectionView.scrollToItem(
-                at: IndexPath(item: request.pageIndex, section: 0),
+                at: IndexPath(item: request.surfaceIndex, section: 0),
                 at: .top,
                 animated: false
             )
@@ -1247,8 +1212,8 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
 
         private func publishFrames(from scrollView: UIScrollView) {
             guard let collectionView = scrollView as? UICollectionView else { return }
-            let frames = collectionView.indexPathsForVisibleItems.reduce(into: [Int: ReaderVerticalPageFrameValue]()) { result, indexPath in
-                guard let pageIdentity = verticalPageIdentity(for: indexPath.item),
+            let frames = collectionView.indexPathsForVisibleItems.reduce(into: [Int: ReaderVerticalSurfaceFrameValue]()) { result, indexPath in
+                guard let surface = verticalSurface(for: indexPath.item),
                       let attributes = collectionView.layoutAttributesForItem(at: indexPath) else {
                     return
                 }
@@ -1256,18 +1221,18 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
                     dx: -collectionView.contentOffset.x,
                     dy: -collectionView.contentOffset.y
                 )
-                result[pageIdentity.pageIndex] = ReaderVerticalPageFrameValue(
-                    documentView: pageIdentity.documentView,
+                result[surface.presentationIndex] = ReaderVerticalSurfaceFrameValue(
+                    documentView: surface.documentView,
                     frame: visibleFrame
                 )
             }
-            let onPageFramesChange = parent.onPageFramesChange
+            let onSurfaceFramesChange = parent.onSurfaceFramesChange
             callbackScheduler.publish {
-                onPageFramesChange(frames)
+                onSurfaceFramesChange(frames)
             }
-            let visibleSurfaceIdentities = frames.keys
-                .compactMap { parent.surfaceIdentityByPageIndex[$0] }
-                .sorted { $0.ordinal < $1.ordinal }
+            let visibleSurfaceIdentities = collectionView.indexPathsForVisibleItems
+                .sorted { $0.item < $1.item }
+                .compactMap { verticalSurface(for: $0.item)?.identity }
             let onVisibleSurfaceIdentitiesChange = parent.onVisibleSurfaceIdentitiesChange
             callbackScheduler.publish {
                 onVisibleSurfaceIdentitiesChange(visibleSurfaceIdentities)
@@ -1276,7 +1241,7 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
             let referenceLineY = ReaderVerticalPositioning.viewportReferenceLineY(in: scrollView.bounds)
             let textSample = collectionView.indexPathsForVisibleItems
                 .compactMap { indexPath -> (distance: CGFloat, sample: NovelTextViewportSample)? in
-                    guard let pageIdentity = verticalPageIdentity(for: indexPath.item),
+                    guard let surface = verticalSurface(for: indexPath.item),
                           let cell = collectionView.cellForItem(at: indexPath) as? ReaderVerticalViewportCell,
                           let attributes = collectionView.layoutAttributesForItem(at: indexPath) else {
                         return nil
@@ -1287,9 +1252,7 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
                     )
                     guard let sample = cell.textViewportSample(
                         referenceLineY: referenceLineY,
-                        pageFrame: visibleFrame,
-                        documentView: pageIdentity.documentView,
-                        pageIndex: pageIdentity.pageIndex
+                        surfaceFrame: visibleFrame
                     ) else {
                         return nil
                     }
@@ -1320,15 +1283,15 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
         }
 
         private func verticalItemHeight(for item: Int, in collectionView: UICollectionView) -> CGFloat {
-            guard let displayPage = verticalDisplayPage(for: item) else {
+            guard let displaySurface = verticalDisplaySurface(for: item) else {
                 return max(collectionView.bounds.height, 1)
             }
-            let topPadding = displayPage.pageIndex == 0 ? CGFloat(16) : 0
-            if let viewportMetricHeight = parent.viewportLayoutMetrics?.pageHeight(for: displayPage.pageIndex) {
-                return max(ceil(viewportMetricHeight + topPadding), 1)
+            let topPadding = displaySurface.surfaceIndex == 0 ? CGFloat(16) : 0
+            if let presentationHeight = displaySurface.presentationHeight {
+                return max(ceil(presentationHeight + topPadding), 1)
             }
             let contentWidth = max(verticalItemWidth(in: collectionView) - parent.settings.horizontalPadding * 2, 1)
-            let blockHeights = displayPage.blocks.map { block -> CGFloat in
+            let blockHeights = displaySurface.blocks.map { block -> CGFloat in
                 switch block {
                 case .text:
                     return max(collectionView.bounds.height, 1)
@@ -1339,48 +1302,28 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
                 }
             }
             let contentHeight = blockHeights.reduce(CGFloat.zero, +)
-            let spacingHeight = CGFloat(max(displayPage.blocks.count - 1, 0)) * 14
+            let spacingHeight = CGFloat(max(displaySurface.blocks.count - 1, 0)) * 14
             return max(ceil(contentHeight + spacingHeight + topPadding), 1)
         }
 
-        private var verticalPageCount: Int {
-            parent.viewportIndex?.pages.count ?? parent.pages.count
+        private var verticalSurfaceCount: Int {
+            parent.surfaces.count
         }
 
-        private func verticalPageIdentity(for item: Int) -> (pageIndex: Int, documentView: Int)? {
-            if let viewportPage = parent.viewportIndex?.pages.first(where: { $0.pageIndex == item }) {
-                return (viewportPage.pageIndex, viewportPage.documentView)
-            }
-            guard parent.pages.indices.contains(item) else {
-                return nil
-            }
-            let page = parent.pages[item]
-            return (page.pageIndex, page.documentView)
+        private func verticalSurface(for item: Int) -> NovelReaderSurface? {
+            guard parent.surfaces.indices.contains(item) else { return nil }
+            return parent.surfaces[item]
         }
 
-        private func verticalDisplayPage(for item: Int) -> ReaderVerticalViewportDisplayPage? {
-            if let viewportPage = parent.viewportIndex?.pages.first(where: { $0.pageIndex == item }) {
-                return ReaderVerticalViewportDisplayPage(
-                    pageIndex: viewportPage.pageIndex,
-                    documentView: viewportPage.documentView,
-                    blocks: ReaderViewportPageContent.viewportBlocks(
-                        viewportContext: parent.viewportContext,
-                        viewportPage: viewportPage,
-                        settings: parent.settings
-                    )
-                )
-            }
-            guard parent.pages.indices.contains(item) else {
-                return nil
-            }
-            let page = parent.pages[item]
-            return ReaderVerticalViewportDisplayPage(
-                pageIndex: page.pageIndex,
-                documentView: page.documentView,
-                blocks: ReaderViewportPageContent.viewportBlocks(
-                    viewportContext: parent.viewportContext,
-                    viewportPage: page,
-                    settings: parent.settings
+        private func verticalDisplaySurface(for item: Int) -> ReaderVerticalViewportDisplaySurface? {
+            guard let surface = verticalSurface(for: item) else { return nil }
+            return ReaderVerticalViewportDisplaySurface(
+                identity: surface.identity,
+                surfaceIndex: surface.presentationIndex,
+                documentView: surface.documentView,
+                presentationHeight: surface.presentationSize.height > 0 ? surface.presentationSize.height : nil,
+                blocks: ReaderViewportSurfaceContent.viewportBlocks(
+                    surface: surface
                 )
             )
         }
@@ -1390,10 +1333,10 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
             in collectionView: UICollectionView
         ) -> Bool {
             guard let textAnchor = request.textAnchor,
-                  request.pageIndex >= 0,
-                  request.pageIndex < verticalPageCount,
-                  let cell = collectionView.cellForItem(at: IndexPath(item: request.pageIndex, section: 0)) as? ReaderVerticalViewportCell,
-                  let attributes = collectionView.layoutAttributesForItem(at: IndexPath(item: request.pageIndex, section: 0)) else {
+                  request.surfaceIndex >= 0,
+                  request.surfaceIndex < verticalSurfaceCount,
+                  let cell = collectionView.cellForItem(at: IndexPath(item: request.surfaceIndex, section: 0)) as? ReaderVerticalViewportCell,
+                  let attributes = collectionView.layoutAttributesForItem(at: IndexPath(item: request.surfaceIndex, section: 0)) else {
                 return request.textAnchor == nil
             }
             let visibleFrame = attributes.frame.offsetBy(
@@ -1402,7 +1345,7 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
             )
             guard let anchorY = cell.textViewportAnchorY(
                 for: textAnchor,
-                pageFrame: visibleFrame
+                surfaceFrame: visibleFrame
             ) else {
                 return false
             }
@@ -1432,7 +1375,7 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
     }
 
     private var blockViews: [BlockView] = []
-    private var currentPage: ReaderVerticalViewportDisplayPage?
+    private var currentPage: ReaderVerticalViewportDisplaySurface?
     private var currentSettings = ReaderAppearanceSettings()
     private var currentRefererURL: URL?
     private var currentSessionState = SessionState()
@@ -1484,7 +1427,7 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
     }
 
     func configure(
-        page: ReaderVerticalViewportDisplayPage,
+        page: ReaderVerticalViewportDisplaySurface,
         displayReference: NovelTextViewportDisplayReference?,
         textHeight: CGFloat?,
         settings: ReaderAppearanceSettings,
@@ -1523,11 +1466,9 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
 
     func textViewportSample(
         referenceLineY: CGFloat,
-        pageFrame: CGRect,
-        documentView: Int,
-        pageIndex: Int
+        surfaceFrame: CGRect
     ) -> NovelTextViewportSample? {
-        let contentY = referenceLineY - pageFrame.minY
+        let contentY = referenceLineY - surfaceFrame.minY
         let candidates = blockViews.compactMap { block -> (distance: CGFloat, sample: NovelTextViewportSample)? in
             guard let displayReference = block.displayReference else {
                 return nil
@@ -1543,17 +1484,14 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
 
     func textViewportAnchorY(
         for anchor: ReaderVerticalTextAnchor,
-        pageFrame: CGRect
+        surfaceFrame: CGRect
     ) -> CGFloat? {
         for block in blockViews {
             guard let displayReference = block.displayReference,
-                  let referenceY = displayReference.referenceY(
-                    segmentIndex: anchor.segmentIndex,
-                    segmentOffset: anchor.segmentOffset
-                  ) else {
+                  let referenceY = displayReference.referenceY(for: anchor.position) else {
                 continue
             }
-            return pageFrame.minY + block.view.frame.minY + referenceY
+            return surfaceFrame.minY + block.view.frame.minY + referenceY
         }
         return nil
     }
@@ -1566,7 +1504,7 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
     private func makeBlockView(
         for block: ReaderViewportDisplayBlock,
         blockIndex: Int,
-        page: ReaderVerticalViewportDisplayPage,
+        page: ReaderVerticalViewportDisplaySurface,
         contentWidth: CGFloat,
         refererURL: URL,
         sessionState: SessionState,
@@ -1740,10 +1678,7 @@ private final class ReaderVerticalViewportImageView: UIView {
 }
 
 private struct ReaderVerticalViewportContentIdentity: Hashable {
-    var pages: [NovelTextViewportIndexPage]
-    var viewportContext: NovelTextViewportContext?
-    var viewportIndex: NovelTextViewportIndex?
-    var viewportLayoutMetrics: NovelTextViewportLayoutMetrics?
+    var surfaces: [NovelReaderSurface]
     var settings: ReaderAppearanceSettings
     var topInset: CGFloat
     var bottomInset: CGFloat
@@ -2177,7 +2112,7 @@ struct ReaderBottomChrome: View {
         if model.settings.readingMode == .vertical {
             0 ... 100
         } else {
-            0 ... Double(max(model.renderedPageCount - 1, 0))
+            0 ... Double(max(model.surfaceCount - 1, 0))
         }
     }
 
@@ -2185,7 +2120,7 @@ struct ReaderBottomChrome: View {
         if model.settings.readingMode == .vertical {
             Double(model.currentProgressPercent)
         } else {
-            Double(max(model.currentRenderedPage - 1, 0))
+            Double(max(model.currentSurfaceNumber - 1, 0))
         }
     }
 
@@ -2193,8 +2128,8 @@ struct ReaderBottomChrome: View {
         ReaderProgressSliderSnapshot(
             readingMode: model.settings.readingMode,
             visibleView: model.visibleView,
-            renderedPageCount: model.renderedPageCount,
-            currentRenderedPage: model.currentRenderedPage,
+            surfaceCount: model.surfaceCount,
+            currentSurfaceNumber: model.currentSurfaceNumber,
             currentProgressPercent: model.currentProgressPercent
         )
     }
@@ -2205,8 +2140,8 @@ struct ReaderBottomChrome: View {
 
     private var displayedProgressFraction: Double {
         if scrubState.phase == .scrubbing {
-            guard model.renderedPageCount > 1 else { return 0 }
-            return Double(scrubState.targetRenderedPageIndex) / Double(max(model.renderedPageCount - 1, 1))
+            guard model.surfaceCount > 1 else { return 0 }
+            return Double(scrubState.targetSurfaceIndex) / Double(max(model.surfaceCount - 1, 1))
         }
         return model.currentProgressFraction
     }
@@ -2215,27 +2150,27 @@ struct ReaderBottomChrome: View {
         model.progressSliderLabelText(
             isEditing: sliderState.isEditing,
             sliderValue: sliderState.sliderValue,
-            targetRenderedPageIndex: sliderTargetRenderedPageIndex
+            targetSurfaceIndex: sliderTargetSurfaceIndex
         )
     }
 
-    private var sliderTargetRenderedPageIndex: Int {
-        model.targetRenderedPageIndex(forProgressValue: sliderState.sliderValue)
+    private var sliderTargetSurfaceIndex: Int {
+        model.targetSurfaceIndex(forProgressValue: sliderState.sliderValue)
     }
 
     private var scrubContext: ReaderProgressScrubContext {
         ReaderProgressScrubContext(
             readingMode: model.settings.readingMode,
-            pageCount: model.renderedPageCount,
+            surfaceCount: model.surfaceCount,
             currentProgressPercent: model.currentProgressPercent,
-            targetPageIndex: { value in
-                model.targetRenderedPageIndex(forProgressValue: value)
+            targetSurfaceIndex: { value in
+                model.targetSurfaceIndex(forProgressValue: value)
             },
-            chapterTitle: { pageIndex in
-                model.chapterTitle(forRenderedPageIndex: pageIndex)
+            chapterTitle: { surfaceIndex in
+                model.chapterTitle(forSurfaceIndex: surfaceIndex)
             },
-            chapterTickStartIndex: { pageIndex in
-                model.progressChapterTickStartIndex(forRenderedPageIndex: pageIndex)
+            chapterTickStartIndex: { surfaceIndex in
+                model.progressChapterTickStartIndex(forSurfaceIndex: surfaceIndex)
             }
         )
     }
@@ -2252,7 +2187,7 @@ struct ReaderBottomChrome: View {
         guard scrubState.phase == .scrubbing else { return }
         let update = scrubState.end()
         triggerFeedback(update.haptics)
-        if let target = update.committedPageIndex {
+        if let target = update.committedSurfaceIndex {
             onProgressCommit(target)
         }
         sliderState.sliderValue = sliderModelValue
@@ -2276,7 +2211,7 @@ struct ReaderBottomChrome: View {
     }
 
     private func triggerProgressTickFeedbackIfNeeded() {
-        guard let tickStartIndex = model.progressChapterTickStartIndex(forRenderedPageIndex: sliderTargetRenderedPageIndex) else {
+        guard let tickStartIndex = model.progressChapterTickStartIndex(forSurfaceIndex: sliderTargetSurfaceIndex) else {
             lastFeedbackTickStartIndex = nil
             return
         }

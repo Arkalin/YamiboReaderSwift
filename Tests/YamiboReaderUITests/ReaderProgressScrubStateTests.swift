@@ -7,9 +7,9 @@ final class ReaderProgressScrubStateTests: XCTestCase {
         var state = ReaderProgressScrubState()
         let context = ReaderProgressScrubContext(
             readingMode: .paged,
-            pageCount: 5,
+            surfaceCount: 5,
             currentProgressPercent: 20,
-            targetPageIndex: { value in min(max(Int(value.rounded()), 0), 4) },
+            targetSurfaceIndex: { value in min(max(Int(value.rounded()), 0), 4) },
             chapterTitle: { index in index >= 2 ? "第二章" : "第一章" },
             chapterTickStartIndex: { index in index == 2 ? 2 : nil }
         )
@@ -18,18 +18,18 @@ final class ReaderProgressScrubStateTests: XCTestCase {
 
         XCTAssertEqual(state.phase, .scrubbing)
         XCTAssertEqual(state.value, 4)
-        XCTAssertEqual(state.targetRenderedPageIndex, 4)
+        XCTAssertEqual(state.targetSurfaceIndex, 4)
         XCTAssertEqual(state.preview, ReaderProgressScrubPreview(chapterTitle: "第二章", pageNumber: 5))
-        XCTAssertNil(update.committedPageIndex)
+        XCTAssertNil(update.committedSurfaceIndex)
     }
 
     func testCommitReturnsOneTargetPageAndCommitHaptic() {
         var state = ReaderProgressScrubState()
         let context = ReaderProgressScrubContext(
             readingMode: .paged,
-            pageCount: 5,
+            surfaceCount: 5,
             currentProgressPercent: 0,
-            targetPageIndex: { value in Int(value.rounded()) },
+            targetSurfaceIndex: { value in Int(value.rounded()) },
             chapterTitle: { _ in nil },
             chapterTickStartIndex: { _ in nil }
         )
@@ -38,7 +38,7 @@ final class ReaderProgressScrubStateTests: XCTestCase {
         let commit = state.end()
 
         XCTAssertEqual(state.phase, .ended)
-        XCTAssertEqual(commit.committedPageIndex, 3)
+        XCTAssertEqual(commit.committedSurfaceIndex, 3)
         XCTAssertEqual(commit.haptics, [.commit])
     }
 
@@ -46,9 +46,9 @@ final class ReaderProgressScrubStateTests: XCTestCase {
         var state = ReaderProgressScrubState()
         let context = ReaderProgressScrubContext(
             readingMode: .paged,
-            pageCount: 6,
+            surfaceCount: 6,
             currentProgressPercent: 0,
-            targetPageIndex: { value in Int(value.rounded()) },
+            targetSurfaceIndex: { value in Int(value.rounded()) },
             chapterTitle: { _ in nil },
             chapterTickStartIndex: { index in [0, 2, 5].contains(index) ? index : nil }
         )
@@ -62,9 +62,9 @@ final class ReaderProgressScrubStateTests: XCTestCase {
         var state = ReaderProgressScrubState()
         let context = ReaderProgressScrubContext(
             readingMode: .vertical,
-            pageCount: 6,
+            surfaceCount: 6,
             currentProgressPercent: 40,
-            targetPageIndex: { value in Int((value / 100 * 5).rounded()) },
+            targetSurfaceIndex: { value in Int((value / 100 * 5).rounded()) },
             chapterTitle: { _ in nil },
             chapterTickStartIndex: { _ in nil }
         )

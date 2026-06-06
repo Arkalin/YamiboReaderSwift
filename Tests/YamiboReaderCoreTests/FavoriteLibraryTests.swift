@@ -69,7 +69,7 @@ import Testing
     let archive = FavoriteMetadataArchiveEntry(
         canonicalThreadURL: ReaderCacheIdentity.canonicalThreadURL(from: archivedURL),
         displayName: "恢复名",
-        lastPage: 6,
+        mangaPageIndex: 6,
         lastView: 2,
         lastChapter: "第二章",
         authorID: "author-935",
@@ -101,7 +101,7 @@ import Testing
     #expect(restored.isHidden)
     #expect(restored.parentCollectionID == nil)
     #expect(restored.type == .novel)
-    #expect(restored.lastPage == 6)
+    #expect(restored.mangaPageIndex == 6)
     #expect(restored.lastView == 2)
     #expect(restored.lastChapter == "第二章")
     #expect(restored.authorID == "author-935")

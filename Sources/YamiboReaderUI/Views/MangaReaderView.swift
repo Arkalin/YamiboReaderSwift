@@ -12,6 +12,11 @@ private struct MangaVerticalPageFramePreferenceKey: PreferenceKey {
     }
 }
 
+private struct MangaVerticalScrollRequest: Equatable, Sendable {
+    let pageIndex: Int
+    let intraPageProgress: Double
+}
+
 public struct MangaReaderView: View {
     private static let verticalReaderCoordinateSpaceName = "MangaReaderVerticalCoordinateSpace"
     private static let pagedTapDelayNanoseconds: UInt64 = 340_000_000
@@ -34,7 +39,7 @@ public struct MangaReaderView: View {
     @State private var lastPagedTapDate: Date?
     @State private var lastPagedTapLocation: CGPoint?
     @State private var suppressPagedSingleTapUntil = Date.distantPast
-    @State private var verticalRestoreController = ReaderVerticalRestoreController()
+    @State private var verticalRestoreController = VerticalRestoreController<MangaVerticalScrollRequest>()
     @State private var verticalRestoreSettleTask: Task<Void, Never>?
     @State private var verticalPageFrames: [MangaPage.ID: CGRect] = [:]
     @State private var isDismissing = false
@@ -703,14 +708,14 @@ public struct MangaReaderView: View {
         verticalRestoreSettleTask?.cancel()
         verticalRestoreSettleTask = nil
         verticalRestoreController.beginScrolling(
-            to: ReaderVerticalScrollRequest(
+            to: MangaVerticalScrollRequest(
                 pageIndex: request.targetIndex,
                 intraPageProgress: 0
             )
         )
     }
 
-    private func beginVerticalRestoreSettling(for request: ReaderVerticalScrollRequest) {
+    private func beginVerticalRestoreSettling(for request: MangaVerticalScrollRequest) {
         verticalRestoreController.beginSettling(request, now: CACurrentMediaTime())
         verticalRestoreSettleTask?.cancel()
         verticalRestoreSettleTask = Task {

@@ -69,9 +69,80 @@ private extension Character {
 #if canImport(UIKit)
 import UIKit
 
+public typealias ReaderPlatformColor = UIColor
+typealias ReaderPlatformFont = UIFont
+typealias ReaderPlatformFontDescriptor = UIFontDescriptor
+public typealias ReaderPlatformFontWeight = UIFont.Weight
+
+private extension ReaderPlatformColor {
+    static var readerLabel: ReaderPlatformColor { .label }
+}
+#elseif canImport(AppKit)
+import AppKit
+
+public typealias ReaderPlatformColor = NSColor
+typealias ReaderPlatformFont = NSFont
+typealias ReaderPlatformFontDescriptor = NSFontDescriptor
+public typealias ReaderPlatformFontWeight = NSFont.Weight
+
+private extension ReaderPlatformColor {
+    static var readerLabel: ReaderPlatformColor { .labelColor }
+}
+#endif
+
+#if canImport(UIKit) || canImport(AppKit)
+
 @_spi(NovelTextAttributedDocument)
 public enum ReaderAttributedTextFactory {
     public static let defaultBaseFontSize: Double = 22
+
+    static func makeAttributedDocument(
+        from preparedInput: NovelTextLayoutPreparedInput
+    ) -> NSAttributedString {
+        let document = NSMutableAttributedString()
+        var hasText = false
+
+        for annotatedSegment in preparedInput.annotatedSegments {
+            guard case let .text(text, _) = annotatedSegment.segment else {
+                continue
+            }
+            if hasText {
+                document.append(
+                    makeAttributedText(
+                        text: "\n\n",
+                        chapterTitleRange: nil,
+                        settings: preparedInput.settings
+                    )
+                )
+            }
+            document.append(
+                makeAttributedText(
+                    text: text,
+                    chapterTitleRange: annotatedSegment.semantics?.chapterTitleRange,
+                    settings: preparedInput.settings
+                )
+            )
+            hasText = true
+        }
+
+        return document
+    }
+
+    static func resolvedFontFingerprint(
+        settings: ReaderAppearanceSettings,
+        baseFontSize: Double = defaultBaseFontSize
+    ) -> String {
+        let font = settings.fontFamily.platformFont(
+            size: baseFontSize * settings.fontScale,
+            weight: .regular
+        )
+        return [
+            font.fontName,
+            font.familyName ?? "",
+            String(describing: font.pointSize),
+            String(describing: font.fontDescriptor.fontAttributes),
+        ].joined(separator: "|")
+    }
 
     public static func makeAttributedText(
         text: String,
@@ -79,10 +150,11 @@ public enum ReaderAttributedTextFactory {
         startsAtParagraphBoundary: Bool = true,
         settings: ReaderAppearanceSettings,
         baseFontSize: Double = defaultBaseFontSize,
-        textColor: UIColor = .label,
-        titleWeight: UIFont.Weight = .regular
+        textColor: ReaderPlatformColor? = nil,
+        titleWeight: ReaderPlatformFontWeight = .regular
     ) -> NSAttributedString {
         let rendered = NSMutableAttributedString()
+        let textColor = textColor ?? .readerLabel
         let segments = ReaderChapterTextComponents.split(text: text, chapterTitle: chapterTitle)
         let pointSize = baseFontSize * settings.fontScale
         let firstBodyParagraphStyle = makeParagraphStyle(
@@ -97,13 +169,13 @@ public enum ReaderAttributedTextFactory {
         )
         let titleParagraphStyle = makeParagraphStyle(settings: settings, pointSize: pointSize, appliesFirstLineIndent: false)
         let bodyAttributes: [NSAttributedString.Key: Any] = [
-            .font: settings.fontFamily.uiFont(size: pointSize, weight: .regular),
+            .font: settings.fontFamily.platformFont(size: pointSize, weight: .regular),
             .kern: settings.fontFamily.kerning(size: pointSize, scale: settings.characterSpacingScale),
             .foregroundColor: textColor,
             .paragraphStyle: firstBodyParagraphStyle,
         ]
         let titleAttributes: [NSAttributedString.Key: Any] = [
-            .font: settings.fontFamily.uiFont(size: pointSize, weight: titleWeight),
+            .font: settings.fontFamily.platformFont(size: pointSize, weight: titleWeight),
             .kern: settings.fontFamily.kerning(size: pointSize, scale: settings.characterSpacingScale),
             .foregroundColor: textColor,
             .paragraphStyle: titleParagraphStyle,
@@ -128,6 +200,64 @@ public enum ReaderAttributedTextFactory {
                 laterParagraphStyle: laterBodyParagraphStyle,
                 startsAtParagraphBoundary: startsAtParagraphBoundary
             )
+        }
+
+        return rendered
+    }
+
+    static func makeAttributedText(
+        text: String,
+        chapterTitleRange: ReaderCharacterRange?,
+        startsAtParagraphBoundary: Bool = true,
+        settings: ReaderAppearanceSettings,
+        baseFontSize: Double = defaultBaseFontSize,
+        textColor: ReaderPlatformColor? = nil,
+        titleWeight: ReaderPlatformFontWeight = .regular
+    ) -> NSAttributedString {
+        let rendered = NSMutableAttributedString()
+        let textColor = textColor ?? .readerLabel
+        let pointSize = baseFontSize * settings.fontScale
+        let firstBodyParagraphStyle = makeParagraphStyle(
+            settings: settings,
+            pointSize: pointSize,
+            appliesFirstLineIndent: startsAtParagraphBoundary
+        )
+        let laterBodyParagraphStyle = makeParagraphStyle(
+            settings: settings,
+            pointSize: pointSize,
+            appliesFirstLineIndent: true
+        )
+        let titleParagraphStyle = makeParagraphStyle(settings: settings, pointSize: pointSize, appliesFirstLineIndent: false)
+        let bodyAttributes: [NSAttributedString.Key: Any] = [
+            .font: settings.fontFamily.platformFont(size: pointSize, weight: .regular),
+            .kern: settings.fontFamily.kerning(size: pointSize, scale: settings.characterSpacingScale),
+            .foregroundColor: textColor,
+            .paragraphStyle: firstBodyParagraphStyle,
+        ]
+        let titleAttributes: [NSAttributedString.Key: Any] = [
+            .font: settings.fontFamily.platformFont(size: pointSize, weight: titleWeight),
+            .kern: settings.fontFamily.kerning(size: pointSize, scale: settings.characterSpacingScale),
+            .foregroundColor: textColor,
+            .paragraphStyle: titleParagraphStyle,
+        ]
+
+        rendered.append(NSAttributedString(string: text, attributes: bodyAttributes))
+
+        if !startsAtParagraphBoundary {
+            for range in ReaderParagraphIndentPlanner.indentedParagraphRangesAfterFirst(in: text) {
+                let location = text.distance(from: text.startIndex, to: range.lowerBound)
+                let length = text.distance(from: range.lowerBound, to: range.upperBound)
+                guard length > 0 else { continue }
+                rendered.addAttribute(
+                    .paragraphStyle,
+                    value: laterBodyParagraphStyle,
+                    range: NSRange(location: location, length: length)
+                )
+            }
+        }
+
+        if let titleRange = titleRange(from: chapterTitleRange, in: text) {
+            rendered.addAttributes(titleAttributes, range: titleRange)
         }
 
         return rendered
@@ -174,47 +304,89 @@ public enum ReaderAttributedTextFactory {
             )
         }
     }
+
+    private static func titleRange(
+        from chapterTitleRange: ReaderCharacterRange?,
+        in text: String
+    ) -> NSRange? {
+        guard let chapterTitleRange,
+              chapterTitleRange.length > 0,
+              chapterTitleRange.location >= 0,
+              chapterTitleRange.upperBound <= text.count else {
+            return nil
+        }
+        return NSRange(location: chapterTitleRange.location, length: chapterTitleRange.length)
+    }
 }
 
-public extension ReaderFontFamily {
-    func uiFont(size: Double, weight: UIFont.Weight) -> UIFont {
+extension ReaderFontFamily {
+    func platformFont(size: Double, weight: ReaderPlatformFontWeight) -> ReaderPlatformFont {
         let pointSize = CGFloat(size)
         switch self {
         case .systemSans:
             return preferredFamilyFont(familyName: "PingFang SC", size: pointSize, weight: weight)
-                ?? .systemFont(ofSize: pointSize, weight: weight)
+                ?? systemFont(ofSize: pointSize, weight: weight)
         case .systemSerif:
             return preferredFamilyFont(familyName: "Songti SC", size: pointSize, weight: weight)
                 ?? systemFont(size: pointSize, weight: weight, design: .serif)
-                ?? .systemFont(ofSize: pointSize, weight: weight)
+                ?? systemFont(ofSize: pointSize, weight: weight)
         case .rounded:
             return systemFont(size: pointSize, weight: weight, design: .rounded)
-                ?? .systemFont(ofSize: pointSize, weight: weight)
+                ?? systemFont(ofSize: pointSize, weight: weight)
         }
     }
+
+    #if canImport(UIKit)
+    func uiFont(size: Double, weight: UIFont.Weight) -> UIFont {
+        platformFont(size: size, weight: weight)
+    }
+    #endif
 
     func kerning(size: Double, scale: Double) -> CGFloat {
         CGFloat(size * scale * 0.55)
     }
 
-    private func preferredFamilyFont(familyName: String, size: CGFloat, weight: UIFont.Weight) -> UIFont? {
-        let descriptor = UIFontDescriptor(
+    private func preferredFamilyFont(
+        familyName: String,
+        size: CGFloat,
+        weight: ReaderPlatformFontWeight
+    ) -> ReaderPlatformFont? {
+        let descriptor = ReaderPlatformFontDescriptor(
             fontAttributes: [
                 .family: familyName,
-                .traits: [UIFontDescriptor.TraitKey.weight: weight],
+                .traits: [ReaderPlatformFontDescriptor.TraitKey.weight: weight],
             ]
         )
-        let font = UIFont(descriptor: descriptor, size: size)
+        #if canImport(UIKit)
+        let font = ReaderPlatformFont(descriptor: descriptor, size: size)
         return font.familyName == familyName ? font : nil
+        #else
+        guard let font = ReaderPlatformFont(descriptor: descriptor, size: size) else {
+            return nil
+        }
+        return font.fontName.contains(familyName) || font.familyName == familyName ? font : nil
+        #endif
     }
 
-    private func systemFont(size: CGFloat, weight: UIFont.Weight, design: UIFontDescriptor.SystemDesign) -> UIFont? {
-        let baseDescriptor = UIFont.systemFont(ofSize: size, weight: weight).fontDescriptor
+    private func systemFont(
+        size: CGFloat,
+        weight: ReaderPlatformFontWeight,
+        design: ReaderPlatformFontDescriptor.SystemDesign
+    ) -> ReaderPlatformFont? {
+        let baseDescriptor = systemFont(ofSize: size, weight: weight).fontDescriptor
         guard let designedDescriptor = baseDescriptor.withDesign(design) else {
             return nil
         }
 
-        return UIFont(descriptor: designedDescriptor, size: size)
+        return ReaderPlatformFont(descriptor: designedDescriptor, size: size)
+    }
+
+    private func systemFont(ofSize size: CGFloat, weight: ReaderPlatformFontWeight) -> ReaderPlatformFont {
+        #if canImport(UIKit)
+        return .systemFont(ofSize: size, weight: weight)
+        #else
+        return .systemFont(ofSize: size, weight: weight)
+        #endif
     }
 }
 #endif

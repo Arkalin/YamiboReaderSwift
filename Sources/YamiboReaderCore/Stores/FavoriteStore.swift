@@ -30,7 +30,7 @@ public protocol FavoriteStoring: Sendable {
     func favorite(for url: URL) async -> Favorite?
     func favorite(id: String) async -> Favorite?
     func markLastReadAt(for favoriteID: String, date: Date) async throws -> [Favorite]
-    func updateReadingProgress(for url: URL, progress: ReaderProgress) async throws -> Favorite
+    func updateNovelReadingPosition(_ position: NovelReadingPosition) async throws -> Favorite
     func updateMangaProgress(for url: URL, chapterURL: URL, chapterTitle: String, pageIndex: Int) async throws -> Favorite
     func clearAll() async throws
 }
@@ -610,39 +610,47 @@ public actor FavoriteStore: FavoriteStoring {
         return try persistLibrary(favorites: updated, collections: snapshot.collections).favorites
     }
 
-    public func updateReadingProgress(for url: URL, progress: ReaderProgress) async throws -> Favorite {
-        guard let favorite = try await updateReadingProgress(for: url, progress: progress, createIfMissing: true) else {
+    public func updateNovelReadingPosition(_ position: NovelReadingPosition) async throws -> Favorite {
+        guard let favorite = try await updateNovelReadingPosition(position, createIfMissing: true) else {
             throw YamiboError.persistenceFailed(L10n.string("favorite_store.save_reader_progress_failed"))
         }
         return favorite
     }
 
-    public func updateReadingProgress(for url: URL, progress: ReaderProgress, createIfMissing: Bool) async throws -> Favorite? {
+    public func updateNovelReadingPosition(
+        _ position: NovelReadingPosition,
+        createIfMissing: Bool
+    ) async throws -> Favorite? {
         let snapshot = await loadLibrarySnapshot()
         var favorites = snapshot.favorites
+        let resumePoint = position.resumePoint
+        let view = resumePoint?.view ?? position.view
+        let chapterTitle = resumePoint?.chapterTitle ?? position.chapterTitle
+        let authorID = resumePoint?.authorID ?? position.authorID
 
-        if let index = favorites.firstIndex(where: { $0.url == url || $0.id == url.absoluteString }) {
-            favorites[index].lastView = progress.view
-            favorites[index].lastPage = progress.page
-            favorites[index].lastChapter = progress.chapterTitle
-            favorites[index].authorID = progress.authorID
-            favorites[index].novelResumePoint = progress.resumePoint
-            if favorites[index].type == .unknown {
-                favorites[index].type = .novel
-            }
+        if let index = favorites.firstIndex(where: {
+            $0.url == position.threadURL || $0.id == position.threadURL.absoluteString
+        }) {
+            favorites[index].lastView = view
+            favorites[index].mangaPageIndex = 0
+            favorites[index].lastChapter = chapterTitle
+            favorites[index].authorID = authorID
+            favorites[index].novelResumePoint = resumePoint
+            favorites[index].lastMangaURL = nil
+            favorites[index].type = .novel
             return try persistLibrary(favorites: favorites, collections: snapshot.collections).favorites[index]
         }
 
         guard createIfMissing else { return nil }
 
         var favorite = Favorite(
-            title: url.absoluteString,
-            url: url,
-            lastPage: progress.page,
-            lastView: progress.view,
-            lastChapter: progress.chapterTitle,
-            authorID: progress.authorID,
-            novelResumePoint: progress.resumePoint,
+            title: position.threadURL.absoluteString,
+            url: position.threadURL,
+            mangaPageIndex: 0,
+            lastView: view,
+            lastChapter: chapterTitle,
+            authorID: authorID,
+            novelResumePoint: resumePoint,
             isHidden: false,
             type: .novel
         )
@@ -671,7 +679,7 @@ public actor FavoriteStore: FavoriteStoring {
         if let index = favorites.firstIndex(where: { $0.url == url || $0.id == url.absoluteString }) {
             favorites[index].lastMangaURL = chapterURL
             favorites[index].lastChapter = chapterTitle
-            favorites[index].lastPage = max(0, pageIndex)
+            favorites[index].mangaPageIndex = max(0, pageIndex)
             favorites[index].novelResumePoint = nil
             favorites[index].type = .manga
             return try persistLibrary(favorites: favorites, collections: snapshot.collections).favorites[index]
@@ -682,7 +690,7 @@ public actor FavoriteStore: FavoriteStoring {
         var favorite = Favorite(
             title: chapterTitle,
             url: url,
-            lastPage: max(0, pageIndex),
+            mangaPageIndex: max(0, pageIndex),
             lastView: 1,
             lastChapter: chapterTitle,
             authorID: nil,

@@ -1,323 +1,260 @@
 import Foundation
 
-public struct ReaderPagedSpread: Identifiable, Equatable, Sendable {
+package struct NovelReadingSpread: Identifiable, Equatable, Sendable {
     public let index: Int
-    public let leftPageIndex: Int
-    public let rightPageIndex: Int?
+    public let leftSurfaceIndex: Int
+    public let rightSurfaceIndex: Int?
     public let chapterTitle: String?
 
     public var id: Int { index }
 
-    public init(index: Int, leftPageIndex: Int, rightPageIndex: Int?, chapterTitle: String?) {
+    public init(index: Int, leftSurfaceIndex: Int, rightSurfaceIndex: Int?, chapterTitle: String?) {
         self.index = max(0, index)
-        self.leftPageIndex = max(0, leftPageIndex)
-        self.rightPageIndex = rightPageIndex
+        self.leftSurfaceIndex = max(0, leftSurfaceIndex)
+        self.rightSurfaceIndex = rightSurfaceIndex
         self.chapterTitle = chapterTitle
     }
 }
 
-public struct NovelReadingSnapshot: Equatable, Sendable {
-    public var pages: [NovelTextViewportIndexPage]
-    public var chapters: [ReaderChapter]
-    public var currentPageIndex: Int
-    public var currentPageIntraProgress: Double
+package struct NovelReadingSnapshot: Equatable, Sendable {
+    public var selectedSurfaceOrdinal: Int
+    public var currentSurfaceIntraProgress: Double
     public var currentView: Int
     public var maxView: Int
     public var currentChapterTitle: String?
     public var currentContentSource: ReaderContentSource
     public var retainedChapterCount: Int
     public var filteredChapterCandidateCount: Int
-    public var pagedSpreads: [ReaderPagedSpread]
-    public var prefetchedStartIndex: Int?
     public var currentAuthorID: String?
-    public var viewportContext: NovelTextViewportContext?
-    public var viewportIndex: NovelTextViewportIndex?
-    public var viewportLayoutMetrics: NovelTextViewportLayoutMetrics?
 
     public init(
-        pages: [NovelTextViewportIndexPage],
-        chapters: [ReaderChapter],
-        currentPageIndex: Int,
-        currentPageIntraProgress: Double,
+        selectedSurfaceOrdinal: Int,
+        currentSurfaceIntraProgress: Double,
         currentView: Int,
         maxView: Int,
         currentChapterTitle: String?,
         currentContentSource: ReaderContentSource,
         retainedChapterCount: Int,
         filteredChapterCandidateCount: Int,
-        pagedSpreads: [ReaderPagedSpread],
-        prefetchedStartIndex: Int?,
-        currentAuthorID: String?,
-        viewportContext: NovelTextViewportContext? = nil,
-        viewportIndex: NovelTextViewportIndex? = nil,
-        viewportLayoutMetrics: NovelTextViewportLayoutMetrics? = nil
+        currentAuthorID: String?
     ) {
-        self.pages = pages
-        self.chapters = chapters
-        self.currentPageIndex = max(0, currentPageIndex)
-        self.currentPageIntraProgress = min(max(currentPageIntraProgress, 0), 1)
+        self.selectedSurfaceOrdinal = max(0, selectedSurfaceOrdinal)
+        self.currentSurfaceIntraProgress = min(max(currentSurfaceIntraProgress, 0), 1)
         self.currentView = max(1, currentView)
         self.maxView = max(self.currentView, maxView)
         self.currentChapterTitle = currentChapterTitle
         self.currentContentSource = currentContentSource
         self.retainedChapterCount = max(0, retainedChapterCount)
         self.filteredChapterCandidateCount = max(0, filteredChapterCandidateCount)
-        self.pagedSpreads = pagedSpreads
-        self.prefetchedStartIndex = prefetchedStartIndex
         self.currentAuthorID = currentAuthorID
-        self.viewportContext = viewportContext
-        self.viewportIndex = viewportIndex
-        self.viewportLayoutMetrics = viewportLayoutMetrics
     }
 }
 
-public enum NovelReadingNavigationRequest: Equatable, Sendable {
-    case loadView(view: Int, preferredPage: Int, resumePoint: ReaderResumePoint?)
-    case promotePrefetched(preferredPage: Int, resumePoint: ReaderResumePoint?)
+package enum NovelReadingNavigationRequest: Equatable, Sendable {
+    case loadView(view: Int, preferredSurfaceOrdinal: Int, resumePoint: ReaderResumePoint?)
+    case promotePrefetched(preferredSurfaceOrdinal: Int, resumePoint: ReaderResumePoint?)
 }
 
-public struct NovelReadingSession: Sendable {
+package struct NovelReadingSession: Sendable {
     public private(set) var snapshot: NovelReadingSnapshot
 
-    private var settings: ReaderAppearanceSettings
-    private var layout: ReaderContainerLayout
     private var currentDocument: ReaderPageDocument
-    private var prefetchedDocument: ReaderPageDocument?
-    private var usesPadPresentation: Bool
+    private var layoutResult: NovelTextLayoutResult?
+    private var surfaces: [NovelTextViewportIndexSurface]
+    private var chapters: [ReaderChapter]
+    private var spreads: [NovelReadingSpread]
+    private var usesPagedSpread: Bool
     private var pendingResumePoint: ReaderResumePoint?
-    private var pendingResumeRequiresLayoutSync = false
-    private var currentViewportIndex: NovelTextViewportIndex?
     private var preservedTextResumePoint: ReaderResumePoint?
-    private let pagination: NovelTextPagination
 
     init(
         document: ReaderPageDocument,
-        settings: ReaderAppearanceSettings,
-        layout: ReaderContainerLayout,
-        preferredPage: Int = 0,
+        layoutResult: NovelTextLayoutResult,
+        preferredSurfaceOrdinal: Int = 0,
         resumePoint: ReaderResumePoint? = nil,
-        usesPadPresentation: Bool = false,
         currentAuthorID: String? = nil,
-        pagination: @escaping NovelTextPagination = NovelTextLayout.layout
+        usesPagedSpread: Bool = false
     ) {
         self.init(
             unpaginatedDocument: document,
-            settings: settings,
-            layout: layout,
-            usesPadPresentation: usesPadPresentation,
             currentAuthorID: currentAuthorID,
-            pagination: pagination
+            usesPagedSpread: usesPagedSpread
         )
         preservedTextResumePoint = resumePoint
-        applyPaginationIgnoringFailure(for: document, preferredPage: preferredPage, preferredResumePoint: resumePoint)
+        consumeCommittedLayoutResult(
+            layoutResult,
+            for: document,
+            preferredSurfaceOrdinal: preferredSurfaceOrdinal,
+            preferredResumePoint: resumePoint
+        )
     }
 
     public init(
         validating document: ReaderPageDocument,
-        settings: ReaderAppearanceSettings,
-        layout: ReaderContainerLayout,
-        preferredPage: Int = 0,
+        layoutResult: NovelTextLayoutResult,
+        preferredSurfaceOrdinal: Int = 0,
         resumePoint: ReaderResumePoint? = nil,
-        usesPadPresentation: Bool = false,
         currentAuthorID: String? = nil,
-        pagination: @escaping NovelTextPagination = NovelTextLayout.layout
+        usesPagedSpread: Bool = false
     ) throws {
         self.init(
             unpaginatedDocument: document,
-            settings: settings,
-            layout: layout,
-            usesPadPresentation: usesPadPresentation,
             currentAuthorID: currentAuthorID,
-            pagination: pagination
+            usesPagedSpread: usesPagedSpread
         )
         preservedTextResumePoint = resumePoint
-        try applyPagination(for: document, preferredPage: preferredPage, preferredResumePoint: resumePoint)
+        try validateCommittedLayoutResult(layoutResult, for: document)
+        consumeCommittedLayoutResult(
+            layoutResult,
+            for: document,
+            preferredSurfaceOrdinal: preferredSurfaceOrdinal,
+            preferredResumePoint: resumePoint
+        )
     }
 
     private init(
         unpaginatedDocument document: ReaderPageDocument,
-        settings: ReaderAppearanceSettings,
-        layout: ReaderContainerLayout,
-        usesPadPresentation: Bool,
         currentAuthorID: String?,
-        pagination: @escaping NovelTextPagination
+        usesPagedSpread: Bool
     ) {
-        self.settings = settings
-        self.layout = layout
         self.currentDocument = document
-        self.usesPadPresentation = usesPadPresentation
+        self.layoutResult = nil
+        self.surfaces = []
+        self.chapters = []
+        self.spreads = []
+        self.usesPagedSpread = usesPagedSpread
         self.pendingResumePoint = nil
-        self.currentViewportIndex = nil
         self.preservedTextResumePoint = nil
-        self.pagination = pagination
         self.snapshot = NovelReadingSnapshot(
-            pages: [],
-            chapters: [],
-            currentPageIndex: 0,
-            currentPageIntraProgress: 0,
+            selectedSurfaceOrdinal: 0,
+            currentSurfaceIntraProgress: 0,
             currentView: document.view,
             maxView: document.maxView,
             currentChapterTitle: nil,
             currentContentSource: document.contentSource,
             retainedChapterCount: document.retainedChapterCount,
             filteredChapterCandidateCount: document.filteredChapterCandidateCount,
-            pagedSpreads: [],
-            prefetchedStartIndex: nil,
-            currentAuthorID: document.resolvedAuthorID ?? currentAuthorID,
-            viewportContext: nil,
-            viewportIndex: nil,
-            viewportLayoutMetrics: nil
+            currentAuthorID: document.resolvedAuthorID ?? currentAuthorID
         )
     }
 
-    private var isTwoPageSpreadActive: Bool {
-        settings.readingMode == .paged &&
-            settings.showsTwoPagesInLandscapeOnPad &&
-            usesPadPresentation &&
-            layout.width > layout.height
+    public mutating func consumeCommittedLayoutResult(
+        _ layoutResult: NovelTextLayoutResult,
+        preferredSurfaceOrdinal: Int,
+        preferredResumePoint: ReaderResumePoint?,
+        usesPagedSpread: Bool? = nil
+    ) {
+        if let usesPagedSpread {
+            self.usesPagedSpread = usesPagedSpread
+        }
+        consumeCommittedLayoutResult(
+            layoutResult,
+            for: currentDocument,
+            preferredSurfaceOrdinal: preferredSurfaceOrdinal,
+            preferredResumePoint: preferredResumePoint
+        )
     }
 
-    public mutating func applySettings(_ newSettings: ReaderAppearanceSettings) throws {
-        let oldSettings = settings
-        let oldPendingResumePoint = pendingResumePoint
-        let oldPendingResumeRequiresLayoutSync = pendingResumeRequiresLayoutSync
-        let shouldRepaginate = oldSettings != newSettings
-        let resumePoint = shouldRepaginate ? captureNovelReadingPosition() : nil
-        if shouldRepaginate {
-            pendingResumePoint = resumePoint
-            pendingResumeRequiresLayoutSync = oldSettings.readingMode != newSettings.readingMode
+    public mutating func consumeCommittedLayoutResult(
+        _ layoutResult: NovelTextLayoutResult,
+        for document: ReaderPageDocument,
+        preferredSurfaceOrdinal: Int,
+        preferredResumePoint: ReaderResumePoint?,
+        usesPagedSpread: Bool? = nil
+    ) {
+        if let usesPagedSpread {
+            self.usesPagedSpread = usesPagedSpread
         }
-        settings = newSettings
-        guard shouldRepaginate else { return }
-        do {
-            try applyPagination(for: currentDocument, preferredPage: snapshot.currentPageIndex, preferredResumePoint: resumePoint)
-        } catch {
-            settings = oldSettings
-            pendingResumePoint = oldPendingResumePoint
-            pendingResumeRequiresLayoutSync = oldPendingResumeRequiresLayoutSync
-            throw error
-        }
-        clearPendingResumePointIfSettled()
+        currentDocument = document
+        applyCommittedLayoutResult(
+            layoutResult,
+            for: document,
+            preferredSurfaceOrdinal: preferredSurfaceOrdinal,
+            preferredResumePoint: preferredResumePoint
+        )
     }
 
-    public mutating func updateLayout(_ layout: ReaderContainerLayout) throws {
-        guard self.layout != layout else { return }
-        let resumePoint = pendingResumePoint ?? captureNovelReadingPosition()
-        let oldLayout = self.layout
-        self.layout = layout
-        do {
-            try applyPagination(for: currentDocument, preferredPage: snapshot.currentPageIndex, preferredResumePoint: resumePoint)
-        } catch {
-            self.layout = oldLayout
-            throw error
-        }
-        clearPendingResumePointIfSettled()
-    }
-
-    public mutating func updatePagedPresentationEnvironment(isPad: Bool) throws {
-        guard usesPadPresentation != isPad else { return }
-        let oldUsesPadPresentation = usesPadPresentation
-        usesPadPresentation = isPad
-        guard settings.readingMode == .paged else { return }
-        do {
-            try applyPagination(
-                for: currentDocument,
-                preferredPage: snapshot.currentPageIndex,
-                preferredResumePoint: captureNovelReadingPosition()
-            )
-        } catch {
-            usesPadPresentation = oldUsesPadPresentation
-            throw error
-        }
-    }
-
-    public mutating func jumpToRenderedPage(_ pageIndex: Int) {
-        updateLocation(pageIndex: pageIndex, intraPageProgress: 0)
+    public mutating func selectSurface(_ surfaceOrdinal: Int) {
+        updateLocation(surfaceOrdinal: surfaceOrdinal, intraSurfaceProgress: 0)
     }
 
     @discardableResult
-    public mutating func jumpRelativePage(_ delta: Int) -> NovelReadingNavigationRequest? {
+    public mutating func jumpRelativeSurface(_ delta: Int) -> NovelReadingNavigationRequest? {
         guard delta != 0 else { return nil }
 
-        if settings.readingMode == .paged, isTwoPageSpreadActive {
+        if layoutResult?.viewportIndex.readingMode == .paged, !spreads.isEmpty {
             let targetSpreadIndex = spreadIndex(
-                forPageIndex: snapshot.currentPageIndex,
-                pages: snapshot.pages,
-                pagedSpreads: snapshot.pagedSpreads
+                forSurfaceOrdinal: snapshot.selectedSurfaceOrdinal,
+                surfaces: surfaces,
+                spreads: spreads
             ) + delta
-            if targetSpreadIndex >= 0, targetSpreadIndex < snapshot.pagedSpreads.count {
-                jumpToRenderedPage(leftPageIndex(forSpreadIndex: targetSpreadIndex, pagedSpreads: snapshot.pagedSpreads))
+            if targetSpreadIndex >= 0, targetSpreadIndex < spreads.count {
+                selectSurface(leftSurfaceIndex(forSpreadIndex: targetSpreadIndex, spreads: spreads))
                 return nil
             }
         }
 
-        let targetIndex = snapshot.currentPageIndex + delta
-        if targetIndex >= 0, targetIndex < snapshot.pages.count {
-            jumpToRenderedPage(targetIndex)
+        let targetIndex = snapshot.selectedSurfaceOrdinal + delta
+        if targetIndex >= 0, targetIndex < surfaces.count {
+            selectSurface(targetIndex)
             return nil
         }
 
         if targetIndex < 0 {
             let previousView = max(snapshot.currentView - 1, 1)
             guard previousView < snapshot.currentView else {
-                jumpToRenderedPage(0)
+                selectSurface(0)
                 return nil
             }
-            return .loadView(view: previousView, preferredPage: .max, resumePoint: nil)
-        }
-
-        if prefetchedDocument?.view == snapshot.currentView + 1 {
-            return .promotePrefetched(preferredPage: 0, resumePoint: nil)
+            return .loadView(view: previousView, preferredSurfaceOrdinal: .max, resumePoint: nil)
         }
 
         let nextView = min(snapshot.currentView + 1, snapshot.maxView)
         guard nextView > snapshot.currentView else {
-            jumpToRenderedPage(max(snapshot.pages.count - 1, 0))
+            selectSurface(max(surfaces.count - 1, 0))
             return nil
         }
-        return .loadView(view: nextView, preferredPage: 0, resumePoint: nil)
+        return .loadView(view: nextView, preferredSurfaceOrdinal: 0, resumePoint: nil)
     }
 
-    public mutating func updateVerticalViewportPosition(pageIndex: Int, intraPageProgress: Double) {
-        updateLocation(pageIndex: pageIndex, intraPageProgress: intraPageProgress)
+    public mutating func updateVerticalViewportPosition(surfaceOrdinal: Int, intraSurfaceProgress: Double) {
+        updateLocation(surfaceOrdinal: surfaceOrdinal, intraSurfaceProgress: intraSurfaceProgress)
         preserveCurrentTextResumePointIfAvailable()
     }
 
     public mutating func updateVerticalViewportPosition(sample: NovelTextViewportSample) {
-        guard settings.readingMode == .vertical,
+        guard layoutResult?.viewportIndex.readingMode == .vertical,
               let target = resolveViewportSample(sample) else {
-            updateVerticalViewportPosition(
-                pageIndex: sample.pageIndex,
-                intraPageProgress: 0
-            )
+            updateVerticalViewportPosition(surfaceOrdinal: sample.surfaceIdentity.ordinal, intraSurfaceProgress: 0)
             return
         }
         setCurrentLocation(target)
         preserveCurrentTextResumePointIfAvailable()
     }
 
-    public mutating func acceptPrefetchedDocument(_ document: ReaderPageDocument) {
-        prefetchedDocument = document
-        snapshot.maxView = max(snapshot.maxView, document.maxView)
+    package mutating func updateMaximumView(_ maxView: Int) {
+        snapshot.maxView = max(snapshot.currentView, maxView)
     }
 
     public mutating func promotePrefetchedDocument(
-        preferredPage: Int = 0,
-        resumePoint: ReaderResumePoint? = nil
+        document nextDocument: ReaderPageDocument,
+        layoutResult: NovelTextLayoutResult,
+        preferredSurfaceOrdinal: Int = 0,
+        resumePoint: ReaderResumePoint? = nil,
+        usesPagedSpread: Bool? = nil
     ) throws {
-        guard let nextDocument = prefetchedDocument else { return }
-        let previousDocument = currentDocument
-        let previousPrefetchedDocument = prefetchedDocument
-        currentDocument = nextDocument
-        prefetchedDocument = nil
         let effectiveResumePoint = resumePoint?.view == nextDocument.view ? resumePoint : nil
-        do {
-            try applyPagination(for: nextDocument, preferredPage: preferredPage, preferredResumePoint: effectiveResumePoint)
-        } catch {
-            currentDocument = previousDocument
-            prefetchedDocument = previousPrefetchedDocument
-            throw error
+        try validateCommittedLayoutResult(layoutResult, for: nextDocument)
+        if let usesPagedSpread {
+            self.usesPagedSpread = usesPagedSpread
         }
+        currentDocument = nextDocument
+        applyCommittedLayoutResult(
+            layoutResult,
+            for: nextDocument,
+            preferredSurfaceOrdinal: preferredSurfaceOrdinal,
+            preferredResumePoint: effectiveResumePoint
+        )
     }
 
     public func captureNovelReadingPosition() -> ReaderResumePoint? {
@@ -325,178 +262,174 @@ public struct NovelReadingSession: Sendable {
     }
 
     private func currentNovelReadingPosition() -> ReaderResumePoint? {
-        guard let page = currentRenderedPage,
+        guard let page = selectedViewportSurface,
               let chapterOrdinal = page.chapterOrdinal,
-              let position = textPosition(for: snapshot.currentPageIntraProgress, in: page) else {
+              let position = page.semanticTextPosition(
+                for: snapshot.currentSurfaceIntraProgress,
+                in: currentDocument
+              ) else {
             return nil
         }
 
-        let range = position.range
-        let segmentLength = range.length
-        let offsetWithinSegment = segmentLength > 0
-            ? Int((Double(segmentLength) * position.progressInRange).rounded(.towardZero))
-            : 0
-        let displayedTextOffset = range.startOffset + min(offsetWithinSegment, segmentLength)
-        let semantics = currentDocument.semantics(forSegmentIndex: range.segmentIndex)
         return ReaderResumePoint(
             view: page.documentView,
-            chapterIdentity: semantics?.chapterIdentity,
-            textSegmentIdentity: semantics?.textSegmentIdentity,
-            displayedTextOffset: displayedTextOffset,
+            chapterIdentity: position.chapterIdentity,
+            textSegmentIdentity: position.textSegmentIdentity,
+            displayedTextOffset: position.displayedTextOffset,
             chapterOrdinal: chapterOrdinal,
             chapterTitle: page.chapterTitle,
-            segmentIndex: range.segmentIndex,
-            segmentOffset: displayedTextOffset,
-            segmentProgress: snapshot.currentPageIntraProgress,
+            segmentProgress: snapshot.currentSurfaceIntraProgress,
             authorID: snapshot.currentAuthorID,
-            readingModeHint: settings.readingMode
+            readingModeHint: layoutResult?.viewportIndex.readingMode ?? .paged
         )
     }
 
     public func currentPreviewSourceText() -> String {
-        guard let page = currentRenderedPage,
+        guard let page = selectedViewportSurface,
               let document = document(for: page.documentView),
               !document.segments.isEmpty else {
             return ""
         }
 
-        guard let currentPosition = textPosition(for: snapshot.currentPageIntraProgress, in: page) else {
+        guard let currentPosition = page.semanticTextPosition(
+            for: snapshot.currentSurfaceIntraProgress,
+            in: document
+        ) else {
             return ""
         }
-        let startSegmentIndex = min(
-            max(currentPosition.range.segmentIndex, 0),
-            max(document.segments.count - 1, 0)
-        )
-        let startOffset = sourceOffset(for: currentPosition)
+        return document.previewSourceText(from: currentPosition)
+    }
 
-        let fragments = document.segments[startSegmentIndex...].enumerated().compactMap { offset, segment -> String? in
-            guard case let .text(text, _) = segment else { return nil }
-
-            let previewText = offset == 0
-                ? text.droppingReaderPreviewCharacters(startOffset)
-                : text
-            let trimmed = previewText.trimmingCharacters(in: .whitespacesAndNewlines)
-            return trimmed.isEmpty ? nil : trimmed
+    private func chapterTitle(
+        forSurfaceOrdinal surfaceOrdinal: Int,
+        surfaces: [NovelTextViewportIndexSurface],
+        chapters: [ReaderChapter]
+    ) -> String? {
+        guard surfaces.indices.contains(surfaceOrdinal) else {
+            return chapters.last(where: { $0.startIndex <= surfaceOrdinal })?.title
         }
-
-        return fragments.joined(separator: "\n\n")
+        return surfaces[surfaceOrdinal].chapterTitle ?? chapters.last(where: { $0.startIndex <= surfaceOrdinal })?.title
     }
 
-    private func sourceOffset(for position: ReaderPageTextPosition) -> Int {
-        let range = position.range
-        let segmentLength = range.length
-        let offsetWithinSegment = segmentLength > 0
-            ? Int((Double(segmentLength) * position.progressInRange).rounded(.towardZero))
-            : 0
-        return range.startOffset + min(offsetWithinSegment, segmentLength)
-    }
-
-    private func chapterTitle(for pageIndex: Int, pages: [NovelTextViewportIndexPage], chapters: [ReaderChapter]) -> String? {
-        guard pages.indices.contains(pageIndex) else {
-            return chapters.last(where: { $0.startIndex <= pageIndex })?.title
-        }
-        return pages[pageIndex].chapterTitle ?? chapters.last(where: { $0.startIndex <= pageIndex })?.title
-    }
-
-    private var currentRenderedPage: NovelTextViewportIndexPage? {
-        let normalizedIndex = normalizedPagedPageIndex(
-            snapshot.currentPageIndex,
-            pages: snapshot.pages,
-            pagedSpreads: snapshot.pagedSpreads
+    private var selectedViewportSurface: NovelTextViewportIndexSurface? {
+        let normalizedIndex = normalizedPagedSurfaceOrdinal(
+            snapshot.selectedSurfaceOrdinal,
+            surfaces: surfaces,
+            spreads: spreads
         )
-        guard snapshot.pages.indices.contains(normalizedIndex) else { return nil }
-        return snapshot.pages[normalizedIndex]
+        guard surfaces.indices.contains(normalizedIndex) else { return nil }
+        return surfaces[normalizedIndex]
     }
 
     private func document(for view: Int) -> ReaderPageDocument? {
-        if view == prefetchedDocument?.view {
-            return prefetchedDocument
-        }
         if view == currentDocument.view {
             return currentDocument
         }
         return nil
     }
 
-    private mutating func updateLocation(pageIndex: Int, intraPageProgress: Double) {
-        let normalizedPageIndex = normalizedPagedPageIndex(
-            pageIndex,
-            pages: snapshot.pages,
-            pagedSpreads: snapshot.pagedSpreads
+    private mutating func updateLocation(surfaceOrdinal: Int, intraSurfaceProgress: Double) {
+        let normalizedSurfaceOrdinal = normalizedPagedSurfaceOrdinal(
+            surfaceOrdinal,
+            surfaces: surfaces,
+            spreads: spreads
         )
-        let target = ReaderResolvedTarget(
-            pageIndex: normalizedPageIndex,
-            intraPageProgress: intraPageProgress,
-            documentView: displayedViewCandidate(for: normalizedPageIndex, pages: snapshot.pages)
+        let target = ReaderResolvedSurfaceTarget(
+            surfaceOrdinal: normalizedSurfaceOrdinal,
+            intraSurfaceProgress: intraSurfaceProgress,
+            documentView: displayedViewCandidate(for: normalizedSurfaceOrdinal, surfaces: surfaces)
         )
         setCurrentLocation(target)
     }
 
-    private mutating func setCurrentLocation(_ target: ReaderResolvedTarget) {
-        let normalizedPageIndex = normalizedPagedPageIndex(
-            target.pageIndex,
-            pages: snapshot.pages,
-            pagedSpreads: snapshot.pagedSpreads
+    private mutating func setCurrentLocation(_ target: ReaderResolvedSurfaceTarget) {
+        let normalizedSurfaceOrdinal = normalizedPagedSurfaceOrdinal(
+            target.surfaceOrdinal,
+            surfaces: surfaces,
+            spreads: spreads
         )
-        snapshot.currentPageIndex = normalizedPageIndex
-        snapshot.currentPageIntraProgress = min(max(target.intraPageProgress, 0), 1)
+        snapshot.selectedSurfaceOrdinal = normalizedSurfaceOrdinal
+        snapshot.currentSurfaceIntraProgress = min(max(target.intraSurfaceProgress, 0), 1)
         snapshot.currentChapterTitle = chapterTitle(
-            for: normalizedPageIndex,
-            pages: snapshot.pages,
-            chapters: snapshot.chapters
+            forSurfaceOrdinal: normalizedSurfaceOrdinal,
+            surfaces: surfaces,
+            chapters: chapters
         )
     }
 
-    private mutating func clearPendingResumePointIfSettled() {
-        guard pendingResumePoint != nil else { return }
-        guard !pendingResumeRequiresLayoutSync || layout.readingMode == settings.readingMode else { return }
-        pendingResumePoint = nil
-        pendingResumeRequiresLayoutSync = false
-    }
-
-    private mutating func applyPagination(
-        for document: ReaderPageDocument,
-        preferredPage: Int,
-        preferredResumePoint: ReaderResumePoint?
+    private func validateCommittedLayoutResult(
+        _ layoutResult: NovelTextLayoutResult,
+        for document: ReaderPageDocument
     ) throws {
-        let paginationLayout = layout.novelTextBoxLayout(
-            settings: settings,
-            usesPadPresentation: usesPadPresentation
-        )
-        let layoutResult = try pagination(document, settings, paginationLayout)
-        let viewportPages = layoutResult.viewportIndex.pages
-        let renderedChapters = layoutResult.viewportIndex.readerChapters
-        let prefetchedStartIndex: Int? = nil
+        guard layoutResult.viewportIndex.documentView == document.view,
+              layoutResult.viewportContext.identity.documentView == document.view else {
+            throw NovelTextLayoutFailure.offsetMapping
+        }
+    }
 
-        let pages = viewportPages
-        let fallbackTarget = ReaderResolvedTarget(
-            pageIndex: max(0, min(preferredPage, max(pages.count - 1, 0))),
-            intraPageProgress: 0,
-            documentView: displayedViewCandidate(for: preferredPage, pages: pages)
+    private mutating func applyCommittedLayoutResult(
+        _ layoutResult: NovelTextLayoutResult,
+        for document: ReaderPageDocument,
+        preferredSurfaceOrdinal: Int,
+        preferredResumePoint: ReaderResumePoint?
+    ) {
+        let viewportSurfaces = layoutResult.viewportIndex.surfaces
+        let renderedChapters = layoutResult.viewportIndex.readerChapters
+        let surfaces = viewportSurfaces
+        let fallbackTarget = ReaderResolvedSurfaceTarget(
+            surfaceOrdinal: max(0, min(preferredSurfaceOrdinal, max(surfaces.count - 1, 0))),
+            intraSurfaceProgress: 0,
+            documentView: displayedViewCandidate(for: preferredSurfaceOrdinal, surfaces: surfaces)
         )
         let effectiveResumePoint = pendingResumePoint ?? preferredResumePoint
-        currentViewportIndex = layoutResult.viewportIndex
-        let resolvedTarget = effectiveResumePoint.flatMap { resolveResumePoint($0, in: pages) } ?? fallbackTarget
-        let normalizedPageIndex = normalizedPagedPageIndex(resolvedTarget.pageIndex, pages: pages, pagedSpreads: makePagedSpreads(from: pages))
+        let resolvedTarget = effectiveResumePoint.flatMap { resolveResumePoint($0, in: surfaces) } ?? fallbackTarget
+        let spreads = makeSpreads(from: surfaces)
+        let normalizedSurfaceOrdinal = normalizedPagedSurfaceOrdinal(
+            resolvedTarget.surfaceOrdinal,
+            surfaces: surfaces,
+            spreads: spreads
+        )
+        self.layoutResult = layoutResult
+        self.surfaces = surfaces
+        self.chapters = renderedChapters
+        self.spreads = spreads
         snapshot = NovelReadingSnapshot(
-            pages: pages,
-            chapters: renderedChapters,
-            currentPageIndex: normalizedPageIndex,
-            currentPageIntraProgress: resolvedTarget.intraPageProgress,
+            selectedSurfaceOrdinal: normalizedSurfaceOrdinal,
+            currentSurfaceIntraProgress: resolvedTarget.intraSurfaceProgress,
             currentView: document.view,
             maxView: document.maxView,
-            currentChapterTitle: chapterTitle(for: normalizedPageIndex, pages: pages, chapters: renderedChapters),
+            currentChapterTitle: chapterTitle(
+                forSurfaceOrdinal: normalizedSurfaceOrdinal,
+                surfaces: surfaces,
+                chapters: renderedChapters
+            ),
             currentContentSource: document.contentSource,
             retainedChapterCount: document.retainedChapterCount,
             filteredChapterCandidateCount: document.filteredChapterCandidateCount,
-            pagedSpreads: makePagedSpreads(from: pages),
-            prefetchedStartIndex: prefetchedStartIndex,
-            currentAuthorID: document.resolvedAuthorID ?? snapshot.currentAuthorID,
-            viewportContext: layoutResult.viewportContext,
-            viewportIndex: layoutResult.viewportIndex,
-            viewportLayoutMetrics: layoutResult.layoutMetrics
+            currentAuthorID: document.resolvedAuthorID ?? snapshot.currentAuthorID
         )
+        pendingResumePoint = nil
         preserveCurrentTextResumePointIfAvailable()
+    }
+
+    package func surfaceCount(in view: Int) -> Int {
+        surfaces.filter { $0.documentView == view }.count
+    }
+
+    package var viewportSurfacesForTesting: [NovelTextViewportIndexSurface] {
+        surfaces
+    }
+
+    package var readerChaptersForTesting: [ReaderChapter] {
+        chapters
+    }
+
+    package var spreadsForTesting: [NovelReadingSpread] {
+        spreads
+    }
+
+    package var layoutResultForTesting: NovelTextLayoutResult? {
+        layoutResult
     }
 
     private mutating func preserveCurrentTextResumePointIfAvailable() {
@@ -504,98 +437,86 @@ public struct NovelReadingSession: Sendable {
         preservedTextResumePoint = resumePoint
     }
 
-    private mutating func applyPaginationIgnoringFailure(
-        for document: ReaderPageDocument,
-        preferredPage: Int,
-        preferredResumePoint: ReaderResumePoint?
-    ) {
-        try? applyPagination(
-            for: document,
-            preferredPage: preferredPage,
-            preferredResumePoint: preferredResumePoint
-        )
-    }
-
-    private func displayedViewCandidate(for preferredPage: Int, pages: [NovelTextViewportIndexPage]) -> Int {
-        let spreads = makePagedSpreads(from: pages)
-        let normalizedIndex = normalizedPagedPageIndex(preferredPage, pages: pages, pagedSpreads: spreads)
-        guard pages.indices.contains(normalizedIndex) else {
+    private func displayedViewCandidate(for preferredSurfaceOrdinal: Int, surfaces: [NovelTextViewportIndexSurface]) -> Int {
+        let spreads = makeSpreads(from: surfaces)
+        let normalizedIndex = normalizedPagedSurfaceOrdinal(preferredSurfaceOrdinal, surfaces: surfaces, spreads: spreads)
+        guard surfaces.indices.contains(normalizedIndex) else {
             return currentDocument.view
         }
-        return pages[normalizedIndex].documentView
+        return surfaces[normalizedIndex].documentView
     }
 
-    private func makePagedSpreads(from pages: [NovelTextViewportIndexPage]) -> [ReaderPagedSpread] {
-        guard !pages.isEmpty else { return [] }
+    private func makeSpreads(from surfaces: [NovelTextViewportIndexSurface]) -> [NovelReadingSpread] {
+        guard !surfaces.isEmpty else { return [] }
 
-        var spreads: [ReaderPagedSpread] = []
-        var pageIndex = 0
+        var spreads: [NovelReadingSpread] = []
+        var surfaceCursor = 0
 
-        while pageIndex < pages.count {
-            let leftPage = pages[pageIndex]
-            let candidateRightIndex = pageIndex + 1
-            let rightPageIndex: Int? = if pages.indices.contains(candidateRightIndex),
-                                          pages[candidateRightIndex].documentView == leftPage.documentView {
+        while surfaceCursor < surfaces.count {
+            let leftSurface = surfaces[surfaceCursor]
+            let candidateRightIndex = surfaceCursor + 1
+            let rightSurfaceIndex: Int? = if surfaces.indices.contains(candidateRightIndex),
+                                          surfaces[candidateRightIndex].documentView == leftSurface.documentView {
                 candidateRightIndex
             } else {
                 nil
             }
 
             spreads.append(
-                ReaderPagedSpread(
+                NovelReadingSpread(
                     index: spreads.count,
-                    leftPageIndex: leftPage.pageIndex,
-                    rightPageIndex: rightPageIndex,
-                    chapterTitle: leftPage.chapterTitle
+                    leftSurfaceIndex: leftSurface.surfaceOrdinal,
+                    rightSurfaceIndex: rightSurfaceIndex,
+                    chapterTitle: leftSurface.chapterTitle
                 )
             )
-            pageIndex += rightPageIndex == nil ? 1 : 2
+            surfaceCursor += rightSurfaceIndex == nil ? 1 : 2
         }
 
         return spreads
     }
 
     private func spreadIndex(
-        forPageIndex pageIndex: Int,
-        pages: [NovelTextViewportIndexPage],
-        pagedSpreads: [ReaderPagedSpread]
+        forSurfaceOrdinal surfaceOrdinal: Int,
+        surfaces: [NovelTextViewportIndexSurface],
+        spreads: [NovelReadingSpread]
     ) -> Int {
-        guard isTwoPageSpreadActive else {
-            return max(0, min(pageIndex, max(pages.count - 1, 0)))
+        guard usesPagedSpread else {
+            return max(0, min(surfaceOrdinal, max(surfaces.count - 1, 0)))
         }
 
-        let normalizedIndex = max(0, min(pageIndex, max(pages.count - 1, 0)))
-        return pagedSpreads.first(where: { spread in
-            spread.leftPageIndex == normalizedIndex || spread.rightPageIndex == normalizedIndex
+        let normalizedIndex = max(0, min(surfaceOrdinal, max(surfaces.count - 1, 0)))
+        return spreads.first(where: { spread in
+            spread.leftSurfaceIndex == normalizedIndex || spread.rightSurfaceIndex == normalizedIndex
         })?.index ?? 0
     }
 
-    private func leftPageIndex(forSpreadIndex spreadIndex: Int, pagedSpreads: [ReaderPagedSpread]) -> Int {
-        guard let spread = pagedSpreads.first(where: { $0.index == spreadIndex }) ?? pagedSpreads.last else {
+    private func leftSurfaceIndex(forSpreadIndex spreadIndex: Int, spreads: [NovelReadingSpread]) -> Int {
+        guard let spread = spreads.first(where: { $0.index == spreadIndex }) ?? spreads.last else {
             return 0
         }
-        return spread.leftPageIndex
+        return spread.leftSurfaceIndex
     }
 
-    private func normalizedPagedPageIndex(
-        _ pageIndex: Int,
-        pages: [NovelTextViewportIndexPage],
-        pagedSpreads: [ReaderPagedSpread]
+    private func normalizedPagedSurfaceOrdinal(
+        _ surfaceOrdinal: Int,
+        surfaces: [NovelTextViewportIndexSurface],
+        spreads: [NovelReadingSpread]
     ) -> Int {
-        let clampedIndex = max(0, min(pageIndex, max(pages.count - 1, 0)))
-        guard isTwoPageSpreadActive else { return clampedIndex }
-        return leftPageIndex(
-            forSpreadIndex: spreadIndex(forPageIndex: clampedIndex, pages: pages, pagedSpreads: pagedSpreads),
-            pagedSpreads: pagedSpreads
+        let clampedIndex = max(0, min(surfaceOrdinal, max(surfaces.count - 1, 0)))
+        guard usesPagedSpread else { return clampedIndex }
+        return leftSurfaceIndex(
+            forSpreadIndex: spreadIndex(forSurfaceOrdinal: clampedIndex, surfaces: surfaces, spreads: spreads),
+            spreads: spreads
         )
     }
 
     private func resolveResumePoint(
         _ resumePoint: ReaderResumePoint,
-        in renderedPages: [NovelTextViewportIndexPage]
-    ) -> ReaderResolvedTarget? {
-        let pagesInView = renderedPages.filter { $0.documentView == resumePoint.view }
-        guard !pagesInView.isEmpty else {
+        in indexedSurfaces: [NovelTextViewportIndexSurface]
+    ) -> ReaderResolvedSurfaceTarget? {
+        let surfacesInView = indexedSurfaces.filter { $0.documentView == resumePoint.view }
+        guard !surfacesInView.isEmpty else {
             return nil
         }
 
@@ -604,7 +525,7 @@ public struct NovelReadingSession: Sendable {
             textSegmentIdentity,
             displayedTextOffset: resumePoint.displayedTextOffset,
             resumePoint: resumePoint,
-            pagesInView: pagesInView
+            surfacesInView: surfacesInView
            ) {
             return target
         }
@@ -613,314 +534,171 @@ public struct NovelReadingSession: Sendable {
            let target = resolveChapterIdentity(
             chapterIdentity,
             resumePoint: resumePoint,
-            pagesInView: pagesInView
+            surfacesInView: surfacesInView
            ) {
             return target
         }
 
-        let candidatePages = pagesInView.filter { contains(segmentIndex: resumePoint.segmentIndex, in: $0) }
-        let containingPage = candidatePages.first {
-            contains(offset: resumePoint.segmentOffset, segmentIndex: resumePoint.segmentIndex, in: $0)
+        if let legacySegmentIndex = resumePoint.legacySegmentIndex,
+           let legacySegmentOffset = resumePoint.legacySegmentOffset {
+            let candidateSurfaces = surfacesInView.filter { $0.containsLegacyTextSegment(index: legacySegmentIndex) }
+            let containingSurface = candidateSurfaces.first {
+                $0.containsLegacyTextSegment(index: legacySegmentIndex, offset: legacySegmentOffset)
+            }
+
+            if let containingSurface {
+                return ReaderResolvedSurfaceTarget(
+                    surfaceOrdinal: containingSurface.surfaceOrdinal,
+                    intraSurfaceProgress: containingSurface.legacyIntraSurfaceProgress(
+                        segmentIndex: legacySegmentIndex,
+                        segmentOffset: legacySegmentOffset,
+                        fallbackProgress: resumePoint.segmentProgress,
+                    ),
+                    documentView: containingSurface.documentView
+                )
+            }
+
+            if let nearestSurface = candidateSurfaces.min(by: {
+                $0.distanceFromLegacyTextSegmentOffset(legacySegmentOffset, index: legacySegmentIndex)
+                    < $1.distanceFromLegacyTextSegmentOffset(legacySegmentOffset, index: legacySegmentIndex)
+            }) {
+                return ReaderResolvedSurfaceTarget(
+                    surfaceOrdinal: nearestSurface.surfaceOrdinal,
+                    intraSurfaceProgress: nearestSurface.legacyIntraSurfaceProgress(
+                        segmentIndex: legacySegmentIndex,
+                        segmentOffset: legacySegmentOffset,
+                        fallbackProgress: resumePoint.segmentProgress,
+                    ),
+                    documentView: nearestSurface.documentView
+                )
+            }
         }
 
-        if let containingPage {
-            return ReaderResolvedTarget(
-                pageIndex: containingPage.pageIndex,
-                intraPageProgress: intraPageProgress(for: resumePoint, in: containingPage),
-                documentView: containingPage.documentView
+        if let chapterSurface = surfacesInView.first(where: { $0.chapterOrdinal == resumePoint.chapterOrdinal }) {
+            return ReaderResolvedSurfaceTarget(
+                surfaceOrdinal: chapterSurface.surfaceOrdinal,
+                intraSurfaceProgress: min(max(resumePoint.segmentProgress, 0), 1),
+                documentView: chapterSurface.documentView
             )
         }
 
-        if let nearestPage = candidatePages.min(by: {
-            distance(from: resumePoint.segmentOffset, segmentIndex: resumePoint.segmentIndex, to: $0)
-                < distance(from: resumePoint.segmentOffset, segmentIndex: resumePoint.segmentIndex, to: $1)
-        }) {
-            return ReaderResolvedTarget(
-                pageIndex: nearestPage.pageIndex,
-                intraPageProgress: intraPageProgress(for: resumePoint, in: nearestPage),
-                documentView: nearestPage.documentView
+        if let firstTextSurface = surfacesInView.first(where: \.containsText) {
+            return ReaderResolvedSurfaceTarget(
+                surfaceOrdinal: firstTextSurface.surfaceOrdinal,
+                intraSurfaceProgress: 0,
+                documentView: firstTextSurface.documentView
             )
         }
 
-        if let chapterPage = pagesInView.first(where: { $0.chapterOrdinal == resumePoint.chapterOrdinal }) {
-            return ReaderResolvedTarget(
-                pageIndex: chapterPage.pageIndex,
-                intraPageProgress: min(max(resumePoint.segmentProgress, 0), 1),
-                documentView: chapterPage.documentView
-            )
-        }
-
-        if let firstTextPage = pagesInView.first(where: { !textRanges(for: $0).isEmpty }) {
-            return ReaderResolvedTarget(
-                pageIndex: firstTextPage.pageIndex,
-                intraPageProgress: 0,
-                documentView: firstTextPage.documentView
-            )
-        }
-
-        guard let firstPage = pagesInView.first else { return nil }
-        return ReaderResolvedTarget(pageIndex: firstPage.pageIndex, intraPageProgress: 0, documentView: firstPage.documentView)
+        guard let firstSurface = surfacesInView.first else { return nil }
+        return ReaderResolvedSurfaceTarget(
+            surfaceOrdinal: firstSurface.surfaceOrdinal,
+            intraSurfaceProgress: 0,
+            documentView: firstSurface.documentView
+        )
     }
 
     private func resolveTextSegmentIdentity(
         _ textSegmentIdentity: NovelTextSegmentIdentity,
         displayedTextOffset: Int,
         resumePoint: ReaderResumePoint,
-        pagesInView: [NovelTextViewportIndexPage]
-    ) -> ReaderResolvedTarget? {
-        let candidatePages = pagesInView.filter { page in
-            textRanges(for: page).contains { range in
-                currentDocument.semantics(forSegmentIndex: range.segmentIndex)?.textSegmentIdentity == textSegmentIdentity
-            }
+        surfacesInView: [NovelTextViewportIndexSurface]
+    ) -> ReaderResolvedSurfaceTarget? {
+        let candidateSurfaces = surfacesInView.filter { surface in
+            surface.contains(textSegmentIdentity: textSegmentIdentity, in: currentDocument)
         }
-        let containingPage = candidatePages.first { page in
-            textRanges(for: page).contains { range in
-                currentDocument.semantics(forSegmentIndex: range.segmentIndex)?.textSegmentIdentity == textSegmentIdentity &&
-                    contains(offset: displayedTextOffset, in: range)
-            }
-        }
-        if let containingPage {
-            return ReaderResolvedTarget(
-                pageIndex: containingPage.pageIndex,
-                intraPageProgress: intraPageProgress(
-                    displayedTextOffset: displayedTextOffset,
-                    textSegmentIdentity: textSegmentIdentity,
-                    fallback: resumePoint,
-                    in: containingPage
-                ),
-                documentView: containingPage.documentView
+        let containingSurface = candidateSurfaces.first { surface in
+            surface.contains(
+                textSegmentIdentity: textSegmentIdentity,
+                displayedTextOffset: displayedTextOffset,
+                in: currentDocument
             )
         }
-        guard let nearestPage = candidatePages.min(by: {
-            distance(
+        if let containingSurface {
+            return ReaderResolvedSurfaceTarget(
+                surfaceOrdinal: containingSurface.surfaceOrdinal,
+                intraSurfaceProgress: containingSurface.intraSurfaceProgress(
+                    displayedTextOffset: displayedTextOffset,
+                    textSegmentIdentity: textSegmentIdentity,
+                    fallbackProgress: resumePoint.segmentProgress,
+                    in: currentDocument
+                ),
+                documentView: containingSurface.documentView
+            )
+        }
+        guard let nearestSurface = candidateSurfaces.min(by: {
+            $0.distance(
                 from: displayedTextOffset,
                 textSegmentIdentity: textSegmentIdentity,
-                to: $0
-            ) < distance(
+                in: currentDocument
+            ) < $1.distance(
                 from: displayedTextOffset,
                 textSegmentIdentity: textSegmentIdentity,
-                to: $1
+                in: currentDocument
             )
         }) else {
             return nil
         }
-        return ReaderResolvedTarget(
-            pageIndex: nearestPage.pageIndex,
-            intraPageProgress: intraPageProgress(
+        return ReaderResolvedSurfaceTarget(
+            surfaceOrdinal: nearestSurface.surfaceOrdinal,
+            intraSurfaceProgress: nearestSurface.intraSurfaceProgress(
                 displayedTextOffset: displayedTextOffset,
                 textSegmentIdentity: textSegmentIdentity,
-                fallback: resumePoint,
-                in: nearestPage
+                fallbackProgress: resumePoint.segmentProgress,
+                in: currentDocument
             ),
-            documentView: nearestPage.documentView
+            documentView: nearestSurface.documentView
         )
     }
 
     private func resolveChapterIdentity(
         _ chapterIdentity: NovelChapterIdentity,
         resumePoint: ReaderResumePoint,
-        pagesInView: [NovelTextViewportIndexPage]
-    ) -> ReaderResolvedTarget? {
-        guard let chapterPage = pagesInView.first(where: { page in
-            textRanges(for: page).contains { range in
-                currentDocument.semantics(forSegmentIndex: range.segmentIndex)?.chapterIdentity == chapterIdentity
-            } || page.externalBlocks.contains { block in
-                currentDocument.semantics(forSegmentIndex: block.segmentIndex)?.chapterIdentity == chapterIdentity
-            }
+        surfacesInView: [NovelTextViewportIndexSurface]
+    ) -> ReaderResolvedSurfaceTarget? {
+        guard let chapterSurface = surfacesInView.first(where: { surface in
+            surface.contains(chapterIdentity: chapterIdentity, in: currentDocument)
         }) else {
             return nil
         }
-        return ReaderResolvedTarget(
-            pageIndex: chapterPage.pageIndex,
-            intraPageProgress: min(max(resumePoint.segmentProgress, 0), 1),
-            documentView: chapterPage.documentView
+        return ReaderResolvedSurfaceTarget(
+            surfaceOrdinal: chapterSurface.surfaceOrdinal,
+            intraSurfaceProgress: min(max(resumePoint.segmentProgress, 0), 1),
+            documentView: chapterSurface.documentView
         )
     }
 
-    private func resolveViewportSample(_ sample: NovelTextViewportSample) -> ReaderResolvedTarget? {
-        guard let page = snapshot.pages.first(where: {
-            $0.pageIndex == sample.pageIndex && $0.documentView == sample.documentView
+    private func resolveViewportSample(_ sample: NovelTextViewportSample) -> ReaderResolvedSurfaceTarget? {
+        guard let surface = surfaces.first(where: {
+            $0.surfaceOrdinal == sample.surfaceIdentity.ordinal && $0.documentView == sample.documentView
         }) else {
             return nil
         }
-        let ranges = textRanges(for: page)
-        guard !ranges.isEmpty else { return nil }
 
-        let totalLength = ranges.reduce(0) { $0 + max($1.length, 1) }
-        var runningLength = 0
-
-        for range in ranges {
-            let length = max(range.length, 1)
-            defer { runningLength += length }
-            guard range.segmentIndex == sample.segmentIndex,
-                  contains(offset: sample.segmentOffset, in: range) else {
-                continue
-            }
-            let localOffset = min(max(sample.segmentOffset - range.startOffset, 0), length)
-            let progress = Double(runningLength + localOffset) / Double(max(totalLength, 1))
-            return ReaderResolvedTarget(
-                pageIndex: page.pageIndex,
-                intraPageProgress: min(max(progress, 0), 1),
-                documentView: page.documentView
-            )
+        guard surface.contains(
+            textSegmentIdentity: sample.textSegmentIdentity,
+            displayedTextOffset: sample.displayedTextOffset,
+            in: currentDocument
+        ) else {
+            return nil
         }
 
-        return nil
+        return ReaderResolvedSurfaceTarget(
+            surfaceOrdinal: surface.surfaceOrdinal,
+            intraSurfaceProgress: surface.intraSurfaceProgress(
+                displayedTextOffset: sample.displayedTextOffset,
+                textSegmentIdentity: sample.textSegmentIdentity,
+                fallbackProgress: 0,
+                in: currentDocument
+            ),
+            documentView: surface.documentView
+        )
     }
 
-    private func contains(offset: Int, in page: NovelTextViewportIndexPage) -> Bool {
-        let ranges = textRanges(for: page)
-        return ranges.contains(where: { contains(offset: offset, in: $0) })
-    }
-
-    private func contains(offset: Int, segmentIndex: Int, in page: NovelTextViewportIndexPage) -> Bool {
-        let matchingRanges = textRanges(for: page).filter { $0.segmentIndex == segmentIndex }
-        return matchingRanges.contains { contains(offset: offset, in: $0) }
-    }
-
-    private func contains(segmentIndex: Int, in page: NovelTextViewportIndexPage) -> Bool {
-        textRanges(for: page).contains { $0.segmentIndex == segmentIndex }
-    }
-
-    private func contains(offset: Int, in range: ReaderRenderedTextRange) -> Bool {
-        if range.startOffset == range.endOffset {
-            return offset <= range.startOffset
-        }
-        return offset >= range.startOffset && offset < range.endOffset
-    }
-
-    private func distance(from offset: Int, to page: NovelTextViewportIndexPage) -> Int {
-        let ranges = textRanges(for: page)
-        return ranges.map { distance(from: offset, to: $0) }.min() ?? 0
-    }
-
-    private func distance(from offset: Int, segmentIndex: Int, to page: NovelTextViewportIndexPage) -> Int {
-        let matchingRanges = textRanges(for: page).filter { $0.segmentIndex == segmentIndex }
-        if !matchingRanges.isEmpty {
-            return matchingRanges.map { distance(from: offset, to: $0) }.min() ?? 0
-        }
-        return Int.max
-    }
-
-    private func distance(
-        from offset: Int,
-        textSegmentIdentity: NovelTextSegmentIdentity,
-        to page: NovelTextViewportIndexPage
-    ) -> Int {
-        let matchingRanges = textRanges(for: page).filter { range in
-            currentDocument.semantics(forSegmentIndex: range.segmentIndex)?.textSegmentIdentity == textSegmentIdentity
-        }
-        if !matchingRanges.isEmpty {
-            return matchingRanges.map { distance(from: offset, to: $0) }.min() ?? 0
-        }
-        return Int.max
-    }
-
-    private func distance(from offset: Int, to range: ReaderRenderedTextRange) -> Int {
-        if contains(offset: offset, in: range) {
-            return 0
-        }
-        if offset < range.startOffset {
-            return range.startOffset - offset
-        }
-        return offset - range.endOffset
-    }
-
-    private func intraPageProgress(for resumePoint: ReaderResumePoint, in page: NovelTextViewportIndexPage) -> Double {
-        let ranges = textRanges(for: page)
-        if !ranges.isEmpty {
-            let totalLength = ranges.reduce(0) { $0 + max($1.length, 1) }
-            var runningLength = 0
-
-            for range in ranges {
-                let length = max(range.length, 1)
-                defer { runningLength += length }
-                guard range.segmentIndex == resumePoint.segmentIndex else { continue }
-                let localOffset = min(max(resumePoint.segmentOffset - range.startOffset, 0), length)
-                let progress = Double(runningLength + localOffset) / Double(max(totalLength, 1))
-                return min(max(progress, 0), 1)
-            }
-        }
-        return min(max(resumePoint.segmentProgress, 0), 1)
-    }
-
-    private func intraPageProgress(
-        displayedTextOffset: Int,
-        textSegmentIdentity: NovelTextSegmentIdentity,
-        fallback resumePoint: ReaderResumePoint,
-        in page: NovelTextViewportIndexPage
-    ) -> Double {
-        let ranges = textRanges(for: page)
-        if !ranges.isEmpty {
-            let totalLength = ranges.reduce(0) { $0 + max($1.length, 1) }
-            var runningLength = 0
-
-            for range in ranges {
-                let length = max(range.length, 1)
-                defer { runningLength += length }
-                guard currentDocument.semantics(forSegmentIndex: range.segmentIndex)?.textSegmentIdentity == textSegmentIdentity else {
-                    continue
-                }
-                let localOffset = min(max(displayedTextOffset - range.startOffset, 0), length)
-                let progress = Double(runningLength + localOffset) / Double(max(totalLength, 1))
-                return min(max(progress, 0), 1)
-            }
-        }
-        return min(max(resumePoint.segmentProgress, 0), 1)
-    }
-
-    private func textPosition(for intraPageProgress: Double, in page: NovelTextViewportIndexPage) -> ReaderPageTextPosition? {
-        let ranges = textRanges(for: page)
-        guard !ranges.isEmpty else { return nil }
-        guard ranges.count > 1 else {
-            return ranges.first.map {
-                ReaderPageTextPosition(range: $0, progressInRange: min(max(intraPageProgress, 0), 1))
-            }
-        }
-
-        let totalLength = ranges.reduce(0) { $0 + max($1.length, 1) }
-        let targetOffset = Int((Double(totalLength) * min(max(intraPageProgress, 0), 1)).rounded(.towardZero))
-        var runningLength = 0
-
-        for range in ranges {
-            let length = max(range.length, 1)
-            if targetOffset < runningLength + length {
-                let progressInRange = Double(targetOffset - runningLength) / Double(length)
-                return ReaderPageTextPosition(
-                    range: range,
-                    progressInRange: min(max(progressInRange, 0), 1)
-                )
-            }
-            runningLength += length
-        }
-
-        return ranges.last.map {
-            ReaderPageTextPosition(range: $0, progressInRange: 1)
-        }
-    }
-
-    private func textRanges(for page: NovelTextViewportIndexPage) -> [ReaderRenderedTextRange] {
-        page.ranges
-    }
 }
 
-private struct ReaderResolvedTarget {
-    let pageIndex: Int
-    let intraPageProgress: Double
+private struct ReaderResolvedSurfaceTarget {
+    let surfaceOrdinal: Int
+    let intraSurfaceProgress: Double
     let documentView: Int
-}
-
-private struct ReaderPageTextPosition {
-    let range: ReaderRenderedTextRange
-    let progressInRange: Double
-}
-
-private extension String {
-    func droppingReaderPreviewCharacters(_ count: Int) -> String {
-        guard count > 0 else { return self }
-        guard count < self.count else { return "" }
-
-        let start = index(startIndex, offsetBy: count)
-        return String(self[start...])
-    }
 }

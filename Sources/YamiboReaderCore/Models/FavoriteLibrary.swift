@@ -45,7 +45,7 @@ public struct FavoriteLibrarySnapshot: Codable, Equatable, Sendable {
 public struct FavoriteMetadataArchiveEntry: Codable, Equatable, Sendable {
     public var canonicalThreadURL: URL
     public var displayName: String?
-    public var lastPage: Int
+    public var mangaPageIndex: Int
     public var lastView: Int
     public var lastChapter: String?
     public var authorID: String?
@@ -61,7 +61,7 @@ public struct FavoriteMetadataArchiveEntry: Codable, Equatable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case canonicalThreadURL
         case displayName
-        case lastPage
+        case mangaPageIndex = "lastPage"
         case lastView
         case lastChapter
         case authorID
@@ -78,7 +78,7 @@ public struct FavoriteMetadataArchiveEntry: Codable, Equatable, Sendable {
     public init(
         canonicalThreadURL: URL,
         displayName: String?,
-        lastPage: Int,
+        mangaPageIndex: Int,
         lastView: Int,
         lastChapter: String?,
         authorID: String?,
@@ -93,7 +93,7 @@ public struct FavoriteMetadataArchiveEntry: Codable, Equatable, Sendable {
     ) {
         self.canonicalThreadURL = canonicalThreadURL
         self.displayName = displayName
-        self.lastPage = max(0, lastPage)
+        self.mangaPageIndex = max(0, mangaPageIndex)
         self.lastView = max(1, lastView)
         self.lastChapter = lastChapter
         self.authorID = authorID
@@ -111,7 +111,7 @@ public struct FavoriteMetadataArchiveEntry: Codable, Equatable, Sendable {
         self.init(
             canonicalThreadURL: ReaderCacheIdentity.canonicalThreadURL(from: favorite.url),
             displayName: favorite.displayName,
-            lastPage: favorite.lastPage,
+            mangaPageIndex: favorite.mangaPageIndex,
             lastView: favorite.lastView,
             lastChapter: favorite.lastChapter,
             authorID: favorite.authorID,
@@ -130,7 +130,7 @@ public struct FavoriteMetadataArchiveEntry: Codable, Equatable, Sendable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         canonicalThreadURL = try container.decode(URL.self, forKey: .canonicalThreadURL)
         displayName = try container.decodeIfPresent(String.self, forKey: .displayName)
-        lastPage = max(0, try container.decodeIfPresent(Int.self, forKey: .lastPage) ?? 0)
+        mangaPageIndex = max(0, try container.decodeIfPresent(Int.self, forKey: .mangaPageIndex) ?? 0)
         lastView = max(1, try container.decodeIfPresent(Int.self, forKey: .lastView) ?? 1)
         lastChapter = try container.decodeIfPresent(String.self, forKey: .lastChapter)
         authorID = try container.decodeIfPresent(String.self, forKey: .authorID)
@@ -271,7 +271,7 @@ private extension Favorite {
         validTagIDs: Set<String>
     ) {
         displayName = archive.displayName
-        lastPage = archive.lastPage
+        mangaPageIndex = archive.mangaPageIndex
         lastView = archive.lastView
         lastChapter = archive.lastChapter
         authorID = archive.authorID

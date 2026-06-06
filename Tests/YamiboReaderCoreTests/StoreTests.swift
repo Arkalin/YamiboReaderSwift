@@ -175,25 +175,23 @@ import Testing
     #expect(decoded.directorySortOrder == .ascending)
 }
 
-@Test func favoriteStoreUpdatesReadingProgress() async throws {
+@Test func favoriteStoreUpdatesNovelReadingPosition() async throws {
     let defaults = try #require(UserDefaults(suiteName: "favorite-progress-tests"))
     defaults.removePersistentDomain(forName: "favorite-progress-tests")
     let store = FavoriteStore(defaults: defaults, key: "favorites")
     let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=30&mobile=2"))
 
-    _ = try await store.updateReadingProgress(
-        for: url,
-        progress: ReaderProgress(
+    _ = try await store.updateNovelReadingPosition(
+        NovelReadingPosition(
+            threadURL: url,
             view: 2,
-            page: 18,
             chapterTitle: "第三章",
             authorID: "77",
             resumePoint: ReaderResumePoint(
                 view: 2,
+                displayedTextOffset: 128,
                 chapterOrdinal: 2,
                 chapterTitle: "第三章",
-                segmentIndex: 8,
-                segmentOffset: 128,
                 segmentProgress: 0.4,
                 authorID: "77",
                 readingModeHint: .vertical
@@ -203,10 +201,10 @@ import Testing
 
     let favorite = await store.favorite(for: url)
     #expect(favorite?.lastView == 2)
-    #expect(favorite?.lastPage == 18)
+    #expect(favorite?.mangaPageIndex == 0)
     #expect(favorite?.lastChapter == "第三章")
     #expect(favorite?.authorID == "77")
-    #expect(favorite?.novelResumePoint?.segmentIndex == 8)
+    #expect(favorite?.novelResumePoint?.displayedTextOffset == 128)
     #expect(favorite?.type == .novel)
 }
 
@@ -227,9 +225,13 @@ import Testing
     }
     await Task.yield()
 
-    _ = try await store.updateReadingProgress(
-        for: url,
-        progress: ReaderProgress(view: 2, page: 18, chapterTitle: "第三章", authorID: "77")
+    _ = try await store.updateNovelReadingPosition(
+        NovelReadingPosition(
+            threadURL: url,
+            view: 2,
+            chapterTitle: "第三章",
+            authorID: "77"
+        )
     )
 
     let didReceive = await notificationTask.value
@@ -368,7 +370,7 @@ import Testing
                 FavoriteMetadataArchiveEntry(
                     canonicalThreadURL: url,
                     displayName: nil,
-                    lastPage: 0,
+                    mangaPageIndex: 0,
                     lastView: 1,
                     lastChapter: nil,
                     authorID: nil,
@@ -551,7 +553,7 @@ import Testing
     let favorite = await store.favorite(for: url)
     #expect(favorite?.lastMangaURL == chapterURL)
     #expect(favorite?.lastChapter == "第5话")
-    #expect(favorite?.lastPage == 8)
+    #expect(favorite?.mangaPageIndex == 8)
     #expect(favorite?.type == .manga)
 }
 
@@ -892,10 +894,9 @@ import Testing
     let collection = FavoriteCollection(id: "collection-a", name: "合集A")
     let resumePoint = ReaderResumePoint(
         view: 3,
+        displayedTextOffset: 120,
         chapterOrdinal: 2,
         chapterTitle: "第二章",
-        segmentIndex: 4,
-        segmentOffset: 120,
         segmentProgress: 0.3,
         authorID: "77",
         readingModeHint: .vertical
@@ -905,7 +906,7 @@ import Testing
         displayName: "我的收藏名",
         url: url,
         remoteFavoriteID: "remote-930",
-        lastPage: 8,
+        mangaPageIndex: 8,
         lastView: 3,
         lastChapter: "第二章",
         authorID: "77",
@@ -930,7 +931,7 @@ import Testing
     #expect(archive.isHidden)
     #expect(archive.parentCollectionID == collection.id)
     #expect(archive.type == .novel)
-    #expect(archive.lastPage == 8)
+    #expect(archive.mangaPageIndex == 8)
     #expect(archive.lastView == 3)
     #expect(archive.lastChapter == "第二章")
     #expect(archive.authorID == "77")
@@ -945,10 +946,9 @@ import Testing
     let collection = FavoriteCollection(id: "collection-a", name: "合集A")
     let resumePoint = ReaderResumePoint(
         view: 4,
+        displayedTextOffset: 240,
         chapterOrdinal: 3,
         chapterTitle: "第三章",
-        segmentIndex: 7,
-        segmentOffset: 240,
         segmentProgress: 0.8,
         authorID: "88",
         readingModeHint: .paged
@@ -956,7 +956,7 @@ import Testing
     let archive = FavoriteMetadataArchiveEntry(
         canonicalThreadURL: ReaderCacheIdentity.canonicalThreadURL(from: url),
         displayName: "恢复名",
-        lastPage: 11,
+        mangaPageIndex: 11,
         lastView: 4,
         lastChapter: "第三章",
         authorID: "88",
@@ -986,7 +986,7 @@ import Testing
     #expect(restored.isHidden)
     #expect(restored.parentCollectionID == collection.id)
     #expect(restored.type == .novel)
-    #expect(restored.lastPage == 11)
+    #expect(restored.mangaPageIndex == 11)
     #expect(restored.lastView == 4)
     #expect(restored.lastChapter == "第三章")
     #expect(restored.authorID == "88")
@@ -1002,7 +1002,7 @@ import Testing
     let archive = FavoriteMetadataArchiveEntry(
         canonicalThreadURL: ReaderCacheIdentity.canonicalThreadURL(from: url),
         displayName: "无合集恢复",
-        lastPage: 2,
+        mangaPageIndex: 2,
         lastView: 1,
         lastChapter: nil,
         authorID: nil,
@@ -1040,7 +1040,7 @@ import Testing
     let archive = FavoriteMetadataArchiveEntry(
         canonicalThreadURL: ReaderCacheIdentity.canonicalThreadURL(from: archivedURL),
         displayName: "规范 URL 恢复",
-        lastPage: 5,
+        mangaPageIndex: 5,
         lastView: 2,
         lastChapter: "恢复章节",
         authorID: nil,
@@ -1065,7 +1065,7 @@ import Testing
 
     #expect(restored.url == returningURL)
     #expect(restored.displayName == "规范 URL 恢复")
-    #expect(restored.lastPage == 5)
+    #expect(restored.mangaPageIndex == 5)
     #expect(restored.lastView == 2)
     #expect(restored.lastChapter == "恢复章节")
     #expect((await store.loadLibrarySnapshot()).archivedMetadata.isEmpty)
@@ -1125,10 +1125,9 @@ import Testing
     let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=611&mobile=2"))
     let resumePoint = ReaderResumePoint(
         view: 2,
+        displayedTextOffset: 20,
         chapterOrdinal: 3,
         chapterTitle: "第三章",
-        segmentIndex: 4,
-        segmentOffset: 20,
         segmentProgress: 0.5,
         authorID: "42",
         readingModeHint: .vertical
@@ -1138,7 +1137,6 @@ import Testing
         threadTitle: "测试小说",
         source: .resume,
         initialView: 2,
-        initialPage: 5,
         authorID: "42",
         initialResumePoint: resumePoint
     )

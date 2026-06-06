@@ -11,8 +11,7 @@ final class MangaPresentationRouteTests: XCTestCase {
             threadURL: originalURL,
             threadTitle: "测试小说",
             source: .resume,
-            initialView: 3,
-            initialPage: 4
+            initialView: 3
         )
         try await store.save(.novel(context))
 
@@ -299,8 +298,7 @@ final class MangaPresentationRouteTests: XCTestCase {
             threadURL: originalURL,
             threadTitle: "测试小说",
             source: .favorites,
-            initialView: 2,
-            initialPage: 4
+            initialView: 2
         )
 
         appModel.presentReader(context)

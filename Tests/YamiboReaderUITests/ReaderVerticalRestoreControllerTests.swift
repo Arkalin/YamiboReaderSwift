@@ -1,10 +1,11 @@
 import XCTest
+@testable import YamiboReaderCore
 @testable import YamiboReaderUI
 
 final class ReaderVerticalRestoreControllerTests: XCTestCase {
     func testActiveRestoreSuppressesViewportSamplingIncludingForcedSave() {
         var controller = ReaderVerticalRestoreController()
-        let request = ReaderVerticalScrollRequest(pageIndex: 81, intraPageProgress: 0.0194)
+        let request = ReaderVerticalScrollRequest(surfaceIndex: 81, intraSurfaceProgress: 0.0194)
 
         controller.beginScrolling(to: request)
 
@@ -14,7 +15,7 @@ final class ReaderVerticalRestoreControllerTests: XCTestCase {
 
     func testScrollingRestoreStaysActiveForLateFrameRetryUntilFineTuneSettles() {
         var controller = ReaderVerticalRestoreController()
-        let request = ReaderVerticalScrollRequest(pageIndex: 81, intraPageProgress: 0.0194)
+        let request = ReaderVerticalScrollRequest(surfaceIndex: 81, intraSurfaceProgress: 0.0194)
 
         controller.beginScrolling(to: request)
         XCTAssertTrue(controller.shouldConcealViewportContent)
@@ -35,9 +36,18 @@ final class ReaderVerticalRestoreControllerTests: XCTestCase {
     func testTextAnchorScrollingRestoreConcealsViewportWhileWaitingForLateLayout() {
         var controller = ReaderVerticalRestoreController()
         let request = ReaderVerticalScrollRequest(
-            pageIndex: 12,
-            intraPageProgress: 0.59,
-            textAnchor: ReaderVerticalTextAnchor(segmentIndex: 3, segmentOffset: 42)
+            surfaceIndex: 12,
+            intraSurfaceProgress: 0.59,
+            textAnchor: ReaderVerticalTextAnchor(
+                position: ReaderResumePoint(
+                    view: 1,
+                    textSegmentIdentity: NovelTextSegmentIdentity(rawValue: "text-3"),
+                    displayedTextOffset: 42,
+                    chapterOrdinal: 0,
+                    segmentProgress: 0,
+                    readingModeHint: .vertical
+                )
+            )
         )
 
         controller.beginScrolling(to: request)
@@ -52,7 +62,7 @@ final class ReaderVerticalRestoreControllerTests: XCTestCase {
 
     func testUserScrollCancelSuppressesViewportSamplingUntilCooldownEnds() {
         var controller = ReaderVerticalRestoreController()
-        let request = ReaderVerticalScrollRequest(pageIndex: 80, intraPageProgress: 0.97)
+        let request = ReaderVerticalScrollRequest(surfaceIndex: 80, intraSurfaceProgress: 0.97)
 
         controller.beginScrolling(to: request)
         controller.cancel(now: 20, samplingCooldown: 0.25)
@@ -64,7 +74,7 @@ final class ReaderVerticalRestoreControllerTests: XCTestCase {
 
     func testFineTuneSettlingSuppressesForcedSaveSamplingUntilDeadline() {
         var controller = ReaderVerticalRestoreController()
-        let request = ReaderVerticalScrollRequest(pageIndex: 12, intraPageProgress: 0.59)
+        let request = ReaderVerticalScrollRequest(surfaceIndex: 12, intraSurfaceProgress: 0.59)
 
         controller.beginFineTuning(request)
         controller.beginSettling(request, now: 30, duration: 0.45)

@@ -1,15 +1,68 @@
 import CoreGraphics
 import Foundation
 
+struct NovelTextSurfaceLayoutFragment: Equatable {
+    let characterRange: NSRange
+    let rect: CGRect
+}
+
+struct NovelTextSurfaceLayoutSlice: Equatable {
+    let characterRange: NSRange
+    let clipRect: CGRect
+}
+
+enum NovelTextSurfaceFragmentPartitioner {
+    static func partition(
+        _ segments: [NovelTextSurfaceLayoutFragment],
+        surfaceHeight: CGFloat
+    ) -> [NovelTextSurfaceLayoutSlice] {
+        guard surfaceHeight > 0 else { return [] }
+        var surfaces: [NovelTextSurfaceLayoutSlice] = []
+        var currentRange: NSRange?
+        var currentClipRect: CGRect?
+        for segment in segments {
+            guard let existingRange = currentRange,
+                  let existingClipRect = currentClipRect else {
+                currentRange = segment.characterRange
+                currentClipRect = segment.rect
+                continue
+            }
+            let candidateClipRect = existingClipRect.union(segment.rect)
+            if candidateClipRect.height > surfaceHeight {
+                surfaces.append(
+                    NovelTextSurfaceLayoutSlice(
+                        characterRange: existingRange,
+                        clipRect: existingClipRect
+                    )
+                )
+                currentRange = segment.characterRange
+                currentClipRect = segment.rect
+            } else {
+                currentRange = existingRange.union(segment.characterRange)
+                currentClipRect = candidateClipRect
+            }
+        }
+        if let currentRange, let currentClipRect {
+            surfaces.append(
+                NovelTextSurfaceLayoutSlice(
+                    characterRange: currentRange,
+                    clipRect: currentClipRect
+                )
+            )
+        }
+        return surfaces
+    }
+}
+
 enum NovelTextViewportDrawingGeometry {
     static func clipRect(
         bounds: CGRect,
-        pageOriginY: CGFloat,
+        surfaceOriginY: CGFloat,
         documentClipMaxY: CGFloat?
     ) -> CGRect {
         guard let documentClipMaxY else { return bounds }
         let clipHeight = min(
-            max(documentClipMaxY - pageOriginY, 0),
+            max(documentClipMaxY - surfaceOriginY, 0),
             max(bounds.height, 0)
         )
         return CGRect(
@@ -21,14 +74,18 @@ enum NovelTextViewportDrawingGeometry {
     }
 }
 
+#if canImport(UIKit) || canImport(AppKit)
 #if canImport(UIKit)
 import UIKit
+#elseif canImport(AppKit)
+import AppKit
+#endif
 #endif
 
-public struct NovelTextViewportRuntimeDiagnostics: Equatable, Sendable {
+package struct NovelTextViewportRuntimeDiagnostics: Equatable, Sendable {
     public var contentStorageCount: Int
     public var activeLayoutManagerCount: Int
-    public var perPageTextKitDocumentCount: Int
+    public var perSurfaceTextKitDocumentCount: Int
     public var semanticAttributedDocumentCacheCount: Int
     public var viewportControllerCount: Int
     public var currentActivePlusCandidateGraphCount: Int
@@ -36,22 +93,30 @@ public struct NovelTextViewportRuntimeDiagnostics: Equatable, Sendable {
     public var postCommitFullLayoutCount: Int
     public var viewportUpdateCount: Int
     public var rematerializedSurfaceCount: Int
+    public var drawingAccessCount: Int
+    public var staleDrawingAttemptCount: Int
+    public var lastDrawnSurfaceIdentity: NovelReaderSurfaceIdentity?
+    public var lastDrawnDocumentRange: Range<Int>?
 
     public init(
         contentStorageCount: Int,
         activeLayoutManagerCount: Int,
-        perPageTextKitDocumentCount: Int,
+        perSurfaceTextKitDocumentCount: Int,
         semanticAttributedDocumentCacheCount: Int = 0,
         viewportControllerCount: Int? = nil,
         currentActivePlusCandidateGraphCount: Int? = nil,
         peakActivePlusCandidateGraphCount: Int? = nil,
         postCommitFullLayoutCount: Int = 0,
         viewportUpdateCount: Int = 0,
-        rematerializedSurfaceCount: Int = 0
+        rematerializedSurfaceCount: Int = 0,
+        drawingAccessCount: Int = 0,
+        staleDrawingAttemptCount: Int = 0,
+        lastDrawnSurfaceIdentity: NovelReaderSurfaceIdentity? = nil,
+        lastDrawnDocumentRange: Range<Int>? = nil
     ) {
         self.contentStorageCount = max(0, contentStorageCount)
         self.activeLayoutManagerCount = max(0, activeLayoutManagerCount)
-        self.perPageTextKitDocumentCount = max(0, perPageTextKitDocumentCount)
+        self.perSurfaceTextKitDocumentCount = max(0, perSurfaceTextKitDocumentCount)
         self.semanticAttributedDocumentCacheCount = max(0, semanticAttributedDocumentCacheCount)
         self.viewportControllerCount = max(0, viewportControllerCount ?? activeLayoutManagerCount)
         self.currentActivePlusCandidateGraphCount = max(0, currentActivePlusCandidateGraphCount ?? contentStorageCount)
@@ -59,11 +124,18 @@ public struct NovelTextViewportRuntimeDiagnostics: Equatable, Sendable {
         self.postCommitFullLayoutCount = max(0, postCommitFullLayoutCount)
         self.viewportUpdateCount = max(0, viewportUpdateCount)
         self.rematerializedSurfaceCount = max(0, rematerializedSurfaceCount)
+        self.drawingAccessCount = max(0, drawingAccessCount)
+        self.staleDrawingAttemptCount = max(0, staleDrawingAttemptCount)
+        self.lastDrawnSurfaceIdentity = lastDrawnSurfaceIdentity
+        self.lastDrawnDocumentRange = lastDrawnDocumentRange
     }
 }
 
-public struct NovelTextViewportRuntimeTransactionDiagnostics: Equatable, Sendable {
+package struct NovelTextViewportRuntimeTransactionDiagnostics: Equatable, Sendable {
     public var committedTransactionCount: Int
+    public var supersededTransactionCount: Int
+    public var failedTransactionCount: Int
+    public var lastFailureStage: NovelTextLayoutFailureStage?
     public var semanticAttributedDocumentBuildCount: Int
     public var semanticAttributedDocumentReuseCount: Int
     public var candidateIndexingPassCount: Int
@@ -72,6 +144,9 @@ public struct NovelTextViewportRuntimeTransactionDiagnostics: Equatable, Sendabl
 
     public init(
         committedTransactionCount: Int = 0,
+        supersededTransactionCount: Int = 0,
+        failedTransactionCount: Int = 0,
+        lastFailureStage: NovelTextLayoutFailureStage? = nil,
         semanticAttributedDocumentBuildCount: Int = 0,
         semanticAttributedDocumentReuseCount: Int = 0,
         candidateIndexingPassCount: Int? = nil,
@@ -79,6 +154,9 @@ public struct NovelTextViewportRuntimeTransactionDiagnostics: Equatable, Sendabl
         geometryDeviationCount: Int = 0
     ) {
         self.committedTransactionCount = max(0, committedTransactionCount)
+        self.supersededTransactionCount = max(0, supersededTransactionCount)
+        self.failedTransactionCount = max(0, failedTransactionCount)
+        self.lastFailureStage = lastFailureStage
         self.semanticAttributedDocumentBuildCount = max(0, semanticAttributedDocumentBuildCount)
         self.semanticAttributedDocumentReuseCount = max(0, semanticAttributedDocumentReuseCount)
         self.candidateIndexingPassCount = max(0, candidateIndexingPassCount ?? committedTransactionCount)
@@ -88,72 +166,133 @@ public struct NovelTextViewportRuntimeTransactionDiagnostics: Equatable, Sendabl
 }
 
 @MainActor
-struct NovelTextLayoutRuntimeAdapterInput {
-    var result: NovelTextLayoutResult
+package struct NovelTextLayoutRuntimeAdapterInput {
+    var preparedInput: NovelTextLayoutPreparedInput
+    var precomputedResult: NovelTextLayoutResult?
     var settings: ReaderAppearanceSettings
     var layout: ReaderContainerLayout
     var cachedSemanticAttributedDocument: NSAttributedString?
+
+    init(
+        preparedInput: NovelTextLayoutPreparedInput,
+        settings: ReaderAppearanceSettings,
+        layout: ReaderContainerLayout,
+        cachedSemanticAttributedDocument: NSAttributedString?,
+        precomputedResult: NovelTextLayoutResult? = nil
+    ) {
+        self.preparedInput = preparedInput
+        self.precomputedResult = precomputedResult
+        self.settings = settings
+        self.layout = layout
+        self.cachedSemanticAttributedDocument = cachedSemanticAttributedDocument
+    }
 }
 
 @MainActor
-final class NovelTextLayoutRuntimeCandidate {
+package final class NovelTextLayoutRuntimeCandidate {
+    let result: NovelTextLayoutResult?
     let semanticAttributedDocument: NSAttributedString?
     let reusedSemanticAttributedDocument: Bool
     let fullDocumentLayoutPassCount: Int
     let postIndexCompactionCount: Int
     let geometryDeviationCount: Int
+    let ownsAuthoritativeIndex: Bool
 
-#if canImport(UIKit)
+#if canImport(UIKit) || canImport(AppKit)
     let textContentStorage: NSTextContentStorage?
     let textLayoutManager: NSTextLayoutManager?
     let textContainer: NSTextContainer?
+    let textViewportLayoutController: NSTextViewportLayoutController?
+    let textViewportLayoutDelegate: NovelTextViewportLayoutDelegate?
 #endif
 
     init(
-        semanticAttributedDocument: NSAttributedString? = nil,
-        reusedSemanticAttributedDocument: Bool = false,
-        fullDocumentLayoutPassCount: Int = 1,
-        postIndexCompactionCount: Int = 1,
-        geometryDeviationCount: Int = 0
-    ) {
-        self.semanticAttributedDocument = semanticAttributedDocument
-        self.reusedSemanticAttributedDocument = reusedSemanticAttributedDocument
-        self.fullDocumentLayoutPassCount = max(0, fullDocumentLayoutPassCount)
-        self.postIndexCompactionCount = max(0, postIndexCompactionCount)
-        self.geometryDeviationCount = max(0, geometryDeviationCount)
-#if canImport(UIKit)
-        textContentStorage = nil
-        textLayoutManager = nil
-        textContainer = nil
-#endif
-    }
-
-#if canImport(UIKit)
-    init(
+        result: NovelTextLayoutResult? = nil,
         semanticAttributedDocument: NSAttributedString? = nil,
         reusedSemanticAttributedDocument: Bool = false,
         fullDocumentLayoutPassCount: Int = 1,
         postIndexCompactionCount: Int = 1,
         geometryDeviationCount: Int = 0,
-        textContentStorage: NSTextContentStorage?,
-        textLayoutManager: NSTextLayoutManager?,
-        textContainer: NSTextContainer?
+        ownsAuthoritativeIndex: Bool = false
     ) {
+        self.result = result
         self.semanticAttributedDocument = semanticAttributedDocument
         self.reusedSemanticAttributedDocument = reusedSemanticAttributedDocument
         self.fullDocumentLayoutPassCount = max(0, fullDocumentLayoutPassCount)
         self.postIndexCompactionCount = max(0, postIndexCompactionCount)
         self.geometryDeviationCount = max(0, geometryDeviationCount)
+        self.ownsAuthoritativeIndex = ownsAuthoritativeIndex
+#if canImport(UIKit) || canImport(AppKit)
+        textContentStorage = nil
+        textLayoutManager = nil
+        textContainer = nil
+        textViewportLayoutController = nil
+        textViewportLayoutDelegate = nil
+#endif
+    }
+
+#if canImport(UIKit) || canImport(AppKit)
+    init(
+        result: NovelTextLayoutResult? = nil,
+        semanticAttributedDocument: NSAttributedString? = nil,
+        reusedSemanticAttributedDocument: Bool = false,
+        fullDocumentLayoutPassCount: Int = 1,
+        postIndexCompactionCount: Int = 1,
+        geometryDeviationCount: Int = 0,
+        ownsAuthoritativeIndex: Bool = false,
+        textContentStorage: NSTextContentStorage?,
+        textLayoutManager: NSTextLayoutManager?,
+        textContainer: NSTextContainer?,
+        textViewportLayoutController: NSTextViewportLayoutController?,
+        textViewportLayoutDelegate: NovelTextViewportLayoutDelegate?
+    ) {
+        self.result = result
+        self.semanticAttributedDocument = semanticAttributedDocument
+        self.reusedSemanticAttributedDocument = reusedSemanticAttributedDocument
+        self.fullDocumentLayoutPassCount = max(0, fullDocumentLayoutPassCount)
+        self.postIndexCompactionCount = max(0, postIndexCompactionCount)
+        self.geometryDeviationCount = max(0, geometryDeviationCount)
+        self.ownsAuthoritativeIndex = ownsAuthoritativeIndex
         self.textContentStorage = textContentStorage
         self.textLayoutManager = textLayoutManager
         self.textContainer = textContainer
+        self.textViewportLayoutController = textViewportLayoutController
+        self.textViewportLayoutDelegate = textViewportLayoutDelegate
     }
 #endif
 }
 
+#if canImport(UIKit) || canImport(AppKit)
+@MainActor
+final class NovelTextViewportLayoutDelegate: NSObject, NSTextViewportLayoutControllerDelegate {
+    nonisolated(unsafe) private var viewportBounds: CGRect
+
+    init(viewportBounds: CGRect) {
+        self.viewportBounds = viewportBounds
+    }
+
+    func updateViewportBounds(_ viewportBounds: CGRect) {
+        self.viewportBounds = viewportBounds
+    }
+
+    nonisolated func viewportBounds(
+        for textViewportLayoutController: NSTextViewportLayoutController
+    ) -> CGRect {
+        viewportBounds
+    }
+
+    nonisolated func textViewportLayoutController(
+        _ textViewportLayoutController: NSTextViewportLayoutController,
+        configureRenderingSurfaceFor textLayoutFragment: NSTextLayoutFragment
+    ) {
+        _ = textLayoutFragment
+    }
+}
+#endif
+
 private extension NovelTextLayoutRuntimeCandidate {
     var textKitGraphCount: Int {
-#if canImport(UIKit)
+#if canImport(UIKit) || canImport(AppKit)
         textContentStorage == nil ? 0 : 1
 #else
         0
@@ -162,18 +301,31 @@ private extension NovelTextLayoutRuntimeCandidate {
 }
 
 @MainActor
-protocol NovelTextLayoutRuntimeAdapter: AnyObject {
+package protocol NovelTextLayoutRuntimeAdapter: AnyObject {
     func prepareCandidate(
         input: NovelTextLayoutRuntimeAdapterInput
     ) throws -> NovelTextLayoutRuntimeCandidate
 }
 
 @MainActor
-final class DefaultNovelTextLayoutRuntimeAdapter: NovelTextLayoutRuntimeAdapter {
-    func prepareCandidate(
+package final class DefaultNovelTextLayoutRuntimeAdapter: NovelTextLayoutRuntimeAdapter {
+    package func prepareCandidate(
         input: NovelTextLayoutRuntimeAdapterInput
     ) throws -> NovelTextLayoutRuntimeCandidate {
-#if canImport(UIKit)
+#if canImport(UIKit) || canImport(AppKit)
+        let viewportContext = input.preparedInput.viewportContextSeed
+        guard !viewportContext.document.text.isEmpty else {
+            let result = try input.precomputedResult ?? NovelTextLayout.result(
+                from: input.preparedInput,
+                surfaceRanges: []
+            )
+            return NovelTextLayoutRuntimeCandidate(
+                result: result,
+                fullDocumentLayoutPassCount: 0,
+                postIndexCompactionCount: 1,
+                ownsAuthoritativeIndex: input.precomputedResult == nil
+            )
+        }
         let reusesSemanticDocument = input.cachedSemanticAttributedDocument != nil
         let contentStorage = NSTextContentStorage()
         let layoutManager = NSTextLayoutManager()
@@ -190,68 +342,351 @@ final class DefaultNovelTextLayoutRuntimeAdapter: NovelTextLayoutRuntimeAdapter 
         if reusesSemanticDocument, let cached = input.cachedSemanticAttributedDocument {
             attributedDocument = cached
         } else {
-#if canImport(UIKit)
-            attributedDocument = ReaderAttributedTextFactory.makeAttributedText(
-                text: input.result.viewportContext.document.text,
-                chapterTitle: nil,
-                settings: input.settings
+            attributedDocument = ReaderAttributedTextFactory.makeAttributedDocument(
+                from: input.preparedInput
             )
-#else
-            attributedDocument = NSAttributedString(string: input.result.viewportContext.document.text)
-#endif
+        }
+        guard attributedDocument.string == viewportContext.document.text else {
+            throw NovelTextLayoutFailure.offsetMapping
         }
         contentStorage.textStorage?.setAttributedString(attributedDocument)
-        layoutManager.ensureLayout(for: contentStorage.documentRange)
+        let surfaceSize: CGSize = if input.settings.readingMode == .vertical {
+            CGSize(
+                width: contentWidth,
+                height: max(input.layout.readableFrame.height * 1.8, 1)
+            )
+        } else {
+            CGSize(
+                width: contentWidth,
+                height: max(input.layout.readableFrame.height, 1)
+            )
+        }
+        let surfaceRanges = try Self.indexSurfaceRanges(
+            attributedDocument: attributedDocument,
+            contentStorage: contentStorage,
+            layoutManager: layoutManager,
+            surfaceSize: surfaceSize
+        )
+        var result = try input.precomputedResult ?? NovelTextLayout.result(
+            from: input.preparedInput,
+            surfaceRanges: surfaceRanges
+        )
+        result.fingerprints.font = ReaderAttributedTextFactory.resolvedFontFingerprint(
+            settings: input.settings
+        )
+#if canImport(UIKit)
+        let platformName = "UIKit"
+#else
+        let platformName = "AppKit"
+#endif
+        result.fingerprints.platform = [
+            ProcessInfo.processInfo.operatingSystemVersionString,
+            platformName,
+        ].joined(separator: "|")
+        result.fingerprints.textKitImplementation = "NSTextLayoutManager-TextKit2-v1"
+        layoutManager.invalidateLayout(for: contentStorage.documentRange)
+        let initialClipRect = surfaceRanges
+            .prefix(2)
+            .compactMap(\.frozenGeometry)
+            .reduce(CGRect.null) { partial, geometry in
+                partial.union(
+                    CGRect(
+                        x: 0,
+                        y: geometry.documentClipMinY,
+                        width: contentWidth,
+                        height: geometry.documentClipMaxY - geometry.documentClipMinY
+                    )
+                )
+            }
+        let viewportLayoutController = layoutManager.textViewportLayoutController
+        let viewportLayoutDelegate = NovelTextViewportLayoutDelegate(
+            viewportBounds: initialClipRect.isNull
+                ? CGRect(
+                    origin: .zero,
+                    size: CGSize(
+                        width: contentWidth,
+                        height: max(input.layout.readableFrame.height * 2, 1)
+                    )
+                )
+                : initialClipRect
+        )
+        viewportLayoutController.delegate = viewportLayoutDelegate
+        viewportLayoutController.layoutViewport()
+        let geometryDeviationCount = try Self.validateRematerializedGeometry(
+            surfaceRanges: Array(surfaceRanges.prefix(2)),
+            attributedDocument: attributedDocument,
+            contentStorage: contentStorage,
+            layoutManager: layoutManager
+        )
+        guard geometryDeviationCount == 0 else {
+            throw NovelTextLayoutFailure.geometryValidation
+        }
         return NovelTextLayoutRuntimeCandidate(
+            result: result,
             semanticAttributedDocument: attributedDocument,
             reusedSemanticAttributedDocument: reusesSemanticDocument,
             fullDocumentLayoutPassCount: 1,
             postIndexCompactionCount: 1,
+            geometryDeviationCount: geometryDeviationCount,
+            ownsAuthoritativeIndex: input.precomputedResult == nil,
             textContentStorage: contentStorage,
             textLayoutManager: layoutManager,
-            textContainer: container
+            textContainer: container,
+            textViewportLayoutController: viewportLayoutController,
+            textViewportLayoutDelegate: viewportLayoutDelegate
         )
 #else
-        return NovelTextLayoutRuntimeCandidate()
+        let result = input.precomputedResult
+        ?? NovelTextLayoutResult(
+            pages: [],
+            chapters: [],
+            viewportIndex: NovelTextViewportIndex(documentView: input.preparedInput.document.view, readingMode: input.settings.readingMode, surfaces: [], chapters: []),
+            viewportContext: input.preparedInput.viewportContextSeed
+        )
+        return NovelTextLayoutRuntimeCandidate(result: result)
 #endif
     }
+
+#if canImport(UIKit) || canImport(AppKit)
+    private static func indexSurfaceRanges(
+        attributedDocument: NSAttributedString,
+        contentStorage: NSTextContentStorage,
+        layoutManager: NSTextLayoutManager,
+        surfaceSize: CGSize
+    ) throws -> [NovelTextViewportDocumentSurfaceRange] {
+        guard surfaceSize.width >= 120, surfaceSize.height > 0 else {
+            throw NovelTextLayoutFailure.textKitIndexing
+        }
+        let documentRange = contentStorage.documentRange
+        layoutManager.ensureLayout(for: documentRange)
+
+        var segments: [NovelTextSurfaceLayoutFragment] = []
+        layoutManager.enumerateTextSegments(
+            in: documentRange,
+            type: .standard,
+            options: []
+        ) { textRange, rect, _, _ in
+            guard let textRange,
+                  let characterRange = nsRange(for: textRange, in: contentStorage),
+                  characterRange.length > 0,
+                  rect.origin.x.isFinite,
+                  rect.origin.y.isFinite,
+                  rect.width.isFinite,
+                  rect.height.isFinite,
+                  rect.height > 0 else {
+                return true
+            }
+            segments.append(
+                NovelTextSurfaceLayoutFragment(
+                    characterRange: characterRange,
+                    rect: rect
+                )
+            )
+            return true
+        }
+
+        let ranges = NovelTextSurfaceFragmentPartitioner.partition(
+            segments,
+            surfaceHeight: surfaceSize.height
+        ).compactMap { page in
+            viewportDocumentPageRange(
+                from: attributedDocument,
+                range: page.characterRange,
+                clipRect: page.clipRect
+            )
+        }
+        guard attributedDocument.length == 0 || !ranges.isEmpty else {
+            throw NovelTextLayoutFailure.textKitIndexing
+        }
+        return ranges
+    }
+
+    fileprivate static func validateRematerializedGeometry(
+        surfaceRanges: [NovelTextViewportDocumentSurfaceRange],
+        attributedDocument: NSAttributedString,
+        contentStorage: NSTextContentStorage,
+        layoutManager: NSTextLayoutManager
+    ) throws -> Int {
+        let documentStart = contentStorage.documentRange.location
+        var deviationCount = 0
+        for surfaceRange in surfaceRanges {
+            guard let geometry = surfaceRange.frozenGeometry,
+                  let utf16Range = utf16Range(
+                      in: attributedDocument.string,
+                      characterStart: surfaceRange.startOffset,
+                      characterEnd: surfaceRange.endOffset
+                  ),
+                  let start = contentStorage.location(
+                      documentStart,
+                      offsetBy: utf16Range.location
+                  ),
+                  let end = contentStorage.location(
+                      start,
+                      offsetBy: utf16Range.length
+                  ),
+                  let textRange = NSTextRange(location: start, end: end) else {
+                throw NovelTextLayoutFailure.geometryValidation
+            }
+            var rematerializedRect = CGRect.null
+            layoutManager.enumerateTextSegments(
+                in: textRange,
+                type: .standard,
+                options: []
+            ) { _, rect, _, _ in
+                if rect.width.isFinite, rect.height.isFinite, rect.height > 0 {
+                    rematerializedRect = rematerializedRect.union(rect)
+                }
+                return true
+            }
+            let tolerance: CGFloat = 1
+            if rematerializedRect.isNull ||
+                abs(rematerializedRect.minY - geometry.documentClipMinY) > tolerance ||
+                rematerializedRect.maxY - geometry.documentClipMaxY > tolerance {
+                deviationCount += 1
+            }
+        }
+        return deviationCount
+    }
+
+    private static func utf16Range(
+        in text: String,
+        characterStart: Int,
+        characterEnd: Int
+    ) -> NSRange? {
+        guard characterStart >= 0,
+              characterEnd >= characterStart,
+              let start = text.index(text.startIndex, offsetBy: characterStart, limitedBy: text.endIndex),
+              let end = text.index(text.startIndex, offsetBy: characterEnd, limitedBy: text.endIndex) else {
+            return nil
+        }
+        return NSRange(
+            location: text.utf16.distance(from: text.utf16.startIndex, to: start.samePosition(in: text.utf16)!),
+            length: text.utf16.distance(from: start.samePosition(in: text.utf16)!, to: end.samePosition(in: text.utf16)!)
+        )
+    }
+
+    private static func nsRange(
+        for textRange: NSTextRange,
+        in contentManager: NSTextContentManager
+    ) -> NSRange? {
+        let documentStart = contentManager.documentRange.location
+        let start = contentManager.offset(from: documentStart, to: textRange.location)
+        let end = contentManager.offset(from: documentStart, to: textRange.endLocation)
+        guard start != NSNotFound, end != NSNotFound, end >= start else { return nil }
+        return NSRange(location: start, length: end - start)
+    }
+
+    private static func viewportDocumentPageRange(
+        from attributedText: NSAttributedString,
+        range: NSRange,
+        clipRect: CGRect
+    ) -> NovelTextViewportDocumentSurfaceRange? {
+        let text = attributedText.string
+        let textLength = text.utf16.count
+        let pageCharacterStart = max(0, min(range.location, textLength))
+        let nextCharacterEnd = min(range.location + range.length, textLength)
+        let trimmedEnd = max(
+            trimmedUTF16Boundary(in: text, from: pageCharacterStart, to: nextCharacterEnd),
+            pageCharacterStart
+        )
+        guard trimmedEnd > pageCharacterStart else { return nil }
+
+        let candidateText = attributedText.attributedSubstring(
+            from: NSRange(location: pageCharacterStart, length: trimmedEnd - pageCharacterStart)
+        ).string
+        let trimmedLeadingText = trimmingLeadingPaginationWhitespace(candidateText)
+        let leadingTrimmed = candidateText.utf16.count - trimmedLeadingText.utf16.count
+        let effectiveStart = pageCharacterStart + leadingTrimmed
+        guard effectiveStart < trimmedEnd,
+              let characterStart = characterOffset(in: text, fromUTF16Offset: effectiveStart),
+              let characterEnd = characterOffset(in: text, fromUTF16Offset: trimmedEnd),
+              characterEnd > characterStart else {
+            return nil
+        }
+
+        return NovelTextViewportDocumentSurfaceRange(
+            startOffset: characterStart,
+            endOffset: characterEnd,
+            frozenGeometry: NovelTextViewportFrozenGeometry(
+                documentStartOffset: characterStart,
+                documentEndOffset: characterEnd,
+                documentClipMinY: clipRect.minY,
+                documentClipMaxY: clipRect.maxY,
+                contentHeight: NovelTextViewportFrozenGeometry.surfaceContentHeight(
+                    forDocumentClipRect: clipRect
+                )
+            )
+        )
+    }
+
+    private static func trimmedUTF16Boundary(
+        in text: String,
+        from start: Int,
+        to candidateEnd: Int
+    ) -> Int {
+        guard candidateEnd > start else { return start }
+        let nsText = text as NSString
+        var end = candidateEnd
+        while end > start {
+            let character = nsText.substring(with: NSRange(location: end - 1, length: 1))
+            if character.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                end -= 1
+            } else {
+                break
+            }
+        }
+        return end
+    }
+
+    private static func characterOffset(in text: String, fromUTF16Offset offset: Int) -> Int? {
+        guard offset >= 0, offset <= text.utf16.count,
+              let utf16Index = text.utf16.index(
+                  text.utf16.startIndex,
+                  offsetBy: offset,
+                  limitedBy: text.utf16.endIndex
+              ),
+              let stringIndex = String.Index(utf16Index, within: text) else {
+            return nil
+        }
+        return text.distance(from: text.startIndex, to: stringIndex)
+    }
+
+    private static func trimmingLeadingPaginationWhitespace(_ text: String) -> String {
+        guard !text.isEmpty else { return text }
+        var result = text[...]
+        while let first = result.first, first.isWhitespace {
+            result.removeFirst()
+        }
+        return String(result)
+    }
+#endif
 }
 
 @MainActor
 public final class NovelTextViewportDisplayReference {
-    public let generation: UInt64
-    public let documentView: Int
-    public let pageIdentity: Int
+    public let surfaceIdentity: NovelReaderSurfaceIdentity
+    package var surfaceOrdinal: Int { surfaceIdentity.ordinal }
+    public var generation: UInt64 { surfaceIdentity.generation }
 
     private weak var runtimeOwner: NovelTextViewportRuntimeOwner?
 
     init(
         runtimeOwner: NovelTextViewportRuntimeOwner,
-        generation: UInt64,
-        documentView: Int,
-        pageIdentity: Int
+        surfaceIdentity: NovelReaderSurfaceIdentity
     ) {
         self.runtimeOwner = runtimeOwner
-        self.generation = generation
-        self.documentView = documentView
-        self.pageIdentity = pageIdentity
+        self.surfaceIdentity = surfaceIdentity
     }
 
     public var isStale: Bool {
         guard let runtimeOwner else { return true }
-        return !runtimeOwner.isCurrent(
-            generation: generation,
-            documentView: documentView,
-            pageIdentity: pageIdentity
-        )
+        return !runtimeOwner.isCurrent(surfaceIdentity)
     }
 
-    public func viewportSample(referencePoint: CGPoint) -> NovelTextViewportSample? {
-#if canImport(UIKit)
+    package func viewportSample(referencePoint: CGPoint) -> NovelTextViewportSample? {
+#if canImport(UIKit) || canImport(AppKit)
         runtimeOwner?.viewportSample(
-            generation: generation,
-            documentView: documentView,
-            pageIdentity: pageIdentity,
+            surfaceIdentity: surfaceIdentity,
             referencePoint: referencePoint
         )
 #else
@@ -259,26 +694,21 @@ public final class NovelTextViewportDisplayReference {
 #endif
     }
 
-    public func referenceY(segmentIndex: Int, segmentOffset: Int) -> CGFloat? {
-#if canImport(UIKit)
+    package func referenceY(for position: ReaderResumePoint) -> CGFloat? {
+#if canImport(UIKit) || canImport(AppKit)
         runtimeOwner?.referenceY(
-            generation: generation,
-            documentView: documentView,
-            pageIdentity: pageIdentity,
-            segmentIndex: segmentIndex,
-            segmentOffset: segmentOffset
+            surfaceIdentity: surfaceIdentity,
+            position: position
         )
 #else
         nil
 #endif
     }
 
-#if canImport(UIKit)
+#if canImport(UIKit) || canImport(AppKit)
     public func draw(in context: CGContext, bounds: CGRect) {
         runtimeOwner?.draw(
-            generation: generation,
-            documentView: documentView,
-            pageIdentity: pageIdentity,
+            surfaceIdentity: surfaceIdentity,
             in: context,
             bounds: bounds
         )
@@ -296,30 +726,36 @@ final class NovelTextViewportRuntimeTransaction {
 
     let generation: UInt64
     let result: NovelTextLayoutResult
+    let document: ReaderPageDocument?
     let settings: ReaderAppearanceSettings
     let layout: ReaderContainerLayout
     private(set) var semanticAttributedDocument: NSAttributedString?
     let reusedSemanticAttributedDocument: Bool
     let fullDocumentLayoutPassCount: Int
     let postIndexCompactionCount: Int
-    let geometryDeviationCount: Int
+    private(set) var geometryDeviationCount: Int
+    let ownsAuthoritativeIndex: Bool
     private var state = State.pending
 
-#if canImport(UIKit)
+#if canImport(UIKit) || canImport(AppKit)
     private(set) var textContentStorage: NSTextContentStorage?
     private(set) var textLayoutManager: NSTextLayoutManager?
     private(set) var textContainer: NSTextContainer?
+    private(set) var textViewportLayoutController: NSTextViewportLayoutController?
+    private(set) var textViewportLayoutDelegate: NovelTextViewportLayoutDelegate?
 #endif
 
     init(
         generation: UInt64,
         result: NovelTextLayoutResult,
+        document: ReaderPageDocument?,
         settings: ReaderAppearanceSettings,
         layout: ReaderContainerLayout,
         candidate: NovelTextLayoutRuntimeCandidate
     ) {
         self.generation = generation
         self.result = result
+        self.document = document
         self.settings = settings
         self.layout = layout
         semanticAttributedDocument = candidate.semanticAttributedDocument
@@ -327,10 +763,13 @@ final class NovelTextViewportRuntimeTransaction {
         fullDocumentLayoutPassCount = candidate.fullDocumentLayoutPassCount
         postIndexCompactionCount = candidate.postIndexCompactionCount
         geometryDeviationCount = candidate.geometryDeviationCount
-#if canImport(UIKit)
+        ownsAuthoritativeIndex = candidate.ownsAuthoritativeIndex
+#if canImport(UIKit) || canImport(AppKit)
         textContentStorage = candidate.textContentStorage
         textLayoutManager = candidate.textLayoutManager
         textContainer = candidate.textContainer
+        textViewportLayoutController = candidate.textViewportLayoutController
+        textViewportLayoutDelegate = candidate.textViewportLayoutDelegate
 #endif
     }
 
@@ -340,21 +779,74 @@ final class NovelTextViewportRuntimeTransaction {
         return true
     }
 
-    func supersede() {
-        guard case .pending = state else { return }
+    func supersede() -> Bool {
+        guard case .pending = state else { return false }
         state = .superseded
         semanticAttributedDocument = nil
-#if canImport(UIKit)
+#if canImport(UIKit) || canImport(AppKit)
         textContentStorage = nil
         textLayoutManager = nil
         textContainer = nil
+        textViewportLayoutController = nil
+        textViewportLayoutDelegate = nil
+#endif
+        return true
+    }
+
+    fileprivate func prepareInitialViewport(around surfaceOrdinal: Int) throws {
+#if canImport(UIKit) || canImport(AppKit)
+        guard ownsAuthoritativeIndex else { return }
+        guard let attributedDocument = semanticAttributedDocument,
+              let textContentStorage,
+              let textLayoutManager,
+              let textContainer,
+              let textViewportLayoutController,
+              let textViewportLayoutDelegate else {
+            return
+        }
+        let selectedPages = result.viewportIndex.surfaces.filter {
+            abs($0.surfaceOrdinal - surfaceOrdinal) <= 1
+        }
+        let viewportBounds = selectedPages
+            .compactMap(\.frozenGeometry)
+            .reduce(CGRect.null) { partial, geometry in
+                partial.union(
+                    CGRect(
+                        x: 0,
+                        y: geometry.documentClipMinY,
+                        width: max(textContainer.size.width, 1),
+                        height: geometry.contentHeight
+                    )
+                )
+            }
+        guard !viewportBounds.isNull else { return }
+        textViewportLayoutDelegate.updateViewportBounds(viewportBounds)
+        textViewportLayoutController.layoutViewport()
+        let surfaceRanges = selectedPages.compactMap { page -> NovelTextViewportDocumentSurfaceRange? in
+            guard let geometry = page.frozenGeometry else { return nil }
+            return NovelTextViewportDocumentSurfaceRange(
+                startOffset: geometry.documentStartOffset,
+                endOffset: geometry.documentEndOffset,
+                frozenGeometry: geometry
+            )
+        }
+        let deviations = try DefaultNovelTextLayoutRuntimeAdapter.validateRematerializedGeometry(
+            surfaceRanges: surfaceRanges,
+            attributedDocument: attributedDocument,
+            contentStorage: textContentStorage,
+            layoutManager: textLayoutManager
+        )
+        geometryDeviationCount += deviations
+        guard deviations == 0 else {
+            throw NovelTextLayoutFailure.geometryValidation
+        }
 #endif
     }
 }
 
 private extension NovelTextViewportRuntimeTransaction {
     var textKitGraphCount: Int {
-#if canImport(UIKit)
+#if canImport(UIKit) || canImport(AppKit)
         textContentStorage == nil ? 0 : 1
 #else
         0
@@ -367,21 +859,28 @@ final class NovelTextViewportRuntimeOwner {
     private var activeGeneration: UInt64 = 0
     private var nextGeneration: UInt64 = 1
     private var result: NovelTextLayoutResult?
+    private var document: ReaderPageDocument?
     private var settings = ReaderAppearanceSettings()
     private var layout = ReaderContainerLayout(width: 1, height: 1)
-    private var visiblePageIdentities = Set<Int>()
+    private var visibleSurfaceOrdinals = Set<Int>()
     private var semanticAttributedDocumentCache: NSAttributedString?
     private var transactionDiagnostics = NovelTextViewportRuntimeTransactionDiagnostics()
     private var peakActivePlusCandidateGraphCount = 0
     private var viewportUpdateCount = 0
     private var rematerializedSurfaceCount = 0
+    private var drawingAccessCount = 0
+    private var staleDrawingAttemptCount = 0
+    private var lastDrawnSurfaceIdentity: NovelReaderSurfaceIdentity?
+    private var lastDrawnDocumentRange: Range<Int>?
     private let adapter: any NovelTextLayoutRuntimeAdapter
     private var pendingTransaction: NovelTextViewportRuntimeTransaction?
 
-#if canImport(UIKit)
+#if canImport(UIKit) || canImport(AppKit)
     private var textContentStorage: NSTextContentStorage?
     private var textLayoutManager: NSTextLayoutManager?
     private var textContainer: NSTextContainer?
+    private var textViewportLayoutController: NSTextViewportLayoutController?
+    private var textViewportLayoutDelegate: NovelTextViewportLayoutDelegate?
 #endif
 
     init(adapter: any NovelTextLayoutRuntimeAdapter = DefaultNovelTextLayoutRuntimeAdapter()) {
@@ -389,29 +888,37 @@ final class NovelTextViewportRuntimeOwner {
     }
 
     var diagnostics: NovelTextViewportRuntimeDiagnostics {
-#if canImport(UIKit)
+#if canImport(UIKit) || canImport(AppKit)
         NovelTextViewportRuntimeDiagnostics(
             contentStorageCount: textContentStorage == nil ? 0 : 1,
             activeLayoutManagerCount: textLayoutManager == nil ? 0 : 1,
-            perPageTextKitDocumentCount: 0,
+            perSurfaceTextKitDocumentCount: 0,
             semanticAttributedDocumentCacheCount: semanticAttributedDocumentCache == nil ? 0 : 1,
             currentActivePlusCandidateGraphCount: activeTextKitGraphCount + pendingTextKitGraphCount,
             peakActivePlusCandidateGraphCount: peakActivePlusCandidateGraphCount,
             postCommitFullLayoutCount: 0,
             viewportUpdateCount: viewportUpdateCount,
-            rematerializedSurfaceCount: rematerializedSurfaceCount
+            rematerializedSurfaceCount: rematerializedSurfaceCount,
+            drawingAccessCount: drawingAccessCount,
+            staleDrawingAttemptCount: staleDrawingAttemptCount,
+            lastDrawnSurfaceIdentity: lastDrawnSurfaceIdentity,
+            lastDrawnDocumentRange: lastDrawnDocumentRange
         )
 #else
         NovelTextViewportRuntimeDiagnostics(
             contentStorageCount: 0,
             activeLayoutManagerCount: 0,
-            perPageTextKitDocumentCount: 0,
+            perSurfaceTextKitDocumentCount: 0,
             semanticAttributedDocumentCacheCount: semanticAttributedDocumentCache == nil ? 0 : 1,
             currentActivePlusCandidateGraphCount: pendingTextKitGraphCount,
             peakActivePlusCandidateGraphCount: peakActivePlusCandidateGraphCount,
             postCommitFullLayoutCount: 0,
             viewportUpdateCount: viewportUpdateCount,
-            rematerializedSurfaceCount: rematerializedSurfaceCount
+            rematerializedSurfaceCount: rematerializedSurfaceCount,
+            drawingAccessCount: drawingAccessCount,
+            staleDrawingAttemptCount: staleDrawingAttemptCount,
+            lastDrawnSurfaceIdentity: lastDrawnSurfaceIdentity,
+            lastDrawnDocumentRange: lastDrawnDocumentRange
         )
 #endif
     }
@@ -420,12 +927,16 @@ final class NovelTextViewportRuntimeOwner {
         transactionDiagnostics
     }
 
+    var currentResult: NovelTextLayoutResult? {
+        result
+    }
+
     var currentGeneration: UInt64 {
         activeGeneration
     }
 
     private var activeTextKitGraphCount: Int {
-#if canImport(UIKit)
+#if canImport(UIKit) || canImport(AppKit)
         textContentStorage == nil ? 0 : 1
 #else
         0
@@ -436,43 +947,38 @@ final class NovelTextViewportRuntimeOwner {
         pendingTransaction?.textKitGraphCount ?? 0
     }
 
-    func commit(
-        result: NovelTextLayoutResult,
-        settings: ReaderAppearanceSettings,
-        layout: ReaderContainerLayout
-    ) throws {
-        guard let transaction = try prepareTransaction(
-            result: result,
-            settings: settings,
-            layout: layout
-        ) else { return }
-        commit(transaction)
-    }
-
     func prepareTransaction(
-        result: NovelTextLayoutResult,
-        settings: ReaderAppearanceSettings,
-        layout: ReaderContainerLayout
-    ) throws -> NovelTextViewportRuntimeTransaction? {
-        guard self.result != result || self.settings != settings || self.layout != layout else {
-            return nil
-        }
-
-        pendingTransaction?.supersede()
+        preparedInput: NovelTextLayoutPreparedInput
+    ) throws -> NovelTextViewportRuntimeTransaction {
+        supersedePendingTransaction()
         pendingTransaction = nil
         let generation = nextGeneration
         nextGeneration &+= 1
-        let candidate = try adapter.prepareCandidate(
-            input: NovelTextLayoutRuntimeAdapterInput(
-                result: result,
-                settings: settings,
-                layout: layout,
-                cachedSemanticAttributedDocument: reusableSemanticAttributedDocument(
-                    for: result,
-                    settings: settings
+        let candidate: NovelTextLayoutRuntimeCandidate
+        do {
+            candidate = try adapter.prepareCandidate(
+                input: NovelTextLayoutRuntimeAdapterInput(
+                    preparedInput: preparedInput,
+                    settings: preparedInput.settings,
+                    layout: preparedInput.layout,
+                    cachedSemanticAttributedDocument: reusableSemanticAttributedDocument(
+                        for: preparedInput
+                    )
                 )
             )
-        )
+        } catch let failure as NovelTextLayoutFailure {
+            recordFailure(failure)
+            throw failure
+        } catch {
+            let failure = NovelTextLayoutFailure.textKitIndexing
+            recordFailure(failure)
+            throw failure
+        }
+        guard let result = candidate.result else {
+            let failure = NovelTextLayoutFailure.textKitIndexing
+            recordFailure(failure)
+            throw failure
+        }
         peakActivePlusCandidateGraphCount = max(
             peakActivePlusCandidateGraphCount,
             activeTextKitGraphCount + candidate.textKitGraphCount
@@ -480,27 +986,32 @@ final class NovelTextViewportRuntimeOwner {
         let transaction = NovelTextViewportRuntimeTransaction(
             generation: generation,
             result: result,
-            settings: settings,
-            layout: layout,
+            document: preparedInput.document,
+            settings: preparedInput.settings,
+            layout: preparedInput.layout,
             candidate: candidate
         )
         pendingTransaction = transaction
         return transaction
     }
 
-    func commit(_ transaction: NovelTextViewportRuntimeTransaction) {
+    @discardableResult
+    func commit(_ transaction: NovelTextViewportRuntimeTransaction) -> Bool {
         guard pendingTransaction === transaction,
-              transaction.markCommitted() else { return }
+              transaction.markCommitted() else { return false }
         pendingTransaction = nil
         activeGeneration = transaction.generation
         result = transaction.result
+        document = transaction.document
         settings = transaction.settings
         layout = transaction.layout
         semanticAttributedDocumentCache = transaction.semanticAttributedDocument
-#if canImport(UIKit)
+#if canImport(UIKit) || canImport(AppKit)
         textContentStorage = transaction.textContentStorage
         textLayoutManager = transaction.textLayoutManager
         textContainer = transaction.textContainer
+        textViewportLayoutController = transaction.textViewportLayoutController
+        textViewportLayoutDelegate = transaction.textViewportLayoutDelegate
 #endif
         transactionDiagnostics.committedTransactionCount += 1
         if transaction.reusedSemanticAttributedDocument {
@@ -512,82 +1023,108 @@ final class NovelTextViewportRuntimeOwner {
         transactionDiagnostics.postIndexCompactionCount += transaction.postIndexCompactionCount
         transactionDiagnostics.geometryDeviationCount += transaction.geometryDeviationCount
         peakActivePlusCandidateGraphCount = max(peakActivePlusCandidateGraphCount, activeTextKitGraphCount)
+        return true
+    }
+
+    func prepareInitialViewport(
+        for transaction: NovelTextViewportRuntimeTransaction,
+        around surfaceOrdinal: Int
+    ) throws {
+        guard pendingTransaction === transaction else { return }
+        do {
+            try transaction.prepareInitialViewport(around: surfaceOrdinal)
+        } catch let failure as NovelTextLayoutFailure {
+            _ = transaction.supersede()
+            pendingTransaction = nil
+            recordFailure(failure)
+            throw failure
+        } catch {
+            _ = transaction.supersede()
+            pendingTransaction = nil
+            let failure = NovelTextLayoutFailure.geometryValidation
+            recordFailure(failure)
+            throw failure
+        }
     }
 
     private func reusableSemanticAttributedDocument(
-        for result: NovelTextLayoutResult,
-        settings: ReaderAppearanceSettings
+        for preparedInput: NovelTextLayoutPreparedInput
     ) -> NSAttributedString? {
-        guard self.result?.viewportContext.document == result.viewportContext.document,
-              self.settings == settings else {
+        guard result?.viewportContext.document == preparedInput.viewportContextSeed.document,
+              settings == preparedInput.settings else {
             return nil
         }
         return semanticAttributedDocumentCache
     }
 
     func release() {
-        pendingTransaction?.supersede()
+        supersedePendingTransaction()
         pendingTransaction = nil
         result = nil
-        visiblePageIdentities.removeAll(keepingCapacity: false)
+        document = nil
+        visibleSurfaceOrdinals.removeAll(keepingCapacity: false)
         semanticAttributedDocumentCache = nil
         peakActivePlusCandidateGraphCount = 0
         viewportUpdateCount = 0
         rematerializedSurfaceCount = 0
-#if canImport(UIKit)
+        drawingAccessCount = 0
+        staleDrawingAttemptCount = 0
+        lastDrawnSurfaceIdentity = nil
+        lastDrawnDocumentRange = nil
+#if canImport(UIKit) || canImport(AppKit)
         textContentStorage = nil
         textLayoutManager = nil
         textContainer = nil
+        textViewportLayoutController = nil
+        textViewportLayoutDelegate = nil
 #endif
     }
 
+    private func supersedePendingTransaction() {
+        guard pendingTransaction?.supersede() == true else { return }
+        transactionDiagnostics.supersededTransactionCount += 1
+    }
+
+    private func recordFailure(_ failure: NovelTextLayoutFailure) {
+        transactionDiagnostics.failedTransactionCount += 1
+        transactionDiagnostics.lastFailureStage = failure.stage
+    }
+
     func handleMemoryPressure() {
-        // The live TextKit graph owns everything needed to keep the current
-        // generation drawable. This extra attributed document is rebuildable.
+        supersedePendingTransaction()
+        pendingTransaction = nil
         semanticAttributedDocumentCache = nil
     }
 
-    func displayReference(for pageIdentity: Int) -> NovelTextViewportDisplayReference? {
-        guard let page = result?.viewportIndex.pages.first(where: { $0.pageIndex == pageIdentity }) else {
+    func displayReference(for surfaceIdentity: NovelReaderSurfaceIdentity) -> NovelTextViewportDisplayReference? {
+        guard isCurrent(surfaceIdentity) else {
             return nil
         }
         return NovelTextViewportDisplayReference(
             runtimeOwner: self,
-            generation: activeGeneration,
-            documentView: page.documentView,
-            pageIdentity: page.pageIndex
+            surfaceIdentity: surfaceIdentity
         )
-    }
-
-    func displayReference(for surfaceIdentity: NovelReaderSurfaceIdentity) -> NovelTextViewportDisplayReference? {
-        guard surfaceIdentity.generation == activeGeneration else {
-            return nil
-        }
-        return displayReference(for: surfaceIdentity.ordinal)
-    }
-
-    func updateVisiblePageIdentities(_ pageIdentities: [Int]) {
-        visiblePageIdentities = Set(pageIdentities.filter { pageIdentity in
-            result?.viewportIndex.pages.contains(where: { $0.pageIndex == pageIdentity }) == true
-        })
     }
 
     func updateVisibleSurfaceIdentities(_ surfaceIdentities: [NovelReaderSurfaceIdentity]) {
         let visibleOrdinals = Set<Int>(surfaceIdentities.compactMap { surfaceIdentity -> Int? in
             guard surfaceIdentity.generation == activeGeneration,
-                  result?.viewportIndex.pages.contains(where: { $0.pageIndex == surfaceIdentity.ordinal }) == true else {
+                  result?.viewportIndex.surfaces.contains(where: { $0.surfaceOrdinal == surfaceIdentity.ordinal }) == true else {
                 return nil
             }
             return surfaceIdentity.ordinal
         })
-        visiblePageIdentities = preheatedPageIdentities(around: visibleOrdinals)
+        visibleSurfaceOrdinals = preheatedSurfaceOrdinals(around: visibleOrdinals)
         viewportUpdateCount += 1
-        rematerializedSurfaceCount = visiblePageIdentities.count
+        rematerializedSurfaceCount = visibleSurfaceOrdinals.count
+#if canImport(UIKit) || canImport(AppKit)
+        updateTextKitViewport()
+#endif
     }
 
-    private func preheatedPageIdentities(around visibleOrdinals: Set<Int>) -> Set<Int> {
-        guard let pages = result?.viewportIndex.pages, !visibleOrdinals.isEmpty else { return [] }
-        let validOrdinals = Set(pages.map(\.pageIndex))
+    private func preheatedSurfaceOrdinals(around visibleOrdinals: Set<Int>) -> Set<Int> {
+        guard let pages = result?.viewportIndex.surfaces, !visibleOrdinals.isEmpty else { return [] }
+        let validOrdinals = Set(pages.map(\.surfaceOrdinal))
         var preheated = visibleOrdinals.intersection(validOrdinals)
         if let first = visibleOrdinals.min(), validOrdinals.contains(first - 1) {
             preheated.insert(first - 1)
@@ -598,38 +1135,61 @@ final class NovelTextViewportRuntimeOwner {
         return preheated
     }
 
-    func isCurrent(generation: UInt64, documentView: Int, pageIdentity: Int) -> Bool {
-        guard generation == activeGeneration,
-              let page = result?.viewportIndex.pages.first(where: { $0.pageIndex == pageIdentity }) else {
-            return false
+#if canImport(UIKit) || canImport(AppKit)
+    private func updateTextKitViewport() {
+        guard let result,
+              let textContainer,
+              let textViewportLayoutController,
+              let textViewportLayoutDelegate else {
+            return
         }
-        return page.documentView == documentView
+        let viewportBounds = result.viewportIndex.surfaces
+            .filter { visibleSurfaceOrdinals.contains($0.surfaceOrdinal) }
+            .compactMap(\.frozenGeometry)
+            .reduce(CGRect.null) { partial, geometry in
+                partial.union(
+                    CGRect(
+                        x: 0,
+                        y: geometry.documentClipMinY,
+                        width: max(textContainer.size.width, 1),
+                        height: geometry.contentHeight
+                    )
+                )
+            }
+        textViewportLayoutDelegate.updateViewportBounds(
+            viewportBounds.isNull ? .zero : viewportBounds
+        )
+        textViewportLayoutController.layoutViewport()
+    }
+#endif
+
+    func isCurrent(_ surfaceIdentity: NovelReaderSurfaceIdentity) -> Bool {
+        surfaceIdentity.generation == activeGeneration &&
+            result?.viewportIndex.surfaces.contains(where: {
+                $0.surfaceOrdinal == surfaceIdentity.ordinal
+            }) == true
     }
 
-#if canImport(UIKit)
+#if canImport(UIKit) || canImport(AppKit)
     func viewportSample(
-        generation: UInt64,
-        documentView: Int,
-        pageIdentity: Int,
+        surfaceIdentity: NovelReaderSurfaceIdentity,
         referencePoint: CGPoint
     ) -> NovelTextViewportSample? {
-        guard isCurrent(
-            generation: generation,
-            documentView: documentView,
-            pageIdentity: pageIdentity
-        ),
+        let surfaceOrdinal = surfaceIdentity.ordinal
+        guard isCurrent(surfaceIdentity),
         let result,
+        let document,
         let textContentStorage,
         let textLayoutManager,
-        let page = result.viewportIndex.pages.first(where: { $0.pageIndex == pageIdentity }),
-        let pageOriginY = pageOriginY(
+        let page = result.viewportIndex.surfaces.first(where: { $0.surfaceOrdinal == surfaceOrdinal }),
+        let surfaceOriginY = surfaceOriginY(
             page: page,
             result: result,
             textContentStorage: textContentStorage,
             textLayoutManager: textLayoutManager
         ),
         let fragment = closestLayoutFragment(
-            to: CGPoint(x: referencePoint.x, y: pageOriginY + referencePoint.y),
+            to: CGPoint(x: referencePoint.x, y: surfaceOriginY + referencePoint.y),
             textContentStorage: textContentStorage,
             textLayoutManager: textLayoutManager
         ) else {
@@ -641,7 +1201,7 @@ final class NovelTextViewportRuntimeOwner {
         guard fragmentStart != NSNotFound else { return nil }
         let fragmentPoint = CGPoint(
             x: referencePoint.x - fragment.layoutFragmentFrame.minX,
-            y: pageOriginY + referencePoint.y - fragment.layoutFragmentFrame.minY
+            y: surfaceOriginY + referencePoint.y - fragment.layoutFragmentFrame.minY
         )
         let lineOffset: Int
         if let lineFragment = fragment.textLineFragment(
@@ -660,42 +1220,35 @@ final class NovelTextViewportRuntimeOwner {
             lineOffset = 0
         }
         let documentOffset = fragmentStart + lineOffset
-        guard let segmentRange = result.viewportContext.document.textRangesBySegment
-            .first(where: { _, range in
-                documentOffset >= range.startOffset && documentOffset <= range.endOffset
-            }) else {
+        guard let sample = result.viewportContext.document.sample(
+            containingDocumentOffset: documentOffset,
+            surfaceIdentity: surfaceIdentity,
+            documentView: page.documentView,
+            in: document
+        ) else {
             return nearestTextSample(
                 documentOffset: documentOffset,
                 page: page,
-                result: result
+                result: result,
+                document: document
             )
         }
-        return NovelTextViewportSample(
-            documentView: documentView,
-            pageIndex: pageIdentity,
-            segmentIndex: segmentRange.key,
-            segmentOffset: documentOffset - segmentRange.value.startOffset
-        )
+        return sample
     }
 
     func referenceY(
-        generation: UInt64,
-        documentView: Int,
-        pageIdentity: Int,
-        segmentIndex: Int,
-        segmentOffset: Int
+        surfaceIdentity: NovelReaderSurfaceIdentity,
+        position: ReaderResumePoint
     ) -> CGFloat? {
-        guard isCurrent(
-            generation: generation,
-            documentView: documentView,
-            pageIdentity: pageIdentity
-        ),
+        let surfaceOrdinal = surfaceIdentity.ordinal
+        guard isCurrent(surfaceIdentity),
         let result,
+        let document,
         let textContentStorage,
         let textLayoutManager,
-        let page = result.viewportIndex.pages.first(where: { $0.pageIndex == pageIdentity }),
-        let segmentRange = result.viewportContext.document.textRangesBySegment[segmentIndex],
-        let pageOriginY = pageOriginY(
+        let page = result.viewportIndex.surfaces.first(where: { $0.surfaceOrdinal == surfaceOrdinal }),
+        let documentOffset = result.viewportContext.document.documentOffset(for: position, in: document),
+        let surfaceOriginY = surfaceOriginY(
             page: page,
             result: result,
             textContentStorage: textContentStorage,
@@ -703,17 +1256,17 @@ final class NovelTextViewportRuntimeOwner {
         ),
         let location = textContentStorage.location(
             textContentStorage.documentRange.location,
-            offsetBy: segmentRange.startOffset + min(max(segmentOffset, 0), segmentRange.length)
+            offsetBy: documentOffset
         ),
         let fragment = textLayoutManager.textLayoutFragment(for: location),
         let lineFragment = fragment.textLineFragment(for: location, isUpstreamAffinity: true) else {
             return nil
         }
-        return fragment.layoutFragmentFrame.minY + lineFragment.typographicBounds.midY - pageOriginY
+        return fragment.layoutFragmentFrame.minY + lineFragment.typographicBounds.midY - surfaceOriginY
     }
 
-    private func pageOriginY(
-        page: NovelTextViewportIndexPage,
+    private func surfaceOriginY(
+        page: NovelTextViewportIndexSurface,
         result: NovelTextLayoutResult,
         textContentStorage: NSTextContentStorage,
         textLayoutManager: NSTextLayoutManager
@@ -722,10 +1275,10 @@ final class NovelTextViewportRuntimeOwner {
             return frozenGeometry.pageLocalOriginY
         }
         guard let firstRange = page.ranges.first,
-              let documentRange = result.viewportContext.document.textRangesBySegment[firstRange.segmentIndex],
+              let documentOffset = result.viewportContext.document.documentOffset(forSurfaceRange: firstRange),
               let pageLocation = textContentStorage.location(
                 textContentStorage.documentRange.location,
-                offsetBy: documentRange.startOffset + firstRange.startOffset
+                offsetBy: documentOffset
               ),
               let firstFragment = textLayoutManager.textLayoutFragment(for: pageLocation) else {
             return nil
@@ -766,48 +1319,39 @@ final class NovelTextViewportRuntimeOwner {
 
     private func nearestTextSample(
         documentOffset: Int,
-        page: NovelTextViewportIndexPage,
-        result: NovelTextLayoutResult
+        page: NovelTextViewportIndexSurface,
+        result: NovelTextLayoutResult,
+        document: ReaderPageDocument
     ) -> NovelTextViewportSample? {
-        let candidates = page.ranges.compactMap { range -> (distance: Int, sample: NovelTextViewportSample)? in
-            guard let documentRange = result.viewportContext.document.textRangesBySegment[range.segmentIndex] else {
-                return nil
-            }
-            let start = documentRange.startOffset + range.startOffset
-            let end = documentRange.startOffset + range.endOffset
-            let nearestOffset = min(max(documentOffset, start), end)
-            return (
-                abs(documentOffset - nearestOffset),
-                NovelTextViewportSample(
-                    documentView: page.documentView,
-                    pageIndex: page.pageIndex,
-                    segmentIndex: range.segmentIndex,
-                    segmentOffset: nearestOffset - documentRange.startOffset
-                )
-            )
-        }
-        return candidates.min { $0.distance < $1.distance }?.sample
+        page.nearestTextSample(
+            toDocumentOffset: documentOffset,
+            surfaceIdentity: NovelReaderSurfaceIdentity(
+                generation: activeGeneration,
+                ordinal: page.surfaceOrdinal
+            ),
+            viewportDocument: result.viewportContext.document,
+            sourceDocument: document
+        )
     }
 #endif
 
-#if canImport(UIKit)
+#if canImport(UIKit) || canImport(AppKit)
     func draw(
-        generation: UInt64,
-        documentView: Int,
-        pageIdentity: Int,
+        surfaceIdentity: NovelReaderSurfaceIdentity,
         in context: CGContext,
         bounds: CGRect
     ) {
-        guard isCurrent(
-            generation: generation,
-            documentView: documentView,
-            pageIdentity: pageIdentity
-        ),
+        let surfaceOrdinal = surfaceIdentity.ordinal
+        guard isCurrent(surfaceIdentity) else {
+            staleDrawingAttemptCount += 1
+            return
+        }
+        guard
         let result,
         let textContentStorage,
         let textLayoutManager,
-        let page = result.viewportIndex.pages.first(where: { $0.pageIndex == pageIdentity }),
-        let pageOriginY = pageOriginY(
+        let page = result.viewportIndex.surfaces.first(where: { $0.surfaceOrdinal == surfaceOrdinal }),
+        let surfaceOriginY = surfaceOriginY(
             page: page,
             result: result,
             textContentStorage: textContentStorage,
@@ -820,34 +1364,53 @@ final class NovelTextViewportRuntimeOwner {
         ) else {
             return
         }
-        let clipMaxY = page.frozenGeometry?.documentClipMaxY ?? pageOriginY + bounds.height
+        let documentRange = page.frozenGeometry.map {
+            $0.documentStartOffset..<$0.documentEndOffset
+        }
+        let clipMaxY = page.frozenGeometry?.documentClipMaxY ?? surfaceOriginY + bounds.height
         let pageClipRect = NovelTextViewportDrawingGeometry.clipRect(
             bounds: bounds,
-            pageOriginY: pageOriginY,
+            surfaceOriginY: surfaceOriginY,
             documentClipMaxY: page.frozenGeometry?.documentClipMaxY
         )
 
         context.saveGState()
         context.clip(to: pageClipRect)
-        context.translateBy(x: bounds.minX, y: bounds.minY - pageOriginY)
+        context.translateBy(x: bounds.minX, y: bounds.minY - surfaceOriginY)
         textLayoutManager.enumerateTextLayoutFragments(
             from: pageLocation,
-            options: [.ensuresLayout]
+            options: []
         ) { fragment in
+            if let documentRange {
+                let fragmentStart = textContentStorage.offset(
+                    from: textContentStorage.documentRange.location,
+                    to: fragment.rangeInElement.location
+                )
+                guard fragmentStart != NSNotFound else { return false }
+                if fragmentStart >= documentRange.upperBound {
+                    return false
+                }
+                guard fragmentStart >= documentRange.lowerBound else {
+                    return true
+                }
+            }
             guard fragment.layoutFragmentFrame.minY < clipMaxY else {
                 return false
             }
-            guard fragment.layoutFragmentFrame.maxY >= pageOriginY else {
+            guard fragment.layoutFragmentFrame.maxY >= surfaceOriginY else {
                 return true
             }
             fragment.draw(at: fragment.layoutFragmentFrame.origin, in: context)
             return true
         }
         context.restoreGState()
+        drawingAccessCount += 1
+        lastDrawnSurfaceIdentity = surfaceIdentity
+        lastDrawnDocumentRange = documentRange
     }
 
     private func pageStartLocation(
-        page: NovelTextViewportIndexPage,
+        page: NovelTextViewportIndexSurface,
         result: NovelTextLayoutResult,
         textContentStorage: NSTextContentStorage
     ) -> NSTextLocation? {
@@ -858,12 +1421,12 @@ final class NovelTextViewportRuntimeOwner {
             )
         }
         guard let firstRange = page.ranges.first,
-              let documentRange = result.viewportContext.document.textRangesBySegment[firstRange.segmentIndex] else {
+              let documentOffset = result.viewportContext.document.documentOffset(forSurfaceRange: firstRange) else {
             return nil
         }
         return textContentStorage.location(
             textContentStorage.documentRange.location,
-            offsetBy: documentRange.startOffset + firstRange.startOffset
+            offsetBy: documentOffset
         )
     }
 #endif
