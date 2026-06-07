@@ -160,6 +160,12 @@ public enum WebDAVSyncDirection: String, Codable, CaseIterable, Sendable {
     case download
 }
 
+public enum WebDAVAutomaticSyncResult: Equatable, Sendable {
+    case skipped
+    case downloaded(WebDAVSyncPayload)
+    case uploaded(WebDAVSyncPayload)
+}
+
 public enum WebDAVSyncError: LocalizedError, Equatable, Sendable {
     case invalidConfiguration
     case notFound
@@ -355,11 +361,12 @@ public actor WebDAVSyncService {
         return payload
     }
 
-    public func synchronizeAutomatically() async throws {
+    @discardableResult
+    public func synchronizeAutomatically() async throws -> WebDAVAutomaticSyncResult {
         let settings = await settingsStore.load()
         let sessionState = await sessionStore.load()
-        guard policyModule.canSynchronizeAutomatically(settings: settings, session: sessionState) else { return }
-        guard let accountUID = try? await accountUIDResolver.resolveCurrentAccountUID() else { return }
+        guard policyModule.canSynchronizeAutomatically(settings: settings, session: sessionState) else { return .skipped }
+        guard let accountUID = try? await accountUIDResolver.resolveCurrentAccountUID() else { return .skipped }
 
         let remotePayload: WebDAVSyncPayload?
         do {
@@ -369,12 +376,14 @@ public actor WebDAVSyncService {
         }
         switch policyModule.automaticDecision(settings: settings, remotePayload: remotePayload, localUID: accountUID) {
         case .skip:
-            return
+            return .skipped
         case let .download(remotePayload):
             try await apply(remotePayload)
             try await updateSettingsAfterSync(settings, remoteUpdatedAt: remotePayload.updatedAt)
+            return .downloaded(remotePayload)
         case .upload:
-            _ = try await upload(using: settings, accountUID: accountUID)
+            let payload = try await upload(using: settings, accountUID: accountUID)
+            return .uploaded(payload)
         }
     }
 
