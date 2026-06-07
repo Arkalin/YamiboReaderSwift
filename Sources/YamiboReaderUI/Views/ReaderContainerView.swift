@@ -218,6 +218,8 @@ public struct ReaderContainerView: View {
                         .zIndex(4)
                 }
             }
+            .disabled(hasPresentedOverlay)
+            .allowsHitTesting(!hasPresentedOverlay)
             .task {
                 await model.commitNovelTextPresentationEnvironment(isPad: isPadDevice)
                 await model.prepare(layout: currentLayout)
