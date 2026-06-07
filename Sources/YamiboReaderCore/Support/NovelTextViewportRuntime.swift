@@ -14,7 +14,8 @@ struct NovelTextSurfaceLayoutSlice: Equatable {
 enum NovelTextSurfaceFragmentPartitioner {
     static func partition(
         _ segments: [NovelTextSurfaceLayoutFragment],
-        surfaceHeight: CGFloat
+        surfaceHeight: CGFloat,
+        breakOffsets: Set<Int> = []
     ) -> [NovelTextSurfaceLayoutSlice] {
         guard surfaceHeight > 0 else { return [] }
         var surfaces: [NovelTextSurfaceLayoutSlice] = []
@@ -23,6 +24,20 @@ enum NovelTextSurfaceFragmentPartitioner {
         for segment in segments {
             guard let existingRange = currentRange,
                   let existingClipRect = currentClipRect else {
+                currentRange = segment.characterRange
+                currentClipRect = segment.rect
+                continue
+            }
+            if breakOffsets.contains(where: { breakOffset in
+                breakOffset > existingRange.location &&
+                    breakOffset <= segment.characterRange.location
+            }) {
+                surfaces.append(
+                    NovelTextSurfaceLayoutSlice(
+                        characterRange: existingRange,
+                        clipRect: existingClipRect
+                    )
+                )
                 currentRange = segment.characterRange
                 currentClipRect = segment.rect
                 continue
@@ -387,7 +402,10 @@ package final class DefaultNovelTextLayoutRuntimeAdapter: NovelTextLayoutRuntime
             attributedDocument: attributedDocument,
             contentStorage: contentStorage,
             layoutManager: layoutManager,
-            surfaceSize: surfaceSize
+            surfaceSize: surfaceSize,
+            semanticBreakOffsets: input.settings.readingMode == .paged
+                ? Self.semanticSurfaceBreakOffsets(for: input.preparedInput)
+                : []
         )
         if input.settings.readingMode == .vertical {
             surfaceRanges = Self.splitSurfaceRangesAtSemanticBreaks(
@@ -481,7 +499,8 @@ package final class DefaultNovelTextLayoutRuntimeAdapter: NovelTextLayoutRuntime
         attributedDocument: NSAttributedString,
         contentStorage: NSTextContentStorage,
         layoutManager: NSTextLayoutManager,
-        surfaceSize: CGSize
+        surfaceSize: CGSize,
+        semanticBreakOffsets: Set<Int> = []
     ) throws -> [NovelTextViewportDocumentSurfaceRange] {
         guard surfaceSize.width >= 120, surfaceSize.height > 0 else {
             throw NovelTextLayoutFailure.textKitIndexing
@@ -535,9 +554,15 @@ package final class DefaultNovelTextLayoutRuntimeAdapter: NovelTextLayoutRuntime
             return true
         }
 
+        let breakOffsets = Set(
+            semanticBreakOffsets.compactMap {
+                utf16Offset(in: attributedDocument.string, characterOffset: $0)
+            }
+        )
         let ranges = NovelTextSurfaceFragmentPartitioner.partition(
             segments,
-            surfaceHeight: surfaceSize.height
+            surfaceHeight: surfaceSize.height,
+            breakOffsets: breakOffsets
         ).compactMap { page in
             viewportDocumentPageRange(
                 from: attributedDocument,
@@ -752,6 +777,18 @@ package final class DefaultNovelTextLayoutRuntimeAdapter: NovelTextLayoutRuntime
             location: text.utf16.distance(from: text.utf16.startIndex, to: start.samePosition(in: text.utf16)!),
             length: text.utf16.distance(from: start.samePosition(in: text.utf16)!, to: end.samePosition(in: text.utf16)!)
         )
+    }
+
+    private static func utf16Offset(
+        in text: String,
+        characterOffset: Int
+    ) -> Int? {
+        guard characterOffset >= 0,
+              let index = text.index(text.startIndex, offsetBy: characterOffset, limitedBy: text.endIndex),
+              let utf16Index = index.samePosition(in: text.utf16) else {
+            return nil
+        }
+        return text.utf16.distance(from: text.utf16.startIndex, to: utf16Index)
     }
 
     private static func nsRange(
