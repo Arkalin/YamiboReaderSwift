@@ -346,6 +346,53 @@ final class ReaderContainerModelTests: XCTestCase {
         }
     }
 
+    func testVerticalProgressScrubContextUsesCachedCurrentViewSurfaceMapping() async throws {
+        let model = try await makeModel(
+            documents: [
+                makeImageDocument(view: 1, maxView: 1, surfaceCount: 5),
+            ],
+            settings: ReaderAppearanceSettings(readingMode: .vertical)
+        )
+
+        await MainActor.run {
+            let context = model.verticalProgressScrubContext
+
+            XCTAssertEqual(context.targetSurfaceIndex(0), 0)
+            XCTAssertEqual(context.targetSurfaceIndex(50), 2)
+            XCTAssertEqual(context.targetSurfaceIndex(100), 4)
+            XCTAssertEqual(context.targetSurfaceIndex(-25), 0)
+            XCTAssertEqual(context.targetSurfaceIndex(250), 4)
+            XCTAssertEqual(context.chapterTitle(2), "第3章")
+            XCTAssertEqual(context.chapterTickStartIndex(2), 2)
+        }
+    }
+
+    func testVerticalProgressScrubContextClampsSingleSurfaceWithoutChapters() async throws {
+        let document = ReaderPageDocument(
+            threadURL: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=445566&mobile=2")!,
+            view: 1,
+            maxView: 1,
+            contentSource: .fallbackUnfilteredPage,
+            segments: [
+                .text("没有章节标题的正文。", chapterTitle: nil),
+            ]
+        )
+        let model = try await makeModel(
+            documents: [document],
+            settings: ReaderAppearanceSettings(readingMode: .vertical)
+        )
+
+        await MainActor.run {
+            let context = model.verticalProgressScrubContext
+
+            XCTAssertEqual(context.targetSurfaceIndex(0), 0)
+            XCTAssertEqual(context.targetSurfaceIndex(50), 0)
+            XCTAssertEqual(context.targetSurfaceIndex(100), 0)
+            XCTAssertNil(context.chapterTitle(0))
+            XCTAssertNil(context.chapterTickStartIndex(0))
+        }
+    }
+
     func testVerticalNearEndPrefetchDoesNotMergeNextWebView() async throws {
         let model = try await makeModel(
             documents: [
