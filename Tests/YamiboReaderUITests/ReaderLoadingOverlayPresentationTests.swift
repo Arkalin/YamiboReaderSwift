@@ -12,6 +12,7 @@ final class ReaderLoadingOverlayPresentationTests: XCTestCase {
 
         XCTAssertEqual(presentation.reason, .initialContentLoad)
         XCTAssertTrue(presentation.isPresented)
+        XCTAssertFalse(presentation.allowsChrome)
     }
 
     func testInitialLoadErrorDoesNotPresentOverlay() {
@@ -25,6 +26,7 @@ final class ReaderLoadingOverlayPresentationTests: XCTestCase {
 
         XCTAssertNil(presentation.reason)
         XCTAssertFalse(presentation.isPresented)
+        XCTAssertTrue(presentation.allowsChrome)
     }
 
     func testAppearanceSettingsApplyTakesPriority() {
@@ -71,6 +73,17 @@ final class ReaderLoadingOverlayPresentationTests: XCTestCase {
         let body = try XCTUnwrap(functionBody(named: "content(topInset", in: source))
 
         XCTAssertFalse(body.contains("ProgressView(L10n.string(\"common.loading\"))"))
+    }
+
+    func testReaderContainerChromeIsHiddenWhileLoadingOverlayIsPresented() throws {
+        let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let source = try String(
+            contentsOf: repositoryRoot
+                .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderContainerView.swift"),
+            encoding: .utf8
+        )
+
+        XCTAssertTrue(source.contains("if chromeState.showsChrome && loadingOverlayPresentation.allowsChrome"))
     }
 }
 
