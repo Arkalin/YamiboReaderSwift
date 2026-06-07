@@ -639,7 +639,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertTrue(restoreTextAnchorBody.contains("cell.textViewportAnchorY("))
         XCTAssertTrue(restoreTextAnchorBody.contains("applyTextAnchorRestore"))
         XCTAssertTrue(restoreTextAnchorBody.contains("applyProgressFallbackRestore"))
-        XCTAssertTrue(verticalBody.contains("ReaderVerticalPositioning.viewportRestoreLineY"))
+        XCTAssertTrue(verticalBody.contains("ReaderVerticalPositioning.viewportReadingAnchorLineY"))
         XCTAssertTrue(sampleBody.contains("displayReference.viewportSample("))
         XCTAssertTrue(sampleBody.contains("ReaderVerticalPositioning.pageDistance"))
         XCTAssertTrue(anchorBody.contains("displayReference.referenceY("))

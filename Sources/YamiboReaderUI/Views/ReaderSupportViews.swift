@@ -1295,7 +1295,7 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
                 }
             }
 
-            let referenceLineY = ReaderVerticalPositioning.viewportReferenceLineY(in: scrollView.bounds)
+            let referenceLineY = ReaderVerticalPositioning.viewportReadingAnchorLineY(in: scrollView.bounds)
             let textSample = collectionView.indexPathsForVisibleItems
                 .compactMap { indexPath -> (distance: CGFloat, sample: NovelTextViewportSample)? in
                     guard let surface = verticalSurface(for: indexPath.item),
@@ -1496,7 +1496,7 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
             restoredItem: Int,
             visibleFrame: CGRect
         ) {
-            let referenceLineY = ReaderVerticalPositioning.viewportRestoreLineY(in: collectionView.bounds)
+            let referenceLineY = ReaderVerticalPositioning.viewportReadingAnchorLineY(in: collectionView.bounds)
             let desiredY = collectionView.contentOffset.y + anchorY - referenceLineY
             let minOffsetY = -collectionView.adjustedContentInset.top
             let maxOffsetY = max(
@@ -1514,7 +1514,7 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
             collectionView: UICollectionView,
             visibleFrame: CGRect
         ) {
-            let referenceLineY = ReaderVerticalPositioning.viewportRestoreLineY(in: collectionView.bounds)
+            let referenceLineY = ReaderVerticalPositioning.viewportReadingAnchorLineY(in: collectionView.bounds)
             let desiredY = collectionView.contentOffset.y
                 + visibleFrame.minY
                 + visibleFrame.height * min(max(request.intraSurfaceProgress, 0), 1)
