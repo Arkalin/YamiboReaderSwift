@@ -4,24 +4,35 @@ import YamiboReaderCore
 @testable import YamiboReaderUI
 
 final class ReaderVerticalPositioningTests: XCTestCase {
-    func testViewportReferenceLineMatchesProgressSamplingAnchor() {
+    func testViewportReadingAnchorLineMatchesProgressSamplingAnchor() {
         let bounds = CGRect(x: 0, y: 12, width: 393, height: 852)
 
-        XCTAssertEqual(ReaderVerticalPositioning.viewportReferenceLineY(in: bounds), 426)
+        XCTAssertEqual(ReaderVerticalPositioning.viewportReadingAnchorLineY(in: bounds), 136.32, accuracy: 0.001)
     }
 
-    func testViewportRestoreLineUsesTopReadingArea() {
+    func testViewportReadingAnchorLineUsesTopReadingArea() {
         let bounds = CGRect(x: 0, y: 12, width: 393, height: 852)
 
-        XCTAssertEqual(ReaderVerticalPositioning.viewportRestoreLineY(in: bounds), 136.32, accuracy: 0.001)
-        XCTAssertLessThan(ReaderVerticalPositioning.viewportRestoreLineY(in: bounds), ReaderVerticalPositioning.viewportReferenceLineY(in: bounds))
+        XCTAssertEqual(ReaderVerticalPositioning.viewportReadingAnchorLineY(in: bounds), 136.32, accuracy: 0.001)
     }
 
-    func testViewportReferenceLineIgnoresScrollOffsetOrigin() {
+    func testVerticalSamplingAndRestoreUseSharedReadingAnchorLine() {
+        let boundsSamples = [
+            CGRect(x: 0, y: 0, width: 320, height: 568),
+            CGRect(x: 0, y: 12, width: 393, height: 852),
+            CGRect(x: 0, y: 24, width: 768, height: 1024),
+        ]
+
+        for bounds in boundsSamples {
+            XCTAssertEqual(ReaderVerticalPositioning.viewportReadingAnchorLineY(in: bounds), expectedAnchorLineY(for: bounds), accuracy: 0.001)
+        }
+    }
+
+    func testViewportReadingAnchorLineIgnoresScrollOffsetOrigin() {
         let scrolledBounds = CGRect(x: 0, y: 7_403, width: 393, height: 852)
 
-        XCTAssertEqual(ReaderVerticalPositioning.viewportReferenceLineY(in: scrolledBounds), 426)
-        XCTAssertNotEqual(ReaderVerticalPositioning.viewportReferenceLineY(in: scrolledBounds), scrolledBounds.midY)
+        XCTAssertEqual(ReaderVerticalPositioning.viewportReadingAnchorLineY(in: scrolledBounds), 136.32, accuracy: 0.001)
+        XCTAssertNotEqual(ReaderVerticalPositioning.viewportReadingAnchorLineY(in: scrolledBounds), scrolledBounds.midY)
     }
 
     func testPageDistanceReportsZeroOnlyWhenReferenceLineCrossesFrame() {
@@ -86,6 +97,10 @@ final class ReaderVerticalPositioningTests: XCTestCase {
         }
     }
 
+}
+
+private func expectedAnchorLineY(for bounds: CGRect) -> CGFloat {
+    min(max(bounds.height * 0.16, 96), max(bounds.height - 96, 0))
 }
 
 private func projectFilePath(_ relativePath: String) -> String {

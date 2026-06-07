@@ -1,11 +1,7 @@
 import CoreGraphics
 
 enum ReaderVerticalPositioning {
-    static func viewportReferenceLineY(in bounds: CGRect) -> CGFloat {
-        bounds.height / 2
-    }
-
-    static func viewportRestoreLineY(in bounds: CGRect) -> CGFloat {
+    static func viewportReadingAnchorLineY(in bounds: CGRect) -> CGFloat {
         min(max(bounds.height * 0.16, 96), max(bounds.height - 96, 0))
     }
 
