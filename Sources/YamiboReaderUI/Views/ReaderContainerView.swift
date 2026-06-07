@@ -176,6 +176,7 @@ public struct ReaderContainerView: View {
                     layout: currentLayout
                 )
                 .ignoresSafeArea(.container, edges: .top)
+                .opacity(shouldShowReaderLoadingOverlay ? 0 : 1)
 
                 ApplePencilPageTurnInteractionOverlay(
                     settings: model.applePencilPageTurnSettings,
@@ -210,6 +211,11 @@ public struct ReaderContainerView: View {
                     bottomInset: bottomInset
                 )
                 .zIndex(3)
+
+                if shouldShowReaderLoadingOverlay {
+                    readerLoadingOverlay
+                        .zIndex(4)
+                }
             }
             .task {
                 await model.commitNovelTextPresentationEnvironment(isPad: isPadDevice)
@@ -413,90 +419,95 @@ public struct ReaderContainerView: View {
     }
 
     private func verticalContent(topInset: CGFloat, bottomInset: CGFloat) -> some View {
-        ZStack {
-            ReaderVerticalViewportScrollView(
-                surfaces: model.readerSurfaces,
-                settings: model.settings,
-                refererURL: model.forumURL,
-                sessionState: model.sessionState,
-                topInset: topInset,
-                bottomInset: bottomInset,
-                scrollRequest: verticalScrollRequest,
-                displayReferenceProvider: { surfaceIdentity in
-                    model.novelTextViewportDisplayReference(for: surfaceIdentity)
-                },
-                onVisibleSurfaceIdentitiesChange: { surfaceIdentities in
-                    model.updateNovelTextViewportVisibleSurfaceIdentities(surfaceIdentities)
-                },
-                onScrollRequestHandled: { request in
-                    guard verticalRestoreController.scrollingRequest == request else {
-                        if verticalScrollRequest == request {
-                            verticalScrollRequest = nil
-                        }
-                        return
+        ReaderVerticalViewportScrollView(
+            surfaces: model.readerSurfaces,
+            settings: model.settings,
+            refererURL: model.forumURL,
+            sessionState: model.sessionState,
+            topInset: topInset,
+            bottomInset: bottomInset,
+            scrollRequest: verticalScrollRequest,
+            displayReferenceProvider: { surfaceIdentity in
+                model.novelTextViewportDisplayReference(for: surfaceIdentity)
+            },
+            onVisibleSurfaceIdentitiesChange: { surfaceIdentities in
+                model.updateNovelTextViewportVisibleSurfaceIdentities(surfaceIdentities)
+            },
+            onScrollRequestHandled: { request in
+                guard verticalRestoreController.scrollingRequest == request else {
+                    if verticalScrollRequest == request {
+                        verticalScrollRequest = nil
                     }
-                    verticalScrollRequest = nil
-                    if request.textAnchor != nil {
-                        verticalRestoreController.beginSettling(request, now: CACurrentMediaTime())
-                        verticalRestoreRetryTask?.cancel()
-                        verticalRestoreRetryTask = nil
-                        return
-                    }
-                    tryAdvanceVerticalRestore()
-                },
-                onScrollViewReady: { scrollView in
-                    verticalScrollCoordinator.attach(scrollView: scrollView)
-                    verticalScrollCoordinator.onBoundaryPullRelease = { direction in
-                        Task { @MainActor in
-                            await handleVerticalBoundaryPullRelease(direction)
-                        }
-                    }
-                    verticalScrollCoordinator.onViewportMetricsChange = {
-                        Task { @MainActor in
-                            tryAdvanceVerticalRestore()
-                            scheduleVerticalViewportPositionUpdate()
-                        }
-                    }
-                    verticalScrollCoordinator.onBoundaryPullStateChange = { state in
-                        Task { @MainActor in
-                            updateVerticalBoundaryPullState(state)
-                        }
-                    }
-                },
-                onSurfaceFramesChange: { frames in
-                    guard verticalSurfaceFrames != frames else { return }
-                    verticalSurfaceFrames = frames
-                    tryAdvanceVerticalRestore()
-                    scheduleVerticalViewportPositionUpdate()
-                },
-                onTextViewportSampleChange: { sample in
-                    guard verticalTextViewportSample != sample else { return }
-                    verticalTextViewportSample = sample
-                    scheduleVerticalViewportPositionUpdate()
-                },
-                onViewportChange: {
-                    scheduleVerticalViewportPositionUpdate()
-                },
-                onScrollSettled: {
-                    updateVerticalViewportPosition()
-                },
-                onTap: {
-                    handleVerticalTap()
+                    return
                 }
-            )
-            .contentShape(Rectangle())
-            .opacity(verticalRestoreController.shouldConcealViewportContent ? 0 : 1)
-            .simultaneousGesture(verticalScrollSuppressionGesture)
-
-            if verticalRestoreController.shouldConcealViewportContent {
-                ProgressView(L10n.string("common.loading"))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                verticalScrollRequest = nil
+                if request.textAnchor != nil {
+                    verticalRestoreController.beginSettling(request, now: CACurrentMediaTime())
+                    verticalRestoreRetryTask?.cancel()
+                    verticalRestoreRetryTask = nil
+                    return
+                }
+                tryAdvanceVerticalRestore()
+            },
+            onScrollViewReady: { scrollView in
+                verticalScrollCoordinator.attach(scrollView: scrollView)
+                verticalScrollCoordinator.onBoundaryPullRelease = { direction in
+                    Task { @MainActor in
+                        await handleVerticalBoundaryPullRelease(direction)
+                    }
+                }
+                verticalScrollCoordinator.onViewportMetricsChange = {
+                    Task { @MainActor in
+                        tryAdvanceVerticalRestore()
+                        scheduleVerticalViewportPositionUpdate()
+                    }
+                }
+                verticalScrollCoordinator.onBoundaryPullStateChange = { state in
+                    Task { @MainActor in
+                        updateVerticalBoundaryPullState(state)
+                    }
+                }
+            },
+            onSurfaceFramesChange: { frames in
+                guard verticalSurfaceFrames != frames else { return }
+                verticalSurfaceFrames = frames
+                tryAdvanceVerticalRestore()
+                scheduleVerticalViewportPositionUpdate()
+            },
+            onTextViewportSampleChange: { sample in
+                guard verticalTextViewportSample != sample else { return }
+                verticalTextViewportSample = sample
+                scheduleVerticalViewportPositionUpdate()
+            },
+            onViewportChange: {
+                scheduleVerticalViewportPositionUpdate()
+            },
+            onScrollSettled: {
+                updateVerticalViewportPosition()
+            },
+            onTap: {
+                handleVerticalTap()
             }
-        }
+        )
+        .contentShape(Rectangle())
+        .simultaneousGesture(verticalScrollSuppressionGesture)
     }
 
     private var backgroundColor: Color {
         readerThemeColor(for: model.settings.backgroundStyle, colorScheme: colorScheme)
+    }
+
+    private var shouldShowReaderLoadingOverlay: Bool {
+        model.isApplyingAppearanceSettings || verticalRestoreController.shouldConcealViewportContent
+    }
+
+    private var readerLoadingOverlay: some View {
+        Color.clear
+            .contentShape(Rectangle())
+            .overlay {
+                ProgressView(L10n.string("common.loading"))
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private func verticalBoundaryPullOverlayLayer(topInset: CGFloat, bottomInset: CGFloat) -> some View {

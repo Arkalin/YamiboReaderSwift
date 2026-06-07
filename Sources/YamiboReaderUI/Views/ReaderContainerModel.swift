@@ -263,6 +263,7 @@ public struct ReaderChromeProgressSnapshot: Equatable, Sendable {
 @MainActor
 public final class ReaderContainerModel: ObservableObject {
     @Published public private(set) var isLoading = false
+    @Published public private(set) var isApplyingAppearanceSettings = false
     @Published public private(set) var errorMessage: String?
     @Published public private(set) var cachedViews: Set<Int> = []
     @Published private var bootstrapSettings = ReaderAppearanceSettings()
@@ -286,10 +287,12 @@ public final class ReaderContainerModel: ObservableObject {
     private let appContext: YamiboAppContext
     private var repository: ReaderRepository?
     private var readingWorkflow: NovelReadingWorkflow?
+    private var appearanceSettingsApplicationSequence: UInt64 = 0
     private var layout: ReaderContainerLayout = .zero
     private var usesPadPresentation = false
     private var chapterDirectoryAnchors: [Int: NovelChapterAnchor] = [:]
     private let runtimeAdapter: (any NovelTextLayoutRuntimeAdapter)?
+    package var runtimeUpdatePreparation: NovelReadingWorkflowRuntimeUpdatePreparation = { $0 }
     private let progressSync: ProgressSyncModule
     private lazy var chapterCommentsModule = ReaderChapterCommentsModule(
         adapter: ReaderChapterCommentsModule.Adapter(
@@ -614,6 +617,8 @@ public final class ReaderContainerModel: ObservableObject {
     }
 
     public func close() {
+        appearanceSettingsApplicationSequence &+= 1
+        isApplyingAppearanceSettings = false
         readingWorkflow?.close()
         readingWorkflow = nil
         chromeProgressSnapshot = .empty
@@ -759,12 +764,16 @@ public final class ReaderContainerModel: ObservableObject {
             return
         }
 
+        let applicationSequence = beginApplyingAppearanceSettings()
+        defer { finishApplyingAppearanceSettings(applicationSequence) }
+
         do {
             guard let state = try await requestRuntimeUpdate(
                 settings: newSettings,
                 layout: layout,
                 usesPadPresentation: usesPadPresentation
             ) else { return }
+            guard appearanceSettingsApplicationSequence == applicationSequence else { return }
             applePencilPageTurnSettings = newApplePencilPageTurnSettings
             syncFromWorkflowState(state)
             bootstrapSettings = newSettings
@@ -772,7 +781,9 @@ public final class ReaderContainerModel: ObservableObject {
                 readerSettings: newSettings,
                 applePencilPageTurnSettings: applePencilSettingsChanged ? newApplePencilPageTurnSettings : nil
             )
+        } catch is CancellationError {
         } catch {
+            guard appearanceSettingsApplicationSequence == applicationSequence else { return }
             applePencilPageTurnSettings = oldApplePencilPageTurnSettings
             errorMessage = error.localizedDescription
         }
@@ -1201,7 +1212,8 @@ public final class ReaderContainerModel: ObservableObject {
                 settings: settings,
                 layout: layout,
                 usesPadPresentation: usesPadPresentation
-            )
+            ),
+            preparation: runtimeUpdatePreparation
         )
     }
 
@@ -1416,6 +1428,17 @@ public final class ReaderContainerModel: ObservableObject {
 
     private func syncCachedViews(_ views: Set<Int>) {
         cacheOperationModule.syncCachedViews(views)
+    }
+
+    private func beginApplyingAppearanceSettings() -> UInt64 {
+        appearanceSettingsApplicationSequence &+= 1
+        isApplyingAppearanceSettings = true
+        return appearanceSettingsApplicationSequence
+    }
+
+    private func finishApplyingAppearanceSettings(_ sequence: UInt64) {
+        guard appearanceSettingsApplicationSequence == sequence else { return }
+        isApplyingAppearanceSettings = false
     }
 }
 
