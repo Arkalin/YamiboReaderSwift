@@ -281,15 +281,6 @@ public struct ReaderBottomChromeLayoutPresentation: Equatable, Sendable {
         if position >= 1 { return max(length, 0) }
         return capsuleChapterTickCoordinate(position: position, length: length, edgeInset: edgeInset)
     }
-
-    public func bottomChromeBottomPadding(readingMode: ReaderReadingMode, bottomInset: CGFloat) -> CGFloat {
-        switch readingMode {
-        case .paged:
-            max(bottomInset - 18, 8)
-        case .vertical:
-            max(bottomInset, 12)
-        }
-    }
 }
 
 public struct ReaderChromeProgressSummary: Equatable, Sendable {
@@ -2164,7 +2155,7 @@ struct ReaderBottomChrome: View {
                 .padding(.horizontal, 12)
         }
         .padding(.top, 8)
-        .padding(.bottom, chromeLayout.bottomChromeBottomPadding(readingMode: readingMode, bottomInset: bottomInset))
+        .padding(.bottom, max(bottomInset - 18, 8))
         .onAppear {
             sliderState.reset(to: sliderSnapshot)
         }
