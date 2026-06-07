@@ -1026,9 +1026,7 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
     private var contentIdentity: ReaderVerticalViewportContentIdentity {
         ReaderVerticalViewportContentIdentity(
             surfaces: surfaces,
-            settings: settings,
-            topInset: topInset,
-            bottomInset: bottomInset
+            settings: settings
         )
     }
 
@@ -1074,6 +1072,12 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
         let callbackScheduler = SwiftUIViewUpdateCallbackScheduler()
         private var contentIdentity: ReaderVerticalViewportContentIdentity?
         private var handledScrollRequest: ReaderVerticalScrollRequest?
+        private var lastPublishedSurfaceFrames: [Int: ReaderVerticalSurfaceFrameValue]?
+        private var lastPublishedVisibleSurfaceIdentities: [NovelReaderSurfaceIdentity]?
+        private var lastPublishedTextViewportSample: NovelTextViewportSample?
+        private var hasPublishedNilTextViewportSample = false
+        private var isImmediateVisibleTextRedrawScheduled = false
+        private var isDelayedVisibleTextRedrawScheduled = false
         lazy var tapGesture = UITapGestureRecognizer(target: self, action: #selector(handleTap))
 
         init(parent: ReaderVerticalViewportScrollView) {
@@ -1087,14 +1091,21 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
         ) {
             let contentIdentityChanged = contentIdentity != nextContentIdentity
             let insetsChanged = updateInsets(in: collectionView)
-            guard contentIdentityChanged || insetsChanged else { return }
+            guard contentIdentityChanged else {
+                if insetsChanged {
+                    publishLayout(from: collectionView)
+                }
+                return
+            }
             contentIdentity = nextContentIdentity
             collectionView.collectionViewLayout.invalidateLayout()
             collectionView.reloadData()
+            resetPublishedViewportCache()
             if collectionView.bounds.width > 0, collectionView.bounds.height > 0 {
                 collectionView.layoutIfNeeded()
                 publishLayout(from: collectionView)
             }
+            scheduleVisibleTextRedraw(in: collectionView, includeDelayedPass: true)
         }
 
         @discardableResult
@@ -1106,8 +1117,16 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
                 right: 0
             )
             guard collectionView.contentInset != contentInset else { return false }
+            let previousVisibleOffsetY = collectionView.contentOffset.y + collectionView.adjustedContentInset.top
             collectionView.contentInset = contentInset
             collectionView.scrollIndicatorInsets = contentInset
+            let nextOffsetY = previousVisibleOffsetY - collectionView.adjustedContentInset.top
+            if collectionView.contentOffset.y != nextOffsetY {
+                collectionView.setContentOffset(
+                    CGPoint(x: collectionView.contentOffset.x, y: nextOffsetY),
+                    animated: false
+                )
+            }
             return true
         }
 
@@ -1155,9 +1174,9 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
             if let attributes = collectionView.layoutAttributesForItem(at: indexPath) {
                 cell.refreshLayout(for: attributes.size)
             } else {
-                cell.refreshLayoutForCurrentBounds()
+                cell.refreshLayoutForCurrentBounds(forceRedraw: true)
             }
-            scheduleVisibleTextRedraw(in: collectionView)
+            scheduleVisibleTextRedraw(in: collectionView, includeDelayedPass: false)
         }
 
         func collectionView(
@@ -1231,7 +1250,7 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
             callbackScheduler.publish {
                 onScrollRequestHandled(request)
             }
-            scheduleVisibleTextRedraw(in: collectionView)
+            scheduleVisibleTextRedraw(in: collectionView, includeDelayedPass: true)
             publishScrollSettled(from: collectionView)
         }
 
@@ -1259,17 +1278,22 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
                 )
             }
             let onSurfaceFramesChange = parent.onSurfaceFramesChange
-            callbackScheduler.publish {
-                onSurfaceFramesChange(frames)
+            if lastPublishedSurfaceFrames != frames {
+                lastPublishedSurfaceFrames = frames
+                callbackScheduler.publish {
+                    onSurfaceFramesChange(frames)
+                }
             }
             let visibleSurfaceIdentities = collectionView.indexPathsForVisibleItems
                 .sorted { $0.item < $1.item }
                 .compactMap { verticalSurface(for: $0.item)?.identity }
             let onVisibleSurfaceIdentitiesChange = parent.onVisibleSurfaceIdentitiesChange
-            callbackScheduler.publish {
-                onVisibleSurfaceIdentitiesChange(visibleSurfaceIdentities)
+            if lastPublishedVisibleSurfaceIdentities != visibleSurfaceIdentities {
+                lastPublishedVisibleSurfaceIdentities = visibleSurfaceIdentities
+                callbackScheduler.publish {
+                    onVisibleSurfaceIdentitiesChange(visibleSurfaceIdentities)
+                }
             }
-            scheduleVisibleTextRedraw(in: collectionView)
 
             let referenceLineY = ReaderVerticalPositioning.viewportReferenceLineY(in: scrollView.bounds)
             let textSample = collectionView.indexPathsForVisibleItems
@@ -1293,21 +1317,50 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
                 }
                 .min { $0.distance < $1.distance }?.sample
             let onTextViewportSampleChange = parent.onTextViewportSampleChange
-            callbackScheduler.publish {
-                onTextViewportSampleChange(textSample)
+            if shouldPublishTextViewportSample(textSample) {
+                lastPublishedTextViewportSample = textSample
+                hasPublishedNilTextViewportSample = textSample == nil
+                callbackScheduler.publish {
+                    onTextViewportSampleChange(textSample)
+                }
             }
         }
 
-        private func scheduleVisibleTextRedraw(in collectionView: UICollectionView) {
-            let delays: [TimeInterval] = [0, 0.05, 0.2]
-            for delay in delays {
-                DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak collectionView] in
-                    collectionView?.visibleCells.forEach { cell in
-                        guard let cell = cell as? ReaderVerticalViewportCell else { return }
-                        cell.refreshLayoutForCurrentBounds()
-                    }
+        private func scheduleVisibleTextRedraw(in collectionView: UICollectionView, includeDelayedPass: Bool) {
+            if !isImmediateVisibleTextRedrawScheduled {
+                isImmediateVisibleTextRedrawScheduled = true
+                DispatchQueue.main.async { [weak self, weak collectionView] in
+                    self?.isImmediateVisibleTextRedrawScheduled = false
+                    self?.redrawVisibleText(in: collectionView)
                 }
             }
+            guard includeDelayedPass, !isDelayedVisibleTextRedrawScheduled else { return }
+            isDelayedVisibleTextRedrawScheduled = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self, weak collectionView] in
+                self?.isDelayedVisibleTextRedrawScheduled = false
+                self?.redrawVisibleText(in: collectionView)
+            }
+        }
+
+        private func redrawVisibleText(in collectionView: UICollectionView?) {
+            collectionView?.visibleCells.forEach { cell in
+                guard let cell = cell as? ReaderVerticalViewportCell else { return }
+                cell.refreshLayoutForCurrentBounds(forceRedraw: true)
+            }
+        }
+
+        private func resetPublishedViewportCache() {
+            lastPublishedSurfaceFrames = nil
+            lastPublishedVisibleSurfaceIdentities = nil
+            lastPublishedTextViewportSample = nil
+            hasPublishedNilTextViewportSample = false
+        }
+
+        private func shouldPublishTextViewportSample(_ sample: NovelTextViewportSample?) -> Bool {
+            guard let sample else {
+                return !hasPublishedNilTextViewportSample || lastPublishedTextViewportSample != nil
+            }
+            return lastPublishedTextViewportSample != sample
         }
 
         private func publishScrollSettled(from scrollView: UIScrollView) {
@@ -1646,9 +1699,11 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
         }
     }
 
-    func refreshLayoutForCurrentBounds() {
-        layoutBlockSubviews()
-        setNeedsDisplayForTextBlocks()
+    func refreshLayoutForCurrentBounds(forceRedraw: Bool = false) {
+        let didChangeLayout = layoutBlockSubviews()
+        if forceRedraw || didChangeLayout {
+            setNeedsDisplayForTextBlocks()
+        }
     }
 
     func refreshLayout(for layoutSize: CGSize) {
@@ -1725,15 +1780,22 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
         return BlockView(view: label, height: 44, displayReference: nil)
     }
 
-    private func layoutBlockSubviews() {
+    @discardableResult
+    private func layoutBlockSubviews() -> Bool {
         let x = currentSettings.horizontalPadding
         let width = max(contentView.bounds.width - currentSettings.horizontalPadding * 2, currentContentWidth, 1)
         var y = currentTopPadding
+        var didChangeLayout = false
         for blockView in blockViews {
             let height = max(ceil(blockView.height), 1)
-            blockView.view.frame = CGRect(x: x, y: y, width: width, height: height)
+            let frame = CGRect(x: x, y: y, width: width, height: height)
+            if blockView.view.frame != frame {
+                blockView.view.frame = frame
+                didChangeLayout = true
+            }
             y += height + 14
         }
+        return didChangeLayout
     }
 
     private func effectiveLayoutSize(for layoutSize: CGSize) -> CGSize {
@@ -1862,8 +1924,6 @@ private final class ReaderVerticalViewportImageView: UIView {
 private struct ReaderVerticalViewportContentIdentity: Hashable {
     var surfaces: [NovelReaderSurface]
     var settings: ReaderAppearanceSettings
-    var topInset: CGFloat
-    var bottomInset: CGFloat
 }
 #endif
 

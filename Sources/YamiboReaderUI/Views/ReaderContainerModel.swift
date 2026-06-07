@@ -620,13 +620,12 @@ public final class ReaderContainerModel: ObservableObject {
         }
         guard let presentation = readerPresentation,
               presentation.surfaces.indices.contains(surfaceIndex) else { return }
-        if let state = readingWorkflow?.updateVerticalViewportPosition(
+        guard let state = readingWorkflow?.updateVerticalViewportPosition(
             surfaceIdentity: presentation.surfaces[surfaceIndex].identity,
             intraSurfaceProgress: normalizedProgress,
             presentationRevision: presentation.revision
-        ) {
-            syncFromWorkflowState(state)
-        }
+        ) else { return }
+        syncFromWorkflowState(state)
         scheduleProgressSync()
 
         Task {

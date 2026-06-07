@@ -1275,7 +1275,9 @@ final class NovelTextViewportRuntimeOwner {
             }
             return surfaceIdentity.ordinal
         })
-        visibleSurfaceOrdinals = preheatedSurfaceOrdinals(around: visibleOrdinals)
+        let nextVisibleSurfaceOrdinals = preheatedSurfaceOrdinals(around: visibleOrdinals)
+        guard visibleSurfaceOrdinals != nextVisibleSurfaceOrdinals else { return }
+        visibleSurfaceOrdinals = nextVisibleSurfaceOrdinals
         viewportUpdateCount += 1
         rematerializedSurfaceCount = visibleSurfaceOrdinals.count
 #if canImport(UIKit) || canImport(AppKit)
