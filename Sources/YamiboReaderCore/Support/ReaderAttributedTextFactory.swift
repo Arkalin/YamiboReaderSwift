@@ -151,7 +151,7 @@ public enum ReaderAttributedTextFactory {
         settings: ReaderAppearanceSettings,
         baseFontSize: Double = defaultBaseFontSize,
         textColor: ReaderPlatformColor? = nil,
-        titleWeight: ReaderPlatformFontWeight = .regular
+        titleWeight: ReaderPlatformFontWeight = .bold
     ) -> NSAttributedString {
         let rendered = NSMutableAttributedString()
         let textColor = textColor ?? .readerLabel
@@ -212,7 +212,7 @@ public enum ReaderAttributedTextFactory {
         settings: ReaderAppearanceSettings,
         baseFontSize: Double = defaultBaseFontSize,
         textColor: ReaderPlatformColor? = nil,
-        titleWeight: ReaderPlatformFontWeight = .regular
+        titleWeight: ReaderPlatformFontWeight = .bold
     ) -> NSAttributedString {
         let rendered = NSMutableAttributedString()
         let textColor = textColor ?? .readerLabel
