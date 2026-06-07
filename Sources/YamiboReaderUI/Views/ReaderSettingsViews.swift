@@ -575,7 +575,7 @@ private struct ReaderBooksApplePencilSection: View {
         ReaderBooksSettingsSection(title: "Apple Pencil", palette: palette) {
             HStack(spacing: 10) {
                 Text(L10n.string("apple_pencil.page_turn"))
-                    .font(.title3.weight(.semibold))
+                    .font(.title3)
                     .foregroundStyle(palette.primaryText)
                     .lineLimit(2)
                     .minimumScaleFactor(0.85)
@@ -613,7 +613,7 @@ private struct ReaderBooksApplePencilSection: View {
 
             HStack(spacing: 12) {
                 Text(L10n.string("apple_pencil.behavior.title"))
-                    .font(.title3.weight(.semibold))
+                    .font(.title3)
                     .foregroundStyle(palette.primaryText)
                     .lineLimit(2)
                     .minimumScaleFactor(0.85)
@@ -769,8 +769,10 @@ private struct ReaderBooksToggleRow: View {
     var body: some View {
         HStack {
             Text(title)
-                .font(.title3.weight(.semibold))
+                .font(.title3)
                 .foregroundStyle(palette.primaryText)
+                .lineLimit(2)
+                .minimumScaleFactor(0.85)
             Spacer()
             Toggle("", isOn: $isOn)
                 .labelsHidden()
