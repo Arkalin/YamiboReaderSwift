@@ -165,6 +165,7 @@ public struct ReaderContainerView: View {
                 topInset: topInset,
                 bottomInset: bottomInset
             )
+            let loadingOverlayPresentation = readerLoadingOverlayPresentation
 
             ZStack {
                 backgroundColor
@@ -176,7 +177,7 @@ public struct ReaderContainerView: View {
                     layout: currentLayout
                 )
                 .ignoresSafeArea(.container, edges: .top)
-                .opacity(shouldShowReaderLoadingOverlay ? 0 : 1)
+                .opacity(loadingOverlayPresentation.isPresented ? 0 : 1)
 
                 ApplePencilPageTurnInteractionOverlay(
                     settings: model.applePencilPageTurnSettings,
@@ -212,7 +213,7 @@ public struct ReaderContainerView: View {
                 )
                 .zIndex(3)
 
-                if shouldShowReaderLoadingOverlay {
+                if loadingOverlayPresentation.isPresented {
                     readerLoadingOverlay
                         .zIndex(4)
                 }
@@ -328,12 +329,7 @@ public struct ReaderContainerView: View {
 
     @ViewBuilder
     private func content(topInset: CGFloat, bottomInset: CGFloat, layout: ReaderContainerLayout) -> some View {
-        if model.isLoading && model.readerSurfaces.isEmpty {
-            VStack(spacing: 12) {
-                ProgressView(L10n.string("common.loading"))
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if let errorMessage = model.errorMessage, model.readerSurfaces.isEmpty {
+        if let errorMessage = model.errorMessage, model.readerSurfaces.isEmpty {
             VStack(spacing: 12) {
                 Image(systemName: "exclamationmark.triangle")
                     .font(.largeTitle)
@@ -497,8 +493,14 @@ public struct ReaderContainerView: View {
         readerThemeColor(for: model.settings.backgroundStyle, colorScheme: colorScheme)
     }
 
-    private var shouldShowReaderLoadingOverlay: Bool {
-        model.isApplyingAppearanceSettings || verticalRestoreController.shouldConcealViewportContent
+    private var readerLoadingOverlayPresentation: ReaderLoadingOverlayPresentation {
+        ReaderLoadingOverlayPresentation(
+            isLoading: model.isLoading,
+            hasSurfaces: !model.readerSurfaces.isEmpty,
+            hasInitialLoadError: model.errorMessage != nil,
+            isApplyingAppearanceSettings: model.isApplyingAppearanceSettings,
+            shouldConcealViewportContent: verticalRestoreController.shouldConcealViewportContent
+        )
     }
 
     private var readerLoadingOverlay: some View {
