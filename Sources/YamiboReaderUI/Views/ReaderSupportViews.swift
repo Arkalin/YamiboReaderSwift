@@ -2589,22 +2589,27 @@ private struct ReaderDirectoryProgressCapsule: View {
 }
 
 struct ReaderVerticalProgressCapsule: View {
-    let progressFraction: Double
-    let preview: ReaderProgressScrubPreview?
-    let isScrubbing: Bool
+    let restingProgressFraction: Double
+    let scrubContext: ReaderProgressScrubContext
     let ticks: [ReaderProgressChapterTick]
-    let onScrub: (CGFloat, CGFloat) -> Void
+    let onBeginScrub: () -> Void
+    let onCommit: (Int) -> Void
     let onEndScrub: () -> Void
     @State private var dragStartProgressFraction: Double?
+    @State private var scrubState = ReaderProgressScrubState()
+    @State private var progressStartFeedbackGenerator = UIImpactFeedbackGenerator(style: .light)
+    @State private var progressTickFeedbackGenerator = UISelectionFeedbackGenerator()
+    @State private var progressCommitFeedbackGenerator = UIImpactFeedbackGenerator(style: .medium)
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         let layout = ReaderBottomChromeLayoutPresentation()
+        let preview = scrubState.preview
         let totalWidth = isScrubbing ? layout.verticalPreviewWidth + layout.verticalScrubberSideSpacing + layout.verticalScrubberWidth : layout.verticalScrubberWidth
 
         GeometryReader { geometry in
             let height = max(geometry.size.height, 1)
-            let clampedProgress = min(max(progressFraction, 0), 1)
+            let clampedProgress = min(max(displayedProgressFraction, 0), 1)
             let thumbY = min(max(height * clampedProgress, 0), height)
 
             ZStack(alignment: .topTrailing) {
@@ -2626,25 +2631,78 @@ struct ReaderVerticalProgressCapsule: View {
                 DragGesture(minimumDistance: 0)
                     .onChanged { value in
                         if dragStartProgressFraction == nil {
-                            dragStartProgressFraction = progressFraction
+                            dragStartProgressFraction = displayedProgressFraction
                         }
                         let targetFraction = ReaderProgressDragMapping.value(
-                            startProgressFraction: dragStartProgressFraction ?? progressFraction,
+                            startProgressFraction: dragStartProgressFraction ?? displayedProgressFraction,
                             translation: value.translation.height,
                             length: height,
                             range: 0...1
                         )
-                        onScrub(CGFloat(targetFraction) * height, height)
+                        updateScrub(value: targetFraction * 100)
                     }
                     .onEnded { _ in
                         dragStartProgressFraction = nil
-                        onEndScrub()
+                        commitScrub()
                     }
             )
             .accessibilityLabel("目录 · 进度")
         }
         .frame(width: totalWidth)
         .frame(height: layout.verticalScrubberHeight)
+    }
+
+    private var displayedProgressFraction: Double {
+        if scrubState.phase == .scrubbing {
+            guard scrubContext.surfaceCount > 1 else { return 0 }
+            return Double(scrubState.targetSurfaceIndex) / Double(max(scrubContext.surfaceCount - 1, 1))
+        }
+        return restingProgressFraction
+    }
+
+    private var isScrubbing: Bool {
+        scrubState.phase == .scrubbing
+    }
+
+    private func updateScrub(value: Double) {
+        let wasScrubbing = scrubState.phase == .scrubbing
+        let update = scrubState.update(value: value, context: scrubContext)
+        if !wasScrubbing, scrubState.phase == .scrubbing {
+            onBeginScrub()
+        }
+        triggerFeedback(update.haptics)
+    }
+
+    private func commitScrub() {
+        guard scrubState.phase == .scrubbing else {
+            scrubState.reset()
+            onEndScrub()
+            return
+        }
+        let update = scrubState.end()
+        triggerFeedback(update.haptics)
+        if let target = update.committedSurfaceIndex {
+            onCommit(target)
+        }
+        scrubState.reset()
+        onEndScrub()
+    }
+
+    private func triggerFeedback(_ haptics: [ReaderProgressScrubHaptic]) {
+        for haptic in haptics {
+            switch haptic {
+            case .start:
+                progressStartFeedbackGenerator.impactOccurred()
+                progressStartFeedbackGenerator.prepare()
+                progressTickFeedbackGenerator.prepare()
+            case .chapterTick:
+                progressTickFeedbackGenerator.selectionChanged()
+                progressTickFeedbackGenerator.prepare()
+            case .commit:
+                progressCommitFeedbackGenerator.impactOccurred()
+                progressCommitFeedbackGenerator.prepare()
+            }
+        }
     }
 
     private func verticalProgressBar(height: CGFloat, thumbY: CGFloat) -> some View {

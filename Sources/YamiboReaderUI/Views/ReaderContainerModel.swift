@@ -13,6 +13,48 @@ public struct ReaderProgressChapterTick: Equatable, Sendable {
     }
 }
 
+private struct ReaderProgressScrubData: Sendable {
+    var readingMode: ReaderReadingMode
+    var surfaceCount: Int
+    var currentProgressPercent: Int
+    var visibleSurfaceIndexes: [Int]
+    var fallbackVisibleSurfaceIndex: Int
+    var chapterTitlesBySurfaceIndex: [Int: String]
+    var chapterTickStartIndexes: Set<Int>
+    var isTwoPageSpreadActive: Bool
+
+    func targetSurfaceIndex(for value: Double) -> Int {
+        guard surfaceCount > 1 else { return 0 }
+        switch readingMode {
+        case .paged:
+            let target = min(max(Int(value.rounded()), 0), max(surfaceCount - 1, 0))
+            guard isTwoPageSpreadActive else { return target }
+            return max(0, min(target - (target % 2), max(surfaceCount - 1, 0)))
+        case .vertical:
+            guard !visibleSurfaceIndexes.isEmpty,
+                  visibleSurfaceIndexes.count > 1 else {
+                return fallbackVisibleSurfaceIndex
+            }
+            let clampedPercent = min(max(value, 0), 100)
+            let localSurfaceIndex = min(
+                max(Int((clampedPercent / 100) * Double(visibleSurfaceIndexes.count - 1)), 0),
+                max(visibleSurfaceIndexes.count - 1, 0)
+            )
+            return visibleSurfaceIndexes[localSurfaceIndex]
+        }
+    }
+
+    func chapterTitle(for surfaceIndex: Int) -> String? {
+        let clampedIndex = min(max(surfaceIndex, 0), max(surfaceCount - 1, 0))
+        return chapterTitlesBySurfaceIndex[clampedIndex]
+    }
+
+    func chapterTickStartIndex(for surfaceIndex: Int) -> Int? {
+        let clampedIndex = min(max(surfaceIndex, 0), max(surfaceCount - 1, 0))
+        return chapterTickStartIndexes.contains(clampedIndex) ? clampedIndex : nil
+    }
+}
+
 @MainActor
 public final class ReaderContainerModel: ObservableObject {
     @Published public private(set) var isLoading = false
@@ -356,6 +398,24 @@ public final class ReaderContainerModel: ObservableObject {
         return chapters
             .map { min(max($0.startIndex, 0), max(surfaceCount - 1, 0)) }
             .first { $0 == clampedIndex }
+    }
+
+    public var verticalProgressScrubContext: ReaderProgressScrubContext {
+        let cached = cachedProgressScrubData(readingMode: .vertical)
+        return ReaderProgressScrubContext(
+            readingMode: .vertical,
+            surfaceCount: cached.surfaceCount,
+            currentProgressPercent: cached.currentProgressPercent,
+            targetSurfaceIndex: { value in
+                cached.targetSurfaceIndex(for: value)
+            },
+            chapterTitle: { surfaceIndex in
+                cached.chapterTitle(for: surfaceIndex)
+            },
+            chapterTickStartIndex: { surfaceIndex in
+                cached.chapterTickStartIndex(for: surfaceIndex)
+            }
+        )
     }
 
     public func targetSurfaceIndex(forProgressValue value: Double) -> Int {
@@ -1141,6 +1201,47 @@ public final class ReaderContainerModel: ObservableObject {
         let clampedIndex = max(0, min(surfaceIndex, max(readerSurfaces.count - 1, 0)))
         guard isTwoPageSpreadActive else { return clampedIndex }
         return leftSurfaceIndex(forSpreadIndex: spreadIndex(forSurfaceIndex: clampedIndex))
+    }
+
+    private func cachedProgressScrubData(readingMode: ReaderReadingMode) -> ReaderProgressScrubData {
+        let surfaces = readerSurfaces
+        let count = max(surfaces.count, 1)
+        let maxIndex = max(count - 1, 0)
+        let visibleView = displayedView
+        let visibleSurfaceIndexes = surfaces.indices.filter { surfaces[$0].documentView == visibleView }
+        let chapterTitlesBySurfaceIndex = chapterTitlesBySurfaceIndex(maxIndex: maxIndex)
+        let tickStartIndexes = Set(chapters.map { min(max($0.startIndex, 0), maxIndex) })
+
+        return ReaderProgressScrubData(
+            readingMode: readingMode,
+            surfaceCount: count,
+            currentProgressPercent: currentProgressPercent,
+            visibleSurfaceIndexes: visibleSurfaceIndexes,
+            fallbackVisibleSurfaceIndex: surfaces.firstIndex { $0.documentView == visibleView } ?? 0,
+            chapterTitlesBySurfaceIndex: chapterTitlesBySurfaceIndex,
+            chapterTickStartIndexes: tickStartIndexes,
+            isTwoPageSpreadActive: isTwoPageSpreadActive
+        )
+    }
+
+    private func chapterTitlesBySurfaceIndex(maxIndex: Int) -> [Int: String] {
+        guard maxIndex >= 0, !readerSurfaces.isEmpty else { return [:] }
+        var result: [Int: String] = [:]
+        var chapterIndex = 0
+        let sortedChapters = chapters.sorted { $0.startIndex < $1.startIndex }
+        for index in readerSurfaces.indices {
+            while chapterIndex + 1 < sortedChapters.count,
+                  sortedChapters[chapterIndex + 1].startIndex <= index {
+                chapterIndex += 1
+            }
+            if let title = readerSurfaces[index].chapterTitle {
+                result[index] = title
+            } else if sortedChapters.indices.contains(chapterIndex),
+                      sortedChapters[chapterIndex].startIndex <= index {
+                result[index] = sortedChapters[chapterIndex].title
+            }
+        }
+        return result
     }
 
     private func cacheContext(forView view: Int) -> (authorID: String?, contentSource: ReaderContentSource?) {
