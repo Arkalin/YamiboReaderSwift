@@ -794,7 +794,8 @@ public final class ReaderContainerModel: ObservableObject {
         persistSettings(applePencilPageTurnSettings: newSettings)
     }
 
-    public func saveProgress() async {
+    @discardableResult
+    public func saveProgress() async -> ReaderLaunchContext {
         await flushProgress()
     }
 
@@ -1297,14 +1298,24 @@ public final class ReaderContainerModel: ObservableObject {
         }
     }
 
-    private func flushProgress() async {
+    private func flushProgress() async -> ReaderLaunchContext {
         let snapshot = currentProgressSnapshot()
-        await persistReaderResumeRoute(snapshot)
+        let resumeContext = resumeContext(for: snapshot)
+        await persistReaderResumeRoute(resumeContext)
         try? await progressSync.flush(.novel(snapshot))
+        return resumeContext
     }
 
     private func persistReaderResumeRoute(_ snapshot: NovelReadingPosition) async {
-        let resumeContext = ReaderLaunchContext(
+        await persistReaderResumeRoute(resumeContext(for: snapshot))
+    }
+
+    private func persistReaderResumeRoute(_ resumeContext: ReaderLaunchContext) async {
+        try? await appContext.readerResumeRouteStore.saveReadingPosition(.novel(resumeContext))
+    }
+
+    private func resumeContext(for snapshot: NovelReadingPosition) -> ReaderLaunchContext {
+        ReaderLaunchContext(
             threadURL: context.threadURL,
             threadTitle: context.threadTitle,
             source: .resume,
@@ -1312,7 +1323,6 @@ public final class ReaderContainerModel: ObservableObject {
             authorID: snapshot.authorID ?? context.authorID,
             initialResumePoint: snapshot.resumePoint
         )
-        try? await appContext.readerResumeRouteStore.saveReadingPosition(.novel(resumeContext))
     }
 
     private func spreadIndex(forSurfaceIndex surfaceIndex: Int) -> Int {

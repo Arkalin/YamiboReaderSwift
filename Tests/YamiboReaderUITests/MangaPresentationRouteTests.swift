@@ -291,21 +291,70 @@ final class MangaPresentationRouteTests: XCTestCase {
         XCTAssertEqual(appModel.forumNavigationRequest?.url, originalURL)
     }
 
-    func testSelectingFavoritesAfterReaderOpenedForumRestoresReader() {
-        let appModel = YamiboAppModel(appContext: YamiboAppContext(), initialTab: .favorites)
+    func testDismissReaderToOriginalPostSuspendsProvidedLatestContext() {
+        let appModel = YamiboAppModel(appContext: YamiboAppContext(), initialTab: .mine)
         let originalURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=703&mobile=2")!
-        let context = ReaderLaunchContext(
+        let staleContext = ReaderLaunchContext(
             threadURL: originalURL,
             threadTitle: "测试小说",
             source: .favorites,
             initialView: 2
         )
+        let latestResumePoint = ReaderResumePoint(
+            view: 4,
+            displayedTextOffset: 128,
+            chapterOrdinal: 3,
+            chapterTitle: "第四章",
+            segmentProgress: 0.42,
+            readingModeHint: .vertical
+        )
+        let latestContext = ReaderLaunchContext(
+            threadURL: originalURL,
+            threadTitle: "测试小说",
+            source: .resume,
+            initialView: 4,
+            initialResumePoint: latestResumePoint
+        )
 
-        appModel.presentReader(context)
-        appModel.dismissReader(openThreadInForum: originalURL)
+        appModel.presentReader(staleContext)
+        appModel.dismissReader(openThreadInForum: originalURL, suspendedContext: latestContext)
+
+        XCTAssertNil(appModel.activeReaderContext)
+        XCTAssertEqual(appModel.suspendedReaderContext, latestContext)
+        XCTAssertEqual(appModel.selectedTab, .forum)
+        XCTAssertEqual(appModel.forumNavigationRequest?.url, originalURL)
+    }
+
+    func testSelectingFavoritesAfterReaderOpenedForumRestoresLatestSuspendedReader() {
+        let appModel = YamiboAppModel(appContext: YamiboAppContext(), initialTab: .favorites)
+        let originalURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=703&mobile=2")!
+        let staleContext = ReaderLaunchContext(
+            threadURL: originalURL,
+            threadTitle: "测试小说",
+            source: .favorites,
+            initialView: 2
+        )
+        let latestResumePoint = ReaderResumePoint(
+            view: 5,
+            displayedTextOffset: 256,
+            chapterOrdinal: 4,
+            chapterTitle: "第五章",
+            segmentProgress: 0.67,
+            readingModeHint: .paged
+        )
+        let latestContext = ReaderLaunchContext(
+            threadURL: originalURL,
+            threadTitle: "测试小说",
+            source: .resume,
+            initialView: 5,
+            initialResumePoint: latestResumePoint
+        )
+
+        appModel.presentReader(staleContext)
+        appModel.dismissReader(openThreadInForum: originalURL, suspendedContext: latestContext)
         appModel.selectTab(.favorites)
 
-        XCTAssertEqual(appModel.activeReaderContext, context)
+        XCTAssertEqual(appModel.activeReaderContext, latestContext)
         XCTAssertNil(appModel.suspendedReaderContext)
         XCTAssertEqual(appModel.selectedTab, .favorites)
     }

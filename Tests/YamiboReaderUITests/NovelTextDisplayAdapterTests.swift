@@ -217,6 +217,26 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertTrue(modelSource.contains("readingWorkflow?.close()"))
     }
 
+    func testReaderCommentsOpenOriginalPostUsesParentDismissFlow() throws {
+        let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let containerSource = try String(
+            contentsOf: repositoryRoot
+                .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderContainerView.swift"),
+            encoding: .utf8
+        )
+        let supportSource = try String(
+            contentsOf: repositoryRoot
+                .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderSupportViews.swift"),
+            encoding: .utf8
+        )
+
+        XCTAssertTrue(containerSource.contains("let resumeContext = await model.saveProgress()"))
+        XCTAssertTrue(containerSource.contains("appModel.dismissReader(openThreadInForum: url, suspendedContext: resumeContext)"))
+        XCTAssertTrue(supportSource.contains("let onOpenOriginalPost: (URL) -> Void"))
+        XCTAssertTrue(supportSource.contains("onOpenOriginalPost(url)"))
+        XCTAssertFalse(supportSource.contains("appModel.dismissReader(openThreadInForum: url)"))
+    }
+
     func testPagedCellsResolveViewportSurfaceIdentityBeforeRenderingNormalText() throws {
         let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let supportSource = try String(
