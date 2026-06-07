@@ -74,6 +74,7 @@ import Testing
     try await sync.flush(.novel(NovelReadingPosition(
         threadURL: novelURL,
         view: 2,
+        maxView: 7,
         chapterTitle: "第二章",
         authorID: "42",
         resumePoint: ReaderResumePoint(
@@ -96,6 +97,7 @@ import Testing
     let novel = await favoriteStore.favorite(for: novelURL)
     let manga = await favoriteStore.favorite(for: mangaURL)
     #expect(novel?.lastView == 2)
+    #expect(novel?.novelMaxView == 7)
     #expect(novel?.mangaPageIndex == 0)
     #expect(novel?.lastChapter == "第二章")
     #expect(novel?.authorID == "42")

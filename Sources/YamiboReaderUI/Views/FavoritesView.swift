@@ -3272,12 +3272,8 @@ struct FavoriteRow: View {
                 }
 
                 VStack(alignment: .leading, spacing: 6) {
-                    ForEach(favoriteDetailLines(for: favorite), id: \.self) { line in
-                        Text(line)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                    ForEach(favoriteDetailLineItems(for: favorite), id: \.self) { line in
+                        FavoriteDetailLineView(line: line)
                     }
 
                     if favorite.isHidden {
@@ -3315,6 +3311,46 @@ struct FavoriteRow: View {
 
     private var titleColor: Color {
         isSelecting && !isSelected ? .secondary : .primary
+    }
+}
+
+private struct FavoriteDetailLineView: View {
+    let line: FavoriteDetailLine
+
+    var body: some View {
+        switch line {
+        case let .text(text):
+            Text(text)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        case let .novelProgress(chapterTitle, progressText):
+            HStack(spacing: 0) {
+                if let chapterTitle, !chapterTitle.isEmpty {
+                    Text(chapterTitle)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .layoutPriority(0)
+
+                    Text(" · \(progressText)")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
+                        .layoutPriority(1)
+                } else {
+                    Text(progressText)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 }
 
@@ -3653,16 +3689,26 @@ private func favoriteSearchTextForCollectionMatch(
     return ""
 }
 
+enum FavoriteDetailLine: Hashable {
+    case text(String)
+    case novelProgress(chapterTitle: String?, progressText: String)
+
+    var displayText: String {
+        switch self {
+        case let .text(text):
+            return text
+        case let .novelProgress(chapterTitle, progressText):
+            if let chapterTitle, !chapterTitle.isEmpty {
+                return "\(chapterTitle) · \(progressText)"
+            }
+            return progressText
+        }
+    }
+}
+
 func favoriteProgressText(for favorite: Favorite) -> String? {
     if favorite.type == .novel {
-        if let chapterTitle = favorite.novelResumePoint?.chapterTitle,
-           !chapterTitle.isEmpty {
-            return chapterTitle
-        }
-        if let lastChapter = favorite.lastChapter, !lastChapter.isEmpty {
-            return lastChapter
-        }
-        return nil
+        return favoriteNovelProgressText(for: favorite)
     }
     if let lastChapter = favorite.lastChapter, !lastChapter.isEmpty {
         if favorite.type == .manga, favorite.mangaPageIndex > 0 {
@@ -3682,6 +3728,25 @@ func favoriteProgressText(for favorite: Favorite) -> String? {
     return nil
 }
 
+func favoriteNovelProgressText(for favorite: Favorite) -> String? {
+    guard favorite.type == .novel,
+          let resumePoint = favorite.novelResumePoint else {
+        return nil
+    }
+
+    let percent = Int((min(max(resumePoint.segmentProgress, 0), 1) * 100).rounded(.down))
+    guard let maxView = favorite.novelMaxView, maxView > 1 else {
+        return L10n.string("favorites.progress.novel_percent", percent)
+    }
+
+    return L10n.string(
+        "favorites.progress.novel_page_web",
+        percent,
+        min(max(favorite.lastView, 1), maxView),
+        maxView
+    )
+}
+
 func favoriteMangaChapterLabel(from rawTitle: String) -> String? {
     let trimmedTitle = rawTitle.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmedTitle.isEmpty else { return nil }
@@ -3696,40 +3761,57 @@ func favoriteMangaChapterLabel(from rawTitle: String) -> String? {
     return L10n.string("favorites.manga_chapter", displayNumber)
 }
 
-func favoriteDetailLines(for favorite: Favorite) -> [String] {
-    var lines: [String] = []
+func favoriteDetailLineItems(for favorite: Favorite) -> [FavoriteDetailLine] {
+    var lines: [FavoriteDetailLine] = []
 
     if favorite.type == .manga {
         if let progressText = favoriteProgressText(for: favorite) {
-            lines.append(progressText)
+            lines.append(.text(progressText))
         } else if let lastChapter = favorite.lastChapter?.trimmingCharacters(in: .whitespacesAndNewlines),
                   !lastChapter.isEmpty {
-            lines.append(lastChapter)
+            lines.append(.text(lastChapter))
         }
 
         if lines.isEmpty {
-            lines.append(favorite.type.title)
+            lines.append(.text(favorite.type.title))
         }
 
         return Array(lines.prefix(1))
     }
 
-    if let lastChapter = favorite.lastChapter?.trimmingCharacters(in: .whitespacesAndNewlines),
-       !lastChapter.isEmpty {
-        lines.append(lastChapter)
+    if favorite.type == .novel {
+        let chapterTitle = favorite.novelResumePoint?.chapterTitle?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let fallbackChapterTitle = favorite.lastChapter?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let displayChapterTitle = [chapterTitle, fallbackChapterTitle]
+            .compactMap { $0 }
+            .first { !$0.isEmpty }
+        let progressText = favoriteProgressText(for: favorite)
+
+        if let progressText {
+            lines.append(.novelProgress(chapterTitle: displayChapterTitle, progressText: progressText))
+        } else if let displayChapterTitle {
+            lines.append(.text(displayChapterTitle))
+        }
+    } else if let lastChapter = favorite.lastChapter?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !lastChapter.isEmpty {
+        lines.append(.text(lastChapter))
     }
 
     if favorite.type != .novel,
        let progressText = favoriteProgressText(for: favorite),
-              !lines.contains(progressText) {
-        lines.append(progressText)
+       !lines.contains(.text(progressText)) {
+        lines.append(.text(progressText))
     }
 
     if lines.isEmpty {
-        lines.append(favorite.type.title)
+        lines.append(.text(favorite.type.title))
     }
 
     return Array(lines.prefix(2))
+}
+
+func favoriteDetailLines(for favorite: Favorite) -> [String] {
+    favoriteDetailLineItems(for: favorite).map(\.displayText)
 }
 
 func favoriteAccentAppearanceColor(

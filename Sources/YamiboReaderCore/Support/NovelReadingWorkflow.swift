@@ -551,6 +551,7 @@ public final class NovelReadingWorkflow {
         return NovelReadingPosition(
             threadURL: context.threadURL,
             view: view,
+            maxView: snapshot?.maxView,
             chapterTitle: resumePoint?.chapterTitle ?? snapshot?.currentChapterTitle,
             authorID: resumePoint?.authorID ?? snapshot?.currentAuthorID ?? currentAuthorID ?? context.authorID,
             resumePoint: resumePoint

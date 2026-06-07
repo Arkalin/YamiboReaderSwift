@@ -625,6 +625,7 @@ public actor FavoriteStore: FavoriteStoring {
         var favorites = snapshot.favorites
         let resumePoint = position.resumePoint
         let view = resumePoint?.view ?? position.view
+        let novelMaxView = position.maxView.map { max(view, $0) }
         let chapterTitle = resumePoint?.chapterTitle ?? position.chapterTitle
         let authorID = resumePoint?.authorID ?? position.authorID
 
@@ -636,6 +637,7 @@ public actor FavoriteStore: FavoriteStoring {
             favorites[index].lastChapter = chapterTitle
             favorites[index].authorID = authorID
             favorites[index].novelResumePoint = resumePoint
+            favorites[index].novelMaxView = novelMaxView
             favorites[index].lastMangaURL = nil
             favorites[index].type = .novel
             return try persistLibrary(favorites: favorites, collections: snapshot.collections).favorites[index]
@@ -651,6 +653,7 @@ public actor FavoriteStore: FavoriteStoring {
             lastChapter: chapterTitle,
             authorID: authorID,
             novelResumePoint: resumePoint,
+            novelMaxView: novelMaxView,
             isHidden: false,
             type: .novel
         )
@@ -681,6 +684,7 @@ public actor FavoriteStore: FavoriteStoring {
             favorites[index].lastChapter = chapterTitle
             favorites[index].mangaPageIndex = max(0, pageIndex)
             favorites[index].novelResumePoint = nil
+            favorites[index].novelMaxView = nil
             favorites[index].type = .manga
             return try persistLibrary(favorites: favorites, collections: snapshot.collections).favorites[index]
         }
@@ -695,6 +699,7 @@ public actor FavoriteStore: FavoriteStoring {
             lastChapter: chapterTitle,
             authorID: nil,
             novelResumePoint: nil,
+            novelMaxView: nil,
             isHidden: false,
             type: .manga,
             lastMangaURL: chapterURL

@@ -185,6 +185,7 @@ import Testing
         NovelReadingPosition(
             threadURL: url,
             view: 2,
+            maxView: 5,
             chapterTitle: "第三章",
             authorID: "77",
             resumePoint: ReaderResumePoint(
@@ -201,6 +202,7 @@ import Testing
 
     let favorite = await store.favorite(for: url)
     #expect(favorite?.lastView == 2)
+    #expect(favorite?.novelMaxView == 5)
     #expect(favorite?.mangaPageIndex == 0)
     #expect(favorite?.lastChapter == "第三章")
     #expect(favorite?.authorID == "77")
@@ -911,6 +913,7 @@ import Testing
         lastChapter: "第二章",
         authorID: "77",
         novelResumePoint: resumePoint,
+        novelMaxView: 6,
         isHidden: true,
         type: .novel,
         parentCollectionID: collection.id,
@@ -933,6 +936,7 @@ import Testing
     #expect(archive.type == .novel)
     #expect(archive.mangaPageIndex == 8)
     #expect(archive.lastView == 3)
+    #expect(archive.novelMaxView == 6)
     #expect(archive.lastChapter == "第二章")
     #expect(archive.authorID == "77")
     #expect(archive.novelResumePoint == resumePoint)
@@ -961,6 +965,7 @@ import Testing
         lastChapter: "第三章",
         authorID: "88",
         novelResumePoint: resumePoint,
+        novelMaxView: 8,
         isHidden: true,
         type: .novel,
         lastMangaURL: nil,
@@ -988,6 +993,7 @@ import Testing
     #expect(restored.type == .novel)
     #expect(restored.mangaPageIndex == 11)
     #expect(restored.lastView == 4)
+    #expect(restored.novelMaxView == 8)
     #expect(restored.lastChapter == "第三章")
     #expect(restored.authorID == "88")
     #expect(restored.novelResumePoint == resumePoint)
