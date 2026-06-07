@@ -182,7 +182,7 @@ package struct NovelReadingSession: Sendable {
     public mutating func jumpRelativeSurface(_ delta: Int) -> NovelReadingNavigationRequest? {
         guard delta != 0 else { return nil }
 
-        if layoutResult?.viewportIndex.readingMode == .paged, !spreads.isEmpty {
+        if layoutResult?.viewportIndex.readingMode == .paged, usesPagedSpread, !spreads.isEmpty {
             let targetSpreadIndex = spreadIndex(
                 forSurfaceOrdinal: snapshot.selectedSurfaceOrdinal,
                 surfaces: surfaces,
