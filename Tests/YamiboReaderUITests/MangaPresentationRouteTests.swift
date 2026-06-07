@@ -42,6 +42,218 @@ final class MangaPresentationRouteTests: XCTestCase {
         XCTAssertEqual(appModel.activeMangaRoute, route)
     }
 
+    func testBootstrapIfNeededRestoresNovelRouteFromDownloadedWebDAVProgress() async throws {
+        let suiteName = "reader-resume-webdav-novel-\(UUID().uuidString)"
+        let fixture = try makeAppModelWebDAVFixture(suiteName: suiteName)
+        let host = "reader-restore-novel.example.com"
+        let threadURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=730&mobile=2"))
+        let staleResumePoint = ReaderResumePoint(
+            view: 1,
+            displayedTextOffset: 12,
+            chapterOrdinal: 0,
+            chapterTitle: "第一章",
+            segmentProgress: 0.1,
+            readingModeHint: .paged
+        )
+        let staleContext = ReaderLaunchContext(
+            threadURL: threadURL,
+            threadTitle: "本地小说",
+            source: .resume,
+            initialView: 1,
+            initialResumePoint: staleResumePoint
+        )
+        let remoteResumePoint = ReaderResumePoint(
+            view: 5,
+            displayedTextOffset: 256,
+            chapterOrdinal: 4,
+            chapterTitle: "第五章",
+            segmentProgress: 0.6,
+            authorID: "42",
+            readingModeHint: .vertical
+        )
+        let remoteFavorite = Favorite(
+            title: "远端小说",
+            url: threadURL,
+            lastView: 5,
+            lastChapter: "第五章",
+            authorID: "42",
+            novelResumePoint: remoteResumePoint,
+            novelMaxView: 9,
+            type: .novel
+        )
+        let payload = WebDAVSyncPayload(
+            updatedAt: Date(timeIntervalSince1970: 2_000),
+            accountUID: "100",
+            library: FavoriteLibrarySnapshot(favorites: [remoteFavorite], collections: [])
+        )
+        let encodedPayload = try JSONEncoder().encode(payload)
+
+        try await fixture.resumeRouteStore.save(.novel(staleContext))
+        try await fixture.sessionStore.save(SessionState(cookie: "sid=local", isLoggedIn: true, accountUID: "100"))
+        try await fixture.webDAVSettingsStore.save(WebDAVSyncSettings(
+            baseURLString: "https://\(host)",
+            username: "admin",
+            password: "secret",
+            isAutoSyncEnabled: true,
+            lastRemoteUpdatedAt: Date(timeIntervalSince1970: 1_000),
+            localUpdatedAt: Date(timeIntervalSince1970: 1_000)
+        ))
+
+        AppModelWebDAVTestURLProtocol.setHandler(for: host) { request in
+            XCTAssertEqual(request.httpMethod, "GET")
+            return (
+                encodedPayload,
+                HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
+            )
+        }
+        defer { AppModelWebDAVTestURLProtocol.removeHandler(for: host) }
+
+        let appContext = YamiboAppContext(
+            sessionStore: fixture.sessionStore,
+            settingsStore: fixture.settingsStore,
+            webDAVSyncSettingsStore: fixture.webDAVSettingsStore,
+            readerResumeRouteStore: fixture.resumeRouteStore,
+            favoriteStore: fixture.favoriteStore,
+            session: fixture.session
+        )
+        let appModel = YamiboAppModel(appContext: appContext)
+
+        await appModel.bootstrapIfNeeded()
+
+        let expectedContext = ReaderLaunchContext(
+            threadURL: threadURL,
+            threadTitle: "远端小说",
+            source: .resume,
+            initialView: 5,
+            authorID: "42",
+            initialResumePoint: remoteResumePoint
+        )
+        XCTAssertEqual(appModel.activeReaderContext, expectedContext)
+        let restoredRoute = await fixture.resumeRouteStore.load()
+        XCTAssertEqual(restoredRoute, .novel(expectedContext))
+    }
+
+    func testBootstrapIfNeededRestoresMangaRouteFromDownloadedWebDAVProgress() async throws {
+        let suiteName = "reader-resume-webdav-manga-\(UUID().uuidString)"
+        let fixture = try makeAppModelWebDAVFixture(suiteName: suiteName)
+        let host = "reader-restore-manga.example.com"
+        let originalURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=731&mobile=2"))
+        let staleChapterURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=732&mobile=2"))
+        let remoteChapterURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=733&mobile=2"))
+        let staleContext = MangaLaunchContext(
+            originalThreadURL: originalURL,
+            chapterURL: staleChapterURL,
+            displayTitle: "本地漫画",
+            source: .resume,
+            initialPage: 0,
+            directoryName: "本地目录"
+        )
+        let remoteFavorite = Favorite(
+            title: "远端漫画",
+            url: originalURL,
+            mangaPageIndex: 7,
+            lastChapter: "第七页",
+            type: .manga,
+            lastMangaURL: remoteChapterURL
+        )
+        let payload = WebDAVSyncPayload(
+            updatedAt: Date(timeIntervalSince1970: 2_000),
+            accountUID: "100",
+            library: FavoriteLibrarySnapshot(favorites: [remoteFavorite], collections: [])
+        )
+        let encodedPayload = try JSONEncoder().encode(payload)
+
+        try await fixture.resumeRouteStore.save(.manga(.native(staleContext)))
+        try await fixture.sessionStore.save(SessionState(cookie: "sid=local", isLoggedIn: true, accountUID: "100"))
+        try await fixture.webDAVSettingsStore.save(WebDAVSyncSettings(
+            baseURLString: "https://\(host)",
+            username: "admin",
+            password: "secret",
+            isAutoSyncEnabled: true,
+            lastRemoteUpdatedAt: Date(timeIntervalSince1970: 1_000),
+            localUpdatedAt: Date(timeIntervalSince1970: 1_000)
+        ))
+
+        AppModelWebDAVTestURLProtocol.setHandler(for: host) { request in
+            XCTAssertEqual(request.httpMethod, "GET")
+            return (
+                encodedPayload,
+                HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
+            )
+        }
+        defer { AppModelWebDAVTestURLProtocol.removeHandler(for: host) }
+
+        let appContext = YamiboAppContext(
+            sessionStore: fixture.sessionStore,
+            settingsStore: fixture.settingsStore,
+            webDAVSyncSettingsStore: fixture.webDAVSettingsStore,
+            readerResumeRouteStore: fixture.resumeRouteStore,
+            favoriteStore: fixture.favoriteStore,
+            session: fixture.session
+        )
+        let appModel = YamiboAppModel(appContext: appContext)
+
+        await appModel.bootstrapIfNeeded()
+
+        let expectedContext = MangaLaunchContext(
+            originalThreadURL: originalURL,
+            chapterURL: remoteChapterURL,
+            displayTitle: "远端漫画",
+            source: .resume,
+            initialPage: 7,
+            directoryName: "本地目录"
+        )
+        XCTAssertEqual(appModel.activeMangaRoute, .native(expectedContext))
+        let restoredRoute = await fixture.resumeRouteStore.load()
+        XCTAssertEqual(restoredRoute, .manga(.native(expectedContext)))
+    }
+
+    func testBootstrapIfNeededKeepsLocalResumeRouteWhenWebDAVDoesNotDownloadProgress() async throws {
+        let suiteName = "reader-resume-webdav-skip-\(UUID().uuidString)"
+        let fixture = try makeAppModelWebDAVFixture(suiteName: suiteName)
+        let threadURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=734&mobile=2"))
+        let localResumePoint = ReaderResumePoint(
+            view: 6,
+            displayedTextOffset: 512,
+            chapterOrdinal: 5,
+            chapterTitle: "第六章",
+            segmentProgress: 0.8,
+            readingModeHint: .vertical
+        )
+        let localContext = ReaderLaunchContext(
+            threadURL: threadURL,
+            threadTitle: "本地小说",
+            source: .resume,
+            initialView: 6,
+            initialResumePoint: localResumePoint
+        )
+        let staleFavorite = Favorite(
+            title: "旧收藏进度",
+            url: threadURL,
+            lastView: 2,
+            lastChapter: "第二章",
+            type: .novel
+        )
+        try await fixture.resumeRouteStore.save(.novel(localContext))
+        try await fixture.favoriteStore.saveFavorites([staleFavorite])
+
+        let appContext = YamiboAppContext(
+            sessionStore: fixture.sessionStore,
+            settingsStore: fixture.settingsStore,
+            webDAVSyncSettingsStore: fixture.webDAVSettingsStore,
+            readerResumeRouteStore: fixture.resumeRouteStore,
+            favoriteStore: fixture.favoriteStore,
+            session: fixture.session
+        )
+        let appModel = YamiboAppModel(appContext: appContext)
+
+        await appModel.bootstrapIfNeeded()
+
+        XCTAssertEqual(appModel.activeReaderContext, localContext)
+        let restoredRoute = await fixture.resumeRouteStore.load()
+        XCTAssertEqual(restoredRoute, .novel(localContext))
+    }
+
     func testPresentingReadersPersistsResumeRouteAndDismissClearsIt() async throws {
         let (appModel, store) = try await makeAppModelWithReaderResumeRouteStore()
         let originalURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=723&mobile=2"))
@@ -413,4 +625,82 @@ private func waitForReaderResumeRoute(
     }
     let loaded = await store.load()
     XCTAssertEqual(loaded, expected, file: file, line: line)
+}
+
+private struct AppModelWebDAVFixture: Sendable {
+    let sessionStore: SessionStore
+    let settingsStore: SettingsStore
+    let webDAVSettingsStore: WebDAVSyncSettingsStore
+    let resumeRouteStore: ReaderResumeRouteStore
+    let favoriteStore: FavoriteStore
+    let session: URLSession
+}
+
+private func makeAppModelWebDAVFixture(suiteName: String) throws -> AppModelWebDAVFixture {
+    return AppModelWebDAVFixture(
+        sessionStore: SessionStore(key: "\(suiteName).session"),
+        settingsStore: SettingsStore(key: "\(suiteName).settings"),
+        webDAVSettingsStore: WebDAVSyncSettingsStore(key: "\(suiteName).webdav"),
+        resumeRouteStore: ReaderResumeRouteStore(key: "\(suiteName).reader-route"),
+        favoriteStore: FavoriteStore(key: "\(suiteName).favorites"),
+        session: makeAppModelWebDAVTestSession()
+    )
+}
+
+private final class AppModelWebDAVTestURLProtocol: URLProtocol {
+    typealias Handler = (URLRequest) throws -> (Data, HTTPURLResponse)
+
+    nonisolated(unsafe) private static var handlers: [String: Handler] = [:]
+    private static let lock = NSLock()
+
+    static func setHandler(for host: String, _ handler: @escaping Handler) {
+        lock.withLock {
+            handlers[host] = handler
+        }
+    }
+
+    static func removeHandler(for host: String) {
+        _ = lock.withLock {
+            handlers.removeValue(forKey: host)
+        }
+    }
+
+    override class func canInit(with request: URLRequest) -> Bool {
+        true
+    }
+
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest {
+        request
+    }
+
+    override func startLoading() {
+        guard
+            let host = request.url?.host,
+            let handler = Self.lock.withLock({ Self.handlers[host] })
+        else {
+            client?.urlProtocol(self, didFailWithError: AppModelWebDAVTestError.missingHandler)
+            return
+        }
+
+        do {
+            let (data, response) = try handler(request)
+            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocol(self, didLoad: data)
+            client?.urlProtocolDidFinishLoading(self)
+        } catch {
+            client?.urlProtocol(self, didFailWithError: error)
+        }
+    }
+
+    override func stopLoading() {}
+}
+
+private enum AppModelWebDAVTestError: Error {
+    case missingHandler
+}
+
+private func makeAppModelWebDAVTestSession() -> URLSession {
+    let configuration = URLSessionConfiguration.ephemeral
+    configuration.protocolClasses = [AppModelWebDAVTestURLProtocol.self]
+    return URLSession(configuration: configuration)
 }

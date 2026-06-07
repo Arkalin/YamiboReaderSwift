@@ -39,32 +39,54 @@ public final class YamiboAppModel {
 
     public func bootstrapIfNeeded() async {
         guard bootstrapState == nil, !isBootstrapping else { return }
-        await bootstrap()
-        synchronizeWebDAVIfNeeded()
+        await bootstrap(restoresReaderResumeRoute: false)
+        let didDownloadRemoteProgress = await synchronizeWebDAVForStartup()
+        await restoreReaderResumeRouteIfNeeded(reconcilesWithFavoriteProgress: didDownloadRemoteProgress)
     }
 
     public func bootstrap() async {
+        await bootstrap(restoresReaderResumeRoute: true)
+    }
+
+    private func bootstrap(restoresReaderResumeRoute: Bool) async {
         isBootstrapping = true
         defer { isBootstrapping = false }
 
         let state = await appContext.bootstrap()
         bootstrapState = state
         bootstrapErrorMessage = nil
-        await restoreReaderResumeRouteIfNeeded()
+        if restoresReaderResumeRoute {
+            await restoreReaderResumeRouteIfNeeded()
+        }
     }
 
     public func synchronizeWebDAVIfNeeded() {
         webDAVForegroundSyncTask?.cancel()
-        webDAVForegroundSyncTask = Task { @MainActor [appContext] in
-            guard !isWebDAVSyncInProgress else { return }
-            isWebDAVSyncInProgress = true
-            defer { isWebDAVSyncInProgress = false }
+        webDAVForegroundSyncTask = Task { @MainActor [weak self] in
+            _ = await self?.synchronizeWebDAVSilently()
+        }
+    }
 
-            do {
-                try await appContext.makeWebDAVSyncService().synchronizeAutomatically()
-            } catch {
-                // Automatic sync should never block the app shell.
-            }
+    private func synchronizeWebDAVForStartup() async -> Bool {
+        webDAVForegroundSyncTask?.cancel()
+        webDAVForegroundSyncTask = nil
+        let result = await synchronizeWebDAVSilently()
+        if case .downloaded = result {
+            return true
+        }
+        return false
+    }
+
+    private func synchronizeWebDAVSilently() async -> WebDAVAutomaticSyncResult {
+        guard !isWebDAVSyncInProgress else { return .skipped }
+        isWebDAVSyncInProgress = true
+        defer { isWebDAVSyncInProgress = false }
+
+        do {
+            return try await appContext.makeWebDAVSyncService().synchronizeAutomatically()
+        } catch {
+            // Automatic sync should never block the app shell.
+            return .skipped
         }
     }
 
@@ -230,17 +252,59 @@ public final class YamiboAppModel {
         persistReaderResumePosition(route)
     }
 
-    private func restoreReaderResumeRouteIfNeeded() async {
+    private func restoreReaderResumeRouteIfNeeded(reconcilesWithFavoriteProgress: Bool = false) async {
         guard !hasRestoredReaderResumeRoute else { return }
         hasRestoredReaderResumeRoute = true
         guard activeReaderContext == nil, activeMangaRoute == nil else { return }
         guard let route = await appContext.readerResumeRouteStore.load() else { return }
+        let restoredRoute = if reconcilesWithFavoriteProgress {
+            await routeReconciledWithFavoriteProgress(route)
+        } else {
+            route
+        }
+        if restoredRoute != route {
+            try? await appContext.readerResumeRouteStore.save(restoredRoute)
+        }
 
-        switch route {
+        switch restoredRoute {
         case let .novel(context):
             activeReaderContext = context
         case let .manga(route):
             activeMangaRoute = route
+        }
+    }
+
+    private func routeReconciledWithFavoriteProgress(_ route: ReaderResumeRoute) async -> ReaderResumeRoute {
+        switch route {
+        case let .novel(context):
+            guard let favorite = await appContext.favoriteStore.favorite(for: context.threadURL),
+                  favorite.hasNovelReadingProgress
+            else {
+                return route
+            }
+            return .novel(context.reconciledWithFavoriteProgress(favorite))
+        case let .manga(route):
+            let route = await mangaRouteReconciledWithFavoriteProgress(route)
+            return .manga(route)
+        }
+    }
+
+    private func mangaRouteReconciledWithFavoriteProgress(_ route: MangaPresentationRoute) async -> MangaPresentationRoute {
+        switch route {
+        case let .native(context):
+            guard let favorite = await appContext.favoriteStore.favorite(for: context.originalThreadURL),
+                  favorite.hasMangaReadingProgress
+            else {
+                return route
+            }
+            return .native(context.reconciledWithFavoriteProgress(favorite))
+        case let .web(context):
+            guard let favorite = await appContext.favoriteStore.favorite(for: context.originalThreadURL),
+                  favorite.hasMangaReadingProgress
+            else {
+                return route
+            }
+            return .web(context.reconciledWithFavoriteProgress(favorite))
         }
     }
 
@@ -270,5 +334,61 @@ public final class YamiboAppModel {
         guard tab == .favorites, let route = suspendedMangaRoute else { return }
         suspendedMangaRoute = nil
         activeMangaRoute = route
+    }
+}
+
+private extension Favorite {
+    var hasNovelReadingProgress: Bool {
+        novelResumePoint != nil ||
+            lastView > 1 ||
+            lastChapter != nil ||
+            authorID != nil ||
+            novelMaxView != nil
+    }
+
+    var hasMangaReadingProgress: Bool {
+        lastMangaURL != nil ||
+            mangaPageIndex > 0 ||
+            type == .manga
+    }
+}
+
+private extension ReaderLaunchContext {
+    func reconciledWithFavoriteProgress(_ favorite: Favorite) -> ReaderLaunchContext {
+        let resumePoint = favorite.novelResumePoint ?? initialResumePoint
+        return ReaderLaunchContext(
+            threadURL: threadURL,
+            threadTitle: favorite.resolvedDisplayTitle,
+            source: .resume,
+            initialView: resumePoint?.view ?? favorite.lastView,
+            authorID: resumePoint?.authorID ?? favorite.authorID ?? authorID,
+            initialResumePoint: resumePoint
+        )
+    }
+}
+
+private extension MangaLaunchContext {
+    func reconciledWithFavoriteProgress(_ favorite: Favorite) -> MangaLaunchContext {
+        MangaLaunchContext(
+            originalThreadURL: originalThreadURL,
+            chapterURL: favorite.lastMangaURL ?? chapterURL,
+            displayTitle: favorite.resolvedDisplayTitle,
+            source: .resume,
+            initialPage: favorite.mangaPageIndex,
+            directoryName: directoryName
+        )
+    }
+}
+
+private extension MangaWebContext {
+    func reconciledWithFavoriteProgress(_ favorite: Favorite) -> MangaWebContext {
+        MangaWebContext(
+            currentURL: favorite.lastMangaURL ?? currentURL,
+            originalThreadURL: originalThreadURL,
+            source: .resume,
+            initialPage: favorite.mangaPageIndex,
+            autoOpenNative: autoOpenNative,
+            waitingForNativeReturn: waitingForNativeReturn
+        )
     }
 }
