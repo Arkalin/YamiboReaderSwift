@@ -462,7 +462,9 @@ public final class NovelReadingWorkflow {
               presentation.surfaces.contains(where: { $0.identity == surfaceIdentity }) else {
             return nil
         }
+        let previousSnapshot = session?.snapshot
         session?.selectSurface(surfaceIdentity.ordinal)
+        guard session?.snapshot != previousSnapshot else { return nil }
         return try? updateStateFromSession(cachedViews: state?.cachedViews ?? [])
     }
 
@@ -477,10 +479,12 @@ public final class NovelReadingWorkflow {
               presentation.surfaces.contains(where: { $0.identity == surfaceIdentity }) else {
             return nil
         }
+        let previousSnapshot = session?.snapshot
         session?.updateVerticalViewportPosition(
             surfaceOrdinal: surfaceIdentity.ordinal,
             intraSurfaceProgress: intraSurfaceProgress
         )
+        guard session?.snapshot != previousSnapshot else { return nil }
         return try? updateStateFromSession(cachedViews: state?.cachedViews ?? [])
     }
 
@@ -488,7 +492,9 @@ public final class NovelReadingWorkflow {
     package func updateVerticalViewportPosition(
         sample: NovelTextViewportSample
     ) -> NovelReadingWorkflowState? {
+        let previousSnapshot = session?.snapshot
         session?.updateVerticalViewportPosition(sample: sample)
+        guard session?.snapshot != previousSnapshot else { return nil }
         return try? updateStateFromSession(cachedViews: state?.cachedViews ?? [])
     }
 
@@ -502,7 +508,9 @@ public final class NovelReadingWorkflow {
               presentation.revision == presentationRevision else {
             return nil
         }
+        let previousSnapshot = session?.snapshot
         session?.updateVerticalViewportPosition(sample: sample)
+        guard session?.snapshot != previousSnapshot else { return nil }
         return try? updateStateFromSession(cachedViews: state?.cachedViews ?? [])
     }
 

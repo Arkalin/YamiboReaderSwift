@@ -454,12 +454,66 @@ final class NovelReadingWorkflowTests: XCTestCase {
         XCTAssertEqual(updatedDiagnostics.viewportUpdateCount, 1)
         XCTAssertEqual(updatedDiagnostics.rematerializedSurfaceCount, 4)
 
+        workflow.updateVisibleSurfaceIdentities(Array(surfaces[1...2].map(\.identity)))
+        XCTAssertEqual(workflow.runtimeDiagnostics.viewportUpdateCount, 1)
+        XCTAssertEqual(workflow.runtimeDiagnostics.rematerializedSurfaceCount, 4)
+
         workflow.updateVisibleSurfaceIdentities([
             NovelReaderSurfaceIdentity(generation: surfaces[1].identity.generation - 1, ordinal: 1)
         ])
 
         XCTAssertEqual(workflow.runtimeDiagnostics.viewportUpdateCount, 2)
         XCTAssertEqual(workflow.runtimeDiagnostics.rematerializedSurfaceCount, 0)
+    }
+
+    func testRepeatedVerticalViewportSampleDoesNotPublishPresentationRevision() async throws {
+        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9222&mobile=2")!
+        let document = ReaderPageDocument(
+            threadURL: threadURL,
+            view: 1,
+            maxView: 1,
+            resolvedAuthorID: "author-1",
+            segments: [
+                .text(
+                    String(repeating: "同一个阅读位置不应该反复发布新的展示修订。", count: 160),
+                    chapterTitle: "第一章"
+                )
+            ]
+        )
+        let repository = RecordingNovelReadingRepository(documents: [1: document])
+        let workflow = NovelReadingWorkflow(
+            context: ReaderLaunchContext(
+                threadURL: threadURL,
+                threadTitle: "Thread",
+                source: .forum,
+                initialView: 1,
+                authorID: "author-1"
+            ),
+            settings: ReaderAppearanceSettings(readingMode: .vertical),
+            layout: ReaderContainerLayout(width: 320, height: 568, readingMode: .vertical),
+            repository: repository
+        )
+
+        let state = try await workflow.start(initial: NovelReadingInitialPosition())
+        let surface: NovelTextViewportIndexSurface = try XCTUnwrap(workflow.debugState.viewportSurfaces.dropFirst().first { !$0.ranges.isEmpty })
+        let range: ReaderRenderedTextRange = try XCTUnwrap(surface.ranges.first)
+        let segmentIdentity = try XCTUnwrap(document.semantics(forSegmentIndex: range.segmentIndex)?.textSegmentIdentity)
+        let surfaceIdentity = try XCTUnwrap(state.presentation?.surfaces.first(where: {
+            $0.identity.ordinal == surface.surfaceOrdinal
+        })?.identity)
+        let sample = NovelTextViewportSample(
+            surfaceIdentity: surfaceIdentity,
+            documentView: surface.documentView,
+            textSegmentIdentity: segmentIdentity,
+            displayedTextOffset: range.startOffset
+        )
+
+        let firstUpdate: NovelReadingWorkflowState = try XCTUnwrap(workflow.updateVerticalViewportPosition(sample: sample))
+        let revisionAfterFirstUpdate = try XCTUnwrap(firstUpdate.presentation?.revision)
+        let repeatedUpdate = workflow.updateVerticalViewportPosition(sample: sample)
+
+        XCTAssertNil(repeatedUpdate)
+        XCTAssertEqual(workflow.state?.presentation?.revision, revisionAfterFirstUpdate)
     }
 
     func testTwoPageSpreadReferencesShareRuntimeGeneration() async throws {

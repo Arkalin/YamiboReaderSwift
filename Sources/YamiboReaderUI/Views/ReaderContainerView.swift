@@ -300,9 +300,11 @@ public struct ReaderContainerView: View {
                 updateChromeForContentState()
             }
             .onPreferenceChange(ReaderTopChromeHeightPreferenceKey.self) { value in
+                guard topChromeHeight != value else { return }
                 topChromeHeight = value
             }
             .onPreferenceChange(ReaderBottomChromeHeightPreferenceKey.self) { value in
+                guard bottomChromeHeight != value else { return }
                 bottomChromeHeight = value
             }
         }
@@ -452,11 +454,13 @@ public struct ReaderContainerView: View {
                     }
                 },
                 onSurfaceFramesChange: { frames in
+                    guard verticalSurfaceFrames != frames else { return }
                     verticalSurfaceFrames = frames
                     tryAdvanceVerticalRestore()
                     scheduleVerticalViewportPositionUpdate()
                 },
                 onTextViewportSampleChange: { sample in
+                    guard verticalTextViewportSample != sample else { return }
                     verticalTextViewportSample = sample
                     scheduleVerticalViewportPositionUpdate()
                 },
