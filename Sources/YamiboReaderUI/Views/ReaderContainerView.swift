@@ -187,7 +187,7 @@ public struct ReaderContainerView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-                if chromeState.showsChrome {
+                if chromeState.showsChrome && loadingOverlayPresentation.allowsChrome {
                     VStack(spacing: 0) {
                         topChrome(topInset: topInset)
                         Spacer(minLength: 0)

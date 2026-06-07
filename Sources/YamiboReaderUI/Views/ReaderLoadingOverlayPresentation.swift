@@ -30,4 +30,8 @@ struct ReaderLoadingOverlayPresentation: Equatable, Sendable {
     var isPresented: Bool {
         reason != nil
     }
+
+    var allowsChrome: Bool {
+        !isPresented
+    }
 }
