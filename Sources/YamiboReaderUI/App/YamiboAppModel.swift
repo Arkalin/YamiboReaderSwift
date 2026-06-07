@@ -189,9 +189,9 @@ public final class YamiboAppModel {
         }
     }
 
-    public func dismissReader(openThreadInForum url: URL? = nil) {
+    public func dismissReader(openThreadInForum url: URL? = nil, suspendedContext: ReaderLaunchContext? = nil) {
         if url != nil {
-            suspendedReaderContext = activeReaderContext
+            suspendedReaderContext = suspendedContext ?? activeReaderContext
         } else {
             suspendedReaderContext = nil
         }

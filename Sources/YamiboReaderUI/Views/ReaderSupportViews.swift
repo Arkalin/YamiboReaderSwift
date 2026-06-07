@@ -3012,7 +3012,7 @@ private struct ReaderChapterWebNavigationButton: View {
 struct ReaderChapterCommentsSheet: View {
     @ObservedObject var model: ReaderContainerModel
     let target: ReaderChapterCommentTarget?
-    let appModel: YamiboAppModel
+    let onOpenOriginalPost: (URL) -> Void
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -3055,10 +3055,7 @@ struct ReaderChapterCommentsSheet: View {
 
     private func openOriginalPost(_ url: URL) {
         dismiss()
-        Task {
-            await model.saveProgress()
-            appModel.dismissReader(openThreadInForum: url)
-        }
+        onOpenOriginalPost(url)
     }
 }
 

@@ -263,7 +263,9 @@ public struct ReaderContainerView: View {
                 }
             }
             .sheet(isPresented: $showingChapterComments) {
-                ReaderChapterCommentsSheet(model: model, target: chapterCommentsTarget, appModel: appModel)
+                ReaderChapterCommentsSheet(model: model, target: chapterCommentsTarget) { url in
+                    openOriginalPostFromComments(url)
+                }
             }
             .sheet(isPresented: $showingCachePanel) {
                 ReaderCachePanel(model: model) {
@@ -708,14 +710,7 @@ public struct ReaderContainerView: View {
     }
 
     private func openInForum() {
-        chromeState.showChrome()
-        guard !isDismissing else { return }
-        isDismissing = true
-        syncVerticalViewportBeforeSave()
-        Task {
-            await model.saveProgress()
-            appModel.dismissReader(openThreadInForum: model.forumURL)
-        }
+        dismissReaderOpeningForum(model.forumURL)
     }
 
     private func closeReader() {
@@ -726,6 +721,21 @@ public struct ReaderContainerView: View {
         Task {
             await model.saveProgress()
             appModel.dismissReader()
+        }
+    }
+
+    private func openOriginalPostFromComments(_ url: URL) {
+        dismissReaderOpeningForum(url)
+    }
+
+    private func dismissReaderOpeningForum(_ url: URL) {
+        chromeState.showChrome()
+        guard !isDismissing else { return }
+        isDismissing = true
+        syncVerticalViewportBeforeSave()
+        Task {
+            let resumeContext = await model.saveProgress()
+            appModel.dismissReader(openThreadInForum: url, suspendedContext: resumeContext)
         }
     }
 

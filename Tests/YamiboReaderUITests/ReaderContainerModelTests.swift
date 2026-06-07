@@ -1117,12 +1117,14 @@ final class ReaderContainerModelTests: XCTestCase {
             XCTAssertFalse(preview.contains("第二段不应预览"))
         }
 
-        await model.saveProgress()
+        let resumeContext = await model.saveProgress()
 
         let favorite = await favoriteStore.favorite(for: threadURL)
         XCTAssertEqual(favorite?.novelResumePoint?.textSegmentIdentity, try XCTUnwrap(document.semantics(forSegmentIndex: 2)?.textSegmentIdentity))
         XCTAssertEqual(favorite?.novelResumePoint?.displayedTextOffset, targetOffset)
         XCTAssertEqual(favorite?.mangaPageIndex, 0)
+        XCTAssertEqual(resumeContext.initialResumePoint, favorite?.novelResumePoint)
+        XCTAssertEqual(resumeContext.initialView, favorite?.novelResumePoint?.view)
     }
 
     func testReaderContainerModelDoesNotOwnNovelReadingPositionRangeSemantics() throws {
@@ -1220,7 +1222,7 @@ final class ReaderContainerModelTests: XCTestCase {
         await MainActor.run {
             model.selectSurface(2)
         }
-        await model.saveProgress()
+        let savedContext = await model.saveProgress()
 
         guard case let .novel(context)? = await readerResumeRouteStore.load() else {
             return XCTFail("Expected novel resume route")
@@ -1230,6 +1232,7 @@ final class ReaderContainerModelTests: XCTestCase {
         XCTAssertEqual(context.source, .resume)
         XCTAssertEqual(context.initialView, 1)
         XCTAssertEqual(context.initialResumePoint?.view, 1)
+        XCTAssertEqual(savedContext, context)
     }
 
     func testLateNovelSaveAfterDismissDoesNotRecreateReaderResumeRoute() async throws {
