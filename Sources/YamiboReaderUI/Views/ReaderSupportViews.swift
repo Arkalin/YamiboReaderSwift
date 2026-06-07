@@ -2885,6 +2885,7 @@ struct ReaderChapterSheet: View {
                                         }
                                         .frame(maxWidth: .infinity, alignment: .leading)
                                         .padding(.vertical, 4)
+                                        .contentShape(Rectangle())
                                     }
                                     .buttonStyle(.plain)
                                     .listRowBackground(isCurrent(chapter) ? Color.accentColor.opacity(0.12) : Color.clear)
@@ -3002,6 +3003,7 @@ private struct ReaderChapterWebNavigationButton: View {
             .foregroundStyle(Color.accentColor)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 8)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .listRowBackground(Color.clear)
