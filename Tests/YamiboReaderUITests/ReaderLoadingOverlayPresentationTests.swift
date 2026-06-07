@@ -1,0 +1,98 @@
+import XCTest
+@testable import YamiboReaderUI
+
+final class ReaderLoadingOverlayPresentationTests: XCTestCase {
+    func testInitialContentLoadPresentsOverlay() {
+        let presentation = ReaderLoadingOverlayPresentation(
+            isLoading: true,
+            hasSurfaces: false,
+            isApplyingAppearanceSettings: false,
+            shouldConcealViewportContent: false
+        )
+
+        XCTAssertEqual(presentation.reason, .initialContentLoad)
+        XCTAssertTrue(presentation.isPresented)
+    }
+
+    func testInitialLoadErrorDoesNotPresentOverlay() {
+        let presentation = ReaderLoadingOverlayPresentation(
+            isLoading: true,
+            hasSurfaces: false,
+            hasInitialLoadError: true,
+            isApplyingAppearanceSettings: false,
+            shouldConcealViewportContent: false
+        )
+
+        XCTAssertNil(presentation.reason)
+        XCTAssertFalse(presentation.isPresented)
+    }
+
+    func testAppearanceSettingsApplyTakesPriority() {
+        let presentation = ReaderLoadingOverlayPresentation(
+            isLoading: true,
+            hasSurfaces: false,
+            isApplyingAppearanceSettings: true,
+            shouldConcealViewportContent: true
+        )
+
+        XCTAssertEqual(presentation.reason, .appearanceSettingsApply)
+    }
+
+    func testVerticalRestoreTakesPriorityOverInitialContentLoad() {
+        let presentation = ReaderLoadingOverlayPresentation(
+            isLoading: true,
+            hasSurfaces: false,
+            isApplyingAppearanceSettings: false,
+            shouldConcealViewportContent: true
+        )
+
+        XCTAssertEqual(presentation.reason, .verticalRestore)
+    }
+
+    func testNoLoadingStateDoesNotPresentOverlay() {
+        let presentation = ReaderLoadingOverlayPresentation(
+            isLoading: false,
+            hasSurfaces: true,
+            isApplyingAppearanceSettings: false,
+            shouldConcealViewportContent: false
+        )
+
+        XCTAssertNil(presentation.reason)
+        XCTAssertFalse(presentation.isPresented)
+    }
+
+    func testReaderContainerContentDoesNotOwnCommonLoadingProgressView() throws {
+        let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let source = try String(
+            contentsOf: repositoryRoot
+                .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderContainerView.swift"),
+            encoding: .utf8
+        )
+        let body = try XCTUnwrap(functionBody(named: "content(topInset", in: source))
+
+        XCTAssertFalse(body.contains("ProgressView(L10n.string(\"common.loading\"))"))
+    }
+}
+
+private func functionBody(named name: String, in source: String) -> String? {
+    guard let range = source.range(of: name),
+          let openingBrace = source[range.upperBound...].firstIndex(of: "{") else {
+        return nil
+    }
+
+    var depth = 0
+    var index = openingBrace
+    while index < source.endIndex {
+        let character = source[index]
+        if character == "{" {
+            depth += 1
+        } else if character == "}" {
+            depth -= 1
+            if depth == 0 {
+                return String(source[source.index(after: openingBrace) ..< index])
+            }
+        }
+        index = source.index(after: index)
+    }
+    return nil
+}
