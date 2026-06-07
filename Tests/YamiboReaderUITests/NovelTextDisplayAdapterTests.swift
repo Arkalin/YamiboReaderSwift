@@ -102,17 +102,24 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertFalse(viewportContentBody.contains("NovelTextDisplayValue"))
     }
 
-    func testSettingsPreviewUsesSwiftUITextWithoutUILayoutMeasurement() throws {
+    func testSettingsPreviewUsesAttributedPreviewSurfaceWithoutUILayoutMeasurement() throws {
         let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let settingsSource = try String(
             contentsOf: repositoryRoot
                 .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderSettingsViews.swift"),
             encoding: .utf8
         )
+        let adapterSource = try String(
+            contentsOf: repositoryRoot
+                .appendingPathComponent("Sources/YamiboReaderUI/Views/NovelTextDisplayAdapter.swift"),
+            encoding: .utf8
+        )
         let previewBody = try XCTUnwrap(typeBody(named: "ReaderBooksPreviewMaskedContent", in: settingsSource))
 
-        XCTAssertTrue(previewBody.contains("Text(previewText)"))
-        XCTAssertTrue(previewBody.contains(".font(previewFont)"))
+        XCTAssertTrue(previewBody.contains("NativeNovelTextSettingsPreviewView("))
+        XCTAssertTrue(previewBody.contains("NovelTextSettingsPreviewSurface("))
+        XCTAssertTrue(previewBody.contains("settings: settings"))
+        XCTAssertTrue(adapterSource.contains("NovelTextSettingsPreviewSurface"))
         XCTAssertFalse(previewBody.contains("sizeThatFits"))
         XCTAssertFalse(previewBody.contains("measuredHeight"))
     }
@@ -793,7 +800,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertFalse(readerSupportSource.contains("NovelTextLayout.displayValue("))
     }
 
-    func testSettingsPreviewUsesSwiftUITextInsteadOfNativeTextKitAdapter() throws {
+    func testSettingsPreviewUsesLightweightSurfaceInsteadOfReaderRuntimeAdapter() throws {
         let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let settingsSource = try String(
             contentsOf: repositoryRoot
@@ -801,8 +808,8 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
             encoding: .utf8
         )
 
-        XCTAssertTrue(settingsSource.contains("Text(previewText)"))
-        XCTAssertTrue(settingsSource.contains(".font(previewFont)"))
+        XCTAssertTrue(settingsSource.contains("NativeNovelTextSettingsPreviewView("))
+        XCTAssertTrue(settingsSource.contains("NovelTextSettingsPreviewSurface("))
         XCTAssertFalse(settingsSource.contains("NativeNovelTextDisplayView("))
         XCTAssertFalse(settingsSource.contains("NovelTextDisplayValue"))
     }
