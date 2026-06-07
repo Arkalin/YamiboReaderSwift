@@ -72,12 +72,14 @@ struct ReaderSettingsPanel: View {
                         height: heroHeight,
                         onClose: { dismiss() },
                         onConfirm: {
+                            let committedSettings = draftSettings
+                            let committedApplePencilPageTurnSettings = draftApplePencilPageTurnSettings
+                            dismiss()
                             Task {
                                 await model.commitNovelTextAppearance(
-                                    draftSettings,
-                                    applePencilPageTurnSettings: draftApplePencilPageTurnSettings
+                                    committedSettings,
+                                    applePencilPageTurnSettings: committedApplePencilPageTurnSettings
                                 )
-                                dismiss()
                             }
                         }
                     )
