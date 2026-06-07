@@ -590,7 +590,8 @@ public struct ReaderContainerView: View {
     @ViewBuilder
     private func bottomChrome(bottomInset: CGFloat) -> some View {
         ReaderBottomChrome(
-            model: model,
+            progressSnapshot: model.chromeProgressSnapshot,
+            readingMode: model.settings.readingMode,
             bottomInset: bottomInset,
             onShowChapters: openChapterDrawer,
             onShowSettings: openSettings,
@@ -623,10 +624,11 @@ public struct ReaderContainerView: View {
         )
         let layout = ReaderBottomChromeLayoutPresentation()
         if presentation.showsVerticalScrubber {
+            let progressSnapshot = model.chromeProgressSnapshot
             ReaderVerticalProgressCapsule(
-                restingProgressFraction: model.currentProgressFraction,
-                scrubContext: model.verticalProgressScrubContext,
-                ticks: model.progressChapterTicks,
+                restingProgressFraction: progressSnapshot.currentProgressFraction,
+                scrubContext: progressSnapshot.progressScrubContext,
+                ticks: progressSnapshot.progressChapterTicks,
                 onBeginScrub: {
                     beginVerticalProgressScrub()
                 },

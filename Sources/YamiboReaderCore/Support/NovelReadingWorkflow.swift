@@ -270,7 +270,12 @@ public final class NovelReadingWorkflow {
                 layoutResult: viewportRuntime.currentResult,
                 generation: viewportRuntime.currentGeneration,
                 revision: revision,
-                settings: settings
+                settings: settings,
+                usesTwoPageSpread: usesPagedSpread(
+                    settings: settings,
+                    layout: layout,
+                    usesPadPresentation: usesPadPresentation
+                )
             ),
             cachedViews: state.cachedViews
         )
@@ -418,7 +423,12 @@ public final class NovelReadingWorkflow {
                 layoutResult: runtime.result,
                 generation: runtime.generation,
                 revision: 0,
-                settings: settings
+                settings: settings,
+                usesTwoPageSpread: usesPagedSpread(
+                    settings: settings,
+                    layout: layout,
+                    usesPadPresentation: usesPadPresentation
+                )
             ),
             cachedViews: cachedViews
         )
@@ -790,7 +800,12 @@ public final class NovelReadingWorkflow {
                 layoutResult: viewportRuntime.currentResult,
                 generation: generation,
                 revision: revision,
-                settings: settings
+                settings: settings,
+                usesTwoPageSpread: usesPagedSpread(
+                    settings: settings,
+                    layout: layout,
+                    usesPadPresentation: usesPadPresentation
+                )
             ),
             cachedViews: cachedViews
         )
@@ -803,10 +818,13 @@ public final class NovelReadingWorkflow {
         layoutResult: NovelTextLayoutResult?,
         generation: UInt64,
         revision: UInt64,
-        settings: ReaderAppearanceSettings
+        settings: ReaderAppearanceSettings,
+        usesTwoPageSpread: Bool
     ) -> NovelReaderPresentation {
         let readableSize = layoutResult?.viewportContext.identity.layout.readableFrame.size ?? layout.readableFrame.size
-        let indexSurfaces = layoutResult?.viewportIndex.surfaces ?? []
+        let indexSurfaces = (layoutResult?.viewportIndex.surfaces ?? []).sorted { lhs, rhs in
+            lhs.surfaceOrdinal < rhs.surfaceOrdinal
+        }
         let surfaces = indexSurfaces.enumerated().map { index, surface in
             let presentationHeight = layoutResult?.layoutMetrics.surfaceHeight(for: surface.surfaceOrdinal) ?? readableSize.height
             let nextSurface = indexSurfaces.indices.contains(index + 1) ? indexSurfaces[index + 1] : nil
@@ -855,6 +873,22 @@ public final class NovelReadingWorkflow {
                 chapterTitle: spread.chapterTitle
             )
         }
+        let selectedSurfaceIndex = surfaceIndexByOrdinal[snapshot.selectedSurfaceOrdinal]
+        let readingState = NovelReaderReadingState(
+            currentView: snapshot.currentView,
+            maxView: snapshot.maxView,
+            currentChapterTitle: snapshot.currentChapterTitle,
+            authorID: snapshot.currentAuthorID,
+            currentSurfaceIntraProgress: snapshot.currentSurfaceIntraProgress
+        )
+        let progressProjection = NovelReaderProgressProjection(
+            readingMode: settings.readingMode,
+            usesTwoPageSpread: usesTwoPageSpread,
+            surfaces: surfaces,
+            selectedSurfaceIndex: selectedSurfaceIndex ?? 0,
+            spreads: spreads,
+            readingState: readingState
+        )
         return NovelReaderPresentation(
             generation: generation,
             revision: revision,
@@ -863,16 +897,13 @@ public final class NovelReadingWorkflow {
             spreads: spreads,
             chapters: layoutResult?.viewportIndex.readerChapters ?? [],
             committedSettings: settings,
-            readingState: NovelReaderReadingState(
-                currentView: snapshot.currentView,
-                maxView: snapshot.maxView,
-                currentChapterTitle: snapshot.currentChapterTitle,
-                authorID: snapshot.currentAuthorID,
-                currentSurfaceIntraProgress: snapshot.currentSurfaceIntraProgress
-            ),
+            readingState: readingState,
             currentContentSource: snapshot.currentContentSource,
             retainedChapterCount: snapshot.retainedChapterCount,
-            filteredChapterCandidateCount: snapshot.filteredChapterCandidateCount
+            filteredChapterCandidateCount: snapshot.filteredChapterCandidateCount,
+            selectedSurfaceIndex: selectedSurfaceIndex,
+            progressProjection: progressProjection,
+            usesTwoPageSpread: usesTwoPageSpread
         )
     }
 

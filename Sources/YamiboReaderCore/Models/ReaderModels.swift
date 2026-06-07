@@ -1600,11 +1600,136 @@ public struct NovelReaderReadingState: Hashable, Sendable {
     }
 }
 
+public struct NovelReaderProgressProjection: Hashable, Sendable {
+    public var readingMode: ReaderReadingMode
+    public var usesTwoPageSpread: Bool
+    public var surfaceCount: Int
+    public var selectedSurfaceIndex: Int
+    public var currentSurfaceNumber: Int
+    public var displayedView: Int
+    public var displayedPageIndex: Int
+    public var displayedPageCount: Int
+    public var displayedPageLabel: String
+    public var currentProgressFraction: Double
+    public var currentProgressPercent: Int
+    public var currentProgressPercentText: String
+    public var visibleSurfaceIndexes: [Int]
+    public var fallbackVisibleSurfaceIndex: Int
+
+    public init(
+        readingMode: ReaderReadingMode,
+        usesTwoPageSpread: Bool,
+        surfaceCount: Int,
+        selectedSurfaceIndex: Int,
+        currentSurfaceNumber: Int,
+        displayedView: Int,
+        displayedPageIndex: Int,
+        displayedPageCount: Int,
+        displayedPageLabel: String,
+        currentProgressFraction: Double,
+        currentProgressPercent: Int,
+        currentProgressPercentText: String,
+        visibleSurfaceIndexes: [Int],
+        fallbackVisibleSurfaceIndex: Int
+    ) {
+        self.readingMode = readingMode
+        self.usesTwoPageSpread = usesTwoPageSpread
+        self.surfaceCount = max(surfaceCount, 1)
+        self.selectedSurfaceIndex = max(selectedSurfaceIndex, 0)
+        self.currentSurfaceNumber = min(max(currentSurfaceNumber, 1), self.surfaceCount)
+        self.displayedView = max(displayedView, 1)
+        self.displayedPageIndex = max(displayedPageIndex, 0)
+        self.displayedPageCount = max(displayedPageCount, 1)
+        self.displayedPageLabel = displayedPageLabel.isEmpty ? "1" : displayedPageLabel
+        self.currentProgressFraction = min(max(currentProgressFraction, 0), 1)
+        self.currentProgressPercent = min(max(currentProgressPercent, 0), 100)
+        self.currentProgressPercentText = currentProgressPercentText
+        self.visibleSurfaceIndexes = visibleSurfaceIndexes.map { max($0, 0) }
+        self.fallbackVisibleSurfaceIndex = max(fallbackVisibleSurfaceIndex, 0)
+    }
+
+    public init(
+        readingMode: ReaderReadingMode,
+        usesTwoPageSpread: Bool,
+        surfaces: [NovelReaderSurface],
+        selectedSurfaceIndex: Int,
+        spreads: [NovelReaderPresentationSpread],
+        readingState: NovelReaderReadingState
+    ) {
+        let surfaceCount = max(surfaces.count, 1)
+        let maxSurfaceIndex = max(surfaceCount - 1, 0)
+        let normalizedSelectedIndex = min(max(selectedSurfaceIndex, 0), maxSurfaceIndex)
+        let selectedSurface = surfaces.indices.contains(normalizedSelectedIndex) ? surfaces[normalizedSelectedIndex] : nil
+        let displayedView = selectedSurface?.documentView ?? readingState.currentView
+        let visibleSurfaceIndexes = surfaces.indices.filter { surfaces[$0].documentView == displayedView }
+        let fallbackVisibleSurfaceIndex = visibleSurfaceIndexes.first ?? normalizedSelectedIndex
+        let displayedPageIndex = visibleSurfaceIndexes.first.map {
+            max(normalizedSelectedIndex - $0, 0)
+        } ?? normalizedSelectedIndex
+        let displayedPageCount = max(visibleSurfaceIndexes.count, 1)
+        let displayedPageLabel = Self.displayedPageLabel(
+            displayedPageIndex: displayedPageIndex,
+            displayedPageCount: displayedPageCount,
+            displayedView: displayedView,
+            selectedSurfaceIndex: normalizedSelectedIndex,
+            surfaces: surfaces,
+            spreads: spreads,
+            usesTwoPageSpread: usesTwoPageSpread
+        )
+        let fraction: Double = switch readingMode {
+        case .vertical:
+            displayedPageCount > 1 ? Double(displayedPageIndex) / Double(displayedPageCount - 1) : 0
+        case .paged:
+            surfaceCount > 1 ? Double(normalizedSelectedIndex) / Double(surfaceCount - 1) : 0
+        }
+        let percent = Int((fraction * 100).rounded())
+
+        self.init(
+            readingMode: readingMode,
+            usesTwoPageSpread: usesTwoPageSpread,
+            surfaceCount: surfaceCount,
+            selectedSurfaceIndex: normalizedSelectedIndex,
+            currentSurfaceNumber: normalizedSelectedIndex + 1,
+            displayedView: displayedView,
+            displayedPageIndex: displayedPageIndex,
+            displayedPageCount: displayedPageCount,
+            displayedPageLabel: displayedPageLabel,
+            currentProgressFraction: fraction,
+            currentProgressPercent: percent,
+            currentProgressPercentText: "\(percent)%",
+            visibleSurfaceIndexes: Array(visibleSurfaceIndexes),
+            fallbackVisibleSurfaceIndex: fallbackVisibleSurfaceIndex
+        )
+    }
+
+    private static func displayedPageLabel(
+        displayedPageIndex: Int,
+        displayedPageCount: Int,
+        displayedView: Int,
+        selectedSurfaceIndex: Int,
+        surfaces: [NovelReaderSurface],
+        spreads: [NovelReaderPresentationSpread],
+        usesTwoPageSpread: Bool
+    ) -> String {
+        let leftSurfaceNumber = displayedPageIndex + 1
+        guard usesTwoPageSpread,
+              let spread = spreads.first(where: { $0.leftSurfaceIndex == selectedSurfaceIndex }),
+              let rightSurfaceIndex = spread.rightSurfaceIndex,
+              surfaces.indices.contains(rightSurfaceIndex),
+              surfaces[rightSurfaceIndex].documentView == displayedView else {
+            return "\(leftSurfaceNumber)"
+        }
+        let rightSurfaceNumber = displayedPageIndex + 2
+        return "\(leftSurfaceNumber)-\(min(rightSurfaceNumber, displayedPageCount))"
+    }
+}
+
 public struct NovelReaderPresentation: Hashable, Sendable {
     public var generation: UInt64
     public var revision: UInt64
     public var surfaces: [NovelReaderSurface]
     public var selectedSurfaceIdentity: NovelReaderSurfaceIdentity?
+    public var selectedSurfaceIndex: Int?
     public var spreads: [NovelReaderPresentationSpread]
     public var chapters: [ReaderChapter]
     public var committedSettings: ReaderAppearanceSettings
@@ -1612,6 +1737,7 @@ public struct NovelReaderPresentation: Hashable, Sendable {
     public var currentContentSource: ReaderContentSource
     public var retainedChapterCount: Int
     public var filteredChapterCandidateCount: Int
+    public var progressProjection: NovelReaderProgressProjection
 
     public init(
         generation: UInt64,
@@ -1624,12 +1750,21 @@ public struct NovelReaderPresentation: Hashable, Sendable {
         readingState: NovelReaderReadingState,
         currentContentSource: ReaderContentSource,
         retainedChapterCount: Int,
-        filteredChapterCandidateCount: Int
+        filteredChapterCandidateCount: Int,
+        selectedSurfaceIndex: Int? = nil,
+        progressProjection: NovelReaderProgressProjection? = nil,
+        usesTwoPageSpread: Bool = false
     ) {
+        let resolvedSelectedSurfaceIndex = selectedSurfaceIndex ?? Self.surfaceIndex(
+            for: selectedSurfaceIdentity,
+            in: surfaces,
+            generation: generation
+        )
         self.generation = generation
         self.revision = revision
         self.surfaces = surfaces
         self.selectedSurfaceIdentity = selectedSurfaceIdentity
+        self.selectedSurfaceIndex = resolvedSelectedSurfaceIndex
         self.spreads = spreads
         self.chapters = chapters
         self.committedSettings = committedSettings
@@ -1637,15 +1772,32 @@ public struct NovelReaderPresentation: Hashable, Sendable {
         self.currentContentSource = currentContentSource
         self.retainedChapterCount = max(0, retainedChapterCount)
         self.filteredChapterCandidateCount = max(0, filteredChapterCandidateCount)
-    }
-
-    public var selectedSurfaceIndex: Int? {
-        guard let selectedSurfaceIdentity else { return nil }
-        return surfaces.first(where: { $0.identity == selectedSurfaceIdentity })?.presentationIndex
+        self.progressProjection = progressProjection ?? NovelReaderProgressProjection(
+            readingMode: committedSettings.readingMode,
+            usesTwoPageSpread: usesTwoPageSpread,
+            surfaces: surfaces,
+            selectedSurfaceIndex: resolvedSelectedSurfaceIndex ?? 0,
+            spreads: spreads,
+            readingState: readingState
+        )
     }
 
     public func surfaceIndex(for identity: NovelReaderSurfaceIdentity) -> Int? {
-        surfaces.first(where: { $0.identity == identity })?.presentationIndex
+        Self.surfaceIndex(for: identity, in: surfaces, generation: generation)
+    }
+
+    private static func surfaceIndex(
+        for identity: NovelReaderSurfaceIdentity?,
+        in surfaces: [NovelReaderSurface],
+        generation: UInt64
+    ) -> Int? {
+        guard let identity,
+              identity.generation == generation,
+              surfaces.indices.contains(identity.ordinal),
+              surfaces[identity.ordinal].identity == identity else {
+            return nil
+        }
+        return surfaces[identity.ordinal].presentationIndex
     }
 }
 

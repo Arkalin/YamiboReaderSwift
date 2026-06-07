@@ -367,6 +367,38 @@ final class ReaderContainerModelTests: XCTestCase {
         }
     }
 
+    func testChromeProgressSnapshotUsesLargeVerticalProjection() async throws {
+        let model = try await makeModel(
+            documents: [
+                makeImageDocument(view: 1, maxView: 1, surfaceCount: 800),
+            ],
+            settings: ReaderAppearanceSettings(readingMode: .vertical)
+        )
+
+        await MainActor.run {
+            model.selectSurface(799)
+            let snapshot = model.chromeProgressSnapshot
+
+            XCTAssertEqual(snapshot.surfaceCount, 800)
+            XCTAssertEqual(snapshot.currentSurfaceNumber, 800)
+            XCTAssertEqual(snapshot.currentProgressPercentText, "100%")
+            XCTAssertEqual(snapshot.targetSurfaceIndex(forProgressValue: 0), 0)
+            XCTAssertEqual(snapshot.targetSurfaceIndex(forProgressValue: 50), 399)
+            XCTAssertEqual(snapshot.targetSurfaceIndex(forProgressValue: 100), 799)
+            XCTAssertEqual(snapshot.chapterTitle(forSurfaceIndex: 399), "第400章")
+            XCTAssertEqual(snapshot.progressChapterTickStartIndex(forSurfaceIndex: 399), 399)
+
+            let revision = model.readerPresentation?.revision
+            for _ in 0..<100 {
+                _ = model.chromeProgressSnapshot.progressText
+                _ = model.chromeProgressSnapshot.currentProgressPercentText
+                _ = model.chromeProgressSnapshot.progressChapterTicks
+                _ = model.chromeProgressSnapshot.progressScrubContext.targetSurfaceIndex(50)
+            }
+            XCTAssertEqual(model.readerPresentation?.revision, revision)
+        }
+    }
+
     func testVerticalProgressScrubContextClampsSingleSurfaceWithoutChapters() async throws {
         let document = ReaderPageDocument(
             threadURL: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=445566&mobile=2")!,
