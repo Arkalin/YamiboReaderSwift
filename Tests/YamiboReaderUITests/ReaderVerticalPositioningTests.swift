@@ -41,6 +41,51 @@ final class ReaderVerticalPositioningTests: XCTestCase {
         XCTAssertFalse(source.contains("intraPageProgress: sample.intraPageProgress"))
     }
 
+    func testChromeStateUpdateDoesNotStartVerticalRestore() throws {
+        let source = try String(contentsOfFile: projectFilePath("Sources/YamiboReaderUI/Views/ReaderContainerView.swift"))
+        let body = try functionBody(
+            signature: "private func updateChromeForContentState()",
+            in: source
+        )
+
+        XCTAssertFalse(body.contains("requestVerticalScrollToCurrentPage()"))
+        XCTAssertFalse(body.contains("restoreVerticalPositionIfNeeded()"))
+    }
+
+    func testSheetPresentationChangesOnlyUpdateChrome() throws {
+        let source = try String(contentsOfFile: projectFilePath("Sources/YamiboReaderUI/Views/ReaderContainerView.swift"))
+        let sheetStateNames = [
+            "showingSettings",
+            "showingCachePanel",
+            "showingCacheProgress",
+            "showingChapterSheet",
+            "showingChapterComments",
+        ]
+
+        for stateName in sheetStateNames {
+            let expectedBlock = ".onChange(of: \(stateName)) { _, _ in\n                updateChromeForContentState()\n            }"
+            XCTAssertTrue(source.contains(expectedBlock), "Unexpected onChange body for \(stateName)")
+        }
+    }
+
+    func testExplicitVerticalNavigationStillRequestsRestore() throws {
+        let source = try String(contentsOfFile: projectFilePath("Sources/YamiboReaderUI/Views/ReaderContainerView.swift"))
+        let navigationSignatures = [
+            "private func commitProgressSlider(_ targetIndex: Int)",
+            "private func jumpAdjacentChapter(_ delta: Int)",
+            "private func jumpToChapter(_ chapter: ReaderChapter)",
+            "private func jumpToChapterDirectoryChapter(_ chapter: ReaderChapter) async",
+            "private func jumpToWebView(_ view: Int, preferredSurfaceOrdinal: Int) async",
+            "private func goRelativePage(_ delta: Int) async",
+            "private func commitVerticalProgressScrub(_ target: Int)",
+        ]
+
+        for signature in navigationSignatures {
+            let body = try functionBody(signature: signature, in: source)
+            XCTAssertTrue(body.contains("restoreVerticalPositionIfNeeded()"), "\(signature) should restore vertical position")
+        }
+    }
+
 }
 
 private func projectFilePath(_ relativePath: String) -> String {
@@ -50,4 +95,28 @@ private func projectFilePath(_ relativePath: String) -> String {
         .deletingLastPathComponent()
         .appendingPathComponent(relativePath)
         .path
+}
+
+private func functionBody(signature: String, in source: String) throws -> String {
+    let signatureRange = try XCTUnwrap(source.range(of: signature), "Missing function signature: \(signature)")
+    let searchRange = signatureRange.upperBound..<source.endIndex
+    let openingBrace = try XCTUnwrap(source.range(of: "{", range: searchRange)?.lowerBound)
+    var depth = 0
+    var index = openingBrace
+
+    while index < source.endIndex {
+        let character = source[index]
+        if character == "{" {
+            depth += 1
+        } else if character == "}" {
+            depth -= 1
+            if depth == 0 {
+                return String(source[openingBrace...index])
+            }
+        }
+        index = source.index(after: index)
+    }
+
+    XCTFail("Unterminated function body for \(signature)")
+    return ""
 }
