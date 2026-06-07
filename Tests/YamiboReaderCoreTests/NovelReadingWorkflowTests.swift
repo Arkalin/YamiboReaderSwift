@@ -1,4 +1,5 @@
 import Foundation
+import CoreGraphics
 import XCTest
 @testable import YamiboReaderCore
 
@@ -595,6 +596,57 @@ final class NovelReadingWorkflowTests: XCTestCase {
         XCTAssertEqual(replacementPresentation.revision, 0)
         XCTAssertNotEqual(replacementPresentation.surfaces.first?.identity, initialPresentation.surfaces.first?.identity)
         XCTAssertNil(workflow.displayReference(for: initialSurface))
+    }
+
+    func testNovelReaderPresentationResolvesSelectedSurfaceIndexByIdentityOrdinal() throws {
+        let generation: UInt64 = 7
+        let surfaces = (0..<800).map { index in
+            NovelReaderSurface(
+                identity: NovelReaderSurfaceIdentity(generation: generation, ordinal: index),
+                presentationIndex: index,
+                kind: .text,
+                documentView: 1,
+                chapterTitle: "第\(index + 1)章",
+                presentationSize: CGSize(width: 320, height: 44)
+            )
+        }
+        let selectedIdentity = surfaces[777].identity
+        let presentation = NovelReaderPresentation(
+            generation: generation,
+            revision: 0,
+            surfaces: surfaces,
+            selectedSurfaceIdentity: selectedIdentity,
+            spreads: [],
+            chapters: [],
+            committedSettings: ReaderAppearanceSettings(readingMode: .vertical),
+            readingState: NovelReaderReadingState(
+                currentView: 1,
+                maxView: 1,
+                currentChapterTitle: "第778章",
+                authorID: nil,
+                currentSurfaceIntraProgress: 0
+            ),
+            currentContentSource: .fallbackUnfilteredPage,
+            retainedChapterCount: 800,
+            filteredChapterCandidateCount: 800,
+            selectedSurfaceIndex: 777
+        )
+
+        XCTAssertEqual(presentation.selectedSurfaceIndex, 777)
+        XCTAssertEqual(presentation.surfaceIndex(for: selectedIdentity), 777)
+        XCTAssertNil(presentation.surfaceIndex(for: NovelReaderSurfaceIdentity(generation: generation + 1, ordinal: 777)))
+    }
+
+    func testNovelReaderPresentationLookupDoesNotScanSurfaces() throws {
+        let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let source = try String(
+            contentsOf: repositoryRoot
+                .appendingPathComponent("Sources/YamiboReaderCore/Models/ReaderModels.swift"),
+            encoding: .utf8
+        )
+
+        XCTAssertFalse(source.contains("surfaces.first(where: { $0.identity == selectedSurfaceIdentity })"))
+        XCTAssertFalse(source.contains("surfaces.first(where: { $0.identity == identity })"))
     }
 
     func testPrefetchDoesNotCreateASecondViewportRuntime() async throws {

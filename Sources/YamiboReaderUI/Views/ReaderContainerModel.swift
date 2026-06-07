@@ -13,7 +13,7 @@ public struct ReaderProgressChapterTick: Equatable, Sendable {
     }
 }
 
-private struct ReaderProgressScrubData: Sendable {
+private struct ReaderProgressScrubData: Equatable, Sendable {
     var readingMode: ReaderReadingMode
     var surfaceCount: Int
     var currentProgressPercent: Int
@@ -55,6 +55,211 @@ private struct ReaderProgressScrubData: Sendable {
     }
 }
 
+public struct ReaderChromeProgressSnapshot: Equatable, Sendable {
+    public var readingMode: ReaderReadingMode
+    public var visibleView: Int
+    public var surfaceCount: Int
+    public var currentSurfaceNumber: Int
+    public var currentChapterTitle: String?
+    public var progressText: String
+    public var currentProgressFraction: Double
+    public var currentProgressPercent: Int
+    public var currentProgressPercentText: String
+    public var progressChapterTicks: [ReaderProgressChapterTick]
+    private var scrubData: ReaderProgressScrubData
+
+    public static var empty: ReaderChromeProgressSnapshot {
+        ReaderChromeProgressSnapshot(
+            readingMode: .paged,
+            visibleView: 1,
+            surfaceCount: 1,
+            currentSurfaceNumber: 1,
+            currentChapterTitle: nil,
+            progressText: "",
+            currentProgressFraction: 0,
+            currentProgressPercent: 0,
+            currentProgressPercentText: "0%",
+            progressChapterTicks: [],
+            scrubData: ReaderProgressScrubData(
+                readingMode: .paged,
+                surfaceCount: 1,
+                currentProgressPercent: 0,
+                visibleSurfaceIndexes: [],
+                fallbackVisibleSurfaceIndex: 0,
+                chapterTitlesBySurfaceIndex: [:],
+                chapterTickStartIndexes: [],
+                isTwoPageSpreadActive: false
+            )
+        )
+    }
+
+    public init(presentation: NovelReaderPresentation) {
+        let projection = presentation.progressProjection
+        let chapter = presentation.readingState.currentChapterTitle ?? ""
+        let progressText = if chapter.isEmpty {
+            L10n.string(
+                "reader.progress",
+                projection.displayedPageLabel,
+                max(projection.displayedPageCount, 1),
+                projection.displayedView,
+                max(presentation.readingState.maxView, 1)
+            )
+        } else {
+            L10n.string(
+                "reader.progress_with_chapter",
+                projection.displayedPageLabel,
+                max(projection.displayedPageCount, 1),
+                projection.displayedView,
+                max(presentation.readingState.maxView, 1),
+                chapter
+            )
+        }
+        let maxIndex = max(projection.surfaceCount - 1, 0)
+        let currentChapterIndex = presentation.chapters.lastIndex {
+            $0.startIndex <= projection.selectedSurfaceIndex
+        }
+        let progressChapterTicks: [ReaderProgressChapterTick] = {
+            guard projection.surfaceCount > 1, !presentation.chapters.isEmpty else { return [] }
+            var seenStartIndexes = Set<Int>()
+            return presentation.chapters.enumerated().compactMap { index, chapter -> ReaderProgressChapterTick? in
+                let clampedStartIndex = min(max(chapter.startIndex, 0), max(maxIndex, 1))
+                guard seenStartIndexes.insert(clampedStartIndex).inserted else { return nil }
+                return ReaderProgressChapterTick(
+                    chapter: chapter,
+                    position: Double(clampedStartIndex) / Double(max(maxIndex, 1)),
+                    isCurrent: currentChapterIndex == index
+                )
+            }
+        }()
+        let chapterTitlesBySurfaceIndex = Self.chapterTitlesBySurfaceIndex(
+            surfaces: presentation.surfaces,
+            chapters: presentation.chapters,
+            maxIndex: maxIndex
+        )
+        let tickStartIndexes = Set(presentation.chapters.map { min(max($0.startIndex, 0), maxIndex) })
+
+        self.init(
+            readingMode: projection.readingMode,
+            visibleView: projection.displayedView,
+            surfaceCount: projection.surfaceCount,
+            currentSurfaceNumber: projection.currentSurfaceNumber,
+            currentChapterTitle: presentation.readingState.currentChapterTitle,
+            progressText: progressText,
+            currentProgressFraction: projection.currentProgressFraction,
+            currentProgressPercent: projection.currentProgressPercent,
+            currentProgressPercentText: projection.currentProgressPercentText,
+            progressChapterTicks: progressChapterTicks,
+            scrubData: ReaderProgressScrubData(
+                readingMode: projection.readingMode,
+                surfaceCount: projection.surfaceCount,
+                currentProgressPercent: projection.currentProgressPercent,
+                visibleSurfaceIndexes: projection.visibleSurfaceIndexes,
+                fallbackVisibleSurfaceIndex: projection.fallbackVisibleSurfaceIndex,
+                chapterTitlesBySurfaceIndex: chapterTitlesBySurfaceIndex,
+                chapterTickStartIndexes: tickStartIndexes,
+                isTwoPageSpreadActive: projection.usesTwoPageSpread
+            )
+        )
+    }
+
+    private init(
+        readingMode: ReaderReadingMode,
+        visibleView: Int,
+        surfaceCount: Int,
+        currentSurfaceNumber: Int,
+        currentChapterTitle: String?,
+        progressText: String,
+        currentProgressFraction: Double,
+        currentProgressPercent: Int,
+        currentProgressPercentText: String,
+        progressChapterTicks: [ReaderProgressChapterTick],
+        scrubData: ReaderProgressScrubData
+    ) {
+        self.readingMode = readingMode
+        self.visibleView = max(visibleView, 1)
+        self.surfaceCount = max(surfaceCount, 1)
+        self.currentSurfaceNumber = min(max(currentSurfaceNumber, 1), self.surfaceCount)
+        self.currentChapterTitle = currentChapterTitle
+        self.progressText = progressText
+        self.currentProgressFraction = min(max(currentProgressFraction, 0), 1)
+        self.currentProgressPercent = min(max(currentProgressPercent, 0), 100)
+        self.currentProgressPercentText = currentProgressPercentText
+        self.progressChapterTicks = progressChapterTicks
+        self.scrubData = scrubData
+    }
+
+    public func progressSliderLabelText(
+        isEditing: Bool,
+        sliderValue: Double,
+        targetSurfaceIndex: Int
+    ) -> String {
+        if readingMode == .vertical {
+            guard isEditing else { return currentProgressPercentText }
+            let percent = Int(min(max(sliderValue, 0), 100).rounded())
+            return "\(percent)%"
+        }
+
+        guard isEditing else {
+            return "\(currentSurfaceNumber) / \(surfaceCount)"
+        }
+        let page = min(max(targetSurfaceIndex + 1, 1), surfaceCount)
+        return "\(page) / \(surfaceCount)"
+    }
+
+    public func targetSurfaceIndex(forProgressValue value: Double) -> Int {
+        scrubData.targetSurfaceIndex(for: value)
+    }
+
+    public func chapterTitle(forSurfaceIndex surfaceIndex: Int) -> String? {
+        scrubData.chapterTitle(for: surfaceIndex)
+    }
+
+    public func progressChapterTickStartIndex(forSurfaceIndex surfaceIndex: Int) -> Int? {
+        scrubData.chapterTickStartIndex(for: surfaceIndex)
+    }
+
+    public var progressScrubContext: ReaderProgressScrubContext {
+        ReaderProgressScrubContext(
+            readingMode: scrubData.readingMode,
+            surfaceCount: scrubData.surfaceCount,
+            currentProgressPercent: scrubData.currentProgressPercent,
+            targetSurfaceIndex: { value in
+                scrubData.targetSurfaceIndex(for: value)
+            },
+            chapterTitle: { surfaceIndex in
+                scrubData.chapterTitle(for: surfaceIndex)
+            },
+            chapterTickStartIndex: { surfaceIndex in
+                scrubData.chapterTickStartIndex(for: surfaceIndex)
+            }
+        )
+    }
+
+    private static func chapterTitlesBySurfaceIndex(
+        surfaces: [NovelReaderSurface],
+        chapters: [ReaderChapter],
+        maxIndex: Int
+    ) -> [Int: String] {
+        guard maxIndex >= 0, !surfaces.isEmpty else { return [:] }
+        var result: [Int: String] = [:]
+        var chapterIndex = 0
+        let sortedChapters = chapters.sorted { $0.startIndex < $1.startIndex }
+        for index in surfaces.indices {
+            while chapterIndex + 1 < sortedChapters.count,
+                  sortedChapters[chapterIndex + 1].startIndex <= index {
+                chapterIndex += 1
+            }
+            if let title = surfaces[index].chapterTitle {
+                result[index] = title
+            } else if sortedChapters.indices.contains(chapterIndex),
+                      sortedChapters[chapterIndex].startIndex <= index {
+                result[index] = sortedChapters[chapterIndex].title
+            }
+        }
+        return result
+    }
+}
+
 @MainActor
 public final class ReaderContainerModel: ObservableObject {
     @Published public private(set) var isLoading = false
@@ -74,6 +279,7 @@ public final class ReaderContainerModel: ObservableObject {
     @Published public private(set) var isLoadingChapterDirectory = false
     @Published public private(set) var chapterDirectoryError: String?
     @Published public private(set) var readerPresentation: NovelReaderPresentation?
+    public private(set) var chromeProgressSnapshot = ReaderChromeProgressSnapshot.empty
 
     public let context: ReaderLaunchContext
 
@@ -217,11 +423,7 @@ public final class ReaderContainerModel: ObservableObject {
     }
 
     public var progressText: String {
-        let chapter = currentChapterTitle ?? ""
-        if chapter.isEmpty {
-            return L10n.string("reader.progress", displayedPageLabel, max(displayedPageCount, 1), displayedView, max(maxView, 1))
-        }
-        return L10n.string("reader.progress_with_chapter", displayedPageLabel, max(displayedPageCount, 1), displayedView, max(maxView, 1), chapter)
+        chromeProgressSnapshot.progressText
     }
 
     public func previewText(
@@ -236,46 +438,27 @@ public final class ReaderContainerModel: ObservableObject {
     }
 
     public var surfaceCount: Int {
-        max(readerSurfaces.count, 1)
+        chromeProgressSnapshot.surfaceCount
     }
 
     public var currentSurfaceNumber: Int {
-        min(max(selectedSurfaceIndex + 1, 1), surfaceCount)
+        chromeProgressSnapshot.currentSurfaceNumber
     }
 
     public var currentProgressFraction: Double {
-        if settings.readingMode == .vertical {
-            guard displayedPageCount > 1 else { return 0 }
-            return Double(displayedPageIndex) / Double(displayedPageCount - 1)
-        }
-        guard surfaceCount > 1 else { return 0 }
-        return Double(selectedSurfaceIndex) / Double(surfaceCount - 1)
+        chromeProgressSnapshot.currentProgressFraction
     }
 
     public var currentProgressPercent: Int {
-        Int((currentProgressFraction * 100).rounded())
+        chromeProgressSnapshot.currentProgressPercent
     }
 
     public var currentProgressPercentText: String {
-        "\(currentProgressPercent)%"
+        chromeProgressSnapshot.currentProgressPercentText
     }
 
     public var progressChapterTicks: [ReaderProgressChapterTick] {
-        guard surfaceCount > 1, !chapters.isEmpty else { return [] }
-
-        let currentIndex = currentChapterIndex
-        let maxPageIndex = max(surfaceCount - 1, 1)
-        var seenStartIndexes = Set<Int>()
-
-        return chapters.enumerated().compactMap { index, chapter in
-            let clampedStartIndex = min(max(chapter.startIndex, 0), maxPageIndex)
-            guard seenStartIndexes.insert(clampedStartIndex).inserted else { return nil }
-            return ReaderProgressChapterTick(
-                chapter: chapter,
-                position: Double(clampedStartIndex) / Double(maxPageIndex),
-                isCurrent: currentIndex == index
-            )
-        }
+        chromeProgressSnapshot.progressChapterTicks
     }
 
     public func progressSliderLabelText(
@@ -283,17 +466,11 @@ public final class ReaderContainerModel: ObservableObject {
         sliderValue: Double,
         targetSurfaceIndex: Int
     ) -> String {
-        if settings.readingMode == .vertical {
-            guard isEditing else { return currentProgressPercentText }
-            let percent = Int(min(max(sliderValue, 0), 100).rounded())
-            return "\(percent)%"
-        }
-
-        guard isEditing else {
-            return "\(currentSurfaceNumber) / \(surfaceCount)"
-        }
-        let page = min(max(targetSurfaceIndex + 1, 1), surfaceCount)
-        return "\(page) / \(surfaceCount)"
+        chromeProgressSnapshot.progressSliderLabelText(
+            isEditing: isEditing,
+            sliderValue: sliderValue,
+            targetSurfaceIndex: targetSurfaceIndex
+        )
     }
 
     public var currentChapterCommentTarget: ReaderChapterCommentTarget? {
@@ -387,61 +564,19 @@ public final class ReaderContainerModel: ObservableObject {
     }
 
     public func chapterTitle(forSurfaceIndex surfaceIndex: Int) -> String? {
-        guard !readerSurfaces.isEmpty else { return nil }
-        let clampedIndex = min(max(surfaceIndex, 0), max(readerSurfaces.count - 1, 0))
-        return readerSurfaces[clampedIndex].chapterTitle ?? chapters.last(where: { $0.startIndex <= clampedIndex })?.title
+        chromeProgressSnapshot.chapterTitle(forSurfaceIndex: surfaceIndex)
     }
 
     public func progressChapterTickStartIndex(forSurfaceIndex surfaceIndex: Int) -> Int? {
-        guard !chapters.isEmpty else { return nil }
-        let clampedIndex = min(max(surfaceIndex, 0), max(surfaceCount - 1, 0))
-        return chapters
-            .map { min(max($0.startIndex, 0), max(surfaceCount - 1, 0)) }
-            .first { $0 == clampedIndex }
+        chromeProgressSnapshot.progressChapterTickStartIndex(forSurfaceIndex: surfaceIndex)
     }
 
     public var verticalProgressScrubContext: ReaderProgressScrubContext {
-        let cached = cachedProgressScrubData(readingMode: .vertical)
-        return ReaderProgressScrubContext(
-            readingMode: .vertical,
-            surfaceCount: cached.surfaceCount,
-            currentProgressPercent: cached.currentProgressPercent,
-            targetSurfaceIndex: { value in
-                cached.targetSurfaceIndex(for: value)
-            },
-            chapterTitle: { surfaceIndex in
-                cached.chapterTitle(for: surfaceIndex)
-            },
-            chapterTickStartIndex: { surfaceIndex in
-                cached.chapterTickStartIndex(for: surfaceIndex)
-            }
-        )
+        chromeProgressSnapshot.progressScrubContext
     }
 
     public func targetSurfaceIndex(forProgressValue value: Double) -> Int {
-        guard !readerSurfaces.isEmpty else { return 0 }
-
-        switch settings.readingMode {
-        case .paged:
-            let target = min(
-                max(Int(value.rounded()), 0),
-                max(readerSurfaces.count - 1, 0)
-            )
-            return normalizedPagedSurfaceIndex(target)
-        case .vertical:
-            let view = displayedView
-            let viewPageIndexes = readerSurfaces.indices.filter { readerSurfaces[$0].documentView == view }
-            guard let firstPageIndex = viewPageIndexes.first,
-                  viewPageIndexes.count > 1 else {
-                return readerSurfaces.firstIndex(where: { $0.documentView == view }) ?? 0
-            }
-            let clampedPercent = min(max(value, 0), 100)
-            let localPageIndex = min(
-                max(Int((clampedPercent / 100) * Double(viewPageIndexes.count - 1)), 0),
-                max(viewPageIndexes.count - 1, 0)
-            )
-            return firstPageIndex + localPageIndex
-        }
+        chromeProgressSnapshot.targetSurfaceIndex(forProgressValue: value)
     }
 
     public var cacheScopeTitle: String {
@@ -481,6 +616,7 @@ public final class ReaderContainerModel: ObservableObject {
     public func close() {
         readingWorkflow?.close()
         readingWorkflow = nil
+        chromeProgressSnapshot = .empty
         readerPresentation = nil
     }
 
@@ -1077,6 +1213,7 @@ public final class ReaderContainerModel: ObservableObject {
     }
 
     private func syncFromWorkflowState(_ state: NovelReadingWorkflowState) {
+        chromeProgressSnapshot = state.presentation.map(ReaderChromeProgressSnapshot.init) ?? .empty
         readerPresentation = state.presentation
         syncCachedViews(state.cachedViews)
     }
@@ -1099,33 +1236,19 @@ public final class ReaderContainerModel: ObservableObject {
     }
 
     private var displayedPageLabel: String {
-        let leftSurfaceNumber = displayedPageIndex + 1
-        guard isTwoPageSpreadActive,
-              let spread = presentationSpreads.first(where: { $0.leftSurfaceIndex == selectedSurfaceIndex }),
-              let rightSurfaceIndex = spread.rightSurfaceIndex,
-              readerSurfaces.indices.contains(rightSurfaceIndex),
-              readerSurfaces[rightSurfaceIndex].documentView == displayedView else {
-            return "\(leftSurfaceNumber)"
-        }
-        let rightSurfaceNumber = displayedPageIndex + 2
-        return "\(leftSurfaceNumber)-\(min(rightSurfaceNumber, displayedPageCount))"
+        readerPresentation?.progressProjection.displayedPageLabel ?? "1"
     }
 
     private var displayedView: Int {
-        selectedSurface?.documentView ?? currentView
+        chromeProgressSnapshot.visibleView
     }
 
     private var displayedPageIndex: Int {
-        let view = displayedView
-        guard let firstIndex = readerSurfaces.firstIndex(where: { $0.documentView == view }) else {
-            return selectedSurfaceIndex
-        }
-        return max(selectedSurfaceIndex - firstIndex, 0)
+        readerPresentation?.progressProjection.displayedPageIndex ?? 0
     }
 
     private var displayedPageCount: Int {
-        let count = readerSurfaces.filter { $0.documentView == displayedView }.count
-        return max(count, 1)
+        readerPresentation?.progressProjection.displayedPageCount ?? 1
     }
 
     private var selectedSurface: NovelReaderSurface? {
@@ -1201,47 +1324,6 @@ public final class ReaderContainerModel: ObservableObject {
         let clampedIndex = max(0, min(surfaceIndex, max(readerSurfaces.count - 1, 0)))
         guard isTwoPageSpreadActive else { return clampedIndex }
         return leftSurfaceIndex(forSpreadIndex: spreadIndex(forSurfaceIndex: clampedIndex))
-    }
-
-    private func cachedProgressScrubData(readingMode: ReaderReadingMode) -> ReaderProgressScrubData {
-        let surfaces = readerSurfaces
-        let count = max(surfaces.count, 1)
-        let maxIndex = max(count - 1, 0)
-        let visibleView = displayedView
-        let visibleSurfaceIndexes = surfaces.indices.filter { surfaces[$0].documentView == visibleView }
-        let chapterTitlesBySurfaceIndex = chapterTitlesBySurfaceIndex(maxIndex: maxIndex)
-        let tickStartIndexes = Set(chapters.map { min(max($0.startIndex, 0), maxIndex) })
-
-        return ReaderProgressScrubData(
-            readingMode: readingMode,
-            surfaceCount: count,
-            currentProgressPercent: currentProgressPercent,
-            visibleSurfaceIndexes: visibleSurfaceIndexes,
-            fallbackVisibleSurfaceIndex: surfaces.firstIndex { $0.documentView == visibleView } ?? 0,
-            chapterTitlesBySurfaceIndex: chapterTitlesBySurfaceIndex,
-            chapterTickStartIndexes: tickStartIndexes,
-            isTwoPageSpreadActive: isTwoPageSpreadActive
-        )
-    }
-
-    private func chapterTitlesBySurfaceIndex(maxIndex: Int) -> [Int: String] {
-        guard maxIndex >= 0, !readerSurfaces.isEmpty else { return [:] }
-        var result: [Int: String] = [:]
-        var chapterIndex = 0
-        let sortedChapters = chapters.sorted { $0.startIndex < $1.startIndex }
-        for index in readerSurfaces.indices {
-            while chapterIndex + 1 < sortedChapters.count,
-                  sortedChapters[chapterIndex + 1].startIndex <= index {
-                chapterIndex += 1
-            }
-            if let title = readerSurfaces[index].chapterTitle {
-                result[index] = title
-            } else if sortedChapters.indices.contains(chapterIndex),
-                      sortedChapters[chapterIndex].startIndex <= index {
-                result[index] = sortedChapters[chapterIndex].title
-            }
-        }
-        return result
     }
 
     private func cacheContext(forView view: Int) -> (authorID: String?, contentSource: ReaderContentSource?) {
