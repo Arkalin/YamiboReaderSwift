@@ -4,23 +4,6 @@ import YamiboReaderCore
 #if os(iOS)
 import UIKit
 
-private extension Font.Weight {
-    var uiFontWeight: UIFont.Weight {
-        switch self {
-        case .ultraLight: .ultraLight
-        case .thin: .thin
-        case .light: .light
-        case .regular: .regular
-        case .medium: .medium
-        case .semibold: .semibold
-        case .bold: .bold
-        case .heavy: .heavy
-        case .black: .black
-        default: .regular
-        }
-    }
-}
-
 struct ReaderSettingsPanel: View {
     @ObservedObject var model: ReaderContainerModel
     @Environment(\.dismiss) private var dismiss
@@ -268,14 +251,13 @@ private struct ReaderBooksPreviewMaskedContent: View {
     var body: some View {
         ZStack(alignment: .topLeading) {
             Color.clear
-            VStack(alignment: .leading, spacing: 20) {
-                Text(previewText)
-                    .font(previewFont)
-                    .tracking(22 * settings.fontScale * settings.characterSpacingScale)
-                    .lineSpacing(max(22 * settings.fontScale * (settings.lineHeightScale - 1), 0))
-                    .foregroundStyle(palette.primaryText)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
+            NativeNovelTextSettingsPreviewView(
+                surface: NovelTextSettingsPreviewSurface(
+                    text: previewText,
+                    settings: settings,
+                    textColor: UIColor(palette.primaryText)
+                )
+            )
             .padding(.top, 4)
             .padding(.horizontal, settings.horizontalPadding)
         }
@@ -295,18 +277,6 @@ private struct ReaderBooksPreviewMaskedContent: View {
             )
         )
         .clipped()
-    }
-
-    private var previewFont: Font {
-        let size = 22 * settings.fontScale
-        switch settings.fontFamily {
-        case .systemSans:
-            return .system(size: size, design: .default)
-        case .systemSerif:
-            return .system(size: size, design: .serif)
-        case .rounded:
-            return .system(size: size, design: .rounded)
-        }
     }
 }
 

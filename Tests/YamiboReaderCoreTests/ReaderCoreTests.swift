@@ -2217,6 +2217,34 @@ private final class StubURLProtocol: URLProtocol {
     #expect(abs(bodyStyle.lineSpacing - 9.6) < 0.001)
 }
 
+@Test func novelTextSettingsPreviewSurfaceUsesAttributedParagraphSemantics() throws {
+    let surface = NovelTextSettingsPreviewSurface(
+        text: "第一段正文。\n\n第二段正文。",
+        settings: ReaderAppearanceSettings(
+            usesJustifiedText: true,
+            indentsParagraphFirstLine: true
+        )
+    )
+    let style = try #require(surface.diagnosticParagraphStyle(at: 0))
+
+    #expect(style.alignment == .justified)
+    #expect(style.firstLineHeadIndent == 44)
+}
+
+@Test func novelTextSettingsPreviewSurfaceAvoidsPerDrawTextKitGraph() throws {
+    let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+    let previewSurfaceSource = try String(
+        contentsOf: repositoryRoot
+            .appendingPathComponent("Sources/YamiboReaderCore/Support/NovelTextSettingsPreviewSurface.swift"),
+        encoding: .utf8
+    )
+    let drawBody = try #require(functionBody(named: "draw(in context", in: previewSurfaceSource))
+
+    #expect(drawBody.contains("attributedText.draw("))
+    #expect(!drawBody.contains("NSTextContentStorage"))
+    #expect(!drawBody.contains("NSTextLayoutManager"))
+}
+
 @Test func readerAttributedTextFactoryIndentsBodyButNotTitleOrContinuationSlices() throws {
     let pointSize = 24.0
     let settings = ReaderAppearanceSettings(indentsParagraphFirstLine: true)
