@@ -1590,11 +1590,36 @@ final class MangaReaderModelTests: XCTestCase {
         XCTAssertNil(context.initialResumePoint)
     }
 
-    func testNovelFavoriteDetailLinesKeepDisplayProgressText() {
+    func testNovelFavoriteDetailLinesAppendProgressAfterChapterTitle() {
         let favorite = Favorite(
             title: "小说收藏",
             url: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=815&mobile=2")!,
             mangaPageIndex: 126,
+            lastView: 2,
+            lastChapter: "第一章",
+            novelResumePoint: ReaderResumePoint(
+                view: 2,
+                displayedTextOffset: 400,
+                chapterOrdinal: 0,
+                chapterTitle: "第一章",
+                segmentProgress: 0.409,
+                authorID: nil,
+                readingModeHint: .vertical
+            ),
+            novelMaxView: 5,
+            type: .novel
+        )
+
+        XCTAssertEqual(
+            favoriteDetailLineItems(for: favorite),
+            [.novelProgress(chapterTitle: "第一章", progressText: "页内 40 % · 网页 2 / 5")]
+        )
+    }
+
+    func testNovelFavoriteDetailLinesShowPercentOnlyForSingleWebPage() {
+        let favorite = Favorite(
+            title: "小说收藏",
+            url: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=816&mobile=2")!,
             lastView: 1,
             lastChapter: "第一章",
             novelResumePoint: ReaderResumePoint(
@@ -1602,7 +1627,31 @@ final class MangaReaderModelTests: XCTestCase {
                 displayedTextOffset: 400,
                 chapterOrdinal: 0,
                 chapterTitle: "第一章",
-                segmentProgress: 0.4,
+                segmentProgress: 0.999,
+                authorID: nil,
+                readingModeHint: .vertical
+            ),
+            novelMaxView: 1,
+            type: .novel
+        )
+
+        XCTAssertEqual(
+            favoriteDetailLineItems(for: favorite),
+            [.novelProgress(chapterTitle: "第一章", progressText: "99 %")]
+        )
+    }
+
+    func testNovelFavoriteDetailLinesShowProgressWithoutChapterTitle() {
+        let favorite = Favorite(
+            title: "小说收藏",
+            url: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=817&mobile=2")!,
+            lastView: 1,
+            novelResumePoint: ReaderResumePoint(
+                view: 1,
+                displayedTextOffset: 400,
+                chapterOrdinal: 0,
+                chapterTitle: nil,
+                segmentProgress: 1,
                 authorID: nil,
                 readingModeHint: .vertical
             ),
@@ -1610,9 +1659,32 @@ final class MangaReaderModelTests: XCTestCase {
         )
 
         XCTAssertEqual(
-            favoriteDetailLines(for: favorite),
-            ["第一章"]
+            favoriteDetailLineItems(for: favorite),
+            [.novelProgress(chapterTitle: nil, progressText: "100 %")]
         )
+    }
+
+    func testNovelFavoriteDetailLinesKeepFallbackWithoutProgress() {
+        let favorite = Favorite(
+            title: "小说收藏",
+            url: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=818&mobile=2")!,
+            type: .novel
+        )
+
+        XCTAssertEqual(
+            favoriteDetailLineItems(for: favorite),
+            [.text("小说")]
+        )
+    }
+
+    func testNovelFavoriteDetailLineViewKeepsProgressTextUntruncated() throws {
+        let source = try String(contentsOfFile: projectFilePath("Sources/YamiboReaderUI/Views/FavoritesView.swift"))
+
+        XCTAssertTrue(source.contains("ForEach(favoriteDetailLineItems(for: favorite), id: \\.self)"))
+        XCTAssertFalse(source.contains("ForEach(favoriteDetailLines(for: favorite), id: \\.self)"))
+        XCTAssertTrue(source.contains("case let .novelProgress(chapterTitle, progressText):"))
+        XCTAssertTrue(source.contains("Text(\" · \\(progressText)\")"))
+        XCTAssertTrue(source.contains(".fixedSize(horizontal: true, vertical: false)"))
     }
 
     func testFavoritesViewModelDeletesFavoriteAfterRemoteDeleteSucceeds() async throws {
@@ -2715,6 +2787,15 @@ private func httpResponse(url: URL, body: String, statusCode: Int = 200) -> (Dat
             headerFields: ["Content-Type": "text/html"]
         )!
     )
+}
+
+private func projectFilePath(_ relativePath: String) -> String {
+    URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .appendingPathComponent(relativePath)
+        .path
 }
 
 private final class MangaReaderTestURLProtocol: URLProtocol {

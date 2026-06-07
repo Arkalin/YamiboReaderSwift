@@ -3,6 +3,7 @@ import Foundation
 public struct NovelReadingPosition: Hashable, Sendable {
     public var threadURL: URL
     public var view: Int
+    public var maxView: Int?
     public var chapterTitle: String?
     public var authorID: String?
     public var resumePoint: ReaderResumePoint?
@@ -10,12 +11,14 @@ public struct NovelReadingPosition: Hashable, Sendable {
     public init(
         threadURL: URL,
         view: Int,
+        maxView: Int? = nil,
         chapterTitle: String? = nil,
         authorID: String? = nil,
         resumePoint: ReaderResumePoint? = nil
     ) {
         self.threadURL = threadURL
         self.view = max(1, view)
+        self.maxView = maxView.map { max(self.view, $0) }
         self.chapterTitle = resumePoint?.chapterTitle ?? chapterTitle
         self.authorID = resumePoint?.authorID ?? authorID
         self.resumePoint = resumePoint

@@ -1273,6 +1273,7 @@ public final class ReaderContainerModel: ObservableObject {
         readingWorkflow?.currentProgressPosition() ?? NovelReadingPosition(
             threadURL: context.threadURL,
             view: displayedView,
+            maxView: maxView,
             chapterTitle: currentChapterTitle,
             authorID: currentAuthorID ?? context.authorID
         )

@@ -50,6 +50,7 @@ public struct FavoriteMetadataArchiveEntry: Codable, Equatable, Sendable {
     public var lastChapter: String?
     public var authorID: String?
     public var novelResumePoint: ReaderResumePoint?
+    public var novelMaxView: Int?
     public var isHidden: Bool
     public var type: FavoriteType
     public var lastMangaURL: URL?
@@ -66,6 +67,7 @@ public struct FavoriteMetadataArchiveEntry: Codable, Equatable, Sendable {
         case lastChapter
         case authorID
         case novelResumePoint
+        case novelMaxView
         case isHidden
         case type
         case lastMangaURL
@@ -83,6 +85,7 @@ public struct FavoriteMetadataArchiveEntry: Codable, Equatable, Sendable {
         lastChapter: String?,
         authorID: String?,
         novelResumePoint: ReaderResumePoint?,
+        novelMaxView: Int? = nil,
         isHidden: Bool,
         type: FavoriteType,
         lastMangaURL: URL?,
@@ -98,6 +101,7 @@ public struct FavoriteMetadataArchiveEntry: Codable, Equatable, Sendable {
         self.lastChapter = lastChapter
         self.authorID = authorID
         self.novelResumePoint = novelResumePoint
+        self.novelMaxView = novelMaxView.map { max(1, $0) }
         self.isHidden = isHidden
         self.type = type
         self.lastMangaURL = lastMangaURL
@@ -116,6 +120,7 @@ public struct FavoriteMetadataArchiveEntry: Codable, Equatable, Sendable {
             lastChapter: favorite.lastChapter,
             authorID: favorite.authorID,
             novelResumePoint: favorite.novelResumePoint,
+            novelMaxView: favorite.novelMaxView,
             isHidden: favorite.isHidden,
             type: favorite.type,
             lastMangaURL: favorite.lastMangaURL,
@@ -135,6 +140,7 @@ public struct FavoriteMetadataArchiveEntry: Codable, Equatable, Sendable {
         lastChapter = try container.decodeIfPresent(String.self, forKey: .lastChapter)
         authorID = try container.decodeIfPresent(String.self, forKey: .authorID)
         novelResumePoint = try container.decodeIfPresent(ReaderResumePoint.self, forKey: .novelResumePoint)
+        novelMaxView = try container.decodeIfPresent(Int.self, forKey: .novelMaxView).map { max(1, $0) }
         isHidden = try container.decodeIfPresent(Bool.self, forKey: .isHidden) ?? false
         type = try container.decodeIfPresent(FavoriteType.self, forKey: .type) ?? .unknown
         lastMangaURL = try container.decodeIfPresent(URL.self, forKey: .lastMangaURL)
@@ -276,6 +282,7 @@ private extension Favorite {
         lastChapter = archive.lastChapter
         authorID = archive.authorID
         novelResumePoint = archive.novelResumePoint
+        novelMaxView = archive.novelMaxView
         isHidden = archive.isHidden
         type = archive.type
         lastMangaURL = archive.lastMangaURL

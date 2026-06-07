@@ -11,6 +11,7 @@ public struct Favorite: Codable, Hashable, Identifiable, Sendable {
     public var lastChapter: String?
     public var authorID: String?
     public var novelResumePoint: ReaderResumePoint?
+    public var novelMaxView: Int?
     public var isHidden: Bool
     public var type: FavoriteType
     public var lastMangaURL: URL?
@@ -30,6 +31,7 @@ public struct Favorite: Codable, Hashable, Identifiable, Sendable {
         case lastChapter
         case authorID
         case novelResumePoint
+        case novelMaxView
         case isHidden
         case type
         case lastMangaURL
@@ -50,6 +52,7 @@ public struct Favorite: Codable, Hashable, Identifiable, Sendable {
         lastChapter: String? = nil,
         authorID: String? = nil,
         novelResumePoint: ReaderResumePoint? = nil,
+        novelMaxView: Int? = nil,
         isHidden: Bool = false,
         type: FavoriteType = .unknown,
         lastMangaURL: URL? = nil,
@@ -68,6 +71,7 @@ public struct Favorite: Codable, Hashable, Identifiable, Sendable {
         self.lastChapter = lastChapter
         self.authorID = authorID
         self.novelResumePoint = novelResumePoint
+        self.novelMaxView = novelMaxView.map { max(1, $0) }
         self.isHidden = isHidden
         self.type = type
         self.lastMangaURL = lastMangaURL
@@ -94,6 +98,7 @@ public struct Favorite: Codable, Hashable, Identifiable, Sendable {
         lastChapter = try container.decodeIfPresent(String.self, forKey: .lastChapter)
         authorID = try container.decodeIfPresent(String.self, forKey: .authorID)
         novelResumePoint = try container.decodeIfPresent(ReaderResumePoint.self, forKey: .novelResumePoint)
+        novelMaxView = try container.decodeIfPresent(Int.self, forKey: .novelMaxView).map { max(1, $0) }
         isHidden = try container.decodeIfPresent(Bool.self, forKey: .isHidden) ?? false
         type = try container.decodeIfPresent(FavoriteType.self, forKey: .type) ?? .unknown
         lastMangaURL = try container.decodeIfPresent(URL.self, forKey: .lastMangaURL)
