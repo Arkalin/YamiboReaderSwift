@@ -28,6 +28,7 @@ struct ReaderVerticalSurfaceFrameValue: Equatable {
 }
 
 private struct ReaderVerticalPositioningFingerprint: Equatable {
+    let generation: UInt64
     let view: Int
     let surfaceCount: Int
     let surfaceIndex: Int
@@ -214,10 +215,17 @@ public struct ReaderContainerView: View {
                 await model.commitNovelTextPresentationEnvironment(isPad: isPadDevice)
                 await model.prepare(layout: currentLayout)
                 updateChromeForContentState()
+                restoreVerticalPositionIfNeeded()
             }
             .onChange(of: currentLayout) { _, newValue in
                 Task {
+                    guard !hasPresentedOverlay else {
+                        updateChromeForContentState()
+                        return
+                    }
                     await model.commitNovelTextLayout(newValue)
+                    updateChromeForContentState()
+                    restoreVerticalPositionIfNeeded()
                 }
             }
             .onReceive(NotificationCenter.default.publisher(
@@ -278,8 +286,13 @@ public struct ReaderContainerView: View {
             .onChange(of: model.readerSurfaces.count) { _, _ in
                 updateChromeForContentState()
             }
+            .onChange(of: model.readerPresentation?.generation) { _, _ in
+                updateChromeForContentState()
+                restoreVerticalPositionIfNeeded()
+            }
             .onChange(of: model.settings.readingMode) { _, _ in
                 updateChromeForContentState()
+                restoreVerticalPositionIfNeeded()
             }
             .onChange(of: showingSettings) { _, _ in
                 updateChromeForContentState()
@@ -814,49 +827,59 @@ public struct ReaderContainerView: View {
             return
         }
 
-        if model.settings.readingMode == .vertical {
-            let fingerprint = ReaderVerticalPositioningFingerprint(
-                view: model.visibleView,
-                surfaceCount: model.readerSurfaces.count,
-                surfaceIndex: model.selectedSurfaceIndex,
-                intraSurfaceProgressBucket: Int((model.currentSurfaceIntraProgress * 1000).rounded()),
-                readingMode: model.settings.readingMode
-            )
-            if lastVerticalPositioningFingerprint != fingerprint {
-                lastVerticalPositioningFingerprint = fingerprint
-                requestVerticalScrollToCurrentPage()
-            }
-        } else {
+        if currentVerticalPositioningFingerprint == nil {
             lastVerticalPositioningFingerprint = nil
         }
     }
 
+    private var currentVerticalPositioningFingerprint: ReaderVerticalPositioningFingerprint? {
+        guard model.settings.readingMode == .vertical,
+              !model.readerSurfaces.isEmpty,
+              let generation = model.readerPresentation?.generation else {
+            return nil
+        }
+        return ReaderVerticalPositioningFingerprint(
+            generation: generation,
+            view: model.visibleView,
+            surfaceCount: model.readerSurfaces.count,
+            surfaceIndex: model.selectedSurfaceIndex,
+            intraSurfaceProgressBucket: Int((model.currentSurfaceIntraProgress * 1000).rounded()),
+            readingMode: model.settings.readingMode
+        )
+    }
+
+    private func rememberCurrentVerticalPositioningFingerprint() {
+        lastVerticalPositioningFingerprint = currentVerticalPositioningFingerprint
+    }
+
+    private func restoreVerticalPositionIfNeeded() {
+        guard let fingerprint = currentVerticalPositioningFingerprint else {
+            lastVerticalPositioningFingerprint = nil
+            return
+        }
+        guard lastVerticalPositioningFingerprint != fingerprint else { return }
+        lastVerticalPositioningFingerprint = fingerprint
+        requestVerticalScrollToCurrentPage()
+    }
+
     private func commitProgressSlider(_ targetIndex: Int) {
         model.jumpToSurface(targetIndex)
-        if model.settings.readingMode == .vertical {
-            requestVerticalScrollToCurrentPage()
-        }
+        restoreVerticalPositionIfNeeded()
     }
 
     private func jumpAdjacentChapter(_ delta: Int) {
         model.jumpToAdjacentChapter(delta)
-        if model.settings.readingMode == .vertical {
-            requestVerticalScrollToCurrentPage()
-        }
+        restoreVerticalPositionIfNeeded()
     }
 
     private func jumpToChapter(_ chapter: ReaderChapter) {
         model.jumpToChapter(chapter)
-        if model.settings.readingMode == .vertical {
-            requestVerticalScrollToCurrentPage()
-        }
+        restoreVerticalPositionIfNeeded()
     }
 
     private func jumpToChapterDirectoryChapter(_ chapter: ReaderChapter) async {
         await model.jumpToChapterDirectoryChapter(chapter)
-        if model.settings.readingMode == .vertical {
-            requestVerticalScrollToCurrentPage()
-        }
+        restoreVerticalPositionIfNeeded()
     }
 
     private func jumpToWebView(_ view: Int) async {
@@ -866,16 +889,12 @@ public struct ReaderContainerView: View {
     private func jumpToWebView(_ view: Int, preferredSurfaceOrdinal: Int) async {
         chromeState.showChrome()
         await model.jumpToWebView(view, preferredSurfaceOrdinal: preferredSurfaceOrdinal)
-        if model.settings.readingMode == .vertical {
-            requestVerticalScrollToCurrentPage()
-        }
+        restoreVerticalPositionIfNeeded()
     }
 
     private func goRelativePage(_ delta: Int) async {
         await model.jumpRelativeSurface(delta)
-        if model.settings.readingMode == .vertical {
-            requestVerticalScrollToCurrentPage()
-        }
+        restoreVerticalPositionIfNeeded()
     }
 
     private func canNavigateVerticalBoundary(_ direction: ReaderVerticalBoundaryDirection) -> Bool {
@@ -939,7 +958,7 @@ public struct ReaderContainerView: View {
 
     private func commitVerticalProgressScrub(_ target: Int) {
         model.jumpToSurface(target)
-        requestVerticalScrollToCurrentPage()
+        restoreVerticalPositionIfNeeded()
         verticalTapSuppressionUntil = CACurrentMediaTime() + 0.5
     }
 
@@ -978,6 +997,7 @@ public struct ReaderContainerView: View {
 
         if let sample = verticalTextViewportSample {
             model.updateVerticalViewportPosition(sample: sample)
+            rememberCurrentVerticalPositioningFingerprint()
         }
     }
 
