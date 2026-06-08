@@ -1,0 +1,22 @@
+{
+  "name": "YamiboReader Repository",
+  "identifier": "com.arkalin.yamiboreader.source",
+  "apps": [
+    {
+      "name": "Yamibo Reader",
+      "bundleIdentifier": "com.arkalin.YamiboReader",
+      "developerName": "Arkalin",
+      "localizedDescription": "A SwiftUI reader for Yamibo forum novels and manga.",
+      "iconURL": "https://raw.githubusercontent.com/Arkalin/YamiboReaderSwift/main/YamiboReader/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png",
+      "versions": [
+        {
+          "version": "0.3.2",
+          "date": "2026-06-08",
+          "localizedDescription": "Initial AltStore-compatible source release.",
+          "downloadURL": "https://github.com/Arkalin/YamiboReaderSwift/releases/download/v0.3.2/YamiboReader_v0.3.2_unsigned.ipa",
+          "size": 0
+        }
+      ]
+    }
+  ]
+}
