@@ -196,7 +196,8 @@ import Testing
                 segmentProgress: 0.4,
                 authorID: "77",
                 readingModeHint: .vertical
-            )
+            ),
+            documentSurfaceProgressPercent: 43
         )
     )
 
@@ -207,7 +208,32 @@ import Testing
     #expect(favorite?.lastChapter == "第三章")
     #expect(favorite?.authorID == "77")
     #expect(favorite?.novelResumePoint?.displayedTextOffset == 128)
+    #expect(favorite?.novelDocumentSurfaceProgressPercent == 43)
     #expect(favorite?.type == .novel)
+}
+
+@Test func favoriteDecodesLegacyNovelProgressWithoutDocumentSurfacePercent() throws {
+    let payload: [String: Any] = [
+        "id": "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=302&mobile=2",
+        "title": "旧小说收藏",
+        "url": "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=302&mobile=2",
+        "lastView": 2,
+        "type": FavoriteType.novel.rawValue,
+        "novelMaxView": 5,
+        "novelResumePoint": [
+            "schemaVersion": ReaderResumePoint.schemaVersion,
+            "view": 2,
+            "displayedTextOffset": 128,
+            "chapterOrdinal": 0,
+            "segmentProgress": 0.86,
+            "readingModeHint": "vertical"
+        ]
+    ]
+    let data = try JSONSerialization.data(withJSONObject: payload)
+
+    let favorite = try JSONDecoder().decode(Favorite.self, from: data)
+
+    #expect(favorite.novelDocumentSurfaceProgressPercent == nil)
 }
 
 @Test func favoriteStorePostsChangeNotificationWhenProgressChanges() async throws {
@@ -914,6 +940,7 @@ import Testing
         authorID: "77",
         novelResumePoint: resumePoint,
         novelMaxView: 6,
+        novelDocumentSurfaceProgressPercent: 43,
         isHidden: true,
         type: .novel,
         parentCollectionID: collection.id,
@@ -940,6 +967,7 @@ import Testing
     #expect(archive.lastChapter == "第二章")
     #expect(archive.authorID == "77")
     #expect(archive.novelResumePoint == resumePoint)
+    #expect(archive.novelDocumentSurfaceProgressPercent == 43)
     #expect(archive.lastReadAt == Date(timeIntervalSince1970: 1_700_000_000))
 }
 
@@ -966,6 +994,7 @@ import Testing
         authorID: "88",
         novelResumePoint: resumePoint,
         novelMaxView: 8,
+        novelDocumentSurfaceProgressPercent: 57,
         isHidden: true,
         type: .novel,
         lastMangaURL: nil,
@@ -997,6 +1026,7 @@ import Testing
     #expect(restored.lastChapter == "第三章")
     #expect(restored.authorID == "88")
     #expect(restored.novelResumePoint == resumePoint)
+    #expect(restored.novelDocumentSurfaceProgressPercent == 57)
     #expect(restored.lastReadAt == Date(timeIntervalSince1970: 1_800_000_000))
     #expect(snapshot.archivedMetadata.isEmpty)
 }

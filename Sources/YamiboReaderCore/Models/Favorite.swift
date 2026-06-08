@@ -12,6 +12,7 @@ public struct Favorite: Codable, Hashable, Identifiable, Sendable {
     public var authorID: String?
     public var novelResumePoint: ReaderResumePoint?
     public var novelMaxView: Int?
+    public var novelDocumentSurfaceProgressPercent: Int?
     public var isHidden: Bool
     public var type: FavoriteType
     public var lastMangaURL: URL?
@@ -32,6 +33,7 @@ public struct Favorite: Codable, Hashable, Identifiable, Sendable {
         case authorID
         case novelResumePoint
         case novelMaxView
+        case novelDocumentSurfaceProgressPercent
         case isHidden
         case type
         case lastMangaURL
@@ -53,6 +55,7 @@ public struct Favorite: Codable, Hashable, Identifiable, Sendable {
         authorID: String? = nil,
         novelResumePoint: ReaderResumePoint? = nil,
         novelMaxView: Int? = nil,
+        novelDocumentSurfaceProgressPercent: Int? = nil,
         isHidden: Bool = false,
         type: FavoriteType = .unknown,
         lastMangaURL: URL? = nil,
@@ -72,6 +75,7 @@ public struct Favorite: Codable, Hashable, Identifiable, Sendable {
         self.authorID = authorID
         self.novelResumePoint = novelResumePoint
         self.novelMaxView = novelMaxView.map { max(1, $0) }
+        self.novelDocumentSurfaceProgressPercent = novelDocumentSurfaceProgressPercent.map { min(max($0, 0), 100) }
         self.isHidden = isHidden
         self.type = type
         self.lastMangaURL = lastMangaURL
@@ -99,6 +103,10 @@ public struct Favorite: Codable, Hashable, Identifiable, Sendable {
         authorID = try container.decodeIfPresent(String.self, forKey: .authorID)
         novelResumePoint = try container.decodeIfPresent(ReaderResumePoint.self, forKey: .novelResumePoint)
         novelMaxView = try container.decodeIfPresent(Int.self, forKey: .novelMaxView).map { max(1, $0) }
+        novelDocumentSurfaceProgressPercent = try container.decodeIfPresent(
+            Int.self,
+            forKey: .novelDocumentSurfaceProgressPercent
+        ).map { min(max($0, 0), 100) }
         isHidden = try container.decodeIfPresent(Bool.self, forKey: .isHidden) ?? false
         type = try container.decodeIfPresent(FavoriteType.self, forKey: .type) ?? .unknown
         lastMangaURL = try container.decodeIfPresent(URL.self, forKey: .lastMangaURL)

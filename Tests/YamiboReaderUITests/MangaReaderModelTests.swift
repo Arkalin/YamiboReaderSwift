@@ -1602,17 +1602,18 @@ final class MangaReaderModelTests: XCTestCase {
                 displayedTextOffset: 400,
                 chapterOrdinal: 0,
                 chapterTitle: "第一章",
-                segmentProgress: 0.409,
+                segmentProgress: 0.864,
                 authorID: nil,
                 readingModeHint: .vertical
             ),
             novelMaxView: 5,
+            novelDocumentSurfaceProgressPercent: 43,
             type: .novel
         )
 
         XCTAssertEqual(
             favoriteDetailLineItems(for: favorite),
-            [.novelProgress(chapterTitle: "第一章", progressText: "页内 40 % · 网页 2 / 5")]
+            [.novelProgress(chapterTitle: "第一章", progressText: "页内 43 % · 网页 2 / 5")]
         )
     }
 
@@ -1632,22 +1633,23 @@ final class MangaReaderModelTests: XCTestCase {
                 readingModeHint: .vertical
             ),
             novelMaxView: 1,
+            novelDocumentSurfaceProgressPercent: 43,
             type: .novel
         )
 
         XCTAssertEqual(
             favoriteDetailLineItems(for: favorite),
-            [.novelProgress(chapterTitle: "第一章", progressText: "99 %")]
+            [.novelProgress(chapterTitle: "第一章", progressText: "43 %")]
         )
     }
 
-    func testNovelFavoriteDetailLinesShowProgressWithoutChapterTitle() {
+    func testNovelFavoriteDetailLinesShowWebOnlyForLegacyMultiWebPageProgress() {
         let favorite = Favorite(
             title: "小说收藏",
             url: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=817&mobile=2")!,
-            lastView: 1,
+            lastView: 2,
             novelResumePoint: ReaderResumePoint(
-                view: 1,
+                view: 2,
                 displayedTextOffset: 400,
                 chapterOrdinal: 0,
                 chapterTitle: nil,
@@ -1655,12 +1657,37 @@ final class MangaReaderModelTests: XCTestCase {
                 authorID: nil,
                 readingModeHint: .vertical
             ),
+            novelMaxView: 5,
             type: .novel
         )
 
         XCTAssertEqual(
             favoriteDetailLineItems(for: favorite),
-            [.novelProgress(chapterTitle: nil, progressText: "100 %")]
+            [.novelProgress(chapterTitle: nil, progressText: "网页 2 / 5")]
+        )
+    }
+
+    func testNovelFavoriteDetailLinesHideLegacySingleWebPageProgress() {
+        let favorite = Favorite(
+            title: "小说收藏",
+            url: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=819&mobile=2")!,
+            lastChapter: "第一章",
+            novelResumePoint: ReaderResumePoint(
+                view: 1,
+                displayedTextOffset: 400,
+                chapterOrdinal: 0,
+                chapterTitle: "第一章",
+                segmentProgress: 0.999,
+                authorID: nil,
+                readingModeHint: .vertical
+            ),
+            novelMaxView: 1,
+            type: .novel
+        )
+
+        XCTAssertEqual(
+            favoriteDetailLineItems(for: favorite),
+            [.text("第一章")]
         )
     }
 

@@ -638,6 +638,7 @@ public actor FavoriteStore: FavoriteStoring {
             favorites[index].authorID = authorID
             favorites[index].novelResumePoint = resumePoint
             favorites[index].novelMaxView = novelMaxView
+            favorites[index].novelDocumentSurfaceProgressPercent = position.documentSurfaceProgressPercent
             favorites[index].lastMangaURL = nil
             favorites[index].type = .novel
             return try persistLibrary(favorites: favorites, collections: snapshot.collections).favorites[index]
@@ -654,6 +655,7 @@ public actor FavoriteStore: FavoriteStoring {
             authorID: authorID,
             novelResumePoint: resumePoint,
             novelMaxView: novelMaxView,
+            novelDocumentSurfaceProgressPercent: position.documentSurfaceProgressPercent,
             isHidden: false,
             type: .novel
         )

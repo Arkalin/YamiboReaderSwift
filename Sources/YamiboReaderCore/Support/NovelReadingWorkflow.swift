@@ -546,6 +546,12 @@ public final class NovelReadingWorkflow {
     public func currentProgressPosition() -> NovelReadingPosition {
         let resumePoint = captureNovelReadingPosition()
         let snapshot = state?.snapshot
+        let progressProjection = state?.presentation?.progressProjection
+        let documentSurfaceProgressPercent = progressProjection.map { projection in
+            guard projection.displayedPageCount > 1 else { return 0 }
+            let fraction = Double(projection.displayedPageIndex) / Double(projection.displayedPageCount - 1)
+            return Int((min(max(fraction, 0), 1) * 100).rounded())
+        }
         let surfaces = viewportRuntime.currentResult?.viewportIndex.surfaces ?? []
         let view = currentDisplayedView(in: snapshot, surfaces: surfaces) ?? resumePoint?.view ?? context.initialView ?? 1
         return NovelReadingPosition(
@@ -554,7 +560,8 @@ public final class NovelReadingWorkflow {
             maxView: snapshot?.maxView,
             chapterTitle: resumePoint?.chapterTitle ?? snapshot?.currentChapterTitle,
             authorID: resumePoint?.authorID ?? snapshot?.currentAuthorID ?? currentAuthorID ?? context.authorID,
-            resumePoint: resumePoint
+            resumePoint: resumePoint,
+            documentSurfaceProgressPercent: documentSurfaceProgressPercent
         )
     }
 
