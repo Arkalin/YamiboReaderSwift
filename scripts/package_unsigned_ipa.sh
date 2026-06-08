@@ -56,3 +56,9 @@ fi
 
 echo "Unsigned IPA exported:"
 echo "${IPA_PATH}"
+echo
+echo "Release checklist:"
+echo "- Upload the IPA to GitHub Releases."
+echo "- Update app-repo.json versions[0].version to ${VERSION}."
+echo "- Update app-repo.json versions[0].downloadURL to the release asset URL."
+echo "- Update app-repo.json versions[0].size to $(stat -f%z "${IPA_PATH}") bytes."

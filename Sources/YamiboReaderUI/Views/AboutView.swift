@@ -9,8 +9,12 @@ import AppKit
 
 public struct AboutView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
+    @StateObject private var updateViewModel: AboutUpdateViewModel
 
-    public init(appContext: YamiboAppContext) {}
+    public init(appContext: YamiboAppContext) {
+        _updateViewModel = StateObject(wrappedValue: AboutUpdateViewModel())
+    }
 
     public var body: some View {
         NavigationStack {
@@ -19,7 +23,14 @@ public struct AboutView: View {
                     AboutHeaderView()
                         .padding(.top, 32)
 
-                    AboutLinksSection()
+                    AboutLinksSection(
+                        isCheckingForUpdates: updateViewModel.isCheckingForUpdates,
+                        checkForUpdates: {
+                            Task {
+                                await updateViewModel.checkForUpdates()
+                            }
+                        }
+                    )
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.horizontal, 24)
@@ -36,17 +47,84 @@ public struct AboutView: View {
                     }
                 }
             }
+            .alert(
+                updateViewModel.alert?.title ?? "",
+                isPresented: updateAlertIsPresented,
+                presenting: updateViewModel.alert
+            ) { alert in
+                if let downloadURL = alert.downloadURL {
+                    Button(L10n.string("app_update.open_download")) {
+                        openURL(downloadURL)
+                    }
+                    Button(L10n.string("app_update.copy_source")) {
+                        copyToPasteboard(AppUpdateChecker.defaultSourceURL.absoluteString)
+                    }
+                }
+                Button(L10n.string("common.ok"), role: .cancel) {}
+            } message: { alert in
+                Text(alert.message)
+            }
         }
+    }
+
+    private var updateAlertIsPresented: Binding<Bool> {
+        Binding(
+            get: { updateViewModel.alert != nil },
+            set: { isPresented in
+                if !isPresented {
+                    updateViewModel.alert = nil
+                }
+            }
+        )
+    }
+
+    private func copyToPasteboard(_ text: String) {
+        #if canImport(UIKit)
+        UIPasteboard.general.string = text
+        #elseif canImport(AppKit)
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+        #endif
     }
 }
 
 private struct AboutLinksSection: View {
+    let isCheckingForUpdates: Bool
+    let checkForUpdates: () -> Void
+
     var body: some View {
         VStack(spacing: 0) {
             AboutExternalLinkRow(
                 title: L10n.string("about.github"),
                 destination: AppMetadata.githubURL
             )
+
+            Divider()
+
+            Button(action: checkForUpdates) {
+                HStack(spacing: 16) {
+                    Text(L10n.string("about.check_update"))
+                        .font(.title3)
+                        .foregroundStyle(.primary)
+
+                    Spacer(minLength: 16)
+
+                    if isCheckingForUpdates {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Image(systemName: "arrow.down.circle")
+                            .font(.title2.weight(.semibold))
+                            .foregroundStyle(Color.accentColor)
+                            .accessibilityHidden(true)
+                    }
+                }
+                .frame(minHeight: 64)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(isCheckingForUpdates)
+            .accessibilityIdentifier("about-check-update-button")
         }
     }
 }
@@ -121,6 +199,115 @@ private enum AppMetadata {
         case (nil, nil):
             return L10n.string("about.version", "--")
         }
+    }
+}
+
+@MainActor
+final class AboutUpdateViewModel: ObservableObject {
+    typealias CheckForUpdate = @Sendable (URL, String, String) async -> AppUpdateCheckResult
+
+    @Published private(set) var isCheckingForUpdates = false
+    @Published var alert: AboutUpdateAlert?
+
+    private let sourceURL: URL
+    private let currentBundleIdentifier: String
+    private let currentVersion: String
+    private let checkForUpdate: CheckForUpdate
+
+    init(
+        sourceURL: URL = AppUpdateChecker.defaultSourceURL,
+        currentBundleIdentifier: String = Bundle.main.bundleIdentifier ?? "",
+        currentVersion: String = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "",
+        checkForUpdate: @escaping CheckForUpdate = { sourceURL, bundleIdentifier, version in
+            await AppUpdateChecker().checkForUpdate(
+                sourceURL: sourceURL,
+                currentBundleIdentifier: bundleIdentifier,
+                currentVersion: version
+            )
+        }
+    ) {
+        self.sourceURL = sourceURL
+        self.currentBundleIdentifier = currentBundleIdentifier
+        self.currentVersion = currentVersion
+        self.checkForUpdate = checkForUpdate
+    }
+
+    func checkForUpdates() async {
+        guard !isCheckingForUpdates else { return }
+        isCheckingForUpdates = true
+        defer { isCheckingForUpdates = false }
+
+        let result = await checkForUpdate(sourceURL, currentBundleIdentifier, currentVersion)
+        alert = AboutUpdateAlert(result: result)
+    }
+}
+
+struct AboutUpdateAlert: Identifiable, Equatable {
+    enum Kind: Equatable {
+        case upToDate
+        case updateAvailable(AppSourceVersion)
+        case sourceDoesNotContainCurrentApp
+        case failure(String)
+    }
+
+    let id = UUID()
+    var kind: Kind
+
+    init(result: AppUpdateCheckResult) {
+        switch result {
+        case .upToDate:
+            kind = .upToDate
+        case let .updateAvailable(version):
+            kind = .updateAvailable(version)
+        case .sourceDoesNotContainCurrentApp:
+            kind = .sourceDoesNotContainCurrentApp
+        case let .failure(error):
+            kind = .failure(error.localizedDescription)
+        }
+    }
+
+    var title: String {
+        switch kind {
+        case .upToDate:
+            L10n.string("app_update.up_to_date_title")
+        case .updateAvailable:
+            L10n.string("app_update.available_title")
+        case .sourceDoesNotContainCurrentApp, .failure:
+            L10n.string("app_update.failed_title")
+        }
+    }
+
+    var message: String {
+        switch kind {
+        case .upToDate:
+            L10n.string("app_update.up_to_date_message")
+        case let .updateAvailable(version):
+            updateAvailableMessage(for: version)
+        case .sourceDoesNotContainCurrentApp:
+            L10n.string("app_update.error.source_missing")
+        case let .failure(message):
+            message
+        }
+    }
+
+    var downloadURL: URL? {
+        if case let .updateAvailable(version) = kind {
+            return version.downloadURL
+        }
+        return nil
+    }
+
+    private func updateAvailableMessage(for version: AppSourceVersion) -> String {
+        var parts = [
+            L10n.string("app_update.available_message", version.version)
+        ]
+        if let size = version.size, size > 0 {
+            parts.append(L10n.string("app_update.size", ByteCountFormatter.string(fromByteCount: size, countStyle: .file)))
+        }
+        if let description = version.localizedDescription, !description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            parts.append(description)
+        }
+        return parts.joined(separator: "\n\n")
     }
 }
 
