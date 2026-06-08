@@ -133,6 +133,7 @@
 "favorites.progress.page_with_chapter" = "读至第 %d 页 · %@";
 "favorites.progress.novel_page_web" = "页内 %d %% · 网页 %d / %d";
 "favorites.progress.novel_percent" = "%d %%";
+"favorites.progress.novel_web" = "网页 %d / %d";
 "favorites.search_tags" = "搜索标签";
 "favorites.select_target_collection" = "选择目标合集。";
 "favorites.select_tags" = "选择标签";

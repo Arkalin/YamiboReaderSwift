@@ -1276,8 +1276,16 @@ public final class ReaderContainerModel: ObservableObject {
             view: displayedView,
             maxView: maxView,
             chapterTitle: currentChapterTitle,
-            authorID: currentAuthorID ?? context.authorID
+            authorID: currentAuthorID ?? context.authorID,
+            documentSurfaceProgressPercent: currentDocumentSurfaceProgressPercent
         )
+    }
+
+    private var currentDocumentSurfaceProgressPercent: Int? {
+        guard let projection = readerPresentation?.progressProjection else { return nil }
+        guard projection.displayedPageCount > 1 else { return 0 }
+        let fraction = Double(projection.displayedPageIndex) / Double(projection.displayedPageCount - 1)
+        return Int((min(max(fraction, 0), 1) * 100).rounded())
     }
 
     private func promoteIfNeededAfterLocationUpdate() {

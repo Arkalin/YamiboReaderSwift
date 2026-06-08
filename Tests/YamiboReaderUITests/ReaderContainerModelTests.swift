@@ -1530,6 +1530,9 @@ final class ReaderContainerModelTests: XCTestCase {
             model.updateVerticalViewportPosition(surfaceIndex: targetPage.surfaceOrdinal, intraSurfaceProgress: 0.59)
         }
         await model.saveProgress()
+        let savedFavorite = await favoriteStore.favorite(for: threadURL)
+        let savedProgressPercent = await MainActor.run { model.currentProgressPercent }
+        XCTAssertEqual(savedFavorite?.novelDocumentSurfaceProgressPercent, savedProgressPercent)
 
         let restoredModel = await MainActor.run {
             ReaderContainerModel(context: launchContext, appContext: appContext)

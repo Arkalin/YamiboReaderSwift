@@ -3730,19 +3730,25 @@ func favoriteProgressText(for favorite: Favorite) -> String? {
 
 func favoriteNovelProgressText(for favorite: Favorite) -> String? {
     guard favorite.type == .novel,
-          let resumePoint = favorite.novelResumePoint else {
+          favorite.novelResumePoint != nil else {
         return nil
     }
 
-    let percent = Int((min(max(resumePoint.segmentProgress, 0), 1) * 100).rounded(.down))
+    let percent = favorite.novelDocumentSurfaceProgressPercent
     guard let maxView = favorite.novelMaxView, maxView > 1 else {
+        guard let percent else { return nil }
         return L10n.string("favorites.progress.novel_percent", percent)
+    }
+
+    let view = min(max(favorite.lastView, 1), maxView)
+    guard let percent else {
+        return L10n.string("favorites.progress.novel_web", view, maxView)
     }
 
     return L10n.string(
         "favorites.progress.novel_page_web",
         percent,
-        min(max(favorite.lastView, 1), maxView),
+        view,
         maxView
     )
 }
