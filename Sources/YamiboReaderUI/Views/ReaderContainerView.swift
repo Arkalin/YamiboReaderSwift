@@ -202,9 +202,6 @@ public struct ReaderContainerView: View {
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                     .zIndex(2)
 
-                    verticalProgressScrubber(topInset: topInset, bottomInset: bottomInset)
-                        .transition(.opacity)
-                        .zIndex(2)
                 }
 
                 verticalBoundaryPullOverlayLayer(
@@ -621,6 +618,15 @@ public struct ReaderContainerView: View {
             onProgressCommit: { surfaceIndex in
                 commitProgressSlider(surfaceIndex)
             },
+            onVerticalProgressCommit: { surfaceIndex in
+                commitVerticalProgressScrub(surfaceIndex)
+            },
+            onBeginVerticalProgressScrub: {
+                beginVerticalProgressScrub()
+            },
+            onEndVerticalProgressScrub: {
+                endVerticalProgressScrub()
+            },
             isProgressScrubbing: isVerticalProgressScrubbing
         )
         .background(
@@ -631,36 +637,6 @@ public struct ReaderContainerView: View {
                 )
             }
         )
-    }
-
-    @ViewBuilder
-    private func verticalProgressScrubber(topInset: CGFloat, bottomInset: CGFloat) -> some View {
-        let presentation = ReaderProgressChromePresentation(
-            readingMode: model.settings.readingMode,
-            isChromeVisible: chromeState.showsChrome
-        )
-        let layout = ReaderBottomChromeLayoutPresentation()
-        if presentation.showsVerticalScrubber {
-            let progressSnapshot = model.chromeProgressSnapshot
-            ReaderVerticalProgressCapsule(
-                restingProgressFraction: progressSnapshot.currentProgressFraction,
-                scrubContext: progressSnapshot.progressScrubContext,
-                ticks: progressSnapshot.progressChapterTicks,
-                onBeginScrub: {
-                    beginVerticalProgressScrub()
-                },
-                onCommit: { target in
-                    commitVerticalProgressScrub(target)
-                },
-                onEndScrub: {
-                    endVerticalProgressScrub()
-                }
-            )
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
-            .padding(.bottom, max(bottomInset, 12) + layout.bottomControlsAdditionalBottomOffset + layout.verticalScrubberActionRowBottomOffset)
-            .padding(.trailing, 12)
-            .allowsHitTesting(true)
-        }
     }
 
     private func readerLayout(proxy: GeometryProxy, topInset: CGFloat, bottomInset: CGFloat) -> ReaderContainerLayout {

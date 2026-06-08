@@ -167,7 +167,10 @@ final class ReaderProgressScrubStateTests: XCTestCase {
         let presentation = ReaderBottomChromeLayoutPresentation()
 
         XCTAssertEqual(presentation.verticalScrubberWidth, presentation.progressPanelHeight)
-        XCTAssertEqual(presentation.verticalScrubberHeight, 206)
+        XCTAssertEqual(
+            presentation.verticalScrubberHeight,
+            presentation.progressPanelHeight * 3 + presentation.panelSpacing * 3 + presentation.actionButtonRowHeight
+        )
         XCTAssertEqual(presentation.verticalPreviewWidth, presentation.maxChromeWidth)
         XCTAssertEqual(presentation.verticalPreviewHeight, 50)
         XCTAssertTrue(presentation.verticalScrubberShowsChapterTicks)
@@ -187,7 +190,6 @@ final class ReaderProgressScrubStateTests: XCTestCase {
         XCTAssertTrue(presentation.bottomProgressSummaryUsesPageCenter)
         XCTAssertTrue(presentation.verticalProgressSummaryUsesLiquidGlass)
         XCTAssertTrue(presentation.verticalChapterTitleCapsuleWrapsContent)
-        XCTAssertEqual(presentation.verticalScrubberActionRowBottomOffset, 46)
     }
 
     func testCapsuleChapterTicksUseRoundedEdgeInsets() {

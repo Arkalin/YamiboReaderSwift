@@ -232,6 +232,7 @@ public struct ReaderBottomChromeLayoutPresentation: Equatable, Sendable {
     public var actionButtonRowHeight: CGFloat { progressPanelHeight }
     public var actionButtonSpacing: CGFloat { 8 }
     public var bottomControlsAdditionalBottomOffset: CGFloat { 8 }
+    public var bottomChromeTopPadding: CGFloat { 8 }
     public var horizontalAlignment: ReaderBottomChromeHorizontalAlignment { .trailing }
     public var progressTextLeadsIcon: Bool { true }
     public var progressFillHasVerticalTrailingEdge: Bool { true }
@@ -263,7 +264,6 @@ public struct ReaderBottomChromeLayoutPresentation: Equatable, Sendable {
     public var verticalProgressSummaryUsesLiquidGlass: Bool { true }
     public var pagedProgressSummaryMovesBelowContentText: Bool { true }
     public var verticalChapterTitleCapsuleWrapsContent: Bool { true }
-    public var verticalScrubberActionRowBottomOffset: CGFloat { 46 }
     public var capsuleChapterTickRoundedEdgeInset: CGFloat { 6 }
 
     public init() {}
@@ -2148,6 +2148,9 @@ struct ReaderBottomChrome: View {
     let onOpenForum: () -> Void
     let onJumpChapter: (Int) -> Void
     let onProgressCommit: (Int) -> Void
+    let onVerticalProgressCommit: (Int) -> Void
+    let onBeginVerticalProgressScrub: () -> Void
+    let onEndVerticalProgressScrub: () -> Void
     let isProgressScrubbing: Bool
 
     @State private var sliderState = ReaderProgressSliderState()
@@ -2160,20 +2163,16 @@ struct ReaderBottomChrome: View {
 
     var body: some View {
         VStack(spacing: 12) {
-            VStack(spacing: chromeLayout.panelSpacing) {
-                progressControl
-                actionRow
-            }
-            .frame(maxWidth: chromeLayout.maxChromeWidth)
+            bottomControls
             .frame(maxWidth: .infinity, alignment: .trailing)
             .padding(.leading, 12)
-            .padding(.trailing, bottomChromeTrailingPadding)
+            .padding(.trailing, 12)
             .padding(.bottom, chromeLayout.bottomControlsAdditionalBottomOffset)
 
             progressSummary
                 .padding(.horizontal, 12)
         }
-        .padding(.top, 8)
+        .padding(.top, chromeLayout.bottomChromeTopPadding)
         .padding(.bottom, max(bottomInset - 18, 8))
         .onAppear {
             sliderState.reset(to: sliderSnapshot)
@@ -2190,9 +2189,40 @@ struct ReaderBottomChrome: View {
         ReaderBottomChromeLayoutPresentation()
     }
 
-    private var bottomChromeTrailingPadding: CGFloat {
-        guard readingMode == .vertical else { return 12 }
-        return 12 + chromeLayout.verticalScrubberWidth + chromeLayout.verticalScrubberSideSpacing
+    private var bottomControls: some View {
+        HStack(alignment: .top, spacing: chromeLayout.verticalScrubberSideSpacing) {
+            VStack(spacing: chromeLayout.panelSpacing) {
+                progressControl
+                actionRow
+            }
+            .frame(width: chromeLayout.maxChromeWidth)
+
+            if progressChromePresentation.showsVerticalScrubber {
+                verticalProgressControl
+                    .frame(width: chromeLayout.verticalScrubberWidth, alignment: .trailing)
+            }
+        }
+        .frame(
+            maxWidth: chromeLayout.maxChromeWidth + verticalProgressControlReservedWidth,
+            alignment: .trailing
+        )
+    }
+
+    private var verticalProgressControlReservedWidth: CGFloat {
+        guard progressChromePresentation.showsVerticalScrubber else { return 0 }
+        return chromeLayout.verticalScrubberSideSpacing + chromeLayout.verticalScrubberWidth
+    }
+
+    private var verticalProgressControl: some View {
+        ReaderVerticalProgressCapsule(
+            restingProgressFraction: progressSnapshot.currentProgressFraction,
+            scrubContext: progressSnapshot.progressScrubContext,
+            ticks: progressSnapshot.progressChapterTicks,
+            onBeginScrub: onBeginVerticalProgressScrub,
+            onCommit: onVerticalProgressCommit,
+            onEndScrub: onEndVerticalProgressScrub
+        )
+        .frame(width: chromeLayout.verticalScrubberWidth, alignment: .trailing)
     }
 
     private var actionRow: some View {
