@@ -10,11 +10,11 @@
       "iconURL": "https://raw.githubusercontent.com/Arkalin/YamiboReaderSwift/main/YamiboReader/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png",
       "versions": [
         {
-          "version": "0.3.2",
+          "version": "0.4.0",
           "date": "2026-06-08",
-          "localizedDescription": "Initial AltStore-compatible source release.",
-          "downloadURL": "https://github.com/Arkalin/YamiboReaderSwift/releases/download/v0.3.2/YamiboReader_v0.3.2_unsigned.ipa",
-          "size": 0
+          "localizedDescription": "新增 AltStore Source 格式软件源和检查更新功能，并修复了一些错误。",
+          "downloadURL": "https://github.com/Arkalin/YamiboReaderSwift/releases/download/v0.4.0/YamiboReader_v0.4.0_unsigned.ipa",
+          "size": 6016921
         }
       ]
     }
