@@ -1021,6 +1021,10 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
         )
     }
 
+    private var verticalLineSpacing: CGFloat {
+        Self.verticalLineSpacing(for: settings)
+    }
+
     func makeCoordinator() -> Coordinator {
         Coordinator(parent: self)
     }
@@ -1028,7 +1032,7 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
     func makeUIView(context: Context) -> UICollectionView {
         let layout = UICollectionViewFlowLayout()
         layout.scrollDirection = .vertical
-        layout.minimumLineSpacing = 16
+        layout.minimumLineSpacing = verticalLineSpacing
         layout.minimumInteritemSpacing = 0
         layout.estimatedItemSize = .zero
 
@@ -1053,9 +1057,14 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
     func updateUIView(_ collectionView: UICollectionView, context: Context) {
         context.coordinator.parent = self
         context.coordinator.callbackScheduler.performViewUpdate {
+            context.coordinator.updateLineSpacing(in: collectionView)
             context.coordinator.reloadDataIfNeeded(in: collectionView, contentIdentity: contentIdentity)
             context.coordinator.handle(scrollRequest, in: collectionView)
         }
+    }
+
+    private static func verticalLineSpacing(for settings: ReaderAppearanceSettings) -> CGFloat {
+        max(CGFloat(6 * settings.lineHeightScale), 0)
     }
 
     final class Coordinator: NSObject, UICollectionViewDataSource, UICollectionViewDelegateFlowLayout, UIScrollViewDelegate {
@@ -1074,6 +1083,16 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
         init(parent: ReaderVerticalViewportScrollView) {
             self.parent = parent
             super.init()
+        }
+
+        fileprivate func updateLineSpacing(in collectionView: UICollectionView) {
+            guard let layout = collectionView.collectionViewLayout as? UICollectionViewFlowLayout else {
+                return
+            }
+            let lineSpacing = parent.verticalLineSpacing
+            guard layout.minimumLineSpacing != lineSpacing else { return }
+            layout.minimumLineSpacing = lineSpacing
+            layout.invalidateLayout()
         }
 
         fileprivate func reloadDataIfNeeded(
