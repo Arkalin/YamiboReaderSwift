@@ -598,8 +598,7 @@ public struct ReaderContainerView: View {
     }
 
     private func readerPagedContentTopInset(for layoutTopInset: CGFloat) -> CGFloat {
-        guard isPadDevice else { return layoutTopInset }
-        return layoutTopInset + readerPadVisibleStatusBarTopInset
+        layoutTopInset
     }
 
     private func retryLoad() {
