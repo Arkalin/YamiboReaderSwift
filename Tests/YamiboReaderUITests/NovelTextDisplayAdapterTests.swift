@@ -264,7 +264,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         )
         let modelSource = try String(
             contentsOf: repositoryRoot
-                .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderContainerModel.swift"),
+                .appendingPathComponent("Sources/YamiboReaderUI/Models/ReaderContainerModel.swift"),
             encoding: .utf8
         )
 
@@ -870,7 +870,8 @@ private func readerSupportSources() throws -> String {
     let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
     let relativePaths = [
         "Sources/YamiboReaderUI/Views/ReaderSupportViews.swift",
-        "Sources/YamiboReaderUI/Views/ReaderProgressPresentation.swift",
+        "Sources/YamiboReaderUI/Presentation/ReaderProgressPresentation.swift",
+        "Sources/YamiboReaderUI/Presentation/ReaderChromeProgressSnapshot.swift",
         "Sources/YamiboReaderUI/Views/ReaderChromeControls.swift",
         "Sources/YamiboReaderUI/Views/ReaderViewportContentViews.swift",
         "Sources/YamiboReaderUI/Views/ReaderPagedViewport.swift",
