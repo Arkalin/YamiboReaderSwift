@@ -27,6 +27,15 @@ struct ReaderVerticalSurfaceFrameValue: Equatable {
     let frame: CGRect
 }
 
+private struct ReaderImageBrowserItem: Identifiable, Equatable {
+    let url: URL
+    let title: String
+
+    var id: String {
+        url.absoluteString
+    }
+}
+
 private struct ReaderVerticalPositioningFingerprint: Equatable {
     let generation: UInt64
     let view: Int
@@ -115,6 +124,7 @@ public struct ReaderContainerView: View {
     @State private var showingCacheProgress = false
     @State private var showingChapterSheet = false
     @State private var showingChapterComments = false
+    @State private var imageBrowserItem: ReaderImageBrowserItem?
     @State private var chapterCommentsTarget: ReaderChapterCommentTarget?
     @State private var chromeState = ReaderChromeState()
     @State private var verticalScrollRequest: ReaderVerticalScrollRequest?
@@ -218,13 +228,23 @@ public struct ReaderContainerView: View {
             }
             .disabled(hasPresentedOverlay)
             .allowsHitTesting(!hasPresentedOverlay)
-            .task {
+            .modifier(readerLifecycleModifier(currentLayout: currentLayout))
+            .modifier(readerPresentationModifier())
+            .modifier(readerStateObserverModifier())
+            .modifier(readerChromeHeightObserverModifier())
+        }
+    }
+
+    private func readerLifecycleModifier(currentLayout: ReaderContainerLayout) -> ReaderContainerLifecycleModifier {
+        ReaderContainerLifecycleModifier(
+            currentLayout: currentLayout,
+            onInitialTask: {
                 await model.commitNovelTextPresentationEnvironment(isPad: isPadDevice)
                 await model.prepare(layout: currentLayout)
                 updateChromeForContentState()
                 restoreVerticalPositionIfNeeded()
-            }
-            .onChange(of: currentLayout) { _, newValue in
+            },
+            onLayoutChange: { newValue in
                 Task {
                     guard !hasPresentedOverlay else {
                         updateChromeForContentState()
@@ -234,13 +254,11 @@ public struct ReaderContainerView: View {
                     updateChromeForContentState()
                     restoreVerticalPositionIfNeeded()
                 }
-            }
-            .onReceive(NotificationCenter.default.publisher(
-                for: UIApplication.didReceiveMemoryWarningNotification
-            )) { _ in
+            },
+            onMemoryWarning: {
                 model.handleMemoryPressure()
-            }
-            .onDisappear {
+            },
+            onDisappear: {
                 verticalRestoreRetryTask?.cancel()
                 verticalViewportPositionUpdateTask?.cancel()
                 syncVerticalViewportBeforeSave()
@@ -249,84 +267,55 @@ public struct ReaderContainerView: View {
                     model.close()
                 }
             }
-            .sheet(isPresented: $showingSettings) {
-                ReaderSettingsPanel(model: model)
-                    .presentationDetents([.large])
-                    .presentationDragIndicator(.hidden)
-                    .presentationBackground(.clear)
+        )
+    }
+
+    private func readerPresentationModifier() -> ReaderContainerPresentationModifier {
+        ReaderContainerPresentationModifier(
+            model: model,
+            showingSettings: $showingSettings,
+            showingCachePanel: $showingCachePanel,
+            showingCacheProgress: $showingCacheProgress,
+            showingChapterSheet: $showingChapterSheet,
+            showingChapterComments: $showingChapterComments,
+            imageBrowserItem: $imageBrowserItem,
+            chapterCommentsTarget: chapterCommentsTarget,
+            onJumpToChapterDirectoryChapter: { chapter in
+                Task { await jumpToChapterDirectoryChapter(chapter) }
+            },
+            onPreviewChapterDirectoryWebView: { view in
+                Task { await model.previewChapterDirectoryWebView(view) }
+            },
+            onOpenOriginalPostFromComments: { url in
+                openOriginalPostFromComments(url)
             }
-            .sheet(isPresented: $showingChapterSheet) {
-                ReaderChapterSheet(model: model) { chapter in
-                    Task { await jumpToChapterDirectoryChapter(chapter) }
-                } onSelectWebView: { view in
-                    Task { await model.previewChapterDirectoryWebView(view) }
-                }
-            }
-            .sheet(isPresented: $showingChapterComments) {
-                ReaderChapterCommentsSheet(model: model, target: chapterCommentsTarget) { url in
-                    openOriginalPostFromComments(url)
-                }
-            }
-            .sheet(isPresented: $showingCachePanel) {
-                ReaderCachePanel(model: model) {
-                    showingCachePanel = false
-                    showingCacheProgress = true
-                }
-            }
-            .sheet(
-                isPresented: $showingCacheProgress,
-                onDismiss: {
-                    if model.hasCacheOperationSession {
-                        model.hideCacheProgress()
-                    }
-                }
-            ) {
-                ReaderCacheProgressSheet(model: model) {
-                    showingCacheProgress = false
-                }
-            }
-            .statusBar(hidden: chromeState.mode == .immersiveHidden)
-            .onChange(of: model.isLoading) { _, _ in
+        )
+    }
+
+    private func readerStateObserverModifier() -> ReaderContainerStateObserverModifier {
+        ReaderContainerStateObserverModifier(
+            model: model,
+            showingSettings: $showingSettings,
+            showingCachePanel: $showingCachePanel,
+            showingCacheProgress: $showingCacheProgress,
+            showingChapterSheet: $showingChapterSheet,
+            showingChapterComments: $showingChapterComments,
+            imageBrowserItem: $imageBrowserItem,
+            isStatusBarHidden: chromeState.mode == .immersiveHidden,
+            onUpdateChromeForContentState: {
                 updateChromeForContentState()
-            }
-            .onChange(of: model.errorMessage) { _, _ in
-                updateChromeForContentState()
-            }
-            .onChange(of: model.readerSurfaces.count) { _, _ in
-                updateChromeForContentState()
-            }
-            .onChange(of: model.readerPresentation?.generation) { _, _ in
-                updateChromeForContentState()
+            },
+            onRestoreVerticalPositionIfNeeded: {
                 restoreVerticalPositionIfNeeded()
             }
-            .onChange(of: model.settings.readingMode) { _, _ in
-                updateChromeForContentState()
-                restoreVerticalPositionIfNeeded()
-            }
-            .onChange(of: showingSettings) { _, _ in
-                updateChromeForContentState()
-            }
-            .onChange(of: showingCachePanel) { _, _ in
-                updateChromeForContentState()
-            }
-            .onChange(of: showingCacheProgress) { _, _ in
-                updateChromeForContentState()
-            }
-            .onChange(of: showingChapterSheet) { _, _ in
-                updateChromeForContentState()
-            }
-            .onChange(of: showingChapterComments) { _, _ in
-                updateChromeForContentState()
-            }
-            .onPreferenceChange(ReaderTopChromeHeightPreferenceKey.self) { value in
-                guard topChromeHeight != value else { return }
-                topChromeHeight = value
-            }
-            .onPreferenceChange(ReaderBottomChromeHeightPreferenceKey.self) { value in
-                guard bottomChromeHeight != value else { return }
-                bottomChromeHeight = value
-            }
-        }
+        )
+    }
+
+    private func readerChromeHeightObserverModifier() -> ReaderChromeHeightObserverModifier {
+        ReaderChromeHeightObserverModifier(
+            topChromeHeight: $topChromeHeight,
+            bottomChromeHeight: $bottomChromeHeight
+        )
     }
 
     @ViewBuilder
@@ -367,8 +356,18 @@ public struct ReaderContainerView: View {
                     displayReferenceProvider: { surfaceIdentity in
                         model.novelTextViewportDisplayReference(for: surfaceIdentity)
                     },
+                    isChromeVisible: chromeState.showsChrome,
                     onSelectionChange: { selectionIndex in
                         model.selectPagedViewportIndex(selectionIndex)
+                    },
+                    onPageTapZone: { zone in
+                        handlePagedTapZone(zone)
+                    },
+                    onChromeVisibleImageTap: {
+                        enterImmersiveMode()
+                    },
+                    onImageTap: { url, title in
+                        handleImageTap(url: url, title: title)
                     }
                 )
             } else {
@@ -383,8 +382,18 @@ public struct ReaderContainerView: View {
                     displayReferenceProvider: { surfaceIdentity in
                         model.novelTextViewportDisplayReference(for: surfaceIdentity)
                     },
+                    isChromeVisible: chromeState.showsChrome,
                     onSelectionChange: { selectionIndex in
                         model.selectPagedViewportIndex(selectionIndex)
+                    },
+                    onPageTapZone: { zone in
+                        handlePagedTapZone(zone)
+                    },
+                    onChromeVisibleImageTap: {
+                        enterImmersiveMode()
+                    },
+                    onImageTap: { url, title in
+                        handleImageTap(url: url, title: title)
                     }
                 )
             }
@@ -399,21 +408,6 @@ public struct ReaderContainerView: View {
             )
         )
         .scrollDisabled(chromeState.showsChrome)
-        .overlay {
-            if !model.readerSurfaces.isEmpty {
-                ReaderPagedTapZones(
-                    onPrevious: {
-                        handlePagedContentTap(pageDelta: -1)
-                    },
-                    onToggleChrome: {
-                        handlePagedContentTap()
-                    },
-                    onNext: {
-                        handlePagedContentTap(pageDelta: 1)
-                    }
-                )
-            }
-        }
     }
 
     private func verticalContent(topInset: CGFloat, bottomInset: CGFloat) -> some View {
@@ -428,6 +422,7 @@ public struct ReaderContainerView: View {
             displayReferenceProvider: { surfaceIdentity in
                 model.novelTextViewportDisplayReference(for: surfaceIdentity)
             },
+            isChromeVisible: chromeState.showsChrome,
             onVisibleSurfaceIdentitiesChange: { surfaceIdentities in
                 model.updateNovelTextViewportVisibleSurfaceIdentities(surfaceIdentities)
             },
@@ -485,6 +480,12 @@ public struct ReaderContainerView: View {
             },
             onTap: {
                 handleVerticalTap()
+            },
+            onChromeVisibleImageTap: {
+                enterImmersiveMode()
+            },
+            onImageTap: { url, title in
+                handleImageTap(url: url, title: title)
             }
         )
         .contentShape(Rectangle())
@@ -693,6 +694,34 @@ public struct ReaderContainerView: View {
         dismissReaderOpeningForum(model.forumURL)
     }
 
+    private func handleImageTap(url: URL, title: String?) {
+        guard !chromeState.showsChrome else {
+            enterImmersiveMode()
+            return
+        }
+        openImageBrowser(url: url, title: title)
+    }
+
+    private func openImageBrowser(url: URL, title: String?) {
+        imageBrowserItem = ReaderImageBrowserItem(
+            url: url,
+            title: imageBrowserTitle(title)
+        )
+    }
+
+    private func imageBrowserTitle(_ title: String?) -> String {
+        let candidates = [
+            title,
+            model.currentChapterTitle,
+            model.title,
+            L10n.string("reader.inline_images")
+        ]
+        return candidates.compactMap { candidate in
+            let normalized = candidate?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return normalized.isEmpty ? nil : normalized
+        }.first ?? L10n.string("reader.inline_images")
+    }
+
     private func closeReader() {
         chromeState.showChrome()
         guard !isDismissing else { return }
@@ -745,6 +774,17 @@ public struct ReaderContainerView: View {
             Task { await goRelativePage(pageDelta) }
         } else {
             toggleChrome()
+        }
+    }
+
+    private func handlePagedTapZone(_ zone: ReaderPagedTapZone) {
+        switch zone {
+        case .previous:
+            handlePagedContentTap(pageDelta: -1)
+        case .toggleChrome:
+            handlePagedContentTap()
+        case .next:
+            handlePagedContentTap(pageDelta: 1)
         }
     }
 
@@ -806,7 +846,7 @@ public struct ReaderContainerView: View {
             isLoading: model.isLoading,
             errorMessage: model.errorMessage,
             hasPages: !model.readerSurfaces.isEmpty,
-            hasPresentedOverlay: hasPresentedOverlay,
+            hasPresentedOverlay: hasChromePresentedOverlay,
             usesVerticalReadingMode: model.settings.readingMode == .vertical
         )
         if previousState != nextState {
@@ -943,7 +983,20 @@ public struct ReaderContainerView: View {
     }
 
     private var hasPresentedOverlay: Bool {
-        showingSettings || showingCachePanel || showingCacheProgress || showingChapterSheet || showingChapterComments
+        showingSettings ||
+            showingCachePanel ||
+            showingCacheProgress ||
+            showingChapterSheet ||
+            showingChapterComments ||
+            imageBrowserItem != nil
+    }
+
+    private var hasChromePresentedOverlay: Bool {
+        showingSettings ||
+            showingCachePanel ||
+            showingCacheProgress ||
+            showingChapterSheet ||
+            showingChapterComments
     }
 
     private var canReceiveApplePencilPageTurn: Bool {
@@ -1130,6 +1183,169 @@ public struct ReaderContainerView: View {
             .flatMap(\.windows)
             .first(where: \.isKeyWindow)?
             .safeAreaInsets ?? .zero
+    }
+}
+
+private struct ReaderContainerLifecycleModifier: ViewModifier {
+    let currentLayout: ReaderContainerLayout
+    let onInitialTask: () async -> Void
+    let onLayoutChange: (ReaderContainerLayout) -> Void
+    let onMemoryWarning: () -> Void
+    let onDisappear: () -> Void
+
+    func body(content: Content) -> some View {
+        content
+            .task {
+                await onInitialTask()
+            }
+            .onChange(of: currentLayout) { _, newValue in
+                onLayoutChange(newValue)
+            }
+            .onReceive(NotificationCenter.default.publisher(
+                for: UIApplication.didReceiveMemoryWarningNotification
+            )) { _ in
+                onMemoryWarning()
+            }
+            .onDisappear {
+                onDisappear()
+            }
+    }
+}
+
+private struct ReaderContainerPresentationModifier: ViewModifier {
+    @ObservedObject var model: ReaderContainerModel
+    @Binding var showingSettings: Bool
+    @Binding var showingCachePanel: Bool
+    @Binding var showingCacheProgress: Bool
+    @Binding var showingChapterSheet: Bool
+    @Binding var showingChapterComments: Bool
+    @Binding var imageBrowserItem: ReaderImageBrowserItem?
+
+    let chapterCommentsTarget: ReaderChapterCommentTarget?
+    let onJumpToChapterDirectoryChapter: (ReaderChapter) -> Void
+    let onPreviewChapterDirectoryWebView: (Int) -> Void
+    let onOpenOriginalPostFromComments: (URL) -> Void
+
+    func body(content: Content) -> some View {
+        content
+            .sheet(isPresented: $showingSettings) {
+                ReaderSettingsPanel(model: model)
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.hidden)
+                    .presentationBackground(.clear)
+            }
+            .sheet(isPresented: $showingChapterSheet) {
+                ReaderChapterSheet(model: model) { chapter in
+                    onJumpToChapterDirectoryChapter(chapter)
+                } onSelectWebView: { view in
+                    onPreviewChapterDirectoryWebView(view)
+                }
+            }
+            .sheet(isPresented: $showingChapterComments) {
+                ReaderChapterCommentsSheet(model: model, target: chapterCommentsTarget) { url in
+                    onOpenOriginalPostFromComments(url)
+                }
+            }
+            .sheet(isPresented: $showingCachePanel) {
+                ReaderCachePanel(model: model) {
+                    showingCachePanel = false
+                    showingCacheProgress = true
+                }
+            }
+            .sheet(
+                isPresented: $showingCacheProgress,
+                onDismiss: {
+                    if model.hasCacheOperationSession {
+                        model.hideCacheProgress()
+                    }
+                }
+            ) {
+                ReaderCacheProgressSheet(model: model) {
+                    showingCacheProgress = false
+                }
+            }
+            .fullScreenCover(item: $imageBrowserItem) { item in
+                ReaderImageBrowserView(
+                    url: item.url,
+                    title: item.title,
+                    refererURL: model.forumURL,
+                    sessionState: model.sessionState
+                ) {
+                    imageBrowserItem = nil
+                }
+                .presentationBackground(.clear)
+            }
+    }
+}
+
+private struct ReaderContainerStateObserverModifier: ViewModifier {
+    @ObservedObject var model: ReaderContainerModel
+    @Binding var showingSettings: Bool
+    @Binding var showingCachePanel: Bool
+    @Binding var showingCacheProgress: Bool
+    @Binding var showingChapterSheet: Bool
+    @Binding var showingChapterComments: Bool
+    @Binding var imageBrowserItem: ReaderImageBrowserItem?
+
+    let isStatusBarHidden: Bool
+    let onUpdateChromeForContentState: () -> Void
+    let onRestoreVerticalPositionIfNeeded: () -> Void
+
+    func body(content: Content) -> some View {
+        content
+            .statusBar(hidden: isStatusBarHidden)
+            .onChange(of: model.isLoading) { _, _ in
+                onUpdateChromeForContentState()
+            }
+            .onChange(of: model.errorMessage) { _, _ in
+                onUpdateChromeForContentState()
+            }
+            .onChange(of: model.readerSurfaces.count) { _, _ in
+                onUpdateChromeForContentState()
+            }
+            .onChange(of: model.readerPresentation?.generation) { _, _ in
+                onUpdateChromeForContentState()
+                onRestoreVerticalPositionIfNeeded()
+            }
+            .onChange(of: model.settings.readingMode) { _, _ in
+                onUpdateChromeForContentState()
+                onRestoreVerticalPositionIfNeeded()
+            }
+            .onChange(of: showingSettings) { _, _ in
+                onUpdateChromeForContentState()
+            }
+            .onChange(of: showingCachePanel) { _, _ in
+                onUpdateChromeForContentState()
+            }
+            .onChange(of: showingCacheProgress) { _, _ in
+                onUpdateChromeForContentState()
+            }
+            .onChange(of: showingChapterSheet) { _, _ in
+                onUpdateChromeForContentState()
+            }
+            .onChange(of: showingChapterComments) { _, _ in
+                onUpdateChromeForContentState()
+            }
+            .onChange(of: imageBrowserItem) { _, _ in
+                onUpdateChromeForContentState()
+            }
+    }
+}
+
+private struct ReaderChromeHeightObserverModifier: ViewModifier {
+    @Binding var topChromeHeight: CGFloat
+    @Binding var bottomChromeHeight: CGFloat
+
+    func body(content: Content) -> some View {
+        content
+            .onPreferenceChange(ReaderTopChromeHeightPreferenceKey.self) { value in
+                guard topChromeHeight != value else { return }
+                topChromeHeight = value
+            }
+            .onPreferenceChange(ReaderBottomChromeHeightPreferenceKey.self) { value in
+                guard bottomChromeHeight != value else { return }
+                bottomChromeHeight = value
+            }
     }
 }
 
