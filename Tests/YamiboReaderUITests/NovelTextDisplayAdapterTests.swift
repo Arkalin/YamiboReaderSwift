@@ -257,11 +257,14 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
 
     func testReaderLifecycleClosesWorkflowAndForwardsMemoryWarnings() throws {
         let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        let containerSource = try String(
-            contentsOf: repositoryRoot
-                .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderContainerView.swift"),
-            encoding: .utf8
-        )
+        let containerSource = try [
+            "Sources/YamiboReaderUI/Views/ReaderContainerView.swift",
+            "Sources/YamiboReaderUI/Views/ReaderContainerPresentationModifiers.swift",
+        ]
+        .map { path in
+            try String(contentsOf: repositoryRoot.appendingPathComponent(path), encoding: .utf8)
+        }
+        .joined(separator: "\n")
         let modelSource = try String(
             contentsOf: repositoryRoot
                 .appendingPathComponent("Sources/YamiboReaderUI/Models/ReaderContainerModel.swift"),

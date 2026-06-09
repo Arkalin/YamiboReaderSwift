@@ -64,9 +64,9 @@ final class ReaderVerticalPositioningTests: XCTestCase {
     }
 
     func testSheetPresentationChangesOnlyUpdateChrome() throws {
-        let source = try String(contentsOfFile: projectFilePath("Sources/YamiboReaderUI/Views/ReaderContainerView.swift"))
+        let source = try String(contentsOfFile: projectFilePath("Sources/YamiboReaderUI/Views/ReaderContainerPresentationModifiers.swift"))
         let body = try functionBody(
-            signature: "private struct ReaderContainerStateObserverModifier: ViewModifier",
+            signature: "struct ReaderContainerStateObserverModifier: ViewModifier",
             in: source
         )
         let sheetStateNames = [
