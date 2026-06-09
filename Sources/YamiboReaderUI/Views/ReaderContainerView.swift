@@ -187,19 +187,20 @@ public struct ReaderContainerView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-                if chromeState.showsChrome && loadingOverlayPresentation.allowsChrome {
-                    VStack(spacing: 0) {
-                        topChrome(topInset: topInset)
-                        Spacer(minLength: 0)
+                if loadingOverlayPresentation.allowsChrome {
+                    if chromeState.showsChrome {
+                        VStack(spacing: 0) {
+                            topChrome(topInset: topInset)
+                            Spacer(minLength: 0)
+                        }
+                        .transition(.opacity)
+                        .zIndex(2)
                     }
-                    .transition(.move(edge: .top).combined(with: .opacity))
-                    .zIndex(2)
 
                     VStack(spacing: 0) {
                         Spacer(minLength: 0)
-                        bottomChrome(bottomInset: bottomInset)
+                        bottomChrome(bottomInset: bottomInset, isVisible: chromeState.showsChrome)
                     }
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
                     .zIndex(2)
 
                 }
@@ -602,11 +603,12 @@ public struct ReaderContainerView: View {
     }
 
     @ViewBuilder
-    private func bottomChrome(bottomInset: CGFloat) -> some View {
+    private func bottomChrome(bottomInset: CGFloat, isVisible: Bool) -> some View {
         ReaderBottomChrome(
             progressSnapshot: model.chromeProgressSnapshot,
             readingMode: model.settings.readingMode,
             bottomInset: bottomInset,
+            isVisible: isVisible,
             onShowChapters: openChapterDrawer,
             onShowSettings: openSettings,
             onShowCache: openCachePanel,

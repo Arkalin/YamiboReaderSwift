@@ -83,7 +83,22 @@ final class ReaderLoadingOverlayPresentationTests: XCTestCase {
             encoding: .utf8
         )
 
-        XCTAssertTrue(source.contains("if chromeState.showsChrome && loadingOverlayPresentation.allowsChrome"))
+        XCTAssertTrue(source.contains("if loadingOverlayPresentation.allowsChrome"))
+        XCTAssertTrue(source.contains("if chromeState.showsChrome"))
+        XCTAssertTrue(source.contains("bottomChrome(bottomInset: bottomInset, isVisible: chromeState.showsChrome)"))
+    }
+
+    func testReaderContainerChromeDoesNotUseEdgeMoveTransitions() throws {
+        let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let source = try String(
+            contentsOf: repositoryRoot
+                .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderContainerView.swift"),
+            encoding: .utf8
+        )
+
+        XCTAssertFalse(source.contains(".move(edge: .top)"))
+        XCTAssertFalse(source.contains(".move(edge: .bottom)"))
+        XCTAssertTrue(source.contains(".transition(.opacity)"))
     }
 }
 

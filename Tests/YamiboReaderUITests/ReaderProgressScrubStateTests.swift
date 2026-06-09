@@ -152,6 +152,21 @@ final class ReaderProgressScrubStateTests: XCTestCase {
         XCTAssertTrue(presentation.progressSummaryVisibleWhileScrubbing)
     }
 
+    func testReaderChromeVisibilityAnimationContracts() {
+        let fade = ReaderChromeVisibilityAnimationPresentation.fade
+        let popup = ReaderChromeVisibilityAnimationPresentation.anchoredPopup
+
+        XCTAssertEqual(fade.kind, .fade)
+        XCTAssertEqual(fade.duration, 0.2)
+        XCTAssertEqual(fade.hiddenScale, 1)
+        XCTAssertNil(fade.anchor)
+
+        XCTAssertEqual(popup.kind, .anchoredPopup)
+        XCTAssertEqual(popup.duration, 0.2)
+        XCTAssertEqual(popup.hiddenScale, 0.88)
+        XCTAssertEqual(popup.anchor, .bottomTrailing)
+    }
+
     func testReaderChromeSummarySeparatesChapterAndProgressLines() {
         let summary = ReaderChromeProgressSummary(
             chapterTitle: "20主导权",
