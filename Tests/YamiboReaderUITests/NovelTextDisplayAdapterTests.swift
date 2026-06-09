@@ -864,6 +864,8 @@ private func readerSupportSources() throws -> String {
         "Sources/YamiboReaderUI/Views/ReaderChromeControls.swift",
         "Sources/YamiboReaderUI/Views/ReaderViewportContentViews.swift",
         "Sources/YamiboReaderUI/Views/ReaderPagedViewport.swift",
+        "Sources/YamiboReaderUI/Views/ReaderPagedCollectionViewport.swift",
+        "Sources/YamiboReaderUI/Views/ReaderPresentationSpreadCollectionViewport.swift",
         "Sources/YamiboReaderUI/Views/ReaderPagedTapZones.swift",
         "Sources/YamiboReaderUI/Views/ReaderVerticalViewport.swift",
         "Sources/YamiboReaderUI/Views/ReaderImageBrowserView.swift",
