@@ -111,4 +111,62 @@ private extension ReaderChromePopupAnchor {
         }
     }
 }
+
+struct ReaderChromeIconButton: View {
+    let systemName: String
+    let title: String
+    let action: () -> Void
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.headline)
+                .frame(width: 34, height: 34)
+        }
+        .readerChromeButtonStyle(tint: readerChromeButtonTint(for: colorScheme))
+        .accessibilityLabel(title)
+    }
+}
+
+struct ReaderChromeCircleButton: View {
+    let systemName: String
+    let title: String
+    var tint: Color
+    var prominent = false
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.headline)
+                .frame(width: 34, height: 34)
+        }
+        .buttonBorderShape(.circle)
+        .readerChromeButtonStyle(prominent: prominent, tint: tint)
+        .accessibilityLabel(title)
+    }
+}
+
+struct ReaderToolbarIconButton: View {
+    let systemName: String
+    let title: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Label(title, systemImage: systemName)
+                .labelStyle(.iconOnly)
+        }
+        .accessibilityLabel(title)
+    }
+}
+
+func readerChromePanelTint(for colorScheme: ColorScheme) -> Color {
+    colorScheme == .dark ? Color.white.opacity(0.06) : Color.white.opacity(0.18)
+}
+
+func readerChromeButtonTint(for colorScheme: ColorScheme) -> Color {
+    colorScheme == .dark ? Color(red: 0.78, green: 0.58, blue: 0.42) : .accentColor
+}
 #endif
