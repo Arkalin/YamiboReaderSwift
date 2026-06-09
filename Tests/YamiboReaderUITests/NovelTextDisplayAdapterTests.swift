@@ -640,7 +640,8 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
 
         XCTAssertTrue(pagingDriverBody.contains("let animationRequest = matchingScrollAnimationRequest(inputs: inputs)"))
         XCTAssertTrue(pagingDriverBody.contains("guard didChangeContentIdentity else"))
-        XCTAssertTrue(pagingDriverBody.contains("requestSelectionScroll(in: collectionView, animated: animationRequest != nil, inputs: inputs)"))
+        XCTAssertTrue(pagingDriverBody.contains("if let animationRequest"))
+        XCTAssertTrue(pagingDriverBody.contains("onTransitionCompletion: (() -> Void)? = nil"))
         XCTAssertTrue(pagingDriverBody.contains("consumeScrollAnimationRequest(animationRequest, inputs: inputs)"))
         XCTAssertTrue(pagingDriverBody.contains("collectionView.collectionViewLayout.invalidateLayout()"))
         XCTAssertTrue(pagingDriverBody.contains("reloadDataAndRequestSelectionScroll(in: collectionView, animated: false, inputs: inputs)"))
@@ -650,6 +651,68 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
             XCTAssertTrue(body.contains("func updateContentAndRequestSelectionScroll("))
             XCTAssertTrue(body.contains("let didChangeContentIdentity = contentIdentity != nextContentIdentity"))
             XCTAssertTrue(body.contains("pagingDriver.updateContentAndRequestSelectionScroll("))
+        }
+    }
+
+    func testReaderSettingsMenuMapsQuickFadeToPagedTurnStyle() throws {
+        let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let controlsSource = try String(
+            contentsOf: repositoryRoot
+                .appendingPathComponent("Sources/YamiboReaderUI/Features/NovelReader/Settings/ReaderSettingsControls.swift"),
+            encoding: .utf8
+        )
+        let sectionsSource = try String(
+            contentsOf: repositoryRoot
+                .appendingPathComponent("Sources/YamiboReaderUI/Features/NovelReader/Settings/ReaderSettingsSections.swift"),
+            encoding: .utf8
+        )
+        let viewsSource = try String(
+            contentsOf: repositoryRoot
+                .appendingPathComponent("Sources/YamiboReaderUI/Features/NovelReader/Settings/ReaderSettingsViews.swift"),
+            encoding: .utf8
+        )
+
+        XCTAssertTrue(controlsSource.contains("let settings: ReaderAppearanceSettings"))
+        XCTAssertTrue(controlsSource.contains("case .quickFade:"))
+        XCTAssertTrue(controlsSource.contains("self = .quickFade"))
+        XCTAssertTrue(controlsSource.contains("onSelect(option.readingMode, option.pagedTurnStyle ?? settings.pagedTurnStyle)"))
+        XCTAssertTrue(controlsSource.contains("case .quickFade:\n            .quickFade"))
+        XCTAssertTrue(controlsSource.contains("self != .pageCurl"))
+        XCTAssertTrue(sectionsSource.contains("let onReadingModeChange: (ReaderReadingMode, ReaderPagedTurnStyle) -> Void"))
+        XCTAssertTrue(viewsSource.contains("private func setReadingMode(_ value: ReaderReadingMode, pagedTurnStyle: ReaderPagedTurnStyle)"))
+        XCTAssertTrue(viewsSource.contains("draftSettings.pagedTurnStyle = pagedTurnStyle"))
+    }
+
+    func testPagedViewportsUseUnifiedQuickFadeTransitionDriver() throws {
+        let supportSource = try readerSupportSources()
+        let singlePageBody = try XCTUnwrap(typeBody(named: "ReaderPagedCollectionViewport", in: supportSource))
+        let spreadBody = try XCTUnwrap(typeBody(named: "ReaderPresentationSpreadCollectionViewport", in: supportSource))
+        let pagingDriverBody = try XCTUnwrap(typeBody(named: "ReaderPagedViewportPagingDriver", in: supportSource))
+
+        XCTAssertTrue(pagingDriverBody.contains("private static let quickFadeDuration: TimeInterval = 0.18"))
+        XCTAssertTrue(pagingDriverBody.contains("private static let quickFadeVelocityThreshold: CGFloat = 450"))
+        XCTAssertTrue(pagingDriverBody.contains("func updateGestureState(in collectionView: UICollectionView, inputs: ReaderPagedViewportPagingInputs)"))
+        XCTAssertTrue(pagingDriverBody.contains("collectionView.panGestureRecognizer.isEnabled = inputs.settings.pagedTurnStyle != .quickFade"))
+        XCTAssertTrue(pagingDriverBody.contains("func quickFadePanShouldBegin"))
+        XCTAssertTrue(pagingDriverBody.contains("func handleQuickFadePan"))
+        XCTAssertTrue(pagingDriverBody.contains("performSelectionTransition("))
+        XCTAssertTrue(pagingDriverBody.contains("snapshotView(afterScreenUpdates: false)"))
+        XCTAssertTrue(pagingDriverBody.contains("collectionView.convert(collectionView.bounds, to: snapshotContainer)"))
+        XCTAssertTrue(pagingDriverBody.contains("CGRect(origin: targetOffset, size: collectionView.bounds.size)"))
+        XCTAssertTrue(pagingDriverBody.contains("quickFadeSnapshot.alpha = 0"))
+        XCTAssertTrue(pagingDriverBody.contains(".beginFromCurrentState"))
+        XCTAssertTrue(pagingDriverBody.contains(".allowUserInteraction"))
+        XCTAssertFalse(pagingDriverBody.contains(".transitionCrossDissolve"))
+        XCTAssertTrue(pagingDriverBody.contains("publishSelectionIfNeeded(item, inputs: inputs)"))
+        XCTAssertTrue(pagingDriverBody.contains("isPerformingQuickFadeTransition"))
+
+        for body in [singlePageBody, spreadBody] {
+            XCTAssertTrue(body.contains("UIPanGestureRecognizer("))
+            XCTAssertTrue(body.contains("handleQuickFadePan"))
+            XCTAssertTrue(body.contains("quickFadePanRecognizer.delegate = context.coordinator"))
+            XCTAssertTrue(body.contains("pagingDriver.handleQuickFadePan(recognizer, inputs: pagingInputs)"))
+            XCTAssertTrue(body.contains("pagingDriver.quickFadePanShouldBegin(panRecognizer, inputs: pagingInputs)"))
+            XCTAssertTrue(body.contains("pagingDriver.updateGestureState(in: collectionView, inputs: pagingInputs)"))
         }
     }
 

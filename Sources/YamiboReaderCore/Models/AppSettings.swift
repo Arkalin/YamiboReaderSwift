@@ -47,6 +47,18 @@ public enum ReaderReadingMode: String, Codable, Hashable, CaseIterable, Sendable
     }
 }
 
+public enum ReaderPagedTurnStyle: String, Codable, Hashable, CaseIterable, Sendable {
+    case slide
+    case quickFade
+
+    public var title: String {
+        switch self {
+        case .slide: L10n.string("reading_mode.slide")
+        case .quickFade: L10n.string("reading_mode.quick_fade")
+        }
+    }
+}
+
 public enum ReaderTranslationMode: String, Codable, Hashable, CaseIterable, Sendable {
     case none
     case simplified
@@ -95,6 +107,7 @@ public struct ReaderAppearanceSettings: Codable, Hashable, Sendable {
     public var showsTwoPagesInLandscapeOnPad: Bool
     public var backgroundStyle: ReaderBackgroundStyle
     public var readingMode: ReaderReadingMode
+    public var pagedTurnStyle: ReaderPagedTurnStyle
     public var translationMode: ReaderTranslationMode
 
     public init(
@@ -109,6 +122,7 @@ public struct ReaderAppearanceSettings: Codable, Hashable, Sendable {
         showsTwoPagesInLandscapeOnPad: Bool = false,
         backgroundStyle: ReaderBackgroundStyle = .system,
         readingMode: ReaderReadingMode = .paged,
+        pagedTurnStyle: ReaderPagedTurnStyle = .slide,
         translationMode: ReaderTranslationMode = .none
     ) {
         self.fontScale = fontScale
@@ -122,6 +136,7 @@ public struct ReaderAppearanceSettings: Codable, Hashable, Sendable {
         self.showsTwoPagesInLandscapeOnPad = showsTwoPagesInLandscapeOnPad
         self.backgroundStyle = backgroundStyle
         self.readingMode = readingMode
+        self.pagedTurnStyle = pagedTurnStyle
         self.translationMode = translationMode
     }
 
@@ -137,6 +152,7 @@ public struct ReaderAppearanceSettings: Codable, Hashable, Sendable {
         case showsTwoPagesInLandscapeOnPad
         case backgroundStyle
         case readingMode
+        case pagedTurnStyle
         case translationMode
     }
 
@@ -153,6 +169,7 @@ public struct ReaderAppearanceSettings: Codable, Hashable, Sendable {
         showsTwoPagesInLandscapeOnPad = try container.decodeIfPresent(Bool.self, forKey: .showsTwoPagesInLandscapeOnPad) ?? false
         backgroundStyle = try container.decodeIfPresent(ReaderBackgroundStyle.self, forKey: .backgroundStyle) ?? .system
         readingMode = try container.decodeIfPresent(ReaderReadingMode.self, forKey: .readingMode) ?? .paged
+        pagedTurnStyle = try container.decodeIfPresent(ReaderPagedTurnStyle.self, forKey: .pagedTurnStyle) ?? .slide
         translationMode = try container.decodeIfPresent(ReaderTranslationMode.self, forKey: .translationMode) ?? .none
     }
 
@@ -169,6 +186,7 @@ public struct ReaderAppearanceSettings: Codable, Hashable, Sendable {
         try container.encode(showsTwoPagesInLandscapeOnPad, forKey: .showsTwoPagesInLandscapeOnPad)
         try container.encode(backgroundStyle, forKey: .backgroundStyle)
         try container.encode(readingMode, forKey: .readingMode)
+        try container.encode(pagedTurnStyle, forKey: .pagedTurnStyle)
         try container.encode(translationMode, forKey: .translationMode)
     }
 }

@@ -209,9 +209,9 @@ struct ReaderBooksSliderLeadingIcon: View {
 }
 
 struct ReaderBooksReadingModeMenuRow: View {
-    let selection: ReaderReadingMode
+    let settings: ReaderAppearanceSettings
     let palette: ReaderBooksSheetPalette
-    let onSelect: (ReaderReadingMode) -> Void
+    let onSelect: (ReaderReadingMode, ReaderPagedTurnStyle) -> Void
 
     var body: some View {
         HStack(spacing: 12) {
@@ -227,10 +227,10 @@ struct ReaderBooksReadingModeMenuRow: View {
                 Picker(
                     L10n.string("reading_mode.title"),
                     selection: Binding(
-                        get: { ReaderBooksReadingModeMenuOption(selection) },
+                        get: { ReaderBooksReadingModeMenuOption(settings) },
                         set: { option in
-                            guard let mode = option.readingMode else { return }
-                            onSelect(mode)
+                            guard option.isSelectable else { return }
+                            onSelect(option.readingMode, option.pagedTurnStyle ?? settings.pagedTurnStyle)
                         }
                     )
                 ) {
@@ -242,7 +242,7 @@ struct ReaderBooksReadingModeMenuRow: View {
                 }
             } label: {
                 HStack(spacing: 8) {
-                    Text(ReaderBooksReadingModeMenuOption(selection).title)
+                    Text(ReaderBooksReadingModeMenuOption(settings).title)
                         .font(.system(size: 18))
                         .foregroundStyle(palette.secondaryText)
                         .lineLimit(1)
@@ -264,10 +264,15 @@ private enum ReaderBooksReadingModeMenuOption: CaseIterable, Hashable {
     case quickFade
     case scroll
 
-    init(_ mode: ReaderReadingMode) {
-        switch mode {
+    init(_ settings: ReaderAppearanceSettings) {
+        switch settings.readingMode {
         case .paged:
-            self = .slide
+            switch settings.pagedTurnStyle {
+            case .slide:
+                self = .slide
+            case .quickFade:
+                self = .quickFade
+            }
         case .vertical:
             self = .scroll
         }
@@ -299,19 +304,28 @@ private enum ReaderBooksReadingModeMenuOption: CaseIterable, Hashable {
         }
     }
 
-    var readingMode: ReaderReadingMode? {
+    var readingMode: ReaderReadingMode {
         switch self {
-        case .slide:
+        case .slide, .pageCurl, .quickFade:
             .paged
         case .scroll:
             .vertical
-        case .pageCurl, .quickFade:
+        }
+    }
+
+    var pagedTurnStyle: ReaderPagedTurnStyle? {
+        switch self {
+        case .slide:
+            .slide
+        case .quickFade:
+            .quickFade
+        case .pageCurl, .scroll:
             nil
         }
     }
 
     var isSelectable: Bool {
-        readingMode != nil
+        self != .pageCurl
     }
 }
 

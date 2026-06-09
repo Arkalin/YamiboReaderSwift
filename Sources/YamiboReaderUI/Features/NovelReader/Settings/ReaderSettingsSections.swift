@@ -120,7 +120,7 @@ struct ReaderBooksDisplaySection: View {
     let showsTwoPageToggle: Bool
     @Binding var showsTwoPagesInLandscapeOnPad: Bool
     let onBackgroundStyleChange: (ReaderBackgroundStyle) -> Void
-    let onReadingModeChange: (ReaderReadingMode) -> Void
+    let onReadingModeChange: (ReaderReadingMode, ReaderPagedTurnStyle) -> Void
     let onSelectOriginalText: () -> Void
     let onSelectSimplifiedText: () -> Void
     let onSelectTraditionalText: () -> Void
@@ -135,7 +135,7 @@ struct ReaderBooksDisplaySection: View {
             )
             ReaderBooksDivider(palette: palette)
             ReaderBooksReadingModeMenuRow(
-                selection: settings.readingMode,
+                settings: settings,
                 palette: palette,
                 onSelect: onReadingModeChange
             )

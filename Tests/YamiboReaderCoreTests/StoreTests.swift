@@ -48,6 +48,7 @@ import Testing
             showsTwoPagesInLandscapeOnPad: true,
             backgroundStyle: .paper,
             readingMode: .vertical,
+            pagedTurnStyle: .quickFade,
             translationMode: .traditional
         ),
         manga: MangaReaderSettings(
@@ -155,6 +156,7 @@ import Testing
     #expect(decoded.characterSpacingScale == 0)
     #expect(decoded.usesJustifiedText == false)
     #expect(decoded.showsTwoPagesInLandscapeOnPad == false)
+    #expect(decoded.pagedTurnStyle == .slide)
     #expect(decoded.fontScale == 1.2)
     #expect(decoded.lineHeightScale == 1.5)
 }
