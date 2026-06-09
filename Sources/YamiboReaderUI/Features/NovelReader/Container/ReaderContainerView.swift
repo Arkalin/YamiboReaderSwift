@@ -30,6 +30,7 @@ public struct ReaderContainerView: View {
     @State private var isDismissing = false
     @State private var topChromeHeight: CGFloat = 0
     @State private var bottomChromeHeight: CGFloat = 0
+    @State private var pagedScrollAnimationRequest: ReaderPagedScrollAnimationRequest?
     private let appModel: YamiboAppModel
 
     public init(context: ReaderLaunchContext, appModel: YamiboAppModel) {
@@ -64,6 +65,13 @@ public struct ReaderContainerView: View {
                 topInset: topInset,
                 bottomInset: bottomInset
             )
+            let pagedPagerIdentity = ReaderPagedPagerIdentity(
+                visibleView: model.visibleView,
+                surfaceCount: model.readerSurfaces.count,
+                spreadCount: model.presentationSpreads.count,
+                usesTwoPageSpread: model.isTwoPageSpreadActive,
+                layout: currentLayout
+            )
             let loadingOverlayPresentation = readerLoadingOverlayPresentation
 
             ZStack {
@@ -82,7 +90,7 @@ public struct ReaderContainerView: View {
                     settings: model.applePencilPageTurnSettings,
                     canTurnPage: canReceiveApplePencilPageTurn
                 ) { delta in
-                    Task { await goRelativePage(delta) }
+                    Task { await goRelativePage(delta, pagerIdentity: pagedPagerIdentity) }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
@@ -231,7 +239,14 @@ public struct ReaderContainerView: View {
     }
 
     private func pagedContent(layout: ReaderContainerLayout) -> some View {
-        Group {
+        let pagerIdentity = ReaderPagedPagerIdentity(
+            visibleView: model.visibleView,
+            surfaceCount: model.readerSurfaces.count,
+            spreadCount: model.presentationSpreads.count,
+            usesTwoPageSpread: model.isTwoPageSpreadActive,
+            layout: layout
+        )
+        return Group {
             if model.isTwoPageSpreadActive {
                 ReaderPresentationSpreadCollectionViewport(
                     spreads: model.presentationSpreads,
@@ -242,6 +257,8 @@ public struct ReaderContainerView: View {
                     topInset: layout.chromeInsets.top,
                     bottomInset: layout.chromeInsets.bottom,
                     selectionIndex: model.pagedViewportSelectionIndex,
+                    pagerIdentity: pagerIdentity,
+                    scrollAnimationRequest: pagedScrollAnimationRequest,
                     displayReferenceProvider: { surfaceIdentity in
                         model.novelTextViewportDisplayReference(for: surfaceIdentity)
                     },
@@ -250,7 +267,10 @@ public struct ReaderContainerView: View {
                         model.selectPagedViewportIndex(selectionIndex)
                     },
                     onPageTapZone: { zone in
-                        handlePagedTapZone(zone)
+                        handlePagedTapZone(zone, pagerIdentity: pagerIdentity)
+                    },
+                    onScrollAnimationRequestConsumed: { request in
+                        clearPagedScrollAnimationRequest(request)
                     },
                     onChromeVisibleImageTap: {
                         enterImmersiveMode()
@@ -268,6 +288,8 @@ public struct ReaderContainerView: View {
                     topInset: layout.chromeInsets.top,
                     bottomInset: layout.chromeInsets.bottom,
                     selectionIndex: model.pagedViewportSelectionIndex,
+                    pagerIdentity: pagerIdentity,
+                    scrollAnimationRequest: pagedScrollAnimationRequest,
                     displayReferenceProvider: { surfaceIdentity in
                         model.novelTextViewportDisplayReference(for: surfaceIdentity)
                     },
@@ -276,7 +298,10 @@ public struct ReaderContainerView: View {
                         model.selectPagedViewportIndex(selectionIndex)
                     },
                     onPageTapZone: { zone in
-                        handlePagedTapZone(zone)
+                        handlePagedTapZone(zone, pagerIdentity: pagerIdentity)
+                    },
+                    onScrollAnimationRequestConsumed: { request in
+                        clearPagedScrollAnimationRequest(request)
                     },
                     onChromeVisibleImageTap: {
                         enterImmersiveMode()
@@ -287,15 +312,7 @@ public struct ReaderContainerView: View {
                 )
             }
         }
-        .id(
-            ReaderPagedPagerIdentity(
-                visibleView: model.visibleView,
-                surfaceCount: model.readerSurfaces.count,
-                spreadCount: model.presentationSpreads.count,
-                usesTwoPageSpread: model.isTwoPageSpreadActive,
-                layout: layout
-            )
-        )
+        .id(pagerIdentity)
         .scrollDisabled(chromeState.showsChrome)
     }
 
@@ -653,27 +670,30 @@ public struct ReaderContainerView: View {
         }
     }
 
-    private func handlePagedContentTap(pageDelta: Int? = nil) {
+    private func handlePagedContentTap(
+        pageDelta: Int? = nil,
+        pagerIdentity: ReaderPagedPagerIdentity? = nil
+    ) {
         guard !chromeState.showsChrome else {
             enterImmersiveMode()
             return
         }
 
         if let pageDelta {
-            Task { await goRelativePage(pageDelta) }
+            Task { await goRelativePage(pageDelta, pagerIdentity: pagerIdentity) }
         } else {
             toggleChrome()
         }
     }
 
-    private func handlePagedTapZone(_ zone: ReaderPagedTapZone) {
+    private func handlePagedTapZone(_ zone: ReaderPagedTapZone, pagerIdentity: ReaderPagedPagerIdentity) {
         switch zone {
         case .previous:
-            handlePagedContentTap(pageDelta: -1)
+            handlePagedContentTap(pageDelta: -1, pagerIdentity: pagerIdentity)
         case .toggleChrome:
             handlePagedContentTap()
         case .next:
-            handlePagedContentTap(pageDelta: 1)
+            handlePagedContentTap(pageDelta: 1, pagerIdentity: pagerIdentity)
         }
     }
 
@@ -827,8 +847,45 @@ public struct ReaderContainerView: View {
     }
 
     private func goRelativePage(_ delta: Int) async {
+        pagedScrollAnimationRequest = nil
         await model.jumpRelativeSurface(delta)
         restoreVerticalPositionIfNeeded()
+    }
+
+    private func goRelativePage(_ delta: Int, pagerIdentity: ReaderPagedPagerIdentity?) async {
+        let animationRequest = pagerIdentity.flatMap {
+            makePagedScrollAnimationRequest(delta: delta, pagerIdentity: $0)
+        }
+        pagedScrollAnimationRequest = animationRequest
+        await model.jumpRelativeSurface(delta)
+        if let request = pagedScrollAnimationRequest,
+           request.selectionIndex != model.pagedViewportSelectionIndex {
+            pagedScrollAnimationRequest = nil
+        }
+        restoreVerticalPositionIfNeeded()
+    }
+
+    private func makePagedScrollAnimationRequest(
+        delta: Int,
+        pagerIdentity: ReaderPagedPagerIdentity
+    ) -> ReaderPagedScrollAnimationRequest? {
+        guard model.settings.readingMode == .paged else { return nil }
+        let targetSelectionIndex = model.pagedViewportSelectionIndex + delta
+        let selectionCount = model.isTwoPageSpreadActive
+            ? model.presentationSpreads.count
+            : model.readerSurfaces.count
+        guard targetSelectionIndex >= 0, targetSelectionIndex < selectionCount else {
+            return nil
+        }
+        return ReaderPagedScrollAnimationRequest(
+            pagerIdentity: pagerIdentity,
+            selectionIndex: targetSelectionIndex
+        )
+    }
+
+    private func clearPagedScrollAnimationRequest(_ request: ReaderPagedScrollAnimationRequest) {
+        guard pagedScrollAnimationRequest == request else { return }
+        pagedScrollAnimationRequest = nil
     }
 
     private func canNavigateVerticalBoundary(_ direction: ReaderVerticalBoundaryDirection) -> Bool {

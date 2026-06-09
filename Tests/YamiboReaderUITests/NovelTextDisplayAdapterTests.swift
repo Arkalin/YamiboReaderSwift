@@ -507,6 +507,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
 
         XCTAssertTrue(supportSource.contains("struct ReaderPagedViewportContentIdentity: Equatable"))
         XCTAssertTrue(supportSource.contains("struct ReaderPagedSpreadViewportContentIdentity: Equatable"))
+        XCTAssertTrue(supportSource.contains("struct ReaderPagedScrollAnimationRequest: Equatable"))
         XCTAssertTrue(supportSource.contains("var surfaces: [NovelReaderSurface]"))
         XCTAssertTrue(supportSource.contains("var spreads: [NovelReaderPresentationSpread]"))
         XCTAssertTrue(supportSource.contains("var settings: ReaderAppearanceSettings"))
@@ -520,11 +521,49 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         for body in [singlePageBody, spreadBody] {
             XCTAssertTrue(body.contains("private var contentIdentity:"))
             XCTAssertTrue(body.contains("func updateContentAndRequestSelectionScroll("))
+            XCTAssertTrue(body.contains("let animationRequest = matchingScrollAnimationRequest()"))
             XCTAssertTrue(body.contains("guard contentIdentity != nextContentIdentity else"))
-            XCTAssertTrue(body.contains("requestSelectionScroll(in: collectionView, animated: animated)"))
+            XCTAssertTrue(body.contains("requestSelectionScroll(in: collectionView, animated: animationRequest != nil)"))
+            XCTAssertTrue(body.contains("consumeScrollAnimationRequest(animationRequest)"))
             XCTAssertTrue(body.contains("collectionView.collectionViewLayout.invalidateLayout()"))
-            XCTAssertTrue(body.contains("reloadDataAndRequestSelectionScroll(in: collectionView, animated: animated)"))
-            XCTAssertFalse(body.contains("reloadDataAndRequestSelectionScroll(in: collectionView, animated: false)"))
+            XCTAssertTrue(body.contains("reloadDataAndRequestSelectionScroll(in: collectionView, animated: false)"))
+        }
+    }
+
+    func testPagedViewportsConsumeMatchingRelativePageAnimationRequests() throws {
+        let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let containerSource = try String(
+            contentsOf: repositoryRoot
+                .appendingPathComponent("Sources/YamiboReaderUI/Features/NovelReader/Container/ReaderContainerView.swift"),
+            encoding: .utf8
+        )
+        let supportSource = try readerSupportSources()
+        let singlePageBody = try XCTUnwrap(typeBody(named: "ReaderPagedCollectionViewport", in: supportSource))
+        let spreadBody = try XCTUnwrap(typeBody(named: "ReaderPresentationSpreadCollectionViewport", in: supportSource))
+        let makeRequestBody = try XCTUnwrap(functionBody(named: "makePagedScrollAnimationRequest", in: containerSource))
+
+        XCTAssertTrue(containerSource.contains("@State private var pagedScrollAnimationRequest: ReaderPagedScrollAnimationRequest?"))
+        XCTAssertTrue(containerSource.contains("private func goRelativePage(_ delta: Int, pagerIdentity: ReaderPagedPagerIdentity?) async"))
+        XCTAssertTrue(containerSource.contains("makePagedScrollAnimationRequest(delta: delta, pagerIdentity: $0)"))
+        XCTAssertTrue(containerSource.contains("await model.jumpRelativeSurface(delta)"))
+        XCTAssertTrue(makeRequestBody.contains("model.pagedViewportSelectionIndex + delta"))
+        XCTAssertTrue(makeRequestBody.contains("model.presentationSpreads.count"))
+        XCTAssertTrue(makeRequestBody.contains("model.readerSurfaces.count"))
+        XCTAssertTrue(containerSource.contains("clearPagedScrollAnimationRequest"))
+
+        for body in [singlePageBody, spreadBody] {
+            XCTAssertTrue(body.contains("let pagerIdentity: ReaderPagedPagerIdentity"))
+            XCTAssertTrue(body.contains("let scrollAnimationRequest: ReaderPagedScrollAnimationRequest?"))
+            XCTAssertTrue(body.contains("let onScrollAnimationRequestConsumed: (ReaderPagedScrollAnimationRequest) -> Void"))
+            XCTAssertTrue(body.contains("animateAdjacentSelection(for: zone, in: collectionView)"))
+            XCTAssertTrue(body.contains("parent.selectionIndex + delta"))
+            XCTAssertTrue(body.contains("private var consumedScrollAnimationRequestID: UUID?"))
+            XCTAssertTrue(body.contains("func matchingScrollAnimationRequest() -> ReaderPagedScrollAnimationRequest?"))
+            XCTAssertTrue(body.contains("request.pagerIdentity == parent.pagerIdentity"))
+            XCTAssertTrue(body.contains("request.selectionIndex == parent.selectionIndex"))
+            XCTAssertTrue(body.contains("request.id != consumedScrollAnimationRequestID"))
+            XCTAssertTrue(body.contains("setContentOffset"))
+            XCTAssertTrue(body.contains("animated: animated"))
         }
     }
 
@@ -579,7 +618,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         let spreadBody = try XCTUnwrap(typeBody(named: "ReaderPresentationSpreadCollectionViewport", in: supportSource))
 
         for body in [singlePageBody, spreadBody] {
-            XCTAssertTrue(body.contains("reloadDataAndRequestSelectionScroll(in: collectionView, animated: animated)"))
+            XCTAssertTrue(body.contains("reloadDataAndRequestSelectionScroll(in: collectionView, animated: false)"))
             XCTAssertTrue(body.contains("collectionView.performBatchUpdates(nil)"))
             XCTAssertTrue(body.contains("self?.scrollToPendingSelectionIfPossible(in: collectionView, animated: animated)"))
         }
