@@ -1,0 +1,427 @@
+import SwiftUI
+import UniformTypeIdentifiers
+import YamiboReaderCore
+
+#if canImport(UIKit)
+import UIKit
+#endif
+
+struct FavoriteSearchModifier: ViewModifier {
+    @Binding var searchText: String
+
+    func body(content: Content) -> some View {
+        #if os(iOS)
+        content
+            .navigationBarTitleDisplayMode(.inline)
+            .searchable(
+                text: $searchText,
+                placement: .navigationBarDrawer(displayMode: .automatic),
+                prompt: L10n.string("common.search")
+            )
+        #else
+        content
+            .searchable(text: $searchText, prompt: L10n.string("common.search"))
+        #endif
+    }
+}
+
+private struct FavoriteSettingsMenuButton: View {
+    @Binding var showingSettingsSheet: Bool
+    @Binding var showingAboutSheet: Bool
+
+    var body: some View {
+        Menu {
+            Button {
+                showingSettingsSheet = true
+            } label: {
+                Label(L10n.string("settings.title"), systemImage: "gearshape")
+            }
+
+            Button {
+                showingAboutSheet = true
+            } label: {
+                Label(L10n.string("about.title"), systemImage: "info.circle")
+            }
+        } label: {
+            Image(systemName: "ellipsis.circle")
+        }
+    }
+}
+
+private struct FavoriteSortMenuButton: View {
+    @Binding var sortRawValue: String
+
+    var body: some View {
+        Menu {
+            Picker(L10n.string("favorites.sort"), selection: $sortRawValue) {
+                ForEach(FavoriteSortOrder.allCases) { sortOrder in
+                    Text(sortOrder.title).tag(sortOrder.rawValue)
+                }
+            }
+        } label: {
+            Image(systemName: "arrow.up.arrow.down.circle")
+        }
+    }
+}
+
+private struct FavoriteSelectionToggleButton: View {
+    let isSelecting: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(isSelecting ? L10n.string("common.done") : L10n.string("common.select"), action: action)
+    }
+}
+
+private struct FavoriteToolbarMenuButton: View {
+    @Binding var filterRawValue: String
+    @Binding var showsHidden: Bool
+    let favoriteAppearance: FavoriteAppearanceSettings
+    let selectedTagCount: Int
+    let allTitle: String
+    let onEditTagFilter: () -> Void
+    let onClearTagFilter: () -> Void
+
+    var body: some View {
+        Menu {
+            Picker(L10n.string("favorites.category"), selection: $filterRawValue) {
+                ForEach(FavoriteFilter.allCases) { filter in
+                    Label {
+                        Text(filter == .all ? allTitle : filter.title)
+                    } icon: {
+                        filter.menuIcon(appearance: favoriteAppearance)
+                    }
+                    .tag(filter.rawValue)
+                }
+            }
+
+            Button(action: onEditTagFilter) {
+                Label(tagFilterTitle, systemImage: "tag")
+            }
+
+            if selectedTagCount > 0 {
+                Button(action: onClearTagFilter) {
+                    Label(L10n.string("favorites.filter.clear_tags"), systemImage: "xmark.circle")
+                }
+            }
+
+            Divider()
+
+            Toggle(isOn: $showsHidden) {
+                Label(L10n.string("favorites.show_hidden"), systemImage: "eye.slash")
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Text(currentTitle)
+                    .font(.headline)
+                    .foregroundStyle(.primary)
+
+                Image(systemName: "chevron.down")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+            .contentShape(Rectangle())
+        }
+    }
+
+    private var currentFilter: FavoriteFilter {
+        FavoriteFilter(rawValue: filterRawValue) ?? .all
+    }
+
+    private var currentTitle: String {
+        currentFilter == .all ? allTitle : currentFilter.title
+    }
+
+    private var tagFilterTitle: String {
+        guard selectedTagCount > 0 else {
+            return L10n.string("favorites.filter.tags")
+        }
+        return L10n.string("favorites.filter.tags_count", selectedTagCount)
+    }
+}
+
+private extension FavoriteFilter {
+    var menuIconName: String {
+        switch self {
+        case .all:
+            "square.grid.2x2.fill"
+        case .novel:
+            "book.closed.fill"
+        case .manga:
+            "photo.on.rectangle.angled"
+        case .other:
+            "ellipsis.circle.fill"
+        }
+    }
+
+    @ViewBuilder
+    func menuIcon(appearance: FavoriteAppearanceSettings) -> some View {
+        #if canImport(UIKit)
+        if let icon = UIImage(systemName: menuIconName)?
+            .withTintColor(menuUIColor(appearance: appearance), renderingMode: .alwaysOriginal) {
+            Image(uiImage: icon)
+        } else {
+            Image(systemName: menuIconName)
+                .foregroundStyle(menuColor(appearance: appearance))
+        }
+        #else
+        Image(systemName: menuIconName)
+            .foregroundStyle(menuColor(appearance: appearance))
+        #endif
+    }
+
+    func menuColor(appearance: FavoriteAppearanceSettings) -> Color {
+        switch self {
+        case .all:
+            .black
+        case .novel:
+            favoriteAccentColor(for: .novel, appearance: appearance)
+        case .manga:
+            favoriteAccentColor(for: .manga, appearance: appearance)
+        case .other:
+            favoriteAccentColor(for: .other, appearance: appearance)
+        }
+    }
+
+    #if canImport(UIKit)
+    func menuUIColor(appearance: FavoriteAppearanceSettings) -> UIColor {
+        switch self {
+        case .all:
+            .black
+        case .novel:
+            appearance.novel.uiColor
+        case .manga:
+            appearance.manga.uiColor
+        case .other:
+            appearance.other.uiColor
+        }
+    }
+    #endif
+}
+
+#if canImport(UIKit)
+private extension FavoriteAppearanceColor {
+    var uiColor: UIColor {
+        switch self {
+        case .red: .systemRed
+        case .pink: .systemPink
+        case .orange: .systemOrange
+        case .yellow: .systemYellow
+        case .green: .systemGreen
+        case .mint: .systemMint
+        case .cyan: .systemCyan
+        case .blue: .systemBlue
+        case .purple: .systemPurple
+        case .gray: .systemGray
+        }
+    }
+}
+#endif
+
+struct FavoriteToolbarModifier: ViewModifier {
+    @Binding var showingSettingsSheet: Bool
+    @Binding var showingAboutSheet: Bool
+    @Binding var filterRawValue: String
+    @Binding var sortRawValue: String
+    @Binding var showsHidden: Bool
+    @Binding var isSelecting: Bool
+    let favoriteAppearance: FavoriteAppearanceSettings
+    let showsSettingsMenu: Bool
+    let selectedTagCount: Int
+    let visibleSelectionIsComplete: Bool
+    let canToggleVisibleSelection: Bool
+    let allTitle: String
+    let onFinishSelection: () -> Void
+    let onToggleVisibleSelection: () -> Void
+    let onEditTagFilter: () -> Void
+    let onClearTagFilter: () -> Void
+
+    func body(content: Content) -> some View {
+        content.toolbar {
+            #if os(iOS)
+            if isSelecting {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button(
+                        visibleSelectionIsComplete ? L10n.string("common.invert_selection") : L10n.string("common.select_all"),
+                        action: onToggleVisibleSelection
+                    )
+                    .disabled(!canToggleVisibleSelection)
+                }
+            } else if showsSettingsMenu {
+                ToolbarItemGroup(placement: .topBarLeading) {
+                    FavoriteSettingsMenuButton(
+                        showingSettingsSheet: $showingSettingsSheet,
+                        showingAboutSheet: $showingAboutSheet
+                    )
+
+                    FavoriteSortMenuButton(sortRawValue: $sortRawValue)
+                }
+            }
+            #else
+            if showsSettingsMenu {
+                ToolbarItem(placement: .automatic) {
+                    FavoriteSettingsMenuButton(
+                        showingSettingsSheet: $showingSettingsSheet,
+                        showingAboutSheet: $showingAboutSheet
+                    )
+                }
+            }
+            #endif
+
+            ToolbarItem(placement: .principal) {
+                FavoriteToolbarMenuButton(
+                    filterRawValue: $filterRawValue,
+                    showsHidden: $showsHidden,
+                    favoriteAppearance: favoriteAppearance,
+                    selectedTagCount: selectedTagCount,
+                    allTitle: allTitle,
+                    onEditTagFilter: onEditTagFilter,
+                    onClearTagFilter: onClearTagFilter
+                )
+            }
+
+            #if os(iOS)
+            ToolbarItem(placement: .topBarTrailing) {
+                FavoriteSelectionToggleButton(isSelecting: isSelecting) {
+                    if isSelecting {
+                        onFinishSelection()
+                    } else {
+                        isSelecting = true
+                    }
+                }
+            }
+            #else
+            ToolbarItem(placement: .automatic) {
+                FavoriteSelectionToggleButton(isSelecting: isSelecting) {
+                    if isSelecting {
+                        onFinishSelection()
+                    } else {
+                        isSelecting = true
+                    }
+                }
+            }
+            #endif
+        }
+    }
+}
+
+struct FavoriteCollectionNavigationDestinationModifier: ViewModifier {
+    let isEnabled: Bool
+    let appContext: YamiboAppContext
+    let appModel: YamiboAppModel
+
+    func body(content: Content) -> some View {
+        if isEnabled {
+            content.navigationDestination(for: FavoriteCollection.self) { collection in
+                FavoritesView(
+                    favoriteStore: appContext.favoriteStore,
+                    appContext: appContext,
+                    appModel: appModel,
+                    scope: .collection(collection)
+                )
+            }
+        } else {
+            content
+        }
+    }
+}
+
+struct FavoriteCollectionDialogsModifier: ViewModifier {
+    @Binding var collectionNameDraft: FavoriteCollectionNameDraft?
+    @Binding var pendingDeleteCollection: FavoriteCollection?
+    let saveName: (FavoriteCollectionNameDraft) -> Void
+    let dissolveCollection: (FavoriteCollection) -> Void
+
+    func body(content: Content) -> some View {
+        content
+            .alert(L10n.string("favorites.edit_collection_name"), isPresented: collectionNameAlertBinding) {
+                TextField(L10n.string("favorites.collection_name"), text: collectionNameTextBinding)
+                Button(L10n.string("common.cancel"), role: .cancel) {
+                    collectionNameDraft = nil
+                }
+                Button(L10n.string("common.save")) {
+                    guard let draft = collectionNameDraft else { return }
+                    saveName(draft)
+                }
+                .disabled(collectionNameDraft?.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+            } message: {
+                Text(L10n.string("favorites.collection_name_message"))
+            }
+            .alert(
+                L10n.string("favorites.dissolve_collection"),
+                isPresented: pendingCollectionDeleteAlertBinding,
+                presenting: pendingDeleteCollection
+            ) { collection in
+                Button(L10n.string("common.cancel"), role: .cancel) {
+                    pendingDeleteCollection = nil
+                }
+                Button(L10n.string("favorites.dissolve"), role: .destructive) {
+                    dissolveCollection(collection)
+                }
+            } message: { collection in
+                Text(L10n.string("favorites.dissolve_collection_message", collection.name))
+            }
+    }
+
+    private var collectionNameAlertBinding: Binding<Bool> {
+        Binding(
+            get: { collectionNameDraft != nil },
+            set: { isPresented in
+                if !isPresented {
+                    collectionNameDraft = nil
+                }
+            }
+        )
+    }
+
+    private var collectionNameTextBinding: Binding<String> {
+        Binding(
+            get: { collectionNameDraft?.name ?? "" },
+            set: { collectionNameDraft?.name = $0 }
+        )
+    }
+
+    private var pendingCollectionDeleteAlertBinding: Binding<Bool> {
+        Binding(
+            get: { pendingDeleteCollection != nil },
+            set: { isPresented in
+                if !isPresented {
+                    pendingDeleteCollection = nil
+                }
+            }
+        )
+    }
+}
+
+struct FavoriteEntryDropDelegate: DropDelegate {
+    let draggedEntryKey: String?
+    let targetEntry: FavoriteListEntry?
+    let column: FavoriteListColumn
+    let canReorder: Bool
+    let onDropOnEntry: (String, FavoriteListEntry, FavoriteDropPosition) -> Void
+    let onDropToColumnBottom: (String, FavoriteListColumn) -> Void
+    let onFinish: () -> Void
+
+    func validateDrop(info: DropInfo) -> Bool {
+        canReorder && draggedEntryKey != nil && info.hasItemsConforming(to: [UTType.plainText.identifier])
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        guard canReorder, draggedEntryKey != nil else { return nil }
+        return DropProposal(operation: .move)
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        guard canReorder, let draggedEntryKey else { return false }
+
+        if let targetEntry {
+            let position: FavoriteDropPosition = info.location.y < 56 ? .before : .after
+            onDropOnEntry(draggedEntryKey, targetEntry, position)
+        } else {
+            onDropToColumnBottom(draggedEntryKey, column)
+        }
+
+        onFinish()
+        return true
+    }
+}
