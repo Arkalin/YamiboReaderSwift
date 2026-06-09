@@ -165,14 +165,9 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
     }
 
     func testSettingsPreviewUsesAttributedPreviewSurfaceWithoutUILayoutMeasurement() throws {
-        let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        let settingsSource = try String(
-            contentsOf: repositoryRoot
-                .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderSettingsViews.swift"),
-            encoding: .utf8
-        )
+        let settingsSource = try readerSettingsSources()
         let adapterSource = try String(
-            contentsOf: repositoryRoot
+            contentsOf: URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
                 .appendingPathComponent("Sources/YamiboReaderUI/Views/NovelTextDisplayAdapter.swift"),
             encoding: .utf8
         )
@@ -751,13 +746,8 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
     }
 
     func testNovelReadingSessionDisplayPathDoesNotRetainUIKitTextViewFallback() throws {
-        let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let readerSupportSource = try readerSupportSources()
-        let settingsSource = try String(
-            contentsOf: repositoryRoot
-                .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderSettingsViews.swift"),
-            encoding: .utf8
-        )
+        let settingsSource = try readerSettingsSources()
         let productionDisplaySources = readerSupportSource + "\n" + settingsSource
 
         XCTAssertFalse(productionDisplaySources.contains("ReaderRichTextView"))
@@ -774,12 +764,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
     }
 
     func testSettingsPreviewUsesLightweightSurfaceInsteadOfReaderRuntimeAdapter() throws {
-        let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        let settingsSource = try String(
-            contentsOf: repositoryRoot
-                .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderSettingsViews.swift"),
-            encoding: .utf8
-        )
+        let settingsSource = try readerSettingsSources()
 
         XCTAssertTrue(settingsSource.contains("NativeNovelTextSettingsPreviewView("))
         XCTAssertTrue(settingsSource.contains("NovelTextSettingsPreviewSurface("))
@@ -870,21 +855,36 @@ private func functionBody(named name: String, in source: String) -> String? {
 }
 
 private func readerSupportSources() throws -> String {
-    let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-    let relativePaths = [
+    try joinedSourceFiles([
         "Sources/YamiboReaderUI/Views/ReaderSupportViews.swift",
         "Sources/YamiboReaderUI/Presentation/ReaderProgressPresentation.swift",
         "Sources/YamiboReaderUI/Presentation/ReaderChromeProgressSnapshot.swift",
+        "Sources/YamiboReaderUI/Views/ReaderTopChrome.swift",
+        "Sources/YamiboReaderUI/Views/ReaderBottomChrome.swift",
         "Sources/YamiboReaderUI/Views/ReaderChromeControls.swift",
         "Sources/YamiboReaderUI/Views/ReaderViewportContentViews.swift",
         "Sources/YamiboReaderUI/Views/ReaderPagedViewport.swift",
+        "Sources/YamiboReaderUI/Views/ReaderPagedTapZones.swift",
         "Sources/YamiboReaderUI/Views/ReaderVerticalViewport.swift",
         "Sources/YamiboReaderUI/Views/ReaderImageBrowserView.swift",
-        "Sources/YamiboReaderUI/Views/ReaderChromeViews.swift",
+        "Sources/YamiboReaderUI/Views/ReaderProgressCapsules.swift",
         "Sources/YamiboReaderUI/Views/ReaderChapterSheets.swift",
         "Sources/YamiboReaderUI/Views/ReaderCacheViews.swift",
-    ]
+    ])
+}
 
+private func readerSettingsSources() throws -> String {
+    try joinedSourceFiles([
+        "Sources/YamiboReaderUI/Views/ReaderSettingsViews.swift",
+        "Sources/YamiboReaderUI/Views/ReaderSettingsHeroViews.swift",
+        "Sources/YamiboReaderUI/Views/ReaderSettingsPalette.swift",
+        "Sources/YamiboReaderUI/Views/ReaderSettingsSections.swift",
+        "Sources/YamiboReaderUI/Views/ReaderSettingsControls.swift",
+    ])
+}
+
+private func joinedSourceFiles(_ relativePaths: [String]) throws -> String {
+    let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
     return try relativePaths
         .map { path in
             try String(contentsOf: repositoryRoot.appendingPathComponent(path), encoding: .utf8)
