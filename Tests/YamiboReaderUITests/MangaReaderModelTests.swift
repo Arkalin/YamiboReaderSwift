@@ -1705,7 +1705,7 @@ final class MangaReaderModelTests: XCTestCase {
     }
 
     func testNovelFavoriteDetailLineViewKeepsProgressTextUntruncated() throws {
-        let source = try String(contentsOfFile: projectFilePath("Sources/YamiboReaderUI/Views/FavoritesView.swift"))
+        let source = try String(contentsOfFile: projectFilePath("Sources/YamiboReaderUI/Views/FavoriteRows.swift"))
 
         XCTAssertTrue(source.contains("ForEach(favoriteDetailLineItems(for: favorite), id: \\.self)"))
         XCTAssertFalse(source.contains("ForEach(favoriteDetailLines(for: favorite), id: \\.self)"))
