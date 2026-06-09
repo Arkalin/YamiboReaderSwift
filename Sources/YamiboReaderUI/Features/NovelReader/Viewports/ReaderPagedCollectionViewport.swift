@@ -55,16 +55,24 @@ struct ReaderPagedCollectionViewport: UIViewRepresentable {
         tapRecognizer.cancelsTouchesInView = false
         tapRecognizer.delegate = context.coordinator
         collectionView.addGestureRecognizer(tapRecognizer)
+        let quickFadePanRecognizer = UIPanGestureRecognizer(
+            target: context.coordinator,
+            action: #selector(Coordinator.handleQuickFadePan(_:))
+        )
+        quickFadePanRecognizer.delegate = context.coordinator
+        collectionView.addGestureRecognizer(quickFadePanRecognizer)
         let coordinator = context.coordinator
         collectionView.onLayoutSubviews = { [weak coordinator, weak collectionView] in
             guard let collectionView else { return }
             coordinator?.scrollToPendingSelectionIfPossible(in: collectionView, animated: false)
         }
+        context.coordinator.updateGestureState(in: collectionView)
         return collectionView
     }
 
     func updateUIView(_ collectionView: UICollectionView, context: Context) {
         context.coordinator.parent = self
+        context.coordinator.updateGestureState(in: collectionView)
         context.coordinator.callbackScheduler.performViewUpdate {
             context.coordinator.updateContentAndRequestSelectionScroll(
                 in: collectionView,
@@ -194,11 +202,21 @@ struct ReaderPagedCollectionViewport: UIViewRepresentable {
             }
         }
 
+        @objc
+        func handleQuickFadePan(_ recognizer: UIPanGestureRecognizer) {
+            pagingDriver.handleQuickFadePan(recognizer, inputs: pagingInputs)
+        }
+
         func gestureRecognizer(
             _ gestureRecognizer: UIGestureRecognizer,
             shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
         ) -> Bool {
             otherGestureRecognizer.view?.isDescendant(ofType: ReaderVerticalViewportImageView.self) == true
+        }
+
+        func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+            guard let panRecognizer = gestureRecognizer as? UIPanGestureRecognizer else { return true }
+            return pagingDriver.quickFadePanShouldBegin(panRecognizer, inputs: pagingInputs)
         }
 
         func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
@@ -246,6 +264,10 @@ struct ReaderPagedCollectionViewport: UIViewRepresentable {
         @discardableResult
         func scrollToPendingSelectionIfPossible(in collectionView: UICollectionView, animated: Bool) -> Bool {
             pagingDriver.scrollToPendingSelectionIfPossible(in: collectionView, animated: animated, inputs: pagingInputs)
+        }
+
+        func updateGestureState(in collectionView: UICollectionView) {
+            pagingDriver.updateGestureState(in: collectionView, inputs: pagingInputs)
         }
     }
 }

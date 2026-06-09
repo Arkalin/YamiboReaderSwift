@@ -1208,6 +1208,9 @@ private extension ReaderAppearanceSettings {
         var rhs = other
         lhs.backgroundStyle = .system
         rhs.backgroundStyle = .system
-        return lhs == rhs && backgroundStyle != other.backgroundStyle
+        lhs.pagedTurnStyle = .slide
+        rhs.pagedTurnStyle = .slide
+        return lhs == rhs &&
+            (backgroundStyle != other.backgroundStyle || pagedTurnStyle != other.pagedTurnStyle)
     }
 }

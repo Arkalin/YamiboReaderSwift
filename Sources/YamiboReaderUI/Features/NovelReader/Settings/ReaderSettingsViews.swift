@@ -174,7 +174,12 @@ struct ReaderSettingsPanel: View {
     private func setCharacterSpacingScale(_ value: Double) { draftSettings.characterSpacingScale = value }
     private func setHorizontalPadding(_ value: Double) { draftSettings.horizontalPadding = value }
     private func setBackgroundStyle(_ value: ReaderBackgroundStyle) { draftSettings.backgroundStyle = value }
-    private func setReadingMode(_ value: ReaderReadingMode) { draftSettings.readingMode = value }
+    private func setReadingMode(_ value: ReaderReadingMode, pagedTurnStyle: ReaderPagedTurnStyle) {
+        draftSettings.readingMode = value
+        if value == .paged {
+            draftSettings.pagedTurnStyle = pagedTurnStyle
+        }
+    }
     private func setTranslationMode(_ value: ReaderTranslationMode) { draftSettings.translationMode = value }
     private func setImageLoading(_ value: Bool) { draftSettings.loadsInlineImages = value }
     private func setApplePencilPageTurnBehavior(_ value: ApplePencilPageTurnBehavior) {
