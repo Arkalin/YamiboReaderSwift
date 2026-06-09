@@ -1,8 +1,87 @@
+import CoreGraphics
 import XCTest
 @testable import YamiboReaderCore
 @testable import YamiboReaderUI
 
 final class NovelTextDisplayAdapterTests: XCTestCase {
+    func testInlineImageHitTestingUsesAspectFitFrameOnly() {
+        let container = CGSize(width: 300, height: 500)
+        let image = CGSize(width: 300, height: 200)
+        let imageFrame = ReaderImageHitTesting.aspectFitImageFrame(
+            imageSize: image,
+            containerSize: container
+        )
+
+        XCTAssertEqual(imageFrame, CGRect(x: 0, y: 150, width: 300, height: 200))
+        XCTAssertTrue(ReaderImageHitTesting.containsImagePoint(CGPoint(x: 150, y: 240), imageSize: image, containerSize: container))
+        XCTAssertFalse(ReaderImageHitTesting.containsImagePoint(CGPoint(x: 150, y: 420), imageSize: image, containerSize: container))
+    }
+
+    func testPagedTapZoneKeepsBlankAreaNavigationAvailable() {
+        let bounds = CGRect(x: 0, y: 0, width: 390, height: 844)
+
+        XCTAssertEqual(ReaderPagedTapZone.zone(for: CGPoint(x: 40, y: 720), in: bounds), .previous)
+        XCTAssertEqual(ReaderPagedTapZone.zone(for: CGPoint(x: 190, y: 720), in: bounds), .toggleChrome)
+        XCTAssertEqual(ReaderPagedTapZone.zone(for: CGPoint(x: 340, y: 720), in: bounds), .next)
+    }
+
+    func testImageTapRoutesHitImageBeforePageTapHandling() throws {
+        let supportSource = try String(
+            contentsOf: URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+                .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderSupportViews.swift"),
+            encoding: .utf8
+        )
+
+        XCTAssertTrue(supportSource.contains("firstDescendant(\n                ofType: ReaderVerticalViewportImageView.self"))
+        XCTAssertTrue(supportSource.contains("handleImageTap(imageView, at: imageLocation)"))
+        XCTAssertTrue(supportSource.contains("func imageTapPayloadIfHit(at point: CGPoint) -> (url: URL, title: String?)?"))
+        XCTAssertTrue(supportSource.contains("if parent.isChromeVisible"))
+        XCTAssertTrue(supportSource.contains("onChromeVisibleImageTap()"))
+        XCTAssertTrue(supportSource.contains("onImageTap(payload.url, payload.title)"))
+        XCTAssertFalse(supportSource.contains("shouldBeRequiredToFailBy otherGestureRecognizer"))
+        XCTAssertFalse(supportSource.contains("hitTest(location, with: nil)?.isDescendant(of: ReaderVerticalViewportImageView.self)"))
+        XCTAssertFalse(supportSource.contains("private var onTap: ((URL, String?) -> Void)?"))
+    }
+
+    func testImageBrowserSwipeDownDismissRequiresMinimumZoomAndDownwardIntent() {
+        XCTAssertTrue(ReaderImageBrowserDismissGesture.canBegin(
+            translation: CGPoint(x: 12, y: 80),
+            zoomScale: 1,
+            minimumZoomScale: 1
+        ))
+        XCTAssertTrue(ReaderImageBrowserDismissGesture.shouldDismiss(
+            translation: CGPoint(x: 12, y: 120),
+            velocity: CGPoint(x: 0, y: 700),
+            zoomScale: 1,
+            minimumZoomScale: 1
+        ))
+        XCTAssertFalse(ReaderImageBrowserDismissGesture.shouldDismiss(
+            translation: CGPoint(x: 12, y: 120),
+            velocity: CGPoint(x: 0, y: 900),
+            zoomScale: 1.2,
+            minimumZoomScale: 1
+        ))
+        XCTAssertFalse(ReaderImageBrowserDismissGesture.canBegin(
+            translation: CGPoint(x: 120, y: 80),
+            zoomScale: 1,
+            minimumZoomScale: 1
+        ))
+        XCTAssertFalse(ReaderImageBrowserDismissGesture.shouldDismiss(
+            translation: CGPoint(x: 12, y: 70),
+            velocity: CGPoint(x: 0, y: 300),
+            zoomScale: 1,
+            minimumZoomScale: 1
+        ))
+    }
+
+    func testImageBrowserSwipeDownDismissVisualProgressIsClamped() {
+        XCTAssertEqual(ReaderImageBrowserDismissGesture.progress(for: -40), 0)
+        XCTAssertEqual(ReaderImageBrowserDismissGesture.progress(for: 75), 0.5)
+        XCTAssertEqual(ReaderImageBrowserDismissGesture.progress(for: 300), 1)
+        XCTAssertEqual(ReaderImageBrowserDismissGesture.imageScale(for: 1), 0.92, accuracy: 0.001)
+        XCTAssertEqual(ReaderImageBrowserDismissGesture.backgroundOpacity(for: 1), 0, accuracy: 0.001)
+    }
+
     func testMigrationGateRejectsUIOwnedTextKitGraphsAndDisplayValueFallbacks() throws {
         let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let adapterSource = try String(

@@ -445,6 +445,81 @@ struct ReaderPagedPagerIdentity: Hashable {
     }
 }
 
+enum ReaderPagedTapZone: Equatable {
+    case previous
+    case toggleChrome
+    case next
+
+    static func zone(for point: CGPoint, in bounds: CGRect) -> ReaderPagedTapZone {
+        guard bounds.width > 0 else { return .toggleChrome }
+        let relativeX = point.x - bounds.minX
+        let thirdWidth = bounds.width / 3
+        if relativeX < thirdWidth {
+            return .previous
+        }
+        if relativeX > thirdWidth * 2 {
+            return .next
+        }
+        return .toggleChrome
+    }
+}
+
+enum ReaderImageHitTesting {
+    static func aspectFitImageFrame(imageSize: CGSize, containerSize: CGSize) -> CGRect {
+        guard imageSize.width > 0,
+              imageSize.height > 0,
+              containerSize.width > 0,
+              containerSize.height > 0 else {
+            return .zero
+        }
+
+        let scale = min(containerSize.width / imageSize.width, containerSize.height / imageSize.height)
+        let fittedSize = CGSize(width: imageSize.width * scale, height: imageSize.height * scale)
+        return CGRect(
+            x: (containerSize.width - fittedSize.width) / 2,
+            y: (containerSize.height - fittedSize.height) / 2,
+            width: fittedSize.width,
+            height: fittedSize.height
+        )
+    }
+
+    static func containsImagePoint(_ point: CGPoint, imageSize: CGSize, containerSize: CGSize) -> Bool {
+        aspectFitImageFrame(imageSize: imageSize, containerSize: containerSize).contains(point)
+    }
+}
+
+enum ReaderImageBrowserDismissGesture {
+    static let minimumTranslation: CGFloat = 90
+    static let committedTranslation: CGFloat = 150
+    static let minimumVelocity: CGFloat = 650
+
+    static func progress(for translationY: CGFloat) -> CGFloat {
+        min(max(translationY / committedTranslation, 0), 1)
+    }
+
+    static func imageScale(for progress: CGFloat) -> CGFloat {
+        1 - min(max(progress, 0), 1) * 0.08
+    }
+
+    static func backgroundOpacity(for progress: CGFloat) -> CGFloat {
+        1 - min(max(progress, 0), 1)
+    }
+
+    static func canBegin(translation: CGPoint, zoomScale: CGFloat, minimumZoomScale: CGFloat) -> Bool {
+        guard zoomScale <= minimumZoomScale + 0.01 else { return false }
+        guard translation.y > 0 else { return false }
+        return translation.y > abs(translation.x) * 1.2
+    }
+
+    static func shouldDismiss(translation: CGPoint, velocity: CGPoint, zoomScale: CGFloat, minimumZoomScale: CGFloat) -> Bool {
+        guard canBegin(translation: translation, zoomScale: zoomScale, minimumZoomScale: minimumZoomScale) else {
+            return false
+        }
+        guard translation.y >= minimumTranslation else { return false }
+        return translation.y >= committedTranslation || velocity.y >= minimumVelocity
+    }
+}
+
 #if os(iOS)
 import UIKit
 
@@ -582,6 +657,7 @@ struct ReaderPresentationSpreadContent: View {
     let topInset: CGFloat
     let bottomInset: CGFloat
     let displayReferenceProvider: @MainActor (NovelReaderSurfaceIdentity) -> NovelTextViewportDisplayReference?
+    let onImageTap: (URL, String?) -> Void
 
     var body: some View {
         HStack(spacing: 0) {
@@ -605,7 +681,8 @@ struct ReaderPresentationSpreadContent: View {
                     fallbackSurfaceIndex: surfaceIndex,
                     settings: settings,
                     refererURL: refererURL,
-                    sessionState: sessionState
+                    sessionState: sessionState,
+                    onImageTap: onImageTap
                 )
                 .padding(.horizontal, settings.horizontalPadding)
                 .padding(.top, topInset)
@@ -628,6 +705,7 @@ struct ReaderViewportSurfaceContent: View {
     let settings: ReaderAppearanceSettings
     let refererURL: URL
     let sessionState: SessionState
+    let onImageTap: (URL, String?) -> Void
 
     init(
         surface: NovelReaderSurface?,
@@ -636,7 +714,8 @@ struct ReaderViewportSurfaceContent: View {
         fallbackSurfaceIndex: Int?,
         settings: ReaderAppearanceSettings,
         refererURL: URL,
-        sessionState: SessionState
+        sessionState: SessionState,
+        onImageTap: @escaping (URL, String?) -> Void = { _, _ in }
     ) {
         self.surface = surface
         self.displayReference = displayReference
@@ -645,6 +724,7 @@ struct ReaderViewportSurfaceContent: View {
         self.settings = settings
         self.refererURL = refererURL
         self.sessionState = sessionState
+        self.onImageTap = onImageTap
     }
 
     var body: some View {
@@ -667,7 +747,9 @@ struct ReaderViewportSurfaceContent: View {
                     block: block,
                     displayReference: displayReference,
                     refererURL: refererURL,
-                    sessionState: sessionState
+                    sessionState: sessionState,
+                    title: surface?.chapterTitle,
+                    onImageTap: onImageTap
                 )
             }
         }
@@ -683,7 +765,9 @@ struct ReaderViewportSurfaceContent: View {
                     block: block,
                     displayReference: displayReference,
                     refererURL: refererURL,
-                    sessionState: sessionState
+                    sessionState: sessionState,
+                    title: surface?.chapterTitle,
+                    onImageTap: onImageTap
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
             }
@@ -746,7 +830,11 @@ struct ReaderPagedCollectionViewport: UIViewRepresentable {
     let bottomInset: CGFloat
     let selectionIndex: Int
     let displayReferenceProvider: @MainActor (NovelReaderSurfaceIdentity) -> NovelTextViewportDisplayReference?
+    let isChromeVisible: Bool
     let onSelectionChange: (Int) -> Void
+    let onPageTapZone: (ReaderPagedTapZone) -> Void
+    let onChromeVisibleImageTap: () -> Void
+    let onImageTap: (URL, String?) -> Void
 
     func makeCoordinator() -> Coordinator {
         Coordinator(parent: self)
@@ -766,6 +854,10 @@ struct ReaderPagedCollectionViewport: UIViewRepresentable {
         collectionView.dataSource = context.coordinator
         collectionView.delegate = context.coordinator
         collectionView.register(UICollectionViewCell.self, forCellWithReuseIdentifier: Coordinator.reuseIdentifier)
+        let tapRecognizer = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleTap(_:)))
+        tapRecognizer.cancelsTouchesInView = false
+        tapRecognizer.delegate = context.coordinator
+        collectionView.addGestureRecognizer(tapRecognizer)
         let coordinator = context.coordinator
         collectionView.onLayoutSubviews = { [weak coordinator, weak collectionView] in
             guard let collectionView else { return }
@@ -781,7 +873,7 @@ struct ReaderPagedCollectionViewport: UIViewRepresentable {
         }
     }
 
-    final class Coordinator: NSObject, UICollectionViewDataSource, UICollectionViewDelegateFlowLayout, UIScrollViewDelegate {
+    final class Coordinator: NSObject, UICollectionViewDataSource, UICollectionViewDelegateFlowLayout, UIScrollViewDelegate, UIGestureRecognizerDelegate {
         static let reuseIdentifier = "ReaderPagedCollectionViewportCell"
 
         var parent: ReaderPagedCollectionViewport
@@ -819,7 +911,8 @@ struct ReaderPagedCollectionViewport: UIViewRepresentable {
                     fallbackSurfaceIndex: indexPath.item,
                     settings: parent.settings,
                     refererURL: parent.refererURL,
-                    sessionState: parent.sessionState
+                    sessionState: parent.sessionState,
+                    onImageTap: parent.onImageTap
                 )
                 .padding(.horizontal, parent.settings.horizontalPadding)
                 .padding(.top, parent.topInset)
@@ -844,6 +937,55 @@ struct ReaderPagedCollectionViewport: UIViewRepresentable {
 
         func scrollViewDidEndScrollingAnimation(_ scrollView: UIScrollView) {
             updateSelection(from: scrollView)
+        }
+
+        @objc
+        func handleTap(_ recognizer: UITapGestureRecognizer) {
+            guard recognizer.state == .ended,
+                  let collectionView = recognizer.view as? UICollectionView else {
+                return
+            }
+            let location = recognizer.location(in: collectionView)
+            if let imageView = collectionView.firstDescendant(
+                ofType: ReaderVerticalViewportImageView.self,
+                containing: location
+            ) {
+                let imageLocation = collectionView.convert(location, to: imageView)
+                handleImageTap(imageView, at: imageLocation)
+                return
+            }
+            let zone = ReaderPagedTapZone.zone(for: location, in: collectionView.bounds)
+            let onPageTapZone = parent.onPageTapZone
+            callbackScheduler.publish {
+                onPageTapZone(zone)
+            }
+        }
+
+        func gestureRecognizer(
+            _ gestureRecognizer: UIGestureRecognizer,
+            shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
+        ) -> Bool {
+            otherGestureRecognizer.view?.isDescendant(ofType: ReaderVerticalViewportImageView.self) == true
+        }
+
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+            true
+        }
+
+        private func handleImageTap(_ imageView: ReaderVerticalViewportImageView, at location: CGPoint) {
+            if parent.isChromeVisible {
+                let onChromeVisibleImageTap = parent.onChromeVisibleImageTap
+                callbackScheduler.publish {
+                    onChromeVisibleImageTap()
+                }
+                return
+            }
+
+            guard let payload = imageView.imageTapPayloadIfHit(at: location) else { return }
+            let onImageTap = parent.onImageTap
+            callbackScheduler.publish {
+                onImageTap(payload.url, payload.title)
+            }
         }
 
         func reloadDataAndRequestSelectionScroll(in collectionView: UICollectionView, animated: Bool) {
@@ -930,7 +1072,11 @@ struct ReaderPresentationSpreadCollectionViewport: UIViewRepresentable {
     let bottomInset: CGFloat
     let selectionIndex: Int
     let displayReferenceProvider: @MainActor (NovelReaderSurfaceIdentity) -> NovelTextViewportDisplayReference?
+    let isChromeVisible: Bool
     let onSelectionChange: (Int) -> Void
+    let onPageTapZone: (ReaderPagedTapZone) -> Void
+    let onChromeVisibleImageTap: () -> Void
+    let onImageTap: (URL, String?) -> Void
 
     func makeCoordinator() -> Coordinator {
         Coordinator(parent: self)
@@ -950,6 +1096,10 @@ struct ReaderPresentationSpreadCollectionViewport: UIViewRepresentable {
         collectionView.dataSource = context.coordinator
         collectionView.delegate = context.coordinator
         collectionView.register(UICollectionViewCell.self, forCellWithReuseIdentifier: Coordinator.reuseIdentifier)
+        let tapRecognizer = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleTap(_:)))
+        tapRecognizer.cancelsTouchesInView = false
+        tapRecognizer.delegate = context.coordinator
+        collectionView.addGestureRecognizer(tapRecognizer)
         let coordinator = context.coordinator
         collectionView.onLayoutSubviews = { [weak coordinator, weak collectionView] in
             guard let collectionView else { return }
@@ -965,7 +1115,7 @@ struct ReaderPresentationSpreadCollectionViewport: UIViewRepresentable {
         }
     }
 
-    final class Coordinator: NSObject, UICollectionViewDataSource, UICollectionViewDelegateFlowLayout, UIScrollViewDelegate {
+    final class Coordinator: NSObject, UICollectionViewDataSource, UICollectionViewDelegateFlowLayout, UIScrollViewDelegate, UIGestureRecognizerDelegate {
         static let reuseIdentifier = "ReaderPresentationSpreadCollectionViewportCell"
 
         var parent: ReaderPresentationSpreadCollectionViewport
@@ -1001,7 +1151,8 @@ struct ReaderPresentationSpreadCollectionViewport: UIViewRepresentable {
                     sessionState: parent.sessionState,
                     topInset: parent.topInset,
                     bottomInset: parent.bottomInset,
-                    displayReferenceProvider: parent.displayReferenceProvider
+                    displayReferenceProvider: parent.displayReferenceProvider,
+                    onImageTap: parent.onImageTap
                 )
             }
             .margins(.all, 0)
@@ -1022,6 +1173,55 @@ struct ReaderPresentationSpreadCollectionViewport: UIViewRepresentable {
 
         func scrollViewDidEndScrollingAnimation(_ scrollView: UIScrollView) {
             updateSelection(from: scrollView)
+        }
+
+        @objc
+        func handleTap(_ recognizer: UITapGestureRecognizer) {
+            guard recognizer.state == .ended,
+                  let collectionView = recognizer.view as? UICollectionView else {
+                return
+            }
+            let location = recognizer.location(in: collectionView)
+            if let imageView = collectionView.firstDescendant(
+                ofType: ReaderVerticalViewportImageView.self,
+                containing: location
+            ) {
+                let imageLocation = collectionView.convert(location, to: imageView)
+                handleImageTap(imageView, at: imageLocation)
+                return
+            }
+            let zone = ReaderPagedTapZone.zone(for: location, in: collectionView.bounds)
+            let onPageTapZone = parent.onPageTapZone
+            callbackScheduler.publish {
+                onPageTapZone(zone)
+            }
+        }
+
+        func gestureRecognizer(
+            _ gestureRecognizer: UIGestureRecognizer,
+            shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
+        ) -> Bool {
+            otherGestureRecognizer.view?.isDescendant(ofType: ReaderVerticalViewportImageView.self) == true
+        }
+
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+            true
+        }
+
+        private func handleImageTap(_ imageView: ReaderVerticalViewportImageView, at location: CGPoint) {
+            if parent.isChromeVisible {
+                let onChromeVisibleImageTap = parent.onChromeVisibleImageTap
+                callbackScheduler.publish {
+                    onChromeVisibleImageTap()
+                }
+                return
+            }
+
+            guard let payload = imageView.imageTapPayloadIfHit(at: location) else { return }
+            let onImageTap = parent.onImageTap
+            callbackScheduler.publish {
+                onImageTap(payload.url, payload.title)
+            }
         }
 
         func reloadDataAndRequestSelectionScroll(in collectionView: UICollectionView, animated: Bool) {
@@ -1102,6 +1302,7 @@ private struct ReaderVerticalViewportDisplaySurface {
     let identity: NovelReaderSurfaceIdentity
     let surfaceIndex: Int
     let documentView: Int
+    let chapterTitle: String?
     let presentationHeight: CGFloat?
     let blocks: [ReaderViewportDisplayBlock]
 }
@@ -1115,6 +1316,7 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
     let bottomInset: CGFloat
     let scrollRequest: ReaderVerticalScrollRequest?
     let displayReferenceProvider: @MainActor (NovelReaderSurfaceIdentity) -> NovelTextViewportDisplayReference?
+    let isChromeVisible: Bool
     let onVisibleSurfaceIdentitiesChange: ([NovelReaderSurfaceIdentity]) -> Void
     let onScrollRequestHandled: (ReaderVerticalScrollRequest) -> Void
     let onScrollViewReady: (UIScrollView) -> Void
@@ -1123,6 +1325,8 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
     let onViewportChange: () -> Void
     let onScrollSettled: () -> Void
     let onTap: () -> Void
+    let onChromeVisibleImageTap: () -> Void
+    let onImageTap: (URL, String?) -> Void
 
     private var contentIdentity: ReaderVerticalViewportContentIdentity {
         ReaderVerticalViewportContentIdentity(
@@ -1159,6 +1363,7 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
             coordinator?.publishLayout(from: collectionView)
         }
         context.coordinator.tapGesture.cancelsTouchesInView = false
+        context.coordinator.tapGesture.delegate = context.coordinator
         collectionView.addGestureRecognizer(context.coordinator.tapGesture)
         onScrollViewReady(collectionView)
         return collectionView
@@ -1177,7 +1382,7 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
         max(CGFloat(6 * settings.lineHeightScale), 0)
     }
 
-    final class Coordinator: NSObject, UICollectionViewDataSource, UICollectionViewDelegateFlowLayout, UIScrollViewDelegate {
+    final class Coordinator: NSObject, UICollectionViewDataSource, UICollectionViewDelegateFlowLayout, UIScrollViewDelegate, UIGestureRecognizerDelegate {
         var parent: ReaderVerticalViewportScrollView
         let callbackScheduler = SwiftUIViewUpdateCallbackScheduler()
         private var contentIdentity: ReaderVerticalViewportContentIdentity?
@@ -1188,7 +1393,7 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
         private var hasPublishedNilTextViewportSample = false
         private var isImmediateVisibleTextRedrawScheduled = false
         private var isDelayedVisibleTextRedrawScheduled = false
-        lazy var tapGesture = UITapGestureRecognizer(target: self, action: #selector(handleTap))
+        lazy var tapGesture = UITapGestureRecognizer(target: self, action: #selector(handleTap(_:)))
 
         init(parent: ReaderVerticalViewportScrollView) {
             self.parent = parent
@@ -1277,7 +1482,8 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
                 refererURL: parent.refererURL,
                 sessionState: parent.sessionState,
                 contentWidth: max(verticalItemWidth(in: collectionView) - parent.settings.horizontalPadding * 2, 1),
-                topPadding: displaySurface.surfaceIndex == 0 ? 16 : 0
+                topPadding: displaySurface.surfaceIndex == 0 ? 16 : 0,
+                onImageTap: parent.onImageTap
             )
             if let attributes = collectionView.layoutAttributesForItem(at: indexPath) {
                 cell.refreshLayout(for: attributes.size)
@@ -1374,10 +1580,45 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
             publishScrollSettled(from: collectionView)
         }
 
-        @objc private func handleTap() {
+        @objc private func handleTap(_ recognizer: UITapGestureRecognizer) {
+            guard recognizer.state == .ended else { return }
+            if let collectionView = recognizer.view as? UICollectionView {
+                let location = recognizer.location(in: collectionView)
+                if let imageView = collectionView.firstDescendant(
+                    ofType: ReaderVerticalViewportImageView.self,
+                    containing: location
+                ) {
+                    let imageLocation = collectionView.convert(location, to: imageView)
+                    handleImageTap(imageView, at: imageLocation)
+                    return
+                }
+            }
             let onTap = parent.onTap
             callbackScheduler.publish {
                 onTap()
+            }
+        }
+
+        func gestureRecognizer(
+            _ gestureRecognizer: UIGestureRecognizer,
+            shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
+        ) -> Bool {
+            otherGestureRecognizer.view?.isDescendant(ofType: ReaderVerticalViewportImageView.self) == true
+        }
+
+        private func handleImageTap(_ imageView: ReaderVerticalViewportImageView, at location: CGPoint) {
+            if parent.isChromeVisible {
+                let onChromeVisibleImageTap = parent.onChromeVisibleImageTap
+                callbackScheduler.publish {
+                    onChromeVisibleImageTap()
+                }
+                return
+            }
+
+            guard let payload = imageView.imageTapPayloadIfHit(at: location) else { return }
+            let onImageTap = parent.onImageTap
+            callbackScheduler.publish {
+                onImageTap(payload.url, payload.title)
             }
         }
 
@@ -1538,6 +1779,7 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
                 identity: surface.identity,
                 surfaceIndex: surface.presentationIndex,
                 documentView: surface.documentView,
+                chapterTitle: surface.chapterTitle,
                 presentationHeight: surface.presentationSize.height > 0 ? surface.presentationSize.height : nil,
                 blocks: ReaderViewportSurfaceContent.viewportBlocks(
                     surface: surface
@@ -1678,6 +1920,7 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
     private var currentTopPadding: CGFloat = 0
     private var currentDisplayReference: NovelTextViewportDisplayReference?
     private var currentTextHeight: CGFloat?
+    private var currentOnImageTap: (URL, String?) -> Void = { _, _ in }
     private var lastAppliedLayoutSize = CGSize.zero
     private var preferredLayoutSize = CGSize.zero
 
@@ -1696,6 +1939,7 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
         currentPage = nil
         currentDisplayReference = nil
         currentTextHeight = nil
+        currentOnImageTap = { _, _ in }
         lastAppliedLayoutSize = .zero
         preferredLayoutSize = .zero
         removeBlockSubviews()
@@ -1732,7 +1976,8 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
             refererURL: currentRefererURL,
             sessionState: currentSessionState,
             contentWidth: currentContentWidth,
-            topPadding: currentTopPadding
+            topPadding: currentTopPadding,
+            onImageTap: currentOnImageTap
         )
     }
 
@@ -1744,7 +1989,8 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
         refererURL: URL,
         sessionState: SessionState,
         contentWidth: CGFloat,
-        topPadding: CGFloat
+        topPadding: CGFloat,
+        onImageTap: @escaping (URL, String?) -> Void
     ) {
         currentPage = page
         currentDisplayReference = displayReference
@@ -1754,6 +2000,7 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
         currentSessionState = sessionState
         currentContentWidth = contentWidth
         currentTopPadding = topPadding
+        currentOnImageTap = onImageTap
 
         removeBlockSubviews()
 
@@ -1766,7 +2013,8 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
                 refererURL: refererURL,
                 sessionState: sessionState,
                 displayReference: displayReference,
-                textHeight: textHeight
+                textHeight: textHeight,
+                onImageTap: onImageTap
             )
             blockViews.append(blockView)
             contentView.addSubview(blockView.view)
@@ -1847,7 +2095,8 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
         refererURL: URL,
         sessionState: SessionState,
         displayReference: NovelTextViewportDisplayReference?,
-        textHeight: CGFloat?
+        textHeight: CGFloat?,
+        onImageTap: @escaping (URL, String?) -> Void
     ) -> BlockView {
         switch block {
         case .text:
@@ -1861,7 +2110,9 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
                 url: url,
                 refererURL: refererURL,
                 sessionState: sessionState,
-                preferredHeight: textHeight
+                preferredHeight: textHeight,
+                title: page.chapterTitle,
+                onImageTap: onImageTap
             )
         case let .footer(text):
             return makeFooterBlockView(text)
@@ -1886,11 +2137,13 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
         url: URL,
         refererURL: URL,
         sessionState: SessionState,
-        preferredHeight: CGFloat?
+        preferredHeight: CGFloat?,
+        title: String?,
+        onImageTap: @escaping (URL, String?) -> Void
     ) -> BlockView {
         let height = max(preferredHeight ?? bounds.height, 1)
         let imageView = ReaderVerticalViewportImageView()
-        imageView.configure(url: url, refererURL: refererURL, sessionState: sessionState)
+        imageView.configure(url: url, refererURL: refererURL, sessionState: sessionState, title: title, onTap: onImageTap)
         return BlockView(view: imageView, height: height, displayReference: nil)
     }
 
@@ -1953,6 +2206,16 @@ private final class ReaderVerticalViewportImageView: UIView {
     private let activityIndicator = UIActivityIndicatorView(style: .medium)
     private let failureLabel = UILabel()
     private var task: Task<Void, Never>?
+    private var url: URL?
+    private var title: String?
+    private var requestIdentity: RequestIdentity?
+
+    private struct RequestIdentity: Equatable {
+        let url: URL
+        let refererURL: URL
+        let userAgent: String
+        let cookie: String
+    }
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -1968,7 +2231,35 @@ private final class ReaderVerticalViewportImageView: UIView {
         task?.cancel()
     }
 
-    func configure(url: URL, refererURL: URL, sessionState: SessionState) {
+    override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
+        guard super.point(inside: point, with: event) else { return false }
+        guard let image = imageView.image else {
+            return !activityIndicator.isHidden || !failureLabel.isHidden
+        }
+        return ReaderImageHitTesting.containsImagePoint(
+            point,
+            imageSize: image.size,
+            containerSize: bounds.size
+        )
+    }
+
+    func configure(
+        url: URL,
+        refererURL: URL,
+        sessionState: SessionState,
+        title: String?,
+        onTap: @escaping (URL, String?) -> Void
+    ) {
+        let nextRequestIdentity = RequestIdentity(
+            url: url,
+            refererURL: refererURL,
+            userAgent: sessionState.userAgent,
+            cookie: sessionState.cookie
+        )
+        self.url = url
+        self.title = title
+        guard requestIdentity != nextRequestIdentity else { return }
+        requestIdentity = nextRequestIdentity
         task?.cancel()
         imageView.image = nil
         failureLabel.isHidden = true
@@ -2000,6 +2291,7 @@ private final class ReaderVerticalViewportImageView: UIView {
 
     private func configureViewHierarchy() {
         backgroundColor = .clear
+        isUserInteractionEnabled = true
 
         imageView.contentMode = .scaleAspectFit
         imageView.translatesAutoresizingMaskIntoConstraints = false
@@ -2030,6 +2322,19 @@ private final class ReaderVerticalViewportImageView: UIView {
         ])
     }
 
+    func imageTapPayloadIfHit(at point: CGPoint) -> (url: URL, title: String?)? {
+        guard let url,
+              let image = imageView.image,
+              ReaderImageHitTesting.containsImagePoint(
+                  point,
+                  imageSize: image.size,
+                  containerSize: bounds.size
+              ) else {
+            return nil
+        }
+        return (url, title)
+    }
+
     @MainActor
     private func show(image: UIImage) {
         activityIndicator.stopAnimating()
@@ -2045,6 +2350,59 @@ private final class ReaderVerticalViewportImageView: UIView {
     }
 }
 
+private struct ReaderInlineViewportImage: UIViewRepresentable {
+    let url: URL
+    let refererURL: URL
+    let sessionState: SessionState
+    let title: String?
+    let onTap: (URL, String?) -> Void
+
+    func makeUIView(context: Context) -> ReaderVerticalViewportImageView {
+        ReaderVerticalViewportImageView()
+    }
+
+    func updateUIView(_ uiView: ReaderVerticalViewportImageView, context: Context) {
+        uiView.configure(
+            url: url,
+            refererURL: refererURL,
+            sessionState: sessionState,
+            title: title,
+            onTap: onTap
+        )
+    }
+}
+
+private extension UIView {
+    func isDescendant<T: UIView>(ofType type: T.Type) -> Bool {
+        if self is T {
+            return true
+        }
+        return superview?.isDescendant(ofType: type) ?? false
+    }
+
+    func firstDescendant<T: UIView>(
+        ofType type: T.Type,
+        containing point: CGPoint,
+        event: UIEvent? = nil
+    ) -> T? {
+        for subview in subviews.reversed() {
+            let subviewPoint = convert(point, to: subview)
+            if let typedSubview = subview as? T,
+               typedSubview.point(inside: subviewPoint, with: event) {
+                return typedSubview
+            }
+            if let match = subview.firstDescendant(
+                ofType: type,
+                containing: subviewPoint,
+                event: event
+            ) {
+                return match
+            }
+        }
+        return nil
+    }
+}
+
 private struct ReaderVerticalViewportContentIdentity: Hashable {
     var surfaces: [NovelReaderSurface]
     var settings: ReaderAppearanceSettings
@@ -2056,6 +2414,8 @@ private struct ReaderViewportBlockView: View {
     let displayReference: NovelTextViewportDisplayReference?
     let refererURL: URL
     let sessionState: SessionState
+    let title: String?
+    let onImageTap: (URL, String?) -> Void
 
     var body: some View {
         switch block {
@@ -2067,11 +2427,21 @@ private struct ReaderViewportBlockView: View {
                 Color.clear.frame(height: 1)
             }
         case let .image(url):
+#if os(iOS)
+            ReaderInlineViewportImage(
+                url: url,
+                refererURL: refererURL,
+                sessionState: sessionState,
+                title: title,
+                onTap: onImageTap
+            )
+#else
             AuthenticatedReaderImage(
                 url: url,
                 refererURL: refererURL,
                 sessionState: sessionState
             )
+#endif
         case let .footer(text):
             Text(text)
                 .font(.caption)
@@ -2175,6 +2545,404 @@ private struct AuthenticatedReaderImage: View {
         .task {
             await loader.loadIfNeeded()
         }
+    }
+}
+
+struct ReaderImageBrowserView: View {
+    let url: URL
+    let title: String
+    let refererURL: URL
+    let sessionState: SessionState
+    let onDismiss: () -> Void
+
+    @StateObject private var loader: ReaderImageLoader
+    @State private var swipeDismissProgress: CGFloat = 0
+    @State private var isSwipeDismissCommitted = false
+
+    init(
+        url: URL,
+        title: String,
+        refererURL: URL,
+        sessionState: SessionState,
+        onDismiss: @escaping () -> Void
+    ) {
+        self.url = url
+        self.title = title
+        self.refererURL = refererURL
+        self.sessionState = sessionState
+        self.onDismiss = onDismiss
+        _loader = StateObject(
+            wrappedValue: ReaderImageLoader(
+                url: url,
+                refererURL: refererURL,
+                sessionState: sessionState
+            )
+        )
+    }
+
+    var body: some View {
+        ZStack {
+            Color.black
+                .opacity(isSwipeDismissCommitted ? 0 : ReaderImageBrowserDismissGesture.backgroundOpacity(for: swipeDismissProgress))
+                .ignoresSafeArea()
+
+            if let image = loader.image {
+                ReaderZoomableImageView(
+                    image: image,
+                    onSwipeDownProgressChange: { progress in
+                        swipeDismissProgress = progress
+                    },
+                    onSwipeDownCommit: beginSwipeDownDismissCommit,
+                    onSwipeDownDismiss: commitSwipeDownDismiss
+                )
+                    .ignoresSafeArea()
+            } else if loader.didFail {
+                VStack(spacing: 12) {
+                    Label(L10n.string("image.load_failed"), systemImage: "photo")
+                        .foregroundStyle(.white.opacity(0.8))
+
+                    Button {
+                        Task {
+                            await loader.retry()
+                        }
+                    } label: {
+                        Label(L10n.string("common.retry"), systemImage: "arrow.clockwise")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.regular)
+                }
+                .padding(24)
+            } else {
+                ProgressView(L10n.string("image.loading"))
+                    .tint(.white)
+                    .foregroundStyle(.white.opacity(0.8))
+            }
+
+            VStack(spacing: 0) {
+                HStack(spacing: 12) {
+                    Text(title)
+                        .font(.headline)
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+
+                    Spacer(minLength: 12)
+
+                    Button(action: onDismiss) {
+                        Image(systemName: "checkmark")
+                            .font(.title3.weight(.semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 44, height: 44)
+                            .background(.black.opacity(0.58), in: Circle())
+                    }
+                    .accessibilityLabel(L10n.string("common.done"))
+                }
+                .padding(.horizontal, 18)
+                .padding(.top, 12)
+                .padding(.bottom, 8)
+                .background(
+                    LinearGradient(
+                        colors: [.black.opacity(0.62), .black.opacity(0)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .ignoresSafeArea(edges: .top)
+                )
+
+                Spacer(minLength: 0)
+            }
+            .opacity(1 - min(swipeDismissProgress * 1.4, 1))
+            .allowsHitTesting(!isSwipeDismissCommitted)
+        }
+        .background(Color.clear)
+        .task {
+            await loader.loadIfNeeded()
+        }
+        .accessibilityIdentifier("reader-image-browser")
+    }
+
+    private func beginSwipeDownDismissCommit() {
+        guard !isSwipeDismissCommitted else { return }
+        isSwipeDismissCommitted = true
+        swipeDismissProgress = 1
+    }
+
+    private func commitSwipeDownDismiss() {
+        isSwipeDismissCommitted = true
+        onDismiss()
+    }
+}
+
+private struct ReaderZoomableImageView: UIViewRepresentable {
+    let image: UIImage
+    let onSwipeDownProgressChange: (CGFloat) -> Void
+    let onSwipeDownCommit: () -> Void
+    let onSwipeDownDismiss: () -> Void
+
+    func makeUIView(context: Context) -> ReaderZoomableImageUIView {
+        let view = ReaderZoomableImageUIView()
+        view.scrollView.delegate = context.coordinator
+        view.onSwipeDownProgressChange = onSwipeDownProgressChange
+        view.onSwipeDownCommit = onSwipeDownCommit
+        view.onSwipeDownDismiss = onSwipeDownDismiss
+        context.coordinator.zoomView = view
+        return view
+    }
+
+    func updateUIView(_ uiView: ReaderZoomableImageUIView, context: Context) {
+        uiView.onSwipeDownProgressChange = onSwipeDownProgressChange
+        uiView.onSwipeDownCommit = onSwipeDownCommit
+        uiView.onSwipeDownDismiss = onSwipeDownDismiss
+        uiView.setImage(image)
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    final class Coordinator: NSObject, UIScrollViewDelegate {
+        weak var zoomView: ReaderZoomableImageUIView?
+
+        func viewForZooming(in scrollView: UIScrollView) -> UIView? {
+            zoomView?.imageView
+        }
+
+        func scrollViewDidZoom(_ scrollView: UIScrollView) {
+            zoomView?.centerImage()
+        }
+    }
+}
+
+private final class ReaderZoomableImageUIView: UIView, UIGestureRecognizerDelegate {
+    let scrollView = UIScrollView()
+    let imageView = UIImageView()
+    var onSwipeDownProgressChange: ((CGFloat) -> Void)?
+    var onSwipeDownCommit: (() -> Void)?
+    var onSwipeDownDismiss: (() -> Void)?
+
+    private var currentImage: UIImage?
+    private var isSwipeDismissTracking = false
+    private var isSwipeDismissCommitted = false
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        configureViewHierarchy()
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        updateImageFrame(resetZoom: false)
+        centerImage()
+    }
+
+    func setImage(_ image: UIImage) {
+        guard currentImage !== image else { return }
+        currentImage = image
+        imageView.image = image
+        updateImageFrame(resetZoom: true)
+    }
+
+    func centerImage() {
+        let boundsSize = scrollView.bounds.size
+        var frame = imageView.frame
+        frame.origin.x = frame.width < boundsSize.width ? (boundsSize.width - frame.width) / 2 : 0
+        frame.origin.y = frame.height < boundsSize.height ? (boundsSize.height - frame.height) / 2 : 0
+        imageView.frame = frame
+        scrollView.contentSize = frame.size
+    }
+
+    private func configureViewHierarchy() {
+        backgroundColor = .black
+
+        scrollView.backgroundColor = .black
+        scrollView.minimumZoomScale = 1
+        scrollView.maximumZoomScale = 5
+        scrollView.bouncesZoom = true
+        scrollView.showsHorizontalScrollIndicator = false
+        scrollView.showsVerticalScrollIndicator = false
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(scrollView)
+
+        imageView.contentMode = .scaleAspectFit
+        scrollView.addSubview(imageView)
+
+        let doubleTap = UITapGestureRecognizer(target: self, action: #selector(handleDoubleTap(_:)))
+        doubleTap.numberOfTapsRequired = 2
+        scrollView.addGestureRecognizer(doubleTap)
+
+        let dismissPan = UIPanGestureRecognizer(target: self, action: #selector(handleDismissPan(_:)))
+        dismissPan.delegate = self
+        scrollView.addGestureRecognizer(dismissPan)
+
+        NSLayoutConstraint.activate([
+            scrollView.topAnchor.constraint(equalTo: topAnchor),
+            scrollView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            scrollView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            scrollView.bottomAnchor.constraint(equalTo: bottomAnchor)
+        ])
+    }
+
+    private func updateImageFrame(resetZoom: Bool) {
+        guard let image = currentImage,
+              bounds.width > 0,
+              bounds.height > 0,
+              image.size.width > 0,
+              image.size.height > 0 else {
+            return
+        }
+
+        let widthScale = bounds.width / image.size.width
+        let heightScale = bounds.height / image.size.height
+        let fitScale = min(widthScale, heightScale)
+        let fittedSize = CGSize(
+            width: image.size.width * fitScale,
+            height: image.size.height * fitScale
+        )
+        if resetZoom {
+            scrollView.zoomScale = 1
+        }
+        imageView.frame = CGRect(origin: .zero, size: fittedSize)
+        scrollView.contentSize = fittedSize
+        centerImage()
+    }
+
+    @objc
+    private func handleDoubleTap(_ recognizer: UITapGestureRecognizer) {
+        if scrollView.zoomScale > scrollView.minimumZoomScale {
+            scrollView.setZoomScale(scrollView.minimumZoomScale, animated: true)
+            return
+        }
+
+        let location = recognizer.location(in: imageView)
+        let zoomScale = min(scrollView.maximumZoomScale, 2.6)
+        let zoomSize = CGSize(
+            width: scrollView.bounds.width / zoomScale,
+            height: scrollView.bounds.height / zoomScale
+        )
+        let zoomRect = CGRect(
+            x: location.x - zoomSize.width / 2,
+            y: location.y - zoomSize.height / 2,
+            width: zoomSize.width,
+            height: zoomSize.height
+        )
+        scrollView.zoom(to: zoomRect, animated: true)
+    }
+
+    @objc
+    private func handleDismissPan(_ recognizer: UIPanGestureRecognizer) {
+        let translation = recognizer.translation(in: self)
+        let velocity = recognizer.velocity(in: self)
+        switch recognizer.state {
+        case .began, .changed:
+            guard ReaderImageBrowserDismissGesture.canBegin(
+                translation: translation,
+                zoomScale: scrollView.zoomScale,
+                minimumZoomScale: scrollView.minimumZoomScale
+            ) else {
+                resetSwipeDismissTracking(animated: true)
+                return
+            }
+            isSwipeDismissTracking = true
+            applySwipeDismissTransform(translationY: translation.y)
+        case .ended:
+            if ReaderImageBrowserDismissGesture.shouldDismiss(
+                translation: translation,
+                velocity: velocity,
+                zoomScale: scrollView.zoomScale,
+                minimumZoomScale: scrollView.minimumZoomScale
+            ) {
+                commitSwipeDismiss(translationY: translation.y)
+            } else {
+                resetSwipeDismissTracking(animated: true)
+            }
+        case .cancelled, .failed:
+            resetSwipeDismissTracking(animated: true)
+        default:
+            break
+        }
+    }
+
+    private func applySwipeDismissTransform(translationY: CGFloat) {
+        guard !isSwipeDismissCommitted else { return }
+        let progress = ReaderImageBrowserDismissGesture.progress(for: translationY)
+        let scale = ReaderImageBrowserDismissGesture.imageScale(for: progress)
+        imageView.transform = CGAffineTransform(translationX: 0, y: max(translationY, 0))
+            .scaledBy(x: scale, y: scale)
+        scrollView.backgroundColor = .clear
+        backgroundColor = .clear
+        onSwipeDownProgressChange?(progress)
+    }
+
+    private func resetSwipeDismissTracking(animated: Bool) {
+        guard isSwipeDismissTracking || imageView.transform != .identity else { return }
+        isSwipeDismissTracking = false
+        let updates = {
+            self.imageView.transform = .identity
+            self.backgroundColor = .black
+            self.scrollView.backgroundColor = .black
+        }
+        let completion: (Bool) -> Void = { _ in
+            self.onSwipeDownProgressChange?(0)
+        }
+        if animated {
+            UIView.animate(
+                withDuration: 0.22,
+                delay: 0,
+                usingSpringWithDamping: 0.86,
+                initialSpringVelocity: 0,
+                options: [.beginFromCurrentState, .allowUserInteraction],
+                animations: updates,
+                completion: completion
+            )
+        } else {
+            updates()
+            completion(true)
+        }
+    }
+
+    private func commitSwipeDismiss(translationY: CGFloat) {
+        guard !isSwipeDismissCommitted else { return }
+        isSwipeDismissCommitted = true
+        isSwipeDismissTracking = false
+        onSwipeDownCommit?()
+        onSwipeDownProgressChange?(1)
+        let exitDistance = max(bounds.height - max(translationY, 0) + imageView.bounds.height * 0.35, bounds.height * 0.45)
+        UIView.animate(
+            withDuration: 0.18,
+            delay: 0,
+            options: [.curveEaseIn, .beginFromCurrentState],
+            animations: {
+                self.imageView.transform = self.imageView.transform.translatedBy(x: 0, y: exitDistance)
+                self.imageView.alpha = 0
+            },
+            completion: { _ in
+                self.onSwipeDownDismiss?()
+            }
+        )
+    }
+
+    override func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        guard let panGesture = gestureRecognizer as? UIPanGestureRecognizer,
+              gestureRecognizer.view === scrollView else {
+            return super.gestureRecognizerShouldBegin(gestureRecognizer)
+        }
+        return ReaderImageBrowserDismissGesture.canBegin(
+            translation: panGesture.translation(in: self),
+            zoomScale: scrollView.zoomScale,
+            minimumZoomScale: scrollView.minimumZoomScale
+        )
+    }
+
+    func gestureRecognizer(
+        _ gestureRecognizer: UIGestureRecognizer,
+        shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
+    ) -> Bool {
+        false
     }
 }
 

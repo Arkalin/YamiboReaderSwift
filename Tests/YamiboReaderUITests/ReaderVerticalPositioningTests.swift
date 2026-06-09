@@ -65,6 +65,10 @@ final class ReaderVerticalPositioningTests: XCTestCase {
 
     func testSheetPresentationChangesOnlyUpdateChrome() throws {
         let source = try String(contentsOfFile: projectFilePath("Sources/YamiboReaderUI/Views/ReaderContainerView.swift"))
+        let body = try functionBody(
+            signature: "private struct ReaderContainerStateObserverModifier: ViewModifier",
+            in: source
+        )
         let sheetStateNames = [
             "showingSettings",
             "showingCachePanel",
@@ -74,9 +78,49 @@ final class ReaderVerticalPositioningTests: XCTestCase {
         ]
 
         for stateName in sheetStateNames {
-            let expectedBlock = ".onChange(of: \(stateName)) { _, _ in\n                updateChromeForContentState()\n            }"
-            XCTAssertTrue(source.contains(expectedBlock), "Unexpected onChange body for \(stateName)")
+            let expectedBlock = ".onChange(of: \(stateName)) { _, _ in\n                onUpdateChromeForContentState()\n            }"
+            XCTAssertTrue(body.contains(expectedBlock), "Unexpected onChange body for \(stateName)")
         }
+    }
+
+    func testImageBrowserDoesNotForceReaderChromeVisible() throws {
+        let source = try String(contentsOfFile: projectFilePath("Sources/YamiboReaderUI/Views/ReaderContainerView.swift"))
+        let updateChromeBody = try functionBody(
+            signature: "private func updateChromeForContentState()",
+            in: source
+        )
+        let presentedOverlayBody = try functionBody(
+            signature: "private var hasPresentedOverlay: Bool",
+            in: source
+        )
+        let chromeOverlayBody = try functionBody(
+            signature: "private var hasChromePresentedOverlay: Bool",
+            in: source
+        )
+
+        XCTAssertTrue(updateChromeBody.contains("hasPresentedOverlay: hasChromePresentedOverlay"))
+        XCTAssertTrue(presentedOverlayBody.contains("imageBrowserItem != nil"))
+        XCTAssertFalse(chromeOverlayBody.contains("imageBrowserItem"))
+    }
+
+    func testImageTapHidesVisibleChromeBeforeOpeningBrowser() throws {
+        let source = try String(contentsOfFile: projectFilePath("Sources/YamiboReaderUI/Views/ReaderContainerView.swift"))
+        let body = try functionBody(
+            signature: "private func handleImageTap(url: URL, title: String?)",
+            in: source
+        )
+
+        XCTAssertTrue(body.contains("guard !chromeState.showsChrome else"))
+        XCTAssertTrue(body.contains("enterImmersiveMode()"))
+        XCTAssertTrue(body.contains("return"))
+        XCTAssertTrue(body.contains("openImageBrowser(url: url, title: title)"))
+        XCTAssertLessThan(
+            body.range(of: "enterImmersiveMode()")!.lowerBound,
+            body.range(of: "openImageBrowser(url: url, title: title)")!.lowerBound
+        )
+        XCTAssertEqual(source.components(separatedBy: "isChromeVisible: chromeState.showsChrome").count - 1, 3)
+        XCTAssertEqual(source.components(separatedBy: "onChromeVisibleImageTap: {\n                        enterImmersiveMode()\n                    }").count - 1, 2)
+        XCTAssertTrue(source.contains("onChromeVisibleImageTap: {\n                enterImmersiveMode()\n            }"))
     }
 
     func testExplicitVerticalNavigationStillRequestsRestore() throws {
