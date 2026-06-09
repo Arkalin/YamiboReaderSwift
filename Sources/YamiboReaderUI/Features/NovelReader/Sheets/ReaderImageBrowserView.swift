@@ -129,276 +129,303 @@ struct ReaderImageBrowserView: View {
     }
 }
 
-private struct ReaderZoomableImageView: UIViewRepresentable {
+private struct ReaderZoomableImageView: View {
     let image: UIImage
     let onSwipeDownProgressChange: (CGFloat) -> Void
     let onSwipeDownCommit: () -> Void
     let onSwipeDownDismiss: () -> Void
 
-    func makeUIView(context: Context) -> ReaderZoomableImageUIView {
-        let view = ReaderZoomableImageUIView()
-        view.scrollView.delegate = context.coordinator
-        view.onSwipeDownProgressChange = onSwipeDownProgressChange
-        view.onSwipeDownCommit = onSwipeDownCommit
-        view.onSwipeDownDismiss = onSwipeDownDismiss
-        context.coordinator.zoomView = view
-        return view
-    }
+    private let doubleTapZoomScale: CGFloat = 2.6
+    private let maximumZoomScale: CGFloat = 5
 
-    func updateUIView(_ uiView: ReaderZoomableImageUIView, context: Context) {
-        uiView.onSwipeDownProgressChange = onSwipeDownProgressChange
-        uiView.onSwipeDownCommit = onSwipeDownCommit
-        uiView.onSwipeDownDismiss = onSwipeDownDismiss
-        uiView.setImage(image)
-    }
+    @State private var steadyScale: CGFloat = 1
+    @State private var gestureScale: CGFloat = 1
+    @State private var steadyOffset: CGSize = .zero
+    @State private var gestureOffset: CGSize = .zero
+    @State private var swipeDismissTranslation: CGFloat = 0
+    @State private var swipeDismissExitOffset: CGFloat = 0
+    @State private var imageOpacity: CGFloat = 1
+    @State private var isSwipeDismissCommitted = false
 
-    func makeCoordinator() -> Coordinator {
-        Coordinator()
-    }
+    var body: some View {
+        GeometryReader { geometry in
+            let containerSize = geometry.size
 
-    final class Coordinator: NSObject, UIScrollViewDelegate {
-        weak var zoomView: ReaderZoomableImageUIView?
-
-        func viewForZooming(in scrollView: UIScrollView) -> UIView? {
-            zoomView?.imageView
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFit()
+                .frame(width: containerSize.width, height: containerSize.height)
+                .scaleEffect(displayScale)
+                .offset(
+                    x: steadyOffset.width + gestureOffset.width,
+                    y: steadyOffset.height + gestureOffset.height + swipeDismissTranslation + swipeDismissExitOffset
+                )
+                .opacity(imageOpacity)
+                .contentShape(Rectangle())
+                .simultaneousGesture(doubleTapGesture(containerSize: containerSize))
+                .simultaneousGesture(magnifyGesture(containerSize: containerSize))
+                .simultaneousGesture(dragGesture(containerSize: containerSize))
+                .onChange(of: containerSize) { _, newValue in
+                    clampSteadyOffset(containerSize: newValue)
+                }
         }
-
-        func scrollViewDidZoom(_ scrollView: UIScrollView) {
-            zoomView?.centerImage()
-        }
-    }
-}
-
-private final class ReaderZoomableImageUIView: UIView, UIGestureRecognizerDelegate {
-    let scrollView = UIScrollView()
-    let imageView = UIImageView()
-    var onSwipeDownProgressChange: ((CGFloat) -> Void)?
-    var onSwipeDownCommit: (() -> Void)?
-    var onSwipeDownDismiss: (() -> Void)?
-
-    private var currentImage: UIImage?
-    private var isSwipeDismissTracking = false
-    private var isSwipeDismissCommitted = false
-
-    override init(frame: CGRect) {
-        super.init(frame: frame)
-        configureViewHierarchy()
     }
 
-    @available(*, unavailable)
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
+    private var zoomScale: CGFloat {
+        clampedScale(steadyScale * gestureScale)
     }
 
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        updateImageFrame(resetZoom: false)
-        centerImage()
+    private var displayScale: CGFloat {
+        zoomScale * ReaderImageBrowserDismissGesture.imageScale(for: swipeDismissProgress)
     }
 
-    func setImage(_ image: UIImage) {
-        guard currentImage !== image else { return }
-        currentImage = image
-        imageView.image = image
-        updateImageFrame(resetZoom: true)
+    private var swipeDismissProgress: CGFloat {
+        ReaderImageBrowserDismissGesture.progress(for: swipeDismissTranslation)
     }
 
-    func centerImage() {
-        let boundsSize = scrollView.bounds.size
-        var frame = imageView.frame
-        frame.origin.x = frame.width < boundsSize.width ? (boundsSize.width - frame.width) / 2 : 0
-        frame.origin.y = frame.height < boundsSize.height ? (boundsSize.height - frame.height) / 2 : 0
-        imageView.frame = frame
-        scrollView.contentSize = frame.size
-    }
-
-    private func configureViewHierarchy() {
-        backgroundColor = .black
-
-        scrollView.backgroundColor = .black
-        scrollView.minimumZoomScale = 1
-        scrollView.maximumZoomScale = 5
-        scrollView.bouncesZoom = true
-        scrollView.showsHorizontalScrollIndicator = false
-        scrollView.showsVerticalScrollIndicator = false
-        scrollView.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(scrollView)
-
-        imageView.contentMode = .scaleAspectFit
-        scrollView.addSubview(imageView)
-
-        let doubleTap = UITapGestureRecognizer(target: self, action: #selector(handleDoubleTap(_:)))
-        doubleTap.numberOfTapsRequired = 2
-        scrollView.addGestureRecognizer(doubleTap)
-
-        let dismissPan = UIPanGestureRecognizer(target: self, action: #selector(handleDismissPan(_:)))
-        dismissPan.delegate = self
-        scrollView.addGestureRecognizer(dismissPan)
-
-        NSLayoutConstraint.activate([
-            scrollView.topAnchor.constraint(equalTo: topAnchor),
-            scrollView.leadingAnchor.constraint(equalTo: leadingAnchor),
-            scrollView.trailingAnchor.constraint(equalTo: trailingAnchor),
-            scrollView.bottomAnchor.constraint(equalTo: bottomAnchor)
-        ])
-    }
-
-    private func updateImageFrame(resetZoom: Bool) {
-        guard let image = currentImage,
-              bounds.width > 0,
-              bounds.height > 0,
-              image.size.width > 0,
-              image.size.height > 0 else {
-            return
-        }
-
-        let widthScale = bounds.width / image.size.width
-        let heightScale = bounds.height / image.size.height
-        let fitScale = min(widthScale, heightScale)
-        let fittedSize = CGSize(
-            width: image.size.width * fitScale,
-            height: image.size.height * fitScale
-        )
-        if resetZoom {
-            scrollView.zoomScale = 1
-        }
-        imageView.frame = CGRect(origin: .zero, size: fittedSize)
-        scrollView.contentSize = fittedSize
-        centerImage()
-    }
-
-    @objc
-    private func handleDoubleTap(_ recognizer: UITapGestureRecognizer) {
-        if scrollView.zoomScale > scrollView.minimumZoomScale {
-            scrollView.setZoomScale(scrollView.minimumZoomScale, animated: true)
-            return
-        }
-
-        let location = recognizer.location(in: imageView)
-        let zoomScale = min(scrollView.maximumZoomScale, 2.6)
-        let zoomSize = CGSize(
-            width: scrollView.bounds.width / zoomScale,
-            height: scrollView.bounds.height / zoomScale
-        )
-        let zoomRect = CGRect(
-            x: location.x - zoomSize.width / 2,
-            y: location.y - zoomSize.height / 2,
-            width: zoomSize.width,
-            height: zoomSize.height
-        )
-        scrollView.zoom(to: zoomRect, animated: true)
-    }
-
-    @objc
-    private func handleDismissPan(_ recognizer: UIPanGestureRecognizer) {
-        let translation = recognizer.translation(in: self)
-        let velocity = recognizer.velocity(in: self)
-        switch recognizer.state {
-        case .began, .changed:
-            guard ReaderImageBrowserDismissGesture.canBegin(
-                translation: translation,
-                zoomScale: scrollView.zoomScale,
-                minimumZoomScale: scrollView.minimumZoomScale
-            ) else {
-                resetSwipeDismissTracking(animated: true)
-                return
+    private func doubleTapGesture(containerSize: CGSize) -> some Gesture {
+        SpatialTapGesture(count: 2, coordinateSpace: .local)
+            .onEnded { value in
+                guard !isSwipeDismissCommitted else { return }
+                if steadyScale > 1.05 {
+                    resetZoom(containerSize: containerSize, animated: true)
+                } else {
+                    zoomIn(to: value.location, containerSize: containerSize)
+                }
             }
-            isSwipeDismissTracking = true
-            applySwipeDismissTransform(translationY: translation.y)
-        case .ended:
-            if ReaderImageBrowserDismissGesture.shouldDismiss(
-                translation: translation,
-                velocity: velocity,
-                zoomScale: scrollView.zoomScale,
-                minimumZoomScale: scrollView.minimumZoomScale
-            ) {
-                commitSwipeDismiss(translationY: translation.y)
-            } else {
-                resetSwipeDismissTracking(animated: true)
+    }
+
+    private func magnifyGesture(containerSize: CGSize) -> some Gesture {
+        MagnifyGesture()
+            .onChanged { value in
+                guard !isSwipeDismissCommitted else { return }
+                let nextScale = clampedScale(steadyScale * value.magnification)
+                gestureScale = nextScale / max(steadyScale, 0.001)
+                steadyOffset = clampedOffset(
+                    steadyOffset,
+                    scale: nextScale,
+                    containerSize: containerSize
+                )
             }
-        case .cancelled, .failed:
+            .onEnded { value in
+                guard !isSwipeDismissCommitted else { return }
+                let nextScale = clampedScale(steadyScale * value.magnification)
+                steadyScale = nextScale
+                gestureScale = 1
+                if nextScale <= 1.01 {
+                    resetZoom(containerSize: containerSize, animated: true)
+                } else {
+                    steadyOffset = clampedOffset(
+                        steadyOffset,
+                        scale: nextScale,
+                        containerSize: containerSize
+                    )
+                }
+            }
+    }
+
+    private func dragGesture(containerSize: CGSize) -> some Gesture {
+        DragGesture()
+            .onChanged { value in
+                guard !isSwipeDismissCommitted else { return }
+                if zoomScale > 1.01 {
+                    updateZoomDrag(value.translation, containerSize: containerSize)
+                } else {
+                    updateSwipeDismissDrag(value.translation)
+                }
+            }
+            .onEnded { value in
+                guard !isSwipeDismissCommitted else { return }
+                if zoomScale > 1.01 {
+                    endZoomDrag(value.translation, containerSize: containerSize)
+                } else {
+                    endSwipeDismissDrag(value, containerSize: containerSize)
+                }
+            }
+    }
+
+    private func updateZoomDrag(_ translation: CGSize, containerSize: CGSize) {
+        let proposed = CGSize(
+            width: steadyOffset.width + translation.width,
+            height: steadyOffset.height + translation.height
+        )
+        let clamped = clampedOffset(
+            proposed,
+            scale: zoomScale,
+            containerSize: containerSize
+        )
+        gestureOffset = CGSize(
+            width: clamped.width - steadyOffset.width,
+            height: clamped.height - steadyOffset.height
+        )
+    }
+
+    private func endZoomDrag(_ translation: CGSize, containerSize: CGSize) {
+        let proposed = CGSize(
+            width: steadyOffset.width + translation.width,
+            height: steadyOffset.height + translation.height
+        )
+        steadyOffset = clampedOffset(
+            proposed,
+            scale: steadyScale,
+            containerSize: containerSize
+        )
+        gestureOffset = .zero
+    }
+
+    private func updateSwipeDismissDrag(_ translation: CGSize) {
+        let dismissTranslation = CGPoint(x: translation.width, y: translation.height)
+        guard ReaderImageBrowserDismissGesture.canBegin(
+            translation: dismissTranslation,
+            zoomScale: zoomScale,
+            minimumZoomScale: 1
+        ) else {
             resetSwipeDismissTracking(animated: true)
-        default:
-            break
+            return
+        }
+        swipeDismissTranslation = max(translation.height, 0)
+        onSwipeDownProgressChange(swipeDismissProgress)
+    }
+
+    private func endSwipeDismissDrag(_ value: DragGesture.Value, containerSize: CGSize) {
+        let translation = CGPoint(
+            x: value.translation.width,
+            y: value.translation.height
+        )
+        let velocity = CGPoint(
+            x: value.velocity.width,
+            y: value.velocity.height
+        )
+
+        if ReaderImageBrowserDismissGesture.shouldDismiss(
+            translation: translation,
+            velocity: velocity,
+            zoomScale: zoomScale,
+            minimumZoomScale: 1
+        ) {
+            commitSwipeDismiss(translationY: translation.y, containerSize: containerSize)
+        } else {
+            resetSwipeDismissTracking(animated: true)
         }
     }
 
-    private func applySwipeDismissTransform(translationY: CGFloat) {
-        guard !isSwipeDismissCommitted else { return }
-        let progress = ReaderImageBrowserDismissGesture.progress(for: translationY)
-        let scale = ReaderImageBrowserDismissGesture.imageScale(for: progress)
-        imageView.transform = CGAffineTransform(translationX: 0, y: max(translationY, 0))
-            .scaledBy(x: scale, y: scale)
-        scrollView.backgroundColor = .clear
-        backgroundColor = .clear
-        onSwipeDownProgressChange?(progress)
+    private func zoomIn(to location: CGPoint, containerSize: CGSize) {
+        let targetScale = min(maximumZoomScale, doubleTapZoomScale)
+        let imageFrame = imageFrame(containerSize: containerSize)
+        let targetLocation = imageFrame.contains(location)
+            ? location
+            : CGPoint(x: containerSize.width / 2, y: containerSize.height / 2)
+        let center = CGPoint(x: containerSize.width / 2, y: containerSize.height / 2)
+        let proposedOffset = CGSize(
+            width: -(targetLocation.x - center.x) * targetScale,
+            height: -(targetLocation.y - center.y) * targetScale
+        )
+
+        withAnimation(.easeOut(duration: 0.2)) {
+            steadyScale = targetScale
+            gestureScale = 1
+            steadyOffset = clampedOffset(
+                proposedOffset,
+                scale: targetScale,
+                containerSize: containerSize
+            )
+            gestureOffset = .zero
+        }
+    }
+
+    private func resetZoom(containerSize: CGSize, animated: Bool) {
+        let updates = {
+            steadyScale = 1
+            gestureScale = 1
+            steadyOffset = .zero
+            gestureOffset = .zero
+        }
+        if animated {
+            withAnimation(.easeOut(duration: 0.2), updates)
+        } else {
+            updates()
+        }
+        clampSteadyOffset(containerSize: containerSize)
     }
 
     private func resetSwipeDismissTracking(animated: Bool) {
-        guard isSwipeDismissTracking || imageView.transform != .identity else { return }
-        isSwipeDismissTracking = false
-        let updates = {
-            self.imageView.transform = .identity
-            self.backgroundColor = .black
-            self.scrollView.backgroundColor = .black
+        guard swipeDismissTranslation != 0 else {
+            onSwipeDownProgressChange(0)
+            return
         }
-        let completion: (Bool) -> Void = { _ in
-            self.onSwipeDownProgressChange?(0)
+
+        let updates = {
+            swipeDismissTranslation = 0
         }
         if animated {
-            UIView.animate(
-                withDuration: 0.22,
-                delay: 0,
-                usingSpringWithDamping: 0.86,
-                initialSpringVelocity: 0,
-                options: [.beginFromCurrentState, .allowUserInteraction],
-                animations: updates,
-                completion: completion
-            )
+            withAnimation(.spring(response: 0.22, dampingFraction: 0.86), updates)
         } else {
             updates()
-            completion(true)
         }
+        onSwipeDownProgressChange(0)
     }
 
-    private func commitSwipeDismiss(translationY: CGFloat) {
+    private func commitSwipeDismiss(translationY: CGFloat, containerSize: CGSize) {
         guard !isSwipeDismissCommitted else { return }
         isSwipeDismissCommitted = true
-        isSwipeDismissTracking = false
-        onSwipeDownCommit?()
-        onSwipeDownProgressChange?(1)
-        let exitDistance = max(bounds.height - max(translationY, 0) + imageView.bounds.height * 0.35, bounds.height * 0.45)
-        UIView.animate(
-            withDuration: 0.18,
-            delay: 0,
-            options: [.curveEaseIn, .beginFromCurrentState],
-            animations: {
-                self.imageView.transform = self.imageView.transform.translatedBy(x: 0, y: exitDistance)
-                self.imageView.alpha = 0
-            },
-            completion: { _ in
-                self.onSwipeDownDismiss?()
-            }
-        )
-    }
+        onSwipeDownCommit()
+        onSwipeDownProgressChange(1)
 
-    override func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
-        guard let panGesture = gestureRecognizer as? UIPanGestureRecognizer,
-              gestureRecognizer.view === scrollView else {
-            return super.gestureRecognizerShouldBegin(gestureRecognizer)
+        let imageHeight = imageFrame(containerSize: containerSize).height
+        let exitDistance = max(
+            containerSize.height - max(translationY, 0) + imageHeight * 0.35,
+            containerSize.height * 0.45
+        )
+        withAnimation(.easeIn(duration: 0.18)) {
+            swipeDismissTranslation = max(translationY, 0)
+            swipeDismissExitOffset = exitDistance
+            imageOpacity = 0
         }
-        return ReaderImageBrowserDismissGesture.canBegin(
-            translation: panGesture.translation(in: self),
-            zoomScale: scrollView.zoomScale,
-            minimumZoomScale: scrollView.minimumZoomScale
+
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 180_000_000)
+            onSwipeDownDismiss()
+        }
+    }
+
+    private func clampSteadyOffset(containerSize: CGSize) {
+        steadyOffset = clampedOffset(
+            steadyOffset,
+            scale: steadyScale,
+            containerSize: containerSize
+        )
+        gestureOffset = .zero
+    }
+
+    private func clampedScale(_ scale: CGFloat) -> CGFloat {
+        min(maximumZoomScale, max(1, scale))
+    }
+
+    private func clampedOffset(
+        _ proposed: CGSize,
+        scale: CGFloat,
+        containerSize: CGSize
+    ) -> CGSize {
+        let bounds = dragBounds(scale: scale, containerSize: containerSize)
+        return CGSize(
+            width: min(bounds.width, max(-bounds.width, proposed.width)),
+            height: min(bounds.height, max(-bounds.height, proposed.height))
         )
     }
 
-    func gestureRecognizer(
-        _ gestureRecognizer: UIGestureRecognizer,
-        shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
-    ) -> Bool {
-        false
+    private func dragBounds(scale: CGFloat, containerSize: CGSize) -> CGSize {
+        let imageSize = imageFrame(containerSize: containerSize).size
+        return CGSize(
+            width: max(0, (imageSize.width * scale - containerSize.width) / 2),
+            height: max(0, (imageSize.height * scale - containerSize.height) / 2)
+        )
+    }
+
+    private func imageFrame(containerSize: CGSize) -> CGRect {
+        ReaderImageHitTesting.aspectFitImageFrame(
+            imageSize: image.size,
+            containerSize: containerSize
+        )
     }
 }
 #endif
