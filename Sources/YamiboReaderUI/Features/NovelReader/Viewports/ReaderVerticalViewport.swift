@@ -914,14 +914,7 @@ final class ReaderVerticalViewportImageView: UIView {
     private var task: Task<Void, Never>?
     private var url: URL?
     private var title: String?
-    private var requestIdentity: RequestIdentity?
-
-    private struct RequestIdentity: Equatable {
-        let url: URL
-        let refererURL: URL
-        let userAgent: String
-        let cookie: String
-    }
+    private var requestIdentity: ReaderInlineImageRequestIdentity?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -956,30 +949,28 @@ final class ReaderVerticalViewportImageView: UIView {
         title: String?,
         onTap: @escaping (URL, String?) -> Void
     ) {
-        let nextRequestIdentity = RequestIdentity(
+        let nextRequestIdentity = ReaderInlineImageRequestIdentity(
             url: url,
             refererURL: refererURL,
-            userAgent: sessionState.userAgent,
-            cookie: sessionState.cookie
+            sessionState: sessionState
         )
         self.url = url
         self.title = title
         guard requestIdentity != nextRequestIdentity else { return }
         requestIdentity = nextRequestIdentity
         task?.cancel()
+        if let cachedImage = ReaderInlineImageMemoryCache.image(for: nextRequestIdentity) {
+            Task { @MainActor [weak self] in
+                self?.show(image: cachedImage)
+            }
+            return
+        }
         imageView.image = nil
         failureLabel.isHidden = true
         activityIndicator.startAnimating()
         task = Task { [weak self] in
-            var request = URLRequest(url: url)
-            request.setValue(sessionState.userAgent, forHTTPHeaderField: "User-Agent")
-            if !sessionState.cookie.isEmpty {
-                request.setValue(sessionState.cookie, forHTTPHeaderField: "Cookie")
-            }
-            request.setValue(refererURL.absoluteString, forHTTPHeaderField: "Referer")
-
             do {
-                let (data, response) = try await URLSession.shared.data(for: request)
+                let (data, response) = try await URLSession.shared.data(for: nextRequestIdentity.urlRequest)
                 guard !Task.isCancelled,
                       let http = response as? HTTPURLResponse,
                       200 ..< 300 ~= http.statusCode,
@@ -987,6 +978,7 @@ final class ReaderVerticalViewportImageView: UIView {
                     await self?.showFailure()
                     return
                 }
+                ReaderInlineImageMemoryCache.store(image, for: nextRequestIdentity)
                 await self?.show(image: image)
             } catch {
                 guard !Task.isCancelled else { return }

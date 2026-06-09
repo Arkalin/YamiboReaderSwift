@@ -20,6 +20,20 @@ struct ReaderPresentationSpreadCollectionViewport: UIViewRepresentable {
     let onChromeVisibleImageTap: () -> Void
     let onImageTap: (URL, String?) -> Void
 
+    private var contentIdentity: ReaderPagedSpreadViewportContentIdentity {
+        ReaderPagedSpreadViewportContentIdentity(
+            spreads: spreads,
+            content: ReaderPagedViewportContentIdentity(
+                surfaces: surfaces,
+                settings: settings,
+                refererURL: refererURL,
+                sessionState: sessionState,
+                topInset: topInset,
+                bottomInset: bottomInset
+            )
+        )
+    }
+
     func makeCoordinator() -> Coordinator {
         Coordinator(parent: self)
     }
@@ -53,7 +67,11 @@ struct ReaderPresentationSpreadCollectionViewport: UIViewRepresentable {
     func updateUIView(_ collectionView: UICollectionView, context: Context) {
         context.coordinator.parent = self
         context.coordinator.callbackScheduler.performViewUpdate {
-            context.coordinator.reloadDataAndRequestSelectionScroll(in: collectionView, animated: false)
+            context.coordinator.updateContentAndRequestSelectionScroll(
+                in: collectionView,
+                contentIdentity: contentIdentity,
+                animated: false
+            )
         }
     }
 
@@ -62,6 +80,7 @@ struct ReaderPresentationSpreadCollectionViewport: UIViewRepresentable {
 
         var parent: ReaderPresentationSpreadCollectionViewport
         let callbackScheduler = SwiftUIViewUpdateCallbackScheduler()
+        private var contentIdentity: ReaderPagedSpreadViewportContentIdentity?
         private var pendingSelectionIndex: Int?
         private var isReloadingDataForSelectionScroll = false
         private var isPendingSelectionScrollRetryScheduled = false
@@ -164,6 +183,20 @@ struct ReaderPresentationSpreadCollectionViewport: UIViewRepresentable {
             callbackScheduler.publish {
                 onImageTap(payload.url, payload.title)
             }
+        }
+
+        func updateContentAndRequestSelectionScroll(
+            in collectionView: UICollectionView,
+            contentIdentity nextContentIdentity: ReaderPagedSpreadViewportContentIdentity,
+            animated: Bool
+        ) {
+            guard contentIdentity != nextContentIdentity else {
+                requestSelectionScroll(in: collectionView, animated: animated)
+                return
+            }
+            contentIdentity = nextContentIdentity
+            collectionView.collectionViewLayout.invalidateLayout()
+            reloadDataAndRequestSelectionScroll(in: collectionView, animated: animated)
         }
 
         func reloadDataAndRequestSelectionScroll(in collectionView: UICollectionView, animated: Bool) {
