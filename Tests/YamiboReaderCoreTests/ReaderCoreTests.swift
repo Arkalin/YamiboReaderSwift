@@ -939,7 +939,7 @@ private final class StubURLProtocol: URLProtocol {
         encoding: .utf8
     )
     let modelSource = try String(
-        contentsOf: repositoryRoot.appendingPathComponent("Sources/YamiboReaderUI/Models/ReaderContainerModel.swift"),
+        contentsOf: repositoryRoot.appendingPathComponent("Sources/YamiboReaderUI/Features/NovelReader/Container/ReaderContainerModel.swift"),
         encoding: .utf8
     )
 

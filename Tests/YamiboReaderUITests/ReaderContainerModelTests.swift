@@ -929,7 +929,7 @@ final class ReaderContainerModelTests: XCTestCase {
         let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let modelSource = try String(
             contentsOf: repositoryRoot
-                .appendingPathComponent("Sources/YamiboReaderUI/Models/ReaderContainerModel.swift"),
+                .appendingPathComponent("Sources/YamiboReaderUI/Features/NovelReader/Container/ReaderContainerModel.swift"),
             encoding: .utf8
         )
         let previewBody = try XCTUnwrap(functionBody(named: "previewChapterDirectoryWebView", in: modelSource))
@@ -946,7 +946,7 @@ final class ReaderContainerModelTests: XCTestCase {
         let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let modelSource = try String(
             contentsOf: repositoryRoot
-                .appendingPathComponent("Sources/YamiboReaderUI/Models/ReaderContainerModel.swift"),
+                .appendingPathComponent("Sources/YamiboReaderUI/Features/NovelReader/Container/ReaderContainerModel.swift"),
             encoding: .utf8
         )
         let appearanceBody = try XCTUnwrap(
@@ -1131,7 +1131,7 @@ final class ReaderContainerModelTests: XCTestCase {
         let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let modelSource = try String(
             contentsOf: repositoryRoot
-                .appendingPathComponent("Sources/YamiboReaderUI/Models/ReaderContainerModel.swift"),
+                .appendingPathComponent("Sources/YamiboReaderUI/Features/NovelReader/Container/ReaderContainerModel.swift"),
             encoding: .utf8
         )
 

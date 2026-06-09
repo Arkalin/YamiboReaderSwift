@@ -46,14 +46,14 @@ final class ReaderVerticalPositioningTests: XCTestCase {
     }
 
     func testReaderContainerViewDoesNotUseFrameSamplerForVerticalTextPosition() throws {
-        let source = try String(contentsOfFile: projectFilePath("Sources/YamiboReaderUI/Views/ReaderContainerView.swift"))
+        let source = try String(contentsOfFile: projectFilePath("Sources/YamiboReaderUI/Features/NovelReader/Container/ReaderContainerView.swift"))
 
         XCTAssertFalse(source.contains("ReaderVerticalPositioning.sample("))
         XCTAssertFalse(source.contains("intraPageProgress: sample.intraPageProgress"))
     }
 
     func testChromeStateUpdateDoesNotStartVerticalRestore() throws {
-        let source = try String(contentsOfFile: projectFilePath("Sources/YamiboReaderUI/Views/ReaderContainerView.swift"))
+        let source = try String(contentsOfFile: projectFilePath("Sources/YamiboReaderUI/Features/NovelReader/Container/ReaderContainerView.swift"))
         let body = try functionBody(
             signature: "private func updateChromeForContentState()",
             in: source
@@ -64,7 +64,7 @@ final class ReaderVerticalPositioningTests: XCTestCase {
     }
 
     func testSheetPresentationChangesOnlyUpdateChrome() throws {
-        let source = try String(contentsOfFile: projectFilePath("Sources/YamiboReaderUI/Views/ReaderContainerPresentationModifiers.swift"))
+        let source = try String(contentsOfFile: projectFilePath("Sources/YamiboReaderUI/Features/NovelReader/Container/ReaderContainerPresentationModifiers.swift"))
         let body = try functionBody(
             signature: "struct ReaderContainerStateObserverModifier: ViewModifier",
             in: source
@@ -84,7 +84,7 @@ final class ReaderVerticalPositioningTests: XCTestCase {
     }
 
     func testImageBrowserDoesNotForceReaderChromeVisible() throws {
-        let source = try String(contentsOfFile: projectFilePath("Sources/YamiboReaderUI/Views/ReaderContainerView.swift"))
+        let source = try String(contentsOfFile: projectFilePath("Sources/YamiboReaderUI/Features/NovelReader/Container/ReaderContainerView.swift"))
         let updateChromeBody = try functionBody(
             signature: "private func updateChromeForContentState()",
             in: source
@@ -104,7 +104,7 @@ final class ReaderVerticalPositioningTests: XCTestCase {
     }
 
     func testImageTapHidesVisibleChromeBeforeOpeningBrowser() throws {
-        let source = try String(contentsOfFile: projectFilePath("Sources/YamiboReaderUI/Views/ReaderContainerView.swift"))
+        let source = try String(contentsOfFile: projectFilePath("Sources/YamiboReaderUI/Features/NovelReader/Container/ReaderContainerView.swift"))
         let body = try functionBody(
             signature: "private func handleImageTap(url: URL, title: String?)",
             in: source
@@ -124,7 +124,7 @@ final class ReaderVerticalPositioningTests: XCTestCase {
     }
 
     func testExplicitVerticalNavigationStillRequestsRestore() throws {
-        let source = try String(contentsOfFile: projectFilePath("Sources/YamiboReaderUI/Views/ReaderContainerView.swift"))
+        let source = try String(contentsOfFile: projectFilePath("Sources/YamiboReaderUI/Features/NovelReader/Container/ReaderContainerView.swift"))
         let navigationSignatures = [
             "private func commitProgressSlider(_ targetIndex: Int)",
             "private func jumpAdjacentChapter(_ delta: Int)",

@@ -2,13 +2,13 @@ import SwiftUI
 import YamiboReaderCore
 
 @MainActor
-final class FavoritesSettingsViewModel: ObservableObject {
+final class SystemSettingsViewModel: ObservableObject {
     @Published var homePage: AppHomePage = .forum
     @Published var showsNavigationBar = true
     @Published var favoriteAppearance = FavoriteAppearanceSettings()
     @Published private(set) var novelCacheBytes = 0
     @Published private(set) var mangaCacheBytes = 0
-    @Published private(set) var activeAction: FavoritesSettingsAction?
+    @Published private(set) var activeAction: SystemSettingsAction?
     @Published var errorMessage: String?
 
     private let appContext: YamiboAppContext

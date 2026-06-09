@@ -308,7 +308,7 @@ public struct FavoritesView: View {
                 )
             }
             .sheet(isPresented: $showingSettingsSheet) {
-                FavoritesSettingsView(appContext: appContext) {
+                SystemSettingsView(appContext: appContext) {
                     filterRawValue = FavoriteFilter.all.rawValue
                     sortRawValue = FavoriteSortOrder.manual.rawValue
                     showsHidden = false

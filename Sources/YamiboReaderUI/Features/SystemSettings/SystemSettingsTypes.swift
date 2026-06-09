@@ -1,13 +1,13 @@
 import YamiboReaderCore
 
-enum FavoritesSettingsAction: Equatable {
+enum SystemSettingsAction: Equatable {
     case loading
     case clearingNovelCache
     case clearingMangaCache
     case resettingApplication
 }
 
-enum FavoritesSettingsConfirmation: String, Identifiable {
+enum SystemSettingsConfirmation: String, Identifiable {
     case clearNovelCache
     case clearMangaCache
     case resetApplication
