@@ -254,8 +254,7 @@ private struct ReaderBooksPreviewMaskedContent: View {
             NativeNovelTextSettingsPreviewView(
                 surface: NovelTextSettingsPreviewSurface(
                     text: previewText,
-                    settings: settings,
-                    textColor: UIColor(palette.primaryText)
+                    settings: settings
                 )
             )
             .padding(.top, 4)
@@ -973,7 +972,7 @@ func readerThemeColor(for style: ReaderBackgroundStyle, colorScheme: ColorScheme
     case .system:
         return Color(red: 0.95, green: 0.94, blue: 0.91)
     case .paper:
-        return Color(red: 0.96, green: 0.92, blue: 0.84)
+        return Color(red: 0.945, green: 0.882, blue: 0.769)
     case .mint:
         return Color(red: 0.92, green: 0.97, blue: 0.93)
     case .sakura:
