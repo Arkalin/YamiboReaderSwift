@@ -1,24 +1,24 @@
 import SwiftUI
 import YamiboReaderCore
 
-public struct FavoritesSettingsView: View {
+public struct SystemSettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
 
     private let appContext: YamiboAppContext
     private let onApplicationReset: @MainActor () async -> Void
 
-    @StateObject private var viewModel: FavoritesSettingsViewModel
+    @StateObject private var viewModel: SystemSettingsViewModel
     @State private var showingDirectoryManager = false
     @State private var showingWebDAVSettings = false
-    @State private var pendingConfirmation: FavoritesSettingsConfirmation?
+    @State private var pendingConfirmation: SystemSettingsConfirmation?
     @State private var activeAppearanceCategory: FavoriteAppearanceCategory?
 
     public init(
         appContext: YamiboAppContext,
         onApplicationReset: @escaping @MainActor () async -> Void
     ) {
-        _viewModel = StateObject(wrappedValue: FavoritesSettingsViewModel(appContext: appContext))
+        _viewModel = StateObject(wrappedValue: SystemSettingsViewModel(appContext: appContext))
         self.appContext = appContext
         self.onApplicationReset = onApplicationReset
     }
@@ -27,7 +27,7 @@ public struct FavoritesSettingsView: View {
         NavigationStack {
             Form {
                 Section(L10n.string("settings.section.general")) {
-                    FavoritesSettingsHomePageSelector(
+                    SystemSettingsHomePageSelector(
                         homePage: viewModel.homePage,
                         isBusy: viewModel.isBusy,
                         onSelect: viewModel.updateHomePage
@@ -36,14 +36,14 @@ public struct FavoritesSettingsView: View {
                     Button {
                         openAutoSignInAutomationCreator()
                     } label: {
-                        FavoritesSettingsRow(title: L10n.string("settings.auto_sign_in"))
+                        SystemSettingsRow(title: L10n.string("settings.auto_sign_in"))
                     }
                     .disabled(viewModel.isBusy)
 
                     Button {
                         openWebDAVSettings()
                     } label: {
-                        FavoritesSettingsRow(title: L10n.string("settings.webdav_sync"))
+                        SystemSettingsRow(title: L10n.string("settings.webdav_sync"))
                     }
                     .disabled(viewModel.isBusy)
                 }
@@ -75,14 +75,14 @@ public struct FavoritesSettingsView: View {
                     Button {
                         showingDirectoryManager = true
                     } label: {
-                        FavoritesSettingsRow(title: L10n.string("settings.manga_directory_management"))
+                        SystemSettingsRow(title: L10n.string("settings.manga_directory_management"))
                     }
                     .disabled(viewModel.isBusy)
 
                     Button {
                         pendingConfirmation = .clearNovelCache
                     } label: {
-                        FavoritesSettingsRow(
+                        SystemSettingsRow(
                             title: L10n.string("settings.clear_novel_cache"),
                             value: viewModel.novelCacheLabel
                         )
@@ -92,7 +92,7 @@ public struct FavoritesSettingsView: View {
                     Button {
                         pendingConfirmation = .clearMangaCache
                     } label: {
-                        FavoritesSettingsRow(
+                        SystemSettingsRow(
                             title: L10n.string("settings.clear_manga_cache"),
                             value: viewModel.mangaCacheLabel
                         )
@@ -206,7 +206,7 @@ public struct FavoritesSettingsView: View {
         }
     }
 
-    private func handleConfirmation(_ confirmation: FavoritesSettingsConfirmation) async {
+    private func handleConfirmation(_ confirmation: SystemSettingsConfirmation) async {
         switch confirmation {
         case .clearNovelCache:
             _ = await viewModel.clearNovelCache()

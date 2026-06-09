@@ -1,7 +1,7 @@
 import SwiftUI
 import YamiboReaderCore
 
-struct FavoritesSettingsHomePageSelector: View {
+struct SystemSettingsHomePageSelector: View {
     let homePage: AppHomePage
     let isBusy: Bool
     let onSelect: (AppHomePage) -> Void
@@ -39,7 +39,7 @@ struct FavoritesSettingsHomePageSelector: View {
     }
 }
 
-struct FavoritesSettingsRow: View {
+struct SystemSettingsRow: View {
     let title: String
     let value: String?
 
