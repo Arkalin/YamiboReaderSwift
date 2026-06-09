@@ -1,0 +1,111 @@
+import SwiftUI
+import YamiboReaderCore
+
+#if os(iOS)
+import UIKit
+
+struct ReaderBooksSheetPalette {
+    let isNightMode: Bool
+    let heroBackground: Color
+    let bodyBackground: Color
+    let cardBackground: Color
+    let primaryText: Color
+    let secondaryText: Color
+    let segmentedBackground: Color
+    let divider: Color
+    let headerButtonBackground: Color
+    let confirmButtonBackground: Color
+
+    init(settings: ReaderAppearanceSettings, colorScheme: ColorScheme) {
+        let isNightMode = colorScheme == .dark
+        let heroBackground = readerThemeColor(for: settings.backgroundStyle, colorScheme: colorScheme)
+        let bodyBackground: Color
+        let cardBackground: Color
+
+        if isNightMode {
+            bodyBackground = heroBackground.mix(with: Color(red: 0.08, green: 0.09, blue: 0.10), amount: 0.24)
+            cardBackground = bodyBackground.mix(with: .white, amount: 0.08)
+        } else {
+            bodyBackground = heroBackground.mix(with: Color(red: 0.98, green: 0.98, blue: 0.99), amount: 0.72)
+            cardBackground = bodyBackground.mix(with: .white, amount: 0.35)
+        }
+
+        self.isNightMode = isNightMode
+        self.heroBackground = heroBackground
+        self.bodyBackground = bodyBackground
+        self.cardBackground = cardBackground
+        primaryText = isNightMode
+            ? Color.white.opacity(0.92)
+            : Color(red: 0.09, green: 0.08, blue: 0.10)
+        secondaryText = isNightMode
+            ? Color.white.opacity(0.68)
+            : Color.black.opacity(0.56)
+        segmentedBackground = isNightMode
+            ? bodyBackground.mix(with: .white, amount: 0.05)
+            : bodyBackground.mix(with: Color.black, amount: 0.03)
+        divider = isNightMode
+            ? Color.white.opacity(0.08)
+            : Color.black.opacity(0.08)
+        headerButtonBackground = isNightMode
+            ? Color.white.opacity(0.10)
+            : Color.white.opacity(0.78)
+        confirmButtonBackground = isNightMode
+            ? heroBackground.mix(with: Color(red: 0.44, green: 0.39, blue: 0.30), amount: 0.58)
+            : heroBackground.mix(with: Color(red: 0.31, green: 0.26, blue: 0.18), amount: 0.72)
+    }
+}
+
+private extension Color {
+    func mix(with other: Color, amount: Double) -> Color {
+        let clamped = min(max(amount, 0), 1)
+        let lhs = UIColor(self)
+        let rhs = UIColor(other)
+
+        var lr: CGFloat = 0
+        var lg: CGFloat = 0
+        var lb: CGFloat = 0
+        var la: CGFloat = 0
+        var rr: CGFloat = 0
+        var rg: CGFloat = 0
+        var rb: CGFloat = 0
+        var ra: CGFloat = 0
+        lhs.getRed(&lr, green: &lg, blue: &lb, alpha: &la)
+        rhs.getRed(&rr, green: &rg, blue: &rb, alpha: &ra)
+
+        return Color(
+            red: lr + (rr - lr) * clamped,
+            green: lg + (rg - lg) * clamped,
+            blue: lb + (rb - lb) * clamped,
+            opacity: la + (ra - la) * clamped
+        )
+    }
+}
+
+func readerThemeColor(for style: ReaderBackgroundStyle, colorScheme: ColorScheme) -> Color {
+    let isNightMode = colorScheme == .dark
+    if isNightMode {
+        switch style {
+        case .system:
+            return Color(red: 0.15, green: 0.16, blue: 0.18)
+        case .paper:
+            return Color(red: 0.21, green: 0.19, blue: 0.16)
+        case .mint:
+            return Color(red: 0.14, green: 0.18, blue: 0.16)
+        case .sakura:
+            return Color(red: 0.19, green: 0.16, blue: 0.18)
+        }
+    }
+
+    switch style {
+    case .system:
+        return Color(red: 0.95, green: 0.94, blue: 0.91)
+    case .paper:
+        return Color(red: 0.945, green: 0.882, blue: 0.769)
+    case .mint:
+        return Color(red: 0.92, green: 0.97, blue: 0.93)
+    case .sakura:
+        return Color(red: 0.97, green: 0.92, blue: 0.93)
+    }
+}
+
+#endif
