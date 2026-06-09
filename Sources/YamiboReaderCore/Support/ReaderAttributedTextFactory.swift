@@ -75,7 +75,26 @@ typealias ReaderPlatformFontDescriptor = UIFontDescriptor
 public typealias ReaderPlatformFontWeight = UIFont.Weight
 
 private extension ReaderPlatformColor {
-    static var readerLabel: ReaderPlatformColor { .label }
+    static func readerText(settings: ReaderAppearanceSettings) -> ReaderPlatformColor {
+        UIColor { traits in
+            if traits.userInterfaceStyle == .dark {
+                return UIColor(white: 1, alpha: 0.86)
+            }
+
+            return lightReaderText(backgroundStyle: settings.backgroundStyle)
+        }
+    }
+
+    private static func lightReaderText(backgroundStyle: ReaderBackgroundStyle) -> ReaderPlatformColor {
+        switch backgroundStyle {
+        case .system, .paper:
+            return UIColor(red: 0.23, green: 0.19, blue: 0.15, alpha: 1)
+        case .mint:
+            return UIColor(red: 0.15, green: 0.21, blue: 0.18, alpha: 1)
+        case .sakura:
+            return UIColor(red: 0.23, green: 0.17, blue: 0.19, alpha: 1)
+        }
+    }
 }
 #elseif canImport(AppKit)
 import AppKit
@@ -86,7 +105,26 @@ typealias ReaderPlatformFontDescriptor = NSFontDescriptor
 public typealias ReaderPlatformFontWeight = NSFont.Weight
 
 private extension ReaderPlatformColor {
-    static var readerLabel: ReaderPlatformColor { .labelColor }
+    static func readerText(settings: ReaderAppearanceSettings) -> ReaderPlatformColor {
+        NSColor(name: nil) { appearance in
+            if appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua {
+                return NSColor(white: 1, alpha: 0.86)
+            }
+
+            return lightReaderText(backgroundStyle: settings.backgroundStyle)
+        }
+    }
+
+    private static func lightReaderText(backgroundStyle: ReaderBackgroundStyle) -> ReaderPlatformColor {
+        switch backgroundStyle {
+        case .system, .paper:
+            return NSColor(red: 0.23, green: 0.19, blue: 0.15, alpha: 1)
+        case .mint:
+            return NSColor(red: 0.15, green: 0.21, blue: 0.18, alpha: 1)
+        case .sakura:
+            return NSColor(red: 0.23, green: 0.17, blue: 0.19, alpha: 1)
+        }
+    }
 }
 #endif
 
@@ -95,6 +133,7 @@ private extension ReaderPlatformColor {
 @_spi(NovelTextAttributedDocument)
 public enum ReaderAttributedTextFactory {
     public static let defaultBaseFontSize: Double = 22
+    private static let bodyFontWeight: ReaderPlatformFontWeight = .light
 
     static func makeAttributedDocument(
         from preparedInput: NovelTextLayoutPreparedInput
@@ -134,7 +173,7 @@ public enum ReaderAttributedTextFactory {
     ) -> String {
         let font = settings.fontFamily.platformFont(
             size: baseFontSize * settings.fontScale,
-            weight: .regular
+            weight: bodyFontWeight
         )
         return [
             font.fontName,
@@ -154,7 +193,7 @@ public enum ReaderAttributedTextFactory {
         titleWeight: ReaderPlatformFontWeight = .bold
     ) -> NSAttributedString {
         let rendered = NSMutableAttributedString()
-        let textColor = textColor ?? .readerLabel
+        let textColor = textColor ?? .readerText(settings: settings)
         let segments = ReaderChapterTextComponents.split(text: text, chapterTitle: chapterTitle)
         let pointSize = baseFontSize * settings.fontScale
         let firstBodyParagraphStyle = makeParagraphStyle(
@@ -169,7 +208,7 @@ public enum ReaderAttributedTextFactory {
         )
         let titleParagraphStyle = makeParagraphStyle(settings: settings, pointSize: pointSize, appliesFirstLineIndent: false)
         let bodyAttributes: [NSAttributedString.Key: Any] = [
-            .font: settings.fontFamily.platformFont(size: pointSize, weight: .regular),
+            .font: settings.fontFamily.platformFont(size: pointSize, weight: bodyFontWeight),
             .kern: settings.fontFamily.kerning(size: pointSize, scale: settings.characterSpacingScale),
             .foregroundColor: textColor,
             .paragraphStyle: firstBodyParagraphStyle,
@@ -215,7 +254,7 @@ public enum ReaderAttributedTextFactory {
         titleWeight: ReaderPlatformFontWeight = .bold
     ) -> NSAttributedString {
         let rendered = NSMutableAttributedString()
-        let textColor = textColor ?? .readerLabel
+        let textColor = textColor ?? .readerText(settings: settings)
         let pointSize = baseFontSize * settings.fontScale
         let firstBodyParagraphStyle = makeParagraphStyle(
             settings: settings,
@@ -229,7 +268,7 @@ public enum ReaderAttributedTextFactory {
         )
         let titleParagraphStyle = makeParagraphStyle(settings: settings, pointSize: pointSize, appliesFirstLineIndent: false)
         let bodyAttributes: [NSAttributedString.Key: Any] = [
-            .font: settings.fontFamily.platformFont(size: pointSize, weight: .regular),
+            .font: settings.fontFamily.platformFont(size: pointSize, weight: bodyFontWeight),
             .kern: settings.fontFamily.kerning(size: pointSize, scale: settings.characterSpacingScale),
             .foregroundColor: textColor,
             .paragraphStyle: firstBodyParagraphStyle,

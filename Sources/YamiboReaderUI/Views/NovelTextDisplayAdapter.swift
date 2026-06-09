@@ -63,8 +63,6 @@ final class NovelTextViewportReferenceUIView: UIView {
         guard !displayReference.isStale else {
             return
         }
-        context.setFillColor(UIColor.label.cgColor)
-        context.setStrokeColor(UIColor.label.cgColor)
         displayReference.draw(in: context, bounds: self.bounds)
     }
 
