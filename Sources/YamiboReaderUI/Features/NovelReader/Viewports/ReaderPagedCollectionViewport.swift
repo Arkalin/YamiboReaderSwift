@@ -12,10 +12,13 @@ struct ReaderPagedCollectionViewport: UIViewRepresentable {
     let topInset: CGFloat
     let bottomInset: CGFloat
     let selectionIndex: Int
+    let pagerIdentity: ReaderPagedPagerIdentity
+    let scrollAnimationRequest: ReaderPagedScrollAnimationRequest?
     let displayReferenceProvider: @MainActor (NovelReaderSurfaceIdentity) -> NovelTextViewportDisplayReference?
     let isChromeVisible: Bool
     let onSelectionChange: (Int) -> Void
     let onPageTapZone: (ReaderPagedTapZone) -> Void
+    let onScrollAnimationRequestConsumed: (ReaderPagedScrollAnimationRequest) -> Void
     let onChromeVisibleImageTap: () -> Void
     let onImageTap: (URL, String?) -> Void
 
@@ -65,8 +68,7 @@ struct ReaderPagedCollectionViewport: UIViewRepresentable {
         context.coordinator.callbackScheduler.performViewUpdate {
             context.coordinator.updateContentAndRequestSelectionScroll(
                 in: collectionView,
-                contentIdentity: contentIdentity,
-                animated: false
+                contentIdentity: contentIdentity
             )
         }
     }
@@ -80,6 +82,7 @@ struct ReaderPagedCollectionViewport: UIViewRepresentable {
         private var pendingSelectionIndex: Int?
         private var isReloadingDataForSelectionScroll = false
         private var isPendingSelectionScrollRetryScheduled = false
+        private var consumedScrollAnimationRequestID: UUID?
 
         init(parent: ReaderPagedCollectionViewport) {
             self.parent = parent
@@ -154,6 +157,10 @@ struct ReaderPagedCollectionViewport: UIViewRepresentable {
                 return
             }
             let zone = ReaderPagedTapZone.zone(for: location, in: collectionView.bounds)
+            if !parent.isChromeVisible,
+               animateAdjacentSelection(for: zone, in: collectionView) {
+                return
+            }
             let onPageTapZone = parent.onPageTapZone
             callbackScheduler.publish {
                 onPageTapZone(zone)
@@ -189,16 +196,22 @@ struct ReaderPagedCollectionViewport: UIViewRepresentable {
 
         func updateContentAndRequestSelectionScroll(
             in collectionView: UICollectionView,
-            contentIdentity nextContentIdentity: ReaderPagedViewportContentIdentity,
-            animated: Bool
+            contentIdentity nextContentIdentity: ReaderPagedViewportContentIdentity
         ) {
+            let animationRequest = matchingScrollAnimationRequest()
             guard contentIdentity != nextContentIdentity else {
-                requestSelectionScroll(in: collectionView, animated: animated)
+                if requestSelectionScroll(in: collectionView, animated: animationRequest != nil),
+                   let animationRequest {
+                    consumeScrollAnimationRequest(animationRequest)
+                }
                 return
+            }
+            if let animationRequest {
+                consumeScrollAnimationRequest(animationRequest)
             }
             contentIdentity = nextContentIdentity
             collectionView.collectionViewLayout.invalidateLayout()
-            reloadDataAndRequestSelectionScroll(in: collectionView, animated: animated)
+            reloadDataAndRequestSelectionScroll(in: collectionView, animated: false)
         }
 
         func reloadDataAndRequestSelectionScroll(in collectionView: UICollectionView, animated: Bool) {
@@ -213,31 +226,33 @@ struct ReaderPagedCollectionViewport: UIViewRepresentable {
             }
         }
 
-        func requestSelectionScroll(in collectionView: UICollectionView, animated: Bool) {
+        @discardableResult
+        func requestSelectionScroll(in collectionView: UICollectionView, animated: Bool) -> Bool {
             pendingSelectionIndex = parent.selectionIndex
-            scrollToPendingSelectionIfPossible(in: collectionView, animated: animated)
+            return scrollToPendingSelectionIfPossible(in: collectionView, animated: animated)
         }
 
-        func scrollToPendingSelectionIfPossible(in collectionView: UICollectionView, animated: Bool) {
+        @discardableResult
+        func scrollToPendingSelectionIfPossible(in collectionView: UICollectionView, animated: Bool) -> Bool {
             guard let pendingSelectionIndex,
                   !isReloadingDataForSelectionScroll,
                   !parent.surfaces.isEmpty,
                   collectionView.bounds.width > 0,
                   collectionView.window != nil else {
-                return
+                return false
             }
             let item = min(max(pendingSelectionIndex, 0), max(parent.surfaces.count - 1, 0))
             guard collectionView.numberOfSections > 0,
                   collectionView.numberOfItems(inSection: 0) > item else {
                 schedulePendingSelectionScrollRetry(in: collectionView, animated: animated)
-                return
+                return false
             }
 
             collectionView.layoutIfNeeded()
             let targetContentOffsetX = CGFloat(item) * collectionView.bounds.width
             guard collectionView.contentSize.width >= targetContentOffsetX + collectionView.bounds.width else {
                 schedulePendingSelectionScrollRetry(in: collectionView, animated: animated)
-                return
+                return false
             }
 
             collectionView.setContentOffset(
@@ -249,6 +264,34 @@ struct ReaderPagedCollectionViewport: UIViewRepresentable {
             } else {
                 schedulePendingSelectionScrollRetry(in: collectionView, animated: animated)
             }
+            return true
+        }
+
+        private func animateAdjacentSelection(
+            for zone: ReaderPagedTapZone,
+            in collectionView: UICollectionView
+        ) -> Bool {
+            let delta: Int
+            switch zone {
+            case .previous:
+                delta = -1
+            case .next:
+                delta = 1
+            case .toggleChrome:
+                return false
+            }
+
+            guard !parent.surfaces.isEmpty,
+                  collectionView.bounds.width > 0,
+                  collectionView.window != nil else {
+                return false
+            }
+            let targetItem = parent.selectionIndex + delta
+            guard targetItem >= 0, targetItem < parent.surfaces.count else {
+                return false
+            }
+            pendingSelectionIndex = targetItem
+            return scrollToPendingSelectionIfPossible(in: collectionView, animated: true)
         }
 
         private func schedulePendingSelectionScrollRetry(in collectionView: UICollectionView, animated: Bool) {
@@ -270,6 +313,24 @@ struct ReaderPagedCollectionViewport: UIViewRepresentable {
             let onSelectionChange = parent.onSelectionChange
             callbackScheduler.publish {
                 onSelectionChange(clampedItem)
+            }
+        }
+
+        private func matchingScrollAnimationRequest() -> ReaderPagedScrollAnimationRequest? {
+            guard let request = parent.scrollAnimationRequest,
+                  request.id != consumedScrollAnimationRequestID,
+                  request.pagerIdentity == parent.pagerIdentity,
+                  request.selectionIndex == parent.selectionIndex else {
+                return nil
+            }
+            return request
+        }
+
+        private func consumeScrollAnimationRequest(_ request: ReaderPagedScrollAnimationRequest) {
+            consumedScrollAnimationRequestID = request.id
+            let onScrollAnimationRequestConsumed = parent.onScrollAnimationRequestConsumed
+            callbackScheduler.publish {
+                onScrollAnimationRequestConsumed(request)
             }
         }
     }

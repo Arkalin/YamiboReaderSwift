@@ -43,6 +43,22 @@ struct ReaderPagedSpreadViewportContentIdentity: Equatable {
     var content: ReaderPagedViewportContentIdentity
 }
 
+struct ReaderPagedScrollAnimationRequest: Equatable {
+    let id: UUID
+    let pagerIdentity: ReaderPagedPagerIdentity
+    let selectionIndex: Int
+
+    init(
+        id: UUID = UUID(),
+        pagerIdentity: ReaderPagedPagerIdentity,
+        selectionIndex: Int
+    ) {
+        self.id = id
+        self.pagerIdentity = pagerIdentity
+        self.selectionIndex = max(0, selectionIndex)
+    }
+}
+
 struct ReaderPagedViewportSessionIdentity: Equatable {
     var userAgent: String
     var cookie: String
