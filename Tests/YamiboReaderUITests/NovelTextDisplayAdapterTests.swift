@@ -112,11 +112,13 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         let supportSource = try readerSupportSources()
         let singlePageBody = try XCTUnwrap(typeBody(named: "ReaderPagedCollectionViewport", in: supportSource))
         let spreadBody = try XCTUnwrap(typeBody(named: "ReaderPresentationSpreadCollectionViewport", in: supportSource))
+        let pagingDriverBody = try XCTUnwrap(typeBody(named: "ReaderPagedViewportPagingDriver", in: supportSource))
 
         XCTAssertTrue(supportSource.contains("struct ReaderPagedPageTurnVisualMetrics: Equatable"))
         XCTAssertTrue(supportSource.contains("enum ReaderPagedPageTurnPresentation"))
         XCTAssertTrue(supportSource.contains("struct ReaderPagedPageSurfaceContainer<Content: View>: View"))
         XCTAssertTrue(supportSource.contains("final class ReaderPagedPageTurnCell: UICollectionViewCell"))
+        XCTAssertTrue(supportSource.contains("final class ReaderPagedViewportPagingDriver"))
         XCTAssertTrue(supportSource.contains("enum ReaderPagedPageTurnBackground"))
         XCTAssertTrue(supportSource.contains("enum ReaderPagedPageTurnCornerRadius"))
         XCTAssertTrue(supportSource.contains("[\"_display\", \"Corner\", \"Radius\"].joined()"))
@@ -128,6 +130,14 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertTrue(supportSource.contains("addSubview(pageTurnOverlayView)"))
         XCTAssertTrue(supportSource.contains(".background(readerThemeColor(for: settings.backgroundStyle, colorScheme: colorScheme))"))
 
+        XCTAssertTrue(pagingDriverBody.contains("beginPageTurnVisuals(in: collectionView, inputs: inputs)"))
+        XCTAssertTrue(pagingDriverBody.contains("applyPageTurnVisuals(in: collectionView, inputs: inputs)"))
+        XCTAssertTrue(pagingDriverBody.contains("endPageTurnVisuals(in: collectionView)"))
+        XCTAssertTrue(pagingDriverBody.contains("ReaderPagedPageTurnPresentation.metrics"))
+        XCTAssertTrue(pagingDriverBody.contains("cornerRadius: ReaderPagedPageTurnCornerRadius.radius(for: collectionView.window?.screen)"))
+        XCTAssertTrue(pagingDriverBody.contains("collectionView.backgroundColor = ReaderPagedPageTurnBackground.dimmedPageColor"))
+        XCTAssertTrue(pagingDriverBody.contains("collectionView.backgroundColor = .clear"))
+
         for body in [singlePageBody, spreadBody] {
             XCTAssertTrue(body.contains("ReaderPagedPageTurnCell.self"))
             XCTAssertTrue(body.contains("as! ReaderPagedPageTurnCell"))
@@ -135,13 +145,10 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
             XCTAssertTrue(body.contains("scrollViewWillBeginDragging"))
             XCTAssertTrue(body.contains("scrollViewDidScroll"))
             XCTAssertTrue(body.contains("scrollViewDidEndDragging"))
-            XCTAssertTrue(body.contains("beginPageTurnVisuals(in: collectionView)"))
-            XCTAssertTrue(body.contains("applyPageTurnVisuals(in: collectionView)"))
-            XCTAssertTrue(body.contains("endPageTurnVisuals(in: collectionView)"))
-            XCTAssertTrue(body.contains("ReaderPagedPageTurnPresentation.metrics"))
-            XCTAssertTrue(body.contains("cornerRadius: ReaderPagedPageTurnCornerRadius.radius(for: collectionView.window?.screen)"))
-            XCTAssertTrue(body.contains("collectionView.backgroundColor = ReaderPagedPageTurnBackground.dimmedPageColor"))
-            XCTAssertTrue(body.contains("collectionView.backgroundColor = .clear"))
+            XCTAssertTrue(body.contains("private let pagingDriver = ReaderPagedViewportPagingDriver()"))
+            XCTAssertTrue(body.contains("pagingDriver.scrollViewWillBeginDragging(scrollView, inputs: pagingInputs)"))
+            XCTAssertTrue(body.contains("pagingDriver.scrollViewDidScroll(scrollView, inputs: pagingInputs)"))
+            XCTAssertTrue(body.contains("pagingDriver.scrollViewDidEndDragging(scrollView, willDecelerate: decelerate, inputs: pagingInputs)"))
             XCTAssertTrue(body.contains("cell.resetPageTurnVisuals()"))
             XCTAssertTrue(body.contains("UIHostingConfiguration"))
         }
@@ -598,13 +605,16 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         let supportSource = try readerSupportSources()
         let singlePageBody = try XCTUnwrap(typeBody(named: "ReaderPagedCollectionViewport", in: supportSource))
         let spreadBody = try XCTUnwrap(typeBody(named: "ReaderPresentationSpreadCollectionViewport", in: supportSource))
+        let pagingDriverBody = try XCTUnwrap(typeBody(named: "ReaderPagedViewportPagingDriver", in: supportSource))
 
         XCTAssertTrue(supportSource.contains("final class ReaderPagedViewportCollectionView: UICollectionView"))
         XCTAssertTrue(supportSource.contains("override func layoutSubviews()"))
+        XCTAssertTrue(pagingDriverBody.contains("func scrollToPendingSelectionIfPossible("))
+        XCTAssertTrue(pagingDriverBody.contains("scrollToPendingSelectionIfPossible(in: collectionView, animated: animated, inputs: inputs)"))
         for body in [singlePageBody, spreadBody] {
             XCTAssertTrue(body.contains("onLayoutSubviews"))
             XCTAssertTrue(body.contains("updateContentAndRequestSelectionScroll("))
-            XCTAssertTrue(body.contains("scrollToPendingSelectionIfPossible(in: collectionView, animated: animated)"))
+            XCTAssertTrue(body.contains("pagingDriver.scrollToPendingSelectionIfPossible(in: collectionView, animated: animated, inputs: pagingInputs)"))
         }
     }
 
@@ -612,10 +622,12 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         let supportSource = try readerSupportSources()
         let singlePageBody = try XCTUnwrap(typeBody(named: "ReaderPagedCollectionViewport", in: supportSource))
         let spreadBody = try XCTUnwrap(typeBody(named: "ReaderPresentationSpreadCollectionViewport", in: supportSource))
+        let pagingDriverBody = try XCTUnwrap(typeBody(named: "ReaderPagedViewportPagingDriver", in: supportSource))
 
         XCTAssertTrue(supportSource.contains("struct ReaderPagedViewportContentIdentity: Equatable"))
         XCTAssertTrue(supportSource.contains("struct ReaderPagedSpreadViewportContentIdentity: Equatable"))
         XCTAssertTrue(supportSource.contains("struct ReaderPagedScrollAnimationRequest: Equatable"))
+        XCTAssertTrue(supportSource.contains("struct ReaderPagedViewportPagingInputs"))
         XCTAssertTrue(supportSource.contains("var surfaces: [NovelReaderSurface]"))
         XCTAssertTrue(supportSource.contains("var spreads: [NovelReaderPresentationSpread]"))
         XCTAssertTrue(supportSource.contains("var settings: ReaderAppearanceSettings"))
@@ -626,15 +638,18 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertTrue(supportSource.contains("var userAgent: String"))
         XCTAssertTrue(supportSource.contains("var cookie: String"))
 
+        XCTAssertTrue(pagingDriverBody.contains("let animationRequest = matchingScrollAnimationRequest(inputs: inputs)"))
+        XCTAssertTrue(pagingDriverBody.contains("guard didChangeContentIdentity else"))
+        XCTAssertTrue(pagingDriverBody.contains("requestSelectionScroll(in: collectionView, animated: animationRequest != nil, inputs: inputs)"))
+        XCTAssertTrue(pagingDriverBody.contains("consumeScrollAnimationRequest(animationRequest, inputs: inputs)"))
+        XCTAssertTrue(pagingDriverBody.contains("collectionView.collectionViewLayout.invalidateLayout()"))
+        XCTAssertTrue(pagingDriverBody.contains("reloadDataAndRequestSelectionScroll(in: collectionView, animated: false, inputs: inputs)"))
+
         for body in [singlePageBody, spreadBody] {
             XCTAssertTrue(body.contains("private var contentIdentity:"))
             XCTAssertTrue(body.contains("func updateContentAndRequestSelectionScroll("))
-            XCTAssertTrue(body.contains("let animationRequest = matchingScrollAnimationRequest()"))
-            XCTAssertTrue(body.contains("guard contentIdentity != nextContentIdentity else"))
-            XCTAssertTrue(body.contains("requestSelectionScroll(in: collectionView, animated: animationRequest != nil)"))
-            XCTAssertTrue(body.contains("consumeScrollAnimationRequest(animationRequest)"))
-            XCTAssertTrue(body.contains("collectionView.collectionViewLayout.invalidateLayout()"))
-            XCTAssertTrue(body.contains("reloadDataAndRequestSelectionScroll(in: collectionView, animated: false)"))
+            XCTAssertTrue(body.contains("let didChangeContentIdentity = contentIdentity != nextContentIdentity"))
+            XCTAssertTrue(body.contains("pagingDriver.updateContentAndRequestSelectionScroll("))
         }
     }
 
@@ -648,6 +663,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         let supportSource = try readerSupportSources()
         let singlePageBody = try XCTUnwrap(typeBody(named: "ReaderPagedCollectionViewport", in: supportSource))
         let spreadBody = try XCTUnwrap(typeBody(named: "ReaderPresentationSpreadCollectionViewport", in: supportSource))
+        let pagingDriverBody = try XCTUnwrap(typeBody(named: "ReaderPagedViewportPagingDriver", in: supportSource))
         let makeRequestBody = try XCTUnwrap(functionBody(named: "makePagedScrollAnimationRequest", in: containerSource))
 
         XCTAssertTrue(containerSource.contains("@State private var pagedScrollAnimationRequest: ReaderPagedScrollAnimationRequest?"))
@@ -659,19 +675,22 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertTrue(makeRequestBody.contains("model.readerSurfaces.count"))
         XCTAssertTrue(containerSource.contains("clearPagedScrollAnimationRequest"))
 
+        XCTAssertTrue(pagingDriverBody.contains("let targetItem = inputs.selectionIndex + delta"))
+        XCTAssertTrue(pagingDriverBody.contains("private var consumedScrollAnimationRequestID: UUID?"))
+        XCTAssertTrue(pagingDriverBody.contains("private func matchingScrollAnimationRequest("))
+        XCTAssertTrue(pagingDriverBody.contains("request.pagerIdentity == inputs.pagerIdentity"))
+        XCTAssertTrue(pagingDriverBody.contains("request.selectionIndex == inputs.selectionIndex"))
+        XCTAssertTrue(pagingDriverBody.contains("request.id != consumedScrollAnimationRequestID"))
+        XCTAssertTrue(pagingDriverBody.contains("setContentOffset"))
+        XCTAssertTrue(pagingDriverBody.contains("animated: animated"))
+
         for body in [singlePageBody, spreadBody] {
             XCTAssertTrue(body.contains("let pagerIdentity: ReaderPagedPagerIdentity"))
             XCTAssertTrue(body.contains("let scrollAnimationRequest: ReaderPagedScrollAnimationRequest?"))
             XCTAssertTrue(body.contains("let onScrollAnimationRequestConsumed: (ReaderPagedScrollAnimationRequest) -> Void"))
-            XCTAssertTrue(body.contains("animateAdjacentSelection(for: zone, in: collectionView)"))
-            XCTAssertTrue(body.contains("parent.selectionIndex + delta"))
-            XCTAssertTrue(body.contains("private var consumedScrollAnimationRequestID: UUID?"))
-            XCTAssertTrue(body.contains("func matchingScrollAnimationRequest() -> ReaderPagedScrollAnimationRequest?"))
-            XCTAssertTrue(body.contains("request.pagerIdentity == parent.pagerIdentity"))
-            XCTAssertTrue(body.contains("request.selectionIndex == parent.selectionIndex"))
-            XCTAssertTrue(body.contains("request.id != consumedScrollAnimationRequestID"))
-            XCTAssertTrue(body.contains("setContentOffset"))
-            XCTAssertTrue(body.contains("animated: animated"))
+            XCTAssertTrue(body.contains("pagingDriver.animateAdjacentSelection(for: zone, in: collectionView, inputs: pagingInputs)"))
+            XCTAssertTrue(body.contains("scrollAnimationRequest: parent.scrollAnimationRequest"))
+            XCTAssertTrue(body.contains("onScrollAnimationRequestConsumed: parent.onScrollAnimationRequestConsumed"))
         }
     }
 
@@ -724,11 +743,13 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         let supportSource = try readerSupportSources()
         let singlePageBody = try XCTUnwrap(typeBody(named: "ReaderPagedCollectionViewport", in: supportSource))
         let spreadBody = try XCTUnwrap(typeBody(named: "ReaderPresentationSpreadCollectionViewport", in: supportSource))
+        let pagingDriverBody = try XCTUnwrap(typeBody(named: "ReaderPagedViewportPagingDriver", in: supportSource))
 
+        XCTAssertTrue(pagingDriverBody.contains("reloadDataAndRequestSelectionScroll(in: collectionView, animated: false, inputs: inputs)"))
+        XCTAssertTrue(pagingDriverBody.contains("collectionView.performBatchUpdates(nil)"))
+        XCTAssertTrue(pagingDriverBody.contains("self?.scrollToPendingSelectionIfPossible(in: collectionView, animated: animated, inputs: inputs)"))
         for body in [singlePageBody, spreadBody] {
-            XCTAssertTrue(body.contains("reloadDataAndRequestSelectionScroll(in: collectionView, animated: false)"))
-            XCTAssertTrue(body.contains("collectionView.performBatchUpdates(nil)"))
-            XCTAssertTrue(body.contains("self?.scrollToPendingSelectionIfPossible(in: collectionView, animated: animated)"))
+            XCTAssertTrue(body.contains("pagingDriver.reloadDataAndRequestSelectionScroll(in: collectionView, animated: animated, inputs: pagingInputs)"))
         }
     }
 
@@ -767,13 +788,15 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         let supportSource = try readerSupportSources()
         let singlePageBody = try XCTUnwrap(typeBody(named: "ReaderPagedCollectionViewport", in: supportSource))
         let spreadBody = try XCTUnwrap(typeBody(named: "ReaderPresentationSpreadCollectionViewport", in: supportSource))
+        let pagingDriverBody = try XCTUnwrap(typeBody(named: "ReaderPagedViewportPagingDriver", in: supportSource))
 
+        XCTAssertTrue(pagingDriverBody.contains("collectionView.window != nil"))
+        XCTAssertTrue(pagingDriverBody.contains("collectionView.contentSize.width >= targetContentOffsetX + collectionView.bounds.width"))
+        XCTAssertTrue(pagingDriverBody.contains("schedulePendingSelectionScrollRetry(in: collectionView, animated: animated, inputs: inputs)"))
+        XCTAssertTrue(pagingDriverBody.contains("collectionView.setContentOffset"))
+        XCTAssertFalse(pagingDriverBody.contains("collectionView.scrollToItem"))
         for body in [singlePageBody, spreadBody] {
-            XCTAssertTrue(body.contains("collectionView.window != nil"))
-            XCTAssertTrue(body.contains("collectionView.contentSize.width >= targetContentOffsetX + collectionView.bounds.width"))
-            XCTAssertTrue(body.contains("schedulePendingSelectionScrollRetry(in: collectionView, animated: animated)"))
-            XCTAssertTrue(body.contains("collectionView.setContentOffset"))
-            XCTAssertFalse(body.contains("collectionView.scrollToItem"))
+            XCTAssertTrue(body.contains("pagingDriver.scrollToPendingSelectionIfPossible(in: collectionView, animated: animated, inputs: pagingInputs)"))
         }
     }
 

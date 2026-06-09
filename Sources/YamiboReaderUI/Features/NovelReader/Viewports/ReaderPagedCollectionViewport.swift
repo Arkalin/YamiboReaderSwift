@@ -77,13 +77,24 @@ struct ReaderPagedCollectionViewport: UIViewRepresentable {
         static let reuseIdentifier = "ReaderPagedCollectionViewportCell"
 
         var parent: ReaderPagedCollectionViewport
-        let callbackScheduler = SwiftUIViewUpdateCallbackScheduler()
+        private let pagingDriver = ReaderPagedViewportPagingDriver()
         private var contentIdentity: ReaderPagedViewportContentIdentity?
-        private var pendingSelectionIndex: Int?
-        private var isReloadingDataForSelectionScroll = false
-        private var isPendingSelectionScrollRetryScheduled = false
-        private var consumedScrollAnimationRequestID: UUID?
-        private var pageTurnRestingIndex: Int?
+
+        var callbackScheduler: SwiftUIViewUpdateCallbackScheduler {
+            pagingDriver.callbackScheduler
+        }
+
+        private var pagingInputs: ReaderPagedViewportPagingInputs {
+            ReaderPagedViewportPagingInputs(
+                itemCount: parent.surfaces.count,
+                selectionIndex: parent.selectionIndex,
+                settings: parent.settings,
+                pagerIdentity: parent.pagerIdentity,
+                scrollAnimationRequest: parent.scrollAnimationRequest,
+                onSelectionChange: parent.onSelectionChange,
+                onScrollAnimationRequestConsumed: parent.onScrollAnimationRequestConsumed
+            )
+        }
 
         init(parent: ReaderPagedCollectionViewport) {
             self.parent = parent
@@ -138,33 +149,23 @@ struct ReaderPagedCollectionViewport: UIViewRepresentable {
         }
 
         func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
-            guard let collectionView = scrollView as? UICollectionView else { return }
-            beginPageTurnVisuals(in: collectionView)
+            pagingDriver.scrollViewWillBeginDragging(scrollView, inputs: pagingInputs)
         }
 
         func scrollViewDidScroll(_ scrollView: UIScrollView) {
-            guard let collectionView = scrollView as? UICollectionView else { return }
-            applyPageTurnVisuals(in: collectionView)
+            pagingDriver.scrollViewDidScroll(scrollView, inputs: pagingInputs)
         }
 
         func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {
-            guard let collectionView = scrollView as? UICollectionView else { return }
-            if !decelerate {
-                updateSelection(from: scrollView)
-                endPageTurnVisuals(in: collectionView)
-            }
+            pagingDriver.scrollViewDidEndDragging(scrollView, willDecelerate: decelerate, inputs: pagingInputs)
         }
 
         func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) {
-            updateSelection(from: scrollView)
-            guard let collectionView = scrollView as? UICollectionView else { return }
-            endPageTurnVisuals(in: collectionView)
+            pagingDriver.scrollViewDidEndDecelerating(scrollView, inputs: pagingInputs)
         }
 
         func scrollViewDidEndScrollingAnimation(_ scrollView: UIScrollView) {
-            updateSelection(from: scrollView)
-            guard let collectionView = scrollView as? UICollectionView else { return }
-            endPageTurnVisuals(in: collectionView)
+            pagingDriver.scrollViewDidEndScrollingAnimation(scrollView, inputs: pagingInputs)
         }
 
         @objc
@@ -184,7 +185,7 @@ struct ReaderPagedCollectionViewport: UIViewRepresentable {
             }
             let zone = ReaderPagedTapZone.zone(for: location, in: collectionView.bounds)
             if !parent.isChromeVisible,
-               animateAdjacentSelection(for: zone, in: collectionView) {
+               pagingDriver.animateAdjacentSelection(for: zone, in: collectionView, inputs: pagingInputs) {
                 return
             }
             let onPageTapZone = parent.onPageTapZone
@@ -224,202 +225,27 @@ struct ReaderPagedCollectionViewport: UIViewRepresentable {
             in collectionView: UICollectionView,
             contentIdentity nextContentIdentity: ReaderPagedViewportContentIdentity
         ) {
-            let animationRequest = matchingScrollAnimationRequest()
-            guard contentIdentity != nextContentIdentity else {
-                if requestSelectionScroll(in: collectionView, animated: animationRequest != nil),
-                   let animationRequest {
-                    consumeScrollAnimationRequest(animationRequest)
-                }
-                return
-            }
-            if let animationRequest {
-                consumeScrollAnimationRequest(animationRequest)
-            }
+            let didChangeContentIdentity = contentIdentity != nextContentIdentity
             contentIdentity = nextContentIdentity
-            collectionView.collectionViewLayout.invalidateLayout()
-            reloadDataAndRequestSelectionScroll(in: collectionView, animated: false)
+            pagingDriver.updateContentAndRequestSelectionScroll(
+                in: collectionView,
+                didChangeContentIdentity: didChangeContentIdentity,
+                inputs: pagingInputs
+            )
         }
 
         func reloadDataAndRequestSelectionScroll(in collectionView: UICollectionView, animated: Bool) {
-            pendingSelectionIndex = parent.selectionIndex
-            isReloadingDataForSelectionScroll = true
-            collectionView.reloadData()
-            collectionView.performBatchUpdates(nil) { [weak self, weak collectionView] _ in
-                guard let collectionView else { return }
-                self?.isReloadingDataForSelectionScroll = false
-                self?.requestSelectionScroll(in: collectionView, animated: animated)
-                self?.scrollToPendingSelectionIfPossible(in: collectionView, animated: animated)
-            }
+            pagingDriver.reloadDataAndRequestSelectionScroll(in: collectionView, animated: animated, inputs: pagingInputs)
         }
 
         @discardableResult
         func requestSelectionScroll(in collectionView: UICollectionView, animated: Bool) -> Bool {
-            pendingSelectionIndex = parent.selectionIndex
-            return scrollToPendingSelectionIfPossible(in: collectionView, animated: animated)
+            pagingDriver.requestSelectionScroll(in: collectionView, animated: animated, inputs: pagingInputs)
         }
 
         @discardableResult
         func scrollToPendingSelectionIfPossible(in collectionView: UICollectionView, animated: Bool) -> Bool {
-            guard let pendingSelectionIndex,
-                  !isReloadingDataForSelectionScroll,
-                  !parent.surfaces.isEmpty,
-                  collectionView.bounds.width > 0,
-                  collectionView.window != nil else {
-                return false
-            }
-            let item = min(max(pendingSelectionIndex, 0), max(parent.surfaces.count - 1, 0))
-            guard collectionView.numberOfSections > 0,
-                  collectionView.numberOfItems(inSection: 0) > item else {
-                schedulePendingSelectionScrollRetry(in: collectionView, animated: animated)
-                return false
-            }
-
-            collectionView.layoutIfNeeded()
-            let targetContentOffsetX = CGFloat(item) * collectionView.bounds.width
-            guard collectionView.contentSize.width >= targetContentOffsetX + collectionView.bounds.width else {
-                schedulePendingSelectionScrollRetry(in: collectionView, animated: animated)
-                return false
-            }
-
-            if animated {
-                beginPageTurnVisuals(in: collectionView)
-            }
-            collectionView.setContentOffset(
-                CGPoint(x: targetContentOffsetX, y: collectionView.contentOffset.y),
-                animated: animated
-            )
-            if animated {
-                applyPageTurnVisuals(in: collectionView)
-            }
-            if animated || abs(collectionView.contentOffset.x - targetContentOffsetX) <= 1 {
-                self.pendingSelectionIndex = nil
-            } else {
-                schedulePendingSelectionScrollRetry(in: collectionView, animated: animated)
-            }
-            return true
-        }
-
-        private func animateAdjacentSelection(
-            for zone: ReaderPagedTapZone,
-            in collectionView: UICollectionView
-        ) -> Bool {
-            let delta: Int
-            switch zone {
-            case .previous:
-                delta = -1
-            case .next:
-                delta = 1
-            case .toggleChrome:
-                return false
-            }
-
-            guard !parent.surfaces.isEmpty,
-                  collectionView.bounds.width > 0,
-                  collectionView.window != nil else {
-                return false
-            }
-            let targetItem = parent.selectionIndex + delta
-            guard targetItem >= 0, targetItem < parent.surfaces.count else {
-                return false
-            }
-            pendingSelectionIndex = targetItem
-            return scrollToPendingSelectionIfPossible(in: collectionView, animated: true)
-        }
-
-        private func schedulePendingSelectionScrollRetry(in collectionView: UICollectionView, animated: Bool) {
-            guard !isPendingSelectionScrollRetryScheduled else { return }
-            isPendingSelectionScrollRetryScheduled = true
-            DispatchQueue.main.async { [weak self, weak collectionView] in
-                guard let self else { return }
-                self.isPendingSelectionScrollRetryScheduled = false
-                guard let collectionView else { return }
-                self.scrollToPendingSelectionIfPossible(in: collectionView, animated: animated)
-            }
-        }
-
-        private func updateSelection(from scrollView: UIScrollView) {
-            guard scrollView.bounds.width > 0 else { return }
-            let item = Int((scrollView.contentOffset.x / scrollView.bounds.width).rounded())
-            let clampedItem = min(max(item, 0), max(parent.surfaces.count - 1, 0))
-            guard clampedItem != parent.selectionIndex else { return }
-            let onSelectionChange = parent.onSelectionChange
-            callbackScheduler.publish {
-                onSelectionChange(clampedItem)
-            }
-        }
-
-        private func beginPageTurnVisuals(in collectionView: UICollectionView) {
-            guard collectionView.bounds.width > 0 else { return }
-            let currentIndex = Int((collectionView.contentOffset.x / collectionView.bounds.width).rounded())
-            pageTurnRestingIndex = min(max(currentIndex, 0), max(parent.surfaces.count - 1, 0))
-        }
-
-        private func applyPageTurnVisuals(in collectionView: UICollectionView) {
-            guard let metrics = ReaderPagedPageTurnPresentation.metrics(
-                contentOffsetX: collectionView.contentOffset.x,
-                pageWidth: collectionView.bounds.width,
-                pageCount: parent.surfaces.count,
-                restingPageIndex: pageTurnRestingIndex ?? parent.selectionIndex,
-                cornerRadius: ReaderPagedPageTurnCornerRadius.radius(for: collectionView.window?.screen)
-            ) else {
-                resetPageTurnVisuals(in: collectionView)
-                return
-            }
-            collectionView.backgroundColor = ReaderPagedPageTurnBackground.dimmedPageColor(
-                settings: parent.settings,
-                traitCollection: collectionView.traitCollection,
-                overlayAlpha: metrics.overlayAlpha
-            )
-
-            for case let cell as ReaderPagedPageTurnCell in collectionView.visibleCells {
-                guard let indexPath = collectionView.indexPath(for: cell) else {
-                    cell.resetPageTurnVisuals()
-                    continue
-                }
-                if indexPath.item == metrics.maskedPageIndex {
-                    cell.applyPageTurnVisuals(
-                        overlayAlpha: metrics.overlayAlpha,
-                        cornerRadius: 0
-                    )
-                } else if indexPath.item == metrics.roundedPageIndex {
-                    cell.applyPageTurnVisuals(
-                        overlayAlpha: 0,
-                        cornerRadius: metrics.cornerRadius
-                    )
-                } else {
-                    cell.resetPageTurnVisuals()
-                }
-            }
-        }
-
-        private func endPageTurnVisuals(in collectionView: UICollectionView) {
-            pageTurnRestingIndex = nil
-            resetPageTurnVisuals(in: collectionView)
-        }
-
-        private func resetPageTurnVisuals(in collectionView: UICollectionView) {
-            collectionView.backgroundColor = .clear
-            for case let cell as ReaderPagedPageTurnCell in collectionView.visibleCells {
-                cell.resetPageTurnVisuals()
-            }
-        }
-
-        private func matchingScrollAnimationRequest() -> ReaderPagedScrollAnimationRequest? {
-            guard let request = parent.scrollAnimationRequest,
-                  request.id != consumedScrollAnimationRequestID,
-                  request.pagerIdentity == parent.pagerIdentity,
-                  request.selectionIndex == parent.selectionIndex else {
-                return nil
-            }
-            return request
-        }
-
-        private func consumeScrollAnimationRequest(_ request: ReaderPagedScrollAnimationRequest) {
-            consumedScrollAnimationRequestID = request.id
-            let onScrollAnimationRequestConsumed = parent.onScrollAnimationRequestConsumed
-            callbackScheduler.publish {
-                onScrollAnimationRequestConsumed(request)
-            }
+            pagingDriver.scrollToPendingSelectionIfPossible(in: collectionView, animated: animated, inputs: pagingInputs)
         }
     }
 }
