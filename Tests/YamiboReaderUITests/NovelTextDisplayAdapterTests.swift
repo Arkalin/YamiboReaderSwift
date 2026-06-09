@@ -868,7 +868,9 @@ private func readerSupportSources() throws -> String {
         "Sources/YamiboReaderUI/Views/ReaderVerticalViewport.swift",
         "Sources/YamiboReaderUI/Views/ReaderImageBrowserView.swift",
         "Sources/YamiboReaderUI/Views/ReaderProgressCapsules.swift",
-        "Sources/YamiboReaderUI/Views/ReaderChapterSheets.swift",
+        "Sources/YamiboReaderUI/Views/ReaderChapterCatalogSheets.swift",
+        "Sources/YamiboReaderUI/Views/ReaderChapterCommentsSheets.swift",
+        "Sources/YamiboReaderUI/Views/ReaderWebJumpSheet.swift",
         "Sources/YamiboReaderUI/Views/ReaderCacheViews.swift",
     ])
 }
