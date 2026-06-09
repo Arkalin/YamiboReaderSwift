@@ -283,6 +283,36 @@ public struct ReaderBottomChromeLayoutPresentation: Equatable, Sendable {
     }
 }
 
+public enum ReaderChromeVisibilityAnimationKind: Equatable, Sendable {
+    case fade
+    case anchoredPopup
+}
+
+public enum ReaderChromePopupAnchor: Equatable, Sendable {
+    case bottomTrailing
+}
+
+public struct ReaderChromeVisibilityAnimationPresentation: Equatable, Sendable {
+    public var kind: ReaderChromeVisibilityAnimationKind
+    public var duration: Double
+    public var hiddenScale: CGFloat
+    public var anchor: ReaderChromePopupAnchor?
+
+    public static let fade = ReaderChromeVisibilityAnimationPresentation(
+        kind: .fade,
+        duration: 0.2,
+        hiddenScale: 1,
+        anchor: nil
+    )
+
+    public static let anchoredPopup = ReaderChromeVisibilityAnimationPresentation(
+        kind: .anchoredPopup,
+        duration: 0.2,
+        hiddenScale: 0.88,
+        anchor: .bottomTrailing
+    )
+}
+
 public struct ReaderChromeProgressSummary: Equatable, Sendable {
     public var chapterTitle: String
     public var pageProgressLine: String
@@ -475,6 +505,53 @@ extension View {
                     .buttonStyle(.bordered)
                     .tint(tint)
             }
+        }
+    }
+
+    func readerChromeFadeVisibility(_ isVisible: Bool) -> some View {
+        modifier(ReaderChromeFadeVisibilityModifier(isVisible: isVisible))
+    }
+
+    func readerChromeAnchoredPopupVisibility(_ isVisible: Bool) -> some View {
+        modifier(ReaderChromeAnchoredPopupVisibilityModifier(isVisible: isVisible))
+    }
+}
+
+private struct ReaderChromeFadeVisibilityModifier: ViewModifier {
+    let isVisible: Bool
+    private let presentation = ReaderChromeVisibilityAnimationPresentation.fade
+
+    func body(content: Content) -> some View {
+        content
+            .opacity(isVisible ? 1 : 0)
+            .allowsHitTesting(isVisible)
+            .accessibilityHidden(!isVisible)
+            .animation(.easeInOut(duration: presentation.duration), value: isVisible)
+    }
+}
+
+private struct ReaderChromeAnchoredPopupVisibilityModifier: ViewModifier {
+    let isVisible: Bool
+    private let presentation = ReaderChromeVisibilityAnimationPresentation.anchoredPopup
+
+    func body(content: Content) -> some View {
+        content
+            .scaleEffect(
+                isVisible ? 1 : presentation.hiddenScale,
+                anchor: presentation.anchor?.unitPoint ?? .bottomTrailing
+            )
+            .opacity(isVisible ? 1 : 0)
+            .allowsHitTesting(isVisible)
+            .accessibilityHidden(!isVisible)
+            .animation(.easeInOut(duration: presentation.duration), value: isVisible)
+    }
+}
+
+private extension ReaderChromePopupAnchor {
+    var unitPoint: UnitPoint {
+        switch self {
+        case .bottomTrailing:
+            return .bottomTrailing
         }
     }
 }
@@ -2141,6 +2218,7 @@ struct ReaderBottomChrome: View {
     let progressSnapshot: ReaderChromeProgressSnapshot
     let readingMode: ReaderReadingMode
     let bottomInset: CGFloat
+    let isVisible: Bool
     let onShowChapters: () -> Void
     let onShowSettings: () -> Void
     let onShowCache: () -> Void
@@ -2164,12 +2242,14 @@ struct ReaderBottomChrome: View {
     var body: some View {
         VStack(spacing: 12) {
             bottomControls
-            .frame(maxWidth: .infinity, alignment: .trailing)
-            .padding(.leading, 12)
-            .padding(.trailing, 12)
-            .padding(.bottom, chromeLayout.bottomControlsAdditionalBottomOffset)
+                .readerChromeAnchoredPopupVisibility(isVisible)
+                .frame(maxWidth: .infinity, alignment: .trailing)
+                .padding(.leading, 12)
+                .padding(.trailing, 12)
+                .padding(.bottom, chromeLayout.bottomControlsAdditionalBottomOffset)
 
             progressSummary
+                .readerChromeFadeVisibility(isVisible)
                 .padding(.horizontal, 12)
         }
         .padding(.top, chromeLayout.bottomChromeTopPadding)
