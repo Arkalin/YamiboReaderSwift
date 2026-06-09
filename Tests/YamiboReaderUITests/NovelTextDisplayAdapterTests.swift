@@ -495,8 +495,36 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertTrue(supportSource.contains("override func layoutSubviews()"))
         for body in [singlePageBody, spreadBody] {
             XCTAssertTrue(body.contains("onLayoutSubviews"))
-            XCTAssertTrue(body.contains("reloadDataAndRequestSelectionScroll(in: collectionView, animated: false)"))
+            XCTAssertTrue(body.contains("updateContentAndRequestSelectionScroll("))
             XCTAssertTrue(body.contains("scrollToPendingSelectionIfPossible(in: collectionView, animated: animated)"))
+        }
+    }
+
+    func testPagedViewportsReloadOnlyWhenContentIdentityChanges() throws {
+        let supportSource = try readerSupportSources()
+        let singlePageBody = try XCTUnwrap(typeBody(named: "ReaderPagedCollectionViewport", in: supportSource))
+        let spreadBody = try XCTUnwrap(typeBody(named: "ReaderPresentationSpreadCollectionViewport", in: supportSource))
+
+        XCTAssertTrue(supportSource.contains("struct ReaderPagedViewportContentIdentity: Equatable"))
+        XCTAssertTrue(supportSource.contains("struct ReaderPagedSpreadViewportContentIdentity: Equatable"))
+        XCTAssertTrue(supportSource.contains("var surfaces: [NovelReaderSurface]"))
+        XCTAssertTrue(supportSource.contains("var spreads: [NovelReaderPresentationSpread]"))
+        XCTAssertTrue(supportSource.contains("var settings: ReaderAppearanceSettings"))
+        XCTAssertTrue(supportSource.contains("var refererURL: URL"))
+        XCTAssertTrue(supportSource.contains("var sessionState: ReaderPagedViewportSessionIdentity"))
+        XCTAssertTrue(supportSource.contains("var topInset: CGFloat"))
+        XCTAssertTrue(supportSource.contains("var bottomInset: CGFloat"))
+        XCTAssertTrue(supportSource.contains("var userAgent: String"))
+        XCTAssertTrue(supportSource.contains("var cookie: String"))
+
+        for body in [singlePageBody, spreadBody] {
+            XCTAssertTrue(body.contains("private var contentIdentity:"))
+            XCTAssertTrue(body.contains("func updateContentAndRequestSelectionScroll("))
+            XCTAssertTrue(body.contains("guard contentIdentity != nextContentIdentity else"))
+            XCTAssertTrue(body.contains("requestSelectionScroll(in: collectionView, animated: animated)"))
+            XCTAssertTrue(body.contains("collectionView.collectionViewLayout.invalidateLayout()"))
+            XCTAssertTrue(body.contains("reloadDataAndRequestSelectionScroll(in: collectionView, animated: animated)"))
+            XCTAssertFalse(body.contains("reloadDataAndRequestSelectionScroll(in: collectionView, animated: false)"))
         }
     }
 
@@ -551,10 +579,41 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         let spreadBody = try XCTUnwrap(typeBody(named: "ReaderPresentationSpreadCollectionViewport", in: supportSource))
 
         for body in [singlePageBody, spreadBody] {
-            XCTAssertTrue(body.contains("reloadDataAndRequestSelectionScroll(in: collectionView, animated: false)"))
+            XCTAssertTrue(body.contains("reloadDataAndRequestSelectionScroll(in: collectionView, animated: animated)"))
             XCTAssertTrue(body.contains("collectionView.performBatchUpdates(nil)"))
             XCTAssertTrue(body.contains("self?.scrollToPendingSelectionIfPossible(in: collectionView, animated: animated)"))
         }
+    }
+
+    func testReaderInlineImagesUseSharedMemoryCache() throws {
+        let supportSource = try readerSupportSources()
+        let loaderBody = try XCTUnwrap(typeBody(named: "ReaderImageLoader", in: supportSource))
+        let imageViewBody = try XCTUnwrap(typeBody(named: "ReaderVerticalViewportImageView", in: supportSource))
+        let cacheBody = try XCTUnwrap(typeBody(named: "ReaderInlineImageMemoryCache", in: supportSource))
+        let storageBody = try XCTUnwrap(typeBody(named: "ReaderInlineImageMemoryCacheStorage", in: supportSource))
+        let requestIdentityBody = try XCTUnwrap(typeBody(named: "ReaderInlineImageRequestIdentity", in: supportSource))
+
+        XCTAssertTrue(supportSource.contains("private final class ReaderInlineImageMemoryCacheStorage: @unchecked Sendable"))
+        XCTAssertTrue(storageBody.contains("NSCache<NSString, UIImage>"))
+        XCTAssertTrue(cacheBody.contains("defaultMemoryLimitBytes = 80 * 1024 * 1024"))
+        XCTAssertTrue(storageBody.contains("cache.totalCostLimit = memoryLimitBytes"))
+        XCTAssertTrue(cacheBody.contains("static func image(for requestIdentity: ReaderInlineImageRequestIdentity) -> UIImage?"))
+        XCTAssertTrue(cacheBody.contains("static func store(_ image: UIImage, for requestIdentity: ReaderInlineImageRequestIdentity)"))
+
+        XCTAssertTrue(requestIdentityBody.contains("let url: URL"))
+        XCTAssertTrue(requestIdentityBody.contains("let refererURL: URL"))
+        XCTAssertTrue(requestIdentityBody.contains("let userAgent: String"))
+        XCTAssertTrue(requestIdentityBody.contains("let cookie: String"))
+        XCTAssertTrue(requestIdentityBody.contains("url.absoluteString"))
+        XCTAssertTrue(requestIdentityBody.contains("refererURL.absoluteString"))
+        XCTAssertTrue(requestIdentityBody.contains("request.setValue(userAgent, forHTTPHeaderField: \"User-Agent\")"))
+        XCTAssertTrue(requestIdentityBody.contains("request.setValue(cookie, forHTTPHeaderField: \"Cookie\")"))
+        XCTAssertTrue(requestIdentityBody.contains("request.setValue(refererURL.absoluteString, forHTTPHeaderField: \"Referer\")"))
+
+        XCTAssertTrue(loaderBody.contains("ReaderInlineImageMemoryCache.image(for: requestIdentity)"))
+        XCTAssertTrue(loaderBody.contains("ReaderInlineImageMemoryCache.store(image, for: requestIdentity)"))
+        XCTAssertTrue(imageViewBody.contains("ReaderInlineImageMemoryCache.image(for: nextRequestIdentity)"))
+        XCTAssertTrue(imageViewBody.contains("ReaderInlineImageMemoryCache.store(image, for: nextRequestIdentity)"))
     }
 
     func testPagedViewportsKeepPendingSelectionUntilCollectionViewCanRepresentTargetOffset() throws {

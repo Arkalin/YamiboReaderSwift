@@ -246,25 +246,29 @@ final class ReaderImageLoader: ObservableObject {
     }
 
     func loadIfNeeded() async {
+        let requestIdentity = ReaderInlineImageRequestIdentity(
+            url: url,
+            refererURL: refererURL,
+            sessionState: sessionState
+        )
+        if let cachedImage = ReaderInlineImageMemoryCache.image(for: requestIdentity) {
+            image = cachedImage
+            didFail = false
+            return
+        }
         guard image == nil, !isLoading else { return }
         isLoading = true
         didFail = false
         defer { isLoading = false }
 
-        var request = URLRequest(url: url)
-        request.setValue(sessionState.userAgent, forHTTPHeaderField: "User-Agent")
-        if !sessionState.cookie.isEmpty {
-            request.setValue(sessionState.cookie, forHTTPHeaderField: "Cookie")
-        }
-        request.setValue(refererURL.absoluteString, forHTTPHeaderField: "Referer")
-
         do {
-            let (data, response) = try await URLSession.shared.data(for: request)
+            let (data, response) = try await URLSession.shared.data(for: requestIdentity.urlRequest)
             guard let http = response as? HTTPURLResponse, 200 ..< 300 ~= http.statusCode,
                   let image = UIImage(data: data) else {
                 didFail = true
                 return
             }
+            ReaderInlineImageMemoryCache.store(image, for: requestIdentity)
             self.image = image
             didFail = false
         } catch {
@@ -321,6 +325,76 @@ private struct AuthenticatedReaderImage: View {
         .task {
             await loader.loadIfNeeded()
         }
+    }
+}
+
+struct ReaderInlineImageRequestIdentity: Hashable {
+    let url: URL
+    let refererURL: URL
+    let userAgent: String
+    let cookie: String
+
+    init(url: URL, refererURL: URL, sessionState: SessionState) {
+        self.url = url
+        self.refererURL = refererURL
+        userAgent = sessionState.userAgent
+        cookie = sessionState.cookie
+    }
+
+    var urlRequest: URLRequest {
+        var request = URLRequest(url: url)
+        request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
+        if !cookie.isEmpty {
+            request.setValue(cookie, forHTTPHeaderField: "Cookie")
+        }
+        request.setValue(refererURL.absoluteString, forHTTPHeaderField: "Referer")
+        return request
+    }
+
+    var cacheKey: String {
+        [
+            url.absoluteString,
+            refererURL.absoluteString,
+            userAgent,
+            cookie
+        ].joined(separator: "\u{1F}")
+    }
+}
+
+struct ReaderInlineImageMemoryCache {
+    static let defaultMemoryLimitBytes = 80 * 1024 * 1024
+
+    private static let storage = ReaderInlineImageMemoryCacheStorage(memoryLimitBytes: defaultMemoryLimitBytes)
+
+    private init() {}
+
+    static func image(for requestIdentity: ReaderInlineImageRequestIdentity) -> UIImage? {
+        storage.cache.object(forKey: requestIdentity.cacheKey as NSString)
+    }
+
+    static func store(_ image: UIImage, for requestIdentity: ReaderInlineImageRequestIdentity) {
+        storage.cache.setObject(
+            image,
+            forKey: requestIdentity.cacheKey as NSString,
+            cost: cost(for: image)
+        )
+    }
+
+    private static func cost(for image: UIImage) -> Int {
+        if let cgImage = image.cgImage {
+            return cgImage.bytesPerRow * cgImage.height
+        }
+        let scale = max(image.scale, 1)
+        return Int(image.size.width * scale * image.size.height * scale * 4)
+    }
+}
+
+private final class ReaderInlineImageMemoryCacheStorage: @unchecked Sendable {
+    let cache: NSCache<NSString, UIImage>
+
+    init(memoryLimitBytes: Int) {
+        cache = NSCache<NSString, UIImage>()
+        cache.totalCostLimit = memoryLimitBytes
     }
 }
 #endif
