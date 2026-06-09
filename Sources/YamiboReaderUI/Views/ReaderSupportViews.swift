@@ -648,11 +648,20 @@ struct ReaderViewportSurfaceContent: View {
     }
 
     var body: some View {
+        Group {
+            if centersExternalBlockInPagedMode {
+                centeredViewportBlocks
+            } else {
+                stackedViewportBlocks
+            }
+        }
+        .accessibilityIdentifier(accessibilityIdentifier)
+    }
+
+    private var stackedViewportBlocks: some View {
         VStack(alignment: .leading, spacing: 14) {
             ForEach(
-                Self.viewportBlocks(
-                    surface: surface
-                )
+                viewportBlocks
             ) { block in
                 ReaderViewportBlockView(
                     block: block,
@@ -663,7 +672,31 @@ struct ReaderViewportSurfaceContent: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .accessibilityIdentifier(accessibilityIdentifier)
+    }
+
+    private var centeredViewportBlocks: some View {
+        VStack(alignment: .center, spacing: 14) {
+            ForEach(
+                viewportBlocks
+            ) { block in
+                ReaderViewportBlockView(
+                    block: block,
+                    displayReference: displayReference,
+                    refererURL: refererURL,
+                    sessionState: sessionState
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+    }
+
+    private var viewportBlocks: [ReaderViewportDisplayBlock] {
+        Self.viewportBlocks(surface: surface)
+    }
+
+    private var centersExternalBlockInPagedMode: Bool {
+        settings.readingMode == .paged && surface?.kind == .externalBlock
     }
 
     private var accessibilityIdentifier: String {
@@ -1475,13 +1508,12 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
             if let presentationHeight = displaySurface.presentationHeight {
                 return max(ceil(presentationHeight + topPadding), 1)
             }
-            let contentWidth = max(verticalItemWidth(in: collectionView) - parent.settings.horizontalPadding * 2, 1)
             let blockHeights = displaySurface.blocks.map { block -> CGFloat in
                 switch block {
                 case .text:
                     return max(collectionView.bounds.height, 1)
                 case .image:
-                    return min(max(contentWidth * 0.65, 160), max(collectionView.bounds.height, 160))
+                    return max(collectionView.bounds.height, 160)
                 case .footer:
                     return 44
                 }
@@ -1825,7 +1857,12 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
                 textHeight: textHeight
             )
         case let .image(url):
-            return makeImageBlockView(url: url, contentWidth: contentWidth, refererURL: refererURL, sessionState: sessionState)
+            return makeImageBlockView(
+                url: url,
+                refererURL: refererURL,
+                sessionState: sessionState,
+                preferredHeight: textHeight
+            )
         case let .footer(text):
             return makeFooterBlockView(text)
         }
@@ -1847,11 +1884,11 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
 
     private func makeImageBlockView(
         url: URL,
-        contentWidth: CGFloat,
         refererURL: URL,
-        sessionState: SessionState
+        sessionState: SessionState,
+        preferredHeight: CGFloat?
     ) -> BlockView {
-        let height = min(max(contentWidth * 0.65, 160), max(bounds.height, 160))
+        let height = max(preferredHeight ?? bounds.height, 1)
         let imageView = ReaderVerticalViewportImageView()
         imageView.configure(url: url, refererURL: refererURL, sessionState: sessionState)
         return BlockView(view: imageView, height: height, displayReference: nil)

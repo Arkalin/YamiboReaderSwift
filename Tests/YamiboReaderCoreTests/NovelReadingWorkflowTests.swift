@@ -376,6 +376,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
         XCTAssertEqual(surfaces.map(\.kind), [.text, .text, .externalBlock, .text])
         XCTAssertEqual(surfaces[0].presentationSize.height, 180)
         XCTAssertEqual(surfaces[1].presentationSize.height, 240)
+        XCTAssertEqual(surfaces[2].presentationSize.height, layout.readableFrame.height)
         XCTAssertEqual(surfaces[0].presentationSpacingAfter, 0)
         XCTAssertEqual(surfaces[1].presentationSpacingAfter, 14)
         XCTAssertEqual(surfaces[2].presentationSpacingAfter, 14)

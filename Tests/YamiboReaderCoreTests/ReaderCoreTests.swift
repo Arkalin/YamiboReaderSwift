@@ -971,11 +971,15 @@ private final class StubURLProtocol: URLProtocol {
     )
     let adapterBody = try #require(functionBody(named: "prepareCandidate", in: runtimeSource))
     let metricsBody = try #require(functionBody(named: "layoutMetrics", in: layoutSource))
+    let externalBlockHeightBody = try #require(functionBody(named: "externalBlockPresentationHeight", in: layoutSource))
 
     #expect(adapterBody.contains("max(input.layout.readableFrame.width, 1)"))
-    #expect(metricsBody.contains("max(layout.readableFrame.width, 1)"))
+    #expect(metricsBody.contains("externalBlockPresentationHeight(layout: layout)"))
+    #expect(externalBlockHeightBody.contains("max(layout.readableFrame.width, 1)"))
+    #expect(externalBlockHeightBody.contains("max(layout.readableFrame.height, 160)"))
     #expect(!adapterBody.contains("readableFrame.width - settings.horizontalPadding"))
     #expect(!metricsBody.contains("readableFrame.width - settings.horizontalPadding"))
+    #expect(!externalBlockHeightBody.contains("readableFrame.width - settings.horizontalPadding"))
 }
 
 @Test func novelTextAttributedDocumentFactoryIsNotOrdinaryPublicAPI() throws {

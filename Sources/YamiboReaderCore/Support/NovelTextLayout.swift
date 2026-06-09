@@ -451,14 +451,13 @@ public enum NovelTextLayout {
         viewportIndex: NovelTextViewportIndex,
         layout: ReaderContainerLayout
     ) -> NovelTextViewportLayoutMetrics {
-        let contentWidth = max(layout.readableFrame.width, 1)
         let surfaceMetrics = Dictionary(
             uniqueKeysWithValues: viewportIndex.surfaces.map { page in
                 let textHeight = textHeightForViewportMetrics(
                     viewportSurface: page
                 )
                 let externalBlockHeight = CGFloat(page.externalBlocks.count) *
-                    min(max(contentWidth * 0.65, 160), max(layout.readableFrame.height, 160))
+                    externalBlockPresentationHeight(layout: layout)
                 let blockCount = (textHeight == nil ? 0 : 1) + page.externalBlocks.count
                 let spacingHeight = CGFloat(max(blockCount - 1, 0)) * 14
                 return (
@@ -486,13 +485,22 @@ public enum NovelTextLayout {
 
     private static func frozenExternalBlockFrame(layout: ReaderContainerLayout) -> NovelTextViewportExternalBlockFrame {
         let contentWidth = max(layout.readableFrame.width, 1)
-        let height = min(max(contentWidth * 0.65, 160), max(layout.readableFrame.height, 160))
+        let height = externalBlockPresentationHeight(layout: layout)
         return NovelTextViewportExternalBlockFrame(
             x: 0,
             y: 0,
             width: contentWidth,
             height: height
         )
+    }
+
+    private static func externalBlockPresentationHeight(layout: ReaderContainerLayout) -> CGFloat {
+        let readableHeight = max(layout.readableFrame.height, 160)
+        guard layout.readingMode == .vertical else {
+            let contentWidth = max(layout.readableFrame.width, 1)
+            return min(max(contentWidth * 0.65, 160), readableHeight)
+        }
+        return readableHeight
     }
 
     private static func makeViewportContext(
