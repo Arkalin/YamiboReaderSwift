@@ -142,6 +142,7 @@ struct ReaderPagedCollectionViewport: UIViewRepresentable {
                     .padding(.bottom, parent.bottomInset)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 }
+                .modifier(ReaderPagedHostingTopSafeAreaModifier())
             }
             .margins(.all, 0)
             cell.resetPageTurnVisuals()

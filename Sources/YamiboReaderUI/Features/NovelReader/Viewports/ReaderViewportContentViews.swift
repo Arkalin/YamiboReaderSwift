@@ -21,6 +21,12 @@ enum ReaderViewportDisplayBlock: Identifiable {
     }
 }
 
+struct ReaderPagedHostingTopSafeAreaModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        content.ignoresSafeArea(.container, edges: .top)
+    }
+}
+
 struct ReaderPresentationSpreadContent: View {
     let spread: NovelReaderPresentationSpread
     let surfaces: [NovelReaderSurface]

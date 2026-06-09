@@ -1462,22 +1462,7 @@ final class NovelTextViewportRuntimeOwner {
         textLayoutManager: NSTextLayoutManager
     ) -> CGFloat? {
         if let frozenGeometry = page.frozenGeometry {
-            guard let pageLocation = textContentStorage.location(
-                textContentStorage.documentRange.location,
-                offsetBy: frozenGeometry.documentStartOffset
-            ) else {
-                return frozenGeometry.pageLocalOriginY
-            }
-            guard let fragment = textLayoutManager.textLayoutFragment(for: pageLocation) else {
-                return frozenGeometry.pageLocalOriginY
-            }
-            guard let firstLineFragment = fragment.textLineFragment(
-                for: pageLocation,
-                isUpstreamAffinity: false
-            ) else {
-                return fragment.layoutFragmentFrame.minY
-            }
-            return fragment.layoutFragmentFrame.minY + firstLineFragment.typographicBounds.minY
+            return frozenGeometry.pageLocalOriginY
         }
         guard let firstRange = page.ranges.first,
               let documentOffset = result.viewportContext.document.documentOffset(forSurfaceRange: firstRange),

@@ -140,6 +140,7 @@ struct ReaderPresentationSpreadCollectionViewport: UIViewRepresentable {
                         onImageTap: parent.onImageTap
                     )
                 }
+                .modifier(ReaderPagedHostingTopSafeAreaModifier())
             }
             .margins(.all, 0)
             cell.resetPageTurnVisuals()

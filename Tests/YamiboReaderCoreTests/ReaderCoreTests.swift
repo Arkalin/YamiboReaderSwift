@@ -1834,6 +1834,28 @@ private final class StubURLProtocol: URLProtocol {
     }
 }
 
+@Test func novelTextViewportUsesFrozenSurfaceOriginWithoutTextKitFragmentLookup() throws {
+    let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+    let runtimeSource = try String(
+        contentsOf: repositoryRoot
+            .appendingPathComponent("Sources/YamiboReaderCore/Support/NovelTextViewportRuntime.swift"),
+        encoding: .utf8
+    )
+    let surfaceOriginBody = try #require(functionBody(named: "surfaceOriginY", in: runtimeSource))
+    let frozenBranchStart = try #require(
+        surfaceOriginBody.range(of: "if let frozenGeometry = page.frozenGeometry {")
+    )
+    let legacyBranchStart = try #require(
+        surfaceOriginBody.range(of: "\n        guard let firstRange", range: frozenBranchStart.upperBound..<surfaceOriginBody.endIndex)
+    )
+    let frozenBranch = String(surfaceOriginBody[frozenBranchStart.lowerBound..<legacyBranchStart.lowerBound])
+
+    #expect(frozenBranch.contains("return frozenGeometry.pageLocalOriginY"))
+    #expect(!frozenBranch.contains("textLayoutFragment(for:"))
+    #expect(!frozenBranch.contains("textLineFragment("))
+    #expect(!frozenBranch.contains("layoutFragmentFrame"))
+}
+
 @Test func novelTextLayoutAcceptsRematerializedGeometryWhenPageStartsAfterTrimmedWhitespace() async throws {
 #if canImport(UIKit) || canImport(AppKit)
     let paragraph = "    页首空白不应使 TextKit 重新物化后的片段几何校验失败。"

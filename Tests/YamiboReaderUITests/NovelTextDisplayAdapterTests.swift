@@ -465,17 +465,34 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertFalse(collectionViewportBody.contains("viewportIndex"))
     }
 
-    func testPagedViewportUsesChromeInsetsBecauseHostingCellAlreadyAppliesSafeArea() throws {
+    func testPagedViewportUsesStableContentTopInsetPlusChromeInset() throws {
         let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let containerSource = try String(
             contentsOf: repositoryRoot
                 .appendingPathComponent("Sources/YamiboReaderUI/Features/NovelReader/Container/ReaderContainerView.swift"),
             encoding: .utf8
         )
+        let supportSource = try readerSupportSources()
+        let contentBody = try XCTUnwrap(functionBody(named: "content", in: containerSource))
         let pagedContentBody = try XCTUnwrap(functionBody(named: "pagedContent", in: containerSource))
+        let contentTopInsetBody = try XCTUnwrap(functionBody(named: "readerContentTopInset", in: containerSource))
+        let pagedContentTopInsetBody = try XCTUnwrap(functionBody(named: "readerPagedContentTopInset", in: containerSource))
 
-        XCTAssertTrue(pagedContentBody.contains("topInset: layout.chromeInsets.top"))
+        XCTAssertTrue(containerSource.contains("? readerPagedContentTopInset(for: topInset)"))
+        XCTAssertTrue(contentBody.contains("pagedContent(\n                topInset: topInset,\n                layout: layout\n            )"))
+        XCTAssertTrue(containerSource.contains("if model.settings.readingMode == .paged {\n                        transaction.animation = nil\n                    }"))
+        XCTAssertTrue(pagedContentBody.contains("let pagedTopInset = topInset + layout.chromeInsets.top"))
+        XCTAssertTrue(pagedContentBody.contains("topInset: pagedTopInset"))
+        XCTAssertFalse(pagedContentBody.contains("ignoresTopSafeArea"))
+        XCTAssertFalse(pagedContentBody.contains("topInset: layout.chromeInsets.top"))
         XCTAssertTrue(pagedContentBody.contains("bottomInset: layout.chromeInsets.bottom"))
+        XCTAssertTrue(contentTopInsetBody.contains("rawTopInset > 0"))
+        XCTAssertTrue(pagedContentTopInsetBody.contains("layoutTopInset + readerPadVisibleStatusBarTopInset"))
+        XCTAssertFalse(pagedContentTopInsetBody.contains("rawTopInset"))
+        XCTAssertTrue(supportSource.contains("struct ReaderPagedHostingTopSafeAreaModifier"))
+        XCTAssertTrue(supportSource.contains("content.ignoresSafeArea(.container, edges: .top)"))
+        XCTAssertTrue(supportSource.contains(".modifier(ReaderPagedHostingTopSafeAreaModifier())"))
+        XCTAssertFalse(supportSource.contains("let ignoresTopSafeArea"))
     }
 
     func testTwoPageSpreadReadingUsesUIKitCollectionViewportWithCommittedSurfaces() throws {

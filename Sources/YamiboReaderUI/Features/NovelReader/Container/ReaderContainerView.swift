@@ -58,7 +58,9 @@ public struct ReaderContainerView: View {
         GeometryReader { proxy in
             let rawTopInset = max(proxy.safeAreaInsets.top, windowSafeAreaInsets.top)
             let topInset = effectiveTopInset(rawTopInset)
-            let contentTopInset = readerContentTopInset(for: topInset, rawTopInset: rawTopInset)
+            let contentTopInset = model.settings.readingMode == .paged
+                ? readerPagedContentTopInset(for: topInset)
+                : readerContentTopInset(for: topInset, rawTopInset: rawTopInset)
             let bottomInset = max(proxy.safeAreaInsets.bottom, windowSafeAreaInsets.bottom)
             let currentLayout = readerLayout(
                 proxy: proxy,
@@ -84,6 +86,11 @@ public struct ReaderContainerView: View {
                     layout: currentLayout
                 )
                 .ignoresSafeArea(.container, edges: .top)
+                .transaction { transaction in
+                    if model.settings.readingMode == .paged {
+                        transaction.animation = nil
+                    }
+                }
                 .opacity(loadingOverlayPresentation.isPresented ? 0 : 1)
 
                 ApplePencilPageTurnInteractionOverlay(
@@ -229,7 +236,10 @@ public struct ReaderContainerView: View {
             .padding(24)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if model.settings.readingMode == .paged {
-            pagedContent(layout: layout)
+            pagedContent(
+                topInset: topInset,
+                layout: layout
+            )
         } else {
             verticalContent(
                 topInset: topInset,
@@ -238,7 +248,7 @@ public struct ReaderContainerView: View {
         }
     }
 
-    private func pagedContent(layout: ReaderContainerLayout) -> some View {
+    private func pagedContent(topInset: CGFloat, layout: ReaderContainerLayout) -> some View {
         let pagerIdentity = ReaderPagedPagerIdentity(
             visibleView: model.visibleView,
             surfaceCount: model.readerSurfaces.count,
@@ -246,6 +256,7 @@ public struct ReaderContainerView: View {
             usesTwoPageSpread: model.isTwoPageSpreadActive,
             layout: layout
         )
+        let pagedTopInset = topInset + layout.chromeInsets.top
         return Group {
             if model.isTwoPageSpreadActive {
                 ReaderPresentationSpreadCollectionViewport(
@@ -254,7 +265,7 @@ public struct ReaderContainerView: View {
                     settings: model.settings,
                     refererURL: model.forumURL,
                     sessionState: model.sessionState,
-                    topInset: layout.chromeInsets.top,
+                    topInset: pagedTopInset,
                     bottomInset: layout.chromeInsets.bottom,
                     selectionIndex: model.pagedViewportSelectionIndex,
                     pagerIdentity: pagerIdentity,
@@ -285,7 +296,7 @@ public struct ReaderContainerView: View {
                     settings: model.settings,
                     refererURL: model.forumURL,
                     sessionState: model.sessionState,
-                    topInset: layout.chromeInsets.top,
+                    topInset: pagedTopInset,
                     bottomInset: layout.chromeInsets.bottom,
                     selectionIndex: model.pagedViewportSelectionIndex,
                     pagerIdentity: pagerIdentity,
@@ -584,6 +595,11 @@ public struct ReaderContainerView: View {
         return rawTopInset > 0
             ? layoutTopInset
             : layoutTopInset + readerPadVisibleStatusBarTopInset
+    }
+
+    private func readerPagedContentTopInset(for layoutTopInset: CGFloat) -> CGFloat {
+        guard isPadDevice else { return layoutTopInset }
+        return layoutTopInset + readerPadVisibleStatusBarTopInset
     }
 
     private func retryLoad() {
