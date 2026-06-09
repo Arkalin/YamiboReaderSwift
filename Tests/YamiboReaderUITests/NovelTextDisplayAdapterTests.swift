@@ -78,6 +78,21 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertEqual(ReaderImageBrowserDismissGesture.backgroundOpacity(for: 1), 0, accuracy: 0.001)
     }
 
+    func testImageBrowserUsesSwiftUIGestureAPIInsteadOfUIKitZoomView() throws {
+        let supportSource = try readerSupportSources()
+        let zoomableImageBody = try XCTUnwrap(typeBody(named: "ReaderZoomableImageView", in: supportSource))
+
+        XCTAssertTrue(supportSource.contains("private struct ReaderZoomableImageView: View"))
+        XCTAssertTrue(zoomableImageBody.contains("SpatialTapGesture(count: 2"))
+        XCTAssertTrue(zoomableImageBody.contains("MagnifyGesture()"))
+        XCTAssertTrue(zoomableImageBody.contains("DragGesture()"))
+        XCTAssertFalse(supportSource.contains("ReaderZoomableImageView: UIViewRepresentable"))
+        XCTAssertFalse(supportSource.contains("ReaderZoomableImageUIView"))
+        XCTAssertFalse(zoomableImageBody.contains("UIScrollView"))
+        XCTAssertFalse(zoomableImageBody.contains("UITapGestureRecognizer"))
+        XCTAssertFalse(zoomableImageBody.contains("UIPanGestureRecognizer"))
+    }
+
     func testMigrationGateRejectsUIOwnedTextKitGraphsAndDisplayValueFallbacks() throws {
         let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let adapterSource = try String(
