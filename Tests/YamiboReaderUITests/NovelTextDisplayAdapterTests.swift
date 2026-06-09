@@ -26,11 +26,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
     }
 
     func testImageTapRoutesHitImageBeforePageTapHandling() throws {
-        let supportSource = try String(
-            contentsOf: URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-                .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderSupportViews.swift"),
-            encoding: .utf8
-        )
+        let supportSource = try readerSupportSources()
 
         XCTAssertTrue(supportSource.contains("firstDescendant(\n                ofType: ReaderVerticalViewportImageView.self"))
         XCTAssertTrue(supportSource.contains("handleImageTap(imageView, at: imageLocation)"))
@@ -89,11 +85,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
                 .appendingPathComponent("Sources/YamiboReaderUI/Views/NovelTextDisplayAdapter.swift"),
             encoding: .utf8
         )
-        let supportSource = try String(
-            contentsOf: repositoryRoot
-                .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderSupportViews.swift"),
-            encoding: .utf8
-        )
+        let supportSource = try readerSupportSources()
         let sessionSource = try String(
             contentsOf: repositoryRoot
                 .appendingPathComponent("Sources/YamiboReaderCore/Support/NovelReadingSession.swift"),
@@ -118,11 +110,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
 
     func testSinglePagePagedCellUsesOpaqueWorkflowDisplayReference() throws {
         let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        let supportSource = try String(
-            contentsOf: repositoryRoot
-                .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderSupportViews.swift"),
-            encoding: .utf8
-        )
+        let supportSource = try readerSupportSources()
         let adapterSource = try String(
             contentsOf: repositoryRoot
                 .appendingPathComponent("Sources/YamiboReaderUI/Views/NovelTextDisplayAdapter.swift"),
@@ -169,12 +157,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
     }
 
     func testViewportSurfaceContentDoesNotMaterializeDisplayValuesForParagraphIndent() throws {
-        let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        let supportSource = try String(
-            contentsOf: repositoryRoot
-                .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderSupportViews.swift"),
-            encoding: .utf8
-        )
+        let supportSource = try readerSupportSources()
         let viewportContentBody = try XCTUnwrap(typeBody(named: "ReaderViewportSurfaceContent", in: supportSource))
 
         XCTAssertFalse(viewportContentBody.contains("NovelTextLayout.displayValue("))
@@ -248,12 +231,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
     }
 
     func testTwoPagePagedSpreadUsesViewportBackedReaderPageContent() throws {
-        let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        let readerSupportSource = try String(
-            contentsOf: repositoryRoot
-                .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderSupportViews.swift"),
-            encoding: .utf8
-        )
+        let readerSupportSource = try readerSupportSources()
         let spreadContentBody = try XCTUnwrap(typeBody(named: "ReaderPresentationSpreadContent", in: readerSupportSource))
 
         XCTAssertTrue(spreadContentBody.contains("ReaderViewportSurfaceContent("))
@@ -263,12 +241,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
     }
 
     func testTwoPageSpreadInstallsOpaqueReferencesForLeftAndRightPages() throws {
-        let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        let supportSource = try String(
-            contentsOf: repositoryRoot
-                .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderSupportViews.swift"),
-            encoding: .utf8
-        )
+        let supportSource = try readerSupportSources()
         let spreadViewportBody = try XCTUnwrap(
             typeBody(named: "ReaderPresentationSpreadCollectionViewport", in: supportSource)
         )
@@ -310,11 +283,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
                 .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderContainerView.swift"),
             encoding: .utf8
         )
-        let supportSource = try String(
-            contentsOf: repositoryRoot
-                .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderSupportViews.swift"),
-            encoding: .utf8
-        )
+        let supportSource = try readerSupportSources()
 
         XCTAssertTrue(containerSource.contains("let resumeContext = await model.saveProgress()"))
         XCTAssertTrue(containerSource.contains("appModel.dismissReader(openThreadInForum: url, suspendedContext: resumeContext)"))
@@ -324,12 +293,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
     }
 
     func testPagedCellsResolveViewportSurfaceIdentityBeforeRenderingNormalText() throws {
-        let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        let supportSource = try String(
-            contentsOf: repositoryRoot
-                .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderSupportViews.swift"),
-            encoding: .utf8
-        )
+        let supportSource = try readerSupportSources()
         let singlePageBody = try XCTUnwrap(typeBody(named: "ReaderPagedCollectionViewport", in: supportSource))
         let spreadContentBody = try XCTUnwrap(typeBody(named: "ReaderPresentationSpreadContent", in: supportSource))
         let viewportContentBody = try XCTUnwrap(typeBody(named: "ReaderViewportSurfaceContent", in: supportSource))
@@ -361,11 +325,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
                 .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderContainerView.swift"),
             encoding: .utf8
         )
-        let supportSource = try String(
-            contentsOf: repositoryRoot
-                .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderSupportViews.swift"),
-            encoding: .utf8
-        )
+        let supportSource = try readerSupportSources()
         let pagedContentBody = try XCTUnwrap(functionBody(named: "pagedContent", in: containerSource))
         let collectionViewportBody = try XCTUnwrap(typeBody(named: "ReaderPagedCollectionViewport", in: supportSource))
 
@@ -397,11 +357,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
                 .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderContainerView.swift"),
             encoding: .utf8
         )
-        let supportSource = try String(
-            contentsOf: repositoryRoot
-                .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderSupportViews.swift"),
-            encoding: .utf8
-        )
+        let supportSource = try readerSupportSources()
         let pagedContentBody = try XCTUnwrap(functionBody(named: "pagedContent", in: containerSource))
         let spreadViewportBody = try XCTUnwrap(typeBody(named: "ReaderPresentationSpreadCollectionViewport", in: supportSource))
         let spreadContentBody = try XCTUnwrap(typeBody(named: "ReaderPresentationSpreadContent", in: supportSource))
@@ -423,11 +379,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
                 .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderContainerView.swift"),
             encoding: .utf8
         )
-        let supportSource = try String(
-            contentsOf: repositoryRoot
-                .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderSupportViews.swift"),
-            encoding: .utf8
-        )
+        let supportSource = try readerSupportSources()
         let verticalContentBody = try XCTUnwrap(functionBody(named: "verticalContent", in: containerSource))
         let scrollViewBody = try XCTUnwrap(typeBody(named: "ReaderVerticalViewportScrollView", in: supportSource))
         let readerBlockBody = try XCTUnwrap(typeBody(named: "ReaderViewportBlockView", in: supportSource))
@@ -447,11 +399,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
                 .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderContainerView.swift"),
             encoding: .utf8
         )
-        let supportSource = try String(
-            contentsOf: repositoryRoot
-                .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderSupportViews.swift"),
-            encoding: .utf8
-        )
+        let supportSource = try readerSupportSources()
         let verticalContentBody = try XCTUnwrap(functionBody(named: "verticalContent", in: containerSource))
         let scrollViewBody = try XCTUnwrap(typeBody(named: "ReaderVerticalViewportScrollView", in: supportSource))
 
@@ -466,12 +414,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
     }
 
     func testAllVisibleViewportModesRenderSharedContextThroughLazyCollectionCells() throws {
-        let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        let supportSource = try String(
-            contentsOf: repositoryRoot
-                .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderSupportViews.swift"),
-            encoding: .utf8
-        )
+        let supportSource = try readerSupportSources()
         let singlePageBody = try XCTUnwrap(typeBody(named: "ReaderPagedCollectionViewport", in: supportSource))
         let spreadBody = try XCTUnwrap(typeBody(named: "ReaderPresentationSpreadCollectionViewport", in: supportSource))
         let spreadContentBody = try XCTUnwrap(typeBody(named: "ReaderPresentationSpreadContent", in: supportSource))
@@ -514,12 +457,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
     }
 
     func testPagedViewportCellsRenderFromViewportIndexPageIdentity() throws {
-        let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        let supportSource = try String(
-            contentsOf: repositoryRoot
-                .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderSupportViews.swift"),
-            encoding: .utf8
-        )
+        let supportSource = try readerSupportSources()
         let singlePageBody = try XCTUnwrap(typeBody(named: "ReaderPagedCollectionViewport", in: supportSource))
         let spreadContentBody = try XCTUnwrap(typeBody(named: "ReaderPresentationSpreadContent", in: supportSource))
 
@@ -536,12 +474,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
     }
 
     func testPagedViewportsRetrySelectionScrollAfterInitialZeroWidthLayout() throws {
-        let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        let supportSource = try String(
-            contentsOf: repositoryRoot
-                .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderSupportViews.swift"),
-            encoding: .utf8
-        )
+        let supportSource = try readerSupportSources()
         let singlePageBody = try XCTUnwrap(typeBody(named: "ReaderPagedCollectionViewport", in: supportSource))
         let spreadBody = try XCTUnwrap(typeBody(named: "ReaderPresentationSpreadCollectionViewport", in: supportSource))
 
@@ -555,12 +488,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
     }
 
     func testVerticalViewportPublishesVisibleSurfacesAfterLayoutSubviews() throws {
-        let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        let supportSource = try String(
-            contentsOf: repositoryRoot
-                .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderSupportViews.swift"),
-            encoding: .utf8
-        )
+        let supportSource = try readerSupportSources()
         let verticalBody = try XCTUnwrap(typeBody(named: "ReaderVerticalViewportScrollView", in: supportSource))
 
         XCTAssertTrue(supportSource.contains("private final class ReaderVerticalViewportCollectionView: UICollectionView"))
@@ -572,12 +500,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
     }
 
     func testVerticalViewportRefreshesCellsAfterFinalFlowLayoutSizing() throws {
-        let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        let supportSource = try String(
-            contentsOf: repositoryRoot
-                .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderSupportViews.swift"),
-            encoding: .utf8
-        )
+        let supportSource = try readerSupportSources()
         let verticalBody = try XCTUnwrap(typeBody(named: "ReaderVerticalViewportScrollView", in: supportSource))
         let coordinatorBody = try XCTUnwrap(typeBody(named: "Coordinator", in: verticalBody))
         let cellBody = try XCTUnwrap(typeBody(named: "ReaderVerticalViewportCell", in: supportSource))
@@ -610,12 +533,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
     }
 
     func testPagedViewportsRetrySelectionScrollAfterReloadLayoutCompletes() throws {
-        let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        let supportSource = try String(
-            contentsOf: repositoryRoot
-                .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderSupportViews.swift"),
-            encoding: .utf8
-        )
+        let supportSource = try readerSupportSources()
         let singlePageBody = try XCTUnwrap(typeBody(named: "ReaderPagedCollectionViewport", in: supportSource))
         let spreadBody = try XCTUnwrap(typeBody(named: "ReaderPresentationSpreadCollectionViewport", in: supportSource))
 
@@ -627,12 +545,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
     }
 
     func testPagedViewportsKeepPendingSelectionUntilCollectionViewCanRepresentTargetOffset() throws {
-        let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        let supportSource = try String(
-            contentsOf: repositoryRoot
-                .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderSupportViews.swift"),
-            encoding: .utf8
-        )
+        let supportSource = try readerSupportSources()
         let singlePageBody = try XCTUnwrap(typeBody(named: "ReaderPagedCollectionViewport", in: supportSource))
         let spreadBody = try XCTUnwrap(typeBody(named: "ReaderPresentationSpreadCollectionViewport", in: supportSource))
 
@@ -646,12 +559,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
     }
 
     func testVerticalViewportUsesExplicitFlowLayoutSizingForScrollableFullWidthCells() throws {
-        let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        let supportSource = try String(
-            contentsOf: repositoryRoot
-                .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderSupportViews.swift"),
-            encoding: .utf8
-        )
+        let supportSource = try readerSupportSources()
         let verticalBody = try XCTUnwrap(typeBody(named: "ReaderVerticalViewportScrollView", in: supportSource))
 
         XCTAssertTrue(verticalBody.contains("layout.estimatedItemSize = .zero"))
@@ -677,12 +585,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
     }
 
     func testVerticalViewportCellsUseWorkflowOwnedDisplayReferences() throws {
-        let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        let supportSource = try String(
-            contentsOf: repositoryRoot
-                .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderSupportViews.swift"),
-            encoding: .utf8
-        )
+        let supportSource = try readerSupportSources()
         let verticalBody = try XCTUnwrap(typeBody(named: "ReaderVerticalViewportScrollView", in: supportSource))
         let verticalCellBody = try XCTUnwrap(typeBody(named: "ReaderVerticalViewportCell", in: supportSource))
 
@@ -707,12 +610,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
     }
 
     func testVerticalViewportCellsSampleAndRestoreThroughTextKitSurfaces() throws {
-        let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        let supportSource = try String(
-            contentsOf: repositoryRoot
-                .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderSupportViews.swift"),
-            encoding: .utf8
-        )
+        let supportSource = try readerSupportSources()
         let verticalBody = try XCTUnwrap(typeBody(named: "ReaderVerticalViewportScrollView", in: supportSource))
         let verticalCellBody = try XCTUnwrap(typeBody(named: "ReaderVerticalViewportCell", in: supportSource))
         let displaySurfaceBody = try XCTUnwrap(functionBody(named: "verticalDisplaySurface", in: verticalBody))
@@ -758,12 +656,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
     }
 
     func testVerticalViewportSizingSamplingAndRestoreUseWorkflowReferences() throws {
-        let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        let supportSource = try String(
-            contentsOf: repositoryRoot
-                .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderSupportViews.swift"),
-            encoding: .utf8
-        )
+        let supportSource = try readerSupportSources()
         let verticalBody = try XCTUnwrap(typeBody(named: "ReaderVerticalViewportScrollView", in: supportSource))
         let pagedSpreadBody = try XCTUnwrap(typeBody(named: "ReaderPresentationSpreadContent", in: supportSource))
         let itemHeightBody = try XCTUnwrap(functionBody(named: "verticalItemHeight", in: verticalBody))
@@ -804,12 +697,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
     }
 
     func testViewportSurfaceContentUsesReferenceMarkerWithoutRebuildingDisplayValue() throws {
-        let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        let supportSource = try String(
-            contentsOf: repositoryRoot
-                .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderSupportViews.swift"),
-            encoding: .utf8
-        )
+        let supportSource = try readerSupportSources()
         let viewportSurfaceContentBody = try XCTUnwrap(typeBody(named: "ReaderViewportSurfaceContent", in: supportSource))
 
         XCTAssertTrue(viewportSurfaceContentBody.contains("viewportBlocks("))
@@ -826,12 +714,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
     }
 
     func testPagedExternalBlockSurfaceContentCentersImageBlocks() throws {
-        let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        let supportSource = try String(
-            contentsOf: repositoryRoot
-                .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderSupportViews.swift"),
-            encoding: .utf8
-        )
+        let supportSource = try readerSupportSources()
         let viewportSurfaceContentBody = try XCTUnwrap(typeBody(named: "ReaderViewportSurfaceContent", in: supportSource))
 
         XCTAssertTrue(viewportSurfaceContentBody.contains("if centersExternalBlockInPagedMode"))
@@ -866,11 +749,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
 
     func testNovelReadingSessionDisplayPathDoesNotRetainUIKitTextViewFallback() throws {
         let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        let readerSupportSource = try String(
-            contentsOf: repositoryRoot
-                .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderSupportViews.swift"),
-            encoding: .utf8
-        )
+        let readerSupportSource = try readerSupportSources()
         let settingsSource = try String(
             contentsOf: repositoryRoot
                 .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderSettingsViews.swift"),
@@ -883,12 +762,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
     }
 
     func testNovelReadingSessionBlockPassesOpaqueDisplayReference() throws {
-        let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        let readerSupportSource = try String(
-            contentsOf: repositoryRoot
-                .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderSupportViews.swift"),
-            encoding: .utf8
-        )
+        let readerSupportSource = try readerSupportSources()
 
         XCTAssertTrue(readerSupportSource.contains("displayReference: displayReference"))
         XCTAssertTrue(readerSupportSource.contains("NativeNovelTextViewportReferenceView("))
@@ -990,6 +864,28 @@ private func functionBody(named name: String, in source: String) -> String? {
         index = source.index(after: index)
     }
     return nil
+}
+
+private func readerSupportSources() throws -> String {
+    let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+    let relativePaths = [
+        "Sources/YamiboReaderUI/Views/ReaderSupportViews.swift",
+        "Sources/YamiboReaderUI/Views/ReaderProgressPresentation.swift",
+        "Sources/YamiboReaderUI/Views/ReaderChromeControls.swift",
+        "Sources/YamiboReaderUI/Views/ReaderViewportContentViews.swift",
+        "Sources/YamiboReaderUI/Views/ReaderPagedViewport.swift",
+        "Sources/YamiboReaderUI/Views/ReaderVerticalViewport.swift",
+        "Sources/YamiboReaderUI/Views/ReaderImageBrowserView.swift",
+        "Sources/YamiboReaderUI/Views/ReaderChromeViews.swift",
+        "Sources/YamiboReaderUI/Views/ReaderChapterSheets.swift",
+        "Sources/YamiboReaderUI/Views/ReaderCacheViews.swift",
+    ]
+
+    return try relativePaths
+        .map { path in
+            try String(contentsOf: repositoryRoot.appendingPathComponent(path), encoding: .utf8)
+        }
+        .joined(separator: "\n")
 }
 
 private func typeBody(named name: String, in source: String) -> String? {

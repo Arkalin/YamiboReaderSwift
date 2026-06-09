@@ -1,0 +1,229 @@
+import SwiftUI
+import YamiboReaderCore
+
+#if os(iOS)
+import UIKit
+
+struct ReaderCachePanel: View {
+    @ObservedObject var model: ReaderContainerModel
+    let onShowProgress: () -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var selectedViews: Set<Int> = []
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section(L10n.string("reader.cache_scope")) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(model.cacheScopeTitle)
+                            .font(.headline)
+                        Text(model.cacheScopeDescription)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.vertical, 4)
+                }
+
+                Section(L10n.string("reader.select_page")) {
+                    Button(selectionState.isAllSelected ? L10n.string("common.deselect_all") : L10n.string("common.select_all")) {
+                        if selectionState.isAllSelected {
+                            selectedViews = []
+                        } else {
+                            selectedViews = Set(model.allCacheableViews)
+                        }
+                    }
+                    .disabled(model.allCacheableViews.isEmpty)
+
+                    if model.allCacheableViews.isEmpty {
+                        Text(L10n.string("reader.no_cacheable_pages"))
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(model.allCacheableViews, id: \.self) { view in
+                            Button {
+                                toggleSelection(for: view)
+                            } label: {
+                                HStack(spacing: 12) {
+                                    Image(systemName: selectedViews.contains(view) ? "checkmark.circle.fill" : "circle")
+                                        .foregroundStyle(selectedViews.contains(view) ? Color.accentColor : Color.secondary)
+                                    Text(L10n.string("reader.page_number_spaced", view))
+                                        .foregroundStyle(.primary)
+                                    Spacer()
+                                    if model.cachedViews.contains(view) {
+                                        Label(L10n.string("reader.cached"), systemImage: "checkmark.seal.fill")
+                                            .labelStyle(.titleAndIcon)
+                                            .font(.caption)
+                                            .foregroundStyle(.green)
+                                    }
+                                }
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+
+                if !selectedViews.isEmpty {
+                    Section(L10n.string("reader.selected_content")) {
+                        Text(L10n.string("reader.selected_pages", selectedViews.count))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .navigationTitle(L10n.string("reader.cache_management"))
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                actionBar
+            }
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(L10n.string("common.close")) {
+                        dismiss()
+                    }
+                }
+            }
+            .task {
+                await model.refreshCachedState()
+            }
+        }
+    }
+
+    private var selectionState: ReaderCacheSelectionState {
+        model.cacheSelectionState(for: selectedViews)
+    }
+
+    private var actionBar: some View {
+        VStack(spacing: 12) {
+            Divider()
+            HStack(spacing: 12) {
+                Button(L10n.string("reader.cache_action.cache")) {
+                    model.startCaching(views: selectionState.uncachedSelectedViews)
+                    onShowProgress()
+                    dismiss()
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(!selectionState.canCache)
+
+                Button(L10n.string("reader.cache_action.update")) {
+                    model.updateCachedViews(selectionState.cachedSelectedViews)
+                    onShowProgress()
+                    dismiss()
+                }
+                .buttonStyle(.bordered)
+                .disabled(!selectionState.canUpdate)
+
+                Button(L10n.string("common.delete"), role: .destructive) {
+                    Task {
+                        await model.deleteCachedViews(selectionState.cachedSelectedViews)
+                        dismiss()
+                    }
+                }
+                .buttonStyle(.bordered)
+                .disabled(!selectionState.canDelete)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 20)
+            .padding(.bottom, 12)
+        }
+        .background(.ultraThinMaterial)
+    }
+
+    private func toggleSelection(for view: Int) {
+        if selectedViews.contains(view) {
+            selectedViews.remove(view)
+        } else {
+            selectedViews.insert(view)
+        }
+    }
+}
+
+struct ReaderCacheProgressSheet: View {
+    @ObservedObject var model: ReaderContainerModel
+    let onClose: () -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 24) {
+                ProgressView(value: progressValue)
+                    .progressViewStyle(.linear)
+
+                VStack(spacing: 10) {
+                    Text(titleText)
+                        .font(.title3.weight(.semibold))
+
+                    Text(detailText)
+                        .font(.body)
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(.secondary)
+
+                    if let summary = model.cacheOperationState.summaryMessage, model.cacheOperationState.isFinished {
+                        Text(summary)
+                            .font(.footnote)
+                            .multilineTextAlignment(.center)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                Spacer()
+            }
+            .padding(24)
+            .navigationTitle(L10n.string("reader.cache_progress"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .bottomBar) {
+                    HStack {
+                        if model.cacheOperationState.isFinished {
+                            Button(L10n.string("common.done")) {
+                                model.dismissCacheProgress()
+                                onClose()
+                                dismiss()
+                            }
+                            .buttonStyle(.borderedProminent)
+                        } else {
+                            Button(L10n.string("reader.run_in_background")) {
+                                model.hideCacheProgress()
+                                onClose()
+                                dismiss()
+                            }
+                            .buttonStyle(.borderedProminent)
+
+                            Button(L10n.string("common.stop"), role: .destructive) {
+                                model.stopCaching()
+                            }
+                            .buttonStyle(.bordered)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var progressValue: Double {
+        guard model.cacheOperationState.totalCount > 0 else { return 0 }
+        return Double(model.cacheOperationState.completedCount) / Double(model.cacheOperationState.totalCount)
+    }
+
+    private var titleText: String {
+        switch model.cacheOperationState.status {
+        case .idle:
+            return L10n.string("reader.cache_status.ready")
+        case .running:
+            return L10n.string("reader.cache_status.running")
+        case .completed:
+            return L10n.string("reader.cache_status.completed")
+        case .cancelled:
+            return L10n.string("reader.cache_status.cancelled")
+        }
+    }
+
+    private var detailText: String {
+        if model.cacheOperationState.isFinished {
+            return L10n.string("reader.cache_detail.completed", model.cacheOperationState.completedCount, max(model.cacheOperationState.totalCount, 1))
+        }
+
+        if let currentView = model.cacheOperationState.currentView {
+            return L10n.string("reader.cache_detail.running", currentView, model.cacheOperationState.completedCount, max(model.cacheOperationState.totalCount, 1))
+        }
+
+        return L10n.string("reader.cache_detail.ready")
+    }
+}
+#endif
