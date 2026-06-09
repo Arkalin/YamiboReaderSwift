@@ -746,6 +746,23 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertFalse(viewportSurfaceContentBody.contains("page.novelTextDisplayValues.first"))
     }
 
+    func testPagedExternalBlockSurfaceContentCentersImageBlocks() throws {
+        let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let supportSource = try String(
+            contentsOf: repositoryRoot
+                .appendingPathComponent("Sources/YamiboReaderUI/Views/ReaderSupportViews.swift"),
+            encoding: .utf8
+        )
+        let viewportSurfaceContentBody = try XCTUnwrap(typeBody(named: "ReaderViewportSurfaceContent", in: supportSource))
+
+        XCTAssertTrue(viewportSurfaceContentBody.contains("if centersExternalBlockInPagedMode"))
+        XCTAssertTrue(viewportSurfaceContentBody.contains("settings.readingMode == .paged && surface?.kind == .externalBlock"))
+        XCTAssertTrue(viewportSurfaceContentBody.contains("centeredViewportBlocks"))
+        XCTAssertTrue(viewportSurfaceContentBody.contains(".frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)"))
+        XCTAssertTrue(viewportSurfaceContentBody.contains("stackedViewportBlocks"))
+        XCTAssertTrue(viewportSurfaceContentBody.contains(".frame(maxWidth: .infinity, alignment: .leading)"))
+    }
+
     func testNovelReadingSessionPositioningUsesViewportIndexWithoutPageSegmentFallbacks() throws {
         let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let sessionSource = try String(
