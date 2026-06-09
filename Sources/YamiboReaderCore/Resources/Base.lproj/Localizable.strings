@@ -296,6 +296,10 @@
 "reader.web_view_chapters" = "%@ 的章节";
 "reader.web_view_progress" = "网页 %d / %d";
 "reading_mode.paged" = "横向分页";
+"reading_mode.page_curl" = "卷页";
+"reading_mode.quick_fade" = "快速淡入淡出";
+"reading_mode.scroll" = "滚动";
+"reading_mode.slide" = "滑动";
 "reading_mode.title" = "阅读模式";
 "reading_mode.vertical" = "纵向滚动";
 "settings.auto_sign_in" = "自动签到";
