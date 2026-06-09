@@ -208,41 +208,110 @@ struct ReaderBooksSliderLeadingIcon: View {
     }
 }
 
-struct ReaderBooksReadingModePicker: View {
+struct ReaderBooksReadingModeMenuRow: View {
     let selection: ReaderReadingMode
     let palette: ReaderBooksSheetPalette
     let onSelect: (ReaderReadingMode) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        HStack(spacing: 12) {
             Text(L10n.string("reading_mode.title"))
                 .font(.title3.weight(.semibold))
                 .foregroundStyle(palette.primaryText)
+                .lineLimit(2)
+                .minimumScaleFactor(0.85)
 
-            HStack(spacing: 8) {
-                modeButton(.paged)
-                modeButton(.vertical)
+            Spacer(minLength: 8)
+
+            Menu {
+                Picker(
+                    L10n.string("reading_mode.title"),
+                    selection: Binding(
+                        get: { ReaderBooksReadingModeMenuOption(selection) },
+                        set: { option in
+                            guard let mode = option.readingMode else { return }
+                            onSelect(mode)
+                        }
+                    )
+                ) {
+                    ForEach(ReaderBooksReadingModeMenuOption.allCases, id: \.self) { option in
+                        Label(option.title, systemImage: option.systemImageName)
+                            .tag(option)
+                            .disabled(!option.isSelectable)
+                    }
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    Text(ReaderBooksReadingModeMenuOption(selection).title)
+                        .font(.system(size: 18))
+                        .foregroundStyle(palette.secondaryText)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.78)
+
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(palette.secondaryText.opacity(0.75))
+                }
             }
-            .padding(6)
-            .background(palette.segmentedBackground, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+            .buttonStyle(.plain)
+        }
+    }
+}
+
+private enum ReaderBooksReadingModeMenuOption: CaseIterable, Hashable {
+    case slide
+    case pageCurl
+    case quickFade
+    case scroll
+
+    init(_ mode: ReaderReadingMode) {
+        switch mode {
+        case .paged:
+            self = .slide
+        case .vertical:
+            self = .scroll
         }
     }
 
-    private func modeButton(_ mode: ReaderReadingMode) -> some View {
-        Button {
-            onSelect(mode)
-        } label: {
-            Text(mode.title)
-                .font(.subheadline.weight(.semibold))
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 10)
-                .background(
-                    selection == mode ? palette.cardBackground : Color.clear,
-                    in: RoundedRectangle(cornerRadius: 20, style: .continuous)
-                )
-                .foregroundStyle(palette.primaryText)
+    var title: String {
+        switch self {
+        case .slide:
+            L10n.string("reading_mode.slide")
+        case .pageCurl:
+            L10n.string("reading_mode.page_curl")
+        case .quickFade:
+            L10n.string("reading_mode.quick_fade")
+        case .scroll:
+            L10n.string("reading_mode.scroll")
         }
-        .buttonStyle(.plain)
+    }
+
+    var systemImageName: String {
+        switch self {
+        case .slide:
+            "arrow.left.to.line.square"
+        case .pageCurl:
+            "doc"
+        case .quickFade:
+            "bolt.square"
+        case .scroll:
+            "text.page"
+        }
+    }
+
+    var readingMode: ReaderReadingMode? {
+        switch self {
+        case .slide:
+            .paged
+        case .scroll:
+            .vertical
+        case .pageCurl, .quickFade:
+            nil
+        }
+    }
+
+    var isSelectable: Bool {
+        readingMode != nil
     }
 }
 
