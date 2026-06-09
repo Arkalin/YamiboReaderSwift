@@ -25,6 +25,75 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertEqual(ReaderPagedTapZone.zone(for: CGPoint(x: 340, y: 720), in: bounds), .next)
     }
 
+    func testPagedPageTurnVisualMetricsFadeOverlayAsPageApproachesRest() {
+        let start = ReaderPagedPageTurnPresentation.metrics(
+            contentOffsetX: 201,
+            pageWidth: 100,
+            pageCount: 5,
+            restingPageIndex: 2
+        )
+        let halfway = ReaderPagedPageTurnPresentation.metrics(
+            contentOffsetX: 250,
+            pageWidth: 100,
+            pageCount: 5,
+            restingPageIndex: 2
+        )
+        let completed = ReaderPagedPageTurnPresentation.metrics(
+            contentOffsetX: 300,
+            pageWidth: 100,
+            pageCount: 5,
+            restingPageIndex: 2
+        )
+
+        XCTAssertEqual(start?.overlayAlpha ?? 0, ReaderPagedPageTurnPresentation.maxOverlayAlpha * 0.99, accuracy: 0.001)
+        XCTAssertEqual(halfway?.overlayAlpha ?? 0, ReaderPagedPageTurnPresentation.maxOverlayAlpha * 0.5, accuracy: 0.001)
+        XCTAssertNil(completed)
+    }
+
+    func testPagedPageTurnVisualMetricsIdentifyNextAndPreviousPages() throws {
+        let next = try XCTUnwrap(ReaderPagedPageTurnPresentation.metrics(
+            contentOffsetX: 250,
+            pageWidth: 100,
+            pageCount: 5,
+            restingPageIndex: 2
+        ))
+        let previous = try XCTUnwrap(ReaderPagedPageTurnPresentation.metrics(
+            contentOffsetX: 150,
+            pageWidth: 100,
+            pageCount: 5,
+            restingPageIndex: 2
+        ))
+
+        XCTAssertEqual(next.roundedPageIndex, 2)
+        XCTAssertEqual(next.maskedPageIndex, 3)
+        XCTAssertEqual(next.cornerRadius, ReaderPagedPageTurnPresentation.fallbackPageCornerRadius)
+        XCTAssertTrue(next.isActive)
+        XCTAssertEqual(previous.roundedPageIndex, 2)
+        XCTAssertEqual(previous.maskedPageIndex, 1)
+        XCTAssertTrue(previous.isActive)
+    }
+
+    func testPagedPageTurnVisualMetricsStayInactiveAtRestAndBoundaries() {
+        XCTAssertNil(ReaderPagedPageTurnPresentation.metrics(
+            contentOffsetX: 200,
+            pageWidth: 100,
+            pageCount: 5,
+            restingPageIndex: 2
+        ))
+        XCTAssertNil(ReaderPagedPageTurnPresentation.metrics(
+            contentOffsetX: -20,
+            pageWidth: 100,
+            pageCount: 5,
+            restingPageIndex: 0
+        ))
+        XCTAssertNil(ReaderPagedPageTurnPresentation.metrics(
+            contentOffsetX: 420,
+            pageWidth: 100,
+            pageCount: 5,
+            restingPageIndex: 4
+        ))
+    }
+
     func testImageTapRoutesHitImageBeforePageTapHandling() throws {
         let supportSource = try readerSupportSources()
 
@@ -37,6 +106,45 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertFalse(supportSource.contains("shouldBeRequiredToFailBy otherGestureRecognizer"))
         XCTAssertFalse(supportSource.contains("hitTest(location, with: nil)?.isDescendant(of: ReaderVerticalViewportImageView.self)"))
         XCTAssertFalse(supportSource.contains("private var onTap: ((URL, String?) -> Void)?"))
+    }
+
+    func testPagedViewportsInstallAppleBooksStylePageTurnVisuals() throws {
+        let supportSource = try readerSupportSources()
+        let singlePageBody = try XCTUnwrap(typeBody(named: "ReaderPagedCollectionViewport", in: supportSource))
+        let spreadBody = try XCTUnwrap(typeBody(named: "ReaderPresentationSpreadCollectionViewport", in: supportSource))
+
+        XCTAssertTrue(supportSource.contains("struct ReaderPagedPageTurnVisualMetrics: Equatable"))
+        XCTAssertTrue(supportSource.contains("enum ReaderPagedPageTurnPresentation"))
+        XCTAssertTrue(supportSource.contains("struct ReaderPagedPageSurfaceContainer<Content: View>: View"))
+        XCTAssertTrue(supportSource.contains("final class ReaderPagedPageTurnCell: UICollectionViewCell"))
+        XCTAssertTrue(supportSource.contains("enum ReaderPagedPageTurnBackground"))
+        XCTAssertTrue(supportSource.contains("enum ReaderPagedPageTurnCornerRadius"))
+        XCTAssertTrue(supportSource.contains("[\"_display\", \"Corner\", \"Radius\"].joined()"))
+        XCTAssertTrue(supportSource.contains("screen.value(forKey: displayCornerRadiusSelectorName)"))
+        XCTAssertTrue(supportSource.contains("static func dimmedPageColor"))
+        XCTAssertTrue(supportSource.contains("static let maxOverlayAlpha: CGFloat = 0.22"))
+        XCTAssertTrue(supportSource.contains("static let fallbackPageCornerRadius: CGFloat = 56"))
+        XCTAssertTrue(supportSource.contains("layer.cornerCurve = .continuous"))
+        XCTAssertTrue(supportSource.contains("addSubview(pageTurnOverlayView)"))
+        XCTAssertTrue(supportSource.contains(".background(readerThemeColor(for: settings.backgroundStyle, colorScheme: colorScheme))"))
+
+        for body in [singlePageBody, spreadBody] {
+            XCTAssertTrue(body.contains("ReaderPagedPageTurnCell.self"))
+            XCTAssertTrue(body.contains("as! ReaderPagedPageTurnCell"))
+            XCTAssertTrue(body.contains("ReaderPagedPageSurfaceContainer(settings: parent.settings)"))
+            XCTAssertTrue(body.contains("scrollViewWillBeginDragging"))
+            XCTAssertTrue(body.contains("scrollViewDidScroll"))
+            XCTAssertTrue(body.contains("scrollViewDidEndDragging"))
+            XCTAssertTrue(body.contains("beginPageTurnVisuals(in: collectionView)"))
+            XCTAssertTrue(body.contains("applyPageTurnVisuals(in: collectionView)"))
+            XCTAssertTrue(body.contains("endPageTurnVisuals(in: collectionView)"))
+            XCTAssertTrue(body.contains("ReaderPagedPageTurnPresentation.metrics"))
+            XCTAssertTrue(body.contains("cornerRadius: ReaderPagedPageTurnCornerRadius.radius(for: collectionView.window?.screen)"))
+            XCTAssertTrue(body.contains("collectionView.backgroundColor = ReaderPagedPageTurnBackground.dimmedPageColor"))
+            XCTAssertTrue(body.contains("collectionView.backgroundColor = .clear"))
+            XCTAssertTrue(body.contains("cell.resetPageTurnVisuals()"))
+            XCTAssertTrue(body.contains("UIHostingConfiguration"))
+        }
     }
 
     func testImageBrowserSwipeDownDismissRequiresMinimumZoomAndDownwardIntent() {

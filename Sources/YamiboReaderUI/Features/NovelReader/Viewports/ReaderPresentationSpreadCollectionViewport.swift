@@ -54,7 +54,7 @@ struct ReaderPresentationSpreadCollectionViewport: UIViewRepresentable {
         collectionView.backgroundColor = .clear
         collectionView.dataSource = context.coordinator
         collectionView.delegate = context.coordinator
-        collectionView.register(UICollectionViewCell.self, forCellWithReuseIdentifier: Coordinator.reuseIdentifier)
+        collectionView.register(ReaderPagedPageTurnCell.self, forCellWithReuseIdentifier: Coordinator.reuseIdentifier)
         let tapRecognizer = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleTap(_:)))
         tapRecognizer.cancelsTouchesInView = false
         tapRecognizer.delegate = context.coordinator
@@ -87,6 +87,7 @@ struct ReaderPresentationSpreadCollectionViewport: UIViewRepresentable {
         private var isReloadingDataForSelectionScroll = false
         private var isPendingSelectionScrollRetryScheduled = false
         private var consumedScrollAnimationRequestID: UUID?
+        private var pageTurnRestingIndex: Int?
 
         init(parent: ReaderPresentationSpreadCollectionViewport) {
             self.parent = parent
@@ -103,23 +104,26 @@ struct ReaderPresentationSpreadCollectionViewport: UIViewRepresentable {
             let cell = collectionView.dequeueReusableCell(
                 withReuseIdentifier: Self.reuseIdentifier,
                 for: indexPath
-            )
+            ) as! ReaderPagedPageTurnCell
             let spread = parent.spreads[indexPath.item]
             cell.backgroundColor = .clear
             cell.contentConfiguration = UIHostingConfiguration {
-                ReaderPresentationSpreadContent(
-                    spread: spread,
-                    surfaces: parent.surfaces,
-                    settings: parent.settings,
-                    refererURL: parent.refererURL,
-                    sessionState: parent.sessionState,
-                    topInset: parent.topInset,
-                    bottomInset: parent.bottomInset,
-                    displayReferenceProvider: parent.displayReferenceProvider,
-                    onImageTap: parent.onImageTap
-                )
+                ReaderPagedPageSurfaceContainer(settings: parent.settings) {
+                    ReaderPresentationSpreadContent(
+                        spread: spread,
+                        surfaces: parent.surfaces,
+                        settings: parent.settings,
+                        refererURL: parent.refererURL,
+                        sessionState: parent.sessionState,
+                        topInset: parent.topInset,
+                        bottomInset: parent.bottomInset,
+                        displayReferenceProvider: parent.displayReferenceProvider,
+                        onImageTap: parent.onImageTap
+                    )
+                }
             }
             .margins(.all, 0)
+            cell.resetPageTurnVisuals()
             return cell
         }
 
@@ -131,12 +135,34 @@ struct ReaderPresentationSpreadCollectionViewport: UIViewRepresentable {
             collectionView.bounds.size
         }
 
+        func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
+            guard let collectionView = scrollView as? UICollectionView else { return }
+            beginPageTurnVisuals(in: collectionView)
+        }
+
+        func scrollViewDidScroll(_ scrollView: UIScrollView) {
+            guard let collectionView = scrollView as? UICollectionView else { return }
+            applyPageTurnVisuals(in: collectionView)
+        }
+
+        func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {
+            guard let collectionView = scrollView as? UICollectionView else { return }
+            if !decelerate {
+                updateSelection(from: scrollView)
+                endPageTurnVisuals(in: collectionView)
+            }
+        }
+
         func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) {
             updateSelection(from: scrollView)
+            guard let collectionView = scrollView as? UICollectionView else { return }
+            endPageTurnVisuals(in: collectionView)
         }
 
         func scrollViewDidEndScrollingAnimation(_ scrollView: UIScrollView) {
             updateSelection(from: scrollView)
+            guard let collectionView = scrollView as? UICollectionView else { return }
+            endPageTurnVisuals(in: collectionView)
         }
 
         @objc
@@ -253,10 +279,16 @@ struct ReaderPresentationSpreadCollectionViewport: UIViewRepresentable {
                 return false
             }
 
+            if animated {
+                beginPageTurnVisuals(in: collectionView)
+            }
             collectionView.setContentOffset(
                 CGPoint(x: targetContentOffsetX, y: collectionView.contentOffset.y),
                 animated: animated
             )
+            if animated {
+                applyPageTurnVisuals(in: collectionView)
+            }
             if animated || abs(collectionView.contentOffset.x - targetContentOffsetX) <= 1 {
                 self.pendingSelectionIndex = nil
             } else {
@@ -311,6 +343,62 @@ struct ReaderPresentationSpreadCollectionViewport: UIViewRepresentable {
             let onSelectionChange = parent.onSelectionChange
             callbackScheduler.publish {
                 onSelectionChange(clampedItem)
+            }
+        }
+
+        private func beginPageTurnVisuals(in collectionView: UICollectionView) {
+            guard collectionView.bounds.width > 0 else { return }
+            let currentIndex = Int((collectionView.contentOffset.x / collectionView.bounds.width).rounded())
+            pageTurnRestingIndex = min(max(currentIndex, 0), max(parent.spreads.count - 1, 0))
+        }
+
+        private func applyPageTurnVisuals(in collectionView: UICollectionView) {
+            guard let metrics = ReaderPagedPageTurnPresentation.metrics(
+                contentOffsetX: collectionView.contentOffset.x,
+                pageWidth: collectionView.bounds.width,
+                pageCount: parent.spreads.count,
+                restingPageIndex: pageTurnRestingIndex ?? parent.selectionIndex,
+                cornerRadius: ReaderPagedPageTurnCornerRadius.radius(for: collectionView.window?.screen)
+            ) else {
+                resetPageTurnVisuals(in: collectionView)
+                return
+            }
+            collectionView.backgroundColor = ReaderPagedPageTurnBackground.dimmedPageColor(
+                settings: parent.settings,
+                traitCollection: collectionView.traitCollection,
+                overlayAlpha: metrics.overlayAlpha
+            )
+
+            for case let cell as ReaderPagedPageTurnCell in collectionView.visibleCells {
+                guard let indexPath = collectionView.indexPath(for: cell) else {
+                    cell.resetPageTurnVisuals()
+                    continue
+                }
+                if indexPath.item == metrics.maskedPageIndex {
+                    cell.applyPageTurnVisuals(
+                        overlayAlpha: metrics.overlayAlpha,
+                        cornerRadius: 0
+                    )
+                } else if indexPath.item == metrics.roundedPageIndex {
+                    cell.applyPageTurnVisuals(
+                        overlayAlpha: 0,
+                        cornerRadius: metrics.cornerRadius
+                    )
+                } else {
+                    cell.resetPageTurnVisuals()
+                }
+            }
+        }
+
+        private func endPageTurnVisuals(in collectionView: UICollectionView) {
+            pageTurnRestingIndex = nil
+            resetPageTurnVisuals(in: collectionView)
+        }
+
+        private func resetPageTurnVisuals(in collectionView: UICollectionView) {
+            collectionView.backgroundColor = .clear
+            for case let cell as ReaderPagedPageTurnCell in collectionView.visibleCells {
+                cell.resetPageTurnVisuals()
             }
         }
 
