@@ -1,0 +1,114 @@
+import SwiftUI
+import YamiboReaderCore
+
+#if os(iOS)
+import UIKit
+
+struct ReaderGlassContainer<Content: View>: View {
+    let spacing: CGFloat
+    @ViewBuilder let content: () -> Content
+
+    init(spacing: CGFloat = 16, @ViewBuilder content: @escaping () -> Content) {
+        self.spacing = spacing
+        self.content = content
+    }
+
+    var body: some View {
+        if #available(iOS 26.0, *) {
+            GlassEffectContainer(spacing: spacing) {
+                content()
+            }
+        } else {
+            content()
+        }
+    }
+}
+
+extension View {
+    @ViewBuilder
+    func readerChromePanel(cornerRadius: CGFloat = 28, tint: Color = .clear) -> some View {
+        if #available(iOS 26.0, *) {
+            self.glassEffect(.regular.tint(tint), in: .rect(cornerRadius: cornerRadius))
+        } else {
+            self
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                        .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+                }
+        }
+    }
+
+    @ViewBuilder
+    func readerChromeButtonStyle(prominent: Bool = false, tint: Color) -> some View {
+        if #available(iOS 26.0, *) {
+            if prominent {
+                self
+                    .buttonStyle(.glassProminent)
+                    .tint(tint)
+            } else {
+                self
+                    .buttonStyle(.glass)
+                    .tint(tint)
+            }
+        } else {
+            if prominent {
+                self
+                    .buttonStyle(.borderedProminent)
+                    .tint(tint)
+            } else {
+                self
+                    .buttonStyle(.bordered)
+                    .tint(tint)
+            }
+        }
+    }
+
+    func readerChromeFadeVisibility(_ isVisible: Bool) -> some View {
+        modifier(ReaderChromeFadeVisibilityModifier(isVisible: isVisible))
+    }
+
+    func readerChromeAnchoredPopupVisibility(_ isVisible: Bool) -> some View {
+        modifier(ReaderChromeAnchoredPopupVisibilityModifier(isVisible: isVisible))
+    }
+}
+
+private struct ReaderChromeFadeVisibilityModifier: ViewModifier {
+    let isVisible: Bool
+    private let presentation = ReaderChromeVisibilityAnimationPresentation.fade
+
+    func body(content: Content) -> some View {
+        content
+            .opacity(isVisible ? 1 : 0)
+            .allowsHitTesting(isVisible)
+            .accessibilityHidden(!isVisible)
+            .animation(.easeInOut(duration: presentation.duration), value: isVisible)
+    }
+}
+
+private struct ReaderChromeAnchoredPopupVisibilityModifier: ViewModifier {
+    let isVisible: Bool
+    private let presentation = ReaderChromeVisibilityAnimationPresentation.anchoredPopup
+
+    func body(content: Content) -> some View {
+        content
+            .scaleEffect(
+                isVisible ? 1 : presentation.hiddenScale,
+                anchor: presentation.anchor?.unitPoint ?? .bottomTrailing
+            )
+            .opacity(isVisible ? 1 : 0)
+            .allowsHitTesting(isVisible)
+            .accessibilityHidden(!isVisible)
+            .animation(.easeInOut(duration: presentation.duration), value: isVisible)
+    }
+}
+
+private extension ReaderChromePopupAnchor {
+    var unitPoint: UnitPoint {
+        switch self {
+        case .bottomTrailing:
+            return .bottomTrailing
+        }
+    }
+}
+#endif
