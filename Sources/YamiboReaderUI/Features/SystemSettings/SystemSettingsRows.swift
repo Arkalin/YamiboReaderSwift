@@ -42,23 +42,27 @@ struct SystemSettingsHomePageSelector: View {
 struct SystemSettingsRow: View {
     let title: String
     let value: String?
+    let showsChevron: Bool
+    let titleColor: Color
 
-    init(title: String, value: String? = nil) {
+    init(title: String, value: String? = nil, showsChevron: Bool = true, titleColor: Color = .primary) {
         self.title = title
         self.value = value
+        self.showsChevron = showsChevron
+        self.titleColor = titleColor
     }
 
     var body: some View {
         HStack(spacing: 12) {
             Text(title)
-                .foregroundStyle(.primary)
+                .foregroundStyle(titleColor)
 
             Spacer(minLength: 0)
 
             if let value {
                 Text(value)
                     .foregroundStyle(.secondary)
-            } else {
+            } else if showsChevron {
                 Image(systemName: "chevron.right")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.tertiary)

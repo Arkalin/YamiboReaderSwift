@@ -311,7 +311,13 @@
 "settings.confirm_clear_novel_cache" = "确认清除小说缓存";
 "settings.confirm_reset_application" = "确认初始化应用";
 "settings.home_page" = "App 主页";
+"settings.gamepad" = "手柄";
+"settings.gamepad.next_page" = "下一页";
+"settings.gamepad.open_comments" = "打开评论";
+"settings.gamepad.previous_page" = "上一页";
+"settings.gamepad.unset" = "未设置";
 "settings.manga_directory_management" = "漫画目录管理";
+"settings.peripheral_behavior" = "外设行为";
 "settings.reset" = "初始化";
 "settings.reset_application" = "初始化应用";
 "settings.reset_application_message" = "这将清空登录态、收藏本地状态、全部缓存、漫画目录和应用设置，并移除网页持久化数据。";

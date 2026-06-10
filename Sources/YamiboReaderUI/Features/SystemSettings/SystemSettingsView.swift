@@ -36,14 +36,31 @@ public struct SystemSettingsView: View {
                     Button {
                         openAutoSignInAutomationCreator()
                     } label: {
-                        SystemSettingsRow(title: L10n.string("settings.auto_sign_in"))
+                        SystemSettingsRow(
+                            title: L10n.string("settings.auto_sign_in"),
+                            titleColor: .accentColor
+                        )
                     }
                     .disabled(viewModel.isBusy)
 
                     Button {
                         openWebDAVSettings()
                     } label: {
-                        SystemSettingsRow(title: L10n.string("settings.webdav_sync"))
+                        SystemSettingsRow(
+                            title: L10n.string("settings.webdav_sync"),
+                            titleColor: .accentColor
+                        )
+                    }
+                    .disabled(viewModel.isBusy)
+
+                    NavigationLink {
+                        SystemSettingsPeripheralPageTurnView(viewModel: viewModel)
+                    } label: {
+                        SystemSettingsRow(
+                            title: L10n.string("settings.peripheral_behavior"),
+                            showsChevron: false,
+                            titleColor: .accentColor
+                        )
                     }
                     .disabled(viewModel.isBusy)
                 }
