@@ -8,8 +8,19 @@ enum ReaderHTMLDOMParser {
 
     struct ParsedMessage {
         let segments: [ReaderSegment]
+        let segmentInlineStyles: [[ReaderInlineTextStyleRange]]
         let chapterTitle: String?
         let ownerPostID: String?
+    }
+
+    private struct ParsedSegment {
+        let segment: ReaderSegment
+        let inlineTextStyles: [ReaderInlineTextStyleRange]
+    }
+
+    private struct StyledCharacter {
+        let character: Character
+        let isBold: Bool
     }
 
     static func parse(html: String) throws -> Context {
@@ -92,7 +103,7 @@ enum ReaderHTMLDOMParser {
         let fragmentHTML = try element.html()
         let fragment = try SwiftSoup.parseBodyFragment(fragmentHTML)
         guard let body = fragment.body() else {
-            return ParsedMessage(segments: [], chapterTitle: nil, ownerPostID: postID(from: element))
+            return ParsedMessage(segments: [], segmentInlineStyles: [], chapterTitle: nil, ownerPostID: postID(from: element))
         }
 
         try body.select("i").remove()
@@ -105,8 +116,13 @@ enum ReaderHTMLDOMParser {
                 .map { String($0.prefix(30)) }
         )
 
-        let segments = try orderedSegments(from: body, chapterTitle: chapterTitle)
-        return ParsedMessage(segments: segments, chapterTitle: chapterTitle, ownerPostID: postID(from: element))
+        let parsedSegments = try orderedSegments(from: body, chapterTitle: chapterTitle)
+        return ParsedMessage(
+            segments: parsedSegments.map(\.segment),
+            segmentInlineStyles: parsedSegments.map(\.inlineTextStyles),
+            chapterTitle: chapterTitle,
+            ownerPostID: postID(from: element)
+        )
     }
 
     private static func postID(from element: Element) -> String? {
@@ -152,61 +168,76 @@ enum ReaderHTMLDOMParser {
         return normalizeText(value)
     }
 
-    private static func orderedSegments(from body: Element, chapterTitle: String?) throws -> [ReaderSegment] {
-        var segments: [ReaderSegment] = []
-        var text = ""
+    private static func orderedSegments(from body: Element, chapterTitle: String?) throws -> [ParsedSegment] {
+        var segments: [ParsedSegment] = []
+        var text: [StyledCharacter] = []
 
         func flushText() {
-            let normalized = normalizeText(text)
-            guard !normalized.isEmpty else {
-                text = ""
+            let normalized = normalizeStyledText(text)
+            guard !normalized.text.isEmpty else {
+                text = []
                 return
             }
-            segments.append(.text(normalized, chapterTitle: chapterTitle))
-            text = ""
+            segments.append(
+                ParsedSegment(
+                    segment: .text(normalized.text, chapterTitle: chapterTitle),
+                    inlineTextStyles: normalized.inlineTextStyles
+                )
+            )
+            text = []
         }
 
-        func appendSegments(from node: Node) throws {
+        func appendText(_ value: String, isBold: Bool) {
+            for character in value {
+                text.append(StyledCharacter(character: character, isBold: isBold))
+            }
+        }
+
+        func appendSegments(from node: Node, isBold: Bool) throws {
             if let textNode = node as? TextNode {
-                text += textNode
+                appendText(
+                    textNode
                     .getWholeText()
-                    .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+                    .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression),
+                    isBold: isBold
+                )
                 return
             }
 
             if let element = node as? Element {
                 let tagName = element.tagName().lowercased()
+                let nextBold = resolvedBoldState(for: element, tagName: tagName, inheritedBold: isBold)
                 if tagName == "br" {
-                    text += "\n"
+                    appendText("\n", isBold: nextBold)
                     return
                 }
                 if tagName == "img" {
                     guard let url = try imageURL(from: element) else { return }
                     flushText()
-                    segments.append(.image(url, chapterTitle: chapterTitle))
+                    segments.append(ParsedSegment(segment: .image(url, chapterTitle: chapterTitle), inlineTextStyles: []))
                     return
                 }
                 if tagName == "li" {
-                    text += "• "
+                    appendText("• ", isBold: nextBold)
                 }
 
                 for child in element.getChildNodes() {
-                    try appendSegments(from: child)
+                    try appendSegments(from: child, isBold: nextBold)
                 }
 
                 if blockBreakTags.contains(tagName) {
-                    text += "\n"
+                    appendText("\n", isBold: nextBold)
                 }
                 return
             }
 
             for child in node.getChildNodes() {
-                try appendSegments(from: child)
+                try appendSegments(from: child, isBold: isBold)
             }
         }
 
         for child in body.getChildNodes() {
-            try appendSegments(from: child)
+            try appendSegments(from: child, isBold: false)
         }
         flushText()
 
@@ -244,6 +275,179 @@ enum ReaderHTMLDOMParser {
         for child in node.getChildNodes() {
             try appendText(from: child, into: &value)
         }
+    }
+
+    private static func resolvedBoldState(
+        for element: Element,
+        tagName: String,
+        inheritedBold: Bool
+    ) -> Bool {
+        var isBold = inheritedBold
+        if tagName == "b" || tagName == "strong" {
+            isBold = true
+        }
+        if let styleBold = inlineFontWeightBoldState(for: element) {
+            isBold = styleBold
+        }
+        return isBold
+    }
+
+    private static func inlineFontWeightBoldState(for element: Element) -> Bool? {
+        let style = (try? element.attr("style"))?.lowercased() ?? ""
+        guard !style.isEmpty else { return nil }
+
+        for declaration in style.split(separator: ";") {
+            let parts = declaration.split(separator: ":", maxSplits: 1).map {
+                $0.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            guard parts.count == 2, parts[0] == "font-weight" else { continue }
+            let value = parts[1]
+                .replacingOccurrences(of: "!important", with: "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if value == "bold" || value == "bolder" {
+                return true
+            }
+            if value == "normal" || value == "lighter" {
+                return false
+            }
+            let numericPrefix = value.prefix { $0.isNumber }
+            if let weight = Int(numericPrefix) {
+                return weight >= 600
+            }
+        }
+        return nil
+    }
+
+    private static func normalizeStyledText(
+        _ text: [StyledCharacter]
+    ) -> (text: String, inlineTextStyles: [ReaderInlineTextStyleRange]) {
+        let normalizedLineBreaks = normalizeStyledLineBreaks(text)
+        var lines: [[StyledCharacter]] = [[]]
+        for character in normalizedLineBreaks {
+            if character.character == "\n" {
+                lines.append([])
+            } else {
+                lines[lines.count - 1].append(character)
+            }
+        }
+
+        var normalized: [StyledCharacter] = []
+        for (index, line) in lines.enumerated() {
+            if index > 0 {
+                normalized.append(StyledCharacter(character: "\n", isBold: false))
+            }
+            normalized.append(contentsOf: normalizeStyledLine(line))
+        }
+
+        normalized = collapseExcessNewlines(in: normalized)
+        normalized = trimStyledWhitespaceAndNewlines(normalized)
+
+        var output = ""
+        var inlineTextStyles: [ReaderInlineTextStyleRange] = []
+        var boldStart: Int?
+        for character in normalized {
+            let location = output.count
+            if character.isBold {
+                if boldStart == nil {
+                    boldStart = location
+                }
+            } else if let start = boldStart {
+                if location > start {
+                    inlineTextStyles.append(
+                        ReaderInlineTextStyleRange(
+                            style: .bold,
+                            range: ReaderCharacterRange(location: start, length: location - start)
+                        )
+                    )
+                }
+                boldStart = nil
+            }
+            output.append(character.character)
+        }
+        if let start = boldStart, output.count > start {
+            inlineTextStyles.append(
+                ReaderInlineTextStyleRange(
+                    style: .bold,
+                    range: ReaderCharacterRange(location: start, length: output.count - start)
+                )
+            )
+        }
+        return (output, inlineTextStyles)
+    }
+
+    private static func normalizeStyledLineBreaks(_ text: [StyledCharacter]) -> [StyledCharacter] {
+        var result: [StyledCharacter] = []
+        var index = 0
+        while index < text.count {
+            let character = text[index]
+            if character.character == "\r" {
+                result.append(StyledCharacter(character: "\n", isBold: character.isBold))
+                if index + 1 < text.count, text[index + 1].character == "\n" {
+                    index += 1
+                }
+            } else if character.character == "\u{00A0}" {
+                result.append(StyledCharacter(character: " ", isBold: character.isBold))
+            } else {
+                result.append(character)
+            }
+            index += 1
+        }
+        return result
+    }
+
+    private static func normalizeStyledLine(_ line: [StyledCharacter]) -> [StyledCharacter] {
+        var result: [StyledCharacter] = []
+        var pendingWhitespaceIsBold = false
+        var hasPendingWhitespace = false
+
+        for character in line {
+            if character.character == " " || character.character == "\t" {
+                hasPendingWhitespace = true
+                pendingWhitespaceIsBold = pendingWhitespaceIsBold || character.isBold
+                continue
+            }
+            if hasPendingWhitespace, !result.isEmpty {
+                result.append(StyledCharacter(character: " ", isBold: pendingWhitespaceIsBold))
+            }
+            hasPendingWhitespace = false
+            pendingWhitespaceIsBold = false
+            result.append(character)
+        }
+
+        return result
+    }
+
+    private static func collapseExcessNewlines(in text: [StyledCharacter]) -> [StyledCharacter] {
+        var result: [StyledCharacter] = []
+        var newlineCount = 0
+        for character in text {
+            if character.character == "\n" {
+                newlineCount += 1
+                if newlineCount <= 2 {
+                    result.append(StyledCharacter(character: "\n", isBold: false))
+                }
+            } else {
+                newlineCount = 0
+                result.append(character)
+            }
+        }
+        return result
+    }
+
+    private static func trimStyledWhitespaceAndNewlines(_ text: [StyledCharacter]) -> [StyledCharacter] {
+        var start = text.startIndex
+        var end = text.endIndex
+        while start < end, isTrimmable(text[start].character) {
+            start += 1
+        }
+        while end > start, isTrimmable(text[text.index(before: end)].character) {
+            end -= 1
+        }
+        return Array(text[start..<end])
+    }
+
+    private static func isTrimmable(_ character: Character) -> Bool {
+        character == " " || character == "\t" || character == "\n" || character == "\r"
     }
 
     private static func imageURL(from image: Element) throws -> URL? {

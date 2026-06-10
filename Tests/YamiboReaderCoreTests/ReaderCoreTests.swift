@@ -5,8 +5,32 @@ import XCTest
 
 #if canImport(UIKit)
 import UIKit
+private typealias ReaderTestFont = UIFont
+
+private func readerTestFontWeight(_ font: ReaderTestFont) -> CGFloat {
+    let traits = font.fontDescriptor.object(forKey: .traits) as? [UIFontDescriptor.TraitKey: Any]
+    if let value = traits?[.weight] as? CGFloat {
+        return value
+    }
+    if let value = traits?[.weight] as? NSNumber {
+        return CGFloat(truncating: value)
+    }
+    return 0
+}
 #elseif canImport(AppKit)
 import AppKit
+private typealias ReaderTestFont = NSFont
+
+private func readerTestFontWeight(_ font: ReaderTestFont) -> CGFloat {
+    let traits = font.fontDescriptor.object(forKey: .traits) as? [NSFontDescriptor.TraitKey: Any]
+    if let value = traits?[.weight] as? CGFloat {
+        return value
+    }
+    if let value = traits?[.weight] as? NSNumber {
+        return CGFloat(truncating: value)
+    }
+    return 0
+}
 #endif
 
 private struct StubURLProtocolResponse {
@@ -401,6 +425,30 @@ private final class StubURLProtocol: URLProtocol {
     #expect(repeatedTitleText.chapterIdentity != firstText.chapterIdentity)
 }
 
+@Test func readerHTMLParserPreservesBoldInlineTextStyles() async throws {
+    let html = #"""
+    <html>
+      <body>
+        <div class="message" id="postmessage_201">第一章<br>普通<strong>粗体</strong><span style="font-weight: 700">重字</span><b style="font-weight: normal">不粗</b><span style="font-weight: bold">再粗</span></div>
+      </body>
+    </html>
+    """#
+    let request = ReaderPageRequest(
+        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=201&mobile=2")),
+        view: 1
+    )
+
+    let document = try ReaderHTMLParser.parseDocument(html: html, request: request)
+    let semantics = try #require(document.semantics(forSegmentIndex: 0))
+
+    #expect(document.segments[0] == .text("第一章\n普通 粗体 重字 不粗 再粗", chapterTitle: "第一章"))
+    #expect(semantics.inlineTextStyles == [
+        ReaderInlineTextStyleRange(style: .bold, range: ReaderCharacterRange(location: 7, length: 2)),
+        ReaderInlineTextStyleRange(style: .bold, range: ReaderCharacterRange(location: 10, length: 2)),
+        ReaderInlineTextStyleRange(style: .bold, range: ReaderCharacterRange(location: 16, length: 2)),
+    ])
+}
+
 @Test func readerHTMLParserUsesDocumentOccurrenceWhenOwnerPostIdentityIsMissing() async throws {
     let html = #"""
     <html>
@@ -422,6 +470,33 @@ private final class StubURLProtocol: URLProtocol {
     #expect(first.contains("#view:2#source:allPostsPage#chapter:0"))
     #expect(second.contains("#view:2#source:allPostsPage#chapter:1"))
     #expect(first != second)
+}
+
+@Test func readerHTMLParserKeepsBoldRangesAlignedAcrossImages() async throws {
+    let html = #"""
+    <html>
+      <body>
+        <div class="message">
+          序章<br><b>前文</b><img src="images/first.jpg" /><strong>后文</strong>
+        </div>
+      </body>
+    </html>
+    """#
+
+    let parsed = ReaderHTMLParser.parseSegments(from: html)
+
+    #expect(parsed.segments == [
+        .text("序章\n前文", chapterTitle: "序章"),
+        .image(try #require(URL(string: "https://bbs.yamibo.com/images/first.jpg")), chapterTitle: "序章"),
+        .text("后文", chapterTitle: "序章")
+    ])
+    #expect(parsed.segmentSemantics[0]?.inlineTextStyles == [
+        ReaderInlineTextStyleRange(style: .bold, range: ReaderCharacterRange(location: 3, length: 2))
+    ])
+    #expect(parsed.segmentSemantics[1]?.inlineTextStyles == [])
+    #expect(parsed.segmentSemantics[2]?.inlineTextStyles == [
+        ReaderInlineTextStyleRange(style: .bold, range: ReaderCharacterRange(location: 0, length: 2))
+    ])
 }
 
 @Test func readerHTMLParserPreservesInlineImagePositionWithinMessage() async throws {
@@ -2396,6 +2471,114 @@ private final class StubURLProtocol: URLProtocol {
     #expect(titleStyle.firstLineHeadIndent == 0)
     #expect(bodyStyle.firstLineHeadIndent > 0)
 }
+
+@Test func novelTextLayoutTransformsInlineBoldRangesWithDisplayedText() throws {
+    let document = ReaderPageDocument(
+        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=304&mobile=2")),
+        view: 1,
+        maxView: 1,
+        segments: [.text("繁體粗體結束", chapterTitle: nil)],
+        segmentSemantics: [
+            ReaderSegmentSemantics(
+                chapterIdentity: NovelChapterIdentity(rawValue: "chapter-1"),
+                textSegmentIdentity: NovelTextSegmentIdentity(rawValue: "text-1"),
+                inlineTextStyles: [
+                    ReaderInlineTextStyleRange(style: .bold, range: ReaderCharacterRange(location: 2, length: 2))
+                ]
+            )
+        ]
+    )
+
+    let preparedInput = try NovelTextLayout.prepareInput(
+        document: document,
+        settings: ReaderAppearanceSettings(readingMode: .paged, translationMode: .simplified),
+        layout: ReaderContainerLayout(width: 390, height: 844)
+    )
+
+    #expect(preparedInput.viewportContextSeed.document.text == "繁体粗体结束")
+    #expect(preparedInput.annotatedSegments.first?.semantics?.inlineTextStyles == [
+        ReaderInlineTextStyleRange(style: .bold, range: ReaderCharacterRange(location: 2, length: 2))
+    ])
+    #expect(preparedInput.viewportContextSeed.document.inlineTextStylesBySegment[0] == [
+        ReaderInlineTextStyleRange(style: .bold, range: ReaderCharacterRange(location: 2, length: 2))
+    ])
+}
+
+@Test func readerAttributedTextFactoryAppliesInlineBoldWithoutChangingNormalBody() throws {
+    let document = ReaderPageDocument(
+        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=305&mobile=2")),
+        view: 1,
+        maxView: 1,
+        segments: [.text("普通粗体普通", chapterTitle: nil)],
+        segmentSemantics: [
+            ReaderSegmentSemantics(
+                chapterIdentity: NovelChapterIdentity(rawValue: "chapter-1"),
+                textSegmentIdentity: NovelTextSegmentIdentity(rawValue: "text-1"),
+                inlineTextStyles: [
+                    ReaderInlineTextStyleRange(style: .bold, range: ReaderCharacterRange(location: 2, length: 2))
+                ]
+            )
+        ]
+    )
+    let preparedInput = try NovelTextLayout.prepareInput(
+        document: document,
+        settings: ReaderAppearanceSettings(),
+        layout: ReaderContainerLayout(width: 390, height: 844)
+    )
+
+    let attributedDocument = ReaderAttributedTextFactory.makeAttributedDocument(from: preparedInput)
+    let normalFont = try #require(attributedDocument.attribute(.font, at: 0, effectiveRange: nil) as? ReaderTestFont)
+    let boldFont = try #require(attributedDocument.attribute(.font, at: 2, effectiveRange: nil) as? ReaderTestFont)
+
+    #expect(readerTestFontWeight(boldFont) > readerTestFontWeight(normalFont))
+}
+
+@MainActor
+@Test func novelTextRuntimeRebuildsSemanticDocumentWhenOnlyInlineStylesChange() throws {
+    let runtime = NovelTextViewportRuntimeOwner()
+    let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=306&mobile=2"))
+    let plain = ReaderPageDocument(
+        threadURL: threadURL,
+        view: 1,
+        maxView: 1,
+        segments: [.text("同一段正文", chapterTitle: nil)],
+        segmentSemantics: [
+            ReaderSegmentSemantics(
+                chapterIdentity: NovelChapterIdentity(rawValue: "chapter-1"),
+                textSegmentIdentity: NovelTextSegmentIdentity(rawValue: "text-1")
+            )
+        ]
+    )
+    let styled = ReaderPageDocument(
+        threadURL: threadURL,
+        view: 1,
+        maxView: 1,
+        segments: [.text("同一段正文", chapterTitle: nil)],
+        segmentSemantics: [
+            ReaderSegmentSemantics(
+                chapterIdentity: NovelChapterIdentity(rawValue: "chapter-1"),
+                textSegmentIdentity: NovelTextSegmentIdentity(rawValue: "text-1"),
+                inlineTextStyles: [
+                    ReaderInlineTextStyleRange(style: .bold, range: ReaderCharacterRange(location: 3, length: 2))
+                ]
+            )
+        ]
+    )
+    let settings = ReaderAppearanceSettings(readingMode: .paged)
+    let layout = ReaderContainerLayout(width: 390, height: 844)
+
+    let first = try runtime.prepareTransaction(
+        preparedInput: NovelTextLayout.prepareInput(document: plain, settings: settings, layout: layout)
+    )
+    #expect(runtime.commit(first))
+    let second = try runtime.prepareTransaction(
+        preparedInput: NovelTextLayout.prepareInput(document: styled, settings: settings, layout: layout)
+    )
+    #expect(runtime.commit(second))
+
+    #expect(runtime.runtimeTransactionDiagnostics.semanticAttributedDocumentBuildCount == 2)
+    #expect(runtime.runtimeTransactionDiagnostics.semanticAttributedDocumentReuseCount == 0)
+}
 #endif
 
 @Test func novelTextLayoutRejectsEmptySemanticDocumentBeforeRuntimeAllocation() throws {
@@ -2470,7 +2653,17 @@ private final class StubURLProtocol: URLProtocol {
         threadURL: threadURL,
         view: 1,
         maxView: 1,
-        segments: [.text("第一章\n正文", chapterTitle: "第一章")]
+        segments: [.text("第一章\n正文", chapterTitle: "第一章")],
+        segmentSemantics: [
+            ReaderSegmentSemantics(
+                chapterIdentity: NovelChapterIdentity(rawValue: "chapter-1"),
+                textSegmentIdentity: NovelTextSegmentIdentity(rawValue: "text-1"),
+                chapterTitleRange: ReaderCharacterRange(location: 0, length: "第一章".count),
+                inlineTextStyles: [
+                    ReaderInlineTextStyleRange(style: .bold, range: ReaderCharacterRange(location: 4, length: 2))
+                ]
+            )
+        ]
     )
 
     try await store.save(document)
@@ -2488,12 +2681,50 @@ private final class StubURLProtocol: URLProtocol {
     let chapterIdentity = try #require(firstSemantics["chapterIdentity"] as? [String: Any])
     let textSegmentIdentity = try #require(firstSemantics["textSegmentIdentity"] as? [String: Any])
     let titleRange = try #require(firstSemantics["chapterTitleRange"] as? [String: Any])
+    let inlineTextStyles = try #require(firstSemantics["inlineTextStyles"] as? [[String: Any]])
+    let firstInlineStyle = try #require(inlineTextStyles.first)
+    let firstInlineRange = try #require(firstInlineStyle["range"] as? [String: Any])
 
     #expect(object["schemaVersion"] as? Int == ReaderPageDocument.schemaVersion)
     #expect(chapterIdentity["rawValue"] as? String != nil)
     #expect(textSegmentIdentity["rawValue"] as? String != nil)
     #expect(titleRange["location"] as? Int == 0)
     #expect(titleRange["length"] as? Int == "第一章".count)
+    #expect(firstInlineStyle["style"] as? String == ReaderInlineTextStyle.bold.rawValue)
+    #expect(firstInlineRange["location"] as? Int == 4)
+    #expect(firstInlineRange["length"] as? Int == 2)
+}
+
+@Test func readerPageDocumentDecodeDefaultsMissingInlineTextStylesToEmpty() async throws {
+    let json = #"""
+    {
+      "schemaVersion": 3,
+      "threadURL": "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=18605",
+      "view": 1,
+      "maxView": 1,
+      "contentSource": "fallbackUnfilteredPage",
+      "retainedChapterCount": 1,
+      "filteredChapterCandidateCount": 0,
+      "segments": [
+        {"kind": "text", "text": "第一章\n正文", "chapterTitle": "第一章"}
+      ],
+      "segmentSources": [null],
+      "segmentSemantics": [
+        {
+          "chapterIdentity": {"rawValue": "post:1#chapter:0"},
+          "textSegmentIdentity": {"rawValue": "post:1#chapter:0#text:0"},
+          "chapterTitleRange": {"location": 0, "length": 3}
+        }
+      ],
+      "fetchedAt": "2026-06-05T00:00:00Z"
+    }
+    """#.data(using: .utf8)!
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+
+    let document = try decoder.decode(ReaderPageDocument.self, from: json)
+
+    #expect(document.segmentSemantics.first??.inlineTextStyles == [])
 }
 
 @Test func readerPageDocumentLegacyDecodeSynthesizesIdentitiesWithoutGroupingEqualTitles() async throws {
@@ -2599,6 +2830,71 @@ private final class StubURLProtocol: URLProtocol {
           "chapterIdentity": {"rawValue": "post:1#chapter:0"},
           "textSegmentIdentity": {"rawValue": "post:1#chapter:0#text:0"},
           "chapterTitleRange": {"location": 0, "length": 20}
+        }
+      ],
+      "fetchedAt": "2026-06-05T00:00:00Z"
+    }
+    """#
+    try Data(index.utf8).write(to: directory.appendingPathComponent("index.json"))
+    try Data(document.utf8).write(to: directory.appendingPathComponent(documentFileName))
+
+    let store = ReaderCacheStore(baseDirectory: directory)
+    let loaded = await store.loadDocument(
+        for: ReaderPageRequest(threadURL: threadURL, view: 1),
+        contentSource: .fallbackUnfilteredPage
+    )
+
+    #expect(loaded == nil)
+}
+
+@Test func readerCacheStoreInvalidatesDocumentWithCorruptInlineTextStyleRange() async throws {
+    let directory = URL(fileURLWithPath: NSTemporaryDirectory())
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=18606&mobile=2"))
+    let identity = ReaderCacheIdentity(threadURL: threadURL, view: 1, authorID: nil, contentSource: .fallbackUnfilteredPage)
+    let documentFileName = "bad-inline-reader-document.json"
+    let index = """
+    {
+      "version": 2,
+      "threads": {
+        "\(identity.threadKey)": {
+          "threadURL": "\(identity.threadURL.absoluteString)",
+          "variants": {
+            "\(identity.variantKey)": {
+              "pages": {
+                "1": {
+                  "fileName": "\(documentFileName)",
+                  "fetchedAt": "2026-06-05T00:00:00Z"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    """
+    let document = #"""
+    {
+      "schemaVersion": 3,
+      "threadURL": "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=18606",
+      "view": 1,
+      "maxView": 1,
+      "contentSource": "fallbackUnfilteredPage",
+      "retainedChapterCount": 1,
+      "filteredChapterCandidateCount": 0,
+      "segments": [
+        {"kind": "text", "text": "短文", "chapterTitle": "短文"}
+      ],
+      "segmentSources": [null],
+      "segmentSemantics": [
+        {
+          "chapterIdentity": {"rawValue": "post:1#chapter:0"},
+          "textSegmentIdentity": {"rawValue": "post:1#chapter:0#text:0"},
+          "chapterTitleRange": {"location": 0, "length": 2},
+          "inlineTextStyles": [
+            {"style": "bold", "range": {"location": 1, "length": 20}}
+          ]
         }
       ],
       "fetchedAt": "2026-06-05T00:00:00Z"
