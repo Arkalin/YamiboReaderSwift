@@ -58,6 +58,14 @@
 
 ## 运行与验证
 
+## 下载
+
+访问 [releases](https://github.com/Arkalin/YamiboReaderSwift/releases) 并获得最新的 `.ipa`.
+
+<a href="https://celloserenity.github.io/altdirect/?url=https://raw.githubusercontent.com/Arkalin/YamiboReaderSwift/main/app-repo.json" target="_blank">
+   <img src="https://github.com/CelloSerenity/altdirect/blob/main/assets/png/AltSource_Blue.png?raw=true" alt="Add AltSource" width="200">
+</a>
+
 ### 环境要求
 
 - Swift 6.0+
