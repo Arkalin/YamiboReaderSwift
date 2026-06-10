@@ -1033,6 +1033,33 @@ final class NovelReadingSessionTests: XCTestCase {
         XCTAssertEqual(session.snapshot.selectedSurfaceOrdinal, 2)
     }
 
+    func testTwoPageSpreadRequestsNextWebViewPageAfterLastCompleteSpread() throws {
+        let document = ReaderPageDocument(
+            threadURL: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9002&mobile=2")!,
+            view: 1,
+            maxView: 2,
+            contentSource: .fallbackUnfilteredPage,
+            segments: (0 ..< 6).map { .image(URL(string: "https://example.com/\($0).jpg")!, chapterTitle: "第一章") }
+        )
+        let settings = ReaderAppearanceSettings(
+            showsTwoPagesInLandscapeOnPad: true,
+            readingMode: .paged
+        )
+        let landscapeLayout = ReaderContainerLayout(width: 844, height: 390, readingMode: .paged)
+        var session = NovelReadingSession(
+            document: document,
+            settings: settings,
+            layout: landscapeLayout,
+            usesPadPresentation: true
+        )
+
+        session.selectSurface(5)
+        let request = session.jumpRelativeSurface(1)
+
+        XCTAssertEqual(session.snapshot.selectedSurfaceOrdinal, 4)
+        XCTAssertEqual(request, .loadView(view: 2, preferredSurfaceOrdinal: 0, resumePoint: nil))
+    }
+
     func testJumpRelativePageRequestsNextWebViewPageWhenNeeded() throws {
         let document = makeNovelDocument(
             view: 1,
