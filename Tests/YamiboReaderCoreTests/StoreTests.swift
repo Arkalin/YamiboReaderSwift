@@ -161,6 +161,19 @@ import Testing
     #expect(decoded.lineHeightScale == 1.5)
 }
 
+@Test func readerAppearanceSettingsEncodesAndDecodesPageCurlTurnStyle() throws {
+    let settings = ReaderAppearanceSettings(
+        readingMode: .paged,
+        pagedTurnStyle: .pageCurl
+    )
+
+    let encoded = try JSONEncoder().encode(settings)
+    let decoded = try JSONDecoder().decode(ReaderAppearanceSettings.self, from: encoded)
+
+    #expect(decoded.readingMode == .paged)
+    #expect(decoded.pagedTurnStyle == .pageCurl)
+}
+
 @Test func mangaReaderSettingsDecodesLegacyPayloadWithAscendingDirectorySortOrder() async throws {
     let legacy = """
     {

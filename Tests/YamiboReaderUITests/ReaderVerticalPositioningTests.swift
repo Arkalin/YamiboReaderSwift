@@ -118,8 +118,8 @@ final class ReaderVerticalPositioningTests: XCTestCase {
             body.range(of: "enterImmersiveMode()")!.lowerBound,
             body.range(of: "openImageBrowser(url: url, title: title)")!.lowerBound
         )
-        XCTAssertEqual(source.components(separatedBy: "isChromeVisible: chromeState.showsChrome").count - 1, 3)
-        XCTAssertEqual(source.components(separatedBy: "onChromeVisibleImageTap: {\n                        enterImmersiveMode()\n                    }").count - 1, 2)
+        XCTAssertEqual(source.components(separatedBy: "isChromeVisible: chromeState.showsChrome").count - 1, 4)
+        XCTAssertEqual(source.components(separatedBy: "onChromeVisibleImageTap: {\n                        enterImmersiveMode()\n                    }").count - 1, 3)
         XCTAssertTrue(source.contains("onChromeVisibleImageTap: {\n                enterImmersiveMode()\n            }"))
     }
 

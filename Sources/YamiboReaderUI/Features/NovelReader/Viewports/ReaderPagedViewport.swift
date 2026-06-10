@@ -545,7 +545,7 @@ final class ReaderPagedViewportPagingDriver {
         }
 
         switch inputs.settings.pagedTurnStyle {
-        case .slide:
+        case .slide, .pageCurl:
             beginPageTurnVisuals(in: collectionView, inputs: inputs)
             collectionView.setContentOffset(targetOffset, animated: true)
             applyPageTurnVisuals(in: collectionView, inputs: inputs)
