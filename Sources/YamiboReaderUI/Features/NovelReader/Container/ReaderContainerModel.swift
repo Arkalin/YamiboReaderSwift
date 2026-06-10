@@ -1031,12 +1031,30 @@ public final class ReaderContainerModel: ObservableObject {
 
     private func promoteIfNeededAfterLocationUpdate() {
         if settings.readingMode == .paged,
-           selectedSurfaceIndex >= max(readerSurfaces.filter({ $0.documentView == currentView }).count - 1, 0),
+           isAtPagedDocumentEnd,
            readingWorkflow?.canPromotePrefetchedDocument(forView: currentView + 1) == true {
             Task {
                 await promotePrefetchedDocument(startingAt: 0, preferredResumePoint: nil)
             }
         }
+    }
+
+    private var isAtPagedDocumentEnd: Bool {
+        guard settings.readingMode == .paged else { return false }
+        if isTwoPageSpreadActive {
+            let currentDocumentSpreads = presentationSpreads.filter { spread in
+                guard readerSurfaces.indices.contains(spread.leftSurfaceIndex) else { return false }
+                return readerSurfaces[spread.leftSurfaceIndex].documentView == currentView
+            }
+            guard let lastSpread = currentDocumentSpreads.last else { return false }
+            return pagedViewportSelectionIndex >= lastSpread.index
+        }
+
+        let currentDocumentSurfaceIndexes = readerSurfaces.indices.filter {
+            readerSurfaces[$0].documentView == currentView
+        }
+        guard let lastSurfaceIndex = currentDocumentSurfaceIndexes.last else { return false }
+        return selectedSurfaceIndex >= lastSurfaceIndex
     }
 
     private func scheduleProgressSync() {

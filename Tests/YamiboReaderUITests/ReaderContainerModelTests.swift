@@ -663,6 +663,42 @@ final class ReaderContainerModelTests: XCTestCase {
         }
     }
 
+    func testTwoPageSpreadMovesToNextWebViewAfterLastCompleteSpread() async throws {
+        let model = try await makeModel(
+            documents: [
+                makeImageDocument(view: 1, maxView: 2, surfaceCount: 6),
+                makeImageDocument(view: 2, maxView: 2, surfaceCount: 4),
+            ],
+            settings: ReaderAppearanceSettings(
+                showsTwoPagesInLandscapeOnPad: true,
+                readingMode: .paged
+            )
+        )
+
+        await model.commitNovelTextPresentationEnvironment(isPad: true)
+        await model.commitNovelTextLayout(
+            ReaderContainerLayout(
+                width: 844,
+                height: 390,
+                readingMode: .paged
+            )
+        )
+
+        await MainActor.run {
+            model.jumpToSurface(5)
+            XCTAssertEqual(model.selectedSurfaceIndex, 4)
+            XCTAssertEqual(model.pagedViewportSelectionIndex, 2)
+        }
+
+        await model.jumpRelativeSurface(1)
+
+        await MainActor.run {
+            XCTAssertEqual(model.currentView, 2)
+            XCTAssertEqual(model.selectedSurfaceIndex, 0)
+            XCTAssertEqual(model.pagedViewportSelectionIndex, 0)
+        }
+    }
+
     func testTwoPageSpreadRepaginatesTextForHalfWidthColumns() async throws {
         let document = ReaderPageDocument(
             threadURL: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9911&mobile=2")!,

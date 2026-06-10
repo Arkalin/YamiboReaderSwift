@@ -192,6 +192,21 @@ package struct NovelReadingSession: Sendable {
                 selectSurface(leftSurfaceIndex(forSpreadIndex: targetSpreadIndex, spreads: spreads))
                 return nil
             }
+            if targetSpreadIndex < 0 {
+                let previousView = max(snapshot.currentView - 1, 1)
+                guard previousView < snapshot.currentView else {
+                    selectSurface(leftSurfaceIndex(forSpreadIndex: 0, spreads: spreads))
+                    return nil
+                }
+                return .loadView(view: previousView, preferredSurfaceOrdinal: .max, resumePoint: nil)
+            }
+
+            let nextView = min(snapshot.currentView + 1, snapshot.maxView)
+            guard nextView > snapshot.currentView else {
+                selectSurface(leftSurfaceIndex(forSpreadIndex: max(spreads.count - 1, 0), spreads: spreads))
+                return nil
+            }
+            return .loadView(view: nextView, preferredSurfaceOrdinal: 0, resumePoint: nil)
         }
 
         let targetIndex = snapshot.selectedSurfaceOrdinal + delta
