@@ -114,6 +114,12 @@ struct ReaderPagedPageCurlViewport: UIViewControllerRepresentable {
     let onChromeVisibleImageTap: () -> Void
     let onImageTap: (URL, String?) -> Void
 
+    @Environment(\.colorScheme) private var colorScheme
+
+    private var pageBackgroundColor: UIColor {
+        readerThemeUIColor(for: settings.backgroundStyle, colorScheme: colorScheme)
+    }
+
     private var sequence: ReaderPagedPageCurlSequence {
         ReaderPagedPageCurlSequence(
             surfaces: surfaces,
@@ -149,7 +155,8 @@ struct ReaderPagedPageCurlViewport: UIViewControllerRepresentable {
         )
         pageViewController.dataSource = context.coordinator
         pageViewController.delegate = context.coordinator
-        pageViewController.view.backgroundColor = .clear
+        pageViewController.view.backgroundColor = pageBackgroundColor
+        pageViewController.view.isOpaque = true
 
         let tapRecognizer = UITapGestureRecognizer(
             target: context.coordinator,
@@ -159,6 +166,7 @@ struct ReaderPagedPageCurlViewport: UIViewControllerRepresentable {
         tapRecognizer.delegate = context.coordinator
         pageViewController.view.addGestureRecognizer(tapRecognizer)
 
+        context.coordinator.applyPageBackground(to: pageViewController)
         context.coordinator.configureGestures(in: pageViewController)
         context.coordinator.configureSpine(in: pageViewController)
         context.coordinator.setCurrentSelection(in: pageViewController, animated: false)
@@ -172,6 +180,7 @@ struct ReaderPagedPageCurlViewport: UIViewControllerRepresentable {
                 pageViewController,
                 contentIdentity: contentIdentity
             )
+            context.coordinator.applyPageBackground(to: pageViewController)
         }
     }
 
@@ -181,9 +190,15 @@ struct ReaderPagedPageCurlViewport: UIViewControllerRepresentable {
         private var contentIdentity: ReaderPagedSpreadViewportContentIdentity?
         private var consumedScrollAnimationRequestID: UUID?
         private var currentSelectionIndex: Int?
+        private weak var pageCurlBackColorPageViewController: UIPageViewController?
+        private var pageCurlBackColorDisplayLink: CADisplayLink?
 
         init(parent: ReaderPagedPageCurlViewport) {
             self.parent = parent
+        }
+
+        deinit {
+            stopPageCurlBackColorRefresh()
         }
 
         func update(
@@ -194,6 +209,7 @@ struct ReaderPagedPageCurlViewport: UIViewControllerRepresentable {
             contentIdentity = nextContentIdentity
             configureGestures(in: pageViewController)
             configureSpine(in: pageViewController)
+            applyPageBackground(to: pageViewController)
 
             if let animationRequest = matchingScrollAnimationRequest() {
                 setCurrentSelection(in: pageViewController, animated: true) { [weak self] in
@@ -229,6 +245,13 @@ struct ReaderPagedPageCurlViewport: UIViewControllerRepresentable {
 
         func pageViewController(
             _ pageViewController: UIPageViewController,
+            willTransitionTo pendingViewControllers: [UIViewController]
+        ) {
+            startPageCurlBackColorRefresh(in: pageViewController)
+        }
+
+        func pageViewController(
+            _ pageViewController: UIPageViewController,
             spineLocationFor orientation: UIInterfaceOrientation
         ) -> UIPageViewController.SpineLocation {
             configureSpine(in: pageViewController)
@@ -242,6 +265,7 @@ struct ReaderPagedPageCurlViewport: UIViewControllerRepresentable {
             previousViewControllers: [UIViewController],
             transitionCompleted completed: Bool
         ) {
+            stopPageCurlBackColorRefresh()
             guard completed else { return }
             publishSelection(from: pageViewController)
         }
@@ -318,10 +342,16 @@ struct ReaderPagedPageCurlViewport: UIViewControllerRepresentable {
                 animated: animated
             ) { [weak self] completed in
                 guard let self else { return }
+                if animated {
+                    self.stopPageCurlBackColorRefresh()
+                }
                 if !animated || completed {
                     self.currentSelectionIndex = self.parent.selectionIndex
                 }
                 completion?()
+            }
+            if animated {
+                startPageCurlBackColorRefresh(in: pageViewController)
             }
             if !animated {
                 currentSelectionIndex = parent.selectionIndex
@@ -343,8 +373,57 @@ struct ReaderPagedPageCurlViewport: UIViewControllerRepresentable {
                     bottomInset: parent.bottomInset,
                     displayReferenceProvider: parent.displayReferenceProvider,
                     onImageTap: parent.onImageTap
-                )
+                ),
+                pageBackgroundColor: parent.pageBackgroundColor
             )
+        }
+
+        func applyPageBackground(to pageViewController: UIPageViewController) {
+            let pageBackgroundColor = parent.pageBackgroundColor
+            pageViewController.view.backgroundColor = pageBackgroundColor
+            pageViewController.view.isOpaque = true
+            for case let controller as ReaderPagedPageCurlHostingController in pageViewController.viewControllers ?? [] {
+                controller.applyPageBackground(pageBackgroundColor)
+            }
+            if !parent.sequence.usesTwoPageSpread {
+                ReaderPageCurlPrivateBackColor.apply(to: pageViewController.view, backColor: pageBackgroundColor)
+            }
+        }
+
+        private func startPageCurlBackColorRefresh(in pageViewController: UIPageViewController) {
+            guard !parent.sequence.usesTwoPageSpread else {
+                applyPageBackground(to: pageViewController)
+                return
+            }
+
+            pageCurlBackColorPageViewController = pageViewController
+            applyPageBackground(to: pageViewController)
+            guard pageCurlBackColorDisplayLink == nil else { return }
+
+            let displayLink = CADisplayLink(
+                target: self,
+                selector: #selector(refreshPageCurlBackColor)
+            )
+            displayLink.add(to: .main, forMode: .common)
+            pageCurlBackColorDisplayLink = displayLink
+        }
+
+        private func stopPageCurlBackColorRefresh() {
+            pageCurlBackColorDisplayLink?.invalidate()
+            pageCurlBackColorDisplayLink = nil
+            if let pageCurlBackColorPageViewController {
+                applyPageBackground(to: pageCurlBackColorPageViewController)
+            }
+            pageCurlBackColorPageViewController = nil
+        }
+
+        @objc
+        private func refreshPageCurlBackColor() {
+            guard let pageViewController = pageCurlBackColorPageViewController else {
+                stopPageCurlBackColorRefresh()
+                return
+            }
+            applyPageBackground(to: pageViewController)
         }
 
         private func publishSelection(from pageViewController: UIPageViewController) {
@@ -398,15 +477,70 @@ struct ReaderPagedPageCurlViewport: UIViewControllerRepresentable {
 private final class ReaderPagedPageCurlHostingController: UIHostingController<ReaderPagedPageCurlLeafView> {
     let leaf: ReaderPagedPageCurlLeaf
 
-    init(leaf: ReaderPagedPageCurlLeaf, rootView: ReaderPagedPageCurlLeafView) {
+    init(
+        leaf: ReaderPagedPageCurlLeaf,
+        rootView: ReaderPagedPageCurlLeafView,
+        pageBackgroundColor: UIColor
+    ) {
         self.leaf = leaf
         super.init(rootView: rootView)
-        view.backgroundColor = .clear
+        applyPageBackground(pageBackgroundColor)
     }
 
     @MainActor @preconcurrency
     required dynamic init?(coder aDecoder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    func applyPageBackground(_ pageBackgroundColor: UIColor) {
+        view.backgroundColor = pageBackgroundColor
+        view.isOpaque = true
+    }
+}
+
+private enum ReaderPageCurlPrivateBackColor {
+    private static let filtersKey = "filters"
+    private static let backgroundFiltersKey = "backgroundFilters"
+    private static let typeKey = "type"
+    private static let pageCurlType = "pageCurl"
+    private static let inputBackEnabledKey = "inputBackEnabled"
+    private static let inputBackColor0Key = "inputBackColor0"
+    private static let inputBackColor1Key = "inputBackColor1"
+
+    static func apply(to rootView: UIView, backColor: UIColor) {
+        let colorComponents = backColor.readerPageCurlPrivateColorComponents
+        apply(to: rootView.layer, colorComponents: colorComponents)
+    }
+
+    private static func apply(to layer: CALayer, colorComponents: [NSNumber]) {
+        for filterKey in [filtersKey, backgroundFiltersKey] {
+            guard let filters = layer.value(forKey: filterKey) as? [NSObject] else { continue }
+            for filter in filters where isPageCurlFilter(filter) {
+                filter.setValue(NSNumber(value: true), forKey: inputBackEnabledKey)
+                filter.setValue(colorComponents, forKey: inputBackColor0Key)
+                filter.setValue(colorComponents, forKey: inputBackColor1Key)
+            }
+        }
+
+        layer.sublayers?.forEach { apply(to: $0, colorComponents: colorComponents) }
+    }
+
+    private static func isPageCurlFilter(_ filter: NSObject) -> Bool {
+        if String(describing: filter) == pageCurlType {
+            return true
+        }
+        return (filter.value(forKey: typeKey) as? String) == pageCurlType
+    }
+}
+
+private extension UIColor {
+    var readerPageCurlPrivateColorComponents: [NSNumber] {
+        var red: CGFloat = 0
+        var green: CGFloat = 0
+        var blue: CGFloat = 0
+        var alpha: CGFloat = 0
+        getRed(&red, green: &green, blue: &blue, alpha: &alpha)
+        return [red, green, blue, alpha].map { NSNumber(value: Double($0)) }
     }
 }
 
