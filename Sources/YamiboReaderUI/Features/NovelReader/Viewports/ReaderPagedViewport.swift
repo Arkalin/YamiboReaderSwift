@@ -47,6 +47,52 @@ enum ReaderPagedPageTurnPresentation {
     }
 }
 
+struct ReaderPagedBoundaryPageTurn {
+    static let minimumTranslation: CGFloat = 48
+    static let translationWidthFactor: CGFloat = 0.18
+    static let velocityThreshold: CGFloat = 450
+
+    static func horizontalDelta(
+        translation: CGPoint,
+        velocity: CGPoint,
+        viewportWidth: CGFloat
+    ) -> Int? {
+        if abs(velocity.x) >= velocityThreshold, abs(velocity.x) > abs(velocity.y) {
+            return velocity.x < 0 ? 1 : -1
+        }
+
+        let translationThreshold = max(
+            minimumTranslation,
+            viewportWidth * translationWidthFactor
+        )
+        guard abs(translation.x) >= translationThreshold, abs(translation.x) > abs(translation.y) else {
+            return nil
+        }
+        return translation.x < 0 ? 1 : -1
+    }
+
+    static func boundaryDelta(
+        selectionIndex: Int,
+        itemCount: Int,
+        translation: CGPoint,
+        velocity: CGPoint,
+        viewportWidth: CGFloat,
+        canBoundaryPageTurn: (Int) -> Bool
+    ) -> Int? {
+        guard itemCount > 0,
+              let delta = horizontalDelta(
+                  translation: translation,
+                  velocity: velocity,
+                  viewportWidth: viewportWidth
+              ) else {
+            return nil
+        }
+        let targetItem = selectionIndex + delta
+        guard targetItem < 0 || targetItem >= itemCount else { return nil }
+        return canBoundaryPageTurn(delta) ? delta : nil
+    }
+}
+
 #if os(iOS)
 import UIKit
 
@@ -240,16 +286,15 @@ struct ReaderPagedViewportPagingInputs: @unchecked Sendable {
     var settings: ReaderAppearanceSettings
     var pagerIdentity: ReaderPagedPagerIdentity
     var scrollAnimationRequest: ReaderPagedScrollAnimationRequest?
+    var canBoundaryPageTurn: (Int) -> Bool
     var onSelectionChange: (Int) -> Void
+    var onBoundaryPageTurn: (Int) -> Void
     var onScrollAnimationRequestConsumed: (ReaderPagedScrollAnimationRequest) -> Void
 }
 
 @MainActor
 final class ReaderPagedViewportPagingDriver {
     private static let quickFadeDuration: TimeInterval = 0.18
-    private static let quickFadeMinimumTranslation: CGFloat = 48
-    private static let quickFadeTranslationWidthFactor: CGFloat = 0.18
-    private static let quickFadeVelocityThreshold: CGFloat = 450
 
     let callbackScheduler = SwiftUIViewUpdateCallbackScheduler()
     private var pendingSelectionIndex: Int?
@@ -393,7 +438,7 @@ final class ReaderPagedViewportPagingDriver {
 
     func quickFadePanShouldBegin(_ recognizer: UIPanGestureRecognizer, inputs: ReaderPagedViewportPagingInputs) -> Bool {
         guard inputs.settings.pagedTurnStyle == .quickFade,
-              inputs.itemCount > 1,
+              inputs.itemCount > 0,
               let view = recognizer.view else {
             return false
         }
@@ -409,9 +454,12 @@ final class ReaderPagedViewportPagingDriver {
 
         switch recognizer.state {
         case .ended:
-            guard let delta = quickFadePanDelta(for: recognizer, in: collectionView) else { return }
+            guard let delta = horizontalPanDelta(for: recognizer, in: collectionView) else { return }
             let targetItem = inputs.selectionIndex + delta
-            guard targetItem >= 0, targetItem < inputs.itemCount else { return }
+            guard targetItem >= 0, targetItem < inputs.itemCount else {
+                publishBoundaryPageTurnIfPossible(delta, inputs: inputs)
+                return
+            }
             pendingSelectionIndex = targetItem
             _ = scrollToPendingSelectionIfPossible(in: collectionView, animated: true, inputs: inputs)
         case .cancelled, .failed:
@@ -445,6 +493,10 @@ final class ReaderPagedViewportPagingDriver {
         inputs: ReaderPagedViewportPagingInputs
     ) {
         guard let collectionView = scrollView as? UICollectionView else { return }
+        if publishBoundaryPageTurnIfPossible(from: collectionView.panGestureRecognizer, in: collectionView, inputs: inputs) {
+            endPageTurnVisuals(in: collectionView)
+            return
+        }
         if !decelerate {
             updateSelection(from: scrollView, inputs: inputs)
             endPageTurnVisuals(in: collectionView)
@@ -455,6 +507,28 @@ final class ReaderPagedViewportPagingDriver {
         updateSelection(from: scrollView, inputs: inputs)
         guard let collectionView = scrollView as? UICollectionView else { return }
         endPageTurnVisuals(in: collectionView)
+    }
+
+    @discardableResult
+    func publishBoundaryPageTurnIfPossible(
+        from recognizer: UIPanGestureRecognizer,
+        in view: UIView,
+        inputs: ReaderPagedViewportPagingInputs
+    ) -> Bool {
+        let translation = recognizer.translation(in: view)
+        let velocity = recognizer.velocity(in: view)
+        guard let delta = ReaderPagedBoundaryPageTurn.boundaryDelta(
+            selectionIndex: inputs.selectionIndex,
+            itemCount: inputs.itemCount,
+            translation: translation,
+            velocity: velocity,
+            viewportWidth: view.bounds.width,
+            canBoundaryPageTurn: inputs.canBoundaryPageTurn
+        ) else {
+            return false
+        }
+        publishBoundaryPageTurnIfPossible(delta, inputs: inputs)
+        return true
     }
 
     func scrollViewDidEndScrollingAnimation(_ scrollView: UIScrollView, inputs: ReaderPagedViewportPagingInputs) {
@@ -566,21 +640,20 @@ final class ReaderPagedViewportPagingDriver {
         return true
     }
 
-    private func quickFadePanDelta(for recognizer: UIPanGestureRecognizer, in collectionView: UICollectionView) -> Int? {
-        let translation = recognizer.translation(in: collectionView)
-        let velocity = recognizer.velocity(in: collectionView)
-        if abs(velocity.x) >= Self.quickFadeVelocityThreshold, abs(velocity.x) > abs(velocity.y) {
-            return velocity.x < 0 ? 1 : -1
-        }
-
-        let translationThreshold = max(
-            Self.quickFadeMinimumTranslation,
-            collectionView.bounds.width * Self.quickFadeTranslationWidthFactor
+    private func horizontalPanDelta(for recognizer: UIPanGestureRecognizer, in collectionView: UICollectionView) -> Int? {
+        ReaderPagedBoundaryPageTurn.horizontalDelta(
+            translation: recognizer.translation(in: collectionView),
+            velocity: recognizer.velocity(in: collectionView),
+            viewportWidth: collectionView.bounds.width
         )
-        guard abs(translation.x) >= translationThreshold, abs(translation.x) > abs(translation.y) else {
-            return nil
+    }
+
+    private func publishBoundaryPageTurnIfPossible(_ delta: Int, inputs: ReaderPagedViewportPagingInputs) {
+        guard inputs.canBoundaryPageTurn(delta) else { return }
+        let onBoundaryPageTurn = inputs.onBoundaryPageTurn
+        callbackScheduler.publish {
+            onBoundaryPageTurn(delta)
         }
-        return translation.x < 0 ? 1 : -1
     }
 
     private func beginPageTurnVisuals(in collectionView: UICollectionView, inputs: ReaderPagedViewportPagingInputs) {

@@ -108,7 +108,9 @@ struct ReaderPagedPageCurlViewport: UIViewControllerRepresentable {
     let scrollAnimationRequest: ReaderPagedScrollAnimationRequest?
     let displayReferenceProvider: @MainActor (NovelReaderSurfaceIdentity) -> NovelTextViewportDisplayReference?
     let isChromeVisible: Bool
+    let canBoundaryPageTurn: (Int) -> Bool
     let onSelectionChange: (Int) -> Void
+    let onBoundaryPageTurn: (Int) -> Void
     let onPageTapZone: (ReaderPagedTapZone) -> Void
     let onScrollAnimationRequestConsumed: (ReaderPagedScrollAnimationRequest) -> Void
     let onChromeVisibleImageTap: () -> Void
@@ -166,6 +168,14 @@ struct ReaderPagedPageCurlViewport: UIViewControllerRepresentable {
         tapRecognizer.delegate = context.coordinator
         pageViewController.view.addGestureRecognizer(tapRecognizer)
 
+        let boundaryPageTurnPanRecognizer = UIPanGestureRecognizer(
+            target: context.coordinator,
+            action: #selector(Coordinator.handleBoundaryPageTurnPan(_:))
+        )
+        boundaryPageTurnPanRecognizer.delegate = context.coordinator
+        pageViewController.view.addGestureRecognizer(boundaryPageTurnPanRecognizer)
+        context.coordinator.boundaryPageTurnPanRecognizer = boundaryPageTurnPanRecognizer
+
         context.coordinator.applyPageBackground(to: pageViewController)
         context.coordinator.configureGestures(in: pageViewController)
         context.coordinator.configureSpine(in: pageViewController)
@@ -191,6 +201,7 @@ struct ReaderPagedPageCurlViewport: UIViewControllerRepresentable {
         private var consumedScrollAnimationRequestID: UUID?
         private var currentSelectionIndex: Int?
         private weak var pageCurlBackColorPageViewController: UIPageViewController?
+        weak var boundaryPageTurnPanRecognizer: UIPanGestureRecognizer?
         private var pageCurlBackColorDisplayLink: CADisplayLink?
 
         init(parent: ReaderPagedPageCurlViewport) {
@@ -293,11 +304,53 @@ struct ReaderPagedPageCurlViewport: UIViewControllerRepresentable {
             }
         }
 
+        @objc
+        func handleBoundaryPageTurnPan(_ recognizer: UIPanGestureRecognizer) {
+            guard recognizer.state == .ended,
+                  !parent.isChromeVisible,
+                  let view = recognizer.view else {
+                return
+            }
+            guard let delta = ReaderPagedBoundaryPageTurn.boundaryDelta(
+                selectionIndex: parent.selectionIndex,
+                itemCount: parent.sequence.pageCount,
+                translation: recognizer.translation(in: view),
+                velocity: recognizer.velocity(in: view),
+                viewportWidth: view.bounds.width,
+                canBoundaryPageTurn: parent.canBoundaryPageTurn
+            ) else {
+                return
+            }
+            let onBoundaryPageTurn = parent.onBoundaryPageTurn
+            callbackScheduler.publish {
+                onBoundaryPageTurn(delta)
+            }
+        }
+
         func gestureRecognizer(
             _ gestureRecognizer: UIGestureRecognizer,
             shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
         ) -> Bool {
-            otherGestureRecognizer.view?.isDescendant(ofType: ReaderVerticalViewportImageView.self) == true
+            if gestureRecognizer === boundaryPageTurnPanRecognizer ||
+                otherGestureRecognizer === boundaryPageTurnPanRecognizer {
+                return true
+            }
+            return otherGestureRecognizer.view?.isDescendant(ofType: ReaderVerticalViewportImageView.self) == true
+        }
+
+        func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+            guard gestureRecognizer === boundaryPageTurnPanRecognizer,
+                  let panRecognizer = gestureRecognizer as? UIPanGestureRecognizer,
+                  !parent.isChromeVisible,
+                  let view = panRecognizer.view else {
+                return true
+            }
+            let velocity = panRecognizer.velocity(in: view)
+            guard abs(velocity.x) > abs(velocity.y) else { return false }
+            let delta = velocity.x < 0 ? 1 : -1
+            let targetItem = parent.selectionIndex + delta
+            guard targetItem < 0 || targetItem >= parent.sequence.pageCount else { return true }
+            return parent.canBoundaryPageTurn(delta)
         }
 
         func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
@@ -316,6 +369,7 @@ struct ReaderPagedPageCurlViewport: UIViewControllerRepresentable {
                     recognizer.isEnabled = !parent.isChromeVisible
                 }
             }
+            boundaryPageTurnPanRecognizer?.isEnabled = !parent.isChromeVisible
         }
 
         func setCurrentSelection(

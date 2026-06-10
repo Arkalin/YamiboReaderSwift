@@ -275,8 +275,14 @@ public struct ReaderContainerView: View {
                         model.novelTextViewportDisplayReference(for: surfaceIdentity)
                     },
                     isChromeVisible: chromeState.showsChrome,
+                    canBoundaryPageTurn: { delta in
+                        canNavigatePagedBoundary(delta: delta)
+                    },
                     onSelectionChange: { selectionIndex in
                         model.selectPagedViewportIndex(selectionIndex)
+                    },
+                    onBoundaryPageTurn: { delta in
+                        Task { await goRelativePage(delta, pagerIdentity: pagerIdentity) }
                     },
                     onPageTapZone: { zone in
                         handlePagedTapZone(zone, pagerIdentity: pagerIdentity)
@@ -307,8 +313,14 @@ public struct ReaderContainerView: View {
                         model.novelTextViewportDisplayReference(for: surfaceIdentity)
                     },
                     isChromeVisible: chromeState.showsChrome,
+                    canBoundaryPageTurn: { delta in
+                        canNavigatePagedBoundary(delta: delta)
+                    },
                     onSelectionChange: { selectionIndex in
                         model.selectPagedViewportIndex(selectionIndex)
+                    },
+                    onBoundaryPageTurn: { delta in
+                        Task { await goRelativePage(delta, pagerIdentity: pagerIdentity) }
                     },
                     onPageTapZone: { zone in
                         handlePagedTapZone(zone, pagerIdentity: pagerIdentity)
@@ -338,8 +350,14 @@ public struct ReaderContainerView: View {
                         model.novelTextViewportDisplayReference(for: surfaceIdentity)
                     },
                     isChromeVisible: chromeState.showsChrome,
+                    canBoundaryPageTurn: { delta in
+                        canNavigatePagedBoundary(delta: delta)
+                    },
                     onSelectionChange: { selectionIndex in
                         model.selectPagedViewportIndex(selectionIndex)
+                    },
+                    onBoundaryPageTurn: { delta in
+                        Task { await goRelativePage(delta, pagerIdentity: pagerIdentity) }
                     },
                     onPageTapZone: { zone in
                         handlePagedTapZone(zone, pagerIdentity: pagerIdentity)
@@ -934,6 +952,17 @@ public struct ReaderContainerView: View {
     private func clearPagedScrollAnimationRequest(_ request: ReaderPagedScrollAnimationRequest) {
         guard pagedScrollAnimationRequest == request else { return }
         pagedScrollAnimationRequest = nil
+    }
+
+    private func canNavigatePagedBoundary(delta: Int) -> Bool {
+        guard model.settings.readingMode == .paged, !model.readerSurfaces.isEmpty else { return false }
+        if delta < 0 {
+            return model.visibleView > 1
+        }
+        if delta > 0 {
+            return model.visibleView < model.maxView
+        }
+        return false
     }
 
     private func canNavigateVerticalBoundary(_ direction: ReaderVerticalBoundaryDirection) -> Bool {

@@ -16,7 +16,9 @@ struct ReaderPagedCollectionViewport: UIViewRepresentable {
     let scrollAnimationRequest: ReaderPagedScrollAnimationRequest?
     let displayReferenceProvider: @MainActor (NovelReaderSurfaceIdentity) -> NovelTextViewportDisplayReference?
     let isChromeVisible: Bool
+    let canBoundaryPageTurn: (Int) -> Bool
     let onSelectionChange: (Int) -> Void
+    let onBoundaryPageTurn: (Int) -> Void
     let onPageTapZone: (ReaderPagedTapZone) -> Void
     let onScrollAnimationRequestConsumed: (ReaderPagedScrollAnimationRequest) -> Void
     let onChromeVisibleImageTap: () -> Void
@@ -99,7 +101,9 @@ struct ReaderPagedCollectionViewport: UIViewRepresentable {
                 settings: parent.settings,
                 pagerIdentity: parent.pagerIdentity,
                 scrollAnimationRequest: parent.scrollAnimationRequest,
+                canBoundaryPageTurn: parent.canBoundaryPageTurn,
                 onSelectionChange: parent.onSelectionChange,
+                onBoundaryPageTurn: parent.onBoundaryPageTurn,
                 onScrollAnimationRequestConsumed: parent.onScrollAnimationRequestConsumed
             )
         }

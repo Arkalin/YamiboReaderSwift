@@ -25,6 +25,107 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertEqual(ReaderPagedTapZone.zone(for: CGPoint(x: 340, y: 720), in: bounds), .next)
     }
 
+    func testPagedBoundaryPageTurnDetectsOnlyArmedHorizontalBoundaryGestures() {
+        XCTAssertEqual(
+            ReaderPagedBoundaryPageTurn.boundaryDelta(
+                selectionIndex: 0,
+                itemCount: 3,
+                translation: CGPoint(x: 80, y: 4),
+                velocity: .zero,
+                viewportWidth: 390,
+                canBoundaryPageTurn: { $0 == -1 }
+            ),
+            -1
+        )
+        XCTAssertEqual(
+            ReaderPagedBoundaryPageTurn.boundaryDelta(
+                selectionIndex: 2,
+                itemCount: 3,
+                translation: CGPoint(x: -80, y: 4),
+                velocity: .zero,
+                viewportWidth: 390,
+                canBoundaryPageTurn: { $0 == 1 }
+            ),
+            1
+        )
+        XCTAssertEqual(
+            ReaderPagedBoundaryPageTurn.boundaryDelta(
+                selectionIndex: 0,
+                itemCount: 1,
+                translation: CGPoint(x: -80, y: 4),
+                velocity: .zero,
+                viewportWidth: 390,
+                canBoundaryPageTurn: { $0 == 1 }
+            ),
+            1
+        )
+        XCTAssertEqual(
+            ReaderPagedBoundaryPageTurn.boundaryDelta(
+                selectionIndex: 0,
+                itemCount: 1,
+                translation: CGPoint(x: 80, y: 4),
+                velocity: .zero,
+                viewportWidth: 390,
+                canBoundaryPageTurn: { $0 == -1 }
+            ),
+            -1
+        )
+        XCTAssertEqual(
+            ReaderPagedBoundaryPageTurn.boundaryDelta(
+                selectionIndex: 0,
+                itemCount: 3,
+                translation: .zero,
+                velocity: CGPoint(x: -500, y: 20),
+                viewportWidth: 390,
+                canBoundaryPageTurn: { $0 == 1 }
+            ),
+            nil
+        )
+        XCTAssertEqual(
+            ReaderPagedBoundaryPageTurn.boundaryDelta(
+                selectionIndex: 2,
+                itemCount: 3,
+                translation: .zero,
+                velocity: CGPoint(x: -500, y: 20),
+                viewportWidth: 390,
+                canBoundaryPageTurn: { $0 == 1 }
+            ),
+            1
+        )
+        XCTAssertNil(ReaderPagedBoundaryPageTurn.boundaryDelta(
+            selectionIndex: 1,
+            itemCount: 3,
+            translation: CGPoint(x: -80, y: 4),
+            velocity: .zero,
+            viewportWidth: 390,
+            canBoundaryPageTurn: { _ in true }
+        ))
+        XCTAssertNil(ReaderPagedBoundaryPageTurn.boundaryDelta(
+            selectionIndex: 2,
+            itemCount: 3,
+            translation: CGPoint(x: -20, y: 4),
+            velocity: .zero,
+            viewportWidth: 390,
+            canBoundaryPageTurn: { _ in true }
+        ))
+        XCTAssertNil(ReaderPagedBoundaryPageTurn.boundaryDelta(
+            selectionIndex: 2,
+            itemCount: 3,
+            translation: CGPoint(x: -100, y: 150),
+            velocity: .zero,
+            viewportWidth: 390,
+            canBoundaryPageTurn: { _ in true }
+        ))
+        XCTAssertNil(ReaderPagedBoundaryPageTurn.boundaryDelta(
+            selectionIndex: 2,
+            itemCount: 3,
+            translation: CGPoint(x: -80, y: 4),
+            velocity: .zero,
+            viewportWidth: 390,
+            canBoundaryPageTurn: { _ in false }
+        ))
+    }
+
     func testPageCurlSequenceMapsSinglePagesBySurfaceIndex() {
         let surfaces = makePageCurlSurfaces(count: 3)
         let sequence = ReaderPagedPageCurlSequence(
@@ -808,12 +909,19 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         let spreadBody = try XCTUnwrap(typeBody(named: "ReaderPresentationSpreadCollectionViewport", in: supportSource))
         let pagingDriverBody = try XCTUnwrap(typeBody(named: "ReaderPagedViewportPagingDriver", in: supportSource))
 
+        XCTAssertTrue(supportSource.contains("struct ReaderPagedBoundaryPageTurn"))
+        XCTAssertTrue(supportSource.contains("static let minimumTranslation: CGFloat = 48"))
+        XCTAssertTrue(supportSource.contains("static let translationWidthFactor: CGFloat = 0.18"))
+        XCTAssertTrue(supportSource.contains("static let velocityThreshold: CGFloat = 450"))
         XCTAssertTrue(pagingDriverBody.contains("private static let quickFadeDuration: TimeInterval = 0.18"))
-        XCTAssertTrue(pagingDriverBody.contains("private static let quickFadeVelocityThreshold: CGFloat = 450"))
         XCTAssertTrue(pagingDriverBody.contains("func updateGestureState(in collectionView: UICollectionView, inputs: ReaderPagedViewportPagingInputs)"))
         XCTAssertTrue(pagingDriverBody.contains("collectionView.panGestureRecognizer.isEnabled = inputs.settings.pagedTurnStyle != .quickFade"))
         XCTAssertTrue(pagingDriverBody.contains("func quickFadePanShouldBegin"))
         XCTAssertTrue(pagingDriverBody.contains("func handleQuickFadePan"))
+        XCTAssertTrue(pagingDriverBody.contains("inputs.itemCount > 0"))
+        XCTAssertTrue(pagingDriverBody.contains("private func horizontalPanDelta"))
+        XCTAssertTrue(pagingDriverBody.contains("ReaderPagedBoundaryPageTurn.horizontalDelta"))
+        XCTAssertTrue(pagingDriverBody.contains("publishBoundaryPageTurnIfPossible(delta, inputs: inputs)"))
         XCTAssertTrue(pagingDriverBody.contains("performSelectionTransition("))
         XCTAssertTrue(pagingDriverBody.contains("snapshotView(afterScreenUpdates: false)"))
         XCTAssertTrue(pagingDriverBody.contains("collectionView.convert(collectionView.bounds, to: snapshotContainer)"))
@@ -842,6 +950,11 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
                 .appendingPathComponent("Sources/YamiboReaderUI/Features/NovelReader/Container/ReaderContainerView.swift"),
             encoding: .utf8
         )
+        let pageCurlSource = try String(
+            contentsOf: repositoryRoot
+                .appendingPathComponent("Sources/YamiboReaderUI/Features/NovelReader/Viewports/ReaderPagedPageCurlViewport.swift"),
+            encoding: .utf8
+        )
         let supportSource = try readerSupportSources()
         let singlePageBody = try XCTUnwrap(typeBody(named: "ReaderPagedCollectionViewport", in: supportSource))
         let spreadBody = try XCTUnwrap(typeBody(named: "ReaderPresentationSpreadCollectionViewport", in: supportSource))
@@ -852,12 +965,20 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertTrue(containerSource.contains("private func goRelativePage(_ delta: Int, pagerIdentity: ReaderPagedPagerIdentity?) async"))
         XCTAssertTrue(containerSource.contains("makePagedScrollAnimationRequest(delta: delta, pagerIdentity: $0)"))
         XCTAssertTrue(containerSource.contains("await model.jumpRelativeSurface(delta)"))
+        XCTAssertTrue(containerSource.contains("private func canNavigatePagedBoundary(delta: Int) -> Bool"))
+        XCTAssertTrue(containerSource.contains("return model.visibleView > 1"))
+        XCTAssertTrue(containerSource.contains("return model.visibleView < model.maxView"))
+        XCTAssertEqual(containerSource.components(separatedBy: "canBoundaryPageTurn: { delta in").count - 1, 3)
+        XCTAssertEqual(containerSource.components(separatedBy: "onBoundaryPageTurn: { delta in").count - 1, 3)
         XCTAssertTrue(makeRequestBody.contains("model.pagedViewportSelectionIndex + delta"))
         XCTAssertTrue(makeRequestBody.contains("model.presentationSpreads.count"))
         XCTAssertTrue(makeRequestBody.contains("model.readerSurfaces.count"))
         XCTAssertTrue(containerSource.contains("clearPagedScrollAnimationRequest"))
 
         XCTAssertTrue(pagingDriverBody.contains("let targetItem = inputs.selectionIndex + delta"))
+        XCTAssertTrue(pagingDriverBody.contains("func publishBoundaryPageTurnIfPossible("))
+        XCTAssertTrue(pagingDriverBody.contains("ReaderPagedBoundaryPageTurn.boundaryDelta"))
+        XCTAssertTrue(pagingDriverBody.contains("onBoundaryPageTurn(delta)"))
         XCTAssertTrue(pagingDriverBody.contains("private var consumedScrollAnimationRequestID: UUID?"))
         XCTAssertTrue(pagingDriverBody.contains("private func matchingScrollAnimationRequest("))
         XCTAssertTrue(pagingDriverBody.contains("request.pagerIdentity == inputs.pagerIdentity"))
@@ -869,11 +990,24 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         for body in [singlePageBody, spreadBody] {
             XCTAssertTrue(body.contains("let pagerIdentity: ReaderPagedPagerIdentity"))
             XCTAssertTrue(body.contains("let scrollAnimationRequest: ReaderPagedScrollAnimationRequest?"))
+            XCTAssertTrue(body.contains("let canBoundaryPageTurn: (Int) -> Bool"))
+            XCTAssertTrue(body.contains("let onBoundaryPageTurn: (Int) -> Void"))
             XCTAssertTrue(body.contains("let onScrollAnimationRequestConsumed: (ReaderPagedScrollAnimationRequest) -> Void"))
             XCTAssertTrue(body.contains("pagingDriver.animateAdjacentSelection(for: zone, in: collectionView, inputs: pagingInputs)"))
             XCTAssertTrue(body.contains("scrollAnimationRequest: parent.scrollAnimationRequest"))
+            XCTAssertTrue(body.contains("canBoundaryPageTurn: parent.canBoundaryPageTurn"))
+            XCTAssertTrue(body.contains("onBoundaryPageTurn: parent.onBoundaryPageTurn"))
             XCTAssertTrue(body.contains("onScrollAnimationRequestConsumed: parent.onScrollAnimationRequestConsumed"))
         }
+
+        XCTAssertTrue(pageCurlSource.contains("struct ReaderPagedPageCurlViewport: UIViewControllerRepresentable"))
+        XCTAssertTrue(pageCurlSource.contains("let canBoundaryPageTurn: (Int) -> Bool"))
+        XCTAssertTrue(pageCurlSource.contains("let onBoundaryPageTurn: (Int) -> Void"))
+        XCTAssertTrue(pageCurlSource.contains("action: #selector(Coordinator.handleBoundaryPageTurnPan(_:))"))
+        XCTAssertTrue(pageCurlSource.contains("boundaryPageTurnPanRecognizer.delegate = context.coordinator"))
+        XCTAssertTrue(pageCurlSource.contains("ReaderPagedBoundaryPageTurn.boundaryDelta"))
+        XCTAssertTrue(pageCurlSource.contains("onBoundaryPageTurn(delta)"))
+        XCTAssertTrue(pageCurlSource.contains("boundaryPageTurnPanRecognizer?.isEnabled = !parent.isChromeVisible"))
     }
 
     func testVerticalViewportPublishesVisibleSurfacesAfterLayoutSubviews() throws {
