@@ -109,6 +109,102 @@ final class ReaderContainerModelTests: XCTestCase {
         }
     }
 
+    func testWebViewBoundaryNavigationPublishesLoadingOverlayState() async throws {
+        let model = try await makeModel(
+            documents: [
+                makeDocument(view: 1, maxView: 2, chapterTitles: ["第一章", "第二章", "第三章", "第四章"]),
+                makeDocument(view: 2, maxView: 2, chapterTitles: ["第五章", "第六章"]),
+            ]
+        )
+        let navigationStateRecorder = await MainActor.run {
+            let recorder = ReaderNavigationStateRecorder()
+            let gate = ReaderNavigationOverlayGate()
+            model.readerPageDocumentNavigationOverlayPreparation = {
+                await gate.prepare()
+            }
+            model.readerPageDocumentNavigationStateDidChange = { state in
+                recorder.record(state)
+            }
+            return (recorder, gate)
+        }
+
+        let navigationTask = Task {
+            await model.jumpToWebView(2)
+        }
+
+        try await waitFor {
+            await MainActor.run {
+                navigationStateRecorder.1.didEnterPreparation
+            }
+        }
+
+        await MainActor.run {
+            XCTAssertTrue(navigationStateRecorder.0.states.contains(true))
+            XCTAssertTrue(model.isNavigatingReaderPageDocument)
+            XCTAssertEqual(model.currentView, 1)
+            navigationStateRecorder.1.release()
+        }
+        await navigationTask.value
+
+        await MainActor.run {
+            XCTAssertEqual(navigationStateRecorder.0.states, [true, false])
+            XCTAssertFalse(model.isNavigatingReaderPageDocument)
+            XCTAssertEqual(model.currentView, 2)
+            XCTAssertEqual(model.currentSurfaceNumber, 1)
+        }
+    }
+
+    func testPreviousWebViewBoundaryNavigationLandsOnPreviousLastSurfaceAfterOverlay() async throws {
+        let model = try await makeModel(
+            documents: [
+                makeDocument(view: 1, maxView: 2, chapterTitles: ["第一章", "第二章", "第三章"]),
+                makeDocument(view: 2, maxView: 2, chapterTitles: ["第四章", "第五章"]),
+            ]
+        )
+        await model.jumpToWebView(2)
+        await MainActor.run {
+            XCTAssertEqual(model.currentView, 2)
+            XCTAssertEqual(model.currentSurfaceNumber, 1)
+        }
+        let navigationStateRecorder = await MainActor.run {
+            let recorder = ReaderNavigationStateRecorder()
+            let gate = ReaderNavigationOverlayGate()
+            model.readerPageDocumentNavigationOverlayPreparation = {
+                await gate.prepare()
+            }
+            model.readerPageDocumentNavigationStateDidChange = { state in
+                recorder.record(state)
+            }
+            return (recorder, gate)
+        }
+
+        let navigationTask = Task {
+            await model.jumpRelativeSurface(-1)
+        }
+
+        try await waitFor {
+            await MainActor.run {
+                navigationStateRecorder.1.didEnterPreparation
+            }
+        }
+
+        await MainActor.run {
+            XCTAssertTrue(navigationStateRecorder.0.states.contains(true))
+            XCTAssertTrue(model.isNavigatingReaderPageDocument)
+            XCTAssertEqual(model.currentView, 2)
+            XCTAssertEqual(model.currentSurfaceNumber, 1)
+            navigationStateRecorder.1.release()
+        }
+        await navigationTask.value
+
+        await MainActor.run {
+            XCTAssertEqual(navigationStateRecorder.0.states, [true, false])
+            XCTAssertFalse(model.isNavigatingReaderPageDocument)
+            XCTAssertEqual(model.currentView, 1)
+            XCTAssertEqual(model.currentSurfaceNumber, model.surfaceCount)
+        }
+    }
+
     func testPublishesPresentationAndRequestsDisplayReferencesBySurfaceIdentity() async throws {
         let model = try await makeModel(
             documents: [
@@ -2514,6 +2610,33 @@ private func waitFor(
         try await Task.sleep(nanoseconds: pollIntervalNanoseconds)
     }
     XCTFail("Timed out waiting for condition")
+}
+
+@MainActor
+private final class ReaderNavigationStateRecorder {
+    private(set) var states: [Bool] = []
+
+    func record(_ state: Bool) {
+        states.append(state)
+    }
+}
+
+@MainActor
+private final class ReaderNavigationOverlayGate {
+    private(set) var didEnterPreparation = false
+    private var continuation: CheckedContinuation<Void, Never>?
+
+    func prepare() async {
+        didEnterPreparation = true
+        await withCheckedContinuation { continuation in
+            self.continuation = continuation
+        }
+    }
+
+    func release() {
+        continuation?.resume()
+        continuation = nil
+    }
 }
 
 @MainActor
