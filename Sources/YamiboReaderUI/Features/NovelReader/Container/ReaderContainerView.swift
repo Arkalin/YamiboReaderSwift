@@ -258,7 +258,40 @@ public struct ReaderContainerView: View {
         )
         let pagedTopInset = topInset + layout.chromeInsets.top
         return Group {
-            if model.isTwoPageSpreadActive {
+            if model.settings.pagedTurnStyle == .pageCurl {
+                ReaderPagedPageCurlViewport(
+                    spreads: model.presentationSpreads,
+                    surfaces: model.readerSurfaces,
+                    settings: model.settings,
+                    refererURL: model.forumURL,
+                    sessionState: model.sessionState,
+                    topInset: pagedTopInset,
+                    bottomInset: layout.chromeInsets.bottom,
+                    selectionIndex: model.pagedViewportSelectionIndex,
+                    usesTwoPageSpread: model.isTwoPageSpreadActive,
+                    pagerIdentity: pagerIdentity,
+                    scrollAnimationRequest: pagedScrollAnimationRequest,
+                    displayReferenceProvider: { surfaceIdentity in
+                        model.novelTextViewportDisplayReference(for: surfaceIdentity)
+                    },
+                    isChromeVisible: chromeState.showsChrome,
+                    onSelectionChange: { selectionIndex in
+                        model.selectPagedViewportIndex(selectionIndex)
+                    },
+                    onPageTapZone: { zone in
+                        handlePagedTapZone(zone, pagerIdentity: pagerIdentity)
+                    },
+                    onScrollAnimationRequestConsumed: { request in
+                        clearPagedScrollAnimationRequest(request)
+                    },
+                    onChromeVisibleImageTap: {
+                        enterImmersiveMode()
+                    },
+                    onImageTap: { url, title in
+                        handleImageTap(url: url, title: title)
+                    }
+                )
+            } else if model.isTwoPageSpreadActive {
                 ReaderPresentationSpreadCollectionViewport(
                     spreads: model.presentationSpreads,
                     surfaces: model.readerSurfaces,

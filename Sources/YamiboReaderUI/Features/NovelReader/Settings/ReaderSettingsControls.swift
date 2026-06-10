@@ -270,6 +270,8 @@ private enum ReaderBooksReadingModeMenuOption: CaseIterable, Hashable {
             switch settings.pagedTurnStyle {
             case .slide:
                 self = .slide
+            case .pageCurl:
+                self = .pageCurl
             case .quickFade:
                 self = .quickFade
             }
@@ -317,15 +319,17 @@ private enum ReaderBooksReadingModeMenuOption: CaseIterable, Hashable {
         switch self {
         case .slide:
             .slide
+        case .pageCurl:
+            .pageCurl
         case .quickFade:
             .quickFade
-        case .pageCurl, .scroll:
+        case .scroll:
             nil
         }
     }
 
     var isSelectable: Bool {
-        self != .pageCurl
+        true
     }
 }
 

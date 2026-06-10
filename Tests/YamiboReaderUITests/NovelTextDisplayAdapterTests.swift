@@ -25,6 +25,89 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertEqual(ReaderPagedTapZone.zone(for: CGPoint(x: 340, y: 720), in: bounds), .next)
     }
 
+    func testPageCurlSequenceMapsSinglePagesBySurfaceIndex() {
+        let surfaces = makePageCurlSurfaces(count: 3)
+        let sequence = ReaderPagedPageCurlSequence(
+            surfaces: surfaces,
+            spreads: [],
+            usesTwoPageSpread: false
+        )
+
+        XCTAssertEqual(sequence.pageCount, 3)
+        XCTAssertEqual(sequence.leafIndexes(forSelectionIndex: 1), [1])
+        XCTAssertEqual(sequence.selectionIndex(forLeafIndexes: [2]), 2)
+        XCTAssertEqual(sequence.leaves.map(\.surfaceIndex), [0, 1, 2])
+    }
+
+    func testPageCurlSequenceMapsTwoPageSpreadsAndBlankTail() {
+        let surfaces = makePageCurlSurfaces(count: 3)
+        let spreads = [
+            NovelReaderPresentationSpread(
+                index: 0,
+                leftSurfaceIndex: 0,
+                leftSurfaceIdentity: surfaces[0].identity,
+                rightSurfaceIndex: 1,
+                rightSurfaceIdentity: surfaces[1].identity,
+                chapterTitle: nil
+            ),
+            NovelReaderPresentationSpread(
+                index: 1,
+                leftSurfaceIndex: 2,
+                leftSurfaceIdentity: surfaces[2].identity,
+                rightSurfaceIndex: nil,
+                rightSurfaceIdentity: nil,
+                chapterTitle: nil
+            )
+        ]
+        let sequence = ReaderPagedPageCurlSequence(
+            surfaces: surfaces,
+            spreads: spreads,
+            usesTwoPageSpread: true
+        )
+
+        XCTAssertEqual(sequence.pageCount, 2)
+        XCTAssertEqual(sequence.leafIndexes(forSelectionIndex: 1), [2, 3])
+        XCTAssertEqual(sequence.selectionIndex(forLeafIndexes: [3]), 1)
+        XCTAssertEqual(sequence.leaves.map(\.surfaceIndex), [0, 1, 2, nil])
+    }
+
+    func testPageCurlSequenceProvidesBlankControllersForEmptyContent() {
+        let singlePageSequence = ReaderPagedPageCurlSequence(
+            surfaces: [],
+            spreads: [],
+            usesTwoPageSpread: false
+        )
+        let spreadSequence = ReaderPagedPageCurlSequence(
+            surfaces: [],
+            spreads: [],
+            usesTwoPageSpread: true
+        )
+
+        XCTAssertEqual(singlePageSequence.pageCount, 1)
+        XCTAssertEqual(singlePageSequence.leafIndexes(forSelectionIndex: 0), [0])
+        XCTAssertEqual(singlePageSequence.leaves.map(\.surfaceIndex), [nil])
+
+        XCTAssertEqual(spreadSequence.pageCount, 1)
+        XCTAssertEqual(spreadSequence.leafIndexes(forSelectionIndex: 0), [0, 1])
+        XCTAssertEqual(spreadSequence.leaves.map(\.surfaceIndex), [nil, nil])
+    }
+
+    func testPageCurlViewportUsesUIPageViewControllerAndContainerSelectsIt() throws {
+        let containerSource = try joinedSourceFiles([
+            "Sources/YamiboReaderUI/Features/NovelReader/Container/ReaderContainerView.swift"
+        ])
+        let pageCurlSource = try joinedSourceFiles([
+            "Sources/YamiboReaderUI/Features/NovelReader/Viewports/ReaderPagedPageCurlViewport.swift"
+        ])
+
+        XCTAssertTrue(containerSource.contains("model.settings.pagedTurnStyle == .pageCurl"))
+        XCTAssertTrue(containerSource.contains("ReaderPagedPageCurlViewport("))
+        XCTAssertTrue(pageCurlSource.contains("UIViewControllerRepresentable"))
+        XCTAssertTrue(pageCurlSource.contains("UIPageViewController(\n            transitionStyle: .pageCurl"))
+        XCTAssertTrue(pageCurlSource.contains("return parent.sequence.usesTwoPageSpread ? .mid : .min"))
+        XCTAssertTrue(pageCurlSource.contains("pageViewController.isDoubleSided = parent.sequence.usesTwoPageSpread"))
+    }
+
     func testPagedPageTurnVisualMetricsFadeOverlayAsPageApproachesRest() {
         let start = ReaderPagedPageTurnPresentation.metrics(
             contentOffsetX: 201,
@@ -693,9 +776,11 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertTrue(controlsSource.contains("let settings: ReaderAppearanceSettings"))
         XCTAssertTrue(controlsSource.contains("case .quickFade:"))
         XCTAssertTrue(controlsSource.contains("self = .quickFade"))
+        XCTAssertTrue(controlsSource.contains("case .pageCurl:\n                self = .pageCurl"))
         XCTAssertTrue(controlsSource.contains("onSelect(option.readingMode, option.pagedTurnStyle ?? settings.pagedTurnStyle)"))
+        XCTAssertTrue(controlsSource.contains("case .pageCurl:\n            .pageCurl"))
         XCTAssertTrue(controlsSource.contains("case .quickFade:\n            .quickFade"))
-        XCTAssertTrue(controlsSource.contains("self != .pageCurl"))
+        XCTAssertTrue(controlsSource.contains("var isSelectable: Bool {\n        true"))
         XCTAssertTrue(sectionsSource.contains("let onReadingModeChange: (ReaderReadingMode, ReaderPagedTurnStyle) -> Void"))
         XCTAssertTrue(viewsSource.contains("private func setReadingMode(_ value: ReaderReadingMode, pagedTurnStyle: ReaderPagedTurnStyle)"))
         XCTAssertTrue(viewsSource.contains("draftSettings.pagedTurnStyle = pagedTurnStyle"))
@@ -1210,6 +1295,19 @@ private func readerSettingsSources() throws -> String {
         "Sources/YamiboReaderUI/Features/NovelReader/Settings/ReaderSettingsSections.swift",
         "Sources/YamiboReaderUI/Features/NovelReader/Settings/ReaderSettingsControls.swift",
     ])
+}
+
+private func makePageCurlSurfaces(count: Int) -> [NovelReaderSurface] {
+    (0 ..< count).map { index in
+        NovelReaderSurface(
+            identity: NovelReaderSurfaceIdentity(generation: 1, ordinal: index),
+            presentationIndex: index,
+            kind: .text,
+            documentView: 1,
+            chapterTitle: nil,
+            presentationSize: CGSize(width: 320, height: 480)
+        )
+    }
 }
 
 private func joinedSourceFiles(_ relativePaths: [String]) throws -> String {
