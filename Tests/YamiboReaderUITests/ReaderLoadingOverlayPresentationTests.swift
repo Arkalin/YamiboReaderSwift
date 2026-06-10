@@ -51,6 +51,32 @@ final class ReaderLoadingOverlayPresentationTests: XCTestCase {
         XCTAssertEqual(presentation.reason, .verticalRestore)
     }
 
+    func testReaderPageDocumentNavigationPresentsOverlayOverExistingSurfaces() {
+        let presentation = ReaderLoadingOverlayPresentation(
+            isLoading: true,
+            hasSurfaces: true,
+            isApplyingAppearanceSettings: false,
+            isNavigatingReaderPageDocument: true,
+            shouldConcealViewportContent: false
+        )
+
+        XCTAssertEqual(presentation.reason, .readerPageDocumentNavigation)
+        XCTAssertTrue(presentation.isPresented)
+        XCTAssertFalse(presentation.allowsChrome)
+    }
+
+    func testVerticalRestoreTakesPriorityOverReaderPageDocumentNavigation() {
+        let presentation = ReaderLoadingOverlayPresentation(
+            isLoading: true,
+            hasSurfaces: true,
+            isApplyingAppearanceSettings: false,
+            isNavigatingReaderPageDocument: true,
+            shouldConcealViewportContent: true
+        )
+
+        XCTAssertEqual(presentation.reason, .verticalRestore)
+    }
+
     func testNoLoadingStateDoesNotPresentOverlay() {
         let presentation = ReaderLoadingOverlayPresentation(
             isLoading: false,

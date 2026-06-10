@@ -4,6 +4,7 @@ import YamiboReaderCore
 @MainActor
 public final class ReaderContainerModel: ObservableObject {
     @Published public private(set) var isLoading = false
+    @Published public private(set) var isNavigatingReaderPageDocument = false
     @Published public private(set) var isApplyingAppearanceSettings = false
     @Published public private(set) var errorMessage: String?
     @Published public private(set) var cachedViews: Set<Int> = []
@@ -34,6 +35,11 @@ public final class ReaderContainerModel: ObservableObject {
     private var chapterDirectoryAnchors: [Int: NovelChapterAnchor] = [:]
     private let runtimeAdapter: (any NovelTextLayoutRuntimeAdapter)?
     package var runtimeUpdatePreparation: NovelReadingWorkflowRuntimeUpdatePreparation = { $0 }
+    package var readerPageDocumentNavigationOverlayPreparation: (@MainActor () async -> Void) = {
+        await Task.yield()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+    }
+    package var readerPageDocumentNavigationStateDidChange: (@MainActor (Bool) -> Void)?
     private let progressSync: ProgressSyncModule
     private lazy var chapterCommentsModule = ReaderChapterCommentsModule(
         adapter: ReaderChapterCommentsModule.Adapter(
@@ -456,11 +462,21 @@ public final class ReaderContainerModel: ObservableObject {
 
         if delta > 0,
            readingWorkflow?.canPromotePrefetchedDocument(forView: target) == true {
-            await promotePrefetchedDocument(startingAt: 0)
+            await promotePrefetchedDocument(
+                startingAt: 0,
+                preferredResumePoint: nil,
+                showsReaderPageDocumentNavigationOverlay: true
+            )
             return
         }
 
-        await load(view: target, preferredSurfaceOrdinal: 0, preferredResumePoint: nil, forceRefresh: false)
+        await load(
+            view: target,
+            preferredSurfaceOrdinal: 0,
+            preferredResumePoint: nil,
+            forceRefresh: false,
+            showsReaderPageDocumentNavigationOverlay: true
+        )
     }
 
     public func commitNovelTextAppearance(_ newSettings: ReaderAppearanceSettings) async {
@@ -643,9 +659,19 @@ public final class ReaderContainerModel: ObservableObject {
                 await prefetchIfNeeded(for: selectedSurfaceIndex)
             }
         case let .loadView(view, preferredSurfaceOrdinal, resumePoint):
-            await load(view: view, preferredSurfaceOrdinal: preferredSurfaceOrdinal, preferredResumePoint: resumePoint, forceRefresh: false)
+            await load(
+                view: view,
+                preferredSurfaceOrdinal: preferredSurfaceOrdinal,
+                preferredResumePoint: resumePoint,
+                forceRefresh: false,
+                showsReaderPageDocumentNavigationOverlay: true
+            )
         case let .promotePrefetched(preferredSurfaceOrdinal, resumePoint):
-            await promotePrefetchedDocument(startingAt: preferredSurfaceOrdinal, preferredResumePoint: resumePoint)
+            await promotePrefetchedDocument(
+                startingAt: preferredSurfaceOrdinal,
+                preferredResumePoint: resumePoint,
+                showsReaderPageDocumentNavigationOverlay: true
+            )
         }
     }
 
@@ -664,7 +690,11 @@ public final class ReaderContainerModel: ObservableObject {
         let clampedView = max(1, min(maxView, view))
 
         if readingWorkflow?.canPromotePrefetchedDocument(forView: clampedView) == true {
-            await promotePrefetchedDocument(startingAt: preferredSurfaceOrdinal, preferredResumePoint: nil)
+            await promotePrefetchedDocument(
+                startingAt: preferredSurfaceOrdinal,
+                preferredResumePoint: nil,
+                showsReaderPageDocumentNavigationOverlay: true
+            )
             return
         }
 
@@ -673,7 +703,13 @@ public final class ReaderContainerModel: ObservableObject {
             return
         }
 
-        await load(view: clampedView, preferredSurfaceOrdinal: preferredSurfaceOrdinal, preferredResumePoint: nil, forceRefresh: false)
+        await load(
+            view: clampedView,
+            preferredSurfaceOrdinal: preferredSurfaceOrdinal,
+            preferredResumePoint: nil,
+            forceRefresh: false,
+            showsReaderPageDocumentNavigationOverlay: true
+        )
     }
 
     public func resetChapterDirectoryBrowsing() {
@@ -730,10 +766,13 @@ public final class ReaderContainerModel: ObservableObject {
                 view: targetView,
                 preferredSurfaceOrdinal: 0,
                 preferredResumePoint: nil,
-                forceRefresh: false
+                forceRefresh: false,
+                showsReaderPageDocumentNavigationOverlay: true
             )
             return
         }
+        await beginReaderPageDocumentNavigation()
+        defer { setReaderPageDocumentNavigation(false) }
         isLoading = true
         errorMessage = nil
         do {
@@ -859,9 +898,18 @@ public final class ReaderContainerModel: ObservableObject {
         view: Int,
         preferredSurfaceOrdinal: Int,
         preferredResumePoint: ReaderResumePoint?,
-        forceRefresh: Bool
+        forceRefresh: Bool,
+        showsReaderPageDocumentNavigationOverlay: Bool = false
     ) async {
         guard let workflow = await ensureReadingWorkflow() else { return }
+        if showsReaderPageDocumentNavigationOverlay {
+            await beginReaderPageDocumentNavigation()
+        }
+        defer {
+            if showsReaderPageDocumentNavigationOverlay {
+                setReaderPageDocumentNavigation(false)
+            }
+        }
         isLoading = true
         errorMessage = nil
         do {
@@ -972,6 +1020,17 @@ public final class ReaderContainerModel: ObservableObject {
         syncCachedViews(state.cachedViews)
     }
 
+    private func beginReaderPageDocumentNavigation() async {
+        setReaderPageDocumentNavigation(true)
+        await readerPageDocumentNavigationOverlayPreparation()
+    }
+
+    private func setReaderPageDocumentNavigation(_ isNavigating: Bool) {
+        guard isNavigatingReaderPageDocument != isNavigating else { return }
+        isNavigatingReaderPageDocument = isNavigating
+        readerPageDocumentNavigationStateDidChange?(isNavigating)
+    }
+
     private func prefetchIfNeeded(for surfaceIndex: Int) async {
         guard let workflow = await ensureReadingWorkflow(),
               let presentation = readerPresentation,
@@ -1034,7 +1093,11 @@ public final class ReaderContainerModel: ObservableObject {
            isAtPagedDocumentEnd,
            readingWorkflow?.canPromotePrefetchedDocument(forView: currentView + 1) == true {
             Task {
-                await promotePrefetchedDocument(startingAt: 0, preferredResumePoint: nil)
+                await promotePrefetchedDocument(
+                    startingAt: 0,
+                    preferredResumePoint: nil,
+                    showsReaderPageDocumentNavigationOverlay: true
+                )
             }
         }
     }
@@ -1168,7 +1231,19 @@ public final class ReaderContainerModel: ObservableObject {
         await promotePrefetchedDocument(startingAt: preferredSurfaceOrdinal, preferredResumePoint: nil)
     }
 
-    private func promotePrefetchedDocument(startingAt preferredSurfaceOrdinal: Int, preferredResumePoint: ReaderResumePoint?) async {
+    private func promotePrefetchedDocument(
+        startingAt preferredSurfaceOrdinal: Int,
+        preferredResumePoint: ReaderResumePoint?,
+        showsReaderPageDocumentNavigationOverlay: Bool = false
+    ) async {
+        if showsReaderPageDocumentNavigationOverlay {
+            await beginReaderPageDocumentNavigation()
+        }
+        defer {
+            if showsReaderPageDocumentNavigationOverlay {
+                setReaderPageDocumentNavigation(false)
+            }
+        }
         do {
             guard let workflowState = try await readingWorkflow?.promotePrefetchedDocument(
                 preferredSurfaceOrdinal: preferredSurfaceOrdinal,

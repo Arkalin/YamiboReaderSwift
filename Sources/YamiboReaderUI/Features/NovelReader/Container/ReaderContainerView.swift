@@ -470,6 +470,7 @@ public struct ReaderContainerView: View {
             hasSurfaces: !model.readerSurfaces.isEmpty,
             hasInitialLoadError: model.errorMessage != nil,
             isApplyingAppearanceSettings: model.isApplyingAppearanceSettings,
+            isNavigatingReaderPageDocument: model.isNavigatingReaderPageDocument,
             shouldConcealViewportContent: verticalRestoreController.shouldConcealViewportContent
         )
     }

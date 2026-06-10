@@ -3,6 +3,7 @@ import Foundation
 enum ReaderLoadingOverlayReason: Equatable, Sendable {
     case appearanceSettingsApply
     case verticalRestore
+    case readerPageDocumentNavigation
     case initialContentLoad
 }
 
@@ -14,12 +15,15 @@ struct ReaderLoadingOverlayPresentation: Equatable, Sendable {
         hasSurfaces: Bool,
         hasInitialLoadError: Bool = false,
         isApplyingAppearanceSettings: Bool,
+        isNavigatingReaderPageDocument: Bool = false,
         shouldConcealViewportContent: Bool
     ) {
         if isApplyingAppearanceSettings {
             reason = .appearanceSettingsApply
         } else if shouldConcealViewportContent {
             reason = .verticalRestore
+        } else if isNavigatingReaderPageDocument {
+            reason = .readerPageDocumentNavigation
         } else if isLoading && !hasSurfaces && !hasInitialLoadError {
             reason = .initialContentLoad
         } else {
