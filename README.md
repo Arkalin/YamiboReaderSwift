@@ -56,8 +56,6 @@
 - 支持阅读缓存、漫画图片缓存、目录缓存与设置存储
 - 提供应用数据重置、小说缓存清理、漫画缓存清理与本地 Web 数据清理能力
 
-## 运行与验证
-
 ## 下载
 
 访问 [releases](https://github.com/Arkalin/YamiboReaderSwift/releases) 并获得最新的 `.ipa`.
@@ -65,6 +63,8 @@
 <a href="https://celloserenity.github.io/altdirect/?url=https://raw.githubusercontent.com/Arkalin/YamiboReaderSwift/main/app-repo.json" target="_blank">
    <img src="https://github.com/CelloSerenity/altdirect/blob/main/assets/png/AltSource_Blue.png?raw=true" alt="Add AltSource" width="200">
 </a>
+
+## 运行与验证
 
 ### 环境要求
 
