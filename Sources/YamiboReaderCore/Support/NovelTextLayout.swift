@@ -410,11 +410,19 @@ public enum NovelTextLayout {
         layout: ReaderContainerLayout
     ) -> NovelTextLayoutFingerprints {
         let semanticPayload = annotatedSegments.map { segment in
+            let inlineStyles = (segment.semantics?.inlineTextStyles ?? []).map { inlineStyle in
+                [
+                    inlineStyle.style.rawValue,
+                    String(inlineStyle.range.location),
+                    String(inlineStyle.range.length),
+                ].joined(separator: ":")
+            }.joined(separator: ",")
             return [
                 String(segment.index),
                 segment.semantics?.chapterIdentity?.rawValue ?? "",
                 segment.semantics?.textSegmentIdentity?.rawValue ?? "",
                 segment.chapterTitle ?? "",
+                inlineStyles,
                 segment.textContent,
             ].joined(separator: "\u{1f}")
         }.joined(separator: "\u{1e}")
@@ -512,6 +520,7 @@ public enum NovelTextLayout {
         var composedText = ""
         var textRangesBySegment: [Int: ReaderRenderedTextRange] = [:]
         var insertedSeparatorRanges: [ReaderRenderedTextRange] = []
+        var inlineTextStylesBySegment: [Int: [ReaderInlineTextStyleRange]] = [:]
         var externalBlocks: [NovelTextViewportExternalBlock] = []
         var lastTextSegmentIndex: Int?
 
@@ -538,6 +547,10 @@ public enum NovelTextLayout {
                     startOffset: startOffset,
                     endOffset: composedText.count
                 )
+                if let inlineTextStyles = annotatedSegment.semantics?.inlineTextStyles,
+                   !inlineTextStyles.isEmpty {
+                    inlineTextStylesBySegment[annotatedSegment.index] = inlineTextStyles
+                }
                 lastTextSegmentIndex = annotatedSegment.index
 
             case let .image(url, _):
@@ -566,7 +579,8 @@ public enum NovelTextLayout {
             document: NovelTextViewportDocument(
                 text: composedText,
                 textRangesBySegment: textRangesBySegment,
-                insertedSeparatorRanges: insertedSeparatorRanges
+                insertedSeparatorRanges: insertedSeparatorRanges,
+                inlineTextStylesBySegment: inlineTextStylesBySegment
             ),
             externalBlocks: externalBlocks,
             diagnostics: NovelTextViewportDiagnostics(indexBuildCount: 1)
@@ -687,19 +701,25 @@ public enum NovelTextLayout {
         for (index, input) in segmentInputs {
             let (segment, semanticAndSource) = input
             let (semantics, source) = semanticAndSource
-            guard let transformedSegment = transformedSegment(from: segment, settings: settings) else {
+            guard let transformed = transformedSegment(
+                from: segment,
+                semantics: semantics,
+                settings: settings
+            ) else {
                 continue
             }
+            let transformedSegment = transformed.segment
+            let transformedSemantics = transformed.semantics
             let explicitChapterTitle = segment.chapterTitle?.trimmingCharacters(in: .whitespacesAndNewlines)
             let semanticChapterIdentity: NovelChapterIdentity? = if case .image = segment,
-                semantics?.textSegmentIdentity == nil,
+                transformedSemantics?.textSegmentIdentity == nil,
                 let explicitChapterTitle,
                 !explicitChapterTitle.isEmpty,
                 explicitChapterTitle == currentChapterTitle,
                 let currentChapterIdentity {
                 currentChapterIdentity
             } else {
-                semantics?.chapterIdentity
+                transformedSemantics?.chapterIdentity
             }
 
             if let semanticChapterIdentity, !semanticChapterIdentity.rawValue.isEmpty {
@@ -724,7 +744,7 @@ public enum NovelTextLayout {
                 NovelAnnotatedSegment(
                     index: index,
                     segment: transformedSegment,
-                    semantics: semantics,
+                    semantics: transformedSemantics,
                     source: source,
                     chapterOrdinal: currentChapterOrdinal,
                     chapterTitle: currentChapterTitle
@@ -737,15 +757,85 @@ public enum NovelTextLayout {
 
     private static func transformedSegment(
         from segment: ReaderSegment,
+        semantics: ReaderSegmentSemantics?,
         settings: ReaderAppearanceSettings
-    ) -> ReaderSegment? {
+    ) -> (segment: ReaderSegment, semantics: ReaderSegmentSemantics?)? {
         switch segment {
         case let .text(text, chapterTitle):
-            let transformed = ReaderTextTransformer.transform(text, mode: settings.translationMode)
-            return .text(transformed, chapterTitle: chapterTitle)
+            let transformed = transformTextAndInlineStyles(
+                text: text,
+                inlineTextStyles: semantics?.inlineTextStyles ?? [],
+                mode: settings.translationMode
+            )
+            var transformedSemantics = semantics
+            transformedSemantics?.inlineTextStyles = transformed.inlineTextStyles
+            return (.text(transformed.text, chapterTitle: chapterTitle), transformedSemantics)
         case let .image(url, chapterTitle):
-            return settings.loadsInlineImages ? .image(url, chapterTitle: chapterTitle) : nil
+            return settings.loadsInlineImages ? (.image(url, chapterTitle: chapterTitle), semantics) : nil
         }
+    }
+
+    private static func transformTextAndInlineStyles(
+        text: String,
+        inlineTextStyles: [ReaderInlineTextStyleRange],
+        mode: ReaderTranslationMode
+    ) -> (text: String, inlineTextStyles: [ReaderInlineTextStyleRange]) {
+        guard mode != .none, !inlineTextStyles.isEmpty else {
+            return (ReaderTextTransformer.transform(text, mode: mode), inlineTextStyles)
+        }
+
+        let sortedStyles = inlineTextStyles.sorted {
+            if $0.range.location != $1.range.location {
+                return $0.range.location < $1.range.location
+            }
+            return $0.range.length < $1.range.length
+        }
+        var output = ""
+        var transformedStyles: [ReaderInlineTextStyleRange] = []
+        var cursor = 0
+
+        for inlineStyle in sortedStyles {
+            let start = min(max(inlineStyle.range.location, cursor), text.count)
+            let end = min(max(inlineStyle.range.upperBound, start), text.count)
+            if start > cursor {
+                output += ReaderTextTransformer.transform(
+                    substring(in: text, range: cursor ..< start),
+                    mode: mode
+                )
+            }
+            let transformedStart = output.count
+            output += ReaderTextTransformer.transform(
+                substring(in: text, range: start ..< end),
+                mode: mode
+            )
+            let transformedEnd = output.count
+            if transformedEnd > transformedStart {
+                transformedStyles.append(
+                    ReaderInlineTextStyleRange(
+                        style: inlineStyle.style,
+                        range: ReaderCharacterRange(
+                            location: transformedStart,
+                            length: transformedEnd - transformedStart
+                        )
+                    )
+                )
+            }
+            cursor = end
+        }
+
+        if cursor < text.count {
+            output += ReaderTextTransformer.transform(
+                substring(in: text, range: cursor ..< text.count),
+                mode: mode
+            )
+        }
+        return (output, transformedStyles)
+    }
+
+    private static func substring(in text: String, range: Range<Int>) -> String {
+        let lower = text.index(text.startIndex, offsetBy: range.lowerBound)
+        let upper = text.index(text.startIndex, offsetBy: range.upperBound)
+        return String(text[lower..<upper])
     }
 
     private static func chapterCommentTarget(

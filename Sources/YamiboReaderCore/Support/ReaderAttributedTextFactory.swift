@@ -158,6 +158,7 @@ public enum ReaderAttributedTextFactory {
                 makeAttributedText(
                     text: text,
                     chapterTitleRange: annotatedSegment.semantics?.chapterTitleRange,
+                    inlineTextStyles: annotatedSegment.semantics?.inlineTextStyles ?? [],
                     settings: preparedInput.settings
                 )
             )
@@ -247,6 +248,7 @@ public enum ReaderAttributedTextFactory {
     static func makeAttributedText(
         text: String,
         chapterTitleRange: ReaderCharacterRange?,
+        inlineTextStyles: [ReaderInlineTextStyleRange] = [],
         startsAtParagraphBoundary: Bool = true,
         settings: ReaderAppearanceSettings,
         baseFontSize: Double = defaultBaseFontSize,
@@ -298,6 +300,13 @@ public enum ReaderAttributedTextFactory {
         if let titleRange = titleRange(from: chapterTitleRange, in: text) {
             rendered.addAttributes(titleAttributes, range: titleRange)
         }
+        applyInlineTextStyles(
+            inlineTextStyles,
+            to: rendered,
+            text: text,
+            settings: settings,
+            pointSize: pointSize
+        )
 
         return rendered
     }
@@ -355,6 +364,38 @@ public enum ReaderAttributedTextFactory {
             return nil
         }
         return NSRange(location: chapterTitleRange.location, length: chapterTitleRange.length)
+    }
+
+    private static func applyInlineTextStyles(
+        _ inlineTextStyles: [ReaderInlineTextStyleRange],
+        to rendered: NSMutableAttributedString,
+        text: String,
+        settings: ReaderAppearanceSettings,
+        pointSize: Double
+    ) {
+        for inlineStyle in inlineTextStyles {
+            guard inlineStyle.style == .bold,
+                  let range = textRange(from: inlineStyle.range, in: text) else {
+                continue
+            }
+            rendered.addAttribute(
+                .font,
+                value: settings.fontFamily.platformFont(size: pointSize, weight: .bold),
+                range: range
+            )
+        }
+    }
+
+    private static func textRange(
+        from range: ReaderCharacterRange,
+        in text: String
+    ) -> NSRange? {
+        guard range.length > 0,
+              range.location >= 0,
+              range.upperBound <= text.count else {
+            return nil
+        }
+        return NSRange(location: range.location, length: range.length)
     }
 }
 

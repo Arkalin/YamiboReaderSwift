@@ -109,19 +109,63 @@ public struct ReaderCharacterRange: Codable, Hashable, Sendable {
     }
 }
 
-public struct ReaderSegmentSemantics: Codable, Hashable, Sendable {
+public enum ReaderInlineTextStyle: String, Codable, Hashable, Sendable {
+    case bold
+}
+
+public struct ReaderInlineTextStyleRange: Codable, Hashable, Sendable {
+    public var style: ReaderInlineTextStyle
+    public var range: ReaderCharacterRange
+
+    public init(style: ReaderInlineTextStyle, range: ReaderCharacterRange) {
+        self.style = style
+        self.range = range
+    }
+}
+
+public struct ReaderSegmentSemantics: Hashable, Sendable {
     public var chapterIdentity: NovelChapterIdentity?
     public var textSegmentIdentity: NovelTextSegmentIdentity?
     public var chapterTitleRange: ReaderCharacterRange?
+    public var inlineTextStyles: [ReaderInlineTextStyleRange]
 
     public init(
         chapterIdentity: NovelChapterIdentity? = nil,
         textSegmentIdentity: NovelTextSegmentIdentity? = nil,
-        chapterTitleRange: ReaderCharacterRange? = nil
+        chapterTitleRange: ReaderCharacterRange? = nil,
+        inlineTextStyles: [ReaderInlineTextStyleRange] = []
     ) {
         self.chapterIdentity = chapterIdentity
         self.textSegmentIdentity = textSegmentIdentity
         self.chapterTitleRange = chapterTitleRange
+        self.inlineTextStyles = inlineTextStyles
+    }
+}
+
+extension ReaderSegmentSemantics: Codable {
+    private enum CodingKeys: String, CodingKey {
+        case chapterIdentity
+        case textSegmentIdentity
+        case chapterTitleRange
+        case inlineTextStyles
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            chapterIdentity: try container.decodeIfPresent(NovelChapterIdentity.self, forKey: .chapterIdentity),
+            textSegmentIdentity: try container.decodeIfPresent(NovelTextSegmentIdentity.self, forKey: .textSegmentIdentity),
+            chapterTitleRange: try container.decodeIfPresent(ReaderCharacterRange.self, forKey: .chapterTitleRange),
+            inlineTextStyles: try container.decodeIfPresent([ReaderInlineTextStyleRange].self, forKey: .inlineTextStyles) ?? []
+        )
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encodeIfPresent(chapterIdentity, forKey: .chapterIdentity)
+        try container.encodeIfPresent(textSegmentIdentity, forKey: .textSegmentIdentity)
+        try container.encodeIfPresent(chapterTitleRange, forKey: .chapterTitleRange)
+        try container.encode(inlineTextStyles, forKey: .inlineTextStyles)
     }
 }
 
@@ -414,11 +458,26 @@ extension ReaderPageDocument {
                         )
                     }
                 }
+                for inlineStyle in semantics?.inlineTextStyles ?? [] {
+                    let range = inlineStyle.range
+                    guard range.location >= 0,
+                          range.length >= 0,
+                          range.upperBound <= text.count else {
+                        throw DecodingError.dataCorrupted(
+                            DecodingError.Context(codingPath: [], debugDescription: "Inline text style range is outside segment text.")
+                        )
+                    }
+                }
 
             case .image:
                 if semantics?.textSegmentIdentity != nil {
                     throw DecodingError.dataCorrupted(
                         DecodingError.Context(codingPath: [], debugDescription: "Image segment cannot carry a text segment identity.")
+                    )
+                }
+                if semantics?.inlineTextStyles.isEmpty == false {
+                    throw DecodingError.dataCorrupted(
+                        DecodingError.Context(codingPath: [], debugDescription: "Image segment cannot carry inline text styles.")
                     )
                 }
             }
@@ -1332,15 +1391,18 @@ package struct NovelTextViewportDocument: Hashable, Sendable {
     public var text: String
     public var textRangesBySegment: [Int: ReaderRenderedTextRange]
     public var insertedSeparatorRanges: [ReaderRenderedTextRange]
+    public var inlineTextStylesBySegment: [Int: [ReaderInlineTextStyleRange]]
 
     public init(
         text: String,
         textRangesBySegment: [Int: ReaderRenderedTextRange],
-        insertedSeparatorRanges: [ReaderRenderedTextRange]
+        insertedSeparatorRanges: [ReaderRenderedTextRange],
+        inlineTextStylesBySegment: [Int: [ReaderInlineTextStyleRange]] = [:]
     ) {
         self.text = text
         self.textRangesBySegment = textRangesBySegment
         self.insertedSeparatorRanges = insertedSeparatorRanges
+        self.inlineTextStylesBySegment = inlineTextStylesBySegment
     }
 }
 
