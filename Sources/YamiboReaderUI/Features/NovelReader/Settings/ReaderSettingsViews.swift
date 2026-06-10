@@ -9,18 +9,9 @@ struct ReaderSettingsPanel: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
     @State private var draftSettings = ReaderAppearanceSettings()
-    @State private var draftApplePencilPageTurnSettings = ApplePencilPageTurnSettings()
     @State private var hasLoadedDraft = false
     private static let fallbackPreviewText = L10n.string("reader.settings.preview_fallback")
     private static let previewCharacterCount = 200
-
-    private var showsApplePencilSection: Bool {
-#if os(iOS)
-        UIDevice.current.userInterfaceIdiom == .pad && draftSettings.readingMode == .paged
-#else
-        false
-#endif
-    }
 
     private var showsTwoPageToggle: Bool {
 #if os(iOS)
@@ -129,18 +120,6 @@ struct ReaderSettingsPanel: View {
                     loadsInlineImages: draftSettings.loadsInlineImages,
                     onLoadsInlineImagesChange: setImageLoading
                 )
-
-                if showsApplePencilSection {
-                    ReaderBooksApplePencilSection(
-                        settings: draftApplePencilPageTurnSettings,
-                        palette: palette,
-                        isEnabled: Binding(
-                            get: { draftApplePencilPageTurnSettings.isEnabled },
-                            set: { draftApplePencilPageTurnSettings.isEnabled = $0 }
-                        ),
-                        onBehaviorChange: setApplePencilPageTurnBehavior
-                    )
-                }
             }
             .padding(.top, 24)
             .padding(.horizontal, 20)
@@ -152,19 +131,14 @@ struct ReaderSettingsPanel: View {
     private func loadDraftIfNeeded() {
         guard !hasLoadedDraft else { return }
         draftSettings = model.settings
-        draftApplePencilPageTurnSettings = model.applePencilPageTurnSettings
         hasLoadedDraft = true
     }
 
     private func commitDraft() {
         let committedSettings = draftSettings
-        let committedApplePencilPageTurnSettings = draftApplePencilPageTurnSettings
         dismiss()
         Task {
-            await model.commitNovelTextAppearance(
-                committedSettings,
-                applePencilPageTurnSettings: committedApplePencilPageTurnSettings
-            )
+            await model.commitNovelTextAppearance(committedSettings)
         }
     }
 
@@ -182,9 +156,6 @@ struct ReaderSettingsPanel: View {
     }
     private func setTranslationMode(_ value: ReaderTranslationMode) { draftSettings.translationMode = value }
     private func setImageLoading(_ value: Bool) { draftSettings.loadsInlineImages = value }
-    private func setApplePencilPageTurnBehavior(_ value: ApplePencilPageTurnBehavior) {
-        draftApplePencilPageTurnSettings.behavior = value
-    }
 }
 
 #endif

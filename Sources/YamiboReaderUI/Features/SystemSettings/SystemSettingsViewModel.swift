@@ -6,6 +6,7 @@ final class SystemSettingsViewModel: ObservableObject {
     @Published var homePage: AppHomePage = .forum
     @Published var showsNavigationBar = true
     @Published var favoriteAppearance = FavoriteAppearanceSettings()
+    @Published var applePencilPageTurn = ApplePencilPageTurnSettings()
     @Published private(set) var novelCacheBytes = 0
     @Published private(set) var mangaCacheBytes = 0
     @Published private(set) var activeAction: SystemSettingsAction?
@@ -37,6 +38,7 @@ final class SystemSettingsViewModel: ObservableObject {
         homePage = settings.homePage
         showsNavigationBar = settings.webBrowser.showsNavigationBar
         favoriteAppearance = settings.favoriteAppearance
+        applePencilPageTurn = settings.applePencilPageTurn
         await refreshStorageUsage()
     }
 
@@ -101,6 +103,18 @@ final class SystemSettingsViewModel: ObservableObject {
         }
     }
 
+    func updateApplePencilPageTurnEnabled(_ isEnabled: Bool) {
+        var updated = applePencilPageTurn
+        updated.isEnabled = isEnabled
+        updateApplePencilPageTurn(updated)
+    }
+
+    func updateApplePencilPageTurnBehavior(_ behavior: ApplePencilPageTurnBehavior) {
+        var updated = applePencilPageTurn
+        updated.behavior = behavior
+        updateApplePencilPageTurn(updated)
+    }
+
     func clearNovelCache() async -> Bool {
         activeAction = .clearingNovelCache
         defer { activeAction = nil }
@@ -138,6 +152,7 @@ final class SystemSettingsViewModel: ObservableObject {
             homePage = .forum
             showsNavigationBar = true
             favoriteAppearance = .init()
+            applePencilPageTurn = .init()
             novelCacheBytes = 0
             mangaCacheBytes = 0
             return true
@@ -157,5 +172,26 @@ final class SystemSettingsViewModel: ObservableObject {
     private func cacheLabel(for bytes: Int) -> String {
         let megabytes = Double(max(0, bytes)) / 1_048_576
         return String(format: "%.2f MB", megabytes)
+    }
+
+    private func updateApplePencilPageTurn(_ updated: ApplePencilPageTurnSettings) {
+        let previous = applePencilPageTurn
+        applePencilPageTurn = updated
+
+        Task {
+            var settings = await appContext.settingsStore.load()
+            settings.applePencilPageTurn = updated
+
+            do {
+                try await appContext.settingsStore.save(settings)
+            } catch {
+                await MainActor.run {
+                    if applePencilPageTurn == updated {
+                        applePencilPageTurn = previous
+                    }
+                    errorMessage = error.localizedDescription
+                }
+            }
+        }
     }
 }
