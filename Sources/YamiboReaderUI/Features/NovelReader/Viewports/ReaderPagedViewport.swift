@@ -68,37 +68,11 @@ enum ReaderPagedPageTurnBackground {
         traitCollection: UITraitCollection,
         overlayAlpha: CGFloat
     ) -> UIColor {
-        let base = pageColor(
+        let base = readerThemeUIColor(
             for: settings.backgroundStyle,
-            isDarkMode: traitCollection.userInterfaceStyle == .dark
+            traitCollection: traitCollection
         )
         return blend(base: base, overlay: .black, alpha: min(max(overlayAlpha, 0), 1))
-    }
-
-    private static func pageColor(for style: ReaderBackgroundStyle, isDarkMode: Bool) -> UIColor {
-        if isDarkMode {
-            switch style {
-            case .system:
-                return UIColor(red: 0.15, green: 0.16, blue: 0.18, alpha: 1)
-            case .paper:
-                return UIColor(red: 0.21, green: 0.19, blue: 0.16, alpha: 1)
-            case .mint:
-                return UIColor(red: 0.14, green: 0.18, blue: 0.16, alpha: 1)
-            case .sakura:
-                return UIColor(red: 0.19, green: 0.16, blue: 0.18, alpha: 1)
-            }
-        }
-
-        switch style {
-        case .system:
-            return UIColor(red: 0.95, green: 0.94, blue: 0.91, alpha: 1)
-        case .paper:
-            return UIColor(red: 0.945, green: 0.882, blue: 0.769, alpha: 1)
-        case .mint:
-            return UIColor(red: 0.92, green: 0.97, blue: 0.93, alpha: 1)
-        case .sakura:
-            return UIColor(red: 0.97, green: 0.92, blue: 0.93, alpha: 1)
-        }
     }
 
     private static func blend(base: UIColor, overlay: UIColor, alpha: CGFloat) -> UIColor {

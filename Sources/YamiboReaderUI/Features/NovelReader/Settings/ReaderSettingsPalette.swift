@@ -81,31 +81,63 @@ private extension Color {
     }
 }
 
-func readerThemeColor(for style: ReaderBackgroundStyle, colorScheme: ColorScheme) -> Color {
-    let isNightMode = colorScheme == .dark
-    if isNightMode {
+private struct ReaderThemeColorComponents {
+    let red: Double
+    let green: Double
+    let blue: Double
+    let alpha: Double
+
+    var color: Color {
+        Color(red: red, green: green, blue: blue, opacity: alpha)
+    }
+
+    var uiColor: UIColor {
+        UIColor(red: CGFloat(red), green: CGFloat(green), blue: CGFloat(blue), alpha: CGFloat(alpha))
+    }
+}
+
+private func readerThemeColorComponents(
+    for style: ReaderBackgroundStyle,
+    colorScheme: ColorScheme
+) -> ReaderThemeColorComponents {
+    if colorScheme == .dark {
         switch style {
         case .system:
-            return Color(red: 0.15, green: 0.16, blue: 0.18)
+            return ReaderThemeColorComponents(red: 0.15, green: 0.16, blue: 0.18, alpha: 1)
         case .paper:
-            return Color(red: 0.21, green: 0.19, blue: 0.16)
+            return ReaderThemeColorComponents(red: 0.21, green: 0.19, blue: 0.16, alpha: 1)
         case .mint:
-            return Color(red: 0.14, green: 0.18, blue: 0.16)
+            return ReaderThemeColorComponents(red: 0.14, green: 0.18, blue: 0.16, alpha: 1)
         case .sakura:
-            return Color(red: 0.19, green: 0.16, blue: 0.18)
+            return ReaderThemeColorComponents(red: 0.19, green: 0.16, blue: 0.18, alpha: 1)
         }
     }
 
     switch style {
     case .system:
-        return Color(red: 0.95, green: 0.94, blue: 0.91)
+        return ReaderThemeColorComponents(red: 0.95, green: 0.94, blue: 0.91, alpha: 1)
     case .paper:
-        return Color(red: 0.945, green: 0.882, blue: 0.769)
+        return ReaderThemeColorComponents(red: 0.945, green: 0.882, blue: 0.769, alpha: 1)
     case .mint:
-        return Color(red: 0.92, green: 0.97, blue: 0.93)
+        return ReaderThemeColorComponents(red: 0.92, green: 0.97, blue: 0.93, alpha: 1)
     case .sakura:
-        return Color(red: 0.97, green: 0.92, blue: 0.93)
+        return ReaderThemeColorComponents(red: 0.97, green: 0.92, blue: 0.93, alpha: 1)
     }
+}
+
+func readerThemeColor(for style: ReaderBackgroundStyle, colorScheme: ColorScheme) -> Color {
+    readerThemeColorComponents(for: style, colorScheme: colorScheme).color
+}
+
+func readerThemeUIColor(for style: ReaderBackgroundStyle, colorScheme: ColorScheme) -> UIColor {
+    readerThemeColorComponents(for: style, colorScheme: colorScheme).uiColor
+}
+
+func readerThemeUIColor(for style: ReaderBackgroundStyle, traitCollection: UITraitCollection) -> UIColor {
+    readerThemeUIColor(
+        for: style,
+        colorScheme: traitCollection.userInterfaceStyle == .dark ? .dark : .light
+    )
 }
 
 #endif

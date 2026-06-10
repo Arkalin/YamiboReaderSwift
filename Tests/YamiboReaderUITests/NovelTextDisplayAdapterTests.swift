@@ -106,6 +106,20 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertTrue(pageCurlSource.contains("UIPageViewController(\n            transitionStyle: .pageCurl"))
         XCTAssertTrue(pageCurlSource.contains("return parent.sequence.usesTwoPageSpread ? .mid : .min"))
         XCTAssertTrue(pageCurlSource.contains("pageViewController.isDoubleSided = parent.sequence.usesTwoPageSpread"))
+        XCTAssertTrue(pageCurlSource.contains("@Environment(\\.colorScheme) private var colorScheme"))
+        XCTAssertTrue(pageCurlSource.contains("readerThemeUIColor(for: settings.backgroundStyle, colorScheme: colorScheme)"))
+        XCTAssertTrue(pageCurlSource.contains("pageViewController.view.backgroundColor = pageBackgroundColor"))
+        XCTAssertTrue(pageCurlSource.contains("pageViewController.view.isOpaque = true"))
+        XCTAssertTrue(pageCurlSource.contains("controller.applyPageBackground(pageBackgroundColor)"))
+        XCTAssertTrue(pageCurlSource.contains("private enum ReaderPageCurlPrivateBackColor"))
+        XCTAssertTrue(pageCurlSource.contains("private static let inputBackColor0Key = \"inputBackColor0\""))
+        XCTAssertTrue(pageCurlSource.contains("private static let inputBackColor1Key = \"inputBackColor1\""))
+        XCTAssertTrue(pageCurlSource.contains("filter.setValue(colorComponents, forKey: inputBackColor0Key)"))
+        XCTAssertTrue(pageCurlSource.contains("filter.setValue(colorComponents, forKey: inputBackColor1Key)"))
+        XCTAssertTrue(pageCurlSource.contains("if !parent.sequence.usesTwoPageSpread {\n                ReaderPageCurlPrivateBackColor.apply(to: pageViewController.view, backColor: pageBackgroundColor)\n            }"))
+        XCTAssertTrue(pageCurlSource.contains("guard !parent.sequence.usesTwoPageSpread else {\n                applyPageBackground(to: pageViewController)\n                return\n            }"))
+        XCTAssertTrue(pageCurlSource.contains("CADisplayLink("))
+        XCTAssertTrue(pageCurlSource.contains("startPageCurlBackColorRefresh(in: pageViewController)"))
     }
 
     func testPagedPageTurnVisualMetricsFadeOverlayAsPageApproachesRest() {
@@ -220,6 +234,8 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertTrue(pagingDriverBody.contains("cornerRadius: ReaderPagedPageTurnCornerRadius.radius(for: collectionView.window?.screen)"))
         XCTAssertTrue(pagingDriverBody.contains("collectionView.backgroundColor = ReaderPagedPageTurnBackground.dimmedPageColor"))
         XCTAssertTrue(pagingDriverBody.contains("collectionView.backgroundColor = .clear"))
+        XCTAssertTrue(supportSource.contains("let base = readerThemeUIColor("))
+        XCTAssertFalse(supportSource.contains("private static func pageColor"))
 
         for body in [singlePageBody, spreadBody] {
             XCTAssertTrue(body.contains("ReaderPagedPageTurnCell.self"))
