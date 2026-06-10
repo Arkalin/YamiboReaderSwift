@@ -10,6 +10,13 @@
       "iconURL": "https://raw.githubusercontent.com/Arkalin/YamiboReaderSwift/main/YamiboReader/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png",
       "versions": [
         {
+          "version": "0.4.2",
+          "date": "2026-06-10",
+          "localizedDescription": "新增小说阅读器卷页翻页动画，优化网页切换动画，并调整外设行为设置与手柄控制预留界面，同时修复了一些错误。",
+          "downloadURL": "https://github.com/Arkalin/YamiboReaderSwift/releases/download/v0.4.2/YamiboReader_v0.4.2_unsigned.ipa",
+          "size": 6147637
+        },
+        {
           "version": "0.4.1",
           "date": "2026-06-09",
           "localizedDescription": "新增小说阅读器滑动、淡入淡出翻页动画和小说图片浏览器，调整正文与背景视觉效果，并修复了一些错误。",
