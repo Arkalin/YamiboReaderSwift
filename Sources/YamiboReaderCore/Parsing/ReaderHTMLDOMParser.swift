@@ -116,13 +116,38 @@ enum ReaderHTMLDOMParser {
                 .map { String($0.prefix(30)) }
         )
 
-        let parsedSegments = try orderedSegments(from: body, chapterTitle: chapterTitle)
+        var parsedSegments = try orderedSegments(from: body, chapterTitle: chapterTitle)
+        parsedSegments.append(contentsOf: try siblingAttachmentImageSegments(after: element, chapterTitle: chapterTitle))
         return ParsedMessage(
             segments: parsedSegments.map(\.segment),
             segmentInlineStyles: parsedSegments.map(\.inlineTextStyles),
             chapterTitle: chapterTitle,
             ownerPostID: postID(from: element)
         )
+    }
+
+    private static func siblingAttachmentImageSegments(after element: Element, chapterTitle: String?) throws -> [ParsedSegment] {
+        guard element.hasClass("message") else { return [] }
+
+        var segments: [ParsedSegment] = []
+        var sibling = try element.nextElementSibling()
+        while let candidate = sibling, isAttachmentImageList(candidate) {
+            for image in try candidate.select("img") {
+                guard let url = try imageURL(from: image) else { continue }
+                segments.append(
+                    ParsedSegment(
+                        segment: .image(url, chapterTitle: chapterTitle),
+                        inlineTextStyles: []
+                    )
+                )
+            }
+            sibling = try candidate.nextElementSibling()
+        }
+        return segments
+    }
+
+    private static func isAttachmentImageList(_ element: Element) -> Bool {
+        element.tagName().lowercased() == "ul" && element.hasClass("img_one")
     }
 
     private static func postID(from element: Element) -> String? {
