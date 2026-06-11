@@ -67,18 +67,13 @@ struct FavoriteRow: View {
             .padding(.trailing, 14)
         }
         .frame(maxWidth: .infinity, minHeight: 112, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .fill(.regularMaterial)
+        .favoriteCardSurface(
+            accentColor: accentColor,
+            fallbackFill: .regularMaterial,
+            fallbackBorderOpacity: 0.18,
+            glassTintOpacity: 0.05,
+            isSelected: isSelected
         )
-        .overlay(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .strokeBorder(
-                    isSelected ? Color.accentColor.opacity(0.55) : accentColor.opacity(0.18),
-                    lineWidth: isSelected ? 1.5 : 1
-                )
-        )
-        .shadow(color: .black.opacity(0.04), radius: 8, x: 0, y: 3)
         .contentShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
         .onTapGesture(perform: onOpen)
         .accessibilityAddTraits(.isButton)
@@ -237,15 +232,13 @@ struct FavoriteCollectionRow: View {
             .padding(.trailing, 14)
         }
         .frame(maxWidth: .infinity, minHeight: 112, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .fill(accentColor.opacity(0.08))
+        .favoriteCardSurface(
+            accentColor: accentColor,
+            fallbackFill: accentColor.opacity(0.08),
+            fallbackBorderOpacity: 0.32,
+            glassTintOpacity: 0.1,
+            isSelected: isSelected
         )
-        .overlay(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .strokeBorder(isSelected ? Color.accentColor.opacity(0.55) : accentColor.opacity(0.32), lineWidth: isSelected ? 1.5 : 1)
-        )
-        .shadow(color: .black.opacity(0.04), radius: 8, x: 0, y: 3)
         .contentShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
     }
 
@@ -258,6 +251,102 @@ struct FavoriteCollectionRow: View {
             return L10n.string("favorites.collection_summary_hidden", summary.itemCount, summary.hiddenCount)
         }
         return L10n.string("favorites.collection_summary", summary.itemCount)
+    }
+}
+
+struct FavoriteGlassContainer<Content: View>: View {
+    let spacing: CGFloat
+    @ViewBuilder let content: () -> Content
+
+    init(spacing: CGFloat = 16, @ViewBuilder content: @escaping () -> Content) {
+        self.spacing = spacing
+        self.content = content
+    }
+
+    var body: some View {
+        #if os(iOS)
+        if #available(iOS 26.0, *) {
+            GlassEffectContainer(spacing: spacing) {
+                content()
+            }
+        } else {
+            content()
+        }
+        #else
+        content()
+        #endif
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func favoriteCardSurface<Fill: ShapeStyle>(
+        accentColor: Color,
+        fallbackFill: Fill,
+        fallbackBorderOpacity: Double,
+        glassTintOpacity: Double,
+        isSelected: Bool
+    ) -> some View {
+        #if os(iOS)
+        if #available(iOS 26.0, *) {
+            self
+                .glassEffect(
+                    .regular
+                        .tint(accentColor.opacity(glassTintOpacity))
+                        .interactive(),
+                    in: .rect(cornerRadius: 24)
+                )
+                .favoriteCardBorder(
+                    accentColor: accentColor,
+                    fallbackBorderOpacity: fallbackBorderOpacity,
+                    isSelected: isSelected
+                )
+                .favoriteCardShadow()
+        } else {
+            self
+                .favoriteCardFallbackSurface(fallbackFill)
+                .favoriteCardBorder(
+                    accentColor: accentColor,
+                    fallbackBorderOpacity: fallbackBorderOpacity,
+                    isSelected: isSelected
+                )
+                .favoriteCardShadow()
+        }
+        #else
+        self
+            .favoriteCardFallbackSurface(fallbackFill)
+            .favoriteCardBorder(
+                accentColor: accentColor,
+                fallbackBorderOpacity: fallbackBorderOpacity,
+                isSelected: isSelected
+            )
+            .favoriteCardShadow()
+        #endif
+    }
+
+    func favoriteCardFallbackSurface<Fill: ShapeStyle>(_ fill: Fill) -> some View {
+        background(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .fill(fill)
+        )
+    }
+
+    func favoriteCardBorder(
+        accentColor: Color,
+        fallbackBorderOpacity: Double,
+        isSelected: Bool
+    ) -> some View {
+        overlay {
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .strokeBorder(
+                    isSelected ? Color.accentColor.opacity(0.55) : accentColor.opacity(fallbackBorderOpacity),
+                    lineWidth: isSelected ? 1.5 : 1
+                )
+        }
+    }
+
+    func favoriteCardShadow() -> some View {
+        shadow(color: .black.opacity(0.04), radius: 8, x: 0, y: 3)
     }
 }
 
