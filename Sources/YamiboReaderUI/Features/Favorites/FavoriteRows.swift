@@ -72,10 +72,11 @@ struct FavoriteRow: View {
             fallbackFill: .regularMaterial,
             fallbackBorderOpacity: 0.18,
             glassTintOpacity: 0.05,
+            isInteractive: !isSelecting,
             isSelected: isSelected
         )
         .contentShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .onTapGesture(perform: onOpen)
+        .favoriteCardTapGesture(isEnabled: !isSelecting, perform: onOpen)
         .accessibilityAddTraits(.isButton)
     }
 
@@ -237,6 +238,7 @@ struct FavoriteCollectionRow: View {
             fallbackFill: accentColor.opacity(0.08),
             fallbackBorderOpacity: 0.32,
             glassTintOpacity: 0.1,
+            isInteractive: !isSelecting,
             isSelected: isSelected
         )
         .contentShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
@@ -285,23 +287,29 @@ private extension View {
         fallbackFill: Fill,
         fallbackBorderOpacity: Double,
         glassTintOpacity: Double,
+        isInteractive: Bool,
         isSelected: Bool
     ) -> some View {
         #if os(iOS)
         if #available(iOS 26.0, *) {
-            self
-                .glassEffect(
-                    .regular
-                        .tint(accentColor.opacity(glassTintOpacity))
-                        .interactive(),
-                    in: .rect(cornerRadius: 24)
-                )
-                .favoriteCardBorder(
-                    accentColor: accentColor,
-                    fallbackBorderOpacity: fallbackBorderOpacity,
-                    isSelected: isSelected
-                )
-                .favoriteCardShadow()
+            if isInteractive {
+                self
+                    .glassEffect(
+                        .regular
+                            .tint(accentColor.opacity(glassTintOpacity))
+                            .interactive(),
+                        in: .rect(cornerRadius: 24)
+                    )
+                    .favoriteCardShadow()
+            } else {
+                self
+                    .glassEffect(
+                        .regular
+                            .tint(accentColor.opacity(glassTintOpacity)),
+                        in: .rect(cornerRadius: 24)
+                    )
+                    .favoriteCardShadow()
+            }
         } else {
             self
                 .favoriteCardFallbackSurface(fallbackFill)
@@ -347,6 +355,15 @@ private extension View {
 
     func favoriteCardShadow() -> some View {
         shadow(color: .black.opacity(0.04), radius: 8, x: 0, y: 3)
+    }
+
+    @ViewBuilder
+    func favoriteCardTapGesture(isEnabled: Bool, perform action: @escaping () -> Void) -> some View {
+        if isEnabled {
+            onTapGesture(perform: action)
+        } else {
+            self
+        }
     }
 }
 
