@@ -31,6 +31,8 @@ public final class ReaderContainerModel: ObservableObject {
     private var readingWorkflow: NovelReadingWorkflow?
     private var appearanceSettingsApplicationSequence: UInt64 = 0
     private var layout: ReaderContainerLayout = .zero
+    private var latestRequestedLayout: ReaderContainerLayout = .zero
+    private var layoutRequestSequence: UInt64 = 0
     private var usesPadPresentation = false
     private var chapterDirectoryAnchors: [Int: NovelChapterAnchor] = [:]
     private let runtimeAdapter: (any NovelTextLayoutRuntimeAdapter)?
@@ -365,6 +367,8 @@ public final class ReaderContainerModel: ObservableObject {
 
     public func close() {
         appearanceSettingsApplicationSequence &+= 1
+        layoutRequestSequence &+= 1
+        latestRequestedLayout = layout
         isApplyingAppearanceSettings = false
         readingWorkflow?.close()
         readingWorkflow = nil
@@ -400,6 +404,8 @@ public final class ReaderContainerModel: ObservableObject {
 
     public func prepare(layout: ReaderContainerLayout) async {
         self.layout = layout
+        latestRequestedLayout = layout
+        layoutRequestSequence &+= 1
         if repository == nil {
             repository = await appContext.makeReaderRepository()
             let appSettings = await appContext.settingsStore.load()
@@ -429,7 +435,10 @@ public final class ReaderContainerModel: ObservableObject {
     }
 
     public func commitNovelTextLayout(_ layout: ReaderContainerLayout) async {
-        guard self.layout != layout else { return }
+        guard latestRequestedLayout != layout else { return }
+        latestRequestedLayout = layout
+        layoutRequestSequence &+= 1
+        let requestSequence = layoutRequestSequence
         guard readingWorkflow?.state != nil else {
             self.layout = layout
             return
@@ -439,10 +448,22 @@ public final class ReaderContainerModel: ObservableObject {
                 settings: settings,
                 layout: layout,
                 usesPadPresentation: usesPadPresentation
-            ) else { return }
+            ) else {
+                if layoutRequestSequence == requestSequence {
+                    latestRequestedLayout = self.layout
+                }
+                return
+            }
+            guard layoutRequestSequence == requestSequence else { return }
             self.layout = layout
             syncFromWorkflowState(state)
+        } catch is CancellationError {
+            if layoutRequestSequence == requestSequence {
+                latestRequestedLayout = self.layout
+            }
         } catch {
+            guard layoutRequestSequence == requestSequence else { return }
+            latestRequestedLayout = self.layout
             errorMessage = error.localizedDescription
         }
     }
