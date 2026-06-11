@@ -862,6 +862,7 @@ public struct FavoritesView: View {
                 tagSearchText: searchText,
                 prioritizedTagIDs: selectedFilterTagIDs,
                 accentColor: favoriteAccentColor(for: favorite.type, appearance: viewModel.favoriteAppearance),
+                actionMenu: isSelecting ? nil : AnyView(favoriteActionMenuButton(favorite)),
                 onOpen: {
                     if isSelecting {
                         toggleFavoriteSelection(favorite)
@@ -880,9 +881,6 @@ public struct FavoritesView: View {
                 .buttonStyle(.plain)
             } else {
                 favoriteRow
-                    .overlay(alignment: .topTrailing) {
-                        favoriteActionMenuButton(favorite)
-                    }
             }
         }
     }
@@ -1040,11 +1038,7 @@ public struct FavoritesView: View {
             }
             .disabled(viewModel.deletingFavoriteID != nil)
         } label: {
-            Image(systemName: "ellipsis.circle.fill")
-                .font(.title3)
-                .foregroundStyle(.secondary)
-                .padding(14)
-                .contentShape(Rectangle())
+            favoriteActionMenuIcon
         }
         .buttonStyle(.plain)
         .disabled(viewModel.deletingFavoriteID != nil)
@@ -1114,13 +1108,25 @@ public struct FavoritesView: View {
                 Label(L10n.string("common.delete"), systemImage: "trash")
             }
         } label: {
-            Image(systemName: "ellipsis.circle.fill")
-                .font(.title3)
-                .foregroundStyle(.secondary)
-                .padding(14)
-                .contentShape(Rectangle())
+            favoriteActionMenuIcon
         }
         .buttonStyle(.plain)
+    }
+
+    private var favoriteActionMenuIcon: some View {
+        ZStack {
+            Circle()
+                .fill(Color.white.opacity(0.88))
+                .frame(width: 30, height: 30)
+                .shadow(color: .black.opacity(0.06), radius: 4, x: 0, y: 2)
+
+            Image(systemName: "ellipsis")
+                .font(.system(size: 17, weight: .bold))
+                .symbolRenderingMode(.monochrome)
+                .foregroundStyle(Color.primary.opacity(0.82))
+        }
+        .frame(width: 44, height: 44)
+        .contentShape(Rectangle())
     }
 
     private func shouldUseTwoColumnLayout(in size: CGSize) -> Bool {
