@@ -425,6 +425,68 @@ private final class StubURLProtocol: URLProtocol {
     #expect(repeatedTitleText.chapterIdentity != firstText.chapterIdentity)
 }
 
+@Test func readerHTMLParserExtractsAttachmentImagesFromSiblingImgOne() async throws {
+    let html = #"""
+    <html>
+      <body>
+        <div class="plc cl" id="pid41142124">
+          <div class="display pi">
+            <div class="message">
+              文库版的一些插图
+            </div>
+            <ul class="img_one">
+              <li>
+                <a href="data/attachment/forum/202412/08/153657ahhp2shbtyzzheoo.jpeg" class="orange" />
+                <img id="aimg_1330202" src="data/attachment/forum/202412/08/153657ahhp2shbtyzzheoo.jpeg" alt="IMG_6332.jpeg" loading="lazy" />
+                </a>
+              </li>
+              <li>
+                <a href="data/attachment/forum/202412/08/153657pwam4aaa8ca33nzu.jpeg" class="orange" />
+                <img id="aimg_1330203" src="data/attachment/forum/202412/08/153657pwam4aaa8ca33nzu.jpeg" alt="IMG_6326.jpeg" loading="lazy" />
+                </a>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </body>
+    </html>
+    """#
+    let request = ReaderPageRequest(
+        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=514442&mobile=2")),
+        view: 5
+    )
+
+    let document = try ReaderHTMLParser.parseDocument(html: html, request: request)
+
+    #expect(document.segments == [
+        .text("文库版的一些插图", chapterTitle: "文库版的一些插图"),
+        .image(
+            try #require(URL(string: "https://bbs.yamibo.com/data/attachment/forum/202412/08/153657ahhp2shbtyzzheoo.jpeg")),
+            chapterTitle: "文库版的一些插图"
+        ),
+        .image(
+            try #require(URL(string: "https://bbs.yamibo.com/data/attachment/forum/202412/08/153657pwam4aaa8ca33nzu.jpeg")),
+            chapterTitle: "文库版的一些插图"
+        )
+    ])
+
+    let textSemantics = try #require(document.semantics(forSegmentIndex: 0))
+    let firstImageSemantics = try #require(document.semantics(forSegmentIndex: 1))
+    let secondImageSemantics = try #require(document.semantics(forSegmentIndex: 2))
+
+    #expect(textSemantics.chapterIdentity?.rawValue == "post:41142124#chapter:0")
+    #expect(textSemantics.textSegmentIdentity?.rawValue == "post:41142124#chapter:0#text:0")
+    #expect(firstImageSemantics.chapterIdentity == textSemantics.chapterIdentity)
+    #expect(secondImageSemantics.chapterIdentity == textSemantics.chapterIdentity)
+    #expect(firstImageSemantics.textSegmentIdentity == nil)
+    #expect(secondImageSemantics.textSegmentIdentity == nil)
+    #expect(document.segmentSources == [
+        ReaderSegmentSource(ownerPostID: "41142124"),
+        ReaderSegmentSource(ownerPostID: "41142124"),
+        ReaderSegmentSource(ownerPostID: "41142124")
+    ])
+}
+
 @Test func readerHTMLParserPreservesBoldInlineTextStyles() async throws {
     let html = #"""
     <html>
