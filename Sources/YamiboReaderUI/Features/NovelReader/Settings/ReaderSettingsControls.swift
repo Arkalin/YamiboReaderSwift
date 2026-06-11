@@ -56,15 +56,15 @@ struct ReaderBooksFontScaleRow: View {
                         get: { value },
                         set: { newValue in
                             let stepped = (newValue / 0.1).rounded() * 0.1
-                            onChange(min(1.8, max(0.8, stepped)))
+                            onChange(min(2.3, max(0.8, stepped)))
                         }
                     ),
-                    in: 0.8 ... 1.8
+                    in: 0.8 ... 2.3
                 )
                 .tint(Color(red: 0.71, green: 0.51, blue: 0.35))
 
                 circleButton(systemName: "plus") {
-                    onChange(min(1.8, value + 0.1))
+                    onChange(min(2.3, value + 0.1))
                 }
             }
         }
