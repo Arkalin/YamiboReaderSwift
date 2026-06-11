@@ -25,7 +25,7 @@ struct FavoriteRow: View {
     var body: some View {
         HStack(spacing: 0) {
             RoundedRectangle(cornerRadius: 999, style: .continuous)
-                .fill(accentColor)
+                .fill(selectionAccentColor)
                 .frame(width: 5)
                 .padding(.vertical, 14)
                 .padding(.leading, 10)
@@ -82,6 +82,10 @@ struct FavoriteRow: View {
 
     private var titleColor: Color {
         isSelecting && !isSelected ? .secondary : .primary
+    }
+
+    private var selectionAccentColor: Color {
+        isSelecting && !isSelected ? accentColor.opacity(0.35) : accentColor
     }
 }
 
@@ -186,7 +190,7 @@ struct FavoriteCollectionRow: View {
     var body: some View {
         HStack(spacing: 0) {
             RoundedRectangle(cornerRadius: 999, style: .continuous)
-                .fill(accentColor)
+                .fill(selectionAccentColor)
                 .frame(width: 7)
                 .padding(.vertical, 14)
                 .padding(.leading, 10)
@@ -194,11 +198,11 @@ struct FavoriteCollectionRow: View {
             HStack(spacing: 14) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .fill(accentColor.opacity(0.12))
+                        .fill(selectionAccentColor.opacity(0.12))
                         .frame(width: 54, height: 54)
                     Image(systemName: "folder.fill")
                         .font(.title2.weight(.semibold))
-                        .foregroundStyle(accentColor)
+                        .foregroundStyle(selectionAccentColor)
                 }
 
                 VStack(alignment: .leading, spacing: 8) {
@@ -246,6 +250,10 @@ struct FavoriteCollectionRow: View {
 
     private var titleColor: Color {
         isSelecting && !isSelected ? .secondary : .primary
+    }
+
+    private var selectionAccentColor: Color {
+        isSelecting && !isSelected ? accentColor.opacity(0.35) : accentColor
     }
 
     private var summaryText: String {
