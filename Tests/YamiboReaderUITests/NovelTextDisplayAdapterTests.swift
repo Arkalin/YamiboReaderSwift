@@ -1100,6 +1100,20 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertTrue(imageViewBody.contains("ReaderInlineImageMemoryCache.store(image, for: nextRequestIdentity)"))
     }
 
+    func testReaderInlineImageFailureLabelUsesFrameLayoutToAvoidZeroWidthConstraintConflicts() throws {
+        let supportSource = try readerSupportSources()
+        let imageViewBody = try XCTUnwrap(typeBody(named: "ReaderVerticalViewportImageView", in: supportSource))
+
+        XCTAssertTrue(imageViewBody.contains("override func layoutSubviews()"))
+        XCTAssertTrue(imageViewBody.contains("imageView.frame = bounds"))
+        XCTAssertTrue(imageViewBody.contains("failureLabel.sizeThatFits"))
+        XCTAssertTrue(imageViewBody.contains("bounds.width >= 24 ? 12 : 0"))
+        XCTAssertTrue(imageViewBody.contains("max(bounds.width - horizontalInset * 2, 0)"))
+        XCTAssertFalse(imageViewBody.contains("failureLabel.centerXAnchor.constraint"))
+        XCTAssertFalse(imageViewBody.contains("failureLabel.leadingAnchor.constraint"))
+        XCTAssertFalse(imageViewBody.contains("failureLabel.trailingAnchor.constraint"))
+    }
+
     func testPagedViewportsKeepPendingSelectionUntilCollectionViewCanRepresentTargetOffset() throws {
         let supportSource = try readerSupportSources()
         let singlePageBody = try XCTUnwrap(typeBody(named: "ReaderPagedCollectionViewport", in: supportSource))

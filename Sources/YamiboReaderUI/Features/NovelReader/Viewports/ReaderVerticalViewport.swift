@@ -930,6 +930,26 @@ final class ReaderVerticalViewportImageView: UIView {
         task?.cancel()
     }
 
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        imageView.frame = bounds
+        activityIndicator.center = CGPoint(x: bounds.midX, y: bounds.midY)
+
+        let horizontalInset: CGFloat = bounds.width >= 24 ? 12 : 0
+        let availableWidth = max(bounds.width - horizontalInset * 2, 0)
+        let labelSize = failureLabel.sizeThatFits(
+            CGSize(width: availableWidth, height: CGFloat.greatestFiniteMagnitude)
+        )
+        let labelWidth = min(labelSize.width, availableWidth)
+        let labelHeight = min(labelSize.height, bounds.height)
+        failureLabel.frame = CGRect(
+            x: bounds.midX - labelWidth / 2,
+            y: bounds.midY - labelHeight / 2,
+            width: labelWidth,
+            height: labelHeight
+        )
+    }
+
     override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
         guard super.point(inside: point, with: event) else { return false }
         guard let image = imageView.image else {
@@ -992,10 +1012,8 @@ final class ReaderVerticalViewportImageView: UIView {
         isUserInteractionEnabled = true
 
         imageView.contentMode = .scaleAspectFit
-        imageView.translatesAutoresizingMaskIntoConstraints = false
         addSubview(imageView)
 
-        activityIndicator.translatesAutoresizingMaskIntoConstraints = false
         addSubview(activityIndicator)
 
         failureLabel.text = L10n.string("image.load_failed")
@@ -1003,21 +1021,7 @@ final class ReaderVerticalViewportImageView: UIView {
         failureLabel.font = .preferredFont(forTextStyle: .caption1)
         failureLabel.textAlignment = .center
         failureLabel.isHidden = true
-        failureLabel.translatesAutoresizingMaskIntoConstraints = false
         addSubview(failureLabel)
-
-        NSLayoutConstraint.activate([
-            imageView.topAnchor.constraint(equalTo: topAnchor),
-            imageView.leadingAnchor.constraint(equalTo: leadingAnchor),
-            imageView.trailingAnchor.constraint(equalTo: trailingAnchor),
-            imageView.bottomAnchor.constraint(equalTo: bottomAnchor),
-            activityIndicator.centerXAnchor.constraint(equalTo: centerXAnchor),
-            activityIndicator.centerYAnchor.constraint(equalTo: centerYAnchor),
-            failureLabel.centerXAnchor.constraint(equalTo: centerXAnchor),
-            failureLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
-            failureLabel.leadingAnchor.constraint(greaterThanOrEqualTo: leadingAnchor, constant: 12),
-            failureLabel.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -12)
-        ])
     }
 
     func imageTapPayloadIfHit(at point: CGPoint) -> (url: URL, title: String?)? {
