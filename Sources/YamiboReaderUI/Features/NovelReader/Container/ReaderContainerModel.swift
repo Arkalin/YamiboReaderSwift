@@ -402,6 +402,11 @@ public final class ReaderContainerModel: ObservableObject {
         YamiboRoute.thread(url: context.threadURL, page: displayedView, authorID: currentAuthorID ?? context.authorID).url
     }
 
+    public var currentForumTargetURL: URL {
+        guard let target = currentChapterCommentTarget else { return forumURL }
+        return YamiboRoute.findPostURL(threadURL: target.threadURL, postID: target.ownerPostID) ?? forumURL
+    }
+
     public func prepare(layout: ReaderContainerLayout) async {
         self.layout = layout
         latestRequestedLayout = layout
