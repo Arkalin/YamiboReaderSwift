@@ -11,7 +11,34 @@ struct FavoriteRow: View {
     let tagSearchText: String
     let prioritizedTagIDs: Set<String>
     let accentColor: Color
+    let actionMenu: AnyView?
     let onOpen: () -> Void
+
+    init(
+        favorite: Favorite,
+        isResolving: Bool,
+        isDeleting: Bool,
+        isSelected: Bool,
+        isSelecting: Bool,
+        tags: [FavoriteTag],
+        tagSearchText: String,
+        prioritizedTagIDs: Set<String>,
+        accentColor: Color,
+        actionMenu: AnyView? = nil,
+        onOpen: @escaping () -> Void
+    ) {
+        self.favorite = favorite
+        self.isResolving = isResolving
+        self.isDeleting = isDeleting
+        self.isSelected = isSelected
+        self.isSelecting = isSelecting
+        self.tags = tags
+        self.tagSearchText = tagSearchText
+        self.prioritizedTagIDs = prioritizedTagIDs
+        self.accentColor = accentColor
+        self.actionMenu = actionMenu
+        self.onOpen = onOpen
+    }
 
     private var tagChipSummary: FavoriteTagChipSummary {
         makeFavoriteTagChipSummary(
@@ -43,6 +70,12 @@ struct FavoriteRow: View {
                         ProgressView()
                             .controlSize(.small)
                             .padding(.top, 2)
+                    }
+
+                    if let actionMenu {
+                        actionMenu
+                            .padding(.top, -12)
+                            .padding(.trailing, -10)
                     }
                 }
 
