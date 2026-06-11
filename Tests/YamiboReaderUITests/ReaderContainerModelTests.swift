@@ -828,6 +828,165 @@ final class ReaderContainerModelTests: XCTestCase {
         }
     }
 
+    func testLatestLandscapeLayoutSupersedesInFlightPortraitLayoutMatchingCommittedLayout() async throws {
+        let document = ReaderPageDocument(
+            threadURL: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9912&mobile=2")!,
+            view: 1,
+            maxView: 1,
+            contentSource: .fallbackUnfilteredPage,
+            segments: [
+                .text(String(repeating: "第一章 前台恢复布局竞态。", count: 1_200), chapterTitle: "第一章")
+            ]
+        )
+        let model = try await makeModel(
+            documents: [document],
+            settings: ReaderAppearanceSettings(
+                showsTwoPagesInLandscapeOnPad: true,
+                readingMode: .paged
+            )
+        )
+        let portrait = ReaderContainerLayout(
+            width: 1032,
+            height: 1376,
+            readingMode: .paged
+        )
+        let landscape = ReaderContainerLayout(
+            width: 1376,
+            height: 1032,
+            readingMode: .paged
+        )
+
+        await model.commitNovelTextPresentationEnvironment(isPad: true)
+        await model.commitNovelTextLayout(landscape)
+        await MainActor.run {
+            model.jumpToSurface(max(model.surfaceCount / 2, 0))
+        }
+
+        let initialState = try await MainActor.run {
+            (
+                try XCTUnwrap(model.readerPresentation),
+                try XCTUnwrap(model.novelReaderDebugState),
+                try XCTUnwrap(model.currentNovelResumePoint)
+            )
+        }
+        let gate = ReaderLayoutUpdatePreparationGate(blockedLayout: portrait)
+        await MainActor.run {
+            model.runtimeUpdatePreparation = { update in
+                await gate.prepare(update)
+            }
+        }
+
+        let portraitTask = Task {
+            await model.commitNovelTextLayout(portrait)
+        }
+        await gate.waitUntilBlocked()
+
+        await model.commitNovelTextLayout(landscape)
+        await gate.release()
+        await portraitTask.value
+
+        await MainActor.run {
+            let finalPresentation = try? XCTUnwrap(model.readerPresentation)
+            let finalDebugState = try? XCTUnwrap(model.novelReaderDebugState)
+            let finalResumePoint = try? XCTUnwrap(model.currentNovelResumePoint)
+
+            XCTAssertTrue(model.isTwoPageSpreadActive)
+            XCTAssertEqual(finalPresentation?.generation, initialState.0.generation + 1)
+            XCTAssertEqual(finalPresentation?.surfaces.count, initialState.0.surfaces.count)
+            XCTAssertEqual(finalDebugState?.fingerprints?.layout, initialState.1.fingerprints?.layout)
+            XCTAssertEqual(
+                finalDebugState?.transactions.committedTransactionCount,
+                initialState.1.transactions.committedTransactionCount + 1
+            )
+            XCTAssertEqual(finalResumePoint?.view, initialState.2.view)
+            XCTAssertEqual(finalResumePoint?.chapterIdentity, initialState.2.chapterIdentity)
+            XCTAssertEqual(finalResumePoint?.textSegmentIdentity, initialState.2.textSegmentIdentity)
+            XCTAssertEqual(finalResumePoint?.displayedTextOffset, initialState.2.displayedTextOffset)
+            XCTAssertNil(model.errorMessage)
+        }
+    }
+
+    func testRepeatedCommittedLayoutDoesNotCreateRuntimeTransaction() async throws {
+        let model = try await makeModel(
+            documents: [
+                makeDocument(view: 1, maxView: 1, chapterTitles: ["第一章", "第二章"])
+            ],
+            settings: ReaderAppearanceSettings(readingMode: .paged)
+        )
+        let layout = ReaderContainerLayout(
+            width: 844,
+            height: 390,
+            readingMode: .paged
+        )
+
+        await model.commitNovelTextLayout(layout)
+        let committedState = try await MainActor.run {
+            (
+                try XCTUnwrap(model.readerPresentation),
+                try XCTUnwrap(model.novelReaderDebugState)
+            )
+        }
+
+        await model.commitNovelTextLayout(layout)
+
+        await MainActor.run {
+            XCTAssertEqual(model.readerPresentation?.generation, committedState.0.generation)
+            XCTAssertEqual(
+                model.novelReaderDebugState?.transactions,
+                committedState.1.transactions
+            )
+        }
+    }
+
+    func testFailedLayoutRequestCanRetrySameLayout() async throws {
+        let model = try await makeModel(
+            documents: [
+                makeDocument(view: 1, maxView: 1, chapterTitles: ["第一章", "第二章"])
+            ],
+            settings: ReaderAppearanceSettings(readingMode: .paged)
+        )
+        let targetLayout = ReaderContainerLayout(
+            width: 390,
+            height: 844,
+            readingMode: .paged
+        )
+        let initialState = try await MainActor.run {
+            (
+                try XCTUnwrap(model.readerPresentation),
+                try XCTUnwrap(model.novelReaderDebugState)
+            )
+        }
+        let failureInjector = ReaderLayoutUpdateFailureInjector(failingLayout: targetLayout)
+        await MainActor.run {
+            model.runtimeUpdatePreparation = { update in
+                try await failureInjector.prepare(update)
+            }
+        }
+
+        await model.commitNovelTextLayout(targetLayout)
+        await MainActor.run {
+            XCTAssertEqual(model.readerPresentation?.generation, initialState.0.generation)
+            XCTAssertEqual(model.novelReaderDebugState?.transactions, initialState.1.transactions)
+            XCTAssertEqual(model.errorMessage, NovelTextLayoutFailure.textKitIndexing.localizedDescription)
+        }
+
+        await model.commitNovelTextLayout(targetLayout)
+
+        let attemptCount = await failureInjector.attemptCount
+        await MainActor.run {
+            XCTAssertEqual(attemptCount, 2)
+            XCTAssertEqual(model.readerPresentation?.generation, initialState.0.generation + 1)
+            XCTAssertNotEqual(
+                model.novelReaderDebugState?.fingerprints?.layout,
+                initialState.1.fingerprints?.layout
+            )
+            XCTAssertEqual(
+                model.novelReaderDebugState?.transactions.committedTransactionCount,
+                initialState.1.transactions.committedTransactionCount + 1
+            )
+        }
+    }
+
     func testApplySettingsUpdatesStoredReaderSettings() async throws {
         let model = try await makeModel(
             documents: [
@@ -2636,6 +2795,58 @@ private final class ReaderNavigationOverlayGate {
     func release() {
         continuation?.resume()
         continuation = nil
+    }
+}
+
+private actor ReaderLayoutUpdatePreparationGate {
+    private let blockedLayout: ReaderContainerLayout
+    private var continuation: CheckedContinuation<Void, Never>?
+
+    init(blockedLayout: ReaderContainerLayout) {
+        self.blockedLayout = blockedLayout
+    }
+
+    func prepare(
+        _ update: NovelReadingWorkflowRuntimeUpdate
+    ) async -> NovelReadingWorkflowRuntimeUpdate {
+        guard update.layout == blockedLayout else { return update }
+        await withCheckedContinuation { continuation in
+            self.continuation = continuation
+        }
+        return update
+    }
+
+    func waitUntilBlocked() async {
+        while continuation == nil {
+            await Task.yield()
+        }
+    }
+
+    func release() {
+        continuation?.resume()
+        continuation = nil
+    }
+}
+
+private actor ReaderLayoutUpdateFailureInjector {
+    private let failingLayout: ReaderContainerLayout
+    private var hasFailed = false
+    private(set) var attemptCount = 0
+
+    init(failingLayout: ReaderContainerLayout) {
+        self.failingLayout = failingLayout
+    }
+
+    func prepare(
+        _ update: NovelReadingWorkflowRuntimeUpdate
+    ) async throws -> NovelReadingWorkflowRuntimeUpdate {
+        guard update.layout == failingLayout else { return update }
+        attemptCount += 1
+        if !hasFailed {
+            hasFailed = true
+            throw NovelTextLayoutFailure.textKitIndexing
+        }
+        return update
     }
 }
 
