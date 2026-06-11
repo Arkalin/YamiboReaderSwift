@@ -60,6 +60,9 @@ public struct FavoritesView: View {
         let content = favoritesChromeContent
 
         return Group {
+            #if os(iOS)
+            content
+            #else
             if isSelecting {
                 content.safeAreaInset(edge: .bottom, spacing: 0) {
                     selectionActionBar
@@ -67,6 +70,7 @@ public struct FavoritesView: View {
             } else {
                 content
             }
+            #endif
         }
         .disabled(isOpeningManga)
         .overlay {
@@ -76,6 +80,11 @@ public struct FavoritesView: View {
         }
         #if os(iOS)
         .toolbar(isSelecting ? .hidden : .visible, for: .tabBar)
+        .toolbar {
+            if isSelecting {
+                selectionBottomToolbar
+            }
+        }
         #endif
     }
 
@@ -623,7 +632,11 @@ public struct FavoritesView: View {
                     showingMoveDialog = true
                 }
                 .disabled(!selectionActionState.canMove)
-                .confirmationDialog(L10n.string("favorites.move_to_collection"), isPresented: $showingMoveDialog, titleVisibility: .visible) {
+                .confirmationDialog(
+                    L10n.string("favorites.move_to_collection"),
+                    isPresented: $showingMoveDialog,
+                    titleVisibility: .visible
+                ) {
                     Button(L10n.string("favorites.move_to_root")) {
                         moveSelectedFavorites(to: nil)
                     }
@@ -654,6 +667,122 @@ public struct FavoritesView: View {
         }
         .background(selectionActionBarBackground)
     }
+
+    #if os(iOS)
+    @ToolbarContentBuilder
+    private var selectionBottomToolbar: some ToolbarContent {
+        ToolbarItem(placement: .bottomBar) {
+            selectionToolbarCapsule
+        }
+    }
+
+    @ViewBuilder
+    private var selectionToolbarCapsule: some View {
+        if #available(iOS 26, *) {
+            selectionToolbarCapsuleContent
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+        } else {
+            selectionToolbarCapsuleContent
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(.ultraThinMaterial, in: Capsule())
+        }
+    }
+
+    private var selectionToolbarCapsuleContent: some View {
+        HStack(spacing: 8) {
+            selectionToolbarButton(
+                title: L10n.string("favorites.tags_action"),
+                systemImage: "tag",
+                isEnabled: selectionActionState.canTag
+            ) {
+                presentBatchTagPicker()
+            }
+            .disabled(!selectionActionState.canTag)
+
+            selectionToolbarButton(
+                title: L10n.string("favorites.create_collection"),
+                systemImage: "folder.badge.plus",
+                isEnabled: selectionActionState.canCreateCollection
+            ) {
+                showingCreateCollectionPrompt = true
+            }
+            .disabled(!selectionActionState.canCreateCollection)
+
+            selectionToolbarButton(
+                title: L10n.string("common.move"),
+                systemImage: "doc.on.doc",
+                isEnabled: selectionActionState.canMove
+            ) {
+                showingMoveDialog = true
+            }
+            .disabled(!selectionActionState.canMove)
+            .confirmationDialog(
+                L10n.string("favorites.move_to_collection"),
+                isPresented: $showingMoveDialog,
+                titleVisibility: .visible
+            ) {
+                Button(L10n.string("favorites.move_to_root")) {
+                    moveSelectedFavorites(to: nil)
+                }
+                ForEach(moveTargets) { collection in
+                    Button(collection.name) {
+                        moveSelectedFavorites(to: collection.id)
+                    }
+                }
+                Button(L10n.string("common.cancel"), role: .cancel) {}
+            } message: {
+                Text(L10n.string("favorites.select_target_collection"))
+            }
+
+            selectionToolbarButton(
+                title: L10n.string("common.delete"),
+                systemImage: "trash",
+                role: .destructive,
+                isEnabled: selectionActionState.canDelete
+            ) {
+                showingBulkDeleteConfirmation = true
+            }
+            .disabled(!selectionActionState.canDelete)
+        }
+    }
+
+    private func selectionToolbarButton(
+        title: String,
+        systemImage: String,
+        role: ButtonRole? = nil,
+        isEnabled: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(role: role, action: action) {
+            selectionToolbarLabel(title: title, systemImage: systemImage, role: role)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(title)
+        .opacity(isEnabled ? 1 : 0.35)
+    }
+
+    private func selectionToolbarLabel(
+        title: String,
+        systemImage: String,
+        role: ButtonRole?
+    ) -> some View {
+        VStack(spacing: 3) {
+            Image(systemName: systemImage)
+                .font(.system(size: 18, weight: .regular))
+                .frame(width: 24, height: 22)
+
+            Text(title)
+                .font(.caption2)
+                .lineLimit(1)
+                .minimumScaleFactor(0.78)
+        }
+        .frame(width: 66)
+        .foregroundStyle(role == .destructive ? Color.red : Color.primary)
+        .contentShape(Rectangle())
+    }
+    #endif
 
     private var selectionActionBarBackground: Color {
         #if canImport(UIKit)
