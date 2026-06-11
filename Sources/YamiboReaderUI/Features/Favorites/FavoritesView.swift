@@ -339,13 +339,15 @@ public struct FavoritesView: View {
     }
 
     private var twoColumnFavoritesList: some View {
-        ScrollView {
-            HStack(alignment: .top, spacing: 20) {
-                twoColumnFavoritesColumn(entries: leftColumnEntries, column: .left)
-                twoColumnFavoritesColumn(entries: rightColumnEntries, column: .right)
+        FavoriteGlassContainer(spacing: 20) {
+            ScrollView {
+                HStack(alignment: .top, spacing: 20) {
+                    twoColumnFavoritesColumn(entries: leftColumnEntries, column: .left)
+                    twoColumnFavoritesColumn(entries: rightColumnEntries, column: .right)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
         }
     }
 
@@ -393,17 +395,19 @@ public struct FavoritesView: View {
     }
 
     private func singleColumnFavoritesList(entries: [FavoriteListEntry]) -> some View {
-        List {
-            ForEach(entries) { entry in
-                row(for: entry)
-                    .listRowSeparator(.hidden)
-                    .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
-                    .listRowBackground(Color.clear)
+        FavoriteGlassContainer(spacing: 16) {
+            List {
+                ForEach(entries) { entry in
+                    row(for: entry)
+                        .listRowSeparator(.hidden)
+                        .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+                        .listRowBackground(Color.clear)
+                }
+                .onMove(perform: handleMove)
+                .moveDisabled(!canReorderEntries)
             }
-            .onMove(perform: handleMove)
-            .moveDisabled(!canReorderEntries)
+            .listStyle(.plain)
         }
-        .listStyle(.plain)
     }
 
     @ViewBuilder
