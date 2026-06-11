@@ -318,6 +318,32 @@ import Testing
     #expect(url.absoluteString == "https://bbs.yamibo.com/forum.php?goto=findpost&mobile=2&mod=redirect&pid=102&ptid=42")
 }
 
+@Test func findPostURLUsesQueryThreadAndPostIdentity() throws {
+    let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=42&mobile=2&page=3"))
+
+    let url = try #require(YamiboRoute.findPostURL(threadURL: threadURL, postID: "102"))
+
+    #expect(url.absoluteString == "https://bbs.yamibo.com/forum.php?goto=findpost&mobile=2&mod=redirect&pid=102&ptid=42")
+}
+
+@Test func findPostURLUsesThreadHTMLIdentity() throws {
+    let threadURL = try #require(URL(string: "https://bbs.yamibo.com/thread-54321-1-1.html"))
+
+    let url = try #require(YamiboRoute.findPostURL(threadURL: threadURL, postID: "987"))
+
+    #expect(url.absoluteString == "https://bbs.yamibo.com/forum.php?goto=findpost&mobile=2&mod=redirect&pid=987&ptid=54321")
+}
+
+@Test func findPostURLRequiresThreadAndPostIdentity() throws {
+    let missingThreadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&mobile=2"))
+    let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=42&mobile=2"))
+
+    #expect(YamiboRoute.findPostURL(threadURL: missingThreadURL, postID: "102") == nil)
+    #expect(YamiboRoute.findPostURL(threadURL: threadURL, postID: "") == nil)
+    #expect(YamiboRoute.findPostURL(threadURL: threadURL, postID: "   ") == nil)
+    #expect(YamiboRoute.findPostURL(threadURL: threadURL, postID: nil) == nil)
+}
+
 @Test func chapterCommentSourcesExposeLocalizedDisplayLabels() {
     #expect(ChapterCommentSource.postComment.displayLabel == "点评")
     #expect(ChapterCommentSource.ratingReason.displayLabel == "评分")

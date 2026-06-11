@@ -664,7 +664,8 @@ public struct ReaderContainerView: View {
     }
 
     private func openInForum() {
-        dismissReaderOpeningForum(model.forumURL)
+        syncVerticalViewportBeforeSave()
+        dismissReaderOpeningForum(model.currentForumTargetURL)
     }
 
     private func handleImageTap(url: URL, title: String?) {

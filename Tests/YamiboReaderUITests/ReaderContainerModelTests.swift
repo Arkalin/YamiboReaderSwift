@@ -2521,6 +2521,76 @@ final class ReaderContainerModelTests: XCTestCase {
         }
     }
 
+    func testCurrentForumTargetURLUsesCurrentChapterPostIdentity() async throws {
+        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=7001&mobile=2")!
+        let model = try await makeModel(
+            documents: [
+                makeDocument(
+                    threadURL: threadURL,
+                    view: 1,
+                    maxView: 1,
+                    chapterTitles: ["第一章"],
+                    ownerPostIDs: ["100"]
+                )
+            ]
+        )
+
+        await MainActor.run {
+            XCTAssertEqual(
+                model.currentForumTargetURL.absoluteString,
+                "https://bbs.yamibo.com/forum.php?goto=findpost&mobile=2&mod=redirect&pid=100&ptid=7001"
+            )
+        }
+    }
+
+    func testCurrentForumTargetURLFallsBackToCurrentWebPageWithoutPostIdentity() async throws {
+        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=7002&mobile=2")!
+        let model = try await makeModel(
+            documents: [
+                makeDocument(
+                    threadURL: threadURL,
+                    view: 1,
+                    maxView: 1,
+                    chapterTitles: ["第一章"]
+                )
+            ]
+        )
+
+        await MainActor.run {
+            XCTAssertEqual(model.currentForumTargetURL, model.forumURL)
+        }
+    }
+
+    func testCurrentForumTargetURLIgnoresAuthorFilterWhenOpeningChapterPost() async throws {
+        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=7003&mobile=2")!
+        let model = try await makeModel(
+            documents: [
+                makeDocument(
+                    threadURL: threadURL,
+                    view: 1,
+                    maxView: 1,
+                    chapterTitles: ["第一章"],
+                    authorID: "42",
+                    contentSource: .authorFilteredPage,
+                    ownerPostIDs: ["101"]
+                )
+            ],
+            launchContext: ReaderLaunchContext(
+                threadURL: threadURL,
+                threadTitle: "测试线程",
+                source: .forum,
+                authorID: "42"
+            )
+        )
+
+        await MainActor.run {
+            XCTAssertEqual(
+                model.currentForumTargetURL.absoluteString,
+                "https://bbs.yamibo.com/forum.php?goto=findpost&mobile=2&mod=redirect&pid=101&ptid=7003"
+            )
+        }
+    }
+
     func testCacheSelectionStateSeparatesCachedAndUncachedViews() async throws {
         let model = try await makeModel(
             documents: [
@@ -2936,10 +3006,16 @@ private func makeDocument(
     maxView: Int,
     chapterTitles: [String],
     authorID: String? = nil,
-    contentSource: ReaderContentSource = .fallbackUnfilteredPage
+    contentSource: ReaderContentSource = .fallbackUnfilteredPage,
+    ownerPostIDs: [String?]? = nil
 ) -> ReaderPageDocument {
     let segments = chapterTitles.map { title in
         ReaderSegment.text(String(repeating: "\(title) 内容。", count: 80), chapterTitle: title)
+    }
+    let segmentSources = ownerPostIDs.map { postIDs in
+        segments.indices.map { index in
+            postIDs.indices.contains(index) ? ReaderSegmentSource(ownerPostID: postIDs[index]) : nil
+        }
     }
     return ReaderPageDocument(
         threadURL: threadURL,
@@ -2947,7 +3023,8 @@ private func makeDocument(
         maxView: maxView,
         resolvedAuthorID: authorID,
         contentSource: contentSource,
-        segments: segments
+        segments: segments,
+        segmentSources: segmentSources
     )
 }
 

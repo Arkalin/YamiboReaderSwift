@@ -3,6 +3,36 @@ import Foundation
 public enum YamiboRoute: Sendable {
     public static let baseURL = URL(string: "https://bbs.yamibo.com")!
 
+    public static func findPostURL(threadURL: URL, postID: String?) -> URL? {
+        let normalizedPostID = postID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !normalizedPostID.isEmpty else { return nil }
+
+        let resolvedURL = URL(string: threadURL.absoluteString, relativeTo: Self.baseURL)?.absoluteURL ?? threadURL.absoluteURL
+        let queryThreadID = URLComponents(url: resolvedURL, resolvingAgainstBaseURL: false)?
+            .queryItems?
+            .first(where: { $0.name == "tid" })?
+            .value?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let threadID = (queryThreadID?.isEmpty == false ? queryThreadID : nil)
+            ?? MangaTitleCleaner.extractTid(from: resolvedURL.absoluteString)
+
+        guard let threadID, !threadID.isEmpty else { return nil }
+
+        var components = URLComponents(url: resolvedURL, resolvingAgainstBaseURL: false)
+            ?? URLComponents(url: Self.baseURL, resolvingAgainstBaseURL: false)!
+        components.scheme = components.scheme ?? Self.baseURL.scheme
+        components.host = components.host ?? Self.baseURL.host
+        components.path = "/forum.php"
+        components.queryItems = [
+            .init(name: "goto", value: "findpost"),
+            .init(name: "mobile", value: "2"),
+            .init(name: "mod", value: "redirect"),
+            .init(name: "pid", value: normalizedPostID),
+            .init(name: "ptid", value: threadID)
+        ]
+        return components.url
+    }
+
     case favorites(page: Int)
     case favoriteDeleteForm
     case favoriteDelete
