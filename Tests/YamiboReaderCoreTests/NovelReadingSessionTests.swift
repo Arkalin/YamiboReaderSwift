@@ -867,6 +867,96 @@ final class NovelReadingSessionTests: XCTestCase {
         XCTAssertTrue(viewportSurfaceContainsSegmentOffset(restoredViewportSurface, segmentIndex: targetRange.segmentIndex, offset: targetOffset))
     }
 
+    func testHidingAuthorReplyToOtherFallbacksToPreviousVisibleText() throws {
+        let document = ReaderPageDocument(
+            threadURL: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9101&mobile=2")!,
+            view: 1,
+            maxView: 1,
+            contentSource: .authorFilteredPage,
+            segments: [
+                .text(String(repeating: "第一章 内容。", count: 80), chapterTitle: "第一章"),
+                .text(String(repeating: "读者甲 发表于 2026-5-1\n楼主回复。", count: 20), chapterTitle: "读者甲 发表于 2026-5-1"),
+                .text(String(repeating: "第二章 内容。", count: 80), chapterTitle: "第二章"),
+            ],
+            segmentSources: [
+                ReaderSegmentSource(ownerPostID: "100"),
+                ReaderSegmentSource(ownerPostID: "101", isAuthorReplyToOther: true),
+                ReaderSegmentSource(ownerPostID: "102"),
+            ]
+        )
+        let layout = ReaderContainerLayout(width: 320, height: 568)
+        var session = try NovelReadingSession(
+            validating: document,
+            settings: ReaderAppearanceSettings(readingMode: .vertical),
+            layout: layout
+        )
+        let replySurface = try XCTUnwrap(session.viewportSurfacesForTesting.first { surface in
+            surface.ranges.contains { $0.segmentIndex == 1 }
+        })
+
+        session.updateVerticalViewportPosition(surfaceOrdinal: replySurface.surfaceOrdinal, intraSurfaceProgress: 0.5)
+        let replyPosition = try XCTUnwrap(session.captureNovelReadingPosition())
+        session.consumeCommittedLayoutResult(
+            try committedLayoutResult(
+                document: document,
+                settings: ReaderAppearanceSettings(showsAuthorRepliesToOthers: false, readingMode: .vertical),
+                layout: layout
+            ),
+            preferredSurfaceOrdinal: session.snapshot.selectedSurfaceOrdinal,
+            preferredResumePoint: replyPosition
+        )
+
+        let restoredSurface = session.viewportSurfacesForTesting[session.snapshot.selectedSurfaceOrdinal]
+        XCTAssertTrue(restoredSurface.ranges.contains { $0.segmentIndex == 0 })
+        XCTAssertFalse(session.viewportSurfacesForTesting.flatMap(\.ranges).contains { $0.segmentIndex == 1 })
+        XCTAssertEqual(restoredSurface.chapterTitle, "第一章")
+        XCTAssertEqual(session.snapshot.currentSurfaceIntraProgress, 1, accuracy: 0.001)
+    }
+
+    func testHidingAuthorReplyToOtherFallbacksToNextVisibleTextWhenNoPreviousTextExists() throws {
+        let document = ReaderPageDocument(
+            threadURL: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9102&mobile=2")!,
+            view: 1,
+            maxView: 1,
+            contentSource: .authorFilteredPage,
+            segments: [
+                .text(String(repeating: "读者甲 发表于 2026-5-1\n楼主回复。", count: 20), chapterTitle: "读者甲 发表于 2026-5-1"),
+                .text(String(repeating: "第一章 内容。", count: 80), chapterTitle: "第一章"),
+            ],
+            segmentSources: [
+                ReaderSegmentSource(ownerPostID: "100", isAuthorReplyToOther: true),
+                ReaderSegmentSource(ownerPostID: "101"),
+            ]
+        )
+        let layout = ReaderContainerLayout(width: 320, height: 568)
+        var session = try NovelReadingSession(
+            validating: document,
+            settings: ReaderAppearanceSettings(readingMode: .vertical),
+            layout: layout
+        )
+        let replySurface = try XCTUnwrap(session.viewportSurfacesForTesting.first { surface in
+            surface.ranges.contains { $0.segmentIndex == 0 }
+        })
+
+        session.updateVerticalViewportPosition(surfaceOrdinal: replySurface.surfaceOrdinal, intraSurfaceProgress: 0.5)
+        let replyPosition = try XCTUnwrap(session.captureNovelReadingPosition())
+        session.consumeCommittedLayoutResult(
+            try committedLayoutResult(
+                document: document,
+                settings: ReaderAppearanceSettings(showsAuthorRepliesToOthers: false, readingMode: .vertical),
+                layout: layout
+            ),
+            preferredSurfaceOrdinal: session.snapshot.selectedSurfaceOrdinal,
+            preferredResumePoint: replyPosition
+        )
+
+        let restoredSurface = session.viewportSurfacesForTesting[session.snapshot.selectedSurfaceOrdinal]
+        XCTAssertTrue(restoredSurface.ranges.contains { $0.segmentIndex == 1 })
+        XCTAssertFalse(session.viewportSurfacesForTesting.flatMap(\.ranges).contains { $0.segmentIndex == 0 })
+        XCTAssertEqual(restoredSurface.chapterTitle, "第一章")
+        XCTAssertEqual(session.snapshot.currentSurfaceIntraProgress, 0, accuracy: 0.001)
+    }
+
     func testPagedTextKitRepaginationPreservesSemanticReadingPosition() throws {
         let document = makeNovelDocument(
             view: 1,

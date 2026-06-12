@@ -1001,6 +1001,7 @@ final class ReaderContainerModelTests: XCTestCase {
             horizontalPadding: 22,
             usesJustifiedText: true,
             loadsInlineImages: false,
+            showsAuthorRepliesToOthers: false,
             backgroundStyle: .paper,
             readingMode: .vertical,
             translationMode: .traditional

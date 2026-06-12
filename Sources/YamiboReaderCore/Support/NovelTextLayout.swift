@@ -433,6 +433,7 @@ public enum NovelTextLayout {
             String(settings.characterSpacingScale),
             String(settings.usesJustifiedText),
             String(settings.indentsParagraphFirstLine),
+            String(settings.showsAuthorRepliesToOthers),
             settings.readingMode.rawValue,
             String(describing: layout.containerSize),
             String(describing: layout.safeAreaInsets),
@@ -701,6 +702,9 @@ public enum NovelTextLayout {
         for (index, input) in segmentInputs {
             let (segment, semanticAndSource) = input
             let (semantics, source) = semanticAndSource
+            if source?.isAuthorReplyToOther == true, !settings.showsAuthorRepliesToOthers {
+                continue
+            }
             guard let transformed = transformedSegment(
                 from: segment,
                 semantics: semantics,

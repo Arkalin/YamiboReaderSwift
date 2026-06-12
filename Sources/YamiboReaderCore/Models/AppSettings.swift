@@ -106,6 +106,7 @@ public struct ReaderAppearanceSettings: Codable, Hashable, Sendable {
     public var usesJustifiedText: Bool
     public var indentsParagraphFirstLine: Bool
     public var loadsInlineImages: Bool
+    public var showsAuthorRepliesToOthers: Bool
     public var showsTwoPagesInLandscapeOnPad: Bool
     public var backgroundStyle: ReaderBackgroundStyle
     public var readingMode: ReaderReadingMode
@@ -121,6 +122,7 @@ public struct ReaderAppearanceSettings: Codable, Hashable, Sendable {
         usesJustifiedText: Bool = false,
         indentsParagraphFirstLine: Bool = false,
         loadsInlineImages: Bool = true,
+        showsAuthorRepliesToOthers: Bool = true,
         showsTwoPagesInLandscapeOnPad: Bool = false,
         backgroundStyle: ReaderBackgroundStyle = .system,
         readingMode: ReaderReadingMode = .paged,
@@ -135,6 +137,7 @@ public struct ReaderAppearanceSettings: Codable, Hashable, Sendable {
         self.usesJustifiedText = usesJustifiedText
         self.indentsParagraphFirstLine = indentsParagraphFirstLine
         self.loadsInlineImages = loadsInlineImages
+        self.showsAuthorRepliesToOthers = showsAuthorRepliesToOthers
         self.showsTwoPagesInLandscapeOnPad = showsTwoPagesInLandscapeOnPad
         self.backgroundStyle = backgroundStyle
         self.readingMode = readingMode
@@ -151,6 +154,7 @@ public struct ReaderAppearanceSettings: Codable, Hashable, Sendable {
         case usesJustifiedText
         case indentsParagraphFirstLine
         case loadsInlineImages
+        case showsAuthorRepliesToOthers
         case showsTwoPagesInLandscapeOnPad
         case backgroundStyle
         case readingMode
@@ -168,6 +172,7 @@ public struct ReaderAppearanceSettings: Codable, Hashable, Sendable {
         usesJustifiedText = try container.decodeIfPresent(Bool.self, forKey: .usesJustifiedText) ?? false
         indentsParagraphFirstLine = try container.decodeIfPresent(Bool.self, forKey: .indentsParagraphFirstLine) ?? false
         loadsInlineImages = try container.decodeIfPresent(Bool.self, forKey: .loadsInlineImages) ?? true
+        showsAuthorRepliesToOthers = try container.decodeIfPresent(Bool.self, forKey: .showsAuthorRepliesToOthers) ?? true
         showsTwoPagesInLandscapeOnPad = try container.decodeIfPresent(Bool.self, forKey: .showsTwoPagesInLandscapeOnPad) ?? false
         backgroundStyle = try container.decodeIfPresent(ReaderBackgroundStyle.self, forKey: .backgroundStyle) ?? .system
         readingMode = try container.decodeIfPresent(ReaderReadingMode.self, forKey: .readingMode) ?? .paged
@@ -185,6 +190,7 @@ public struct ReaderAppearanceSettings: Codable, Hashable, Sendable {
         try container.encode(usesJustifiedText, forKey: .usesJustifiedText)
         try container.encode(indentsParagraphFirstLine, forKey: .indentsParagraphFirstLine)
         try container.encode(loadsInlineImages, forKey: .loadsInlineImages)
+        try container.encode(showsAuthorRepliesToOthers, forKey: .showsAuthorRepliesToOthers)
         try container.encode(showsTwoPagesInLandscapeOnPad, forKey: .showsTwoPagesInLandscapeOnPad)
         try container.encode(backgroundStyle, forKey: .backgroundStyle)
         try container.encode(readingMode, forKey: .readingMode)

@@ -11,6 +11,8 @@ enum ReaderHTMLDOMParser {
         let segmentInlineStyles: [[ReaderInlineTextStyleRange]]
         let chapterTitle: String?
         let ownerPostID: String?
+        let isOwnerPost: Bool
+        let isReplyToOther: Bool
     }
 
     private struct ParsedSegment {
@@ -103,9 +105,17 @@ enum ReaderHTMLDOMParser {
         let fragmentHTML = try element.html()
         let fragment = try SwiftSoup.parseBodyFragment(fragmentHTML)
         guard let body = fragment.body() else {
-            return ParsedMessage(segments: [], segmentInlineStyles: [], chapterTitle: nil, ownerPostID: postID(from: element))
+            return ParsedMessage(
+                segments: [],
+                segmentInlineStyles: [],
+                chapterTitle: nil,
+                ownerPostID: postID(from: element),
+                isOwnerPost: isOwnerPost(element),
+                isReplyToOther: false
+            )
         }
 
+        let isReplyToOther = try isReplyToOther(in: body)
         try body.select("i").remove()
         let text = try readableText(from: body)
         let chapterTitle = ReaderChapterTitleNormalizer.normalize(
@@ -122,8 +132,78 @@ enum ReaderHTMLDOMParser {
             segments: parsedSegments.map(\.segment),
             segmentInlineStyles: parsedSegments.map(\.inlineTextStyles),
             chapterTitle: chapterTitle,
-            ownerPostID: postID(from: element)
+            ownerPostID: postID(from: element),
+            isOwnerPost: isOwnerPost(element),
+            isReplyToOther: isReplyToOther
         )
+    }
+
+    private static func isReplyToOther(in body: Element) throws -> Bool {
+        let quoteCandidates = try body.select(".quote, blockquote").array()
+        guard quoteCandidates.contains(where: isDiscuzReplyQuote) else {
+            return false
+        }
+
+        let remainingFragment = try SwiftSoup.parseBodyFragment(try body.html())
+        guard let remainingBody = remainingFragment.body() else { return false }
+        try remainingBody.select(".quote").remove()
+        for blockquote in try remainingBody.select("blockquote") where isDiscuzReplyQuote(blockquote) {
+            try blockquote.remove()
+        }
+        try remainingBody.select("i, .pstatus").remove()
+        return !normalizeText(try remainingBody.text()).isEmpty
+    }
+
+    private static func isDiscuzReplyQuote(_ element: Element) -> Bool {
+        if element.hasClass("quote") {
+            return true
+        }
+        let text = normalizeText((try? element.text()) ?? "")
+        return containsDiscuzQuoteHeader(text)
+    }
+
+    private static func containsDiscuzQuoteHeader(_ text: String) -> Bool {
+        let markers = ["发表于", "發表於", "發表于", "发表於"]
+        return markers.contains { text.contains($0) }
+    }
+
+    private static func isOwnerPost(_ element: Element) -> Bool {
+        guard let container = postContainer(for: element) else {
+            return false
+        }
+        if ((try? container.select("[title=楼主]").isEmpty()) == false) {
+            return true
+        }
+        let ownerLabels = [
+            ".authi a",
+            ".mtit a",
+            ".author"
+        ]
+        for selector in ownerLabels {
+            guard let labels = try? container.select(selector) else { continue }
+            for label in labels {
+                if normalizeText((try? label.text()) ?? "") == "楼主" {
+                    return true
+                }
+            }
+        }
+        return false
+    }
+
+    private static func postContainer(for element: Element) -> Element? {
+        var current: Element? = element
+        while let candidate = current {
+            if let id = try? candidate.attr("id"),
+               id.hasPrefix("post_") || id.hasPrefix("pid") {
+                return candidate
+            }
+            if ((try? candidate.select(".authi").isEmpty()) == false),
+               ((try? candidate.select("[id^=postmessage_], .message").isEmpty()) == false) {
+                return candidate
+            }
+            current = candidate.parent()
+        }
+        return nil
     }
 
     private static func siblingAttachmentImageSegments(after element: Element, chapterTitle: String?) throws -> [ParsedSegment] {
