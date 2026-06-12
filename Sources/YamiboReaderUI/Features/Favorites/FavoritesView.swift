@@ -17,7 +17,7 @@ public struct FavoritesView: View {
     @State private var collectionNameDraft: FavoriteCollectionNameDraft?
     @State private var pendingDeleteFavorite: Favorite?
     @State private var pendingDeleteCollection: FavoriteCollection?
-    @State private var isSelecting = false
+    @Binding private var isSelecting: Bool
     @State private var selectedFavoriteIDs: Set<String> = []
     @State private var selectedCollectionIDs: Set<String> = []
     @State private var selectedFilterTagIDs: Set<String> = []
@@ -38,22 +38,18 @@ public struct FavoritesView: View {
         favoriteStore: FavoriteStore,
         appContext: YamiboAppContext,
         appModel: YamiboAppModel,
-        scope: FavoriteScope = .root
+        scope: FavoriteScope = .root,
+        isSelecting: Binding<Bool>
     ) {
         _viewModel = StateObject(wrappedValue: FavoritesViewModel(appContext: appContext, favoriteStore: favoriteStore))
+        _isSelecting = isSelecting
         self.scope = scope
         self.appContext = appContext
         self.appModel = appModel
     }
 
     public var body: some View {
-        if case .root = scope {
-            NavigationStack {
-                favoritesContent
-            }
-        } else {
-            favoritesContent
-        }
+        favoritesContent
     }
 
     private var favoritesContent: some View {
@@ -79,7 +75,6 @@ public struct FavoritesView: View {
             }
         }
         #if os(iOS)
-        .toolbar(isSelecting ? .hidden : .visible, for: .tabBar)
         .toolbar {
             if isSelecting {
                 selectionBottomToolbar
@@ -116,13 +111,6 @@ public struct FavoritesView: View {
                     onClearTagFilter: {
                         selectedFilterTagIDs.removeAll()
                     }
-                )
-            )
-            .modifier(
-                FavoriteCollectionNavigationDestinationModifier(
-                    isEnabled: isRootScope,
-                    appContext: appContext,
-                    appModel: appModel
                 )
             )
     }

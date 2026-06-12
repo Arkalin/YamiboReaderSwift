@@ -305,27 +305,6 @@ struct FavoriteToolbarModifier: ViewModifier {
     }
 }
 
-struct FavoriteCollectionNavigationDestinationModifier: ViewModifier {
-    let isEnabled: Bool
-    let appContext: YamiboAppContext
-    let appModel: YamiboAppModel
-
-    func body(content: Content) -> some View {
-        if isEnabled {
-            content.navigationDestination(for: FavoriteCollection.self) { collection in
-                FavoritesView(
-                    favoriteStore: appContext.favoriteStore,
-                    appContext: appContext,
-                    appModel: appModel,
-                    scope: .collection(collection)
-                )
-            }
-        } else {
-            content
-        }
-    }
-}
-
 struct FavoriteCollectionDialogsModifier: ViewModifier {
     @Binding var collectionNameDraft: FavoriteCollectionNameDraft?
     @Binding var pendingDeleteCollection: FavoriteCollection?
