@@ -58,7 +58,7 @@ public struct RootTabView: View {
                     Label(L10n.string("tab.forum"), systemImage: "globe.asia.australia")
                 }
 
-            FavoritesView(favoriteStore: favoriteStore, appContext: appModel.appContext, appModel: appModel)
+            FavoritesNavigationHostView(favoriteStore: favoriteStore, appContext: appModel.appContext, appModel: appModel)
                 .tag(AppTab.favorites)
                 .tabItem {
                     Label(L10n.string("tab.favorites"), systemImage: "heart.text.square")
