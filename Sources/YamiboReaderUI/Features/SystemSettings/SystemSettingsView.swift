@@ -12,6 +12,7 @@ public struct SystemSettingsView: View {
     @StateObject private var viewModel: SystemSettingsViewModel
     @State private var showingDirectoryManager = false
     @State private var showingWebDAVSettings = false
+    @State private var showingPeripheralSettings = false
     @State private var pendingConfirmation: SystemSettingsConfirmation?
     @State private var activeAppearanceCategory: FavoriteAppearanceCategory?
     @State private var showingFavoriteBackgroundPicker = false
@@ -58,12 +59,11 @@ public struct SystemSettingsView: View {
                     }
                     .disabled(viewModel.isBusy)
 
-                    NavigationLink {
-                        SystemSettingsPeripheralPageTurnView(viewModel: viewModel)
+                    Button {
+                        showingPeripheralSettings = true
                     } label: {
                         SystemSettingsRow(
                             title: L10n.string("settings.peripheral_behavior"),
-                            showsChevron: false,
                             titleColor: .accentColor
                         )
                     }
@@ -76,7 +76,8 @@ public struct SystemSettingsView: View {
                     } label: {
                         SystemSettingsRow(
                             title: L10n.string("settings.favorite_background"),
-                            value: favoriteBackgroundStatusLabel
+                            value: favoriteBackgroundStatusLabel,
+                            showsChevronAfterValue: true
                         )
                     }
                     .disabled(viewModel.isBusy)
@@ -150,6 +151,9 @@ public struct SystemSettingsView: View {
             }
             .sheet(isPresented: $showingWebDAVSettings) {
                 WebDAVSyncSettingsView(appContext: appContext)
+            }
+            .navigationDestination(isPresented: $showingPeripheralSettings) {
+                SystemSettingsPeripheralPageTurnView(viewModel: viewModel)
             }
             .photosPicker(
                 isPresented: $showingFavoriteBackgroundPicker,
