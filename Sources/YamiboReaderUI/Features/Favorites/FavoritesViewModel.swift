@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 import YamiboReaderCore
 
@@ -188,6 +189,8 @@ public final class FavoritesViewModel: ObservableObject {
     }
 
     public func refresh() async {
+        guard !isLoading else { return }
+
         isLoading = true
         defer { isLoading = false }
 
@@ -199,8 +202,21 @@ public final class FavoritesViewModel: ObservableObject {
             tags = await favoriteStore.loadTags()
             errorMessage = nil
         } catch {
+            guard !isCancellationError(error) else { return }
             errorMessage = refreshErrorMessage(for: error)
         }
+    }
+
+    private func isCancellationError(_ error: Error) -> Bool {
+        if error is CancellationError {
+            return true
+        }
+        if let urlError = error as? URLError, urlError.code == .cancelled {
+            return true
+        }
+
+        let nsError = error as NSError
+        return nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorCancelled
     }
 
     private func refreshErrorMessage(for error: Error) -> String {

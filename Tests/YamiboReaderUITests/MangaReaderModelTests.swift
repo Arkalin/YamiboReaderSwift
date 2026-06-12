@@ -494,6 +494,85 @@ final class MangaReaderModelTests: XCTestCase {
         }
     }
 
+    func testFavoritesViewModelIgnoresCancelledRefreshError() async throws {
+        let keyPrefix = UUID().uuidString
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [FavoritesRefreshTestURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        FavoritesRefreshTestURLProtocol.handler = { _, urlProtocol in
+            urlProtocol.fail(with: URLError(.cancelled))
+        }
+        defer { FavoritesRefreshTestURLProtocol.handler = nil }
+
+        let favoriteStore = FavoriteStore(key: "\(keyPrefix).favorites")
+        let appContext = YamiboAppContext(
+            sessionStore: SessionStore(key: "\(keyPrefix).session"),
+            settingsStore: SettingsStore(key: "\(keyPrefix).settings"),
+            favoriteStore: favoriteStore,
+            readerCacheStore: ReaderCacheStore(baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)),
+            mangaDirectoryStore: MangaDirectoryStore(baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)),
+            session: session
+        )
+        let viewModel = await MainActor.run {
+            FavoritesViewModel(appContext: appContext, favoriteStore: favoriteStore)
+        }
+
+        await viewModel.refresh()
+
+        await MainActor.run {
+            XCTAssertNil(viewModel.errorMessage)
+            XCTAssertFalse(viewModel.isLoading)
+            XCTAssertTrue(viewModel.favorites.isEmpty)
+        }
+    }
+
+    func testFavoritesViewModelRefreshDoesNotStartDuplicateRequestWhileLoading() async throws {
+        let keyPrefix = UUID().uuidString
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [FavoritesRefreshTestURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        nonisolated(unsafe) var requestCount = 0
+        FavoritesRefreshTestURLProtocol.handler = { _, urlProtocol in
+            requestCount += 1
+            Thread.sleep(forTimeInterval: 0.2)
+            urlProtocol.succeed(with: """
+            <html><body>
+              <a href="forum.php?mod=viewthread&tid=901&mobile=2">远端收藏</a>
+            </body></html>
+            """)
+        }
+        defer { FavoritesRefreshTestURLProtocol.handler = nil }
+
+        let favoriteStore = FavoriteStore(key: "\(keyPrefix).favorites")
+        let appContext = YamiboAppContext(
+            sessionStore: SessionStore(key: "\(keyPrefix).session"),
+            settingsStore: SettingsStore(key: "\(keyPrefix).settings"),
+            favoriteStore: favoriteStore,
+            readerCacheStore: ReaderCacheStore(baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)),
+            mangaDirectoryStore: MangaDirectoryStore(baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)),
+            session: session
+        )
+        let viewModel = await MainActor.run {
+            FavoritesViewModel(appContext: appContext, favoriteStore: favoriteStore)
+        }
+
+        let firstRefresh = Task {
+            await viewModel.refresh()
+        }
+        try await waitFor {
+            await MainActor.run { viewModel.isLoading }
+        }
+        await viewModel.refresh()
+        await firstRefresh.value
+
+        await MainActor.run {
+            XCTAssertEqual(requestCount, 1)
+            XCTAssertNil(viewModel.errorMessage)
+            XCTAssertFalse(viewModel.isLoading)
+            XCTAssertEqual(viewModel.favorites.map(\.title), ["远端收藏"])
+        }
+    }
+
     func testFavoritesViewModelCanSetDisplayNameByFavoriteID() async throws {
         let keyPrefix = UUID().uuidString
         let favoriteStore = FavoriteStore(key: "\(keyPrefix).favorites")
@@ -2843,6 +2922,39 @@ private final class MangaReaderTestURLProtocol: URLProtocol {
     }
 
     override func stopLoading() {}
+}
+
+private final class FavoritesRefreshTestURLProtocol: URLProtocol {
+    nonisolated(unsafe) static var handler: ((URLRequest, FavoritesRefreshTestURLProtocol) -> Void)?
+
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        guard let handler = Self.handler else {
+            fail(with: URLError(.badServerResponse))
+            return
+        }
+        handler(request, self)
+    }
+
+    override func stopLoading() {}
+
+    func succeed(with html: String) {
+        let response = HTTPURLResponse(
+            url: request.url!,
+            statusCode: 200,
+            httpVersion: nil,
+            headerFields: ["Content-Type": "text/html"]
+        )!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: Data(html.utf8))
+        client?.urlProtocolDidFinishLoading(self)
+    }
+
+    func fail(with error: Error) {
+        client?.urlProtocol(self, didFailWithError: error)
+    }
 }
 
 private actor RequestLog {
