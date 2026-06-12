@@ -6,6 +6,7 @@ final class SystemSettingsViewModel: ObservableObject {
     @Published var homePage: AppHomePage = .forum
     @Published var showsNavigationBar = true
     @Published var favoriteAppearance = FavoriteAppearanceSettings()
+    @Published var favoriteBackground = FavoriteBackgroundSettings()
     @Published var applePencilPageTurn = ApplePencilPageTurnSettings()
     @Published private(set) var novelCacheBytes = 0
     @Published private(set) var mangaCacheBytes = 0
@@ -38,6 +39,7 @@ final class SystemSettingsViewModel: ObservableObject {
         homePage = settings.homePage
         showsNavigationBar = settings.webBrowser.showsNavigationBar
         favoriteAppearance = settings.favoriteAppearance
+        favoriteBackground = settings.favoriteBackground
         applePencilPageTurn = settings.applePencilPageTurn
         await refreshStorageUsage()
     }
@@ -103,6 +105,61 @@ final class SystemSettingsViewModel: ObservableObject {
         }
     }
 
+    func loadFavoriteBackgroundImageData() async -> Data? {
+        await appContext.favoriteBackgroundImageStore.loadData(imageID: favoriteBackground.imageID)
+    }
+
+    func normalizedFavoriteBackgroundImageData(from data: Data) throws -> Data {
+        try FavoriteBackgroundImageProcessor.normalizedJPEGData(from: data)
+    }
+
+    func applyFavoriteBackground(
+        imageData: Data,
+        draftSettings: FavoriteBackgroundSettings
+    ) async -> Bool {
+        let imageID = UUID().uuidString
+        var updatedBackground = FavoriteBackgroundSettings(
+            isEnabled: true,
+            imageID: imageID,
+            scale: draftSettings.scale,
+            offsetX: draftSettings.offsetX,
+            offsetY: draftSettings.offsetY,
+            blurRadius: draftSettings.blurRadius
+        )
+        updatedBackground.isEnabled = true
+
+        do {
+            try await appContext.favoriteBackgroundImageStore.save(imageData, imageID: imageID)
+
+            var settings = await appContext.settingsStore.load()
+            settings.favoriteBackground = updatedBackground
+            try await appContext.settingsStore.save(settings)
+
+            favoriteBackground = updatedBackground
+            try? await appContext.favoriteBackgroundImageStore.prune(keeping: imageID)
+            return true
+        } catch {
+            try? await appContext.favoriteBackgroundImageStore.delete(imageID: imageID)
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
+
+    func restoreDefaultFavoriteBackground() async -> Bool {
+        do {
+            var settings = await appContext.settingsStore.load()
+            settings.favoriteBackground = FavoriteBackgroundSettings()
+            try await appContext.settingsStore.save(settings)
+
+            favoriteBackground = FavoriteBackgroundSettings()
+            try? await appContext.favoriteBackgroundImageStore.deleteAll()
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
+
     func updateApplePencilPageTurnEnabled(_ isEnabled: Bool) {
         var updated = applePencilPageTurn
         updated.isEnabled = isEnabled
@@ -152,6 +209,7 @@ final class SystemSettingsViewModel: ObservableObject {
             homePage = .forum
             showsNavigationBar = true
             favoriteAppearance = .init()
+            favoriteBackground = .init()
             applePencilPageTurn = .init()
             novelCacheBytes = 0
             mangaCacheBytes = 0
