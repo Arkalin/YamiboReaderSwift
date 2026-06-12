@@ -13,6 +13,13 @@
       "iconURL": "https://raw.githubusercontent.com/Arkalin/YamiboReaderSwift/main/YamiboReader/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png",
       "versions": [
         {
+          "version": "0.4.3",
+          "date": "2026-06-12T07:48:18Z",
+          "localizedDescription": "收藏卡片 UI 改用 Liquid Glass 风格，新增收藏主页背景图片设置和小说阅读器过滤楼主对他人的回帖开关，并修复已知问题。",
+          "downloadURL": "https://github.com/Arkalin/YamiboReaderSwift/releases/download/v0.4.3/YamiboReader_v0.4.3_unsigned.ipa",
+          "size": 7798047
+        },
+        {
           "version": "0.4.2",
           "date": "2026-06-10",
           "localizedDescription": "新增小说阅读器卷页翻页动画，优化网页切换动画，并调整外设行为设置与手柄控制预留界面，同时修复了一些错误。",
