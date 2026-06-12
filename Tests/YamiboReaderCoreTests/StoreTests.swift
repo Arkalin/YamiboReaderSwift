@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 import Testing
 @testable import YamiboReaderCore
@@ -99,8 +100,35 @@ import Testing
     #expect(decoded.webBrowser.showsNavigationBar == true)
     #expect(decoded.homePage == .forum)
     #expect(decoded.favoriteAppearance == FavoriteAppearanceSettings())
+    #expect(decoded.favoriteBackground == FavoriteBackgroundSettings())
     #expect(decoded.applePencilPageTurn == ApplePencilPageTurnSettings())
     #expect(decoded.collapsesFavoriteSections == true)
+}
+
+@Test func favoriteBackgroundSettingsEncodesDecodesAndClampsValues() throws {
+    let payload = """
+    {
+      "isEnabled": true,
+      "imageID": "image-a",
+      "scale": 9.0,
+      "offsetX": -4.0,
+      "offsetY": 2.0,
+      "blurRadius": 80.0
+    }
+    """
+
+    let decoded = try JSONDecoder().decode(FavoriteBackgroundSettings.self, from: Data(payload.utf8))
+
+    #expect(decoded.isEnabled)
+    #expect(decoded.imageID == "image-a")
+    #expect(decoded.scale == FavoriteBackgroundSettings.maximumScale)
+    #expect(decoded.offsetX == FavoriteBackgroundSettings.minimumOffset)
+    #expect(decoded.offsetY == FavoriteBackgroundSettings.maximumOffset)
+    #expect(decoded.blurRadius == FavoriteBackgroundSettings.maximumBlurRadius)
+
+    let encoded = try JSONEncoder().encode(decoded)
+    let roundTrip = try JSONDecoder().decode(FavoriteBackgroundSettings.self, from: encoded)
+    #expect(roundTrip == decoded)
 }
 
 @Test func applePencilPageTurnBehaviorMapsGesturesToPageDeltas() {
@@ -1320,6 +1348,83 @@ import Testing
     #expect(clearedUsage == 0)
 }
 
+@Test func favoriteBackgroundImageStoreSavesLoadsDeletesAndPrunes() async throws {
+    let baseDirectory = makeTemporaryDirectory(prefix: "favorite-background-tests")
+    let store = FavoriteBackgroundImageStore(baseDirectory: baseDirectory)
+    let firstData = Data(repeating: 3, count: 32)
+    let secondData = Data(repeating: 8, count: 48)
+
+    try await store.save(firstData, imageID: "first")
+    try await store.save(secondData, imageID: "second")
+
+    #expect(await store.loadData(imageID: "first") == firstData)
+    #expect(await store.loadData(imageID: "second") == secondData)
+
+    try await store.prune(keeping: "second")
+    #expect(await store.loadData(imageID: "first") == nil)
+    #expect(await store.loadData(imageID: "second") == secondData)
+
+    try await store.delete(imageID: "second")
+    #expect(await store.loadData(imageID: "second") == nil)
+
+    try await store.save(firstData, imageID: "third")
+    try await store.deleteAll()
+    #expect(await store.loadData(imageID: "third") == nil)
+}
+
+@Test func clearingReaderAndMangaCachesDoesNotDeleteFavoriteBackground() async throws {
+    let rootDirectory = makeTemporaryDirectory(prefix: "cache-clear-background-root")
+    let readerCacheStore = ReaderCacheStore(baseDirectory: rootDirectory.appendingPathComponent("reader-cache", isDirectory: true))
+    let mangaImageCacheStore = MangaImageCacheStore(baseDirectory: rootDirectory.appendingPathComponent("manga-image-cache", isDirectory: true))
+    let backgroundStore = FavoriteBackgroundImageStore(baseDirectory: rootDirectory.appendingPathComponent("favorite-background", isDirectory: true))
+    let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=701&mobile=2"))
+    let imageURL = try #require(URL(string: "https://static.yamibo.com/test-background.jpg"))
+    let backgroundData = Data(repeating: 4, count: 64)
+
+    try await readerCacheStore.save(
+        ReaderPageDocument(
+            threadURL: threadURL,
+            view: 1,
+            maxView: 1,
+            segments: [.text("测试", chapterTitle: nil)]
+        )
+    )
+    try await mangaImageCacheStore.save(Data(repeating: 9, count: 128), for: imageURL)
+    try await backgroundStore.save(backgroundData, imageID: "background")
+
+    try await readerCacheStore.clearAll()
+    try await mangaImageCacheStore.clearAll()
+
+    #expect(await backgroundStore.loadData(imageID: "background") == backgroundData)
+}
+
+@Test func favoriteBackgroundLayoutClampsScaleAndOffsetsForDifferentAspectRatios() {
+    let settings = FavoriteBackgroundSettings(
+        isEnabled: true,
+        imageID: "background",
+        scale: 4,
+        offsetX: 2,
+        offsetY: -2,
+        blurRadius: 0
+    )
+    let portraitFrame = FavoriteBackgroundLayout.renderedFrame(
+        imageSize: CGSize(width: 200, height: 100),
+        containerSize: CGSize(width: 100, height: 200),
+        settings: settings
+    )
+    #expect(portraitFrame.size == CGSize(width: 1200, height: 600))
+    #expect(portraitFrame.offset == CGSize(width: 550, height: -200))
+
+    let offsets = FavoriteBackgroundLayout.normalizedOffsets(
+        imageSize: CGSize(width: 100, height: 200),
+        containerSize: CGSize(width: 300, height: 200),
+        scale: 1,
+        proposedOffset: CGSize(width: 1000, height: 1000)
+    )
+    #expect(offsets.offsetX == 0)
+    #expect(offsets.offsetY == 1)
+}
+
 @Test func appContextResetApplicationDataClearsPersistedState() async throws {
     let suiteName = makeIsolatedDefaultsSuiteName(prefix: "app-reset-tests")
     UserDefaults(suiteName: suiteName)?.removePersistentDomain(forName: suiteName)
@@ -1332,6 +1437,9 @@ import Testing
     let favoriteStore = FavoriteStore(defaults: try #require(UserDefaults(suiteName: suiteName)), key: "favorites")
     let readerCacheStore = ReaderCacheStore(baseDirectory: rootDirectory.appendingPathComponent("reader-cache", isDirectory: true))
     let mangaImageCacheStore = MangaImageCacheStore(baseDirectory: rootDirectory.appendingPathComponent("manga-image-cache", isDirectory: true))
+    let favoriteBackgroundImageStore = FavoriteBackgroundImageStore(
+        baseDirectory: rootDirectory.appendingPathComponent("favorite-background", isDirectory: true)
+    )
     let mangaDirectoryStore = MangaDirectoryStore(
         fileManager: fileManager,
         baseDirectory: rootDirectory.appendingPathComponent("manga-directory", isDirectory: true)
@@ -1343,6 +1451,7 @@ import Testing
         favoriteStore: favoriteStore,
         readerCacheStore: readerCacheStore,
         mangaImageCacheStore: mangaImageCacheStore,
+        favoriteBackgroundImageStore: favoriteBackgroundImageStore,
         mangaDirectoryStore: mangaDirectoryStore
     )
 
@@ -1370,6 +1479,7 @@ import Testing
         )
     )
     try await mangaImageCacheStore.save(Data(repeating: 9, count: 1024), for: imageURL)
+    try await favoriteBackgroundImageStore.save(Data(repeating: 5, count: 256), imageID: "background")
     _ = try await mangaDirectoryStore.initializeDirectory(
         currentURL: threadURL,
         rawTitle: "测试漫画 第1话",
@@ -1384,6 +1494,7 @@ import Testing
     let favorites = await favoriteStore.loadFavorites()
     let readerCacheBytes = await readerCacheStore.totalDiskUsageBytes()
     let mangaCacheBytes = await mangaImageCacheStore.totalDiskUsageBytes()
+    let backgroundData = await favoriteBackgroundImageStore.loadData(imageID: "background")
     let directories = await mangaDirectoryStore.allDirectories()
 
     #expect(session == SessionState())
@@ -1392,6 +1503,7 @@ import Testing
     #expect(favorites.isEmpty)
     #expect(readerCacheBytes == 0)
     #expect(mangaCacheBytes == 0)
+    #expect(backgroundData == nil)
     #expect(directories.isEmpty)
 }
 

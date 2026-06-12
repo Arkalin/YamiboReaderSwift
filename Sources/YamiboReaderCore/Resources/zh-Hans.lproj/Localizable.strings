@@ -65,6 +65,7 @@
 "common.ok" = "确定";
 "common.operation_failed" = "操作失败";
 "common.original_post" = "原帖";
+"common.apply" = "应用";
 "common.refresh" = "刷新";
 "common.retry" = "重试";
 "common.save" = "保存";
@@ -99,6 +100,10 @@
 "favorite_category.manga" = "漫画";
 "favorite_category.novel" = "小说";
 "favorite_category.other" = "其他";
+"favorite_background.blur" = "高斯模糊";
+"favorite_background.change_image" = "选取图片";
+"favorite_background.load_failed" = "无法载入这张图片，请换一张";
+"favorite_background.restore_default" = "恢复默认";
 "favorite_store.collection_name_empty" = "合集名称不能为空";
 "favorite_store.save_manga_progress_failed" = "未能保存漫画进度";
 "favorite_store.save_reader_progress_failed" = "未能保存阅读进度";
@@ -310,6 +315,9 @@
 "settings.confirm_clear_manga_cache" = "确认清除漫画缓存";
 "settings.confirm_clear_novel_cache" = "确认清除小说缓存";
 "settings.confirm_reset_application" = "确认初始化应用";
+"settings.favorite_background" = "收藏页背景";
+"settings.favorite_background.custom" = "自定义";
+"settings.favorite_background.default" = "默认";
 "settings.home_page" = "App 主页";
 "settings.gamepad" = "手柄";
 "settings.gamepad.next_page" = "下一页";

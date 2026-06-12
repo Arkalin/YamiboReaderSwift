@@ -120,6 +120,8 @@ public final class FavoritesViewModel: ObservableObject {
     @Published public private(set) var resolvingFavoriteID: String?
     @Published public private(set) var deletingFavoriteID: String?
     @Published public private(set) var favoriteAppearance = FavoriteAppearanceSettings()
+    @Published public private(set) var favoriteBackground = FavoriteBackgroundSettings()
+    @Published public private(set) var favoriteBackgroundImageData: Data?
     @Published public var errorMessage: String?
 
     private let appContext: YamiboAppContext
@@ -149,7 +151,7 @@ public final class FavoritesViewModel: ObservableObject {
                       changeID == settingsStore.changeID else {
                     continue
                 }
-                await self.reloadFavoriteAppearance()
+                await self.reloadFavoriteSettings()
             }
         }
     }
@@ -160,7 +162,7 @@ public final class FavoritesViewModel: ObservableObject {
     }
 
     public func loadCachedFavorites() async {
-        await reloadFavoriteAppearance()
+        await reloadFavoriteSettings()
         await reloadLocalFavorites()
     }
 
@@ -169,7 +171,20 @@ public final class FavoritesViewModel: ObservableObject {
     }
 
     public func reloadFavoriteAppearance() async {
-        favoriteAppearance = await appContext.settingsStore.load().favoriteAppearance
+        await reloadFavoriteSettings()
+    }
+
+    public func reloadFavoriteSettings() async {
+        let settings = await appContext.settingsStore.load()
+        favoriteAppearance = settings.favoriteAppearance
+        favoriteBackground = settings.favoriteBackground
+        if settings.favoriteBackground.isEnabled {
+            favoriteBackgroundImageData = await appContext.favoriteBackgroundImageStore.loadData(
+                imageID: settings.favoriteBackground.imageID
+            )
+        } else {
+            favoriteBackgroundImageData = nil
+        }
     }
 
     public func refresh() async {

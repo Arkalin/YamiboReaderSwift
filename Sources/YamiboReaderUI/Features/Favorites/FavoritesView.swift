@@ -118,6 +118,12 @@ public struct FavoritesView: View {
     private var favoritesListLayout: some View {
         GeometryReader { geometry in
             ZStack {
+                FavoriteBackgroundLayer(
+                    settings: viewModel.favoriteBackground,
+                    imageData: viewModel.favoriteBackgroundImageData
+                )
+                .ignoresSafeArea()
+
                 if shouldUseTwoColumnLayout(in: geometry.size) {
                     twoColumnFavoritesList
                 } else {
@@ -404,6 +410,8 @@ public struct FavoritesView: View {
                 .moveDisabled(!canReorderEntries)
             }
             .listStyle(.plain)
+            .scrollContentBackground(.hidden)
+            .background(Color.clear)
         }
     }
 

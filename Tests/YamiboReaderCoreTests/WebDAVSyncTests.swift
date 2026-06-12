@@ -387,6 +387,14 @@ private enum WebDAVTestError: Error {
     let appSettings = AppSettings(
         webBrowser: WebBrowserSettings(showsNavigationBar: false),
         favoriteAppearance: FavoriteAppearanceSettings(collection: .purple, novel: .red, manga: .green, other: .gray),
+        favoriteBackground: FavoriteBackgroundSettings(
+            isEnabled: true,
+            imageID: "local-background",
+            scale: 2,
+            offsetX: 0.4,
+            offsetY: -0.2,
+            blurRadius: 12
+        ),
         homePage: .favorites,
         usesDataSaverMode: true
     )
@@ -422,6 +430,9 @@ private enum WebDAVTestError: Error {
     _ = try await service.upload(using: settings)
 
     #expect(uploadedPayload?.appSettings == WebDAVSyncedAppSettings(settings: appSettings))
+    let syncedSettingsData = try JSONEncoder().encode(try #require(uploadedPayload?.appSettings))
+    let syncedSettingsObject = try #require(JSONSerialization.jsonObject(with: syncedSettingsData) as? [String: Any])
+    #expect(syncedSettingsObject["favoriteBackground"] == nil)
 }
 
 @Test func webDAVServiceDownloadAppliesSyncedAppSettingsOnly() async throws {
@@ -437,6 +448,14 @@ private enum WebDAVTestError: Error {
         reader: ReaderAppearanceSettings(readingMode: .vertical),
         webBrowser: WebBrowserSettings(showsNavigationBar: true),
         favoriteAppearance: FavoriteAppearanceSettings(collection: .orange, novel: .pink, manga: .blue, other: .cyan),
+        favoriteBackground: FavoriteBackgroundSettings(
+            isEnabled: true,
+            imageID: "local-background",
+            scale: 1.8,
+            offsetX: 0.25,
+            offsetY: -0.5,
+            blurRadius: 9
+        ),
         homePage: .forum,
         usesDataSaverMode: true,
         collapsesFavoriteSections: true
@@ -480,6 +499,7 @@ private enum WebDAVTestError: Error {
     #expect(loadedSettings.homePage == .favorites)
     #expect(loadedSettings.webBrowser.showsNavigationBar == false)
     #expect(loadedSettings.favoriteAppearance == remoteSyncedSettings.favoriteAppearance)
+    #expect(loadedSettings.favoriteBackground == localSettings.favoriteBackground)
     #expect(loadedSettings.reader.readingMode == .vertical)
     #expect(loadedSettings.usesDataSaverMode == true)
     #expect(loadedSettings.collapsesFavoriteSections == true)

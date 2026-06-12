@@ -23,6 +23,7 @@ public final class YamiboAppContext: YamiboRepositoryProviding, Sendable {
     public let favoriteStore: FavoriteStore
     public let readerCacheStore: ReaderCacheStore
     public let mangaImageCacheStore: MangaImageCacheStore
+    public let favoriteBackgroundImageStore: FavoriteBackgroundImageStore
     public let mangaImageRepository: MangaImageRepository
     public let mangaDirectoryStore: MangaDirectoryStore
     private let session: URLSession
@@ -36,6 +37,7 @@ public final class YamiboAppContext: YamiboRepositoryProviding, Sendable {
         favoriteStore: FavoriteStore = FavoriteStore(),
         readerCacheStore: ReaderCacheStore = ReaderCacheStore(),
         mangaImageCacheStore: MangaImageCacheStore = MangaImageCacheStore(),
+        favoriteBackgroundImageStore: FavoriteBackgroundImageStore = FavoriteBackgroundImageStore(),
         mangaDirectoryStore: MangaDirectoryStore = MangaDirectoryStore(),
         session: URLSession = .shared
     ) {
@@ -47,6 +49,7 @@ public final class YamiboAppContext: YamiboRepositoryProviding, Sendable {
         self.favoriteStore = favoriteStore
         self.readerCacheStore = readerCacheStore
         self.mangaImageCacheStore = mangaImageCacheStore
+        self.favoriteBackgroundImageStore = favoriteBackgroundImageStore
         self.mangaDirectoryStore = mangaDirectoryStore
         self.session = session
         self.mangaImageRepository = MangaImageRepository(
@@ -135,6 +138,7 @@ public final class YamiboAppContext: YamiboRepositoryProviding, Sendable {
         try await favoriteStore.clearAll()
         try await readerCacheStore.clearAll()
         try await mangaImageCacheStore.clearAll()
+        try await favoriteBackgroundImageStore.deleteAll()
         try await mangaDirectoryStore.clearAll()
         clearLocalUIState()
         await clearWebData()

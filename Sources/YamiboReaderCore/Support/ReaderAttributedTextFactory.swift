@@ -176,9 +176,14 @@ public enum ReaderAttributedTextFactory {
             size: baseFontSize * settings.fontScale,
             weight: bodyFontWeight
         )
+        #if canImport(UIKit)
+        let familyName = font.familyName
+        #else
+        let familyName = font.familyName ?? ""
+        #endif
         return [
             font.fontName,
-            font.familyName,
+            familyName,
             String(describing: font.pointSize),
             String(describing: font.fontDescriptor.fontAttributes),
         ].joined(separator: "|")

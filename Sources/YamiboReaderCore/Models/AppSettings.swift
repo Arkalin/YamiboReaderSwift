@@ -285,6 +285,82 @@ public struct FavoriteAppearanceSettings: Codable, Hashable, Sendable {
     }
 }
 
+public struct FavoriteBackgroundSettings: Codable, Hashable, Sendable {
+    public static let minimumScale = 1.0
+    public static let maximumScale = 3.0
+    public static let minimumOffset = -1.0
+    public static let maximumOffset = 1.0
+    public static let minimumBlurRadius = 0.0
+    public static let maximumBlurRadius = 30.0
+
+    public var isEnabled: Bool
+    public var imageID: String?
+    public var scale: Double
+    public var offsetX: Double
+    public var offsetY: Double
+    public var blurRadius: Double
+
+    public init(
+        isEnabled: Bool = false,
+        imageID: String? = nil,
+        scale: Double = 1.0,
+        offsetX: Double = 0,
+        offsetY: Double = 0,
+        blurRadius: Double = 0
+    ) {
+        self.isEnabled = isEnabled
+        self.imageID = imageID
+        self.scale = Self.clampScale(scale)
+        self.offsetX = Self.clampOffset(offsetX)
+        self.offsetY = Self.clampOffset(offsetY)
+        self.blurRadius = Self.clampBlurRadius(blurRadius)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case isEnabled
+        case imageID
+        case scale
+        case offsetX
+        case offsetY
+        case blurRadius
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        isEnabled = try container.decodeIfPresent(Bool.self, forKey: .isEnabled) ?? false
+        imageID = try container.decodeIfPresent(String.self, forKey: .imageID)
+        scale = Self.clampScale(try container.decodeIfPresent(Double.self, forKey: .scale) ?? 1.0)
+        offsetX = Self.clampOffset(try container.decodeIfPresent(Double.self, forKey: .offsetX) ?? 0)
+        offsetY = Self.clampOffset(try container.decodeIfPresent(Double.self, forKey: .offsetY) ?? 0)
+        blurRadius = Self.clampBlurRadius(try container.decodeIfPresent(Double.self, forKey: .blurRadius) ?? 0)
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(isEnabled, forKey: .isEnabled)
+        try container.encodeIfPresent(imageID, forKey: .imageID)
+        try container.encode(Self.clampScale(scale), forKey: .scale)
+        try container.encode(Self.clampOffset(offsetX), forKey: .offsetX)
+        try container.encode(Self.clampOffset(offsetY), forKey: .offsetY)
+        try container.encode(Self.clampBlurRadius(blurRadius), forKey: .blurRadius)
+    }
+
+    public static func clampScale(_ value: Double) -> Double {
+        guard value.isFinite else { return 1.0 }
+        return min(maximumScale, max(minimumScale, value))
+    }
+
+    public static func clampOffset(_ value: Double) -> Double {
+        guard value.isFinite else { return 0 }
+        return min(maximumOffset, max(minimumOffset, value))
+    }
+
+    public static func clampBlurRadius(_ value: Double) -> Double {
+        guard value.isFinite else { return 0 }
+        return min(maximumBlurRadius, max(minimumBlurRadius, value))
+    }
+}
+
 public enum ApplePencilPageTurnGesture: Hashable, Sendable {
     case doubleTap
     case squeeze
@@ -357,6 +433,7 @@ public struct AppSettings: Codable, Hashable, Sendable {
     public var manga: MangaReaderSettings
     public var webBrowser: WebBrowserSettings
     public var favoriteAppearance: FavoriteAppearanceSettings
+    public var favoriteBackground: FavoriteBackgroundSettings
     public var applePencilPageTurn: ApplePencilPageTurnSettings
     public var homePage: AppHomePage
     public var usesDataSaverMode: Bool
@@ -367,6 +444,7 @@ public struct AppSettings: Codable, Hashable, Sendable {
         manga: MangaReaderSettings = .init(),
         webBrowser: WebBrowserSettings = .init(),
         favoriteAppearance: FavoriteAppearanceSettings = .init(),
+        favoriteBackground: FavoriteBackgroundSettings = .init(),
         applePencilPageTurn: ApplePencilPageTurnSettings = .init(),
         homePage: AppHomePage = .forum,
         usesDataSaverMode: Bool = false,
@@ -376,6 +454,7 @@ public struct AppSettings: Codable, Hashable, Sendable {
         self.manga = manga
         self.webBrowser = webBrowser
         self.favoriteAppearance = favoriteAppearance
+        self.favoriteBackground = favoriteBackground
         self.applePencilPageTurn = applePencilPageTurn
         self.homePage = homePage
         self.usesDataSaverMode = usesDataSaverMode
@@ -387,6 +466,7 @@ public struct AppSettings: Codable, Hashable, Sendable {
         case manga
         case webBrowser
         case favoriteAppearance
+        case favoriteBackground
         case applePencilPageTurn
         case homePage
         case usesDataSaverMode
@@ -399,6 +479,7 @@ public struct AppSettings: Codable, Hashable, Sendable {
         manga = try container.decodeIfPresent(MangaReaderSettings.self, forKey: .manga) ?? .init()
         webBrowser = try container.decodeIfPresent(WebBrowserSettings.self, forKey: .webBrowser) ?? .init()
         favoriteAppearance = try container.decodeIfPresent(FavoriteAppearanceSettings.self, forKey: .favoriteAppearance) ?? .init()
+        favoriteBackground = try container.decodeIfPresent(FavoriteBackgroundSettings.self, forKey: .favoriteBackground) ?? .init()
         applePencilPageTurn = try container.decodeIfPresent(ApplePencilPageTurnSettings.self, forKey: .applePencilPageTurn) ?? .init()
         homePage = try container.decodeIfPresent(AppHomePage.self, forKey: .homePage) ?? .forum
         usesDataSaverMode = try container.decodeIfPresent(Bool.self, forKey: .usesDataSaverMode) ?? false
@@ -411,6 +492,7 @@ public struct AppSettings: Codable, Hashable, Sendable {
         try container.encode(manga, forKey: .manga)
         try container.encode(webBrowser, forKey: .webBrowser)
         try container.encode(favoriteAppearance, forKey: .favoriteAppearance)
+        try container.encode(favoriteBackground, forKey: .favoriteBackground)
         try container.encode(applePencilPageTurn, forKey: .applePencilPageTurn)
         try container.encode(homePage, forKey: .homePage)
         try container.encode(usesDataSaverMode, forKey: .usesDataSaverMode)
