@@ -1,6 +1,9 @@
 {
   "name": "YamiboReader Repository",
   "identifier": "com.arkalin.yamiboreader.source",
+  "featuredApps": [
+    "com.arkalin.YamiboReader"
+  ],
   "apps": [
     {
       "name": "Yamibo Reader",
