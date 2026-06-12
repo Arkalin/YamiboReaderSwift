@@ -222,6 +222,7 @@
 "reader.background.sakura" = "樱粉";
 "reader.background.system" = "系统";
 "reader.background_theme" = "背景主题";
+"reader.author_replies_to_others" = "楼主对他人的回帖";
 "reader.cache" = "缓存";
 "reader.comment_anonymous" = "匿名";
 "reader.comment_source.post_comment" = "点评";

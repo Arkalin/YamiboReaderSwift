@@ -118,7 +118,9 @@ struct ReaderSettingsPanel: View {
                 ReaderBooksMiscSection(
                     palette: palette,
                     loadsInlineImages: draftSettings.loadsInlineImages,
-                    onLoadsInlineImagesChange: setImageLoading
+                    showsAuthorRepliesToOthers: draftSettings.showsAuthorRepliesToOthers,
+                    onLoadsInlineImagesChange: setImageLoading,
+                    onShowsAuthorRepliesToOthersChange: setAuthorReplyVisibility
                 )
             }
             .padding(.top, 24)
@@ -156,6 +158,7 @@ struct ReaderSettingsPanel: View {
     }
     private func setTranslationMode(_ value: ReaderTranslationMode) { draftSettings.translationMode = value }
     private func setImageLoading(_ value: Bool) { draftSettings.loadsInlineImages = value }
+    private func setAuthorReplyVisibility(_ value: Bool) { draftSettings.showsAuthorRepliesToOthers = value }
 }
 
 #endif

@@ -70,12 +70,33 @@ public enum ReaderSegment: Hashable, Sendable {
 
 public struct ReaderSegmentSource: Codable, Hashable, Sendable {
     public var ownerPostID: String?
+    public var isAuthorReplyToOther: Bool
 
-    public init(ownerPostID: String? = nil) {
+    public init(ownerPostID: String? = nil, isAuthorReplyToOther: Bool = false) {
         self.ownerPostID = ownerPostID?.trimmingCharacters(in: .whitespacesAndNewlines)
         if self.ownerPostID?.isEmpty == true {
             self.ownerPostID = nil
         }
+        self.isAuthorReplyToOther = isAuthorReplyToOther
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case ownerPostID
+        case isAuthorReplyToOther
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            ownerPostID: try container.decodeIfPresent(String.self, forKey: .ownerPostID),
+            isAuthorReplyToOther: try container.decodeIfPresent(Bool.self, forKey: .isAuthorReplyToOther) ?? false
+        )
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encodeIfPresent(ownerPostID, forKey: .ownerPostID)
+        try container.encode(isAuthorReplyToOther, forKey: .isAuthorReplyToOther)
     }
 }
 
@@ -233,7 +254,7 @@ extension ReaderSegment: Codable {
 }
 
 public struct ReaderPageDocument: Codable, Hashable, Sendable {
-    public static let schemaVersion = 3
+    public static let schemaVersion = 4
 
     public var threadURL: URL
     public var view: Int
@@ -246,6 +267,7 @@ public struct ReaderPageDocument: Codable, Hashable, Sendable {
     public var segmentSources: [ReaderSegmentSource?]
     public var segmentSemantics: [ReaderSegmentSemantics?]
     public var fetchedAt: Date
+    public var decodedSchemaVersion: Int?
 
     public init(
         threadURL: URL,
@@ -258,7 +280,8 @@ public struct ReaderPageDocument: Codable, Hashable, Sendable {
         segments: [ReaderSegment],
         segmentSources: [ReaderSegmentSource?]? = nil,
         segmentSemantics: [ReaderSegmentSemantics?]? = nil,
-        fetchedAt: Date = .now
+        fetchedAt: Date = .now,
+        decodedSchemaVersion: Int? = Self.schemaVersion
     ) {
         self.threadURL = threadURL
         self.view = max(1, view)
@@ -277,6 +300,7 @@ public struct ReaderPageDocument: Codable, Hashable, Sendable {
             contentSource: self.contentSource
         )
         self.fetchedAt = fetchedAt
+        self.decodedSchemaVersion = decodedSchemaVersion
     }
 
     func source(forSegmentIndex index: Int) -> ReaderSegmentSource? {
@@ -344,7 +368,8 @@ extension ReaderPageDocument {
             segments: segments,
             segmentSources: sourceValues,
             segmentSemantics: resolvedSemantics,
-            fetchedAt: try container.decodeIfPresent(Date.self, forKey: .fetchedAt) ?? .distantPast
+            fetchedAt: try container.decodeIfPresent(Date.self, forKey: .fetchedAt) ?? .distantPast,
+            decodedSchemaVersion: schemaVersion
         )
     }
 

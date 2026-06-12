@@ -139,9 +139,13 @@ public enum ReaderHTMLParser {
                 sourceOccurrence += 1
             }
             partial.segments.append(contentsOf: message.segments)
+            let segmentSource = ReaderSegmentSource(
+                ownerPostID: message.ownerPostID,
+                isAuthorReplyToOther: message.isReplyToOther && (contentSource.isAuthorFiltered || message.isOwnerPost)
+            )
             partial.segmentSources.append(
                 contentsOf: Array(
-                    repeating: ReaderSegmentSource(ownerPostID: message.ownerPostID),
+                    repeating: segmentSource,
                     count: message.segments.count
                 )
             )

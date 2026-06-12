@@ -554,6 +554,13 @@ package struct NovelReadingSession: Sendable {
             return target
         }
 
+        if let target = resolveFilteredAuthorReplyFallback(
+            resumePoint,
+            surfacesInView: surfacesInView
+        ) {
+            return target
+        }
+
         if let legacySegmentIndex = resumePoint.legacySegmentIndex,
            let legacySegmentOffset = resumePoint.legacySegmentOffset {
             let candidateSurfaces = surfacesInView.filter { $0.containsLegacyTextSegment(index: legacySegmentIndex) }
@@ -680,6 +687,89 @@ package struct NovelReadingSession: Sendable {
             surfaceOrdinal: chapterSurface.surfaceOrdinal,
             intraSurfaceProgress: min(max(resumePoint.segmentProgress, 0), 1),
             documentView: chapterSurface.documentView
+        )
+    }
+
+    private func resolveFilteredAuthorReplyFallback(
+        _ resumePoint: ReaderResumePoint,
+        surfacesInView: [NovelTextViewportIndexSurface]
+    ) -> ReaderResolvedSurfaceTarget? {
+        guard let textSegmentIdentity = resumePoint.textSegmentIdentity,
+              let hiddenSegmentIndex = currentDocument.segmentSemantics.firstIndex(where: {
+                  $0?.textSegmentIdentity == textSegmentIdentity
+              }),
+              currentDocument.source(forSegmentIndex: hiddenSegmentIndex)?.isAuthorReplyToOther == true else {
+            return nil
+        }
+
+        let visibleRanges = surfacesInView.flatMap { surface in
+            surface.ranges.compactMap { range -> (surface: NovelTextViewportIndexSurface, range: ReaderRenderedTextRange)? in
+                guard currentDocument.source(forSegmentIndex: range.segmentIndex)?.isAuthorReplyToOther != true,
+                      currentDocument.semantics(forSegmentIndex: range.segmentIndex)?.textSegmentIdentity != nil else {
+                    return nil
+                }
+                return (surface, range)
+            }
+        }
+
+        if let previous = visibleRanges
+            .filter({ $0.range.segmentIndex < hiddenSegmentIndex })
+            .max(by: nearestVisibleRangeSort) {
+            return resolvedSurfaceTarget(
+                surface: previous.surface,
+                range: previous.range,
+                displayedTextOffset: previous.range.endOffset,
+                fallbackProgress: 1
+            )
+        }
+
+        if let next = visibleRanges
+            .filter({ $0.range.segmentIndex > hiddenSegmentIndex })
+            .min(by: nearestVisibleRangeSort) {
+            return resolvedSurfaceTarget(
+                surface: next.surface,
+                range: next.range,
+                displayedTextOffset: next.range.startOffset,
+                fallbackProgress: 0
+            )
+        }
+
+        return nil
+    }
+
+    private func nearestVisibleRangeSort(
+        _ lhs: (surface: NovelTextViewportIndexSurface, range: ReaderRenderedTextRange),
+        _ rhs: (surface: NovelTextViewportIndexSurface, range: ReaderRenderedTextRange)
+    ) -> Bool {
+        if lhs.range.segmentIndex != rhs.range.segmentIndex {
+            return lhs.range.segmentIndex < rhs.range.segmentIndex
+        }
+        if lhs.surface.surfaceOrdinal != rhs.surface.surfaceOrdinal {
+            return lhs.surface.surfaceOrdinal < rhs.surface.surfaceOrdinal
+        }
+        return lhs.range.startOffset < rhs.range.startOffset
+    }
+
+    private func resolvedSurfaceTarget(
+        surface: NovelTextViewportIndexSurface,
+        range: ReaderRenderedTextRange,
+        displayedTextOffset: Int,
+        fallbackProgress: Double
+    ) -> ReaderResolvedSurfaceTarget? {
+        guard let textSegmentIdentity = currentDocument
+            .semantics(forSegmentIndex: range.segmentIndex)?
+            .textSegmentIdentity else {
+            return nil
+        }
+        return ReaderResolvedSurfaceTarget(
+            surfaceOrdinal: surface.surfaceOrdinal,
+            intraSurfaceProgress: surface.intraSurfaceProgress(
+                displayedTextOffset: displayedTextOffset,
+                textSegmentIdentity: textSegmentIdentity,
+                fallbackProgress: fallbackProgress,
+                in: currentDocument
+            ),
+            documentView: surface.documentView
         )
     }
 

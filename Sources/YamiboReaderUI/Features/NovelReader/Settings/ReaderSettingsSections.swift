@@ -162,7 +162,9 @@ struct ReaderBooksDisplaySection: View {
 struct ReaderBooksMiscSection: View {
     let palette: ReaderBooksSheetPalette
     let loadsInlineImages: Bool
+    let showsAuthorRepliesToOthers: Bool
     let onLoadsInlineImagesChange: (Bool) -> Void
+    let onShowsAuthorRepliesToOthersChange: (Bool) -> Void
 
     var body: some View {
         ReaderBooksSettingsSection(title: L10n.string("reader.section.other"), palette: palette) {
@@ -172,6 +174,15 @@ struct ReaderBooksMiscSection: View {
                 isOn: Binding(
                     get: { loadsInlineImages },
                     set: { onLoadsInlineImagesChange($0) }
+                )
+            )
+            ReaderBooksDivider(palette: palette)
+            ReaderBooksToggleRow(
+                title: L10n.string("reader.author_replies_to_others"),
+                palette: palette,
+                isOn: Binding(
+                    get: { showsAuthorRepliesToOthers },
+                    set: { onShowsAuthorRepliesToOthersChange($0) }
                 )
             )
         }

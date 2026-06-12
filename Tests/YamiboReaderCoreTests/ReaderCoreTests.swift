@@ -307,6 +307,19 @@ private final class StubURLProtocol: URLProtocol {
             return .response(StubURLProtocolResponse(statusCode: 200, body: body))
         }
 
+        if absolute.contains("tid=30") {
+            return .response(
+                StubURLProtocolResponse(
+                    statusCode: 200,
+                    body: "<html><body><div class=\"message\">新 schema 缓存刷新正文</div></body></html>"
+                )
+            )
+        }
+
+        if absolute.contains("tid=31") {
+            return .error(URLError(.notConnectedToInternet))
+        }
+
         return .error(URLError(.badServerResponse))
         }
     }
@@ -423,6 +436,40 @@ private final class StubURLProtocol: URLProtocol {
     #expect(secondTextInFirstChapter.textSegmentIdentity?.rawValue == "post:101#chapter:0#text:1")
     #expect(repeatedTitleText.chapterIdentity?.rawValue == "post:102#chapter:0")
     #expect(repeatedTitleText.chapterIdentity != firstText.chapterIdentity)
+}
+
+@Test func readerHTMLParserMarksAuthorReplyQuoteSourcesWithoutMarkingPlainBlockquotes() async throws {
+    let html = #"""
+    <html>
+      <body>
+        <div class="message" id="postmessage_201">
+          <div class="quote">
+            <blockquote>读者甲 发表于 2026-5-1 12:00<br>引用内容</blockquote>
+          </div>
+          楼主自己的回复
+        </div>
+        <div class="message" id="postmessage_202">
+          第一章<br>
+          <blockquote>这里是小说正文里的引用排版。</blockquote>
+          正文继续。
+        </div>
+      </body>
+    </html>
+    """#
+    let request = ReaderPageRequest(
+        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=187&mobile=2")),
+        view: 1,
+        authorID: "42"
+    )
+
+    let document = try ReaderHTMLParser.parseDocument(
+        html: html,
+        request: request,
+        contentSource: .authorFilteredPage
+    )
+
+    #expect(document.source(forSegmentIndex: 0)?.isAuthorReplyToOther == true)
+    #expect(document.source(forSegmentIndex: 1)?.isAuthorReplyToOther == false)
 }
 
 @Test func readerHTMLParserExtractsAttachmentImagesFromSiblingImgOne() async throws {
@@ -881,6 +928,43 @@ private final class StubURLProtocol: URLProtocol {
     #expect(vertical.viewportIndex.surfaces.count >= 2)
     #expect(vertical.viewportIndex.chapters.first?.title == "第一章")
     #expect(vertical.viewportIndex.chapters.last?.title == "第二章")
+}
+
+@Test func novelTextLayoutFiltersAuthorRepliesToOthersWhenSettingIsDisabled() throws {
+    let document = ReaderPageDocument(
+        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=188&mobile=2")),
+        view: 1,
+        maxView: 1,
+        contentSource: .authorFilteredPage,
+        segments: [
+            .text(String(repeating: "第一章 正文。", count: 40), chapterTitle: "第一章"),
+            .text(String(repeating: "读者甲 发表于 2026-5-1\n楼主回复。", count: 12), chapterTitle: "读者甲 发表于 2026-5-1"),
+            .text(String(repeating: "第二章 正文。", count: 40), chapterTitle: "第二章"),
+        ],
+        segmentSources: [
+            ReaderSegmentSource(ownerPostID: "301"),
+            ReaderSegmentSource(ownerPostID: "302", isAuthorReplyToOther: true),
+            ReaderSegmentSource(ownerPostID: "303"),
+        ]
+    )
+    let layout = ReaderContainerLayout(width: 320, height: 568)
+    let visible = try NovelTextLayout.layout(
+        document: document,
+        settings: ReaderAppearanceSettings(readingMode: .vertical),
+        layout: layout
+    )
+    let hidden = try NovelTextLayout.layout(
+        document: document,
+        settings: ReaderAppearanceSettings(showsAuthorRepliesToOthers: false, readingMode: .vertical),
+        layout: layout
+    )
+
+    let visibleSegmentIndexes = Set(visible.viewportIndex.surfaces.flatMap { $0.ranges.map(\.segmentIndex) })
+    let hiddenSegmentIndexes = Set(hidden.viewportIndex.surfaces.flatMap { $0.ranges.map(\.segmentIndex) })
+
+    #expect(visibleSegmentIndexes.contains(1))
+    #expect(!hiddenSegmentIndexes.contains(1))
+    #expect(hidden.viewportIndex.chapters.map(\.title) == ["第一章", "第二章"])
 }
 
 @Test func readerContainerLayoutComputesReadableFrameFromSafeAreaAndChrome() async throws {
@@ -3116,6 +3200,72 @@ private final class StubURLProtocol: URLProtocol {
     #expect(preservedText == "全部回复旧缓存")
 }
 
+@Test func readerRepositoryRefreshesCachedDocumentsBeforeAuthorReplyMetadataSchema() async throws {
+    let configuration = URLSessionConfiguration.ephemeral
+    configuration.protocolClasses = [StubURLProtocol.self]
+    let session = URLSession(configuration: configuration)
+    let directory = URL(fileURLWithPath: NSTemporaryDirectory())
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    let cacheStore = ReaderCacheStore(baseDirectory: directory)
+    let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=30&mobile=2"))
+    try await cacheStore.save(
+        ReaderPageDocument(
+            threadURL: threadURL,
+            view: 1,
+            maxView: 1,
+            contentSource: .fallbackUnfilteredPage,
+            segments: [.text("旧 schema 缓存正文", chapterTitle: "第一章")]
+        )
+    )
+    try rewriteCachedReaderDocumentSchemaVersion(in: directory, to: 3)
+    let repository = ReaderRepository(
+        client: YamiboClient(session: session, cookie: "sid=reader", userAgent: "Test-UA"),
+        cacheStore: ReaderCacheStore(baseDirectory: directory)
+    )
+
+    let document = try await repository.loadPage(ReaderPageRequest(threadURL: threadURL, view: 1))
+    let text = document.segments.compactMap { segment -> String? in
+        if case let .text(text, _) = segment { return text }
+        return nil
+    }.first
+
+    #expect(text == "新 schema 缓存刷新正文")
+    #expect(document.decodedSchemaVersion == ReaderPageDocument.schemaVersion)
+}
+
+@Test func readerRepositoryFallsBackToOldSchemaCacheWhenRefreshIsOffline() async throws {
+    let configuration = URLSessionConfiguration.ephemeral
+    configuration.protocolClasses = [StubURLProtocol.self]
+    let session = URLSession(configuration: configuration)
+    let directory = URL(fileURLWithPath: NSTemporaryDirectory())
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    let cacheStore = ReaderCacheStore(baseDirectory: directory)
+    let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=31&mobile=2"))
+    try await cacheStore.save(
+        ReaderPageDocument(
+            threadURL: threadURL,
+            view: 1,
+            maxView: 1,
+            contentSource: .fallbackUnfilteredPage,
+            segments: [.text("旧 schema 离线缓存正文", chapterTitle: "第一章")]
+        )
+    )
+    try rewriteCachedReaderDocumentSchemaVersion(in: directory, to: 3)
+    let repository = ReaderRepository(
+        client: YamiboClient(session: session, cookie: "sid=reader", userAgent: "Test-UA"),
+        cacheStore: ReaderCacheStore(baseDirectory: directory)
+    )
+
+    let document = try await repository.loadPage(ReaderPageRequest(threadURL: threadURL, view: 1))
+    let text = document.segments.compactMap { segment -> String? in
+        if case let .text(text, _) = segment { return text }
+        return nil
+    }.first
+
+    #expect(text == "旧 schema 离线缓存正文")
+    #expect(document.decodedSchemaVersion == 3)
+}
+
 @Test func readerRepositoryCachesViewsSequentiallyAndSkipsFailures() async throws {
     let configuration = URLSessionConfiguration.ephemeral
     configuration.protocolClasses = [StubURLProtocol.self]
@@ -3345,6 +3495,22 @@ private func readerImageSemantics(chapterID: String) -> ReaderSegmentSemantics {
     ReaderSegmentSemantics(
         chapterIdentity: NovelChapterIdentity(rawValue: chapterID)
     )
+}
+
+private func rewriteCachedReaderDocumentSchemaVersion(in directory: URL, to version: Int) throws {
+    let fileManager = FileManager.default
+    let fileURL = try #require(
+        fileManager
+            .contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
+            .first { $0.lastPathComponent.hasPrefix("reader_") && $0.pathExtension == "json" }
+    )
+    let data = try Data(contentsOf: fileURL)
+    guard var object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+        throw CocoaError(.fileReadCorruptFile)
+    }
+    object["schemaVersion"] = version
+    let output = try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
+    try output.write(to: fileURL, options: [.atomic])
 }
 
 private final class LockedCounter: @unchecked Sendable {

@@ -212,7 +212,8 @@ public actor ReaderRepository {
                for: request,
                contentSource: request.authorID == nil ? .fallbackUnfilteredPage : .authorFilteredPage
            ),
-           !isLegacyCachedDocumentMissingChapterCommentSources(cached) {
+           !isLegacyCachedDocumentMissingChapterCommentSources(cached),
+           !isCachedDocumentMissingAuthorReplyMetadata(cached) {
             return cached
         }
 
@@ -252,6 +253,10 @@ public actor ReaderRepository {
         return !document.segmentSources.contains { source in
             source?.ownerPostID?.isEmpty == false
         }
+    }
+
+    private func isCachedDocumentMissingAuthorReplyMetadata(_ document: ReaderPageDocument) -> Bool {
+        (document.decodedSchemaVersion ?? 0) < ReaderPageDocument.schemaVersion
     }
 
     private static func replacingPreviewRatings(
