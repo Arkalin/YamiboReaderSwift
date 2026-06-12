@@ -110,31 +110,53 @@ struct FavoriteBackgroundEditorView: View {
     @State private var isApplying = false
 
     var body: some View {
-        ZStack(alignment: .top) {
-            GeometryReader { geometry in
-                ZStack {
-                    editorBackground
+        GeometryReader { proxy in
+            let topInset = max(proxy.safeAreaInsets.top, windowSafeAreaInsets.top)
 
-                    if let imageData = draft.imageData {
-                        editableImage(data: imageData, containerSize: geometry.size)
+            ZStack {
+                GeometryReader { geometry in
+                    ZStack {
+                        editorBackground
+
+                        if let imageData = draft.imageData {
+                            editableImage(data: imageData, containerSize: geometry.size)
+                        }
+
+                        bottomControls
                     }
-
-                    bottomControls
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(editorBackground)
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(editorBackground)
+                .ignoresSafeArea()
             }
-            .ignoresSafeArea()
-
-            FavoriteBackgroundEditorTopBar(
-                draft: $draft,
-                isApplying: isApplying,
-                onCancel: onCancel,
-                onApply: applyCurrentDraft
-            )
-            .padding(.horizontal, 16)
-            .padding(.bottom, 8)
+            .safeAreaInset(edge: .top, spacing: 0) {
+                FavoriteBackgroundEditorTopBar(
+                    draft: $draft,
+                    isApplying: isApplying,
+                    onCancel: onCancel,
+                    onApply: applyCurrentDraft
+                )
+                .padding(.horizontal, 16)
+                .padding(.top, max(topInset + 8, 20))
+                .padding(.bottom, 8)
+            }
         }
+    }
+
+    private var windowSafeAreaInsets: EdgeInsets {
+        #if os(iOS)
+        guard let insets = UIApplication.shared.connectedScenes
+            .compactMap({ $0 as? UIWindowScene })
+            .flatMap(\.windows)
+            .first(where: \.isKeyWindow)?
+            .safeAreaInsets
+        else {
+            return EdgeInsets()
+        }
+        return EdgeInsets(top: insets.top, leading: insets.left, bottom: insets.bottom, trailing: insets.right)
+        #else
+        return EdgeInsets()
+        #endif
     }
 
     private var editorBackground: some View {
