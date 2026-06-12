@@ -347,7 +347,7 @@ public struct MangaReaderView: View {
                     updateVerticalViewportPosition()
                 }
 
-                if let overlay = verticalZoomOverlay {
+                if verticalZoomOverlay != nil {
                     MangaVerticalZoomOverlay(
                         overlay: $verticalZoomOverlay,
                         activeZoomPageID: $activeZoomPageID,

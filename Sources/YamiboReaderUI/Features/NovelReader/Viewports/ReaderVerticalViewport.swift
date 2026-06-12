@@ -365,7 +365,7 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
             let referenceLineY = ReaderVerticalPositioning.viewportReadingAnchorLineY(in: scrollView.bounds)
             let textSample = collectionView.indexPathsForVisibleItems
                 .compactMap { indexPath -> (distance: CGFloat, sample: NovelTextViewportSample)? in
-                    guard let surface = verticalSurface(for: indexPath.item),
+                    guard verticalSurface(for: indexPath.item) != nil,
                           let cell = collectionView.cellForItem(at: indexPath) as? ReaderVerticalViewportCell,
                           let attributes = collectionView.layoutAttributesForItem(at: indexPath) else {
                         return nil
@@ -633,6 +633,10 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
     override init(frame: CGRect) {
         super.init(frame: frame)
         configureViewHierarchy()
+        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (cell: ReaderVerticalViewportCell, previousTraitCollection) in
+            guard previousTraitCollection.userInterfaceStyle != cell.traitCollection.userInterfaceStyle else { return }
+            cell.reconfigureForCurrentTraitCollection()
+        }
     }
 
     @available(*, unavailable)
@@ -667,10 +671,8 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
         layoutBlockSubviews()
     }
 
-    override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
-        super.traitCollectionDidChange(previousTraitCollection)
-        guard previousTraitCollection?.userInterfaceStyle != traitCollection.userInterfaceStyle,
-              let currentPage,
+    private func reconfigureForCurrentTraitCollection() {
+        guard let currentPage,
               let currentRefererURL else {
             return
         }
@@ -995,14 +997,14 @@ final class ReaderVerticalViewportImageView: UIView {
                       let http = response as? HTTPURLResponse,
                       200 ..< 300 ~= http.statusCode,
                       let image = UIImage(data: data) else {
-                    await self?.showFailure()
+                    self?.showFailure()
                     return
                 }
                 ReaderInlineImageMemoryCache.store(image, for: nextRequestIdentity)
-                await self?.show(image: image)
+                self?.show(image: image)
             } catch {
                 guard !Task.isCancelled else { return }
-                await self?.showFailure()
+                self?.showFailure()
             }
         }
     }

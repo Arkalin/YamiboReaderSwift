@@ -209,7 +209,9 @@ struct ReaderPagedPageCurlViewport: UIViewControllerRepresentable {
         }
 
         deinit {
-            stopPageCurlBackColorRefresh()
+            MainActor.assumeIsolated {
+                stopPageCurlBackColorRefresh()
+            }
         }
 
         func update(
@@ -552,6 +554,7 @@ private final class ReaderPagedPageCurlHostingController: UIHostingController<Re
     }
 }
 
+@MainActor
 private enum ReaderPageCurlPrivateBackColor {
     private static let filtersKey = "filters"
     private static let backgroundFiltersKey = "backgroundFilters"

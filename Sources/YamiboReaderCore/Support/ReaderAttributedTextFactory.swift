@@ -178,7 +178,7 @@ public enum ReaderAttributedTextFactory {
         )
         return [
             font.fontName,
-            font.familyName ?? "",
+            font.familyName,
             String(describing: font.pointSize),
             String(describing: font.fontDescriptor.fontAttributes),
         ].joined(separator: "|")

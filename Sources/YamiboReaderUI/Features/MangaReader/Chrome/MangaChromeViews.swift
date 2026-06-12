@@ -7,12 +7,12 @@ struct MangaBottomChrome: View {
     let bottomInset: CGFloat
     let sliderValue: Double
     let isEditingSlider: Bool
-    let onSliderValueChange: (Double) -> Void
-    let onSliderEditingChanged: (Bool) -> Void
-    let onShowSettings: () -> Void
-    let onShowDirectory: () -> Void
-    let onShowComments: () -> Void
-    let onJumpChapter: (Int) -> Void
+    let onSliderValueChange: @MainActor (Double) -> Void
+    let onSliderEditingChanged: @MainActor (Bool) -> Void
+    let onShowSettings: @MainActor () -> Void
+    let onShowDirectory: @MainActor () -> Void
+    let onShowComments: @MainActor () -> Void
+    let onJumpChapter: @MainActor (Int) -> Void
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
@@ -56,7 +56,7 @@ struct MangaBottomChrome: View {
                             Slider(
                                 value: Binding(
                                     get: { sliderValue },
-                                    set: onSliderValueChange
+                                    set: { newValue in onSliderValueChange(newValue) }
                                 ),
                                 in: model.sliderRange,
                                 step: 1

@@ -159,6 +159,7 @@ enum MangaWebJavaScript {
     """
 }
 
+@MainActor
 final class MangaWebJSBridge: NSObject, WKScriptMessageHandler {
     var onOpenNative: ((String, Int, [URL]) -> Void)?
 
@@ -172,17 +173,14 @@ final class MangaWebJSBridge: NSObject, WKScriptMessageHandler {
         webView.configuration.userContentController.removeScriptMessageHandler(forName: MangaWebMessageName.nativeOpen)
     }
 
-    nonisolated func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         guard message.name == MangaWebMessageName.nativeOpen else { return }
         guard let dictionary = message.body as? [String: Any] else { return }
         let title = dictionary["title"] as? String ?? L10n.string("manga.reader.title")
         let clickedIndex = dictionary["clickedIndex"] as? Int ?? 0
         let urls = (dictionary["urls"] as? [String] ?? []).compactMap(URL.init(string:))
         guard !urls.isEmpty else { return }
-        let handler = onOpenNative
-        Task { @MainActor in
-            handler?(title, max(0, clickedIndex), urls)
-        }
+        onOpenNative?(title, max(0, clickedIndex), urls)
     }
 }
 
