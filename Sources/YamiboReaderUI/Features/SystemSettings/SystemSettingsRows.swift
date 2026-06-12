@@ -43,12 +43,20 @@ struct SystemSettingsRow: View {
     let title: String
     let value: String?
     let showsChevron: Bool
+    let showsChevronAfterValue: Bool
     let titleColor: Color
 
-    init(title: String, value: String? = nil, showsChevron: Bool = true, titleColor: Color = .primary) {
+    init(
+        title: String,
+        value: String? = nil,
+        showsChevron: Bool = true,
+        showsChevronAfterValue: Bool = false,
+        titleColor: Color = .primary
+    ) {
         self.title = title
         self.value = value
         self.showsChevron = showsChevron
+        self.showsChevronAfterValue = showsChevronAfterValue
         self.titleColor = titleColor
     }
 
@@ -62,7 +70,9 @@ struct SystemSettingsRow: View {
             if let value {
                 Text(value)
                     .foregroundStyle(.secondary)
-            } else if showsChevron {
+            }
+
+            if showsChevron && (value == nil || showsChevronAfterValue) {
                 Image(systemName: "chevron.right")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.tertiary)
