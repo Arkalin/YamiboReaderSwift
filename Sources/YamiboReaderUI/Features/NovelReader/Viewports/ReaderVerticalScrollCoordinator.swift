@@ -119,18 +119,23 @@ final class ReaderVerticalScrollCoordinator: NSObject, UIGestureRecognizerDelega
     private func installContentOffsetObservationIfNeeded() {
         guard let scrollView else { return }
         contentOffsetObservation = scrollView.observe(\.contentOffset, options: [.old, .new]) { [weak self] _, change in
-            guard let self, let oldValue = change.oldValue, let newValue = change.newValue else { return }
-            guard oldValue != newValue else { return }
-            guard !self.isRestoringOffset else { return }
-            self.lastMotionTime = CACurrentMediaTime()
-            self.scheduleViewportSync()
+            guard let oldValue = change.oldValue, let newValue = change.newValue else { return }
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                guard oldValue != newValue else { return }
+                guard !self.isRestoringOffset else { return }
+                self.lastMotionTime = CACurrentMediaTime()
+                self.scheduleViewportSync()
+            }
         }
     }
 
     private func installBoundsObservationIfNeeded() {
         guard let scrollView else { return }
         boundsObservation = scrollView.observe(\.bounds, options: [.initial, .new]) { [weak self] _, _ in
-            self?.scheduleViewportSync()
+            Task { @MainActor [weak self] in
+                self?.scheduleViewportSync()
+            }
         }
     }
 

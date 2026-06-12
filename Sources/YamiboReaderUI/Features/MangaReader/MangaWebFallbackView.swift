@@ -491,28 +491,28 @@ private struct MangaFallbackWebView: UIViewRepresentable {
         nonisolated func webView(
             _ webView: WKWebView,
             decidePolicyFor navigationAction: WKNavigationAction,
-            decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
+            decisionHandler: @escaping @MainActor (WKNavigationActionPolicy) -> Void
         ) {
-            guard let url = navigationAction.request.url else {
-                decisionHandler(.cancel)
-                return
-            }
-
-            if navigationAction.targetFrame == nil, isInternal(url) {
-                webView.load(URLRequest(url: url))
-                decisionHandler(.cancel)
-                return
-            }
-
-            if !isInternal(url) {
-                Task { @MainActor in
-                    UIApplication.shared.open(url)
+            Task { @MainActor in
+                guard let url = navigationAction.request.url else {
+                    decisionHandler(.cancel)
+                    return
                 }
-                decisionHandler(.cancel)
-                return
-            }
 
-            decisionHandler(.allow)
+                if navigationAction.targetFrame == nil, isInternal(url) {
+                    webView.load(URLRequest(url: url))
+                    decisionHandler(.cancel)
+                    return
+                }
+
+                if !isInternal(url) {
+                    UIApplication.shared.open(url)
+                    decisionHandler(.cancel)
+                    return
+                }
+
+                decisionHandler(.allow)
+            }
         }
 
         nonisolated func webView(
@@ -521,13 +521,12 @@ private struct MangaFallbackWebView: UIViewRepresentable {
             for navigationAction: WKNavigationAction,
             windowFeatures: WKWindowFeatures
         ) -> WKWebView? {
-            if let url = navigationAction.request.url {
+            Task { @MainActor in
+                guard let url = navigationAction.request.url else { return }
                 if isInternal(url) {
                     webView.load(URLRequest(url: url))
                 } else {
-                    Task { @MainActor in
-                        UIApplication.shared.open(url)
-                    }
+                    UIApplication.shared.open(url)
                 }
             }
             return nil
