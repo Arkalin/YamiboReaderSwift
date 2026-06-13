@@ -103,7 +103,7 @@ public struct RootTabView: View {
                   changeID == appModel.appContext.settingsStore.changeID else {
                 continue
             }
-            appModel.scheduleWebDAVUploadForLocalChange()
+            appModel.scheduleWebDAVUploadForLocalChange(touchesAppSettings: true)
         }
     }
 }

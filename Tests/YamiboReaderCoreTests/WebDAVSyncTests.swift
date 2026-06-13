@@ -274,6 +274,272 @@ private enum WebDAVTestError: Error {
     #expect(updatedSettings.localUpdatedAt == payload.updatedAt)
 }
 
+@Test func webDAVAutomaticSyncMergesRefreshedRemoteFavoritesWithoutOverwritingNewerReadingPosition() async throws {
+    let suiteName = makeWebDAVDefaultsSuiteName(prefix: "webdav-auto-domain-merge")
+    UserDefaults(suiteName: suiteName)?.removePersistentDomain(forName: suiteName)
+    let settingsStore = WebDAVSyncSettingsStore(defaults: try makeWebDAVDefaults(suiteName: suiteName), key: "webdav")
+    let favoriteStore = FavoriteStore(defaults: try makeWebDAVDefaults(suiteName: suiteName), key: "favorites")
+    let sessionStore = SessionStore(defaults: try makeWebDAVDefaults(suiteName: suiteName), key: "session")
+    let host = "auto-domain-merge.example.com"
+    let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=906&mobile=2"))
+    let canonicalKey = ReaderCacheIdentity.canonicalThreadURL(from: url).absoluteString
+    let baseClock = Date(timeIntervalSince1970: 1_000)
+    let remoteReadingClock = Date(timeIntervalSince1970: 3_000)
+    let staleLocalFavorite = Favorite(title: "本地旧阅读", url: url, lastView: 1, type: .novel)
+    let newerRemoteFavorite = Favorite(title: "远端旧标题", url: url, lastView: 8, lastChapter: "第八章", type: .novel)
+    var localMetadata = FavoriteLibrarySyncMetadata(remoteFavoritesUpdatedAt: baseClock)
+    localMetadata.readingPositionUpdatedAtByCanonicalURL[canonicalKey] = baseClock
+    var remoteMetadata = FavoriteLibrarySyncMetadata(remoteFavoritesUpdatedAt: baseClock)
+    remoteMetadata.readingPositionUpdatedAtByCanonicalURL[canonicalKey] = remoteReadingClock
+
+    try await settingsStore.save(WebDAVSyncSettings(
+        baseURLString: "https://\(host)",
+        username: "admin",
+        password: "secret",
+        isAutoSyncEnabled: true,
+        lastRemoteUpdatedAt: baseClock,
+        localUpdatedAt: baseClock
+    ))
+    try await sessionStore.save(SessionState(cookie: "sid=local", isLoggedIn: true, accountUID: "100"))
+    try await favoriteStore.saveLibrarySnapshot(FavoriteLibrarySnapshot(
+        favorites: [staleLocalFavorite],
+        collections: [],
+        syncMetadata: localMetadata
+    ))
+
+    _ = try await favoriteStore.mergeRemoteFavorites([
+        Favorite(title: "刷新后的收藏标题", url: url, remoteFavoriteID: "remote-906")
+    ])
+
+    let remotePayload = WebDAVSyncPayload(
+        updatedAt: remoteReadingClock,
+        accountUID: "100",
+        library: FavoriteLibrarySnapshot(
+            favorites: [newerRemoteFavorite],
+            collections: [],
+            syncMetadata: remoteMetadata
+        )
+    )
+    let encodedRemotePayload = try JSONEncoder().encode(remotePayload)
+    var uploadedPayload: WebDAVSyncPayload?
+    var methods: [String] = []
+
+    WebDAVTestURLProtocol.setHandler(for: host) { request in
+        methods.append(request.httpMethod ?? "")
+        switch request.httpMethod {
+        case "GET":
+            return (
+                encodedRemotePayload,
+                HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
+            )
+        case "MKCOL":
+            return (Data(), HTTPURLResponse(url: request.url!, statusCode: 405, httpVersion: nil, headerFields: nil)!)
+        case "PUT":
+            let body = try #require(request.webDAVBodyData())
+            uploadedPayload = try JSONDecoder().decode(WebDAVSyncPayload.self, from: body)
+            return (Data(), HTTPURLResponse(url: request.url!, statusCode: 201, httpVersion: nil, headerFields: nil)!)
+        default:
+            Issue.record("Unexpected method \(request.httpMethod ?? "nil")")
+            return (Data(), HTTPURLResponse(url: request.url!, statusCode: 500, httpVersion: nil, headerFields: nil)!)
+        }
+    }
+    defer { WebDAVTestURLProtocol.removeHandler(for: host) }
+
+    let service = WebDAVSyncService(
+        settingsStore: settingsStore,
+        favoriteStore: favoriteStore,
+        sessionStore: sessionStore,
+        client: WebDAVClient(session: makeWebDAVTestSession())
+    )
+
+    _ = try await service.synchronizeAutomatically()
+
+    let mergedLocalFavorite = try #require(await favoriteStore.favorite(for: url))
+    #expect(mergedLocalFavorite.title == "刷新后的收藏标题")
+    #expect(mergedLocalFavorite.remoteFavoriteID == "remote-906")
+    #expect(mergedLocalFavorite.lastView == 8)
+    #expect(mergedLocalFavorite.lastChapter == "第八章")
+    #expect(methods == ["GET", "MKCOL", "PUT"])
+    let uploadedFavorite = try #require(uploadedPayload?.library.favorites.first)
+    #expect(uploadedFavorite.title == "刷新后的收藏标题")
+    #expect(uploadedFavorite.lastView == 8)
+    #expect(uploadedPayload?.library.syncMetadata.readingPositionUpdatedAtByCanonicalURL[canonicalKey] == remoteReadingClock)
+}
+
+@Test func webDAVAutomaticSyncNoOpLocalMetadataDoesNotOverrideRemoteMetadata() async throws {
+    let suiteName = makeWebDAVDefaultsSuiteName(prefix: "webdav-auto-noop-metadata")
+    UserDefaults(suiteName: suiteName)?.removePersistentDomain(forName: suiteName)
+    let settingsStore = WebDAVSyncSettingsStore(defaults: try makeWebDAVDefaults(suiteName: suiteName), key: "webdav")
+    let favoriteStore = FavoriteStore(defaults: try makeWebDAVDefaults(suiteName: suiteName), key: "favorites")
+    let sessionStore = SessionStore(defaults: try makeWebDAVDefaults(suiteName: suiteName), key: "session")
+    let host = "auto-noop-metadata.example.com"
+    let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=908&mobile=2"))
+    let canonicalKey = ReaderCacheIdentity.canonicalThreadURL(from: url).absoluteString
+    let baseClock = Date(timeIntervalSince1970: 1_000)
+    let remoteMetadataClock = Date(timeIntervalSince1970: 3_000)
+    let localFavorite = Favorite(
+        title: "同一收藏",
+        displayName: "本地旧名",
+        url: url,
+        isHidden: false,
+        type: .unknown
+    )
+    let remoteFavorite = Favorite(
+        title: "同一收藏",
+        displayName: "远端新名",
+        url: url,
+        isHidden: true,
+        type: .manga
+    )
+    var localMetadata = FavoriteLibrarySyncMetadata(remoteFavoritesUpdatedAt: baseClock)
+    localMetadata.favoriteMetadataUpdatedAtByCanonicalURL[canonicalKey] = baseClock
+    var remoteMetadata = FavoriteLibrarySyncMetadata(remoteFavoritesUpdatedAt: baseClock)
+    remoteMetadata.favoriteMetadataUpdatedAtByCanonicalURL[canonicalKey] = remoteMetadataClock
+
+    try await settingsStore.save(WebDAVSyncSettings(
+        baseURLString: "https://\(host)",
+        username: "admin",
+        password: "secret",
+        isAutoSyncEnabled: true,
+        lastRemoteUpdatedAt: baseClock,
+        localUpdatedAt: baseClock
+    ))
+    try await sessionStore.save(SessionState(cookie: "sid=local", isLoggedIn: true, accountUID: "100"))
+    try await favoriteStore.saveLibrarySnapshot(FavoriteLibrarySnapshot(
+        favorites: [localFavorite],
+        collections: [],
+        syncMetadata: localMetadata
+    ))
+
+    _ = try await favoriteStore.setHidden(false, for: localFavorite.id)
+    _ = try await favoriteStore.setType(.unknown, for: localFavorite.id)
+    _ = try await favoriteStore.setDisplayName("  本地旧名  ", for: localFavorite.id)
+
+    let remotePayload = WebDAVSyncPayload(
+        updatedAt: remoteMetadataClock,
+        accountUID: "100",
+        library: FavoriteLibrarySnapshot(
+            favorites: [remoteFavorite],
+            collections: [],
+            syncMetadata: remoteMetadata
+        )
+    )
+    let encodedRemotePayload = try JSONEncoder().encode(remotePayload)
+
+    WebDAVTestURLProtocol.setHandler(for: host) { request in
+        switch request.httpMethod {
+        case "GET":
+            return (
+                encodedRemotePayload,
+                HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
+            )
+        case "MKCOL":
+            return (Data(), HTTPURLResponse(url: request.url!, statusCode: 405, httpVersion: nil, headerFields: nil)!)
+        case "PUT":
+            return (Data(), HTTPURLResponse(url: request.url!, statusCode: 201, httpVersion: nil, headerFields: nil)!)
+        default:
+            Issue.record("Unexpected method \(request.httpMethod ?? "nil")")
+            return (Data(), HTTPURLResponse(url: request.url!, statusCode: 500, httpVersion: nil, headerFields: nil)!)
+        }
+    }
+    defer { WebDAVTestURLProtocol.removeHandler(for: host) }
+
+    let service = WebDAVSyncService(
+        settingsStore: settingsStore,
+        favoriteStore: favoriteStore,
+        sessionStore: sessionStore,
+        client: WebDAVClient(session: makeWebDAVTestSession())
+    )
+
+    _ = try await service.synchronizeAutomatically()
+
+    let mergedSnapshot = await favoriteStore.loadLibrarySnapshot()
+    let mergedLocalFavorite = try #require(mergedSnapshot.favorites.first)
+    #expect(mergedLocalFavorite.displayName == "远端新名")
+    #expect(mergedLocalFavorite.isHidden)
+    #expect(mergedLocalFavorite.type == .manga)
+    #expect(mergedSnapshot.syncMetadata.favoriteMetadataUpdatedAtByCanonicalURL[canonicalKey] == remoteMetadataClock)
+}
+
+@Test func webDAVAutomaticSyncKeepsLocalDeletionWhenRemotePayloadStillContainsFavorite() async throws {
+    let suiteName = makeWebDAVDefaultsSuiteName(prefix: "webdav-auto-local-delete")
+    UserDefaults(suiteName: suiteName)?.removePersistentDomain(forName: suiteName)
+    let settingsStore = WebDAVSyncSettingsStore(defaults: try makeWebDAVDefaults(suiteName: suiteName), key: "webdav")
+    let favoriteStore = FavoriteStore(defaults: try makeWebDAVDefaults(suiteName: suiteName), key: "favorites")
+    let sessionStore = SessionStore(defaults: try makeWebDAVDefaults(suiteName: suiteName), key: "session")
+    let host = "auto-local-delete.example.com"
+    let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=907&mobile=2"))
+    let baseClock = Date(timeIntervalSince1970: 1_000)
+    let favorite = Favorite(title: "已删除收藏", url: url, remoteFavoriteID: "remote-907")
+    let localMetadata = FavoriteLibrarySyncMetadata(remoteFavoritesUpdatedAt: baseClock)
+    let remoteMetadata = FavoriteLibrarySyncMetadata(remoteFavoritesUpdatedAt: baseClock)
+
+    try await settingsStore.save(WebDAVSyncSettings(
+        baseURLString: "https://\(host)",
+        username: "admin",
+        password: "secret",
+        isAutoSyncEnabled: true,
+        lastRemoteUpdatedAt: baseClock,
+        localUpdatedAt: baseClock
+    ))
+    try await sessionStore.save(SessionState(cookie: "sid=local", isLoggedIn: true, accountUID: "100"))
+    try await favoriteStore.saveLibrarySnapshot(FavoriteLibrarySnapshot(
+        favorites: [favorite],
+        collections: [],
+        syncMetadata: localMetadata
+    ))
+    _ = try await favoriteStore.deleteFavorites(ids: [favorite.id])
+
+    let localDeleteClock = try #require((await favoriteStore.loadLibrarySnapshot()).syncMetadata.remoteFavoritesUpdatedAt)
+    let remotePayload = WebDAVSyncPayload(
+        updatedAt: baseClock,
+        accountUID: "100",
+        library: FavoriteLibrarySnapshot(
+            favorites: [favorite],
+            collections: [],
+            syncMetadata: remoteMetadata
+        )
+    )
+    let encodedRemotePayload = try JSONEncoder().encode(remotePayload)
+    var uploadedPayload: WebDAVSyncPayload?
+    var methods: [String] = []
+
+    WebDAVTestURLProtocol.setHandler(for: host) { request in
+        methods.append(request.httpMethod ?? "")
+        switch request.httpMethod {
+        case "GET":
+            return (
+                encodedRemotePayload,
+                HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
+            )
+        case "MKCOL":
+            return (Data(), HTTPURLResponse(url: request.url!, statusCode: 405, httpVersion: nil, headerFields: nil)!)
+        case "PUT":
+            let body = try #require(request.webDAVBodyData())
+            uploadedPayload = try JSONDecoder().decode(WebDAVSyncPayload.self, from: body)
+            return (Data(), HTTPURLResponse(url: request.url!, statusCode: 201, httpVersion: nil, headerFields: nil)!)
+        default:
+            Issue.record("Unexpected method \(request.httpMethod ?? "nil")")
+            return (Data(), HTTPURLResponse(url: request.url!, statusCode: 500, httpVersion: nil, headerFields: nil)!)
+        }
+    }
+    defer { WebDAVTestURLProtocol.removeHandler(for: host) }
+
+    let service = WebDAVSyncService(
+        settingsStore: settingsStore,
+        favoriteStore: favoriteStore,
+        sessionStore: sessionStore,
+        client: WebDAVClient(session: makeWebDAVTestSession())
+    )
+
+    _ = try await service.synchronizeAutomatically()
+
+    #expect(await favoriteStore.loadFavorites().isEmpty)
+    #expect(methods == ["GET", "MKCOL", "PUT"])
+    #expect(uploadedPayload?.library.favorites.isEmpty == true)
+    #expect(uploadedPayload?.library.syncMetadata.remoteFavoritesUpdatedAt == localDeleteClock)
+}
+
 @Test func webDAVAutomaticSyncDownloadsArchivedFavoriteMetadata() async throws {
     let suiteName = makeWebDAVDefaultsSuiteName(prefix: "webdav-auto-archive")
     UserDefaults(suiteName: suiteName)?.removePersistentDomain(forName: suiteName)
@@ -648,7 +914,9 @@ private enum WebDAVTestError: Error {
 
     let payloadData = try #require(uploadedPayloadData)
     let uploadedPayload = try JSONDecoder().decode(WebDAVSyncPayload.self, from: payloadData)
-    #expect(uploadedPayload.library == expectedLibrary)
+    #expect(uploadedPayload.version == WebDAVSyncPayload.currentVersion)
+    #expect(!uploadedPayload.library.syncMetadata.isEmpty)
+    #expect(uploadedPayload.library.withoutSyncMetadata == expectedLibrary)
 
     WebDAVTestURLProtocol.setHandler(for: host) { request in
         #expect(request.httpMethod == "GET")
@@ -666,7 +934,7 @@ private enum WebDAVTestError: Error {
     )
     _ = try await downloadService.download(using: settings)
 
-    #expect(await downloadFavoriteStore.loadLibrarySnapshot() == expectedLibrary)
+    #expect((await downloadFavoriteStore.loadLibrarySnapshot()).withoutSyncMetadata == expectedLibrary)
 }
 
 @Test func webDAVDownloadSanitizesDanglingTagReferencesFromLegacyPayload() async throws {
@@ -732,6 +1000,7 @@ private enum WebDAVTestError: Error {
     #expect(loadedLibrary.tags.isEmpty)
     #expect(loadedLibrary.favorites.first?.tagIDs == [])
     #expect(loadedLibrary.archivedMetadata.first?.tagIDs == [])
+    #expect(!loadedLibrary.syncMetadata.isEmpty)
 }
 
 @Test func webDAVManualSyncRequiresConfirmationForAccountMismatch() async throws {
@@ -899,5 +1168,13 @@ private extension URLRequest {
             data.append(buffer, count: readCount)
         }
         return data
+    }
+}
+
+private extension FavoriteLibrarySnapshot {
+    var withoutSyncMetadata: FavoriteLibrarySnapshot {
+        var snapshot = self
+        snapshot.syncMetadata = FavoriteLibrarySyncMetadata()
+        return snapshot
     }
 }

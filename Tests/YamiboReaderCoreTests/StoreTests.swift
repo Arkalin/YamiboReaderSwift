@@ -329,6 +329,109 @@ import Testing
     #expect(loaded?.lastReadAt == readAt)
 }
 
+@Test func favoriteStoreRemoteRefreshTouchesOnlyRemoteFavoritesClock() async throws {
+    let defaults = try #require(UserDefaults(suiteName: "favorite-remote-clock-tests"))
+    defaults.removePersistentDomain(forName: "favorite-remote-clock-tests")
+    let store = FavoriteStore(defaults: defaults, key: "favorites")
+    let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=330&mobile=2"))
+    let favorite = Favorite(title: "旧标题", displayName: "本地名", url: url, lastView: 3, isHidden: true)
+
+    try await store.saveLibrarySnapshot(FavoriteLibrarySnapshot(favorites: [favorite], collections: []))
+
+    _ = try await store.mergeRemoteFavorites([
+        Favorite(title: "新标题", url: url, remoteFavoriteID: "remote-330")
+    ])
+
+    let metadata = await store.loadLibrarySnapshot().syncMetadata
+    #expect(metadata.remoteFavoritesUpdatedAt != nil)
+    #expect(metadata.readingPositionUpdatedAtByCanonicalURL.isEmpty)
+    #expect(metadata.lastReadAtUpdatedAtByCanonicalURL.isEmpty)
+    #expect(metadata.favoriteMetadataUpdatedAtByCanonicalURL.isEmpty)
+    #expect(metadata.favoriteOrganizationUpdatedAtByCanonicalURL.isEmpty)
+    #expect(metadata.collectionUpdatedAtByID.isEmpty)
+    #expect(metadata.tagUpdatedAtByID.isEmpty)
+}
+
+@Test func favoriteStoreReadingPositionAndLastReadClocksAreSeparate() async throws {
+    let defaults = try #require(UserDefaults(suiteName: "favorite-reading-clock-tests"))
+    defaults.removePersistentDomain(forName: "favorite-reading-clock-tests")
+    let store = FavoriteStore(defaults: defaults, key: "favorites")
+    let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=331&mobile=2"))
+    let canonicalKey = ReaderCacheIdentity.canonicalThreadURL(from: url).absoluteString
+    let favorite = Favorite(title: "阅读 clock", url: url)
+    let readAt = Date(timeIntervalSince1970: 1_900_000_000)
+
+    try await store.saveLibrarySnapshot(FavoriteLibrarySnapshot(favorites: [favorite], collections: []))
+
+    _ = try await store.updateNovelReadingPosition(NovelReadingPosition(threadURL: url, view: 4, chapterTitle: "第四章"))
+    let afterProgress = await store.loadLibrarySnapshot().syncMetadata
+    let progressClock = try #require(afterProgress.readingPositionUpdatedAtByCanonicalURL[canonicalKey])
+    #expect(afterProgress.remoteFavoritesUpdatedAt == nil)
+    #expect(afterProgress.lastReadAtUpdatedAtByCanonicalURL[canonicalKey] == nil)
+
+    _ = try await store.markLastReadAt(for: favorite.id, date: readAt)
+    let afterLastRead = await store.loadLibrarySnapshot().syncMetadata
+    #expect(afterLastRead.readingPositionUpdatedAtByCanonicalURL[canonicalKey] == progressClock)
+    #expect(afterLastRead.lastReadAtUpdatedAtByCanonicalURL[canonicalKey] == readAt)
+}
+
+@Test func favoriteStoreDeletingFavoriteTouchesRemoteFavoritesClock() async throws {
+    let defaults = try #require(UserDefaults(suiteName: "favorite-delete-list-clock-tests"))
+    defaults.removePersistentDomain(forName: "favorite-delete-list-clock-tests")
+    let store = FavoriteStore(defaults: defaults, key: "favorites")
+    let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=332&mobile=2"))
+    let favorite = Favorite(title: "删除 clock", url: url)
+    let baseClock = Date(timeIntervalSince1970: 1_000)
+
+    try await store.saveLibrarySnapshot(FavoriteLibrarySnapshot(
+        favorites: [favorite],
+        collections: [],
+        syncMetadata: FavoriteLibrarySyncMetadata(remoteFavoritesUpdatedAt: baseClock)
+    ))
+
+    let updated = try await store.deleteFavorites(ids: [favorite.id])
+    let metadata = await store.loadLibrarySnapshot().syncMetadata
+    let listClock = try #require(metadata.remoteFavoritesUpdatedAt)
+
+    #expect(updated.favorites.isEmpty)
+    #expect(listClock > baseClock)
+}
+
+@Test func favoriteStoreCreatingNovelFavoriteFromReadingPositionTouchesListAndReadingClocks() async throws {
+    let defaults = try #require(UserDefaults(suiteName: "favorite-create-novel-clock-tests"))
+    defaults.removePersistentDomain(forName: "favorite-create-novel-clock-tests")
+    let store = FavoriteStore(defaults: defaults, key: "favorites")
+    let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=333&mobile=2"))
+    let canonicalKey = ReaderCacheIdentity.canonicalThreadURL(from: url).absoluteString
+
+    _ = try await store.updateNovelReadingPosition(NovelReadingPosition(threadURL: url, view: 4, chapterTitle: "第四章"))
+    let afterCreate = await store.loadLibrarySnapshot().syncMetadata
+    let listClock = try #require(afterCreate.remoteFavoritesUpdatedAt)
+    let readingClock = try #require(afterCreate.readingPositionUpdatedAtByCanonicalURL[canonicalKey])
+
+    #expect(listClock == readingClock)
+
+    _ = try await store.updateNovelReadingPosition(NovelReadingPosition(threadURL: url, view: 5, chapterTitle: "第五章"))
+    let afterExistingUpdate = await store.loadLibrarySnapshot().syncMetadata
+    #expect(afterExistingUpdate.remoteFavoritesUpdatedAt == listClock)
+}
+
+@Test func favoriteStoreCreatingMangaFavoriteFromReadingPositionTouchesListAndReadingClocks() async throws {
+    let defaults = try #require(UserDefaults(suiteName: "favorite-create-manga-clock-tests"))
+    defaults.removePersistentDomain(forName: "favorite-create-manga-clock-tests")
+    let store = FavoriteStore(defaults: defaults, key: "favorites")
+    let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=334&mobile=2"))
+    let chapterURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=334&page=2&mobile=2"))
+    let canonicalKey = ReaderCacheIdentity.canonicalThreadURL(from: url).absoluteString
+
+    _ = try await store.updateMangaProgress(for: url, chapterURL: chapterURL, chapterTitle: "第二话", pageIndex: 7)
+    let metadata = await store.loadLibrarySnapshot().syncMetadata
+    let listClock = try #require(metadata.remoteFavoritesUpdatedAt)
+    let readingClock = try #require(metadata.readingPositionUpdatedAtByCanonicalURL[canonicalKey])
+
+    #expect(listClock == readingClock)
+}
+
 @Test func favoriteLibrarySnapshotPersistsTagsAndRestoresArchivedTagMetadata() async throws {
     let defaults = try #require(UserDefaults(suiteName: "favorite-tag-model-tests"))
     defaults.removePersistentDomain(forName: "favorite-tag-model-tests")
@@ -711,6 +814,43 @@ import Testing
     let cleared = try await store.setDisplayName("   ", for: favorite.id)
     #expect(cleared.first?.displayName == nil)
     #expect(cleared.first?.resolvedDisplayTitle == "原标题")
+}
+
+@Test func favoriteStoreNoOpMetadataUpdatesDoNotAdvanceMetadataClock() async throws {
+    let defaults = try #require(UserDefaults(suiteName: "favorite-metadata-noop-clock-tests"))
+    defaults.removePersistentDomain(forName: "favorite-metadata-noop-clock-tests")
+    let store = FavoriteStore(defaults: defaults, key: "favorites")
+    let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=200&mobile=2"))
+    let canonicalKey = ReaderCacheIdentity.canonicalThreadURL(from: url).absoluteString
+    let baseClock = Date(timeIntervalSince1970: 1_000)
+    let favorite = Favorite(
+        title: "原标题",
+        displayName: "自定义名称",
+        url: url,
+        isHidden: true,
+        type: .novel
+    )
+    var syncMetadata = FavoriteLibrarySyncMetadata()
+    syncMetadata.favoriteMetadataUpdatedAtByCanonicalURL[canonicalKey] = baseClock
+
+    try await store.saveLibrarySnapshot(FavoriteLibrarySnapshot(
+        favorites: [favorite],
+        collections: [],
+        syncMetadata: syncMetadata
+    ))
+
+    _ = try await store.setHidden(true, for: favorite.id)
+    _ = try await store.setType(.novel, for: favorite.id)
+    _ = try await store.setDisplayName("  自定义名称  ", for: favorite.id)
+
+    let afterNoOps = await store.loadLibrarySnapshot()
+    #expect(afterNoOps.syncMetadata.favoriteMetadataUpdatedAtByCanonicalURL[canonicalKey] == baseClock)
+
+    _ = try await store.setDisplayName("新名称", for: favorite.id)
+    let afterRealChange = await store.loadLibrarySnapshot()
+    let changedClock = try #require(afterRealChange.syncMetadata.favoriteMetadataUpdatedAtByCanonicalURL[canonicalKey])
+    #expect(changedClock > baseClock)
+    #expect(afterRealChange.favorites.first?.displayName == "新名称")
 }
 
 @Test func favoriteStoreMergePreservesLocalDisplayName() async throws {

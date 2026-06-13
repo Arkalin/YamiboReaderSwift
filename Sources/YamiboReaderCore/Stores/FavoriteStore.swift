@@ -46,6 +46,7 @@ public actor FavoriteStore: FavoriteStoring {
     private let collectionsKey: String
     private let tagsKey: String
     private let archivedMetadataKey: String
+    private let syncMetadataKey: String
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
 
@@ -59,6 +60,7 @@ public actor FavoriteStore: FavoriteStoring {
         collectionsKey = "\(key).collections"
         tagsKey = "\(key).tags"
         archivedMetadataKey = "\(key).archivedMetadata"
+        syncMetadataKey = "\(key).syncMetadata"
     }
 
     public func loadFavorites() async -> [Favorite] {
@@ -84,10 +86,19 @@ public actor FavoriteStore: FavoriteStoring {
     }
 
     public func loadLibrarySnapshot() async -> FavoriteLibrarySnapshot {
-        let favorites = await loadFavorites()
-        let collections = await loadCollections()
-        let tags = await loadTags()
+        loadLibrarySnapshotSync()
+    }
+
+    private func loadLibrarySnapshotSync() -> FavoriteLibrarySnapshot {
+        let collections = sanitizeLoadedCollections(decodedValue([FavoriteCollection].self, forKey: collectionsKey) ?? [])
+        let tags = sanitizeTagsForPersistence(decodedValue([FavoriteTag].self, forKey: tagsKey) ?? [])
         let validTagIDs = Set(tags.map(\.id))
+        let favorites = sanitizeLoadedFavorites(
+            decodedValue([Favorite].self, forKey: key) ?? [],
+            collections: collections,
+            validCollectionIDs: Set(collections.map(\.id)),
+            validTagIDs: validTagIDs
+        )
         return FavoriteLibrarySnapshot(
             favorites: favorites,
             collections: collections,
@@ -95,13 +106,18 @@ public actor FavoriteStore: FavoriteStoring {
             archivedMetadata: sanitizeArchivedMetadata(
                 loadArchivedMetadata(),
                 validTagIDs: validTagIDs
-            )
+            ),
+            syncMetadata: loadSyncMetadata()
         )
     }
 
     public func saveFavorites(_ favorites: [Favorite]) async throws {
         let collections = await loadCollections()
-        _ = try persistLibrary(favorites: favorites, collections: collections)
+        _ = try persistLibrary(
+            favorites: favorites,
+            collections: collections,
+            metadataUpdate: Self.touchUserOwnedChanges(date: .now)
+        )
     }
 
     public func saveLibrarySnapshot(_ snapshot: FavoriteLibrarySnapshot) async throws {
@@ -109,7 +125,8 @@ public actor FavoriteStore: FavoriteStoring {
             favorites: snapshot.favorites,
             collections: snapshot.collections,
             tags: snapshot.tags,
-            archivedMetadata: snapshot.archivedMetadata
+            archivedMetadata: snapshot.archivedMetadata,
+            syncMetadata: snapshot.syncMetadata
         )
     }
 
@@ -136,7 +153,8 @@ public actor FavoriteStore: FavoriteStoring {
             favorites: snapshot.favorites,
             collections: snapshot.collections,
             tags: [tag] + shiftedTags,
-            archivedMetadata: snapshot.archivedMetadata
+            archivedMetadata: snapshot.archivedMetadata,
+            metadataUpdate: Self.touchUserOwnedChanges(date: date)
         )
     }
 
@@ -165,7 +183,8 @@ public actor FavoriteStore: FavoriteStoring {
             favorites: snapshot.favorites,
             collections: snapshot.collections,
             tags: updatedTags,
-            archivedMetadata: snapshot.archivedMetadata
+            archivedMetadata: snapshot.archivedMetadata,
+            metadataUpdate: Self.touchUserOwnedChanges(date: date)
         )
     }
 
@@ -187,7 +206,8 @@ public actor FavoriteStore: FavoriteStoring {
             favorites: updatedFavorites,
             collections: snapshot.collections,
             tags: updatedTags,
-            archivedMetadata: updatedArchivedMetadata
+            archivedMetadata: updatedArchivedMetadata,
+            metadataUpdate: Self.touchUserOwnedChanges(date: .now)
         )
     }
 
@@ -198,7 +218,8 @@ public actor FavoriteStore: FavoriteStoring {
             favorites: library.snapshot.favorites,
             collections: library.snapshot.collections,
             tags: library.snapshot.tags,
-            archivedMetadata: library.snapshot.archivedMetadata
+            archivedMetadata: library.snapshot.archivedMetadata,
+            metadataUpdate: Self.touchRemoteFavorites(date: .now)
         )
         return snapshot.favorites
     }
@@ -253,7 +274,8 @@ public actor FavoriteStore: FavoriteStoring {
                 collections: snapshot.collections,
                 favoritesByCollection: favoritesByCollection
             ),
-            collections: snapshot.collections
+            collections: snapshot.collections,
+            metadataUpdate: Self.touchUserOwnedChanges(date: .now)
         )
         return updatedSnapshot.favorites
     }
@@ -305,7 +327,8 @@ public actor FavoriteStore: FavoriteStoring {
                 collections: reorderedCollections,
                 favoritesByCollection: favoritesByCollection
             ),
-            collections: reorderedCollections
+            collections: reorderedCollections,
+            metadataUpdate: Self.touchUserOwnedChanges(date: .now)
         )
     }
 
@@ -355,7 +378,8 @@ public actor FavoriteStore: FavoriteStoring {
             favorites: snapshot.favorites,
             collections: snapshot.collections,
             tags: reorderedTags,
-            archivedMetadata: snapshot.archivedMetadata
+            archivedMetadata: snapshot.archivedMetadata,
+            metadataUpdate: Self.touchUserOwnedChanges(date: date)
         )
     }
 
@@ -390,7 +414,8 @@ public actor FavoriteStore: FavoriteStoring {
                 collections: [collection] + existingCollections,
                 favoritesByCollection: favoritesByCollection
             ),
-            collections: [collection] + existingCollections
+            collections: [collection] + existingCollections,
+            metadataUpdate: Self.touchUserOwnedChanges(date: .now)
         )
     }
 
@@ -441,7 +466,8 @@ public actor FavoriteStore: FavoriteStoring {
                 collections: collections,
                 favoritesByCollection: byCollection
             ),
-            collections: collections
+            collections: collections,
+            metadataUpdate: Self.touchUserOwnedChanges(date: .now)
         )
     }
 
@@ -475,7 +501,8 @@ public actor FavoriteStore: FavoriteStoring {
                 collections: remainingCollections,
                 favoritesByCollection: byCollection
             ),
-            collections: remainingCollections
+            collections: remainingCollections,
+            metadataUpdate: Self.touchUserOwnedChanges(date: .now)
         )
     }
 
@@ -492,7 +519,11 @@ public actor FavoriteStore: FavoriteStoring {
             collection.name = trimmedName
             return collection
         }
-        return try persistLibrary(favorites: snapshot.favorites, collections: updatedCollections)
+        return try persistLibrary(
+            favorites: snapshot.favorites,
+            collections: updatedCollections,
+            metadataUpdate: Self.touchUserOwnedChanges(date: .now)
+        )
     }
 
     public func setCollectionHidden(_ isHidden: Bool, for collectionID: String) async throws -> FavoriteLibrarySnapshot {
@@ -503,7 +534,11 @@ public actor FavoriteStore: FavoriteStoring {
             collection.isHidden = isHidden
             return collection
         }
-        return try persistLibrary(favorites: snapshot.favorites, collections: updatedCollections)
+        return try persistLibrary(
+            favorites: snapshot.favorites,
+            collections: updatedCollections,
+            metadataUpdate: Self.touchUserOwnedChanges(date: .now)
+        )
     }
 
     public func setHidden(_ isHidden: Bool, for favoriteID: String) async throws -> [Favorite] {
@@ -514,7 +549,11 @@ public actor FavoriteStore: FavoriteStoring {
             favorite.isHidden = isHidden
             return favorite
         }
-        return try persistLibrary(favorites: updated, collections: snapshot.collections).favorites
+        return try persistLibrary(
+            favorites: updated,
+            collections: snapshot.collections,
+            metadataUpdate: Self.touchFavoriteMetadata(favoriteIDs: Set([favoriteID]), date: .now)
+        ).favorites
     }
 
     public func setDisplayName(_ displayName: String?, for favoriteID: String) async throws -> [Favorite] {
@@ -524,7 +563,8 @@ public actor FavoriteStore: FavoriteStoring {
             favorites: library.snapshot.favorites,
             collections: library.snapshot.collections,
             tags: library.snapshot.tags,
-            archivedMetadata: library.snapshot.archivedMetadata
+            archivedMetadata: library.snapshot.archivedMetadata,
+            metadataUpdate: Self.touchFavoriteMetadata(favoriteIDs: Set([favoriteID]), date: .now)
         ).favorites
     }
 
@@ -536,7 +576,11 @@ public actor FavoriteStore: FavoriteStoring {
             favorite.type = type
             return favorite
         }
-        return try persistLibrary(favorites: updated, collections: snapshot.collections).favorites
+        return try persistLibrary(
+            favorites: updated,
+            collections: snapshot.collections,
+            metadataUpdate: Self.touchFavoriteMetadata(favoriteIDs: Set([favoriteID]), date: .now)
+        ).favorites
     }
 
     public func setTagIDs(_ tagIDs: [String], for favoriteID: String) async throws -> [Favorite] {
@@ -572,7 +616,8 @@ public actor FavoriteStore: FavoriteStoring {
         return try persistLibrary(
             favorites: updated,
             collections: snapshot.collections,
-            tags: updatedTags
+            tags: updatedTags,
+            metadataUpdate: Self.touchUserOwnedChanges(date: date)
         )
     }
 
@@ -586,7 +631,11 @@ public actor FavoriteStore: FavoriteStoring {
         guard !selectedIDs.isEmpty else { return snapshot }
 
         let updatedFavorites = snapshot.favorites.filter { !selectedIDs.contains($0.id) }
-        return try persistLibrary(favorites: updatedFavorites, collections: snapshot.collections)
+        return try persistLibrary(
+            favorites: updatedFavorites,
+            collections: snapshot.collections,
+            metadataUpdate: Self.touchUserOwnedChanges(date: .now)
+        )
     }
 
     public func favorite(for url: URL) async -> Favorite? {
@@ -607,7 +656,11 @@ public actor FavoriteStore: FavoriteStoring {
             favorite.lastReadAt = date
             return favorite
         }
-        return try persistLibrary(favorites: updated, collections: snapshot.collections).favorites
+        return try persistLibrary(
+            favorites: updated,
+            collections: snapshot.collections,
+            metadataUpdate: Self.touchLastReadAt(favoriteIDs: Set([favoriteID]), date: date)
+        ).favorites
     }
 
     public func updateNovelReadingPosition(_ position: NovelReadingPosition) async throws -> Favorite {
@@ -641,7 +694,11 @@ public actor FavoriteStore: FavoriteStoring {
             favorites[index].novelDocumentSurfaceProgressPercent = position.documentSurfaceProgressPercent
             favorites[index].lastMangaURL = nil
             favorites[index].type = .novel
-            return try persistLibrary(favorites: favorites, collections: snapshot.collections).favorites[index]
+            return try persistLibrary(
+                favorites: favorites,
+                collections: snapshot.collections,
+                metadataUpdate: Self.touchReadingPosition(canonicalURLKeys: Set([Self.canonicalURLKey(for: position.threadURL)]), date: .now)
+            ).favorites[index]
         }
 
         guard createIfMissing else { return nil }
@@ -661,7 +718,14 @@ public actor FavoriteStore: FavoriteStoring {
         )
         favorite.parentCollectionID = nil
         favorites.append(favorite)
-        return try persistLibrary(favorites: favorites, collections: snapshot.collections).favorites.last ?? favorite
+        return try persistLibrary(
+            favorites: favorites,
+            collections: snapshot.collections,
+            metadataUpdate: Self.touchReadingPositionAndRemoteFavorites(
+                canonicalURLKeys: Set([Self.canonicalURLKey(for: position.threadURL)]),
+                date: .now
+            )
+        ).favorites.last ?? favorite
     }
 
     public func updateMangaProgress(for url: URL, chapterURL: URL, chapterTitle: String, pageIndex: Int) async throws -> Favorite {
@@ -688,7 +752,11 @@ public actor FavoriteStore: FavoriteStoring {
             favorites[index].novelResumePoint = nil
             favorites[index].novelMaxView = nil
             favorites[index].type = .manga
-            return try persistLibrary(favorites: favorites, collections: snapshot.collections).favorites[index]
+            return try persistLibrary(
+                favorites: favorites,
+                collections: snapshot.collections,
+                metadataUpdate: Self.touchReadingPosition(canonicalURLKeys: Set([Self.canonicalURLKey(for: url)]), date: .now)
+            ).favorites[index]
         }
 
         guard createIfMissing else { return nil }
@@ -708,19 +776,35 @@ public actor FavoriteStore: FavoriteStoring {
         )
         favorite.parentCollectionID = nil
         favorites.append(favorite)
-        return try persistLibrary(favorites: favorites, collections: snapshot.collections).favorites.last ?? favorite
+        return try persistLibrary(
+            favorites: favorites,
+            collections: snapshot.collections,
+            metadataUpdate: Self.touchReadingPositionAndRemoteFavorites(
+                canonicalURLKeys: Set([Self.canonicalURLKey(for: url)]),
+                date: .now
+            )
+        ).favorites.last ?? favorite
     }
 
     public func clearAll() async throws {
-        _ = try persistLibrary(favorites: [], collections: [], tags: [], archivedMetadata: [])
+        _ = try persistLibrary(
+            favorites: [],
+            collections: [],
+            tags: [],
+            archivedMetadata: [],
+            metadataUpdate: Self.touchUserOwnedChanges(date: .now)
+        )
     }
 
     private func persistLibrary(
         favorites: [Favorite],
         collections: [FavoriteCollection],
         tags: [FavoriteTag]? = nil,
-        archivedMetadata: [FavoriteMetadataArchiveEntry]? = nil
+        archivedMetadata: [FavoriteMetadataArchiveEntry]? = nil,
+        syncMetadata: FavoriteLibrarySyncMetadata? = nil,
+        metadataUpdate: ((inout FavoriteLibrarySyncMetadata, FavoriteLibrarySnapshot, FavoriteLibrarySnapshot) -> Void)? = nil
     ) throws -> FavoriteLibrarySnapshot {
+        let previousSnapshot = loadLibrarySnapshotSync()
         let sanitizedCollections = sanitizeCollectionsForPersistence(collections)
         let sanitizedTags = sanitizeTagsForPersistence(tags ?? (decodedValue([FavoriteTag].self, forKey: tagsKey) ?? []))
         let validCollectionIDs = Set(sanitizedCollections.map(\.id))
@@ -734,30 +818,172 @@ public actor FavoriteStore: FavoriteStoring {
             archivedMetadata ?? loadArchivedMetadata(),
             validTagIDs: validTagIDs
         )
+        var resolvedSyncMetadata = syncMetadata ?? loadSyncMetadata()
+        let nextSnapshotWithoutMetadata = FavoriteLibrarySnapshot(
+            favorites: sanitizedFavorites,
+            collections: sanitizedCollections,
+            tags: sanitizedTags,
+            archivedMetadata: resolvedArchivedMetadata
+        )
+        metadataUpdate?(&resolvedSyncMetadata, previousSnapshot, nextSnapshotWithoutMetadata)
 
         do {
             let favoritesData = try encoder.encode(sanitizedFavorites)
             let collectionsData = try encoder.encode(sanitizedCollections)
             let tagsData = try encoder.encode(sanitizedTags)
             let archivedMetadataData = try encoder.encode(resolvedArchivedMetadata)
+            let syncMetadataData = try encoder.encode(resolvedSyncMetadata)
             defaults.set(favoritesData, forKey: key)
             defaults.set(collectionsData, forKey: collectionsKey)
             defaults.set(tagsData, forKey: tagsKey)
             defaults.set(archivedMetadataData, forKey: archivedMetadataKey)
+            defaults.set(syncMetadataData, forKey: syncMetadataKey)
             postChangeNotification()
             return FavoriteLibrarySnapshot(
                 favorites: sanitizedFavorites,
                 collections: sanitizedCollections,
                 tags: sanitizedTags,
-                archivedMetadata: resolvedArchivedMetadata
+                archivedMetadata: resolvedArchivedMetadata,
+                syncMetadata: resolvedSyncMetadata
             )
         } catch {
             throw YamiboError.persistenceFailed(error.localizedDescription)
         }
     }
 
+    private static func touchRemoteFavorites(
+        date: Date
+    ) -> (inout FavoriteLibrarySyncMetadata, FavoriteLibrarySnapshot, FavoriteLibrarySnapshot) -> Void {
+        { metadata, _, _ in
+            metadata.remoteFavoritesUpdatedAt = date
+        }
+    }
+
+    private static func touchReadingPosition(
+        canonicalURLKeys: Set<String>,
+        date: Date
+    ) -> (inout FavoriteLibrarySyncMetadata, FavoriteLibrarySnapshot, FavoriteLibrarySnapshot) -> Void {
+        { metadata, _, _ in
+            for key in canonicalURLKeys {
+                metadata.readingPositionUpdatedAtByCanonicalURL[key] = date
+            }
+        }
+    }
+
+    private static func touchReadingPositionAndRemoteFavorites(
+        canonicalURLKeys: Set<String>,
+        date: Date
+    ) -> (inout FavoriteLibrarySyncMetadata, FavoriteLibrarySnapshot, FavoriteLibrarySnapshot) -> Void {
+        { metadata, _, _ in
+            metadata.remoteFavoritesUpdatedAt = date
+            for key in canonicalURLKeys {
+                metadata.readingPositionUpdatedAtByCanonicalURL[key] = date
+            }
+        }
+    }
+
+    private static func touchFavoriteMetadata(
+        favoriteIDs: Set<String>,
+        date: Date
+    ) -> (inout FavoriteLibrarySyncMetadata, FavoriteLibrarySnapshot, FavoriteLibrarySnapshot) -> Void {
+        { metadata, previous, next in
+            let previousRecords = favoriteClockRecords(from: previous)
+            let nextRecords = favoriteClockRecords(from: next)
+            for key in canonicalURLKeys(forFavoriteIDs: favoriteIDs, previous: previous, next: next) {
+                guard previousRecords[key]?.favoriteMetadata != nextRecords[key]?.favoriteMetadata else { continue }
+                metadata.favoriteMetadataUpdatedAtByCanonicalURL[key] = date
+            }
+        }
+    }
+
+    private static func touchLastReadAt(
+        favoriteIDs: Set<String>,
+        date: Date
+    ) -> (inout FavoriteLibrarySyncMetadata, FavoriteLibrarySnapshot, FavoriteLibrarySnapshot) -> Void {
+        { metadata, previous, next in
+            for key in canonicalURLKeys(forFavoriteIDs: favoriteIDs, previous: previous, next: next) {
+                metadata.lastReadAtUpdatedAtByCanonicalURL[key] = date
+            }
+        }
+    }
+
+    private static func touchUserOwnedChanges(
+        date: Date
+    ) -> (inout FavoriteLibrarySyncMetadata, FavoriteLibrarySnapshot, FavoriteLibrarySnapshot) -> Void {
+        { metadata, previous, next in
+            let previousVisibleFavoriteKeys = Set(previous.favorites.map { canonicalURLKey(for: $0.url) })
+            let nextVisibleFavoriteKeys = Set(next.favorites.map { canonicalURLKey(for: $0.url) })
+            if previousVisibleFavoriteKeys != nextVisibleFavoriteKeys {
+                metadata.remoteFavoritesUpdatedAt = date
+            }
+
+            let previousRecords = favoriteClockRecords(from: previous)
+            let nextRecords = favoriteClockRecords(from: next)
+            for key in Set(previousRecords.keys).union(nextRecords.keys) {
+                let previousRecord = previousRecords[key]
+                let nextRecord = nextRecords[key]
+                if previousRecord?.readingPosition != nextRecord?.readingPosition {
+                    metadata.readingPositionUpdatedAtByCanonicalURL[key] = date
+                }
+                if previousRecord?.lastReadAt != nextRecord?.lastReadAt {
+                    metadata.lastReadAtUpdatedAtByCanonicalURL[key] = date
+                }
+                if previousRecord?.favoriteMetadata != nextRecord?.favoriteMetadata {
+                    metadata.favoriteMetadataUpdatedAtByCanonicalURL[key] = date
+                }
+                if previousRecord?.organization != nextRecord?.organization {
+                    metadata.favoriteOrganizationUpdatedAtByCanonicalURL[key] = date
+                }
+            }
+
+            let previousCollections = Dictionary(uniqueKeysWithValues: previous.collections.map { ($0.id, $0) })
+            let nextCollections = Dictionary(uniqueKeysWithValues: next.collections.map { ($0.id, $0) })
+            for id in Set(previousCollections.keys).union(nextCollections.keys) where previousCollections[id] != nextCollections[id] {
+                metadata.collectionUpdatedAtByID[id] = date
+            }
+
+            let previousTags = Dictionary(uniqueKeysWithValues: previous.tags.map { ($0.id, $0) })
+            let nextTags = Dictionary(uniqueKeysWithValues: next.tags.map { ($0.id, $0) })
+            for id in Set(previousTags.keys).union(nextTags.keys) where previousTags[id] != nextTags[id] {
+                metadata.tagUpdatedAtByID[id] = date
+            }
+        }
+    }
+
+    private static func canonicalURLKey(for url: URL) -> String {
+        ReaderCacheIdentity.canonicalThreadURL(from: url).absoluteString
+    }
+
+    private static func canonicalURLKeys(
+        forFavoriteIDs favoriteIDs: Set<String>,
+        previous: FavoriteLibrarySnapshot,
+        next: FavoriteLibrarySnapshot
+    ) -> Set<String> {
+        let favorites = previous.favorites + next.favorites
+        return Set(favorites.compactMap { favorite in
+            favoriteIDs.contains(favorite.id) ? canonicalURLKey(for: favorite.url) : nil
+        })
+    }
+
+    private static func favoriteClockRecords(
+        from snapshot: FavoriteLibrarySnapshot
+    ) -> [String: FavoriteClockRecord] {
+        var records: [String: FavoriteClockRecord] = [:]
+        for favorite in snapshot.favorites {
+            records[canonicalURLKey(for: favorite.url)] = FavoriteClockRecord(favorite: favorite)
+        }
+        for archive in snapshot.archivedMetadata {
+            records[archive.canonicalThreadURL.absoluteString] = FavoriteClockRecord(archive: archive)
+        }
+        return records
+    }
+
     private func loadArchivedMetadata() -> [FavoriteMetadataArchiveEntry] {
         decodedValue([FavoriteMetadataArchiveEntry].self, forKey: archivedMetadataKey) ?? []
+    }
+
+    private func loadSyncMetadata() -> FavoriteLibrarySyncMetadata {
+        decodedValue(FavoriteLibrarySyncMetadata.self, forKey: syncMetadataKey) ?? FavoriteLibrarySyncMetadata()
     }
 
 
@@ -1077,6 +1303,84 @@ private enum RootEntry {
         }
         return nil
     }
+}
+
+private struct FavoriteClockRecord: Equatable {
+    var readingPosition: FavoriteReadingPositionClockFields
+    var lastReadAt: Date?
+    var favoriteMetadata: FavoriteMetadataClockFields
+    var organization: FavoriteOrganizationClockFields
+
+    init(favorite: Favorite) {
+        readingPosition = FavoriteReadingPositionClockFields(
+            mangaPageIndex: favorite.mangaPageIndex,
+            lastView: favorite.lastView,
+            lastChapter: favorite.lastChapter,
+            authorID: favorite.authorID,
+            novelResumePoint: favorite.novelResumePoint,
+            novelMaxView: favorite.novelMaxView,
+            novelDocumentSurfaceProgressPercent: favorite.novelDocumentSurfaceProgressPercent,
+            lastMangaURL: favorite.lastMangaURL
+        )
+        lastReadAt = favorite.lastReadAt
+        favoriteMetadata = FavoriteMetadataClockFields(
+            displayName: favorite.displayName,
+            isHidden: favorite.isHidden,
+            type: favorite.type
+        )
+        organization = FavoriteOrganizationClockFields(
+            parentCollectionID: favorite.parentCollectionID,
+            manualOrder: favorite.manualOrder,
+            tagIDs: favorite.tagIDs
+        )
+    }
+
+    init(archive: FavoriteMetadataArchiveEntry) {
+        readingPosition = FavoriteReadingPositionClockFields(
+            mangaPageIndex: archive.mangaPageIndex,
+            lastView: archive.lastView,
+            lastChapter: archive.lastChapter,
+            authorID: archive.authorID,
+            novelResumePoint: archive.novelResumePoint,
+            novelMaxView: archive.novelMaxView,
+            novelDocumentSurfaceProgressPercent: archive.novelDocumentSurfaceProgressPercent,
+            lastMangaURL: archive.lastMangaURL
+        )
+        lastReadAt = archive.lastReadAt
+        favoriteMetadata = FavoriteMetadataClockFields(
+            displayName: archive.displayName,
+            isHidden: archive.isHidden,
+            type: archive.type
+        )
+        organization = FavoriteOrganizationClockFields(
+            parentCollectionID: archive.parentCollectionID,
+            manualOrder: archive.manualOrder,
+            tagIDs: archive.tagIDs
+        )
+    }
+}
+
+private struct FavoriteReadingPositionClockFields: Equatable {
+    var mangaPageIndex: Int
+    var lastView: Int
+    var lastChapter: String?
+    var authorID: String?
+    var novelResumePoint: ReaderResumePoint?
+    var novelMaxView: Int?
+    var novelDocumentSurfaceProgressPercent: Int?
+    var lastMangaURL: URL?
+}
+
+private struct FavoriteMetadataClockFields: Equatable {
+    var displayName: String?
+    var isHidden: Bool
+    var type: FavoriteType
+}
+
+private struct FavoriteOrganizationClockFields: Equatable {
+    var parentCollectionID: String?
+    var manualOrder: Int
+    var tagIDs: [String]
 }
 
 private extension String {
