@@ -90,13 +90,13 @@ public final class YamiboAppModel {
         }
     }
 
-    public func scheduleWebDAVUploadForLocalChange() {
+    public func scheduleWebDAVUploadForLocalChange(touchesAppSettings: Bool = false) {
         guard !isWebDAVSyncInProgress else { return }
         webDAVDebouncedUploadTask?.cancel()
-        webDAVDebouncedUploadTask = Task { @MainActor [appContext] in
+        webDAVDebouncedUploadTask = Task { @MainActor [appContext, touchesAppSettings] in
             do {
                 let service = appContext.makeWebDAVSyncService()
-                try await service.markLocalDataChanged()
+                try await service.markLocalDataChanged(touchesAppSettings: touchesAppSettings)
                 try await Task.sleep(for: .seconds(2))
 
                 guard !isWebDAVSyncInProgress else { return }

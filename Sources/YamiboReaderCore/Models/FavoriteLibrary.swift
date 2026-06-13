@@ -1,28 +1,105 @@
 import Foundation
 
+public struct FavoriteLibrarySyncMetadata: Codable, Equatable, Sendable {
+    public var remoteFavoritesUpdatedAt: Date?
+    public var readingPositionUpdatedAtByCanonicalURL: [String: Date]
+    public var lastReadAtUpdatedAtByCanonicalURL: [String: Date]
+    public var favoriteMetadataUpdatedAtByCanonicalURL: [String: Date]
+    public var favoriteOrganizationUpdatedAtByCanonicalURL: [String: Date]
+    public var collectionUpdatedAtByID: [String: Date]
+    public var tagUpdatedAtByID: [String: Date]
+
+    public init(
+        remoteFavoritesUpdatedAt: Date? = nil,
+        readingPositionUpdatedAtByCanonicalURL: [String: Date] = [:],
+        lastReadAtUpdatedAtByCanonicalURL: [String: Date] = [:],
+        favoriteMetadataUpdatedAtByCanonicalURL: [String: Date] = [:],
+        favoriteOrganizationUpdatedAtByCanonicalURL: [String: Date] = [:],
+        collectionUpdatedAtByID: [String: Date] = [:],
+        tagUpdatedAtByID: [String: Date] = [:]
+    ) {
+        self.remoteFavoritesUpdatedAt = remoteFavoritesUpdatedAt
+        self.readingPositionUpdatedAtByCanonicalURL = readingPositionUpdatedAtByCanonicalURL
+        self.lastReadAtUpdatedAtByCanonicalURL = lastReadAtUpdatedAtByCanonicalURL
+        self.favoriteMetadataUpdatedAtByCanonicalURL = favoriteMetadataUpdatedAtByCanonicalURL
+        self.favoriteOrganizationUpdatedAtByCanonicalURL = favoriteOrganizationUpdatedAtByCanonicalURL
+        self.collectionUpdatedAtByID = collectionUpdatedAtByID
+        self.tagUpdatedAtByID = tagUpdatedAtByID
+    }
+
+    public var isEmpty: Bool {
+        remoteFavoritesUpdatedAt == nil &&
+            readingPositionUpdatedAtByCanonicalURL.isEmpty &&
+            lastReadAtUpdatedAtByCanonicalURL.isEmpty &&
+            favoriteMetadataUpdatedAtByCanonicalURL.isEmpty &&
+            favoriteOrganizationUpdatedAtByCanonicalURL.isEmpty &&
+            collectionUpdatedAtByID.isEmpty &&
+            tagUpdatedAtByID.isEmpty
+    }
+
+    public static func inferred(from snapshot: FavoriteLibrarySnapshot, updatedAt date: Date) -> Self {
+        var metadata = Self(remoteFavoritesUpdatedAt: date)
+        for key in snapshot.favoriteCanonicalURLKeys {
+            metadata.readingPositionUpdatedAtByCanonicalURL[key] = date
+            metadata.lastReadAtUpdatedAtByCanonicalURL[key] = date
+            metadata.favoriteMetadataUpdatedAtByCanonicalURL[key] = date
+            metadata.favoriteOrganizationUpdatedAtByCanonicalURL[key] = date
+        }
+        for collection in snapshot.collections {
+            metadata.collectionUpdatedAtByID[collection.id] = date
+        }
+        for tag in snapshot.tags {
+            metadata.tagUpdatedAtByID[tag.id] = date
+        }
+        return metadata
+    }
+
+    public mutating func inferMissingDomains(from snapshot: FavoriteLibrarySnapshot, updatedAt date: Date) {
+        if remoteFavoritesUpdatedAt == nil {
+            remoteFavoritesUpdatedAt = date
+        }
+        for key in snapshot.favoriteCanonicalURLKeys {
+            readingPositionUpdatedAtByCanonicalURL[key] = readingPositionUpdatedAtByCanonicalURL[key] ?? date
+            lastReadAtUpdatedAtByCanonicalURL[key] = lastReadAtUpdatedAtByCanonicalURL[key] ?? date
+            favoriteMetadataUpdatedAtByCanonicalURL[key] = favoriteMetadataUpdatedAtByCanonicalURL[key] ?? date
+            favoriteOrganizationUpdatedAtByCanonicalURL[key] = favoriteOrganizationUpdatedAtByCanonicalURL[key] ?? date
+        }
+        for collection in snapshot.collections {
+            collectionUpdatedAtByID[collection.id] = collectionUpdatedAtByID[collection.id] ?? date
+        }
+        for tag in snapshot.tags {
+            tagUpdatedAtByID[tag.id] = tagUpdatedAtByID[tag.id] ?? date
+        }
+    }
+}
+
 public struct FavoriteLibrarySnapshot: Codable, Equatable, Sendable {
     public var favorites: [Favorite]
     public var collections: [FavoriteCollection]
     public var tags: [FavoriteTag]
     public var archivedMetadata: [FavoriteMetadataArchiveEntry]
+    public var syncMetadata: FavoriteLibrarySyncMetadata
 
     private enum CodingKeys: String, CodingKey {
         case favorites
         case collections
         case tags
         case archivedMetadata
+        case syncMetadata
     }
 
     public init(
         favorites: [Favorite],
         collections: [FavoriteCollection],
         tags: [FavoriteTag] = [],
-        archivedMetadata: [FavoriteMetadataArchiveEntry] = []
+        archivedMetadata: [FavoriteMetadataArchiveEntry] = [],
+        syncMetadata: FavoriteLibrarySyncMetadata = FavoriteLibrarySyncMetadata()
     ) {
         self.favorites = favorites
         self.collections = collections
         self.tags = tags
         self.archivedMetadata = archivedMetadata
+        self.syncMetadata = syncMetadata
     }
 
     public init(from decoder: any Decoder) throws {
@@ -31,6 +108,7 @@ public struct FavoriteLibrarySnapshot: Codable, Equatable, Sendable {
         collections = try container.decode([FavoriteCollection].self, forKey: .collections)
         tags = try container.decodeIfPresent([FavoriteTag].self, forKey: .tags) ?? []
         archivedMetadata = try container.decodeIfPresent([FavoriteMetadataArchiveEntry].self, forKey: .archivedMetadata) ?? []
+        syncMetadata = try container.decodeIfPresent(FavoriteLibrarySyncMetadata.self, forKey: .syncMetadata) ?? FavoriteLibrarySyncMetadata()
     }
 
     public func encode(to encoder: any Encoder) throws {
@@ -39,6 +117,16 @@ public struct FavoriteLibrarySnapshot: Codable, Equatable, Sendable {
         try container.encode(collections, forKey: .collections)
         try container.encode(tags, forKey: .tags)
         try container.encode(archivedMetadata, forKey: .archivedMetadata)
+        if !syncMetadata.isEmpty {
+            try container.encode(syncMetadata, forKey: .syncMetadata)
+        }
+    }
+
+    public var favoriteCanonicalURLKeys: Set<String> {
+        Set(
+            favorites.map { ReaderCacheIdentity.canonicalThreadURL(from: $0.url).absoluteString } +
+                archivedMetadata.map(\.canonicalThreadURL.absoluteString)
+        )
     }
 }
 
