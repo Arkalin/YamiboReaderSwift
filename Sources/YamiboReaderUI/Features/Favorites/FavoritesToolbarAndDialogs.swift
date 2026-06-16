@@ -46,7 +46,14 @@ private struct FavoriteSelectionToggleButton: View {
     let action: () -> Void
 
     var body: some View {
-        Button(isSelecting ? L10n.string("common.done") : L10n.string("common.select"), action: action)
+        Button(action: action) {
+            if isSelecting {
+                Text(L10n.string("common.done"))
+            } else {
+                Image(systemName: "checkmark.circle")
+            }
+        }
+        .accessibilityLabel(isSelecting ? L10n.string("common.done") : L10n.string("common.select"))
     }
 }
 
