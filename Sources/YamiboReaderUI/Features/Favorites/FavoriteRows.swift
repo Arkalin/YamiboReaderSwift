@@ -297,30 +297,6 @@ struct FavoriteCollectionRow: View {
     }
 }
 
-struct FavoriteGlassContainer<Content: View>: View {
-    let spacing: CGFloat
-    @ViewBuilder let content: () -> Content
-
-    init(spacing: CGFloat = 16, @ViewBuilder content: @escaping () -> Content) {
-        self.spacing = spacing
-        self.content = content
-    }
-
-    var body: some View {
-        #if os(iOS)
-        if #available(iOS 26.0, *) {
-            GlassEffectContainer(spacing: spacing) {
-                content()
-            }
-        } else {
-            content()
-        }
-        #else
-        content()
-        #endif
-    }
-}
-
 private extension View {
     @ViewBuilder
     func favoriteCardSurface<Fill: ShapeStyle>(
