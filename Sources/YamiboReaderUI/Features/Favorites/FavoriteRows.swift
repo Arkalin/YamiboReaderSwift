@@ -108,7 +108,7 @@ struct FavoriteRow: View {
             isInteractive: !isSelecting,
             isSelected: isSelected
         )
-        .contentShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .favoriteCardContentShape()
         .favoriteCardTapGesture(isEnabled: !isSelecting, perform: onOpen)
         .accessibilityAddTraits(.isButton)
     }
@@ -278,7 +278,7 @@ struct FavoriteCollectionRow: View {
             isInteractive: !isSelecting,
             isSelected: isSelected
         )
-        .contentShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .favoriteCardContentShape()
     }
 
     private var titleColor: Color {
@@ -372,6 +372,11 @@ private extension View {
 
     func favoriteCardShadow() -> some View {
         shadow(color: .black.opacity(0.04), radius: 8, x: 0, y: 3)
+    }
+
+    func favoriteCardContentShape() -> some View {
+        contentShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+            .contentShape(.dragPreview, RoundedRectangle(cornerRadius: 24, style: .continuous))
     }
 
     @ViewBuilder
