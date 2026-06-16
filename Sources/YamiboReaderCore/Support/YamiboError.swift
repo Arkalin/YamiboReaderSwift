@@ -8,6 +8,9 @@ public enum YamiboError: LocalizedError, Equatable, Sendable {
     case floodControl
     case notAuthenticated
     case accountUIDUnavailable
+    case loginFormUnavailable
+    case loginFailed(String)
+    case loginVerificationRequired
     case offline
     case searchCooldown(seconds: Int)
     case persistenceFailed(String)
@@ -35,6 +38,14 @@ public enum YamiboError: LocalizedError, Equatable, Sendable {
             return L10n.string("error.not_authenticated")
         case .accountUIDUnavailable:
             return L10n.string("error.account_uid_unavailable")
+        case .loginFormUnavailable:
+            return L10n.string("error.login_form_unavailable")
+        case let .loginFailed(message):
+            return message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                ? L10n.string("error.login_failed")
+                : message
+        case .loginVerificationRequired:
+            return L10n.string("error.login_verification_required")
         case .offline:
             return L10n.string("error.offline")
         case let .searchCooldown(seconds):

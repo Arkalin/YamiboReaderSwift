@@ -28,7 +28,15 @@ public struct YamiboClient: Sendable {
         fields: [(String, String)],
         userAgent: String? = nil
     ) async throws -> String {
-        var request = URLRequest(url: route.url)
+        try await submitForm(url: route.url, fields: fields, userAgent: userAgent)
+    }
+
+    public func submitForm(
+        url: URL,
+        fields: [(String, String)],
+        userAgent: String? = nil
+    ) async throws -> String {
+        var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.httpBody = formBody(fields)
         request.setValue("application/x-www-form-urlencoded; charset=utf-8", forHTTPHeaderField: "Content-Type")

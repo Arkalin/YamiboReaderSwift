@@ -81,6 +81,7 @@
 "context.manga_directory" = "漫画目录";
 "context.manga_images" = "漫画图片";
 "context.novel_body" = "小说正文";
+"context.profile_page" = "个人资料页";
 "context.thread_title" = "帖子标题";
 "error.empty_html" = "返回内容为空";
 "error.favorite_delete_failed" = "删除收藏失败，请稍后重试";
@@ -88,6 +89,9 @@
 "error.invalid_response" = "未拿到有效的论坛响应";
 "error.invalid_response_with_status" = "论坛响应异常（HTTP %d）";
 "error.account_uid_unavailable" = "无法确认当前百合会账号，请重新登录后再同步。";
+"error.login_failed" = "登录失败，请检查账号信息后重试";
+"error.login_form_unavailable" = "登录表单解析失败，请稍后重试";
+"error.login_verification_required" = "当前账号需要论坛验证，App 暂不支持无网页登录";
 "error.missing_favorite_delete_id" = "当前收藏缺少删除标识，请先下拉刷新";
 "error.missing_favorite_delete_token" = "删除收藏失败：未拿到表单校验码";
 "error.not_authenticated" = "当前登录态不可用，请重新登录";
@@ -218,6 +222,17 @@
 "manga_web.load_failed" = "网页漫画加载失败";
 "manga_web.loading" = "正在载入网页漫画…";
 "manga_web.title" = "网页漫画模式";
+"mine.credit_progress_format" = "%d/%d";
+"mine.login" = "登录";
+"mine.login_password" = "密码";
+"mine.login_username" = "用户名 / Email / UID";
+"mine.profile_card_sign_out_hint" = "轻点可退出登录";
+"mine.security_answer" = "答案";
+"mine.security_question" = "安全提问";
+"mine.sign_out" = "退出登录";
+"mine.signing_out" = "退出登录中…";
+"mine.uid_format" = "UID %@";
+"mine.unknown_user" = "未知用户";
 "reader.background.paper" = "纸张";
 "reader.background.sakura" = "樱粉";
 "reader.background.system" = "系统";

@@ -9,8 +9,6 @@ public struct FavoritesView: View {
     @AppStorage("yamibo.favorite.showHidden") private var showsHidden = false
     @State private var searchText = ""
     @State private var selectedFavorite: Favorite?
-    @State private var showingSettingsSheet = false
-    @State private var showingAboutSheet = false
     @State private var displayNameDraft: FavoriteDisplayNameDraft?
     @State private var pendingEditFavorite: Favorite?
     @State private var tagPickerContext: FavoriteTagPickerContext?
@@ -93,8 +91,6 @@ public struct FavoritesView: View {
             .modifier(FavoriteSearchModifier(searchText: $searchText))
             .modifier(
                 FavoriteToolbarModifier(
-                    showingSettingsSheet: $showingSettingsSheet,
-                    showingAboutSheet: $showingAboutSheet,
                     filterRawValue: $filterRawValue,
                     sortRawValue: $sortRawValue,
                     showsHidden: $showsHidden,
@@ -309,18 +305,6 @@ public struct FavoritesView: View {
                         )
                     }
                 )
-            }
-            .sheet(isPresented: $showingSettingsSheet) {
-                SystemSettingsView(appContext: appContext) {
-                    filterRawValue = FavoriteFilter.all.rawValue
-                    sortRawValue = FavoriteSortOrder.manual.rawValue
-                    showsHidden = false
-                    searchText = ""
-                    await appModel.bootstrap()
-                }
-            }
-            .sheet(isPresented: $showingAboutSheet) {
-                AboutView(appContext: appContext)
             }
             .modifier(FavoriteSharePresenter(favorite: $sharingFavorite))
             .modifier(

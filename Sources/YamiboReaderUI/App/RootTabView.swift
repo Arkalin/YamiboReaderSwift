@@ -3,7 +3,6 @@ import YamiboReaderCore
 
 public struct RootTabView: View {
     private let forumURL = URL(string: "https://bbs.yamibo.com/forum.php?mobile=2")!
-    private let mineURL = URL(string: "https://bbs.yamibo.com/home.php?mod=space&do=profile&mycenter=1&mobile=2")!
     private let appModel: YamiboAppModel
 
     @Environment(\.scenePhase) private var scenePhase
@@ -64,12 +63,7 @@ public struct RootTabView: View {
                     Label(L10n.string("tab.favorites"), systemImage: "heart.text.square")
                 }
 
-            ForumBrowserView(
-                url: mineURL,
-                appContext: appModel.appContext,
-                appModel: appModel,
-                listensToForumNavigationRequest: false
-            )
+            MineHomeView(appContext: appModel.appContext, appModel: appModel)
                 .tag(AppTab.mine)
                 .tabItem {
                     Label(L10n.string("tab.mine"), systemImage: "person.crop.circle")

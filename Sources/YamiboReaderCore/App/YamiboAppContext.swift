@@ -16,6 +16,7 @@ public final class YamiboAppContext: YamiboRepositoryProviding, Sendable {
     ]
 
     public let sessionStore: SessionStore
+    public let profileStore: YamiboProfileStore
     public let autoSignInStore: AutoSignInStore
     public let settingsStore: SettingsStore
     public let webDAVSyncSettingsStore: WebDAVSyncSettingsStore
@@ -30,6 +31,7 @@ public final class YamiboAppContext: YamiboRepositoryProviding, Sendable {
 
     public init(
         sessionStore: SessionStore = SessionStore(),
+        profileStore: YamiboProfileStore = YamiboProfileStore(),
         autoSignInStore: AutoSignInStore = AutoSignInStore(),
         settingsStore: SettingsStore = SettingsStore(),
         webDAVSyncSettingsStore: WebDAVSyncSettingsStore = WebDAVSyncSettingsStore(),
@@ -42,6 +44,7 @@ public final class YamiboAppContext: YamiboRepositoryProviding, Sendable {
         session: URLSession = .shared
     ) {
         self.sessionStore = sessionStore
+        self.profileStore = profileStore
         self.autoSignInStore = autoSignInStore
         self.settingsStore = settingsStore
         self.webDAVSyncSettingsStore = webDAVSyncSettingsStore
@@ -111,6 +114,14 @@ public final class YamiboAppContext: YamiboRepositoryProviding, Sendable {
         )
     }
 
+    public func makeAccountService() -> YamiboAccountService {
+        YamiboAccountService(
+            session: session,
+            sessionStore: sessionStore,
+            profileStore: profileStore
+        )
+    }
+
     public func makeWebDAVSyncService() -> WebDAVSyncService {
         WebDAVSyncService(
             settingsStore: webDAVSyncSettingsStore,
@@ -125,6 +136,7 @@ public final class YamiboAppContext: YamiboRepositoryProviding, Sendable {
     public func bootstrap() async -> YamiboBootstrapState {
         YamiboBootstrapState(
             session: await sessionStore.load(),
+            profile: await profileStore.load(),
             settings: await settingsStore.load(),
             favorites: await favoriteStore.loadFavorites()
         )
@@ -132,6 +144,7 @@ public final class YamiboAppContext: YamiboRepositoryProviding, Sendable {
 
     public func resetApplicationData() async throws {
         try await sessionStore.reset()
+        await profileStore.clear()
         try await settingsStore.reset()
         try await webDAVSyncSettingsStore.reset()
         await readerResumeRouteStore.clear()
@@ -171,11 +184,13 @@ public final class YamiboAppContext: YamiboRepositoryProviding, Sendable {
 
 public struct YamiboBootstrapState: Sendable {
     public let session: SessionState
+    public let profile: YamiboProfile?
     public let settings: AppSettings
     public let favorites: [Favorite]
 
-    public init(session: SessionState, settings: AppSettings, favorites: [Favorite]) {
+    public init(session: SessionState, profile: YamiboProfile?, settings: AppSettings, favorites: [Favorite]) {
         self.session = session
+        self.profile = profile
         self.settings = settings
         self.favorites = favorites
     }

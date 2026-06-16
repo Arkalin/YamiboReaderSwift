@@ -20,4 +20,14 @@ public struct SessionState: Codable, Hashable, Sendable {
         self.lastUpdatedAt = lastUpdatedAt
         self.accountUID = accountUID
     }
+
+    public static func hasAuthenticationCookie(_ cookieHeader: String) -> Bool {
+        cookieHeader
+            .split(separator: ";")
+            .contains { part in
+                part
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .hasPrefix("EeqY_2132_auth=")
+            }
+    }
 }
