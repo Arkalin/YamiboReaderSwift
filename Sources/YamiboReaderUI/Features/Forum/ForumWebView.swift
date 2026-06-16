@@ -194,7 +194,7 @@ public struct IOSForumWebView: UIViewRepresentable {
             try await appContext.sessionStore.updateWebSession(
                 cookie: header,
                 userAgent: userAgent,
-                isLoggedIn: !header.isEmpty
+                isLoggedIn: SessionState.hasAuthenticationCookie(header)
             )
         }
     }

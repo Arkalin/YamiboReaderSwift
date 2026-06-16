@@ -25,29 +25,6 @@ struct FavoriteSearchModifier: ViewModifier {
     }
 }
 
-private struct FavoriteSettingsMenuButton: View {
-    @Binding var showingSettingsSheet: Bool
-    @Binding var showingAboutSheet: Bool
-
-    var body: some View {
-        Menu {
-            Button {
-                showingSettingsSheet = true
-            } label: {
-                Label(L10n.string("settings.title"), systemImage: "gearshape")
-            }
-
-            Button {
-                showingAboutSheet = true
-            } label: {
-                Label(L10n.string("about.title"), systemImage: "info.circle")
-            }
-        } label: {
-            Image(systemName: "ellipsis.circle")
-        }
-    }
-}
-
 private struct FavoriteSortMenuButton: View {
     @Binding var sortRawValue: String
 
@@ -219,8 +196,6 @@ private extension FavoriteAppearanceColor {
 #endif
 
 struct FavoriteToolbarModifier: ViewModifier {
-    @Binding var showingSettingsSheet: Bool
-    @Binding var showingAboutSheet: Bool
     @Binding var filterRawValue: String
     @Binding var sortRawValue: String
     @Binding var showsHidden: Bool
@@ -249,21 +224,13 @@ struct FavoriteToolbarModifier: ViewModifier {
                 }
             } else if showsSettingsMenu {
                 ToolbarItemGroup(placement: .topBarLeading) {
-                    FavoriteSettingsMenuButton(
-                        showingSettingsSheet: $showingSettingsSheet,
-                        showingAboutSheet: $showingAboutSheet
-                    )
-
                     FavoriteSortMenuButton(sortRawValue: $sortRawValue)
                 }
             }
             #else
             if showsSettingsMenu {
                 ToolbarItem(placement: .automatic) {
-                    FavoriteSettingsMenuButton(
-                        showingSettingsSheet: $showingSettingsSheet,
-                        showingAboutSheet: $showingAboutSheet
-                    )
+                    FavoriteSortMenuButton(sortRawValue: $sortRawValue)
                 }
             }
             #endif

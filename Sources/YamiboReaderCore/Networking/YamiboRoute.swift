@@ -36,6 +36,9 @@ public enum YamiboRoute: Sendable {
     case favorites(page: Int)
     case favoriteDeleteForm
     case favoriteDelete
+    case login
+    case currentProfile
+    case logout(formHash: String)
     case tag(id: String, page: Int)
     case search(keyword: String, forumID: String)
     case searchPage(searchID: String, page: Int)
@@ -71,6 +74,35 @@ public enum YamiboRoute: Sendable {
                 .init(name: "op", value: "delete"),
                 .init(name: "type", value: "all"),
                 .init(name: "checkall", value: "1")
+            ]
+            return components.url!
+        case .login:
+            var components = URLComponents(url: Self.baseURL, resolvingAgainstBaseURL: false)!
+            components.path = "/member.php"
+            components.queryItems = [
+                .init(name: "mod", value: "logging"),
+                .init(name: "action", value: "login"),
+                .init(name: "mobile", value: "2")
+            ]
+            return components.url!
+        case .currentProfile:
+            var components = URLComponents(url: Self.baseURL, resolvingAgainstBaseURL: false)!
+            components.path = "/home.php"
+            components.queryItems = [
+                .init(name: "mod", value: "space"),
+                .init(name: "do", value: "profile"),
+                .init(name: "mycenter", value: "1"),
+                .init(name: "mobile", value: "2")
+            ]
+            return components.url!
+        case let .logout(formHash):
+            var components = URLComponents(url: Self.baseURL, resolvingAgainstBaseURL: false)!
+            components.path = "/member.php"
+            components.queryItems = [
+                .init(name: "mod", value: "logging"),
+                .init(name: "action", value: "logout"),
+                .init(name: "formhash", value: formHash),
+                .init(name: "mobile", value: "2")
             ]
             return components.url!
         case let .tag(id, page):
