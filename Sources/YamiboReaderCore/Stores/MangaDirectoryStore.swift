@@ -19,7 +19,7 @@ public actor MangaDirectoryStore {
         self.fileManager = fileManager
         self.baseDirectory = baseDirectory
             ?? fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
-            .appendingPathComponent("YamiboReaderPro", isDirectory: true)
+            .appendingPathComponent("YamiboReader", isDirectory: true)
             .appendingPathComponent("manga-directory", isDirectory: true)
             ?? URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("manga-directory", isDirectory: true)
         self.indexURL = self.baseDirectory.appendingPathComponent("index.json", isDirectory: false)
