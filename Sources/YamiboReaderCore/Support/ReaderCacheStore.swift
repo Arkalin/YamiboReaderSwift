@@ -19,7 +19,7 @@ public actor ReaderCacheStore {
         self.fileManager = fileManager
         let root = baseDirectory
             ?? fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
-            .appendingPathComponent("YamiboReaderPro", isDirectory: true)
+            .appendingPathComponent("YamiboReader", isDirectory: true)
             .appendingPathComponent("reader-cache", isDirectory: true)
             ?? URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("reader-cache", isDirectory: true)
         self.baseDirectory = root
