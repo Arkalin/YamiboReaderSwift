@@ -52,15 +52,33 @@ public actor SessionStore: SessionStoring {
         try await save(session)
     }
 
-    public func updateWebSession(cookie: String, userAgent: String, isLoggedIn: Bool) async throws {
+    public func updateWebSession(cookie: String, userAgent: String, isLoggedIn _: Bool) async throws {
         var session = await load()
-        let previousCookie = session.cookie
+        let previousSession = session
+        let previousAuthenticationValue = SessionState.authenticationCookieValue(in: session.cookie)
+        let webAuthenticationValue = SessionState.authenticationCookieValue(in: cookie)
+        let hasCurrentAuthentication = session.isLoggedIn && previousAuthenticationValue != nil
+
+        if hasCurrentAuthentication,
+           webAuthenticationValue != previousAuthenticationValue {
+            return
+        }
+
         session.cookie = cookie
         session.userAgent = userAgent
-        session.isLoggedIn = isLoggedIn
-        if !isLoggedIn || cookie != previousCookie {
+        session.isLoggedIn = webAuthenticationValue != nil
+        if webAuthenticationValue == nil || webAuthenticationValue != previousAuthenticationValue {
             session.accountUID = nil
         }
+
+        guard session.cookie != previousSession.cookie ||
+            session.userAgent != previousSession.userAgent ||
+            session.isLoggedIn != previousSession.isLoggedIn ||
+            session.accountUID != previousSession.accountUID
+        else {
+            return
+        }
+
         session.lastUpdatedAt = .now
         try await save(session)
     }

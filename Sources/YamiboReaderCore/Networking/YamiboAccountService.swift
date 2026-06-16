@@ -1,5 +1,8 @@
 import Foundation
 import SwiftSoup
+#if canImport(WebKit)
+import WebKit
+#endif
 
 public struct YamiboAccountService: Sendable {
     private let session: URLSession
@@ -100,6 +103,7 @@ public struct YamiboAccountService: Sendable {
         try await sessionStore.reset()
         await profileStore.clear()
         clearHTTPCookies()
+        await clearWebKitCookies()
     }
 
     private func fetchLoginForm() async throws -> YamiboLoginForm {
@@ -172,6 +176,19 @@ public struct YamiboAccountService: Sendable {
         }
     }
 
+    #if canImport(WebKit)
+    @MainActor
+    private func clearWebKitCookies() async {
+        let cookieStore = WKWebsiteDataStore.default().httpCookieStore
+        let cookies = await cookieStore.allCookies()
+        for cookie in cookies where cookie.domain.lowercased().contains("yamibo.com") {
+            await cookieStore.deleteCookieAsync(cookie)
+        }
+    }
+    #else
+    private func clearWebKitCookies() async {}
+    #endif
+
     private func requiresAdditionalVerification(_ html: String) -> Bool {
         let markers = [
             "seccode",
@@ -214,3 +231,23 @@ private extension String {
         isEmpty ? nil : self
     }
 }
+
+#if canImport(WebKit)
+private extension WKHTTPCookieStore {
+    func allCookies() async -> [HTTPCookie] {
+        await withCheckedContinuation { continuation in
+            getAllCookies { cookies in
+                continuation.resume(returning: cookies)
+            }
+        }
+    }
+
+    func deleteCookieAsync(_ cookie: HTTPCookie) async {
+        await withCheckedContinuation { continuation in
+            delete(cookie) {
+                continuation.resume()
+            }
+        }
+    }
+}
+#endif

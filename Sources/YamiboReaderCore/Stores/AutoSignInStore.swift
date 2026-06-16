@@ -87,17 +87,7 @@ public actor AutoSignInStore {
     }
 
     private func accountHash(from cookie: String) -> String? {
-        let parts = cookie.split(separator: ";")
-        guard
-            let authValue = parts
-                .compactMap({ part -> String? in
-                    let pair = part.split(separator: "=", maxSplits: 1).map(String.init)
-                    guard pair.count == 2 else { return nil }
-                    return pair[0].trimmingCharacters(in: .whitespacesAndNewlines) == "EeqY_2132_auth" ? pair[1] : nil
-                })
-                .first,
-            !authValue.isEmpty
-        else {
+        guard let authValue = SessionState.authenticationCookieValue(in: cookie) else {
             return nil
         }
 
