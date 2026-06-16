@@ -1793,6 +1793,14 @@ final class MangaReaderModelTests: XCTestCase {
         XCTAssertTrue(source.contains(".fixedSize(horizontal: true, vertical: false)"))
     }
 
+    func testFavoriteRowsUseRoundedDragPreviewShapeForCardReordering() throws {
+        let source = try String(contentsOfFile: projectFilePath("Sources/YamiboReaderUI/Features/Favorites/FavoriteRows.swift"))
+
+        XCTAssertTrue(source.contains("func favoriteCardContentShape() -> some View"))
+        XCTAssertTrue(source.contains(".contentShape(.dragPreview, RoundedRectangle(cornerRadius: 24, style: .continuous))"))
+        XCTAssertEqual(source.components(separatedBy: ".favoriteCardContentShape()").count - 1, 2)
+    }
+
     func testFavoritesViewModelDeletesFavoriteAfterRemoteDeleteSucceeds() async throws {
         let keyPrefix = UUID().uuidString
         let configuration = URLSessionConfiguration.ephemeral
