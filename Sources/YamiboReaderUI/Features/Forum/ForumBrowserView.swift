@@ -136,7 +136,11 @@ public struct ForumBrowserView: View {
                 showsLocationLabel: showsNavigationBar
             )
             ZStack(alignment: .top) {
-                IOSForumWebView(model: model, appContext: appContext)
+                IOSForumWebView(
+                    model: model,
+                    appContext: appContext,
+                    isSelected: appModel.selectedTab == .forum
+                )
                 if model.isLoading {
                     ProgressView()
                         .controlSize(.small)

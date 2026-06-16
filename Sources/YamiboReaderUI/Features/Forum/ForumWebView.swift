@@ -32,10 +32,12 @@ import UIKit
 public struct IOSForumWebView: UIViewRepresentable {
     public let model: ForumBrowserModel
     public let appContext: YamiboAppContext
+    public let isSelected: Bool
 
-    public init(model: ForumBrowserModel, appContext: YamiboAppContext) {
+    public init(model: ForumBrowserModel, appContext: YamiboAppContext, isSelected: Bool = true) {
         self.model = model
         self.appContext = appContext
+        self.isSelected = isSelected
     }
 
     public func makeCoordinator() -> Coordinator {
@@ -58,6 +60,9 @@ public struct IOSForumWebView: UIViewRepresentable {
 
     public func updateUIView(_ view: WKWebView, context: Context) {
         context.coordinator.attach(view)
+        if isSelected {
+            context.coordinator.synchronizeCurrentSession(reloadIfNeeded: true)
+        }
     }
 
     public final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate {
@@ -65,28 +70,42 @@ public struct IOSForumWebView: UIViewRepresentable {
         private let appContext: YamiboAppContext
         private weak var webView: WKWebView?
         private var didPrepareInitialLoad = false
+        private var sessionObservationTask: Task<Void, Never>?
+        private var lastInjectedCookieHeader: String?
+        private var lastInjectedAuthenticationCookieValue: String?
 
         init(model: ForumBrowserModel, appContext: YamiboAppContext) {
             self.model = model
             self.appContext = appContext
         }
 
+        deinit {
+            sessionObservationTask?.cancel()
+        }
+
         func attach(_ webView: WKWebView) {
             self.webView = webView
             model.attach(webView: webView)
+            startObservingSessionChanges()
 
             guard !didPrepareInitialLoad else { return }
             didPrepareInitialLoad = true
 
-            Task { @MainActor in
+            Task { @MainActor [weak self, weak webView] in
+                guard let self, let webView else { return }
                 let sessionState = await appContext.sessionStore.load()
-                await injectCookies(sessionState.cookie, into: webView)
-                if let userAgent = sessionState.userAgent.nilIfEmpty {
-                    webView.customUserAgent = userAgent
-                }
+                await synchronizeWebViewSession(sessionState, reloadIfNeeded: false)
                 if webView.url == nil {
                     model.load(model.currentURL ?? YamiboRoute.baseURL)
                 }
+            }
+        }
+
+        func synchronizeCurrentSession(reloadIfNeeded: Bool) {
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                let sessionState = await appContext.sessionStore.load()
+                await synchronizeWebViewSession(sessionState, reloadIfNeeded: reloadIfNeeded)
             }
         }
 
@@ -162,6 +181,75 @@ public struct IOSForumWebView: UIViewRepresentable {
             return host == "bbs.yamibo.com" || host.hasSuffix(".yamibo.com")
         }
 
+        private func startObservingSessionChanges() {
+            guard sessionObservationTask == nil else { return }
+
+            sessionObservationTask = Task { @MainActor [weak self] in
+                for await notification in NotificationCenter.default.notifications(named: SessionStore.didChangeNotification) {
+                    guard !Task.isCancelled else { return }
+                    guard let self else { return }
+                    guard let changeID = notification.userInfo?[SessionStore.changeIDUserInfoKey] as? String,
+                          changeID == appContext.sessionStore.changeID else {
+                        continue
+                    }
+
+                    let sessionState = await appContext.sessionStore.load()
+                    await synchronizeWebViewSession(sessionState, reloadIfNeeded: true)
+                }
+            }
+        }
+
+        @MainActor
+        private func synchronizeWebViewSession(_ sessionState: SessionState, reloadIfNeeded: Bool) async {
+            guard let webView else { return }
+
+            if let userAgent = sessionState.userAgent.nilIfEmpty,
+               webView.customUserAgent != userAgent {
+                webView.customUserAgent = userAgent
+            }
+
+            let authenticationValue = SessionState.authenticationCookieValue(in: sessionState.cookie)
+            if authenticationValue != nil {
+                let cookieChanged = sessionState.cookie != lastInjectedCookieHeader
+                let authenticationChanged = authenticationValue != lastInjectedAuthenticationCookieValue
+                guard cookieChanged || authenticationChanged else { return }
+
+                await injectCookies(sessionState.cookie, into: webView)
+                lastInjectedCookieHeader = sessionState.cookie
+                lastInjectedAuthenticationCookieValue = authenticationValue
+
+                if reloadIfNeeded || authenticationChanged {
+                    reloadOrLoad(webView)
+                }
+                return
+            }
+
+            if sessionState.cookie.isEmpty {
+                let hadSynchronizedCookies = lastInjectedCookieHeader != nil || lastInjectedAuthenticationCookieValue != nil
+                await clearYamiboCookies(in: webView)
+                lastInjectedCookieHeader = sessionState.cookie
+                lastInjectedAuthenticationCookieValue = nil
+                if reloadIfNeeded, hadSynchronizedCookies {
+                    reloadOrLoad(webView)
+                }
+                return
+            }
+
+            guard sessionState.cookie != lastInjectedCookieHeader else { return }
+            await injectCookies(sessionState.cookie, into: webView)
+            lastInjectedCookieHeader = sessionState.cookie
+            lastInjectedAuthenticationCookieValue = nil
+        }
+
+        @MainActor
+        private func reloadOrLoad(_ webView: WKWebView) {
+            if webView.url == nil {
+                model.load(model.currentURL ?? YamiboRoute.baseURL)
+            } else if let url = webView.url, isInternal(url) {
+                webView.reload()
+            }
+        }
+
         private func injectCookies(_ cookieHeader: String, into webView: WKWebView) async {
             let cookies = cookieHeader
                 .split(separator: ";")
@@ -177,8 +265,29 @@ public struct IOSForumWebView: UIViewRepresentable {
                     ])
                 }
 
+            await clearConflictingYamiboCookies(for: cookies, in: webView)
             for cookie in cookies {
                 await webView.configuration.websiteDataStore.httpCookieStore.setCookieAsync(cookie)
+            }
+        }
+
+        private func clearConflictingYamiboCookies(for cookies: [HTTPCookie], in webView: WKWebView) async {
+            let incomingNames = Set(cookies.map(\.name))
+                .union([SessionState.authenticationCookieName])
+            let cookieStore = webView.configuration.websiteDataStore.httpCookieStore
+            let storedCookies = await cookieStore.allCookies()
+            for cookie in storedCookies
+                where cookie.domain.lowercased().contains("yamibo.com") &&
+                incomingNames.contains(cookie.name) {
+                await cookieStore.deleteCookieAsync(cookie)
+            }
+        }
+
+        private func clearYamiboCookies(in webView: WKWebView) async {
+            let cookieStore = webView.configuration.websiteDataStore.httpCookieStore
+            let cookies = await cookieStore.allCookies()
+            for cookie in cookies where cookie.domain.lowercased().contains("yamibo.com") {
+                await cookieStore.deleteCookieAsync(cookie)
             }
         }
 
@@ -231,6 +340,14 @@ private extension WKHTTPCookieStore {
         await withCheckedContinuation { continuation in
             getAllCookies { cookies in
                 continuation.resume(returning: cookies)
+            }
+        }
+    }
+
+    func deleteCookieAsync(_ cookie: HTTPCookie) async {
+        await withCheckedContinuation { continuation in
+            delete(cookie) {
+                continuation.resume()
             }
         }
     }
