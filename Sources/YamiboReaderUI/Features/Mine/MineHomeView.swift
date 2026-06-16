@@ -113,7 +113,7 @@ public struct MineHomeView: View {
 
 @MainActor
 @Observable
-private final class MineHomeViewModel {
+final class MineHomeViewModel {
     var session = SessionState()
     var profile: YamiboProfile?
     var errorMessage: String?
@@ -125,6 +125,7 @@ private final class MineHomeViewModel {
     let loginQuestions = YamiboLoginQuestion.defaultQuestions
 
     private let appContext: YamiboAppContext
+    @ObservationIgnored private var lastAutomaticProfileRefreshCredential: String?
 
     init(appContext: YamiboAppContext) {
         self.appContext = appContext
@@ -145,9 +146,26 @@ private final class MineHomeViewModel {
 
         session = await appContext.sessionStore.load()
         profile = await appContext.profileStore.load()
-        if isLoggedIn {
-            await refreshProfile(presentsErrors: profile == nil)
+
+        guard isLoggedIn,
+              let credential = SessionState.authenticationCookieValue(in: session.cookie) else {
+            lastAutomaticProfileRefreshCredential = nil
+            return
         }
+        guard profileNeedsAutomaticRefresh else { return }
+        guard lastAutomaticProfileRefreshCredential != credential else { return }
+
+        lastAutomaticProfileRefreshCredential = credential
+        await refreshProfile(presentsErrors: profile == nil)
+    }
+
+    private var profileNeedsAutomaticRefresh: Bool {
+        guard let profile else { return true }
+        guard let accountUID = session.accountUID?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !accountUID.isEmpty else {
+            return false
+        }
+        return profile.uid.trimmingCharacters(in: .whitespacesAndNewlines) != accountUID
     }
 
     func refreshProfile() async {
@@ -186,6 +204,7 @@ private final class MineHomeViewModel {
             try await appContext.makeAccountService().signOut()
             session = await appContext.sessionStore.load()
             profile = await appContext.profileStore.load()
+            lastAutomaticProfileRefreshCredential = nil
             errorMessage = nil
         } catch {
             errorMessage = error.localizedDescription
