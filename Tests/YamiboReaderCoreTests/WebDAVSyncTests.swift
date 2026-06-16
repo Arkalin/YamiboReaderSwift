@@ -54,17 +54,6 @@ private enum WebDAVTestError: Error {
     case missingHandler
 }
 
-@Test func accountUIDResolverExtractsUIDFromFinalURLOrHTML() throws {
-    #expect(AccountUIDResolver.extractAccountUID(
-        finalURL: URL(string: "https://bbs.yamibo.com/home.php?mod=space&uid=456&do=profile")!,
-        html: ""
-    ) == "456")
-    #expect(AccountUIDResolver.extractAccountUID(
-        finalURL: nil,
-        html: #"<a href="space-uid-789.html">用户</a>"#
-    ) == "789")
-}
-
 @Test func webDAVClientUploadsWithBasicAuthAndExpectedPaths() async throws {
     let session = makeWebDAVTestSession()
     let client = WebDAVClient(session: session)
@@ -140,6 +129,34 @@ private enum WebDAVTestError: Error {
     }
 
     WebDAVTestURLProtocol.removeHandler(for: host)
+}
+
+@Test func webDAVSyncRequiresStoredAccountUID() async throws {
+    let suiteName = makeWebDAVDefaultsSuiteName(prefix: "webdav-requires-account-uid")
+    UserDefaults(suiteName: suiteName)?.removePersistentDomain(forName: suiteName)
+    let settingsStore = WebDAVSyncSettingsStore(defaults: try makeWebDAVDefaults(suiteName: suiteName), key: "webdav")
+    let favoriteStore = FavoriteStore(defaults: try makeWebDAVDefaults(suiteName: suiteName), key: "favorites")
+    let sessionStore = SessionStore(defaults: try makeWebDAVDefaults(suiteName: suiteName), key: "session")
+    let settings = WebDAVSyncSettings(
+        baseURLString: "https://requires-account-uid.example.com",
+        username: "admin",
+        password: "secret"
+    )
+    try await sessionStore.save(SessionState(cookie: "sid=local", isLoggedIn: true))
+
+    let service = WebDAVSyncService(
+        settingsStore: settingsStore,
+        favoriteStore: favoriteStore,
+        sessionStore: sessionStore,
+        client: WebDAVClient(session: makeWebDAVTestSession())
+    )
+
+    await #expect(throws: YamiboError.accountUIDUnavailable) {
+        _ = try await service.upload(using: settings)
+    }
+    await #expect(throws: YamiboError.accountUIDUnavailable) {
+        _ = try await service.download(using: settings)
+    }
 }
 
 @Test func webDAVSyncDownloadRestoresLibraryWithoutTouchingSessionSignInSettingsOrCaches() async throws {

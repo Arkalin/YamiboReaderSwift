@@ -363,7 +363,6 @@ public actor WebDAVSyncService {
     private let favoriteStore: FavoriteStore
     private let sessionStore: SessionStore
     private let appSettingsStore: (any SettingsStoring)?
-    private let accountUIDResolver: AccountUIDResolver
     private let client: WebDAVClient
     private let policyModule: WebDAVSyncPolicyModule
     private let domainMerger: WebDAVDomainMerger
@@ -374,7 +373,6 @@ public actor WebDAVSyncService {
         sessionStore: SessionStore,
         appSettingsStore: (any SettingsStoring)? = nil,
         client: WebDAVClient = WebDAVClient(),
-        accountUIDResolver: AccountUIDResolver? = nil,
         policyModule: WebDAVSyncPolicyModule = WebDAVSyncPolicyModule()
     ) {
         self.settingsStore = settingsStore
@@ -382,7 +380,6 @@ public actor WebDAVSyncService {
         self.sessionStore = sessionStore
         self.appSettingsStore = appSettingsStore
         self.client = client
-        self.accountUIDResolver = accountUIDResolver ?? AccountUIDResolver(sessionStore: sessionStore)
         self.policyModule = policyModule
         domainMerger = WebDAVDomainMerger()
     }
@@ -394,7 +391,7 @@ public actor WebDAVSyncService {
 
     @discardableResult
     public func upload(using settings: WebDAVSyncSettings, allowingAccountMismatch: Bool = false) async throws -> WebDAVSyncPayload {
-        let accountUID = try await accountUIDResolver.resolveCurrentAccountUID()
+        let accountUID = try await currentAccountUID()
         if !allowingAccountMismatch {
             try await validateRemoteAccountIfPresent(settings: settings, localUID: accountUID)
         }
@@ -409,7 +406,7 @@ public actor WebDAVSyncService {
 
     @discardableResult
     public func download(using settings: WebDAVSyncSettings, allowingAccountMismatch _: Bool = false) async throws -> WebDAVSyncPayload {
-        let accountUID = try await accountUIDResolver.resolveCurrentAccountUID()
+        let accountUID = try await currentAccountUID()
         let payload = try await client.fetchPayload(settings: settings)
         try validate(remotePayload: payload, localUID: accountUID, allowingAccountMismatch: false)
         try await apply(payload)
@@ -422,7 +419,7 @@ public actor WebDAVSyncService {
         let settings = await settingsStore.load()
         let sessionState = await sessionStore.load()
         guard policyModule.canSynchronizeAutomatically(settings: settings, session: sessionState) else { return .skipped }
-        guard let accountUID = try? await accountUIDResolver.resolveCurrentAccountUID() else { return .skipped }
+        guard let accountUID = try? currentAccountUID(from: sessionState) else { return .skipped }
 
         let remotePayload: WebDAVSyncPayload?
         do {
@@ -464,6 +461,21 @@ public actor WebDAVSyncService {
             try await updateSettingsAfterSync(settings, syncedPayload: remotePayload, remoteUpdatedAt: remotePayload.updatedAt)
         }
         return mergeResult.remoteContributedChanges ? .downloaded(mergeResult.payload) : .skipped
+    }
+
+    private func currentAccountUID() async throws -> String {
+        try currentAccountUID(from: await sessionStore.load())
+    }
+
+    private nonisolated func currentAccountUID(from sessionState: SessionState) throws -> String {
+        guard sessionState.isLoggedIn, !sessionState.cookie.isEmpty else {
+            throw YamiboError.notAuthenticated
+        }
+        let accountUID = sessionState.accountUID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !accountUID.isEmpty else {
+            throw YamiboError.accountUIDUnavailable
+        }
+        return accountUID
     }
 
     public func markLocalDataChanged(at date: Date = .now, touchesAppSettings: Bool = false) async throws {
