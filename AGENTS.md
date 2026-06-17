@@ -10,4 +10,4 @@ Use the default five-label triage vocabulary. See `docs/agents/triage-labels.md`
 
 ### Domain docs
 
-This is a single-context repo. See `docs/agents/domain.md`.
+This is a multi-context repo. Start with `CONTEXT-MAP.md`. See `docs/agents/domain.md`.
