@@ -1,68 +1,40 @@
 # MangaReader Core Boundary
 
-This directory is the phase 1 target boundary root for the manga reader refactor. It is intentionally documentation-only during phase 1.
+This directory owns the phase 2 manga reader rewrite boundary.
 
-Do not move existing production files here until a later phase extracts behavior behind tests.
+The legacy manga reader implementation has been moved to `docs/reference/manga-reader-legacy/` and is reference-only. New production code must not depend on legacy implementation classes or actors.
 
 ## Domain
 
-Pure manga reader values and rules.
+Pure manga reader values and rules:
 
-Target ownership:
+- `MangaChapter`
+- `MangaDirectory`
+- `MangaDirectoryStrategy`
+- `MangaChapterDocument`
+- `MangaChapterWindow`
+- `MangaReadingPosition`
 
-- **Manga Directory** value semantics.
-- **Manga Chapter Document** as parsed image-page content, not raw HTML.
-- **Manga Chapter Window** ordering, adjacency, trimming, and **Manga Reading Position** resolution.
-- Pure chapter merge/sort rules once isolated.
-
-Current candidate mappings:
-
-- `Support/MangaChapterWindow.swift` -> `Domain`
-- `Models/MangaChapter.swift` and manga model values -> `Domain` after reviewing cross-feature ownership
+`MangaChapterDocument` represents parsed image-page content. It does not expose raw HTML.
 
 ## Application
 
-Workflow coordination that is independent of SwiftUI and WebKit.
+Application-level values and projections that do not depend on SwiftUI or WebKit:
 
-Target ownership:
+- app route contracts
+- reader settings contracts
+- `MangaReaderPageProjection`
 
-- `MangaDirectoryWorkflow`
-- reader preparation and jump workflow
-- progress coordination
-- committed settings coordination
-- image prefetch policy
-- probe recovery policy through a UI adapter seam
-
-Current candidate mappings:
-
-- `Support/MangaReadingSession.swift` -> `Application` candidate
-- mixed responsibilities from `Stores/MangaDirectoryStore.swift` -> `MangaDirectoryWorkflow`
-- progress sync calls from `MangaReaderModel` -> future progress workflow
+Phase 2 intentionally does not implement directory workflows, continuous reading, progress writes, automatic WebKit fallback, prefetching, or image caching.
 
 ## Data
 
-Yamibo fetches, parsing adapters, and persistence implementation.
+Repository seams for future implementations:
 
-Target ownership:
+- `MangaChapterDocumentLoading`
+- `MangaDirectoryRepository`
+- `MangaDirectorySeed`
+- `MangaDirectoryPersisting`
+- `MangaImageDataLoading`
 
-- `MangaRepository`
-- `MangaHTMLParser`
-- persistence-only `MangaDirectoryStore`
-- `MangaImageRepository`
-- `MangaImageCacheStore`
-
-Current candidate mappings:
-
-- `Networking/MangaRepository.swift` -> `Data`
-- `Parsing/MangaHTMLParser.swift` -> `Data`
-- `Stores/MangaDirectoryStore.swift` -> split into `Data` store plus `Application` workflow
-- `Networking/MangaImageRepository.swift` -> `Data`
-- `Support/MangaImageCacheStore.swift` -> `Data`
-
-## Phase 1 Constraints
-
-- No Swift protocols or placeholder public types.
-- No production routing changes.
-- No movement of existing files.
-- No WebKit dependency in Core.
-- No behavior changes.
+HTML parsing details belong behind repository implementations and should not leak through these seams.

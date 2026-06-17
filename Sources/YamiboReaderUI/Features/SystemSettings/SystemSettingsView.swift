@@ -10,7 +10,6 @@ public struct SystemSettingsView: View {
     private let onApplicationReset: @MainActor () async -> Void
 
     @StateObject private var viewModel: SystemSettingsViewModel
-    @State private var showingDirectoryManager = false
     @State private var showingWebDAVSettings = false
     @State private var showingPeripheralSettings = false
     @State private var pendingConfirmation: SystemSettingsConfirmation?
@@ -106,28 +105,11 @@ public struct SystemSettingsView: View {
 
                 Section(L10n.string("settings.section.storage")) {
                     Button {
-                        showingDirectoryManager = true
-                    } label: {
-                        SystemSettingsRow(title: L10n.string("settings.manga_directory_management"))
-                    }
-                    .disabled(viewModel.isBusy)
-
-                    Button {
                         pendingConfirmation = .clearNovelCache
                     } label: {
                         SystemSettingsRow(
                             title: L10n.string("settings.clear_novel_cache"),
                             value: viewModel.novelCacheLabel
-                        )
-                    }
-                    .disabled(viewModel.isBusy)
-
-                    Button {
-                        pendingConfirmation = .clearMangaCache
-                    } label: {
-                        SystemSettingsRow(
-                            title: L10n.string("settings.clear_manga_cache"),
-                            value: viewModel.mangaCacheLabel
                         )
                     }
                     .disabled(viewModel.isBusy)
@@ -145,9 +127,6 @@ public struct SystemSettingsView: View {
             .overlay(content: loadingOverlay)
             .task {
                 await viewModel.load()
-            }
-            .sheet(isPresented: $showingDirectoryManager) {
-                MangaDirectoryManagementView(store: appContext.mangaDirectoryStore)
             }
             .sheet(isPresented: $showingWebDAVSettings) {
                 WebDAVSyncSettingsView(appContext: appContext)
@@ -366,8 +345,6 @@ public struct SystemSettingsView: View {
         switch confirmation {
         case .clearNovelCache:
             _ = await viewModel.clearNovelCache()
-        case .clearMangaCache:
-            _ = await viewModel.clearMangaCache()
         case .resetApplication:
             let didReset = await viewModel.resetApplication()
             guard didReset else { return }

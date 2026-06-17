@@ -1587,23 +1587,6 @@ import Testing
     #expect(clearedUsage == 0)
 }
 
-@Test func mangaImageCacheStoreReportsUsageAndCanClearAll() async throws {
-    let baseDirectory = makeTemporaryDirectory(prefix: "manga-image-cache-tests")
-    let store = MangaImageCacheStore(baseDirectory: baseDirectory)
-    let imageURL = try #require(URL(string: "https://static.yamibo.com/test-1.jpg"))
-    let data = Data(repeating: 7, count: 2048)
-
-    try await store.save(data, for: imageURL)
-
-    let usage = await store.totalDiskUsageBytes()
-    #expect(usage == data.count)
-
-    try await store.clearAll()
-
-    let clearedUsage = await store.totalDiskUsageBytes()
-    #expect(clearedUsage == 0)
-}
-
 @Test func favoriteBackgroundImageStoreSavesLoadsDeletesAndPrunes() async throws {
     let baseDirectory = makeTemporaryDirectory(prefix: "favorite-background-tests")
     let store = FavoriteBackgroundImageStore(baseDirectory: baseDirectory)
@@ -1628,13 +1611,11 @@ import Testing
     #expect(await store.loadData(imageID: "third") == nil)
 }
 
-@Test func clearingReaderAndMangaCachesDoesNotDeleteFavoriteBackground() async throws {
+@Test func clearingReaderCacheDoesNotDeleteFavoriteBackground() async throws {
     let rootDirectory = makeTemporaryDirectory(prefix: "cache-clear-background-root")
     let readerCacheStore = ReaderCacheStore(baseDirectory: rootDirectory.appendingPathComponent("reader-cache", isDirectory: true))
-    let mangaImageCacheStore = MangaImageCacheStore(baseDirectory: rootDirectory.appendingPathComponent("manga-image-cache", isDirectory: true))
     let backgroundStore = FavoriteBackgroundImageStore(baseDirectory: rootDirectory.appendingPathComponent("favorite-background", isDirectory: true))
     let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=701&mobile=2"))
-    let imageURL = try #require(URL(string: "https://static.yamibo.com/test-background.jpg"))
     let backgroundData = Data(repeating: 4, count: 64)
 
     try await readerCacheStore.save(
@@ -1645,11 +1626,9 @@ import Testing
             segments: [.text("测试", chapterTitle: nil)]
         )
     )
-    try await mangaImageCacheStore.save(Data(repeating: 9, count: 128), for: imageURL)
     try await backgroundStore.save(backgroundData, imageID: "background")
 
     try await readerCacheStore.clearAll()
-    try await mangaImageCacheStore.clearAll()
 
     #expect(await backgroundStore.loadData(imageID: "background") == backgroundData)
 }
@@ -1684,7 +1663,6 @@ import Testing
 @Test func appContextResetApplicationDataClearsPersistedState() async throws {
     let suiteName = makeIsolatedDefaultsSuiteName(prefix: "app-reset-tests")
     UserDefaults(suiteName: suiteName)?.removePersistentDomain(forName: suiteName)
-    let fileManager = FileManager.default
     let rootDirectory = makeTemporaryDirectory(prefix: "app-reset-root")
 
     let sessionStore = SessionStore(defaults: try #require(UserDefaults(suiteName: suiteName)), key: "session")
@@ -1692,13 +1670,8 @@ import Testing
     let readerResumeRouteStore = ReaderResumeRouteStore(defaults: try #require(UserDefaults(suiteName: suiteName)), key: "reader-route")
     let favoriteStore = FavoriteStore(defaults: try #require(UserDefaults(suiteName: suiteName)), key: "favorites")
     let readerCacheStore = ReaderCacheStore(baseDirectory: rootDirectory.appendingPathComponent("reader-cache", isDirectory: true))
-    let mangaImageCacheStore = MangaImageCacheStore(baseDirectory: rootDirectory.appendingPathComponent("manga-image-cache", isDirectory: true))
     let favoriteBackgroundImageStore = FavoriteBackgroundImageStore(
         baseDirectory: rootDirectory.appendingPathComponent("favorite-background", isDirectory: true)
-    )
-    let mangaDirectoryStore = MangaDirectoryStore(
-        fileManager: fileManager,
-        baseDirectory: rootDirectory.appendingPathComponent("manga-directory", isDirectory: true)
     )
     let appContext = YamiboAppContext(
         sessionStore: sessionStore,
@@ -1706,13 +1679,10 @@ import Testing
         readerResumeRouteStore: readerResumeRouteStore,
         favoriteStore: favoriteStore,
         readerCacheStore: readerCacheStore,
-        mangaImageCacheStore: mangaImageCacheStore,
-        favoriteBackgroundImageStore: favoriteBackgroundImageStore,
-        mangaDirectoryStore: mangaDirectoryStore
+        favoriteBackgroundImageStore: favoriteBackgroundImageStore
     )
 
     let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=700&mobile=2"))
-    let imageURL = try #require(URL(string: "https://static.yamibo.com/test-2.jpg"))
 
     try await sessionStore.updateWebSession(cookie: "sid=1", userAgent: "UA", isLoggedIn: true)
     try await settingsStore.save(AppSettings(webBrowser: WebBrowserSettings(showsNavigationBar: false)))
@@ -1734,13 +1704,7 @@ import Testing
             segments: [.text("测试", chapterTitle: nil)]
         )
     )
-    try await mangaImageCacheStore.save(Data(repeating: 9, count: 1024), for: imageURL)
     try await favoriteBackgroundImageStore.save(Data(repeating: 5, count: 256), imageID: "background")
-    _ = try await mangaDirectoryStore.initializeDirectory(
-        currentURL: threadURL,
-        rawTitle: "测试漫画 第1话",
-        html: ""
-    )
 
     try await appContext.resetApplicationData()
 
@@ -1749,18 +1713,14 @@ import Testing
     let readerResumeRoute = await readerResumeRouteStore.load()
     let favorites = await favoriteStore.loadFavorites()
     let readerCacheBytes = await readerCacheStore.totalDiskUsageBytes()
-    let mangaCacheBytes = await mangaImageCacheStore.totalDiskUsageBytes()
     let backgroundData = await favoriteBackgroundImageStore.loadData(imageID: "background")
-    let directories = await mangaDirectoryStore.allDirectories()
 
     #expect(session == SessionState())
     #expect(settings == AppSettings())
     #expect(readerResumeRoute == nil)
     #expect(favorites.isEmpty)
     #expect(readerCacheBytes == 0)
-    #expect(mangaCacheBytes == 0)
     #expect(backgroundData == nil)
-    #expect(directories.isEmpty)
 }
 
 private func makeIsolatedDefaults(prefix: String) throws -> UserDefaults {

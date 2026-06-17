@@ -196,19 +196,9 @@ public final class YamiboAppModel {
     }
 
     public func openManga(_ context: MangaLaunchContext, currentHTML: String? = nil, currentTitle: String? = nil) async {
-        let probeService = MangaProbeService(appContext: appContext)
-        let outcome = await probeService.probe(
-            launchContext: context,
-            currentHTML: currentHTML,
-            currentTitle: currentTitle
-        )
-        switch outcome {
-        case .success:
-            presentManga(context)
-        case let .fallback(_, suggestedWebContext):
-            suspendedMangaWebContext = nil
-            presentMangaWeb(suggestedWebContext)
-        }
+        _ = currentHTML
+        _ = currentTitle
+        presentManga(context)
     }
 
     public func dismissReader(openThreadInForum url: URL? = nil, suspendedContext: ReaderLaunchContext? = nil) {

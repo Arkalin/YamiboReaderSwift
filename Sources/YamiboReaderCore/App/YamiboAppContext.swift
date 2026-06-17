@@ -23,10 +23,7 @@ public final class YamiboAppContext: YamiboRepositoryProviding, Sendable {
     public let readerResumeRouteStore: ReaderResumeRouteStore
     public let favoriteStore: FavoriteStore
     public let readerCacheStore: ReaderCacheStore
-    public let mangaImageCacheStore: MangaImageCacheStore
     public let favoriteBackgroundImageStore: FavoriteBackgroundImageStore
-    public let mangaImageRepository: MangaImageRepository
-    public let mangaDirectoryStore: MangaDirectoryStore
     private let session: URLSession
 
     public init(
@@ -38,9 +35,7 @@ public final class YamiboAppContext: YamiboRepositoryProviding, Sendable {
         readerResumeRouteStore: ReaderResumeRouteStore = ReaderResumeRouteStore(),
         favoriteStore: FavoriteStore = FavoriteStore(),
         readerCacheStore: ReaderCacheStore = ReaderCacheStore(),
-        mangaImageCacheStore: MangaImageCacheStore = MangaImageCacheStore(),
         favoriteBackgroundImageStore: FavoriteBackgroundImageStore = FavoriteBackgroundImageStore(),
-        mangaDirectoryStore: MangaDirectoryStore = MangaDirectoryStore(),
         session: URLSession = .shared
     ) {
         self.sessionStore = sessionStore
@@ -51,15 +46,8 @@ public final class YamiboAppContext: YamiboRepositoryProviding, Sendable {
         self.readerResumeRouteStore = readerResumeRouteStore
         self.favoriteStore = favoriteStore
         self.readerCacheStore = readerCacheStore
-        self.mangaImageCacheStore = mangaImageCacheStore
         self.favoriteBackgroundImageStore = favoriteBackgroundImageStore
-        self.mangaDirectoryStore = mangaDirectoryStore
         self.session = session
-        self.mangaImageRepository = MangaImageRepository(
-            session: session,
-            sessionStore: sessionStore,
-            cacheStore: mangaImageCacheStore
-        )
     }
 
     public func makeRepository() async -> YamiboRepository {
@@ -80,20 +68,6 @@ public final class YamiboAppContext: YamiboRepositoryProviding, Sendable {
             userAgent: sessionState.userAgent
         )
         return ReaderRepository(client: client, cacheStore: readerCacheStore)
-    }
-
-    public func makeMangaRepository() async -> MangaRepository {
-        let sessionState = await sessionStore.load()
-        let client = YamiboClient(
-            session: session,
-            cookie: sessionState.cookie,
-            userAgent: sessionState.userAgent
-        )
-        return MangaRepository(client: client)
-    }
-
-    public func makeMangaImageRepository() async -> MangaImageRepository {
-        mangaImageRepository
     }
 
     public func makeThreadOpenResolver() async -> ThreadOpenResolver {
@@ -149,9 +123,7 @@ public final class YamiboAppContext: YamiboRepositoryProviding, Sendable {
         await readerResumeRouteStore.clear()
         try await favoriteStore.clearAll()
         try await readerCacheStore.clearAll()
-        try await mangaImageCacheStore.clearAll()
         try await favoriteBackgroundImageStore.deleteAll()
-        try await mangaDirectoryStore.clearAll()
         clearLocalUIState()
         await clearWebData()
     }
