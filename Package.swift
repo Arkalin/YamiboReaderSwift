@@ -29,7 +29,10 @@ let package = Package(
         ),
         .testTarget(
             name: "YamiboReaderCoreTests",
-            dependencies: ["YamiboReaderCore"]
+            dependencies: [
+                "YamiboReaderCore",
+                "YamiboReaderUI",
+            ]
         ),
         .testTarget(
             name: "YamiboReaderUITests",

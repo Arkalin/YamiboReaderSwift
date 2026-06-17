@@ -3,13 +3,11 @@ import YamiboReaderCore
 enum SystemSettingsAction: Equatable {
     case loading
     case clearingNovelCache
-    case clearingMangaCache
     case resettingApplication
 }
 
 enum SystemSettingsConfirmation: String, Identifiable {
     case clearNovelCache
-    case clearMangaCache
     case resetApplication
 
     var id: String { rawValue }
@@ -18,8 +16,6 @@ enum SystemSettingsConfirmation: String, Identifiable {
         switch self {
         case .clearNovelCache:
             L10n.string("settings.confirm_clear_novel_cache")
-        case .clearMangaCache:
-            L10n.string("settings.confirm_clear_manga_cache")
         case .resetApplication:
             L10n.string("settings.confirm_reset_application")
         }
@@ -27,7 +23,7 @@ enum SystemSettingsConfirmation: String, Identifiable {
 
     var buttonTitle: String {
         switch self {
-        case .clearNovelCache, .clearMangaCache:
+        case .clearNovelCache:
             L10n.string("common.clear")
         case .resetApplication:
             L10n.string("settings.reset")
@@ -38,8 +34,6 @@ enum SystemSettingsConfirmation: String, Identifiable {
         switch self {
         case .clearNovelCache:
             L10n.string("settings.clear_novel_cache_message")
-        case .clearMangaCache:
-            L10n.string("settings.clear_manga_cache_message")
         case .resetApplication:
             L10n.string("settings.reset_application_message")
         }

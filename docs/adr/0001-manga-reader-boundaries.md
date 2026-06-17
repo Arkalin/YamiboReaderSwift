@@ -4,7 +4,7 @@ Date: 2026-06-17
 
 ## Status
 
-Accepted for phase 1.
+Accepted for phase 1. Revised for phase 2 on 2026-06-17.
 
 ## Context
 
@@ -38,6 +38,38 @@ Sources/YamiboReaderUI/Features/MangaReaderNew/
 ```
 
 `MangaReaderNew` is a temporary parallel rewrite workspace. It is not a production feature route during phase 1.
+
+## Phase 2 Revision
+
+Phase 2 changes the refactor policy from behavior-preserving seam extraction around the legacy reader to a full rewrite path:
+
+- The legacy manga reader implementation is reference material only during the rewrite.
+- The legacy manga reader does not need to remain runnable or compile-ready once phase 2 begins.
+- New manga reader code should live under the phase 1 boundary roots rather than adapting legacy implementation classes or actors.
+- New Domain values should follow the glossary directly, even when that breaks compatibility with legacy conveniences such as storing raw HTML on **Manga Chapter Document**.
+- Protocol seams introduced in phase 2 should serve the new implementation, not retrofit `MangaRepository`, `MangaDirectoryStore`, `MangaReadingSession`, or `MangaReaderModel`.
+- Legacy manga reader implementation files should move out of `Sources/` into `docs/reference/manga-reader-legacy/` so they remain available as reference material without participating in package compilation.
+- After the legacy UI reader moves out of `Sources/YamiboReaderUI/Features/MangaReader`, `Sources/YamiboReaderUI/Features/MangaReaderNew` should be renamed to `Sources/YamiboReaderUI/Features/MangaReader`; the rewrite owns the production-facing path name from that point forward.
+- App-level manga route/context contracts remain source code, because Favorites, resume route, and app presentation use them outside the legacy reader implementation.
+- Phase 2 should deliver a compiling vertical skeleton for the new reader, not complete continuous reading parity.
+- Legacy manga reader tests should move to `docs/reference/manga-reader-legacy/Tests/`; new tests should cover the phase 2 skeleton and retained app-level route/context contracts.
+- Phase 2 retains Web route types such as `MangaWebContext`, but does not implement WebKit fallback, hidden probing, JavaScript extraction, or automatic return-to-native behavior.
+- `MangaReaderSettings` remains a persisted settings contract during phase 2, but it is not the internal state model for the new reader UI.
+- Manga progress and resume contracts remain source code, but the phase 2 reader skeleton should not write progress until real **Manga Reading Position** updates exist.
+- Phase 2 Data seams should expose repository operations, not raw HTML or full reader workflows. HTML parsing details stay hidden behind repositories.
+- `MangaChapterDocumentLoading` should return **Manga Chapter Document** directly without source HTML.
+- Tag IDs, same-page chapter links, title, and first post identity needed to initialize a **Manga Directory** should come from a new `MangaDirectoryRepository` boundary.
+- `MangaDirectoryRepository` should return a directory seed and remote chapter arrays; Application code owns final **Manga Directory** construction, merge strategy, cooldown, rename, and persistence coordination.
+- `ownerPostID` remains parsed metadata on **Manga Chapter Document**. Directory seed may also include first post identity as initialization metadata.
+- The legacy `MangaPage` shape should not become new Domain. New reader output should use an Application-level `MangaReaderPageProjection`.
+- Phase 2 should rewrite only a minimal **Manga Chapter Window** skeleton that can hold documents, expose page projections, and resolve/clamp a **Manga Reading Position**. Adjacent insertion, trimming, directory refresh, and continuous-reading behavior belong to later phases.
+- The phase 2 SwiftUI reader should be a routeable presentation skeleton only. It should not perform real network loading, progress writes, WebKit fallback, image caching, or continuous-reading recovery.
+- Existing manga entry points should route to the phase 2 skeleton rather than disabling manga opening. The skeleton keeps the public `MangaReaderView(context:appModel:)` entry shape so app routing can stay narrow.
+- During phase 2, `YamiboAppModel.openManga` should route directly to the native skeleton and should not invoke legacy probing or automatically fall back to Web.
+- Legacy probe support types and behavior, including `MangaProbePayload`, `MangaProbeOutcome`, and `MangaProbeDecision`, should move to reference with the old probe implementation. Phase 2 keeps Web route context only as an app-level route contract.
+- `ThreadOpenResolver` and `ThreadOpenTarget.manga(MangaLaunchContext)` remain source code because they classify forum threads and create app-level manga opening routes rather than implementing the legacy manga reader.
+
+This revision supersedes the earlier assumption that phase 2 must preserve production manga reader behavior while extracting protocol seams.
 
 ## Target Boundaries
 
@@ -107,11 +139,12 @@ Core may own probe decisions and policy, but it must not depend on `WKWebView`.
 
 ## Specific Boundary Decisions
 
-- `MangaChapterDocument.html` is a legacy implementation convenience. The target shape is a `MangaChapterLoadResult(document, sourceHTML)` or equivalent Application/Data result so Domain **Manga Chapter Document** remains parsed image-page content.
-- `MangaReaderSettings` remains a legacy aggregate during phase 1. Future work should distinguish committed reader behavior settings, presentation appearance settings, sheet draft state, and persisted settings-store representation.
-- `MangaPage` may remain an Application/Core value, but UI should eventually receive a slimmer `MangaReaderPageProjection` containing image URL, referer URL, chapter identity, owner post ID, title, local page number, and chapter page count.
+- **Manga Chapter Document** must not carry raw HTML. Chapter HTML parsing belongs behind repository boundaries.
+- A new `MangaDirectoryRepository` provides tag IDs, same-page chapter links, title, and first post identity needed to initialize a **Manga Directory**.
+- `MangaReaderSettings` remains a persisted settings contract during phase 2. Future work should distinguish committed reader behavior settings, presentation appearance settings, sheet draft state, and persisted settings-store representation.
+- The legacy `MangaPage` shape should not be carried forward. UI should receive `MangaReaderPageProjection` containing image URL, referer URL, chapter identity, owner post ID, title, local page number, and chapter page count.
 - Image byte fetch/cache belongs in Core Data. Image prefetch strategy belongs in Core Application. Platform image decoding and display belong in UI Presentation.
-- `MangaProbeDecision` can remain pure Core logic. WebKit probing remains a UI adapter behind the existing closure seam until a real extraction needs a stronger interface.
+- Legacy probe decisions and WebKit probing move to reference during phase 2. Future fallback/probe behavior should be redesigned behind new repository or adapter seams.
 
 ## Phase 1 Scope
 
@@ -131,20 +164,20 @@ Phase 1 must not add:
 
 ## Cutover Policy
 
-`Sources/YamiboReaderUI/Features/MangaReader` remains the only production native manga reader route until parity is proven.
+Phase 1 kept `Sources/YamiboReaderUI/Features/MangaReader` as the only production native manga reader route. Phase 2 no longer requires the legacy manga reader to remain production-ready while the rewrite proceeds.
 
 `Sources/YamiboReaderUI/Features/MangaReaderNew` must not be wired into `RootTabView` during phase 1.
 
-After the new reader passes parity tests, perform one explicit cutover change:
+At the start of phase 2:
 
-1. Rename old `MangaReader` to `MangaReaderLegacy` or delete it if rollback is not needed.
-2. Rename `MangaReaderNew` to `MangaReader`.
-3. Update `RootTabView` once.
-4. Remove duplicate route and test references.
+1. Move legacy manga reader source and tests to `docs/reference/manga-reader-legacy/`.
+2. Rename `Sources/YamiboReaderUI/Features/MangaReaderNew` to `Sources/YamiboReaderUI/Features/MangaReader`.
+3. Keep app-level route/context contracts in source.
+4. Route existing manga entry points to the new skeleton.
 
 ## Phase 2 Entry Tests
 
-Before phase 2 extracts real workflows or wires the new reader, behavior coverage must exist and pass for:
+Phase 1 identified the following useful characterization coverage. Under the phase 2 rewrite policy, these tests are reference expectations rather than a requirement that legacy reader behavior stay production-runnable:
 
 - **Manga Directory** initialization from tag, same-page links, and pending search cases.
 - **Manga Directory** update through tag success, tag empty to search fallback, forced search, and search cooldown.
@@ -154,4 +187,4 @@ Before phase 2 extracts real workflows or wires the new reader, behavior coverag
 
 ## Consequences
 
-The refactor gets a visible destination without destabilizing the production manga reader. Later phases can move behavior one workflow at a time, with `MangaDirectoryWorkflow` as the preferred first extraction because it has the clearest mixed Data/Application responsibilities and can help remove raw HTML from Domain values.
+The refactor gets a visible destination. Phase 2 accepts temporary disruption to the legacy manga reader so the new implementation can model **Manga Chapter Document**, **Manga Directory**, **Manga Chapter Window**, and **Manga Reading Position** without carrying legacy compatibility fields or adapters.

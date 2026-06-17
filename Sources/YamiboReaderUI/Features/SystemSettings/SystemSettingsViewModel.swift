@@ -9,7 +9,6 @@ final class SystemSettingsViewModel: ObservableObject {
     @Published var favoriteBackground = FavoriteBackgroundSettings()
     @Published var applePencilPageTurn = ApplePencilPageTurnSettings()
     @Published private(set) var novelCacheBytes = 0
-    @Published private(set) var mangaCacheBytes = 0
     @Published private(set) var activeAction: SystemSettingsAction?
     @Published var errorMessage: String?
 
@@ -25,10 +24,6 @@ final class SystemSettingsViewModel: ObservableObject {
 
     var novelCacheLabel: String {
         cacheLabel(for: novelCacheBytes)
-    }
-
-    var mangaCacheLabel: String {
-        cacheLabel(for: mangaCacheBytes)
     }
 
     func load() async {
@@ -186,20 +181,6 @@ final class SystemSettingsViewModel: ObservableObject {
         }
     }
 
-    func clearMangaCache() async -> Bool {
-        activeAction = .clearingMangaCache
-        defer { activeAction = nil }
-
-        do {
-            try await appContext.mangaImageCacheStore.clearAll()
-            await refreshStorageUsage()
-            return true
-        } catch {
-            errorMessage = error.localizedDescription
-            return false
-        }
-    }
-
     func resetApplication() async -> Bool {
         activeAction = .resettingApplication
         defer { activeAction = nil }
@@ -212,7 +193,6 @@ final class SystemSettingsViewModel: ObservableObject {
             favoriteBackground = .init()
             applePencilPageTurn = .init()
             novelCacheBytes = 0
-            mangaCacheBytes = 0
             return true
         } catch {
             errorMessage = error.localizedDescription
@@ -221,10 +201,7 @@ final class SystemSettingsViewModel: ObservableObject {
     }
 
     func refreshStorageUsage() async {
-        async let novelBytes = appContext.readerCacheStore.totalDiskUsageBytes()
-        async let mangaBytes = appContext.mangaImageCacheStore.totalDiskUsageBytes()
-        novelCacheBytes = await novelBytes
-        mangaCacheBytes = await mangaBytes
+        novelCacheBytes = await appContext.readerCacheStore.totalDiskUsageBytes()
     }
 
     private func cacheLabel(for bytes: Int) -> String {

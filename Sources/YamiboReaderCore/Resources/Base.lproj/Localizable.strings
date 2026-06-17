@@ -215,12 +215,17 @@
 "manga.return_to_web" = "返回网页";
 "manga.save_correction" = "保存校正";
 "manga.settings" = "漫画设置";
+"manga.skeleton.current_url" = "当前章节";
+"manga.skeleton.empty_message" = "新的漫画阅读器骨架已接入，章节加载将在后续阶段恢复。";
+"manga.skeleton.empty_title" = "漫画阅读器重构中";
+"manga.skeleton.original_thread" = "原帖";
 "manga.zoom_enabled" = "启用缩放";
 "manga_directory.chapter_count" = "%d 个章节";
 "manga_directory.search_prompt" = "搜索漫画名称";
 "manga_web.ios_only" = "网页漫画模式仅在 iOS 端启用";
 "manga_web.load_failed" = "网页漫画加载失败";
 "manga_web.loading" = "正在载入网页漫画…";
+"manga_web.skeleton.message" = "网页漫画模式将在后续阶段重新接入。";
 "manga_web.title" = "网页漫画模式";
 "mine.credit_progress_format" = "%d/%d";
 "mine.login" = "登录";

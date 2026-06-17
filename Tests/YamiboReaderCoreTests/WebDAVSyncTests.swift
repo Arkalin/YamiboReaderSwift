@@ -169,11 +169,6 @@ private enum WebDAVTestError: Error {
     let autoSignInStore = AutoSignInStore(defaults: try makeWebDAVDefaults(suiteName: suiteName), keyPrefix: "auto-sign")
     let appSettingsStore = SettingsStore(defaults: try makeWebDAVDefaults(suiteName: suiteName), key: "settings")
     let readerCacheStore = ReaderCacheStore(baseDirectory: rootDirectory.appendingPathComponent("reader-cache", isDirectory: true))
-    let mangaImageCacheStore = MangaImageCacheStore(baseDirectory: rootDirectory.appendingPathComponent("manga-cache", isDirectory: true))
-    let mangaDirectoryStore = MangaDirectoryStore(
-        fileManager: .default,
-        baseDirectory: rootDirectory.appendingPathComponent("directory-cache", isDirectory: true)
-    )
 
     let host = "download.example.com"
     try await settingsStore.save(WebDAVSyncSettings(
@@ -191,8 +186,6 @@ private enum WebDAVTestError: Error {
     try await readerCacheStore.save(
         ReaderPageDocument(threadURL: localURL, view: 1, maxView: 1, segments: [.text("local cache", chapterTitle: nil)])
     )
-    try await mangaImageCacheStore.save(Data(repeating: 3, count: 128), for: try #require(URL(string: "https://static.yamibo.com/image.jpg")))
-    _ = try await mangaDirectoryStore.initializeDirectory(currentURL: localURL, rawTitle: "本地目录 第1话", html: "")
 
     let remoteURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=902&mobile=2"))
     let collection = FavoriteCollection(id: "collection-a", name: "远端合集", manualOrder: 0, isHidden: true)
@@ -237,8 +230,6 @@ private enum WebDAVTestError: Error {
     #expect(await autoSignInStore.lastSignedDate(session: localSession) != nil)
     #expect(await appSettingsStore.load().reader.readingMode == .vertical)
     #expect(await readerCacheStore.totalDiskUsageBytes() > 0)
-    #expect(await mangaImageCacheStore.totalDiskUsageBytes() == 128)
-    #expect(await mangaDirectoryStore.allDirectories().isEmpty == false)
 }
 
 @Test func webDAVAutomaticSyncDownloadsNewerRemotePayload() async throws {

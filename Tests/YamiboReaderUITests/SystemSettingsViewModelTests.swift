@@ -162,9 +162,7 @@ private func makeFixture() throws -> SystemSettingsFixture {
         readerResumeRouteStore: ReaderResumeRouteStore(defaults: try makeDefaults(suiteName: suiteName), key: "reader-resume-route"),
         favoriteStore: FavoriteStore(defaults: try makeDefaults(suiteName: suiteName), key: "favorites"),
         readerCacheStore: ReaderCacheStore(baseDirectory: root.appendingPathComponent("reader-cache", isDirectory: true)),
-        mangaImageCacheStore: MangaImageCacheStore(baseDirectory: root.appendingPathComponent("manga-image-cache", isDirectory: true)),
-        favoriteBackgroundImageStore: favoriteBackgroundImageStore,
-        mangaDirectoryStore: MangaDirectoryStore(baseDirectory: root.appendingPathComponent("manga-directory", isDirectory: true))
+        favoriteBackgroundImageStore: favoriteBackgroundImageStore
     )
 
     return SystemSettingsFixture(
