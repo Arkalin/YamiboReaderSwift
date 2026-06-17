@@ -884,6 +884,7 @@ private final class StubURLProtocol: URLProtocol {
     }
 }
 
+#if canImport(UIKit)
 @Test func novelTextLayoutProducesChaptersForBothModes() async throws {
     let document = ReaderPageDocument(
         threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=1&mobile=2")),
@@ -952,6 +953,7 @@ private final class StubURLProtocol: URLProtocol {
     #expect(!hiddenSegmentIndexes.contains(1))
     #expect(hidden.viewportIndex.chapters.map(\.title) == ["第一章", "第二章"])
 }
+#endif
 
 @Test func readerContainerLayoutComputesReadableFrameFromSafeAreaAndChrome() async throws {
     let layout = ReaderContainerLayout(
@@ -998,6 +1000,7 @@ private final class StubURLProtocol: URLProtocol {
     )
 }
 
+#if canImport(UIKit)
 @Test func novelTextLayoutProducesPagedAndVerticalPagesAtModuleSeam() throws {
     let text = String(repeating: "这是用于模块边界测试的正文。", count: 120)
     let document = ReaderPageDocument(
@@ -1026,7 +1029,6 @@ private final class StubURLProtocol: URLProtocol {
     #expect(vertical.viewportIndex.surfaces.last?.ranges.last?.endOffset == text.count)
     #expect(paged.viewportIndex.chapters.first?.title == "第一章")
     #expect(vertical.viewportIndex.chapters.first?.title == "第一章")
-#if canImport(UIKit)
     #expect(
         NovelTextPreviewLayout.textFits(
             String(text.prefix(80)),
@@ -1035,8 +1037,8 @@ private final class StubURLProtocol: URLProtocol {
             layout: ReaderContainerLayout(width: 320, height: 568)
         )
     )
-#endif
 }
+#endif
 
 @Test func novelTextLayoutUsesUIKitTextKit2Measurement() throws {
     let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
@@ -1505,14 +1507,10 @@ private final class StubURLProtocol: URLProtocol {
     #expect(updated.viewportContext.document == created.viewportContext.document)
 }
 
-@Test func novelTextViewportUpdatePublishesPageLayoutMetrics() throws {
 #if canImport(UIKit)
+@Test func novelTextViewportUpdatePublishesPageLayoutMetrics() throws {
     let repetitionCount = 400
     let layout = ReaderContainerLayout(width: 320, height: 568, readingMode: .vertical)
-#else
-    let repetitionCount = 10
-    let layout = ReaderContainerLayout(width: 320, height: 568)
-#endif
     let document = ReaderPageDocument(
         threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=63&mobile=2")),
         view: 1,
@@ -1531,7 +1529,6 @@ private final class StubURLProtocol: URLProtocol {
         layout: layout
     )
 
-#if canImport(UIKit)
     #expect(result.viewportIndex.surfaces.count > 2)
     for page in result.viewportIndex.surfaces {
         let geometry = try #require(page.frozenGeometry)
@@ -1540,10 +1537,8 @@ private final class StubURLProtocol: URLProtocol {
         #expect(textHeight > 0)
         #expect(textHeight <= layout.readableFrame.height)
     }
-#else
-    #expect(!result.viewportIndex.surfaces.isEmpty)
-#endif
 }
+#endif
 
 @Test func novelTextViewportFrozenGeometryUsesSurfaceClipHeight() {
     let clipRect = CGRect(x: 0, y: 2_400, width: 320, height: 780)
@@ -1887,6 +1882,7 @@ private final class StubURLProtocol: URLProtocol {
     #expect(pagination.viewportIndex.surfaces.count == 1)
 }
 
+#if canImport(UIKit)
 @Test func novelTextLayoutPreservesSingleTextSegmentRanges() async throws {
     let text = String(repeating: "分页边界应来自 Novel Text Layout。", count: 100)
     let document = ReaderPageDocument(
@@ -1943,6 +1939,7 @@ private final class StubURLProtocol: URLProtocol {
         #expect(previous.documentClipMaxY <= next.documentClipMinY)
     }
 }
+#endif
 
 @Test func novelTextViewportUsesFrozenSurfaceOriginWithoutTextKitFragmentLookup() throws {
     let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)

@@ -2,6 +2,7 @@ import Foundation
 import Testing
 @testable import YamiboReaderCore
 
+#if canImport(UIKit)
 @Test func readerDocumentCarriesOwnerPostIDToRenderedPages() throws {
     let html = """
     <html><body>
@@ -89,6 +90,7 @@ import Testing
 
     #expect(pagination.viewportIndex.surfaces.first?.chapterCommentTarget?.ownerPostID == "41257246")
 }
+#endif
 
 @Test func chapterCommentsParserReadsOwnerPostCommentsAndFilteredRatings() throws {
     let html = """
