@@ -136,7 +136,6 @@ final class NovelReadingWorkflowTests: XCTestCase {
         )
 
         XCTAssertFalse(source.contains("import UIKit"))
-        XCTAssertFalse(source.contains("import AppKit"))
         XCTAssertFalse(source.contains("NSTextContentStorage"))
         XCTAssertFalse(source.contains("NSTextLayoutManager"))
         XCTAssertTrue(source.contains("package struct NovelReadingSession: Sendable"))

@@ -865,7 +865,7 @@ public enum NovelTextLayout {
         settings: ReaderAppearanceSettings,
         layout: ReaderContainerLayout
     ) -> Bool {
-#if canImport(UIKit) || canImport(AppKit)
+#if canImport(UIKit)
         NovelTextPreviewLayout.textFits(
             text,
             chapterTitle: chapterTitle,

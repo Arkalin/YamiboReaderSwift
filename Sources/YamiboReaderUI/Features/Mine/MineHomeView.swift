@@ -5,8 +5,6 @@ import YamiboReaderCore
 
 #if canImport(UIKit)
 import UIKit
-#elseif canImport(AppKit)
-import AppKit
 #endif
 
 public struct MineHomeView: View {
@@ -541,9 +539,6 @@ private struct MineAvatarView: View {
         #if canImport(UIKit)
         guard let image = UIImage(data: data) else { return nil }
         return Image(uiImage: image)
-        #elseif canImport(AppKit)
-        guard let image = NSImage(data: data) else { return nil }
-        return Image(nsImage: image)
         #else
         return nil
         #endif
