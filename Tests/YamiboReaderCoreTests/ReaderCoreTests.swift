@@ -17,20 +17,6 @@ private func readerTestFontWeight(_ font: ReaderTestFont) -> CGFloat {
     }
     return 0
 }
-#elseif canImport(AppKit)
-import AppKit
-private typealias ReaderTestFont = NSFont
-
-private func readerTestFontWeight(_ font: ReaderTestFont) -> CGFloat {
-    let traits = font.fontDescriptor.object(forKey: .traits) as? [NSFontDescriptor.TraitKey: Any]
-    if let value = traits?[.weight] as? CGFloat {
-        return value
-    }
-    if let value = traits?[.weight] as? NSNumber {
-        return CGFloat(truncating: value)
-    }
-    return 0
-}
 #endif
 
 private struct StubURLProtocolResponse {
@@ -1040,6 +1026,7 @@ private final class StubURLProtocol: URLProtocol {
     #expect(vertical.viewportIndex.surfaces.last?.ranges.last?.endOffset == text.count)
     #expect(paged.viewportIndex.chapters.first?.title == "第一章")
     #expect(vertical.viewportIndex.chapters.first?.title == "第一章")
+#if canImport(UIKit)
     #expect(
         NovelTextPreviewLayout.textFits(
             String(text.prefix(80)),
@@ -1048,26 +1035,20 @@ private final class StubURLProtocol: URLProtocol {
             layout: ReaderContainerLayout(width: 320, height: 568)
         )
     )
+#endif
 }
 
-@Test func novelTextLayoutUsesUIKitTextKit2MeasurementAndRejectsAppKitShim() throws {
+@Test func novelTextLayoutUsesUIKitTextKit2Measurement() throws {
     let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
     let layoutEngineSource = try String(
         contentsOf: repositoryRoot
             .appendingPathComponent("Sources/YamiboReaderCore/Support/NovelTextPreviewLayout.swift"),
         encoding: .utf8
     )
-    let layoutSource = try String(
-        contentsOf: repositoryRoot
-            .appendingPathComponent("Sources/YamiboReaderCore/Support/NovelTextLayout.swift"),
-        encoding: .utf8
-    )
     let uiKitTextFitsBody = try #require(functionBody(named: "textFits", in: layoutEngineSource))
 
     #expect(uiKitTextFitsBody.contains("measuredTextHeight"))
     #expect(!uiKitTextFitsBody.contains("boundingRect"))
-    #expect(!layoutSource.contains("AppKitNovelTextLayoutAdapter"))
-    #expect(!layoutSource.contains("import AppKit"))
 }
 
 @Test func novelTextLayoutDoesNotExposeStaleMeasurementFallbackSurfaces() throws {
@@ -1525,7 +1506,7 @@ private final class StubURLProtocol: URLProtocol {
 }
 
 @Test func novelTextViewportUpdatePublishesPageLayoutMetrics() throws {
-#if canImport(UIKit) || canImport(AppKit)
+#if canImport(UIKit)
     let repetitionCount = 400
     let layout = ReaderContainerLayout(width: 320, height: 568, readingMode: .vertical)
 #else
@@ -1906,98 +1887,6 @@ private final class StubURLProtocol: URLProtocol {
     #expect(pagination.viewportIndex.surfaces.count == 1)
 }
 
-#if canImport(AppKit) && !canImport(UIKit)
-@Test func novelTextLayoutEmptyPagedViewportPageRangeThrowsWithoutEstimatedFallback() throws {
-    let text = String(repeating: "Empty viewport page range output must not fall back to estimated slicing. ", count: 20)
-    let document = ReaderPageDocument(
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=61&mobile=2")),
-        view: 1,
-        maxView: 1,
-        segments: [.text(text, chapterTitle: nil)]
-    )
-
-    #expect(throws: NovelTextLayoutFailure.textKitIndexing) {
-        _ = try NovelTextLayout.layout(
-            document: document,
-            settings: ReaderAppearanceSettings(readingMode: .paged),
-            layout: ReaderContainerLayout(width: 320, height: 568),
-            viewportSurfaceLayout: { _, _, _ in [] }
-        )
-    }
-}
-
-@Test func novelTextLayoutEmptyVerticalViewportPageRangeThrowsWithoutEstimatedFallback() throws {
-    let text = String(repeating: "Empty viewport page range output must not fall back to estimated vertical slicing. ", count: 20)
-    let document = ReaderPageDocument(
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=62&mobile=2")),
-        view: 1,
-        maxView: 1,
-        segments: [.text(text, chapterTitle: nil)]
-    )
-
-    #expect(throws: NovelTextLayoutFailure.textKitIndexing) {
-        _ = try NovelTextLayout.layout(
-            document: document,
-            settings: ReaderAppearanceSettings(readingMode: .vertical),
-            layout: ReaderContainerLayout(width: 320, height: 568, readingMode: .vertical),
-            viewportSurfaceLayout: { _, _, _ in [] }
-        )
-    }
-}
-
-@Test func novelTextLayoutAppKitPagedLayoutUsesPureValueRangesUntilRuntimeAdapterExists() throws {
-    let text = Array(
-        repeating: "AppKit layout should wait for a full runtime adapter instead of a shallow shim.",
-        count: 120
-    ).joined(separator: " ")
-    let document = ReaderPageDocument(
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=63&mobile=2")),
-        view: 1,
-        maxView: 1,
-        segments: [.text(text, chapterTitle: nil)]
-    )
-    let settings = ReaderAppearanceSettings(readingMode: .paged)
-    let layout = ReaderContainerLayout(width: 260, height: 220)
-
-    let pagination = try NovelTextLayout.layout(
-        document: document,
-        settings: settings,
-        layout: layout
-    )
-    let ranges = pagination.viewportIndex.surfaces.flatMap(\.ranges)
-
-    #expect(!ranges.isEmpty)
-    #expect(ranges.first?.startOffset == 0)
-    #expect(ranges.last?.endOffset == text.count)
-}
-
-@Test func novelTextLayoutAppKitVerticalLayoutUsesPureValueRangesUntilRuntimeAdapterExists() throws {
-    let text = Array(
-        repeating: "AppKit vertical layout should wait for a full runtime adapter instead of a shallow shim.",
-        count: 160
-    ).joined(separator: " ")
-    let document = ReaderPageDocument(
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=64&mobile=2")),
-        view: 1,
-        maxView: 1,
-        segments: [.text(text, chapterTitle: nil)]
-    )
-    let settings = ReaderAppearanceSettings(readingMode: .vertical)
-    let layout = ReaderContainerLayout(width: 260, height: 220, readingMode: .vertical)
-
-    let pagination = try NovelTextLayout.layout(
-        document: document,
-        settings: settings,
-        layout: layout
-    )
-    let ranges = pagination.viewportIndex.surfaces.flatMap(\.ranges)
-
-    #expect(!ranges.isEmpty)
-    #expect(ranges.first?.startOffset == 0)
-    #expect(ranges.last?.endOffset == text.count)
-}
-#endif
-
 @Test func novelTextLayoutPreservesSingleTextSegmentRanges() async throws {
     let text = String(repeating: "分页边界应来自 Novel Text Layout。", count: 100)
     let document = ReaderPageDocument(
@@ -2078,7 +1967,7 @@ private final class StubURLProtocol: URLProtocol {
 }
 
 @Test func novelTextLayoutAcceptsRematerializedGeometryWhenPageStartsAfterTrimmedWhitespace() async throws {
-#if canImport(UIKit) || canImport(AppKit)
+#if canImport(UIKit)
     let paragraph = "    页首空白不应使 TextKit 重新物化后的片段几何校验失败。"
     let text = Array(repeating: paragraph, count: 180).joined(separator: "\n\n")
     let document = ReaderPageDocument(
@@ -2195,7 +2084,7 @@ private final class StubURLProtocol: URLProtocol {
 
 @MainActor
 @Test func novelTextViewportDrawsRestoredVerticalSurfaceAfterInitialFirstPageViewport() throws {
-#if canImport(UIKit) || canImport(AppKit)
+#if canImport(UIKit)
     let text = Array(
         repeating: "围绕着王位继承权的争夺，距离那场内战的落幕已过去半个月的时间，而今天，是女王陛下的王位继承仪式。",
         count: 260
@@ -2281,7 +2170,7 @@ private final class StubURLProtocol: URLProtocol {
 
 @MainActor
 @Test func novelTextViewportDrawsLaterSurfaceLinesWhenLayoutFragmentStartsBeforeSurface() throws {
-#if canImport(UIKit) || canImport(AppKit)
+#if canImport(UIKit)
     let text = String(
         repeating: "库莉茜耶把听到的话认真记在心里，然后继续望向远方闪闪发亮的雪原和村庄。 ",
         count: 220
@@ -2436,7 +2325,7 @@ private final class StubURLProtocol: URLProtocol {
     #expect(substrings == ["\n\n新段落正文。", "\n第三段正文。"])
 }
 
-#if canImport(UIKit) || canImport(AppKit)
+#if canImport(UIKit)
 @Test func readerAttributedTextFactoryUsesParagraphStyleForTitleAndBody() throws {
     let pointSize = 24.0
     let attributedText = ReaderAttributedTextFactory.makeAttributedText(
@@ -2744,7 +2633,7 @@ private final class StubURLProtocol: URLProtocol {
     }
 }
 
-#if canImport(UIKit) || canImport(AppKit)
+#if canImport(UIKit)
 @Test func novelTextLayoutCommitsSemanticLayoutFontPlatformAndTextKitFingerprints() throws {
     let document = ReaderPageDocument(
         threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=303&mobile=2")),

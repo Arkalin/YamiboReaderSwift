@@ -3,8 +3,6 @@ import YamiboReaderCore
 
 #if canImport(UIKit)
 import UIKit
-#elseif canImport(AppKit)
-import AppKit
 #endif
 
 struct FavoriteBackgroundEditorDraft: Identifiable {
@@ -163,10 +161,8 @@ struct FavoriteBackgroundEditorView: View {
         ZStack {
             #if canImport(UIKit)
             Color(uiColor: .systemBackground)
-            #elseif canImport(AppKit)
-            Color(nsColor: .windowBackgroundColor)
             #else
-            Color(.systemBackground)
+            Color(.sRGB, white: colorScheme == .dark ? 0.08 : 1, opacity: 1)
             #endif
 
             if draft.imageData == nil {
@@ -314,12 +310,6 @@ private struct FavoriteBackgroundImage: View {
         #if canImport(UIKit)
         if let image = UIImage(data: data) {
             Image(uiImage: image)
-                .resizable()
-                .scaledToFill()
-        }
-        #elseif canImport(AppKit)
-        if let image = NSImage(data: data) {
-            Image(nsImage: image)
                 .resizable()
                 .scaledToFill()
         }
@@ -543,8 +533,6 @@ private extension View {
 private func favoriteBackgroundImageSize(from data: Data) -> CGSize? {
     #if canImport(UIKit)
     UIImage(data: data)?.size
-    #elseif canImport(AppKit)
-    NSImage(data: data)?.size
     #else
     nil
     #endif

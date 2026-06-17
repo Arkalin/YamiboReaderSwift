@@ -3,8 +3,6 @@ import YamiboReaderCore
 
 #if canImport(UIKit)
 import UIKit
-#elseif canImport(AppKit)
-import AppKit
 #endif
 
 public struct AboutView: View {
@@ -81,9 +79,6 @@ public struct AboutView: View {
     private func copyToPasteboard(_ text: String) {
         #if canImport(UIKit)
         UIPasteboard.general.string = text
-        #elseif canImport(AppKit)
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(text, forType: .string)
         #endif
     }
 }
@@ -336,10 +331,6 @@ private enum PlatformAppIcon {
             #if canImport(UIKit)
             if let image = UIImage(named: name) {
                 return Image(uiImage: image)
-            }
-            #elseif canImport(AppKit)
-            if let image = NSImage(named: name) {
-                return Image(nsImage: image)
             }
             #endif
         }

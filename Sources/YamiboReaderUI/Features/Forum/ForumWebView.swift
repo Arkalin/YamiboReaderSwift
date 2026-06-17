@@ -2,30 +2,6 @@ import SwiftUI
 import WebKit
 import YamiboReaderCore
 
-#if os(macOS)
-public struct ForumWebView: NSViewRepresentable {
-    public let url: URL
-
-    public init(url: URL) {
-        self.url = url
-    }
-
-    public func makeNSView(context: Context) -> WKWebView {
-        let configuration = WKWebViewConfiguration()
-        configuration.defaultWebpagePreferences.allowsContentJavaScript = true
-        let webView = WKWebView(frame: .zero, configuration: configuration)
-        webView.setValue(false, forKey: "drawsBackground")
-        webView.load(URLRequest(url: url))
-        return webView
-    }
-
-    public func updateNSView(_ view: WKWebView, context: Context) {
-        guard view.url != url else { return }
-        view.load(URLRequest(url: url))
-    }
-}
-#endif
-
 #if os(iOS)
 import UIKit
 

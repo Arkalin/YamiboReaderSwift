@@ -434,7 +434,6 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertFalse(supportSource.contains("NovelTextDisplayValue"))
         XCTAssertFalse(supportSource.contains("NativeNovelTextDisplayView"))
         XCTAssertFalse(sessionSource.contains("import UIKit"))
-        XCTAssertFalse(sessionSource.contains("import AppKit"))
         XCTAssertTrue(sessionSource.contains("package struct NovelReadingSession: Sendable"))
     }
 

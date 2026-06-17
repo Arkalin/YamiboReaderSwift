@@ -96,39 +96,9 @@ private extension ReaderPlatformColor {
         }
     }
 }
-#elseif canImport(AppKit)
-import AppKit
-
-public typealias ReaderPlatformColor = NSColor
-typealias ReaderPlatformFont = NSFont
-typealias ReaderPlatformFontDescriptor = NSFontDescriptor
-public typealias ReaderPlatformFontWeight = NSFont.Weight
-
-private extension ReaderPlatformColor {
-    static func readerText(settings: ReaderAppearanceSettings) -> ReaderPlatformColor {
-        NSColor(name: nil) { appearance in
-            if appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua {
-                return NSColor(white: 1, alpha: 0.86)
-            }
-
-            return lightReaderText(backgroundStyle: settings.backgroundStyle)
-        }
-    }
-
-    private static func lightReaderText(backgroundStyle: ReaderBackgroundStyle) -> ReaderPlatformColor {
-        switch backgroundStyle {
-        case .system, .paper:
-            return NSColor(red: 0.23, green: 0.19, blue: 0.15, alpha: 1)
-        case .mint:
-            return NSColor(red: 0.15, green: 0.21, blue: 0.18, alpha: 1)
-        case .sakura:
-            return NSColor(red: 0.23, green: 0.17, blue: 0.19, alpha: 1)
-        }
-    }
-}
 #endif
 
-#if canImport(UIKit) || canImport(AppKit)
+#if canImport(UIKit)
 
 @_spi(NovelTextAttributedDocument)
 public enum ReaderAttributedTextFactory {

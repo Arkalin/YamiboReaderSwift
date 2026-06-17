@@ -3,11 +3,7 @@ import Foundation
 
 #if canImport(UIKit)
 import UIKit
-#elseif canImport(AppKit)
-import AppKit
-#endif
 
-#if canImport(UIKit) || canImport(AppKit)
 enum NovelTextPreviewLayout {
     static func textFits(
         _ text: String,

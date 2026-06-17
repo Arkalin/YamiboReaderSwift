@@ -400,7 +400,7 @@ public struct ForumBrowserView: View {
     }
 
     public var body: some View {
-        ForumWebView(url: url)
+        EmptyView()
     }
 }
 

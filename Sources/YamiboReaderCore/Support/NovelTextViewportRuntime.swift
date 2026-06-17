@@ -111,12 +111,8 @@ enum NovelTextViewportDrawingGeometry {
     }
 }
 
-#if canImport(UIKit) || canImport(AppKit)
 #if canImport(UIKit)
 import UIKit
-#elseif canImport(AppKit)
-import AppKit
-#endif
 #endif
 
 package struct NovelTextViewportRuntimeDiagnostics: Equatable, Sendable {
@@ -235,7 +231,7 @@ package final class NovelTextLayoutRuntimeCandidate {
     let geometryDeviationCount: Int
     let ownsAuthoritativeIndex: Bool
 
-#if canImport(UIKit) || canImport(AppKit)
+#if canImport(UIKit)
     let textContentStorage: NSTextContentStorage?
     let textLayoutManager: NSTextLayoutManager?
     let textContainer: NSTextContainer?
@@ -259,7 +255,7 @@ package final class NovelTextLayoutRuntimeCandidate {
         self.postIndexCompactionCount = max(0, postIndexCompactionCount)
         self.geometryDeviationCount = max(0, geometryDeviationCount)
         self.ownsAuthoritativeIndex = ownsAuthoritativeIndex
-#if canImport(UIKit) || canImport(AppKit)
+#if canImport(UIKit)
         textContentStorage = nil
         textLayoutManager = nil
         textContainer = nil
@@ -268,7 +264,7 @@ package final class NovelTextLayoutRuntimeCandidate {
 #endif
     }
 
-#if canImport(UIKit) || canImport(AppKit)
+#if canImport(UIKit)
     init(
         result: NovelTextLayoutResult? = nil,
         semanticAttributedDocument: NSAttributedString? = nil,
@@ -299,7 +295,7 @@ package final class NovelTextLayoutRuntimeCandidate {
 #endif
 }
 
-#if canImport(UIKit) || canImport(AppKit)
+#if canImport(UIKit)
 @MainActor
 final class NovelTextViewportLayoutDelegate: NSObject, NSTextViewportLayoutControllerDelegate {
     nonisolated(unsafe) private var viewportBounds: CGRect
@@ -329,7 +325,7 @@ final class NovelTextViewportLayoutDelegate: NSObject, NSTextViewportLayoutContr
 
 private extension NovelTextLayoutRuntimeCandidate {
     var textKitGraphCount: Int {
-#if canImport(UIKit) || canImport(AppKit)
+#if canImport(UIKit)
         textContentStorage == nil ? 0 : 1
 #else
         0
@@ -349,7 +345,7 @@ package final class DefaultNovelTextLayoutRuntimeAdapter: NovelTextLayoutRuntime
     package func prepareCandidate(
         input: NovelTextLayoutRuntimeAdapterInput
     ) throws -> NovelTextLayoutRuntimeCandidate {
-#if canImport(UIKit) || canImport(AppKit)
+#if canImport(UIKit)
         let viewportContext = input.preparedInput.viewportContextSeed
         guard !viewportContext.document.text.isEmpty else {
             let result = try input.precomputedResult ?? NovelTextLayout.result(
@@ -423,11 +419,7 @@ package final class DefaultNovelTextLayoutRuntimeAdapter: NovelTextLayoutRuntime
         result.fingerprints.font = ReaderAttributedTextFactory.resolvedFontFingerprint(
             settings: input.settings
         )
-#if canImport(UIKit)
         let platformName = "UIKit"
-#else
-        let platformName = "AppKit"
-#endif
         result.fingerprints.platform = [
             ProcessInfo.processInfo.operatingSystemVersionString,
             platformName,
@@ -485,16 +477,19 @@ package final class DefaultNovelTextLayoutRuntimeAdapter: NovelTextLayoutRuntime
 #else
         let result = input.precomputedResult
         ?? NovelTextLayoutResult(
-            pages: [],
-            chapters: [],
-            viewportIndex: NovelTextViewportIndex(documentView: input.preparedInput.document.view, readingMode: input.settings.readingMode, surfaces: [], chapters: []),
-            viewportContext: input.preparedInput.viewportContextSeed
+            viewportContext: input.preparedInput.viewportContextSeed,
+            viewportIndex: NovelTextViewportIndex(
+                documentView: input.preparedInput.document.view,
+                readingMode: input.settings.readingMode,
+                surfaces: [],
+                chapters: []
+            )
         )
         return NovelTextLayoutRuntimeCandidate(result: result)
 #endif
     }
 
-#if canImport(UIKit) || canImport(AppKit)
+#if canImport(UIKit)
     private static func indexSurfaceRanges(
         attributedDocument: NSAttributedString,
         contentStorage: NSTextContentStorage,
@@ -925,7 +920,7 @@ public final class NovelTextViewportDisplayReference {
     }
 
     package func viewportSample(referencePoint: CGPoint) -> NovelTextViewportSample? {
-#if canImport(UIKit) || canImport(AppKit)
+#if canImport(UIKit)
         runtimeOwner?.viewportSample(
             surfaceIdentity: surfaceIdentity,
             referencePoint: referencePoint
@@ -936,7 +931,7 @@ public final class NovelTextViewportDisplayReference {
     }
 
     package func referenceY(for position: ReaderResumePoint) -> CGFloat? {
-#if canImport(UIKit) || canImport(AppKit)
+#if canImport(UIKit)
         runtimeOwner?.referenceY(
             surfaceIdentity: surfaceIdentity,
             position: position
@@ -946,7 +941,7 @@ public final class NovelTextViewportDisplayReference {
 #endif
     }
 
-#if canImport(UIKit) || canImport(AppKit)
+#if canImport(UIKit)
     public func draw(in context: CGContext, bounds: CGRect) {
         runtimeOwner?.draw(
             surfaceIdentity: surfaceIdentity,
@@ -978,7 +973,7 @@ final class NovelTextViewportRuntimeTransaction {
     let ownsAuthoritativeIndex: Bool
     private var state = State.pending
 
-#if canImport(UIKit) || canImport(AppKit)
+#if canImport(UIKit)
     private(set) var textContentStorage: NSTextContentStorage?
     private(set) var textLayoutManager: NSTextLayoutManager?
     private(set) var textContainer: NSTextContainer?
@@ -1005,7 +1000,7 @@ final class NovelTextViewportRuntimeTransaction {
         postIndexCompactionCount = candidate.postIndexCompactionCount
         geometryDeviationCount = candidate.geometryDeviationCount
         ownsAuthoritativeIndex = candidate.ownsAuthoritativeIndex
-#if canImport(UIKit) || canImport(AppKit)
+#if canImport(UIKit)
         textContentStorage = candidate.textContentStorage
         textLayoutManager = candidate.textLayoutManager
         textContainer = candidate.textContainer
@@ -1024,7 +1019,7 @@ final class NovelTextViewportRuntimeTransaction {
         guard case .pending = state else { return false }
         state = .superseded
         semanticAttributedDocument = nil
-#if canImport(UIKit) || canImport(AppKit)
+#if canImport(UIKit)
         textContentStorage = nil
         textLayoutManager = nil
         textContainer = nil
@@ -1035,7 +1030,7 @@ final class NovelTextViewportRuntimeTransaction {
     }
 
     fileprivate func prepareInitialViewport(around surfaceOrdinal: Int) throws {
-#if canImport(UIKit) || canImport(AppKit)
+#if canImport(UIKit)
         guard ownsAuthoritativeIndex else { return }
         _ = surfaceOrdinal
 #endif
@@ -1044,7 +1039,7 @@ final class NovelTextViewportRuntimeTransaction {
 
 private extension NovelTextViewportRuntimeTransaction {
     var textKitGraphCount: Int {
-#if canImport(UIKit) || canImport(AppKit)
+#if canImport(UIKit)
         textContentStorage == nil ? 0 : 1
 #else
         0
@@ -1073,7 +1068,7 @@ final class NovelTextViewportRuntimeOwner {
     private let adapter: any NovelTextLayoutRuntimeAdapter
     private var pendingTransaction: NovelTextViewportRuntimeTransaction?
 
-#if canImport(UIKit) || canImport(AppKit)
+#if canImport(UIKit)
     private var textContentStorage: NSTextContentStorage?
     private var textLayoutManager: NSTextLayoutManager?
     private var textContainer: NSTextContainer?
@@ -1086,7 +1081,7 @@ final class NovelTextViewportRuntimeOwner {
     }
 
     var diagnostics: NovelTextViewportRuntimeDiagnostics {
-#if canImport(UIKit) || canImport(AppKit)
+#if canImport(UIKit)
         NovelTextViewportRuntimeDiagnostics(
             contentStorageCount: textContentStorage == nil ? 0 : 1,
             activeLayoutManagerCount: textLayoutManager == nil ? 0 : 1,
@@ -1134,7 +1129,7 @@ final class NovelTextViewportRuntimeOwner {
     }
 
     private var activeTextKitGraphCount: Int {
-#if canImport(UIKit) || canImport(AppKit)
+#if canImport(UIKit)
         textContentStorage == nil ? 0 : 1
 #else
         0
@@ -1204,7 +1199,7 @@ final class NovelTextViewportRuntimeOwner {
         settings = transaction.settings
         layout = transaction.layout
         semanticAttributedDocumentCache = transaction.semanticAttributedDocument
-#if canImport(UIKit) || canImport(AppKit)
+#if canImport(UIKit)
         textContentStorage = transaction.textContentStorage
         textLayoutManager = transaction.textLayoutManager
         textContainer = transaction.textContainer
@@ -1269,7 +1264,7 @@ final class NovelTextViewportRuntimeOwner {
         staleDrawingAttemptCount = 0
         lastDrawnSurfaceIdentity = nil
         lastDrawnDocumentRange = nil
-#if canImport(UIKit) || canImport(AppKit)
+#if canImport(UIKit)
         textContentStorage = nil
         textLayoutManager = nil
         textContainer = nil
@@ -1317,7 +1312,7 @@ final class NovelTextViewportRuntimeOwner {
         visibleSurfaceOrdinals = nextVisibleSurfaceOrdinals
         viewportUpdateCount += 1
         rematerializedSurfaceCount = visibleSurfaceOrdinals.count
-#if canImport(UIKit) || canImport(AppKit)
+#if canImport(UIKit)
         updateTextKitViewport()
 #endif
     }
@@ -1335,7 +1330,7 @@ final class NovelTextViewportRuntimeOwner {
         return preheated
     }
 
-#if canImport(UIKit) || canImport(AppKit)
+#if canImport(UIKit)
     private func updateTextKitViewport() {
     }
 
@@ -1356,7 +1351,7 @@ final class NovelTextViewportRuntimeOwner {
             }) == true
     }
 
-#if canImport(UIKit) || canImport(AppKit)
+#if canImport(UIKit)
     func viewportSample(
         surfaceIdentity: NovelReaderSurfaceIdentity,
         referencePoint: CGPoint
@@ -1525,7 +1520,7 @@ final class NovelTextViewportRuntimeOwner {
     }
 #endif
 
-#if canImport(UIKit) || canImport(AppKit)
+#if canImport(UIKit)
     func draw(
         surfaceIdentity: NovelReaderSurfaceIdentity,
         in context: CGContext,
