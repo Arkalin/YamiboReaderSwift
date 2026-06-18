@@ -67,4 +67,11 @@ public struct MangaReaderPageProjection: Hashable, Identifiable, Sendable {
             page.tid == position.tid && page.localIndex == position.localIndex
         }
     }
+
+    public static func resolvedPageIndex(for window: MangaChapterWindow) -> Int? {
+        resolvedPageIndex(
+            for: window.resolvedPosition,
+            in: projections(from: window)
+        )
+    }
 }

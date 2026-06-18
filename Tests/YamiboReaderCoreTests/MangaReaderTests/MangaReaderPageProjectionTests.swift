@@ -7,7 +7,10 @@ struct MangaReaderTestsPageProjection {
     @Test func pageProjectionExpandsDocumentsWithStableIndexesAndReferers() throws {
         let first = try makeProjectionDocument(tid: "700", pageCount: 2)
         let second = try makeProjectionDocument(tid: "701", pageCount: 1)
-        let window = try #require(MangaChapterWindow(documents: [first, second]))
+        let window = try #require(MangaChapterWindow(
+            directory: makeProjectionDirectory(tids: ["700", "701"]),
+            documents: [first, second]
+        ))
 
         let pages = MangaReaderPageProjection.projections(from: window)
 
@@ -23,6 +26,7 @@ struct MangaReaderTestsPageProjection {
     @Test func pageProjectionResolvesPageIndexFromReadingPosition() throws {
         let document = try makeProjectionDocument(tid: "700", pageCount: 3)
         let window = MangaChapterWindow(
+            directory: makeProjectionDirectory(tids: ["700"]),
             initialDocument: document,
             position: MangaReadingPosition(tid: "700", localIndex: 2)
         )
@@ -35,10 +39,37 @@ struct MangaReaderTestsPageProjection {
             ) == 2
         )
     }
+
+    @Test func pageProjectionResolvesPageIndexFromWindow() throws {
+        let first = try makeProjectionDocument(tid: "700", pageCount: 2)
+        let second = try makeProjectionDocument(tid: "701", pageCount: 2)
+        let window = try #require(MangaChapterWindow(
+            directory: makeProjectionDirectory(tids: ["700", "701"]),
+            documents: [first, second],
+            position: MangaReadingPosition(tid: "701", localIndex: 1)
+        ))
+
+        #expect(MangaReaderPageProjection.resolvedPageIndex(for: window) == 3)
+    }
+}
+
+private func makeProjectionDirectory(tids: [String]) -> MangaDirectory {
+    MangaDirectory(
+        cleanBookName: "测试漫画",
+        strategy: .links,
+        sourceKey: "测试漫画",
+        chapters: tids.enumerated().map { index, tid in
+            MangaChapter(
+                tid: tid,
+                rawTitle: "第\(index + 1)话",
+                chapterNumber: Double(index + 1),
+                url: makeProjectionChapterURL(tid: tid)
+            )
+        }
+    )
 }
 
 private func makeProjectionDocument(tid: String, pageCount: Int) throws -> MangaChapterDocument {
-    let chapterURL = try #require(URL(string: "https://bbs.yamibo.com/thread-\(tid)-1-1.html"))
     let imageURLs = try (0..<pageCount).map { index in
         try #require(URL(string: "https://img.example.com/\(tid)-\(index).jpg"))
     }
@@ -46,7 +77,11 @@ private func makeProjectionDocument(tid: String, pageCount: Int) throws -> Manga
         tid: tid,
         ownerPostID: "post-\(tid)",
         chapterTitle: "第\(tid)话",
-        chapterURL: chapterURL,
+        chapterURL: makeProjectionChapterURL(tid: tid),
         imageURLs: imageURLs
     )
+}
+
+private func makeProjectionChapterURL(tid: String) -> URL {
+    URL(string: "https://bbs.yamibo.com/thread-\(tid)-1-1.html")!
 }
