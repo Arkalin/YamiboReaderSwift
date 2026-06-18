@@ -147,8 +147,100 @@ struct MangaReaderTestsWorkflow {
         #expect(loaded.pages.map(\.id) == ["700#0"])
         #expect(loaded.readingPosition == MangaReadingPosition(tid: "700", localIndex: 0))
         #expect(await store.requestedNames == ["本地目录"])
+        #expect(await store.requestedTIDs.isEmpty)
         #expect(await repository.seedURLs.isEmpty)
         #expect(await store.savedDirectories.isEmpty)
+    }
+
+    @Test func existingDirectoryContainingDocumentTIDIsReusedWithoutSeedOrSave() async throws {
+        let document = try makeWorkflowDocument(tid: "700", pageCount: 1)
+        let existingDirectory = makeWorkflowDirectory(
+            name: "本地目录",
+            strategy: .searched,
+            sourceKey: "local",
+            tids: ["700", "701"]
+        )
+        let loader = RecordingMangaChapterDocumentLoader(output: .document(document))
+        let repository = RecordingMangaDirectoryRepository(output: .failure(.offline))
+        let store = RecordingMangaDirectoryStore(directories: [existingDirectory])
+        let workflow = MangaReaderWorkflow(
+            context: try makeWorkflowContext(tid: "700", initialPage: 0),
+            documentLoader: loader,
+            directoryRepository: repository,
+            directoryStore: store
+        )
+
+        let presentation = await workflow.prepare()
+
+        guard case let .loaded(loaded) = presentation.state else {
+            Issue.record("Expected loaded presentation")
+            return
+        }
+        #expect(loaded.directoryTitle == "本地目录")
+        #expect(loaded.pages.map(\.id) == ["700#0"])
+        #expect(loaded.readingPosition == MangaReadingPosition(tid: "700", localIndex: 0))
+        #expect(await store.requestedNames.isEmpty)
+        #expect(await store.requestedTIDs == ["700"])
+        #expect(await repository.seedURLs.isEmpty)
+        #expect(await store.savedDirectories.isEmpty)
+    }
+
+    @Test func existingDirectoryNameMissFallsBackToDirectoryContainingDocumentTID() async throws {
+        let document = try makeWorkflowDocument(tid: "700", pageCount: 1)
+        let existingDirectory = makeWorkflowDirectory(
+            name: "本地目录",
+            strategy: .searched,
+            sourceKey: "local",
+            tids: ["700"]
+        )
+        let loader = RecordingMangaChapterDocumentLoader(output: .document(document))
+        let repository = RecordingMangaDirectoryRepository(output: .failure(.offline))
+        let store = RecordingMangaDirectoryStore(directories: [existingDirectory])
+        let workflow = MangaReaderWorkflow(
+            context: try makeWorkflowContext(tid: "700", directoryName: "Missing"),
+            documentLoader: loader,
+            directoryRepository: repository,
+            directoryStore: store
+        )
+
+        let presentation = await workflow.prepare()
+
+        guard case let .loaded(loaded) = presentation.state else {
+            Issue.record("Expected loaded presentation")
+            return
+        }
+        #expect(loaded.directoryTitle == "本地目录")
+        #expect(await store.requestedNames == ["Missing"])
+        #expect(await store.requestedTIDs == ["700"])
+        #expect(await repository.seedURLs.isEmpty)
+        #expect(await store.savedDirectories.isEmpty)
+    }
+
+    @Test func directoryNameAndTIDMissInitializesSeedDirectory() async throws {
+        let document = try makeWorkflowDocument(tid: "700", pageCount: 1)
+        let seed = makeWorkflowSeed(currentTID: "700", tagIDs: ["12"])
+        let loader = RecordingMangaChapterDocumentLoader(output: .document(document))
+        let repository = RecordingMangaDirectoryRepository(output: .seed(seed))
+        let store = RecordingMangaDirectoryStore()
+        let context = try makeWorkflowContext(tid: "700", directoryName: "Missing")
+        let workflow = MangaReaderWorkflow(
+            context: context,
+            documentLoader: loader,
+            directoryRepository: repository,
+            directoryStore: store
+        )
+
+        let presentation = await workflow.prepare()
+
+        guard case let .loaded(loaded) = presentation.state else {
+            Issue.record("Expected loaded presentation")
+            return
+        }
+        #expect(loaded.directoryTitle == "测试漫画")
+        #expect(await store.requestedNames == ["Missing"])
+        #expect(await store.requestedTIDs == ["700"])
+        #expect(await repository.seedURLs == [context.chapterURL])
+        #expect(await store.savedDirectories.count == 1)
     }
 
     @Test func seedDirectoryInitializesTagStrategyAndDoesNotLoadRemoteDirectory() async throws {
@@ -331,6 +423,7 @@ private actor RecordingMangaDirectoryRepository: MangaDirectoryRepository {
 private actor RecordingMangaDirectoryStore: MangaDirectoryPersisting {
     private var directories: [String: MangaDirectory]
     private(set) var requestedNames: [String] = []
+    private(set) var requestedTIDs: [String] = []
     private(set) var savedDirectories: [MangaDirectory] = []
     private(set) var deletedNames: [String] = []
 
@@ -344,6 +437,15 @@ private actor RecordingMangaDirectoryStore: MangaDirectoryPersisting {
         let normalized = Self.normalizedName(name)
         requestedNames.append(normalized)
         return directories[normalized]
+    }
+
+    func directory(containingTID tid: String) async throws -> MangaDirectory? {
+        let normalized = Self.normalizedName(tid)
+        requestedTIDs.append(normalized)
+        guard !normalized.isEmpty else { return nil }
+        return directories.values.first { directory in
+            directory.chapters.contains(where: { Self.normalizedName($0.tid) == normalized })
+        }
     }
 
     func saveDirectory(_ directory: MangaDirectory) async throws {

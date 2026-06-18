@@ -25,6 +25,7 @@ public final class YamiboAppContext: YamiboRepositoryProviding, Sendable {
     public let readerCacheStore: ReaderCacheStore
     public let favoriteBackgroundImageStore: FavoriteBackgroundImageStore
     public let mangaDirectoryStore: FileMangaDirectoryStore
+    public let mangaChapterDocumentStore: FileMangaChapterDocumentStore
     public let mangaImageDataCacheStore: FileMangaImageDataCacheStore
     private let session: URLSession
 
@@ -39,6 +40,7 @@ public final class YamiboAppContext: YamiboRepositoryProviding, Sendable {
         readerCacheStore: ReaderCacheStore = ReaderCacheStore(),
         favoriteBackgroundImageStore: FavoriteBackgroundImageStore = FavoriteBackgroundImageStore(),
         mangaDirectoryStore: FileMangaDirectoryStore = FileMangaDirectoryStore(),
+        mangaChapterDocumentStore: FileMangaChapterDocumentStore = FileMangaChapterDocumentStore(),
         mangaImageDataCacheStore: FileMangaImageDataCacheStore = FileMangaImageDataCacheStore(),
         session: URLSession = .shared
     ) {
@@ -52,6 +54,7 @@ public final class YamiboAppContext: YamiboRepositoryProviding, Sendable {
         self.readerCacheStore = readerCacheStore
         self.favoriteBackgroundImageStore = favoriteBackgroundImageStore
         self.mangaDirectoryStore = mangaDirectoryStore
+        self.mangaChapterDocumentStore = mangaChapterDocumentStore
         self.mangaImageDataCacheStore = mangaImageDataCacheStore
         self.session = session
     }
@@ -93,7 +96,10 @@ public final class YamiboAppContext: YamiboRepositoryProviding, Sendable {
             cookie: sessionState.cookie,
             userAgent: sessionState.userAgent
         )
-        return YamiboMangaChapterDocumentLoader(client: client)
+        return CachedMangaChapterDocumentLoader(
+            store: mangaChapterDocumentStore,
+            upstream: YamiboMangaChapterDocumentLoader(client: client)
+        )
     }
 
     public func makeMangaDirectoryRepository() async -> any MangaDirectoryRepository {
@@ -167,6 +173,7 @@ public final class YamiboAppContext: YamiboRepositoryProviding, Sendable {
         try await favoriteStore.clearAll()
         try await readerCacheStore.clearAll()
         try await mangaDirectoryStore.clearAll()
+        try await mangaChapterDocumentStore.clearAll()
         try await mangaImageDataCacheStore.clearAll()
         try await favoriteBackgroundImageStore.deleteAll()
         clearLocalUIState()

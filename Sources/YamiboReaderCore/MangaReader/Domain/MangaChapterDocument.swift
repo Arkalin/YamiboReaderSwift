@@ -1,6 +1,6 @@
 import Foundation
 
-public struct MangaChapterDocument: Hashable, Sendable {
+public struct MangaChapterDocument: Codable, Hashable, Sendable {
     public var tid: String
     public var ownerPostID: String
     public var chapterTitle: String
