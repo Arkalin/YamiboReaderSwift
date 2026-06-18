@@ -69,6 +69,33 @@ struct MangaDirectoryWorkflowTests {
         #expect(await repository.searchRequests.isEmpty)
     }
 
+    @Test func tagUpdatePrunesExistingNonChapterRowsFilteredFromRemoteTag() async throws {
+        let directory = makeDirectory(
+            name: "因为今天女友不在",
+            strategy: .tag,
+            sourceKey: "20013",
+            chapters: [
+                makeChapter(tid: "518460", title: "01"),
+                makeChapter(tid: "568431", title: "【提灯喵汉化组】因为今天女友不在 37"),
+                makeChapter(tid: "570528", title: "香询问大家因为今天女友不在的漫画价格"),
+            ],
+            searchKeyword: "提灯喵汉化组 因为今天女友不在"
+        )
+        let store = RecordingDirectoryStore(directories: [directory])
+        let repository = RecordingDirectoryRepository(
+            seed: makeSeed(tid: "568431"),
+            tagChapters: [
+                makeChapter(tid: "568431", title: "【提灯喵汉化组】因为今天女友不在 37"),
+                makeChapter(tid: "571415", title: "【提灯喵汉化组】因为今天女友不在 38"),
+            ]
+        )
+        let workflow = MangaDirectoryWorkflow(repository: repository, store: store)
+
+        let result = try await workflow.updateDirectory(directory, currentTID: "568431")
+
+        #expect(result.directory.chapters.map(\.tid) == ["518460", "568431", "571415"])
+    }
+
     @Test func emptyTagUpdateFallsBackToSearchAndStartsCooldown() async throws {
         let now = Date(timeIntervalSince1970: 2_000)
         let directory = makeDirectory(

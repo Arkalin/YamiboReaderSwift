@@ -176,7 +176,13 @@ public struct MangaDirectoryWorkflow: Sendable {
         }
 
         var updated = latest
-        updated.chapters = MangaDirectoryMerge.mergeAndSort(latest.chapters, chapters)
+        let existingChapters = latest.strategy == .tag
+            ? MangaDirectoryChapterRetention.chaptersRetainedDuringTagRefresh(
+                latest.chapters,
+                incoming: chapters
+            )
+            : latest.chapters
+        updated.chapters = MangaDirectoryMerge.mergeAndSort(existingChapters, chapters)
         updated.lastUpdatedAt = now
         if updated.strategy != .tag {
             updated.strategy = .searched
@@ -291,6 +297,28 @@ public struct MangaDirectoryWorkflow: Sendable {
         }
 
         return now.addingTimeInterval(configuration.searchCooldownDuration)
+    }
+}
+
+enum MangaDirectoryChapterRetention {
+    static func chaptersRetainedDuringTagRefresh(
+        _ existing: [MangaChapter],
+        incoming: [MangaChapter]
+    ) -> [MangaChapter] {
+        let incomingIDs = Set(incoming.map(\.tid))
+        return existing.filter { chapter in
+            incomingIDs.contains(chapter.tid) || titleLooksLikeMangaChapter(chapter.rawTitle)
+        }
+    }
+
+    private static func titleLooksLikeMangaChapter(_ rawTitle: String) -> Bool {
+        if MangaTitleCleaner.extractChapterNumber(rawTitle) > 0 {
+            return true
+        }
+        return rawTitle.range(
+            of: #"番外|特典|特别|特別|附录|附錄|SP|卷后|卷後|小剧场|小劇場|小漫画|小漫畫|最终话|最終話|最终回|最終回|大结局"#,
+            options: [.regularExpression, .caseInsensitive]
+        ) != nil
     }
 }
 

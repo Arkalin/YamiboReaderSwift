@@ -183,10 +183,25 @@ public enum MangaHTMLParser {
         parsePCList(html, groupIndex: groupIndex) + parseMobileSearchList(html, groupIndex: groupIndex)
     }
 
-    private static func parsePCList(_ html: String, groupIndex: Int) -> [MangaChapter] {
+    public static func parseTagThreadListHTML(
+        _ html: String,
+        groupIndex: Int = 0,
+        allowedForumIDs: Set<String> = ["30"]
+    ) -> [MangaChapter] {
+        parsePCList(html, groupIndex: groupIndex, allowedForumIDs: allowedForumIDs)
+    }
+
+    private static func parsePCList(
+        _ html: String,
+        groupIndex: Int,
+        allowedForumIDs: Set<String>? = nil
+    ) -> [MangaChapter] {
         let rowPattern = #"<tr[^>]*>(.*?)</tr>"#
         return HTMLTextExtractor.matches(pattern: rowPattern, in: html).compactMap { row in
             guard let rowHTML = row.first else { return nil }
+            if let allowedForumIDs, !rowContainsForumID(in: rowHTML, allowedForumIDs: allowedForumIDs) {
+                return nil
+            }
             guard let link = HTMLTextExtractor.firstMatch(pattern: #"<th[^>]*>.*?<a[^>]*href=["']([^"']+)["'][^>]*>(.*?)</a>"#, in: rowHTML) else {
                 return nil
             }
@@ -216,6 +231,17 @@ public enum MangaHTMLParser {
                 groupIndex: groupIndex,
                 publishTime: parseDate(dateText)
             )
+        }
+    }
+
+    private static func rowContainsForumID(in rowHTML: String, allowedForumIDs: Set<String>) -> Bool {
+        guard !allowedForumIDs.isEmpty else { return true }
+        let hrefMatches = HTMLTextExtractor.matches(
+            pattern: #"<a[^>]*href=["'][^"']*(?:forum-(\d+)-\d+\.html|[?&;]fid=(\d+)|forum-(\d+)-)[^"']*["'][^>]*>"#,
+            in: rowHTML
+        )
+        return hrefMatches.contains { match in
+            match.dropFirst().contains(where: { allowedForumIDs.contains($0) })
         }
     }
 

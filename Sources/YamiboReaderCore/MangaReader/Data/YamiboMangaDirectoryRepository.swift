@@ -61,7 +61,7 @@ public struct YamiboMangaDirectoryRepository: MangaDirectoryRepository {
                     userAgent: YamiboDefaults.desktopTagUserAgent
                 )
                 try MangaReaderDataSupport.validateReadableMangaHTML(firstHTML)
-                chapters.append(contentsOf: MangaHTMLParser.parseListHTML(firstHTML, groupIndex: groupIndex))
+                chapters.append(contentsOf: MangaHTMLParser.parseTagThreadListHTML(firstHTML, groupIndex: groupIndex))
 
                 let totalPages = MangaHTMLParser.extractTotalPages(from: firstHTML)
                 guard totalPages > 1 else { continue }
@@ -73,7 +73,7 @@ public struct YamiboMangaDirectoryRepository: MangaDirectoryRepository {
                         userAgent: YamiboDefaults.desktopTagUserAgent
                     )
                     try MangaReaderDataSupport.validateReadableMangaHTML(html)
-                    let pageChapters = MangaHTMLParser.parseListHTML(html, groupIndex: groupIndex)
+                    let pageChapters = MangaHTMLParser.parseTagThreadListHTML(html, groupIndex: groupIndex)
                     guard !pageChapters.isEmpty else { continue }
                     chapters.append(contentsOf: pageChapters)
                 }

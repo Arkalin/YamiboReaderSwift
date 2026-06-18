@@ -108,6 +108,27 @@ struct MangaReaderTestsDirectoryRepository {
         #expect(harness.requests.map { $0.url?.absoluteString ?? "" }.count == 3)
     }
 
+    @Test func tagDirectoryKeepsOnlyChineseYuriMangaForumRows() async throws {
+        let harness = MangaReaderDataTestHarness()
+        defer { harness.reset() }
+
+        harness.setHandler { _ in
+            MangaReaderDataTestResponse(html: """
+            <html><body>
+              <table>
+                \(listRowHTML(tid: "571415", title: "【提灯喵汉化组】因为今天女友不在 38", forumID: "30", forumName: "中文百合漫画区"))
+                \(listRowHTML(tid: "570528", title: "香询问大家因为今天女友不在的漫画价格", forumID: "33", forumName: "海域區"))
+              </table>
+            </body></html>
+            """)
+        }
+
+        let repository = YamiboMangaDirectoryRepository(client: YamiboClient(session: harness.session))
+        let chapters = try await repository.loadTagDirectory(tagIDs: ["20013"])
+
+        #expect(chapters.map(\.tid) == ["571415"])
+    }
+
     @Test func tagDirectoryThrowsFloodControlInsteadOfReturningPartialResults() async throws {
         let harness = MangaReaderDataTestHarness()
         defer { harness.reset() }
@@ -203,11 +224,22 @@ private func listHTML(tid: String, title: String, totalPages: Int) -> String {
     return """
     <table>
       \(options)
-      <tr>
-        <th><a href="forum.php?mod=viewthread&tid=\(tid)&mobile=2">\(title)</a></th>
-        <td class="by"></td>
-        <td class="by"><cite><a href="space-uid-77.html">作者甲</a></cite><em><span>2026-01-02</span></em></td>
-      </tr>
+      \(listRowHTML(tid: tid, title: title, forumID: "30", forumName: "中文百合漫画区"))
     </table>
+    """
+}
+
+private func listRowHTML(
+    tid: String,
+    title: String,
+    forumID: String,
+    forumName: String
+) -> String {
+    """
+    <tr>
+      <th><a href="forum.php?mod=viewthread&tid=\(tid)&mobile=2">\(title)</a></th>
+      <td class="by"><a href="forum-\(forumID)-1.html">\(forumName)</a></td>
+      <td class="by"><cite><a href="space-uid-77.html">作者甲</a></cite><em><span>2026-01-02</span></em></td>
+    </tr>
     """
 }
