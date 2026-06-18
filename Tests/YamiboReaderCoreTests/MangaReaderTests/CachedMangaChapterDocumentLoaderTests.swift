@@ -57,6 +57,22 @@ struct MangaReaderTestsCachedChapterDocumentLoader {
         #expect(await store.saveCallCount == 1)
     }
 
+    @Test func htmlEncodedDirectoryURLSharesNormalizedCacheKey() async throws {
+        let cachedURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=807&page=1&mobile=2"))
+        let directoryURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&amp;tid=807&amp;extra=&amp;mobile=2"))
+        let document = try makeLoaderDocument(tid: "807")
+        let store = RecordingMangaChapterDocumentStore(initialDocuments: [
+            normalizedChapterDocumentKey(cachedURL): document
+        ])
+        let upstream = RecordingCachedMangaChapterDocumentUpstream(results: [.failure(YamiboError.invalidResponse(statusCode: 404))])
+        let loader = CachedMangaChapterDocumentLoader(store: store, upstream: upstream)
+
+        let loaded = try await loader.loadChapterDocument(at: directoryURL)
+
+        #expect(loaded == document)
+        #expect(await upstream.callCount == 0)
+    }
+
     @Test func upstreamFailureFallsBackToDocumentThatAppearsInStore() async throws {
         let chapterURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?tid=803"))
         let document = try makeLoaderDocument(tid: "803")

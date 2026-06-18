@@ -142,8 +142,9 @@ public enum YamiboRoute: Sendable {
             ]
             return components.url!
         case let .thread(url, page, authorID):
+            let decodedURLString = HTMLTextExtractor.decodeHTMLEntities(url.absoluteString)
             var components = URLComponents(
-                url: URL(string: url.absoluteString, relativeTo: Self.baseURL)?.absoluteURL ?? url.absoluteURL,
+                url: URL(string: decodedURLString, relativeTo: Self.baseURL)?.absoluteURL ?? url.absoluteURL,
                 resolvingAgainstBaseURL: false
             ) ?? URLComponents(url: Self.baseURL, resolvingAgainstBaseURL: false)!
             if components.host == nil {
@@ -156,7 +157,8 @@ public enum YamiboRoute: Sendable {
 
             var items: [String: String?] = [:]
             for item in components.queryItems ?? [] {
-                items[item.name] = item.value
+                guard let value = item.value, !value.isEmpty else { continue }
+                items[item.name] = value
             }
             items["mod"] = "viewthread"
             items["page"] = String(max(1, page))
