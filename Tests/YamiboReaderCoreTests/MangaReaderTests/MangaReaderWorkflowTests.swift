@@ -505,6 +505,189 @@ struct MangaReaderTestsWorkflow {
         #expect(loaded.pages.map(\.id) == ["700#0"])
         #expect(loaded.currentPage?.id == "700#0")
     }
+
+    @Test func workflowPrefetchNearEndAppendsNextChapterDocument() async throws {
+        let document700 = try makeWorkflowDocument(tid: "700", pageCount: 10)
+        let document701 = try makeWorkflowDocument(tid: "701", pageCount: 2)
+        let directory = makeWorkflowDirectory(
+            name: "测试漫画",
+            strategy: .links,
+            sourceKey: "测试漫画",
+            tids: ["700", "701"]
+        )
+        let workflow = MangaReaderWorkflow(
+            context: try makeWorkflowContext(tid: "700", initialPage: 8, directoryName: "测试漫画"),
+            documentLoader: RecordingMangaChapterDocumentLoader(documents: [
+                document700.chapterURL: document700,
+                document701.chapterURL: document701
+            ]),
+            directoryRepository: RecordingMangaDirectoryRepository(output: .failure(.offline)),
+            directoryStore: RecordingMangaDirectoryStore(directories: [directory])
+        )
+
+        _ = await workflow.prepare()
+        let presentation = await workflow.prefetchAdjacentChaptersIfNeeded(around: 8)
+
+        guard case let .loaded(loaded)? = presentation?.state else {
+            Issue.record("Expected adjacent prefetch to publish a loaded presentation")
+            return
+        }
+        #expect(loaded.pages.map(\.id) == [
+            "700#0", "700#1", "700#2", "700#3", "700#4",
+            "700#5", "700#6", "700#7", "700#8", "700#9",
+            "701#0", "701#1"
+        ])
+        #expect(loaded.currentPage?.id == "700#8")
+        #expect(loaded.currentPageIndex == 8)
+        #expect(loaded.viewportPlacement?.targetPageIndex == 8)
+        #expect(loaded.viewportPlacement?.animated == false)
+    }
+
+    @Test func workflowPrefetchNearBeginningPrependsPreviousChapterDocumentAndStabilizesPlacement() async throws {
+        let document699 = try makeWorkflowDocument(tid: "699", pageCount: 3)
+        let document700 = try makeWorkflowDocument(tid: "700", pageCount: 4)
+        let directory = makeWorkflowDirectory(
+            name: "测试漫画",
+            strategy: .links,
+            sourceKey: "测试漫画",
+            tids: ["699", "700"]
+        )
+        let workflow = MangaReaderWorkflow(
+            context: try makeWorkflowContext(tid: "700", initialPage: 1, directoryName: "测试漫画"),
+            documentLoader: RecordingMangaChapterDocumentLoader(documents: [
+                document699.chapterURL: document699,
+                document700.chapterURL: document700
+            ]),
+            directoryRepository: RecordingMangaDirectoryRepository(output: .failure(.offline)),
+            directoryStore: RecordingMangaDirectoryStore(directories: [directory])
+        )
+
+        _ = await workflow.prepare()
+        let presentation = await workflow.prefetchAdjacentChaptersIfNeeded(around: 1)
+
+        guard case let .loaded(loaded)? = presentation?.state else {
+            Issue.record("Expected previous prefetch to publish a loaded presentation")
+            return
+        }
+        #expect(loaded.pages.map(\.id) == [
+            "699#0", "699#1", "699#2", "700#0", "700#1", "700#2", "700#3"
+        ])
+        #expect(loaded.readingPosition == MangaReadingPosition(tid: "700", localIndex: 1))
+        #expect(loaded.currentPage?.id == "700#1")
+        #expect(loaded.currentPageIndex == 4)
+        #expect(loaded.viewportPlacement?.targetPageIndex == 4)
+        #expect(loaded.viewportPlacement?.animated == false)
+    }
+
+    @Test func workflowPrefetchForShortChapterExtendsBothDirectionsWithSinglePlacementRevision() async throws {
+        let documents = try ["699", "700", "701"].map { try makeWorkflowDocument(tid: $0, pageCount: 1) }
+        let documentsByURL = Dictionary(uniqueKeysWithValues: documents.map { ($0.chapterURL, $0) })
+        let directory = makeWorkflowDirectory(
+            name: "测试漫画",
+            strategy: .links,
+            sourceKey: "测试漫画",
+            tids: ["699", "700", "701"]
+        )
+        let workflow = MangaReaderWorkflow(
+            context: try makeWorkflowContext(tid: "700", directoryName: "测试漫画"),
+            documentLoader: RecordingMangaChapterDocumentLoader(documents: documentsByURL),
+            directoryRepository: RecordingMangaDirectoryRepository(output: .failure(.offline)),
+            directoryStore: RecordingMangaDirectoryStore(directories: [directory])
+        )
+
+        _ = await workflow.prepare()
+        let initialLoaded = try #require(loadedPresentation(in: workflow.presentation))
+        let initialRevision = try #require(initialLoaded.viewportPlacement?.revision)
+        let presentation = await workflow.prefetchAdjacentChaptersIfNeeded(around: 0)
+
+        let loaded = try #require(loadedPresentation(in: presentation))
+        #expect(loaded.pages.map(\.id) == ["699#0", "700#0", "701#0"])
+        #expect(loaded.currentPage?.id == "700#0")
+        #expect(loaded.viewportPlacement?.targetPageIndex == 1)
+        #expect(loaded.viewportPlacement?.revision == initialRevision + 1)
+    }
+
+    @Test func workflowAdjacentPrefetchKeepsChapterWindowBoundedToTenDocuments() async throws {
+        let tids = (700...712).map(String.init)
+        let documents = try tids.map { try makeWorkflowDocument(tid: $0, pageCount: 1) }
+        let documentsByURL = Dictionary(uniqueKeysWithValues: documents.map { ($0.chapterURL, $0) })
+        let directory = makeWorkflowDirectory(
+            name: "测试漫画",
+            strategy: .links,
+            sourceKey: "测试漫画",
+            tids: tids
+        )
+        let workflow = MangaReaderWorkflow(
+            context: try makeWorkflowContext(tid: "700", directoryName: "测试漫画"),
+            documentLoader: RecordingMangaChapterDocumentLoader(documents: documentsByURL),
+            directoryRepository: RecordingMangaDirectoryRepository(output: .failure(.offline)),
+            directoryStore: RecordingMangaDirectoryStore(directories: [directory])
+        )
+
+        _ = await workflow.prepare()
+        for _ in 0..<12 {
+            let loaded = try #require(loadedPresentation(in: workflow.presentation))
+            _ = workflow.moveToLoadedPage(at: loaded.pages.count - 1)
+            _ = await workflow.prefetchAdjacentChaptersIfNeeded(around: loaded.pages.count - 1)
+        }
+
+        let loaded = try #require(loadedPresentation(in: workflow.presentation))
+        #expect(Set(loaded.pages.map(\.tid)).count == 10)
+        #expect(loaded.pages.map(\.tid).count == 10)
+        #expect(loaded.pages.map(\.tid) == Array(tids.suffix(10)))
+        #expect(loaded.pages.last?.tid == "712")
+    }
+
+    @Test func workflowAdjacentPrefetchFailureKeepsCurrentPresentation() async throws {
+        let document700 = try makeWorkflowDocument(tid: "700", pageCount: 10)
+        let directory = makeWorkflowDirectory(
+            name: "测试漫画",
+            strategy: .links,
+            sourceKey: "测试漫画",
+            tids: ["700", "701"]
+        )
+        let workflow = MangaReaderWorkflow(
+            context: try makeWorkflowContext(tid: "700", initialPage: 8, directoryName: "测试漫画"),
+            documentLoader: RecordingMangaChapterDocumentLoader(documents: [
+                document700.chapterURL: document700
+            ]),
+            directoryRepository: RecordingMangaDirectoryRepository(output: .failure(.offline)),
+            directoryStore: RecordingMangaDirectoryStore(directories: [directory])
+        )
+
+        _ = await workflow.prepare()
+        let before = workflow.presentation
+        let presentation = await workflow.prefetchAdjacentChaptersIfNeeded(around: 8)
+
+        #expect(presentation == nil)
+        #expect(workflow.presentation == before)
+    }
+
+    @Test func workflowAdjacentPrefetchNoopInsertionsKeepCurrentPresentation() async throws {
+        let document700 = try makeWorkflowDocument(tid: "700", pageCount: 10)
+        let duplicate700 = try makeWorkflowDocument(tid: "700", pageCount: 2)
+        let unknown999 = try makeWorkflowDocument(tid: "999", pageCount: 2)
+        let nonAdjacent702 = try makeWorkflowDocument(tid: "702", pageCount: 2)
+
+        try await expectPrefetchNoop(
+            initialDocument: document700,
+            returnedDocument: duplicate700,
+            directoryTIDs: ["700", "701"],
+            reason: "duplicate"
+        )
+        try await expectPrefetchNoop(
+            initialDocument: document700,
+            returnedDocument: unknown999,
+            directoryTIDs: ["700", "701"],
+            reason: "unknown"
+        )
+        try await expectPrefetchNoop(
+            initialDocument: document700,
+            returnedDocument: nonAdjacent702,
+            directoryTIDs: ["700", "701", "702"],
+            reason: "not adjacent"
+        )
+    }
 }
 
 @MainActor
@@ -712,4 +895,41 @@ private func makeWorkflowDocument(tid: String, pageCount: Int) throws -> MangaCh
 
 private func makeWorkflowURL(tid: String) -> URL {
     URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(tid)&mobile=2")!
+}
+
+private func loadedPresentation(in presentation: MangaReaderPresentation?) -> MangaReaderLoadedPresentation? {
+    guard case let .loaded(loaded)? = presentation?.state else { return nil }
+    return loaded
+}
+
+@MainActor
+private func expectPrefetchNoop(
+    initialDocument: MangaChapterDocument,
+    returnedDocument: MangaChapterDocument,
+    directoryTIDs: [String],
+    reason: String
+) async throws {
+    let directory = makeWorkflowDirectory(
+        name: "测试漫画",
+        strategy: .links,
+        sourceKey: "测试漫画",
+        tids: directoryTIDs
+    )
+    let workflow = MangaReaderWorkflow(
+        context: try makeWorkflowContext(tid: initialDocument.tid, initialPage: 8, directoryName: "测试漫画"),
+        documentLoader: RecordingMangaChapterDocumentLoader(documents: [
+            initialDocument.chapterURL: initialDocument,
+            makeWorkflowURL(tid: "701"): returnedDocument
+        ]),
+        directoryRepository: RecordingMangaDirectoryRepository(output: .failure(.offline)),
+        directoryStore: RecordingMangaDirectoryStore(directories: [directory])
+    )
+
+    _ = await workflow.prepare()
+    let before = workflow.presentation
+    let presentation = await workflow.prefetchAdjacentChaptersIfNeeded(around: 8)
+
+    if presentation != nil || workflow.presentation != before {
+        Issue.record("Expected \(reason) adjacent prefetch insertion to leave presentation unchanged")
+    }
 }

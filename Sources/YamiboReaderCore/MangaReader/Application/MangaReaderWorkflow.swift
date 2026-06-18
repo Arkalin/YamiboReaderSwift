@@ -1,5 +1,32 @@
 import Foundation
 
+public struct MangaAdjacentChapterPrefetchPolicy: Hashable, Sendable {
+    public var nextTriggerDistanceFromEnd: Int
+    public var previousTriggerMaximumIndex: Int
+
+    public init(
+        nextTriggerDistanceFromEnd: Int = 6,
+        previousTriggerMaximumIndex: Int = 2
+    ) {
+        self.nextTriggerDistanceFromEnd = max(0, nextTriggerDistanceFromEnd)
+        self.previousTriggerMaximumIndex = max(0, previousTriggerMaximumIndex)
+    }
+
+    public func triggeredDeltas(globalIndex: Int, pageCount: Int) -> [Int] {
+        guard pageCount > 0 else { return [] }
+
+        let normalizedIndex = min(max(globalIndex, 0), pageCount - 1)
+        var deltas: [Int] = []
+        if normalizedIndex >= pageCount - nextTriggerDistanceFromEnd {
+            deltas.append(1)
+        }
+        if normalizedIndex <= previousTriggerMaximumIndex {
+            deltas.append(-1)
+        }
+        return deltas
+    }
+}
+
 @MainActor
 public final class MangaReaderWorkflow {
     public private(set) var presentation: MangaReaderPresentation
@@ -8,6 +35,7 @@ public final class MangaReaderWorkflow {
     private let context: MangaLaunchContext
     private let documentLoader: any MangaChapterDocumentLoading
     private let directoryWorkflow: MangaDirectoryWorkflow
+    private let adjacentPrefetchPolicy: MangaAdjacentChapterPrefetchPolicy
     private var window: MangaChapterWindow?
     private var settings: MangaReaderSettings
     private var directoryPanelCommandState = MangaDirectoryPanelCommandState()
@@ -21,10 +49,12 @@ public final class MangaReaderWorkflow {
         directoryStore: any MangaDirectoryPersisting,
         settings: MangaReaderSettings = MangaReaderSettings(),
         directoryWorkflowConfiguration: MangaDirectoryWorkflowConfiguration = MangaDirectoryWorkflowConfiguration(),
-        directorySearchCooldownState: MangaDirectorySearchCooldownState = MangaDirectorySearchCooldownState()
+        directorySearchCooldownState: MangaDirectorySearchCooldownState = MangaDirectorySearchCooldownState(),
+        adjacentPrefetchPolicy: MangaAdjacentChapterPrefetchPolicy = MangaAdjacentChapterPrefetchPolicy()
     ) {
         self.context = context
         self.documentLoader = documentLoader
+        self.adjacentPrefetchPolicy = adjacentPrefetchPolicy
         self.directoryWorkflow = MangaDirectoryWorkflow(
             repository: directoryRepository,
             store: directoryStore,
@@ -89,6 +119,45 @@ public final class MangaReaderWorkflow {
         _ = window.moveToLoadedPage(at: globalIndex)
         self.window = window
         presentation = loadedPresentation(from: window)
+        return presentation
+    }
+
+    @discardableResult
+    public func prefetchAdjacentChaptersIfNeeded(around globalIndex: Int) async -> MangaReaderPresentation? {
+        guard var window else { return nil }
+
+        let pages = MangaReaderPageProjection.projections(from: window)
+        let deltas = adjacentPrefetchPolicy.triggeredDeltas(
+            globalIndex: globalIndex,
+            pageCount: pages.count
+        )
+        guard !deltas.isEmpty else { return nil }
+
+        let preservedPosition = window.resolvedPosition
+        var didChange = false
+        for delta in deltas {
+            guard !Task.isCancelled else { return nil }
+            guard let chapter = window.adjacentChapterForLoadedRange(delta: delta) else { continue }
+            let document: MangaChapterDocument
+            do {
+                document = try await documentLoader.loadChapterDocument(at: chapter.url)
+            } catch {
+                guard !Task.isCancelled else { return nil }
+                continue
+            }
+            guard !Task.isCancelled else { return nil }
+
+            let result = window.insertAdjacentDocument(document, preserving: preservedPosition)
+            if case .changed = result {
+                didChange = true
+            }
+        }
+
+        guard didChange else { return nil }
+
+        self.window = window
+        let currentIndex = MangaReaderPageProjection.resolvedPageIndex(for: window)
+        presentation = loadedPresentation(from: window, placementPageIndex: currentIndex)
         return presentation
     }
 
