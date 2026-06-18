@@ -20,11 +20,16 @@ _Avoid_: loaded chapter, chapter HTML
 The reader's current page position within a manga chapter, identified by chapter `tid` and local page index.
 _Avoid_: focus, progress, page focus
 
+**Manga Reader Presentation**:
+The immutable reader-visible snapshot of the manga reader's current loading, readable, or error state.
+_Avoid_: reader view model fields, published loading state, UI snapshot
+
 ## Relationships
 
 - A **Manga Directory** contains zero or more **Manga Chapter Documents** by chapter identity.
 - A **Manga Chapter Window** contains one or more loaded **Manga Chapter Documents** from a **Manga Directory**.
 - A **Manga Chapter Window** preserves the current **Manga Reading Position** while adding or trimming **Manga Chapter Documents**.
+- A **Manga Reader Presentation** projects a **Manga Chapter Window** into reader-visible pages and current position without changing the window.
 - A **Manga Chapter Window** uses chapter `tid` as the canonical chapter identity; chapter URLs are loading and display metadata.
 - A **Manga Chapter Window** extends continuous reading by inserting adjacent **Manga Chapter Documents** and handles distant jumps through an explicit reset.
 - If a **Manga Reading Position** points past the available pages in its **Manga Chapter Document**, the **Manga Chapter Window** resolves it to the nearest valid page in that chapter.
