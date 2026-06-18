@@ -130,18 +130,6 @@ private struct ReaderPresentationModifier: ViewModifier {
             .sheet(item: binding(for: \.activeReaderContext)) { context in
                 ReaderContainerView(context: context, appModel: appModel)
             }
-            .sheet(
-                isPresented: Binding(
-                    get: { appModel.activeMangaRoute != nil },
-                    set: { isPresented in
-                        if !isPresented {
-                            appModel.dismissManga()
-                        }
-                    }
-                )
-            ) {
-                MangaPresentationHostView(appModel: appModel)
-            }
         #endif
     }
 
@@ -153,6 +141,7 @@ private struct ReaderPresentationModifier: ViewModifier {
     }
 }
 
+#if os(iOS)
 private struct MangaPresentationHostView: View {
     let appModel: YamiboAppModel
 
@@ -173,3 +162,4 @@ private struct MangaPresentationHostView: View {
         }
     }
 }
+#endif

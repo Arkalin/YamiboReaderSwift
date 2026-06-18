@@ -1,6 +1,7 @@
 import SwiftUI
 import YamiboReaderCore
 
+#if os(iOS)
 public struct MangaWebFallbackView: View {
     private let context: MangaWebContext
     private let appModel: YamiboAppModel
@@ -40,6 +41,7 @@ public struct MangaWebFallbackView: View {
         }
     }
 }
+#endif
 
 private struct MangaWebFallbackSkeletonContent: View {
     let currentURL: URL
@@ -50,8 +52,8 @@ private struct MangaWebFallbackSkeletonContent: View {
             VStack(alignment: .leading, spacing: 24) {
                 MangaWebFallbackHeader()
                 MangaWebFallbackStatus()
-                MangaReaderRouteRow(title: L10n.string("manga.skeleton.current_url"), url: currentURL)
-                MangaReaderRouteRow(title: L10n.string("manga.skeleton.original_thread"), url: originalThreadURL)
+                MangaWebFallbackRouteRow(title: L10n.string("manga.skeleton.current_url"), url: currentURL)
+                MangaWebFallbackRouteRow(title: L10n.string("manga.skeleton.original_thread"), url: originalThreadURL)
             }
             .frame(maxWidth: 680, alignment: .leading)
             .padding(24)
@@ -80,5 +82,22 @@ private struct MangaWebFallbackStatus: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(.white.opacity(0.08))
             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+}
+
+private struct MangaWebFallbackRouteRow: View {
+    let title: String
+    let url: URL
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text(url.absoluteString)
+                .font(.footnote.monospaced())
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 }

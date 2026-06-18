@@ -58,6 +58,60 @@ struct MangaReaderTestsWorkflow {
         #expect(loaded.readingPosition == MangaReadingPosition(tid: "700", localIndex: 1))
     }
 
+    @Test func workflowMovesReadingPositionInMemoryByLoadedPageIndex() async throws {
+        let document = try makeWorkflowDocument(tid: "700", pageCount: 3)
+        let loader = RecordingMangaChapterDocumentLoader(output: .document(document))
+        let repository = RecordingMangaDirectoryRepository(
+            output: .seed(makeWorkflowSeed(currentTID: "700", tagIDs: ["12"]))
+        )
+        let store = RecordingMangaDirectoryStore()
+        let workflow = MangaReaderWorkflow(
+            context: try makeWorkflowContext(tid: "700", initialPage: 0),
+            documentLoader: loader,
+            directoryRepository: repository,
+            directoryStore: store
+        )
+
+        _ = await workflow.prepare()
+        let presentation = workflow.moveToLoadedPage(at: 2)
+
+        guard case let .loaded(loaded) = presentation.state else {
+            Issue.record("Expected loaded presentation")
+            return
+        }
+        #expect(loaded.currentPage?.id == "700#2")
+        #expect(loaded.currentPageIndex == 2)
+        #expect(loaded.readingPosition == MangaReadingPosition(tid: "700", localIndex: 2))
+        #expect(await store.savedDirectories.count == 1)
+        #expect(await store.deletedNames.isEmpty)
+    }
+
+    @Test func workflowClampsMovedReadingPositionThroughChapterWindow() async throws {
+        let document = try makeWorkflowDocument(tid: "700", pageCount: 2)
+        let workflow = MangaReaderWorkflow(
+            context: try makeWorkflowContext(tid: "700", initialPage: 0),
+            documentLoader: RecordingMangaChapterDocumentLoader(output: .document(document)),
+            directoryRepository: RecordingMangaDirectoryRepository(
+                output: .seed(makeWorkflowSeed(currentTID: "700", tagIDs: ["12"]))
+            ),
+            directoryStore: RecordingMangaDirectoryStore()
+        )
+
+        _ = await workflow.prepare()
+        guard case let .loaded(firstPage) = workflow.moveToLoadedPage(at: -10).state,
+              case let .loaded(lastPage) = workflow.moveToLoadedPage(at: 99).state else {
+            Issue.record("Expected loaded presentations")
+            return
+        }
+
+        #expect(firstPage.currentPage?.id == "700#0")
+        #expect(firstPage.currentPageIndex == 0)
+        #expect(firstPage.readingPosition == MangaReadingPosition(tid: "700", localIndex: 0))
+        #expect(lastPage.currentPage?.id == "700#1")
+        #expect(lastPage.currentPageIndex == 1)
+        #expect(lastPage.readingPosition == MangaReadingPosition(tid: "700", localIndex: 1))
+    }
+
     @Test func existingDirectoryNameIsReusedWithoutSeedOrSave() async throws {
         let document = try makeWorkflowDocument(tid: "700", pageCount: 1)
         let existingDirectory = makeWorkflowDirectory(
