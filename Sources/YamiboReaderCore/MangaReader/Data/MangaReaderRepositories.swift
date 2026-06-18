@@ -42,3 +42,9 @@ public protocol MangaDirectoryPersisting: Sendable {
 public protocol MangaImageDataLoading: Sendable {
     func imageData(for url: URL, refererURL: URL?) async throws -> Data
 }
+
+public protocol MangaImageDataCaching: Sendable {
+    func data(for imageURL: URL) async -> Data?
+    func save(_ data: Data, for imageURL: URL) async throws
+    func clearAll() async throws
+}

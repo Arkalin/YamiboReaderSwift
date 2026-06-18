@@ -1673,13 +1673,17 @@ import Testing
     let favoriteBackgroundImageStore = FavoriteBackgroundImageStore(
         baseDirectory: rootDirectory.appendingPathComponent("favorite-background", isDirectory: true)
     )
+    let mangaImageDataCacheStore = FileMangaImageDataCacheStore(
+        baseDirectory: rootDirectory.appendingPathComponent("manga-image-data", isDirectory: true)
+    )
     let appContext = YamiboAppContext(
         sessionStore: sessionStore,
         settingsStore: settingsStore,
         readerResumeRouteStore: readerResumeRouteStore,
         favoriteStore: favoriteStore,
         readerCacheStore: readerCacheStore,
-        favoriteBackgroundImageStore: favoriteBackgroundImageStore
+        favoriteBackgroundImageStore: favoriteBackgroundImageStore,
+        mangaImageDataCacheStore: mangaImageDataCacheStore
     )
 
     let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=700&mobile=2"))
@@ -1705,6 +1709,10 @@ import Testing
         )
     )
     try await favoriteBackgroundImageStore.save(Data(repeating: 5, count: 256), imageID: "background")
+    try await mangaImageDataCacheStore.save(
+        Data(repeating: 6, count: 128),
+        for: try #require(URL(string: "https://img.example.com/reset.jpg"))
+    )
 
     try await appContext.resetApplicationData()
 
@@ -1714,6 +1722,7 @@ import Testing
     let favorites = await favoriteStore.loadFavorites()
     let readerCacheBytes = await readerCacheStore.totalDiskUsageBytes()
     let backgroundData = await favoriteBackgroundImageStore.loadData(imageID: "background")
+    let mangaImageDataCacheBytes = await mangaImageDataCacheStore.totalDiskUsageBytes()
 
     #expect(session == SessionState())
     #expect(settings == AppSettings())
@@ -1721,6 +1730,7 @@ import Testing
     #expect(favorites.isEmpty)
     #expect(readerCacheBytes == 0)
     #expect(backgroundData == nil)
+    #expect(mangaImageDataCacheBytes == 0)
 }
 
 private func makeIsolatedDefaults(prefix: String) throws -> UserDefaults {
