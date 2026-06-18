@@ -210,6 +210,8 @@
 "manga.name" = "漫画名称";
 "manga.no_chapters" = "暂无章节";
 "manga.preview_page" = "第 %d / %d 页";
+"manga.reader.current_index" = "索引 %d / %d";
+"manga.reader.loaded_pages_count" = "已载入 %d 页";
 "manga.reader.title" = "漫画阅读";
 "manga.repository_uninitialized" = "漫画仓储未初始化";
 "manga.return_to_web" = "返回网页";

@@ -1,0 +1,98 @@
+import Foundation
+
+@MainActor
+public final class MangaReaderWorkflow {
+    public private(set) var presentation: MangaReaderPresentation
+
+    private let context: MangaLaunchContext
+    private let documentLoader: any MangaChapterDocumentLoading
+    private let directoryRepository: any MangaDirectoryRepository
+    private let directoryStore: any MangaDirectoryPersisting
+
+    public init(
+        context: MangaLaunchContext,
+        documentLoader: any MangaChapterDocumentLoading,
+        directoryRepository: any MangaDirectoryRepository,
+        directoryStore: any MangaDirectoryPersisting
+    ) {
+        self.context = context
+        self.documentLoader = documentLoader
+        self.directoryRepository = directoryRepository
+        self.directoryStore = directoryStore
+        self.presentation = MangaReaderPresentation(
+            state: .loading(MangaReaderLoadingPresentation(title: Self.presentationTitle(for: context)))
+        )
+    }
+
+    @discardableResult
+    public func prepare() async -> MangaReaderPresentation {
+        presentation = MangaReaderPresentation(
+            state: .loading(MangaReaderLoadingPresentation(title: Self.presentationTitle(for: context)))
+        )
+
+        do {
+            let document = try await documentLoader.loadChapterDocument(at: context.chapterURL)
+            let directory = try await resolveDirectory()
+            let requestedPosition = MangaReadingPosition(
+                tid: document.tid,
+                localIndex: context.initialPage
+            )
+            let window = MangaChapterWindow(
+                directory: directory,
+                initialDocument: document,
+                position: requestedPosition
+            )
+            let pages = MangaReaderPageProjection.projections(from: window)
+            let currentPageIndex = MangaReaderPageProjection.resolvedPageIndex(for: window)
+            let currentPage = currentPageIndex.flatMap { index in
+                pages.indices.contains(index) ? pages[index] : nil
+            }
+
+            presentation = MangaReaderPresentation(
+                state: .loaded(
+                    MangaReaderLoadedPresentation(
+                        title: Self.presentationTitle(for: context),
+                        directoryTitle: directory.cleanBookName,
+                        pages: pages,
+                        currentPage: currentPage,
+                        currentPageIndex: currentPageIndex,
+                        readingPosition: window.resolvedPosition
+                    )
+                )
+            )
+        } catch {
+            presentation = MangaReaderPresentation(
+                state: .failed(
+                    MangaReaderErrorPresentation(
+                        title: L10n.string("common.load_failed"),
+                        message: error.localizedDescription
+                    )
+                )
+            )
+        }
+
+        return presentation
+    }
+
+    private func resolveDirectory() async throws -> MangaDirectory {
+        if let directoryName = normalizedDirectoryName(context.directoryName),
+           let existing = try await directoryStore.directory(named: directoryName) {
+            return existing
+        }
+
+        let seed = try await directoryRepository.loadDirectorySeed(for: context.chapterURL)
+        let directory = MangaDirectoryInitialization.directory(from: seed)
+        try await directoryStore.saveDirectory(directory)
+        return directory
+    }
+
+    private func normalizedDirectoryName(_ directoryName: String?) -> String? {
+        let normalized = directoryName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return normalized?.isEmpty == false ? normalized : nil
+    }
+
+    private static func presentationTitle(for context: MangaLaunchContext) -> String {
+        let title = context.displayTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        return title.isEmpty ? L10n.string("manga.reader.title") : title
+    }
+}
