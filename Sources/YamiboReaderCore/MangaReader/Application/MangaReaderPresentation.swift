@@ -2,9 +2,14 @@ import Foundation
 
 public struct MangaReaderPresentation: Hashable, Sendable {
     public var state: MangaReaderPresentationState
+    public var settings: MangaReaderSettings
 
-    public init(state: MangaReaderPresentationState) {
+    public init(
+        state: MangaReaderPresentationState,
+        settings: MangaReaderSettings = MangaReaderSettings()
+    ) {
         self.state = state
+        self.settings = settings
     }
 }
 

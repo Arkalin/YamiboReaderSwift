@@ -6,6 +6,7 @@ public struct MangaReaderView: View {
     private let context: MangaLaunchContext
     private let appModel: YamiboAppModel
     @StateObject private var model: MangaReaderModel
+    @State private var isDismissing = false
 
     public init(context: MangaLaunchContext, appModel: YamiboAppModel) {
         self.context = context
@@ -27,10 +28,15 @@ public struct MangaReaderView: View {
             .task {
                 await model.prepare()
             }
+            .onDisappear {
+                Task {
+                    await model.saveProgress()
+                }
+            }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button {
-                        appModel.dismissManga()
+                        closeReader()
                     } label: {
                         Label(L10n.string("common.close"), systemImage: "xmark")
                     }
@@ -38,7 +44,7 @@ public struct MangaReaderView: View {
 
                 ToolbarItem(placement: .primaryAction) {
                     Button {
-                        appModel.dismissManga(openThreadInForum: context.originalThreadURL)
+                        openOriginalPost()
                     } label: {
                         Label(L10n.string("common.original_post"), systemImage: "safari")
                     }
@@ -46,6 +52,27 @@ public struct MangaReaderView: View {
             }
             .navigationTitle(L10n.string("manga.reader.title"))
             .navigationBarTitleDisplayMode(.inline)
+        }
+    }
+
+    private func closeReader() {
+        guard !isDismissing else { return }
+        isDismissing = true
+        Task {
+            await model.saveProgress()
+            appModel.dismissManga()
+        }
+    }
+
+    private func openOriginalPost() {
+        guard !isDismissing else { return }
+        isDismissing = true
+        Task {
+            let latestRoute = await model.saveProgress()
+            appModel.dismissManga(
+                openThreadInForum: context.originalThreadURL,
+                suspendedRoute: latestRoute
+            )
         }
     }
 }
@@ -71,9 +98,25 @@ private struct MangaReaderPresentationContent: View {
             case let .failed(error):
                 MangaReaderFailedContent(error: error)
             }
+
+            brightnessOverlay(brightness: presentation.settings.brightness)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .foregroundStyle(.white)
+    }
+
+    @ViewBuilder
+    private func brightnessOverlay(brightness: Double) -> some View {
+        let delta = brightness - 1
+        if delta < 0 {
+            Color.black.opacity(min(0.7, abs(delta)))
+                .ignoresSafeArea()
+                .allowsHitTesting(false)
+        } else if delta > 0 {
+            Color.white.opacity(min(0.18, delta * 0.18))
+                .ignoresSafeArea()
+                .allowsHitTesting(false)
+        }
     }
 }
 

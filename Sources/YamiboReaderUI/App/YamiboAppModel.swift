@@ -215,9 +215,12 @@ public final class YamiboAppModel {
         }
     }
 
-    public func dismissManga(openThreadInForum url: URL? = nil) {
+    public func dismissManga(
+        openThreadInForum url: URL? = nil,
+        suspendedRoute: MangaPresentationRoute? = nil
+    ) {
         if url != nil {
-            suspendedMangaRoute = activeMangaRoute
+            suspendedMangaRoute = suspendedRoute ?? activeMangaRoute
         } else if activeMangaRoute != nil {
             suspendedMangaRoute = nil
         }
