@@ -22,9 +22,18 @@ public enum MangaChapterDisplayFormatter {
             return String(Int(chapterNumber))
         }
         let formatted = String(format: "%.2f", chapterNumber)
-            .trimmingCharacters(in: CharacterSet(charactersIn: "0"))
-            .trimmingCharacters(in: CharacterSet(charactersIn: "."))
-        return formatted.replacingOccurrences(of: ".", with: "-")
+        let parts = formatted.split(separator: ".", maxSplits: 1).map(String.init)
+        guard parts.count == 2 else { return formatted }
+
+        var suffix = parts[1]
+        while suffix.last == "0" {
+            suffix.removeLast()
+        }
+        while suffix.first == "0" {
+            suffix.removeFirst()
+        }
+        guard !suffix.isEmpty else { return parts[0] }
+        return "\(parts[0])-\(suffix)"
     }
 
     public static func latestChapter(in chapters: [MangaChapter]) -> MangaChapter? {

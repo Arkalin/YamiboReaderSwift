@@ -21,3 +21,9 @@ import Testing
 @Test func searchKeywordKeepsAuthorAndBookName() async throws {
     #expect(MangaTitleCleaner.searchKeyword("【作者名】作品标题 - 中文百合漫画区") == "作者名 作品标题")
 }
+
+@Test func cleanBookNameRemovesChapterSuffixes() async throws {
+    #expect(MangaTitleCleaner.cleanBookName("【作者】作品 第12话 - 中文百合漫画区 - 百合会") == "作品")
+    #expect(MangaTitleCleaner.cleanBookName("作品 第12-13话") == "作品")
+    #expect(MangaTitleCleaner.cleanBookName("作品 最终话") == "作品")
+}

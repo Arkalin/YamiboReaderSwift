@@ -24,6 +24,7 @@ public final class YamiboAppContext: YamiboRepositoryProviding, Sendable {
     public let favoriteStore: FavoriteStore
     public let readerCacheStore: ReaderCacheStore
     public let favoriteBackgroundImageStore: FavoriteBackgroundImageStore
+    public let mangaDirectoryStore: FileMangaDirectoryStore
     private let session: URLSession
 
     public init(
@@ -36,6 +37,7 @@ public final class YamiboAppContext: YamiboRepositoryProviding, Sendable {
         favoriteStore: FavoriteStore = FavoriteStore(),
         readerCacheStore: ReaderCacheStore = ReaderCacheStore(),
         favoriteBackgroundImageStore: FavoriteBackgroundImageStore = FavoriteBackgroundImageStore(),
+        mangaDirectoryStore: FileMangaDirectoryStore = FileMangaDirectoryStore(),
         session: URLSession = .shared
     ) {
         self.sessionStore = sessionStore
@@ -47,6 +49,7 @@ public final class YamiboAppContext: YamiboRepositoryProviding, Sendable {
         self.favoriteStore = favoriteStore
         self.readerCacheStore = readerCacheStore
         self.favoriteBackgroundImageStore = favoriteBackgroundImageStore
+        self.mangaDirectoryStore = mangaDirectoryStore
         self.session = session
     }
 
@@ -78,6 +81,40 @@ public final class YamiboAppContext: YamiboRepositoryProviding, Sendable {
             userAgent: sessionState.userAgent
         )
         return ThreadOpenResolver(client: client)
+    }
+
+    public func makeMangaChapterDocumentLoader() async -> any MangaChapterDocumentLoading {
+        let sessionState = await sessionStore.load()
+        let client = YamiboClient(
+            session: session,
+            cookie: sessionState.cookie,
+            userAgent: sessionState.userAgent
+        )
+        return YamiboMangaChapterDocumentLoader(client: client)
+    }
+
+    public func makeMangaDirectoryRepository() async -> any MangaDirectoryRepository {
+        let sessionState = await sessionStore.load()
+        let client = YamiboClient(
+            session: session,
+            cookie: sessionState.cookie,
+            userAgent: sessionState.userAgent
+        )
+        return YamiboMangaDirectoryRepository(client: client)
+    }
+
+    public func makeMangaDirectoryStore() -> any MangaDirectoryPersisting {
+        mangaDirectoryStore
+    }
+
+    public func makeMangaImageDataLoader() async -> any MangaImageDataLoading {
+        let sessionState = await sessionStore.load()
+        let client = YamiboClient(
+            session: session,
+            cookie: sessionState.cookie,
+            userAgent: sessionState.userAgent
+        )
+        return YamiboMangaImageDataLoader(client: client)
     }
 
     public func makeAutoSignInService() -> AutoSignInService {
@@ -123,6 +160,7 @@ public final class YamiboAppContext: YamiboRepositoryProviding, Sendable {
         await readerResumeRouteStore.clear()
         try await favoriteStore.clearAll()
         try await readerCacheStore.clearAll()
+        try await mangaDirectoryStore.clearAll()
         try await favoriteBackgroundImageStore.deleteAll()
         clearLocalUIState()
         await clearWebData()

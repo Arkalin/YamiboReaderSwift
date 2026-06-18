@@ -41,7 +41,10 @@ public enum MangaHTMLParser {
         .sorted()
     }
 
-    public static func extractSamePageLinks(from html: String) -> [MangaChapter] {
+    public static func extractSamePageLinks(
+        from html: String,
+        baseURL: URL = YamiboRoute.baseURL
+    ) -> [MangaChapter] {
         guard let document = try? SwiftSoup.parse(html) else { return [] }
         guard let message = try? document.select(".message").first() else { return [] }
         let links = (try? message.select("a[href*='tid='], a[href*='thread-']")) ?? Elements()
@@ -50,7 +53,7 @@ public enum MangaHTMLParser {
             let title = ((try? link.text()) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             guard
                 let tid = MangaTitleCleaner.extractTid(from: href),
-                let url = HTMLTextExtractor.absoluteURL(from: href)
+                let url = HTMLTextExtractor.absoluteURL(from: href, baseURL: baseURL)
             else {
                 return nil
             }
