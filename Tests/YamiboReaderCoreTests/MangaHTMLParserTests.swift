@@ -20,6 +20,29 @@ import Testing
     #expect(chapters.first?.chapterNumber == 12)
 }
 
+@Test func parsePCListDecodesHTMLEntitiesInThreadHrefs() async throws {
+    let html = """
+    <table>
+      <tr>
+        <th><a href="forum.php?mod=viewthread&amp;tid=501595&amp;extra=&amp;mobile=2">第12话 测试章节</a></th>
+        <td class="by"></td>
+        <td class="by"><cite><a href="space-uid-77.html">作者甲</a></cite><em><span>2026-01-02</span></em></td>
+      </tr>
+    </table>
+    """
+
+    let chapter = try #require(MangaHTMLParser.parseListHTML(html).first)
+    let components = try #require(URLComponents(url: chapter.url, resolvingAgainstBaseURL: false))
+    let queryItems = Dictionary(uniqueKeysWithValues: (components.queryItems ?? []).compactMap { item in
+        item.value.map { (item.name, $0) }
+    })
+
+    #expect(chapter.tid == "501595")
+    #expect(queryItems["tid"] == "501595")
+    #expect(queryItems["amp;tid"] == nil)
+    #expect(chapter.url.absoluteString.contains("&amp;") == false)
+}
+
 @Test func favoriteParserKeepsOnlyThreadLinks() async throws {
     let html = #"""
     <ul class="sclist">
