@@ -7,6 +7,7 @@ public struct MangaReaderView: View {
     private let appModel: YamiboAppModel
     @StateObject private var model: MangaReaderModel
     @State private var isDismissing = false
+    @State private var isDirectoryPresented = false
 
     public init(context: MangaLaunchContext, appModel: YamiboAppModel) {
         self.context = context
@@ -44,10 +45,42 @@ public struct MangaReaderView: View {
 
                 ToolbarItem(placement: .primaryAction) {
                     Button {
+                        isDirectoryPresented = true
+                    } label: {
+                        Label(L10n.string("manga.directory"), systemImage: "list.bullet")
+                    }
+                }
+
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
                         openOriginalPost()
                     } label: {
                         Label(L10n.string("common.original_post"), systemImage: "safari")
                     }
+                }
+            }
+            .sheet(isPresented: $isDirectoryPresented) {
+                if case let .loaded(loaded) = model.presentation.state {
+                    MangaDirectorySheet(
+                        panel: loaded.directoryPanel,
+                        onSortOrderChange: { sortOrder in
+                            var settings = model.presentation.settings
+                            settings.directorySortOrder = sortOrder
+                            model.applySettings(settings)
+                        },
+                        onUpdateDirectory: {
+                            Task { await model.updateDirectoryFromPanel() }
+                        },
+                        onSaveCorrection: { draft in
+                            Task { await model.renameDirectory(with: draft) }
+                        },
+                        onSelectChapter: { chapter in
+                            isDirectoryPresented = false
+                            Task { await model.jumpToChapter(chapter) }
+                        }
+                    )
+                } else {
+                    MangaDirectoryUnavailableSheet()
                 }
             }
             .navigationTitle(L10n.string("manga.reader.title"))
@@ -143,12 +176,13 @@ private struct MangaReaderLoadedContent: View {
         if loaded.pages.isEmpty {
             MangaReaderEmptyContent()
         } else if let imagePipeline {
-            MangaVerticalCollectionViewport(
-                pages: loaded.pages,
-                currentPageIndex: loaded.currentPageIndex,
-                imagePipeline: imagePipeline,
-                onCurrentPageChange: onCurrentPageChange
-            )
+                MangaVerticalCollectionViewport(
+                    pages: loaded.pages,
+                    currentPageIndex: loaded.currentPageIndex,
+                    viewportPlacement: loaded.viewportPlacement,
+                    imagePipeline: imagePipeline,
+                    onCurrentPageChange: onCurrentPageChange
+                )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             ProgressView(L10n.string("manga.loading"))
