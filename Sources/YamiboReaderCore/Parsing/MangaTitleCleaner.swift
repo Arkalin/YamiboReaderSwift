@@ -13,6 +13,10 @@ public enum MangaTitleCleaner {
 
     public static func cleanBookName(_ rawTitle: String) -> String {
         var clean = cleanThreadTitle(rawTitle)
+        let hasLeadingMetadata = clean.range(
+            of: #"^\s*(?:【.*?】|\[.*?\])+"#,
+            options: .regularExpression
+        ) != nil
         let replacements = [
             #"【.*?】|\[.*?\]"#,
             #"(?i)[\(（]?c\d+[\)）]?"#,
@@ -22,6 +26,13 @@ public enum MangaTitleCleaner {
         ]
         for pattern in replacements {
             clean = clean.replacingOccurrences(of: pattern, with: "", options: .regularExpression)
+        }
+        if hasLeadingMetadata {
+            clean = clean.replacingOccurrences(
+                of: #"\s+(?:第\s*)?\d{1,3}(?:\.\d+)?(?:\s*[-—]\s*\d{1,3}(?:\.\d+)?)?$"#,
+                with: "",
+                options: .regularExpression
+            )
         }
         clean = clean.replacingOccurrences(of: #"[！？\?！!~。，、\.]+$"#, with: "", options: .regularExpression)
         clean = clean.replacingOccurrences(of: #"^[\s\-/\)#]+|[\s\-/\(#:]+$"#, with: "", options: .regularExpression)
