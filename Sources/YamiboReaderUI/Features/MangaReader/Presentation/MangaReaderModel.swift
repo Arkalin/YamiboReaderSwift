@@ -98,6 +98,9 @@ public final class MangaReaderModel: ObservableObject {
     private var directoryMutationTask: Task<Void, Never>?
     private var automaticDirectoryUpdateTask: Task<Void, Never>?
     private var chapterJumpTask: Task<Void, Never>?
+    private var adjacentPrefetchTask: Task<Void, Never>?
+    private var readerContentGeneration = 0
+    private var lastQueuedProgressSnapshot: MangaReaderProgressSnapshot?
     private var directoryMutationGeneration = 0
     private var chapterJumpGeneration = 0
 
@@ -106,6 +109,7 @@ public final class MangaReaderModel: ObservableObject {
         directoryMutationTask?.cancel()
         automaticDirectoryUpdateTask?.cancel()
         chapterJumpTask?.cancel()
+        adjacentPrefetchTask?.cancel()
     }
 
     public init(context: MangaLaunchContext, appContext: YamiboAppContext) {
@@ -139,6 +143,8 @@ public final class MangaReaderModel: ObservableObject {
     public func prepare() async {
         guard !hasPrepared else { return }
         hasPrepared = true
+        invalidateReaderContent()
+        lastQueuedProgressSnapshot = nil
 
         committedSettings = Self.normalizedSettings((await appContext.settingsStore.load()).manga)
         presentation = presentationWithCommittedSettings(presentation)
@@ -169,11 +175,12 @@ public final class MangaReaderModel: ObservableObject {
 
     public func updateCurrentPage(globalIndex: Int) {
         guard let workflow else { return }
+        adjacentPrefetchTask?.cancel()
+        readerContentGeneration += 1
+        let previousProgressSnapshot = progressSnapshot(from: presentation)
         let nextPresentation = workflow.moveToLoadedPage(at: globalIndex)
-        if nextPresentation != presentation {
-            presentation = nextPresentation
-        }
-        scheduleProgressSync(from: nextPresentation)
+        publishPresentation(nextPresentation, previousProgressSnapshot: previousProgressSnapshot)
+        scheduleAdjacentPrefetch(around: currentPageIndex(in: nextPresentation) ?? globalIndex)
     }
 
     public func applySettings(_ settings: MangaReaderSettings) {
@@ -212,6 +219,7 @@ public final class MangaReaderModel: ObservableObject {
         automaticDirectoryUpdateTask?.cancel()
         automaticDirectoryUpdateTask = nil
         directoryMutationTask?.cancel()
+        invalidateReaderContent()
         directoryMutationGeneration += 1
         let generation = directoryMutationGeneration
         directoryMutationTask = Task { @MainActor [weak self] in
@@ -233,6 +241,7 @@ public final class MangaReaderModel: ObservableObject {
 
     public func jumpToChapter(_ chapter: MangaChapter) async {
         chapterJumpTask?.cancel()
+        invalidateReaderContent()
         chapterJumpGeneration += 1
         let generation = chapterJumpGeneration
         chapterJumpTask = Task { @MainActor [weak self] in
@@ -258,6 +267,7 @@ public final class MangaReaderModel: ObservableObject {
             directoryMutationTask?.cancel()
         }
 
+        invalidateReaderContent()
         directoryMutationGeneration += 1
         let generation = directoryMutationGeneration
         let task: Task<Void, Never> = Task { @MainActor [weak self] in
@@ -278,6 +288,7 @@ public final class MangaReaderModel: ObservableObject {
         mutationGeneration: Int
     ) async {
         guard let workflow else { return }
+        let previousProgressSnapshot = progressSnapshot(from: presentation)
 
         defer {
             if directoryMutationGeneration == mutationGeneration {
@@ -292,6 +303,7 @@ public final class MangaReaderModel: ObservableObject {
         do {
             let result = try await workflow.updateDirectory(isForcedSearch: isForcedSearch)
             guard !Task.isCancelled, directoryMutationGeneration == mutationGeneration else { return }
+            publishPresentation(workflow.presentation, previousProgressSnapshot: previousProgressSnapshot)
             if let cooldownExpiresAt = result.cooldownExpiresAt {
                 directoryCooldownExpiresAt = cooldownExpiresAt
                 forcedSearchShortcutExpiresAt = nil
@@ -327,6 +339,7 @@ public final class MangaReaderModel: ObservableObject {
         mutationGeneration: Int
     ) async {
         guard let workflow else { return }
+        let previousProgressSnapshot = progressSnapshot(from: presentation)
         defer {
             if directoryMutationGeneration == mutationGeneration {
                 directoryMutationTask = nil
@@ -337,6 +350,7 @@ public final class MangaReaderModel: ObservableObject {
         do {
             _ = try await workflow.renameDirectory(cleanBookName: cleanBookName, searchKeyword: searchKeyword)
             guard !Task.isCancelled, directoryMutationGeneration == mutationGeneration else { return }
+            publishPresentation(workflow.presentation, previousProgressSnapshot: previousProgressSnapshot)
             refreshDirectoryPanelTiming(errorMessage: nil)
         } catch is CancellationError {
             guard directoryMutationGeneration == mutationGeneration else { return }
@@ -349,6 +363,7 @@ public final class MangaReaderModel: ObservableObject {
 
     private func performJumpToChapter(_ chapter: MangaChapter, jumpGeneration: Int) async {
         guard let workflow else { return }
+        let previousProgressSnapshot = progressSnapshot(from: presentation)
         defer {
             if chapterJumpGeneration == jumpGeneration {
                 chapterJumpTask = nil
@@ -358,7 +373,7 @@ public final class MangaReaderModel: ObservableObject {
         do {
             let nextPresentation = try await workflow.jumpToChapter(chapter)
             guard !Task.isCancelled, chapterJumpGeneration == jumpGeneration else { return }
-            presentation = nextPresentation
+            publishPresentation(nextPresentation, previousProgressSnapshot: previousProgressSnapshot)
             refreshDirectoryPanelTiming(errorMessage: nil)
         } catch is CancellationError {
             return
@@ -376,16 +391,74 @@ public final class MangaReaderModel: ObservableObject {
 
         try? await appContext.readerResumeRouteStore.saveReadingPosition(.manga(snapshot.resumeRoute))
         try? await dependencies.progressSync.flush(.manga(snapshot.progress))
+        lastQueuedProgressSnapshot = snapshot
         return snapshot.resumeRoute
     }
 
-    private func scheduleProgressSync(from presentation: MangaReaderPresentation) {
-        guard let snapshot = progressSnapshot(from: presentation) else { return }
+    private func scheduleAdjacentPrefetch(around globalIndex: Int) {
+        guard workflow != nil else { return }
+        let generation = readerContentGeneration
+        adjacentPrefetchTask = Task { @MainActor [weak self] in
+            await self?.performAdjacentPrefetch(
+                around: globalIndex,
+                readerContentGeneration: generation
+            )
+        }
+    }
+
+    private func performAdjacentPrefetch(
+        around globalIndex: Int,
+        readerContentGeneration generation: Int
+    ) async {
+        guard let workflow else { return }
+        defer {
+            if readerContentGeneration == generation {
+                adjacentPrefetchTask = nil
+            }
+        }
+
+        let previousProgressSnapshot = progressSnapshot(from: presentation)
+        guard let nextPresentation = await workflow.prefetchAdjacentChaptersIfNeeded(around: globalIndex) else {
+            return
+        }
+        guard !Task.isCancelled, readerContentGeneration == generation else { return }
+        publishPresentation(nextPresentation, previousProgressSnapshot: previousProgressSnapshot)
+    }
+
+    private func invalidateReaderContent() {
+        adjacentPrefetchTask?.cancel()
+        adjacentPrefetchTask = nil
+        readerContentGeneration += 1
+    }
+
+    private func publishPresentation(
+        _ nextPresentation: MangaReaderPresentation,
+        previousProgressSnapshot: MangaReaderProgressSnapshot?
+    ) {
+        if nextPresentation != presentation {
+            presentation = nextPresentation
+        }
+        let nextProgressSnapshot = progressSnapshot(from: nextPresentation)
+        guard nextProgressSnapshot != previousProgressSnapshot
+            || nextProgressSnapshot != lastQueuedProgressSnapshot else {
+            return
+        }
+        scheduleProgressSync(snapshot: nextProgressSnapshot)
+    }
+
+    private func scheduleProgressSync(snapshot: MangaReaderProgressSnapshot?) {
+        guard let snapshot else { return }
+        lastQueuedProgressSnapshot = snapshot
         let progressSync = dependencies.progressSync
         Task { [appContext, snapshot, progressSync] in
             try? await appContext.readerResumeRouteStore.saveReadingPosition(.manga(snapshot.resumeRoute))
             await progressSync.queue(.manga(snapshot.progress))
         }
+    }
+
+    private func currentPageIndex(in presentation: MangaReaderPresentation) -> Int? {
+        guard case let .loaded(loaded) = presentation.state else { return nil }
+        return loaded.currentPageIndex
     }
 
     private var currentDirectoryPanelErrorMessage: String? {
@@ -517,7 +590,7 @@ public final class MangaReaderModel: ObservableObject {
     }
 }
 
-private struct MangaReaderProgressSnapshot: Sendable {
+private struct MangaReaderProgressSnapshot: Hashable, Sendable {
     var progress: MangaProgressReadingPosition
     var resumeRoute: MangaPresentationRoute
 }

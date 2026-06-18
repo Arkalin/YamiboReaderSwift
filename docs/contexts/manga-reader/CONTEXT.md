@@ -17,7 +17,7 @@ The parsed image-page content for one manga thread chapter.
 _Avoid_: loaded chapter, chapter HTML
 
 **Manga Reading Position**:
-The reader's current page position within a manga chapter, identified by chapter `tid` and local page index.
+The reader's current page position within a manga chapter, identified by chapter `tid` and local page index. It is page-level and does not include intra-page scroll offset.
 _Avoid_: focus, progress, page focus
 
 **Manga Reader Presentation**:
