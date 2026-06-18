@@ -1673,6 +1673,9 @@ import Testing
     let favoriteBackgroundImageStore = FavoriteBackgroundImageStore(
         baseDirectory: rootDirectory.appendingPathComponent("favorite-background", isDirectory: true)
     )
+    let mangaChapterDocumentStore = FileMangaChapterDocumentStore(
+        baseDirectory: rootDirectory.appendingPathComponent("manga-chapter-documents", isDirectory: true)
+    )
     let mangaImageDataCacheStore = FileMangaImageDataCacheStore(
         baseDirectory: rootDirectory.appendingPathComponent("manga-image-data", isDirectory: true)
     )
@@ -1683,6 +1686,7 @@ import Testing
         favoriteStore: favoriteStore,
         readerCacheStore: readerCacheStore,
         favoriteBackgroundImageStore: favoriteBackgroundImageStore,
+        mangaChapterDocumentStore: mangaChapterDocumentStore,
         mangaImageDataCacheStore: mangaImageDataCacheStore
     )
 
@@ -1709,6 +1713,15 @@ import Testing
         )
     )
     try await favoriteBackgroundImageStore.save(Data(repeating: 5, count: 256), imageID: "background")
+    try await mangaChapterDocumentStore.save(
+        MangaChapterDocument(
+            tid: "700",
+            chapterTitle: "测试漫画",
+            chapterURL: threadURL,
+            imageURLs: [try #require(URL(string: "https://img.example.com/reset-1.jpg"))]
+        ),
+        for: threadURL
+    )
     try await mangaImageDataCacheStore.save(
         Data(repeating: 6, count: 128),
         for: try #require(URL(string: "https://img.example.com/reset.jpg"))
@@ -1722,6 +1735,7 @@ import Testing
     let favorites = await favoriteStore.loadFavorites()
     let readerCacheBytes = await readerCacheStore.totalDiskUsageBytes()
     let backgroundData = await favoriteBackgroundImageStore.loadData(imageID: "background")
+    let mangaChapterDocumentBytes = await mangaChapterDocumentStore.totalDiskUsageBytes()
     let mangaImageDataCacheBytes = await mangaImageDataCacheStore.totalDiskUsageBytes()
 
     #expect(session == SessionState())
@@ -1730,6 +1744,7 @@ import Testing
     #expect(favorites.isEmpty)
     #expect(readerCacheBytes == 0)
     #expect(backgroundData == nil)
+    #expect(mangaChapterDocumentBytes == 0)
     #expect(mangaImageDataCacheBytes == 0)
 }
 

@@ -4,6 +4,12 @@ public protocol MangaChapterDocumentLoading: Sendable {
     func loadChapterDocument(at url: URL) async throws -> MangaChapterDocument
 }
 
+public protocol MangaChapterDocumentPersisting: Sendable {
+    func document(for chapterURL: URL) async -> MangaChapterDocument?
+    func save(_ document: MangaChapterDocument, for chapterURL: URL) async throws
+    func clearAll() async throws
+}
+
 public struct MangaDirectorySeed: Hashable, Sendable {
     public var currentChapter: MangaChapter
     public var tagIDs: [String]
@@ -35,6 +41,7 @@ public protocol MangaDirectoryRepository: Sendable {
 
 public protocol MangaDirectoryPersisting: Sendable {
     func directory(named name: String) async throws -> MangaDirectory?
+    func directory(containingTID tid: String) async throws -> MangaDirectory?
     func saveDirectory(_ directory: MangaDirectory) async throws
     func deleteDirectory(named name: String) async throws
 }

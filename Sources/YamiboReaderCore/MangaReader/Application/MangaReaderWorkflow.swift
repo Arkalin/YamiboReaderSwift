@@ -34,7 +34,7 @@ public final class MangaReaderWorkflow {
 
         do {
             let document = try await documentLoader.loadChapterDocument(at: context.chapterURL)
-            let directory = try await resolveDirectory()
+            let directory = try await resolveDirectory(for: document)
             let requestedPosition = MangaReadingPosition(
                 tid: document.tid,
                 localIndex: context.initialPage
@@ -70,9 +70,13 @@ public final class MangaReaderWorkflow {
         return presentation
     }
 
-    private func resolveDirectory() async throws -> MangaDirectory {
+    private func resolveDirectory(for document: MangaChapterDocument) async throws -> MangaDirectory {
         if let directoryName = normalizedDirectoryName(context.directoryName),
            let existing = try await directoryStore.directory(named: directoryName) {
+            return existing
+        }
+
+        if let existing = try await directoryStore.directory(containingTID: document.tid) {
             return existing
         }
 

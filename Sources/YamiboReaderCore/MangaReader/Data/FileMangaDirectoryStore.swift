@@ -52,6 +52,37 @@ public actor FileMangaDirectoryStore: MangaDirectoryPersisting {
         }
     }
 
+    public func directory(containingTID tid: String) async throws -> MangaDirectory? {
+        do {
+            try ensureIndexLoaded()
+            guard let targetTID = tid.mangaReaderTrimmedNonEmpty else {
+                return nil
+            }
+
+            var candidates: [MangaDirectory] = []
+            var removedInvalidEntry = false
+            for (name, fileName) in index {
+                do {
+                    let directory = try loadDirectory(fileName: fileName)
+                    if directory.chapters.contains(where: { $0.tid.mangaReaderTrimmedNonEmpty == targetTID }) {
+                        candidates.append(directory)
+                    }
+                } catch {
+                    index.removeValue(forKey: name)
+                    removedInvalidEntry = true
+                }
+            }
+
+            if removedInvalidEntry {
+                try persistIndex()
+            }
+
+            return candidates.sorted(by: directoryLookupSort).first
+        } catch {
+            throw persistenceError(from: error)
+        }
+    }
+
     public func saveDirectory(_ directory: MangaDirectory) async throws {
         do {
             try ensureIndexLoaded()
@@ -135,6 +166,15 @@ public actor FileMangaDirectoryStore: MangaDirectoryPersisting {
         if !fileManager.fileExists(atPath: baseDirectory.path) {
             try fileManager.createDirectory(at: baseDirectory, withIntermediateDirectories: true)
         }
+    }
+
+    private func directoryLookupSort(_ lhs: MangaDirectory, _ rhs: MangaDirectory) -> Bool {
+        let leftDate = lhs.lastUpdatedAt ?? .distantPast
+        let rightDate = rhs.lastUpdatedAt ?? .distantPast
+        if leftDate != rightDate {
+            return leftDate > rightDate
+        }
+        return lhs.cleanBookName.localizedStandardCompare(rhs.cleanBookName) == .orderedAscending
     }
 
     private func fileName(for cleanBookName: String) -> String {

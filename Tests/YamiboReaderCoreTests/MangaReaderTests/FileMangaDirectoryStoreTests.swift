@@ -29,6 +29,64 @@ struct MangaReaderTestsFileMangaDirectoryStore {
         #expect(loaded?.chapters.map(\.tid) == ["2", "3"])
     }
 
+    @Test func directoryContainingTIDLoadsAcrossStoreInstances() async throws {
+        let directory = try makeTemporaryDirectory()
+        let writingStore = FileMangaDirectoryStore(baseDirectory: directory)
+        try await writingStore.saveDirectory(makeDirectory(name: "作品A", tids: ["1"]))
+        try await writingStore.saveDirectory(makeDirectory(name: "作品B", tids: ["2", "3"]))
+
+        let loaded = try await FileMangaDirectoryStore(baseDirectory: directory).directory(containingTID: " 2 ")
+
+        #expect(loaded?.cleanBookName == "作品B")
+        #expect(loaded?.chapters.map(\.tid) == ["2", "3"])
+    }
+
+    @Test func directoryContainingBlankTIDReturnsNil() async throws {
+        let store = FileMangaDirectoryStore(baseDirectory: try makeTemporaryDirectory())
+        try await store.saveDirectory(makeDirectory(name: "作品", tids: ["1"]))
+
+        let loaded = try await store.directory(containingTID: "   ")
+
+        #expect(loaded == nil)
+    }
+
+    @Test func directoryContainingTIDSelfHealsInvalidIndexedFiles() async throws {
+        let directory = try makeTemporaryDirectory()
+        let store = FileMangaDirectoryStore(baseDirectory: directory)
+        try await store.saveDirectory(makeDirectory(name: "Good", tids: ["target"]))
+        try await store.saveDirectory(makeDirectory(name: "Broken", tids: ["other"]))
+        try corruptStoredDirectory(named: "Broken", in: directory)
+
+        let loaded = try await FileMangaDirectoryStore(baseDirectory: directory).directory(containingTID: "target")
+        let broken = try await FileMangaDirectoryStore(baseDirectory: directory).directory(named: "Broken")
+
+        #expect(loaded?.cleanBookName == "Good")
+        #expect(broken == nil)
+    }
+
+    @Test func directoryContainingTIDPrefersMostRecentlyUpdatedDirectory() async throws {
+        let directory = try makeTemporaryDirectory()
+        let store = FileMangaDirectoryStore(baseDirectory: directory)
+        try await store.saveDirectory(
+            makeDirectory(
+                name: "Older",
+                tids: ["shared"],
+                lastUpdatedAt: Date(timeIntervalSince1970: 1)
+            )
+        )
+        try await store.saveDirectory(
+            makeDirectory(
+                name: "Newer",
+                tids: ["shared"],
+                lastUpdatedAt: Date(timeIntervalSince1970: 2)
+            )
+        )
+
+        let loaded = try await FileMangaDirectoryStore(baseDirectory: directory).directory(containingTID: "shared")
+
+        #expect(loaded?.cleanBookName == "Newer")
+    }
+
     @Test func deleteDirectoryIsIdempotentAndPersists() async throws {
         let directory = try makeTemporaryDirectory()
         let store = FileMangaDirectoryStore(baseDirectory: directory)
@@ -87,7 +145,7 @@ struct MangaReaderTestsFileMangaDirectoryStore {
     }
 }
 
-private func makeDirectory(name: String, tids: [String]) -> MangaDirectory {
+private func makeDirectory(name: String, tids: [String], lastUpdatedAt: Date? = nil) -> MangaDirectory {
     MangaDirectory(
         cleanBookName: name,
         strategy: .tag,
@@ -99,8 +157,22 @@ private func makeDirectory(name: String, tids: [String]) -> MangaDirectory {
                 chapterNumber: Double(tid) ?? 0,
                 url: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(tid)&mobile=2")!
             )
-        }
+        },
+        lastUpdatedAt: lastUpdatedAt
     )
+}
+
+private func corruptStoredDirectory(named name: String, in directory: URL) throws {
+    let files = try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
+    for file in files where file.lastPathComponent != "index.json" {
+        guard let data = try? Data(contentsOf: file),
+              String(decoding: data, as: UTF8.self).contains(name) else {
+            continue
+        }
+        try Data("not-json".utf8).write(to: file)
+        return
+    }
+    Issue.record("Expected stored directory file named \(name)")
 }
 
 private func makeTemporaryDirectory() throws -> URL {
