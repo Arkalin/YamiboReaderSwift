@@ -7,6 +7,7 @@ import UIKit
 struct MangaVerticalCollectionViewport: UIViewRepresentable {
     let pages: [MangaReaderPageProjection]
     let currentPageIndex: Int?
+    let viewportPlacement: MangaReaderViewportPlacement?
     let imagePipeline: MangaImagePipeline
     let onCurrentPageChange: (Int) -> Void
 
@@ -32,6 +33,7 @@ struct MangaVerticalCollectionViewport: UIViewRepresentable {
         collectionView.onLayoutSubviews = { [weak coordinator, weak collectionView] in
             guard let collectionView else { return }
             coordinator?.applyInitialPlacementIfNeeded(in: collectionView)
+            coordinator?.applyViewportPlacementIfNeeded(in: collectionView)
         }
         return collectionView
     }
@@ -61,6 +63,7 @@ struct MangaVerticalCollectionViewport: UIViewRepresentable {
         private var heightToWidthRatios: [String: CGFloat] = [:]
         private var pendingInitialPageIndex: Int?
         private var lastReportedGlobalIndex: Int?
+        private var lastAppliedPlacementRevision: Int?
 
         init(parent: MangaVerticalCollectionViewport) {
             self.parent = parent
@@ -70,6 +73,7 @@ struct MangaVerticalCollectionViewport: UIViewRepresentable {
             let nextIdentity = parent.pages.map(\.id)
             guard nextIdentity != contentIdentity else {
                 applyInitialPlacementIfNeeded(in: collectionView)
+                applyViewportPlacementIfNeeded(in: collectionView)
                 return
             }
 
@@ -82,7 +86,7 @@ struct MangaVerticalCollectionViewport: UIViewRepresentable {
                 pendingInitialPageIndex = nil
                 collectionView.alpha = 1
             } else {
-                let requestedIndex = parent.currentPageIndex ?? 0
+                let requestedIndex = parent.viewportPlacement?.targetPageIndex ?? parent.currentPageIndex ?? 0
                 pendingInitialPageIndex = min(max(requestedIndex, 0), parent.pages.count - 1)
                 collectionView.alpha = 0
             }
@@ -92,6 +96,7 @@ struct MangaVerticalCollectionViewport: UIViewRepresentable {
             collectionView.setNeedsLayout()
             collectionView.layoutIfNeeded()
             applyInitialPlacementIfNeeded(in: collectionView)
+            applyViewportPlacementIfNeeded(in: collectionView)
         }
 
         func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int {
@@ -169,8 +174,31 @@ struct MangaVerticalCollectionViewport: UIViewRepresentable {
                 at: .top,
                 animated: false
             )
+            lastAppliedPlacementRevision = parent.viewportPlacement?.revision
             pendingInitialPageIndex = nil
             collectionView.alpha = 1
+            publishCurrentPageIfNeeded(from: collectionView)
+        }
+
+        func applyViewportPlacementIfNeeded(in collectionView: UICollectionView) {
+            guard pendingInitialPageIndex == nil,
+                  let placement = parent.viewportPlacement,
+                  placement.revision != lastAppliedPlacementRevision else {
+                return
+            }
+            let targetIndex = min(max(placement.targetPageIndex, 0), max(parent.pages.count - 1, 0))
+            guard parent.pages.indices.contains(targetIndex),
+                  collectionView.bounds.width > 0,
+                  collectionView.bounds.height > 0 else {
+                return
+            }
+
+            collectionView.scrollToItem(
+                at: IndexPath(item: targetIndex, section: 0),
+                at: .top,
+                animated: placement.animated
+            )
+            lastAppliedPlacementRevision = placement.revision
             publishCurrentPageIfNeeded(from: collectionView)
         }
 

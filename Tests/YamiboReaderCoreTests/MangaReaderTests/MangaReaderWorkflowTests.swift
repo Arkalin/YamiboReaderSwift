@@ -343,6 +343,168 @@ struct MangaReaderTestsWorkflow {
         #expect(await repository.seedURLs.isEmpty)
         #expect(await store.savedDirectories.isEmpty)
     }
+
+    @Test func workflowUpdatesDirectoryPreservingCurrentReadingPosition() async throws {
+        let document = try makeWorkflowDocument(tid: "700", pageCount: 2)
+        let directory = makeWorkflowDirectory(
+            name: "测试漫画",
+            strategy: .tag,
+            sourceKey: "12",
+            tids: ["700"]
+        )
+        let repository = RecordingMangaDirectoryRepository(
+            output: .seed(makeWorkflowSeed(currentTID: "700", tagIDs: ["12"])),
+            tagChapters: [
+                makeWorkflowChapter(tid: "699", title: "第699话"),
+                makeWorkflowChapter(tid: "701", title: "第701话")
+            ]
+        )
+        let workflow = MangaReaderWorkflow(
+            context: try makeWorkflowContext(tid: "700", initialPage: 1, directoryName: "测试漫画"),
+            documentLoader: RecordingMangaChapterDocumentLoader(output: .document(document)),
+            directoryRepository: repository,
+            directoryStore: RecordingMangaDirectoryStore(directories: [directory])
+        )
+
+        _ = await workflow.prepare()
+        let result = try await workflow.updateDirectory()
+
+        guard case let .loaded(loaded) = workflow.presentation.state else {
+            Issue.record("Expected loaded presentation")
+            return
+        }
+        #expect(result.shouldOfferForcedSearch)
+        #expect(loaded.directoryPanel.displayChapters.map(\.tid) == ["699", "700", "701"])
+        #expect(loaded.readingPosition == MangaReadingPosition(tid: "700", localIndex: 1))
+        #expect(loaded.currentPage?.id == "700#1")
+        #expect(await repository.tagDirectoryRequests == [["12"]])
+    }
+
+    @Test func workflowJumpsToAlreadyLoadedChapterWithDirectViewportPlacement() async throws {
+        let document700 = try makeWorkflowDocument(tid: "700", pageCount: 1)
+        let document701 = try makeWorkflowDocument(tid: "701", pageCount: 1)
+        let directory = makeWorkflowDirectory(
+            name: "测试漫画",
+            strategy: .links,
+            sourceKey: "测试漫画",
+            tids: ["700", "701"]
+        )
+        let loader = RecordingMangaChapterDocumentLoader(documents: [
+            document700.chapterURL: document700,
+            document701.chapterURL: document701
+        ])
+        let workflow = MangaReaderWorkflow(
+            context: try makeWorkflowContext(tid: "700", directoryName: "测试漫画"),
+            documentLoader: loader,
+            directoryRepository: RecordingMangaDirectoryRepository(output: .failure(.offline)),
+            directoryStore: RecordingMangaDirectoryStore(directories: [directory])
+        )
+
+        _ = await workflow.prepare()
+        _ = try await workflow.jumpToChapter(directory.chapters[1])
+        let presentation = try await workflow.jumpToChapter(directory.chapters[0])
+
+        guard case let .loaded(loaded) = presentation.state else {
+            Issue.record("Expected loaded presentation")
+            return
+        }
+        #expect(loaded.pages.map(\.id) == ["700#0", "701#0"])
+        #expect(loaded.currentPage?.id == "700#0")
+        #expect(loaded.viewportPlacement?.targetPageIndex == 0)
+        #expect(loaded.viewportPlacement?.animated == false)
+    }
+
+    @Test func workflowJumpsToAdjacentChapterByInsertingDocument() async throws {
+        let document700 = try makeWorkflowDocument(tid: "700", pageCount: 1)
+        let document701 = try makeWorkflowDocument(tid: "701", pageCount: 1)
+        let directory = makeWorkflowDirectory(
+            name: "测试漫画",
+            strategy: .links,
+            sourceKey: "测试漫画",
+            tids: ["700", "701"]
+        )
+        let workflow = MangaReaderWorkflow(
+            context: try makeWorkflowContext(tid: "700", directoryName: "测试漫画"),
+            documentLoader: RecordingMangaChapterDocumentLoader(documents: [
+                document700.chapterURL: document700,
+                document701.chapterURL: document701
+            ]),
+            directoryRepository: RecordingMangaDirectoryRepository(output: .failure(.offline)),
+            directoryStore: RecordingMangaDirectoryStore(directories: [directory])
+        )
+
+        _ = await workflow.prepare()
+        let presentation = try await workflow.jumpToChapter(directory.chapters[1])
+
+        guard case let .loaded(loaded) = presentation.state else {
+            Issue.record("Expected loaded presentation")
+            return
+        }
+        #expect(loaded.pages.map(\.id) == ["700#0", "701#0"])
+        #expect(loaded.currentPage?.id == "701#0")
+        #expect(loaded.viewportPlacement?.targetPageIndex == 1)
+    }
+
+    @Test func workflowJumpsToDistantChapterByResettingWindow() async throws {
+        let document700 = try makeWorkflowDocument(tid: "700", pageCount: 1)
+        let document703 = try makeWorkflowDocument(tid: "703", pageCount: 1)
+        let directory = makeWorkflowDirectory(
+            name: "测试漫画",
+            strategy: .links,
+            sourceKey: "测试漫画",
+            tids: ["700", "701", "702", "703"]
+        )
+        let workflow = MangaReaderWorkflow(
+            context: try makeWorkflowContext(tid: "700", directoryName: "测试漫画"),
+            documentLoader: RecordingMangaChapterDocumentLoader(documents: [
+                document700.chapterURL: document700,
+                document703.chapterURL: document703
+            ]),
+            directoryRepository: RecordingMangaDirectoryRepository(output: .failure(.offline)),
+            directoryStore: RecordingMangaDirectoryStore(directories: [directory])
+        )
+
+        _ = await workflow.prepare()
+        let presentation = try await workflow.jumpToChapter(directory.chapters[3])
+
+        guard case let .loaded(loaded) = presentation.state else {
+            Issue.record("Expected loaded presentation")
+            return
+        }
+        #expect(loaded.pages.map(\.id) == ["703#0"])
+        #expect(loaded.currentPage?.id == "703#0")
+        #expect(loaded.viewportPlacement?.targetPageIndex == 0)
+    }
+
+    @Test func workflowJumpFailureKeepsCurrentWindowLoaded() async throws {
+        let document700 = try makeWorkflowDocument(tid: "700", pageCount: 1)
+        let directory = makeWorkflowDirectory(
+            name: "测试漫画",
+            strategy: .links,
+            sourceKey: "测试漫画",
+            tids: ["700", "701"]
+        )
+        let workflow = MangaReaderWorkflow(
+            context: try makeWorkflowContext(tid: "700", directoryName: "测试漫画"),
+            documentLoader: RecordingMangaChapterDocumentLoader(documents: [
+                document700.chapterURL: document700
+            ]),
+            directoryRepository: RecordingMangaDirectoryRepository(output: .failure(.offline)),
+            directoryStore: RecordingMangaDirectoryStore(directories: [directory])
+        )
+
+        _ = await workflow.prepare()
+        await #expect(throws: YamiboError.unreadableBody) {
+            _ = try await workflow.jumpToChapter(directory.chapters[1])
+        }
+
+        guard case let .loaded(loaded) = workflow.presentation.state else {
+            Issue.record("Expected loaded presentation")
+            return
+        }
+        #expect(loaded.pages.map(\.id) == ["700#0"])
+        #expect(loaded.currentPage?.id == "700#0")
+    }
 }
 
 @MainActor
@@ -367,14 +529,27 @@ private actor RecordingMangaChapterDocumentLoader: MangaChapterDocumentLoading {
     }
 
     private let output: Output
+    private let documents: [URL: MangaChapterDocument]?
     private(set) var loadedURLs: [URL] = []
 
     init(output: Output) {
         self.output = output
+        self.documents = nil
+    }
+
+    init(documents: [URL: MangaChapterDocument]) {
+        self.output = .failure(.unreadableBody)
+        self.documents = documents
     }
 
     func loadChapterDocument(at url: URL) async throws -> MangaChapterDocument {
         loadedURLs.append(url)
+        if let documents {
+            guard let document = documents[url] else {
+                throw YamiboError.unreadableBody
+            }
+            return document
+        }
         switch output {
         case let .document(document):
             return document
@@ -391,12 +566,20 @@ private actor RecordingMangaDirectoryRepository: MangaDirectoryRepository {
     }
 
     private let output: Output
+    private let tagChapters: [MangaChapter]
+    private let searchChapters: [MangaChapter]
     private(set) var seedURLs: [URL] = []
     private(set) var tagDirectoryRequests: [[String]] = []
     private(set) var searchRequests: [(keyword: String, forumID: String)] = []
 
-    init(output: Output) {
+    init(
+        output: Output,
+        tagChapters: [MangaChapter] = [],
+        searchChapters: [MangaChapter] = []
+    ) {
         self.output = output
+        self.tagChapters = tagChapters
+        self.searchChapters = searchChapters
     }
 
     func loadDirectorySeed(for chapterURL: URL) async throws -> MangaDirectorySeed {
@@ -411,12 +594,12 @@ private actor RecordingMangaDirectoryRepository: MangaDirectoryRepository {
 
     func loadTagDirectory(tagIDs: [String]) async throws -> [MangaChapter] {
         tagDirectoryRequests.append(tagIDs)
-        return []
+        return tagChapters
     }
 
     func searchDirectory(keyword: String, forumID: String) async throws -> [MangaChapter] {
         searchRequests.append((keyword, forumID))
-        return []
+        return searchChapters
     }
 }
 
