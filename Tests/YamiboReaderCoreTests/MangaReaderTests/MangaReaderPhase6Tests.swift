@@ -55,6 +55,17 @@ struct MangaReaderTestsPhase6 {
         #expect(source.contains("MangaImagePipelineError.invalidImageData"))
     }
 
+    @Test func hiddenFailureStackIsNotMeasuredDuringLayout() throws {
+        let source = try sourceFile("Sources/YamiboReaderUI/Features/MangaReader/Presentation/MangaVerticalCollectionViewport.swift")
+        let guardRange = try #require(source.range(of: "guard !failureStack.isHidden else"))
+        let fittingRange = try #require(source.range(of: "failureStack.systemLayoutSizeFitting(fittingSize)"))
+        let hiddenGuardBody = String(source[guardRange.lowerBound..<fittingRange.lowerBound])
+
+        #expect(hiddenGuardBody.contains("failureStack.frame = .zero"))
+        #expect(hiddenGuardBody.contains("return"))
+        #expect(guardRange.lowerBound < fittingRange.lowerBound)
+    }
+
     #if os(iOS)
     @MainActor
     @Test func imagePipelineDeduplicatesConcurrentLoads() async throws {
