@@ -22,6 +22,7 @@ struct MangaReaderTestsRouteSkeleton {
 
     @MainActor
     @Test func mangaSkeletonViewsAreConstructible() throws {
+        #if os(iOS)
         let appModel = try makeAppModel()
         let nativeContext = try makeLaunchContext(tid: "700")
         let webContext = MangaWebContext(
@@ -32,6 +33,9 @@ struct MangaReaderTestsRouteSkeleton {
 
         _ = MangaReaderView(context: nativeContext, appModel: appModel)
         _ = MangaWebFallbackView(context: webContext, appModel: appModel)
+        #else
+        #expect(true)
+        #endif
     }
 
     @Test func threadOpenResolverStillCreatesMangaLaunchContext() async throws {

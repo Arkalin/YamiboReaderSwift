@@ -8,6 +8,7 @@ public final class MangaReaderWorkflow {
     private let documentLoader: any MangaChapterDocumentLoading
     private let directoryRepository: any MangaDirectoryRepository
     private let directoryStore: any MangaDirectoryPersisting
+    private var window: MangaChapterWindow?
 
     public init(
         context: MangaLaunchContext,
@@ -26,6 +27,7 @@ public final class MangaReaderWorkflow {
 
     @discardableResult
     public func prepare() async -> MangaReaderPresentation {
+        window = nil
         presentation = MangaReaderPresentation(
             state: .loading(MangaReaderLoadingPresentation(title: Self.presentationTitle(for: context)))
         )
@@ -42,25 +44,10 @@ public final class MangaReaderWorkflow {
                 initialDocument: document,
                 position: requestedPosition
             )
-            let pages = MangaReaderPageProjection.projections(from: window)
-            let currentPageIndex = MangaReaderPageProjection.resolvedPageIndex(for: window)
-            let currentPage = currentPageIndex.flatMap { index in
-                pages.indices.contains(index) ? pages[index] : nil
-            }
-
-            presentation = MangaReaderPresentation(
-                state: .loaded(
-                    MangaReaderLoadedPresentation(
-                        title: Self.presentationTitle(for: context),
-                        directoryTitle: directory.cleanBookName,
-                        pages: pages,
-                        currentPage: currentPage,
-                        currentPageIndex: currentPageIndex,
-                        readingPosition: window.resolvedPosition
-                    )
-                )
-            )
+            self.window = window
+            presentation = loadedPresentation(from: window)
         } catch {
+            window = nil
             presentation = MangaReaderPresentation(
                 state: .failed(
                     MangaReaderErrorPresentation(
@@ -71,6 +58,15 @@ public final class MangaReaderWorkflow {
             )
         }
 
+        return presentation
+    }
+
+    @discardableResult
+    public func moveToLoadedPage(at globalIndex: Int) -> MangaReaderPresentation {
+        guard var window else { return presentation }
+        _ = window.moveToLoadedPage(at: globalIndex)
+        self.window = window
+        presentation = loadedPresentation(from: window)
         return presentation
     }
 
@@ -89,6 +85,27 @@ public final class MangaReaderWorkflow {
     private func normalizedDirectoryName(_ directoryName: String?) -> String? {
         let normalized = directoryName?.trimmingCharacters(in: .whitespacesAndNewlines)
         return normalized?.isEmpty == false ? normalized : nil
+    }
+
+    private func loadedPresentation(from window: MangaChapterWindow) -> MangaReaderPresentation {
+        let pages = MangaReaderPageProjection.projections(from: window)
+        let currentPageIndex = MangaReaderPageProjection.resolvedPageIndex(for: window)
+        let currentPage = currentPageIndex.flatMap { index in
+            pages.indices.contains(index) ? pages[index] : nil
+        }
+
+        return MangaReaderPresentation(
+            state: .loaded(
+                MangaReaderLoadedPresentation(
+                    title: Self.presentationTitle(for: context),
+                    directoryTitle: window.directory.cleanBookName,
+                    pages: pages,
+                    currentPage: currentPage,
+                    currentPageIndex: currentPageIndex,
+                    readingPosition: window.resolvedPosition
+                )
+            )
+        )
     }
 
     private static func presentationTitle(for context: MangaLaunchContext) -> String {
