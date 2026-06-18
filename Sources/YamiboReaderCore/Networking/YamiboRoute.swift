@@ -154,10 +154,13 @@ public enum YamiboRoute: Sendable {
                 components.path = "/forum.php"
             }
 
-            var items = Dictionary(uniqueKeysWithValues: (components.queryItems ?? []).map { ($0.name, $0.value) })
-            items["mod"] = items["mod"] ?? "viewthread"
+            var items: [String: String?] = [:]
+            for item in components.queryItems ?? [] {
+                items[item.name] = item.value
+            }
+            items["mod"] = "viewthread"
             items["page"] = String(max(1, page))
-            items["mobile"] = items["mobile"] ?? "2"
+            items["mobile"] = "2"
             if let authorID, !authorID.isEmpty {
                 items["authorid"] = authorID
             }

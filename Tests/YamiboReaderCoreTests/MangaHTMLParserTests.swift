@@ -53,3 +53,22 @@ import Testing
     #expect(favorites.first?.title == "作品 B")
     #expect(favorites.first?.remoteFavoriteID == nil)
 }
+
+@Test func samePageLinksResolveRelativeURLsAgainstBaseURL() throws {
+    let baseURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=700&page=1&mobile=2"))
+    let html = #"""
+    <html><body>
+      <div class="message">
+        <a href="thread-701-1-1.html">第2话</a>
+      </div>
+    </body></html>
+    """#
+
+    let chapters = MangaHTMLParser.extractSamePageLinks(from: html, baseURL: baseURL)
+
+    #expect(chapters.count == 1)
+    #expect(chapters.first?.tid == "701")
+    #expect(chapters.first?.url.host == "bbs.yamibo.com")
+    #expect(chapters.first?.url.absoluteString.contains("page=1") == true)
+    #expect(chapters.first?.url.absoluteString.contains("mobile=2") == true)
+}
