@@ -266,13 +266,18 @@ private final class MangaVerticalCollectionPageCell: UICollectionViewCell {
         heightToWidthRatio = 1 / Self.defaultWidthToHeightAspectRatio
         imageView.image = nil
         activityIndicator.stopAnimating()
-        failureStack.isHidden = true
+        setFailureStackVisible(false)
     }
 
     override func layoutSubviews() {
         super.layoutSubviews()
         imageView.frame = contentView.bounds
         activityIndicator.center = CGPoint(x: contentView.bounds.midX, y: contentView.bounds.midY)
+
+        guard !failureStack.isHidden else {
+            failureStack.frame = .zero
+            return
+        }
 
         let horizontalInset: CGFloat = contentView.bounds.width >= 32 ? 16 : 0
         let availableWidth = max(contentView.bounds.width - horizontalInset * 2, 0)
@@ -346,10 +351,10 @@ private final class MangaVerticalCollectionPageCell: UICollectionViewCell {
         failureStack.axis = .vertical
         failureStack.alignment = .center
         failureStack.spacing = 8
-        failureStack.isHidden = true
         failureStack.addArrangedSubview(failureLabel)
         failureStack.addArrangedSubview(retryButton)
         contentView.addSubview(failureStack)
+        setFailureStackVisible(false)
     }
 
     private func startLoad() {
@@ -375,14 +380,14 @@ private final class MangaVerticalCollectionPageCell: UICollectionViewCell {
 
     private func showLoading() {
         imageView.image = nil
-        failureStack.isHidden = true
+        setFailureStackVisible(false)
         activityIndicator.startAnimating()
     }
 
     private func show(image: UIImage, pageID: String) {
         guard currentPageID == pageID else { return }
         activityIndicator.stopAnimating()
-        failureStack.isHidden = true
+        setFailureStackVisible(false)
         imageView.image = image
         updateHeightToWidthRatio(for: image)
     }
@@ -391,8 +396,18 @@ private final class MangaVerticalCollectionPageCell: UICollectionViewCell {
         guard currentPageID == pageID else { return }
         activityIndicator.stopAnimating()
         imageView.image = nil
-        failureStack.isHidden = false
+        setFailureStackVisible(true)
         setNeedsLayout()
+    }
+
+    private func setFailureStackVisible(_ isVisible: Bool) {
+        failureLabel.isHidden = !isVisible
+        retryButton.isHidden = !isVisible
+        failureStack.isHidden = !isVisible
+        failureStack.isUserInteractionEnabled = isVisible
+        if !isVisible {
+            failureStack.frame = .zero
+        }
     }
 
     private func updateHeightToWidthRatio(for image: UIImage) {
