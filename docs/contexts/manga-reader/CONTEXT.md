@@ -24,12 +24,17 @@ _Avoid_: focus, progress, page focus
 The immutable reader-visible snapshot of the manga reader's current loading, readable, or error state.
 _Avoid_: reader view model fields, published loading state, UI snapshot
 
+**Manga Reader Settings**:
+The user's accepted manga reading preferences, distinct from transient settings drafts.
+_Avoid_: draft settings, reader controls, settings fields
+
 ## Relationships
 
 - A **Manga Directory** contains zero or more **Manga Chapter Documents** by chapter identity.
 - A **Manga Chapter Window** contains one or more loaded **Manga Chapter Documents** from a **Manga Directory**.
 - A **Manga Chapter Window** preserves the current **Manga Reading Position** while adding or trimming **Manga Chapter Documents**.
 - A **Manga Reader Presentation** projects a **Manga Chapter Window** into reader-visible pages and current position without changing the window.
+- A **Manga Reader Presentation** may carry the current **Manga Reader Settings** so visible reader behavior reflects accepted preferences, not draft controls.
 - A **Manga Chapter Window** uses chapter `tid` as the canonical chapter identity; chapter URLs are loading and display metadata.
 - A local **Manga Directory** can be recovered by contained chapter `tid` when launch context lacks the directory name.
 - A **Manga Chapter Window** extends continuous reading by inserting adjacent **Manga Chapter Documents** and handles distant jumps through an explicit reset.
