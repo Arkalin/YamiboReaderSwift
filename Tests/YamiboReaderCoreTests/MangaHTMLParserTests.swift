@@ -20,6 +20,28 @@ import Testing
     #expect(chapters.first?.chapterNumber == 12)
 }
 
+@Test func parsePCListExtractsBareTrailingCircledChapterNumbers() async throws {
+    let html = """
+    <table>
+      <tr>
+        <th><a href="thread-10017-1-1.html">【提灯喵汉化组】【あおのなち】与你相恋到生命尽头 17①</a></th>
+        <td class="by"></td>
+        <td class="by"><cite><a href="space-uid-77.html">作者甲</a></cite></td>
+      </tr>
+      <tr>
+        <th><a href="thread-10018-1-1.html">【提灯喵汉化组】【あおのなち】与你相恋到生命尽头 17②</a></th>
+        <td class="by"></td>
+        <td class="by"><cite><a href="space-uid-77.html">作者甲</a></cite></td>
+      </tr>
+    </table>
+    """
+
+    let chapters = MangaHTMLParser.parseListHTML(html)
+
+    #expect(chapters.map(\.chapterNumber) == [17.01, 17.02])
+    #expect(chapters.map(MangaChapterDisplayFormatter.displayNumber(for:)) == ["17-1", "17-2"])
+}
+
 @Test func parsePCListDecodesHTMLEntitiesInThreadHrefs() async throws {
     let html = """
     <table>
