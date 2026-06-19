@@ -56,8 +56,7 @@ struct MangaDirectorySheet: View {
                 if isSelecting && !usesSystemSelectionBottomToolbar {
                     MangaDirectorySelectionActionBar(
                         selectedChapterTIDs: selectedChapterTIDs,
-                        onDelete: deleteSelectedChapters,
-                        onCache: {}
+                        onDelete: deleteSelectedChapters
                     )
                 }
             }
@@ -77,8 +76,7 @@ struct MangaDirectorySheet: View {
                     ToolbarItem(placement: .bottomBar) {
                         MangaDirectorySelectionToolbarCapsule(
                             selectedChapterTIDs: selectedChapterTIDs,
-                            onDelete: deleteSelectedChapters,
-                            onCache: {}
+                            onDelete: deleteSelectedChapters
                         )
                     }
                 }
@@ -155,7 +153,6 @@ struct MangaDirectorySheet: View {
 private struct MangaDirectorySelectionToolbarCapsule: View {
     let selectedChapterTIDs: Set<String>
     let onDelete: () -> Void
-    let onCache: () -> Void
 
     var body: some View {
         HStack(spacing: 8) {
@@ -167,25 +164,12 @@ private struct MangaDirectorySelectionToolbarCapsule: View {
                 action: onDelete
             )
             .disabled(!canDelete)
-
-            toolbarButton(
-                title: L10n.string("reader.cache_action.cache"),
-                systemImage: "square.and.arrow.down",
-                role: nil,
-                isEnabled: canCache,
-                action: onCache
-            )
-            .disabled(!canCache)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
     }
 
     private var canDelete: Bool {
-        !selectedChapterTIDs.isEmpty
-    }
-
-    private var canCache: Bool {
         !selectedChapterTIDs.isEmpty
     }
 
@@ -430,8 +414,9 @@ private struct MangaDirectorySelectionToggleButton: View {
                 Text(L10n.string("common.done"))
                     .font(.subheadline.weight(.semibold))
             } else {
-                Image(systemName: "checkmark.circle")
+                Image(systemName: "trash")
                     .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.orange)
             }
         }
         .buttonStyle(.plain)
@@ -459,6 +444,10 @@ private struct MangaDirectoryChapterRow: View {
         ZStack(alignment: .trailing) {
             swipeDeleteButton
                 .opacity(isDeleteActionVisible ? 1 : 0)
+                .mask(alignment: .trailing) {
+                    Rectangle()
+                        .frame(width: deleteActionRevealWidth)
+                }
                 .allowsHitTesting(isDeleteActionVisible)
 
             HStack(alignment: .top, spacing: 12) {
@@ -500,11 +489,11 @@ private struct MangaDirectoryChapterRow: View {
             .padding(.vertical, 12)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                UnevenRoundedRectangle(cornerRadii: rowCornerRadii, style: .continuous)
                     .fill(backgroundColor)
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                UnevenRoundedRectangle(cornerRadii: rowCornerRadii, style: .continuous)
                     .strokeBorder(isSelecting && isSelected ? Color.orange : Color.clear, lineWidth: 2)
             )
             .contentShape(Rectangle())
@@ -565,8 +554,25 @@ private struct MangaDirectoryChapterRow: View {
         76
     }
 
+    private var rowCornerRadii: RectangleCornerRadii {
+        RectangleCornerRadii(
+            topLeading: 12,
+            bottomLeading: 12,
+            bottomTrailing: rowTrailingCornerRadius,
+            topTrailing: rowTrailingCornerRadius
+        )
+    }
+
+    private var rowTrailingCornerRadius: CGFloat {
+        isDeleteActionVisible ? 0 : 12
+    }
+
     private var rowOffset: CGFloat {
         isSelecting ? 0 : swipeOffset
+    }
+
+    private var deleteActionRevealWidth: CGFloat {
+        min(swipeActionWidth, max(0, -rowOffset))
     }
 
     private var swipeGesture: some Gesture {
@@ -655,7 +661,6 @@ private struct MangaDirectoryChapterRow: View {
 private struct MangaDirectorySelectionActionBar: View {
     let selectedChapterTIDs: Set<String>
     let onDelete: () -> Void
-    let onCache: () -> Void
 
     var body: some View {
         VStack(spacing: 0) {
@@ -669,15 +674,6 @@ private struct MangaDirectorySelectionActionBar: View {
                     action: onDelete
                 )
                 .disabled(!canDelete)
-
-                actionButton(
-                    title: L10n.string("reader.cache_action.cache"),
-                    systemImage: "square.and.arrow.down",
-                    role: nil,
-                    isEnabled: canCache,
-                    action: onCache
-                )
-                .disabled(!canCache)
             }
             .frame(maxWidth: .infinity)
             .padding(.horizontal, 20)
@@ -688,10 +684,6 @@ private struct MangaDirectorySelectionActionBar: View {
     }
 
     private var canDelete: Bool {
-        !selectedChapterTIDs.isEmpty
-    }
-
-    private var canCache: Bool {
         !selectedChapterTIDs.isEmpty
     }
 
