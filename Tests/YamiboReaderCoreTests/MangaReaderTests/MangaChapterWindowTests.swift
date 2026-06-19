@@ -340,6 +340,29 @@ struct MangaReaderTestsChapterWindow {
         #expect(MangaReaderPageProjection.resolvedPageIndex(for: window) == 1)
     }
 
+    @Test func chapterWindowRemovesLoadedDocumentsByTIDWithoutRemovingPreservedPosition() throws {
+        let directory = makeDirectory(tids: ["699", "700", "701"])
+        let position = MangaReadingPosition(tid: "700", localIndex: 0)
+        var window = try #require(MangaChapterWindow(
+            directory: directory,
+            documents: [
+                makeDocument(tid: "699", pageCount: 1),
+                makeDocument(tid: "700", pageCount: 1),
+                makeDocument(tid: "701", pageCount: 1)
+            ],
+            position: position
+        ))
+
+        let snapshot = window.removeLoadedDocuments(
+            withTIDs: ["699", "701"],
+            preserving: position
+        )
+
+        #expect(snapshot.documents.map(\.tid) == ["700"])
+        #expect(snapshot.resolvedPosition == position)
+        #expect(MangaReaderPageProjection.resolvedPageIndex(for: window) == 0)
+    }
+
     @Test func chapterWindowFindsAdjacentChaptersOnlyAtDirectOffsetsAndLoadedRangeBoundaries() throws {
         let directory = makeDirectory(tids: ["699", "700", "701"])
         let position = MangaReadingPosition(tid: "700", localIndex: 0)

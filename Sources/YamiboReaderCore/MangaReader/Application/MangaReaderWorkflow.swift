@@ -225,6 +225,33 @@ public final class MangaReaderWorkflow {
     }
 
     @discardableResult
+    public func deleteDirectoryChapters(tids: Set<String>) async throws -> MangaReaderPresentation {
+        try Task.checkCancellation()
+
+        guard var window else {
+            throw YamiboError.underlying("Manga reader workflow is not prepared.")
+        }
+
+        let targetTIDs = Set(tids.compactMap(Self.normalizedNonEmpty))
+        guard !targetTIDs.isEmpty else { return presentation }
+        if let currentTID = window.resolvedPosition?.tid,
+           targetTIDs.contains(currentTID) {
+            return presentation
+        }
+
+        let position = window.resolvedPosition
+        let updated = try await directoryWorkflow.deleteChapters(window.directory, tids: targetTIDs)
+        try Task.checkCancellation()
+
+        _ = window.updateDirectory(updated, preserving: position)
+        _ = window.removeLoadedDocuments(withTIDs: targetTIDs, preserving: position)
+        self.window = window
+        let currentIndex = MangaReaderPageProjection.resolvedPageIndex(for: window)
+        presentation = loadedPresentation(from: window, placementPageIndex: currentIndex)
+        return presentation
+    }
+
+    @discardableResult
     public func jumpToChapter(_ chapter: MangaChapter) async throws -> MangaReaderPresentation {
         try Task.checkCancellation()
 
@@ -351,5 +378,10 @@ public final class MangaReaderWorkflow {
     private static func presentationTitle(for context: MangaLaunchContext) -> String {
         let title = context.displayTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         return title.isEmpty ? L10n.string("manga.reader.title") : title
+    }
+
+    private static func normalizedNonEmpty(_ value: String) -> String? {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 }
