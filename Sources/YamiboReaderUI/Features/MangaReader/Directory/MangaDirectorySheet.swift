@@ -22,6 +22,7 @@ struct MangaDirectorySheet: View {
     @State private var isCorrectionPresented = false
     @State private var isSelecting = false
     @State private var selectedChapterTIDs: Set<String> = []
+    @State private var isCurrentChapterDeleteAlertPresented = false
 
     var body: some View {
         NavigationStack {
@@ -51,10 +52,9 @@ struct MangaDirectorySheet: View {
             }
             .background(Color(uiColor: .systemGroupedBackground))
             .safeAreaInset(edge: .bottom, spacing: 0) {
-                if isSelecting {
+                if isSelecting && !usesSystemSelectionBottomToolbar {
                     MangaDirectorySelectionActionBar(
                         selectedChapterTIDs: selectedChapterTIDs,
-                        currentChapterTID: panel.currentChapterTID,
                         onDelete: deleteSelectedChapters,
                         onCache: {}
                     )
@@ -71,6 +71,16 @@ struct MangaDirectorySheet: View {
                     }
                     .accessibilityLabel(L10n.string("common.close"))
                 }
+
+                if isSelecting && usesSystemSelectionBottomToolbar {
+                    ToolbarItem(placement: .bottomBar) {
+                        MangaDirectorySelectionToolbarCapsule(
+                            selectedChapterTIDs: selectedChapterTIDs,
+                            onDelete: deleteSelectedChapters,
+                            onCache: {}
+                        )
+                    }
+                }
             }
             .task {
                 guard !didSeedDraft else { return }
@@ -81,6 +91,11 @@ struct MangaDirectorySheet: View {
                 selectedChapterTIDs.formIntersection(Set(visibleTIDs))
             }
             .sensoryFeedback(.selection, trigger: selectedChapterTIDs)
+            .alert(L10n.string("manga.delete_current_chapter_failed"), isPresented: $isCurrentChapterDeleteAlertPresented) {
+                Button(L10n.string("common.ok"), role: .cancel) {}
+            } message: {
+                Text(L10n.string("manga.delete_current_chapter_failed_message"))
+            }
             .sheet(isPresented: $isCorrectionPresented) {
                 MangaDirectoryCorrectionSheet(
                     draft: $draft,
@@ -94,6 +109,13 @@ struct MangaDirectorySheet: View {
         }
     }
 
+    private var usesSystemSelectionBottomToolbar: Bool {
+        if #available(iOS 26, *) {
+            return true
+        }
+        return false
+    }
+
     private func seedDraft(from panel: MangaDirectoryPanelPresentation) {
         draft = panel.editDraft ?? MangaDirectoryEditDraft(
             cleanBookName: panel.directoryTitle,
@@ -104,8 +126,11 @@ struct MangaDirectorySheet: View {
 
     private func deleteSelectedChapters() {
         let selectedTIDs = selectedChapterTIDs
-        guard !selectedTIDs.isEmpty,
-              selectedTIDs.contains(panel.currentChapterTID ?? "") == false else {
+        guard !selectedTIDs.isEmpty else {
+            return
+        }
+        if selectedTIDs.contains(panel.currentChapterTID ?? "") {
+            isCurrentChapterDeleteAlertPresented = true
             return
         }
         onDeleteChapters(selectedTIDs)
@@ -115,6 +140,79 @@ struct MangaDirectorySheet: View {
     private func exitSelectionMode() {
         isSelecting = false
         selectedChapterTIDs.removeAll()
+    }
+}
+
+private struct MangaDirectorySelectionToolbarCapsule: View {
+    let selectedChapterTIDs: Set<String>
+    let onDelete: () -> Void
+    let onCache: () -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            toolbarButton(
+                title: L10n.string("common.delete"),
+                systemImage: "trash",
+                role: .destructive,
+                isEnabled: canDelete,
+                action: onDelete
+            )
+            .disabled(!canDelete)
+
+            toolbarButton(
+                title: L10n.string("reader.cache_action.cache"),
+                systemImage: "square.and.arrow.down",
+                role: nil,
+                isEnabled: canCache,
+                action: onCache
+            )
+            .disabled(!canCache)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+    }
+
+    private var canDelete: Bool {
+        !selectedChapterTIDs.isEmpty
+    }
+
+    private var canCache: Bool {
+        !selectedChapterTIDs.isEmpty
+    }
+
+    private func toolbarButton(
+        title: String,
+        systemImage: String,
+        role: ButtonRole?,
+        isEnabled: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(role: role, action: action) {
+            toolbarLabel(title: title, systemImage: systemImage, role: role)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(title)
+        .opacity(isEnabled ? 1 : 0.35)
+    }
+
+    private func toolbarLabel(
+        title: String,
+        systemImage: String,
+        role: ButtonRole?
+    ) -> some View {
+        VStack(spacing: 3) {
+            Image(systemName: systemImage)
+                .font(.system(size: 18, weight: .regular))
+                .frame(width: 24, height: 22)
+
+            Text(title)
+                .font(.caption2)
+                .lineLimit(1)
+                .minimumScaleFactor(0.78)
+        }
+        .frame(width: 66)
+        .foregroundStyle(role == .destructive ? Color.red : Color.primary)
+        .contentShape(Rectangle())
     }
 }
 
@@ -215,6 +313,7 @@ private struct MangaDirectoryChapterSection: View {
                     }
                 }
             }
+            .frame(height: 38, alignment: .center)
 
             if chapters.isEmpty {
                 ContentUnavailableView(L10n.string("manga.no_chapters"), systemImage: "books.vertical")
@@ -420,7 +519,6 @@ private struct MangaDirectoryChapterRow: View {
 
 private struct MangaDirectorySelectionActionBar: View {
     let selectedChapterTIDs: Set<String>
-    let currentChapterTID: String?
     let onDelete: () -> Void
     let onCache: () -> Void
 
@@ -455,9 +553,7 @@ private struct MangaDirectorySelectionActionBar: View {
     }
 
     private var canDelete: Bool {
-        guard !selectedChapterTIDs.isEmpty else { return false }
-        guard let currentChapterTID else { return true }
-        return !selectedChapterTIDs.contains(currentChapterTID)
+        !selectedChapterTIDs.isEmpty
     }
 
     private var canCache: Bool {
