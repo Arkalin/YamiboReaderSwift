@@ -93,6 +93,15 @@ public enum MangaTitleCleaner {
             return base + (suffix / 100)
         }
 
+        if let circledSuffix = HTMLTextExtractor.firstMatch(
+            pattern: #"(?:^|[^\d.])(\d+(?:\.\d+)?)\s*([①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳⓪]+)(?!.*\d)"#,
+            in: cleaned
+        ),
+           let base = circledSuffix.dropFirst().first.flatMap(Double.init),
+           let suffix = circledSuffix.dropFirst().dropFirst().first.flatMap(circledDigitsValue) {
+            return base + (suffix / 100)
+        }
+
         let patterns = [
             #"第\s*(\d+(?:\.\d+)?)\s*[-—]\s*(\d+(?:\.\d+)?)"#,
             #"(?:第)?\s*(\d+(?:\.\d+)?)\s*[话話织回章节幕折更]"#,

@@ -45,7 +45,8 @@ struct MangaDirectorySheet: View {
                         isSelecting: $isSelecting,
                         selectedChapterTIDs: $selectedChapterTIDs,
                         onSortOrderChange: onSortOrderChange,
-                        onSelectChapter: onSelectChapter
+                        onSelectChapter: onSelectChapter,
+                        onDeleteChapter: deleteChapter
                     )
                 }
                 .padding(16)
@@ -135,6 +136,14 @@ struct MangaDirectorySheet: View {
         }
         onDeleteChapters(selectedTIDs)
         exitSelectionMode()
+    }
+
+    private func deleteChapter(_ chapter: MangaChapter) {
+        if chapter.tid == panel.currentChapterTID {
+            isCurrentChapterDeleteAlertPresented = true
+            return
+        }
+        onDeleteChapters([chapter.tid])
     }
 
     private func exitSelectionMode() {
@@ -286,6 +295,7 @@ private struct MangaDirectoryChapterSection: View {
     @Binding var selectedChapterTIDs: Set<String>
     let onSortOrderChange: (MangaDirectorySortOrder) -> Void
     let onSelectChapter: (MangaChapter) -> Void
+    let onDeleteChapter: (MangaChapter) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -328,7 +338,9 @@ private struct MangaDirectoryChapterSection: View {
                             isSelecting: isSelecting,
                             isSelected: selectedChapterTIDs.contains(chapter.tid),
                             onSelectChapter: onSelectChapter,
-                            onToggleSelection: toggleSelection
+                            onToggleSelection: toggleSelection,
+                            onBeginSelection: beginSelection,
+                            onDeleteChapter: onDeleteChapter
                         )
                     }
                 }
@@ -358,6 +370,12 @@ private struct MangaDirectoryChapterSection: View {
         } else {
             selectedChapterTIDs.insert(chapter.tid)
         }
+    }
+
+    private func beginSelection(_ chapter: MangaChapter) {
+        guard !isSelecting else { return }
+        isSelecting = true
+        selectedChapterTIDs.insert(chapter.tid)
     }
 
     private func exitSelectionMode() {
@@ -428,65 +446,92 @@ private struct MangaDirectoryChapterRow: View {
     let isSelected: Bool
     let onSelectChapter: (MangaChapter) -> Void
     let onToggleSelection: (MangaChapter) -> Void
+    let onBeginSelection: (MangaChapter) -> Void
+    let onDeleteChapter: (MangaChapter) -> Void
 
     @State private var isExpanded = false
     @State private var isTruncated = false
+    @State private var isDeleteRevealed = false
+    @State private var swipeOffset: CGFloat = 0
+    @State private var isSwipeActive = false
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            Text(MangaChapterDisplayFormatter.displayNumber(for: chapter))
-                .font(.caption.weight(.bold))
-                .foregroundStyle(numberColor)
-                .frame(width: 34, alignment: .leading)
+        ZStack(alignment: .trailing) {
+            swipeDeleteButton
+                .opacity(isDeleteActionVisible ? 1 : 0)
+                .allowsHitTesting(isDeleteActionVisible)
 
-            VStack(alignment: .leading, spacing: 6) {
-                TruncationAwareText(
-                    chapter.rawTitle,
-                    font: UIFont.preferredFont(forTextStyle: .subheadline),
-                    lineLimit: isExpanded ? nil : 1,
-                    isTruncated: $isTruncated
-                )
-                .font(.subheadline)
-                .foregroundStyle(titleColor)
+            HStack(alignment: .top, spacing: 12) {
+                Text(MangaChapterDisplayFormatter.displayNumber(for: chapter))
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(numberColor)
+                    .frame(width: 34, alignment: .leading)
 
-                if isTruncated {
-                    Button(isExpanded ? L10n.string("common.collapse") : L10n.string("common.expand")) {
-                        isExpanded.toggle()
+                VStack(alignment: .leading, spacing: 6) {
+                    TruncationAwareText(
+                        chapter.rawTitle,
+                        font: UIFont.preferredFont(forTextStyle: .subheadline),
+                        lineLimit: isExpanded ? nil : 1,
+                        isTruncated: $isTruncated
+                    )
+                    .font(.subheadline)
+                    .foregroundStyle(titleColor)
+
+                    if isTruncated {
+                        Button(isExpanded ? L10n.string("common.collapse") : L10n.string("common.expand")) {
+                            isExpanded.toggle()
+                        }
+                        .font(.caption.weight(.semibold))
+                        .buttonStyle(.plain)
+                        .foregroundStyle(accentColor)
                     }
-                    .font(.caption.weight(.semibold))
-                    .buttonStyle(.plain)
-                    .foregroundStyle(accentColor)
+                }
+
+                Spacer(minLength: 0)
+
+                if isCurrent {
+                    Circle()
+                        .fill(accentColor)
+                        .frame(width: 8, height: 8)
+                        .padding(.top, 6)
                 }
             }
-
-            Spacer(minLength: 0)
-
-            if isCurrent {
-                Circle()
-                    .fill(accentColor)
-                    .frame(width: 8, height: 8)
-                    .padding(.top, 6)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(backgroundColor)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(isSelecting && isSelected ? Color.orange : Color.clear, lineWidth: 2)
+            )
+            .contentShape(Rectangle())
+            .offset(x: rowOffset)
+            .animation(.spring(response: 0.24, dampingFraction: 0.72), value: isSelected)
+            .onTapGesture {
+                if isDeleteRevealed {
+                    closeDeleteAction()
+                    return
+                }
+                if isSelecting {
+                    onToggleSelection(chapter)
+                } else {
+                    guard !isCurrent else { return }
+                    onSelectChapter(chapter)
+                }
+            }
+            .onLongPressGesture {
+                closeDeleteAction()
+                onBeginSelection(chapter)
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(backgroundColor)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(isSelecting && isSelected ? Color.orange : Color.clear, lineWidth: 2)
-        )
-        .contentShape(Rectangle())
-        .animation(.spring(response: 0.24, dampingFraction: 0.72), value: isSelected)
-        .onTapGesture {
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .simultaneousGesture(swipeGesture)
+        .onChange(of: isSelecting) { _, isSelecting in
             if isSelecting {
-                onToggleSelection(chapter)
-            } else {
-                guard !isCurrent else { return }
-                onSelectChapter(chapter)
+                closeDeleteAction()
             }
         }
     }
@@ -514,6 +559,96 @@ private struct MangaDirectoryChapterRow: View {
             return Color.orange.opacity(isSelecting && !isSelected ? 0.06 : 0.12)
         }
         return Color(uiColor: .secondarySystemGroupedBackground)
+    }
+
+    private var swipeActionWidth: CGFloat {
+        76
+    }
+
+    private var rowOffset: CGFloat {
+        isSelecting ? 0 : swipeOffset
+    }
+
+    private var swipeGesture: some Gesture {
+        DragGesture(minimumDistance: 12, coordinateSpace: .local)
+            .onChanged { value in
+                if !isSwipeActive {
+                    guard shouldStartSwipe(value.translation) else { return }
+                    isSwipeActive = true
+                }
+
+                var transaction = Transaction()
+                transaction.disablesAnimations = true
+                withTransaction(transaction) {
+                    swipeOffset = clampedSwipeOffset(for: value.translation)
+                }
+            }
+            .onEnded { value in
+                defer {
+                    isSwipeActive = false
+                }
+
+                guard isSwipeActive else { return }
+                let proposedOffset = clampedSwipeOffset(for: value.translation)
+                withAnimation(.spring(response: 0.24, dampingFraction: 0.82)) {
+                    let shouldReveal = proposedOffset < -swipeActionWidth * 0.5
+                    isDeleteRevealed = shouldReveal
+                    swipeOffset = shouldReveal ? -swipeActionWidth : 0
+                }
+            }
+    }
+
+    private var swipeDeleteButton: some View {
+        Button(role: .destructive) {
+            closeDeleteAction()
+            onDeleteChapter(chapter)
+        } label: {
+            VStack(spacing: 4) {
+                Image(systemName: "trash")
+                    .font(.caption.weight(.semibold))
+
+                Text(L10n.string("common.delete"))
+                    .font(.caption2.weight(.semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.78)
+            }
+            .frame(width: swipeActionWidth)
+            .frame(maxHeight: .infinity)
+            .foregroundStyle(canDeleteFromSwipe ? Color.white : Color.secondary)
+            .background(canDeleteFromSwipe ? Color.red : Color(uiColor: .tertiarySystemFill))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!canDeleteFromSwipe || !isDeleteActionVisible)
+        .accessibilityLabel(L10n.string("common.delete"))
+    }
+
+    private var canDeleteFromSwipe: Bool {
+        !isCurrent && !isSelecting
+    }
+
+    private var isDeleteActionVisible: Bool {
+        !isSelecting && (isDeleteRevealed || swipeOffset < -1)
+    }
+
+    private func shouldStartSwipe(_ translation: CGSize) -> Bool {
+        guard !isSelecting else { return false }
+        guard abs(translation.width) > abs(translation.height) * 1.25 else { return false }
+        return translation.width < 0 || isDeleteRevealed
+    }
+
+    private func clampedSwipeOffset(for translation: CGSize) -> CGFloat {
+        let baseOffset = isDeleteRevealed ? -swipeActionWidth : 0
+        let proposedOffset = baseOffset + translation.width
+        return min(0, max(-swipeActionWidth, proposedOffset))
+    }
+
+    private func closeDeleteAction() {
+        guard isDeleteRevealed || swipeOffset != 0 else { return }
+        withAnimation(.spring(response: 0.24, dampingFraction: 0.82)) {
+            isDeleteRevealed = false
+            swipeOffset = 0
+        }
     }
 }
 

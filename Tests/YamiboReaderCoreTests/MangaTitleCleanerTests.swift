@@ -18,6 +18,16 @@ import Testing
     #expect(MangaChapterDisplayFormatter.displayNumber(rawTitle: "第03话①", chapterNumber: 3.01) == "3-1")
 }
 
+@Test func chapterNumberMatchesBareTrailingCircledSuffix() async throws {
+    let firstTitle = "【提灯喵汉化组】【あおのなち】与你相恋到生命尽头 17①"
+    let secondTitle = "【提灯喵汉化组】【あおのなち】与你相恋到生命尽头 17②"
+
+    #expect(MangaTitleCleaner.extractChapterNumber(firstTitle) == 17.01)
+    #expect(MangaTitleCleaner.extractChapterNumber(secondTitle) == 17.02)
+    #expect(MangaChapterDisplayFormatter.displayNumber(rawTitle: firstTitle, chapterNumber: 17.01) == "17-1")
+    #expect(MangaChapterDisplayFormatter.displayNumber(rawTitle: secondTitle, chapterNumber: 17.02) == "17-2")
+}
+
 @Test func searchKeywordKeepsAuthorAndBookName() async throws {
     #expect(MangaTitleCleaner.searchKeyword("【作者名】作品标题 - 中文百合漫画区") == "作者名 作品标题")
 }
