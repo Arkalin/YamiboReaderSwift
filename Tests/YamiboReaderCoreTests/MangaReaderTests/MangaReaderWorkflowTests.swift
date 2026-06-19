@@ -380,6 +380,36 @@ struct MangaReaderTestsWorkflow {
         #expect(await repository.tagDirectoryRequests == [["12"]])
     }
 
+    @Test func workflowDeletesDirectoryChaptersPreservingCurrentReadingPosition() async throws {
+        let documents = try ["699", "700", "701"].map { try makeWorkflowDocument(tid: $0, pageCount: 1) }
+        let documentsByURL = Dictionary(uniqueKeysWithValues: documents.map { ($0.chapterURL, $0) })
+        let directory = makeWorkflowDirectory(
+            name: "测试漫画",
+            strategy: .links,
+            sourceKey: "测试漫画",
+            tids: ["699", "700", "701"]
+        )
+        let store = RecordingMangaDirectoryStore(directories: [directory])
+        let workflow = MangaReaderWorkflow(
+            context: try makeWorkflowContext(tid: "700", directoryName: "测试漫画"),
+            documentLoader: RecordingMangaChapterDocumentLoader(documents: documentsByURL),
+            directoryRepository: RecordingMangaDirectoryRepository(output: .failure(.offline)),
+            directoryStore: store
+        )
+
+        _ = await workflow.prepare()
+        _ = await workflow.prefetchAdjacentChaptersIfNeeded(around: 0)
+        let presentation = try await workflow.deleteDirectoryChapters(tids: ["699", "701"])
+
+        let loaded = try #require(loadedPresentation(in: presentation))
+        #expect(loaded.directoryPanel.displayChapters.map(\.tid) == ["700"])
+        #expect(loaded.pages.map(\.id) == ["700#0"])
+        #expect(loaded.currentPage?.id == "700#0")
+        #expect(loaded.readingPosition == MangaReadingPosition(tid: "700", localIndex: 0))
+        let saved = try #require(await store.savedDirectories.last)
+        #expect(saved.chapters.map(\.tid) == ["700"])
+    }
+
     @Test func workflowJumpsToAlreadyLoadedChapterWithDirectViewportPlacement() async throws {
         let document700 = try makeWorkflowDocument(tid: "700", pageCount: 1)
         let document701 = try makeWorkflowDocument(tid: "701", pageCount: 1)

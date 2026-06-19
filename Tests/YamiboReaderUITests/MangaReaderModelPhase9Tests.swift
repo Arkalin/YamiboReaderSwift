@@ -92,6 +92,39 @@ final class MangaReaderModelPhase9Tests: XCTestCase {
         XCTAssertFalse(loaded.pages.map(\.tid).contains("701"))
     }
 
+    func testDirectoryChapterDeleteSupersedesInFlightAdjacentPrefetch() async throws {
+        let document700 = try makePhase9Document(tid: "700", pageCount: 10)
+        let document701 = try makePhase9Document(tid: "701", pageCount: 1)
+        let delayedURL = document701.chapterURL
+        let loader = Phase9DocumentLoader(
+            documents: [document700, document701],
+            delayedURLs: [delayedURL]
+        )
+        let fixture = try await makePhase9Fixture(
+            document: document700,
+            loader: loader,
+            directory: makePhase9Directory(tids: ["700", "701"])
+        )
+
+        await fixture.model.prepare()
+        fixture.model.updateCurrentPage(globalIndex: 8)
+        try await waitForPhase9 {
+            await loader.hasRequested(delayedURL)
+        }
+
+        await fixture.model.deleteDirectoryChapters(tids: ["701"])
+        await loader.release(delayedURL)
+        try await Task.sleep(nanoseconds: 100_000_000)
+
+        guard case let .loaded(loaded) = fixture.model.presentation.state else {
+            XCTFail("Expected loaded presentation")
+            return
+        }
+        XCTAssertEqual(loaded.directoryPanel.displayChapters.map(\.tid), ["700"])
+        XCTAssertEqual(loaded.pages.map(\.id), (0..<10).map { "700#\($0)" })
+        XCTAssertFalse(loaded.pages.map(\.tid).contains("701"))
+    }
+
     func testAdjacentPrefetchDoesNotDuplicateUnchangedProgress() async throws {
         let progressAdapter = RecordingPhase9ProgressAdapter()
         let document700 = try makePhase9Document(tid: "700", pageCount: 10)

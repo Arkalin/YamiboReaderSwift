@@ -11,6 +11,8 @@ final class MangaReaderModelPhase8Tests: XCTestCase {
         XCTAssertTrue(source.contains("MangaDirectorySheet("))
         XCTAssertTrue(source.contains("viewportPlacement: loaded.viewportPlacement"))
         XCTAssertTrue(source.contains("await model.jumpToChapter(chapter)"))
+        XCTAssertTrue(source.contains("onDeleteChapters:"))
+        XCTAssertTrue(source.contains("await model.deleteDirectoryChapters(tids: selectedTIDs)"))
     }
 
     func testDirectorySheetIsPresentationDriven() throws {
@@ -19,6 +21,14 @@ final class MangaReaderModelPhase8Tests: XCTestCase {
         XCTAssertTrue(source.contains("let panel: MangaDirectoryPanelPresentation"))
         XCTAssertTrue(source.contains("ForEach(chapters)"))
         XCTAssertTrue(source.contains("onSaveCorrection(trimmedDraft)"))
+        XCTAssertTrue(source.contains("let onDeleteChapters: (Set<String>) -> Void"))
+        XCTAssertTrue(source.contains("@State private var isSelecting = false"))
+        XCTAssertTrue(source.contains("@State private var selectedChapterTIDs: Set<String> = []"))
+        XCTAssertTrue(source.contains("L10n.string(\"common.invert_selection\")"))
+        XCTAssertTrue(source.contains("L10n.string(\"common.done\")"))
+        XCTAssertTrue(source.contains("MangaDirectorySelectionActionBar("))
+        XCTAssertTrue(source.contains(".disabled(!panel.isUpdateButtonEnabled || isSelecting)"))
+        XCTAssertTrue(source.contains(".sensoryFeedback(.selection, trigger: selectedChapterTIDs)"))
         XCTAssertFalse(source.contains("@ObservedObject var model"))
     }
 

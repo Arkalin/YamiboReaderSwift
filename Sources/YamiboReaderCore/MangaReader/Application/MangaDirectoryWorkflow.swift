@@ -232,6 +232,26 @@ public struct MangaDirectoryWorkflow: Sendable {
         return merged
     }
 
+    public func deleteChapters(
+        _ currentDirectory: MangaDirectory,
+        tids: Set<String>
+    ) async throws -> MangaDirectory {
+        let targetTIDs = Set(tids.compactMap { normalizedNonEmpty($0) })
+        guard !targetTIDs.isEmpty else { return currentDirectory }
+
+        let latest = try await store.directory(named: currentDirectory.cleanBookName) ?? currentDirectory
+        let remainingChapters = latest.chapters.filter { !targetTIDs.contains($0.tid) }
+        guard remainingChapters.count != latest.chapters.count else {
+            return latest
+        }
+
+        var updated = latest
+        updated.chapters = remainingChapters
+        updated.lastUpdatedAt = configuration.now()
+        try await store.saveDirectory(updated)
+        return updated
+    }
+
     public func editDraft(
         for directory: MangaDirectory,
         currentTID: String?

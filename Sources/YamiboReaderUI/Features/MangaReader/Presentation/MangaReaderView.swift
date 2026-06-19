@@ -74,6 +74,9 @@ public struct MangaReaderView: View {
                         onSaveCorrection: { draft in
                             Task { await model.renameDirectory(with: draft) }
                         },
+                        onDeleteChapters: { selectedTIDs in
+                            Task { await model.deleteDirectoryChapters(tids: selectedTIDs) }
+                        },
                         onSelectChapter: { chapter in
                             isDirectoryPresented = false
                             Task { await model.jumpToChapter(chapter) }

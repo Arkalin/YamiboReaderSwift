@@ -239,6 +239,30 @@ public final class MangaReaderModel: ObservableObject {
         )
     }
 
+    public func deleteDirectoryChapters(tids: Set<String>) async {
+        guard case let .loaded(loaded) = presentation.state else { return }
+        let targetTIDs = Set(tids.compactMap(Self.normalizedNonEmpty))
+        guard !targetTIDs.isEmpty else { return }
+        if let currentChapterTID = loaded.directoryPanel.currentChapterTID,
+           targetTIDs.contains(currentChapterTID) {
+            return
+        }
+
+        automaticDirectoryUpdateTask?.cancel()
+        automaticDirectoryUpdateTask = nil
+        directoryMutationTask?.cancel()
+        invalidateReaderContent()
+        directoryMutationGeneration += 1
+        let generation = directoryMutationGeneration
+        directoryMutationTask = Task { @MainActor [weak self] in
+            await self?.performDeleteDirectoryChapters(
+                tids: targetTIDs,
+                mutationGeneration: generation
+            )
+        }
+        await directoryMutationTask?.value
+    }
+
     public func jumpToChapter(_ chapter: MangaChapter) async {
         chapterJumpTask?.cancel()
         invalidateReaderContent()
@@ -351,6 +375,33 @@ public final class MangaReaderModel: ObservableObject {
             _ = try await workflow.renameDirectory(cleanBookName: cleanBookName, searchKeyword: searchKeyword)
             guard !Task.isCancelled, directoryMutationGeneration == mutationGeneration else { return }
             publishPresentation(workflow.presentation, previousProgressSnapshot: previousProgressSnapshot)
+            refreshDirectoryPanelTiming(errorMessage: nil)
+        } catch is CancellationError {
+            guard directoryMutationGeneration == mutationGeneration else { return }
+            refreshDirectoryPanelTiming(errorMessage: currentDirectoryPanelErrorMessage)
+        } catch {
+            guard !Task.isCancelled, directoryMutationGeneration == mutationGeneration else { return }
+            refreshDirectoryPanelTiming(errorMessage: error.localizedDescription)
+        }
+    }
+
+    private func performDeleteDirectoryChapters(
+        tids: Set<String>,
+        mutationGeneration: Int
+    ) async {
+        guard let workflow else { return }
+        let previousProgressSnapshot = progressSnapshot(from: presentation)
+        defer {
+            if directoryMutationGeneration == mutationGeneration {
+                directoryMutationTask = nil
+            }
+        }
+
+        setDirectoryPanelCommandState(isUpdating: true, errorMessage: nil)
+        do {
+            let nextPresentation = try await workflow.deleteDirectoryChapters(tids: tids)
+            guard !Task.isCancelled, directoryMutationGeneration == mutationGeneration else { return }
+            publishPresentation(nextPresentation, previousProgressSnapshot: previousProgressSnapshot)
             refreshDirectoryPanelTiming(errorMessage: nil)
         } catch is CancellationError {
             guard directoryMutationGeneration == mutationGeneration else { return }
@@ -582,6 +633,11 @@ public final class MangaReaderModel: ObservableObject {
     private static func normalizedBrightness(_ brightness: Double) -> Double {
         guard brightness.isFinite else { return 1.0 }
         return min(1.5, max(0.25, brightness))
+    }
+
+    private static func normalizedNonEmpty(_ value: String) -> String? {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     private static func presentationTitle(for context: MangaLaunchContext) -> String {
