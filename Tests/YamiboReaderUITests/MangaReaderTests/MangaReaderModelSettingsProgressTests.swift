@@ -3,7 +3,7 @@ import XCTest
 @testable import YamiboReaderUI
 
 @MainActor
-final class MangaReaderModelPhase7Tests: XCTestCase {
+final class MangaReaderModelSettingsProgressTests: XCTestCase {
     func testPrepareExposesPersistedMangaSettingsWithClampedBrightness() async throws {
         let fixture = try await makeFixture(
             appSettings: AppSettings(
@@ -244,7 +244,7 @@ final class MangaReaderModelPhase7Tests: XCTestCase {
         XCTAssertTrue(source.contains("Color.white.opacity(min(0.18, delta * 0.18))"))
     }
 
-    func testPhase7StillUsesVerticalViewportWithoutPagedOrZoomImplementation() throws {
+    func testReaderStillUsesVerticalViewportWithoutPagedOrZoomImplementation() throws {
         let source = try sourceFile("Sources/YamiboReaderUI/Features/MangaReader/Presentation/MangaReaderView.swift")
 
         XCTAssertTrue(source.contains("MangaVerticalCollectionViewport("))
@@ -253,7 +253,7 @@ final class MangaReaderModelPhase7Tests: XCTestCase {
     }
 }
 
-private struct MangaReaderModelPhase7Fixture {
+private struct MangaReaderModelSettingsProgressFixture {
     let model: MangaReaderModel
     let context: MangaLaunchContext
     let originalURL: URL
@@ -268,7 +268,7 @@ private func makeFixture(
     appSettings: AppSettings = AppSettings(),
     favoriteStore: FavoriteStore = FavoriteStore(key: "\(UUID().uuidString).favorites"),
     progressSync: ProgressSyncModule? = nil
-) async throws -> MangaReaderModelPhase7Fixture {
+) async throws -> MangaReaderModelSettingsProgressFixture {
     let keyPrefix = UUID().uuidString
     let settingsStore = SettingsStore(key: "\(keyPrefix).settings")
     let resumeRouteStore = ReaderResumeRouteStore(key: "\(keyPrefix).resume")
@@ -340,7 +340,7 @@ private func makeFixture(
         dependencies: dependencies
     )
 
-    return MangaReaderModelPhase7Fixture(
+    return MangaReaderModelSettingsProgressFixture(
         model: model,
         context: context,
         originalURL: originalURL,

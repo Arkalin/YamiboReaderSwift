@@ -7,8 +7,8 @@ import Testing
 import UIKit
 #endif
 
-@Suite("MangaReaderTests: Phase 6")
-struct MangaReaderTestsPhase6 {
+@Suite("MangaReaderTests: Presentation Infrastructure")
+struct MangaReaderPresentationInfrastructureTests {
     @Test func verticalViewportUsesUIKitCompositionalLayout() throws {
         let source = try sourceFile("Sources/YamiboReaderUI/Features/MangaReader/Presentation/MangaVerticalCollectionViewport.swift")
 
