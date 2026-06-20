@@ -93,7 +93,7 @@ final class ReaderLoadingOverlayPresentationTests: XCTestCase {
         let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let source = try String(
             contentsOf: repositoryRoot
-                .appendingPathComponent("Sources/YamiboReaderUI/Features/NovelReader/Container/ReaderContainerView.swift"),
+                .appendingPathComponent("Sources/YamiboReaderUI/Features/Reader/NovelReader/Container/ReaderContainerView.swift"),
             encoding: .utf8
         )
         let body = try XCTUnwrap(functionBody(named: "content(topInset", in: source))
@@ -105,7 +105,7 @@ final class ReaderLoadingOverlayPresentationTests: XCTestCase {
         let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let source = try String(
             contentsOf: repositoryRoot
-                .appendingPathComponent("Sources/YamiboReaderUI/Features/NovelReader/Container/ReaderContainerView.swift"),
+                .appendingPathComponent("Sources/YamiboReaderUI/Features/Reader/NovelReader/Container/ReaderContainerView.swift"),
             encoding: .utf8
         )
 
@@ -118,7 +118,7 @@ final class ReaderLoadingOverlayPresentationTests: XCTestCase {
         let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let source = try String(
             contentsOf: repositoryRoot
-                .appendingPathComponent("Sources/YamiboReaderUI/Features/NovelReader/Container/ReaderContainerView.swift"),
+                .appendingPathComponent("Sources/YamiboReaderUI/Features/Reader/NovelReader/Container/ReaderContainerView.swift"),
             encoding: .utf8
         )
 

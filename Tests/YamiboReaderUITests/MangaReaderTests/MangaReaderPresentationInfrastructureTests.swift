@@ -10,7 +10,7 @@ import UIKit
 @Suite("MangaReaderTests: Presentation Infrastructure")
 struct MangaReaderPresentationInfrastructureTests {
     @Test func verticalViewportUsesUIKitCompositionalLayout() throws {
-        let source = try sourceFile("Sources/YamiboReaderUI/Features/MangaReader/Presentation/MangaVerticalCollectionViewport.swift")
+        let source = try sourceFile("Sources/YamiboReaderUI/Features/Reader/MangaReader/Presentation/MangaVerticalCollectionViewport.swift")
 
         #expect(source.contains("struct MangaVerticalCollectionViewport: UIViewRepresentable"))
         #expect(source.contains("UICollectionView"))
@@ -19,7 +19,7 @@ struct MangaReaderPresentationInfrastructureTests {
     }
 
     @Test func readerLoadedStateDoesNotUseDiagnosticScrollList() throws {
-        let source = try sourceFile("Sources/YamiboReaderUI/Features/MangaReader/Presentation/MangaReaderView.swift")
+        let source = try sourceFile("Sources/YamiboReaderUI/Features/Reader/MangaReader/Presentation/MangaReaderView.swift")
 
         #expect(source.contains("MangaVerticalCollectionViewport("))
         #expect(!source.contains("ScrollView"))
@@ -30,7 +30,7 @@ struct MangaReaderPresentationInfrastructureTests {
     }
 
     @Test func nonIOSRootTabViewDoesNotPresentMangaHost() throws {
-        let source = try sourceFile("Sources/YamiboReaderUI/App/RootTabView.swift")
+        let source = try sourceFile("Sources/YamiboReaderUI/AppEntry/RootTabView.swift")
         let nonIOSBranch = try #require(source.range(of: "#else\n        content"))
         let branchTail = String(source[nonIOSBranch.lowerBound...])
         let branchEnd = try #require(branchTail.range(of: "#endif"))
@@ -41,13 +41,13 @@ struct MangaReaderPresentationInfrastructureTests {
     }
 
     @Test func webFallbackViewIsIOSOnly() throws {
-        let source = try sourceFile("Sources/YamiboReaderUI/Features/MangaReader/WebFallback/MangaWebFallbackView.swift")
+        let source = try sourceFile("Sources/YamiboReaderUI/Features/Reader/MangaReader/WebFallback/MangaWebFallbackView.swift")
 
         #expect(source.contains("#if os(iOS)\npublic struct MangaWebFallbackView"))
     }
 
     @Test func imagePipelineSourceCachesSuccessesAndDeduplicatesInFlightLoads() throws {
-        let source = try sourceFile("Sources/YamiboReaderUI/Features/MangaReader/Presentation/MangaImagePipeline.swift")
+        let source = try sourceFile("Sources/YamiboReaderUI/Features/Reader/MangaReader/Presentation/MangaImagePipeline.swift")
 
         #expect(source.contains("NSCache<NSString, UIImage>"))
         #expect(source.contains("inFlightContinuations"))
@@ -56,7 +56,7 @@ struct MangaReaderPresentationInfrastructureTests {
     }
 
     @Test func hiddenFailureStackIsNotMeasuredDuringLayout() throws {
-        let source = try sourceFile("Sources/YamiboReaderUI/Features/MangaReader/Presentation/MangaVerticalCollectionViewport.swift")
+        let source = try sourceFile("Sources/YamiboReaderUI/Features/Reader/MangaReader/Presentation/MangaVerticalCollectionViewport.swift")
         let guardRange = try #require(source.range(of: "guard !failureStack.isHidden else"))
         let fittingRange = try #require(source.range(of: "failureStack.systemLayoutSizeFitting(fittingSize)"))
         let hiddenGuardBody = String(source[guardRange.lowerBound..<fittingRange.lowerBound])

@@ -5,7 +5,7 @@ import XCTest
 @MainActor
 final class MangaReaderDirectoryPanelTests: XCTestCase {
     func testReaderViewWiresFullscreenControlsSheetAndViewportPlacement() throws {
-        let source = try mangaReaderSourceFile("Sources/YamiboReaderUI/Features/MangaReader/Presentation/MangaReaderView.swift")
+        let source = try mangaReaderSourceFile("Sources/YamiboReaderUI/Features/Reader/MangaReader/Presentation/MangaReaderView.swift")
 
         XCTAssertTrue(source.contains("MangaReaderFloatingControls("))
         XCTAssertTrue(source.contains("systemName: \"list.bullet\""))
@@ -21,7 +21,7 @@ final class MangaReaderDirectoryPanelTests: XCTestCase {
     }
 
     func testDirectorySheetIsPresentationDriven() throws {
-        let source = try mangaReaderSourceFile("Sources/YamiboReaderUI/Features/MangaReader/Directory/MangaDirectorySheet.swift")
+        let source = try mangaReaderSourceFile("Sources/YamiboReaderUI/Features/Reader/MangaReader/Directory/MangaDirectorySheet.swift")
 
         XCTAssertTrue(source.contains("let panel: MangaDirectoryPanelPresentation"))
         XCTAssertTrue(source.contains("ForEach(chapters)"))
@@ -59,7 +59,7 @@ final class MangaReaderDirectoryPanelTests: XCTestCase {
     }
 
     func testVerticalViewportAppliesExplicitPlacementWithoutAnimationPolicyInView() throws {
-        let source = try mangaReaderSourceFile("Sources/YamiboReaderUI/Features/MangaReader/Presentation/MangaVerticalCollectionViewport.swift")
+        let source = try mangaReaderSourceFile("Sources/YamiboReaderUI/Features/Reader/MangaReader/Presentation/MangaVerticalCollectionViewport.swift")
 
         XCTAssertTrue(source.contains("let viewportPlacement: MangaReaderViewportPlacement?"))
         XCTAssertTrue(source.contains("placement.revision != lastAppliedPlacementRevision"))

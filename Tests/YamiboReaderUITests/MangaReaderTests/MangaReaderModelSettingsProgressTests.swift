@@ -237,7 +237,7 @@ final class MangaReaderModelSettingsProgressTests: XCTestCase {
     }
 
     func testReaderViewAppliesBrightnessOverlayFromPresentationSettings() throws {
-        let source = try sourceFile("Sources/YamiboReaderUI/Features/MangaReader/Presentation/MangaReaderView.swift")
+        let source = try sourceFile("Sources/YamiboReaderUI/Features/Reader/MangaReader/Presentation/MangaReaderView.swift")
 
         XCTAssertTrue(source.contains("brightnessOverlay(brightness: presentation.settings.brightness)"))
         XCTAssertTrue(source.contains("Color.black.opacity(min(0.7, abs(delta)))"))
@@ -245,7 +245,7 @@ final class MangaReaderModelSettingsProgressTests: XCTestCase {
     }
 
     func testReaderStillUsesVerticalViewportWithoutPagedOrZoomImplementation() throws {
-        let source = try sourceFile("Sources/YamiboReaderUI/Features/MangaReader/Presentation/MangaReaderView.swift")
+        let source = try sourceFile("Sources/YamiboReaderUI/Features/Reader/MangaReader/Presentation/MangaReaderView.swift")
 
         XCTAssertTrue(source.contains("MangaVerticalCollectionViewport("))
         XCTAssertFalse(source.contains("MangaPaged"))

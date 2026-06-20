@@ -195,10 +195,10 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
 
     func testPageCurlViewportUsesUIPageViewControllerAndContainerSelectsIt() throws {
         let containerSource = try joinedSourceFiles([
-            "Sources/YamiboReaderUI/Features/NovelReader/Container/ReaderContainerView.swift"
+            "Sources/YamiboReaderUI/Features/Reader/NovelReader/Container/ReaderContainerView.swift"
         ])
         let pageCurlSource = try joinedSourceFiles([
-            "Sources/YamiboReaderUI/Features/NovelReader/Viewports/ReaderPagedPageCurlViewport.swift"
+            "Sources/YamiboReaderUI/Features/Reader/NovelReader/Viewports/ReaderPagedPageCurlViewport.swift"
         ])
 
         XCTAssertTrue(containerSource.contains("model.settings.pagedTurnStyle == .pageCurl"))
@@ -412,7 +412,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let adapterSource = try String(
             contentsOf: repositoryRoot
-                .appendingPathComponent("Sources/YamiboReaderUI/Features/NovelReader/PlatformAdapters/NovelTextDisplayAdapter.swift"),
+                .appendingPathComponent("Sources/YamiboReaderUI/Features/Reader/NovelReader/PlatformAdapters/NovelTextDisplayAdapter.swift"),
             encoding: .utf8
         )
         let supportSource = try readerSupportSources()
@@ -442,7 +442,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         let supportSource = try readerSupportSources()
         let adapterSource = try String(
             contentsOf: repositoryRoot
-                .appendingPathComponent("Sources/YamiboReaderUI/Features/NovelReader/PlatformAdapters/NovelTextDisplayAdapter.swift"),
+                .appendingPathComponent("Sources/YamiboReaderUI/Features/Reader/NovelReader/PlatformAdapters/NovelTextDisplayAdapter.swift"),
             encoding: .utf8
         )
         let singlePageBody = try XCTUnwrap(typeBody(named: "ReaderPagedCollectionViewport", in: supportSource))
@@ -497,7 +497,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         let settingsSource = try readerSettingsSources()
         let adapterSource = try String(
             contentsOf: URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-                .appendingPathComponent("Sources/YamiboReaderUI/Features/NovelReader/PlatformAdapters/NovelTextDisplayAdapter.swift"),
+                .appendingPathComponent("Sources/YamiboReaderUI/Features/Reader/NovelReader/PlatformAdapters/NovelTextDisplayAdapter.swift"),
             encoding: .utf8
         )
         let previewBody = try XCTUnwrap(typeBody(named: "ReaderBooksPreviewMaskedContent", in: settingsSource))
@@ -519,7 +519,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         )
         let adapterSource = try String(
             contentsOf: repositoryRoot
-                .appendingPathComponent("Sources/YamiboReaderUI/Features/NovelReader/PlatformAdapters/NovelTextDisplayAdapter.swift"),
+                .appendingPathComponent("Sources/YamiboReaderUI/Features/Reader/NovelReader/PlatformAdapters/NovelTextDisplayAdapter.swift"),
             encoding: .utf8
         )
         let referenceSurfaceBody = try XCTUnwrap(
@@ -538,7 +538,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let adapterSource = try String(
             contentsOf: repositoryRoot
-                .appendingPathComponent("Sources/YamiboReaderUI/Features/NovelReader/PlatformAdapters/NovelTextDisplayAdapter.swift"),
+                .appendingPathComponent("Sources/YamiboReaderUI/Features/Reader/NovelReader/PlatformAdapters/NovelTextDisplayAdapter.swift"),
             encoding: .utf8
         )
         let referenceSurfaceBody = try XCTUnwrap(
@@ -582,8 +582,8 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
     func testReaderLifecycleClosesWorkflowAndForwardsMemoryWarnings() throws {
         let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let containerSource = try [
-            "Sources/YamiboReaderUI/Features/NovelReader/Container/ReaderContainerView.swift",
-            "Sources/YamiboReaderUI/Features/NovelReader/Container/ReaderContainerPresentationModifiers.swift",
+            "Sources/YamiboReaderUI/Features/Reader/NovelReader/Container/ReaderContainerView.swift",
+            "Sources/YamiboReaderUI/Features/Reader/NovelReader/Container/ReaderContainerPresentationModifiers.swift",
         ]
         .map { path in
             try String(contentsOf: repositoryRoot.appendingPathComponent(path), encoding: .utf8)
@@ -591,7 +591,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         .joined(separator: "\n")
         let modelSource = try String(
             contentsOf: repositoryRoot
-                .appendingPathComponent("Sources/YamiboReaderUI/Features/NovelReader/Container/ReaderContainerModel.swift"),
+                .appendingPathComponent("Sources/YamiboReaderUI/Features/Reader/NovelReader/Container/ReaderContainerModel.swift"),
             encoding: .utf8
         )
 
@@ -607,7 +607,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let containerSource = try String(
             contentsOf: repositoryRoot
-                .appendingPathComponent("Sources/YamiboReaderUI/Features/NovelReader/Container/ReaderContainerView.swift"),
+                .appendingPathComponent("Sources/YamiboReaderUI/Features/Reader/NovelReader/Container/ReaderContainerView.swift"),
             encoding: .utf8
         )
         let supportSource = try readerSupportSources()
@@ -649,7 +649,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let containerSource = try String(
             contentsOf: repositoryRoot
-                .appendingPathComponent("Sources/YamiboReaderUI/Features/NovelReader/Container/ReaderContainerView.swift"),
+                .appendingPathComponent("Sources/YamiboReaderUI/Features/Reader/NovelReader/Container/ReaderContainerView.swift"),
             encoding: .utf8
         )
         let supportSource = try readerSupportSources()
@@ -668,7 +668,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let containerSource = try String(
             contentsOf: repositoryRoot
-                .appendingPathComponent("Sources/YamiboReaderUI/Features/NovelReader/Container/ReaderContainerView.swift"),
+                .appendingPathComponent("Sources/YamiboReaderUI/Features/Reader/NovelReader/Container/ReaderContainerView.swift"),
             encoding: .utf8
         )
         let supportSource = try readerSupportSources()
@@ -699,7 +699,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let containerSource = try String(
             contentsOf: repositoryRoot
-                .appendingPathComponent("Sources/YamiboReaderUI/Features/NovelReader/Container/ReaderContainerView.swift"),
+                .appendingPathComponent("Sources/YamiboReaderUI/Features/Reader/NovelReader/Container/ReaderContainerView.swift"),
             encoding: .utf8
         )
         let supportSource = try readerSupportSources()
@@ -721,7 +721,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let containerSource = try String(
             contentsOf: repositoryRoot
-                .appendingPathComponent("Sources/YamiboReaderUI/Features/NovelReader/Container/ReaderContainerView.swift"),
+                .appendingPathComponent("Sources/YamiboReaderUI/Features/Reader/NovelReader/Container/ReaderContainerView.swift"),
             encoding: .utf8
         )
         let supportSource = try readerSupportSources()
@@ -741,7 +741,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let containerSource = try String(
             contentsOf: repositoryRoot
-                .appendingPathComponent("Sources/YamiboReaderUI/Features/NovelReader/Container/ReaderContainerView.swift"),
+                .appendingPathComponent("Sources/YamiboReaderUI/Features/Reader/NovelReader/Container/ReaderContainerView.swift"),
             encoding: .utf8
         )
         let supportSource = try readerSupportSources()
@@ -875,17 +875,17 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let controlsSource = try String(
             contentsOf: repositoryRoot
-                .appendingPathComponent("Sources/YamiboReaderUI/Features/NovelReader/Settings/ReaderSettingsControls.swift"),
+                .appendingPathComponent("Sources/YamiboReaderUI/Features/Reader/NovelReader/Settings/ReaderSettingsControls.swift"),
             encoding: .utf8
         )
         let sectionsSource = try String(
             contentsOf: repositoryRoot
-                .appendingPathComponent("Sources/YamiboReaderUI/Features/NovelReader/Settings/ReaderSettingsSections.swift"),
+                .appendingPathComponent("Sources/YamiboReaderUI/Features/Reader/NovelReader/Settings/ReaderSettingsSections.swift"),
             encoding: .utf8
         )
         let viewsSource = try String(
             contentsOf: repositoryRoot
-                .appendingPathComponent("Sources/YamiboReaderUI/Features/NovelReader/Settings/ReaderSettingsViews.swift"),
+                .appendingPathComponent("Sources/YamiboReaderUI/Features/Reader/NovelReader/Settings/ReaderSettingsViews.swift"),
             encoding: .utf8
         )
 
@@ -946,12 +946,12 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let containerSource = try String(
             contentsOf: repositoryRoot
-                .appendingPathComponent("Sources/YamiboReaderUI/Features/NovelReader/Container/ReaderContainerView.swift"),
+                .appendingPathComponent("Sources/YamiboReaderUI/Features/Reader/NovelReader/Container/ReaderContainerView.swift"),
             encoding: .utf8
         )
         let pageCurlSource = try String(
             contentsOf: repositoryRoot
-                .appendingPathComponent("Sources/YamiboReaderUI/Features/NovelReader/Viewports/ReaderPagedPageCurlViewport.swift"),
+                .appendingPathComponent("Sources/YamiboReaderUI/Features/Reader/NovelReader/Viewports/ReaderPagedPageCurlViewport.swift"),
             encoding: .utf8
         )
         let supportSource = try readerSupportSources()
@@ -1429,34 +1429,34 @@ private func functionBody(named name: String, in source: String) -> String? {
 
 private func readerSupportSources() throws -> String {
     try joinedSourceFiles([
-        "Sources/YamiboReaderUI/Features/NovelReader/Container/ReaderSupportViews.swift",
-        "Sources/YamiboReaderUI/Features/NovelReader/Chrome/ReaderProgressPresentation.swift",
-        "Sources/YamiboReaderUI/Features/NovelReader/Chrome/ReaderChromeProgressSnapshot.swift",
-        "Sources/YamiboReaderUI/Features/NovelReader/Chrome/ReaderTopChrome.swift",
-        "Sources/YamiboReaderUI/Features/NovelReader/Chrome/ReaderBottomChrome.swift",
-        "Sources/YamiboReaderUI/Features/NovelReader/Chrome/ReaderChromeControls.swift",
-        "Sources/YamiboReaderUI/Features/NovelReader/Viewports/ReaderViewportContentViews.swift",
-        "Sources/YamiboReaderUI/Features/NovelReader/Viewports/ReaderPagedViewport.swift",
-        "Sources/YamiboReaderUI/Features/NovelReader/Viewports/ReaderPagedCollectionViewport.swift",
-        "Sources/YamiboReaderUI/Features/NovelReader/Viewports/ReaderPresentationSpreadCollectionViewport.swift",
-        "Sources/YamiboReaderUI/Features/NovelReader/Viewports/ReaderPagedTapZones.swift",
-        "Sources/YamiboReaderUI/Features/NovelReader/Viewports/ReaderVerticalViewport.swift",
-        "Sources/YamiboReaderUI/Features/NovelReader/Sheets/ReaderImageBrowserView.swift",
-        "Sources/YamiboReaderUI/Features/NovelReader/Chrome/ReaderProgressCapsules.swift",
-        "Sources/YamiboReaderUI/Features/NovelReader/Sheets/ReaderChapterCatalogSheets.swift",
-        "Sources/YamiboReaderUI/Features/NovelReader/Sheets/ReaderChapterCommentsSheets.swift",
-        "Sources/YamiboReaderUI/Features/NovelReader/Sheets/ReaderWebJumpSheet.swift",
-        "Sources/YamiboReaderUI/Features/NovelReader/Cache/ReaderCacheViews.swift",
+        "Sources/YamiboReaderUI/Features/Reader/NovelReader/Container/ReaderSupportViews.swift",
+        "Sources/YamiboReaderUI/Features/Reader/NovelReader/Chrome/ReaderProgressPresentation.swift",
+        "Sources/YamiboReaderUI/Features/Reader/NovelReader/Chrome/ReaderChromeProgressSnapshot.swift",
+        "Sources/YamiboReaderUI/Features/Reader/NovelReader/Chrome/ReaderTopChrome.swift",
+        "Sources/YamiboReaderUI/Features/Reader/NovelReader/Chrome/ReaderBottomChrome.swift",
+        "Sources/YamiboReaderUI/Features/Reader/NovelReader/Chrome/ReaderChromeControls.swift",
+        "Sources/YamiboReaderUI/Features/Reader/NovelReader/Viewports/ReaderViewportContentViews.swift",
+        "Sources/YamiboReaderUI/Features/Reader/NovelReader/Viewports/ReaderPagedViewport.swift",
+        "Sources/YamiboReaderUI/Features/Reader/NovelReader/Viewports/ReaderPagedCollectionViewport.swift",
+        "Sources/YamiboReaderUI/Features/Reader/NovelReader/Viewports/ReaderPresentationSpreadCollectionViewport.swift",
+        "Sources/YamiboReaderUI/Features/Reader/NovelReader/Viewports/ReaderPagedTapZones.swift",
+        "Sources/YamiboReaderUI/Features/Reader/NovelReader/Viewports/ReaderVerticalViewport.swift",
+        "Sources/YamiboReaderUI/Features/Reader/NovelReader/Sheets/ReaderImageBrowserView.swift",
+        "Sources/YamiboReaderUI/Features/Reader/NovelReader/Chrome/ReaderProgressCapsules.swift",
+        "Sources/YamiboReaderUI/Features/Reader/NovelReader/Sheets/ReaderChapterCatalogSheets.swift",
+        "Sources/YamiboReaderUI/Features/Reader/NovelReader/Sheets/ReaderChapterCommentsSheets.swift",
+        "Sources/YamiboReaderUI/Features/Reader/NovelReader/Sheets/ReaderWebJumpSheet.swift",
+        "Sources/YamiboReaderUI/Features/Reader/NovelReader/Cache/ReaderCacheViews.swift",
     ])
 }
 
 private func readerSettingsSources() throws -> String {
     try joinedSourceFiles([
-        "Sources/YamiboReaderUI/Features/NovelReader/Settings/ReaderSettingsViews.swift",
-        "Sources/YamiboReaderUI/Features/NovelReader/Settings/ReaderSettingsHeroViews.swift",
-        "Sources/YamiboReaderUI/Features/NovelReader/Settings/ReaderSettingsPalette.swift",
-        "Sources/YamiboReaderUI/Features/NovelReader/Settings/ReaderSettingsSections.swift",
-        "Sources/YamiboReaderUI/Features/NovelReader/Settings/ReaderSettingsControls.swift",
+        "Sources/YamiboReaderUI/Features/Reader/NovelReader/Settings/ReaderSettingsViews.swift",
+        "Sources/YamiboReaderUI/Features/Reader/NovelReader/Settings/ReaderSettingsHeroViews.swift",
+        "Sources/YamiboReaderUI/Features/Reader/NovelReader/Settings/ReaderSettingsPalette.swift",
+        "Sources/YamiboReaderUI/Features/Reader/NovelReader/Settings/ReaderSettingsSections.swift",
+        "Sources/YamiboReaderUI/Features/Reader/NovelReader/Settings/ReaderSettingsControls.swift",
     ])
 }
 
