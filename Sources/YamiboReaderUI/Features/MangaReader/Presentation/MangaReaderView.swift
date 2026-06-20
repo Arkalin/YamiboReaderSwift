@@ -2,6 +2,8 @@ import SwiftUI
 import YamiboReaderCore
 
 #if os(iOS)
+import UIKit
+
 public struct MangaReaderView: View {
     private let context: MangaLaunchContext
     private let appModel: YamiboAppModel
@@ -18,7 +20,9 @@ public struct MangaReaderView: View {
     }
 
     public var body: some View {
-        NavigationStack {
+        GeometryReader { proxy in
+            let topInset = max(proxy.safeAreaInsets.top, windowSafeAreaInsets.top)
+
             MangaReaderPresentationContent(
                 presentation: model.presentation,
                 imagePipeline: model.imagePipeline,
@@ -26,6 +30,17 @@ public struct MangaReaderView: View {
                     model.updateCurrentPage(globalIndex: globalIndex)
                 }
             )
+            .ignoresSafeArea()
+            .overlay(alignment: .top) {
+                MangaReaderFloatingControls(
+                    topInset: topInset,
+                    onClose: closeReader,
+                    onShowDirectory: {
+                        isDirectoryPresented = true
+                    },
+                    onOpenOriginalPost: openOriginalPost
+                )
+            }
             .task {
                 await model.prepare()
             }
@@ -34,60 +49,35 @@ public struct MangaReaderView: View {
                     await model.saveProgress()
                 }
             }
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button {
-                        closeReader()
-                    } label: {
-                        Label(L10n.string("common.close"), systemImage: "xmark")
+        }
+        .background(Color.black.ignoresSafeArea())
+        .statusBar(hidden: true)
+        .sheet(isPresented: $isDirectoryPresented) {
+            if case let .loaded(loaded) = model.presentation.state {
+                MangaDirectorySheet(
+                    panel: loaded.directoryPanel,
+                    onSortOrderChange: { sortOrder in
+                        var settings = model.presentation.settings
+                        settings.directorySortOrder = sortOrder
+                        model.applySettings(settings)
+                    },
+                    onUpdateDirectory: {
+                        Task { await model.updateDirectoryFromPanel() }
+                    },
+                    onSaveCorrection: { draft in
+                        Task { await model.renameDirectory(with: draft) }
+                    },
+                    onDeleteChapters: { selectedTIDs in
+                        Task { await model.deleteDirectoryChapters(tids: selectedTIDs) }
+                    },
+                    onSelectChapter: { chapter in
+                        isDirectoryPresented = false
+                        Task { await model.jumpToChapter(chapter) }
                     }
-                }
-
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        isDirectoryPresented = true
-                    } label: {
-                        Label(L10n.string("manga.directory"), systemImage: "list.bullet")
-                    }
-                }
-
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        openOriginalPost()
-                    } label: {
-                        Label(L10n.string("common.original_post"), systemImage: "safari")
-                    }
-                }
+                )
+            } else {
+                MangaDirectoryUnavailableSheet()
             }
-            .sheet(isPresented: $isDirectoryPresented) {
-                if case let .loaded(loaded) = model.presentation.state {
-                    MangaDirectorySheet(
-                        panel: loaded.directoryPanel,
-                        onSortOrderChange: { sortOrder in
-                            var settings = model.presentation.settings
-                            settings.directorySortOrder = sortOrder
-                            model.applySettings(settings)
-                        },
-                        onUpdateDirectory: {
-                            Task { await model.updateDirectoryFromPanel() }
-                        },
-                        onSaveCorrection: { draft in
-                            Task { await model.renameDirectory(with: draft) }
-                        },
-                        onDeleteChapters: { selectedTIDs in
-                            Task { await model.deleteDirectoryChapters(tids: selectedTIDs) }
-                        },
-                        onSelectChapter: { chapter in
-                            isDirectoryPresented = false
-                            Task { await model.jumpToChapter(chapter) }
-                        }
-                    )
-                } else {
-                    MangaDirectoryUnavailableSheet()
-                }
-            }
-            .navigationTitle(L10n.string("manga.reader.title"))
-            .navigationBarTitleDisplayMode(.inline)
         }
     }
 
@@ -110,6 +100,71 @@ public struct MangaReaderView: View {
                 suspendedRoute: latestRoute
             )
         }
+    }
+
+    private var windowSafeAreaInsets: UIEdgeInsets {
+        UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows)
+            .first(where: \.isKeyWindow)?
+            .safeAreaInsets ?? .zero
+    }
+}
+
+private struct MangaReaderFloatingControls: View {
+    let topInset: CGFloat
+    let onClose: () -> Void
+    let onShowDirectory: () -> Void
+    let onOpenOriginalPost: () -> Void
+
+    var body: some View {
+        HStack(spacing: 10) {
+            MangaReaderFloatingButton(
+                systemName: "xmark",
+                title: L10n.string("common.close"),
+                action: onClose
+            )
+
+            Spacer(minLength: 0)
+
+            MangaReaderFloatingButton(
+                systemName: "list.bullet",
+                title: L10n.string("manga.directory"),
+                action: onShowDirectory
+            )
+
+            MangaReaderFloatingButton(
+                systemName: "safari",
+                title: L10n.string("common.original_post"),
+                action: onOpenOriginalPost
+            )
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.top, max(topInset + 8, 12))
+        .padding(.horizontal, 12)
+        .padding(.bottom, 8)
+    }
+}
+
+private struct MangaReaderFloatingButton: View {
+    let systemName: String
+    let title: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.headline.weight(.semibold))
+                .foregroundStyle(.white)
+                .frame(width: 44, height: 44)
+                .background(.black.opacity(0.58), in: Circle())
+                .overlay {
+                    Circle()
+                        .strokeBorder(.white.opacity(0.16), lineWidth: 1)
+                }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(title)
     }
 }
 
