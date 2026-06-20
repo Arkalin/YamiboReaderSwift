@@ -3,20 +3,20 @@ import XCTest
 @testable import YamiboReaderUI
 
 @MainActor
-final class MangaReaderModelPhase9Tests: XCTestCase {
+final class MangaReaderAdjacentPrefetchTests: XCTestCase {
     func testUpdateCurrentPageSchedulesAdjacentPrefetchNearEnd() async throws {
-        let document700 = try makePhase9Document(tid: "700", pageCount: 10)
-        let document701 = try makePhase9Document(tid: "701", pageCount: 1)
-        let fixture = try await makePhase9Fixture(
+        let document700 = try makeAdjacentPrefetchDocument(tid: "700", pageCount: 10)
+        let document701 = try makeAdjacentPrefetchDocument(tid: "701", pageCount: 1)
+        let fixture = try await makeAdjacentPrefetchFixture(
             document: document700,
             extraDocuments: [document701],
-            directory: makePhase9Directory(tids: ["700", "701"])
+            directory: makeAdjacentPrefetchDirectory(tids: ["700", "701"])
         )
 
         await fixture.model.prepare()
         fixture.model.updateCurrentPage(globalIndex: 8)
 
-        try await waitForPhase9 {
+        try await waitForAdjacentPrefetch {
             guard case let .loaded(loaded) = fixture.model.presentation.state else { return false }
             return loaded.pages.map(\.id).contains("701#0")
         }
@@ -30,19 +30,19 @@ final class MangaReaderModelPhase9Tests: XCTestCase {
     }
 
     func testPreviousPrefetchKeepsCurrentPageIdentityAndStablePlacement() async throws {
-        let document699 = try makePhase9Document(tid: "699", pageCount: 3)
-        let document700 = try makePhase9Document(tid: "700", pageCount: 4)
-        let fixture = try await makePhase9Fixture(
+        let document699 = try makeAdjacentPrefetchDocument(tid: "699", pageCount: 3)
+        let document700 = try makeAdjacentPrefetchDocument(tid: "700", pageCount: 4)
+        let fixture = try await makeAdjacentPrefetchFixture(
             document: document700,
             initialPage: 1,
             extraDocuments: [document699],
-            directory: makePhase9Directory(tids: ["699", "700"])
+            directory: makeAdjacentPrefetchDirectory(tids: ["699", "700"])
         )
 
         await fixture.model.prepare()
         fixture.model.updateCurrentPage(globalIndex: 1)
 
-        try await waitForPhase9 {
+        try await waitForAdjacentPrefetch {
             guard case let .loaded(loaded) = fixture.model.presentation.state else { return false }
             return loaded.pages.first?.id == "699#0"
         }
@@ -58,16 +58,16 @@ final class MangaReaderModelPhase9Tests: XCTestCase {
     }
 
     func testDirectoryJumpSupersedesInFlightAdjacentPrefetch() async throws {
-        let document700 = try makePhase9Document(tid: "700", pageCount: 10)
-        let document701 = try makePhase9Document(tid: "701", pageCount: 1)
-        let document702 = try makePhase9Document(tid: "702", pageCount: 1)
+        let document700 = try makeAdjacentPrefetchDocument(tid: "700", pageCount: 10)
+        let document701 = try makeAdjacentPrefetchDocument(tid: "701", pageCount: 1)
+        let document702 = try makeAdjacentPrefetchDocument(tid: "702", pageCount: 1)
         let delayedURL = document701.chapterURL
-        let loader = Phase9DocumentLoader(
+        let loader = AdjacentPrefetchDocumentLoader(
             documents: [document700, document701, document702],
             delayedURLs: [delayedURL]
         )
-        let directory = makePhase9Directory(tids: ["700", "701", "702"])
-        let fixture = try await makePhase9Fixture(
+        let directory = makeAdjacentPrefetchDirectory(tids: ["700", "701", "702"])
+        let fixture = try await makeAdjacentPrefetchFixture(
             document: document700,
             loader: loader,
             directory: directory
@@ -75,7 +75,7 @@ final class MangaReaderModelPhase9Tests: XCTestCase {
 
         await fixture.model.prepare()
         fixture.model.updateCurrentPage(globalIndex: 8)
-        try await waitForPhase9 {
+        try await waitForAdjacentPrefetch {
             await loader.hasRequested(delayedURL)
         }
 
@@ -93,22 +93,22 @@ final class MangaReaderModelPhase9Tests: XCTestCase {
     }
 
     func testDirectoryChapterDeleteSupersedesInFlightAdjacentPrefetch() async throws {
-        let document700 = try makePhase9Document(tid: "700", pageCount: 10)
-        let document701 = try makePhase9Document(tid: "701", pageCount: 1)
+        let document700 = try makeAdjacentPrefetchDocument(tid: "700", pageCount: 10)
+        let document701 = try makeAdjacentPrefetchDocument(tid: "701", pageCount: 1)
         let delayedURL = document701.chapterURL
-        let loader = Phase9DocumentLoader(
+        let loader = AdjacentPrefetchDocumentLoader(
             documents: [document700, document701],
             delayedURLs: [delayedURL]
         )
-        let fixture = try await makePhase9Fixture(
+        let fixture = try await makeAdjacentPrefetchFixture(
             document: document700,
             loader: loader,
-            directory: makePhase9Directory(tids: ["700", "701"])
+            directory: makeAdjacentPrefetchDirectory(tids: ["700", "701"])
         )
 
         await fixture.model.prepare()
         fixture.model.updateCurrentPage(globalIndex: 8)
-        try await waitForPhase9 {
+        try await waitForAdjacentPrefetch {
             await loader.hasRequested(delayedURL)
         }
 
@@ -126,24 +126,24 @@ final class MangaReaderModelPhase9Tests: XCTestCase {
     }
 
     func testAdjacentPrefetchDoesNotDuplicateUnchangedProgress() async throws {
-        let progressAdapter = RecordingPhase9ProgressAdapter()
-        let document700 = try makePhase9Document(tid: "700", pageCount: 10)
-        let document701 = try makePhase9Document(tid: "701", pageCount: 1)
-        let fixture = try await makePhase9Fixture(
+        let progressAdapter = RecordingAdjacentPrefetchProgressAdapter()
+        let document700 = try makeAdjacentPrefetchDocument(tid: "700", pageCount: 10)
+        let document701 = try makeAdjacentPrefetchDocument(tid: "701", pageCount: 1)
+        let fixture = try await makeAdjacentPrefetchFixture(
             document: document700,
             extraDocuments: [document701],
-            directory: makePhase9Directory(tids: ["700", "701"]),
+            directory: makeAdjacentPrefetchDirectory(tids: ["700", "701"]),
             progressSync: ProgressSyncModule(adapter: progressAdapter, debounceNanoseconds: 0)
         )
 
         await fixture.model.prepare()
         fixture.model.updateCurrentPage(globalIndex: 8)
 
-        try await waitForPhase9 {
+        try await waitForAdjacentPrefetch {
             await progressAdapter.savedPositions.count == 1
         }
 
-        try await waitForPhase9 {
+        try await waitForAdjacentPrefetch {
             guard case let .loaded(loaded) = fixture.model.presentation.state else { return false }
             return loaded.pages.map(\.id).contains("701#0")
         }
@@ -155,11 +155,11 @@ final class MangaReaderModelPhase9Tests: XCTestCase {
     }
 
     func testDirectoryJumpQueuesNewProgress() async throws {
-        let progressAdapter = RecordingPhase9ProgressAdapter()
-        let document700 = try makePhase9Document(tid: "700", pageCount: 1)
-        let document701 = try makePhase9Document(tid: "701", pageCount: 1)
-        let directory = makePhase9Directory(tids: ["700", "701"])
-        let fixture = try await makePhase9Fixture(
+        let progressAdapter = RecordingAdjacentPrefetchProgressAdapter()
+        let document700 = try makeAdjacentPrefetchDocument(tid: "700", pageCount: 1)
+        let document701 = try makeAdjacentPrefetchDocument(tid: "701", pageCount: 1)
+        let directory = makeAdjacentPrefetchDirectory(tids: ["700", "701"])
+        let fixture = try await makeAdjacentPrefetchFixture(
             document: document700,
             extraDocuments: [document701],
             directory: directory,
@@ -169,7 +169,7 @@ final class MangaReaderModelPhase9Tests: XCTestCase {
         await fixture.model.prepare()
         await fixture.model.jumpToChapter(directory.chapters[1])
 
-        try await waitForPhase9 {
+        try await waitForAdjacentPrefetch {
             await progressAdapter.savedPositions.contains {
                 $0.chapterURL == document701.chapterURL && $0.pageIndex == 0
             }
@@ -184,18 +184,18 @@ final class MangaReaderModelPhase9Tests: XCTestCase {
     }
 
     func testAdjacentPrefetchFailureDoesNotSetDirectoryPanelError() async throws {
-        let document700 = try makePhase9Document(tid: "700", pageCount: 10)
-        let missingURL = makePhase9URL(tid: "701")
-        let loader = Phase9DocumentLoader(documents: [document700])
-        let fixture = try await makePhase9Fixture(
+        let document700 = try makeAdjacentPrefetchDocument(tid: "700", pageCount: 10)
+        let missingURL = makeAdjacentPrefetchURL(tid: "701")
+        let loader = AdjacentPrefetchDocumentLoader(documents: [document700])
+        let fixture = try await makeAdjacentPrefetchFixture(
             document: document700,
             loader: loader,
-            directory: makePhase9Directory(tids: ["700", "701"])
+            directory: makeAdjacentPrefetchDirectory(tids: ["700", "701"])
         )
 
         await fixture.model.prepare()
         fixture.model.updateCurrentPage(globalIndex: 8)
-        try await waitForPhase9 {
+        try await waitForAdjacentPrefetch {
             await loader.hasRequested(missingURL)
         }
         try await Task.sleep(nanoseconds: 100_000_000)
@@ -209,20 +209,20 @@ final class MangaReaderModelPhase9Tests: XCTestCase {
     }
 }
 
-private struct Phase9Fixture {
+private struct AdjacentPrefetchFixture {
     let model: MangaReaderModel
     let resumeRouteStore: ReaderResumeRouteStore
 }
 
 @MainActor
-private func makePhase9Fixture(
+private func makeAdjacentPrefetchFixture(
     document: MangaChapterDocument,
     initialPage: Int = 0,
     extraDocuments: [MangaChapterDocument] = [],
-    loader: Phase9DocumentLoader? = nil,
+    loader: AdjacentPrefetchDocumentLoader? = nil,
     directory: MangaDirectory,
     progressSync: ProgressSyncModule? = nil
-) async throws -> Phase9Fixture {
+) async throws -> AdjacentPrefetchFixture {
     let keyPrefix = UUID().uuidString
     let settingsStore = SettingsStore(key: "\(keyPrefix).settings")
     try await settingsStore.save(AppSettings())
@@ -234,7 +234,7 @@ private func makePhase9Fixture(
         readerResumeRouteStore: resumeRouteStore,
         favoriteStore: favoriteStore
     )
-    let resolvedLoader = loader ?? Phase9DocumentLoader(documents: [document] + extraDocuments)
+    let resolvedLoader = loader ?? AdjacentPrefetchDocumentLoader(documents: [document] + extraDocuments)
     let resolvedProgressSync = progressSync ?? ProgressSyncModule(
         adapter: FavoriteLibraryProgressSyncAdapter(favoriteStore: favoriteStore),
         debounceNanoseconds: 0
@@ -242,22 +242,22 @@ private func makePhase9Fixture(
     #if os(iOS)
     let dependencies = MangaReaderModelDependencies(
         makeDocumentLoader: { resolvedLoader },
-        makeDirectoryRepository: { Phase9DirectoryRepository(seed: makePhase9Seed(document: document)) },
-        makeDirectoryStore: { Phase9DirectoryStore(directories: [directory]) },
+        makeDirectoryRepository: { AdjacentPrefetchDirectoryRepository(seed: makeAdjacentPrefetchSeed(document: document)) },
+        makeDirectoryStore: { AdjacentPrefetchDirectoryStore(directories: [directory]) },
         makeDirectorySearchCooldownState: { MangaDirectorySearchCooldownState() },
-        makeImageDataLoader: { Phase9ImageDataLoader() },
+        makeImageDataLoader: { AdjacentPrefetchImageDataLoader() },
         progressSync: resolvedProgressSync
     )
     #else
     let dependencies = MangaReaderModelDependencies(
         makeDocumentLoader: { resolvedLoader },
-        makeDirectoryRepository: { Phase9DirectoryRepository(seed: makePhase9Seed(document: document)) },
-        makeDirectoryStore: { Phase9DirectoryStore(directories: [directory]) },
+        makeDirectoryRepository: { AdjacentPrefetchDirectoryRepository(seed: makeAdjacentPrefetchSeed(document: document)) },
+        makeDirectoryStore: { AdjacentPrefetchDirectoryStore(directories: [directory]) },
         makeDirectorySearchCooldownState: { MangaDirectorySearchCooldownState() },
         progressSync: resolvedProgressSync
     )
     #endif
-    let originalURL = makePhase9URL(tid: "700")
+    let originalURL = makeAdjacentPrefetchURL(tid: "700")
     let context = MangaLaunchContext(
         originalThreadURL: originalURL,
         chapterURL: document.chapterURL,
@@ -266,13 +266,13 @@ private func makePhase9Fixture(
         initialPage: initialPage,
         directoryName: directory.cleanBookName
     )
-    return Phase9Fixture(
+    return AdjacentPrefetchFixture(
         model: MangaReaderModel(context: context, appContext: appContext, dependencies: dependencies),
         resumeRouteStore: resumeRouteStore
     )
 }
 
-private actor Phase9DocumentLoader: MangaChapterDocumentLoading {
+private actor AdjacentPrefetchDocumentLoader: MangaChapterDocumentLoading {
     private let documents: [URL: MangaChapterDocument]
     private let delayedURLs: Set<URL>
     private var continuations: [URL: CheckedContinuation<Void, Never>] = [:]
@@ -305,7 +305,7 @@ private actor Phase9DocumentLoader: MangaChapterDocumentLoading {
     }
 }
 
-private actor Phase9DirectoryRepository: MangaDirectoryRepository {
+private actor AdjacentPrefetchDirectoryRepository: MangaDirectoryRepository {
     private let seed: MangaDirectorySeed
 
     init(seed: MangaDirectorySeed) {
@@ -325,7 +325,7 @@ private actor Phase9DirectoryRepository: MangaDirectoryRepository {
     }
 }
 
-private actor Phase9DirectoryStore: MangaDirectoryPersisting {
+private actor AdjacentPrefetchDirectoryStore: MangaDirectoryPersisting {
     private var directories: [String: MangaDirectory]
 
     init(directories: [MangaDirectory]) {
@@ -352,14 +352,14 @@ private actor Phase9DirectoryStore: MangaDirectoryPersisting {
 }
 
 #if os(iOS)
-private actor Phase9ImageDataLoader: MangaImageDataLoading {
+private actor AdjacentPrefetchImageDataLoader: MangaImageDataLoading {
     func imageData(for url: URL, refererURL: URL?) async throws -> Data {
         Data()
     }
 }
 #endif
 
-private actor RecordingPhase9ProgressAdapter: ProgressSyncAdapter {
+private actor RecordingAdjacentPrefetchProgressAdapter: ProgressSyncAdapter {
     private var saved: [MangaProgressReadingPosition] = []
 
     var savedPositions: [MangaProgressReadingPosition] {
@@ -373,25 +373,25 @@ private actor RecordingPhase9ProgressAdapter: ProgressSyncAdapter {
     }
 }
 
-private func makePhase9Directory(tids: [String]) -> MangaDirectory {
+private func makeAdjacentPrefetchDirectory(tids: [String]) -> MangaDirectory {
     MangaDirectory(
         cleanBookName: "Resolved Directory",
         strategy: .links,
         sourceKey: "Resolved Directory",
-        chapters: tids.map { makePhase9Chapter(tid: $0) }
+        chapters: tids.map { makeAdjacentPrefetchChapter(tid: $0) }
     )
 }
 
-private func makePhase9Chapter(tid: String) -> MangaChapter {
+private func makeAdjacentPrefetchChapter(tid: String) -> MangaChapter {
     MangaChapter(
         tid: tid,
         rawTitle: "第\(tid)话",
         chapterNumber: Double(tid) ?? 0,
-        url: makePhase9URL(tid: tid)
+        url: makeAdjacentPrefetchURL(tid: tid)
     )
 }
 
-private func makePhase9Seed(document: MangaChapterDocument) -> MangaDirectorySeed {
+private func makeAdjacentPrefetchSeed(document: MangaChapterDocument) -> MangaDirectorySeed {
     MangaDirectorySeed(
         currentChapter: MangaChapter(
             tid: document.tid,
@@ -403,24 +403,24 @@ private func makePhase9Seed(document: MangaChapterDocument) -> MangaDirectorySee
     )
 }
 
-private func makePhase9Document(tid: String, pageCount: Int) throws -> MangaChapterDocument {
+private func makeAdjacentPrefetchDocument(tid: String, pageCount: Int) throws -> MangaChapterDocument {
     MangaChapterDocument(
         tid: tid,
         ownerPostID: "post-\(tid)",
         chapterTitle: "第\(tid)话",
-        chapterURL: makePhase9URL(tid: tid),
+        chapterURL: makeAdjacentPrefetchURL(tid: tid),
         imageURLs: try (0..<pageCount).map { index in
             try XCTUnwrap(URL(string: "https://img.example.com/\(tid)-\(index).jpg"))
         }
     )
 }
 
-private func makePhase9URL(tid: String) -> URL {
+private func makeAdjacentPrefetchURL(tid: String) -> URL {
     URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(tid)&mobile=2")!
 }
 
 @MainActor
-private func waitForPhase9(
+private func waitForAdjacentPrefetch(
     timeoutNanoseconds: UInt64 = 2_000_000_000,
     pollIntervalNanoseconds: UInt64 = 20_000_000,
     predicate: @escaping @MainActor @Sendable () async -> Bool

@@ -3,9 +3,9 @@ import XCTest
 @testable import YamiboReaderUI
 
 @MainActor
-final class MangaReaderModelPhase8Tests: XCTestCase {
+final class MangaReaderDirectoryPanelTests: XCTestCase {
     func testReaderViewWiresFullscreenControlsSheetAndViewportPlacement() throws {
-        let source = try phase8SourceFile("Sources/YamiboReaderUI/Features/MangaReader/Presentation/MangaReaderView.swift")
+        let source = try mangaReaderSourceFile("Sources/YamiboReaderUI/Features/MangaReader/Presentation/MangaReaderView.swift")
 
         XCTAssertTrue(source.contains("MangaReaderFloatingControls("))
         XCTAssertTrue(source.contains("systemName: \"list.bullet\""))
@@ -21,7 +21,7 @@ final class MangaReaderModelPhase8Tests: XCTestCase {
     }
 
     func testDirectorySheetIsPresentationDriven() throws {
-        let source = try phase8SourceFile("Sources/YamiboReaderUI/Features/MangaReader/Directory/MangaDirectorySheet.swift")
+        let source = try mangaReaderSourceFile("Sources/YamiboReaderUI/Features/MangaReader/Directory/MangaDirectorySheet.swift")
 
         XCTAssertTrue(source.contains("let panel: MangaDirectoryPanelPresentation"))
         XCTAssertTrue(source.contains("ForEach(chapters)"))
@@ -59,7 +59,7 @@ final class MangaReaderModelPhase8Tests: XCTestCase {
     }
 
     func testVerticalViewportAppliesExplicitPlacementWithoutAnimationPolicyInView() throws {
-        let source = try phase8SourceFile("Sources/YamiboReaderUI/Features/MangaReader/Presentation/MangaVerticalCollectionViewport.swift")
+        let source = try mangaReaderSourceFile("Sources/YamiboReaderUI/Features/MangaReader/Presentation/MangaVerticalCollectionViewport.swift")
 
         XCTAssertTrue(source.contains("let viewportPlacement: MangaReaderViewportPlacement?"))
         XCTAssertTrue(source.contains("placement.revision != lastAppliedPlacementRevision"))
@@ -68,7 +68,7 @@ final class MangaReaderModelPhase8Tests: XCTestCase {
 
     func testInitialTagDirectoryRefreshesAfterPrepareAndOffersForcedSearchShortcut() async throws {
         let dateProvider = ManualDateProvider(now: Date(timeIntervalSince1970: 10_000))
-        let fixture = try await makePhase8Fixture(
+        let fixture = try await makeDirectoryPanelFixture(
             seed: MangaDirectorySeed(
                 currentChapter: makeChapter(tid: "700", title: "第1话"),
                 tagIDs: ["31"],
@@ -86,7 +86,7 @@ final class MangaReaderModelPhase8Tests: XCTestCase {
         }
         XCTAssertEqual(initialLoaded.pages.map(\.tid), ["700"])
 
-        try await waitForPhase8 {
+        try await waitForDirectoryPanelUpdate {
             guard case let .loaded(loaded) = fixture.model.presentation.state else { return false }
             return loaded.directoryPanel.displayChapters.map(\.tid) == ["700", "701"]
         }
@@ -110,7 +110,7 @@ final class MangaReaderModelPhase8Tests: XCTestCase {
                 makeChapter(tid: "701", title: "第2话")
             ]
         )
-        let fixture = try await makePhase8Fixture(
+        let fixture = try await makeDirectoryPanelFixture(
             directoryName: "本地目录",
             storedDirectories: [directory],
             appSettings: AppSettings(manga: MangaReaderSettings(directorySortOrder: .descending))
@@ -135,7 +135,7 @@ final class MangaReaderModelPhase8Tests: XCTestCase {
             sourceKey: "31",
             chapters: [makeChapter(tid: "700", title: "【作者】作品 第1话")]
         )
-        let fixture = try await makePhase8Fixture(
+        let fixture = try await makeDirectoryPanelFixture(
             directoryName: "本地目录",
             storedDirectories: [directory],
             searchChapters: [makeChapter(tid: "702", title: "第3话")],
@@ -160,18 +160,18 @@ final class MangaReaderModelPhase8Tests: XCTestCase {
             tagIDs: ["31"],
             cleanBookName: "测试漫画"
         )
-        let repository = Phase8DelayedTagRepository(
+        let repository = DelayedDirectoryPanelRepository(
             seed: seed,
             tagChapters: [makeChapter(tid: "701", title: "第2话")],
             searchChapters: [makeChapter(tid: "702", title: "第3话")]
         )
-        let fixture = try await makePhase8Fixture(
+        let fixture = try await makeDirectoryPanelFixture(
             seed: seed,
             repository: repository
         )
 
         await fixture.model.prepare()
-        try await waitForPhase8 {
+        try await waitForDirectoryPanelUpdate {
             await repository.hasStartedTagLoad()
         }
         await fixture.model.updateDirectory(isForcedSearch: true)
@@ -193,7 +193,7 @@ final class MangaReaderModelPhase8Tests: XCTestCase {
             sourceKey: "旧标题",
             chapters: [makeChapter(tid: "700", title: "第1话")]
         )
-        let fixture = try await makePhase8Fixture(
+        let fixture = try await makeDirectoryPanelFixture(
             directoryName: "旧标题",
             storedDirectories: [directory]
         )
@@ -222,7 +222,7 @@ final class MangaReaderModelPhase8Tests: XCTestCase {
                 makeChapter(tid: "701", title: "第2话")
             ]
         )
-        let fixture = try await makePhase8Fixture(
+        let fixture = try await makeDirectoryPanelFixture(
             directoryName: "本地目录",
             document: document700,
             extraDocuments: [document701],
@@ -242,13 +242,13 @@ final class MangaReaderModelPhase8Tests: XCTestCase {
     }
 }
 
-private struct Phase8Fixture {
+private struct MangaReaderDirectoryPanelFixture {
     let model: MangaReaderModel
     let settingsStore: SettingsStore
 }
 
 @MainActor
-private func makePhase8Fixture(
+private func makeDirectoryPanelFixture(
     directoryName: String? = nil,
     document: MangaChapterDocument? = nil,
     extraDocuments: [MangaChapterDocument] = [],
@@ -259,7 +259,7 @@ private func makePhase8Fixture(
     searchChapters: [MangaChapter] = [],
     appSettings: AppSettings = AppSettings(),
     configuration: MangaDirectoryWorkflowConfiguration = MangaDirectoryWorkflowConfiguration()
-) async throws -> Phase8Fixture {
+) async throws -> MangaReaderDirectoryPanelFixture {
     let keyPrefix = UUID().uuidString
     let settingsStore = SettingsStore(key: "\(keyPrefix).settings")
     try await settingsStore.save(appSettings)
@@ -273,7 +273,7 @@ private func makePhase8Fixture(
         source: .forum,
         directoryName: directoryName
     )
-    let resolvedRepository = repository ?? Phase8DirectoryRepository(
+    let resolvedRepository = repository ?? DirectoryPanelRepository(
         seed: seed ?? MangaDirectorySeed(
             currentChapter: makeChapter(tid: resolvedDocument.tid, title: resolvedDocument.chapterTitle),
             cleanBookName: "测试漫画"
@@ -292,12 +292,12 @@ private func makePhase8Fixture(
     )
     #if os(iOS)
     let dependencies = MangaReaderModelDependencies(
-        makeDocumentLoader: { Phase8DocumentLoader(documents: documents) },
+        makeDocumentLoader: { DirectoryPanelDocumentLoader(documents: documents) },
         makeDirectoryRepository: { resolvedRepository },
-        makeDirectoryStore: { Phase8DirectoryStore(directories: storedDirectories) },
+        makeDirectoryStore: { DirectoryPanelStore(directories: storedDirectories) },
         makeDirectorySearchCooldownState: { MangaDirectorySearchCooldownState() },
         directoryWorkflowConfiguration: configuration,
-        makeImageDataLoader: { Phase8ImageDataLoader() },
+        makeImageDataLoader: { DirectoryPanelImageDataLoader() },
         progressSync: ProgressSyncModule(
             adapter: FavoriteLibraryProgressSyncAdapter(favoriteStore: appContext.favoriteStore),
             debounceNanoseconds: 0
@@ -305,9 +305,9 @@ private func makePhase8Fixture(
     )
     #else
     let dependencies = MangaReaderModelDependencies(
-        makeDocumentLoader: { Phase8DocumentLoader(documents: documents) },
+        makeDocumentLoader: { DirectoryPanelDocumentLoader(documents: documents) },
         makeDirectoryRepository: { resolvedRepository },
-        makeDirectoryStore: { Phase8DirectoryStore(directories: storedDirectories) },
+        makeDirectoryStore: { DirectoryPanelStore(directories: storedDirectories) },
         makeDirectorySearchCooldownState: { MangaDirectorySearchCooldownState() },
         directoryWorkflowConfiguration: configuration,
         progressSync: ProgressSyncModule(
@@ -316,13 +316,13 @@ private func makePhase8Fixture(
         )
     )
     #endif
-    return Phase8Fixture(
+    return MangaReaderDirectoryPanelFixture(
         model: MangaReaderModel(context: context, appContext: appContext, dependencies: dependencies),
         settingsStore: settingsStore
     )
 }
 
-private actor Phase8DocumentLoader: MangaChapterDocumentLoading {
+private actor DirectoryPanelDocumentLoader: MangaChapterDocumentLoading {
     private let documents: [URL: MangaChapterDocument]
 
     init(documents: [URL: MangaChapterDocument]) {
@@ -337,7 +337,7 @@ private actor Phase8DocumentLoader: MangaChapterDocumentLoading {
     }
 }
 
-private actor Phase8DirectoryRepository: MangaDirectoryRepository {
+private actor DirectoryPanelRepository: MangaDirectoryRepository {
     private let seed: MangaDirectorySeed
     private let tagChapters: [MangaChapter]
     private let searchChapters: [MangaChapter]
@@ -365,7 +365,7 @@ private actor Phase8DirectoryRepository: MangaDirectoryRepository {
     }
 }
 
-private actor Phase8DelayedTagRepository: MangaDirectoryRepository {
+private actor DelayedDirectoryPanelRepository: MangaDirectoryRepository {
     private let seed: MangaDirectorySeed
     private let tagChapters: [MangaChapter]
     private let searchChapters: [MangaChapter]
@@ -406,7 +406,7 @@ private actor Phase8DelayedTagRepository: MangaDirectoryRepository {
     }
 }
 
-private actor Phase8DirectoryStore: MangaDirectoryPersisting {
+private actor DirectoryPanelStore: MangaDirectoryPersisting {
     private var directories: [String: MangaDirectory]
 
     init(directories: [MangaDirectory]) {
@@ -433,7 +433,7 @@ private actor Phase8DirectoryStore: MangaDirectoryPersisting {
 }
 
 #if os(iOS)
-private actor Phase8ImageDataLoader: MangaImageDataLoading {
+private actor DirectoryPanelImageDataLoader: MangaImageDataLoading {
     func imageData(for url: URL, refererURL: URL?) async throws -> Data {
         Data()
     }
@@ -469,14 +469,14 @@ private func makeDocument(tid: String, pageCount: Int) throws -> MangaChapterDoc
     )
 }
 
-private func phase8SourceFile(_ relativePath: String) throws -> String {
+private func mangaReaderSourceFile(_ relativePath: String) throws -> String {
     let url = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         .appendingPathComponent(relativePath)
     return try String(contentsOf: url, encoding: .utf8)
 }
 
 @MainActor
-private func waitForPhase8(
+private func waitForDirectoryPanelUpdate(
     timeoutNanoseconds: UInt64 = 2_000_000_000,
     pollIntervalNanoseconds: UInt64 = 20_000_000,
     predicate: @escaping @MainActor @Sendable () async -> Bool
