@@ -1039,13 +1039,13 @@ final class ReaderContainerModelTests: XCTestCase {
                     source: .forum
                 ),
                 appContext: appContext,
-                pagination: { document, settings, layout in
-                    if settings.fontScale > 1.1 {
-                        throw NovelTextLayoutFailure.textKitIndexing
-                    }
-                    return try NovelTextLayout.layout(document: document, settings: settings, layout: layout)
+            pagination: { document, settings, layout in
+                if settings.fontScale > 1.1 {
+                    throw NovelTextLayoutFailure.textKitIndexing
                 }
-            )
+                return try readerModelSegmentPagination(document: document, settings: settings, layout: layout)
+            }
+        )
         }
         await model.prepare(layout: ReaderContainerLayout(width: 320, height: 568))
 
@@ -1145,7 +1145,8 @@ final class ReaderContainerModelTests: XCTestCase {
                     threadTitle: "测试线程",
                     source: .forum
                 ),
-                appContext: appContext
+                appContext: appContext,
+                pagination: readerModelSegmentPagination
             )
         }
         await model.prepare(layout: ReaderContainerLayout(width: 320, height: 568))
@@ -1198,7 +1199,7 @@ final class ReaderContainerModelTests: XCTestCase {
             ],
             pagination: { document, settings, layout in
                 guard document.view == 1 else { throw failure }
-                return try NovelTextLayout.layout(
+                return try readerModelSegmentPagination(
                     document: document,
                     settings: settings,
                     layout: layout
@@ -1221,7 +1222,7 @@ final class ReaderContainerModelTests: XCTestCase {
         let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let modelSource = try String(
             contentsOf: repositoryRoot
-                .appendingPathComponent("Sources/YamiboReaderUI/Features/NovelReader/Container/ReaderContainerModel.swift"),
+                .appendingPathComponent("Sources/YamiboReaderUI/Features/Reader/NovelReader/Container/ReaderContainerModel.swift"),
             encoding: .utf8
         )
         let previewBody = try XCTUnwrap(functionBody(named: "previewChapterDirectoryWebView", in: modelSource))
@@ -1238,7 +1239,7 @@ final class ReaderContainerModelTests: XCTestCase {
         let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let modelSource = try String(
             contentsOf: repositoryRoot
-                .appendingPathComponent("Sources/YamiboReaderUI/Features/NovelReader/Container/ReaderContainerModel.swift"),
+                .appendingPathComponent("Sources/YamiboReaderUI/Features/Reader/NovelReader/Container/ReaderContainerModel.swift"),
             encoding: .utf8
         )
         let appearanceBody = try XCTUnwrap(
@@ -1377,7 +1378,8 @@ final class ReaderContainerModelTests: XCTestCase {
                     source: .favorites,
                     authorID: "author-1"
                 ),
-                appContext: appContext
+                appContext: appContext,
+                pagination: readerModelSegmentPagination
             )
         }
 
@@ -1423,7 +1425,7 @@ final class ReaderContainerModelTests: XCTestCase {
         let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let modelSource = try String(
             contentsOf: repositoryRoot
-                .appendingPathComponent("Sources/YamiboReaderUI/Features/NovelReader/Container/ReaderContainerModel.swift"),
+                .appendingPathComponent("Sources/YamiboReaderUI/Features/Reader/NovelReader/Container/ReaderContainerModel.swift"),
             encoding: .utf8
         )
 
@@ -1464,7 +1466,8 @@ final class ReaderContainerModelTests: XCTestCase {
                     threadTitle: "测试线程",
                     source: .forum
                 ),
-                appContext: appContext
+                appContext: appContext,
+                pagination: readerModelSegmentPagination
             )
         }
 
@@ -1506,13 +1509,14 @@ final class ReaderContainerModelTests: XCTestCase {
                     threadTitle: "测试线程",
                     source: .forum
                 ),
-                appContext: appContext
+                appContext: appContext,
+                pagination: readerModelSegmentPagination
             )
         }
 
         await model.prepare(layout: ReaderContainerLayout(width: 320, height: 568))
         await MainActor.run {
-            model.selectSurface(2)
+            model.updateVerticalViewportPosition(surfaceIndex: 2, intraSurfaceProgress: 0.55, force: true)
         }
         let savedContext = await model.saveProgress()
 
@@ -1554,7 +1558,8 @@ final class ReaderContainerModelTests: XCTestCase {
                     threadTitle: "测试线程",
                     source: .forum
                 ),
-                appContext: appContext
+                appContext: appContext,
+                pagination: readerModelSegmentPagination
             )
         }
 
@@ -1602,14 +1607,14 @@ final class ReaderContainerModelTests: XCTestCase {
                     threadTitle: "测试线程",
                     source: .forum
                 ),
-                appContext: appContext
+                appContext: appContext,
+                pagination: readerModelSegmentPagination
             )
         }
 
         await model.prepare(layout: ReaderContainerLayout(width: 320, height: 568))
         await MainActor.run {
-            model.selectSurface(1)
-            model.selectSurface(2)
+            model.updateVerticalViewportPosition(surfaceIndex: 2, intraSurfaceProgress: 0.55, force: true)
         }
         await model.saveProgress()
 
@@ -1655,7 +1660,8 @@ final class ReaderContainerModelTests: XCTestCase {
                     threadTitle: "测试线程",
                     source: .forum
                 ),
-                appContext: appContext
+                appContext: appContext,
+                pagination: readerModelSegmentPagination
             )
         }
 
@@ -1703,7 +1709,7 @@ final class ReaderContainerModelTests: XCTestCase {
                 .text(String(repeating: "第三章 内容。", count: 120), chapterTitle: "第三章")
             ]
         )
-        let pagination = try NovelTextLayout.layout(
+        let pagination = try readerModelSegmentPagination(
             document: document,
             settings: ReaderAppearanceSettings(readingMode: .vertical),
             layout: ReaderContainerLayout(width: 320, height: 568)
@@ -1712,10 +1718,12 @@ final class ReaderContainerModelTests: XCTestCase {
             pagination.viewportIndex.surfaces.first(where: { $0.chapterTitle == "第三章" && !$0.ranges.isEmpty })
         )
         let savedRange = try XCTUnwrap(savedViewportSurface.ranges.first)
+        let savedSemantics = try XCTUnwrap(document.semantics(forSegmentIndex: savedRange.segmentIndex))
         let savedOffset = midpoint(in: savedRange)
         let savedResumePoint = ReaderResumePoint(
             view: 2,
-            textSegmentIdentity: try XCTUnwrap(document.semantics(forSegmentIndex: savedRange.segmentIndex)?.textSegmentIdentity),
+            chapterIdentity: savedSemantics.chapterIdentity,
+            textSegmentIdentity: try XCTUnwrap(savedSemantics.textSegmentIdentity),
             displayedTextOffset: savedOffset,
             chapterOrdinal: try XCTUnwrap(savedViewportSurface.chapterOrdinal),
             chapterTitle: savedViewportSurface.chapterTitle,
@@ -1751,7 +1759,8 @@ final class ReaderContainerModelTests: XCTestCase {
                     threadTitle: "测试线程",
                     source: .favorites
                 ),
-                appContext: appContext
+                appContext: appContext,
+                pagination: readerModelSegmentPagination
             )
         }
 
@@ -1802,7 +1811,7 @@ final class ReaderContainerModelTests: XCTestCase {
             source: .favorites
         )
         let model = await MainActor.run {
-            ReaderContainerModel(context: launchContext, appContext: appContext)
+            ReaderContainerModel(context: launchContext, appContext: appContext, pagination: readerModelSegmentPagination)
         }
 
         await model.prepare(layout: ReaderContainerLayout(width: 320, height: 568))
@@ -1827,7 +1836,7 @@ final class ReaderContainerModelTests: XCTestCase {
         XCTAssertEqual(savedFavorite?.novelDocumentSurfaceProgressPercent, savedProgressPercent)
 
         let restoredModel = await MainActor.run {
-            ReaderContainerModel(context: launchContext, appContext: appContext)
+            ReaderContainerModel(context: launchContext, appContext: appContext, pagination: readerModelSegmentPagination)
         }
 
         await restoredModel.prepare(layout: ReaderContainerLayout(width: 320, height: 568))
@@ -1861,7 +1870,7 @@ final class ReaderContainerModelTests: XCTestCase {
                 .text(String(repeating: "第三章 内容。", count: 160), chapterTitle: "第三章")
             ]
         )
-        let pagination = try NovelTextLayout.layout(
+        let pagination = try readerModelSegmentPagination(
             document: document,
             settings: ReaderAppearanceSettings(readingMode: .vertical),
             layout: ReaderContainerLayout(width: 320, height: 568)
@@ -1870,9 +1879,11 @@ final class ReaderContainerModelTests: XCTestCase {
             pagination.viewportIndex.surfaces.first(where: { $0.chapterTitle == "第二章" && !$0.ranges.isEmpty })
         )
         let savedRange = try XCTUnwrap(savedViewportSurface.ranges.first)
+        let savedSemantics = try XCTUnwrap(document.semantics(forSegmentIndex: savedRange.segmentIndex))
         let savedResumePoint = ReaderResumePoint(
             view: 2,
-            textSegmentIdentity: try XCTUnwrap(document.semantics(forSegmentIndex: savedRange.segmentIndex)?.textSegmentIdentity),
+            chapterIdentity: savedSemantics.chapterIdentity,
+            textSegmentIdentity: try XCTUnwrap(savedSemantics.textSegmentIdentity),
             displayedTextOffset: savedRange.startOffset,
             chapterOrdinal: try XCTUnwrap(savedViewportSurface.chapterOrdinal),
             chapterTitle: savedViewportSurface.chapterTitle,
@@ -1909,7 +1920,8 @@ final class ReaderContainerModelTests: XCTestCase {
                     source: .favorites,
                     initialView: 2
                 ),
-                appContext: appContext
+                appContext: appContext,
+                pagination: readerModelSegmentPagination
             )
         }
 
@@ -1940,16 +1952,18 @@ final class ReaderContainerModelTests: XCTestCase {
                 .text(String(repeating: "第一章 内容。", count: 520), chapterTitle: "第一章")
             ]
         )
-        let pagination = try NovelTextLayout.layout(
+        let pagination = try readerModelSegmentPagination(
             document: document,
             settings: ReaderAppearanceSettings(readingMode: .paged),
             layout: ReaderContainerLayout(width: 320, height: 568)
         )
         let savedViewportSurface = try XCTUnwrap(pagination.viewportIndex.surfaces.dropFirst().last { !$0.ranges.isEmpty })
         let savedRange = try XCTUnwrap(savedViewportSurface.ranges.first)
+        let savedSemantics = try XCTUnwrap(document.semantics(forSegmentIndex: savedRange.segmentIndex))
         let savedResumePoint = ReaderResumePoint(
             view: 1,
-            textSegmentIdentity: try XCTUnwrap(document.semantics(forSegmentIndex: savedRange.segmentIndex)?.textSegmentIdentity),
+            chapterIdentity: savedSemantics.chapterIdentity,
+            textSegmentIdentity: try XCTUnwrap(savedSemantics.textSegmentIdentity),
             displayedTextOffset: savedRange.startOffset,
             chapterOrdinal: try XCTUnwrap(savedViewportSurface.chapterOrdinal),
             chapterTitle: savedViewportSurface.chapterTitle,
@@ -1985,7 +1999,8 @@ final class ReaderContainerModelTests: XCTestCase {
                     threadTitle: "测试线程",
                     source: .favorites
                 ),
-                appContext: appContext
+                appContext: appContext,
+                pagination: readerModelSegmentPagination
             )
         }
 
@@ -2009,7 +2024,7 @@ final class ReaderContainerModelTests: XCTestCase {
                 .text(String(repeating: "第一章 内容。", count: 520), chapterTitle: "第一章")
             ]
         )
-        let pagination = try NovelTextLayout.layout(
+        let pagination = try readerModelSegmentPagination(
             document: document,
             settings: ReaderAppearanceSettings(readingMode: .paged),
             layout: ReaderContainerLayout(width: 320, height: 568)
@@ -2081,7 +2096,8 @@ final class ReaderContainerModelTests: XCTestCase {
                     source: .forum,
                     initialView: 1
                 ),
-                appContext: appContext
+                appContext: appContext,
+                pagination: readerModelSegmentPagination
             )
         }
 
@@ -2348,7 +2364,8 @@ final class ReaderContainerModelTests: XCTestCase {
                     source: .forum,
                     authorID: "42"
                 ),
-                appContext: appContext
+                appContext: appContext,
+                pagination: readerModelSegmentPagination
             )
         }
 
@@ -2789,7 +2806,7 @@ private func makeModel(
     launchContext: ReaderLaunchContext? = nil,
     session: URLSession = .shared,
     cacheStore: ReaderCacheStore? = nil,
-    pagination: @escaping NovelTextLayoutFixture = NovelTextLayout.layout
+    pagination: @escaping NovelTextLayoutFixture = readerModelSegmentPagination
 ) async throws -> ReaderContainerModel {
     let keyPrefix = UUID().uuidString
     let sessionStore = SessionStore(key: "\(keyPrefix).session")
@@ -2825,6 +2842,41 @@ private func makeModel(
 
     await model.prepare(layout: ReaderContainerLayout(width: 320, height: 568))
     return model
+}
+
+private func readerModelSegmentPagination(
+    document: ReaderPageDocument,
+    settings: ReaderAppearanceSettings,
+    layout: ReaderContainerLayout
+) throws -> NovelTextLayoutResult {
+    let targetCharactersPerSurface = 120
+    return try NovelTextLayout.layout(
+        document: document,
+        settings: settings,
+        layout: layout,
+        viewportSurfaceLayout: { context, _, _ in
+            document.segments.indices.flatMap { segmentIndex -> [NovelTextViewportDocumentSurfaceRange] in
+                guard case .text = document.segments[segmentIndex],
+                      let range = context.document.textRangesBySegment[segmentIndex],
+                      range.endOffset > range.startOffset else {
+                    return []
+                }
+                var surfaceRanges: [NovelTextViewportDocumentSurfaceRange] = []
+                var startOffset = range.startOffset
+                while startOffset < range.endOffset {
+                    let endOffset = min(startOffset + targetCharactersPerSurface, range.endOffset)
+                    surfaceRanges.append(
+                        NovelTextViewportDocumentSurfaceRange(
+                            startOffset: startOffset,
+                            endOffset: endOffset
+                        )
+                    )
+                    startOffset = endOffset
+                }
+                return surfaceRanges
+            }
+        }
+    )
 }
 
 private func waitFor(
@@ -3267,14 +3319,11 @@ private final class ReaderModelFixtureRuntimeAdapter: NovelTextLayoutRuntimeAdap
             input.preparedInput.settings,
             input.preparedInput.layout
         )
-        return try DefaultNovelTextLayoutRuntimeAdapter().prepareCandidate(
-            input: NovelTextLayoutRuntimeAdapterInput(
-                preparedInput: input.preparedInput,
-                settings: input.settings,
-                layout: input.layout,
-                cachedSemanticAttributedDocument: input.cachedSemanticAttributedDocument,
-                precomputedResult: result
-            )
+        return NovelTextLayoutRuntimeCandidate(
+            result: result,
+            fullDocumentLayoutPassCount: 0,
+            postIndexCompactionCount: 0,
+            ownsAuthoritativeIndex: false
         )
     }
 }
@@ -3285,7 +3334,7 @@ private extension ReaderContainerModel {
         context: ReaderLaunchContext,
         appContext: YamiboAppContext,
         initialSettings: ReaderAppearanceSettings? = nil,
-        pagination: @escaping NovelTextLayoutFixture
+        pagination: @escaping NovelTextLayoutFixture = readerModelSegmentPagination
     ) {
         self.init(
             context: context,
