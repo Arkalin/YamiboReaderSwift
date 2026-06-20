@@ -4,15 +4,20 @@ import XCTest
 
 @MainActor
 final class MangaReaderModelPhase8Tests: XCTestCase {
-    func testReaderViewWiresDirectoryToolbarSheetAndViewportPlacement() throws {
+    func testReaderViewWiresFullscreenControlsSheetAndViewportPlacement() throws {
         let source = try phase8SourceFile("Sources/YamiboReaderUI/Features/MangaReader/Presentation/MangaReaderView.swift")
 
-        XCTAssertTrue(source.contains("systemImage: \"list.bullet\""))
+        XCTAssertTrue(source.contains("MangaReaderFloatingControls("))
+        XCTAssertTrue(source.contains("systemName: \"list.bullet\""))
         XCTAssertTrue(source.contains("MangaDirectorySheet("))
         XCTAssertTrue(source.contains("viewportPlacement: loaded.viewportPlacement"))
         XCTAssertTrue(source.contains("await model.jumpToChapter(chapter)"))
         XCTAssertTrue(source.contains("onDeleteChapters:"))
         XCTAssertTrue(source.contains("await model.deleteDirectoryChapters(tids: selectedTIDs)"))
+        XCTAssertTrue(source.contains(".ignoresSafeArea()"))
+        XCTAssertTrue(source.contains(".statusBar(hidden: true)"))
+        XCTAssertTrue(source.contains("windowSafeAreaInsets"))
+        XCTAssertFalse(source.contains("ToolbarItem(placement: .primaryAction)"))
     }
 
     func testDirectorySheetIsPresentationDriven() throws {
