@@ -5,20 +5,20 @@ import YamiboReaderCore
 import UIKit
 
 private struct ReaderProgressChapterTickOverlay: View {
-    let ticks: [ReaderProgressChapterTick]
+    let ticks: [ReaderChromeProgressTick]
     let currentTint: Color
 
     var body: some View {
         let layout = ReaderBottomChromeLayoutPresentation()
 
         GeometryReader { geometry in
-            ForEach(Array(ticks.enumerated()), id: \.element.chapter.startIndex) { _, tick in
+            ForEach(Array(ticks.enumerated()), id: \.element.targetIndex) { _, tick in
                 Capsule()
                     .fill(tick.isCurrent ? currentTint : Color.secondary.opacity(0.38))
                     .frame(width: tick.isCurrent ? 3 : 2, height: tick.isCurrent ? 12 : 8)
                     .position(
                         x: layout.capsuleChapterTickCoordinate(
-                            position: tick.position,
+                            position: tick.positionFraction,
                             length: geometry.size.width,
                             edgeInset: layout.capsuleChapterTickRoundedEdgeInset
                         ),
@@ -38,7 +38,7 @@ struct ReaderDirectoryProgressCapsule: View {
     let showsFill: Bool
     let supportsScrub: Bool
     let isScrubbing: Bool
-    let ticks: [ReaderProgressChapterTick]
+    let ticks: [ReaderChromeProgressTick]
     let onTapDirectory: () -> Void
     let onScrub: (CGFloat, CGFloat) -> Void
     let onEndScrub: () -> Void
@@ -130,7 +130,7 @@ struct ReaderDirectoryProgressCapsule: View {
 struct ReaderVerticalProgressCapsule: View {
     let restingProgressFraction: Double
     let scrubContext: ReaderProgressScrubContext
-    let ticks: [ReaderProgressChapterTick]
+    let ticks: [ReaderChromeProgressTick]
     let onBeginScrub: () -> Void
     let onCommit: (Int) -> Void
     let onEndScrub: () -> Void
@@ -177,7 +177,7 @@ struct ReaderVerticalProgressCapsule: View {
                             length: height,
                             range: 0...1
                         )
-                        updateScrub(value: targetFraction * 100)
+                        updateScrub(value: targetFraction)
                     }
                     .onEnded { _ in
                         dragStartProgressFraction = nil
@@ -192,8 +192,8 @@ struct ReaderVerticalProgressCapsule: View {
 
     private var displayedProgressFraction: Double {
         if scrubState.phase == .scrubbing {
-            guard scrubContext.surfaceCount > 1 else { return 0 }
-            return Double(scrubState.targetSurfaceIndex) / Double(max(scrubContext.surfaceCount - 1, 1))
+            guard scrubContext.itemCount > 1 else { return 0 }
+            return Double(scrubState.targetIndex) / Double(max(scrubContext.itemCount - 1, 1))
         }
         return restingProgressFraction
     }
@@ -219,7 +219,7 @@ struct ReaderVerticalProgressCapsule: View {
         }
         let update = scrubState.end()
         triggerFeedback(update.haptics)
-        if let target = update.committedSurfaceIndex {
+        if let target = update.committedTargetIndex {
             onCommit(target)
         }
         scrubState.reset()
@@ -282,21 +282,21 @@ struct ReaderVerticalProgressCapsule: View {
 }
 
 private struct ReaderVerticalProgressChapterTickOverlay: View {
-    let ticks: [ReaderProgressChapterTick]
+    let ticks: [ReaderChromeProgressTick]
     let currentTint: Color
 
     var body: some View {
         let layout = ReaderBottomChromeLayoutPresentation()
 
         GeometryReader { geometry in
-            ForEach(Array(ticks.enumerated()), id: \.element.chapter.startIndex) { _, tick in
+            ForEach(Array(ticks.enumerated()), id: \.element.targetIndex) { _, tick in
                 Capsule()
                     .fill(tick.isCurrent && layout.verticalCurrentChapterTickUsesAccentColor ? currentTint : Color.secondary.opacity(0.38))
                     .frame(width: tick.isCurrent ? 28 : 18, height: tick.isCurrent ? 3 : 2)
                     .position(
                         x: layout.verticalScrubberTicksAreCentered ? geometry.size.width / 2 : geometry.size.width - 24,
                         y: layout.capsuleChapterTickCoordinate(
-                            position: tick.position,
+                            position: tick.positionFraction,
                             length: geometry.size.height,
                             edgeInset: layout.capsuleChapterTickRoundedEdgeInset
                         )

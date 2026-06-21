@@ -81,6 +81,10 @@ struct MangaReaderModelDependencies {
 @MainActor
 public final class MangaReaderModel: ObservableObject {
     @Published public private(set) var presentation: MangaReaderPresentation
+    @Published public private(set) var chapterCommentsState: ReaderChapterCommentsState = .idle
+    @Published public private(set) var isLoadingMoreChapterComments = false
+    @Published public private(set) var chapterCommentsLoadMoreError: String?
+    @Published public private(set) var chapterCommentsRefreshError: String?
 
     public let context: MangaLaunchContext
     #if os(iOS)
@@ -89,6 +93,7 @@ public final class MangaReaderModel: ObservableObject {
 
     private let appContext: YamiboAppContext
     private let dependencies: MangaReaderModelDependencies
+    private var readerRepository: ReaderRepository?
     private var workflow: MangaReaderWorkflow?
     private var hasPrepared = false
     private var committedSettings = MangaReaderSettings()
@@ -103,6 +108,27 @@ public final class MangaReaderModel: ObservableObject {
     private var lastQueuedProgressSnapshot: MangaReaderProgressSnapshot?
     private var directoryMutationGeneration = 0
     private var chapterJumpGeneration = 0
+    private lazy var chapterCommentsModule = ReaderChapterCommentsModule(
+        adapter: ReaderChapterCommentsModule.Adapter(
+            loadInitial: { [weak self] target in
+                guard let self else {
+                    throw ReaderChapterCommentsUnavailableError()
+                }
+                let repository = await self.ensureReaderRepository()
+                return try await repository.loadChapterComments(for: target)
+            },
+            loadMore: { [weak self] target, view in
+                guard let self else {
+                    throw ReaderChapterCommentsUnavailableError()
+                }
+                let repository = await self.ensureReaderRepository()
+                return try await repository.loadMoreChapterComments(for: target, view: view)
+            }
+        ),
+        onChange: { [weak self] module in
+            self?.syncChapterComments(from: module)
+        }
+    )
 
     deinit {
         directoryTickTask?.cancel()
@@ -181,6 +207,63 @@ public final class MangaReaderModel: ObservableObject {
         let nextPresentation = workflow.moveToLoadedPage(at: globalIndex)
         publishPresentation(nextPresentation, previousProgressSnapshot: previousProgressSnapshot)
         scheduleAdjacentPrefetch(around: currentPageIndex(in: nextPresentation) ?? globalIndex)
+    }
+
+    public func jumpToPage(globalIndex: Int) async {
+        guard let workflow else { return }
+        adjacentPrefetchTask?.cancel()
+        readerContentGeneration += 1
+        let previousProgressSnapshot = progressSnapshot(from: presentation)
+        let nextPresentation = workflow.jumpToLoadedPage(at: globalIndex)
+        publishPresentation(nextPresentation, previousProgressSnapshot: previousProgressSnapshot)
+        scheduleAdjacentPrefetch(around: currentPageIndex(in: nextPresentation) ?? globalIndex)
+    }
+
+    public var currentChapterCommentTarget: ReaderChapterCommentTarget? {
+        guard case let .loaded(loaded) = presentation.state,
+              let currentPage = loaded.currentPage else {
+            return nil
+        }
+        return ReaderChapterCommentTarget(
+            threadURL: currentPage.refererURL,
+            view: Self.webViewPage(from: currentPage.refererURL),
+            ownerPostID: currentPage.ownerPostID,
+            title: currentPage.chapterTitle
+        )
+    }
+
+    public func loadChapterComments(for target: ReaderChapterCommentTarget?) async {
+        guard let target else {
+            let emptyTarget = ReaderChapterCommentTarget(
+                threadURL: context.originalThreadURL,
+                view: 1,
+                ownerPostID: "",
+                title: nil
+            )
+            chapterCommentsState = .loaded(
+                emptyTarget,
+                ChapterCommentsPage(
+                    target: emptyTarget,
+                    comments: [],
+                    isBoundaryClosed: true,
+                    nextView: nil
+                )
+            )
+            isLoadingMoreChapterComments = false
+            chapterCommentsLoadMoreError = nil
+            chapterCommentsRefreshError = nil
+            return
+        }
+        await chapterCommentsModule.load(target)
+    }
+
+    public func refreshChapterComments(for target: ReaderChapterCommentTarget?) async {
+        guard let target else { return }
+        await chapterCommentsModule.refresh(target)
+    }
+
+    public func loadNextChapterCommentsPage() async {
+        await chapterCommentsModule.loadNextPage()
     }
 
     public func applySettings(_ settings: MangaReaderSettings) {
@@ -622,6 +705,31 @@ public final class MangaReaderModel: ObservableObject {
     private func normalizedDirectoryName(_ directoryName: String?) -> String? {
         let normalized = directoryName?.trimmingCharacters(in: .whitespacesAndNewlines)
         return normalized?.isEmpty == false ? normalized : nil
+    }
+
+    private func ensureReaderRepository() async -> ReaderRepository {
+        if readerRepository == nil {
+            readerRepository = await appContext.makeReaderRepository()
+        }
+        guard let readerRepository else {
+            preconditionFailure("Reader repository should be initialized")
+        }
+        return readerRepository
+    }
+
+    private func syncChapterComments(from module: ReaderChapterCommentsModule) {
+        chapterCommentsState = module.state
+        isLoadingMoreChapterComments = module.isLoadingMore
+        chapterCommentsLoadMoreError = module.loadMoreError
+        chapterCommentsRefreshError = module.refreshError
+    }
+
+    private static func webViewPage(from url: URL) -> Int {
+        URLComponents(url: url, resolvingAgainstBaseURL: false)?
+            .queryItems?
+            .first(where: { $0.name == "page" })?
+            .value
+            .flatMap(Int.init) ?? 1
     }
 
     private static func normalizedSettings(_ settings: MangaReaderSettings) -> MangaReaderSettings {

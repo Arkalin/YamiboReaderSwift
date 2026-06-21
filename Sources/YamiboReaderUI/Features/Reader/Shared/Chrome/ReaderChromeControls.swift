@@ -115,6 +115,7 @@ private extension ReaderChromePopupAnchor {
 struct ReaderChromeIconButton: View {
     let systemName: String
     let title: String
+    var isEnabled = true
     let action: () -> Void
     @Environment(\.colorScheme) private var colorScheme
 
@@ -125,6 +126,8 @@ struct ReaderChromeIconButton: View {
                 .frame(width: 34, height: 34)
         }
         .readerChromeButtonStyle(tint: readerChromeButtonTint(for: colorScheme))
+        .opacity(isEnabled ? 1 : 0.34)
+        .disabled(!isEnabled)
         .accessibilityLabel(title)
     }
 }
@@ -134,6 +137,7 @@ struct ReaderChromeCircleButton: View {
     let title: String
     var tint: Color
     var prominent = false
+    var isEnabled = true
     let action: () -> Void
 
     var body: some View {
@@ -144,6 +148,46 @@ struct ReaderChromeCircleButton: View {
         }
         .buttonBorderShape(.circle)
         .readerChromeButtonStyle(prominent: prominent, tint: tint)
+        .opacity(isEnabled ? 1 : 0.34)
+        .disabled(!isEnabled)
+        .accessibilityLabel(title)
+    }
+}
+
+struct ReaderChromeCapsuleButton: View {
+    let title: String
+    let systemName: String
+    var isEnabled = true
+    let action: () -> Void
+
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        let layout = ReaderBottomChromeLayoutPresentation()
+        let controlTint = layout.progressCapsulesUseButtonTint
+            ? readerChromeButtonTint(for: colorScheme)
+            : Color.accentColor
+
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Text(title)
+                    .font(.callout.weight(.semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+                Spacer(minLength: 12)
+                Image(systemName: systemName)
+                    .font(.callout.weight(.semibold))
+            }
+            .foregroundStyle(layout.directoryCapsuleContentUsesAccentColor ? controlTint : Color.primary)
+            .frame(maxWidth: .infinity)
+            .frame(height: layout.progressPanelHeight)
+            .padding(.horizontal, 18)
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .readerChromePanel(cornerRadius: 24, tint: readerChromePanelTint(for: colorScheme))
+        .opacity(isEnabled ? 1 : 0.34)
+        .disabled(!isEnabled)
         .accessibilityLabel(title)
     }
 }

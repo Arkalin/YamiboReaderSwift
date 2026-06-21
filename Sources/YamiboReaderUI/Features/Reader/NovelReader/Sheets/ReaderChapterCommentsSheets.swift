@@ -76,7 +76,7 @@ struct ReaderChapterCommentsSheet: View {
     }
 }
 
-private struct ReaderChapterCommentsContent: View {
+struct ReaderChapterCommentsContent: View {
     private static let loadNextColor = Color(red: 0.54, green: 0.35, blue: 0.22)
 
     let state: ReaderChapterCommentsState
@@ -86,6 +86,7 @@ private struct ReaderChapterCommentsContent: View {
     let retry: (ReaderChapterCommentTarget) -> Void
     let loadNext: () -> Void
     let openOriginalPost: (URL) -> Void
+    var emptyTitle = L10n.string("reader.chapter_comments_empty")
 
     var body: some View {
         content
@@ -122,7 +123,7 @@ private struct ReaderChapterCommentsContent: View {
         case let .loaded(target, page):
             if page.comments.isEmpty {
                 ContentUnavailableView(
-                    L10n.string("reader.chapter_comments_empty"),
+                    emptyTitle,
                     systemImage: "text.bubble"
                 )
             } else {
@@ -176,7 +177,7 @@ private struct ReaderChapterCommentsContent: View {
     }
 }
 
-private struct ReaderChapterCommentsToolbarTitle: View {
+struct ReaderChapterCommentsToolbarTitle: View {
     let target: ReaderChapterCommentTarget?
 
     var body: some View {
@@ -193,7 +194,7 @@ private struct ReaderChapterCommentsToolbarTitle: View {
     }
 }
 
-private struct ReaderChapterCommentRow: View {
+struct ReaderChapterCommentRow: View {
     let comment: ChapterComment
     let originalPostURL: URL?
     let openOriginalPost: (URL) -> Void
@@ -229,7 +230,7 @@ private struct ReaderChapterCommentRow: View {
     }
 }
 
-private struct ReaderChapterCommentSourceBadge: View {
+struct ReaderChapterCommentSourceBadge: View {
     let source: ChapterCommentSource
 
     private var palette: (foreground: Color, border: Color) {

@@ -3,73 +3,93 @@ import XCTest
 @testable import YamiboReaderUI
 
 final class ReaderProgressScrubStateTests: XCTestCase {
+    func testReaderChromeProgressMapsScrubFractionToNeutralTargetIndex() {
+        let progress = ReaderChromeProgress(
+            itemCount: 6,
+            currentIndex: 3,
+            primaryText: "目录 · 60%",
+            secondaryText: "第 4 / 6 页",
+            ticks: [
+                ReaderChromeProgressTick(targetIndex: 0, positionFraction: 0, title: "第一章", isCurrent: false),
+                ReaderChromeProgressTick(targetIndex: 3, positionFraction: 0.6, title: "第二章", isCurrent: true),
+            ],
+            scrubTargetIndexes: [0, 2, 4]
+        )
+
+        XCTAssertEqual(progress.itemCount, 6)
+        XCTAssertEqual(progress.currentIndex, 3)
+        XCTAssertEqual(progress.progressFraction, 0.6, accuracy: 0.001)
+        XCTAssertEqual(progress.percentText, "60%")
+        XCTAssertEqual(progress.targetIndex(forProgressFraction: 0.75), 4)
+        XCTAssertEqual(progress.title(forTargetIndex: 4), "第二章")
+        XCTAssertEqual(progress.tickTargetIndex(forTargetIndex: 3), 3)
+        XCTAssertEqual(progress.positionFraction(forTargetIndex: 4), 0.8, accuracy: 0.001)
+    }
+
     func testUpdatingScrubClampsValueAndBuildsPreviewWithoutCommit() {
         var state = ReaderProgressScrubState()
-        let context = ReaderProgressScrubContext(
-            readingMode: .paged,
-            surfaceCount: 5,
-            currentProgressPercent: 20,
-            targetSurfaceIndex: { value in min(max(Int(value.rounded()), 0), 4) },
-            chapterTitle: { index in index >= 2 ? "第二章" : "第一章" },
-            chapterTickStartIndex: { index in index == 2 ? 2 : nil }
-        )
+        let context = ReaderChromeProgress(
+            itemCount: 5,
+            currentIndex: 1,
+            primaryText: "目录 · 25%",
+            ticks: [
+                ReaderChromeProgressTick(targetIndex: 0, positionFraction: 0, title: "第一章", isCurrent: false),
+                ReaderChromeProgressTick(targetIndex: 2, positionFraction: 0.5, title: "第二章", isCurrent: true),
+            ]
+        ).scrubContext
 
         let update = state.update(value: 99, context: context)
 
         XCTAssertEqual(state.phase, .scrubbing)
-        XCTAssertEqual(state.value, 4)
-        XCTAssertEqual(state.targetSurfaceIndex, 4)
+        XCTAssertEqual(state.value, 1)
+        XCTAssertEqual(state.targetIndex, 4)
         XCTAssertEqual(state.preview, ReaderProgressScrubPreview(chapterTitle: "第二章", pageNumber: 5))
-        XCTAssertNil(update.committedSurfaceIndex)
+        XCTAssertNil(update.committedTargetIndex)
     }
 
     func testCommitReturnsOneTargetPageAndCommitHaptic() {
         var state = ReaderProgressScrubState()
-        let context = ReaderProgressScrubContext(
-            readingMode: .paged,
-            surfaceCount: 5,
-            currentProgressPercent: 0,
-            targetSurfaceIndex: { value in Int(value.rounded()) },
-            chapterTitle: { _ in nil },
-            chapterTickStartIndex: { _ in nil }
-        )
+        let context = ReaderChromeProgress(
+            itemCount: 5,
+            currentIndex: 0,
+            primaryText: "目录 · 0%"
+        ).scrubContext
 
-        _ = state.update(value: 3, context: context)
+        _ = state.update(value: 0.75, context: context)
         let commit = state.end()
 
         XCTAssertEqual(state.phase, .ended)
-        XCTAssertEqual(commit.committedSurfaceIndex, 3)
+        XCTAssertEqual(commit.committedTargetIndex, 3)
         XCTAssertEqual(commit.haptics, [.commit])
     }
 
     func testHapticsFireForStartAndChapterTickButNotEveryPage() {
         var state = ReaderProgressScrubState()
-        let context = ReaderProgressScrubContext(
-            readingMode: .paged,
-            surfaceCount: 6,
-            currentProgressPercent: 0,
-            targetSurfaceIndex: { value in Int(value.rounded()) },
-            chapterTitle: { _ in nil },
-            chapterTickStartIndex: { index in [0, 2, 5].contains(index) ? index : nil }
-        )
+        let context = ReaderChromeProgress(
+            itemCount: 6,
+            currentIndex: 0,
+            primaryText: "目录 · 0%",
+            ticks: [
+                ReaderChromeProgressTick(targetIndex: 0, positionFraction: 0, title: nil, isCurrent: true),
+                ReaderChromeProgressTick(targetIndex: 2, positionFraction: 0.4, title: nil, isCurrent: false),
+                ReaderChromeProgressTick(targetIndex: 5, positionFraction: 1, title: nil, isCurrent: false),
+            ]
+        ).scrubContext
 
-        XCTAssertEqual(state.update(value: 1, context: context).haptics, [.start])
-        XCTAssertEqual(state.update(value: 2, context: context).haptics, [.chapterTick])
-        XCTAssertEqual(state.update(value: 3, context: context).haptics, [])
+        XCTAssertEqual(state.update(value: 0.2, context: context).haptics, [.start])
+        XCTAssertEqual(state.update(value: 0.4, context: context).haptics, [.chapterTick])
+        XCTAssertEqual(state.update(value: 0.6, context: context).haptics, [])
     }
 
     func testPreviewFallsBackToPageOnlyWhenChapterTitleIsUnavailable() {
         var state = ReaderProgressScrubState()
-        let context = ReaderProgressScrubContext(
-            readingMode: .vertical,
-            surfaceCount: 6,
-            currentProgressPercent: 40,
-            targetSurfaceIndex: { value in Int((value / 100 * 5).rounded()) },
-            chapterTitle: { _ in nil },
-            chapterTickStartIndex: { _ in nil }
-        )
+        let context = ReaderChromeProgress(
+            itemCount: 6,
+            currentIndex: 2,
+            primaryText: "目录 · 40%"
+        ).scrubContext
 
-        _ = state.update(value: 50, context: context)
+        _ = state.update(value: 0.5, context: context)
 
         XCTAssertEqual(state.preview?.displayText, "第4页")
     }

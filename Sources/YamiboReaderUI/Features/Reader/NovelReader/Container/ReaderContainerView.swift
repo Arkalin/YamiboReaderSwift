@@ -556,7 +556,7 @@ public struct ReaderContainerView: View {
 
     @ViewBuilder
     private func topChrome(topInset: CGFloat) -> some View {
-        ReaderTopChrome(
+        NovelReaderTopChrome(
             model: model,
             topInset: topInset,
             onClose: closeReader,
@@ -574,8 +574,8 @@ public struct ReaderContainerView: View {
 
     @ViewBuilder
     private func bottomChrome(bottomInset: CGFloat, isVisible: Bool) -> some View {
-        ReaderBottomChrome(
-            progressSnapshot: model.chromeProgressSnapshot,
+        NovelReaderBottomChrome(
+            progress: model.chromeProgressSnapshot.chromeProgress,
             readingMode: model.settings.readingMode,
             bottomInset: bottomInset,
             isVisible: isVisible,

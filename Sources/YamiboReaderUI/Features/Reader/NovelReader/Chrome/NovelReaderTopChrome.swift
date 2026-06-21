@@ -4,7 +4,7 @@ import YamiboReaderCore
 #if os(iOS)
 import UIKit
 
-struct ReaderTopChrome: View {
+struct NovelReaderTopChrome: View {
     private let pagedChapterTitleTopLift: CGFloat = 12
 
     let model: ReaderContainerModel

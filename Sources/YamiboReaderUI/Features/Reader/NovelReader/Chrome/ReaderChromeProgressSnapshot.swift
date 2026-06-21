@@ -219,18 +219,44 @@ public struct ReaderChromeProgressSnapshot: Equatable, Sendable {
 
     public var progressScrubContext: ReaderProgressScrubContext {
         ReaderProgressScrubContext(
-            readingMode: scrubData.readingMode,
-            surfaceCount: scrubData.surfaceCount,
-            currentProgressPercent: scrubData.currentProgressPercent,
-            targetSurfaceIndex: { value in
-                scrubData.targetSurfaceIndex(for: value)
+            itemCount: scrubData.surfaceCount,
+            currentProgressFraction: currentProgressFraction,
+            targetIndex: { fraction in
+                let clampedFraction = min(max(fraction, 0), 1)
+                let value = switch scrubData.readingMode {
+                case .paged:
+                    clampedFraction * Double(max(scrubData.surfaceCount - 1, 0))
+                case .vertical:
+                    clampedFraction * 100
+                }
+                return scrubData.targetSurfaceIndex(for: value)
             },
-            chapterTitle: { surfaceIndex in
+            title: { surfaceIndex in
                 scrubData.chapterTitle(for: surfaceIndex)
             },
-            chapterTickStartIndex: { surfaceIndex in
+            tickTargetIndex: { surfaceIndex in
                 scrubData.chapterTickStartIndex(for: surfaceIndex)
             }
+        )
+    }
+
+    public var chromeProgress: ReaderChromeProgress {
+        ReaderChromeProgress(
+            itemCount: surfaceCount,
+            currentIndex: currentSurfaceNumber - 1,
+            progressFraction: currentProgressFraction,
+            percentText: currentProgressPercentText,
+            primaryText: L10n.string("reader.chapters") + " · \(currentProgressPercentText)",
+            secondaryText: progressText,
+            ticks: progressChapterTicks.map { tick in
+                ReaderChromeProgressTick(
+                    targetIndex: tick.chapter.startIndex,
+                    positionFraction: tick.position,
+                    title: tick.chapter.title,
+                    isCurrent: tick.isCurrent
+                )
+            },
+            scrubTargetIndexes: scrubData.scrubTargetIndexes
         )
     }
 
@@ -256,5 +282,19 @@ public struct ReaderChromeProgressSnapshot: Equatable, Sendable {
             }
         }
         return result
+    }
+}
+
+private extension ReaderProgressScrubData {
+    var scrubTargetIndexes: [Int] {
+        switch readingMode {
+        case .paged:
+            if isTwoPageSpreadActive {
+                return stride(from: 0, through: max(surfaceCount - 1, 0), by: 2).map { $0 }
+            }
+            return Array(0 ... max(surfaceCount - 1, 0))
+        case .vertical:
+            return visibleSurfaceIndexes.isEmpty ? [fallbackVisibleSurfaceIndex] : visibleSurfaceIndexes
+        }
     }
 }

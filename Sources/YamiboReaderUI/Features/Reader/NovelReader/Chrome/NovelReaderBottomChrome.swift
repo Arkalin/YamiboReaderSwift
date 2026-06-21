@@ -4,8 +4,8 @@ import YamiboReaderCore
 #if os(iOS)
 import UIKit
 
-struct ReaderBottomChrome: View {
-    let progressSnapshot: ReaderChromeProgressSnapshot
+struct NovelReaderBottomChrome: View {
+    let progress: ReaderChromeProgress
     let readingMode: ReaderReadingMode
     let bottomInset: CGFloat
     let isVisible: Bool
@@ -21,12 +21,10 @@ struct ReaderBottomChrome: View {
     let onEndVerticalProgressScrub: () -> Void
     let isProgressScrubbing: Bool
 
-    @State private var sliderState = ReaderProgressSliderState()
     @State private var scrubState = ReaderProgressScrubState()
     @State private var progressTickFeedbackGenerator = UISelectionFeedbackGenerator()
     @State private var progressStartFeedbackGenerator = UIImpactFeedbackGenerator(style: .light)
     @State private var progressCommitFeedbackGenerator = UIImpactFeedbackGenerator(style: .medium)
-    @State private var lastFeedbackTickStartIndex: Int?
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
@@ -44,15 +42,6 @@ struct ReaderBottomChrome: View {
         }
         .padding(.top, chromeLayout.bottomChromeTopPadding)
         .padding(.bottom, max(bottomInset - 18, 8))
-        .onAppear {
-            sliderState.reset(to: sliderSnapshot)
-        }
-        .onChange(of: sliderSnapshot) { _, newValue in
-            sliderState.reset(to: newValue)
-        }
-        .onChange(of: sliderModelValue) { _, newValue in
-            sliderState.syncModelValue(newValue)
-        }
     }
 
     private var chromeLayout: ReaderBottomChromeLayoutPresentation {
@@ -85,9 +74,9 @@ struct ReaderBottomChrome: View {
 
     private var verticalProgressControl: some View {
         ReaderVerticalProgressCapsule(
-            restingProgressFraction: progressSnapshot.currentProgressFraction,
-            scrubContext: progressSnapshot.progressScrubContext,
-            ticks: progressSnapshot.progressChapterTicks,
+            restingProgressFraction: progress.progressFraction,
+            scrubContext: progress.scrubContext,
+            ticks: progress.ticks,
             onBeginScrub: onBeginVerticalProgressScrub,
             onCommit: onVerticalProgressCommit,
             onEndScrub: onEndVerticalProgressScrub
@@ -133,8 +122,8 @@ struct ReaderBottomChrome: View {
     @ViewBuilder
     private var progressSummary: some View {
         let summary = ReaderChromeProgressSummary(
-            chapterTitle: progressSnapshot.currentChapterTitle,
-            progressText: progressSnapshot.progressText
+            chapterTitle: progress.title(forTargetIndex: progress.currentIndex),
+            progressText: progress.secondaryText ?? ""
         )
 
         let content = VStack(spacing: 2) {
@@ -187,12 +176,12 @@ struct ReaderBottomChrome: View {
             }
 
             ReaderDirectoryProgressCapsule(
-                title: progressChromePresentation.horizontalCapsuleText(percentText: progressSnapshot.currentProgressPercentText),
+                title: progress.primaryText,
                 progressFraction: displayedProgressFraction,
                 showsFill: progressChromePresentation.showsHorizontalFill,
                 supportsScrub: progressChromePresentation.supportsHorizontalScrub && sliderHasAvailableRange,
                 isScrubbing: scrubState.phase == .scrubbing,
-                ticks: progressSnapshot.progressChapterTicks,
+                ticks: progress.ticks,
                 onTapDirectory: onShowChapters,
                 onScrub: { locationX, width in
                     handleHorizontalCapsuleScrub(locationX: locationX, width: width)
@@ -225,30 +214,15 @@ struct ReaderBottomChrome: View {
         action: @escaping () -> Void
     ) -> some View {
         let presentation = actionRowPresentation
-        let controlTint = chromeLayout.progressCapsulesUseButtonTint ? readerChromeButtonTint(for: colorScheme) : Color.accentColor
 
-        return Button(action: action) {
-            HStack(spacing: 8) {
-                Text(title)
-                    .font(.callout.weight(.semibold))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.85)
-                Spacer(minLength: 12)
-                Image(systemName: systemName)
-                    .font(.callout.weight(.semibold))
-            }
-            .foregroundStyle(chromeLayout.directoryCapsuleContentUsesAccentColor ? controlTint : Color.primary)
-            .frame(maxWidth: .infinity)
-            .frame(height: chromeLayout.progressPanelHeight)
-            .padding(.horizontal, 18)
-            .contentShape(Capsule())
-        }
-        .buttonStyle(.plain)
-        .readerChromePanel(cornerRadius: 24, tint: readerChromePanelTint(for: colorScheme))
+        return ReaderChromeCapsuleButton(
+            title: title,
+            systemName: systemName,
+            action: action
+        )
         .opacity(presentation.opacity)
         .allowsHitTesting(presentation.allowsHitTesting)
         .accessibilityHidden(presentation.isAccessibilityHidden)
-        .accessibilityLabel(title)
     }
 
     private var shouldHideDirectoryCapsule: Bool {
@@ -261,65 +235,25 @@ struct ReaderBottomChrome: View {
         ReaderProgressChromePresentation(readingMode: readingMode, isChromeVisible: true)
     }
 
-    private var sliderRange: ClosedRange<Double> {
-        if readingMode == .vertical {
-            0 ... 100
-        } else {
-            0 ... Double(max(progressSnapshot.surfaceCount - 1, 0))
-        }
-    }
-
-    private var sliderModelValue: Double {
-        if readingMode == .vertical {
-            Double(progressSnapshot.currentProgressPercent)
-        } else {
-            Double(max(progressSnapshot.currentSurfaceNumber - 1, 0))
-        }
-    }
-
-    private var sliderSnapshot: ReaderProgressSliderSnapshot {
-        ReaderProgressSliderSnapshot(
-            readingMode: readingMode,
-            visibleView: progressSnapshot.visibleView,
-            surfaceCount: progressSnapshot.surfaceCount,
-            currentSurfaceNumber: progressSnapshot.currentSurfaceNumber,
-            currentProgressPercent: progressSnapshot.currentProgressPercent
-        )
-    }
-
     private var sliderHasAvailableRange: Bool {
-        sliderRange.lowerBound < sliderRange.upperBound
+        progress.itemCount > 1
     }
 
     private var displayedProgressFraction: Double {
         if scrubState.phase == .scrubbing {
-            guard progressSnapshot.surfaceCount > 1 else { return 0 }
-            return Double(scrubState.targetSurfaceIndex) / Double(max(progressSnapshot.surfaceCount - 1, 1))
+            return progress.positionFraction(forTargetIndex: scrubState.targetIndex)
         }
-        return progressSnapshot.currentProgressFraction
-    }
-
-    private var progressLabelText: String {
-        progressSnapshot.progressSliderLabelText(
-            isEditing: sliderState.isEditing,
-            sliderValue: sliderState.sliderValue,
-            targetSurfaceIndex: sliderTargetSurfaceIndex
-        )
-    }
-
-    private var sliderTargetSurfaceIndex: Int {
-        progressSnapshot.targetSurfaceIndex(forProgressValue: sliderState.sliderValue)
+        return progress.progressFraction
     }
 
     private var scrubContext: ReaderProgressScrubContext {
-        progressSnapshot.progressScrubContext
+        progress.scrubContext
     }
 
     private func handleHorizontalCapsuleScrub(locationX: CGFloat, width: CGFloat) {
         guard progressChromePresentation.supportsHorizontalScrub, width > 0 else { return }
         let fraction = min(max(locationX / width, 0), 1)
-        let value = sliderRange.lowerBound + Double(fraction) * (sliderRange.upperBound - sliderRange.lowerBound)
-        let update = scrubState.update(value: value, context: scrubContext)
+        let update = scrubState.update(value: Double(fraction), context: scrubContext)
         triggerFeedback(update.haptics)
     }
 
@@ -327,10 +261,9 @@ struct ReaderBottomChrome: View {
         guard scrubState.phase == .scrubbing else { return }
         let update = scrubState.end()
         triggerFeedback(update.haptics)
-        if let target = update.committedSurfaceIndex {
+        if let target = update.committedTargetIndex {
             onProgressCommit(target)
         }
-        sliderState.sliderValue = sliderModelValue
     }
 
     private func triggerFeedback(_ haptics: [ReaderProgressScrubHaptic]) {
@@ -348,18 +281,6 @@ struct ReaderBottomChrome: View {
                 progressCommitFeedbackGenerator.prepare()
             }
         }
-    }
-
-    private func triggerProgressTickFeedbackIfNeeded() {
-        guard let tickStartIndex = progressSnapshot.progressChapterTickStartIndex(forSurfaceIndex: sliderTargetSurfaceIndex) else {
-            lastFeedbackTickStartIndex = nil
-            return
-        }
-        guard lastFeedbackTickStartIndex != tickStartIndex else { return }
-
-        progressTickFeedbackGenerator.selectionChanged()
-        progressTickFeedbackGenerator.prepare()
-        lastFeedbackTickStartIndex = tickStartIndex
     }
 }
 #endif
