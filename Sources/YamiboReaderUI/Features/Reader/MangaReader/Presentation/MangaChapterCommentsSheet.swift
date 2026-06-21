@@ -10,6 +10,16 @@ struct MangaChapterCommentsSheet: View {
 
     @ObservedObject var model: MangaReaderModel
 
+    init(
+        model: MangaReaderModel,
+        target: ReaderChapterCommentTarget?,
+        appModel: YamiboAppModel
+    ) {
+        self.model = model
+        self.target = target
+        self.appModel = appModel
+    }
+
     var body: some View {
         NavigationStack {
             content
