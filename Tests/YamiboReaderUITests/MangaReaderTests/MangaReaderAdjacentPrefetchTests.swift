@@ -29,6 +29,34 @@ final class MangaReaderAdjacentPrefetchTests: XCTestCase {
         XCTAssertEqual(loaded.viewportPlacement?.targetPageIndex, 8)
     }
 
+    func testLocalPageJumpStaysInCurrentChapterAfterAdjacentPrefetch() async throws {
+        let document700 = try makeAdjacentPrefetchDocument(tid: "700", pageCount: 4)
+        let document701 = try makeAdjacentPrefetchDocument(tid: "701", pageCount: 4)
+        let fixture = try await makeAdjacentPrefetchFixture(
+            document: document700,
+            extraDocuments: [document701],
+            directory: makeAdjacentPrefetchDirectory(tids: ["700", "701"])
+        )
+
+        await fixture.model.prepare()
+        fixture.model.updateCurrentPage(globalIndex: 3)
+
+        try await waitForAdjacentPrefetch {
+            guard case let .loaded(loaded) = fixture.model.presentation.state else { return false }
+            return loaded.pages.map(\.id).contains("701#1")
+        }
+
+        await fixture.model.jumpToPage(localIndex: 1)
+
+        guard case let .loaded(loaded) = fixture.model.presentation.state else {
+            XCTFail("Expected loaded presentation")
+            return
+        }
+        XCTAssertEqual(loaded.currentPage?.id, "700#1")
+        XCTAssertEqual(loaded.currentPageIndex, 1)
+        XCTAssertEqual(loaded.viewportPlacement?.targetPageIndex, 1)
+    }
+
     func testPreviousPrefetchKeepsCurrentPageIdentityAndStablePlacement() async throws {
         let document699 = try makeAdjacentPrefetchDocument(tid: "699", pageCount: 3)
         let document700 = try makeAdjacentPrefetchDocument(tid: "700", pageCount: 4)
