@@ -253,6 +253,7 @@
 "reader.comment_source.rating_reason" = "评分";
 "reader.comment_source.others_post" = "帖子";
 "reader.comments" = "评论";
+"reader.comments_empty" = "暂无评论";
 "reader.cache_action.cache" = "缓存";
 "reader.cache_action.update" = "更新";
 "reader.cache_detail.completed" = "已完成 %d / %d 页";

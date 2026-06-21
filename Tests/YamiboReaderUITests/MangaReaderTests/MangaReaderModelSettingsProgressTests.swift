@@ -169,6 +169,46 @@ final class MangaReaderModelSettingsProgressTests: XCTestCase {
         XCTAssertTrue(favorites.isEmpty)
     }
 
+    func testCurrentChapterCommentTargetUsesCurrentMangaPageProjection() async throws {
+        let fixture = try await makeFixture()
+
+        await fixture.model.prepare()
+
+        let target = try XCTUnwrap(fixture.model.currentChapterCommentTarget)
+        XCTAssertEqual(target.threadURL, fixture.chapterURL)
+        XCTAssertEqual(target.view, 1)
+        XCTAssertEqual(target.ownerPostID, "9001")
+        XCTAssertEqual(target.title, "第1话")
+    }
+
+    func testNilMangaChapterCommentTargetShowsEmptyCommentsState() async throws {
+        let fixture = try await makeFixture()
+
+        await fixture.model.loadChapterComments(for: nil)
+
+        guard case let .loaded(_, page) = fixture.model.chapterCommentsState else {
+            XCTFail("Expected empty loaded comments state")
+            return
+        }
+        XCTAssertTrue(page.comments.isEmpty)
+        XCTAssertNil(page.nextView)
+    }
+
+    func testJumpToPagePublishesViewportPlacementForSharedScrubberCommit() async throws {
+        let fixture = try await makeFixture()
+
+        await fixture.model.prepare()
+        await fixture.model.jumpToPage(globalIndex: 2)
+
+        guard case let .loaded(loaded) = fixture.model.presentation.state else {
+            XCTFail("Expected loaded presentation")
+            return
+        }
+        XCTAssertEqual(loaded.currentPageIndex, 2)
+        XCTAssertEqual(loaded.currentPage?.globalIndex, 2)
+        XCTAssertEqual(loaded.viewportPlacement?.targetPageIndex, 2)
+    }
+
     func testSaveProgressInLoadingStateDoesNotOverwriteExistingResumeRoute() async throws {
         let progressAdapter = RecordingMangaProgressAdapter()
         let fixture = try await makeFixture(

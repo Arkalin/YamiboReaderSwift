@@ -453,13 +453,13 @@ final class ReaderContainerModelTests: XCTestCase {
         await MainActor.run {
             let context = model.verticalProgressScrubContext
 
-            XCTAssertEqual(context.targetSurfaceIndex(0), 0)
-            XCTAssertEqual(context.targetSurfaceIndex(50), 2)
-            XCTAssertEqual(context.targetSurfaceIndex(100), 4)
-            XCTAssertEqual(context.targetSurfaceIndex(-25), 0)
-            XCTAssertEqual(context.targetSurfaceIndex(250), 4)
-            XCTAssertEqual(context.chapterTitle(2), "第3章")
-            XCTAssertEqual(context.chapterTickStartIndex(2), 2)
+            XCTAssertEqual(context.targetIndex(0), 0)
+            XCTAssertEqual(context.targetIndex(0.5), 2)
+            XCTAssertEqual(context.targetIndex(1), 4)
+            XCTAssertEqual(context.targetIndex(-0.25), 0)
+            XCTAssertEqual(context.targetIndex(2.5), 4)
+            XCTAssertEqual(context.title(2), "第3章")
+            XCTAssertEqual(context.tickTargetIndex(2), 2)
         }
     }
 
@@ -489,7 +489,7 @@ final class ReaderContainerModelTests: XCTestCase {
                 _ = model.chromeProgressSnapshot.progressText
                 _ = model.chromeProgressSnapshot.currentProgressPercentText
                 _ = model.chromeProgressSnapshot.progressChapterTicks
-                _ = model.chromeProgressSnapshot.progressScrubContext.targetSurfaceIndex(50)
+                _ = model.chromeProgressSnapshot.progressScrubContext.targetIndex(0.5)
             }
             XCTAssertEqual(model.readerPresentation?.revision, revision)
         }
@@ -513,11 +513,11 @@ final class ReaderContainerModelTests: XCTestCase {
         await MainActor.run {
             let context = model.verticalProgressScrubContext
 
-            XCTAssertEqual(context.targetSurfaceIndex(0), 0)
-            XCTAssertEqual(context.targetSurfaceIndex(50), 0)
-            XCTAssertEqual(context.targetSurfaceIndex(100), 0)
-            XCTAssertNil(context.chapterTitle(0))
-            XCTAssertNil(context.chapterTickStartIndex(0))
+            XCTAssertEqual(context.targetIndex(0), 0)
+            XCTAssertEqual(context.targetIndex(0.5), 0)
+            XCTAssertEqual(context.targetIndex(1), 0)
+            XCTAssertNil(context.title(0))
+            XCTAssertNil(context.tickTargetIndex(0))
         }
     }
 
@@ -610,30 +610,27 @@ final class ReaderContainerModelTests: XCTestCase {
         }
     }
 
-    func testProgressSliderStateResetsStaleEditingValueWhenWebViewChanges() {
-        var state = ReaderProgressSliderState(sliderValue: 62, isEditing: true)
-
-        state.reset(
-            to: ReaderProgressSliderSnapshot(
-                readingMode: .vertical,
-                visibleView: 2,
-                surfaceCount: 144,
-                currentSurfaceNumber: 1,
-                currentProgressPercent: 0
-            )
+    func testChromeProgressProjectionUsesNeutralProgressForSharedChrome() async throws {
+        let model = try await makeModel(
+            documents: [
+                makeImageDocument(view: 1, maxView: 1, surfaceCount: 5),
+            ],
+            settings: ReaderAppearanceSettings(readingMode: .paged)
         )
 
-        XCTAssertFalse(state.isEditing)
-        XCTAssertEqual(state.sliderValue, 0)
-    }
+        await MainActor.run {
+            model.selectSurface(2)
+            let progress = model.chromeProgressSnapshot.chromeProgress
 
-    func testProgressSliderStateKeepsEditingValueForOrdinaryModelRefresh() {
-        var state = ReaderProgressSliderState(sliderValue: 62, isEditing: true)
-
-        state.syncModelValue(0)
-
-        XCTAssertTrue(state.isEditing)
-        XCTAssertEqual(state.sliderValue, 62)
+            XCTAssertEqual(progress.itemCount, 5)
+            XCTAssertEqual(progress.currentIndex, 2)
+            XCTAssertEqual(progress.progressFraction, 0.5, accuracy: 0.001)
+            XCTAssertEqual(progress.percentText, "50%")
+            XCTAssertEqual(progress.targetIndex(forProgressFraction: 0.75), 3)
+            XCTAssertEqual(progress.positionFraction(forTargetIndex: 3), 0.75, accuracy: 0.001)
+            XCTAssertEqual(progress.title(forTargetIndex: 2), "第3章")
+            XCTAssertEqual(progress.tickTargetIndex(forTargetIndex: 2), 2)
+        }
     }
 
     func testTwoPageSpreadRequiresPadLandscapePagedModeAndSetting() async throws {

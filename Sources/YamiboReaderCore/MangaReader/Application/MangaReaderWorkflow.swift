@@ -123,6 +123,18 @@ public final class MangaReaderWorkflow {
     }
 
     @discardableResult
+    public func jumpToLoadedPage(at globalIndex: Int) -> MangaReaderPresentation {
+        guard var window else { return presentation }
+        _ = window.moveToLoadedPage(at: globalIndex)
+        self.window = window
+        presentation = loadedPresentation(
+            from: window,
+            placementPageIndex: MangaReaderPageProjection.resolvedPageIndex(for: window)
+        )
+        return presentation
+    }
+
+    @discardableResult
     public func prefetchAdjacentChaptersIfNeeded(around globalIndex: Int) async -> MangaReaderPresentation? {
         guard var window else { return nil }
 

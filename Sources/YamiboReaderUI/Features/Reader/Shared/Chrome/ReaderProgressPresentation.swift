@@ -70,55 +70,42 @@ public struct ReaderProgressScrubPreview: Equatable, Sendable {
 }
 
 public struct ReaderProgressScrubContext: Sendable {
-    public var readingMode: ReaderReadingMode
-    public var surfaceCount: Int
-    public var currentProgressPercent: Int
-    public var targetSurfaceIndex: @Sendable (Double) -> Int
-    public var chapterTitle: @Sendable (Int) -> String?
-    public var chapterTickStartIndex: @Sendable (Int) -> Int?
+    public var itemCount: Int
+    public var currentProgressFraction: Double
+    public var targetIndex: @Sendable (Double) -> Int
+    public var title: @Sendable (Int) -> String?
+    public var tickTargetIndex: @Sendable (Int) -> Int?
 
     public init(
-        readingMode: ReaderReadingMode,
-        surfaceCount: Int,
-        currentProgressPercent: Int,
-        targetSurfaceIndex: @escaping @Sendable (Double) -> Int,
-        chapterTitle: @escaping @Sendable (Int) -> String?,
-        chapterTickStartIndex: @escaping @Sendable (Int) -> Int?
+        itemCount: Int,
+        currentProgressFraction: Double,
+        targetIndex: @escaping @Sendable (Double) -> Int,
+        title: @escaping @Sendable (Int) -> String?,
+        tickTargetIndex: @escaping @Sendable (Int) -> Int?
     ) {
-        self.readingMode = readingMode
-        self.surfaceCount = max(surfaceCount, 1)
-        self.currentProgressPercent = min(max(currentProgressPercent, 0), 100)
-        self.targetSurfaceIndex = targetSurfaceIndex
-        self.chapterTitle = chapterTitle
-        self.chapterTickStartIndex = chapterTickStartIndex
+        self.itemCount = max(itemCount, 1)
+        self.currentProgressFraction = min(max(currentProgressFraction, 0), 1)
+        self.targetIndex = targetIndex
+        self.title = title
+        self.tickTargetIndex = tickTargetIndex
     }
 
     public var valueRange: ClosedRange<Double> {
-        switch readingMode {
-        case .paged:
-            0 ... Double(max(surfaceCount - 1, 0))
-        case .vertical:
-            0 ... 100
-        }
+        0 ... 1
     }
 
     public var restingValue: Double {
-        switch readingMode {
-        case .paged:
-            0
-        case .vertical:
-            Double(currentProgressPercent)
-        }
+        currentProgressFraction
     }
 }
 
 public struct ReaderProgressScrubUpdate: Equatable, Sendable {
     public var haptics: [ReaderProgressScrubHaptic]
-    public var committedSurfaceIndex: Int?
+    public var committedTargetIndex: Int?
 
-    public init(haptics: [ReaderProgressScrubHaptic] = [], committedSurfaceIndex: Int? = nil) {
+    public init(haptics: [ReaderProgressScrubHaptic] = [], committedTargetIndex: Int? = nil) {
         self.haptics = haptics
-        self.committedSurfaceIndex = committedSurfaceIndex
+        self.committedTargetIndex = committedTargetIndex
     }
 }
 
@@ -329,9 +316,9 @@ public struct ReaderChromeProgressSummary: Equatable, Sendable {
 public struct ReaderProgressScrubState: Equatable, Sendable {
     public private(set) var phase: ReaderProgressScrubPhase = .idle
     public private(set) var value = 0.0
-    public private(set) var targetSurfaceIndex = 0
+    public private(set) var targetIndex = 0
     public private(set) var preview: ReaderProgressScrubPreview?
-    private var lastChapterTickStartIndex: Int?
+    private var lastTickTargetIndex: Int?
 
     public init() {}
 
@@ -350,17 +337,17 @@ public struct ReaderProgressScrubState: Equatable, Sendable {
 
         phase = .scrubbing
         value = Self.clamp(newValue, to: context.valueRange)
-        targetSurfaceIndex = context.targetSurfaceIndex(value)
+        targetIndex = context.targetIndex(value)
         preview = ReaderProgressScrubPreview(
-            chapterTitle: context.chapterTitle(targetSurfaceIndex),
-            pageNumber: targetSurfaceIndex + 1
+            chapterTitle: context.title(targetIndex),
+            pageNumber: targetIndex + 1
         )
 
-        let tickStartIndex = context.chapterTickStartIndex(targetSurfaceIndex)
-        if let tickStartIndex, tickStartIndex != lastChapterTickStartIndex {
+        let tickTargetIndex = context.tickTargetIndex(targetIndex)
+        if let tickTargetIndex, tickTargetIndex != lastTickTargetIndex {
             haptics.append(.chapterTick)
         }
-        lastChapterTickStartIndex = tickStartIndex
+        lastTickTargetIndex = tickTargetIndex
 
         return ReaderProgressScrubUpdate(haptics: haptics)
     }
@@ -368,52 +355,20 @@ public struct ReaderProgressScrubState: Equatable, Sendable {
     @discardableResult
     public mutating func end() -> ReaderProgressScrubUpdate {
         phase = .ended
-        lastChapterTickStartIndex = nil
-        return ReaderProgressScrubUpdate(haptics: [.commit], committedSurfaceIndex: targetSurfaceIndex)
+        lastTickTargetIndex = nil
+        return ReaderProgressScrubUpdate(haptics: [.commit], committedTargetIndex: targetIndex)
     }
 
     public mutating func reset(to value: Double = 0) {
         phase = .idle
         self.value = value
-        targetSurfaceIndex = 0
+        targetIndex = 0
         preview = nil
-        lastChapterTickStartIndex = nil
+        lastTickTargetIndex = nil
     }
 
     private static func clamp(_ value: Double, to range: ClosedRange<Double>) -> Double {
         min(max(value, range.lowerBound), range.upperBound)
-    }
-}
-
-struct ReaderProgressSliderSnapshot: Equatable {
-    var readingMode: ReaderReadingMode
-    var visibleView: Int
-    var surfaceCount: Int
-    var currentSurfaceNumber: Int
-    var currentProgressPercent: Int
-
-    var modelValue: Double {
-        switch readingMode {
-        case .vertical:
-            Double(currentProgressPercent)
-        case .paged:
-            Double(max(currentSurfaceNumber - 1, 0))
-        }
-    }
-}
-
-struct ReaderProgressSliderState: Equatable {
-    var sliderValue = 0.0
-    var isEditing = false
-
-    mutating func reset(to snapshot: ReaderProgressSliderSnapshot) {
-        isEditing = false
-        sliderValue = snapshot.modelValue
-    }
-
-    mutating func syncModelValue(_ value: Double) {
-        guard !isEditing else { return }
-        sliderValue = value
     }
 }
 
