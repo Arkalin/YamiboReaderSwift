@@ -169,11 +169,12 @@ private struct MangaReaderFloatingControls: View {
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        ReaderGlassContainer(spacing: 10) {
-            ZStack(alignment: .top) {
+        ZStack(alignment: .top) {
+            ReaderGlassContainer(spacing: 10) {
                 topControls
-                bottomControls(progress: progress)
             }
+
+            bottomControls(progress: progress)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
