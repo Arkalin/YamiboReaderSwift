@@ -198,7 +198,7 @@ final class MangaReaderModelSettingsProgressTests: XCTestCase {
         let fixture = try await makeFixture()
 
         await fixture.model.prepare()
-        await fixture.model.jumpToPage(globalIndex: 2)
+        await fixture.model.jumpToPage(localIndex: 2)
 
         guard case let .loaded(loaded) = fixture.model.presentation.state else {
             XCTFail("Expected loaded presentation")
@@ -206,6 +206,8 @@ final class MangaReaderModelSettingsProgressTests: XCTestCase {
         }
         XCTAssertEqual(loaded.currentPageIndex, 2)
         XCTAssertEqual(loaded.currentPage?.globalIndex, 2)
+        XCTAssertEqual(loaded.currentPage?.localIndex, 2)
+        XCTAssertEqual(loaded.currentPage?.chapterPageCount, 3)
         XCTAssertEqual(loaded.viewportPlacement?.targetPageIndex, 2)
     }
 

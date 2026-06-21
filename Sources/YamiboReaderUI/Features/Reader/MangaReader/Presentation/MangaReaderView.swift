@@ -46,8 +46,8 @@ public struct MangaReaderView: View {
                         isChapterCommentsPresented = true
                     },
                     onOpenOriginalPost: openOriginalPost,
-                    onJumpToPage: { targetIndex in
-                        Task { await model.jumpToPage(globalIndex: targetIndex) }
+                    onJumpToLocalPage: { targetIndex in
+                        Task { await model.jumpToPage(localIndex: targetIndex) }
                     }
                 )
             }
@@ -137,30 +137,21 @@ public struct MangaReaderView: View {
         let currentPage = loaded.currentPage
             ?? loaded.currentPageIndex.flatMap { pages.indices.contains($0) ? pages[$0] : nil }
             ?? pages[0]
-        let maxIndex = max(pages.count - 1, 1)
-        let currentIndex = min(max(currentPage.globalIndex, 0), max(pages.count - 1, 0))
-        let progressFraction = pages.count > 1 ? Double(currentIndex) / Double(maxIndex) : 0
+        let itemCount = max(currentPage.chapterPageCount, 1)
+        let maxIndex = max(itemCount - 1, 1)
+        let currentIndex = min(max(currentPage.localIndex, 0), itemCount - 1)
+        let progressFraction = itemCount > 1 ? Double(currentIndex) / Double(maxIndex) : 0
         let percentText = "\(Int((progressFraction * 100).rounded()))%"
-        var seenChapterTIDs = Set<String>()
-        let ticks = pages.compactMap { page -> ReaderChromeProgressTick? in
-            guard seenChapterTIDs.insert(page.tid).inserted else { return nil }
-            return ReaderChromeProgressTick(
-                targetIndex: page.globalIndex,
-                positionFraction: pages.count > 1 ? Double(page.globalIndex) / Double(maxIndex) : 0,
-                title: page.chapterTitle,
-                isCurrent: page.tid == currentPage.tid
-            )
-        }
 
         return ReaderChromeProgress(
-            itemCount: pages.count,
+            itemCount: itemCount,
             currentIndex: currentIndex,
             progressFraction: progressFraction,
             percentText: percentText,
             primaryText: L10n.string("manga.directory") + " · \(percentText)",
-            secondaryText: L10n.string("manga.preview_page", currentIndex + 1, pages.count),
-            ticks: ticks,
-            scrubTargetIndexes: pages.map(\.globalIndex)
+            secondaryText: L10n.string("manga.preview_page", currentIndex + 1, itemCount),
+            ticks: [],
+            scrubTargetIndexes: Array(0 ..< itemCount)
         )
     }
 }
@@ -173,7 +164,7 @@ private struct MangaReaderFloatingControls: View {
     let onShowDirectory: () -> Void
     let onShowComments: () -> Void
     let onOpenOriginalPost: () -> Void
-    let onJumpToPage: (Int) -> Void
+    let onJumpToLocalPage: (Int) -> Void
 
     @Environment(\.colorScheme) private var colorScheme
 
@@ -270,7 +261,7 @@ private struct MangaReaderFloatingControls: View {
                     scrubContext: progress.scrubContext,
                     ticks: progress.ticks,
                     onBeginScrub: {},
-                    onCommit: onJumpToPage,
+                    onCommit: onJumpToLocalPage,
                     onEndScrub: {}
                 )
                 .frame(width: layout.verticalScrubberWidth, alignment: .trailing)

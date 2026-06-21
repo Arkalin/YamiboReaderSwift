@@ -209,14 +209,26 @@ public final class MangaReaderModel: ObservableObject {
         scheduleAdjacentPrefetch(around: currentPageIndex(in: nextPresentation) ?? globalIndex)
     }
 
-    public func jumpToPage(globalIndex: Int) async {
-        guard let workflow else { return }
+    public func jumpToPage(localIndex: Int) async {
+        guard let workflow,
+              case let .loaded(loaded) = presentation.state,
+              let currentPage = loaded.currentPage else {
+            return
+        }
+        let itemCount = max(currentPage.chapterPageCount, 1)
+        let targetLocalIndex = min(max(localIndex, 0), itemCount - 1)
+        guard let targetPage = loaded.pages.first(where: { page in
+            page.tid == currentPage.tid && page.localIndex == targetLocalIndex
+        }) else {
+            return
+        }
+
         adjacentPrefetchTask?.cancel()
         readerContentGeneration += 1
         let previousProgressSnapshot = progressSnapshot(from: presentation)
-        let nextPresentation = workflow.jumpToLoadedPage(at: globalIndex)
+        let nextPresentation = workflow.jumpToLoadedPage(at: targetPage.globalIndex)
         publishPresentation(nextPresentation, previousProgressSnapshot: previousProgressSnapshot)
-        scheduleAdjacentPrefetch(around: currentPageIndex(in: nextPresentation) ?? globalIndex)
+        scheduleAdjacentPrefetch(around: currentPageIndex(in: nextPresentation) ?? targetPage.globalIndex)
     }
 
     public var currentChapterCommentTarget: ReaderChapterCommentTarget? {
