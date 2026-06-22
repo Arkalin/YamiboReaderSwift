@@ -80,6 +80,19 @@ final class MangaReaderDirectoryPanelTests: XCTestCase {
         XCTAssertTrue(source.contains("animated: placement.animated"))
     }
 
+    func testVerticalViewportCoalescesCurrentPagePublishingDuringScroll() throws {
+        let source = try mangaReaderSourceFile("Sources/YamiboReaderUI/Features/Reader/MangaReader/Presentation/MangaVerticalCollectionViewport.swift")
+
+        XCTAssertTrue(source.contains("private var pendingReportedGlobalIndex: Int?"))
+        XCTAssertTrue(source.contains("private var isCurrentPagePublishScheduled = false"))
+        XCTAssertTrue(source.contains("private var currentPagePublishGeneration = 0"))
+        XCTAssertTrue(source.contains("pendingReportedGlobalIndex = globalIndex"))
+        XCTAssertTrue(source.contains("guard !isCurrentPagePublishScheduled else { return }"))
+        XCTAssertTrue(source.contains("generation == self.currentPagePublishGeneration"))
+        XCTAssertTrue(source.contains("self.lastReportedGlobalIndex = globalIndex"))
+        XCTAssertFalse(source.contains("lastReportedGlobalIndex = globalIndex\n            let onCurrentPageChange = parent.onCurrentPageChange"))
+    }
+
     func testInitialTagDirectoryRefreshesAfterPrepareAndOffersForcedSearchShortcut() async throws {
         let dateProvider = ManualDateProvider(now: Date(timeIntervalSince1970: 10_000))
         let fixture = try await makeDirectoryPanelFixture(
