@@ -14,6 +14,7 @@ final class MangaReaderDirectoryPanelTests: XCTestCase {
         XCTAssertTrue(source.contains("systemName: \"square.and.arrow.down\""))
         XCTAssertTrue(source.contains("ReaderVerticalProgressCapsule("))
         XCTAssertTrue(source.contains("ReaderChromeCapsuleButton("))
+        XCTAssertTrue(source.contains("MangaReaderStaticActionControls("))
         XCTAssertTrue(source.contains("isEnabled: false"))
         XCTAssertTrue(source.contains("MangaDirectorySheet("))
         XCTAssertTrue(source.contains("MangaChapterCommentsSheet("))
@@ -84,13 +85,15 @@ final class MangaReaderDirectoryPanelTests: XCTestCase {
         let source = try mangaReaderSourceFile("Sources/YamiboReaderUI/Features/Reader/MangaReader/Presentation/MangaVerticalCollectionViewport.swift")
 
         XCTAssertTrue(source.contains("private var pendingReportedGlobalIndex: Int?"))
-        XCTAssertTrue(source.contains("private var isCurrentPagePublishScheduled = false"))
-        XCTAssertTrue(source.contains("private var currentPagePublishGeneration = 0"))
+        XCTAssertTrue(source.contains("private var currentPagePublishDisplayLink: CADisplayLink?"))
+        XCTAssertTrue(source.contains("currentPagePublishDisplayLink?.invalidate()"))
         XCTAssertTrue(source.contains("pendingReportedGlobalIndex = globalIndex"))
-        XCTAssertTrue(source.contains("guard !isCurrentPagePublishScheduled else { return }"))
-        XCTAssertTrue(source.contains("generation == self.currentPagePublishGeneration"))
-        XCTAssertTrue(source.contains("self.lastReportedGlobalIndex = globalIndex"))
+        XCTAssertTrue(source.contains("guard currentPagePublishDisplayLink == nil else { return }"))
+        XCTAssertTrue(source.contains("selector: #selector(flushPendingCurrentPagePublish)"))
+        XCTAssertTrue(source.contains("@objc private func flushPendingCurrentPagePublish(_ displayLink: CADisplayLink)"))
+        XCTAssertTrue(source.contains("lastReportedGlobalIndex = globalIndex"))
         XCTAssertFalse(source.contains("lastReportedGlobalIndex = globalIndex\n            let onCurrentPageChange = parent.onCurrentPageChange"))
+        XCTAssertFalse(source.contains("DispatchQueue.main.async"))
     }
 
     func testInitialTagDirectoryRefreshesAfterPrepareAndOffersForcedSearchShortcut() async throws {
