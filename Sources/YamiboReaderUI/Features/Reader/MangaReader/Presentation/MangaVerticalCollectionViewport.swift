@@ -64,8 +64,7 @@ struct MangaVerticalCollectionViewport: UIViewRepresentable {
         private var pendingInitialPageIndex: Int?
         private var lastReportedGlobalIndex: Int?
         private var pendingReportedGlobalIndex: Int?
-        private var isCurrentPagePublishScheduled = false
-        private var currentPagePublishGeneration = 0
+        private var currentPagePublishDisplayLink: CADisplayLink?
         private var lastAppliedPlacementRevision: Int?
 
         init(parent: MangaVerticalCollectionViewport) {
@@ -85,8 +84,7 @@ struct MangaVerticalCollectionViewport: UIViewRepresentable {
             heightToWidthRatios = heightToWidthRatios.filter { validIDs.contains($0.key) }
             lastReportedGlobalIndex = nil
             pendingReportedGlobalIndex = nil
-            isCurrentPagePublishScheduled = false
-            currentPagePublishGeneration += 1
+            cancelPendingCurrentPagePublish()
 
             if parent.pages.isEmpty {
                 pendingInitialPageIndex = nil
@@ -215,25 +213,33 @@ struct MangaVerticalCollectionViewport: UIViewRepresentable {
             }
 
             pendingReportedGlobalIndex = globalIndex
-            guard !isCurrentPagePublishScheduled else { return }
+            guard currentPagePublishDisplayLink == nil else { return }
 
-            isCurrentPagePublishScheduled = true
-            let generation = currentPagePublishGeneration
-            DispatchQueue.main.async { [weak self] in
-                guard let self,
-                      generation == self.currentPagePublishGeneration else {
-                    return
-                }
-                self.isCurrentPagePublishScheduled = false
-                guard let globalIndex = self.pendingReportedGlobalIndex,
-                      globalIndex != self.lastReportedGlobalIndex else {
-                    self.pendingReportedGlobalIndex = nil
-                    return
-                }
-                self.pendingReportedGlobalIndex = nil
-                self.lastReportedGlobalIndex = globalIndex
-                self.parent.onCurrentPageChange(globalIndex)
+            let displayLink = CADisplayLink(
+                target: self,
+                selector: #selector(flushPendingCurrentPagePublish)
+            )
+            displayLink.add(to: .main, forMode: .common)
+            currentPagePublishDisplayLink = displayLink
+        }
+
+        @objc private func flushPendingCurrentPagePublish(_ displayLink: CADisplayLink) {
+            displayLink.invalidate()
+            currentPagePublishDisplayLink = nil
+
+            guard let globalIndex = pendingReportedGlobalIndex,
+                  globalIndex != lastReportedGlobalIndex else {
+                pendingReportedGlobalIndex = nil
+                return
             }
+            pendingReportedGlobalIndex = nil
+            lastReportedGlobalIndex = globalIndex
+            parent.onCurrentPageChange(globalIndex)
+        }
+
+        private func cancelPendingCurrentPagePublish() {
+            currentPagePublishDisplayLink?.invalidate()
+            currentPagePublishDisplayLink = nil
         }
 
         private func currentGlobalIndex(in collectionView: UICollectionView) -> Int? {

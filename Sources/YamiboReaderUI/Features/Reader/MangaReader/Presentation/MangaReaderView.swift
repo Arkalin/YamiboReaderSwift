@@ -174,7 +174,14 @@ private struct MangaReaderFloatingControls: View {
                 topControls
             }
 
-            bottomControls(progress: progress)
+            MangaReaderBottomControls(
+                bottomInset: bottomInset,
+                colorScheme: colorScheme,
+                progress: progress,
+                onShowDirectory: onShowDirectory,
+                onShowComments: onShowComments,
+                onJumpToLocalPage: onJumpToLocalPage
+            )
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
@@ -210,71 +217,125 @@ private struct MangaReaderFloatingControls: View {
         .padding(.bottom, 8)
     }
 
-    private func bottomControls(progress: ReaderChromeProgress?) -> some View {
+    private var buttonTint: Color {
+        readerChromeButtonTint(for: colorScheme)
+    }
+}
+
+private struct MangaReaderBottomControls: View {
+    let bottomInset: CGFloat
+    let colorScheme: ColorScheme
+    let progress: ReaderChromeProgress?
+    let onShowDirectory: () -> Void
+    let onShowComments: () -> Void
+    let onJumpToLocalPage: (Int) -> Void
+
+    var body: some View {
         let layout = ReaderBottomChromeLayoutPresentation()
 
-        return HStack(alignment: .bottom, spacing: layout.verticalScrubberSideSpacing) {
+        HStack(alignment: .bottom, spacing: layout.verticalScrubberSideSpacing) {
             Spacer(minLength: 0)
             VStack(spacing: layout.panelSpacing) {
                 if let progress {
-                    ReaderDirectoryProgressCapsule(
-                        title: progress.primaryText,
-                        progressFraction: progress.progressFraction,
-                        showsFill: false,
-                        supportsScrub: false,
-                        isScrubbing: false,
-                        ticks: progress.ticks,
-                        onTapDirectory: onShowDirectory,
-                        onScrub: { _, _ in },
-                        onEndScrub: {}
+                    MangaReaderDirectoryProgressControl(
+                        progress: progress,
+                        onShowDirectory: onShowDirectory
                     )
                 }
 
-                ReaderChromeCapsuleButton(
-                    title: L10n.string("reader.comments"),
-                    systemName: "text.bubble",
-                    action: onShowComments
+                MangaReaderStaticActionControls(
+                    colorScheme: colorScheme,
+                    commentsTitle: L10n.string("reader.comments"),
+                    bookmarkTitle: "书签",
+                    cacheTitle: L10n.string("reader.cache"),
+                    onShowComments: onShowComments
                 )
-
-                HStack(spacing: layout.actionButtonSpacing) {
-                    ReaderChromeCircleButton(
-                        systemName: "bookmark",
-                        title: "书签",
-                        tint: buttonTint,
-                        isEnabled: false,
-                        action: {}
-                    )
-                    ReaderChromeCircleButton(
-                        systemName: "square.and.arrow.down",
-                        title: L10n.string("reader.cache"),
-                        tint: buttonTint,
-                        isEnabled: false,
-                        action: {}
-                    )
-                }
-                .frame(height: layout.actionButtonRowHeight)
             }
             .frame(width: layout.maxChromeWidth)
 
             if let progress {
-                ReaderVerticalProgressCapsule(
-                    restingProgressFraction: progress.progressFraction,
-                    scrubContext: progress.scrubContext,
-                    ticks: progress.ticks,
-                    onBeginScrub: {},
-                    onCommit: onJumpToLocalPage,
-                    onEndScrub: {}
+                MangaReaderVerticalProgressControl(
+                    progress: progress,
+                    onJumpToLocalPage: onJumpToLocalPage
                 )
-                .frame(width: layout.verticalScrubberWidth, alignment: .trailing)
             }
         }
         .padding(.horizontal, 12)
         .padding(.bottom, max(bottomInset + 8, 12))
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
     }
+}
 
-    private var buttonTint: Color {
-        readerChromeButtonTint(for: colorScheme)
+private struct MangaReaderDirectoryProgressControl: View {
+    let progress: ReaderChromeProgress
+    let onShowDirectory: () -> Void
+
+    var body: some View {
+        ReaderDirectoryProgressCapsule(
+            title: progress.primaryText,
+            progressFraction: progress.progressFraction,
+            showsFill: false,
+            supportsScrub: false,
+            isScrubbing: false,
+            ticks: progress.ticks,
+            onTapDirectory: onShowDirectory,
+            onScrub: { _, _ in },
+            onEndScrub: {}
+        )
+    }
+}
+
+private struct MangaReaderVerticalProgressControl: View {
+    let progress: ReaderChromeProgress
+    let onJumpToLocalPage: (Int) -> Void
+
+    var body: some View {
+        ReaderVerticalProgressCapsule(
+            restingProgressFraction: progress.progressFraction,
+            scrubContext: progress.scrubContext,
+            ticks: progress.ticks,
+            onBeginScrub: {},
+            onCommit: onJumpToLocalPage,
+            onEndScrub: {}
+        )
+        .frame(width: ReaderBottomChromeLayoutPresentation().verticalScrubberWidth, alignment: .trailing)
+    }
+}
+
+private struct MangaReaderStaticActionControls: View {
+    let colorScheme: ColorScheme
+    let commentsTitle: String
+    let bookmarkTitle: String
+    let cacheTitle: String
+    let onShowComments: () -> Void
+
+    var body: some View {
+        let layout = ReaderBottomChromeLayoutPresentation()
+        let buttonTint = readerChromeButtonTint(for: colorScheme)
+
+        ReaderChromeCapsuleButton(
+            title: commentsTitle,
+            systemName: "text.bubble",
+            action: onShowComments
+        )
+
+        HStack(spacing: layout.actionButtonSpacing) {
+            ReaderChromeCircleButton(
+                systemName: "bookmark",
+                title: bookmarkTitle,
+                tint: buttonTint,
+                isEnabled: false,
+                action: {}
+            )
+            ReaderChromeCircleButton(
+                systemName: "square.and.arrow.down",
+                title: cacheTitle,
+                tint: buttonTint,
+                isEnabled: false,
+                action: {}
+            )
+        }
+        .frame(height: layout.actionButtonRowHeight)
     }
 }
 
