@@ -180,6 +180,8 @@ private struct MangaReaderFloatingControls: View {
                 progress: progress,
                 onShowDirectory: onShowDirectory,
                 onShowComments: onShowComments,
+                onShowSettings: {},
+                onOpenOriginalPost: onOpenOriginalPost,
                 onJumpToLocalPage: onJumpToLocalPage
             )
         }
@@ -196,20 +198,6 @@ private struct MangaReaderFloatingControls: View {
             )
 
             Spacer(minLength: 0)
-
-            ReaderChromeCircleButton(
-                systemName: "list.bullet",
-                title: L10n.string("manga.directory"),
-                tint: buttonTint,
-                action: onShowDirectory
-            )
-
-            ReaderChromeCircleButton(
-                systemName: "safari",
-                title: L10n.string("common.original_post"),
-                tint: buttonTint,
-                action: onOpenOriginalPost
-            )
         }
         .frame(maxWidth: .infinity)
         .padding(.top, max(topInset + 8, 12))
@@ -228,6 +216,8 @@ private struct MangaReaderBottomControls: View {
     let progress: ReaderChromeProgress?
     let onShowDirectory: () -> Void
     let onShowComments: () -> Void
+    let onShowSettings: () -> Void
+    let onOpenOriginalPost: () -> Void
     let onJumpToLocalPage: (Int) -> Void
 
     var body: some View {
@@ -245,10 +235,14 @@ private struct MangaReaderBottomControls: View {
 
                 MangaReaderStaticActionControls(
                     colorScheme: colorScheme,
+                    originalPostTitle: L10n.string("common.original_post"),
                     commentsTitle: L10n.string("reader.comments"),
+                    settingsTitle: L10n.string("settings.title"),
                     bookmarkTitle: "书签",
                     cacheTitle: L10n.string("reader.cache"),
-                    onShowComments: onShowComments
+                    onOpenOriginalPost: onOpenOriginalPost,
+                    onShowComments: onShowComments,
+                    onShowSettings: onShowSettings
                 )
             }
             .frame(width: layout.maxChromeWidth)
@@ -304,10 +298,14 @@ private struct MangaReaderVerticalProgressControl: View {
 
 private struct MangaReaderStaticActionControls: View {
     let colorScheme: ColorScheme
+    let originalPostTitle: String
     let commentsTitle: String
+    let settingsTitle: String
     let bookmarkTitle: String
     let cacheTitle: String
+    let onOpenOriginalPost: () -> Void
     let onShowComments: () -> Void
+    let onShowSettings: () -> Void
 
     var body: some View {
         let layout = ReaderBottomChromeLayoutPresentation()
@@ -319,7 +317,20 @@ private struct MangaReaderStaticActionControls: View {
             action: onShowComments
         )
 
-        HStack(spacing: layout.actionButtonSpacing) {
+        ReaderChromeCapsuleButton(
+            title: settingsTitle,
+            systemName: "gearshape",
+            action: onShowSettings
+        )
+
+        HStack(spacing: 0) {
+            ReaderChromeCircleButton(
+                systemName: "safari",
+                title: originalPostTitle,
+                tint: buttonTint,
+                action: onOpenOriginalPost
+            )
+            Spacer(minLength: layout.actionButtonSpacing)
             ReaderChromeCircleButton(
                 systemName: "bookmark",
                 title: bookmarkTitle,
@@ -327,6 +338,7 @@ private struct MangaReaderStaticActionControls: View {
                 isEnabled: false,
                 action: {}
             )
+            Spacer(minLength: layout.actionButtonSpacing)
             ReaderChromeCircleButton(
                 systemName: "square.and.arrow.down",
                 title: cacheTitle,
@@ -335,6 +347,7 @@ private struct MangaReaderStaticActionControls: View {
                 action: {}
             )
         }
+        .frame(maxWidth: .infinity)
         .frame(height: layout.actionButtonRowHeight)
     }
 }

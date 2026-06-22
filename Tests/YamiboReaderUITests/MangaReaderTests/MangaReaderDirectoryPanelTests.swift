@@ -8,13 +8,21 @@ final class MangaReaderDirectoryPanelTests: XCTestCase {
         let source = try mangaReaderSourceFile("Sources/YamiboReaderUI/Features/Reader/MangaReader/Presentation/MangaReaderView.swift")
 
         XCTAssertTrue(source.contains("MangaReaderFloatingControls("))
-        XCTAssertTrue(source.contains("systemName: \"list.bullet\""))
+        XCTAssertTrue(source.contains("ReaderDirectoryProgressCapsule("))
         XCTAssertTrue(source.contains("systemName: \"text.bubble\""))
+        XCTAssertTrue(source.contains("systemName: \"gearshape\""))
+        XCTAssertTrue(source.contains("settingsTitle: L10n.string(\"settings.title\")"))
+        XCTAssertTrue(source.contains("onShowSettings: {}"))
+        XCTAssertTrue(source.contains("systemName: \"safari\""))
+        XCTAssertTrue(source.contains("onOpenOriginalPost: onOpenOriginalPost"))
         XCTAssertTrue(source.contains("systemName: \"bookmark\""))
         XCTAssertTrue(source.contains("systemName: \"square.and.arrow.down\""))
         XCTAssertTrue(source.contains("ReaderVerticalProgressCapsule("))
         XCTAssertTrue(source.contains("ReaderChromeCapsuleButton("))
         XCTAssertTrue(source.contains("MangaReaderStaticActionControls("))
+        XCTAssertTrue(source.contains("HStack(spacing: 0)"))
+        XCTAssertTrue(source.contains("Spacer(minLength: layout.actionButtonSpacing)"))
+        XCTAssertTrue(source.contains(".frame(maxWidth: .infinity)"))
         XCTAssertTrue(source.contains("isEnabled: false"))
         XCTAssertTrue(source.contains("MangaDirectorySheet("))
         XCTAssertTrue(source.contains("MangaChapterCommentsSheet("))
@@ -33,6 +41,7 @@ final class MangaReaderDirectoryPanelTests: XCTestCase {
         XCTAssertTrue(source.contains(".statusBar(hidden: true)"))
         XCTAssertTrue(source.contains("windowSafeAreaInsets"))
         XCTAssertFalse(source.contains("ToolbarItem(placement: .primaryAction)"))
+        XCTAssertFalse(source.contains("systemName: \"list.bullet\""))
     }
 
     func testDirectorySheetIsPresentationDriven() throws {
