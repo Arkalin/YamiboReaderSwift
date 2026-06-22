@@ -63,6 +63,9 @@ struct MangaVerticalCollectionViewport: UIViewRepresentable {
         private var heightToWidthRatios: [String: CGFloat] = [:]
         private var pendingInitialPageIndex: Int?
         private var lastReportedGlobalIndex: Int?
+        private var pendingReportedGlobalIndex: Int?
+        private var isCurrentPagePublishScheduled = false
+        private var currentPagePublishGeneration = 0
         private var lastAppliedPlacementRevision: Int?
 
         init(parent: MangaVerticalCollectionViewport) {
@@ -81,6 +84,9 @@ struct MangaVerticalCollectionViewport: UIViewRepresentable {
             let validIDs = Set(nextIdentity)
             heightToWidthRatios = heightToWidthRatios.filter { validIDs.contains($0.key) }
             lastReportedGlobalIndex = nil
+            pendingReportedGlobalIndex = nil
+            isCurrentPagePublishScheduled = false
+            currentPagePublishGeneration += 1
 
             if parent.pages.isEmpty {
                 pendingInitialPageIndex = nil
@@ -208,10 +214,25 @@ struct MangaVerticalCollectionViewport: UIViewRepresentable {
                 return
             }
 
-            lastReportedGlobalIndex = globalIndex
-            let onCurrentPageChange = parent.onCurrentPageChange
-            DispatchQueue.main.async {
-                onCurrentPageChange(globalIndex)
+            pendingReportedGlobalIndex = globalIndex
+            guard !isCurrentPagePublishScheduled else { return }
+
+            isCurrentPagePublishScheduled = true
+            let generation = currentPagePublishGeneration
+            DispatchQueue.main.async { [weak self] in
+                guard let self,
+                      generation == self.currentPagePublishGeneration else {
+                    return
+                }
+                self.isCurrentPagePublishScheduled = false
+                guard let globalIndex = self.pendingReportedGlobalIndex,
+                      globalIndex != self.lastReportedGlobalIndex else {
+                    self.pendingReportedGlobalIndex = nil
+                    return
+                }
+                self.pendingReportedGlobalIndex = nil
+                self.lastReportedGlobalIndex = globalIndex
+                self.parent.onCurrentPageChange(globalIndex)
             }
         }
 
