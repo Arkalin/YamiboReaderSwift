@@ -30,6 +30,7 @@ public struct MangaReaderView: View {
             MangaReaderPresentationContent(
                 presentation: model.presentation,
                 imagePipeline: model.imagePipeline,
+                isChromeVisible: isChromeVisible,
                 onCurrentPageChange: { globalIndex in
                     model.updateCurrentPage(globalIndex: globalIndex)
                 },
@@ -45,6 +46,8 @@ public struct MangaReaderView: View {
                     isVisible: isChromeVisible,
                     imagePipeline: model.imagePipeline,
                     summary: mangaChromeSummary(from: model.presentation),
+                    readingMode: model.presentation.settings.readingMode,
+                    pageTurnDirection: model.presentation.settings.pageTurnDirection,
                     onClose: closeReader,
                     onShowDirectory: {
                         isDirectoryPresented = true
@@ -211,6 +214,8 @@ private struct MangaReaderFloatingControls: View {
     let isVisible: Bool
     let imagePipeline: MangaImagePipeline?
     let summary: MangaReaderChromeSummary?
+    let readingMode: MangaReadingMode
+    let pageTurnDirection: MangaPageTurnDirection
     let onClose: () -> Void
     let onShowDirectory: () -> Void
     let onShowComments: () -> Void
@@ -237,6 +242,8 @@ private struct MangaReaderFloatingControls: View {
                 colorScheme: colorScheme,
                 imagePipeline: imagePipeline,
                 summary: summary,
+                readingMode: readingMode,
+                pageTurnDirection: pageTurnDirection,
                 onShowDirectory: onShowDirectory,
                 onShowComments: onShowComments,
                 onShowSettings: onShowSettings,
@@ -310,17 +317,30 @@ private struct MangaReaderBottomControls: View {
     let colorScheme: ColorScheme
     let imagePipeline: MangaImagePipeline?
     let summary: MangaReaderChromeSummary?
+    let readingMode: MangaReadingMode
+    let pageTurnDirection: MangaPageTurnDirection
     let onShowDirectory: () -> Void
     let onShowComments: () -> Void
     let onShowSettings: () -> Void
     let onOpenOriginalPost: () -> Void
     let onJumpToLocalPage: (Int) -> Void
 
+    @State private var horizontalScrubState = ReaderProgressScrubState()
     @State private var activeVerticalProgressPreview: ReaderProgressScrubPreview?
 
     var body: some View {
         let layout = ReaderBottomChromeLayoutPresentation()
-        let controlVisibility = ReaderBottomActionRowPresentation(isScrubbing: activeVerticalProgressPreview != nil)
+        let progressChromePresentation = ReaderProgressChromePresentation(
+            readingMode: readingMode.readerChromeReadingMode,
+            isChromeVisible: true
+        )
+        let verticalScrubVisibility = ReaderBottomActionRowPresentation(isScrubbing: activeVerticalProgressPreview != nil)
+        let staticControlVisibility = ReaderBottomActionRowPresentation(
+            isScrubbing: horizontalScrubState.phase == .scrubbing || activeVerticalProgressPreview != nil
+        )
+        let centerProgressPreview = progressChromePresentation.showsVerticalScrubber
+            ? activeVerticalProgressPreview
+            : horizontalScrubState.preview
 
         VStack(spacing: 12) {
             HStack(alignment: .bottom, spacing: layout.verticalScrubberSideSpacing) {
@@ -329,7 +349,11 @@ private struct MangaReaderBottomControls: View {
                     if let progress = summary?.progress {
                         MangaReaderDirectoryProgressControl(
                             progress: progress,
-                            onShowDirectory: onShowDirectory
+                            progressChromePresentation: progressChromePresentation,
+                            fillDirection: pageTurnDirection.progressFillDirection,
+                            scrubState: $horizontalScrubState,
+                            onShowDirectory: onShowDirectory,
+                            onJumpToLocalPage: onJumpToLocalPage
                         )
                     }
 
@@ -344,13 +368,17 @@ private struct MangaReaderBottomControls: View {
                         onShowComments: onShowComments,
                         onShowSettings: onShowSettings
                     )
+                    .opacity(staticControlVisibility.opacity)
+                    .allowsHitTesting(staticControlVisibility.allowsHitTesting)
+                    .accessibilityHidden(staticControlVisibility.isAccessibilityHidden)
                 }
                 .frame(width: layout.maxChromeWidth)
-                .opacity(controlVisibility.opacity)
-                .allowsHitTesting(controlVisibility.allowsHitTesting)
-                .accessibilityHidden(controlVisibility.isAccessibilityHidden)
+                .opacity(verticalScrubVisibility.opacity)
+                .allowsHitTesting(verticalScrubVisibility.allowsHitTesting)
+                .accessibilityHidden(verticalScrubVisibility.isAccessibilityHidden)
 
-                if let progress = summary?.progress {
+                if progressChromePresentation.showsVerticalScrubber,
+                   let progress = summary?.progress {
                     MangaReaderVerticalProgressControl(
                         progress: progress,
                         onPreviewChange: { activeVerticalProgressPreview = $0 },
@@ -370,7 +398,7 @@ private struct MangaReaderBottomControls: View {
         .padding(.bottom, max(bottomInset - 18, 8))
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
         .overlay {
-            if let preview = activeVerticalProgressPreview {
+            if let preview = centerProgressPreview {
                 MangaReaderProgressImagePreview(
                     preview: preview,
                     page: summary?.pagePreviewTargets[preview.targetIndex],
@@ -403,20 +431,84 @@ private struct MangaReaderBottomPageSummary: View {
 
 private struct MangaReaderDirectoryProgressControl: View {
     let progress: ReaderChromeProgress
+    let progressChromePresentation: ReaderProgressChromePresentation
+    let fillDirection: ReaderProgressFillDirection
+    @Binding var scrubState: ReaderProgressScrubState
     let onShowDirectory: () -> Void
+    let onJumpToLocalPage: (Int) -> Void
+
+    @State private var progressTickFeedbackGenerator = UISelectionFeedbackGenerator()
+    @State private var progressStartFeedbackGenerator = UIImpactFeedbackGenerator(style: .light)
+    @State private var progressCommitFeedbackGenerator = UIImpactFeedbackGenerator(style: .medium)
 
     var body: some View {
         ReaderDirectoryProgressCapsule(
             title: progress.primaryText,
-            progressFraction: progress.progressFraction,
-            showsFill: false,
-            supportsScrub: false,
-            isScrubbing: false,
+            progressFraction: displayedProgressFraction,
+            fillDirection: fillDirection,
+            showsFill: progressChromePresentation.showsHorizontalFill,
+            supportsScrub: progressChromePresentation.supportsHorizontalScrub && sliderHasAvailableRange,
+            isScrubbing: scrubState.phase == .scrubbing,
             ticks: progress.ticks,
             onTapDirectory: onShowDirectory,
-            onScrub: { _, _ in },
-            onEndScrub: {}
+            onScrub: { locationX, width in
+                handleHorizontalCapsuleScrub(locationX: locationX, width: width)
+            },
+            onEndScrub: {
+                commitHorizontalCapsuleScrub()
+            }
         )
+    }
+
+    private var sliderHasAvailableRange: Bool {
+        progress.itemCount > 1
+    }
+
+    private var displayedProgressFraction: Double {
+        guard scrubState.phase == .scrubbing else {
+            return progress.progressFraction
+        }
+        return progress.positionFraction(forTargetIndex: scrubState.targetIndex)
+    }
+
+    private func handleHorizontalCapsuleScrub(locationX: CGFloat, width: CGFloat) {
+        guard progressChromePresentation.supportsHorizontalScrub, width > 0 else { return }
+        let fraction = min(max(locationX / width, 0), 1)
+        var nextState = scrubState
+        let update = nextState.update(value: Double(fraction), context: progress.scrubContext)
+        scrubState = nextState
+        triggerFeedback(update.haptics)
+    }
+
+    private func commitHorizontalCapsuleScrub() {
+        guard scrubState.phase == .scrubbing else { return }
+        var nextState = scrubState
+        let update = nextState.end()
+        scrubState = nextState
+        triggerFeedback(update.haptics)
+        if let target = update.committedTargetIndex {
+            onJumpToLocalPage(target)
+        }
+        var resetState = scrubState
+        resetState.reset()
+        scrubState = resetState
+    }
+
+    private func triggerFeedback(_ haptics: [ReaderProgressScrubHaptic]) {
+        for haptic in haptics {
+            switch haptic {
+            case .start:
+                progressStartFeedbackGenerator.impactOccurred()
+                progressStartFeedbackGenerator.prepare()
+                progressTickFeedbackGenerator.prepare()
+            case .chapterTick:
+                progressTickFeedbackGenerator.selectionChanged()
+                progressTickFeedbackGenerator.prepare()
+            case .commit:
+                progressCommitFeedbackGenerator.impactOccurred()
+                progressCommitFeedbackGenerator.prepare()
+            }
+        }
     }
 }
 
@@ -645,6 +737,7 @@ private struct MangaReaderStaticActionControls: View {
 private struct MangaReaderPresentationContent: View {
     let presentation: MangaReaderPresentation
     let imagePipeline: MangaImagePipeline?
+    let isChromeVisible: Bool
     let onCurrentPageChange: (Int) -> Void
     let onTap: () -> Void
 
@@ -660,6 +753,7 @@ private struct MangaReaderPresentationContent: View {
                     loaded: loaded,
                     settings: presentation.settings,
                     imagePipeline: imagePipeline,
+                    isChromeVisible: isChromeVisible,
                     onCurrentPageChange: onCurrentPageChange,
                     onTap: onTap
                 )
@@ -706,6 +800,7 @@ private struct MangaReaderLoadedContent: View {
     let loaded: MangaReaderLoadedPresentation
     let settings: MangaReaderSettings
     let imagePipeline: MangaImagePipeline?
+    let isChromeVisible: Bool
     let onCurrentPageChange: (Int) -> Void
     let onTap: () -> Void
 
@@ -733,6 +828,7 @@ private struct MangaReaderLoadedContent: View {
                     viewportPlacement: loaded.viewportPlacement,
                     settings: settings,
                     imagePipeline: imagePipeline,
+                    isChromeVisible: isChromeVisible,
                     onCurrentPageChange: onCurrentPageChange,
                     onTap: onTap
                 )
@@ -787,6 +883,28 @@ private struct MangaReaderEmptyContent: View {
                 .foregroundStyle(.secondary)
         }
         .padding(16)
+    }
+}
+
+private extension MangaReadingMode {
+    var readerChromeReadingMode: ReaderReadingMode {
+        switch self {
+        case .paged:
+            .paged
+        case .vertical:
+            .vertical
+        }
+    }
+}
+
+private extension MangaPageTurnDirection {
+    var progressFillDirection: ReaderProgressFillDirection {
+        switch self {
+        case .rightToLeft:
+            .rightToLeft
+        case .leftToRight:
+            .leftToRight
+        }
     }
 }
 #endif

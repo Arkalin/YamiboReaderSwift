@@ -183,6 +183,21 @@ final class ReaderProgressScrubStateTests: XCTestCase {
         XCTAssertTrue(presentation.progressSummaryVisibleWhileScrubbing)
     }
 
+    func testDirectoryProgressCapsuleSupportsDirectionalFillWithLeftToRightDefault() throws {
+        let capsuleSource = try sourceFile("Sources/YamiboReaderUI/Features/Reader/Shared/Chrome/ReaderProgressCapsules.swift")
+        let presentationSource = try sourceFile("Sources/YamiboReaderUI/Features/Reader/Shared/Chrome/ReaderProgressPresentation.swift")
+        let novelChromeSource = try sourceFile("Sources/YamiboReaderUI/Features/Reader/NovelReader/Chrome/NovelReaderBottomChrome.swift")
+
+        XCTAssertTrue(presentationSource.contains("public enum ReaderProgressFillDirection: Equatable, Sendable"))
+        XCTAssertTrue(capsuleSource.contains("fillDirection: ReaderProgressFillDirection = .leftToRight"))
+        XCTAssertTrue(capsuleSource.contains("ZStack(alignment: fillAlignment)"))
+        XCTAssertTrue(capsuleSource.contains("let logicalTranslation = fillDirection == .rightToLeft ? -value.translation.width : value.translation.width"))
+        XCTAssertTrue(capsuleSource.contains("case .leftToRight:\n            .leading"))
+        XCTAssertTrue(capsuleSource.contains("case .rightToLeft:\n            .trailing"))
+        XCTAssertTrue(novelChromeSource.contains("ReaderDirectoryProgressCapsule("))
+        XCTAssertFalse(novelChromeSource.contains("fillDirection:"))
+    }
+
     func testReaderChromeVisibilityAnimationContracts() {
         let fade = ReaderChromeVisibilityAnimationPresentation.fade
         let popup = ReaderChromeVisibilityAnimationPresentation.anchoredPopup
@@ -330,4 +345,10 @@ final class ReaderProgressScrubStateTests: XCTestCase {
         XCTAssertFalse(scrubbingActions.allowsHitTesting)
         XCTAssertTrue(scrubbingActions.preservesLayout)
     }
+}
+
+private func sourceFile(_ relativePath: String) throws -> String {
+    let url = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        .appendingPathComponent(relativePath)
+    return try String(contentsOf: url, encoding: .utf8)
 }

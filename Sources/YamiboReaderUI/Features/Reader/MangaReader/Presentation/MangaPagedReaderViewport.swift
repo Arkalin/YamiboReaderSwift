@@ -9,6 +9,7 @@ struct MangaPagedReaderViewport: UIViewRepresentable {
     let viewportPlacement: MangaReaderViewportPlacement?
     let settings: MangaReaderSettings
     let imagePipeline: MangaImagePipeline
+    let isChromeVisible: Bool
     let onCurrentPageChange: (Int) -> Void
     let onTap: () -> Void
 
@@ -205,6 +206,13 @@ struct MangaPagedReaderViewport: UIViewRepresentable {
                 for: recognizer.location(in: collectionView),
                 in: collectionView.bounds
             )
+            if parent.isChromeVisible {
+                let onTap = parent.onTap
+                callbackScheduler.publish {
+                    onTap()
+                }
+                return
+            }
             guard let delta = pageDelta(for: zone) else {
                 let onTap = parent.onTap
                 callbackScheduler.publish {

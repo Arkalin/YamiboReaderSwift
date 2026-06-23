@@ -73,7 +73,9 @@ struct MangaReaderPresentationInfrastructureTests {
         #expect(source.contains("static let previewSize = CGSize(width: 184, height: 228)"))
         #expect(source.contains("showsPreview: false"))
         #expect(source.contains(".overlay {"))
-        #expect(source.contains("if let preview = activeVerticalProgressPreview"))
+        #expect(source.contains("let centerProgressPreview = progressChromePresentation.showsVerticalScrubber"))
+        #expect(source.contains(": horizontalScrubState.preview"))
+        #expect(source.contains("if let preview = centerProgressPreview"))
     }
 
     @Test func hiddenFailureStackIsNotMeasuredDuringLayout() throws {
@@ -92,11 +94,24 @@ struct MangaReaderPresentationInfrastructureTests {
 
         #expect(source.contains("struct MangaPagedReaderViewport: UIViewRepresentable"))
         #expect(source.contains("let plan: MangaPagedReadingPlan"))
+        #expect(source.contains("let isChromeVisible: Bool"))
         #expect(source.contains("parent.plan.globalIndex(forPageAt: pageIndex)"))
         #expect(source.contains("onCurrentPageChange(globalIndex)"))
         #expect(source.contains("func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool)"))
         #expect(!source.contains("MangaPageSpread"))
         #expect(!source.contains("NovelReaderSurface"))
+    }
+
+    @Test func pagedViewportHidesVisibleChromeBeforeTapZonePageTurn() throws {
+        let source = try sourceFile("Sources/YamiboReaderUI/Features/Reader/MangaReader/Presentation/MangaPagedReaderViewport.swift")
+        let chromeGateRange = try #require(source.range(of: "if parent.isChromeVisible {"))
+        let pageTurnRange = try #require(source.range(of: "guard let delta = pageDelta(for: zone)"))
+        let chromeGateBody = String(source[chromeGateRange.lowerBound..<pageTurnRange.lowerBound])
+
+        #expect(chromeGateRange.lowerBound < pageTurnRange.lowerBound)
+        #expect(chromeGateBody.contains("let onTap = parent.onTap"))
+        #expect(chromeGateBody.contains("onTap()"))
+        #expect(chromeGateBody.contains("return"))
     }
 
     #if os(iOS)

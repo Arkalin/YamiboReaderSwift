@@ -35,6 +35,7 @@ private struct ReaderProgressChapterTickOverlay: View {
 struct ReaderDirectoryProgressCapsule: View {
     let title: String
     let progressFraction: Double
+    let fillDirection: ReaderProgressFillDirection
     let showsFill: Bool
     let supportsScrub: Bool
     let isScrubbing: Bool
@@ -45,6 +46,30 @@ struct ReaderDirectoryProgressCapsule: View {
     @State private var dragStartProgressFraction: Double?
     @Environment(\.colorScheme) private var colorScheme
 
+    init(
+        title: String,
+        progressFraction: Double,
+        fillDirection: ReaderProgressFillDirection = .leftToRight,
+        showsFill: Bool,
+        supportsScrub: Bool,
+        isScrubbing: Bool,
+        ticks: [ReaderChromeProgressTick],
+        onTapDirectory: @escaping () -> Void,
+        onScrub: @escaping (CGFloat, CGFloat) -> Void,
+        onEndScrub: @escaping () -> Void
+    ) {
+        self.title = title
+        self.progressFraction = progressFraction
+        self.fillDirection = fillDirection
+        self.showsFill = showsFill
+        self.supportsScrub = supportsScrub
+        self.isScrubbing = isScrubbing
+        self.ticks = ticks
+        self.onTapDirectory = onTapDirectory
+        self.onScrub = onScrub
+        self.onEndScrub = onEndScrub
+    }
+
     var body: some View {
         GeometryReader { geometry in
             let layout = ReaderBottomChromeLayoutPresentation()
@@ -52,7 +77,7 @@ struct ReaderDirectoryProgressCapsule: View {
             let width = max(geometry.size.width, 1)
             let clampedProgress = min(max(progressFraction, 0), 1)
 
-            ZStack(alignment: .leading) {
+            ZStack(alignment: fillAlignment) {
                 Capsule()
                     .fill(Color.secondary.opacity(colorScheme == .dark ? 0.18 : 0.12))
 
@@ -106,9 +131,10 @@ struct ReaderDirectoryProgressCapsule: View {
                 if dragStartProgressFraction == nil {
                     dragStartProgressFraction = progressFraction
                 }
+                let logicalTranslation = fillDirection == .rightToLeft ? -value.translation.width : value.translation.width
                 let targetFraction = ReaderProgressDragMapping.value(
                     startProgressFraction: dragStartProgressFraction ?? progressFraction,
-                    translation: value.translation.width,
+                    translation: logicalTranslation,
                     length: width,
                     range: 0...1
                 )
@@ -119,6 +145,15 @@ struct ReaderDirectoryProgressCapsule: View {
                 dragStartProgressFraction = nil
                 onEndScrub()
             }
+    }
+
+    private var fillAlignment: Alignment {
+        switch fillDirection {
+        case .leftToRight:
+            .leading
+        case .rightToLeft:
+            .trailing
+        }
     }
 
     private func showsChapterTicks(layout: ReaderBottomChromeLayoutPresentation) -> Bool {

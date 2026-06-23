@@ -126,6 +126,11 @@ public enum ReaderProgressDragMapping {
     }
 }
 
+public enum ReaderProgressFillDirection: Equatable, Sendable {
+    case leftToRight
+    case rightToLeft
+}
+
 public struct ReaderProgressChromePresentation: Equatable, Sendable {
     public var readingMode: ReaderReadingMode
     public var isChromeVisible: Bool
