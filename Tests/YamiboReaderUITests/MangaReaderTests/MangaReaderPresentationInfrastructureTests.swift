@@ -125,7 +125,9 @@ struct MangaReaderPresentationInfrastructureTests {
         #expect(source.contains("L10n.string(\"manga.page_edge_fill\")"))
         #expect(source.contains("ForEach(MangaPageEdgeFillStyle.allCases, id: \\.self)"))
         #expect(source.contains("edgeFillStyle: settings.pageEdgeFillStyle"))
-        #expect(source.contains("edgeFillStyle?.color(for: colorScheme) ?? palette.previewPageBackground"))
+        #expect(source.contains("edgeFillBackground"))
+        #expect(source.contains("pageBackground: palette.previewPageBackground"))
+        #expect(source.contains(".background(pageBackground)"))
     }
 
     @Test func pagedViewportHidesVisibleChromeBeforeTapZonePageTurn() throws {

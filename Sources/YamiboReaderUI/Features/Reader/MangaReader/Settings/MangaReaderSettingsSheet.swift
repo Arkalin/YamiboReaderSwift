@@ -260,25 +260,27 @@ private struct MangaReaderPagedPreviewPage: View {
 
     @Environment(\.colorScheme) private var colorScheme
 
-    private var pageBackground: Color {
+    private var edgeFillBackground: Color {
         edgeFillStyle?.color(for: colorScheme) ?? palette.previewPageBackground
     }
 
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(pageBackground)
+                .fill(edgeFillBackground)
 
             if scaleMode == .fitHeight {
                 MangaReaderPagedPreviewFitHeightContent(
                     palette: palette,
                     isTrailingPage: isTrailingPage,
+                    pageBackground: palette.previewPageBackground,
                     pageTurnDirection: pageTurnDirection
                 )
             } else {
                 MangaReaderPagedPreviewFitWidthContent(
                     palette: palette,
-                    isTrailingPage: isTrailingPage
+                    isTrailingPage: isTrailingPage,
+                    pageBackground: palette.previewPageBackground
                 )
             }
         }
@@ -291,6 +293,7 @@ private struct MangaReaderPagedPreviewPage: View {
 private struct MangaReaderPagedPreviewFitWidthContent: View {
     let palette: MangaReaderSettingsPalette
     let isTrailingPage: Bool
+    let pageBackground: Color
 
     var body: some View {
         GeometryReader { proxy in
@@ -310,6 +313,8 @@ private struct MangaReaderPagedPreviewFitWidthContent: View {
             )
             .frame(width: contentWidth, height: contentHeight, alignment: .topLeading)
             .padding(.horizontal, horizontalInset)
+            .frame(width: proxy.size.width, height: contentHeight, alignment: .center)
+            .background(pageBackground)
             .frame(width: proxy.size.width, height: proxy.size.height, alignment: .center)
         }
     }
@@ -318,6 +323,7 @@ private struct MangaReaderPagedPreviewFitWidthContent: View {
 private struct MangaReaderPagedPreviewFitHeightContent: View {
     let palette: MangaReaderSettingsPalette
     let isTrailingPage: Bool
+    let pageBackground: Color
     let pageTurnDirection: MangaPageTurnDirection
 
     private var contentAlignment: Alignment {
@@ -331,9 +337,9 @@ private struct MangaReaderPagedPreviewFitHeightContent: View {
 
     var body: some View {
         GeometryReader { proxy in
-            let inset: CGFloat = 12
-            let contentHeight = max(proxy.size.height - inset * 2, 1)
-            let contentWidth = max(proxy.size.width - inset * 2, 1)
+            let horizontalInset: CGFloat = 12
+            let contentHeight = max(proxy.size.height, 1)
+            let contentWidth = max(proxy.size.width - horizontalInset * 2, 1)
             let scale = contentHeight / MangaReaderPagedPreviewArtworkMetrics.height(
                 isTrailingPage: isTrailingPage,
                 scale: 1
@@ -351,8 +357,9 @@ private struct MangaReaderPagedPreviewFitHeightContent: View {
                 height: contentHeight,
                 alignment: contentAlignment
             )
+            .background(pageBackground)
             .clipped()
-            .padding(inset)
+            .padding(.horizontal, horizontalInset)
         }
     }
 }
