@@ -180,14 +180,14 @@ private struct MangaReaderSettingsPreviewSpread: View {
                     .padding(.bottom, 18)
             } else {
                 HStack(spacing: showsTwoPagePreview ? 12 : 0) {
-                    MangaReaderPagedPreviewPage(
+                    MangaReaderLayeredPagedPreviewPage(
                         palette: palette,
                         isTrailingPage: false,
                         scaleMode: settings.pageScaleMode,
                         pageTurnDirection: settings.pageTurnDirection
                     )
                     if showsTwoPagePreview {
-                        MangaReaderPagedPreviewPage(
+                        MangaReaderLayeredPagedPreviewPage(
                             palette: palette,
                             isTrailingPage: true,
                             scaleMode: settings.pageScaleMode,
@@ -206,6 +206,43 @@ private struct MangaReaderSettingsPreviewSpread: View {
         .frame(maxWidth: .infinity)
         .frame(height: height)
         .clipShape(UnevenRoundedRectangle(cornerRadii: frameCornerRadii, style: .continuous))
+    }
+}
+
+private struct MangaReaderLayeredPagedPreviewPage: View {
+    let palette: MangaReaderSettingsPalette
+    let isTrailingPage: Bool
+    let scaleMode: MangaPageScaleMode
+    let pageTurnDirection: MangaPageTurnDirection
+
+    private var duplicateOffsetX: CGFloat {
+        switch pageTurnDirection {
+        case .leftToRight:
+            14
+        case .rightToLeft:
+            -14
+        }
+    }
+
+    var body: some View {
+        ZStack {
+            MangaReaderPagedPreviewPage(
+                palette: palette,
+                isTrailingPage: isTrailingPage,
+                scaleMode: scaleMode,
+                pageTurnDirection: pageTurnDirection
+            )
+            .brightness(-0.08)
+            .opacity(0.82)
+            .offset(x: duplicateOffsetX)
+
+            MangaReaderPagedPreviewPage(
+                palette: palette,
+                isTrailingPage: isTrailingPage,
+                scaleMode: scaleMode,
+                pageTurnDirection: pageTurnDirection
+            )
+        }
     }
 }
 
@@ -245,9 +282,13 @@ private struct MangaReaderPagedPreviewFitWidthContent: View {
 
     var body: some View {
         GeometryReader { proxy in
-            let inset: CGFloat = 12
-            let contentWidth = max(proxy.size.width - inset * 2, 1)
+            let horizontalInset: CGFloat = 12
+            let contentWidth = max(proxy.size.width - horizontalInset * 2, 1)
             let panelWidth = max((contentWidth - 8) / 2, 1)
+            let contentHeight = MangaReaderPagedPreviewArtworkMetrics.height(
+                isTrailingPage: isTrailingPage,
+                scale: 1
+            )
 
             MangaReaderPagedPreviewArtwork(
                 palette: palette,
@@ -255,14 +296,14 @@ private struct MangaReaderPagedPreviewFitWidthContent: View {
                 panelWidth: panelWidth,
                 scale: 1
             )
-            .padding(inset)
+            .frame(width: contentWidth, height: contentHeight, alignment: .topLeading)
+            .padding(.horizontal, horizontalInset)
+            .frame(width: proxy.size.width, height: proxy.size.height, alignment: .center)
         }
     }
 }
 
 private struct MangaReaderPagedPreviewFitHeightContent: View {
-    private static let artworkSize = CGSize(width: 156, height: 130)
-
     let palette: MangaReaderSettingsPalette
     let isTrailingPage: Bool
     let pageTurnDirection: MangaPageTurnDirection
@@ -281,8 +322,11 @@ private struct MangaReaderPagedPreviewFitHeightContent: View {
             let inset: CGFloat = 12
             let contentHeight = max(proxy.size.height - inset * 2, 1)
             let contentWidth = max(proxy.size.width - inset * 2, 1)
-            let scale = contentHeight / Self.artworkSize.height
-            let scaledPanelWidth = (Self.artworkSize.width - 8) / 2 * scale
+            let scale = contentHeight / MangaReaderPagedPreviewArtworkMetrics.height(
+                isTrailingPage: isTrailingPage,
+                scale: 1
+            )
+            let scaledPanelWidth = (MangaReaderPagedPreviewArtworkMetrics.baseWidth - 8) / 2 * scale
 
             MangaReaderPagedPreviewArtwork(
                 palette: palette,
@@ -298,6 +342,19 @@ private struct MangaReaderPagedPreviewFitHeightContent: View {
             .clipped()
             .padding(inset)
         }
+    }
+}
+
+private enum MangaReaderPagedPreviewArtworkMetrics {
+    static let baseWidth: CGFloat = 156
+
+    static func height(isTrailingPage: Bool, scale: CGFloat) -> CGFloat {
+        let topRowHeight: CGFloat = isTrailingPage ? 54 : 50
+        let middleRowHeight: CGFloat = isTrailingPage ? 38 : 34
+        let bottomRowHeight: CGFloat = isTrailingPage ? 34 : 30
+        let rowSpacing: CGFloat = 8
+
+        return (topRowHeight + rowSpacing + middleRowHeight + rowSpacing + bottomRowHeight) * scale
     }
 }
 
