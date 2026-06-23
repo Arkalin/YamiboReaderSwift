@@ -69,3 +69,12 @@ import Testing
         ) != "第51话"
     )
 }
+
+@Test func readerHeaderTitleKeepsEmbeddedSpecialEpisodeWords() async throws {
+    #expect(
+        MangaChapterDisplayFormatter.readerHeaderTitle(
+            rawTitle: "【提灯喵汉化组】【あおのなち】与你相恋到生命尽头 日常番外篇1闪闪发光",
+            cleanBookName: "与你相恋到生命尽头"
+        ) == "SP 日常番外篇1闪闪发光"
+    )
+}
