@@ -315,8 +315,9 @@ private struct MangaReaderBottomControls: View {
                 MangaReaderBottomPageSummary(text: pageSummary)
             }
         }
+        .padding(.top, layout.bottomChromeTopPadding)
         .padding(.horizontal, 12)
-        .padding(.bottom, max(bottomInset + 8, 12))
+        .padding(.bottom, max(bottomInset - 18, 8))
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
     }
 }
@@ -388,7 +389,6 @@ private struct MangaReaderStaticActionControls: View {
 
     var body: some View {
         let layout = ReaderBottomChromeLayoutPresentation()
-        let buttonTint = readerChromeButtonTint(for: colorScheme)
 
         ReaderChromeCapsuleButton(
             title: commentsTitle,
@@ -403,31 +403,47 @@ private struct MangaReaderStaticActionControls: View {
         )
 
         HStack(spacing: 0) {
-            ReaderChromeCircleButton(
-                systemName: "safari",
+            bottomActionButton(
                 title: originalPostTitle,
-                tint: buttonTint,
-                action: onOpenOriginalPost
+                systemName: "safari",
+                handler: onOpenOriginalPost
             )
             Spacer(minLength: layout.actionButtonSpacing)
-            ReaderChromeCircleButton(
-                systemName: "bookmark",
+            bottomActionButton(
                 title: bookmarkTitle,
-                tint: buttonTint,
                 isEnabled: false,
-                action: {}
+                systemName: "bookmark",
+                handler: {}
             )
             Spacer(minLength: layout.actionButtonSpacing)
-            ReaderChromeCircleButton(
-                systemName: "square.and.arrow.down",
+            bottomActionButton(
                 title: cacheTitle,
-                tint: buttonTint,
                 isEnabled: false,
-                action: {}
+                systemName: "square.and.arrow.down",
+                handler: {}
             )
         }
         .frame(maxWidth: .infinity)
         .frame(height: layout.actionButtonRowHeight)
+    }
+
+    private func bottomActionButton(
+        title: String,
+        isEnabled: Bool = true,
+        systemName: String,
+        handler: @escaping () -> Void
+    ) -> some View {
+        let layout = ReaderBottomChromeLayoutPresentation()
+
+        return Button(action: handler) {
+            Image(systemName: systemName)
+                .font(.headline)
+                .frame(width: layout.actionButtonIconFrame, height: layout.actionButtonIconFrame)
+        }
+        .readerChromeButtonStyle(tint: readerChromeButtonTint(for: colorScheme))
+        .opacity(isEnabled ? 1 : 0.34)
+        .disabled(!isEnabled)
+        .accessibilityLabel(title)
     }
 }
 
