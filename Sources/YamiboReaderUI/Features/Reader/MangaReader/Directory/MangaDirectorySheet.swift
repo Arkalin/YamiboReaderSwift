@@ -475,15 +475,7 @@ private struct MangaDirectoryChapterRow: View {
                         .foregroundStyle(accentColor)
                     }
                 }
-
-                Spacer(minLength: 0)
-
-                if isCurrent {
-                    Circle()
-                        .fill(accentColor)
-                        .frame(width: 8, height: 8)
-                        .padding(.top, 6)
-                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
@@ -799,19 +791,30 @@ private struct TruncationAwareText: View {
     var body: some View {
         Text(text)
             .lineLimit(lineLimit)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 GeometryReader { proxy in
                     Color.clear
                         .onAppear {
-                            availableWidth = proxy.size.width
-                            updateTruncation()
+                            updateAvailableWidth(proxy.size.width)
                         }
                         .onChange(of: proxy.size.width) { _, newValue in
-                            availableWidth = newValue
-                            updateTruncation()
+                            updateAvailableWidth(newValue)
                         }
                 }
             )
+            .onChange(of: text) {
+                updateTruncation()
+            }
+            .onChange(of: lineLimit) {
+                updateTruncation()
+            }
+    }
+
+    private func updateAvailableWidth(_ width: CGFloat) {
+        availableWidth = width
+        updateTruncation()
     }
 
     private func updateTruncation() {
