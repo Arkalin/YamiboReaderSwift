@@ -12,6 +12,7 @@ public struct MangaReaderView: View {
     @State private var isChromeVisible = true
     @State private var isDirectoryPresented = false
     @State private var isChapterCommentsPresented = false
+    @State private var isSettingsPresented = false
 
     public init(context: MangaLaunchContext, appModel: YamiboAppModel) {
         self.context = context
@@ -50,6 +51,9 @@ public struct MangaReaderView: View {
                     },
                     onShowComments: {
                         isChapterCommentsPresented = true
+                    },
+                    onShowSettings: {
+                        isSettingsPresented = true
                     },
                     onOpenOriginalPost: openOriginalPost,
                     onJumpToLocalPage: { targetIndex in
@@ -101,6 +105,9 @@ public struct MangaReaderView: View {
                 target: model.currentChapterCommentTarget,
                 appModel: appModel
             )
+        }
+        .sheet(isPresented: $isSettingsPresented) {
+            MangaReaderSettingsSheet(model: model)
         }
     }
 
@@ -207,6 +214,7 @@ private struct MangaReaderFloatingControls: View {
     let onClose: () -> Void
     let onShowDirectory: () -> Void
     let onShowComments: () -> Void
+    let onShowSettings: () -> Void
     let onOpenOriginalPost: () -> Void
     let onJumpToLocalPage: (Int) -> Void
 
@@ -231,7 +239,7 @@ private struct MangaReaderFloatingControls: View {
                 summary: summary,
                 onShowDirectory: onShowDirectory,
                 onShowComments: onShowComments,
-                onShowSettings: {},
+                onShowSettings: onShowSettings,
                 onOpenOriginalPost: onOpenOriginalPost,
                 onJumpToLocalPage: onJumpToLocalPage
             )

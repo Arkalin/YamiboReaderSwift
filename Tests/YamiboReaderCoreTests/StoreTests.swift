@@ -169,6 +169,9 @@ import Testing
         ),
         manga: MangaReaderSettings(
             readingMode: .paged,
+            pagedTurnStyle: .pageCurl,
+            pageTurnDirection: .leftToRight,
+            pageScaleMode: .fitHeight,
             brightness: 0.82,
             zoomEnabled: false,
             showsTwoPagesInLandscapeOnPad: true,
@@ -330,8 +333,29 @@ import Testing
     let decoded = try JSONDecoder().decode(MangaReaderSettings.self, from: Data(legacy.utf8))
 
     #expect(decoded.readingMode == .paged)
+    #expect(decoded.pagedTurnStyle == .slide)
+    #expect(decoded.pageTurnDirection == .rightToLeft)
+    #expect(decoded.pageScaleMode == .fitWidth)
     #expect(decoded.showsTwoPagesInLandscapeOnPad == false)
     #expect(decoded.directorySortOrder == .ascending)
+}
+
+@Test func mangaReaderSettingsEncodesAndDecodesPagedOptions() throws {
+    let settings = MangaReaderSettings(
+        readingMode: .paged,
+        pagedTurnStyle: .quickFade,
+        pageTurnDirection: .leftToRight,
+        pageScaleMode: .fitHeight,
+        brightness: 0.9,
+        zoomEnabled: false,
+        showsTwoPagesInLandscapeOnPad: true,
+        directorySortOrder: .descending
+    )
+
+    let encoded = try JSONEncoder().encode(settings)
+    let decoded = try JSONDecoder().decode(MangaReaderSettings.self, from: encoded)
+
+    #expect(decoded == settings)
 }
 
 @Test func favoriteStoreUpdatesNovelReadingPosition() async throws {
