@@ -31,7 +31,7 @@ final class MangaReaderDirectoryPanelTests: XCTestCase {
         XCTAssertTrue(source.contains("systemName: \"text.bubble\""))
         XCTAssertTrue(source.contains("systemName: \"gearshape\""))
         XCTAssertTrue(source.contains("settingsTitle: L10n.string(\"settings.title\")"))
-        XCTAssertTrue(source.contains("onShowSettings: {}"))
+        XCTAssertTrue(source.contains("onShowSettings: onShowSettings"))
         XCTAssertTrue(source.contains("systemName: \"safari\""))
         XCTAssertTrue(source.contains("onOpenOriginalPost: onOpenOriginalPost"))
         XCTAssertTrue(source.contains("systemName: \"bookmark\""))

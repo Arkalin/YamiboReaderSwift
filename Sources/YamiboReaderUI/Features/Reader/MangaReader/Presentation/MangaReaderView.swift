@@ -658,6 +658,7 @@ private struct MangaReaderPresentationContent: View {
             case let .loaded(loaded):
                 MangaReaderLoadedContent(
                     loaded: loaded,
+                    settings: presentation.settings,
                     imagePipeline: imagePipeline,
                     onCurrentPageChange: onCurrentPageChange,
                     onTap: onTap
@@ -703,6 +704,7 @@ private struct MangaReaderLoadingContent: View {
 
 private struct MangaReaderLoadedContent: View {
     let loaded: MangaReaderLoadedPresentation
+    let settings: MangaReaderSettings
     let imagePipeline: MangaImagePipeline?
     let onCurrentPageChange: (Int) -> Void
     let onTap: () -> Void
@@ -711,6 +713,8 @@ private struct MangaReaderLoadedContent: View {
         if loaded.pages.isEmpty {
             MangaReaderEmptyContent()
         } else if let imagePipeline {
+            switch settings.readingMode {
+            case .vertical:
                 MangaVerticalCollectionViewport(
                     pages: loaded.pages,
                     currentPageIndex: loaded.currentPageIndex,
@@ -719,7 +723,21 @@ private struct MangaReaderLoadedContent: View {
                     onCurrentPageChange: onCurrentPageChange,
                     onTap: onTap
                 )
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            case .paged:
+                MangaPagedReaderViewport(
+                    plan: MangaPagedReadingPlan(
+                        pages: loaded.pages,
+                        currentPageIndex: loaded.currentPageIndex
+                    ),
+                    viewportPlacement: loaded.viewportPlacement,
+                    settings: settings,
+                    imagePipeline: imagePipeline,
+                    onCurrentPageChange: onCurrentPageChange,
+                    onTap: onTap
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
         } else {
             ProgressView(L10n.string("manga.loading"))
                 .tint(.white)
