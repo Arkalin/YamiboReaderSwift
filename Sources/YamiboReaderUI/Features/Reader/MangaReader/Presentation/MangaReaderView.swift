@@ -9,6 +9,7 @@ public struct MangaReaderView: View {
     private let appModel: YamiboAppModel
     @StateObject private var model: MangaReaderModel
     @State private var isDismissing = false
+    @State private var isChromeVisible = true
     @State private var isDirectoryPresented = false
     @State private var isChapterCommentsPresented = false
 
@@ -30,6 +31,9 @@ public struct MangaReaderView: View {
                 imagePipeline: model.imagePipeline,
                 onCurrentPageChange: { globalIndex in
                     model.updateCurrentPage(globalIndex: globalIndex)
+                },
+                onTap: {
+                    toggleChrome()
                 }
             )
             .ignoresSafeArea()
@@ -37,6 +41,7 @@ public struct MangaReaderView: View {
                 MangaReaderFloatingControls(
                     topInset: topInset,
                     bottomInset: bottomInset,
+                    isVisible: isChromeVisible,
                     summary: mangaChromeSummary(from: model.presentation),
                     onClose: closeReader,
                     onShowDirectory: {
@@ -96,6 +101,18 @@ public struct MangaReaderView: View {
                 appModel: appModel
             )
         }
+    }
+
+    private func toggleChrome() {
+        guard canToggleChrome else { return }
+        withAnimation(.easeInOut(duration: ReaderChromeVisibilityAnimationPresentation.fade.duration)) {
+            isChromeVisible.toggle()
+        }
+    }
+
+    private var canToggleChrome: Bool {
+        guard case let .loaded(loaded) = model.presentation.state else { return false }
+        return !loaded.pages.isEmpty
     }
 
     private func closeReader() {
@@ -177,6 +194,7 @@ private struct MangaReaderChromeSummary: Equatable, Sendable {
 private struct MangaReaderFloatingControls: View {
     let topInset: CGFloat
     let bottomInset: CGFloat
+    let isVisible: Bool
     let summary: MangaReaderChromeSummary?
     let onClose: () -> Void
     let onShowDirectory: () -> Void
@@ -188,14 +206,18 @@ private struct MangaReaderFloatingControls: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            MangaReaderTopChrome(
-                title: summary?.headerTitle,
-                topInset: topInset,
-                onClose: onClose
-            )
+            if isVisible {
+                MangaReaderTopChrome(
+                    title: summary?.headerTitle,
+                    topInset: topInset,
+                    onClose: onClose
+                )
+                .transition(.opacity)
+            }
 
             MangaReaderBottomControls(
                 bottomInset: bottomInset,
+                isVisible: isVisible,
                 colorScheme: colorScheme,
                 summary: summary,
                 onShowDirectory: onShowDirectory,
@@ -267,6 +289,7 @@ private struct MangaReaderTopChapterTitle: View {
 
 private struct MangaReaderBottomControls: View {
     let bottomInset: CGFloat
+    let isVisible: Bool
     let colorScheme: ColorScheme
     let summary: MangaReaderChromeSummary?
     let onShowDirectory: () -> Void
@@ -310,9 +333,11 @@ private struct MangaReaderBottomControls: View {
                     )
                 }
             }
+            .readerChromeAnchoredPopupVisibility(isVisible)
 
             if let pageSummary = summary?.pageSummary {
                 MangaReaderBottomPageSummary(text: pageSummary)
+                    .readerChromeFadeVisibility(isVisible)
             }
         }
         .padding(.top, layout.bottomChromeTopPadding)
@@ -451,6 +476,7 @@ private struct MangaReaderPresentationContent: View {
     let presentation: MangaReaderPresentation
     let imagePipeline: MangaImagePipeline?
     let onCurrentPageChange: (Int) -> Void
+    let onTap: () -> Void
 
     var body: some View {
         ZStack {
@@ -463,7 +489,8 @@ private struct MangaReaderPresentationContent: View {
                 MangaReaderLoadedContent(
                     loaded: loaded,
                     imagePipeline: imagePipeline,
-                    onCurrentPageChange: onCurrentPageChange
+                    onCurrentPageChange: onCurrentPageChange,
+                    onTap: onTap
                 )
             case let .failed(error):
                 MangaReaderFailedContent(error: error)
@@ -508,6 +535,7 @@ private struct MangaReaderLoadedContent: View {
     let loaded: MangaReaderLoadedPresentation
     let imagePipeline: MangaImagePipeline?
     let onCurrentPageChange: (Int) -> Void
+    let onTap: () -> Void
 
     var body: some View {
         if loaded.pages.isEmpty {
@@ -518,7 +546,8 @@ private struct MangaReaderLoadedContent: View {
                     currentPageIndex: loaded.currentPageIndex,
                     viewportPlacement: loaded.viewportPlacement,
                     imagePipeline: imagePipeline,
-                    onCurrentPageChange: onCurrentPageChange
+                    onCurrentPageChange: onCurrentPageChange,
+                    onTap: onTap
                 )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
