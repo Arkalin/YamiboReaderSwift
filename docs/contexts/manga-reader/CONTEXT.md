@@ -28,6 +28,10 @@ _Avoid_: reader view model fields, published loading state, UI snapshot
 The user's accepted manga reading preferences, distinct from transient settings drafts.
 _Avoid_: draft settings, reader controls, settings fields
 
+**Manga Reading Mode**:
+The user's preferred manga page navigation model, either continuous vertical reading or paged reading.
+_Avoid_: reader mode, viewport type, settings mode
+
 **Manga Page Turn Direction**:
 The user's preferred horizontal page order for paged manga reading modes.
 _Avoid_: swipe direction, gesture direction
@@ -36,6 +40,14 @@ _Avoid_: swipe direction, gesture direction
 The user's preferred image fit strategy for paged manga reading modes.
 _Avoid_: zoom level, image layout mode
 
+**Manga Page Zoom**:
+The user's optional single-page magnification interaction inside a manga page surface.
+_Avoid_: browser zoom, persistent zoom state, image browser
+
+**Manga Page Spread**:
+A paged reader display group containing one or two manga pages. It is a viewport arrangement and does not replace the page-level **Manga Reading Position**.
+_Avoid_: double page position, two-page progress, spread position
+
 ## Relationships
 
 - A **Manga Directory** contains zero or more **Manga Chapter Documents** by chapter identity.
@@ -43,8 +55,16 @@ _Avoid_: zoom level, image layout mode
 - A **Manga Chapter Window** preserves the current **Manga Reading Position** while adding or trimming **Manga Chapter Documents**.
 - A **Manga Reader Presentation** projects a **Manga Chapter Window** into reader-visible pages and current position without changing the window.
 - A **Manga Reader Presentation** may carry the current **Manga Reader Settings** so visible reader behavior reflects accepted preferences, not draft controls.
-- **Manga Reader Settings** may include a **Manga Page Turn Direction** for paged modes even before paged manga behavior is implemented.
-- **Manga Reader Settings** may include a **Manga Page Scale Mode** for paged modes even before paged manga behavior is implemented.
+- **Manga Reader Settings** includes the current **Manga Reading Mode** so the reader can choose continuous vertical or paged navigation.
+- **Manga Reader Settings** includes a **Manga Page Turn Direction** for paged **Manga Reading Mode** behavior.
+- **Manga Reader Settings** includes a **Manga Page Scale Mode** for paged **Manga Reading Mode** behavior.
+- A **Manga Page Spread** may show two adjacent pages in iPad landscape, but the current **Manga Reading Position** remains page-level.
+- In paged **Manga Reading Mode**, **Manga Page Turn Direction** also controls directional chrome feedback such as progress fill direction, while progress identity remains based on page `localIndex`.
+- In paged **Manga Reading Mode**, **Manga Page Scale Mode** applies to the whole page surface: fit-width pages may include top and bottom blank space, and page turns move that complete surface rather than only the image.
+- In paged **Manga Reading Mode**, fit-height pages may include left and right blank space or horizontally draggable overflow. Initial overflow alignment follows **Manga Page Turn Direction**.
+- **Manga Page Zoom** is available only when reader chrome is hidden, and it does not change **Manga Reading Position**.
+- Page-curl paged reading presents **Manga Page Spreads** with a book-spine model consistent with the novel reader, while comments, resume, and progress remain tied to page-level **Manga Reading Position**.
+- Empty page surfaces required by the page-curl book-spine model do not create **Manga Reading Positions**.
 - A **Manga Chapter Window** uses chapter `tid` as the canonical chapter identity; chapter URLs are loading and display metadata.
 - A local **Manga Directory** can be recovered by contained chapter `tid` when launch context lacks the directory name.
 - A **Manga Chapter Window** extends continuous reading by inserting adjacent **Manga Chapter Documents** and handles distant jumps through an explicit reset.
