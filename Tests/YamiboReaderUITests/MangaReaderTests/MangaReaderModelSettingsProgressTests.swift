@@ -12,6 +12,7 @@ final class MangaReaderModelSettingsProgressTests: XCTestCase {
                     pagedTurnStyle: .pageCurl,
                     pageTurnDirection: .leftToRight,
                     pageScaleMode: .fitHeight,
+                    pageEdgeFillStyle: .system,
                     brightness: 2.0,
                     zoomEnabled: false,
                     showsTwoPagesInLandscapeOnPad: true,
@@ -26,6 +27,7 @@ final class MangaReaderModelSettingsProgressTests: XCTestCase {
         XCTAssertEqual(fixture.model.presentation.settings.pagedTurnStyle, .pageCurl)
         XCTAssertEqual(fixture.model.presentation.settings.pageTurnDirection, .leftToRight)
         XCTAssertEqual(fixture.model.presentation.settings.pageScaleMode, .fitHeight)
+        XCTAssertEqual(fixture.model.presentation.settings.pageEdgeFillStyle, .system)
         XCTAssertEqual(fixture.model.presentation.settings.brightness, 1.5)
         XCTAssertFalse(fixture.model.presentation.settings.zoomEnabled)
         XCTAssertTrue(fixture.model.presentation.settings.showsTwoPagesInLandscapeOnPad)
@@ -52,6 +54,7 @@ final class MangaReaderModelSettingsProgressTests: XCTestCase {
             pagedTurnStyle: .quickFade,
             pageTurnDirection: .leftToRight,
             pageScaleMode: .fitHeight,
+            pageEdgeFillStyle: .white,
             brightness: -1,
             zoomEnabled: false,
             showsTwoPagesInLandscapeOnPad: true,
@@ -61,6 +64,7 @@ final class MangaReaderModelSettingsProgressTests: XCTestCase {
 
         XCTAssertEqual(fixture.model.presentation.settings.brightness, 0.25)
         XCTAssertEqual(fixture.model.presentation.settings.readingMode, .vertical)
+        XCTAssertEqual(fixture.model.presentation.settings.pageEdgeFillStyle, .white)
         XCTAssertFalse(fixture.model.presentation.settings.zoomEnabled)
 
         try await waitFor {
@@ -70,6 +74,7 @@ final class MangaReaderModelSettingsProgressTests: XCTestCase {
                 loaded.manga.pagedTurnStyle == .quickFade &&
                 loaded.manga.pageTurnDirection == .leftToRight &&
                 loaded.manga.pageScaleMode == .fitHeight &&
+                loaded.manga.pageEdgeFillStyle == .white &&
                 loaded.manga.zoomEnabled == false
         }
 

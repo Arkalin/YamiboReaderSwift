@@ -156,6 +156,20 @@ public enum MangaPageScaleMode: String, Codable, Hashable, CaseIterable, Sendabl
     }
 }
 
+public enum MangaPageEdgeFillStyle: String, Codable, Hashable, CaseIterable, Sendable {
+    case white
+    case black
+    case system
+
+    public var title: String {
+        switch self {
+        case .white: L10n.string("manga.page_edge_fill.white")
+        case .black: L10n.string("manga.page_edge_fill.black")
+        case .system: L10n.string("manga.page_edge_fill.system")
+        }
+    }
+}
+
 public enum MangaDirectorySortOrder: String, Codable, Hashable, CaseIterable, Sendable {
     case ascending
     case descending
@@ -173,6 +187,7 @@ public struct MangaReaderSettings: Codable, Hashable, Sendable {
     public var pagedTurnStyle: ReaderPagedTurnStyle
     public var pageTurnDirection: MangaPageTurnDirection
     public var pageScaleMode: MangaPageScaleMode
+    public var pageEdgeFillStyle: MangaPageEdgeFillStyle
     public var brightness: Double
     public var zoomEnabled: Bool
     public var showsTwoPagesInLandscapeOnPad: Bool
@@ -183,6 +198,7 @@ public struct MangaReaderSettings: Codable, Hashable, Sendable {
         pagedTurnStyle: ReaderPagedTurnStyle = .slide,
         pageTurnDirection: MangaPageTurnDirection = .rightToLeft,
         pageScaleMode: MangaPageScaleMode = .fitWidth,
+        pageEdgeFillStyle: MangaPageEdgeFillStyle = .black,
         brightness: Double = 1,
         zoomEnabled: Bool = true,
         showsTwoPagesInLandscapeOnPad: Bool = false,
@@ -192,6 +208,7 @@ public struct MangaReaderSettings: Codable, Hashable, Sendable {
         self.pagedTurnStyle = pagedTurnStyle
         self.pageTurnDirection = pageTurnDirection
         self.pageScaleMode = pageScaleMode
+        self.pageEdgeFillStyle = pageEdgeFillStyle
         self.brightness = brightness
         self.zoomEnabled = zoomEnabled
         self.showsTwoPagesInLandscapeOnPad = showsTwoPagesInLandscapeOnPad
@@ -203,6 +220,7 @@ public struct MangaReaderSettings: Codable, Hashable, Sendable {
         case pagedTurnStyle
         case pageTurnDirection
         case pageScaleMode
+        case pageEdgeFillStyle
         case brightness
         case zoomEnabled
         case showsTwoPagesInLandscapeOnPad
@@ -215,6 +233,7 @@ public struct MangaReaderSettings: Codable, Hashable, Sendable {
         pagedTurnStyle = try container.decodeIfPresent(ReaderPagedTurnStyle.self, forKey: .pagedTurnStyle) ?? .slide
         pageTurnDirection = try container.decodeIfPresent(MangaPageTurnDirection.self, forKey: .pageTurnDirection) ?? .rightToLeft
         pageScaleMode = try container.decodeIfPresent(MangaPageScaleMode.self, forKey: .pageScaleMode) ?? .fitWidth
+        pageEdgeFillStyle = try container.decodeIfPresent(MangaPageEdgeFillStyle.self, forKey: .pageEdgeFillStyle) ?? .black
         brightness = try container.decodeIfPresent(Double.self, forKey: .brightness) ?? 1
         zoomEnabled = try container.decodeIfPresent(Bool.self, forKey: .zoomEnabled) ?? true
         showsTwoPagesInLandscapeOnPad = try container.decodeIfPresent(Bool.self, forKey: .showsTwoPagesInLandscapeOnPad) ?? false
@@ -227,6 +246,7 @@ public struct MangaReaderSettings: Codable, Hashable, Sendable {
         try container.encode(pagedTurnStyle, forKey: .pagedTurnStyle)
         try container.encode(pageTurnDirection, forKey: .pageTurnDirection)
         try container.encode(pageScaleMode, forKey: .pageScaleMode)
+        try container.encode(pageEdgeFillStyle, forKey: .pageEdgeFillStyle)
         try container.encode(brightness, forKey: .brightness)
         try container.encode(zoomEnabled, forKey: .zoomEnabled)
         try container.encode(showsTwoPagesInLandscapeOnPad, forKey: .showsTwoPagesInLandscapeOnPad)

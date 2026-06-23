@@ -40,6 +40,10 @@ _Avoid_: swipe direction, gesture direction
 The user's preferred image fit strategy for paged manga reading modes.
 _Avoid_: zoom level, image layout mode
 
+**Manga Page Edge Fill**:
+The user's preferred fill color for blank page-surface areas around scaled manga pages in paged reading modes.
+_Avoid_: reader background, page padding color
+
 **Manga Page Zoom**:
 The user's optional single-page magnification interaction inside a manga page surface.
 _Avoid_: browser zoom, persistent zoom state, image browser
@@ -58,10 +62,12 @@ _Avoid_: double page position, two-page progress, spread position
 - **Manga Reader Settings** includes the current **Manga Reading Mode** so the reader can choose continuous vertical or paged navigation.
 - **Manga Reader Settings** includes a **Manga Page Turn Direction** for paged **Manga Reading Mode** behavior.
 - **Manga Reader Settings** includes a **Manga Page Scale Mode** for paged **Manga Reading Mode** behavior.
+- **Manga Reader Settings** includes a **Manga Page Edge Fill** for blank page-surface areas in paged **Manga Reading Mode** behavior.
 - A **Manga Page Spread** may show two adjacent pages in iPad landscape, but the current **Manga Reading Position** remains page-level.
 - In paged **Manga Reading Mode**, **Manga Page Turn Direction** also controls directional chrome feedback such as progress fill direction, while progress identity remains based on page `localIndex`.
 - In paged **Manga Reading Mode**, **Manga Page Scale Mode** applies to the whole page surface: fit-width pages may include top and bottom blank space, and page turns move that complete surface rather than only the image.
 - In paged **Manga Reading Mode**, fit-height pages may include left and right blank space or horizontally draggable overflow. Initial overflow alignment follows **Manga Page Turn Direction**.
+- In paged **Manga Reading Mode**, **Manga Page Edge Fill** colors blank page-surface areas without changing the manga image content.
 - **Manga Page Zoom** is available only when reader chrome is hidden, and it does not change **Manga Reading Position**.
 - Page-curl paged reading presents **Manga Page Spreads** with a book-spine model consistent with the novel reader, while comments, resume, and progress remain tied to page-level **Manga Reading Position**.
 - Empty page surfaces required by the page-curl book-spine model do not create **Manga Reading Positions**.

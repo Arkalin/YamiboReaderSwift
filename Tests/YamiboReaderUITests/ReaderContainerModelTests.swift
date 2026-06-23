@@ -1116,6 +1116,7 @@ final class ReaderContainerModelTests: XCTestCase {
         let document = makeDocument(view: 1, maxView: 1, chapterTitles: ["第一章", "第二章"])
         let initialMangaSettings = MangaReaderSettings(
             readingMode: .paged,
+            pageEdgeFillStyle: .system,
             brightness: 0.82,
             zoomEnabled: false,
             showsTwoPagesInLandscapeOnPad: true,

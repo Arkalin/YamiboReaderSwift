@@ -102,6 +102,32 @@ struct MangaReaderPresentationInfrastructureTests {
         #expect(!source.contains("NovelReaderSurface"))
     }
 
+    @Test func pagedViewportAppliesConfiguredPageEdgeFillStyle() throws {
+        let source = try sourceFile("Sources/YamiboReaderUI/Features/Reader/MangaReader/Presentation/MangaPagedReaderViewport.swift")
+
+        #expect(source.contains("pageEdgeFillStyle: parent.settings.pageEdgeFillStyle"))
+        #expect(source.contains("pageEdgeFillStyle: MangaPageEdgeFillStyle"))
+        #expect(source.contains("var pageEdgeFillStyle: MangaPageEdgeFillStyle"))
+        #expect(source.contains("collectionView.backgroundColor = pageEdgeFillColor"))
+        #expect(source.contains("backgroundColor = pageEdgeFillColor"))
+        #expect(source.contains("contentView.backgroundColor = pageEdgeFillColor"))
+        #expect(source.contains("pageEdgeFillStyle.color(for: colorScheme)"))
+        #expect(source.contains("pageEdgeFillStyle.progressTint(for: colorScheme)"))
+        #expect(source.contains("pageEdgeFillStyle.placeholderForeground(for: colorScheme)"))
+    }
+
+    @Test func settingsSheetShowsPageEdgeFillAfterPageScaleMode() throws {
+        let source = try sourceFile("Sources/YamiboReaderUI/Features/Reader/MangaReader/Settings/MangaReaderSettingsSheet.swift")
+        let scaleRange = try #require(source.range(of: "MangaReaderPageScaleModeMenuRow("))
+        let edgeFillRange = try #require(source.range(of: "MangaReaderPageEdgeFillMenuRow("))
+
+        #expect(scaleRange.lowerBound < edgeFillRange.lowerBound)
+        #expect(source.contains("L10n.string(\"manga.page_edge_fill\")"))
+        #expect(source.contains("ForEach(MangaPageEdgeFillStyle.allCases, id: \\.self)"))
+        #expect(source.contains("edgeFillStyle: settings.pageEdgeFillStyle"))
+        #expect(source.contains("edgeFillStyle?.color(for: colorScheme) ?? palette.previewPageBackground"))
+    }
+
     @Test func pagedViewportHidesVisibleChromeBeforeTapZonePageTurn() throws {
         let source = try sourceFile("Sources/YamiboReaderUI/Features/Reader/MangaReader/Presentation/MangaPagedReaderViewport.swift")
         let chromeGateRange = try #require(source.range(of: "if parent.isChromeVisible {"))
