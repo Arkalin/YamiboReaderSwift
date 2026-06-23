@@ -12,7 +12,7 @@ public enum MangaChapterDisplayFormatter {
 
         if displayNumber != "-" {
             let prefix = readerHeaderEpisodePrefix(displayNumber)
-            let subtitle = readerHeaderSubtitle(from: source)
+            let subtitle = readerHeaderSubtitle(from: source, displayNumber: displayNumber)
             return [prefix, subtitle]
                 .filter { !$0.isEmpty }
                 .joined(separator: " ")
@@ -94,20 +94,39 @@ public enum MangaChapterDisplayFormatter {
         }
     }
 
-    private static func readerHeaderSubtitle(from source: String) -> String {
-        let episodeTokenPatterns = [
-            #"最终话|最終話|最终回|最終回|大结局"#,
-            #"(?i)\bfinal\b"#,
-            #"番外|特典|附录|SP|卷后附|卷彩页|小剧场|小漫画"#,
-            #"(?i)\bspecial\b"#,
-            #"特别"#,
-            #"(?i)\bextra\b"#,
-            #"第\s*\d+(?:\.\d+)?\s*[-—]\s*\d+(?:\.\d+)?"#,
-            #"(?:第)?\s*\d+(?:\.\d+)?\s*[话話织回章节幕折更]\s*[①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳⓪]*"#,
-            #"\d+(?:\.\d+)?\s*[①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳⓪]*"#
-        ]
+    private static func readerHeaderSubtitle(from source: String, displayNumber: String) -> String {
+        let patterns: [String]
+        switch displayNumber {
+        case "终":
+            patterns = [
+                #"^(?:最终话|最終話|最终回|最終回|大结局)(?:\s*[\-—–_、，,|｜:/：#·.。!！?？]+\s*|\s+|$)"#,
+                #"(?i)^final(?:\s*[\-—–_、，,|｜:/：#·.。!！?？]+\s*|\s+|$)"#
+            ]
+        case "SP":
+            patterns = [
+                #"^(?:番外|特典|附录|SP|卷后附|卷彩页|小剧场|小漫画)(?:篇|章|话|話|回)?(?:\s*[\-—–_、，,|｜:/：#·.。!！?？]+\s*|\s+|$)"#,
+                #"(?i)^special(?:\s*[\-—–_、，,|｜:/：#·.。!！?？]+\s*|\s+|$)"#
+            ]
+        case "Ex":
+            patterns = [
+                #"^(?:特别|EX|Extra)(?:篇|章|话|話|回)?(?:\s*[\-—–_、，,|｜:/：#·.。!！?？]+\s*|\s+|$)"#,
+                #"(?i)^extra(?:\s*[\-—–_、，,|｜:/：#·.。!！?？]+\s*|\s+|$)"#
+            ]
+        default:
+            patterns = [
+                #"最终话|最終話|最终回|最終回|大结局"#,
+                #"(?i)\bfinal\b"#,
+                #"番外|特典|附录|SP|卷后附|卷彩页|小剧场|小漫画"#,
+                #"(?i)\bspecial\b"#,
+                #"特别"#,
+                #"(?i)\bextra\b"#,
+                #"第\s*\d+(?:\.\d+)?\s*[-—]\s*\d+(?:\.\d+)?"#,
+                #"(?:第)?\s*\d+(?:\.\d+)?\s*[话話织回章节幕折更]\s*[①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳⓪]*"#,
+                #"\d+(?:\.\d+)?\s*[①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳⓪]*"#
+            ]
+        }
 
-        for pattern in episodeTokenPatterns {
+        for pattern in patterns {
             if let range = source.range(of: pattern, options: .regularExpression) {
                 var subtitle = source
                 subtitle.replaceSubrange(range, with: " ")
