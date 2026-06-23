@@ -13,6 +13,7 @@ final class MangaReaderDirectoryPanelTests: XCTestCase {
         XCTAssertTrue(source.contains("MangaChapterDisplayFormatter.readerHeaderTitle("))
         XCTAssertTrue(source.contains("MangaReaderTopChrome("))
         XCTAssertTrue(source.contains("MangaReaderBottomPageSummary("))
+        XCTAssertTrue(source.contains(".readerChromePanel(cornerRadius: 18, tint: readerChromePanelTint(for: colorScheme))"))
         XCTAssertTrue(source.contains("L10n.string(\"manga.preview_page\", currentIndex + 1, itemCount)"))
         XCTAssertTrue(source.contains("ReaderDirectoryProgressCapsule("))
         XCTAssertTrue(source.contains("systemName: \"text.bubble\""))

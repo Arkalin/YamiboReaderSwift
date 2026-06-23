@@ -248,6 +248,7 @@ private struct MangaReaderTopChrome: View {
 
 private struct MangaReaderTopChapterTitle: View {
     let title: String?
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         if let title, !title.isEmpty {
@@ -256,6 +257,9 @@ private struct MangaReaderTopChapterTitle: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
                 .foregroundStyle(.primary)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .readerChromePanel(cornerRadius: 18, tint: readerChromePanelTint(for: colorScheme))
                 .frame(maxWidth: .infinity)
         }
     }
