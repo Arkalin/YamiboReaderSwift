@@ -10,6 +10,7 @@ struct MangaVerticalCollectionViewport: UIViewRepresentable {
     let viewportPlacement: MangaReaderViewportPlacement?
     let imagePipeline: MangaImagePipeline
     let onCurrentPageChange: (Int) -> Void
+    let onTap: () -> Void
 
     func makeCoordinator() -> Coordinator {
         Coordinator(parent: self)
@@ -35,12 +36,17 @@ struct MangaVerticalCollectionViewport: UIViewRepresentable {
             coordinator?.applyInitialPlacementIfNeeded(in: collectionView)
             coordinator?.applyViewportPlacementIfNeeded(in: collectionView)
         }
+        context.coordinator.tapGesture.cancelsTouchesInView = false
+        context.coordinator.tapGesture.delegate = context.coordinator
+        collectionView.addGestureRecognizer(context.coordinator.tapGesture)
         return collectionView
     }
 
     func updateUIView(_ collectionView: UICollectionView, context: Context) {
         context.coordinator.parent = self
-        context.coordinator.updateContentIfNeeded(in: collectionView)
+        context.coordinator.callbackScheduler.performViewUpdate {
+            context.coordinator.updateContentIfNeeded(in: collectionView)
+        }
     }
 
     private static func makeLayout() -> UICollectionViewCompositionalLayout {
@@ -57,8 +63,9 @@ struct MangaVerticalCollectionViewport: UIViewRepresentable {
         }
     }
 
-    final class Coordinator: NSObject, UICollectionViewDataSource, UICollectionViewDelegate, UIScrollViewDelegate {
+    final class Coordinator: NSObject, UICollectionViewDataSource, UICollectionViewDelegate, UIScrollViewDelegate, UIGestureRecognizerDelegate {
         var parent: MangaVerticalCollectionViewport
+        let callbackScheduler = SwiftUIViewUpdateCallbackScheduler()
         private var contentIdentity: [String] = []
         private var heightToWidthRatios: [String: CGFloat] = [:]
         private var pendingInitialPageIndex: Int?
@@ -66,6 +73,7 @@ struct MangaVerticalCollectionViewport: UIViewRepresentable {
         private var pendingReportedGlobalIndex: Int?
         private var currentPagePublishDisplayLink: CADisplayLink?
         private var lastAppliedPlacementRevision: Int?
+        lazy var tapGesture = UITapGestureRecognizer(target: self, action: #selector(handleTap(_:)))
 
         init(parent: MangaVerticalCollectionViewport) {
             self.parent = parent
@@ -204,6 +212,25 @@ struct MangaVerticalCollectionViewport: UIViewRepresentable {
             )
             lastAppliedPlacementRevision = placement.revision
             publishCurrentPageIfNeeded(from: collectionView)
+        }
+
+        @objc private func handleTap(_ recognizer: UITapGestureRecognizer) {
+            guard recognizer.state == .ended else { return }
+            let onTap = parent.onTap
+            callbackScheduler.publish {
+                onTap()
+            }
+        }
+
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+            touch.view?.isDescendant(ofType: UIControl.self) != true
+        }
+
+        func gestureRecognizer(
+            _ gestureRecognizer: UIGestureRecognizer,
+            shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
+        ) -> Bool {
+            true
         }
 
         private func publishCurrentPageIfNeeded(from collectionView: UICollectionView) {

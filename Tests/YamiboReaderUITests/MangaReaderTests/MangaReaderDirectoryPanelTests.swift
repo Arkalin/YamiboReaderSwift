@@ -8,6 +8,13 @@ final class MangaReaderDirectoryPanelTests: XCTestCase {
         let source = try mangaReaderSourceFile("Sources/YamiboReaderUI/Features/Reader/MangaReader/Presentation/MangaReaderView.swift")
 
         XCTAssertTrue(source.contains("MangaReaderFloatingControls("))
+        XCTAssertTrue(source.contains("@State private var isChromeVisible = true"))
+        XCTAssertTrue(source.contains("isVisible: isChromeVisible"))
+        XCTAssertTrue(source.contains("onTap: {\n                    toggleChrome()\n                }"))
+        XCTAssertTrue(source.contains("private func toggleChrome()"))
+        XCTAssertTrue(source.contains("ReaderChromeVisibilityAnimationPresentation.fade.duration"))
+        XCTAssertTrue(source.contains(".readerChromeAnchoredPopupVisibility(isVisible)"))
+        XCTAssertTrue(source.contains(".readerChromeFadeVisibility(isVisible)"))
         XCTAssertTrue(source.contains("summary: mangaChromeSummary(from: model.presentation)"))
         XCTAssertTrue(source.contains("struct MangaReaderChromeSummary"))
         XCTAssertTrue(source.contains("MangaChapterDisplayFormatter.readerHeaderTitle("))
@@ -97,6 +104,11 @@ final class MangaReaderDirectoryPanelTests: XCTestCase {
         let source = try mangaReaderSourceFile("Sources/YamiboReaderUI/Features/Reader/MangaReader/Presentation/MangaVerticalCollectionViewport.swift")
 
         XCTAssertTrue(source.contains("let viewportPlacement: MangaReaderViewportPlacement?"))
+        XCTAssertTrue(source.contains("let onTap: () -> Void"))
+        XCTAssertTrue(source.contains("lazy var tapGesture = UITapGestureRecognizer(target: self, action: #selector(handleTap(_:)))"))
+        XCTAssertTrue(source.contains("collectionView.addGestureRecognizer(context.coordinator.tapGesture)"))
+        XCTAssertTrue(source.contains("callbackScheduler.publish {\n                onTap()\n            }"))
+        XCTAssertTrue(source.contains("touch.view?.isDescendant(ofType: UIControl.self) != true"))
         XCTAssertTrue(source.contains("placement.revision != lastAppliedPlacementRevision"))
         XCTAssertTrue(source.contains("animated: placement.animated"))
     }
