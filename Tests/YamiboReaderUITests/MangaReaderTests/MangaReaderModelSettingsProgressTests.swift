@@ -298,11 +298,13 @@ final class MangaReaderModelSettingsProgressTests: XCTestCase {
         XCTAssertTrue(source.contains("Color.white.opacity(min(0.18, delta * 0.18))"))
     }
 
-    func testReaderStillUsesVerticalViewportWithoutPagedOrZoomImplementation() throws {
+    func testReaderRoutesVerticalAndPagedModesToNativeMangaViewports() throws {
         let source = try sourceFile("Sources/YamiboReaderUI/Features/Reader/MangaReader/Presentation/MangaReaderView.swift")
 
+        XCTAssertTrue(source.contains("switch settings.readingMode"))
         XCTAssertTrue(source.contains("MangaVerticalCollectionViewport("))
-        XCTAssertFalse(source.contains("MangaPaged"))
+        XCTAssertTrue(source.contains("MangaPagedReaderViewport("))
+        XCTAssertTrue(source.contains("plan: MangaPagedReadingPlan("))
         XCTAssertFalse(source.contains("zoomEnabled:"))
     }
 }

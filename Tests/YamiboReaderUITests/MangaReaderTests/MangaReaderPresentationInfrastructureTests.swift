@@ -22,6 +22,10 @@ struct MangaReaderPresentationInfrastructureTests {
         let source = try sourceFile("Sources/YamiboReaderUI/Features/Reader/MangaReader/Presentation/MangaReaderView.swift")
 
         #expect(source.contains("MangaVerticalCollectionViewport("))
+        #expect(source.contains("MangaPagedReaderViewport("))
+        #expect(source.contains("switch settings.readingMode"))
+        #expect(source.contains("case .vertical:"))
+        #expect(source.contains("case .paged:"))
         #expect(!source.contains("ScrollView"))
         #expect(!source.contains("LazyVStack"))
         #expect(!source.contains("MangaReaderRouteDetails"))
@@ -81,6 +85,18 @@ struct MangaReaderPresentationInfrastructureTests {
         #expect(hiddenGuardBody.contains("failureStack.frame = .zero"))
         #expect(hiddenGuardBody.contains("return"))
         #expect(guardRange.lowerBound < fittingRange.lowerBound)
+    }
+
+    @Test func pagedViewportPublishesPageLevelGlobalIndexFromPlan() throws {
+        let source = try sourceFile("Sources/YamiboReaderUI/Features/Reader/MangaReader/Presentation/MangaPagedReaderViewport.swift")
+
+        #expect(source.contains("struct MangaPagedReaderViewport: UIViewRepresentable"))
+        #expect(source.contains("let plan: MangaPagedReadingPlan"))
+        #expect(source.contains("parent.plan.globalIndex(forPageAt: pageIndex)"))
+        #expect(source.contains("onCurrentPageChange(globalIndex)"))
+        #expect(source.contains("func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool)"))
+        #expect(!source.contains("MangaPageSpread"))
+        #expect(!source.contains("NovelReaderSurface"))
     }
 
     #if os(iOS)
