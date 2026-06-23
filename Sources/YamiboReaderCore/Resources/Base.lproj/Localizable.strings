@@ -218,6 +218,10 @@
 "manga.page_scale_mode" = "画面缩放";
 "manga.page_scale_mode.fit_height" = "适应屏幕高度";
 "manga.page_scale_mode.fit_width" = "适应屏幕宽度";
+"manga.page_edge_fill" = "边缘填充";
+"manga.page_edge_fill.white" = "白色";
+"manga.page_edge_fill.black" = "黑色";
+"manga.page_edge_fill.system" = "跟随系统";
 "manga.preview_page" = "第 %d / %d 页";
 "manga.reader.current_index" = "索引 %d / %d";
 "manga.reader.loaded_pages_count" = "已载入 %d 页";

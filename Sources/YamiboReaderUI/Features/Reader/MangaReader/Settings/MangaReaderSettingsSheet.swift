@@ -184,6 +184,7 @@ private struct MangaReaderSettingsPreviewSpread: View {
                         palette: palette,
                         isTrailingPage: false,
                         scaleMode: settings.pageScaleMode,
+                        edgeFillStyle: settings.pageEdgeFillStyle,
                         pageTurnDirection: settings.pageTurnDirection
                     )
                     if showsTwoPagePreview {
@@ -191,6 +192,7 @@ private struct MangaReaderSettingsPreviewSpread: View {
                             palette: palette,
                             isTrailingPage: true,
                             scaleMode: settings.pageScaleMode,
+                            edgeFillStyle: settings.pageEdgeFillStyle,
                             pageTurnDirection: settings.pageTurnDirection
                         )
                     }
@@ -213,6 +215,7 @@ private struct MangaReaderLayeredPagedPreviewPage: View {
     let palette: MangaReaderSettingsPalette
     let isTrailingPage: Bool
     let scaleMode: MangaPageScaleMode
+    let edgeFillStyle: MangaPageEdgeFillStyle
     let pageTurnDirection: MangaPageTurnDirection
 
     private var duplicateOffsetX: CGFloat {
@@ -230,6 +233,7 @@ private struct MangaReaderLayeredPagedPreviewPage: View {
                 palette: palette,
                 isTrailingPage: isTrailingPage,
                 scaleMode: scaleMode,
+                edgeFillStyle: edgeFillStyle,
                 pageTurnDirection: pageTurnDirection
             )
             .brightness(-0.08)
@@ -240,6 +244,7 @@ private struct MangaReaderLayeredPagedPreviewPage: View {
                 palette: palette,
                 isTrailingPage: isTrailingPage,
                 scaleMode: scaleMode,
+                edgeFillStyle: edgeFillStyle,
                 pageTurnDirection: pageTurnDirection
             )
         }
@@ -250,12 +255,19 @@ private struct MangaReaderPagedPreviewPage: View {
     let palette: MangaReaderSettingsPalette
     let isTrailingPage: Bool
     let scaleMode: MangaPageScaleMode
+    var edgeFillStyle: MangaPageEdgeFillStyle? = nil
     let pageTurnDirection: MangaPageTurnDirection
+
+    @Environment(\.colorScheme) private var colorScheme
+
+    private var pageBackground: Color {
+        edgeFillStyle?.color(for: colorScheme) ?? palette.previewPageBackground
+    }
 
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(palette.previewPageBackground)
+                .fill(pageBackground)
 
             if scaleMode == .fitHeight {
                 MangaReaderPagedPreviewFitHeightContent(
@@ -660,6 +672,11 @@ private struct MangaReaderSettingsPagingSection: View {
                     scaleMode: $settings.pageScaleMode,
                     palette: palette
                 )
+                MangaReaderSettingsDivider(palette: palette)
+                MangaReaderPageEdgeFillMenuRow(
+                    edgeFillStyle: $settings.pageEdgeFillStyle,
+                    palette: palette
+                )
             }
         }
     }
@@ -954,6 +971,49 @@ private struct MangaReaderPageScaleModeMenuRow: View {
     }
 }
 
+private struct MangaReaderPageEdgeFillMenuRow: View {
+    @Binding var edgeFillStyle: MangaPageEdgeFillStyle
+    let palette: MangaReaderSettingsPalette
+
+    var body: some View {
+        Menu {
+            Picker(
+                L10n.string("manga.page_edge_fill"),
+                selection: $edgeFillStyle
+            ) {
+                ForEach(MangaPageEdgeFillStyle.allCases, id: \.self) { option in
+                    Label(option.title, systemImage: option.systemImageName)
+                        .tag(option)
+                }
+            }
+        } label: {
+            HStack(spacing: 12) {
+                Text(L10n.string("manga.page_edge_fill"))
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(palette.primaryText)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.85)
+
+                Spacer(minLength: 8)
+
+                HStack(spacing: 8) {
+                    Text(edgeFillStyle.title)
+                        .font(.system(size: 18))
+                        .foregroundStyle(palette.secondaryText)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.78)
+
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(palette.secondaryText.opacity(0.75))
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
 private struct MangaReaderSettingsDivider: View {
     let palette: MangaReaderSettingsPalette
 
@@ -1031,6 +1091,30 @@ private extension MangaPageScaleMode {
             "arrow.up.and.down"
         case .fitWidth:
             "arrow.left.and.right"
+        }
+    }
+}
+
+private extension MangaPageEdgeFillStyle {
+    var systemImageName: String {
+        switch self {
+        case .white:
+            "circle"
+        case .black:
+            "circle.fill"
+        case .system:
+            "circle.lefthalf.filled"
+        }
+    }
+
+    func color(for colorScheme: ColorScheme) -> Color {
+        switch self {
+        case .white:
+            Color.white
+        case .black:
+            Color.black
+        case .system:
+            colorScheme == .dark ? Color.black : Color.white
         }
     }
 }

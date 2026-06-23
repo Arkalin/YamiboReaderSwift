@@ -13,6 +13,12 @@ struct MangaPagedReaderViewport: UIViewRepresentable {
     let onCurrentPageChange: (Int) -> Void
     let onTap: () -> Void
 
+    @Environment(\.colorScheme) private var colorScheme
+
+    private var pageEdgeFillColor: UIColor {
+        settings.pageEdgeFillStyle.uiColor(for: colorScheme)
+    }
+
     func makeCoordinator() -> Coordinator {
         Coordinator(parent: self)
     }
@@ -26,7 +32,7 @@ struct MangaPagedReaderViewport: UIViewRepresentable {
         let collectionView = MangaPagedReaderCollectionView(frame: .zero, collectionViewLayout: layout)
         collectionView.isPagingEnabled = true
         collectionView.alwaysBounceHorizontal = true
-        collectionView.backgroundColor = .black
+        collectionView.backgroundColor = pageEdgeFillColor
         collectionView.showsHorizontalScrollIndicator = false
         collectionView.showsVerticalScrollIndicator = false
         collectionView.dataSource = context.coordinator
@@ -49,6 +55,7 @@ struct MangaPagedReaderViewport: UIViewRepresentable {
 
     func updateUIView(_ collectionView: UICollectionView, context: Context) {
         context.coordinator.parent = self
+        collectionView.backgroundColor = pageEdgeFillColor
         context.coordinator.callbackScheduler.performViewUpdate {
             context.coordinator.updateContentIfNeeded(in: collectionView)
         }
@@ -71,7 +78,9 @@ struct MangaPagedReaderViewport: UIViewRepresentable {
             let nextIdentity = MangaPagedReaderContentIdentity(
                 pageIDs: parent.plan.pages.map(\.id),
                 pageScaleMode: parent.settings.pageScaleMode,
-                pageTurnDirection: parent.settings.pageTurnDirection
+                pageTurnDirection: parent.settings.pageTurnDirection,
+                pageEdgeFillStyle: parent.settings.pageEdgeFillStyle,
+                colorScheme: parent.colorScheme
             )
             guard nextIdentity != contentIdentity else {
                 applyInitialPlacementIfNeeded(in: collectionView)
@@ -120,7 +129,9 @@ struct MangaPagedReaderViewport: UIViewRepresentable {
                 page: parent.plan.pages[indexPath.item],
                 imagePipeline: parent.imagePipeline,
                 pageScaleMode: parent.settings.pageScaleMode,
-                pageTurnDirection: parent.settings.pageTurnDirection
+                pageTurnDirection: parent.settings.pageTurnDirection,
+                pageEdgeFillStyle: parent.settings.pageEdgeFillStyle,
+                colorScheme: parent.colorScheme
             )
             return cell
         }
@@ -282,6 +293,8 @@ private struct MangaPagedReaderContentIdentity: Equatable {
     var pageIDs: [String]
     var pageScaleMode: MangaPageScaleMode
     var pageTurnDirection: MangaPageTurnDirection
+    var pageEdgeFillStyle: MangaPageEdgeFillStyle
+    var colorScheme: ColorScheme
 }
 
 private final class MangaPagedReaderCollectionView: UICollectionView {
@@ -316,14 +329,20 @@ private final class MangaPagedReaderPageCell: UICollectionViewCell {
         page: MangaReaderPageProjection,
         imagePipeline: MangaImagePipeline,
         pageScaleMode: MangaPageScaleMode,
-        pageTurnDirection: MangaPageTurnDirection
+        pageTurnDirection: MangaPageTurnDirection,
+        pageEdgeFillStyle: MangaPageEdgeFillStyle,
+        colorScheme: ColorScheme
     ) {
+        let pageEdgeFillColor = pageEdgeFillStyle.uiColor(for: colorScheme)
+        backgroundColor = pageEdgeFillColor
+        contentView.backgroundColor = pageEdgeFillColor
         contentConfiguration = UIHostingConfiguration {
             MangaPagedReaderPageSurface(
                 page: page,
                 imagePipeline: imagePipeline,
                 pageScaleMode: pageScaleMode,
-                pageTurnDirection: pageTurnDirection
+                pageTurnDirection: pageTurnDirection,
+                pageEdgeFillStyle: pageEdgeFillStyle
             )
         }
         .margins(.all, 0)
@@ -335,25 +354,28 @@ private struct MangaPagedReaderPageSurface: View {
     let imagePipeline: MangaImagePipeline
     let pageScaleMode: MangaPageScaleMode
     let pageTurnDirection: MangaPageTurnDirection
+    let pageEdgeFillStyle: MangaPageEdgeFillStyle
 
     @State private var loadedImage: UIImage?
     @State private var loadedPageID: String?
     @State private var loadingPageID: String?
     @State private var failedPageID: String?
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         ZStack {
-            Color.black
+            pageEdgeFillStyle.color(for: colorScheme)
 
             if let image = displayedImage {
                 MangaPagedReaderScaledImage(
                     image: image,
                     pageScaleMode: pageScaleMode,
-                    pageTurnDirection: pageTurnDirection
+                    pageTurnDirection: pageTurnDirection,
+                    pageEdgeFillStyle: pageEdgeFillStyle
                 )
             } else if loadingPageID == page.id {
                 ProgressView()
-                    .tint(.white)
+                    .tint(pageEdgeFillStyle.progressTint(for: colorScheme))
             } else {
                 VStack(spacing: 8) {
                     Image(systemName: failedPageID == page.id ? "exclamationmark.triangle" : "photo")
@@ -361,7 +383,7 @@ private struct MangaPagedReaderPageSurface: View {
                     Text(failedPageID == page.id ? L10n.string("image.load_failed") : L10n.string("manga.loading"))
                         .font(.caption)
                 }
-                .foregroundStyle(.secondary)
+                .foregroundStyle(pageEdgeFillStyle.placeholderForeground(for: colorScheme))
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -414,6 +436,9 @@ private struct MangaPagedReaderScaledImage: View {
     let image: UIImage
     let pageScaleMode: MangaPageScaleMode
     let pageTurnDirection: MangaPageTurnDirection
+    let pageEdgeFillStyle: MangaPageEdgeFillStyle
+
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         GeometryReader { proxy in
@@ -424,7 +449,7 @@ private struct MangaPagedReaderScaledImage: View {
             )
 
             ZStack(alignment: imageAlignment) {
-                Color.black
+                pageEdgeFillStyle.color(for: colorScheme)
                 Image(uiImage: image)
                     .resizable()
                     .frame(width: scaledSize.width, height: scaledSize.height)
@@ -457,6 +482,42 @@ private struct MangaPagedReaderScaledImage: View {
             containerSize.height / imageSize.height
         }
         return CGSize(width: imageSize.width * scale, height: imageSize.height * scale)
+    }
+}
+
+private extension MangaPageEdgeFillStyle {
+    func color(for colorScheme: ColorScheme) -> Color {
+        Color(uiColor: uiColor(for: colorScheme))
+    }
+
+    func uiColor(for colorScheme: ColorScheme) -> UIColor {
+        switch self {
+        case .white:
+            .white
+        case .black:
+            .black
+        case .system:
+            colorScheme == .dark ? .black : .white
+        }
+    }
+
+    func progressTint(for colorScheme: ColorScheme) -> Color {
+        usesLightFill(for: colorScheme) ? .black : .white
+    }
+
+    func placeholderForeground(for colorScheme: ColorScheme) -> Color {
+        usesLightFill(for: colorScheme) ? Color.black.opacity(0.62) : Color.white.opacity(0.68)
+    }
+
+    private func usesLightFill(for colorScheme: ColorScheme) -> Bool {
+        switch self {
+        case .white:
+            true
+        case .black:
+            false
+        case .system:
+            colorScheme != .dark
+        }
     }
 }
 #endif

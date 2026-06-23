@@ -172,6 +172,7 @@ import Testing
             pagedTurnStyle: .pageCurl,
             pageTurnDirection: .leftToRight,
             pageScaleMode: .fitHeight,
+            pageEdgeFillStyle: .system,
             brightness: 0.82,
             zoomEnabled: false,
             showsTwoPagesInLandscapeOnPad: true,
@@ -336,6 +337,7 @@ import Testing
     #expect(decoded.pagedTurnStyle == .slide)
     #expect(decoded.pageTurnDirection == .rightToLeft)
     #expect(decoded.pageScaleMode == .fitWidth)
+    #expect(decoded.pageEdgeFillStyle == .black)
     #expect(decoded.showsTwoPagesInLandscapeOnPad == false)
     #expect(decoded.directorySortOrder == .ascending)
 }
@@ -346,6 +348,7 @@ import Testing
         pagedTurnStyle: .quickFade,
         pageTurnDirection: .leftToRight,
         pageScaleMode: .fitHeight,
+        pageEdgeFillStyle: .system,
         brightness: 0.9,
         zoomEnabled: false,
         showsTwoPagesInLandscapeOnPad: true,
