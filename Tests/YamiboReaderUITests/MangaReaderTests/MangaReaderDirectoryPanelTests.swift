@@ -56,7 +56,7 @@ final class MangaReaderDirectoryPanelTests: XCTestCase {
         XCTAssertTrue(source.contains("onDeleteChapters:"))
         XCTAssertTrue(source.contains("await model.deleteDirectoryChapters(tids: selectedTIDs)"))
         XCTAssertTrue(source.contains(".ignoresSafeArea()"))
-        XCTAssertTrue(source.contains(".statusBar(hidden: true)"))
+        XCTAssertTrue(source.contains(".statusBar(hidden: !isChromeVisible)"))
         XCTAssertTrue(source.contains("windowSafeAreaInsets"))
         XCTAssertFalse(source.contains("ToolbarItem(placement: .primaryAction)"))
         XCTAssertFalse(source.contains("systemName: \"list.bullet\""))

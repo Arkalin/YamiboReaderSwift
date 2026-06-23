@@ -66,7 +66,7 @@ public struct MangaReaderView: View {
             }
         }
         .background(Color.black.ignoresSafeArea())
-        .statusBar(hidden: true)
+        .statusBar(hidden: !isChromeVisible)
         .sheet(isPresented: $isDirectoryPresented) {
             if case let .loaded(loaded) = model.presentation.state {
                 MangaDirectorySheet(
