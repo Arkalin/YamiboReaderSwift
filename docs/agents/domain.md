@@ -34,6 +34,13 @@ When your output names a domain concept (in an issue title, a refactor proposal,
 
 If the concept you need isn't in the glossary yet, that's a signal -- either you're inventing language the project doesn't use (reconsider) or there's a real gap (note it for `/grill-with-docs`).
 
+## Repo-specific notes
+
+- Manga native paged behavior belongs to the Manga Reader context. Use **Manga Reading Mode**, **Manga Page Turn Direction**, **Manga Page Scale Mode**, **Manga Page Zoom**, and **Manga Page Spread** when discussing that work.
+- Paged manga UI may show one-page, two-page, quick-fade, slide, or page-curl surfaces, but persisted resume, comments, and progress stay tied to page-level **Manga Reading Position**.
+- **Manga Page Scale Mode** applies to the complete page surface: fit-width can leave top/bottom blank space, and fit-height can leave side blank space or horizontally draggable overflow aligned by **Manga Page Turn Direction**.
+- Cross-reader paged primitives belong under `Sources/YamiboReaderUI/Features/Reader/Shared/Paging/`. Keep shared page-turn visuals, boundary gesture thresholds, leaf bookkeeping, and progress fill directions there; keep reader-specific planning and viewport composition in the owning feature folder.
+
 ## Flag ADR conflicts
 
 If your output contradicts an existing ADR, surface it explicitly rather than silently overriding:
