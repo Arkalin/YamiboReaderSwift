@@ -264,10 +264,14 @@ private struct MangaReaderPagedPreviewPage: View {
         edgeFillStyle?.color(for: colorScheme) ?? palette.previewPageBackground
     }
 
+    private var previewBackground: Color {
+        scaleMode == .fitWidth ? edgeFillBackground : palette.previewPageBackground
+    }
+
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(edgeFillBackground)
+                .fill(previewBackground)
 
             if scaleMode == .fitHeight {
                 MangaReaderPagedPreviewFitHeightContent(
@@ -298,12 +302,14 @@ private struct MangaReaderPagedPreviewFitWidthContent: View {
     var body: some View {
         GeometryReader { proxy in
             let horizontalInset: CGFloat = 12
+            let verticalArtworkInset: CGFloat = 10
             let contentWidth = max(proxy.size.width - horizontalInset * 2, 1)
             let panelWidth = max((contentWidth - 8) / 2, 1)
-            let contentHeight = MangaReaderPagedPreviewArtworkMetrics.height(
+            let artworkHeight = MangaReaderPagedPreviewArtworkMetrics.height(
                 isTrailingPage: isTrailingPage,
                 scale: 1
             )
+            let contentHeight = artworkHeight + verticalArtworkInset * 2
 
             MangaReaderPagedPreviewArtwork(
                 palette: palette,
@@ -311,8 +317,9 @@ private struct MangaReaderPagedPreviewFitWidthContent: View {
                 panelWidth: panelWidth,
                 scale: 1
             )
-            .frame(width: contentWidth, height: contentHeight, alignment: .topLeading)
+            .frame(width: contentWidth, height: artworkHeight, alignment: .topLeading)
             .padding(.horizontal, horizontalInset)
+            .padding(.vertical, verticalArtworkInset)
             .frame(width: proxy.size.width, height: contentHeight, alignment: .center)
             .background(pageBackground)
             .frame(width: proxy.size.width, height: proxy.size.height, alignment: .center)

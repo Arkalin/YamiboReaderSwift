@@ -126,6 +126,9 @@ struct MangaReaderPresentationInfrastructureTests {
         #expect(source.contains("ForEach(MangaPageEdgeFillStyle.allCases, id: \\.self)"))
         #expect(source.contains("edgeFillStyle: settings.pageEdgeFillStyle"))
         #expect(source.contains("edgeFillBackground"))
+        #expect(source.contains("scaleMode == .fitWidth ? edgeFillBackground : palette.previewPageBackground"))
+        #expect(source.contains("verticalArtworkInset"))
+        #expect(source.contains("artworkHeight + verticalArtworkInset * 2"))
         #expect(source.contains("pageBackground: palette.previewPageBackground"))
         #expect(source.contains(".background(pageBackground)"))
     }
