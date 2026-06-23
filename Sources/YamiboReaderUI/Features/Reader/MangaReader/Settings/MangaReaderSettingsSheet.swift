@@ -182,12 +182,16 @@ private struct MangaReaderSettingsPreviewSpread: View {
                 HStack(spacing: showsTwoPagePreview ? 12 : 0) {
                     MangaReaderPagedPreviewPage(
                         palette: palette,
-                        isTrailingPage: false
+                        isTrailingPage: false,
+                        scaleMode: settings.pageScaleMode,
+                        pageTurnDirection: settings.pageTurnDirection
                     )
                     if showsTwoPagePreview {
                         MangaReaderPagedPreviewPage(
                             palette: palette,
-                            isTrailingPage: true
+                            isTrailingPage: true,
+                            scaleMode: settings.pageScaleMode,
+                            pageTurnDirection: settings.pageTurnDirection
                         )
                     }
                 }
@@ -208,44 +212,129 @@ private struct MangaReaderSettingsPreviewSpread: View {
 private struct MangaReaderPagedPreviewPage: View {
     let palette: MangaReaderSettingsPalette
     let isTrailingPage: Bool
+    let scaleMode: MangaPageScaleMode
+    let pageTurnDirection: MangaPageTurnDirection
 
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .fill(palette.previewPageBackground)
 
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(alignment: .top, spacing: 8) {
-                    MangaReaderPreviewPanel(
-                        color: isTrailingPage ? palette.coolPanel : palette.warmPanel,
-                        height: 50
-                    )
-                    MangaReaderPreviewPanel(
-                        color: palette.neutralPanel,
-                        height: 50
-                    )
-                }
-
-                MangaReaderPreviewPanel(
-                    color: isTrailingPage ? palette.neutralPanel : palette.coolPanel,
-                    height: 34
+            if scaleMode == .fitHeight {
+                MangaReaderPagedPreviewFitHeightContent(
+                    palette: palette,
+                    isTrailingPage: isTrailingPage,
+                    pageTurnDirection: pageTurnDirection
                 )
-
-                HStack(spacing: 8) {
-                    MangaReaderPreviewPanel(
-                        color: palette.neutralPanel,
-                        height: 30
-                    )
-                    MangaReaderPreviewPanel(
-                        color: isTrailingPage ? palette.warmPanel : palette.neutralPanel,
-                        height: 30
-                    )
-                }
+            } else {
+                MangaReaderPagedPreviewFitWidthContent(
+                    palette: palette,
+                    isTrailingPage: isTrailingPage
+                )
             }
-            .padding(12)
         }
         .aspectRatio(0.72, contentMode: .fit)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .shadow(color: Color.black.opacity(0.12), radius: 10, y: 4)
+    }
+}
+
+private struct MangaReaderPagedPreviewFitWidthContent: View {
+    let palette: MangaReaderSettingsPalette
+    let isTrailingPage: Bool
+
+    var body: some View {
+        MangaReaderPagedPreviewArtwork(
+            palette: palette,
+            isTrailingPage: isTrailingPage,
+            panelWidth: nil,
+            scale: 1
+        )
+        .padding(12)
+    }
+}
+
+private struct MangaReaderPagedPreviewFitHeightContent: View {
+    private static let artworkSize = CGSize(width: 156, height: 130)
+
+    let palette: MangaReaderSettingsPalette
+    let isTrailingPage: Bool
+    let pageTurnDirection: MangaPageTurnDirection
+
+    private var contentAlignment: Alignment {
+        switch pageTurnDirection {
+        case .leftToRight:
+            .leading
+        case .rightToLeft:
+            .trailing
+        }
+    }
+
+    var body: some View {
+        GeometryReader { proxy in
+            let inset: CGFloat = 12
+            let contentHeight = max(proxy.size.height - inset * 2, 1)
+            let contentWidth = max(proxy.size.width - inset * 2, 1)
+            let scale = contentHeight / Self.artworkSize.height
+            let scaledPanelWidth = (Self.artworkSize.width - 8) / 2 * scale
+
+            MangaReaderPagedPreviewArtwork(
+                palette: palette,
+                isTrailingPage: isTrailingPage,
+                panelWidth: scaledPanelWidth,
+                scale: scale
+            )
+            .frame(
+                width: contentWidth,
+                height: contentHeight,
+                alignment: contentAlignment
+            )
+            .clipped()
+            .padding(inset)
+        }
+    }
+}
+
+private struct MangaReaderPagedPreviewArtwork: View {
+    let palette: MangaReaderSettingsPalette
+    let isTrailingPage: Bool
+    let panelWidth: CGFloat?
+    let scale: CGFloat
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8 * scale) {
+            HStack(alignment: .top, spacing: 8 * scale) {
+                MangaReaderPreviewPanel(
+                    color: isTrailingPage ? palette.coolPanel : palette.warmPanel,
+                    height: 50 * scale,
+                    width: panelWidth
+                )
+                MangaReaderPreviewPanel(
+                    color: palette.neutralPanel,
+                    height: 50 * scale,
+                    width: panelWidth
+                )
+            }
+
+            MangaReaderPreviewPanel(
+                color: isTrailingPage ? palette.neutralPanel : palette.coolPanel,
+                height: 34 * scale,
+                width: panelWidth.map { $0 * 2 + 8 * scale }
+            )
+
+            HStack(spacing: 8 * scale) {
+                MangaReaderPreviewPanel(
+                    color: palette.neutralPanel,
+                    height: 30 * scale,
+                    width: panelWidth
+                )
+                MangaReaderPreviewPanel(
+                    color: isTrailingPage ? palette.warmPanel : palette.neutralPanel,
+                    height: 30 * scale,
+                    width: panelWidth
+                )
+            }
+        }
     }
 }
 
@@ -301,14 +390,18 @@ private struct MangaReaderVerticalPagedPreviewPair: View {
         ZStack(alignment: .top) {
             MangaReaderPagedPreviewPage(
                 palette: palette,
-                isTrailingPage: false
+                isTrailingPage: false,
+                scaleMode: .fitWidth,
+                pageTurnDirection: .rightToLeft
             )
             .frame(width: pageWidth, height: pageHeight)
             .offset(y: topPageOffset)
 
             MangaReaderPagedPreviewPage(
                 palette: palette,
-                isTrailingPage: false
+                isTrailingPage: false,
+                scaleMode: .fitWidth,
+                pageTurnDirection: .rightToLeft
             )
             .frame(width: pageWidth, height: pageHeight)
             .offset(y: bottomPageOffset)
@@ -354,11 +447,17 @@ private struct MangaReaderScrollPreviewEdgeBlurMask: View {
 private struct MangaReaderPreviewPanel: View {
     let color: Color
     let height: CGFloat
+    var width: CGFloat?
+
+    private var maximumWidth: CGFloat? {
+        width == nil ? .infinity : nil
+    }
 
     var body: some View {
         RoundedRectangle(cornerRadius: 8, style: .continuous)
             .fill(color)
-            .frame(maxWidth: .infinity)
+            .frame(width: width)
+            .frame(maxWidth: maximumWidth)
             .frame(height: height)
     }
 }
