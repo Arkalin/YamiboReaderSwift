@@ -132,6 +132,8 @@ struct ReaderVerticalProgressCapsule<PreviewContent: View>: View {
     let scrubContext: ReaderProgressScrubContext
     let ticks: [ReaderChromeProgressTick]
     let previewSize: CGSize
+    let showsPreview: Bool
+    let onPreviewChange: (ReaderProgressScrubPreview?) -> Void
     let onBeginScrub: () -> Void
     let onCommit: (Int) -> Void
     let onEndScrub: () -> Void
@@ -148,6 +150,8 @@ struct ReaderVerticalProgressCapsule<PreviewContent: View>: View {
         scrubContext: ReaderProgressScrubContext,
         ticks: [ReaderChromeProgressTick],
         previewSize: CGSize,
+        showsPreview: Bool = true,
+        onPreviewChange: @escaping (ReaderProgressScrubPreview?) -> Void = { _ in },
         onBeginScrub: @escaping () -> Void,
         onCommit: @escaping (Int) -> Void,
         onEndScrub: @escaping () -> Void,
@@ -157,6 +161,8 @@ struct ReaderVerticalProgressCapsule<PreviewContent: View>: View {
         self.scrubContext = scrubContext
         self.ticks = ticks
         self.previewSize = previewSize
+        self.showsPreview = showsPreview
+        self.onPreviewChange = onPreviewChange
         self.onBeginScrub = onBeginScrub
         self.onCommit = onCommit
         self.onEndScrub = onEndScrub
@@ -166,7 +172,7 @@ struct ReaderVerticalProgressCapsule<PreviewContent: View>: View {
     var body: some View {
         let layout = ReaderBottomChromeLayoutPresentation()
         let preview = scrubState.preview
-        let totalWidth = isScrubbing ? previewSize.width + layout.verticalScrubberSideSpacing + layout.verticalScrubberWidth : layout.verticalScrubberWidth
+        let totalWidth = isScrubbing && showsPreview ? previewSize.width + layout.verticalScrubberSideSpacing + layout.verticalScrubberWidth : layout.verticalScrubberWidth
 
         GeometryReader { geometry in
             let height = max(geometry.size.height, 1)
@@ -177,7 +183,7 @@ struct ReaderVerticalProgressCapsule<PreviewContent: View>: View {
                     .frame(width: layout.verticalScrubberWidth, height: height)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
 
-                if isScrubbing, let preview {
+                if isScrubbing, let preview, showsPreview {
                     previewContent(preview)
                         .frame(width: previewSize.width, height: previewSize.height)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -231,12 +237,14 @@ struct ReaderVerticalProgressCapsule<PreviewContent: View>: View {
         if !wasScrubbing, scrubState.phase == .scrubbing {
             onBeginScrub()
         }
+        onPreviewChange(scrubState.preview)
         triggerFeedback(update.haptics)
     }
 
     private func commitScrub() {
         guard scrubState.phase == .scrubbing else {
             scrubState.reset()
+            onPreviewChange(nil)
             onEndScrub()
             return
         }
@@ -246,6 +254,7 @@ struct ReaderVerticalProgressCapsule<PreviewContent: View>: View {
             onCommit(target)
         }
         scrubState.reset()
+        onPreviewChange(nil)
         onEndScrub()
     }
 

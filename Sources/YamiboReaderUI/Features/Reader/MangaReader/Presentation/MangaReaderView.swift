@@ -308,8 +308,11 @@ private struct MangaReaderBottomControls: View {
     let onOpenOriginalPost: () -> Void
     let onJumpToLocalPage: (Int) -> Void
 
+    @State private var activeVerticalProgressPreview: ReaderProgressScrubPreview?
+
     var body: some View {
         let layout = ReaderBottomChromeLayoutPresentation()
+        let controlVisibility = ReaderBottomActionRowPresentation(isScrubbing: activeVerticalProgressPreview != nil)
 
         VStack(spacing: 12) {
             HStack(alignment: .bottom, spacing: layout.verticalScrubberSideSpacing) {
@@ -335,12 +338,14 @@ private struct MangaReaderBottomControls: View {
                     )
                 }
                 .frame(width: layout.maxChromeWidth)
+                .opacity(controlVisibility.opacity)
+                .allowsHitTesting(controlVisibility.allowsHitTesting)
+                .accessibilityHidden(controlVisibility.isAccessibilityHidden)
 
                 if let progress = summary?.progress {
                     MangaReaderVerticalProgressControl(
                         progress: progress,
-                        previewPagesByTargetIndex: summary?.pagePreviewTargets ?? [:],
-                        imagePipeline: imagePipeline,
+                        onPreviewChange: { activeVerticalProgressPreview = $0 },
                         onJumpToLocalPage: onJumpToLocalPage
                     )
                 }
@@ -356,6 +361,17 @@ private struct MangaReaderBottomControls: View {
         .padding(.horizontal, 12)
         .padding(.bottom, max(bottomInset - 18, 8))
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+        .overlay {
+            if let preview = activeVerticalProgressPreview {
+                MangaReaderProgressImagePreview(
+                    preview: preview,
+                    page: summary?.pagePreviewTargets[preview.targetIndex],
+                    imagePipeline: imagePipeline
+                )
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+            }
+        }
     }
 }
 
@@ -398,8 +414,7 @@ private struct MangaReaderDirectoryProgressControl: View {
 
 private struct MangaReaderVerticalProgressControl: View {
     let progress: ReaderChromeProgress
-    let previewPagesByTargetIndex: [Int: MangaReaderPageProjection]
-    let imagePipeline: MangaImagePipeline?
+    let onPreviewChange: (ReaderProgressScrubPreview?) -> Void
     let onJumpToLocalPage: (Int) -> Void
 
     var body: some View {
@@ -408,22 +423,22 @@ private struct MangaReaderVerticalProgressControl: View {
             scrubContext: progress.scrubContext,
             ticks: progress.ticks,
             previewSize: MangaReaderProgressImagePreview.previewSize,
+            showsPreview: false,
+            onPreviewChange: onPreviewChange,
             onBeginScrub: {},
             onCommit: onJumpToLocalPage,
-            onEndScrub: {}
-        ) { preview in
-            MangaReaderProgressImagePreview(
-                preview: preview,
-                page: previewPagesByTargetIndex[preview.targetIndex],
-                imagePipeline: imagePipeline
-            )
+            onEndScrub: {
+                onPreviewChange(nil)
+            }
+        ) { _ in
+            EmptyView()
         }
         .frame(width: ReaderBottomChromeLayoutPresentation().verticalScrubberWidth, alignment: .trailing)
     }
 }
 
 private struct MangaReaderProgressImagePreview: View {
-    static let previewSize = CGSize(width: 148, height: 184)
+    static let previewSize = CGSize(width: 184, height: 228)
 
     let preview: ReaderProgressScrubPreview
     let page: MangaReaderPageProjection?
