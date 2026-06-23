@@ -126,6 +126,39 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         ))
     }
 
+    func testPagedBoundaryPageTurnMapsHorizontalDirection() {
+        let leftSwipeDelta = ReaderPagedBoundaryPageTurn.horizontalDelta(
+            translation: CGPoint(x: -80, y: 4),
+            velocity: .zero,
+            viewportWidth: 390
+        )
+        XCTAssertEqual(leftSwipeDelta, 1)
+        XCTAssertEqual(
+            leftSwipeDelta.map {
+                ReaderPagedBoundaryPageTurn.directionalDelta($0, direction: .leftSwipeAdvances)
+            },
+            1
+        )
+        XCTAssertEqual(
+            leftSwipeDelta.map {
+                ReaderPagedBoundaryPageTurn.directionalDelta($0, direction: .rightSwipeAdvances)
+            },
+            -1
+        )
+        XCTAssertEqual(
+            ReaderPagedBoundaryPageTurn.boundaryDelta(
+                selectionIndex: 0,
+                itemCount: 1,
+                translation: CGPoint(x: -80, y: 4),
+                velocity: .zero,
+                viewportWidth: 390,
+                horizontalNavigationDirection: .rightSwipeAdvances,
+                canBoundaryPageTurn: { $0 == -1 }
+            ),
+            -1
+        )
+    }
+
     func testPageCurlSequenceMapsSinglePagesBySurfaceIndex() {
         let surfaces = makePageCurlSurfaces(count: 3)
         let sequence = ReaderPagedPageCurlSequence(
@@ -330,12 +363,12 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
 
         XCTAssertTrue(pagingDriverBody.contains("beginPageTurnVisuals(in: collectionView, inputs: inputs)"))
         XCTAssertTrue(pagingDriverBody.contains("applyPageTurnVisuals(in: collectionView, inputs: inputs)"))
-        XCTAssertTrue(pagingDriverBody.contains("endPageTurnVisuals(in: collectionView)"))
+        XCTAssertTrue(pagingDriverBody.contains("endPageTurnVisuals(in: collectionView, inputs: inputs)"))
         XCTAssertTrue(pagingDriverBody.contains("ReaderPagedPageTurnPresentation.metrics"))
         XCTAssertTrue(pagingDriverBody.contains("cornerRadius: ReaderPagedPageTurnCornerRadius.radius(for: collectionView.window?.screen)"))
-        XCTAssertTrue(pagingDriverBody.contains("collectionView.backgroundColor = ReaderPagedPageTurnBackground.dimmedPageColor"))
-        XCTAssertTrue(pagingDriverBody.contains("collectionView.backgroundColor = .clear"))
-        XCTAssertTrue(supportSource.contains("let base = readerThemeUIColor("))
+        XCTAssertTrue(pagingDriverBody.contains("collectionView.backgroundColor = inputs.pageTurnBackgroundColor"))
+        XCTAssertTrue(pagingDriverBody.contains("collectionView.backgroundColor = inputs.pageTurnRestingBackgroundColor"))
+        XCTAssertTrue(supportSource.contains("baseColor: readerThemeUIColor("))
         XCTAssertFalse(supportSource.contains("private static func pageColor"))
 
         for body in [singlePageBody, spreadBody] {
@@ -912,9 +945,9 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertTrue(supportSource.contains("static let minimumTranslation: CGFloat = 48"))
         XCTAssertTrue(supportSource.contains("static let translationWidthFactor: CGFloat = 0.18"))
         XCTAssertTrue(supportSource.contains("static let velocityThreshold: CGFloat = 450"))
-        XCTAssertTrue(pagingDriverBody.contains("private static let quickFadeDuration: TimeInterval = 0.18"))
+        XCTAssertTrue(pagingDriverBody.contains("private static let quickFadeDuration: TimeInterval = ReaderPagedQuickFadeTransition.duration"))
         XCTAssertTrue(pagingDriverBody.contains("func updateGestureState(in collectionView: UICollectionView, inputs: ReaderPagedViewportPagingInputs)"))
-        XCTAssertTrue(pagingDriverBody.contains("collectionView.panGestureRecognizer.isEnabled = inputs.settings.pagedTurnStyle != .quickFade"))
+        XCTAssertTrue(pagingDriverBody.contains("collectionView.panGestureRecognizer.isEnabled = inputs.pagedTurnStyle != .quickFade"))
         XCTAssertTrue(pagingDriverBody.contains("func quickFadePanShouldBegin"))
         XCTAssertTrue(pagingDriverBody.contains("func handleQuickFadePan"))
         XCTAssertTrue(pagingDriverBody.contains("inputs.itemCount > 0"))
@@ -929,7 +962,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertTrue(pagingDriverBody.contains(".beginFromCurrentState"))
         XCTAssertTrue(pagingDriverBody.contains(".allowUserInteraction"))
         XCTAssertFalse(pagingDriverBody.contains(".transitionCrossDissolve"))
-        XCTAssertTrue(pagingDriverBody.contains("publishSelectionIfNeeded(item, inputs: inputs)"))
+        XCTAssertTrue(pagingDriverBody.contains("publishSelectionIfNeeded(selectionIndex, inputs: inputs)"))
         XCTAssertTrue(pagingDriverBody.contains("isPerformingQuickFadeTransition"))
 
         for body in [singlePageBody, spreadBody] {
@@ -974,7 +1007,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertTrue(makeRequestBody.contains("model.readerSurfaces.count"))
         XCTAssertTrue(containerSource.contains("clearPagedScrollAnimationRequest"))
 
-        XCTAssertTrue(pagingDriverBody.contains("let targetItem = inputs.selectionIndex + delta"))
+        XCTAssertTrue(pagingDriverBody.contains("let targetSelectionIndex = inputs.selectionIndex + delta"))
         XCTAssertTrue(pagingDriverBody.contains("func publishBoundaryPageTurnIfPossible("))
         XCTAssertTrue(pagingDriverBody.contains("ReaderPagedBoundaryPageTurn.boundaryDelta"))
         XCTAssertTrue(pagingDriverBody.contains("onBoundaryPageTurn(delta)"))
@@ -1436,6 +1469,7 @@ private func readerSupportSources() throws -> String {
         "Sources/YamiboReaderUI/Features/Reader/NovelReader/Chrome/NovelReaderTopChrome.swift",
         "Sources/YamiboReaderUI/Features/Reader/NovelReader/Chrome/NovelReaderBottomChrome.swift",
         "Sources/YamiboReaderUI/Features/Reader/Shared/Chrome/ReaderChromeControls.swift",
+        "Sources/YamiboReaderUI/Features/Reader/Shared/Paging/ReaderPagedPageTurnSupport.swift",
         "Sources/YamiboReaderUI/Features/Reader/NovelReader/Viewports/ReaderViewportContentViews.swift",
         "Sources/YamiboReaderUI/Features/Reader/NovelReader/Viewports/ReaderPagedViewport.swift",
         "Sources/YamiboReaderUI/Features/Reader/NovelReader/Viewports/ReaderPagedCollectionViewport.swift",

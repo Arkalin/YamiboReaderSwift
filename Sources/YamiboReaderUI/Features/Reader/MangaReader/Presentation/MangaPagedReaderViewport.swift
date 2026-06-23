@@ -37,10 +37,7 @@ struct MangaPagedReaderViewport: UIViewRepresentable {
         collectionView.showsVerticalScrollIndicator = false
         collectionView.dataSource = context.coordinator
         collectionView.delegate = context.coordinator
-        collectionView.register(
-            MangaPagedReaderPageCell.self,
-            forCellWithReuseIdentifier: MangaPagedReaderPageCell.reuseIdentifier
-        )
+        collectionView.register(ReaderPagedPageTurnCell.self, forCellWithReuseIdentifier: Coordinator.reuseIdentifier)
         let coordinator = context.coordinator
         collectionView.onLayoutSubviews = { [weak coordinator, weak collectionView] in
             guard let collectionView else { return }
@@ -50,25 +47,77 @@ struct MangaPagedReaderViewport: UIViewRepresentable {
         context.coordinator.tapGesture.cancelsTouchesInView = false
         context.coordinator.tapGesture.delegate = context.coordinator
         collectionView.addGestureRecognizer(context.coordinator.tapGesture)
+        context.coordinator.quickFadePanGesture.delegate = context.coordinator
+        collectionView.addGestureRecognizer(context.coordinator.quickFadePanGesture)
+        context.coordinator.updateGestureState(in: collectionView)
         return collectionView
     }
 
     func updateUIView(_ collectionView: UICollectionView, context: Context) {
         context.coordinator.parent = self
         collectionView.backgroundColor = pageEdgeFillColor
+        context.coordinator.updateGestureState(in: collectionView)
         context.coordinator.callbackScheduler.performViewUpdate {
             context.coordinator.updateContentIfNeeded(in: collectionView)
         }
     }
 
     final class Coordinator: NSObject, UICollectionViewDataSource, UICollectionViewDelegateFlowLayout, UIScrollViewDelegate, UIGestureRecognizerDelegate {
+        static let reuseIdentifier = "MangaPagedReaderPageCell"
+
         var parent: MangaPagedReaderViewport
-        let callbackScheduler = SwiftUIViewUpdateCallbackScheduler()
+        private let pagingDriver = ReaderPagedViewportPagingDriver()
         private var contentIdentity: MangaPagedReaderContentIdentity?
         private var pendingInitialPageIndex: Int?
         private var lastReportedGlobalIndex: Int?
         private var lastAppliedPlacementRevision: Int?
         lazy var tapGesture = UITapGestureRecognizer(target: self, action: #selector(handleTap(_:)))
+        lazy var quickFadePanGesture = UIPanGestureRecognizer(target: self, action: #selector(handleQuickFadePan(_:)))
+
+        var callbackScheduler: SwiftUIViewUpdateCallbackScheduler {
+            pagingDriver.callbackScheduler
+        }
+
+        private var pagingInputs: ReaderPagedViewportPagingInputs {
+            pagingInputs(selectionPageIndex: parent.plan.currentPageIndex)
+        }
+
+        private func pagingInputs(selectionPageIndex: Int?) -> ReaderPagedViewportPagingInputs {
+            let pageIndex = parent.plan.clampedPageIndex(selectionPageIndex) ?? 0
+            return ReaderPagedViewportPagingInputs(
+                itemCount: parent.plan.pages.count,
+                selectionIndex: pageIndex,
+                pagedTurnStyle: parent.settings.pagedTurnStyle,
+                horizontalNavigationDirection: parent.settings.pageTurnDirection.horizontalNavigationDirection,
+                pagerIdentity: ReaderPagedPagerIdentity(
+                    visibleView: pageIndex + 1,
+                    surfaceCount: parent.plan.pages.count,
+                    spreadCount: parent.plan.pages.count,
+                    usesTwoPageSpread: false,
+                    layout: .zero
+                ),
+                scrollAnimationRequest: nil,
+                canBoundaryPageTurn: { _ in false },
+                onSelectionChange: { [weak self] pageIndex in
+                    self?.publishCurrentPageIfNeeded(pageIndex: pageIndex)
+                },
+                onBoundaryPageTurn: { _ in },
+                onScrollAnimationRequestConsumed: { _ in },
+                pageTurnRestingBackgroundColor: { [parent] _ in parent.pageEdgeFillColor },
+                pageTurnBackgroundColor: { [parent] _, overlayAlpha in
+                    ReaderPagedPageTurnBackground.dimmedPageColor(
+                        baseColor: parent.pageEdgeFillColor,
+                        overlayAlpha: overlayAlpha
+                    )
+                },
+                itemIndexForSelectionIndex: { [weak self] pageIndex in
+                    self?.viewportIndex(forPageIndex: pageIndex) ?? pageIndex
+                },
+                selectionIndexForItemIndex: { [weak self] viewportIndex in
+                    self?.pageIndex(forViewportIndex: viewportIndex) ?? viewportIndex
+                }
+            )
+        }
 
         init(parent: MangaPagedReaderViewport) {
             self.parent = parent
@@ -78,6 +127,7 @@ struct MangaPagedReaderViewport: UIViewRepresentable {
             let nextIdentity = MangaPagedReaderContentIdentity(
                 pageIDs: parent.plan.pages.map(\.id),
                 pageScaleMode: parent.settings.pageScaleMode,
+                pagedTurnStyle: parent.settings.pagedTurnStyle,
                 pageTurnDirection: parent.settings.pageTurnDirection,
                 pageEdgeFillStyle: parent.settings.pageEdgeFillStyle,
                 colorScheme: parent.colorScheme
@@ -117,22 +167,24 @@ struct MangaPagedReaderViewport: UIViewRepresentable {
             cellForItemAt indexPath: IndexPath
         ) -> UICollectionViewCell {
             let cell = collectionView.dequeueReusableCell(
-                withReuseIdentifier: MangaPagedReaderPageCell.reuseIdentifier,
+                withReuseIdentifier: Self.reuseIdentifier,
                 for: indexPath
             )
-            guard let cell = cell as? MangaPagedReaderPageCell,
-                  parent.plan.pages.indices.contains(indexPath.item) else {
+            let pageIndex = pageIndex(forViewportIndex: indexPath.item)
+            guard let cell = cell as? ReaderPagedPageTurnCell,
+                  parent.plan.pages.indices.contains(pageIndex) else {
                 return cell
             }
 
             cell.configure(
-                page: parent.plan.pages[indexPath.item],
+                page: parent.plan.pages[pageIndex],
                 imagePipeline: parent.imagePipeline,
                 pageScaleMode: parent.settings.pageScaleMode,
                 pageTurnDirection: parent.settings.pageTurnDirection,
                 pageEdgeFillStyle: parent.settings.pageEdgeFillStyle,
                 colorScheme: parent.colorScheme
             )
+            cell.resetPageTurnVisuals()
             return cell
         }
 
@@ -144,22 +196,24 @@ struct MangaPagedReaderViewport: UIViewRepresentable {
             collectionView.bounds.size
         }
 
+        func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
+            pagingDriver.scrollViewWillBeginDragging(scrollView, inputs: pagingInputs)
+        }
+
+        func scrollViewDidScroll(_ scrollView: UIScrollView) {
+            pagingDriver.scrollViewDidScroll(scrollView, inputs: pagingInputs)
+        }
+
         func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) {
-            guard let collectionView = scrollView as? UICollectionView else { return }
-            publishCurrentPageIfNeeded(from: collectionView)
+            pagingDriver.scrollViewDidEndDecelerating(scrollView, inputs: pagingInputs)
         }
 
         func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {
-            guard !decelerate,
-                  let collectionView = scrollView as? UICollectionView else {
-                return
-            }
-            publishCurrentPageIfNeeded(from: collectionView)
+            pagingDriver.scrollViewDidEndDragging(scrollView, willDecelerate: decelerate, inputs: pagingInputs)
         }
 
         func scrollViewDidEndScrollingAnimation(_ scrollView: UIScrollView) {
-            guard let collectionView = scrollView as? UICollectionView else { return }
-            publishCurrentPageIfNeeded(from: collectionView)
+            pagingDriver.scrollViewDidEndScrollingAnimation(scrollView, inputs: pagingInputs)
         }
 
         func applyInitialPlacementIfNeeded(in collectionView: UICollectionView) {
@@ -172,9 +226,10 @@ struct MangaPagedReaderViewport: UIViewRepresentable {
             guard collectionView.bounds.width > 0, collectionView.bounds.height > 0 else {
                 return
             }
+            let targetViewportIndex = viewportIndex(forPageIndex: targetIndex)
 
             collectionView.scrollToItem(
-                at: IndexPath(item: targetIndex, section: 0),
+                at: IndexPath(item: targetViewportIndex, section: 0),
                 at: .centeredHorizontally,
                 animated: false
             )
@@ -182,6 +237,7 @@ struct MangaPagedReaderViewport: UIViewRepresentable {
             pendingInitialPageIndex = nil
             collectionView.alpha = 1
             publishCurrentPageIfNeeded(from: collectionView)
+            updateGestureState(in: collectionView)
         }
 
         func applyViewportPlacementIfNeeded(in collectionView: UICollectionView) {
@@ -197,14 +253,29 @@ struct MangaPagedReaderViewport: UIViewRepresentable {
                 return
             }
 
-            collectionView.scrollToItem(
-                at: IndexPath(item: targetIndex, section: 0),
-                at: .centeredHorizontally,
-                animated: placement.animated
-            )
+            let targetViewportIndex = viewportIndex(forPageIndex: targetIndex)
+            let placementInputs = pagingInputs(selectionPageIndex: targetIndex)
             lastAppliedPlacementRevision = placement.revision
-            if !placement.animated {
-                publishCurrentPageIfNeeded(from: collectionView)
+            if placement.animated {
+                let didRequestDriverScroll = pagingDriver.requestSelectionScroll(
+                    in: collectionView,
+                    animated: true,
+                    inputs: placementInputs
+                )
+                if !didRequestDriverScroll {
+                    collectionView.scrollToItem(
+                        at: IndexPath(item: targetViewportIndex, section: 0),
+                        at: .centeredHorizontally,
+                        animated: true
+                    )
+                }
+            } else {
+                collectionView.scrollToItem(
+                    at: IndexPath(item: targetViewportIndex, section: 0),
+                    at: .centeredHorizontally,
+                    animated: false
+                )
+                publishCurrentPageIfNeeded(pageIndex: targetIndex)
             }
         }
 
@@ -224,23 +295,22 @@ struct MangaPagedReaderViewport: UIViewRepresentable {
                 }
                 return
             }
-            guard let delta = pageDelta(for: zone) else {
-                let onTap = parent.onTap
-                callbackScheduler.publish {
-                    onTap()
-                }
+            let directionalZone = directionalTapZone(for: zone)
+            if pagingDriver.animateAdjacentSelection(for: directionalZone, in: collectionView, inputs: pagingInputs) {
                 return
             }
-            guard let currentIndex = currentPageIndex(in: collectionView),
-                  let targetIndex = parent.plan.clampedPageIndex(currentIndex + delta),
-                  targetIndex != currentIndex else {
+            guard directionalZone == .toggleChrome else {
                 return
             }
-            collectionView.scrollToItem(
-                at: IndexPath(item: targetIndex, section: 0),
-                at: .centeredHorizontally,
-                animated: true
-            )
+            let onTap = parent.onTap
+            callbackScheduler.publish {
+                onTap()
+            }
+        }
+
+        @objc private func handleQuickFadePan(_ recognizer: UIPanGestureRecognizer) {
+            guard !parent.isChromeVisible else { return }
+            pagingDriver.handleQuickFadePan(recognizer, inputs: pagingInputs)
         }
 
         func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
@@ -254,20 +324,39 @@ struct MangaPagedReaderViewport: UIViewRepresentable {
             true
         }
 
-        private func pageDelta(for zone: ReaderPagedTapZone) -> Int? {
-            switch (zone, parent.settings.pageTurnDirection) {
-            case (.toggleChrome, _):
-                nil
-            case (.previous, .rightToLeft), (.next, .leftToRight):
-                1
-            case (.next, .rightToLeft), (.previous, .leftToRight):
-                -1
+        func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+            guard gestureRecognizer === quickFadePanGesture,
+                  let panRecognizer = gestureRecognizer as? UIPanGestureRecognizer else {
+                return true
+            }
+            return !parent.isChromeVisible &&
+                pagingDriver.quickFadePanShouldBegin(panRecognizer, inputs: pagingInputs)
+        }
+
+        func updateGestureState(in collectionView: UICollectionView) {
+            pagingDriver.updateGestureState(in: collectionView, inputs: pagingInputs)
+            if parent.isChromeVisible {
+                collectionView.panGestureRecognizer.isEnabled = false
+            }
+            quickFadePanGesture.isEnabled = !parent.isChromeVisible && parent.settings.pagedTurnStyle == .quickFade
+        }
+
+        private func directionalTapZone(for zone: ReaderPagedTapZone) -> ReaderPagedTapZone {
+            guard parent.settings.pageTurnDirection == .rightToLeft else {
+                return zone
+            }
+            switch zone {
+            case .previous:
+                return .next
+            case .next:
+                return .previous
+            case .toggleChrome:
+                return .toggleChrome
             }
         }
 
-        private func publishCurrentPageIfNeeded(from collectionView: UICollectionView) {
-            guard let pageIndex = currentPageIndex(in: collectionView),
-                  let globalIndex = parent.plan.globalIndex(forPageAt: pageIndex),
+        private func publishCurrentPageIfNeeded(pageIndex: Int) {
+            guard let globalIndex = parent.plan.globalIndex(forPageAt: pageIndex),
                   globalIndex != lastReportedGlobalIndex else {
                 return
             }
@@ -279,12 +368,44 @@ struct MangaPagedReaderViewport: UIViewRepresentable {
             }
         }
 
+        private func publishCurrentPageIfNeeded(from collectionView: UICollectionView) {
+            guard let pageIndex = currentPageIndex(in: collectionView),
+                  parent.plan.pages.indices.contains(pageIndex) else {
+                return
+            }
+            publishCurrentPageIfNeeded(pageIndex: pageIndex)
+        }
+
         private func currentPageIndex(in collectionView: UICollectionView) -> Int? {
             guard collectionView.bounds.width > 0 else {
                 return parent.plan.currentPageIndex
             }
             let rawIndex = Int((collectionView.contentOffset.x / collectionView.bounds.width).rounded())
-            return parent.plan.clampedPageIndex(rawIndex)
+            return parent.plan.clampedPageIndex(pageIndex(forViewportIndex: rawIndex))
+        }
+
+        private func viewportIndex(forPageIndex pageIndex: Int) -> Int {
+            guard !parent.plan.pages.isEmpty,
+                  let clampedPageIndex = parent.plan.clampedPageIndex(pageIndex) else {
+                return 0
+            }
+            switch parent.settings.pageTurnDirection {
+            case .leftToRight:
+                return clampedPageIndex
+            case .rightToLeft:
+                return parent.plan.pages.count - 1 - clampedPageIndex
+            }
+        }
+
+        private func pageIndex(forViewportIndex viewportIndex: Int) -> Int {
+            guard !parent.plan.pages.isEmpty else { return 0 }
+            let clampedViewportIndex = min(max(viewportIndex, 0), parent.plan.pages.count - 1)
+            switch parent.settings.pageTurnDirection {
+            case .leftToRight:
+                return clampedViewportIndex
+            case .rightToLeft:
+                return parent.plan.pages.count - 1 - clampedViewportIndex
+            }
         }
     }
 }
@@ -292,6 +413,7 @@ struct MangaPagedReaderViewport: UIViewRepresentable {
 private struct MangaPagedReaderContentIdentity: Equatable {
     var pageIDs: [String]
     var pageScaleMode: MangaPageScaleMode
+    var pagedTurnStyle: ReaderPagedTurnStyle
     var pageTurnDirection: MangaPageTurnDirection
     var pageEdgeFillStyle: MangaPageEdgeFillStyle
     var colorScheme: ColorScheme
@@ -306,25 +428,7 @@ private final class MangaPagedReaderCollectionView: UICollectionView {
     }
 }
 
-private final class MangaPagedReaderPageCell: UICollectionViewCell {
-    static let reuseIdentifier = "MangaPagedReaderPageCell"
-
-    override init(frame: CGRect) {
-        super.init(frame: frame)
-        backgroundColor = .black
-        contentView.backgroundColor = .black
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    override func prepareForReuse() {
-        super.prepareForReuse()
-        contentConfiguration = nil
-    }
-
+private extension ReaderPagedPageTurnCell {
     func configure(
         page: MangaReaderPageProjection,
         imagePipeline: MangaImagePipeline,
@@ -517,6 +621,17 @@ private extension MangaPageEdgeFillStyle {
             false
         case .system:
             colorScheme != .dark
+        }
+    }
+}
+
+private extension MangaPageTurnDirection {
+    var horizontalNavigationDirection: ReaderPagedHorizontalNavigationDirection {
+        switch self {
+        case .rightToLeft:
+            .rightSwipeAdvances
+        case .leftToRight:
+            .leftSwipeAdvances
         }
     }
 }
