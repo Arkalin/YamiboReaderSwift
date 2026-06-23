@@ -37,7 +37,7 @@ public struct MangaReaderView: View {
                 MangaReaderFloatingControls(
                     topInset: topInset,
                     bottomInset: bottomInset,
-                    progress: mangaChromeProgress(from: model.presentation),
+                    summary: mangaChromeSummary(from: model.presentation),
                     onClose: closeReader,
                     onShowDirectory: {
                         isDirectoryPresented = true
@@ -127,7 +127,7 @@ public struct MangaReaderView: View {
             .safeAreaInsets ?? .zero
     }
 
-    private func mangaChromeProgress(from presentation: MangaReaderPresentation) -> ReaderChromeProgress? {
+    private func mangaChromeSummary(from presentation: MangaReaderPresentation) -> MangaReaderChromeSummary? {
         guard case let .loaded(loaded) = presentation.state,
               !loaded.pages.isEmpty else {
             return nil
@@ -142,24 +142,42 @@ public struct MangaReaderView: View {
         let currentIndex = min(max(currentPage.localIndex, 0), itemCount - 1)
         let progressFraction = itemCount > 1 ? Double(currentIndex) / Double(maxIndex) : 0
         let percentText = "\(Int((progressFraction * 100).rounded()))%"
+        let pageSummary = L10n.string("manga.preview_page", currentIndex + 1, itemCount)
+        let rawTitle = loaded.directoryPanel.displayChapters
+            .first { $0.tid == currentPage.tid }?
+            .rawTitle ?? currentPage.chapterTitle
+        let headerTitle = MangaChapterDisplayFormatter.readerHeaderTitle(
+            rawTitle: rawTitle,
+            cleanBookName: loaded.directoryTitle
+        )
 
-        return ReaderChromeProgress(
-            itemCount: itemCount,
-            currentIndex: currentIndex,
-            progressFraction: progressFraction,
-            percentText: percentText,
-            primaryText: L10n.string("manga.directory") + " · \(percentText)",
-            secondaryText: L10n.string("manga.preview_page", currentIndex + 1, itemCount),
-            ticks: [],
-            scrubTargetIndexes: Array(0 ..< itemCount)
+        return MangaReaderChromeSummary(
+            headerTitle: headerTitle,
+            pageSummary: pageSummary,
+            progress: ReaderChromeProgress(
+                itemCount: itemCount,
+                currentIndex: currentIndex,
+                progressFraction: progressFraction,
+                percentText: percentText,
+                primaryText: L10n.string("manga.directory") + " · \(percentText)",
+                secondaryText: pageSummary,
+                ticks: [],
+                scrubTargetIndexes: Array(0 ..< itemCount)
+            )
         )
     }
+}
+
+private struct MangaReaderChromeSummary: Equatable, Sendable {
+    let headerTitle: String
+    let pageSummary: String
+    let progress: ReaderChromeProgress
 }
 
 private struct MangaReaderFloatingControls: View {
     let topInset: CGFloat
     let bottomInset: CGFloat
-    let progress: ReaderChromeProgress?
+    let summary: MangaReaderChromeSummary?
     let onClose: () -> Void
     let onShowDirectory: () -> Void
     let onShowComments: () -> Void
@@ -170,14 +188,16 @@ private struct MangaReaderFloatingControls: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            ReaderGlassContainer(spacing: 10) {
-                topControls
-            }
+            MangaReaderTopChrome(
+                title: summary?.headerTitle,
+                topInset: topInset,
+                onClose: onClose
+            )
 
             MangaReaderBottomControls(
                 bottomInset: bottomInset,
                 colorScheme: colorScheme,
-                progress: progress,
+                summary: summary,
                 onShowDirectory: onShowDirectory,
                 onShowComments: onShowComments,
                 onShowSettings: {},
@@ -187,33 +207,64 @@ private struct MangaReaderFloatingControls: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
+}
 
-    private var topControls: some View {
-        HStack(spacing: 10) {
-            ReaderChromeCircleButton(
-                systemName: "xmark",
-                title: L10n.string("common.close"),
-                tint: buttonTint,
-                action: onClose
-            )
+private struct MangaReaderTopChrome: View {
+    let title: String?
+    let topInset: CGFloat
+    let onClose: () -> Void
 
-            Spacer(minLength: 0)
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        ReaderGlassContainer(spacing: 12) {
+            let closeButtonSize: CGFloat = 44
+
+            ZStack {
+                MangaReaderTopChapterTitle(title: title)
+                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal, closeButtonSize + 16)
+
+                HStack {
+                    Spacer(minLength: 0)
+                    ReaderChromeCircleButton(
+                        systemName: "xmark",
+                        title: L10n.string("common.close"),
+                        tint: readerChromeButtonTint(for: colorScheme),
+                        action: onClose
+                    )
+                    .frame(width: closeButtonSize, height: closeButtonSize)
+                }
+            }
+            .frame(maxWidth: .infinity, minHeight: closeButtonSize)
+            .padding(.horizontal, 4)
         }
         .frame(maxWidth: .infinity)
-        .padding(.top, max(topInset + 8, 12))
+        .padding(.top, max(topInset + 8, 20))
         .padding(.horizontal, 12)
         .padding(.bottom, 8)
     }
+}
 
-    private var buttonTint: Color {
-        readerChromeButtonTint(for: colorScheme)
+private struct MangaReaderTopChapterTitle: View {
+    let title: String?
+
+    var body: some View {
+        if let title, !title.isEmpty {
+            Text(title)
+                .font(.callout.weight(.semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+                .foregroundStyle(.primary)
+                .frame(maxWidth: .infinity)
+        }
     }
 }
 
 private struct MangaReaderBottomControls: View {
     let bottomInset: CGFloat
     let colorScheme: ColorScheme
-    let progress: ReaderChromeProgress?
+    let summary: MangaReaderChromeSummary?
     let onShowDirectory: () -> Void
     let onShowComments: () -> Void
     let onShowSettings: () -> Void
@@ -223,40 +274,64 @@ private struct MangaReaderBottomControls: View {
     var body: some View {
         let layout = ReaderBottomChromeLayoutPresentation()
 
-        HStack(alignment: .bottom, spacing: layout.verticalScrubberSideSpacing) {
-            Spacer(minLength: 0)
-            VStack(spacing: layout.panelSpacing) {
-                if let progress {
-                    MangaReaderDirectoryProgressControl(
-                        progress: progress,
-                        onShowDirectory: onShowDirectory
+        VStack(spacing: 12) {
+            HStack(alignment: .bottom, spacing: layout.verticalScrubberSideSpacing) {
+                Spacer(minLength: 0)
+                VStack(spacing: layout.panelSpacing) {
+                    if let progress = summary?.progress {
+                        MangaReaderDirectoryProgressControl(
+                            progress: progress,
+                            onShowDirectory: onShowDirectory
+                        )
+                    }
+
+                    MangaReaderStaticActionControls(
+                        colorScheme: colorScheme,
+                        originalPostTitle: L10n.string("common.original_post"),
+                        commentsTitle: L10n.string("reader.comments"),
+                        settingsTitle: L10n.string("settings.title"),
+                        bookmarkTitle: "书签",
+                        cacheTitle: L10n.string("reader.cache"),
+                        onOpenOriginalPost: onOpenOriginalPost,
+                        onShowComments: onShowComments,
+                        onShowSettings: onShowSettings
                     )
                 }
+                .frame(width: layout.maxChromeWidth)
 
-                MangaReaderStaticActionControls(
-                    colorScheme: colorScheme,
-                    originalPostTitle: L10n.string("common.original_post"),
-                    commentsTitle: L10n.string("reader.comments"),
-                    settingsTitle: L10n.string("settings.title"),
-                    bookmarkTitle: "书签",
-                    cacheTitle: L10n.string("reader.cache"),
-                    onOpenOriginalPost: onOpenOriginalPost,
-                    onShowComments: onShowComments,
-                    onShowSettings: onShowSettings
-                )
+                if let progress = summary?.progress {
+                    MangaReaderVerticalProgressControl(
+                        progress: progress,
+                        onJumpToLocalPage: onJumpToLocalPage
+                    )
+                }
             }
-            .frame(width: layout.maxChromeWidth)
 
-            if let progress {
-                MangaReaderVerticalProgressControl(
-                    progress: progress,
-                    onJumpToLocalPage: onJumpToLocalPage
-                )
+            if let pageSummary = summary?.pageSummary {
+                MangaReaderBottomPageSummary(text: pageSummary)
             }
         }
         .padding(.horizontal, 12)
         .padding(.bottom, max(bottomInset + 8, 12))
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+    }
+}
+
+private struct MangaReaderBottomPageSummary: View {
+    let text: String
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        Text(text)
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .minimumScaleFactor(0.75)
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 6)
+            .readerChromePanel(cornerRadius: 16, tint: readerChromePanelTint(for: colorScheme))
+            .frame(maxWidth: .infinity, alignment: .center)
     }
 }
 
