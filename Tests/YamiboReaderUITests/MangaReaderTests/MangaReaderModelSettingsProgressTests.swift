@@ -9,6 +9,9 @@ final class MangaReaderModelSettingsProgressTests: XCTestCase {
             appSettings: AppSettings(
                 manga: MangaReaderSettings(
                     readingMode: .paged,
+                    pagedTurnStyle: .pageCurl,
+                    pageTurnDirection: .leftToRight,
+                    pageScaleMode: .fitHeight,
                     brightness: 2.0,
                     zoomEnabled: false,
                     showsTwoPagesInLandscapeOnPad: true,
@@ -20,6 +23,9 @@ final class MangaReaderModelSettingsProgressTests: XCTestCase {
         await fixture.model.prepare()
 
         XCTAssertEqual(fixture.model.presentation.settings.readingMode, .paged)
+        XCTAssertEqual(fixture.model.presentation.settings.pagedTurnStyle, .pageCurl)
+        XCTAssertEqual(fixture.model.presentation.settings.pageTurnDirection, .leftToRight)
+        XCTAssertEqual(fixture.model.presentation.settings.pageScaleMode, .fitHeight)
         XCTAssertEqual(fixture.model.presentation.settings.brightness, 1.5)
         XCTAssertFalse(fixture.model.presentation.settings.zoomEnabled)
         XCTAssertTrue(fixture.model.presentation.settings.showsTwoPagesInLandscapeOnPad)
@@ -43,6 +49,9 @@ final class MangaReaderModelSettingsProgressTests: XCTestCase {
 
         let updatedMangaSettings = MangaReaderSettings(
             readingMode: .vertical,
+            pagedTurnStyle: .quickFade,
+            pageTurnDirection: .leftToRight,
+            pageScaleMode: .fitHeight,
             brightness: -1,
             zoomEnabled: false,
             showsTwoPagesInLandscapeOnPad: true,
@@ -58,6 +67,9 @@ final class MangaReaderModelSettingsProgressTests: XCTestCase {
             let loaded = await fixture.settingsStore.load()
             return loaded.manga.brightness == 0.25 &&
                 loaded.manga.readingMode == .vertical &&
+                loaded.manga.pagedTurnStyle == .quickFade &&
+                loaded.manga.pageTurnDirection == .leftToRight &&
+                loaded.manga.pageScaleMode == .fitHeight &&
                 loaded.manga.zoomEnabled == false
         }
 
