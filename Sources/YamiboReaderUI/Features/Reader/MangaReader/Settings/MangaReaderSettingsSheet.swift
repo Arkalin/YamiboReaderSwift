@@ -244,13 +244,19 @@ private struct MangaReaderPagedPreviewFitWidthContent: View {
     let isTrailingPage: Bool
 
     var body: some View {
-        MangaReaderPagedPreviewArtwork(
-            palette: palette,
-            isTrailingPage: isTrailingPage,
-            panelWidth: nil,
-            scale: 1
-        )
-        .padding(12)
+        GeometryReader { proxy in
+            let inset: CGFloat = 12
+            let contentWidth = max(proxy.size.width - inset * 2, 1)
+            let panelWidth = max((contentWidth - 8) / 2, 1)
+
+            MangaReaderPagedPreviewArtwork(
+                palette: palette,
+                isTrailingPage: isTrailingPage,
+                panelWidth: panelWidth,
+                scale: 1
+            )
+            .padding(inset)
+        }
     }
 }
 
@@ -298,40 +304,80 @@ private struct MangaReaderPagedPreviewFitHeightContent: View {
 private struct MangaReaderPagedPreviewArtwork: View {
     let palette: MangaReaderSettingsPalette
     let isTrailingPage: Bool
-    let panelWidth: CGFloat?
+    let panelWidth: CGFloat
     let scale: CGFloat
 
+    private var rowSpacing: CGFloat {
+        8 * scale
+    }
+
+    private var topLeadingPanelWidth: CGFloat {
+        panelWidth * (isTrailingPage ? 0.86 : 1)
+    }
+
+    private var topTrailingPanelWidth: CGFloat {
+        panelWidth * (isTrailingPage ? 1.14 : 1)
+    }
+
+    private var bottomLeadingPanelWidth: CGFloat {
+        panelWidth * (isTrailingPage ? 1.16 : 1)
+    }
+
+    private var bottomTrailingPanelWidth: CGFloat {
+        panelWidth * (isTrailingPage ? 0.84 : 1)
+    }
+
+    private var topLeadingPanelHeight: CGFloat {
+        (isTrailingPage ? 44 : 50) * scale
+    }
+
+    private var topTrailingPanelHeight: CGFloat {
+        (isTrailingPage ? 54 : 50) * scale
+    }
+
+    private var middlePanelHeight: CGFloat {
+        (isTrailingPage ? 38 : 34) * scale
+    }
+
+    private var bottomLeadingPanelHeight: CGFloat {
+        (isTrailingPage ? 28 : 30) * scale
+    }
+
+    private var bottomTrailingPanelHeight: CGFloat {
+        (isTrailingPage ? 34 : 30) * scale
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 8 * scale) {
-            HStack(alignment: .top, spacing: 8 * scale) {
+        VStack(alignment: .leading, spacing: rowSpacing) {
+            HStack(alignment: .top, spacing: rowSpacing) {
                 MangaReaderPreviewPanel(
                     color: isTrailingPage ? palette.coolPanel : palette.warmPanel,
-                    height: 50 * scale,
-                    width: panelWidth
+                    height: topLeadingPanelHeight,
+                    width: topLeadingPanelWidth
                 )
                 MangaReaderPreviewPanel(
                     color: palette.neutralPanel,
-                    height: 50 * scale,
-                    width: panelWidth
+                    height: topTrailingPanelHeight,
+                    width: topTrailingPanelWidth
                 )
             }
 
             MangaReaderPreviewPanel(
                 color: isTrailingPage ? palette.neutralPanel : palette.coolPanel,
-                height: 34 * scale,
-                width: panelWidth.map { $0 * 2 + 8 * scale }
+                height: middlePanelHeight,
+                width: panelWidth * 2 + rowSpacing
             )
 
-            HStack(spacing: 8 * scale) {
+            HStack(alignment: .top, spacing: rowSpacing) {
                 MangaReaderPreviewPanel(
                     color: palette.neutralPanel,
-                    height: 30 * scale,
-                    width: panelWidth
+                    height: bottomLeadingPanelHeight,
+                    width: bottomLeadingPanelWidth
                 )
                 MangaReaderPreviewPanel(
                     color: isTrailingPage ? palette.warmPanel : palette.neutralPanel,
-                    height: 30 * scale,
-                    width: panelWidth
+                    height: bottomTrailingPanelHeight,
+                    width: bottomTrailingPanelWidth
                 )
             }
         }
@@ -447,17 +493,12 @@ private struct MangaReaderScrollPreviewEdgeBlurMask: View {
 private struct MangaReaderPreviewPanel: View {
     let color: Color
     let height: CGFloat
-    var width: CGFloat?
-
-    private var maximumWidth: CGFloat? {
-        width == nil ? .infinity : nil
-    }
+    let width: CGFloat
 
     var body: some View {
         RoundedRectangle(cornerRadius: 8, style: .continuous)
             .fill(color)
             .frame(width: width)
-            .frame(maxWidth: maximumWidth)
             .frame(height: height)
     }
 }
