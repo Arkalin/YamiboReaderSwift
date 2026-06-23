@@ -39,3 +39,33 @@ import Testing
     #expect(MangaTitleCleaner.cleanBookName("作品 最终话") == "作品")
     #expect(MangaTitleCleaner.cleanBookName("Area 51") == "Area 51")
 }
+
+@Test func readerHeaderTitleRemovesBookNameMetadataAndScanlationGroup() async throws {
+    #expect(
+        MangaChapterDisplayFormatter.readerHeaderTitle(
+            rawTitle: "【提灯喵汉化组】【作者】温热的银莲花 32",
+            cleanBookName: "温热的银莲花"
+        ) == "第32话"
+    )
+
+    #expect(
+        MangaChapterDisplayFormatter.readerHeaderTitle(
+            rawTitle: "【某汉化组】作品 第12话 相遇（修正版）",
+            cleanBookName: "作品"
+        ) == "第12话 相遇"
+    )
+
+    #expect(
+        MangaChapterDisplayFormatter.readerHeaderTitle(
+            rawTitle: "[组]作品 第17话① 标题",
+            cleanBookName: "作品"
+        ) == "第17-1话 标题"
+    )
+
+    #expect(
+        MangaChapterDisplayFormatter.readerHeaderTitle(
+            rawTitle: "Area 51",
+            cleanBookName: "Area 51"
+        ) != "第51话"
+    )
+}

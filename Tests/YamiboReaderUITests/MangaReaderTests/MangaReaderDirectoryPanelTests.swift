@@ -8,6 +8,12 @@ final class MangaReaderDirectoryPanelTests: XCTestCase {
         let source = try mangaReaderSourceFile("Sources/YamiboReaderUI/Features/Reader/MangaReader/Presentation/MangaReaderView.swift")
 
         XCTAssertTrue(source.contains("MangaReaderFloatingControls("))
+        XCTAssertTrue(source.contains("summary: mangaChromeSummary(from: model.presentation)"))
+        XCTAssertTrue(source.contains("struct MangaReaderChromeSummary"))
+        XCTAssertTrue(source.contains("MangaChapterDisplayFormatter.readerHeaderTitle("))
+        XCTAssertTrue(source.contains("MangaReaderTopChrome("))
+        XCTAssertTrue(source.contains("MangaReaderBottomPageSummary("))
+        XCTAssertTrue(source.contains("L10n.string(\"manga.preview_page\", currentIndex + 1, itemCount)"))
         XCTAssertTrue(source.contains("ReaderDirectoryProgressCapsule("))
         XCTAssertTrue(source.contains("systemName: \"text.bubble\""))
         XCTAssertTrue(source.contains("systemName: \"gearshape\""))
