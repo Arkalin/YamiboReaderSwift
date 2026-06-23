@@ -98,13 +98,24 @@ struct ReaderPagedCollectionViewport: UIViewRepresentable {
             ReaderPagedViewportPagingInputs(
                 itemCount: parent.surfaces.count,
                 selectionIndex: parent.selectionIndex,
-                settings: parent.settings,
+                pagedTurnStyle: parent.settings.pagedTurnStyle,
+                horizontalNavigationDirection: .leftSwipeAdvances,
                 pagerIdentity: parent.pagerIdentity,
                 scrollAnimationRequest: parent.scrollAnimationRequest,
                 canBoundaryPageTurn: parent.canBoundaryPageTurn,
                 onSelectionChange: parent.onSelectionChange,
                 onBoundaryPageTurn: parent.onBoundaryPageTurn,
-                onScrollAnimationRequestConsumed: parent.onScrollAnimationRequestConsumed
+                onScrollAnimationRequestConsumed: parent.onScrollAnimationRequestConsumed,
+                pageTurnRestingBackgroundColor: { _ in .clear },
+                pageTurnBackgroundColor: { [parent] traitCollection, overlayAlpha in
+                    ReaderPagedPageTurnBackground.dimmedPageColor(
+                        baseColor: readerThemeUIColor(
+                            for: parent.settings.backgroundStyle,
+                            traitCollection: traitCollection
+                        ),
+                        overlayAlpha: overlayAlpha
+                    )
+                }
             )
         }
 

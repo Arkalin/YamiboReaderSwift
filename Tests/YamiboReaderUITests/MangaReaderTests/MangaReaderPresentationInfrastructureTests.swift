@@ -136,13 +136,48 @@ struct MangaReaderPresentationInfrastructureTests {
     @Test func pagedViewportHidesVisibleChromeBeforeTapZonePageTurn() throws {
         let source = try sourceFile("Sources/YamiboReaderUI/Features/Reader/MangaReader/Presentation/MangaPagedReaderViewport.swift")
         let chromeGateRange = try #require(source.range(of: "if parent.isChromeVisible {"))
-        let pageTurnRange = try #require(source.range(of: "guard let delta = pageDelta(for: zone)"))
+        let pageTurnRange = try #require(source.range(of: "pagingDriver.animateAdjacentSelection"))
         let chromeGateBody = String(source[chromeGateRange.lowerBound..<pageTurnRange.lowerBound])
 
         #expect(chromeGateRange.lowerBound < pageTurnRange.lowerBound)
         #expect(chromeGateBody.contains("let onTap = parent.onTap"))
         #expect(chromeGateBody.contains("onTap()"))
         #expect(chromeGateBody.contains("return"))
+    }
+
+    @Test func pagedViewportUsesSharedSlideAndQuickFadePagingContracts() throws {
+        let sharedSource = try sourceFile("Sources/YamiboReaderUI/Features/Reader/Shared/Paging/ReaderPagedPageTurnSupport.swift")
+        let mangaSource = try sourceFile("Sources/YamiboReaderUI/Features/Reader/MangaReader/Presentation/MangaPagedReaderViewport.swift")
+
+        #expect(sharedSource.contains("struct ReaderPagedBoundaryPageTurn"))
+        #expect(sharedSource.contains("enum ReaderPagedQuickFadeTransition"))
+        #expect(sharedSource.contains("static let duration: TimeInterval = 0.18"))
+        #expect(sharedSource.contains("final class ReaderPagedViewportPagingDriver"))
+        #expect(sharedSource.contains("ReaderPagedPageTurnPresentation.metrics"))
+        #expect(sharedSource.contains("var itemIndexForSelectionIndex: (Int) -> Int = { $0 }"))
+        #expect(sharedSource.contains("var selectionIndexForItemIndex: (Int) -> Int = { $0 }"))
+
+        #expect(mangaSource.contains("private let pagingDriver = ReaderPagedViewportPagingDriver()"))
+        #expect(mangaSource.contains("collectionView.register(ReaderPagedPageTurnCell.self"))
+        #expect(mangaSource.contains("handleQuickFadePan"))
+        #expect(mangaSource.contains("pagingDriver.updateGestureState(in: collectionView, inputs: pagingInputs)"))
+        #expect(mangaSource.contains("pagingDriver.animateAdjacentSelection("))
+        #expect(mangaSource.contains("for: directionalZone"))
+        #expect(mangaSource.contains("pagedTurnStyle: parent.settings.pagedTurnStyle"))
+        #expect(mangaSource.contains("pageTurnBackgroundColor: { [parent] _, overlayAlpha in"))
+        #expect(mangaSource.contains("horizontalNavigationDirection: parent.settings.pageTurnDirection.horizontalNavigationDirection"))
+        #expect(mangaSource.contains("itemIndexForSelectionIndex: { [weak self] pageIndex in"))
+        #expect(mangaSource.contains("selectionIndexForItemIndex: { [weak self] viewportIndex in"))
+        #expect(mangaSource.contains("page: parent.plan.pages[pageIndex]"))
+        #expect(mangaSource.contains("pagingInputs(selectionPageIndex: targetIndex)"))
+        #expect(mangaSource.contains("IndexPath(item: targetViewportIndex, section: 0)"))
+        #expect(mangaSource.contains("private func viewportIndex(forPageIndex pageIndex: Int) -> Int"))
+        #expect(mangaSource.contains("private func pageIndex(forViewportIndex viewportIndex: Int) -> Int"))
+        #expect(mangaSource.contains("case .rightToLeft:\n                return parent.plan.pages.count - 1 - clampedPageIndex"))
+        #expect(mangaSource.contains("case .rightToLeft:\n                return parent.plan.pages.count - 1 - clampedViewportIndex"))
+        #expect(mangaSource.contains("case .rightToLeft:\n            .rightSwipeAdvances"))
+        #expect(mangaSource.contains("case .leftToRight:\n            .leftSwipeAdvances"))
+        #expect(sharedSource.contains("ReaderPagedBoundaryPageTurn.directionalDelta"))
     }
 
     #if os(iOS)
