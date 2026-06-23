@@ -55,6 +55,19 @@ struct MangaReaderPresentationInfrastructureTests {
         #expect(source.contains("MangaImagePipelineError.invalidImageData"))
     }
 
+    @Test func progressImagePreviewUsesPipelineCacheAndLocalizedPageFallback() throws {
+        let source = try sourceFile("Sources/YamiboReaderUI/Features/Reader/MangaReader/Presentation/MangaReaderView.swift")
+
+        #expect(source.contains("struct MangaReaderProgressImagePreview"))
+        #expect(source.contains("MangaReaderProgressPreviewImageArea("))
+        #expect(source.contains("MangaReaderProgressPreviewPageLabel("))
+        #expect(source.contains("imagePipeline?.cachedImage(for: page)"))
+        #expect(source.contains("try await imagePipeline.image(for: page)"))
+        #expect(source.contains("catch {"))
+        #expect(source.contains("failedPageID = page.id"))
+        #expect(source.contains("L10n.string(\"reader.page_number_spaced\", preview.pageNumber)"))
+    }
+
     @Test func hiddenFailureStackIsNotMeasuredDuringLayout() throws {
         let source = try sourceFile("Sources/YamiboReaderUI/Features/Reader/MangaReader/Presentation/MangaVerticalCollectionViewport.swift")
         let guardRange = try #require(source.range(of: "guard !failureStack.isHidden else"))
@@ -113,6 +126,25 @@ struct MangaReaderPresentationInfrastructureTests {
         #expect(await loader.callCount == 2)
     }
 
+    @MainActor
+    @Test func imagePipelineDoesNotCacheLoaderFailures() async throws {
+        let loader = RecordingMangaPipelineDataLoader(outputs: [
+            .failure(MangaPipelineTestError.loaderFailure),
+            .success(Self.pngData)
+        ])
+        let pipeline = MangaImagePipeline(dataLoader: loader)
+        let page = try makePipelinePage()
+
+        await #expect(throws: MangaPipelineTestError.loaderFailure) {
+            _ = try await pipeline.image(for: page)
+        }
+        #expect(pipeline.cachedImage(for: page) == nil)
+        let image = try await pipeline.image(for: page)
+
+        #expect(image.size.width > 0)
+        #expect(await loader.callCount == 2)
+    }
+
     private static let pngData = Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=")!
     #endif
 }
@@ -124,6 +156,10 @@ private func sourceFile(_ relativePath: String) throws -> String {
 }
 
 #if os(iOS)
+private enum MangaPipelineTestError: Error, Equatable {
+    case loaderFailure
+}
+
 private actor RecordingMangaPipelineDataLoader: MangaImageDataLoading {
     private var outputs: [Result<Data, Error>]
     private let delayNanoseconds: UInt64

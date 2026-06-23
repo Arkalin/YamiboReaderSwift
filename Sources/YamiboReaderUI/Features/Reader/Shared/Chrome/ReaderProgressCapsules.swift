@@ -127,13 +127,15 @@ struct ReaderDirectoryProgressCapsule: View {
     }
 }
 
-struct ReaderVerticalProgressCapsule: View {
+struct ReaderVerticalProgressCapsule<PreviewContent: View>: View {
     let restingProgressFraction: Double
     let scrubContext: ReaderProgressScrubContext
     let ticks: [ReaderChromeProgressTick]
+    let previewSize: CGSize
     let onBeginScrub: () -> Void
     let onCommit: (Int) -> Void
     let onEndScrub: () -> Void
+    @ViewBuilder let previewContent: (ReaderProgressScrubPreview) -> PreviewContent
     @State private var dragStartProgressFraction: Double?
     @State private var scrubState = ReaderProgressScrubState()
     @State private var progressStartFeedbackGenerator = UIImpactFeedbackGenerator(style: .light)
@@ -141,10 +143,30 @@ struct ReaderVerticalProgressCapsule: View {
     @State private var progressCommitFeedbackGenerator = UIImpactFeedbackGenerator(style: .medium)
     @Environment(\.colorScheme) private var colorScheme
 
+    init(
+        restingProgressFraction: Double,
+        scrubContext: ReaderProgressScrubContext,
+        ticks: [ReaderChromeProgressTick],
+        previewSize: CGSize,
+        onBeginScrub: @escaping () -> Void,
+        onCommit: @escaping (Int) -> Void,
+        onEndScrub: @escaping () -> Void,
+        @ViewBuilder previewContent: @escaping (ReaderProgressScrubPreview) -> PreviewContent
+    ) {
+        self.restingProgressFraction = restingProgressFraction
+        self.scrubContext = scrubContext
+        self.ticks = ticks
+        self.previewSize = previewSize
+        self.onBeginScrub = onBeginScrub
+        self.onCommit = onCommit
+        self.onEndScrub = onEndScrub
+        self.previewContent = previewContent
+    }
+
     var body: some View {
         let layout = ReaderBottomChromeLayoutPresentation()
         let preview = scrubState.preview
-        let totalWidth = isScrubbing ? layout.verticalPreviewWidth + layout.verticalScrubberSideSpacing + layout.verticalScrubberWidth : layout.verticalScrubberWidth
+        let totalWidth = isScrubbing ? previewSize.width + layout.verticalScrubberSideSpacing + layout.verticalScrubberWidth : layout.verticalScrubberWidth
 
         GeometryReader { geometry in
             let height = max(geometry.size.height, 1)
@@ -156,9 +178,10 @@ struct ReaderVerticalProgressCapsule: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
 
                 if isScrubbing, let preview {
-                    ReaderVerticalProgressPreviewCapsule(preview: preview)
+                    previewContent(preview)
+                        .frame(width: previewSize.width, height: previewSize.height)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .offset(y: min(max(thumbY - layout.verticalPreviewHeight / 2, 0), max(height - layout.verticalPreviewHeight, 0)))
+                        .offset(y: min(max(thumbY - previewSize.height / 2, 0), max(height - previewSize.height, 0)))
                         .allowsHitTesting(false)
                         .accessibilityHidden(true)
                 }
@@ -278,6 +301,30 @@ struct ReaderVerticalProgressCapsule: View {
             }
         }
         .mask(Capsule())
+    }
+}
+
+extension ReaderVerticalProgressCapsule where PreviewContent == ReaderVerticalProgressPreviewCapsule {
+    init(
+        restingProgressFraction: Double,
+        scrubContext: ReaderProgressScrubContext,
+        ticks: [ReaderChromeProgressTick],
+        onBeginScrub: @escaping () -> Void,
+        onCommit: @escaping (Int) -> Void,
+        onEndScrub: @escaping () -> Void
+    ) {
+        let layout = ReaderBottomChromeLayoutPresentation()
+        self.init(
+            restingProgressFraction: restingProgressFraction,
+            scrubContext: scrubContext,
+            ticks: ticks,
+            previewSize: CGSize(width: layout.verticalPreviewWidth, height: layout.verticalPreviewHeight),
+            onBeginScrub: onBeginScrub,
+            onCommit: onCommit,
+            onEndScrub: onEndScrub
+        ) { preview in
+            ReaderVerticalProgressPreviewCapsule(preview: preview)
+        }
     }
 }
 

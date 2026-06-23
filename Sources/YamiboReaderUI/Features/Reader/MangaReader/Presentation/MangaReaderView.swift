@@ -42,6 +42,7 @@ public struct MangaReaderView: View {
                     topInset: topInset,
                     bottomInset: bottomInset,
                     isVisible: isChromeVisible,
+                    imagePipeline: model.imagePipeline,
                     summary: mangaChromeSummary(from: model.presentation),
                     onClose: closeReader,
                     onShowDirectory: {
@@ -167,10 +168,15 @@ public struct MangaReaderView: View {
             rawTitle: rawTitle,
             cleanBookName: loaded.directoryTitle
         )
+        let pagePreviewTargets = pages.reduce(into: [Int: MangaReaderPageProjection]()) { result, page in
+            guard page.tid == currentPage.tid else { return }
+            result[page.localIndex] = page
+        }
 
         return MangaReaderChromeSummary(
             headerTitle: headerTitle,
             pageSummary: pageSummary,
+            pagePreviewTargets: pagePreviewTargets,
             progress: ReaderChromeProgress(
                 itemCount: itemCount,
                 currentIndex: currentIndex,
@@ -188,6 +194,7 @@ public struct MangaReaderView: View {
 private struct MangaReaderChromeSummary: Equatable, Sendable {
     let headerTitle: String
     let pageSummary: String
+    let pagePreviewTargets: [Int: MangaReaderPageProjection]
     let progress: ReaderChromeProgress
 }
 
@@ -195,6 +202,7 @@ private struct MangaReaderFloatingControls: View {
     let topInset: CGFloat
     let bottomInset: CGFloat
     let isVisible: Bool
+    let imagePipeline: MangaImagePipeline?
     let summary: MangaReaderChromeSummary?
     let onClose: () -> Void
     let onShowDirectory: () -> Void
@@ -219,6 +227,7 @@ private struct MangaReaderFloatingControls: View {
                 bottomInset: bottomInset,
                 isVisible: isVisible,
                 colorScheme: colorScheme,
+                imagePipeline: imagePipeline,
                 summary: summary,
                 onShowDirectory: onShowDirectory,
                 onShowComments: onShowComments,
@@ -291,6 +300,7 @@ private struct MangaReaderBottomControls: View {
     let bottomInset: CGFloat
     let isVisible: Bool
     let colorScheme: ColorScheme
+    let imagePipeline: MangaImagePipeline?
     let summary: MangaReaderChromeSummary?
     let onShowDirectory: () -> Void
     let onShowComments: () -> Void
@@ -329,6 +339,8 @@ private struct MangaReaderBottomControls: View {
                 if let progress = summary?.progress {
                     MangaReaderVerticalProgressControl(
                         progress: progress,
+                        previewPagesByTargetIndex: summary?.pagePreviewTargets ?? [:],
+                        imagePipeline: imagePipeline,
                         onJumpToLocalPage: onJumpToLocalPage
                     )
                 }
@@ -386,6 +398,8 @@ private struct MangaReaderDirectoryProgressControl: View {
 
 private struct MangaReaderVerticalProgressControl: View {
     let progress: ReaderChromeProgress
+    let previewPagesByTargetIndex: [Int: MangaReaderPageProjection]
+    let imagePipeline: MangaImagePipeline?
     let onJumpToLocalPage: (Int) -> Void
 
     var body: some View {
@@ -393,11 +407,144 @@ private struct MangaReaderVerticalProgressControl: View {
             restingProgressFraction: progress.progressFraction,
             scrubContext: progress.scrubContext,
             ticks: progress.ticks,
+            previewSize: MangaReaderProgressImagePreview.previewSize,
             onBeginScrub: {},
             onCommit: onJumpToLocalPage,
             onEndScrub: {}
-        )
+        ) { preview in
+            MangaReaderProgressImagePreview(
+                preview: preview,
+                page: previewPagesByTargetIndex[preview.targetIndex],
+                imagePipeline: imagePipeline
+            )
+        }
         .frame(width: ReaderBottomChromeLayoutPresentation().verticalScrubberWidth, alignment: .trailing)
+    }
+}
+
+private struct MangaReaderProgressImagePreview: View {
+    static let previewSize = CGSize(width: 148, height: 184)
+
+    let preview: ReaderProgressScrubPreview
+    let page: MangaReaderPageProjection?
+    let imagePipeline: MangaImagePipeline?
+
+    @State private var loadedImage: UIImage?
+    @State private var loadedPageID: String?
+    @State private var loadingPageID: String?
+    @State private var failedPageID: String?
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        let pageID = page?.id
+
+        VStack(spacing: 8) {
+            MangaReaderProgressPreviewImageArea(
+                image: displayedImage,
+                isLoading: loadingPageID == pageID,
+                hasFailed: page == nil || failedPageID == pageID
+            )
+
+            MangaReaderProgressPreviewPageLabel(
+                text: L10n.string("reader.page_number_spaced", preview.pageNumber)
+            )
+        }
+        .padding(8)
+        .frame(width: Self.previewSize.width, height: Self.previewSize.height)
+        .readerChromePanel(cornerRadius: 18, tint: readerChromePanelTint(for: colorScheme))
+        .shadow(color: Color.black.opacity(0.12), radius: 12, y: 5)
+        .task(id: pageID) { @MainActor in
+            await loadImage()
+        }
+    }
+
+    private var displayedImage: UIImage? {
+        guard let page else { return nil }
+        if let cachedImage = imagePipeline?.cachedImage(for: page) {
+            return cachedImage
+        }
+        guard loadedPageID == page.id else { return nil }
+        return loadedImage
+    }
+
+    @MainActor
+    private func loadImage() async {
+        guard let page, let imagePipeline else {
+            loadedImage = nil
+            loadedPageID = nil
+            loadingPageID = nil
+            failedPageID = nil
+            return
+        }
+
+        if let cachedImage = imagePipeline.cachedImage(for: page) {
+            loadedImage = cachedImage
+            loadedPageID = page.id
+            loadingPageID = nil
+            failedPageID = nil
+            return
+        }
+
+        loadingPageID = page.id
+        failedPageID = nil
+
+        do {
+            let image = try await imagePipeline.image(for: page)
+            guard !Task.isCancelled else { return }
+            loadedImage = image
+            loadedPageID = page.id
+            loadingPageID = nil
+            failedPageID = nil
+        } catch {
+            guard !Task.isCancelled else { return }
+            if loadedPageID != page.id {
+                loadedImage = nil
+            }
+            loadingPageID = nil
+            failedPageID = page.id
+        }
+    }
+}
+
+private struct MangaReaderProgressPreviewImageArea: View {
+    let image: UIImage?
+    let isLoading: Bool
+    let hasFailed: Bool
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color.black.opacity(0.72))
+
+            if let image {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFit()
+                    .padding(4)
+            } else if isLoading {
+                ProgressView()
+                    .tint(.white)
+            } else {
+                Image(systemName: hasFailed ? "exclamationmark.triangle" : "photo")
+                    .font(.title2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+}
+
+private struct MangaReaderProgressPreviewPageLabel: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.primary)
+            .lineLimit(1)
+            .minimumScaleFactor(0.82)
+            .frame(maxWidth: .infinity)
     }
 }
 

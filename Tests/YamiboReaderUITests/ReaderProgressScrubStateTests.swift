@@ -44,7 +44,18 @@ final class ReaderProgressScrubStateTests: XCTestCase {
         XCTAssertEqual(state.value, 1)
         XCTAssertEqual(state.targetIndex, 4)
         XCTAssertEqual(state.preview, ReaderProgressScrubPreview(chapterTitle: "第二章", pageNumber: 5))
+        XCTAssertEqual(state.preview?.targetIndex, 4)
         XCTAssertNil(update.committedTargetIndex)
+    }
+
+    func testScrubPreviewCarriesTargetIndexWhileKeepingLegacyDefault() {
+        let legacyPreview = ReaderProgressScrubPreview(chapterTitle: nil, pageNumber: 6)
+        let explicitPreview = ReaderProgressScrubPreview(chapterTitle: nil, pageNumber: 6, targetIndex: 2)
+
+        XCTAssertEqual(legacyPreview.pageNumber, 6)
+        XCTAssertEqual(legacyPreview.targetIndex, 5)
+        XCTAssertEqual(explicitPreview.pageNumber, 6)
+        XCTAssertEqual(explicitPreview.targetIndex, 2)
     }
 
     func testCommitReturnsOneTargetPageAndCommitHaptic() {

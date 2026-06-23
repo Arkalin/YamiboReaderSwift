@@ -53,10 +53,12 @@ public enum ReaderProgressScrubHaptic: Equatable, Sendable {
 public struct ReaderProgressScrubPreview: Equatable, Sendable {
     public var chapterTitle: String?
     public var pageNumber: Int
+    public var targetIndex: Int
 
-    public init(chapterTitle: String?, pageNumber: Int) {
+    public init(chapterTitle: String?, pageNumber: Int, targetIndex: Int? = nil) {
         self.chapterTitle = chapterTitle
         self.pageNumber = max(pageNumber, 1)
+        self.targetIndex = max(targetIndex ?? (self.pageNumber - 1), 0)
     }
 
     public var displayText: String {
@@ -340,7 +342,8 @@ public struct ReaderProgressScrubState: Equatable, Sendable {
         targetIndex = context.targetIndex(value)
         preview = ReaderProgressScrubPreview(
             chapterTitle: context.title(targetIndex),
-            pageNumber: targetIndex + 1
+            pageNumber: targetIndex + 1,
+            targetIndex: targetIndex
         )
 
         let tickTargetIndex = context.tickTargetIndex(targetIndex)
