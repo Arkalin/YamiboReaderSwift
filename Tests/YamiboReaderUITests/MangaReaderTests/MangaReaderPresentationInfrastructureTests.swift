@@ -66,6 +66,10 @@ struct MangaReaderPresentationInfrastructureTests {
         #expect(source.contains("catch {"))
         #expect(source.contains("failedPageID = page.id"))
         #expect(source.contains("L10n.string(\"reader.page_number_spaced\", preview.pageNumber)"))
+        #expect(source.contains("static let previewSize = CGSize(width: 184, height: 228)"))
+        #expect(source.contains("showsPreview: false"))
+        #expect(source.contains(".overlay {"))
+        #expect(source.contains("if let preview = activeVerticalProgressPreview"))
     }
 
     @Test func hiddenFailureStackIsNotMeasuredDuringLayout() throws {
