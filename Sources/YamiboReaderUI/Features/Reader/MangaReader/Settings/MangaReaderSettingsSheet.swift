@@ -174,18 +174,18 @@ private struct MangaReaderSettingsPreviewSpread: View {
                 .fill(palette.previewFrameBackground)
 
             if selectedMode == .scroll {
-                MangaReaderScrollPreviewPage(palette: palette)
+                MangaReaderScrollPreviewPages(palette: palette)
                     .padding(.top, contentTopPadding)
                     .padding(.horizontal, 18)
                     .padding(.bottom, 18)
             } else {
                 HStack(spacing: showsTwoPagePreview ? 12 : 0) {
-                    MangaReaderPreviewPage(
+                    MangaReaderPagedPreviewPage(
                         palette: palette,
                         isTrailingPage: false
                     )
                     if showsTwoPagePreview {
-                        MangaReaderPreviewPage(
+                        MangaReaderPagedPreviewPage(
                             palette: palette,
                             isTrailingPage: true
                         )
@@ -205,7 +205,7 @@ private struct MangaReaderSettingsPreviewSpread: View {
     }
 }
 
-private struct MangaReaderPreviewPage: View {
+private struct MangaReaderPagedPreviewPage: View {
     let palette: MangaReaderSettingsPalette
     let isTrailingPage: Bool
 
@@ -249,21 +249,105 @@ private struct MangaReaderPreviewPage: View {
     }
 }
 
-private struct MangaReaderScrollPreviewPage: View {
+private struct MangaReaderScrollPreviewPages: View {
     let palette: MangaReaderSettingsPalette
 
     var body: some View {
-        VStack(spacing: 8) {
-            MangaReaderPreviewPanel(color: palette.warmPanel, height: 34)
-            MangaReaderPreviewPanel(color: palette.neutralPanel, height: 42)
-            MangaReaderPreviewPanel(color: palette.coolPanel, height: 34)
-            MangaReaderPreviewPanel(color: palette.neutralPanel, height: 28)
+        GeometryReader { proxy in
+            let pageHeight = min(proxy.size.height, proxy.size.width / 0.72)
+            let pageWidth = pageHeight * 0.72
+            let visiblePageHeight = min(pageHeight * 0.48, proxy.size.height * 0.44)
+            let topPageOffset = visiblePageHeight - pageHeight
+            let bottomPageOffset = proxy.size.height - visiblePageHeight
+
+            ZStack(alignment: .top) {
+                MangaReaderVerticalPagedPreviewPair(
+                    palette: palette,
+                    pageWidth: pageWidth,
+                    pageHeight: pageHeight,
+                    containerWidth: proxy.size.width,
+                    topPageOffset: topPageOffset,
+                    bottomPageOffset: bottomPageOffset
+                )
+
+                MangaReaderVerticalPagedPreviewPair(
+                    palette: palette,
+                    pageWidth: pageWidth,
+                    pageHeight: pageHeight,
+                    containerWidth: proxy.size.width,
+                    topPageOffset: topPageOffset,
+                    bottomPageOffset: bottomPageOffset
+                )
+                .blur(radius: 7)
+                .frame(width: proxy.size.width, height: proxy.size.height)
+                .mask(MangaReaderScrollPreviewEdgeBlurMask())
+            }
+            .frame(width: proxy.size.width, height: proxy.size.height)
+            .mask(MangaReaderScrollPreviewEdgeFade())
         }
-        .padding(12)
-        .frame(maxWidth: 178)
-        .frame(maxHeight: .infinity)
-        .background(palette.previewPageBackground, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .shadow(color: Color.black.opacity(0.12), radius: 10, y: 4)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+private struct MangaReaderVerticalPagedPreviewPair: View {
+    let palette: MangaReaderSettingsPalette
+    let pageWidth: CGFloat
+    let pageHeight: CGFloat
+    let containerWidth: CGFloat
+    let topPageOffset: CGFloat
+    let bottomPageOffset: CGFloat
+
+    var body: some View {
+        ZStack(alignment: .top) {
+            MangaReaderPagedPreviewPage(
+                palette: palette,
+                isTrailingPage: false
+            )
+            .frame(width: pageWidth, height: pageHeight)
+            .offset(y: topPageOffset)
+
+            MangaReaderPagedPreviewPage(
+                palette: palette,
+                isTrailingPage: false
+            )
+            .frame(width: pageWidth, height: pageHeight)
+            .offset(y: bottomPageOffset)
+        }
+        .frame(width: containerWidth, height: pageHeight, alignment: .top)
+    }
+}
+
+private struct MangaReaderScrollPreviewEdgeFade: View {
+    var body: some View {
+        LinearGradient(
+            stops: [
+                .init(color: .clear, location: 0.0),
+                .init(color: .black.opacity(0.35), location: 0.08),
+                .init(color: .black, location: 0.22),
+                .init(color: .black, location: 0.78),
+                .init(color: .black.opacity(0.35), location: 0.92),
+                .init(color: .clear, location: 1.0),
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
+}
+
+private struct MangaReaderScrollPreviewEdgeBlurMask: View {
+    var body: some View {
+        LinearGradient(
+            stops: [
+                .init(color: .black, location: 0.0),
+                .init(color: .black, location: 0.14),
+                .init(color: .clear, location: 0.30),
+                .init(color: .clear, location: 0.70),
+                .init(color: .black, location: 0.86),
+                .init(color: .black, location: 1.0),
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
     }
 }
 
