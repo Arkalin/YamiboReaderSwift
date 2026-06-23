@@ -311,7 +311,7 @@ final class MangaReaderModelSettingsProgressTests: XCTestCase {
         XCTAssertTrue(source.contains("MangaPagedReaderViewport("))
         XCTAssertTrue(source.contains("plan: MangaPagedReadingPlan("))
         XCTAssertTrue(source.contains("isChromeVisible: isChromeVisible"))
-        XCTAssertFalse(source.contains("zoomEnabled:"))
+        XCTAssertTrue(source.contains("zoomEnabled: settings.zoomEnabled"))
     }
 }
 

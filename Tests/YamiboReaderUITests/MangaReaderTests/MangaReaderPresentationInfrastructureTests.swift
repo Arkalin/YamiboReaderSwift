@@ -180,6 +180,33 @@ struct MangaReaderPresentationInfrastructureTests {
         #expect(sharedSource.contains("ReaderPagedBoundaryPageTurn.directionalDelta"))
     }
 
+    @Test func pagedViewportGatesZoomAndSurfacePanBehindHiddenChrome() throws {
+        let source = try sourceFile("Sources/YamiboReaderUI/Features/Reader/MangaReader/Presentation/MangaPagedReaderViewport.swift")
+
+        #expect(source.contains("let zoomEnabled: Bool"))
+        #expect(source.contains("zoomEnabled: parent.zoomEnabled"))
+        #expect(source.contains("isZoomInteractionEnabled: !isChromeVisible && zoomEnabled"))
+        #expect(source.contains("SpatialTapGesture(count: 2"))
+        #expect(source.contains("MagnifyGesture()"))
+        #expect(source.contains("DragGesture()"))
+        #expect(source.contains("guard isZoomInteractionEnabled else { return }"))
+        #expect(source.contains(".onChange(of: isZoomInteractionEnabled)"))
+        #expect(source.contains("resetZoomState(animated: true)"))
+    }
+
+    @Test func pagedViewportKeepsZoomStateSeparateFromReadingPositionUpdates() throws {
+        let source = try sourceFile("Sources/YamiboReaderUI/Features/Reader/MangaReader/Presentation/MangaPagedReaderViewport.swift")
+        let surfaceRange = try #require(source.range(of: "private struct MangaPagedReaderPageSurface"))
+        let edgeFillRange = try #require(source.range(of: "private extension MangaPageEdgeFillStyle"))
+        let surfaceSource = String(source[surfaceRange.lowerBound..<edgeFillRange.lowerBound])
+
+        #expect(surfaceSource.contains("@State private var steadyScale: CGFloat = 1"))
+        #expect(surfaceSource.contains("@State private var steadyUserOffset: CGSize = .zero"))
+        #expect(surfaceSource.contains("MangaPagedImageSurfaceLayout("))
+        #expect(!surfaceSource.contains("onCurrentPageChange"))
+        #expect(!surfaceSource.contains("publishCurrentPageIfNeeded"))
+    }
+
     #if os(iOS)
     @MainActor
     @Test func imagePipelineDeduplicatesConcurrentLoads() async throws {

@@ -10,6 +10,7 @@ struct MangaPagedReaderViewport: UIViewRepresentable {
     let settings: MangaReaderSettings
     let imagePipeline: MangaImagePipeline
     let isChromeVisible: Bool
+    let zoomEnabled: Bool
     let onCurrentPageChange: (Int) -> Void
     let onTap: () -> Void
 
@@ -68,6 +69,7 @@ struct MangaPagedReaderViewport: UIViewRepresentable {
         var parent: MangaPagedReaderViewport
         private let pagingDriver = ReaderPagedViewportPagingDriver()
         private var contentIdentity: MangaPagedReaderContentIdentity?
+        private var surfaceInteractionIdentity: MangaPagedReaderSurfaceInteractionIdentity?
         private var pendingInitialPageIndex: Int?
         private var lastReportedGlobalIndex: Int?
         private var lastAppliedPlacementRevision: Int?
@@ -135,10 +137,12 @@ struct MangaPagedReaderViewport: UIViewRepresentable {
             guard nextIdentity != contentIdentity else {
                 applyInitialPlacementIfNeeded(in: collectionView)
                 applyViewportPlacementIfNeeded(in: collectionView)
+                updateVisiblePageSurfacesIfNeeded(in: collectionView)
                 return
             }
 
             contentIdentity = nextIdentity
+            surfaceInteractionIdentity = nil
             lastReportedGlobalIndex = nil
             if parent.plan.pages.isEmpty {
                 pendingInitialPageIndex = nil
@@ -156,6 +160,7 @@ struct MangaPagedReaderViewport: UIViewRepresentable {
             collectionView.layoutIfNeeded()
             applyInitialPlacementIfNeeded(in: collectionView)
             applyViewportPlacementIfNeeded(in: collectionView)
+            updateVisiblePageSurfacesIfNeeded(in: collectionView)
         }
 
         func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int {
@@ -182,6 +187,8 @@ struct MangaPagedReaderViewport: UIViewRepresentable {
                 pageScaleMode: parent.settings.pageScaleMode,
                 pageTurnDirection: parent.settings.pageTurnDirection,
                 pageEdgeFillStyle: parent.settings.pageEdgeFillStyle,
+                isChromeVisible: parent.isChromeVisible,
+                zoomEnabled: parent.zoomEnabled,
                 colorScheme: parent.colorScheme
             )
             cell.resetPageTurnVisuals()
@@ -341,6 +348,33 @@ struct MangaPagedReaderViewport: UIViewRepresentable {
             quickFadePanGesture.isEnabled = !parent.isChromeVisible && parent.settings.pagedTurnStyle == .quickFade
         }
 
+        private func updateVisiblePageSurfacesIfNeeded(in collectionView: UICollectionView) {
+            let nextIdentity = MangaPagedReaderSurfaceInteractionIdentity(
+                isChromeVisible: parent.isChromeVisible,
+                zoomEnabled: parent.zoomEnabled
+            )
+            guard nextIdentity != surfaceInteractionIdentity else { return }
+            surfaceInteractionIdentity = nextIdentity
+
+            for case let cell as ReaderPagedPageTurnCell in collectionView.visibleCells {
+                guard let indexPath = collectionView.indexPath(for: cell) else { continue }
+                let pageIndex = pageIndex(forViewportIndex: indexPath.item)
+                guard parent.plan.pages.indices.contains(pageIndex) else { continue }
+
+                cell.configure(
+                    page: parent.plan.pages[pageIndex],
+                    imagePipeline: parent.imagePipeline,
+                    pageScaleMode: parent.settings.pageScaleMode,
+                    pageTurnDirection: parent.settings.pageTurnDirection,
+                    pageEdgeFillStyle: parent.settings.pageEdgeFillStyle,
+                    isChromeVisible: parent.isChromeVisible,
+                    zoomEnabled: parent.zoomEnabled,
+                    colorScheme: parent.colorScheme
+                )
+                cell.resetPageTurnVisuals()
+            }
+        }
+
         private func directionalTapZone(for zone: ReaderPagedTapZone) -> ReaderPagedTapZone {
             guard parent.settings.pageTurnDirection == .rightToLeft else {
                 return zone
@@ -419,6 +453,11 @@ private struct MangaPagedReaderContentIdentity: Equatable {
     var colorScheme: ColorScheme
 }
 
+private struct MangaPagedReaderSurfaceInteractionIdentity: Equatable {
+    var isChromeVisible: Bool
+    var zoomEnabled: Bool
+}
+
 private final class MangaPagedReaderCollectionView: UICollectionView {
     var onLayoutSubviews: (() -> Void)?
 
@@ -435,6 +474,8 @@ private extension ReaderPagedPageTurnCell {
         pageScaleMode: MangaPageScaleMode,
         pageTurnDirection: MangaPageTurnDirection,
         pageEdgeFillStyle: MangaPageEdgeFillStyle,
+        isChromeVisible: Bool,
+        zoomEnabled: Bool,
         colorScheme: ColorScheme
     ) {
         let pageEdgeFillColor = pageEdgeFillStyle.uiColor(for: colorScheme)
@@ -446,7 +487,9 @@ private extension ReaderPagedPageTurnCell {
                 imagePipeline: imagePipeline,
                 pageScaleMode: pageScaleMode,
                 pageTurnDirection: pageTurnDirection,
-                pageEdgeFillStyle: pageEdgeFillStyle
+                pageEdgeFillStyle: pageEdgeFillStyle,
+                isChromeVisible: isChromeVisible,
+                zoomEnabled: zoomEnabled
             )
         }
         .margins(.all, 0)
@@ -459,6 +502,8 @@ private struct MangaPagedReaderPageSurface: View {
     let pageScaleMode: MangaPageScaleMode
     let pageTurnDirection: MangaPageTurnDirection
     let pageEdgeFillStyle: MangaPageEdgeFillStyle
+    let isChromeVisible: Bool
+    let zoomEnabled: Bool
 
     @State private var loadedImage: UIImage?
     @State private var loadedPageID: String?
@@ -473,9 +518,11 @@ private struct MangaPagedReaderPageSurface: View {
             if let image = displayedImage {
                 MangaPagedReaderScaledImage(
                     image: image,
+                    pageID: page.id,
                     pageScaleMode: pageScaleMode,
                     pageTurnDirection: pageTurnDirection,
-                    pageEdgeFillStyle: pageEdgeFillStyle
+                    pageEdgeFillStyle: pageEdgeFillStyle,
+                    isZoomInteractionEnabled: !isChromeVisible && zoomEnabled
                 )
             } else if loadingPageID == page.id {
                 ProgressView()
@@ -537,55 +584,193 @@ private struct MangaPagedReaderPageSurface: View {
 }
 
 private struct MangaPagedReaderScaledImage: View {
+    private static let maximumZoomScale: CGFloat = 4
+    private static let doubleTapZoomScale: CGFloat = 2
+
     let image: UIImage
+    let pageID: String
     let pageScaleMode: MangaPageScaleMode
     let pageTurnDirection: MangaPageTurnDirection
     let pageEdgeFillStyle: MangaPageEdgeFillStyle
+    let isZoomInteractionEnabled: Bool
 
+    @State private var steadyScale: CGFloat = 1
+    @State private var gestureScale: CGFloat = 1
+    @State private var steadyUserOffset: CGSize = .zero
+    @State private var gestureUserOffset: CGSize = .zero
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         GeometryReader { proxy in
-            let scaledSize = scaledImageSize(
-                imageSize: image.size,
-                containerSize: proxy.size,
-                pageScaleMode: pageScaleMode
-            )
+            let containerSize = proxy.size
+            let layout = imageSurfaceLayout(containerSize: containerSize, scale: zoomScale)
+            let userOffset = proposedUserOffset(layout: layout)
+            let displayOffset = layout.displayOffset(forUserOffset: userOffset)
 
-            ZStack(alignment: imageAlignment) {
+            ZStack {
                 pageEdgeFillStyle.color(for: colorScheme)
                 Image(uiImage: image)
                     .resizable()
-                    .frame(width: scaledSize.width, height: scaledSize.height)
+                    .frame(width: layout.contentSize.width, height: layout.contentSize.height)
+                    .offset(displayOffset)
             }
             .frame(width: proxy.size.width, height: proxy.size.height)
+            .contentShape(Rectangle())
             .clipped()
+            .simultaneousGesture(doubleTapGesture(containerSize: containerSize))
+            .simultaneousGesture(magnifyGesture(containerSize: containerSize))
+            .simultaneousGesture(dragGesture(containerSize: containerSize))
+            .onChange(of: isZoomInteractionEnabled) { _, isEnabled in
+                guard !isEnabled else { return }
+                resetZoomState(animated: true)
+            }
+            .onChange(of: pageID) { _, _ in
+                resetZoomState(animated: false)
+            }
+            .onChange(of: pageScaleMode) { _, _ in
+                resetZoomState(animated: false)
+            }
+            .onChange(of: pageTurnDirection) { _, _ in
+                resetZoomState(animated: false)
+            }
+            .onChange(of: containerSize) { _, newValue in
+                clampSteadyUserOffset(containerSize: newValue)
+            }
         }
     }
 
-    private var imageAlignment: Alignment {
-        guard pageScaleMode == .fitHeight else { return .center }
-        return pageTurnDirection == .rightToLeft ? .trailing : .leading
+    private var zoomScale: CGFloat {
+        clampedScale(steadyScale * gestureScale)
     }
 
-    private func scaledImageSize(
-        imageSize: CGSize,
-        containerSize: CGSize,
-        pageScaleMode: MangaPageScaleMode
-    ) -> CGSize {
-        guard imageSize.width > 0,
-              imageSize.height > 0,
-              containerSize.width > 0,
-              containerSize.height > 0 else {
-            return .zero
+    private func doubleTapGesture(containerSize: CGSize) -> some Gesture {
+        SpatialTapGesture(count: 2, coordinateSpace: .local)
+            .onEnded { value in
+                guard isZoomInteractionEnabled else { return }
+                if steadyScale > 1.05 {
+                    resetZoomState(animated: true)
+                } else {
+                    zoomIn(to: value.location, containerSize: containerSize)
+                }
+            }
+    }
+
+    private func magnifyGesture(containerSize: CGSize) -> some Gesture {
+        MagnifyGesture()
+            .onChanged { value in
+                guard isZoomInteractionEnabled else { return }
+                let nextScale = clampedScale(steadyScale * value.magnification)
+                gestureScale = nextScale / max(steadyScale, 0.001)
+                let layout = imageSurfaceLayout(containerSize: containerSize, scale: nextScale)
+                steadyUserOffset = layout.clampedUserOffset(steadyUserOffset)
+            }
+            .onEnded { value in
+                guard isZoomInteractionEnabled else { return }
+                let nextScale = clampedScale(steadyScale * value.magnification)
+                steadyScale = nextScale
+                gestureScale = 1
+                if nextScale <= 1.01 {
+                    resetZoomState(animated: true)
+                } else {
+                    let layout = imageSurfaceLayout(containerSize: containerSize, scale: nextScale)
+                    steadyUserOffset = layout.clampedUserOffset(steadyUserOffset)
+                }
+            }
+    }
+
+    private func dragGesture(containerSize: CGSize) -> some Gesture {
+        DragGesture()
+            .onChanged { value in
+                guard isZoomInteractionEnabled else { return }
+                let layout = imageSurfaceLayout(containerSize: containerSize, scale: zoomScale)
+                let proposed = CGSize(
+                    width: steadyUserOffset.width + value.translation.width,
+                    height: steadyUserOffset.height + value.translation.height
+                )
+                let clamped = layout.clampedUserOffset(proposed)
+                gestureUserOffset = CGSize(
+                    width: clamped.width - steadyUserOffset.width,
+                    height: clamped.height - steadyUserOffset.height
+                )
+            }
+            .onEnded { value in
+                guard isZoomInteractionEnabled else { return }
+                let layout = imageSurfaceLayout(containerSize: containerSize, scale: steadyScale)
+                let proposed = CGSize(
+                    width: steadyUserOffset.width + value.translation.width,
+                    height: steadyUserOffset.height + value.translation.height
+                )
+                steadyUserOffset = layout.clampedUserOffset(proposed)
+                gestureUserOffset = .zero
+            }
+    }
+
+    private func zoomIn(to location: CGPoint, containerSize: CGSize) {
+        let targetScale = min(Self.maximumZoomScale, Self.doubleTapZoomScale)
+        let targetLayout = imageSurfaceLayout(containerSize: containerSize, scale: targetScale)
+        let center = CGPoint(x: containerSize.width / 2, y: containerSize.height / 2)
+        let targetLocation = CGRect(origin: .zero, size: containerSize).contains(location)
+            ? location
+            : center
+        let proposedDisplayOffset = CGSize(
+            width: -(targetLocation.x - center.x) * targetScale,
+            height: -(targetLocation.y - center.y) * targetScale
+        )
+        let proposedUserOffset = CGSize(
+            width: proposedDisplayOffset.width - targetLayout.restingOffset.width,
+            height: proposedDisplayOffset.height - targetLayout.restingOffset.height
+        )
+
+        withAnimation(.easeOut(duration: 0.2)) {
+            steadyScale = targetScale
+            gestureScale = 1
+            steadyUserOffset = targetLayout.clampedUserOffset(proposedUserOffset)
+            gestureUserOffset = .zero
         }
-        let scale = switch pageScaleMode {
-        case .fitWidth:
-            containerSize.width / imageSize.width
-        case .fitHeight:
-            containerSize.height / imageSize.height
+    }
+
+    private func resetZoomState(animated: Bool) {
+        let updates = {
+            steadyScale = 1
+            gestureScale = 1
+            steadyUserOffset = .zero
+            gestureUserOffset = .zero
         }
-        return CGSize(width: imageSize.width * scale, height: imageSize.height * scale)
+
+        if animated {
+            withAnimation(.easeOut(duration: 0.2), updates)
+        } else {
+            updates()
+        }
+    }
+
+    private func clampSteadyUserOffset(containerSize: CGSize) {
+        let layout = imageSurfaceLayout(containerSize: containerSize, scale: steadyScale)
+        steadyUserOffset = layout.clampedUserOffset(steadyUserOffset)
+        gestureUserOffset = .zero
+    }
+
+    private func proposedUserOffset(layout: MangaPagedImageSurfaceLayout) -> CGSize {
+        layout.clampedUserOffset(
+            CGSize(
+                width: steadyUserOffset.width + gestureUserOffset.width,
+                height: steadyUserOffset.height + gestureUserOffset.height
+            )
+        )
+    }
+
+    private func imageSurfaceLayout(containerSize: CGSize, scale: CGFloat) -> MangaPagedImageSurfaceLayout {
+        MangaPagedImageSurfaceLayout(
+            imageSize: image.size,
+            containerSize: containerSize,
+            pageScaleMode: pageScaleMode,
+            pageTurnDirection: pageTurnDirection,
+            zoomScale: scale
+        )
+    }
+
+    private func clampedScale(_ scale: CGFloat) -> CGFloat {
+        min(Self.maximumZoomScale, max(1, scale))
     }
 }
 
