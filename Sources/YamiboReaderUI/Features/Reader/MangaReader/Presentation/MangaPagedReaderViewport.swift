@@ -2052,7 +2052,7 @@ private struct MangaPagedReaderScaledImage: View {
             )
             .onChange(of: isZoomInteractionEnabled) { _, isEnabled in
                 guard !isEnabled else { return }
-                resetZoomState(animated: true)
+                endSurfaceInteraction(animated: true)
             }
             .onChange(of: pageID) { _, _ in
                 resetZoomState(animated: false)
@@ -2122,13 +2122,19 @@ private struct MangaPagedReaderScaledImage: View {
     }
 
     private func dragGesture(containerSize: CGSize) -> some Gesture {
-        DragGesture()
+        DragGesture(
+            minimumDistance: MangaPagedSurfaceDragIntent.minimumUnzoomedHorizontalTranslation,
+            coordinateSpace: .local
+        )
             .onChanged { value in
-                guard surfaceDragGestureEnabled else { return }
+                guard surfaceDragGestureEnabled,
+                      let translation = surfaceDragTranslation(value.translation) else {
+                    return
+                }
                 let layout = imageSurfaceLayout(containerSize: containerSize, scale: zoomScale)
                 let proposed = CGSize(
-                    width: steadyUserOffset.width + value.translation.width,
-                    height: steadyUserOffset.height + value.translation.height
+                    width: steadyUserOffset.width + translation.width,
+                    height: steadyUserOffset.height + translation.height
                 )
                 let clamped = layout.clampedUserOffset(proposed)
                 gestureUserOffset = CGSize(
@@ -2137,18 +2143,27 @@ private struct MangaPagedReaderScaledImage: View {
                 )
             }
             .onEnded { value in
-                guard surfaceDragGestureEnabled else {
+                guard surfaceDragGestureEnabled,
+                      let translation = surfaceDragTranslation(value.translation) else {
                     gestureUserOffset = .zero
                     return
                 }
                 let layout = imageSurfaceLayout(containerSize: containerSize, scale: steadyScale)
                 let proposed = CGSize(
-                    width: steadyUserOffset.width + value.translation.width,
-                    height: steadyUserOffset.height + value.translation.height
+                    width: steadyUserOffset.width + translation.width,
+                    height: steadyUserOffset.height + translation.height
                 )
                 steadyUserOffset = layout.clampedUserOffset(proposed)
                 gestureUserOffset = .zero
             }
+    }
+
+    private func surfaceDragTranslation(_ translation: CGSize) -> CGSize? {
+        if MangaPageZoomPolicy.isActive(zoomScale) {
+            return translation
+        }
+        guard allowsUnzoomedSurfacePan else { return nil }
+        return MangaPagedSurfaceDragIntent.unzoomedHorizontalTranslation(translation)
     }
 
     private func toggleZoom(at location: CGPoint, containerSize: CGSize) {
@@ -2213,6 +2228,15 @@ private struct MangaPagedReaderScaledImage: View {
         } else {
             updates()
         }
+    }
+
+    private func endSurfaceInteraction(animated: Bool) {
+        guard MangaPagedSurfaceDragIntent.shouldResetOffsetWhenInteractionDisables(zoomScale: zoomScale) else {
+            gestureScale = 1
+            gestureUserOffset = .zero
+            return
+        }
+        resetZoomState(animated: animated)
     }
 
     private func clampSteadyUserOffset(containerSize: CGSize) {

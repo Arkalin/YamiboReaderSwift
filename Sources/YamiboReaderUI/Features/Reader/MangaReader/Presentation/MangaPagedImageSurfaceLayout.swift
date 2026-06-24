@@ -36,6 +36,23 @@ enum MangaPagedCenterTapHitTesting {
     }
 }
 
+enum MangaPagedSurfaceDragIntent {
+    static let minimumUnzoomedHorizontalTranslation: CGFloat = 12
+
+    static func unzoomedHorizontalTranslation(_ translation: CGSize) -> CGSize? {
+        let absoluteWidth = abs(translation.width)
+        guard absoluteWidth >= minimumUnzoomedHorizontalTranslation,
+              absoluteWidth > abs(translation.height) else {
+            return nil
+        }
+        return CGSize(width: translation.width, height: 0)
+    }
+
+    static func shouldResetOffsetWhenInteractionDisables(zoomScale: CGFloat) -> Bool {
+        MangaPageZoomPolicy.isActive(zoomScale)
+    }
+}
+
 enum MangaPagedSurfaceEdgeInteraction {
     static func physicalEdge(forTapZone zone: ReaderPagedTapZone) -> MangaPagedImageSurfaceHorizontalEdge? {
         switch zone {

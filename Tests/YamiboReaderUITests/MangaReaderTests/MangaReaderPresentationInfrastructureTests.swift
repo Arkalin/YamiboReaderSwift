@@ -376,9 +376,14 @@ struct MangaReaderPresentationInfrastructureTests {
         #expect(scaledImageSource.contains("surfaceDragGestureEnabled ? .gesture : .subviews"))
         #expect(scaledImageSource.contains("allowsUnzoomedSurfacePan || MangaPageZoomPolicy.isActive(zoomScale)"))
         #expect(scaledImageSource.contains("including: surfaceDragGestureMask"))
-        #expect(scaledImageSource.contains("guard surfaceDragGestureEnabled else { return }"))
+        #expect(scaledImageSource.contains("endSurfaceInteraction(animated: true)"))
+        #expect(scaledImageSource.contains("DragGesture(\n            minimumDistance: MangaPagedSurfaceDragIntent.minimumUnzoomedHorizontalTranslation,\n            coordinateSpace: .local\n        )"))
+        #expect(scaledImageSource.contains("surfaceDragTranslation(value.translation)"))
+        #expect(scaledImageSource.contains("MangaPagedSurfaceDragIntent.unzoomedHorizontalTranslation(translation)"))
+        #expect(scaledImageSource.contains("guard surfaceDragGestureEnabled,\n                      let translation = surfaceDragTranslation(value.translation) else {\n                    return\n                }"))
         #expect(scaledImageSource.contains(
-            "guard surfaceDragGestureEnabled else {\n" +
+            "guard surfaceDragGestureEnabled,\n" +
+            "                      let translation = surfaceDragTranslation(value.translation) else {\n" +
             "                    gestureUserOffset = .zero\n" +
             "                    return\n" +
             "                }"
