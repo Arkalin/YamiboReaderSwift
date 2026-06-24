@@ -72,6 +72,7 @@ struct MangaPagedReaderViewport: UIViewRepresentable {
         private var contentIdentity: MangaPagedReaderContentIdentity?
         private var surfaceInteractionIdentity: MangaPagedReaderSurfaceInteractionIdentity?
         private var pageSurfaceInteractions: [String: MangaPagedReaderPageSurfaceInteraction] = [:]
+        private var pageSurfaceInitialHorizontalAlignments: [String: MangaPagedImageSurfaceInitialHorizontalAlignment] = [:]
         private var pendingInitialPageIndex: Int?
         private var lastReportedGlobalIndex: Int?
         private var lastAppliedPlacementRevision: Int?
@@ -146,6 +147,7 @@ struct MangaPagedReaderViewport: UIViewRepresentable {
             contentIdentity = nextIdentity
             surfaceInteractionIdentity = nil
             pageSurfaceInteractions = [:]
+            pageSurfaceInitialHorizontalAlignments = [:]
             lastReportedGlobalIndex = nil
             if parent.plan.pages.isEmpty {
                 pendingInitialPageIndex = nil
@@ -184,20 +186,17 @@ struct MangaPagedReaderViewport: UIViewRepresentable {
                 return cell
             }
 
-            let page = parent.plan.pages[pageIndex]
-            cell.configure(
-                page: page,
-                imagePipeline: parent.imagePipeline,
-                pageScaleMode: parent.settings.pageScaleMode,
-                pageTurnDirection: parent.settings.pageTurnDirection,
-                pageEdgeFillStyle: parent.settings.pageEdgeFillStyle,
-                isChromeVisible: parent.isChromeVisible,
-                zoomEnabled: parent.zoomEnabled,
-                colorScheme: parent.colorScheme,
-                surfaceInteraction: surfaceInteraction(for: page)
-            )
-            cell.resetPageTurnVisuals()
+            configurePageCell(cell, pageIndex: pageIndex, refreshInitialHorizontalAlignment: true)
             return cell
+        }
+
+        func collectionView(
+            _ collectionView: UICollectionView,
+            willDisplay cell: UICollectionViewCell,
+            forItemAt indexPath: IndexPath
+        ) {
+            let pageIndex = pageIndex(forViewportIndex: indexPath.item)
+            configurePageCell(cell, pageIndex: pageIndex, refreshInitialHorizontalAlignment: true)
         }
 
         func collectionView(
@@ -402,22 +401,56 @@ struct MangaPagedReaderViewport: UIViewRepresentable {
             for case let cell as ReaderPagedPageTurnCell in collectionView.visibleCells {
                 guard let indexPath = collectionView.indexPath(for: cell) else { continue }
                 let pageIndex = pageIndex(forViewportIndex: indexPath.item)
-                guard parent.plan.pages.indices.contains(pageIndex) else { continue }
-
-                let page = parent.plan.pages[pageIndex]
-                cell.configure(
-                    page: page,
-                    imagePipeline: parent.imagePipeline,
-                    pageScaleMode: parent.settings.pageScaleMode,
-                    pageTurnDirection: parent.settings.pageTurnDirection,
-                    pageEdgeFillStyle: parent.settings.pageEdgeFillStyle,
-                    isChromeVisible: parent.isChromeVisible,
-                    zoomEnabled: parent.zoomEnabled,
-                    colorScheme: parent.colorScheme,
-                    surfaceInteraction: surfaceInteraction(for: page)
-                )
-                cell.resetPageTurnVisuals()
+                configurePageCell(cell, pageIndex: pageIndex, refreshInitialHorizontalAlignment: false)
             }
+        }
+
+        private func configurePageCell(
+            _ cell: UICollectionViewCell,
+            pageIndex: Int,
+            refreshInitialHorizontalAlignment: Bool
+        ) {
+            guard let cell = cell as? ReaderPagedPageTurnCell,
+                  parent.plan.pages.indices.contains(pageIndex) else {
+                return
+            }
+
+            let page = parent.plan.pages[pageIndex]
+            cell.configure(
+                page: page,
+                imagePipeline: parent.imagePipeline,
+                pageScaleMode: parent.settings.pageScaleMode,
+                initialHorizontalAlignment: initialHorizontalAlignment(
+                    for: page,
+                    pageIndex: pageIndex,
+                    refresh: refreshInitialHorizontalAlignment
+                ),
+                pageEdgeFillStyle: parent.settings.pageEdgeFillStyle,
+                isChromeVisible: parent.isChromeVisible,
+                zoomEnabled: parent.zoomEnabled,
+                colorScheme: parent.colorScheme,
+                surfaceInteraction: surfaceInteraction(for: page)
+            )
+            cell.resetPageTurnVisuals()
+        }
+
+        private func initialHorizontalAlignment(
+            for page: MangaReaderPageProjection,
+            pageIndex: Int,
+            refresh: Bool
+        ) -> MangaPagedImageSurfaceInitialHorizontalAlignment {
+            if !refresh, let alignment = pageSurfaceInitialHorizontalAlignments[page.id] {
+                return alignment
+            }
+
+            let alignment = MangaPagedImageSurfaceInitialHorizontalAlignment.enteringPage(
+                pageTurnDirection: parent.settings.pageTurnDirection,
+                pageScaleMode: parent.settings.pageScaleMode,
+                currentPageIndex: parent.plan.currentPageIndex,
+                targetPageIndex: pageIndex
+            )
+            pageSurfaceInitialHorizontalAlignments[page.id] = alignment
+            return alignment
         }
 
         private func surfaceInteraction(for page: MangaReaderPageProjection) -> MangaPagedReaderPageSurfaceInteraction {
@@ -574,7 +607,7 @@ private extension ReaderPagedPageTurnCell {
         page: MangaReaderPageProjection,
         imagePipeline: MangaImagePipeline,
         pageScaleMode: MangaPageScaleMode,
-        pageTurnDirection: MangaPageTurnDirection,
+        initialHorizontalAlignment: MangaPagedImageSurfaceInitialHorizontalAlignment,
         pageEdgeFillStyle: MangaPageEdgeFillStyle,
         isChromeVisible: Bool,
         zoomEnabled: Bool,
@@ -589,7 +622,7 @@ private extension ReaderPagedPageTurnCell {
                 page: page,
                 imagePipeline: imagePipeline,
                 pageScaleMode: pageScaleMode,
-                pageTurnDirection: pageTurnDirection,
+                initialHorizontalAlignment: initialHorizontalAlignment,
                 pageEdgeFillStyle: pageEdgeFillStyle,
                 isChromeVisible: isChromeVisible,
                 zoomEnabled: zoomEnabled,
@@ -604,7 +637,7 @@ private struct MangaPagedReaderPageSurface: View {
     let page: MangaReaderPageProjection
     let imagePipeline: MangaImagePipeline
     let pageScaleMode: MangaPageScaleMode
-    let pageTurnDirection: MangaPageTurnDirection
+    let initialHorizontalAlignment: MangaPagedImageSurfaceInitialHorizontalAlignment
     let pageEdgeFillStyle: MangaPageEdgeFillStyle
     let isChromeVisible: Bool
     let zoomEnabled: Bool
@@ -625,7 +658,7 @@ private struct MangaPagedReaderPageSurface: View {
                     image: image,
                     pageID: page.id,
                     pageScaleMode: pageScaleMode,
-                    pageTurnDirection: pageTurnDirection,
+                    initialHorizontalAlignment: initialHorizontalAlignment,
                     pageEdgeFillStyle: pageEdgeFillStyle,
                     isZoomInteractionEnabled: !isChromeVisible && zoomEnabled,
                     surfaceInteraction: surfaceInteraction
@@ -696,7 +729,7 @@ private struct MangaPagedReaderScaledImage: View {
     let image: UIImage
     let pageID: String
     let pageScaleMode: MangaPageScaleMode
-    let pageTurnDirection: MangaPageTurnDirection
+    let initialHorizontalAlignment: MangaPagedImageSurfaceInitialHorizontalAlignment
     let pageEdgeFillStyle: MangaPageEdgeFillStyle
     let isZoomInteractionEnabled: Bool
     let surfaceInteraction: MangaPagedReaderPageSurfaceInteraction
@@ -738,7 +771,7 @@ private struct MangaPagedReaderScaledImage: View {
             .onChange(of: pageScaleMode) { _, _ in
                 resetZoomState(animated: false)
             }
-            .onChange(of: pageTurnDirection) { _, _ in
+            .onChange(of: initialHorizontalAlignment) { _, _ in
                 resetZoomState(animated: false)
             }
             .onChange(of: containerSize) { _, newValue in
@@ -910,7 +943,7 @@ private struct MangaPagedReaderScaledImage: View {
             imageSize: image.size,
             containerSize: containerSize,
             pageScaleMode: pageScaleMode,
-            pageTurnDirection: pageTurnDirection,
+            initialHorizontalAlignment: initialHorizontalAlignment,
             zoomScale: scale
         )
     }
