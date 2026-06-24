@@ -1,6 +1,17 @@
 import CoreGraphics
 import YamiboReaderCore
 
+enum MangaPagedCenterTapHitTesting {
+    static func acceptsCenterTap(at point: CGPoint, in bounds: CGRect) -> Bool {
+        guard bounds.width > 0,
+              bounds.height > 0,
+              bounds.contains(point) else {
+            return false
+        }
+        return ReaderPagedTapZone.zone(for: point, in: bounds) == .toggleChrome
+    }
+}
+
 enum MangaPagedImageSurfaceHorizontalEdge: CaseIterable, Hashable {
     case left
     case right
