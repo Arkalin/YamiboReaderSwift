@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 import YamiboReaderCore
 
 #if os(iOS)
@@ -70,6 +71,7 @@ struct MangaPagedReaderViewport: UIViewRepresentable {
         private let pagingDriver = ReaderPagedViewportPagingDriver()
         private var contentIdentity: MangaPagedReaderContentIdentity?
         private var surfaceInteractionIdentity: MangaPagedReaderSurfaceInteractionIdentity?
+        private var pageSurfaceInteractions: [String: MangaPagedReaderPageSurfaceInteraction] = [:]
         private var pendingInitialPageIndex: Int?
         private var lastReportedGlobalIndex: Int?
         private var lastAppliedPlacementRevision: Int?
@@ -143,6 +145,7 @@ struct MangaPagedReaderViewport: UIViewRepresentable {
 
             contentIdentity = nextIdentity
             surfaceInteractionIdentity = nil
+            pageSurfaceInteractions = [:]
             lastReportedGlobalIndex = nil
             if parent.plan.pages.isEmpty {
                 pendingInitialPageIndex = nil
@@ -181,15 +184,17 @@ struct MangaPagedReaderViewport: UIViewRepresentable {
                 return cell
             }
 
+            let page = parent.plan.pages[pageIndex]
             cell.configure(
-                page: parent.plan.pages[pageIndex],
+                page: page,
                 imagePipeline: parent.imagePipeline,
                 pageScaleMode: parent.settings.pageScaleMode,
                 pageTurnDirection: parent.settings.pageTurnDirection,
                 pageEdgeFillStyle: parent.settings.pageEdgeFillStyle,
                 isChromeVisible: parent.isChromeVisible,
                 zoomEnabled: parent.zoomEnabled,
-                colorScheme: parent.colorScheme
+                colorScheme: parent.colorScheme,
+                surfaceInteraction: surfaceInteraction(for: page)
             )
             cell.resetPageTurnVisuals()
             return cell
@@ -302,6 +307,9 @@ struct MangaPagedReaderViewport: UIViewRepresentable {
                 }
                 return
             }
+            if consumeSurfaceEdgeTap(for: zone, in: collectionView) {
+                return
+            }
             let directionalZone = directionalTapZone(for: zone)
             if pagingDriver.animateAdjacentSelection(for: directionalZone, in: collectionView, inputs: pagingInputs) {
                 return
@@ -361,17 +369,49 @@ struct MangaPagedReaderViewport: UIViewRepresentable {
                 let pageIndex = pageIndex(forViewportIndex: indexPath.item)
                 guard parent.plan.pages.indices.contains(pageIndex) else { continue }
 
+                let page = parent.plan.pages[pageIndex]
                 cell.configure(
-                    page: parent.plan.pages[pageIndex],
+                    page: page,
                     imagePipeline: parent.imagePipeline,
                     pageScaleMode: parent.settings.pageScaleMode,
                     pageTurnDirection: parent.settings.pageTurnDirection,
                     pageEdgeFillStyle: parent.settings.pageEdgeFillStyle,
                     isChromeVisible: parent.isChromeVisible,
                     zoomEnabled: parent.zoomEnabled,
-                    colorScheme: parent.colorScheme
+                    colorScheme: parent.colorScheme,
+                    surfaceInteraction: surfaceInteraction(for: page)
                 )
                 cell.resetPageTurnVisuals()
+            }
+        }
+
+        private func surfaceInteraction(for page: MangaReaderPageProjection) -> MangaPagedReaderPageSurfaceInteraction {
+            if let interaction = pageSurfaceInteractions[page.id] {
+                return interaction
+            }
+            let interaction = MangaPagedReaderPageSurfaceInteraction()
+            pageSurfaceInteractions[page.id] = interaction
+            return interaction
+        }
+
+        private func consumeSurfaceEdgeTap(for zone: ReaderPagedTapZone, in collectionView: UICollectionView) -> Bool {
+            guard let physicalEdge = physicalHorizontalEdge(for: zone),
+                  let pageIndex = currentPageIndex(in: collectionView),
+                  let page = parent.plan.page(at: pageIndex),
+                  let surfaceInteraction = pageSurfaceInteractions[page.id] else {
+                return false
+            }
+            return surfaceInteraction.consumeTap(onPhysicalEdge: physicalEdge)
+        }
+
+        private func physicalHorizontalEdge(for zone: ReaderPagedTapZone) -> MangaPagedImageSurfaceHorizontalEdge? {
+            switch zone {
+            case .previous:
+                .left
+            case .next:
+                .right
+            case .toggleChrome:
+                nil
             }
         }
 
@@ -458,6 +498,29 @@ private struct MangaPagedReaderSurfaceInteractionIdentity: Equatable {
     var zoomEnabled: Bool
 }
 
+private struct MangaPagedReaderEdgeRevealRequest {
+    let sequence: Int
+    let edge: MangaPagedImageSurfaceHorizontalEdge?
+}
+
+private final class MangaPagedReaderPageSurfaceInteraction: ObservableObject {
+    @Published private(set) var edgeRevealRequest = MangaPagedReaderEdgeRevealRequest(sequence: 0, edge: nil)
+
+    private var requestSequence = 0
+    private(set) var hiddenEdges: Set<MangaPagedImageSurfaceHorizontalEdge> = []
+
+    func updateHiddenEdges(_ hiddenEdges: Set<MangaPagedImageSurfaceHorizontalEdge>) {
+        self.hiddenEdges = hiddenEdges
+    }
+
+    func consumeTap(onPhysicalEdge edge: MangaPagedImageSurfaceHorizontalEdge) -> Bool {
+        guard hiddenEdges.contains(edge) else { return false }
+        requestSequence += 1
+        edgeRevealRequest = MangaPagedReaderEdgeRevealRequest(sequence: requestSequence, edge: edge)
+        return true
+    }
+}
+
 private final class MangaPagedReaderCollectionView: UICollectionView {
     var onLayoutSubviews: (() -> Void)?
 
@@ -476,7 +539,8 @@ private extension ReaderPagedPageTurnCell {
         pageEdgeFillStyle: MangaPageEdgeFillStyle,
         isChromeVisible: Bool,
         zoomEnabled: Bool,
-        colorScheme: ColorScheme
+        colorScheme: ColorScheme,
+        surfaceInteraction: MangaPagedReaderPageSurfaceInteraction
     ) {
         let pageEdgeFillColor = pageEdgeFillStyle.uiColor(for: colorScheme)
         backgroundColor = pageEdgeFillColor
@@ -489,7 +553,8 @@ private extension ReaderPagedPageTurnCell {
                 pageTurnDirection: pageTurnDirection,
                 pageEdgeFillStyle: pageEdgeFillStyle,
                 isChromeVisible: isChromeVisible,
-                zoomEnabled: zoomEnabled
+                zoomEnabled: zoomEnabled,
+                surfaceInteraction: surfaceInteraction
             )
         }
         .margins(.all, 0)
@@ -504,6 +569,7 @@ private struct MangaPagedReaderPageSurface: View {
     let pageEdgeFillStyle: MangaPageEdgeFillStyle
     let isChromeVisible: Bool
     let zoomEnabled: Bool
+    let surfaceInteraction: MangaPagedReaderPageSurfaceInteraction
 
     @State private var loadedImage: UIImage?
     @State private var loadedPageID: String?
@@ -522,7 +588,8 @@ private struct MangaPagedReaderPageSurface: View {
                     pageScaleMode: pageScaleMode,
                     pageTurnDirection: pageTurnDirection,
                     pageEdgeFillStyle: pageEdgeFillStyle,
-                    isZoomInteractionEnabled: !isChromeVisible && zoomEnabled
+                    isZoomInteractionEnabled: !isChromeVisible && zoomEnabled,
+                    surfaceInteraction: surfaceInteraction
                 )
             } else if loadingPageID == page.id {
                 ProgressView()
@@ -593,6 +660,7 @@ private struct MangaPagedReaderScaledImage: View {
     let pageTurnDirection: MangaPageTurnDirection
     let pageEdgeFillStyle: MangaPageEdgeFillStyle
     let isZoomInteractionEnabled: Bool
+    let surfaceInteraction: MangaPagedReaderPageSurfaceInteraction
 
     @State private var steadyScale: CGFloat = 1
     @State private var gestureScale: CGFloat = 1
@@ -606,6 +674,7 @@ private struct MangaPagedReaderScaledImage: View {
             let layout = imageSurfaceLayout(containerSize: containerSize, scale: zoomScale)
             let userOffset = proposedUserOffset(layout: layout)
             let displayOffset = layout.displayOffset(forUserOffset: userOffset)
+            let hiddenEdges = hiddenHorizontalEdges(layout: layout, userOffset: userOffset)
 
             ZStack {
                 pageEdgeFillStyle.color(for: colorScheme)
@@ -635,6 +704,16 @@ private struct MangaPagedReaderScaledImage: View {
             }
             .onChange(of: containerSize) { _, newValue in
                 clampSteadyUserOffset(containerSize: newValue)
+            }
+            .onChange(of: hiddenEdges, initial: true) { _, newValue in
+                surfaceInteraction.updateHiddenEdges(newValue)
+            }
+            .onReceive(surfaceInteraction.$edgeRevealRequest) { request in
+                guard let edge = request.edge else { return }
+                revealHiddenContent(on: edge, containerSize: containerSize)
+            }
+            .onDisappear {
+                surfaceInteraction.updateHiddenEdges([])
             }
         }
     }
@@ -729,6 +808,23 @@ private struct MangaPagedReaderScaledImage: View {
         }
     }
 
+    private func revealHiddenContent(
+        on edge: MangaPagedImageSurfaceHorizontalEdge,
+        containerSize: CGSize
+    ) {
+        let layout = imageSurfaceLayout(containerSize: containerSize, scale: zoomScale)
+        let userOffset = proposedUserOffset(layout: layout)
+        guard let targetUserOffset = layout.userOffsetRevealingContent(on: edge, fromUserOffset: userOffset) else {
+            surfaceInteraction.updateHiddenEdges(hiddenHorizontalEdges(layout: layout, userOffset: userOffset))
+            return
+        }
+
+        withAnimation(.easeOut(duration: 0.2)) {
+            steadyUserOffset = targetUserOffset
+            gestureUserOffset = .zero
+        }
+    }
+
     private func resetZoomState(animated: Bool) {
         let updates = {
             steadyScale = 1
@@ -756,6 +852,17 @@ private struct MangaPagedReaderScaledImage: View {
                 width: steadyUserOffset.width + gestureUserOffset.width,
                 height: steadyUserOffset.height + gestureUserOffset.height
             )
+        )
+    }
+
+    private func hiddenHorizontalEdges(
+        layout: MangaPagedImageSurfaceLayout,
+        userOffset: CGSize
+    ) -> Set<MangaPagedImageSurfaceHorizontalEdge> {
+        Set(
+            MangaPagedImageSurfaceHorizontalEdge.allCases.filter { edge in
+                layout.hasHiddenContent(on: edge, fromUserOffset: userOffset)
+            }
         )
     }
 
