@@ -86,6 +86,83 @@ struct MangaReaderTestsWorkflow {
         #expect(await store.deletedNames.isEmpty)
     }
 
+    @Test func workflowRefreshesViewportPlacementFromCurrentPageWhenPagedTurnStyleChanges() async throws {
+        let document = try makeWorkflowDocument(tid: "700", pageCount: 13)
+        let workflow = MangaReaderWorkflow(
+            context: try makeWorkflowContext(tid: "700", initialPage: 11),
+            documentLoader: RecordingMangaChapterDocumentLoader(output: .document(document)),
+            directoryRepository: RecordingMangaDirectoryRepository(
+                output: .seed(makeWorkflowSeed(currentTID: "700", tagIDs: ["12"]))
+            ),
+            directoryStore: RecordingMangaDirectoryStore(),
+            settings: MangaReaderSettings(readingMode: .paged, pagedTurnStyle: .slide)
+        )
+
+        _ = await workflow.prepare()
+        let initialLoaded = try #require(loadedPresentation(in: workflow.presentation))
+        let initialRevision = try #require(initialLoaded.viewportPlacement?.revision)
+        _ = workflow.moveToLoadedPage(at: 12)
+        let movedLoaded = try #require(loadedPresentation(in: workflow.presentation))
+        #expect(movedLoaded.currentPageIndex == 12)
+        #expect(movedLoaded.viewportPlacement?.targetPageIndex == 11)
+        #expect(movedLoaded.viewportPlacement?.revision == initialRevision)
+
+        var pageCurlSettings = workflow.presentation.settings
+        pageCurlSettings.pagedTurnStyle = .pageCurl
+        let pageCurlPresentation = workflow.applySettings(pageCurlSettings)
+        let pageCurlLoaded = try #require(loadedPresentation(in: pageCurlPresentation))
+        let pageCurlRevision = try #require(pageCurlLoaded.viewportPlacement?.revision)
+
+        #expect(pageCurlLoaded.currentPageIndex == 12)
+        #expect(pageCurlLoaded.readingPosition == MangaReadingPosition(tid: "700", localIndex: 12))
+        #expect(pageCurlLoaded.viewportPlacement?.targetPageIndex == 12)
+        #expect(pageCurlRevision == initialRevision + 1)
+
+        var slideSettings = pageCurlPresentation.settings
+        slideSettings.pagedTurnStyle = .slide
+        let slidePresentation = workflow.applySettings(slideSettings)
+        let slideLoaded = try #require(loadedPresentation(in: slidePresentation))
+
+        #expect(slideLoaded.currentPageIndex == 12)
+        #expect(slideLoaded.readingPosition == MangaReadingPosition(tid: "700", localIndex: 12))
+        #expect(slideLoaded.viewportPlacement?.targetPageIndex == 12)
+        #expect(slideLoaded.viewportPlacement?.revision == pageCurlRevision + 1)
+    }
+
+    @Test func workflowKeepsViewportPlacementRevisionForNonViewportSettingsChanges() async throws {
+        let document = try makeWorkflowDocument(tid: "700", pageCount: 2)
+        let workflow = MangaReaderWorkflow(
+            context: try makeWorkflowContext(tid: "700", initialPage: 1),
+            documentLoader: RecordingMangaChapterDocumentLoader(output: .document(document)),
+            directoryRepository: RecordingMangaDirectoryRepository(
+                output: .seed(makeWorkflowSeed(currentTID: "700", tagIDs: ["12"]))
+            ),
+            directoryStore: RecordingMangaDirectoryStore(),
+            settings: MangaReaderSettings(readingMode: .paged, pagedTurnStyle: .slide)
+        )
+
+        _ = await workflow.prepare()
+        let initialLoaded = try #require(loadedPresentation(in: workflow.presentation))
+        let initialRevision = try #require(initialLoaded.viewportPlacement?.revision)
+
+        var brightnessSettings = workflow.presentation.settings
+        brightnessSettings.brightness = 0.75
+        let brightnessPresentation = workflow.applySettings(brightnessSettings)
+        let brightnessLoaded = try #require(loadedPresentation(in: brightnessPresentation))
+
+        #expect(brightnessLoaded.viewportPlacement?.targetPageIndex == 1)
+        #expect(brightnessLoaded.viewportPlacement?.revision == initialRevision)
+
+        var sortSettings = brightnessPresentation.settings
+        sortSettings.directorySortOrder = .descending
+        let sortPresentation = workflow.applySettings(sortSettings)
+        let sortLoaded = try #require(loadedPresentation(in: sortPresentation))
+
+        #expect(sortLoaded.viewportPlacement?.targetPageIndex == 1)
+        #expect(sortLoaded.viewportPlacement?.revision == initialRevision)
+        #expect(sortLoaded.directoryPanel.sortOrder == .descending)
+    }
+
     @Test func workflowClampsMovedReadingPositionThroughChapterWindow() async throws {
         let document = try makeWorkflowDocument(tid: "700", pageCount: 2)
         let workflow = MangaReaderWorkflow(
