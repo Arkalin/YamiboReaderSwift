@@ -170,6 +170,39 @@ struct MangaReaderPresentationInfrastructureTests {
         #expect(physicalSource.contains("case .toggleChrome:\n                nil"))
     }
 
+    @Test func pagedViewportQuickFadePanDefersToPhysicalHiddenSurfaceEdges() throws {
+        let source = try sourceFile("Sources/YamiboReaderUI/Features/Reader/MangaReader/Presentation/MangaPagedReaderViewport.swift")
+        let shouldBeginRange = try #require(source.range(of: "func gestureRecognizerShouldBegin"))
+        let updateGestureRange = try #require(source.range(of: "func updateGestureState"))
+        let shouldBeginSource = String(source[shouldBeginRange.lowerBound..<updateGestureRange.lowerBound])
+
+        #expect(shouldBeginSource.contains("pagingDriver.quickFadePanShouldBegin(panRecognizer, inputs: pagingInputs)"))
+        #expect(shouldBeginSource.contains("shouldDeferQuickFadePanToSurfaceContent(panRecognizer, in: collectionView)"))
+        #expect(shouldBeginSource.contains("return false"))
+
+        let deferRange = try #require(source.range(of: "private func shouldDeferQuickFadePanToSurfaceContent"))
+        let physicalEdgeRange = try #require(source.range(of: "private func physicalHiddenContentEdge"))
+        let updateVisibleRange = try #require(source.range(of: "private func updateVisiblePageSurfacesIfNeeded"))
+        let interactionRange = try #require(source.range(of: "private final class MangaPagedReaderPageSurfaceInteraction"))
+        let collectionViewRange = try #require(source.range(of: "private final class MangaPagedReaderCollectionView"))
+        let deferSource = String(source[deferRange.lowerBound..<physicalEdgeRange.lowerBound])
+        let physicalEdgeSource = String(source[physicalEdgeRange.lowerBound..<updateVisibleRange.lowerBound])
+        let interactionSource = String(source[interactionRange.lowerBound..<collectionViewRange.lowerBound])
+
+        #expect(deferSource.contains("parent.zoomEnabled"))
+        #expect(deferSource.contains("currentPageIndex(in: collectionView)"))
+        #expect(deferSource.contains("surfaceInteraction.hasHiddenContent(onPhysicalEdge: physicalEdge)"))
+        #expect(!deferSource.contains("directionalTapZone"))
+
+        #expect(physicalEdgeSource.contains("return velocity.x < 0 ? .right : .left"))
+        #expect(physicalEdgeSource.contains("return translation.x < 0 ? .right : .left"))
+        #expect(!physicalEdgeSource.contains("pageTurnDirection"))
+        #expect(!physicalEdgeSource.contains("directional"))
+
+        #expect(interactionSource.contains("func hasHiddenContent(onPhysicalEdge edge: MangaPagedImageSurfaceHorizontalEdge) -> Bool"))
+        #expect(interactionSource.contains("hiddenEdges.contains(edge)"))
+    }
+
     @Test func pagedViewportUsesSharedSlideAndQuickFadePagingContracts() throws {
         let sharedSource = try sourceFile("Sources/YamiboReaderUI/Features/Reader/Shared/Paging/ReaderPagedPageTurnSupport.swift")
         let mangaSource = try sourceFile("Sources/YamiboReaderUI/Features/Reader/MangaReader/Presentation/MangaPagedReaderViewport.swift")
