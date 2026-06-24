@@ -562,6 +562,7 @@ struct MangaPagedReaderViewport: UIViewRepresentable {
             guard let page, let pageIndex else { return nil }
             return MangaPagedReaderSpreadPageSurface(
                 page: page,
+                surfaceIdentity: MangaPagedReaderPageAppearanceIdentity(pageID: page.id, appearanceGeneration: 0),
                 initialHorizontalAlignment: initialHorizontalAlignment(
                     for: page,
                     pageIndex: pageIndex,
@@ -901,6 +902,7 @@ struct MangaPagedPageCurlReaderViewport: UIViewControllerRepresentable {
         private var currentSelectionIndex: Int?
         private var lastReportedGlobalIndex: Int?
         private var pageSurfaceInteractions: [String: MangaPagedReaderPageSurfaceInteraction] = [:]
+        private var pageCurlPageAppearanceGenerations: [String: Int] = [:]
         private var pageCurlSpreadHiddenEdges: Set<MangaPagedImageSurfaceHorizontalEdge> = []
         private var pageCurlSteadyScale: CGFloat = 1
         private var pageCurlGestureScale: CGFloat = 1
@@ -944,6 +946,7 @@ struct MangaPagedPageCurlReaderViewport: UIViewControllerRepresentable {
             let didChangeContentIdentity = contentIdentity != nextContentIdentity
             if didChangeContentIdentity {
                 pageSurfaceInteractions = [:]
+                pageCurlPageAppearanceGenerations = [:]
                 resetPageCurlSpreadZoom(in: containerViewController, animated: false)
             }
             contentIdentity = nextContentIdentity
@@ -1015,6 +1018,7 @@ struct MangaPagedPageCurlReaderViewport: UIViewControllerRepresentable {
         ) {
             stopPageCurlBackColorRefresh()
             guard completed else { return }
+            preparePreviousPageCurlPagesForReuse(previousViewControllers)
             publishSelection(from: pageViewController)
         }
 
@@ -1330,6 +1334,9 @@ struct MangaPagedPageCurlReaderViewport: UIViewControllerRepresentable {
             }
 
             let direction = navigationDirection(to: clampedSelectionIndex)
+            let outgoingViewControllers = pageViewController.viewControllers ?? []
+            let shouldPrepareOutgoingPageCurlPages = !parent.sequence.usesTwoPageSpread &&
+                clampedSelectionIndex != currentSelectionIndex
             pageViewController.setViewControllers(
                 controllers,
                 direction: direction,
@@ -1340,6 +1347,9 @@ struct MangaPagedPageCurlReaderViewport: UIViewControllerRepresentable {
                     self.stopPageCurlBackColorRefresh()
                 }
                 guard !animated || completed else { return }
+                if animated, shouldPrepareOutgoingPageCurlPages {
+                    self.preparePreviousPageCurlPagesForReuse(outgoingViewControllers)
+                }
                 self.currentSelectionIndex = clampedSelectionIndex
                 if publishOnCompletion {
                     self.publishCurrentPageIfNeeded(selectionIndex: clampedSelectionIndex)
@@ -1348,6 +1358,9 @@ struct MangaPagedPageCurlReaderViewport: UIViewControllerRepresentable {
             if animated {
                 startPageCurlBackColorRefresh(in: pageViewController)
             } else {
+                if shouldPrepareOutgoingPageCurlPages {
+                    preparePreviousPageCurlPagesForReuse(outgoingViewControllers)
+                }
                 currentSelectionIndex = clampedSelectionIndex
             }
         }
@@ -1366,16 +1379,20 @@ struct MangaPagedPageCurlReaderViewport: UIViewControllerRepresentable {
             let leaf = parent.sequence.leaves[leafIndex]
             return MangaPagedPageCurlHostingController(
                 leaf: leaf,
-                rootView: MangaPagedPageCurlLeafView(
-                    pageSurface: pageSurface(for: leaf),
-                    imagePipeline: parent.imagePipeline,
-                    pageScaleMode: parent.effectivePageScaleMode,
-                    pageEdgeFillStyle: parent.settings.pageEdgeFillStyle,
-                    isChromeVisible: parent.isChromeVisible,
-                    zoomEnabled: parent.zoomEnabled,
-                    isPageZoomEnabled: !parent.sequence.usesTwoPageSpread
-                ),
+                rootView: rootView(for: leaf),
                 pageBackgroundColor: parent.pageEdgeFillColor
+            )
+        }
+
+        private func rootView(for leaf: MangaPagedPageCurlLeaf) -> MangaPagedPageCurlLeafView {
+            MangaPagedPageCurlLeafView(
+                pageSurface: pageSurface(for: leaf),
+                imagePipeline: parent.imagePipeline,
+                pageScaleMode: parent.effectivePageScaleMode,
+                pageEdgeFillStyle: parent.settings.pageEdgeFillStyle,
+                isChromeVisible: parent.isChromeVisible,
+                zoomEnabled: parent.zoomEnabled,
+                isPageZoomEnabled: !parent.sequence.usesTwoPageSpread
             )
         }
 
@@ -1386,8 +1403,18 @@ struct MangaPagedPageCurlReaderViewport: UIViewControllerRepresentable {
             }
             return MangaPagedReaderSpreadPageSurface(
                 page: page,
+                surfaceIdentity: pageCurlPageSurfaceIdentity(for: page),
                 initialHorizontalAlignment: initialHorizontalAlignment(for: page, pageIndex: pageIndex),
                 surfaceInteraction: surfaceInteraction(for: page)
+            )
+        }
+
+        private func pageCurlPageSurfaceIdentity(
+            for page: MangaReaderPageProjection
+        ) -> MangaPagedReaderPageAppearanceIdentity {
+            MangaPagedReaderPageAppearanceIdentity(
+                pageID: page.id,
+                appearanceGeneration: pageCurlPageAppearanceGenerations[page.id, default: 0]
             )
         }
 
@@ -1479,6 +1506,18 @@ struct MangaPagedPageCurlReaderViewport: UIViewControllerRepresentable {
             currentSelectionIndex = selectionIndex
             guard selectionIndex != parent.selectionIndex else { return }
             publishCurrentPageIfNeeded(selectionIndex: selectionIndex)
+        }
+
+        private func preparePreviousPageCurlPagesForReuse(_ previousViewControllers: [UIViewController]) {
+            guard !parent.sequence.usesTwoPageSpread else { return }
+            for case let controller as MangaPagedPageCurlHostingController in previousViewControllers {
+                guard let pageIndex = controller.leaf.pageIndex,
+                      let page = parent.plan.page(at: pageIndex) else {
+                    continue
+                }
+                pageCurlPageAppearanceGenerations[page.id, default: 0] += 1
+                controller.updateRootView(rootView(for: controller.leaf), pageBackgroundColor: parent.pageEdgeFillColor)
+            }
         }
 
         private func publishCurrentPageIfNeeded(selectionIndex: Int) {
@@ -1852,6 +1891,11 @@ private final class MangaPagedPageCurlHostingController: UIHostingController<Man
         view.backgroundColor = pageBackgroundColor
         view.isOpaque = true
     }
+
+    func updateRootView(_ rootView: MangaPagedPageCurlLeafView, pageBackgroundColor: UIColor) {
+        self.rootView = rootView
+        applyPageBackground(pageBackgroundColor)
+    }
 }
 
 @MainActor
@@ -1969,9 +2013,9 @@ private struct MangaPagedReaderZoomToggleRequest {
     let location: CGPoint?
 }
 
-private final class MangaPagedReaderPageSurfaceInteraction: ObservableObject {
-    @Published private(set) var edgeRevealRequest = MangaPagedReaderEdgeRevealRequest(sequence: 0, edge: nil)
-    @Published private(set) var zoomToggleRequest = MangaPagedReaderZoomToggleRequest(sequence: 0, location: nil)
+private final class MangaPagedReaderPageSurfaceInteraction {
+    let edgeRevealRequests = PassthroughSubject<MangaPagedReaderEdgeRevealRequest, Never>()
+    let zoomToggleRequests = PassthroughSubject<MangaPagedReaderZoomToggleRequest, Never>()
 
     private var requestSequence = 0
     private(set) var hiddenEdges: Set<MangaPagedImageSurfaceHorizontalEdge> = []
@@ -1992,13 +2036,13 @@ private final class MangaPagedReaderPageSurfaceInteraction: ObservableObject {
     func consumeTap(onPhysicalEdge edge: MangaPagedImageSurfaceHorizontalEdge) -> Bool {
         guard hiddenEdges.contains(edge) else { return false }
         requestSequence += 1
-        edgeRevealRequest = MangaPagedReaderEdgeRevealRequest(sequence: requestSequence, edge: edge)
+        edgeRevealRequests.send(MangaPagedReaderEdgeRevealRequest(sequence: requestSequence, edge: edge))
         return true
     }
 
     func requestZoomToggle(at location: CGPoint) {
         requestSequence += 1
-        zoomToggleRequest = MangaPagedReaderZoomToggleRequest(sequence: requestSequence, location: location)
+        zoomToggleRequests.send(MangaPagedReaderZoomToggleRequest(sequence: requestSequence, location: location))
     }
 }
 
@@ -2067,8 +2111,14 @@ private extension ReaderPagedPageTurnCell {
 
 private struct MangaPagedReaderSpreadPageSurface {
     let page: MangaReaderPageProjection
+    let surfaceIdentity: MangaPagedReaderPageAppearanceIdentity
     let initialHorizontalAlignment: MangaPagedImageSurfaceInitialHorizontalAlignment
     let surfaceInteraction: MangaPagedReaderPageSurfaceInteraction
+}
+
+private struct MangaPagedReaderPageAppearanceIdentity: Hashable {
+    let pageID: String
+    let appearanceGeneration: Int
 }
 
 private struct MangaPagedReaderSpreadSurface: View {
@@ -2135,6 +2185,7 @@ private struct MangaPagedReaderPageSlot: View {
             if let surface {
                 MangaPagedReaderPageSurface(
                     page: surface.page,
+                    surfaceIdentity: surface.surfaceIdentity,
                     imagePipeline: imagePipeline,
                     pageScaleMode: pageScaleMode,
                     initialHorizontalAlignment: surface.initialHorizontalAlignment,
@@ -2231,11 +2282,11 @@ private struct MangaPagedReaderZoomableSpreadSurface: View {
             .onChange(of: isSurfaceZoomActive, initial: true) { _, newValue in
                 spreadSurfaceInteraction.updateZoomActive(newValue)
             }
-            .onReceive(spreadSurfaceInteraction.$edgeRevealRequest) { request in
+            .onReceive(spreadSurfaceInteraction.edgeRevealRequests) { request in
                 guard let edge = request.edge else { return }
                 revealHiddenContent(on: edge, containerSize: containerSize)
             }
-            .onReceive(spreadSurfaceInteraction.$zoomToggleRequest) { request in
+            .onReceive(spreadSurfaceInteraction.zoomToggleRequests) { request in
                 guard isZoomInteractionEnabled,
                       let location = request.location else {
                     return
@@ -2406,6 +2457,7 @@ private struct MangaPagedReaderZoomableSpreadSurface: View {
 
 private struct MangaPagedReaderPageSurface: View {
     let page: MangaReaderPageProjection
+    let surfaceIdentity: MangaPagedReaderPageAppearanceIdentity
     let imagePipeline: MangaImagePipeline
     let pageScaleMode: MangaPageScaleMode
     let initialHorizontalAlignment: MangaPagedImageSurfaceInitialHorizontalAlignment
@@ -2436,6 +2488,7 @@ private struct MangaPagedReaderPageSurface: View {
                     allowsUnzoomedSurfacePan: allowsUnzoomedSurfacePan,
                     surfaceInteraction: surfaceInteraction
                 )
+                .id(surfaceIdentity)
             } else if loadingPageID == page.id {
                 ProgressView()
                     .tint(pageEdgeFillStyle.progressTint(for: colorScheme))
@@ -2557,11 +2610,11 @@ private struct MangaPagedReaderScaledImage: View {
             .onChange(of: isSurfaceZoomActive, initial: true) { _, newValue in
                 surfaceInteraction.updateZoomActive(newValue)
             }
-            .onReceive(surfaceInteraction.$edgeRevealRequest) { request in
+            .onReceive(surfaceInteraction.edgeRevealRequests) { request in
                 guard let edge = request.edge else { return }
                 revealHiddenContent(on: edge, containerSize: containerSize)
             }
-            .onReceive(surfaceInteraction.$zoomToggleRequest) { request in
+            .onReceive(surfaceInteraction.zoomToggleRequests) { request in
                 guard isZoomInteractionEnabled,
                       let location = request.location else {
                     return
