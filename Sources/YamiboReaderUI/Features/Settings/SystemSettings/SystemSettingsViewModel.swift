@@ -9,6 +9,8 @@ final class SystemSettingsViewModel: ObservableObject {
     @Published var favoriteBackground = FavoriteBackgroundSettings()
     @Published var applePencilPageTurn = ApplePencilPageTurnSettings()
     @Published private(set) var novelCacheBytes = 0
+    @Published private(set) var mangaIndexCacheBytes = 0
+    @Published private(set) var mangaImageCacheBytes = 0
     @Published private(set) var activeAction: SystemSettingsAction?
     @Published var errorMessage: String?
 
@@ -24,6 +26,14 @@ final class SystemSettingsViewModel: ObservableObject {
 
     var novelCacheLabel: String {
         cacheLabel(for: novelCacheBytes)
+    }
+
+    var mangaIndexCacheLabel: String {
+        cacheLabel(for: mangaIndexCacheBytes)
+    }
+
+    var mangaImageCacheLabel: String {
+        cacheLabel(for: mangaImageCacheBytes)
     }
 
     func load() async {
@@ -181,6 +191,35 @@ final class SystemSettingsViewModel: ObservableObject {
         }
     }
 
+    func clearMangaIndexCache() async -> Bool {
+        activeAction = .clearingMangaIndexCache
+        defer { activeAction = nil }
+
+        do {
+            try await appContext.mangaDirectoryStore.clearAll()
+            try await appContext.mangaChapterDocumentStore.clearAll()
+            await refreshStorageUsage()
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
+
+    func clearMangaImageCache() async -> Bool {
+        activeAction = .clearingMangaImageCache
+        defer { activeAction = nil }
+
+        do {
+            try await appContext.mangaImageDataCacheStore.clearAll()
+            await refreshStorageUsage()
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
+
     func resetApplication() async -> Bool {
         activeAction = .resettingApplication
         defer { activeAction = nil }
@@ -193,6 +232,8 @@ final class SystemSettingsViewModel: ObservableObject {
             favoriteBackground = .init()
             applePencilPageTurn = .init()
             novelCacheBytes = 0
+            mangaIndexCacheBytes = 0
+            mangaImageCacheBytes = 0
             return true
         } catch {
             errorMessage = error.localizedDescription
@@ -202,6 +243,10 @@ final class SystemSettingsViewModel: ObservableObject {
 
     func refreshStorageUsage() async {
         novelCacheBytes = await appContext.readerCacheStore.totalDiskUsageBytes()
+        let directoryBytes = await appContext.mangaDirectoryStore.totalDiskUsageBytes()
+        let chapterDocumentBytes = await appContext.mangaChapterDocumentStore.totalDiskUsageBytes()
+        mangaIndexCacheBytes = directoryBytes + chapterDocumentBytes
+        mangaImageCacheBytes = await appContext.mangaImageDataCacheStore.totalDiskUsageBytes()
     }
 
     private func cacheLabel(for bytes: Int) -> String {

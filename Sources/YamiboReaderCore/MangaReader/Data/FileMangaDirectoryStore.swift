@@ -135,6 +135,18 @@ public actor FileMangaDirectoryStore: MangaDirectoryPersisting {
         }
     }
 
+    public func totalDiskUsageBytes() async -> Int {
+        do {
+            try ensureIndexLoaded()
+            return index.values.reduce(0) { total, fileName in
+                let fileURL = baseDirectory.appendingPathComponent(fileName, isDirectory: false)
+                return total + ((try? fileURL.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
+            }
+        } catch {
+            return 0
+        }
+    }
+
     private func ensureIndexLoaded() throws {
         guard !didLoadIndex else { return }
         didLoadIndex = true
