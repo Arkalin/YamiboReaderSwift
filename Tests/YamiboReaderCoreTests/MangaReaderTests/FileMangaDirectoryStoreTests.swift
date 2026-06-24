@@ -136,6 +136,18 @@ struct MangaReaderTestsFileMangaDirectoryStore {
         #expect(loaded == nil)
     }
 
+    @Test func totalDiskUsageCountsStoredDirectoryFilesAndClearsToZero() async throws {
+        let directory = try makeTemporaryDirectory()
+        let store = FileMangaDirectoryStore(baseDirectory: directory)
+        try await store.saveDirectory(makeDirectory(name: "作品", tids: ["1", "2"]))
+
+        #expect(await store.totalDiskUsageBytes() > 0)
+
+        try await store.clearAll()
+
+        #expect(await store.totalDiskUsageBytes() == 0)
+    }
+
     @Test func saveRejectsEmptyDirectoryName() async throws {
         let store = FileMangaDirectoryStore(baseDirectory: try makeTemporaryDirectory())
 

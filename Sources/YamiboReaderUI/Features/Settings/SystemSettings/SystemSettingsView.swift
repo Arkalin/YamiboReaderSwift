@@ -114,6 +114,26 @@ public struct SystemSettingsView: View {
                     }
                     .disabled(viewModel.isBusy)
 
+                    Button {
+                        pendingConfirmation = .clearMangaIndexCache
+                    } label: {
+                        SystemSettingsRow(
+                            title: L10n.string("settings.clear_manga_index_cache"),
+                            value: viewModel.mangaIndexCacheLabel
+                        )
+                    }
+                    .disabled(viewModel.isBusy)
+
+                    Button {
+                        pendingConfirmation = .clearMangaImageCache
+                    } label: {
+                        SystemSettingsRow(
+                            title: L10n.string("settings.clear_manga_image_cache"),
+                            value: viewModel.mangaImageCacheLabel
+                        )
+                    }
+                    .disabled(viewModel.isBusy)
+
                     Button(role: .destructive) {
                         pendingConfirmation = .resetApplication
                     } label: {
@@ -345,6 +365,10 @@ public struct SystemSettingsView: View {
         switch confirmation {
         case .clearNovelCache:
             _ = await viewModel.clearNovelCache()
+        case .clearMangaIndexCache:
+            _ = await viewModel.clearMangaIndexCache()
+        case .clearMangaImageCache:
+            _ = await viewModel.clearMangaImageCache()
         case .resetApplication:
             let didReset = await viewModel.resetApplication()
             guard didReset else { return }
