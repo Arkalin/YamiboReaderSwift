@@ -282,6 +282,34 @@ struct MangaPagedReadingPlanTests {
         let jumpPlacement = MangaReaderViewportPlacement(targetPageIndex: 2, revision: 2)
         #expect(resolver.selectionIndex(plan: turnedPlan, viewportPlacement: jumpPlacement) == 2)
     }
+
+    @Test func imagePrefetchPlanIncludesAdjacentSinglePageTurnsInRightToLeftMode() throws {
+        let pages = try makePagedPlanPages(pageCountsByTID: [("700", 4)])
+        let plan = MangaPagedReadingPlan(
+            pages: pages,
+            currentPageIndex: 1,
+            pageTurnDirection: .rightToLeft,
+            usesTwoPageSpread: false
+        )
+
+        let prefetchPages = MangaPagedImagePrefetchPlan.pagesToPrefetch(plan: plan, radius: 1)
+
+        #expect(prefetchPages.map(\.id) == ["700#0", "700#2"])
+    }
+
+    @Test func imagePrefetchPlanIncludesBothPagesInAdjacentTwoPageSpreads() throws {
+        let pages = try makePagedPlanPages(pageCountsByTID: [("700", 6)])
+        let plan = MangaPagedReadingPlan(
+            pages: pages,
+            currentPageIndex: 2,
+            pageTurnDirection: .rightToLeft,
+            usesTwoPageSpread: true
+        )
+
+        let prefetchPages = MangaPagedImagePrefetchPlan.pagesToPrefetch(plan: plan, radius: 1)
+
+        #expect(prefetchPages.map(\.id) == ["700#0", "700#1", "700#4", "700#5"])
+    }
 }
 
 private func makePagedPlanPages() throws -> [MangaReaderPageProjection] {
