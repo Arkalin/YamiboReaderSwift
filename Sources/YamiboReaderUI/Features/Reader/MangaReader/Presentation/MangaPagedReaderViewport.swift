@@ -156,6 +156,7 @@ struct MangaPagedReaderViewport: UIViewRepresentable {
         }
 
         func updateContentIfNeeded(in collectionView: UICollectionView) {
+            prefetchAdjacentImages()
             let nextIdentity = MangaPagedReaderContentIdentity(
                 spreadIDs: parent.plan.spreads.map(\.id),
                 pageScaleMode: parent.effectivePageScaleMode,
@@ -554,6 +555,11 @@ struct MangaPagedReaderViewport: UIViewRepresentable {
             cell.resetPageTurnVisuals()
         }
 
+        private func prefetchAdjacentImages() {
+            let pagesToPrefetch = MangaPagedImagePrefetchPlan.pagesToPrefetch(plan: parent.plan)
+            parent.imagePipeline.prefetchImages(for: pagesToPrefetch)
+        }
+
         private func pageSurface(
             page: MangaReaderPageProjection?,
             pageIndex: Int?,
@@ -941,6 +947,7 @@ struct MangaPagedPageCurlReaderViewport: UIViewControllerRepresentable {
             _ containerViewController: MangaPagedPageCurlContainerViewController,
             contentIdentity nextContentIdentity: MangaPagedReaderContentIdentity
         ) {
+            prefetchAdjacentImages()
             let pageViewController = containerViewController.pageViewController
             activeContainerViewController = containerViewController
             activePageViewController = pageViewController
@@ -1426,6 +1433,11 @@ struct MangaPagedPageCurlReaderViewport: UIViewControllerRepresentable {
                 initialHorizontalAlignment: initialHorizontalAlignment(for: page, pageIndex: pageIndex),
                 surfaceInteraction: surfaceInteraction(for: page)
             )
+        }
+
+        private func prefetchAdjacentImages() {
+            let pagesToPrefetch = MangaPagedImagePrefetchPlan.pagesToPrefetch(plan: parent.plan)
+            parent.imagePipeline.prefetchImages(for: pagesToPrefetch)
         }
 
         private func pageCurlPageSurfaceIdentity(

@@ -573,6 +573,14 @@ struct MangaReaderPresentationInfrastructureTests {
         #expect(sharedSource.contains("ReaderPagedBoundaryPageTurn.directionalDelta"))
     }
 
+    @Test func pagedViewportPrefetchesAdjacentImagesBeforePageTurns() throws {
+        let source = try sourceFile("Sources/YamiboReaderUI/Features/Reader/MangaReader/Presentation/MangaPagedReaderViewport.swift")
+
+        #expect(source.contains("prefetchAdjacentImages()"))
+        #expect(source.contains("MangaPagedImagePrefetchPlan.pagesToPrefetch(plan: parent.plan)"))
+        #expect(source.contains("parent.imagePipeline.prefetchImages(for: pagesToPrefetch)"))
+    }
+
     @Test func pagedViewportGatesZoomAndSurfacePanBehindHiddenChrome() throws {
         let source = try sourceFile("Sources/YamiboReaderUI/Features/Reader/MangaReader/Presentation/MangaPagedReaderViewport.swift")
 

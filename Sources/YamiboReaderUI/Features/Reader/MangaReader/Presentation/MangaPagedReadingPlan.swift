@@ -222,6 +222,34 @@ struct MangaPagedReadingPlan: Hashable, Sendable {
     }
 }
 
+enum MangaPagedImagePrefetchPlan {
+    static func pagesToPrefetch(
+        plan: MangaPagedReadingPlan,
+        radius: Int = 1
+    ) -> [MangaReaderPageProjection] {
+        guard radius > 0,
+              let currentSpreadIndex = plan.currentSpreadIndex else {
+            return []
+        }
+
+        var pages: [MangaReaderPageProjection] = []
+        var seenPageIDs = Set<String>()
+        for distance in 1 ... radius {
+            for spreadIndex in [currentSpreadIndex - distance, currentSpreadIndex + distance] {
+                guard let spread = plan.spread(at: spreadIndex) else { continue }
+                for pageIndex in spread.pageIndexes {
+                    guard let page = plan.page(at: pageIndex),
+                          seenPageIDs.insert(page.id).inserted else {
+                        continue
+                    }
+                    pages.append(page)
+                }
+            }
+        }
+        return pages
+    }
+}
+
 struct MangaPagedPageCurlLeaf: Hashable, Sendable {
     let index: Int
     let pageIndex: Int?

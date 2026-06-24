@@ -15,6 +15,7 @@ final class MangaImagePipeline {
     private let dataLoader: any MangaImageDataLoading
     private let cache = NSCache<NSString, UIImage>()
     private var inFlightContinuations: [String: [CheckedContinuation<UIImage, Error>]] = [:]
+    private var prefetchingKeys = Set<String>()
 
     init(
         dataLoader: any MangaImageDataLoading,
@@ -26,6 +27,24 @@ final class MangaImagePipeline {
 
     func cachedImage(for page: MangaReaderPageProjection) -> UIImage? {
         cache.object(forKey: cacheKey(for: page) as NSString)
+    }
+
+    func prefetchImages(for pages: [MangaReaderPageProjection]) {
+        for page in pages {
+            let key = cacheKey(for: page)
+            guard cache.object(forKey: key as NSString) == nil,
+                  inFlightContinuations[key] == nil,
+                  prefetchingKeys.insert(key).inserted else {
+                continue
+            }
+
+            Task { @MainActor in
+                defer {
+                    self.prefetchingKeys.remove(key)
+                }
+                _ = try? await self.image(for: page)
+            }
+        }
     }
 
     func image(for page: MangaReaderPageProjection) async throws -> UIImage {
