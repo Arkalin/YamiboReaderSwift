@@ -206,6 +206,36 @@ struct MangaPagedReadingPlanTests {
         #expect(spreadSequence.globalIndex(forSelectionIndex: 0) == nil)
     }
 
+    @Test func pageCurlSequenceRemapsOldLeavesAfterAdjacentChapterPrefetchChangesPhysicalOrder() throws {
+        let initialPages = try makePagedPlanPages(pageCountsByTID: [("700", 3)])
+        let prefetchedPages = try makePagedPlanPages(pageCountsByTID: [("700", 3), ("701", 2)])
+        let initialSequence = MangaPagedPageCurlSequence(
+            plan: MangaPagedReadingPlan(
+                pages: initialPages,
+                currentPageIndex: 0,
+                pageTurnDirection: .rightToLeft,
+                usesTwoPageSpread: false
+            )
+        )
+        let prefetchedSequence = MangaPagedPageCurlSequence(
+            plan: MangaPagedReadingPlan(
+                pages: prefetchedPages,
+                currentPageIndex: 0,
+                pageTurnDirection: .rightToLeft,
+                usesTwoPageSpread: false
+            )
+        )
+        let visibleLeaf = try #require(
+            initialSequence.leaves.first { $0.pageID == initialPages[0].id }
+        )
+
+        #expect(initialSequence.leaves.map(\.pageID) == ["700#2", "700#1", "700#0"])
+        #expect(prefetchedSequence.leaves.map(\.pageID) == ["701#1", "701#0", "700#2", "700#1", "700#0"])
+        #expect(prefetchedSequence.leafIndex(matching: visibleLeaf) == 4)
+        #expect(prefetchedSequence.leafIndex(before: visibleLeaf) == 3)
+        #expect(prefetchedSequence.leafIndex(after: visibleLeaf) == nil)
+    }
+
     @Test func pageCurlSpineConfigurationDoesNotDisableDoubleSidedWhileCurrentSpineIsMid() {
         let rotatingToSinglePage = MangaPagedPageCurlSpineConfiguration.configuration(
             usesTwoPageSpread: false,

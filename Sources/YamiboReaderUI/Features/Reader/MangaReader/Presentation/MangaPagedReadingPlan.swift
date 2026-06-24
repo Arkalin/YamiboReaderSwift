@@ -225,6 +225,7 @@ struct MangaPagedReadingPlan: Hashable, Sendable {
 struct MangaPagedPageCurlLeaf: Hashable, Sendable {
     let index: Int
     let pageIndex: Int?
+    let pageID: String?
     let selectionIndex: Int
 
     var isBlank: Bool {
@@ -247,11 +248,13 @@ struct MangaPagedPageCurlSequence: Equatable, Sendable {
                     MangaPagedPageCurlLeaf(
                         index: 0,
                         pageIndex: spread.leftPageIndex,
+                        pageID: spread.leftPage?.id,
                         selectionIndex: spread.index
                     ),
                     MangaPagedPageCurlLeaf(
                         index: 0,
                         pageIndex: spread.rightPageIndex,
+                        pageID: spread.rightPage?.id,
                         selectionIndex: spread.index
                     ),
                 ]
@@ -268,6 +271,7 @@ struct MangaPagedPageCurlSequence: Equatable, Sendable {
                     MangaPagedPageCurlLeaf(
                         index: 0,
                         pageIndex: pageIndex,
+                        pageID: plan.pages[pageIndex].id,
                         selectionIndex: pageIndex
                     ),
                 ]
@@ -328,6 +332,35 @@ struct MangaPagedPageCurlSequence: Equatable, Sendable {
         return leaves.indices.contains(targetIndex) ? targetIndex : nil
     }
 
+    func leafIndex(matching leaf: MangaPagedPageCurlLeaf) -> Int? {
+        if let pageID = leaf.pageID {
+            return leaves.first { $0.pageID == pageID }?.index
+        }
+        if leaves.indices.contains(leaf.index) {
+            let candidate = leaves[leaf.index]
+            if candidate.pageID == nil,
+               candidate.selectionIndex == leaf.selectionIndex {
+                return leaf.index
+            }
+        }
+        if let matchingBlankLeaf = leaves.first(where: { candidate in
+            candidate.pageID == nil && candidate.selectionIndex == leaf.selectionIndex
+        }) {
+            return matchingBlankLeaf.index
+        }
+        return leaves.indices.contains(leaf.index) ? leaf.index : nil
+    }
+
+    func leafIndex(before leaf: MangaPagedPageCurlLeaf) -> Int? {
+        guard let leafIndex = leafIndex(matching: leaf) else { return nil }
+        return self.leafIndex(before: leafIndex)
+    }
+
+    func leafIndex(after leaf: MangaPagedPageCurlLeaf) -> Int? {
+        guard let leafIndex = leafIndex(matching: leaf) else { return nil }
+        return self.leafIndex(after: leafIndex)
+    }
+
     func firstLeafIndex(forSelectionIndex selectionIndex: Int) -> Int? {
         leafIndexes(forSelectionIndex: selectionIndex).first
     }
@@ -355,19 +388,20 @@ struct MangaPagedPageCurlSequence: Equatable, Sendable {
             MangaPagedPageCurlLeaf(
                 index: index,
                 pageIndex: leaf.pageIndex,
+                pageID: leaf.pageID,
                 selectionIndex: leaf.selectionIndex
             )
         }
     }
 
     private static var emptySingleLeaf: MangaPagedPageCurlLeaf {
-        MangaPagedPageCurlLeaf(index: 0, pageIndex: nil, selectionIndex: 0)
+        MangaPagedPageCurlLeaf(index: 0, pageIndex: nil, pageID: nil, selectionIndex: 0)
     }
 
     private static var emptySpreadLeaves: [MangaPagedPageCurlLeaf] {
         [
-            MangaPagedPageCurlLeaf(index: 0, pageIndex: nil, selectionIndex: 0),
-            MangaPagedPageCurlLeaf(index: 1, pageIndex: nil, selectionIndex: 0),
+            MangaPagedPageCurlLeaf(index: 0, pageIndex: nil, pageID: nil, selectionIndex: 0),
+            MangaPagedPageCurlLeaf(index: 1, pageIndex: nil, pageID: nil, selectionIndex: 0),
         ]
     }
 }

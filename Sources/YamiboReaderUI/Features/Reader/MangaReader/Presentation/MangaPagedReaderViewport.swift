@@ -993,7 +993,7 @@ struct MangaPagedPageCurlReaderViewport: UIViewControllerRepresentable {
             viewControllerBefore viewController: UIViewController
         ) -> UIViewController? {
             guard let pageController = viewController as? MangaPagedPageCurlHostingController,
-                  let leafIndex = parent.sequence.leafIndex(before: pageController.leaf.index) else {
+                  let leafIndex = parent.sequence.leafIndex(before: pageController.leaf) else {
                 return nil
             }
             return controller(forLeafIndex: leafIndex)
@@ -1004,7 +1004,7 @@ struct MangaPagedPageCurlReaderViewport: UIViewControllerRepresentable {
             viewControllerAfter viewController: UIViewController
         ) -> UIViewController? {
             guard let pageController = viewController as? MangaPagedPageCurlHostingController,
-                  let leafIndex = parent.sequence.leafIndex(after: pageController.leaf.index) else {
+                  let leafIndex = parent.sequence.leafIndex(after: pageController.leaf) else {
                 return nil
             }
             return controller(forLeafIndex: leafIndex)
@@ -1213,6 +1213,9 @@ struct MangaPagedPageCurlReaderViewport: UIViewControllerRepresentable {
                 return true
             }
             guard !parent.isChromeVisible else {
+                return false
+            }
+            guard canBeginPageCurlPan(panRecognizer, in: pageViewController) else {
                 return false
             }
             if let containerViewController = activeContainerViewController,
@@ -1620,6 +1623,48 @@ struct MangaPagedPageCurlReaderViewport: UIViewControllerRepresentable {
                 hiddenEdges: surfaceInteraction.hiddenEdges,
                 physicalEdge: physicalEdge
             )
+        }
+
+        private enum PageCurlPanDirection {
+            case before
+            case after
+        }
+
+        private func canBeginPageCurlPan(
+            _ recognizer: UIPanGestureRecognizer,
+            in pageViewController: UIPageViewController
+        ) -> Bool {
+            let visibleLeafIndexes = (pageViewController.viewControllers ?? [])
+                .compactMap { ($0 as? MangaPagedPageCurlHostingController)?.leaf }
+                .compactMap(parent.sequence.leafIndex(matching:))
+            guard !visibleLeafIndexes.isEmpty else { return false }
+
+            switch pageCurlPanDirection(for: recognizer, in: pageViewController) {
+            case .before:
+                guard let firstLeafIndex = visibleLeafIndexes.min() else { return false }
+                return parent.sequence.leafIndex(before: firstLeafIndex) != nil
+            case .after:
+                guard let lastLeafIndex = visibleLeafIndexes.max() else { return false }
+                return parent.sequence.leafIndex(after: lastLeafIndex) != nil
+            }
+        }
+
+        private func pageCurlPanDirection(
+            for recognizer: UIPanGestureRecognizer,
+            in pageViewController: UIPageViewController
+        ) -> PageCurlPanDirection {
+            let velocity = recognizer.velocity(in: pageViewController.view)
+            if abs(velocity.x) > 1 {
+                return velocity.x < 0 ? .after : .before
+            }
+
+            let translation = recognizer.translation(in: pageViewController.view)
+            if abs(translation.x) > 1 {
+                return translation.x < 0 ? .after : .before
+            }
+
+            let location = recognizer.location(in: pageViewController.view)
+            return location.x >= pageViewController.view.bounds.midX ? .after : .before
         }
 
         private func currentPageCurlSurfaceInteraction(
