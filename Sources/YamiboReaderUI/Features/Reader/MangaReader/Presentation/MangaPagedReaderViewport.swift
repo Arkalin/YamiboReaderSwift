@@ -459,63 +459,28 @@ struct MangaPagedReaderViewport: UIViewRepresentable {
             _ recognizer: UIPanGestureRecognizer,
             in collectionView: UICollectionView
         ) -> Bool {
-            guard parent.zoomEnabled,
-                  let physicalEdge = physicalHiddenContentEdge(for: recognizer, in: collectionView) else {
-                return false
-            }
-            if parent.plan.usesTwoPageSpread {
-                guard let surfaceInteraction = currentSpreadSurfaceInteraction(in: collectionView) else {
-                    return false
-                }
-                return surfaceInteraction.hasHiddenContent(onPhysicalEdge: physicalEdge)
-            }
-            guard let surfaceInteraction = currentPageSurfaceInteraction(in: collectionView) else {
-                return false
-            }
-            return surfaceInteraction.hasHiddenContent(onPhysicalEdge: physicalEdge)
-        }
-
-        private func requestSpreadZoomToggle(at location: CGPoint, in collectionView: UICollectionView) {
-            guard let spreadIndex = currentSpreadIndex(in: collectionView),
-                  let spread = parent.plan.spread(at: spreadIndex),
-                  let surfaceInteraction = spreadSurfaceInteractions[spread.id] else {
-                return
-            }
-            surfaceInteraction.requestZoomToggle(at: spreadLocation(for: spreadIndex, location: location, in: collectionView))
-        }
-
-        private func currentSpreadSurfaceInteraction(
-            in collectionView: UICollectionView
-        ) -> MangaPagedReaderPageSurfaceInteraction? {
-            guard let spreadIndex = currentSpreadIndex(in: collectionView),
-                  let spread = parent.plan.spread(at: spreadIndex) else {
-                return nil
-            }
-            return spreadSurfaceInteractions[spread.id]
-        }
-
-        private func currentPageSurfaceInteraction(
-            in collectionView: UICollectionView
-        ) -> MangaPagedReaderPageSurfaceInteraction? {
-            guard let pageIndex = currentPageIndex(in: collectionView),
-                  let page = parent.plan.page(at: pageIndex) else {
-                return nil
-            }
-            return pageSurfaceInteractions[page.id]
-        }
-
-        private func physicalHiddenContentEdge(
-            for recognizer: UIPanGestureRecognizer,
-            in collectionView: UICollectionView
-        ) -> MangaPagedImageSurfaceHorizontalEdge? {
             let velocity = recognizer.velocity(in: collectionView)
-            if velocity.x != 0 {
-                return velocity.x < 0 ? .right : .left
-            }
-
             let translation = recognizer.translation(in: collectionView)
-            guard translation.x != 0 else { return nil }
-            return translation.x < 0 ? .right : .left
+            guard let physicalEdge = MangaPagedSurfaceEdgeInteraction.physicalEdge(
+                horizontalVelocityX: velocity.x,
+                horizontalTranslationX: translation.x
+            ) else {
+                return false
+            }
+            let surfaceInteraction: MangaPagedReaderPageSurfaceInteraction?
+            if parent.plan.usesTwoPageSpread {
+                surfaceInteraction = currentSpreadSurfaceInteraction(in: collectionView)
+            } else {
+                surfaceInteraction = currentPageSurfaceInteraction(in: collectionView)
+            }
+            guard let surfaceInteraction else {
+                return false
+            }
+            return MangaPagedSurfaceEdgeInteraction.shouldDeferPageTurnPanToSurfaceContent(
+                zoomEnabled: parent.zoomEnabled,
+                hiddenEdges: surfaceInteraction.hiddenEdges,
+                physicalEdge: physicalEdge
+            )
         }
 
         private func updateVisiblePageSurfacesIfNeeded(in collectionView: UICollectionView) {
@@ -624,33 +589,55 @@ struct MangaPagedReaderViewport: UIViewRepresentable {
         }
 
         private func consumeSurfaceEdgeTap(for zone: ReaderPagedTapZone, in collectionView: UICollectionView) -> Bool {
-            guard let physicalEdge = physicalHorizontalEdge(for: zone) else {
+            guard let physicalEdge = MangaPagedSurfaceEdgeInteraction.physicalEdge(forTapZone: zone) else {
                 return false
             }
+            let surfaceInteraction: MangaPagedReaderPageSurfaceInteraction?
             if parent.plan.usesTwoPageSpread {
-                guard let surfaceInteraction = currentSpreadSurfaceInteraction(in: collectionView) else {
-                    return false
-                }
-                return surfaceInteraction.consumeTap(onPhysicalEdge: physicalEdge)
+                surfaceInteraction = currentSpreadSurfaceInteraction(in: collectionView)
+            } else if let pageIndex = pageIndex(forPhysicalEdge: physicalEdge, in: collectionView),
+                      let page = parent.plan.page(at: pageIndex) {
+                surfaceInteraction = pageSurfaceInteractions[page.id]
+            } else {
+                surfaceInteraction = nil
             }
-
-            guard let pageIndex = pageIndex(forPhysicalEdge: physicalEdge, in: collectionView),
-                  let page = parent.plan.page(at: pageIndex),
-                  let surfaceInteraction = pageSurfaceInteractions[page.id] else {
+            guard let surfaceInteraction,
+                  MangaPagedSurfaceEdgeInteraction.shouldRevealHiddenContent(
+                      on: physicalEdge,
+                      hiddenEdges: surfaceInteraction.hiddenEdges
+                  ) else {
                 return false
             }
             return surfaceInteraction.consumeTap(onPhysicalEdge: physicalEdge)
         }
 
-        private func physicalHorizontalEdge(for zone: ReaderPagedTapZone) -> MangaPagedImageSurfaceHorizontalEdge? {
-            switch zone {
-            case .previous:
-                .left
-            case .next:
-                .right
-            case .toggleChrome:
-                nil
+        private func requestSpreadZoomToggle(at location: CGPoint, in collectionView: UICollectionView) {
+            guard let spreadIndex = currentSpreadIndex(in: collectionView),
+                  let spread = parent.plan.spread(at: spreadIndex),
+                  let surfaceInteraction = spreadSurfaceInteractions[spread.id] else {
+                return
             }
+            surfaceInteraction.requestZoomToggle(at: spreadLocation(for: spreadIndex, location: location, in: collectionView))
+        }
+
+        private func currentSpreadSurfaceInteraction(
+            in collectionView: UICollectionView
+        ) -> MangaPagedReaderPageSurfaceInteraction? {
+            guard let spreadIndex = currentSpreadIndex(in: collectionView),
+                  let spread = parent.plan.spread(at: spreadIndex) else {
+                return nil
+            }
+            return spreadSurfaceInteractions[spread.id]
+        }
+
+        private func currentPageSurfaceInteraction(
+            in collectionView: UICollectionView
+        ) -> MangaPagedReaderPageSurfaceInteraction? {
+            guard let pageIndex = currentPageIndex(in: collectionView),
+                  let page = parent.plan.page(at: pageIndex) else {
+                return nil
+            }
+            return pageSurfaceInteractions[page.id]
         }
 
         private func surfaceLocation(
@@ -828,12 +815,7 @@ struct MangaPagedPageCurlReaderViewport: UIViewControllerRepresentable {
     }
 
     private var selectionIndex: Int {
-        let targetPageIndex = plan.clampedPageIndex(
-            viewportPlacement?.targetPageIndex ?? plan.currentPageIndex
-        )
-        return targetPageIndex.flatMap(plan.spreadIndex(forPageAt:))
-            ?? plan.currentSpreadIndex
-            ?? 0
+        MangaPagedPageCurlSelectionResolver.currentSelectionIndex(plan: plan)
     }
 
     private var contentIdentity: MangaPagedReaderContentIdentity {
@@ -892,6 +874,7 @@ struct MangaPagedPageCurlReaderViewport: UIViewControllerRepresentable {
     final class Coordinator: NSObject, UIPageViewControllerDataSource, UIPageViewControllerDelegate, UIGestureRecognizerDelegate {
         var parent: MangaPagedPageCurlReaderViewport
         let callbackScheduler = SwiftUIViewUpdateCallbackScheduler()
+        private var selectionResolver = MangaPagedPageCurlSelectionResolver()
         private var contentIdentity: MangaPagedReaderContentIdentity?
         private var currentSelectionIndex: Int?
         private var lastReportedGlobalIndex: Int?
@@ -929,11 +912,16 @@ struct MangaPagedPageCurlReaderViewport: UIViewControllerRepresentable {
             applyPageBackground(to: pageViewController)
             guard !isAwaitingSinglePageSpine else { return }
 
-            guard didChangeContentIdentity || currentSelectionIndex != parent.selectionIndex else {
+            let targetSelectionIndex = selectionResolver.selectionIndex(
+                plan: parent.plan,
+                viewportPlacement: parent.viewportPlacement
+            )
+            guard didChangeContentIdentity || currentSelectionIndex != targetSelectionIndex else {
                 return
             }
             setCurrentSelection(
                 in: pageViewController,
+                selectionIndex: targetSelectionIndex,
                 animated: !didChangeContentIdentity && parent.viewportPlacement?.animated == true
             )
         }
@@ -1005,6 +993,9 @@ struct MangaPagedPageCurlReaderViewport: UIViewControllerRepresentable {
                 for: recognizer.location(in: pageViewController.view),
                 in: pageViewController.view.bounds
             )
+            if consumeSurfaceEdgeTap(for: zone, in: pageViewController) {
+                return
+            }
             switch directionalTapZone(for: zone) {
             case .previous:
                 animateAdjacentSelection(delta: -1, in: pageViewController)
@@ -1022,6 +1013,21 @@ struct MangaPagedPageCurlReaderViewport: UIViewControllerRepresentable {
             touch.view?.isDescendant(ofType: UIControl.self) != true
         }
 
+        func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+            guard let panRecognizer = gestureRecognizer as? UIPanGestureRecognizer,
+                  let pageViewController = activePageViewController,
+                  pageViewController.gestureRecognizers.contains(where: { $0 === gestureRecognizer }) else {
+                return true
+            }
+            guard !parent.isChromeVisible else {
+                return false
+            }
+            if shouldDeferPageCurlPanToSurfaceContent(panRecognizer, in: pageViewController) {
+                return false
+            }
+            return true
+        }
+
         func configureSpine(in pageViewController: UIPageViewController) -> UIPageViewController.SpineLocation {
             let configuration = MangaPagedPageCurlSpineConfiguration.configuration(
                 usesTwoPageSpread: parent.sequence.usesTwoPageSpread,
@@ -1034,17 +1040,35 @@ struct MangaPagedPageCurlReaderViewport: UIViewControllerRepresentable {
         }
 
         func configureGestures(in pageViewController: UIPageViewController) {
+            activePageViewController = pageViewController
             for recognizer in pageViewController.gestureRecognizers {
                 if recognizer is UITapGestureRecognizer {
                     recognizer.isEnabled = false
                 } else if recognizer is UIPanGestureRecognizer {
+                    recognizer.delegate = self
                     recognizer.isEnabled = !parent.isChromeVisible
                 }
             }
         }
 
         func setCurrentSelection(in pageViewController: UIPageViewController, animated: Bool) {
-            setSelection(parent.selectionIndex, in: pageViewController, animated: animated, publishOnCompletion: false)
+            let targetSelectionIndex = selectionResolver.selectionIndex(
+                plan: parent.plan,
+                viewportPlacement: parent.viewportPlacement
+            )
+            setCurrentSelection(
+                in: pageViewController,
+                selectionIndex: targetSelectionIndex,
+                animated: animated
+            )
+        }
+
+        func setCurrentSelection(
+            in pageViewController: UIPageViewController,
+            selectionIndex: Int,
+            animated: Bool
+        ) {
+            setSelection(selectionIndex, in: pageViewController, animated: animated, publishOnCompletion: false)
         }
 
         private func animateAdjacentSelection(delta: Int, in pageViewController: UIPageViewController) {
@@ -1233,6 +1257,69 @@ struct MangaPagedPageCurlReaderViewport: UIViewControllerRepresentable {
             }
         }
 
+        private func consumeSurfaceEdgeTap(for zone: ReaderPagedTapZone, in pageViewController: UIPageViewController) -> Bool {
+            guard let physicalEdge = MangaPagedSurfaceEdgeInteraction.physicalEdge(forTapZone: zone),
+                  let surfaceInteraction = pageCurlSurfaceInteraction(
+                      onPhysicalEdge: physicalEdge,
+                      in: pageViewController
+                  ),
+                  MangaPagedSurfaceEdgeInteraction.shouldRevealHiddenContent(
+                      on: physicalEdge,
+                      hiddenEdges: surfaceInteraction.hiddenEdges
+                  ) else {
+                return false
+            }
+            return surfaceInteraction.consumeTap(onPhysicalEdge: physicalEdge)
+        }
+
+        private func shouldDeferPageCurlPanToSurfaceContent(
+            _ recognizer: UIPanGestureRecognizer,
+            in pageViewController: UIPageViewController
+        ) -> Bool {
+            let velocity = recognizer.velocity(in: pageViewController.view)
+            let translation = recognizer.translation(in: pageViewController.view)
+            guard let physicalEdge = MangaPagedSurfaceEdgeInteraction.physicalEdge(
+                horizontalVelocityX: velocity.x,
+                horizontalTranslationX: translation.x
+            ),
+                  let surfaceInteraction = pageCurlSurfaceInteraction(
+                      onPhysicalEdge: physicalEdge,
+                      in: pageViewController
+                  ) else {
+                return false
+            }
+            return MangaPagedSurfaceEdgeInteraction.shouldDeferPageTurnPanToSurfaceContent(
+                zoomEnabled: parent.zoomEnabled,
+                hiddenEdges: surfaceInteraction.hiddenEdges,
+                physicalEdge: physicalEdge
+            )
+        }
+
+        private func pageCurlSurfaceInteraction(
+            onPhysicalEdge edge: MangaPagedImageSurfaceHorizontalEdge,
+            in pageViewController: UIPageViewController
+        ) -> MangaPagedReaderPageSurfaceInteraction? {
+            let controllers = (pageViewController.viewControllers ?? [])
+                .compactMap { $0 as? MangaPagedPageCurlHostingController }
+                .sorted { $0.leaf.index < $1.leaf.index }
+            let targetController: MangaPagedPageCurlHostingController?
+            if parent.sequence.usesTwoPageSpread {
+                targetController = switch edge {
+                case .left:
+                    controllers.first
+                case .right:
+                    controllers.last
+                }
+            } else {
+                targetController = controllers.first
+            }
+            guard let pageIndex = targetController?.leaf.pageIndex,
+                  let page = parent.plan.page(at: pageIndex) else {
+                return nil
+            }
+            return pageSurfaceInteractions[page.id]
+        }
+
         private func directionalTapZone(for zone: ReaderPagedTapZone) -> ReaderPagedTapZone {
             guard parent.settings.pageTurnDirection == .rightToLeft else {
                 return zone
@@ -1353,7 +1440,7 @@ private struct MangaPagedPageCurlLeafView: View {
             pageEdgeFillStyle: pageEdgeFillStyle,
             isChromeVisible: isChromeVisible,
             zoomEnabled: zoomEnabled,
-            allowsUnzoomedSurfacePan: false,
+            allowsUnzoomedSurfacePan: true,
             isPageZoomEnabled: true
         )
         .ignoresSafeArea(

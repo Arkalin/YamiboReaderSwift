@@ -372,6 +372,29 @@ struct MangaPagedPageCurlSequence: Equatable, Sendable {
     }
 }
 
+struct MangaPagedPageCurlSelectionResolver: Equatable, Sendable {
+    private(set) var lastAppliedPlacementRevision: Int?
+
+    mutating func selectionIndex(
+        plan: MangaPagedReadingPlan,
+        viewportPlacement: MangaReaderViewportPlacement?
+    ) -> Int {
+        if let viewportPlacement,
+           viewportPlacement.revision != lastAppliedPlacementRevision,
+           let targetPageIndex = plan.clampedPageIndex(viewportPlacement.targetPageIndex),
+           let targetSelectionIndex = plan.spreadIndex(forPageAt: targetPageIndex) {
+            lastAppliedPlacementRevision = viewportPlacement.revision
+            return targetSelectionIndex
+        }
+
+        return Self.currentSelectionIndex(plan: plan)
+    }
+
+    static func currentSelectionIndex(plan: MangaPagedReadingPlan) -> Int {
+        plan.currentSpreadIndex ?? 0
+    }
+}
+
 private extension Array where Element == MangaPagedPageCurlLeaf {
     func ifEmpty(_ fallback: [MangaPagedPageCurlLeaf]) -> [MangaPagedPageCurlLeaf] {
         isEmpty ? fallback : self

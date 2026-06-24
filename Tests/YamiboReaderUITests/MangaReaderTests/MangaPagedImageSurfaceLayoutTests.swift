@@ -39,6 +39,42 @@ struct MangaPagedImageSurfaceLayoutTests {
         #expect(ReaderPagedTapZone.zone(for: CGPoint(x: 260, y: 400), in: bounds) == .toggleChrome)
     }
 
+    @Test func surfaceEdgeInteractionMapsTapZonesToPhysicalEdges() {
+        #expect(MangaPagedSurfaceEdgeInteraction.physicalEdge(forTapZone: .previous) == .left)
+        #expect(MangaPagedSurfaceEdgeInteraction.physicalEdge(forTapZone: .next) == .right)
+        #expect(MangaPagedSurfaceEdgeInteraction.physicalEdge(forTapZone: .toggleChrome) == nil)
+    }
+
+    @Test func surfaceEdgeInteractionMapsHorizontalPanTowardHiddenPhysicalEdge() {
+        #expect(MangaPagedSurfaceEdgeInteraction.physicalEdge(horizontalVelocityX: -10, horizontalTranslationX: 200) == .right)
+        #expect(MangaPagedSurfaceEdgeInteraction.physicalEdge(horizontalVelocityX: 10, horizontalTranslationX: -200) == .left)
+        #expect(MangaPagedSurfaceEdgeInteraction.physicalEdge(horizontalVelocityX: 0, horizontalTranslationX: -20) == .right)
+        #expect(MangaPagedSurfaceEdgeInteraction.physicalEdge(horizontalVelocityX: 0, horizontalTranslationX: 20) == .left)
+        #expect(MangaPagedSurfaceEdgeInteraction.physicalEdge(horizontalVelocityX: 0, horizontalTranslationX: 0) == nil)
+    }
+
+    @Test func surfaceEdgeInteractionDefersPageTurnPanOnlyForEnabledHiddenEdge() {
+        let hiddenEdges: Set<MangaPagedImageSurfaceHorizontalEdge> = [.right]
+
+        #expect(MangaPagedSurfaceEdgeInteraction.shouldRevealHiddenContent(on: .right, hiddenEdges: hiddenEdges))
+        #expect(!MangaPagedSurfaceEdgeInteraction.shouldRevealHiddenContent(on: .left, hiddenEdges: hiddenEdges))
+        #expect(MangaPagedSurfaceEdgeInteraction.shouldDeferPageTurnPanToSurfaceContent(
+            zoomEnabled: true,
+            hiddenEdges: hiddenEdges,
+            physicalEdge: .right
+        ))
+        #expect(!MangaPagedSurfaceEdgeInteraction.shouldDeferPageTurnPanToSurfaceContent(
+            zoomEnabled: false,
+            hiddenEdges: hiddenEdges,
+            physicalEdge: .right
+        ))
+        #expect(!MangaPagedSurfaceEdgeInteraction.shouldDeferPageTurnPanToSurfaceContent(
+            zoomEnabled: true,
+            hiddenEdges: hiddenEdges,
+            physicalEdge: .left
+        ))
+    }
+
     @Test func fitWidthKeepsFixedPageSurfaceWithVerticalBlankSpace() {
         let layout = MangaPagedImageSurfaceLayout(
             imageSize: CGSize(width: 800, height: 600),
