@@ -480,14 +480,6 @@ struct MangaPagedReaderViewport: UIViewRepresentable {
             _ recognizer: UIPanGestureRecognizer,
             in collectionView: UICollectionView
         ) -> Bool {
-            let velocity = recognizer.velocity(in: collectionView)
-            let translation = recognizer.translation(in: collectionView)
-            guard let physicalEdge = MangaPagedSurfaceEdgeInteraction.physicalEdge(
-                horizontalVelocityX: velocity.x,
-                horizontalTranslationX: translation.x
-            ) else {
-                return false
-            }
             let surfaceInteraction: MangaPagedReaderPageSurfaceInteraction?
             if parent.plan.usesTwoPageSpread {
                 surfaceInteraction = currentSpreadSurfaceInteraction(in: collectionView)
@@ -497,8 +489,15 @@ struct MangaPagedReaderViewport: UIViewRepresentable {
             guard let surfaceInteraction else {
                 return false
             }
+            let velocity = recognizer.velocity(in: collectionView)
+            let translation = recognizer.translation(in: collectionView)
+            let physicalEdge = MangaPagedSurfaceEdgeInteraction.physicalEdge(
+                horizontalVelocityX: velocity.x,
+                horizontalTranslationX: translation.x
+            )
             return MangaPagedSurfaceEdgeInteraction.shouldDeferPageTurnPanToSurfaceContent(
                 zoomEnabled: parent.zoomEnabled,
+                isZoomActive: surfaceInteraction.isZoomActive,
                 hiddenEdges: surfaceInteraction.hiddenEdges,
                 physicalEdge: physicalEdge
             )
@@ -1534,14 +1533,13 @@ struct MangaPagedPageCurlReaderViewport: UIViewControllerRepresentable {
             guard parent.sequence.usesTwoPageSpread else { return false }
             let velocity = recognizer.velocity(in: containerViewController.view)
             let translation = recognizer.translation(in: containerViewController.view)
-            guard let physicalEdge = MangaPagedSurfaceEdgeInteraction.physicalEdge(
+            let physicalEdge = MangaPagedSurfaceEdgeInteraction.physicalEdge(
                 horizontalVelocityX: velocity.x,
                 horizontalTranslationX: translation.x
-            ) else {
-                return false
-            }
+            )
             return MangaPagedSurfaceEdgeInteraction.shouldDeferPageTurnPanToSurfaceContent(
                 zoomEnabled: parent.zoomEnabled,
+                isZoomActive: MangaPageZoomPolicy.isActive(pageCurlZoomScale),
                 hiddenEdges: pageCurlSpreadHiddenEdges,
                 physicalEdge: physicalEdge
             )
@@ -1551,24 +1549,36 @@ struct MangaPagedPageCurlReaderViewport: UIViewControllerRepresentable {
             _ recognizer: UIPanGestureRecognizer,
             in pageViewController: UIPageViewController
         ) -> Bool {
-            guard !parent.sequence.usesTwoPageSpread else { return false }
-            let velocity = recognizer.velocity(in: pageViewController.view)
-            let translation = recognizer.translation(in: pageViewController.view)
-            guard let physicalEdge = MangaPagedSurfaceEdgeInteraction.physicalEdge(
-                horizontalVelocityX: velocity.x,
-                horizontalTranslationX: translation.x
-            ),
-                  let surfaceInteraction = pageCurlSurfaceInteraction(
-                      onPhysicalEdge: physicalEdge,
-                      in: pageViewController
-                  ) else {
+            guard !parent.sequence.usesTwoPageSpread,
+                  let surfaceInteraction = currentPageCurlSurfaceInteraction(in: pageViewController) else {
                 return false
             }
+            let velocity = recognizer.velocity(in: pageViewController.view)
+            let translation = recognizer.translation(in: pageViewController.view)
+            let physicalEdge = MangaPagedSurfaceEdgeInteraction.physicalEdge(
+                horizontalVelocityX: velocity.x,
+                horizontalTranslationX: translation.x
+            )
             return MangaPagedSurfaceEdgeInteraction.shouldDeferPageTurnPanToSurfaceContent(
                 zoomEnabled: parent.zoomEnabled,
+                isZoomActive: surfaceInteraction.isZoomActive,
                 hiddenEdges: surfaceInteraction.hiddenEdges,
                 physicalEdge: physicalEdge
             )
+        }
+
+        private func currentPageCurlSurfaceInteraction(
+            in pageViewController: UIPageViewController
+        ) -> MangaPagedReaderPageSurfaceInteraction? {
+            let targetController = (pageViewController.viewControllers ?? [])
+                .compactMap { $0 as? MangaPagedPageCurlHostingController }
+                .sorted { $0.leaf.index < $1.leaf.index }
+                .first
+            guard let pageIndex = targetController?.leaf.pageIndex,
+                  let page = parent.plan.page(at: pageIndex) else {
+                return nil
+            }
+            return pageSurfaceInteractions[page.id]
         }
 
         private func pageCurlSurfaceInteraction(
@@ -1965,9 +1975,14 @@ private final class MangaPagedReaderPageSurfaceInteraction: ObservableObject {
 
     private var requestSequence = 0
     private(set) var hiddenEdges: Set<MangaPagedImageSurfaceHorizontalEdge> = []
+    private(set) var isZoomActive = false
 
     func updateHiddenEdges(_ hiddenEdges: Set<MangaPagedImageSurfaceHorizontalEdge>) {
         self.hiddenEdges = hiddenEdges
+    }
+
+    func updateZoomActive(_ isZoomActive: Bool) {
+        self.isZoomActive = isZoomActive
     }
 
     func hasHiddenContent(onPhysicalEdge edge: MangaPagedImageSurfaceHorizontalEdge) -> Bool {
@@ -2162,6 +2177,7 @@ private struct MangaPagedReaderZoomableSpreadSurface: View {
             let userOffset = proposedUserOffset(layout: layout)
             let displayOffset = layout.displayOffset(forUserOffset: userOffset)
             let hiddenEdges = hiddenHorizontalEdges(layout: layout, userOffset: userOffset)
+            let isSurfaceZoomActive = isZoomInteractionEnabled && MangaPageZoomPolicy.isActive(zoomScale)
 
             ZStack {
                 pageEdgeFillStyle.color(for: colorScheme)
@@ -2212,6 +2228,9 @@ private struct MangaPagedReaderZoomableSpreadSurface: View {
             .onChange(of: hiddenEdges, initial: true) { _, newValue in
                 spreadSurfaceInteraction.updateHiddenEdges(newValue)
             }
+            .onChange(of: isSurfaceZoomActive, initial: true) { _, newValue in
+                spreadSurfaceInteraction.updateZoomActive(newValue)
+            }
             .onReceive(spreadSurfaceInteraction.$edgeRevealRequest) { request in
                 guard let edge = request.edge else { return }
                 revealHiddenContent(on: edge, containerSize: containerSize)
@@ -2225,6 +2244,7 @@ private struct MangaPagedReaderZoomableSpreadSurface: View {
             }
             .onDisappear {
                 spreadSurfaceInteraction.updateHiddenEdges([])
+                spreadSurfaceInteraction.updateZoomActive(false)
             }
         }
     }
@@ -2498,6 +2518,7 @@ private struct MangaPagedReaderScaledImage: View {
             let userOffset = proposedUserOffset(layout: layout)
             let displayOffset = layout.displayOffset(forUserOffset: userOffset)
             let hiddenEdges = hiddenHorizontalEdges(layout: layout, userOffset: userOffset)
+            let isSurfaceZoomActive = isZoomInteractionEnabled && MangaPageZoomPolicy.isActive(zoomScale)
 
             ZStack {
                 pageEdgeFillStyle.color(for: colorScheme)
@@ -2533,6 +2554,9 @@ private struct MangaPagedReaderScaledImage: View {
             .onChange(of: hiddenEdges, initial: true) { _, newValue in
                 surfaceInteraction.updateHiddenEdges(newValue)
             }
+            .onChange(of: isSurfaceZoomActive, initial: true) { _, newValue in
+                surfaceInteraction.updateZoomActive(newValue)
+            }
             .onReceive(surfaceInteraction.$edgeRevealRequest) { request in
                 guard let edge = request.edge else { return }
                 revealHiddenContent(on: edge, containerSize: containerSize)
@@ -2546,6 +2570,7 @@ private struct MangaPagedReaderScaledImage: View {
             }
             .onDisappear {
                 surfaceInteraction.updateHiddenEdges([])
+                surfaceInteraction.updateZoomActive(false)
             }
         }
     }

@@ -66,30 +66,52 @@ struct MangaPagedImageSurfaceLayoutTests {
         #expect(MangaPagedSurfaceEdgeInteraction.physicalEdge(horizontalVelocityX: 0, horizontalTranslationX: 0) == nil)
     }
 
-    @Test func surfaceEdgeInteractionDefersPageTurnPanOnlyForEnabledHiddenEdge() {
+    @Test func pageTurnPanPolicyDefersForActiveZoomBeforeHiddenEdge() {
         let hiddenEdges: Set<MangaPagedImageSurfaceHorizontalEdge> = [.right]
 
         #expect(MangaPagedSurfaceEdgeInteraction.shouldRevealHiddenContent(on: .right, hiddenEdges: hiddenEdges))
         #expect(!MangaPagedSurfaceEdgeInteraction.shouldRevealHiddenContent(on: .left, hiddenEdges: hiddenEdges))
         #expect(MangaPagedSurfaceEdgeInteraction.shouldDeferPageTurnPanToSurfaceContent(
             zoomEnabled: true,
+            isZoomActive: true,
+            hiddenEdges: [],
+            physicalEdge: nil
+        ))
+        #expect(!MangaPagedSurfaceEdgeInteraction.shouldDeferPageTurnPanToSurfaceContent(
+            zoomEnabled: false,
+            isZoomActive: true,
+            hiddenEdges: [],
+            physicalEdge: nil
+        ))
+        #expect(MangaPagedSurfaceEdgeInteraction.shouldDeferPageTurnPanToSurfaceContent(
+            zoomEnabled: true,
+            isZoomActive: false,
             hiddenEdges: hiddenEdges,
             physicalEdge: .right
         ))
         #expect(!MangaPagedSurfaceEdgeInteraction.shouldDeferPageTurnPanToSurfaceContent(
             zoomEnabled: false,
+            isZoomActive: false,
             hiddenEdges: hiddenEdges,
             physicalEdge: .right
         ))
         #expect(!MangaPagedSurfaceEdgeInteraction.shouldDeferPageTurnPanToSurfaceContent(
             zoomEnabled: true,
+            isZoomActive: false,
             hiddenEdges: hiddenEdges,
             physicalEdge: .left
         ))
         #expect(!MangaPagedSurfaceEdgeInteraction.shouldDeferPageTurnPanToSurfaceContent(
             zoomEnabled: true,
+            isZoomActive: false,
             hiddenEdges: [],
             physicalEdge: .right
+        ))
+        #expect(!MangaPagedSurfaceEdgeInteraction.shouldDeferPageTurnPanToSurfaceContent(
+            zoomEnabled: true,
+            isZoomActive: false,
+            hiddenEdges: hiddenEdges,
+            physicalEdge: nil
         ))
     }
 

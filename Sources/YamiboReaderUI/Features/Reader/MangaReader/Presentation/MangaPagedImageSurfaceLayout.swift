@@ -86,10 +86,33 @@ enum MangaPagedSurfaceEdgeInteraction {
 
     static func shouldDeferPageTurnPanToSurfaceContent(
         zoomEnabled: Bool,
+        isZoomActive: Bool,
         hiddenEdges: Set<MangaPagedImageSurfaceHorizontalEdge>,
-        physicalEdge: MangaPagedImageSurfaceHorizontalEdge
+        physicalEdge: MangaPagedImageSurfaceHorizontalEdge?
     ) -> Bool {
-        zoomEnabled && shouldRevealHiddenContent(on: physicalEdge, hiddenEdges: hiddenEdges)
+        MangaPagedPageTurnPanPolicy.shouldDeferPageTurnPanToSurfaceContent(
+            zoomEnabled: zoomEnabled,
+            isZoomActive: isZoomActive,
+            hiddenEdges: hiddenEdges,
+            physicalEdge: physicalEdge
+        )
+    }
+}
+
+enum MangaPagedPageTurnPanPolicy {
+    static func shouldDeferPageTurnPanToSurfaceContent(
+        zoomEnabled: Bool,
+        isZoomActive: Bool,
+        hiddenEdges: Set<MangaPagedImageSurfaceHorizontalEdge>,
+        physicalEdge: MangaPagedImageSurfaceHorizontalEdge?
+    ) -> Bool {
+        guard zoomEnabled else { return false }
+        if isZoomActive { return true }
+        guard let physicalEdge else { return false }
+        return MangaPagedSurfaceEdgeInteraction.shouldRevealHiddenContent(
+            on: physicalEdge,
+            hiddenEdges: hiddenEdges
+        )
     }
 }
 
