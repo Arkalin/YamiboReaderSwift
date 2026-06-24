@@ -72,6 +72,24 @@ struct MangaReaderPresentationInfrastructureTests {
         #expect(!source.contains("originalThreadURL:"))
     }
 
+    @Test func readerInstallsApplePencilPageTurnOverlayForPagedManga() throws {
+        let source = try sourceFile("Sources/YamiboReaderUI/Features/Reader/MangaReader/Presentation/MangaReaderView.swift")
+
+        #expect(source.contains("ApplePencilPageTurnInteractionOverlay("))
+        #expect(source.contains("settings: model.applePencilPageTurnSettings"))
+        #expect(source.contains("canTurnPage: canReceiveApplePencilPageTurn"))
+        #expect(source.contains("Task { await model.jumpRelativePage(delta, usesTwoPageSpread: usesTwoPageSpread) }"))
+        #expect(source.contains("private var canReceiveApplePencilPageTurn: Bool"))
+        #expect(source.contains("UIDevice.current.userInterfaceIdiom == .pad"))
+        #expect(source.contains("model.presentation.settings.readingMode == .paged"))
+        #expect(source.contains("!loaded.pages.isEmpty"))
+        #expect(source.contains("!isDirectoryPresented"))
+        #expect(source.contains("!isChapterCommentsPresented"))
+        #expect(source.contains("!isSettingsPresented"))
+        #expect(source.contains("!isDismissing"))
+        #expect(source.contains("!isChromeVisible"))
+    }
+
     @Test func nonIOSRootTabViewDoesNotPresentMangaHost() throws {
         let source = try sourceFile("Sources/YamiboReaderUI/AppEntry/RootTabView.swift")
         let nonIOSBranch = try #require(source.range(of: "#else\n        content"))

@@ -81,6 +81,7 @@ struct MangaReaderModelDependencies {
 @MainActor
 public final class MangaReaderModel: ObservableObject {
     @Published public private(set) var presentation: MangaReaderPresentation
+    @Published public private(set) var applePencilPageTurnSettings = ApplePencilPageTurnSettings()
     @Published public private(set) var chapterCommentsState: ReaderChapterCommentsState = .idle
     @Published public private(set) var isLoadingMoreChapterComments = false
     @Published public private(set) var chapterCommentsLoadMoreError: String?
@@ -172,7 +173,9 @@ public final class MangaReaderModel: ObservableObject {
         invalidateReaderContent()
         lastQueuedProgressSnapshot = nil
 
-        committedSettings = Self.normalizedSettings((await appContext.settingsStore.load()).manga)
+        let appSettings = await appContext.settingsStore.load()
+        committedSettings = Self.normalizedSettings(appSettings.manga)
+        applePencilPageTurnSettings = appSettings.applePencilPageTurn
         presentation = presentationWithCommittedSettings(presentation)
 
         #if os(iOS)
@@ -229,6 +232,41 @@ public final class MangaReaderModel: ObservableObject {
         let nextPresentation = workflow.jumpToLoadedPage(at: targetPage.globalIndex)
         publishPresentation(nextPresentation, previousProgressSnapshot: previousProgressSnapshot)
         scheduleAdjacentPrefetch(around: currentPageIndex(in: nextPresentation) ?? targetPage.globalIndex)
+    }
+
+    public func jumpRelativePage(_ delta: Int, usesTwoPageSpread: Bool) async {
+        guard delta != 0,
+              let workflow,
+              presentation.settings.readingMode == .paged,
+              case let .loaded(loaded) = presentation.state,
+              !loaded.pages.isEmpty else {
+            return
+        }
+
+        let plan = MangaPagedReadingPlan(
+            pages: loaded.pages,
+            currentPageIndex: loaded.currentPageIndex,
+            pageTurnDirection: presentation.settings.pageTurnDirection,
+            usesTwoPageSpread: usesTwoPageSpread
+        )
+        let targetGlobalIndex: Int?
+        if usesTwoPageSpread {
+            targetGlobalIndex = plan.currentSpreadIndex.flatMap { currentSpreadIndex in
+                plan.globalIndex(forSpreadAt: currentSpreadIndex + delta)
+            }
+        } else {
+            targetGlobalIndex = plan.currentPageIndex.flatMap { currentPageIndex in
+                plan.globalIndex(forPageAt: currentPageIndex + delta)
+            }
+        }
+        guard let targetGlobalIndex else { return }
+
+        adjacentPrefetchTask?.cancel()
+        readerContentGeneration += 1
+        let previousProgressSnapshot = progressSnapshot(from: presentation)
+        let nextPresentation = workflow.jumpToLoadedPage(at: targetGlobalIndex, animated: true)
+        publishPresentation(nextPresentation, previousProgressSnapshot: previousProgressSnapshot)
+        scheduleAdjacentPrefetch(around: currentPageIndex(in: nextPresentation) ?? targetGlobalIndex)
     }
 
     public var currentChapterCommentTarget: ReaderChapterCommentTarget? {
