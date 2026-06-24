@@ -18,6 +18,31 @@ struct MangaReaderPresentationInfrastructureTests {
         #expect(!source.contains("LazyVStack"))
     }
 
+    @Test func verticalViewportSupportsFullScreenDoubleTapZoom() throws {
+        let source = try sourceFile("Sources/YamiboReaderUI/Features/Reader/MangaReader/Presentation/MangaVerticalCollectionViewport.swift")
+        let viewSource = try sourceFile("Sources/YamiboReaderUI/Features/Reader/MangaReader/Presentation/MangaReaderView.swift")
+
+        #expect(viewSource.contains("MangaVerticalCollectionViewport("))
+        #expect(viewSource.contains("isChromeVisible: isChromeVisible"))
+        #expect(viewSource.contains("zoomEnabled: settings.zoomEnabled"))
+        #expect(source.contains("let isChromeVisible: Bool"))
+        #expect(source.contains("let zoomEnabled: Bool"))
+        #expect(source.contains("lazy var doubleTapGesture: UITapGestureRecognizer"))
+        #expect(source.contains("recognizer.numberOfTapsRequired = 2"))
+        #expect(source.contains("tapGesture.require(toFail: context.coordinator.doubleTapGesture)"))
+        #expect(source.contains("@objc private func handleDoubleTap"))
+        #expect(source.contains("if parent.isChromeVisible"))
+        #expect(source.contains("guard parent.zoomEnabled"))
+        #expect(source.contains("cell.toggleZoom(at: location)"))
+        #expect(source.contains("private let zoomScrollView = UIScrollView()"))
+        #expect(source.contains("zoomScrollView.maximumZoomScale = MangaPageZoomPolicy.maximumScale"))
+        #expect(source.contains("MangaPageZoomPolicy.doubleTapTargetScale"))
+        #expect(!source.contains("private static let doubleTapZoomScale"))
+        #expect(!source.contains("private static let maximumZoomScale"))
+        #expect(source.contains("collectionView.isScrollEnabled = false"))
+        #expect(!source.contains("MangaPagedCenterTapHitTesting.acceptsCenterTap"))
+    }
+
     @Test func readerLoadedStateDoesNotUseDiagnosticScrollList() throws {
         let source = try sourceFile("Sources/YamiboReaderUI/Features/Reader/MangaReader/Presentation/MangaReaderView.swift")
 
@@ -271,6 +296,10 @@ struct MangaReaderPresentationInfrastructureTests {
         #expect(source.contains("func requestZoomToggle(at location: CGPoint)"))
         #expect(source.contains(".onReceive(surfaceInteraction.$zoomToggleRequest)"))
         #expect(source.contains("isZoomInteractionEnabled: !isChromeVisible && zoomEnabled"))
+        #expect(source.contains("MangaPageZoomPolicy.doubleTapTargetScale"))
+        #expect(source.contains("MangaPageZoomPolicy.clampedScale(scale)"))
+        #expect(!source.contains("private static let doubleTapZoomScale"))
+        #expect(!source.contains("private static let maximumZoomScale"))
         #expect(source.contains("MagnifyGesture()"))
         #expect(source.contains("DragGesture()"))
         #expect(source.contains("guard isZoomInteractionEnabled else { return }"))

@@ -5,6 +5,19 @@ import Testing
 
 @Suite("MangaReaderTests: Paged Image Surface Layout")
 struct MangaPagedImageSurfaceLayoutTests {
+    @Test func zoomPolicyCentralizesSharedMangaPageZoomThresholds() {
+        #expect(MangaPageZoomPolicy.minimumScale == 1)
+        #expect(MangaPageZoomPolicy.doubleTapTargetScale == 2)
+        #expect(MangaPageZoomPolicy.maximumScale == 4)
+        #expect(MangaPageZoomPolicy.clampedScale(0.2) == 1)
+        #expect(MangaPageZoomPolicy.clampedScale(2.5) == 2.5)
+        #expect(MangaPageZoomPolicy.clampedScale(8) == 4)
+        #expect(!MangaPageZoomPolicy.isActive(1.01))
+        #expect(MangaPageZoomPolicy.isActive(1.02))
+        #expect(!MangaPageZoomPolicy.isZoomedForDoubleTapReset(1.05))
+        #expect(MangaPageZoomPolicy.isZoomedForDoubleTapReset(1.06))
+    }
+
     @Test func centerTapHitTestingAcceptsOnlyMiddleThirdInsideBounds() {
         let bounds = CGRect(x: 20, y: 40, width: 360, height: 720)
 

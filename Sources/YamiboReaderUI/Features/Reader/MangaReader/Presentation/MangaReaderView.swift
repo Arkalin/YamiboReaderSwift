@@ -815,6 +815,8 @@ private struct MangaReaderLoadedContent: View {
                     currentPageIndex: loaded.currentPageIndex,
                     viewportPlacement: loaded.viewportPlacement,
                     imagePipeline: imagePipeline,
+                    isChromeVisible: isChromeVisible,
+                    zoomEnabled: settings.zoomEnabled,
                     onCurrentPageChange: onCurrentPageChange,
                     onTap: onTap
                 )
