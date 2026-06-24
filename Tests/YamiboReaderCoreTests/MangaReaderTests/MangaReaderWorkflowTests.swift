@@ -368,6 +368,22 @@ struct MangaReaderTestsWorkflow {
         #expect(directory.chapters.map(\.tid) == ["700", "701"])
     }
 
+    @Test func seedLinksDirectoryOrdersCurrentChapterWithSamePageChapters() async throws {
+        let seed = MangaDirectorySeed(
+            currentChapter: makeWorkflowChapter(tid: "526353", title: "与你相恋到生命尽头 23"),
+            samePageChapters: [
+                makeWorkflowChapter(tid: "525137", title: "22")
+            ],
+            cleanBookName: "与你相恋到生命尽头",
+            firstPostID: "40392543"
+        )
+
+        let directory = MangaDirectoryInitialization.directory(from: seed)
+
+        #expect(directory.strategy == .links)
+        #expect(directory.chapters.map(\.tid) == ["525137", "526353"])
+    }
+
     @Test func seedDirectoryInitializesPendingSearchStrategy() async throws {
         let seed = MangaDirectorySeed(
             currentChapter: makeWorkflowChapter(tid: "700", title: "第1话"),

@@ -52,7 +52,7 @@ public enum MangaDirectoryInitialization {
             chapters.append(chapter)
         }
 
-        return chapters
+        return MangaDirectoryMerge.mergeAndSort([], chapters)
     }
 
     private static func normalizedBookName(_ seed: MangaDirectorySeed) -> String {
