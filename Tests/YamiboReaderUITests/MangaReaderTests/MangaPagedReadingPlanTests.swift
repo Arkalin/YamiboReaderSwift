@@ -77,6 +77,20 @@ struct MangaPagedReadingPlanTests {
         #expect(rtlPlan.spreads[0].rightPage?.id == "700#0")
     }
 
+    @Test func planDisplaysLogicalChapterPageRangeForTwoPageSpread() throws {
+        let pages = try makePagedPlanPages(pageCountsByTID: [("700", 4)])
+        let plan = MangaPagedReadingPlan(
+            pages: pages,
+            currentPageIndex: 1,
+            pageTurnDirection: .rightToLeft,
+            usesTwoPageSpread: true
+        )
+
+        #expect(plan.currentChapterPageLabel == "1-2")
+        #expect(plan.chapterPageLabel(forSpreadAt: 0) == "1-2")
+        #expect(plan.chapterPageLabel(forSpreadAt: 1) == "3-4")
+    }
+
     @Test func planPlacesRightToLeftOddTailOnRightWithoutFakeLeftPage() throws {
         let pages = try makePagedPlanPages(pageCountsByTID: [("700", 3)])
         let plan = MangaPagedReadingPlan(
@@ -91,6 +105,7 @@ struct MangaPagedReadingPlanTests {
         #expect(plan.spreads[1].pageIndexes == [2])
         #expect(plan.spreads[1].pageIndexForHorizontalLocation(25, width: 100) == nil)
         #expect(plan.spreads[1].pageIndexForHorizontalLocation(75, width: 100) == 2)
+        #expect(plan.currentChapterPageLabel == "3")
     }
 }
 

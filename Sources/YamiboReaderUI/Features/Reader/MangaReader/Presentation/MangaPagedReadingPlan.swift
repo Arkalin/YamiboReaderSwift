@@ -78,6 +78,12 @@ struct MangaPagedReadingPlan: Hashable, Sendable {
         spread(at: currentSpreadIndex)
     }
 
+    var currentChapterPageLabel: String {
+        chapterPageLabel(forSpreadAt: currentSpreadIndex)
+            ?? currentPage.map { String(max($0.localIndex + 1, 1)) }
+            ?? "1"
+    }
+
     func page(at index: Int?) -> MangaReaderPageProjection? {
         guard let index,
               pages.indices.contains(index) else {
@@ -92,6 +98,20 @@ struct MangaPagedReadingPlan: Hashable, Sendable {
             return nil
         }
         return spreads[index]
+    }
+
+    func chapterPageLabel(forSpreadAt index: Int?) -> String? {
+        guard let spread = spread(at: index) else { return nil }
+        let pageNumbers = spread.pageIndexes.compactMap { pageIndex -> Int? in
+            guard pages.indices.contains(pageIndex) else { return nil }
+            return max(pages[pageIndex].localIndex + 1, 1)
+        }
+        guard let firstPageNumber = pageNumbers.first else { return nil }
+        guard let lastPageNumber = pageNumbers.last,
+              lastPageNumber != firstPageNumber else {
+            return String(firstPageNumber)
+        }
+        return "\(firstPageNumber)-\(lastPageNumber)"
     }
 
     func globalIndex(forPageAt index: Int) -> Int? {
