@@ -123,13 +123,14 @@ public final class MangaReaderWorkflow {
     }
 
     @discardableResult
-    public func jumpToLoadedPage(at globalIndex: Int) -> MangaReaderPresentation {
+    public func jumpToLoadedPage(at globalIndex: Int, animated: Bool = false) -> MangaReaderPresentation {
         guard var window else { return presentation }
         _ = window.moveToLoadedPage(at: globalIndex)
         self.window = window
         presentation = loadedPresentation(
             from: window,
-            placementPageIndex: MangaReaderPageProjection.resolvedPageIndex(for: window)
+            placementPageIndex: MangaReaderPageProjection.resolvedPageIndex(for: window),
+            placementAnimated: animated
         )
         return presentation
     }
@@ -310,7 +311,8 @@ public final class MangaReaderWorkflow {
 
     private func loadedPresentation(
         from window: MangaChapterWindow,
-        placementPageIndex: Int? = nil
+        placementPageIndex: Int? = nil,
+        placementAnimated: Bool = false
     ) -> MangaReaderPresentation {
         let pages = MangaReaderPageProjection.projections(from: window)
         let currentPageIndex = MangaReaderPageProjection.resolvedPageIndex(for: window)
@@ -318,7 +320,7 @@ public final class MangaReaderWorkflow {
             pages.indices.contains(index) ? pages[index] : nil
         }
         let viewportPlacement = placementPageIndex.map { index in
-            nextViewportPlacement(targetPageIndex: index)
+            nextViewportPlacement(targetPageIndex: index, animated: placementAnimated)
         } ?? currentViewportPlacement
 
         return MangaReaderPresentation(
@@ -381,11 +383,11 @@ public final class MangaReaderWorkflow {
         )
     }
 
-    private func nextViewportPlacement(targetPageIndex: Int) -> MangaReaderViewportPlacement {
+    private func nextViewportPlacement(targetPageIndex: Int, animated: Bool = false) -> MangaReaderViewportPlacement {
         viewportPlacementRevision += 1
         let placement = MangaReaderViewportPlacement(
             targetPageIndex: targetPageIndex,
-            animated: false,
+            animated: animated,
             revision: viewportPlacementRevision
         )
         currentViewportPlacement = placement

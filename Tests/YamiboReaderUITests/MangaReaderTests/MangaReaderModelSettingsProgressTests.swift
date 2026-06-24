@@ -34,6 +34,20 @@ final class MangaReaderModelSettingsProgressTests: XCTestCase {
         XCTAssertEqual(fixture.model.presentation.settings.directorySortOrder, .descending)
     }
 
+    func testPrepareExposesPersistedApplePencilPageTurnSettings() async throws {
+        let applePencilSettings = ApplePencilPageTurnSettings(
+            isEnabled: true,
+            behavior: .doubleTapNextSqueezePrevious
+        )
+        let fixture = try await makeFixture(
+            appSettings: AppSettings(applePencilPageTurn: applePencilSettings)
+        )
+
+        await fixture.model.prepare()
+
+        XCTAssertEqual(fixture.model.applePencilPageTurnSettings, applePencilSettings)
+    }
+
     func testApplySettingsUpdatesPresentationAndPersistsOnlyMangaSettings() async throws {
         let initialReaderSettings = ReaderAppearanceSettings(fontScale: 1.2, readingMode: .vertical)
         let initialApplePencilSettings = ApplePencilPageTurnSettings(
@@ -226,6 +240,70 @@ final class MangaReaderModelSettingsProgressTests: XCTestCase {
         XCTAssertEqual(loaded.currentPage?.localIndex, 2)
         XCTAssertEqual(loaded.currentPage?.chapterPageCount, 3)
         XCTAssertEqual(loaded.viewportPlacement?.targetPageIndex, 2)
+    }
+
+    func testJumpRelativePagePublishesViewportPlacementForSinglePagePagedMode() async throws {
+        let fixture = try await makeFixture(
+            appSettings: AppSettings(manga: MangaReaderSettings(readingMode: .paged))
+        )
+
+        await fixture.model.prepare()
+        await fixture.model.jumpRelativePage(1, usesTwoPageSpread: false)
+
+        guard case let .loaded(loaded) = fixture.model.presentation.state else {
+            XCTFail("Expected loaded presentation")
+            return
+        }
+        XCTAssertEqual(loaded.currentPageIndex, 1)
+        XCTAssertEqual(loaded.currentPage?.globalIndex, 1)
+        XCTAssertEqual(loaded.currentPage?.localIndex, 1)
+        let placement = try XCTUnwrap(loaded.viewportPlacement)
+        XCTAssertEqual(placement.targetPageIndex, 1)
+        XCTAssertTrue(placement.animated)
+    }
+
+    func testJumpRelativePageAdvancesBySpreadInTwoPagePagedMode() async throws {
+        let fixture = try await makeFixture(
+            appSettings: AppSettings(manga: MangaReaderSettings(readingMode: .paged))
+        )
+
+        await fixture.model.prepare()
+        await fixture.model.jumpRelativePage(1, usesTwoPageSpread: true)
+
+        guard case let .loaded(loaded) = fixture.model.presentation.state else {
+            XCTFail("Expected loaded presentation")
+            return
+        }
+        XCTAssertEqual(loaded.currentPageIndex, 2)
+        XCTAssertEqual(loaded.currentPage?.globalIndex, 2)
+        XCTAssertEqual(loaded.currentPage?.localIndex, 2)
+        let placement = try XCTUnwrap(loaded.viewportPlacement)
+        XCTAssertEqual(placement.targetPageIndex, 2)
+        XCTAssertTrue(placement.animated)
+    }
+
+    func testJumpRelativePageAtBoundaryLeavesPresentationUnchanged() async throws {
+        let fixture = try await makeFixture(
+            appSettings: AppSettings(manga: MangaReaderSettings(readingMode: .paged))
+        )
+
+        await fixture.model.prepare()
+        let initialPresentation = fixture.model.presentation
+        await fixture.model.jumpRelativePage(-1, usesTwoPageSpread: false)
+
+        XCTAssertEqual(fixture.model.presentation, initialPresentation)
+    }
+
+    func testJumpRelativePageIgnoresVerticalReadingMode() async throws {
+        let fixture = try await makeFixture(
+            appSettings: AppSettings(manga: MangaReaderSettings(readingMode: .vertical))
+        )
+
+        await fixture.model.prepare()
+        let initialPresentation = fixture.model.presentation
+        await fixture.model.jumpRelativePage(1, usesTwoPageSpread: false)
+
+        XCTAssertEqual(fixture.model.presentation, initialPresentation)
     }
 
     func testSaveProgressInLoadingStateDoesNotOverwriteExistingResumeRoute() async throws {

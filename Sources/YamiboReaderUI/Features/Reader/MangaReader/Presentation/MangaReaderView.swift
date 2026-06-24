@@ -44,6 +44,15 @@ public struct MangaReaderView: View {
                 }
             )
             .ignoresSafeArea()
+            .overlay {
+                ApplePencilPageTurnInteractionOverlay(
+                    settings: model.applePencilPageTurnSettings,
+                    canTurnPage: canReceiveApplePencilPageTurn
+                ) { delta in
+                    Task { await model.jumpRelativePage(delta, usesTwoPageSpread: usesTwoPageSpread) }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
             .overlay(alignment: .top) {
                 MangaReaderFloatingControls(
                     topInset: topInset,
@@ -132,6 +141,18 @@ public struct MangaReaderView: View {
     private var canToggleChrome: Bool {
         guard case let .loaded(loaded) = model.presentation.state else { return false }
         return !loaded.pages.isEmpty
+    }
+
+    private var canReceiveApplePencilPageTurn: Bool {
+        guard case let .loaded(loaded) = model.presentation.state else { return false }
+        return UIDevice.current.userInterfaceIdiom == .pad &&
+            model.presentation.settings.readingMode == .paged &&
+            !loaded.pages.isEmpty &&
+            !isDirectoryPresented &&
+            !isChapterCommentsPresented &&
+            !isSettingsPresented &&
+            !isDismissing &&
+            !isChromeVisible
     }
 
     private func closeReader() {
