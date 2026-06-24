@@ -29,6 +29,7 @@ struct MangaVerticalCollectionViewport: UIViewRepresentable {
             )
         )
         collectionView.alwaysBounceVertical = true
+        collectionView.contentInsetAdjustmentBehavior = .never
         collectionView.backgroundColor = .black
         collectionView.showsHorizontalScrollIndicator = false
         collectionView.showsVerticalScrollIndicator = false

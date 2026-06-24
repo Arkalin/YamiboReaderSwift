@@ -18,6 +18,12 @@ struct MangaReaderPresentationInfrastructureTests {
         #expect(!source.contains("LazyVStack"))
     }
 
+    @Test func verticalViewportIgnoresScrollViewSafeAreaInsets() throws {
+        let source = try sourceFile("Sources/YamiboReaderUI/Features/Reader/MangaReader/Presentation/MangaVerticalCollectionViewport.swift")
+
+        #expect(source.contains("collectionView.contentInsetAdjustmentBehavior = .never"))
+    }
+
     @Test func verticalViewportSupportsFullStreamDoubleTapAndPinchZoom() throws {
         let source = try sourceFile("Sources/YamiboReaderUI/Features/Reader/MangaReader/Presentation/MangaVerticalCollectionViewport.swift")
         let viewSource = try sourceFile("Sources/YamiboReaderUI/Features/Reader/MangaReader/Presentation/MangaReaderView.swift")
