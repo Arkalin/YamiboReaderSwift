@@ -39,6 +39,19 @@ struct MangaPagedImageSurfaceLayoutTests {
         #expect(ReaderPagedTapZone.zone(for: CGPoint(x: 260, y: 400), in: bounds) == .toggleChrome)
     }
 
+    @Test func surfaceDragIntentRequiresDeliberateHorizontalUnzoomedDrag() {
+        #expect(MangaPagedSurfaceDragIntent.unzoomedHorizontalTranslation(CGSize(width: 8, height: 0)) == nil)
+        #expect(MangaPagedSurfaceDragIntent.unzoomedHorizontalTranslation(CGSize(width: 20, height: 24)) == nil)
+        #expect(MangaPagedSurfaceDragIntent.unzoomedHorizontalTranslation(CGSize(width: -20, height: 4)) == CGSize(width: -20, height: 0))
+        #expect(MangaPagedSurfaceDragIntent.unzoomedHorizontalTranslation(CGSize(width: 20, height: -4)) == CGSize(width: 20, height: 0))
+    }
+
+    @Test func surfaceDragIntentPreservesUnzoomedOffsetWhenInteractionDisables() {
+        #expect(!MangaPagedSurfaceDragIntent.shouldResetOffsetWhenInteractionDisables(zoomScale: 1))
+        #expect(!MangaPagedSurfaceDragIntent.shouldResetOffsetWhenInteractionDisables(zoomScale: 1.01))
+        #expect(MangaPagedSurfaceDragIntent.shouldResetOffsetWhenInteractionDisables(zoomScale: 1.02))
+    }
+
     @Test func surfaceEdgeInteractionMapsTapZonesToPhysicalEdges() {
         #expect(MangaPagedSurfaceEdgeInteraction.physicalEdge(forTapZone: .previous) == .left)
         #expect(MangaPagedSurfaceEdgeInteraction.physicalEdge(forTapZone: .next) == .right)
