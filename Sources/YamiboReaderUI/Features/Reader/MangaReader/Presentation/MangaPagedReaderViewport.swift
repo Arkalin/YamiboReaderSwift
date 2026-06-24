@@ -872,7 +872,7 @@ struct MangaPagedPageCurlReaderViewport: UIViewControllerRepresentable {
         pageViewController.view.addGestureRecognizer(tapRecognizer)
 
         context.coordinator.configureGestures(in: pageViewController)
-        context.coordinator.configureSpine(in: pageViewController)
+        _ = context.coordinator.configureSpine(in: pageViewController)
         context.coordinator.applyPageBackground(to: pageViewController)
         context.coordinator.setCurrentSelection(in: pageViewController, animated: false)
         return pageViewController
@@ -923,8 +923,11 @@ struct MangaPagedPageCurlReaderViewport: UIViewControllerRepresentable {
             }
             contentIdentity = nextContentIdentity
             configureGestures(in: pageViewController)
-            configureSpine(in: pageViewController)
+            let isAwaitingSinglePageSpine = !parent.sequence.usesTwoPageSpread &&
+                pageViewController.mangaPageCurlSpineLocation == .mid
+            _ = configureSpine(in: pageViewController)
             applyPageBackground(to: pageViewController)
+            guard !isAwaitingSinglePageSpine else { return }
 
             guard didChangeContentIdentity || currentSelectionIndex != parent.selectionIndex else {
                 return
@@ -968,9 +971,9 @@ struct MangaPagedPageCurlReaderViewport: UIViewControllerRepresentable {
             _ pageViewController: UIPageViewController,
             spineLocationFor orientation: UIInterfaceOrientation
         ) -> UIPageViewController.SpineLocation {
-            configureSpine(in: pageViewController)
+            let spineLocation = configureSpine(in: pageViewController)
             setCurrentSelection(in: pageViewController, animated: false)
-            return parent.sequence.usesTwoPageSpread ? .mid : .min
+            return spineLocation
         }
 
         func pageViewController(
@@ -1019,8 +1022,15 @@ struct MangaPagedPageCurlReaderViewport: UIViewControllerRepresentable {
             touch.view?.isDescendant(ofType: UIControl.self) != true
         }
 
-        func configureSpine(in pageViewController: UIPageViewController) {
-            pageViewController.isDoubleSided = parent.sequence.usesTwoPageSpread
+        func configureSpine(in pageViewController: UIPageViewController) -> UIPageViewController.SpineLocation {
+            let configuration = MangaPagedPageCurlSpineConfiguration.configuration(
+                usesTwoPageSpread: parent.sequence.usesTwoPageSpread,
+                currentSpineLocation: pageViewController.mangaPageCurlSpineLocation
+            )
+            if let doubleSided = configuration.doubleSidedUpdate {
+                pageViewController.isDoubleSided = doubleSided
+            }
+            return configuration.uiPageViewControllerSpineLocation
         }
 
         func configureGestures(in pageViewController: UIPageViewController) {
@@ -1307,6 +1317,23 @@ private extension UIColor {
         var alpha: CGFloat = 0
         getRed(&red, green: &green, blue: &blue, alpha: &alpha)
         return [red, green, blue, alpha].map { NSNumber(value: Double($0)) }
+    }
+}
+
+private extension UIPageViewController {
+    var mangaPageCurlSpineLocation: MangaPagedPageCurlSpineLocation {
+        spineLocation == .mid ? .mid : .min
+    }
+}
+
+private extension MangaPagedPageCurlSpineConfiguration {
+    var uiPageViewControllerSpineLocation: UIPageViewController.SpineLocation {
+        switch spineLocation {
+        case .min:
+            .min
+        case .mid:
+            .mid
+        }
     }
 }
 
