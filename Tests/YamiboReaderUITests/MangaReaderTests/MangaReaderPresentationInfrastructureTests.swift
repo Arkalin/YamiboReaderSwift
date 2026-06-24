@@ -312,6 +312,31 @@ struct MangaReaderPresentationInfrastructureTests {
         #expect(interactionSource.contains("hiddenEdges.contains(edge)"))
     }
 
+    @Test func pagedViewportLetsSlidePanWinWhenSurfaceIsUnzoomed() throws {
+        let source = try sourceFile("Sources/YamiboReaderUI/Features/Reader/MangaReader/Presentation/MangaPagedReaderViewport.swift")
+
+        #expect(source.contains("allowsUnzoomedSurfacePan: parent.settings.pagedTurnStyle == .quickFade"))
+        #expect(source.contains("allowsUnzoomedSurfacePan: allowsUnzoomedSurfacePan"))
+        #expect(!source.contains(".simultaneousGesture(dragGesture(containerSize: containerSize))"))
+
+        let scaledImageRange = try #require(source.range(of: "private struct MangaPagedReaderScaledImage"))
+        let toggleRange = try #require(source.range(of: "private func toggleZoom"))
+        let scaledImageSource = String(source[scaledImageRange.lowerBound..<toggleRange.lowerBound])
+
+        #expect(scaledImageSource.contains("let allowsUnzoomedSurfacePan: Bool"))
+        #expect(scaledImageSource.contains("private var surfaceDragGestureMask: GestureMask"))
+        #expect(scaledImageSource.contains("surfaceDragGestureEnabled ? .gesture : .subviews"))
+        #expect(scaledImageSource.contains("allowsUnzoomedSurfacePan || MangaPageZoomPolicy.isActive(zoomScale)"))
+        #expect(scaledImageSource.contains("including: surfaceDragGestureMask"))
+        #expect(scaledImageSource.contains("guard surfaceDragGestureEnabled else { return }"))
+        #expect(scaledImageSource.contains(
+            "guard surfaceDragGestureEnabled else {\n" +
+            "                    gestureUserOffset = .zero\n" +
+            "                    return\n" +
+            "                }"
+        ))
+    }
+
     @Test func pagedViewportUsesSharedSlideAndQuickFadePagingContracts() throws {
         let sharedSource = try sourceFile("Sources/YamiboReaderUI/Features/Reader/Shared/Paging/ReaderPagedPageTurnSupport.swift")
         let mangaSource = try sourceFile("Sources/YamiboReaderUI/Features/Reader/MangaReader/Presentation/MangaPagedReaderViewport.swift")
