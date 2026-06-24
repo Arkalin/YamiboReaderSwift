@@ -205,6 +205,10 @@ struct MangaReaderPresentationInfrastructureTests {
         #expect(source.contains("MangaPagedPageCurlSequence(plan: plan)"))
         #expect(source.contains("publishCurrentPageIfNeeded(selectionIndex: selectionIndex)"))
         #expect(source.contains("parent.sequence.globalIndex(forSelectionIndex: selectionIndex)"))
+        #expect(source.contains("parent.sequence.leafIndex(before: pageController.leaf)"))
+        #expect(source.contains("parent.sequence.leafIndex(after: pageController.leaf)"))
+        #expect(source.contains("guard canBeginPageCurlPan(panRecognizer, in: pageViewController) else"))
+        #expect(source.contains("private func canBeginPageCurlPan("))
         #expect(source.contains("private enum MangaPageCurlPrivateBackColor"))
     }
 
