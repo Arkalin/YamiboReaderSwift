@@ -149,12 +149,13 @@ struct MangaReaderPresentationInfrastructureTests {
         #expect(source.contains("pageEdgeFillStyle.placeholderForeground(for: colorScheme)"))
     }
 
-    @Test func pagedViewportLetsFitHeightPagesUseBottomSafeArea() throws {
+    @Test func pagedViewportLetsIPadFitHeightPagesIgnoreVerticalSafeArea() throws {
         let source = try sourceFile("Sources/YamiboReaderUI/Features/Reader/MangaReader/Presentation/MangaPagedReaderViewport.swift")
+        let layoutSource = try sourceFile("Sources/YamiboReaderUI/Features/Reader/MangaReader/Presentation/MangaPagedImageSurfaceLayout.swift")
 
         #expect(source.contains("collectionView.contentInsetAdjustmentBehavior = .never"))
-        #expect(source.contains(".ignoresSafeArea(.container, edges: .bottom)"))
-        #expect(source.contains("case .fitHeight:\n            containerSize.height / imageSize.height"))
+        #expect(source.contains("edges: UIDevice.current.userInterfaceIdiom == .pad ? .vertical : .bottom"))
+        #expect(layoutSource.contains("case .fitHeight:\n            containerSize.height / imageSize.height"))
     }
 
     @Test func settingsSheetShowsPageEdgeFillAfterPageScaleMode() throws {

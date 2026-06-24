@@ -701,7 +701,10 @@ private extension ReaderPagedPageTurnCell {
                 zoomEnabled: zoomEnabled,
                 surfaceInteraction: surfaceInteraction
             )
-            .ignoresSafeArea(.container, edges: .bottom)
+            .ignoresSafeArea(
+                .container,
+                edges: UIDevice.current.userInterfaceIdiom == .pad ? .vertical : .bottom
+            )
         }
         .margins(.all, 0)
     }
