@@ -213,6 +213,41 @@ struct MangaPagedImageSurfaceLayoutTests {
         #expect(layout.clampedUserOffset(CGSize(width: 600, height: -900)) == CGSize(width: 200, height: -200))
     }
 
+    @Test func spreadZoomLayoutScalesWholeViewport() {
+        let layout = MangaPagedSpreadSurfaceZoomLayout(
+            containerSize: CGSize(width: 1_000, height: 700),
+            zoomScale: 2
+        )
+
+        #expect(layout.contentSize == CGSize(width: 2_000, height: 1_400))
+        #expect(layout.clampedUserOffset(CGSize(width: 900, height: -500)) == CGSize(width: 500, height: -350))
+        #expect(layout.displayOffset(forUserOffset: CGSize(width: -600, height: 0)) == CGSize(width: -500, height: 0))
+    }
+
+    @Test func spreadZoomAnchorUsesWholeViewportCoordinates() {
+        let layout = MangaPagedSpreadSurfaceZoomLayout(
+            containerSize: CGSize(width: 1_000, height: 700),
+            zoomScale: 2
+        )
+
+        #expect(layout.userOffsetAnchoring(CGPoint(x: 750, y: 350)) == CGSize(width: -500, height: 0))
+        #expect(layout.userOffsetAnchoring(CGPoint(x: 500, y: 525)) == CGSize(width: 0, height: -350))
+        #expect(layout.userOffsetAnchoring(CGPoint(x: 1_400, y: 350)) == .zero)
+    }
+
+    @Test func spreadZoomReportsHiddenPhysicalEdges() {
+        let layout = MangaPagedSpreadSurfaceZoomLayout(
+            containerSize: CGSize(width: 1_000, height: 700),
+            zoomScale: 2
+        )
+
+        #expect(layout.hasHiddenContent(on: .left, fromUserOffset: .zero))
+        #expect(layout.hasHiddenContent(on: .right, fromUserOffset: .zero))
+        #expect(layout.userOffsetRevealingContent(on: .left, fromUserOffset: .zero) == CGSize(width: 500, height: 0))
+        #expect(layout.userOffsetRevealingContent(on: .right, fromUserOffset: .zero) == CGSize(width: -500, height: 0))
+        #expect(!layout.hasHiddenContent(on: .left, fromUserOffset: CGSize(width: 500, height: 0)))
+    }
+
     private static func layout(
         initialHorizontalAlignment: MangaPagedImageSurfaceInitialHorizontalAlignment
     ) -> MangaPagedImageSurfaceLayout {

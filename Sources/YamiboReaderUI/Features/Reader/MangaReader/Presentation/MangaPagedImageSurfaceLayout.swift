@@ -188,6 +188,82 @@ struct MangaPagedImageSurfaceLayout: Equatable {
     }
 }
 
+struct MangaPagedSpreadSurfaceZoomLayout: Equatable {
+    private static let edgeVisibilityTolerance: CGFloat = 0.5
+
+    let containerSize: CGSize
+    let zoomScale: CGFloat
+
+    var contentSize: CGSize {
+        let scale = max(1, zoomScale)
+        return CGSize(width: containerSize.width * scale, height: containerSize.height * scale)
+    }
+
+    func clampedUserOffset(_ proposed: CGSize) -> CGSize {
+        let bounds = overflowBounds
+        return CGSize(
+            width: proposed.width.clamped(lower: -bounds.width, upper: bounds.width),
+            height: proposed.height.clamped(lower: -bounds.height, upper: bounds.height)
+        )
+    }
+
+    func displayOffset(forUserOffset userOffset: CGSize) -> CGSize {
+        clampedUserOffset(userOffset)
+    }
+
+    func userOffsetAnchoring(_ location: CGPoint) -> CGSize {
+        let center = CGPoint(x: containerSize.width / 2, y: containerSize.height / 2)
+        let targetLocation = CGRect(origin: .zero, size: containerSize).contains(location)
+            ? location
+            : center
+        let scale = max(1, zoomScale)
+        return clampedUserOffset(
+            CGSize(
+                width: -(targetLocation.x - center.x) * scale,
+                height: -(targetLocation.y - center.y) * scale
+            )
+        )
+    }
+
+    func hasHiddenContent(
+        on edge: MangaPagedImageSurfaceHorizontalEdge,
+        fromUserOffset userOffset: CGSize
+    ) -> Bool {
+        let horizontalOverflow = overflowBounds.width
+        guard horizontalOverflow > Self.edgeVisibilityTolerance else { return false }
+
+        let displayOffsetX = displayOffset(forUserOffset: userOffset).width
+        switch edge {
+        case .left:
+            return displayOffsetX < horizontalOverflow - Self.edgeVisibilityTolerance
+        case .right:
+            return displayOffsetX > -horizontalOverflow + Self.edgeVisibilityTolerance
+        }
+    }
+
+    func userOffsetRevealingContent(
+        on edge: MangaPagedImageSurfaceHorizontalEdge,
+        fromUserOffset userOffset: CGSize
+    ) -> CGSize? {
+        guard hasHiddenContent(on: edge, fromUserOffset: userOffset) else { return nil }
+        let horizontalOverflow = overflowBounds.width
+        let targetDisplayOffsetX = switch edge {
+        case .left:
+            horizontalOverflow
+        case .right:
+            -horizontalOverflow
+        }
+        return clampedUserOffset(CGSize(width: targetDisplayOffsetX, height: userOffset.height))
+    }
+
+    private var overflowBounds: CGSize {
+        CGSize(
+            width: max(0, (contentSize.width - containerSize.width) / 2),
+            height: max(0, (contentSize.height - containerSize.height) / 2)
+        )
+    }
+}
+
 private extension CGFloat {
     func clamped(lower: CGFloat, upper: CGFloat) -> CGFloat {
         Swift.min(upper, Swift.max(lower, self))
