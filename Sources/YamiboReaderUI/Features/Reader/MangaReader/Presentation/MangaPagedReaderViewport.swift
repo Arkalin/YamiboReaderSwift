@@ -2506,16 +2506,23 @@ private struct MangaPagedReaderPageSurface: View {
                 )
                 .id(surfaceIdentity)
             } else if loadingPageID == page.id {
-                ProgressView()
-                    .tint(pageEdgeFillStyle.progressTint(for: colorScheme))
+                ReaderLoadStateView(
+                    status: .loading,
+                    tint: pageEdgeFillStyle.progressTint(for: colorScheme)
+                )
+            } else if failedPageID == page.id {
+                ReaderLoadStateView(
+                    status: .failed(title: L10n.string("image.load_failed"), message: ""),
+                    retryAction: {
+                        Task { await loadImage() }
+                    },
+                    tint: pageEdgeFillStyle.placeholderForeground(for: colorScheme)
+                )
             } else {
-                VStack(spacing: 8) {
-                    Image(systemName: failedPageID == page.id ? "exclamationmark.triangle" : "photo")
-                        .font(.title2.weight(.semibold))
-                    Text(failedPageID == page.id ? L10n.string("image.load_failed") : L10n.string("manga.loading"))
-                        .font(.caption)
-                }
-                .foregroundStyle(pageEdgeFillStyle.placeholderForeground(for: colorScheme))
+                ReaderLoadStateView(
+                    status: .loading,
+                    tint: pageEdgeFillStyle.placeholderForeground(for: colorScheme)
+                )
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

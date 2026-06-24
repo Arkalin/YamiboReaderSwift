@@ -116,6 +116,24 @@ struct MangaReaderPresentationInfrastructureTests {
         #expect(source.contains("MangaImagePipelineError.invalidImageData"))
     }
 
+    @Test func nativeMangaReaderUsesSharedLoadStateView() throws {
+        let sharedSource = try sourceFile("Sources/YamiboReaderUI/Features/Reader/Shared/ReaderLoadStateView.swift")
+        let readerSource = try sourceFile("Sources/YamiboReaderUI/Features/Reader/MangaReader/Presentation/MangaReaderView.swift")
+
+        #expect(sharedSource.contains("enum ReaderLoadStateStatus"))
+        #expect(sharedSource.contains("case loading"))
+        #expect(sharedSource.contains("case failed(title: String = L10n.string(\"common.load_failed\"), message: String)"))
+        #expect(sharedSource.contains("ProgressView(L10n.string(\"common.loading\"))"))
+        #expect(sharedSource.contains("Button(L10n.string(\"common.retry\"), action: retryAction)"))
+        #expect(readerSource.contains("ReaderLoadStateView(status: .loading, tint: .white)"))
+        #expect(readerSource.contains("status: .failed(message: error.message)"))
+        #expect(readerSource.contains("retryAction: onRetryInitialLoad"))
+        #expect(readerSource.contains("Task { await model.retryInitialLoad() }"))
+        #expect(!readerSource.contains("L10n.string(\"manga.loading\")"))
+        #expect(!readerSource.contains("MangaReaderLoadingContent"))
+        #expect(!readerSource.contains("MangaReaderFailedContent"))
+    }
+
     @Test func progressImagePreviewUsesPipelineCacheAndLocalizedPageFallback() throws {
         let source = try sourceFile("Sources/YamiboReaderUI/Features/Reader/MangaReader/Presentation/MangaReaderView.swift")
 
@@ -133,17 +151,24 @@ struct MangaReaderPresentationInfrastructureTests {
         #expect(source.contains("let centerProgressPreview = progressChromePresentation.showsVerticalScrubber"))
         #expect(source.contains(": horizontalScrubState.preview"))
         #expect(source.contains("if let preview = centerProgressPreview"))
+        #expect(source.contains("ReaderLoadStateView("))
+        #expect(source.contains("status: hasFailed"))
+        #expect(source.contains(".allowsHitTesting(false)"))
     }
 
-    @Test func hiddenFailureStackIsNotMeasuredDuringLayout() throws {
-        let source = try sourceFile("Sources/YamiboReaderUI/Features/Reader/MangaReader/Presentation/MangaVerticalCollectionViewport.swift")
-        let guardRange = try #require(source.range(of: "guard !failureStack.isHidden else"))
-        let fittingRange = try #require(source.range(of: "failureStack.systemLayoutSizeFitting(fittingSize)"))
-        let hiddenGuardBody = String(source[guardRange.lowerBound..<fittingRange.lowerBound])
+    @Test func mangaImageLoadStatesUseSharedLoadStateView() throws {
+        let verticalSource = try sourceFile("Sources/YamiboReaderUI/Features/Reader/MangaReader/Presentation/MangaVerticalCollectionViewport.swift")
+        let pagedSource = try sourceFile("Sources/YamiboReaderUI/Features/Reader/MangaReader/Presentation/MangaPagedReaderViewport.swift")
 
-        #expect(hiddenGuardBody.contains("failureStack.frame = .zero"))
-        #expect(hiddenGuardBody.contains("return"))
-        #expect(guardRange.lowerBound < fittingRange.lowerBound)
+        #expect(verticalSource.contains("contentConfiguration = UIHostingConfiguration"))
+        #expect(verticalSource.contains("ReaderLoadStateView(status: .loading, tint: .white)"))
+        #expect(verticalSource.contains("self?.retryImageLoad()"))
+        #expect(!verticalSource.contains("UIActivityIndicatorView"))
+        #expect(!verticalSource.contains("failureStack"))
+        #expect(pagedSource.contains("private struct MangaPagedReaderPageSurface: View"))
+        #expect(pagedSource.contains("ReaderLoadStateView("))
+        #expect(pagedSource.contains("Task { await loadImage() }"))
+        #expect(!pagedSource.contains("L10n.string(\"manga.loading\")"))
     }
 
     @Test func pagedViewportPublishesPageLevelGlobalIndexFromPlan() throws {

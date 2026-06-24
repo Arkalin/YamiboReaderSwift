@@ -202,6 +202,25 @@ public final class MangaReaderModel: ObservableObject {
         }
     }
 
+    public func retryInitialLoad() async {
+        cancelReaderTasks()
+        workflow = nil
+        #if os(iOS)
+        imagePipeline = nil
+        #endif
+        hasPrepared = false
+        lastQueuedProgressSnapshot = nil
+        directoryCooldownExpiresAt = nil
+        forcedSearchShortcutExpiresAt = nil
+        presentation = presentationWithCommittedSettings(
+            MangaReaderPresentation(
+                state: .loading(MangaReaderLoadingPresentation(title: Self.presentationTitle(for: context)))
+            )
+        )
+
+        await prepare()
+    }
+
     public func updateCurrentPage(globalIndex: Int) {
         guard let workflow else { return }
         adjacentPrefetchTask?.cancel()
@@ -610,6 +629,20 @@ public final class MangaReaderModel: ObservableObject {
     }
 
     private func invalidateReaderContent() {
+        adjacentPrefetchTask?.cancel()
+        adjacentPrefetchTask = nil
+        readerContentGeneration += 1
+    }
+
+    private func cancelReaderTasks() {
+        directoryTickTask?.cancel()
+        directoryTickTask = nil
+        directoryMutationTask?.cancel()
+        directoryMutationTask = nil
+        automaticDirectoryUpdateTask?.cancel()
+        automaticDirectoryUpdateTask = nil
+        chapterJumpTask?.cancel()
+        chapterJumpTask = nil
         adjacentPrefetchTask?.cancel()
         adjacentPrefetchTask = nil
         readerContentGeneration += 1
