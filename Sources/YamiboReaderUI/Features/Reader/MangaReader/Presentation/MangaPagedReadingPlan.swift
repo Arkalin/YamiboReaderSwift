@@ -221,3 +221,159 @@ struct MangaPagedReadingPlan: Hashable, Sendable {
         return spreads
     }
 }
+
+struct MangaPagedPageCurlLeaf: Hashable, Sendable {
+    let index: Int
+    let pageIndex: Int?
+    let selectionIndex: Int
+
+    var isBlank: Bool {
+        pageIndex == nil
+    }
+}
+
+struct MangaPagedPageCurlSequence: Equatable, Sendable {
+    let plan: MangaPagedReadingPlan
+    let leaves: [MangaPagedPageCurlLeaf]
+    let usesTwoPageSpread: Bool
+
+    init(plan: MangaPagedReadingPlan) {
+        self.plan = plan
+        usesTwoPageSpread = plan.usesTwoPageSpread
+
+        if plan.usesTwoPageSpread {
+            let leafPairs = plan.spreads.map { spread in
+                [
+                    MangaPagedPageCurlLeaf(
+                        index: 0,
+                        pageIndex: spread.leftPageIndex,
+                        selectionIndex: spread.index
+                    ),
+                    MangaPagedPageCurlLeaf(
+                        index: 0,
+                        pageIndex: spread.rightPageIndex,
+                        selectionIndex: spread.index
+                    ),
+                ]
+            }
+            leaves = Self.indexedLeaves(
+                from: Self.physicalBookOrder(
+                    leafGroups: leafPairs,
+                    pageTurnDirection: plan.pageTurnDirection
+                )
+            ).ifEmpty(Self.emptySpreadLeaves)
+        } else {
+            let pageLeaves = plan.pages.indices.map { pageIndex in
+                [
+                    MangaPagedPageCurlLeaf(
+                        index: 0,
+                        pageIndex: pageIndex,
+                        selectionIndex: pageIndex
+                    ),
+                ]
+            }
+            leaves = Self.indexedLeaves(
+                from: Self.physicalBookOrder(
+                    leafGroups: pageLeaves,
+                    pageTurnDirection: plan.pageTurnDirection
+                )
+            ).ifEmpty([Self.emptySingleLeaf])
+        }
+    }
+
+    var pageCount: Int {
+        usesTwoPageSpread ? max(leaves.count / 2, 1) : max(leaves.count, 1)
+    }
+
+    func leafIndexes(forSelectionIndex selectionIndex: Int) -> [Int] {
+        guard !leaves.isEmpty else { return [] }
+        let clampedSelection = clampedSelectionIndex(selectionIndex)
+        let indexes = leaves
+            .filter { $0.selectionIndex == clampedSelection }
+            .map(\.index)
+        guard !indexes.isEmpty else {
+            return usesTwoPageSpread ? [0, 1].filter { leaves.indices.contains($0) } : [0]
+        }
+        return indexes
+    }
+
+    func selectionIndex(forLeafIndexes leafIndexes: [Int]) -> Int? {
+        leafIndexes
+            .compactMap { leaves.indices.contains($0) ? leaves[$0].selectionIndex : nil }
+            .min()
+    }
+
+    func pageIndex(forSelectionIndex selectionIndex: Int) -> Int? {
+        let clampedSelection = clampedSelectionIndex(selectionIndex)
+        if usesTwoPageSpread {
+            return plan.pageIndex(forSpreadAt: clampedSelection)
+        }
+        return plan.pages.indices.contains(clampedSelection) ? clampedSelection : nil
+    }
+
+    func globalIndex(forSelectionIndex selectionIndex: Int) -> Int? {
+        guard let pageIndex = pageIndex(forSelectionIndex: selectionIndex) else {
+            return nil
+        }
+        return plan.globalIndex(forPageAt: pageIndex)
+    }
+
+    func leafIndex(before leafIndex: Int) -> Int? {
+        let targetIndex = leafIndex - 1
+        return leaves.indices.contains(targetIndex) ? targetIndex : nil
+    }
+
+    func leafIndex(after leafIndex: Int) -> Int? {
+        let targetIndex = leafIndex + 1
+        return leaves.indices.contains(targetIndex) ? targetIndex : nil
+    }
+
+    func firstLeafIndex(forSelectionIndex selectionIndex: Int) -> Int? {
+        leafIndexes(forSelectionIndex: selectionIndex).first
+    }
+
+    private func clampedSelectionIndex(_ selectionIndex: Int) -> Int {
+        let upperBound = usesTwoPageSpread ? plan.spreads.count - 1 : plan.pages.count - 1
+        guard upperBound >= 0 else { return 0 }
+        return min(max(selectionIndex, 0), upperBound)
+    }
+
+    private static func physicalBookOrder(
+        leafGroups: [[MangaPagedPageCurlLeaf]],
+        pageTurnDirection: MangaPageTurnDirection
+    ) -> [MangaPagedPageCurlLeaf] {
+        switch pageTurnDirection {
+        case .leftToRight:
+            leafGroups.flatMap { $0 }
+        case .rightToLeft:
+            leafGroups.reversed().flatMap { $0 }
+        }
+    }
+
+    private static func indexedLeaves(from leaves: [MangaPagedPageCurlLeaf]) -> [MangaPagedPageCurlLeaf] {
+        leaves.enumerated().map { index, leaf in
+            MangaPagedPageCurlLeaf(
+                index: index,
+                pageIndex: leaf.pageIndex,
+                selectionIndex: leaf.selectionIndex
+            )
+        }
+    }
+
+    private static var emptySingleLeaf: MangaPagedPageCurlLeaf {
+        MangaPagedPageCurlLeaf(index: 0, pageIndex: nil, selectionIndex: 0)
+    }
+
+    private static var emptySpreadLeaves: [MangaPagedPageCurlLeaf] {
+        [
+            MangaPagedPageCurlLeaf(index: 0, pageIndex: nil, selectionIndex: 0),
+            MangaPagedPageCurlLeaf(index: 1, pageIndex: nil, selectionIndex: 0),
+        ]
+    }
+}
+
+private extension Array where Element == MangaPagedPageCurlLeaf {
+    func ifEmpty(_ fallback: [MangaPagedPageCurlLeaf]) -> [MangaPagedPageCurlLeaf] {
+        isEmpty ? fallback : self
+    }
+}
