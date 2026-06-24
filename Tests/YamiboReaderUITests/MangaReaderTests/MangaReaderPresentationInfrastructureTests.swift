@@ -299,6 +299,9 @@ struct MangaReaderPresentationInfrastructureTests {
         let interactionSource = String(source[interactionRange.lowerBound..<collectionViewRange.lowerBound])
 
         #expect(deferSource.contains("parent.zoomEnabled"))
+        #expect(deferSource.contains("parent.plan.usesTwoPageSpread"))
+        #expect(deferSource.contains("currentSpreadSurfaceInteraction(in: collectionView)"))
+        #expect(deferSource.contains("currentPageSurfaceInteraction(in: collectionView)"))
         #expect(deferSource.contains("currentPageIndex(in: collectionView)"))
         #expect(deferSource.contains("surfaceInteraction.hasHiddenContent(onPhysicalEdge: physicalEdge)"))
         #expect(!deferSource.contains("directionalTapZone"))
@@ -320,7 +323,10 @@ struct MangaReaderPresentationInfrastructureTests {
         #expect(!source.contains(".simultaneousGesture(dragGesture(containerSize: containerSize))"))
 
         let scaledImageRange = try #require(source.range(of: "private struct MangaPagedReaderScaledImage"))
-        let toggleRange = try #require(source.range(of: "private func toggleZoom"))
+        let toggleRange = try #require(source.range(
+            of: "private func toggleZoom",
+            range: scaledImageRange.lowerBound ..< source.endIndex
+        ))
         let scaledImageSource = String(source[scaledImageRange.lowerBound..<toggleRange.lowerBound])
 
         #expect(scaledImageSource.contains("let allowsUnzoomedSurfacePan: Bool"))
@@ -363,6 +369,7 @@ struct MangaReaderPresentationInfrastructureTests {
         #expect(mangaSource.contains("leftPageSurface: pageSurface("))
         #expect(mangaSource.contains("rightPageSurface: pageSurface("))
         #expect(mangaSource.contains("surfaceInteraction: surfaceInteraction(for: page)"))
+        #expect(mangaSource.contains("spreadSurfaceInteraction: spreadSurfaceInteraction(for: spread)"))
         #expect(mangaSource.contains("pagingInputs(selectionSpreadIndex: targetSpreadIndex)"))
         #expect(mangaSource.contains("IndexPath(item: targetViewportIndex, section: 0)"))
         #expect(mangaSource.contains("private func viewportIndex(forSpreadIndex spreadIndex: Int) -> Int"))
@@ -384,11 +391,19 @@ struct MangaReaderPresentationInfrastructureTests {
         #expect(source.contains("tapGesture.require(toFail: context.coordinator.doubleTapGesture)"))
         #expect(source.contains("@objc private func handleDoubleTap"))
         #expect(source.contains("MangaPagedCenterTapHitTesting.acceptsCenterTap"))
+        #expect(source.contains("private var spreadSurfaceInteractions: [String: MangaPagedReaderPageSurfaceInteraction] = [:]"))
+        #expect(source.contains("if parent.plan.usesTwoPageSpread {\n                requestSpreadZoomToggle"))
+        #expect(source.contains("private func requestSpreadZoomToggle"))
+        #expect(source.contains("spreadSurfaceInteractions[spread.id]"))
+        #expect(source.contains("MangaPagedReaderZoomableSpreadSurface("))
+        #expect(source.contains("isPageZoomEnabled: false"))
         #expect(source.contains("surfaceInteraction.requestZoomToggle"))
         #expect(source.contains("@Published private(set) var zoomToggleRequest"))
         #expect(source.contains("func requestZoomToggle(at location: CGPoint)"))
         #expect(source.contains(".onReceive(surfaceInteraction.$zoomToggleRequest)"))
+        #expect(source.contains(".onReceive(spreadSurfaceInteraction.$zoomToggleRequest)"))
         #expect(source.contains("isZoomInteractionEnabled: !isChromeVisible && zoomEnabled"))
+        #expect(source.contains("MangaPagedSpreadSurfaceZoomLayout("))
         #expect(source.contains("MangaPageZoomPolicy.doubleTapTargetScale"))
         #expect(source.contains("MangaPageZoomPolicy.clampedScale(scale)"))
         #expect(!source.contains("private static let doubleTapZoomScale"))
@@ -403,10 +418,17 @@ struct MangaReaderPresentationInfrastructureTests {
 
     @Test func pagedViewportKeepsZoomStateSeparateFromReadingPositionUpdates() throws {
         let source = try sourceFile("Sources/YamiboReaderUI/Features/Reader/MangaReader/Presentation/MangaPagedReaderViewport.swift")
+        let spreadRange = try #require(source.range(of: "private struct MangaPagedReaderZoomableSpreadSurface"))
         let surfaceRange = try #require(source.range(of: "private struct MangaPagedReaderPageSurface"))
         let edgeFillRange = try #require(source.range(of: "private extension MangaPageEdgeFillStyle"))
+        let spreadSource = String(source[spreadRange.lowerBound..<surfaceRange.lowerBound])
         let surfaceSource = String(source[surfaceRange.lowerBound..<edgeFillRange.lowerBound])
 
+        #expect(spreadSource.contains("@State private var steadyScale: CGFloat = 1"))
+        #expect(spreadSource.contains("@State private var steadyUserOffset: CGSize = .zero"))
+        #expect(spreadSource.contains("MangaPagedSpreadSurfaceZoomLayout("))
+        #expect(!spreadSource.contains("onCurrentPageChange"))
+        #expect(!spreadSource.contains("publishCurrentPageIfNeeded"))
         #expect(surfaceSource.contains("@State private var steadyScale: CGFloat = 1"))
         #expect(surfaceSource.contains("@State private var steadyUserOffset: CGSize = .zero"))
         #expect(surfaceSource.contains("MangaPagedImageSurfaceLayout("))

@@ -85,6 +85,7 @@ struct MangaPagedReaderViewport: UIViewRepresentable {
         private var contentIdentity: MangaPagedReaderContentIdentity?
         private var surfaceInteractionIdentity: MangaPagedReaderSurfaceInteractionIdentity?
         private var pageSurfaceInteractions: [String: MangaPagedReaderPageSurfaceInteraction] = [:]
+        private var spreadSurfaceInteractions: [String: MangaPagedReaderPageSurfaceInteraction] = [:]
         private var pageSurfaceInitialHorizontalAlignments: [String: MangaPagedImageSurfaceInitialHorizontalAlignment] = [:]
         private var pendingInitialSpreadIndex: Int?
         private var lastReportedGlobalIndex: Int?
@@ -166,6 +167,7 @@ struct MangaPagedReaderViewport: UIViewRepresentable {
             contentIdentity = nextIdentity
             surfaceInteractionIdentity = nil
             pageSurfaceInteractions = [:]
+            spreadSurfaceInteractions = [:]
             pageSurfaceInitialHorizontalAlignments = [:]
             lastReportedGlobalIndex = nil
             if parent.plan.spreads.isEmpty {
@@ -387,8 +389,15 @@ struct MangaPagedReaderViewport: UIViewRepresentable {
                 return
             }
 
-            guard parent.zoomEnabled,
-                  let pageIndex = pageIndex(at: location, in: collectionView),
+            guard parent.zoomEnabled else {
+                return
+            }
+            if parent.plan.usesTwoPageSpread {
+                requestSpreadZoomToggle(at: location, in: collectionView)
+                return
+            }
+
+            guard let pageIndex = pageIndex(at: location, in: collectionView),
                   let page = parent.plan.page(at: pageIndex),
                   let surfaceInteraction = pageSurfaceInteractions[page.id] else {
                 return
@@ -451,13 +460,48 @@ struct MangaPagedReaderViewport: UIViewRepresentable {
             in collectionView: UICollectionView
         ) -> Bool {
             guard parent.zoomEnabled,
-                  let physicalEdge = physicalHiddenContentEdge(for: recognizer, in: collectionView),
-                  let pageIndex = currentPageIndex(in: collectionView),
-                  let page = parent.plan.page(at: pageIndex),
-                  let surfaceInteraction = pageSurfaceInteractions[page.id] else {
+                  let physicalEdge = physicalHiddenContentEdge(for: recognizer, in: collectionView) else {
+                return false
+            }
+            if parent.plan.usesTwoPageSpread {
+                guard let surfaceInteraction = currentSpreadSurfaceInteraction(in: collectionView) else {
+                    return false
+                }
+                return surfaceInteraction.hasHiddenContent(onPhysicalEdge: physicalEdge)
+            }
+            guard let surfaceInteraction = currentPageSurfaceInteraction(in: collectionView) else {
                 return false
             }
             return surfaceInteraction.hasHiddenContent(onPhysicalEdge: physicalEdge)
+        }
+
+        private func requestSpreadZoomToggle(at location: CGPoint, in collectionView: UICollectionView) {
+            guard let spreadIndex = currentSpreadIndex(in: collectionView),
+                  let spread = parent.plan.spread(at: spreadIndex),
+                  let surfaceInteraction = spreadSurfaceInteractions[spread.id] else {
+                return
+            }
+            surfaceInteraction.requestZoomToggle(at: spreadLocation(for: spreadIndex, location: location, in: collectionView))
+        }
+
+        private func currentSpreadSurfaceInteraction(
+            in collectionView: UICollectionView
+        ) -> MangaPagedReaderPageSurfaceInteraction? {
+            guard let spreadIndex = currentSpreadIndex(in: collectionView),
+                  let spread = parent.plan.spread(at: spreadIndex) else {
+                return nil
+            }
+            return spreadSurfaceInteractions[spread.id]
+        }
+
+        private func currentPageSurfaceInteraction(
+            in collectionView: UICollectionView
+        ) -> MangaPagedReaderPageSurfaceInteraction? {
+            guard let pageIndex = currentPageIndex(in: collectionView),
+                  let page = parent.plan.page(at: pageIndex) else {
+                return nil
+            }
+            return pageSurfaceInteractions[page.id]
         }
 
         private func physicalHiddenContentEdge(
@@ -501,6 +545,7 @@ struct MangaPagedReaderViewport: UIViewRepresentable {
 
             let spread = parent.plan.spreads[spreadIndex]
             cell.configure(
+                spreadID: spread.id,
                 usesTwoPageSpread: parent.plan.usesTwoPageSpread,
                 leftPageSurface: pageSurface(
                     page: spread.leftPage,
@@ -518,6 +563,7 @@ struct MangaPagedReaderViewport: UIViewRepresentable {
                 isChromeVisible: parent.isChromeVisible,
                 zoomEnabled: parent.zoomEnabled,
                 allowsUnzoomedSurfacePan: parent.settings.pagedTurnStyle == .quickFade,
+                spreadSurfaceInteraction: spreadSurfaceInteraction(for: spread),
                 colorScheme: parent.colorScheme
             )
             cell.resetPageTurnVisuals()
@@ -568,9 +614,27 @@ struct MangaPagedReaderViewport: UIViewRepresentable {
             return interaction
         }
 
+        private func spreadSurfaceInteraction(for spread: MangaPageSpread) -> MangaPagedReaderPageSurfaceInteraction {
+            if let interaction = spreadSurfaceInteractions[spread.id] {
+                return interaction
+            }
+            let interaction = MangaPagedReaderPageSurfaceInteraction()
+            spreadSurfaceInteractions[spread.id] = interaction
+            return interaction
+        }
+
         private func consumeSurfaceEdgeTap(for zone: ReaderPagedTapZone, in collectionView: UICollectionView) -> Bool {
-            guard let physicalEdge = physicalHorizontalEdge(for: zone),
-                  let pageIndex = pageIndex(forPhysicalEdge: physicalEdge, in: collectionView),
+            guard let physicalEdge = physicalHorizontalEdge(for: zone) else {
+                return false
+            }
+            if parent.plan.usesTwoPageSpread {
+                guard let surfaceInteraction = currentSpreadSurfaceInteraction(in: collectionView) else {
+                    return false
+                }
+                return surfaceInteraction.consumeTap(onPhysicalEdge: physicalEdge)
+            }
+
+            guard let pageIndex = pageIndex(forPhysicalEdge: physicalEdge, in: collectionView),
                   let page = parent.plan.page(at: pageIndex),
                   let surfaceInteraction = pageSurfaceInteractions[page.id] else {
                 return false
@@ -607,6 +671,25 @@ struct MangaPagedReaderViewport: UIViewRepresentable {
                     cellLocation.x = min(max(cellLocation.x, 0), slotWidth)
                 }
                 return cellLocation
+            }
+            return CGPoint(
+                x: location.x - collectionView.bounds.minX,
+                y: location.y - collectionView.bounds.minY
+            )
+        }
+
+        private func spreadLocation(
+            for spreadIndex: Int,
+            location: CGPoint,
+            in collectionView: UICollectionView
+        ) -> CGPoint {
+            let indexPath = IndexPath(item: viewportIndex(forSpreadIndex: spreadIndex), section: 0)
+            if let cell = collectionView.cellForItem(at: indexPath) {
+                let cellLocation = collectionView.convert(location, to: cell.contentView)
+                return CGPoint(
+                    x: min(max(cellLocation.x, 0), max(cell.contentView.bounds.width, 1)),
+                    y: min(max(cellLocation.y, 0), max(cell.contentView.bounds.height, 1))
+                )
             }
             return CGPoint(
                 x: location.x - collectionView.bounds.minX,
@@ -780,6 +863,7 @@ private final class MangaPagedReaderCollectionView: UICollectionView {
 
 private extension ReaderPagedPageTurnCell {
     func configure(
+        spreadID: String,
         usesTwoPageSpread: Bool,
         leftPageSurface: MangaPagedReaderSpreadPageSurface?,
         rightPageSurface: MangaPagedReaderSpreadPageSurface?,
@@ -789,6 +873,7 @@ private extension ReaderPagedPageTurnCell {
         isChromeVisible: Bool,
         zoomEnabled: Bool,
         allowsUnzoomedSurfacePan: Bool,
+        spreadSurfaceInteraction: MangaPagedReaderPageSurfaceInteraction,
         colorScheme: ColorScheme
     ) {
         let pageEdgeFillColor = pageEdgeFillStyle.uiColor(for: colorScheme)
@@ -796,6 +881,7 @@ private extension ReaderPagedPageTurnCell {
         contentView.backgroundColor = pageEdgeFillColor
         contentConfiguration = UIHostingConfiguration {
             MangaPagedReaderSpreadSurface(
+                spreadID: spreadID,
                 usesTwoPageSpread: usesTwoPageSpread,
                 leftPageSurface: leftPageSurface,
                 rightPageSurface: rightPageSurface,
@@ -804,7 +890,8 @@ private extension ReaderPagedPageTurnCell {
                 pageEdgeFillStyle: pageEdgeFillStyle,
                 isChromeVisible: isChromeVisible,
                 zoomEnabled: zoomEnabled,
-                allowsUnzoomedSurfacePan: allowsUnzoomedSurfacePan
+                allowsUnzoomedSurfacePan: allowsUnzoomedSurfacePan,
+                spreadSurfaceInteraction: spreadSurfaceInteraction
             )
             .ignoresSafeArea(
                 .container,
@@ -822,6 +909,7 @@ private struct MangaPagedReaderSpreadPageSurface {
 }
 
 private struct MangaPagedReaderSpreadSurface: View {
+    let spreadID: String
     let usesTwoPageSpread: Bool
     let leftPageSurface: MangaPagedReaderSpreadPageSurface?
     let rightPageSurface: MangaPagedReaderSpreadPageSurface?
@@ -831,27 +919,54 @@ private struct MangaPagedReaderSpreadSurface: View {
     let isChromeVisible: Bool
     let zoomEnabled: Bool
     let allowsUnzoomedSurfacePan: Bool
+    let spreadSurfaceInteraction: MangaPagedReaderPageSurfaceInteraction
 
     var body: some View {
         ZStack {
             pageEdgeFillStyle.color(for: colorScheme)
 
             if usesTwoPageSpread {
-                HStack(spacing: 0) {
-                    pageSlot(leftPageSurface)
-                    pageSlot(rightPageSurface)
-                }
+                MangaPagedReaderZoomableSpreadSurface(
+                    spreadID: spreadID,
+                    leftPageSurface: leftPageSurface,
+                    rightPageSurface: rightPageSurface,
+                    imagePipeline: imagePipeline,
+                    pageScaleMode: pageScaleMode,
+                    pageEdgeFillStyle: pageEdgeFillStyle,
+                    isChromeVisible: isChromeVisible,
+                    isZoomInteractionEnabled: !isChromeVisible && zoomEnabled,
+                    spreadSurfaceInteraction: spreadSurfaceInteraction
+                )
             } else {
-                pageSlot(leftPageSurface ?? rightPageSurface)
+                MangaPagedReaderPageSlot(
+                    surface: leftPageSurface ?? rightPageSurface,
+                    imagePipeline: imagePipeline,
+                    pageScaleMode: pageScaleMode,
+                    pageEdgeFillStyle: pageEdgeFillStyle,
+                    isChromeVisible: isChromeVisible,
+                    zoomEnabled: zoomEnabled,
+                    allowsUnzoomedSurfacePan: allowsUnzoomedSurfacePan,
+                    isPageZoomEnabled: true
+                )
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     @Environment(\.colorScheme) private var colorScheme
+}
 
-    @ViewBuilder
-    private func pageSlot(_ surface: MangaPagedReaderSpreadPageSurface?) -> some View {
+private struct MangaPagedReaderPageSlot: View {
+    let surface: MangaPagedReaderSpreadPageSurface?
+    let imagePipeline: MangaImagePipeline
+    let pageScaleMode: MangaPageScaleMode
+    let pageEdgeFillStyle: MangaPageEdgeFillStyle
+    let isChromeVisible: Bool
+    let zoomEnabled: Bool
+    let allowsUnzoomedSurfacePan: Bool
+    let isPageZoomEnabled: Bool
+
+    var body: some View {
         ZStack {
             pageEdgeFillStyle.color(for: colorScheme)
             if let surface {
@@ -862,14 +977,262 @@ private struct MangaPagedReaderSpreadSurface: View {
                     initialHorizontalAlignment: surface.initialHorizontalAlignment,
                     pageEdgeFillStyle: pageEdgeFillStyle,
                     isChromeVisible: isChromeVisible,
-                    zoomEnabled: zoomEnabled,
-                    allowsUnzoomedSurfacePan: allowsUnzoomedSurfacePan,
+                    zoomEnabled: zoomEnabled && isPageZoomEnabled,
+                    allowsUnzoomedSurfacePan: allowsUnzoomedSurfacePan && isPageZoomEnabled,
                     surfaceInteraction: surface.surfaceInteraction
                 )
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .clipped()
+    }
+
+    @Environment(\.colorScheme) private var colorScheme
+}
+
+private struct MangaPagedReaderZoomableSpreadSurface: View {
+    let spreadID: String
+    let leftPageSurface: MangaPagedReaderSpreadPageSurface?
+    let rightPageSurface: MangaPagedReaderSpreadPageSurface?
+    let imagePipeline: MangaImagePipeline
+    let pageScaleMode: MangaPageScaleMode
+    let pageEdgeFillStyle: MangaPageEdgeFillStyle
+    let isChromeVisible: Bool
+    let isZoomInteractionEnabled: Bool
+    let spreadSurfaceInteraction: MangaPagedReaderPageSurfaceInteraction
+
+    @State private var steadyScale: CGFloat = 1
+    @State private var gestureScale: CGFloat = 1
+    @State private var steadyUserOffset: CGSize = .zero
+    @State private var gestureUserOffset: CGSize = .zero
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        GeometryReader { proxy in
+            let containerSize = proxy.size
+            let layout = spreadSurfaceLayout(containerSize: containerSize, scale: zoomScale)
+            let userOffset = proposedUserOffset(layout: layout)
+            let displayOffset = layout.displayOffset(forUserOffset: userOffset)
+            let hiddenEdges = hiddenHorizontalEdges(layout: layout, userOffset: userOffset)
+
+            ZStack {
+                pageEdgeFillStyle.color(for: colorScheme)
+                HStack(spacing: 0) {
+                    MangaPagedReaderPageSlot(
+                        surface: leftPageSurface,
+                        imagePipeline: imagePipeline,
+                        pageScaleMode: pageScaleMode,
+                        pageEdgeFillStyle: pageEdgeFillStyle,
+                        isChromeVisible: isChromeVisible,
+                        zoomEnabled: false,
+                        allowsUnzoomedSurfacePan: false,
+                        isPageZoomEnabled: false
+                    )
+                    MangaPagedReaderPageSlot(
+                        surface: rightPageSurface,
+                        imagePipeline: imagePipeline,
+                        pageScaleMode: pageScaleMode,
+                        pageEdgeFillStyle: pageEdgeFillStyle,
+                        isChromeVisible: isChromeVisible,
+                        zoomEnabled: false,
+                        allowsUnzoomedSurfacePan: false,
+                        isPageZoomEnabled: false
+                    )
+                }
+                .frame(width: containerSize.width, height: containerSize.height)
+                .scaleEffect(zoomScale)
+                .offset(displayOffset)
+            }
+            .frame(width: containerSize.width, height: containerSize.height)
+            .contentShape(Rectangle())
+            .clipped()
+            .simultaneousGesture(magnifyGesture(containerSize: containerSize))
+            .simultaneousGesture(
+                dragGesture(containerSize: containerSize),
+                including: surfaceDragGestureMask
+            )
+            .onChange(of: isZoomInteractionEnabled) { _, isEnabled in
+                guard !isEnabled else { return }
+                resetZoomState(animated: true)
+            }
+            .onChange(of: spreadID) { _, _ in
+                resetZoomState(animated: false)
+            }
+            .onChange(of: containerSize) { _, newValue in
+                clampSteadyUserOffset(containerSize: newValue)
+            }
+            .onChange(of: hiddenEdges, initial: true) { _, newValue in
+                spreadSurfaceInteraction.updateHiddenEdges(newValue)
+            }
+            .onReceive(spreadSurfaceInteraction.$edgeRevealRequest) { request in
+                guard let edge = request.edge else { return }
+                revealHiddenContent(on: edge, containerSize: containerSize)
+            }
+            .onReceive(spreadSurfaceInteraction.$zoomToggleRequest) { request in
+                guard isZoomInteractionEnabled,
+                      let location = request.location else {
+                    return
+                }
+                toggleZoom(at: location, containerSize: containerSize)
+            }
+            .onDisappear {
+                spreadSurfaceInteraction.updateHiddenEdges([])
+            }
+        }
+    }
+
+    private var zoomScale: CGFloat {
+        clampedScale(steadyScale * gestureScale)
+    }
+
+    private var surfaceDragGestureMask: GestureMask {
+        surfaceDragGestureEnabled ? .gesture : .subviews
+    }
+
+    private var surfaceDragGestureEnabled: Bool {
+        isZoomInteractionEnabled && MangaPageZoomPolicy.isActive(zoomScale)
+    }
+
+    private func magnifyGesture(containerSize: CGSize) -> some Gesture {
+        MagnifyGesture()
+            .onChanged { value in
+                guard isZoomInteractionEnabled else { return }
+                let nextScale = clampedScale(steadyScale * value.magnification)
+                gestureScale = nextScale / max(steadyScale, 0.001)
+                let layout = spreadSurfaceLayout(containerSize: containerSize, scale: nextScale)
+                steadyUserOffset = layout.clampedUserOffset(steadyUserOffset)
+            }
+            .onEnded { value in
+                guard isZoomInteractionEnabled else { return }
+                let nextScale = clampedScale(steadyScale * value.magnification)
+                steadyScale = nextScale
+                gestureScale = 1
+                if nextScale <= 1.01 {
+                    resetZoomState(animated: true)
+                } else {
+                    let layout = spreadSurfaceLayout(containerSize: containerSize, scale: nextScale)
+                    steadyUserOffset = layout.clampedUserOffset(steadyUserOffset)
+                }
+            }
+    }
+
+    private func dragGesture(containerSize: CGSize) -> some Gesture {
+        DragGesture()
+            .onChanged { value in
+                guard surfaceDragGestureEnabled else { return }
+                let layout = spreadSurfaceLayout(containerSize: containerSize, scale: zoomScale)
+                let proposed = CGSize(
+                    width: steadyUserOffset.width + value.translation.width,
+                    height: steadyUserOffset.height + value.translation.height
+                )
+                let clamped = layout.clampedUserOffset(proposed)
+                gestureUserOffset = CGSize(
+                    width: clamped.width - steadyUserOffset.width,
+                    height: clamped.height - steadyUserOffset.height
+                )
+            }
+            .onEnded { value in
+                guard surfaceDragGestureEnabled else {
+                    gestureUserOffset = .zero
+                    return
+                }
+                let layout = spreadSurfaceLayout(containerSize: containerSize, scale: steadyScale)
+                let proposed = CGSize(
+                    width: steadyUserOffset.width + value.translation.width,
+                    height: steadyUserOffset.height + value.translation.height
+                )
+                steadyUserOffset = layout.clampedUserOffset(proposed)
+                gestureUserOffset = .zero
+            }
+    }
+
+    private func toggleZoom(at location: CGPoint, containerSize: CGSize) {
+        if MangaPageZoomPolicy.isZoomedForDoubleTapReset(steadyScale) {
+            resetZoomState(animated: true)
+        } else {
+            zoomIn(to: location, containerSize: containerSize)
+        }
+    }
+
+    private func zoomIn(to location: CGPoint, containerSize: CGSize) {
+        let targetScale = MangaPageZoomPolicy.doubleTapTargetScale
+        let targetLayout = spreadSurfaceLayout(containerSize: containerSize, scale: targetScale)
+
+        withAnimation(.easeOut(duration: 0.2)) {
+            steadyScale = targetScale
+            gestureScale = 1
+            steadyUserOffset = targetLayout.userOffsetAnchoring(location)
+            gestureUserOffset = .zero
+        }
+    }
+
+    private func revealHiddenContent(
+        on edge: MangaPagedImageSurfaceHorizontalEdge,
+        containerSize: CGSize
+    ) {
+        let layout = spreadSurfaceLayout(containerSize: containerSize, scale: zoomScale)
+        let userOffset = proposedUserOffset(layout: layout)
+        guard let targetUserOffset = layout.userOffsetRevealingContent(on: edge, fromUserOffset: userOffset) else {
+            spreadSurfaceInteraction.updateHiddenEdges(hiddenHorizontalEdges(layout: layout, userOffset: userOffset))
+            return
+        }
+
+        withAnimation(.easeOut(duration: 0.2)) {
+            steadyUserOffset = targetUserOffset
+            gestureUserOffset = .zero
+        }
+    }
+
+    private func resetZoomState(animated: Bool) {
+        let updates = {
+            steadyScale = 1
+            gestureScale = 1
+            steadyUserOffset = .zero
+            gestureUserOffset = .zero
+        }
+
+        if animated {
+            withAnimation(.easeOut(duration: 0.2), updates)
+        } else {
+            updates()
+        }
+    }
+
+    private func clampSteadyUserOffset(containerSize: CGSize) {
+        let layout = spreadSurfaceLayout(containerSize: containerSize, scale: steadyScale)
+        steadyUserOffset = layout.clampedUserOffset(steadyUserOffset)
+        gestureUserOffset = .zero
+    }
+
+    private func proposedUserOffset(layout: MangaPagedSpreadSurfaceZoomLayout) -> CGSize {
+        layout.clampedUserOffset(
+            CGSize(
+                width: steadyUserOffset.width + gestureUserOffset.width,
+                height: steadyUserOffset.height + gestureUserOffset.height
+            )
+        )
+    }
+
+    private func hiddenHorizontalEdges(
+        layout: MangaPagedSpreadSurfaceZoomLayout,
+        userOffset: CGSize
+    ) -> Set<MangaPagedImageSurfaceHorizontalEdge> {
+        Set(
+            MangaPagedImageSurfaceHorizontalEdge.allCases.filter { edge in
+                layout.hasHiddenContent(on: edge, fromUserOffset: userOffset)
+            }
+        )
+    }
+
+    private func spreadSurfaceLayout(containerSize: CGSize, scale: CGFloat) -> MangaPagedSpreadSurfaceZoomLayout {
+        MangaPagedSpreadSurfaceZoomLayout(
+            containerSize: containerSize,
+            zoomScale: scale
+        )
+    }
+
+    private func clampedScale(_ scale: CGFloat) -> CGFloat {
+        MangaPageZoomPolicy.clampedScale(scale)
     }
 }
 

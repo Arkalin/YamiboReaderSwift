@@ -45,7 +45,7 @@ The user's preferred fill color for blank page-surface areas around scaled manga
 _Avoid_: reader background, page padding color
 
 **Manga Page Zoom**:
-The user's optional single-page magnification interaction inside a manga page surface.
+The user's optional magnification interaction inside a manga paged viewport. In single-page paged reading it magnifies one manga page surface; in two-page iPad landscape paged reading it magnifies the current visible **Manga Page Spread** from the viewport center tap zone.
 _Avoid_: browser zoom, persistent zoom state, image browser
 
 **Manga Page Spread**:
@@ -68,7 +68,7 @@ _Avoid_: double page position, two-page progress, spread position
 - In paged **Manga Reading Mode**, **Manga Page Scale Mode** applies to the whole page surface: fit-width pages may include top and bottom blank space, and page turns move that complete surface rather than only the image.
 - In paged **Manga Reading Mode**, fit-height pages may include left and right blank space or horizontally draggable overflow. Initial overflow alignment follows **Manga Page Turn Direction**.
 - In paged **Manga Reading Mode**, **Manga Page Edge Fill** colors blank page-surface areas without changing the manga image content.
-- **Manga Page Zoom** is available only when reader chrome is hidden, and it does not change **Manga Reading Position**.
+- **Manga Page Zoom** is available only when reader chrome is hidden, is triggered from the paged viewport's horizontal middle third, and it does not change **Manga Reading Position**.
 - Page-curl paged reading presents **Manga Page Spreads** with a book-spine model consistent with the novel reader, while comments, resume, and progress remain tied to page-level **Manga Reading Position**.
 - Empty page surfaces required by the page-curl book-spine model do not create **Manga Reading Positions**.
 - A **Manga Chapter Window** uses chapter `tid` as the canonical chapter identity; chapter URLs are loading and display metadata.
