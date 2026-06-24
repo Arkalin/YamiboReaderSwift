@@ -103,7 +103,7 @@ struct MangaDirectorySheet: View {
                         isCorrectionPresented = false
                     }
                 )
-                .presentationDetents([.height(280)])
+                .presentationDetents([.height(MangaDirectoryCorrectionSheet.preferredHeight)])
             }
         }
     }
@@ -708,6 +708,8 @@ private struct MangaDirectorySelectionActionBar: View {
 }
 
 private struct MangaDirectoryCorrectionSheet: View {
+    static let preferredHeight: CGFloat = 360
+
     @Binding var draft: MangaDirectoryEditDraft
     let onSaveCorrection: (MangaDirectoryEditDraft) -> Void
 
@@ -720,6 +722,7 @@ private struct MangaDirectoryCorrectionSheet: View {
                     draft: $draft
                 )
             }
+            .scrollDisabled(true)
             .navigationTitle(L10n.string("manga.correction_title"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -758,9 +761,12 @@ private struct MangaDirectoryCorrectionFields: View {
     @Binding var draft: MangaDirectoryEditDraft
 
     var body: some View {
-        Section {
-            TextField(L10n.string("manga.name"), text: $draft.cleanBookName)
+        Section(L10n.string("manga.name")) {
+            TextField("", text: $draft.cleanBookName)
+                .accessibilityLabel(L10n.string("manga.name"))
+        }
 
+        Section(L10n.string("manga.keywords")) {
             TextField(L10n.string("manga.keyword_primary"), text: $draft.primaryKeyword)
 
             TextField(L10n.string("manga.keyword_secondary"), text: $draft.secondaryKeyword)

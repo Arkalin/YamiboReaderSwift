@@ -205,6 +205,7 @@
 "manga.global_search" = "全局搜索";
 "manga.global_search_countdown" = "全局搜索 %ds";
 "manga.ios_only" = "漫画阅读仅在 iOS 端启用";
+"manga.keywords" = "关键词 1 和 2";
 "manga.keyword_primary" = "关键词 1";
 "manga.keyword_secondary" = "关键词 2（可选）";
 "manga.latest_chapter" = "最新: 第%@话";
