@@ -175,9 +175,14 @@ public final class MangaReaderWorkflow {
 
     @discardableResult
     public func applySettings(_ settings: MangaReaderSettings) -> MangaReaderPresentation {
+        let previousSettings = self.settings
         self.settings = settings
         if let window {
-            presentation = loadedPresentation(from: window)
+            let placementPageIndex = Self.requiresViewportPlacementRefresh(
+                from: previousSettings,
+                to: settings
+            ) ? MangaReaderPageProjection.resolvedPageIndex(for: window) : nil
+            presentation = loadedPresentation(from: window, placementPageIndex: placementPageIndex)
         } else {
             presentation.settings = settings
         }
@@ -385,6 +390,18 @@ public final class MangaReaderWorkflow {
         )
         currentViewportPlacement = placement
         return placement
+    }
+
+    private static func requiresViewportPlacementRefresh(
+        from previousSettings: MangaReaderSettings,
+        to settings: MangaReaderSettings
+    ) -> Bool {
+        previousSettings.readingMode != settings.readingMode ||
+            previousSettings.pagedTurnStyle != settings.pagedTurnStyle ||
+            previousSettings.pageTurnDirection != settings.pageTurnDirection ||
+            previousSettings.pageScaleMode != settings.pageScaleMode ||
+            previousSettings.pageEdgeFillStyle != settings.pageEdgeFillStyle ||
+            previousSettings.showsTwoPagesInLandscapeOnPad != settings.showsTwoPagesInLandscapeOnPad
     }
 
     private static func presentationTitle(for context: MangaLaunchContext) -> String {
