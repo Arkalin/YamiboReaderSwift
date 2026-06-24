@@ -26,6 +26,11 @@ public struct MangaReaderView: View {
         GeometryReader { proxy in
             let topInset = max(proxy.safeAreaInsets.top, windowSafeAreaInsets.top)
             let bottomInset = max(proxy.safeAreaInsets.bottom, windowSafeAreaInsets.bottom)
+            let usesTwoPageSpread = MangaPagedLayoutPolicy.usesTwoPageSpread(
+                settings: model.presentation.settings,
+                isPadDevice: UIDevice.current.userInterfaceIdiom == .pad,
+                availableSize: proxy.size
+            )
 
             MangaReaderPresentationContent(
                 presentation: model.presentation,
@@ -45,7 +50,10 @@ public struct MangaReaderView: View {
                     bottomInset: bottomInset,
                     isVisible: isChromeVisible,
                     imagePipeline: model.imagePipeline,
-                    summary: mangaChromeSummary(from: model.presentation),
+                    summary: mangaChromeSummary(
+                        from: model.presentation,
+                        usesTwoPageSpread: usesTwoPageSpread
+                    ),
                     readingMode: model.presentation.settings.readingMode,
                     pageTurnDirection: model.presentation.settings.pageTurnDirection,
                     onClose: closeReader,
@@ -155,7 +163,10 @@ public struct MangaReaderView: View {
             .safeAreaInsets ?? .zero
     }
 
-    private func mangaChromeSummary(from presentation: MangaReaderPresentation) -> MangaReaderChromeSummary? {
+    private func mangaChromeSummary(
+        from presentation: MangaReaderPresentation,
+        usesTwoPageSpread: Bool
+    ) -> MangaReaderChromeSummary? {
         guard case let .loaded(loaded) = presentation.state,
               !loaded.pages.isEmpty else {
             return nil
@@ -165,12 +176,19 @@ public struct MangaReaderView: View {
         let currentPage = loaded.currentPage
             ?? loaded.currentPageIndex.flatMap { pages.indices.contains($0) ? pages[$0] : nil }
             ?? pages[0]
+        let currentPageIndex = loaded.currentPageIndex ?? pages.firstIndex(of: currentPage)
         let itemCount = max(currentPage.chapterPageCount, 1)
         let maxIndex = max(itemCount - 1, 1)
         let currentIndex = min(max(currentPage.localIndex, 0), itemCount - 1)
         let progressFraction = itemCount > 1 ? Double(currentIndex) / Double(maxIndex) : 0
         let percentText = "\(Int((progressFraction * 100).rounded()))%"
-        let pageSummary = L10n.string("manga.preview_page", currentIndex + 1, itemCount)
+        let pageLabel = MangaPagedReadingPlan(
+            pages: pages,
+            currentPageIndex: currentPageIndex,
+            pageTurnDirection: presentation.settings.pageTurnDirection,
+            usesTwoPageSpread: usesTwoPageSpread
+        ).currentChapterPageLabel
+        let pageSummary = L10n.string("manga.preview_page_label", pageLabel, itemCount)
         let rawTitle = loaded.directoryPanel.displayChapters
             .first { $0.tid == currentPage.tid }?
             .rawTitle ?? currentPage.chapterTitle

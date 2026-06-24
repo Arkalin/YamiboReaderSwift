@@ -223,6 +223,7 @@
 "manga.page_edge_fill.black" = "黑色";
 "manga.page_edge_fill.system" = "跟随系统";
 "manga.preview_page" = "第 %d / %d 页";
+"manga.preview_page_label" = "第 %@ / %d 页";
 "manga.reader.current_index" = "索引 %d / %d";
 "manga.reader.loaded_pages_count" = "已载入 %d 页";
 "manga.reader.title" = "漫画阅读";
