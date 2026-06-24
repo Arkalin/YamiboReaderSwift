@@ -1785,7 +1785,7 @@ struct MangaPagedPageCurlReaderViewport: UIViewControllerRepresentable {
     }
 }
 
-private final class MangaPagedPageCurlContainerViewController: UIViewController {
+final class MangaPagedPageCurlContainerViewController: UIViewController {
     let pageViewController: UIPageViewController
     var onLayoutSubviews: (() -> Void)?
 

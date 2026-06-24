@@ -201,7 +201,7 @@ struct MangaReaderPresentationInfrastructureTests {
         let pageCurlSource = String(source[pageCurlRange.lowerBound..<source.endIndex])
 
         #expect(source.contains("func makeUIViewController(context: Context) -> MangaPagedPageCurlContainerViewController"))
-        #expect(source.contains("private final class MangaPagedPageCurlContainerViewController: UIViewController"))
+        #expect(source.contains("final class MangaPagedPageCurlContainerViewController: UIViewController"))
         #expect(source.contains("let pageViewController: UIPageViewController"))
         #expect(pageCurlSource.contains("lazy var doubleTapGesture: UITapGestureRecognizer"))
         #expect(pageCurlSource.contains("recognizer.numberOfTapsRequired = 2"))
