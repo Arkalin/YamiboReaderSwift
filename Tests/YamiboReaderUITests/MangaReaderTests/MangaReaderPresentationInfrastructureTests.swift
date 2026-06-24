@@ -191,6 +191,19 @@ struct MangaReaderPresentationInfrastructureTests {
         #expect(!source.contains("pageScaleMode: parent.settings.pageScaleMode"))
     }
 
+    @Test func pagedViewportRealignsVisibleSpreadWhenCollectionBoundsChange() throws {
+        let source = try sourceFile("Sources/YamiboReaderUI/Features/Reader/MangaReader/Presentation/MangaPagedReaderViewport.swift")
+        let layoutCallbackRange = try #require(source.range(of: "collectionView.onLayoutSubviews ="))
+        let contentUpdateRange = try #require(source.range(of: "func updateContentIfNeeded"))
+        let layoutCallbackSource = String(source[layoutCallbackRange.lowerBound..<contentUpdateRange.lowerBound])
+
+        #expect(source.contains("private var lastLaidOutViewportSize: CGSize?"))
+        #expect(source.contains("func realignViewportAfterBoundsChangeIfNeeded(in collectionView: UICollectionView)"))
+        #expect(layoutCallbackSource.contains("realignViewportAfterBoundsChangeIfNeeded(in: collectionView)"))
+        #expect(source.contains("MangaPagedViewportResizePolicy.alignedContentOffsetX("))
+        #expect(source.contains("collectionView.collectionViewLayout.invalidateLayout()"))
+    }
+
     @Test func settingsSheetShowsPageEdgeFillAfterPageScaleMode() throws {
         let source = try sourceFile("Sources/YamiboReaderUI/Features/Reader/MangaReader/Settings/MangaReaderSettingsSheet.swift")
         let scaleRange = try #require(source.range(of: "MangaReaderPageScaleModeMenuRow("))

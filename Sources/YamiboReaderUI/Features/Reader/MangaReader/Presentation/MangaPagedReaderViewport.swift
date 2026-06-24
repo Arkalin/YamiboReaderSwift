@@ -51,6 +51,7 @@ struct MangaPagedReaderViewport: UIViewRepresentable {
         let coordinator = context.coordinator
         collectionView.onLayoutSubviews = { [weak coordinator, weak collectionView] in
             guard let collectionView else { return }
+            coordinator?.realignViewportAfterBoundsChangeIfNeeded(in: collectionView)
             coordinator?.applyInitialPlacementIfNeeded(in: collectionView)
             coordinator?.applyViewportPlacementIfNeeded(in: collectionView)
         }
@@ -88,6 +89,7 @@ struct MangaPagedReaderViewport: UIViewRepresentable {
         private var pendingInitialSpreadIndex: Int?
         private var lastReportedGlobalIndex: Int?
         private var lastAppliedPlacementRevision: Int?
+        private var lastLaidOutViewportSize: CGSize?
         lazy var tapGesture = UITapGestureRecognizer(target: self, action: #selector(handleTap(_:)))
         lazy var doubleTapGesture: UITapGestureRecognizer = {
             let recognizer = UITapGestureRecognizer(target: self, action: #selector(handleDoubleTap(_:)))
@@ -185,6 +187,31 @@ struct MangaPagedReaderViewport: UIViewRepresentable {
             applyInitialPlacementIfNeeded(in: collectionView)
             applyViewportPlacementIfNeeded(in: collectionView)
             updateVisiblePageSurfacesIfNeeded(in: collectionView)
+        }
+
+        func realignViewportAfterBoundsChangeIfNeeded(in collectionView: UICollectionView) {
+            let currentViewportSize = collectionView.bounds.size
+            defer {
+                lastLaidOutViewportSize = currentViewportSize
+            }
+
+            guard pendingInitialSpreadIndex == nil,
+                  let targetOffsetX = MangaPagedViewportResizePolicy.alignedContentOffsetX(
+                      previousContentOffsetX: collectionView.contentOffset.x,
+                      previousViewportSize: lastLaidOutViewportSize,
+                      currentViewportSize: currentViewportSize,
+                      itemCount: parent.plan.spreads.count
+                  ) else {
+                return
+            }
+
+            collectionView.collectionViewLayout.invalidateLayout()
+            collectionView.setContentOffset(
+                CGPoint(x: targetOffsetX, y: collectionView.contentOffset.y),
+                animated: false
+            )
+            publishCurrentPageIfNeeded(from: collectionView)
+            updateGestureState(in: collectionView)
         }
 
         func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int {

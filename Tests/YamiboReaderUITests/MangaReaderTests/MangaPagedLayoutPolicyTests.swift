@@ -80,4 +80,38 @@ struct MangaPagedLayoutPolicyTests {
             usesTwoPageSpread: false
         ) == .fitWidth)
     }
+
+    @Test func resizedViewportKeepsSameVisibleItemAtNewPageWidth() {
+        let targetOffset = MangaPagedViewportResizePolicy.alignedContentOffsetX(
+            previousContentOffsetX: 1_800,
+            previousViewportSize: CGSize(width: 600, height: 840),
+            currentViewportSize: CGSize(width: 480, height: 840),
+            itemCount: 8
+        )
+
+        #expect(targetOffset == 1_440)
+    }
+
+    @Test func resizeAlignmentClampsToAvailableItemsAndIgnoresInitialLayout() {
+        #expect(MangaPagedViewportResizePolicy.alignedContentOffsetX(
+            previousContentOffsetX: 6_000,
+            previousViewportSize: CGSize(width: 600, height: 840),
+            currentViewportSize: CGSize(width: 480, height: 840),
+            itemCount: 4
+        ) == 1_440)
+
+        #expect(MangaPagedViewportResizePolicy.alignedContentOffsetX(
+            previousContentOffsetX: 600,
+            previousViewportSize: nil,
+            currentViewportSize: CGSize(width: 480, height: 840),
+            itemCount: 4
+        ) == nil)
+
+        #expect(MangaPagedViewportResizePolicy.alignedContentOffsetX(
+            previousContentOffsetX: 600,
+            previousViewportSize: CGSize(width: 600, height: 840),
+            currentViewportSize: CGSize(width: 600, height: 840),
+            itemCount: 4
+        ) == nil)
+    }
 }
