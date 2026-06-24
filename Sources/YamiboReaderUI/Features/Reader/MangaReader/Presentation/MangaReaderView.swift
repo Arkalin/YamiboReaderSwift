@@ -822,25 +822,36 @@ private struct MangaReaderLoadedContent: View {
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             case .paged:
-                MangaPagedReaderViewport(
-                    plan: MangaPagedReadingPlan(
-                        pages: loaded.pages,
-                        currentPageIndex: loaded.currentPageIndex
-                    ),
-                    viewportPlacement: loaded.viewportPlacement,
-                    settings: settings,
-                    imagePipeline: imagePipeline,
-                    isChromeVisible: isChromeVisible,
-                    zoomEnabled: settings.zoomEnabled,
-                    onCurrentPageChange: onCurrentPageChange,
-                    onTap: onTap
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                GeometryReader { proxy in
+                    MangaPagedReaderViewport(
+                        plan: MangaPagedReadingPlan(
+                            pages: loaded.pages,
+                            currentPageIndex: loaded.currentPageIndex,
+                            pageTurnDirection: settings.pageTurnDirection,
+                            usesTwoPageSpread: usesTwoPageSpread(in: proxy.size)
+                        ),
+                        viewportPlacement: loaded.viewportPlacement,
+                        settings: settings,
+                        imagePipeline: imagePipeline,
+                        isChromeVisible: isChromeVisible,
+                        zoomEnabled: settings.zoomEnabled,
+                        onCurrentPageChange: onCurrentPageChange,
+                        onTap: onTap
+                    )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
             }
         } else {
             ProgressView(L10n.string("manga.loading"))
                 .tint(.white)
         }
+    }
+
+    private func usesTwoPageSpread(in size: CGSize) -> Bool {
+        settings.readingMode == .paged &&
+            settings.showsTwoPagesInLandscapeOnPad &&
+            UIDevice.current.userInterfaceIdiom == .pad &&
+            size.width > size.height
     }
 }
 

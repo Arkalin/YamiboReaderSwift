@@ -26,19 +26,97 @@ struct MangaPagedReadingPlanTests {
         #expect(trailingPlan.currentPage?.localIndex == 2)
         #expect(trailingPlan.pages.map(\.localIndex) == [0, 1, 2])
     }
+
+    @Test func planBuildsTwoPageSpreadsWithoutReplacingPageLevelCurrentPage() throws {
+        let pages = try makePagedPlanPages(pageCountsByTID: [("700", 3), ("701", 2)])
+        let plan = MangaPagedReadingPlan(
+            pages: pages,
+            currentPageIndex: 1,
+            pageTurnDirection: .leftToRight,
+            usesTwoPageSpread: true
+        )
+
+        #expect(plan.spreads.count == 3)
+        #expect(plan.currentPage?.id == "700#1")
+        #expect(plan.currentSpreadIndex == 0)
+        #expect(plan.globalIndex(forSpreadAt: 0) == 1)
+
+        #expect(plan.spreads[0].leftPage?.id == "700#0")
+        #expect(plan.spreads[0].rightPage?.id == "700#1")
+        #expect(plan.spreads[0].preferredPage.id == "700#1")
+
+        #expect(plan.spreads[1].leftPage?.id == "700#2")
+        #expect(plan.spreads[1].rightPage == nil)
+        #expect(plan.spreads[1].pageIndexes == [2])
+        #expect(plan.spreads[1].pageIndexForHorizontalLocation(25, width: 100) == 2)
+        #expect(plan.spreads[1].pageIndexForHorizontalLocation(75, width: 100) == nil)
+
+        #expect(plan.spreads[2].leftPage?.id == "701#0")
+        #expect(plan.spreads[2].rightPage?.id == "701#1")
+        #expect(plan.spreads[2].pageIndexes == [3, 4])
+    }
+
+    @Test func planOrdersTwoPageSpreadsByPageTurnDirection() throws {
+        let pages = try makePagedPlanPages(pageCountsByTID: [("700", 2)])
+        let ltrPlan = MangaPagedReadingPlan(
+            pages: pages,
+            currentPageIndex: 0,
+            pageTurnDirection: .leftToRight,
+            usesTwoPageSpread: true
+        )
+        let rtlPlan = MangaPagedReadingPlan(
+            pages: pages,
+            currentPageIndex: 0,
+            pageTurnDirection: .rightToLeft,
+            usesTwoPageSpread: true
+        )
+
+        #expect(ltrPlan.spreads[0].leftPage?.id == "700#0")
+        #expect(ltrPlan.spreads[0].rightPage?.id == "700#1")
+        #expect(rtlPlan.spreads[0].leftPage?.id == "700#1")
+        #expect(rtlPlan.spreads[0].rightPage?.id == "700#0")
+    }
+
+    @Test func planPlacesRightToLeftOddTailOnRightWithoutFakeLeftPage() throws {
+        let pages = try makePagedPlanPages(pageCountsByTID: [("700", 3)])
+        let plan = MangaPagedReadingPlan(
+            pages: pages,
+            currentPageIndex: 2,
+            pageTurnDirection: .rightToLeft,
+            usesTwoPageSpread: true
+        )
+
+        #expect(plan.spreads[1].leftPage == nil)
+        #expect(plan.spreads[1].rightPage?.id == "700#2")
+        #expect(plan.spreads[1].pageIndexes == [2])
+        #expect(plan.spreads[1].pageIndexForHorizontalLocation(25, width: 100) == nil)
+        #expect(plan.spreads[1].pageIndexForHorizontalLocation(75, width: 100) == 2)
+    }
 }
 
 private func makePagedPlanPages() throws -> [MangaReaderPageProjection] {
-    try (0 ..< 3).map { index in
-        MangaReaderPageProjection(
-            tid: "700",
-            ownerPostID: "post-700",
-            chapterTitle: "Chapter 700",
-            imageURL: try #require(URL(string: "https://img.example.com/700-\(index).png")),
-            refererURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?tid=700")),
-            globalIndex: index,
-            localIndex: index,
-            chapterPageCount: 3
-        )
+    try makePagedPlanPages(pageCountsByTID: [("700", 3)])
+}
+
+private func makePagedPlanPages(pageCountsByTID: [(String, Int)]) throws -> [MangaReaderPageProjection] {
+    var globalIndex = 0
+    var pages: [MangaReaderPageProjection] = []
+    for (tid, pageCount) in pageCountsByTID {
+        for localIndex in 0 ..< pageCount {
+            pages.append(
+                MangaReaderPageProjection(
+                    tid: tid,
+                    ownerPostID: "post-\(tid)",
+                    chapterTitle: "Chapter \(tid)",
+                    imageURL: try #require(URL(string: "https://img.example.com/\(tid)-\(localIndex).png")),
+                    refererURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?tid=\(tid)")),
+                    globalIndex: globalIndex,
+                    localIndex: localIndex,
+                    chapterPageCount: pageCount
+                )
+            )
+            globalIndex += 1
+        }
     }
+    return pages
 }
