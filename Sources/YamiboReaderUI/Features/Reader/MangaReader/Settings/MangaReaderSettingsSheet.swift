@@ -20,6 +20,11 @@ struct MangaReaderSettingsSheet: View {
             let topInset = proxy.safeAreaInsets.top
             let heroHeight = max(318, min(382, proxy.size.height * 0.38)) + topInset
             let palette = MangaReaderSettingsPalette(colorScheme: colorScheme)
+            let usesTwoPageSpread = MangaPagedLayoutPolicy.usesTwoPageSpread(
+                settings: draftSettings,
+                isPadDevice: isPadDevice,
+                availableSize: proxy.size
+            )
 
             ZStack(alignment: .top) {
                 MangaReaderSettingsBackground(
@@ -33,7 +38,7 @@ struct MangaReaderSettingsSheet: View {
                         palette: palette,
                         topInset: topInset,
                         height: heroHeight,
-                        isPadDevice: isPadDevice,
+                        usesTwoPageSpread: usesTwoPageSpread,
                         onClose: { dismiss() },
                         onConfirm: commitDraft
                     )
@@ -41,7 +46,8 @@ struct MangaReaderSettingsSheet: View {
                     MangaReaderSettingsSections(
                         settings: $draftSettings,
                         palette: palette,
-                        isPadDevice: isPadDevice
+                        isPadDevice: isPadDevice,
+                        usesTwoPageSpread: usesTwoPageSpread
                     )
                 }
             }
@@ -85,7 +91,7 @@ private struct MangaReaderSettingsHero: View {
     let palette: MangaReaderSettingsPalette
     let topInset: CGFloat
     let height: CGFloat
-    let isPadDevice: Bool
+    let usesTwoPageSpread: Bool
     let onClose: () -> Void
     let onConfirm: () -> Void
 
@@ -94,7 +100,7 @@ private struct MangaReaderSettingsHero: View {
             MangaReaderSettingsPreviewSpread(
                 settings: settings,
                 palette: palette,
-                isPadDevice: isPadDevice,
+                usesTwoPageSpread: usesTwoPageSpread,
                 height: height,
                 contentTopPadding: topInset + 78
             )
@@ -147,7 +153,7 @@ private struct MangaReaderSettingsHeader: View {
 private struct MangaReaderSettingsPreviewSpread: View {
     let settings: MangaReaderSettings
     let palette: MangaReaderSettingsPalette
-    let isPadDevice: Bool
+    let usesTwoPageSpread: Bool
     let height: CGFloat
     let contentTopPadding: CGFloat
 
@@ -155,8 +161,11 @@ private struct MangaReaderSettingsPreviewSpread: View {
         MangaReaderSettingsModeOption(settings)
     }
 
-    private var showsTwoPagePreview: Bool {
-        isPadDevice && settings.usesPagedMode && settings.showsTwoPagesInLandscapeOnPad
+    private var effectivePageScaleMode: MangaPageScaleMode {
+        MangaPagedLayoutPolicy.effectivePageScaleMode(
+            settings: settings,
+            usesTwoPageSpread: usesTwoPageSpread
+        )
     }
 
     private var frameCornerRadii: RectangleCornerRadii {
@@ -179,19 +188,19 @@ private struct MangaReaderSettingsPreviewSpread: View {
                     .padding(.horizontal, 18)
                     .padding(.bottom, 18)
             } else {
-                HStack(spacing: showsTwoPagePreview ? 12 : 0) {
+                HStack(spacing: usesTwoPageSpread ? 12 : 0) {
                     MangaReaderLayeredPagedPreviewPage(
                         palette: palette,
                         isTrailingPage: false,
-                        scaleMode: settings.pageScaleMode,
+                        scaleMode: effectivePageScaleMode,
                         edgeFillStyle: settings.pageEdgeFillStyle,
                         pageTurnDirection: settings.pageTurnDirection
                     )
-                    if showsTwoPagePreview {
+                    if usesTwoPageSpread {
                         MangaReaderLayeredPagedPreviewPage(
                             palette: palette,
                             isTrailingPage: true,
-                            scaleMode: settings.pageScaleMode,
+                            scaleMode: effectivePageScaleMode,
                             edgeFillStyle: settings.pageEdgeFillStyle,
                             pageTurnDirection: settings.pageTurnDirection
                         )
@@ -606,6 +615,7 @@ private struct MangaReaderSettingsSections: View {
     @Binding var settings: MangaReaderSettings
     let palette: MangaReaderSettingsPalette
     let isPadDevice: Bool
+    let usesTwoPageSpread: Bool
 
     var body: some View {
         ScrollView {
@@ -618,7 +628,8 @@ private struct MangaReaderSettingsSections: View {
                 MangaReaderSettingsPagingSection(
                     settings: $settings,
                     palette: palette,
-                    isPadDevice: isPadDevice
+                    isPadDevice: isPadDevice,
+                    usesTwoPageSpread: usesTwoPageSpread
                 )
             }
             .padding(.top, 8)
@@ -656,6 +667,7 @@ private struct MangaReaderSettingsPagingSection: View {
     @Binding var settings: MangaReaderSettings
     let palette: MangaReaderSettingsPalette
     let isPadDevice: Bool
+    let usesTwoPageSpread: Bool
 
     var body: some View {
         MangaReaderSettingsCardSection(
@@ -682,11 +694,13 @@ private struct MangaReaderSettingsPagingSection: View {
                     palette: palette
                 )
                 MangaReaderSettingsDivider(palette: palette)
-                MangaReaderPageScaleModeMenuRow(
-                    scaleMode: $settings.pageScaleMode,
-                    palette: palette
-                )
-                MangaReaderSettingsDivider(palette: palette)
+                if !usesTwoPageSpread {
+                    MangaReaderPageScaleModeMenuRow(
+                        scaleMode: $settings.pageScaleMode,
+                        palette: palette
+                    )
+                    MangaReaderSettingsDivider(palette: palette)
+                }
                 MangaReaderPageEdgeFillMenuRow(
                     edgeFillStyle: $settings.pageEdgeFillStyle,
                     palette: palette
