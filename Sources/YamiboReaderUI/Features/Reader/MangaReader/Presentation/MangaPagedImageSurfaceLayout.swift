@@ -1,7 +1,14 @@
 import CoreGraphics
 import YamiboReaderCore
 
+enum MangaPagedImageSurfaceHorizontalEdge: CaseIterable, Hashable {
+    case left
+    case right
+}
+
 struct MangaPagedImageSurfaceLayout: Equatable {
+    private static let edgeVisibilityTolerance: CGFloat = 0.5
+
     let imageSize: CGSize
     let containerSize: CGSize
     let pageScaleMode: MangaPageScaleMode
@@ -60,6 +67,43 @@ struct MangaPagedImageSurfaceLayout: Equatable {
         return CGSize(
             width: restingOffset.width + clampedUserOffset.width,
             height: restingOffset.height + clampedUserOffset.height
+        )
+    }
+
+    func hasHiddenContent(
+        on edge: MangaPagedImageSurfaceHorizontalEdge,
+        fromUserOffset userOffset: CGSize
+    ) -> Bool {
+        guard pageScaleMode == .fitHeight else { return false }
+        let horizontalOverflow = overflowBounds.width
+        guard horizontalOverflow > Self.edgeVisibilityTolerance else { return false }
+
+        let displayOffsetX = displayOffset(forUserOffset: userOffset).width
+        switch edge {
+        case .left:
+            return displayOffsetX < horizontalOverflow - Self.edgeVisibilityTolerance
+        case .right:
+            return displayOffsetX > -horizontalOverflow + Self.edgeVisibilityTolerance
+        }
+    }
+
+    func userOffsetRevealingContent(
+        on edge: MangaPagedImageSurfaceHorizontalEdge,
+        fromUserOffset userOffset: CGSize
+    ) -> CGSize? {
+        guard hasHiddenContent(on: edge, fromUserOffset: userOffset) else { return nil }
+        let horizontalOverflow = overflowBounds.width
+        let targetDisplayOffsetX = switch edge {
+        case .left:
+            horizontalOverflow
+        case .right:
+            -horizontalOverflow
+        }
+        return clampedUserOffset(
+            CGSize(
+                width: targetDisplayOffsetX - restingOffset.width,
+                height: userOffset.height
+            )
         )
     }
 

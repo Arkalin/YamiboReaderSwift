@@ -145,6 +145,31 @@ struct MangaReaderPresentationInfrastructureTests {
         #expect(chromeGateBody.contains("return"))
     }
 
+    @Test func pagedViewportConsumesPhysicalSurfaceEdgeTapBeforeDirectionalPageTurn() throws {
+        let source = try sourceFile("Sources/YamiboReaderUI/Features/Reader/MangaReader/Presentation/MangaPagedReaderViewport.swift")
+        let chromeGateRange = try #require(source.range(of: "if parent.isChromeVisible {"))
+        let edgeTapRange = try #require(source.range(of: "if consumeSurfaceEdgeTap(for: zone, in: collectionView)"))
+        let directionalZoneRange = try #require(source.range(of: "let directionalZone = directionalTapZone(for: zone)"))
+        let pageTurnRange = try #require(source.range(of: "pagingDriver.animateAdjacentSelection"))
+
+        #expect(chromeGateRange.lowerBound < edgeTapRange.lowerBound)
+        #expect(edgeTapRange.lowerBound < directionalZoneRange.lowerBound)
+        #expect(directionalZoneRange.lowerBound < pageTurnRange.lowerBound)
+
+        let consumeRange = try #require(source.range(of: "private func consumeSurfaceEdgeTap"))
+        let physicalRange = try #require(source.range(of: "private func physicalHorizontalEdge"))
+        let directionalRange = try #require(source.range(of: "private func directionalTapZone"))
+        let consumeSource = String(source[consumeRange.lowerBound..<physicalRange.lowerBound])
+        let physicalSource = String(source[physicalRange.lowerBound..<directionalRange.lowerBound])
+
+        #expect(consumeSource.contains("physicalHorizontalEdge(for: zone)"))
+        #expect(consumeSource.contains("surfaceInteraction.consumeTap(onPhysicalEdge: physicalEdge)"))
+        #expect(!consumeSource.contains("directionalTapZone"))
+        #expect(physicalSource.contains("case .previous:\n                .left"))
+        #expect(physicalSource.contains("case .next:\n                .right"))
+        #expect(physicalSource.contains("case .toggleChrome:\n                nil"))
+    }
+
     @Test func pagedViewportUsesSharedSlideAndQuickFadePagingContracts() throws {
         let sharedSource = try sourceFile("Sources/YamiboReaderUI/Features/Reader/Shared/Paging/ReaderPagedPageTurnSupport.swift")
         let mangaSource = try sourceFile("Sources/YamiboReaderUI/Features/Reader/MangaReader/Presentation/MangaPagedReaderViewport.swift")
@@ -168,7 +193,8 @@ struct MangaReaderPresentationInfrastructureTests {
         #expect(mangaSource.contains("horizontalNavigationDirection: parent.settings.pageTurnDirection.horizontalNavigationDirection"))
         #expect(mangaSource.contains("itemIndexForSelectionIndex: { [weak self] pageIndex in"))
         #expect(mangaSource.contains("selectionIndexForItemIndex: { [weak self] viewportIndex in"))
-        #expect(mangaSource.contains("page: parent.plan.pages[pageIndex]"))
+        #expect(mangaSource.contains("page: page"))
+        #expect(mangaSource.contains("surfaceInteraction: surfaceInteraction(for: page)"))
         #expect(mangaSource.contains("pagingInputs(selectionPageIndex: targetIndex)"))
         #expect(mangaSource.contains("IndexPath(item: targetViewportIndex, section: 0)"))
         #expect(mangaSource.contains("private func viewportIndex(forPageIndex pageIndex: Int) -> Int"))
