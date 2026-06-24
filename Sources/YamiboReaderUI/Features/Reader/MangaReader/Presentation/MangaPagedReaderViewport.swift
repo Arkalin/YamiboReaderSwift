@@ -344,8 +344,15 @@ struct MangaPagedReaderViewport: UIViewRepresentable {
                   let panRecognizer = gestureRecognizer as? UIPanGestureRecognizer else {
                 return true
             }
-            return !parent.isChromeVisible &&
-                pagingDriver.quickFadePanShouldBegin(panRecognizer, inputs: pagingInputs)
+            guard !parent.isChromeVisible,
+                  let collectionView = panRecognizer.view as? UICollectionView,
+                  pagingDriver.quickFadePanShouldBegin(panRecognizer, inputs: pagingInputs) else {
+                return false
+            }
+            if shouldDeferQuickFadePanToSurfaceContent(panRecognizer, in: collectionView) {
+                return false
+            }
+            return true
         }
 
         func updateGestureState(in collectionView: UICollectionView) {
@@ -354,6 +361,34 @@ struct MangaPagedReaderViewport: UIViewRepresentable {
                 collectionView.panGestureRecognizer.isEnabled = false
             }
             quickFadePanGesture.isEnabled = !parent.isChromeVisible && parent.settings.pagedTurnStyle == .quickFade
+        }
+
+        private func shouldDeferQuickFadePanToSurfaceContent(
+            _ recognizer: UIPanGestureRecognizer,
+            in collectionView: UICollectionView
+        ) -> Bool {
+            guard parent.zoomEnabled,
+                  let physicalEdge = physicalHiddenContentEdge(for: recognizer, in: collectionView),
+                  let pageIndex = currentPageIndex(in: collectionView),
+                  let page = parent.plan.page(at: pageIndex),
+                  let surfaceInteraction = pageSurfaceInteractions[page.id] else {
+                return false
+            }
+            return surfaceInteraction.hasHiddenContent(onPhysicalEdge: physicalEdge)
+        }
+
+        private func physicalHiddenContentEdge(
+            for recognizer: UIPanGestureRecognizer,
+            in collectionView: UICollectionView
+        ) -> MangaPagedImageSurfaceHorizontalEdge? {
+            let velocity = recognizer.velocity(in: collectionView)
+            if velocity.x != 0 {
+                return velocity.x < 0 ? .right : .left
+            }
+
+            let translation = recognizer.translation(in: collectionView)
+            guard translation.x != 0 else { return nil }
+            return translation.x < 0 ? .right : .left
         }
 
         private func updateVisiblePageSurfacesIfNeeded(in collectionView: UICollectionView) {
@@ -511,6 +546,10 @@ private final class MangaPagedReaderPageSurfaceInteraction: ObservableObject {
 
     func updateHiddenEdges(_ hiddenEdges: Set<MangaPagedImageSurfaceHorizontalEdge>) {
         self.hiddenEdges = hiddenEdges
+    }
+
+    func hasHiddenContent(onPhysicalEdge edge: MangaPagedImageSurfaceHorizontalEdge) -> Bool {
+        hiddenEdges.contains(edge)
     }
 
     func consumeTap(onPhysicalEdge edge: MangaPagedImageSurfaceHorizontalEdge) -> Bool {
