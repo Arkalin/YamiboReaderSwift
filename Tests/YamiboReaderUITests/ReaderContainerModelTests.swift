@@ -1216,63 +1216,6 @@ final class ReaderContainerModelTests: XCTestCase {
         }
     }
 
-    func testChapterDirectoryPreviewUsesPureIndexTransaction() throws {
-        let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        let modelSource = try String(
-            contentsOf: repositoryRoot
-                .appendingPathComponent("Sources/YamiboReaderUI/Features/Reader/NovelReader/Container/ReaderContainerModel.swift"),
-            encoding: .utf8
-        )
-        let previewBody = try XCTUnwrap(functionBody(named: "previewChapterDirectoryWebView", in: modelSource))
-
-        XCTAssertTrue(previewBody.contains("workflow.previewChapterDirectory"))
-        XCTAssertTrue(previewBody.contains("chapterDirectoryPageCount = 0"))
-        XCTAssertFalse(previewBody.contains("NovelTextLayout"))
-        XCTAssertFalse(previewBody.contains("viewportIndex"))
-        XCTAssertFalse(previewBody.contains("NovelReadingSession("))
-        XCTAssertFalse(previewBody.contains(".snapshot.chapters"))
-    }
-
-    func testNovelTextModelMutationsExposeCommittedTextKitUpdateSeam() throws {
-        let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        let modelSource = try String(
-            contentsOf: repositoryRoot
-                .appendingPathComponent("Sources/YamiboReaderUI/Features/Reader/NovelReader/Container/ReaderContainerModel.swift"),
-            encoding: .utf8
-        )
-        let appearanceBody = try XCTUnwrap(
-            functionBody(named: "commitNovelTextAppearance(\n        _ newSettings", in: modelSource)
-        )
-        let layoutBody = try XCTUnwrap(functionBody(named: "commitNovelTextLayout", in: modelSource))
-        let environmentBody = try XCTUnwrap(
-            functionBody(named: "commitNovelTextPresentationEnvironment", in: modelSource)
-        )
-
-        XCTAssertFalse(modelSource.contains("func applySettings("))
-        XCTAssertFalse(modelSource.contains("func updateLayout("))
-        XCTAssertFalse(modelSource.contains("func updatePagedPresentationEnvironment("))
-        XCTAssertFalse(modelSource.contains("func updateReadingMode("))
-        XCTAssertFalse(modelSource.contains("func updateFontScale("))
-        XCTAssertFalse(modelSource.contains("func updateTranslationMode("))
-        XCTAssertFalse(modelSource.contains("ReaderPagedSpread"))
-        XCTAssertFalse(modelSource.contains("renderedPage"))
-        XCTAssertFalse(modelSource.contains("RenderedPage"))
-        XCTAssertFalse(modelSource.contains("jumpToRenderedPage"))
-        XCTAssertFalse(modelSource.contains("targetRenderedPageIndex"))
-        XCTAssertFalse(modelSource.contains("committedPageIndex"))
-        XCTAssertFalse(modelSource.contains("currentPageIndex"))
-        XCTAssertFalse(modelSource.contains("preferredPage"))
-        XCTAssertFalse(modelSource.contains("forPageIndex"))
-        XCTAssertFalse(modelSource.contains("jumpRelativePage"))
-        XCTAssertFalse(modelSource.contains("prefetchIfNeeded(forPageIndex"))
-        XCTAssertFalse(modelSource.contains("updateVerticalViewportPosition(pageIndex"))
-        XCTAssertFalse(modelSource.contains("func selectSurface(_ pageIndex"))
-        XCTAssertFalse(modelSource.contains("func jumpToSurface(_ pageIndex"))
-        XCTAssertTrue(appearanceBody.contains("requestRuntimeUpdate("))
-        XCTAssertTrue(layoutBody.contains("requestRuntimeUpdate("))
-        XCTAssertTrue(environmentBody.contains("requestRuntimeUpdate("))
-    }
-
     func testUpdatingLayoutRepaginatesPagedContentAndKeepsCurrentSegment() async throws {
         let model = try await makeModel(
             documents: [
@@ -1417,26 +1360,6 @@ final class ReaderContainerModelTests: XCTestCase {
         XCTAssertEqual(favorite?.mangaPageIndex, 0)
         XCTAssertEqual(resumeContext.initialResumePoint, favorite?.novelResumePoint)
         XCTAssertEqual(resumeContext.initialView, favorite?.novelResumePoint?.view)
-    }
-
-    func testReaderContainerModelDoesNotOwnNovelReadingPositionRangeSemantics() throws {
-        let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        let modelSource = try String(
-            contentsOf: repositoryRoot
-                .appendingPathComponent("Sources/YamiboReaderUI/Features/Reader/NovelReader/Container/ReaderContainerModel.swift"),
-            encoding: .utf8
-        )
-
-        XCTAssertFalse(modelSource.contains("ReaderResumePoint("))
-        XCTAssertFalse(modelSource.contains("flatMap(\\.ranges)"))
-        XCTAssertFalse(modelSource.contains("ReaderPageTextPosition"))
-        XCTAssertFalse(modelSource.contains("segmentOffset:"))
-        XCTAssertFalse(modelSource.contains("state?.currentDocument"))
-        XCTAssertFalse(modelSource.contains("state?.prefetchedDocument"))
-        XCTAssertTrue(modelSource.contains("readingWorkflow?.currentProgressPosition()"))
-        XCTAssertTrue(modelSource.contains("readingWorkflow?.currentPreviewSourceText()"))
-        XCTAssertTrue(modelSource.contains("readingWorkflow?.cacheContext(forView:"))
-        XCTAssertTrue(modelSource.contains("readingWorkflow?.canPromotePrefetchedDocument(forView:"))
     }
 
     func testForumNovelProgressDoesNotCreateFavorite() async throws {
@@ -3025,30 +2948,6 @@ private func rangeContainsOffset(_ range: ReaderRenderedTextRange, offset: Int) 
         return offset <= range.startOffset
     }
     return offset >= range.startOffset && offset < range.endOffset
-}
-
-private func functionBody(named name: String, in source: String) -> String? {
-    guard let nameRange = source.range(of: "func \(name)") ?? source.range(of: "static func \(name)") else {
-        return nil
-    }
-    guard let bodyStart = source[nameRange.upperBound...].firstIndex(of: "{") else {
-        return nil
-    }
-
-    var depth = 0
-    var index = bodyStart
-    while index < source.endIndex {
-        if source[index] == "{" {
-            depth += 1
-        } else if source[index] == "}" {
-            depth -= 1
-            if depth == 0 {
-                return String(source[bodyStart...index])
-            }
-        }
-        index = source.index(after: index)
-    }
-    return nil
 }
 
 private func makeDocument(

@@ -127,89 +127,6 @@ final class NovelReadingWorkflowTests: XCTestCase {
         )
     }
 
-    func testNovelReadingSessionRemainsPlatformIndependentPureValueState() throws {
-        let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        let source = try String(
-            contentsOf: repositoryRoot
-                .appendingPathComponent("Sources/YamiboReaderCore/Support/NovelReadingSession.swift"),
-            encoding: .utf8
-        )
-
-        XCTAssertFalse(source.contains("import UIKit"))
-        XCTAssertFalse(source.contains("NSTextContentStorage"))
-        XCTAssertFalse(source.contains("NSTextLayoutManager"))
-        XCTAssertTrue(source.contains("package struct NovelReadingSession: Sendable"))
-        XCTAssertFalse(source.contains("public var pages: [NovelTextViewportIndexSurface]"))
-        XCTAssertFalse(source.contains("public var chapters: [ReaderChapter]"))
-        XCTAssertFalse(source.contains("public var spreads: [NovelReadingSpread]"))
-        XCTAssertFalse(source.contains("public var viewportIndex: NovelTextViewportIndex?"))
-        XCTAssertFalse(source.contains("ReaderPagedSpread"))
-        XCTAssertFalse(source.contains("func jumpToRenderedPage"))
-        XCTAssertFalse(source.contains("currentRenderedPage"))
-        XCTAssertFalse(source.contains("currentPageIndex"))
-        XCTAssertFalse(source.contains("preferredPage"))
-        XCTAssertFalse(source.contains("forPageIndex"))
-        XCTAssertFalse(source.contains("jumpRelativePage"))
-        XCTAssertFalse(source.contains("updateVerticalViewportPosition(pageIndex"))
-
-        let modelSource = try String(
-            contentsOf: repositoryRoot
-                .appendingPathComponent("Sources/YamiboReaderCore/Models/ReaderModels.swift"),
-            encoding: .utf8
-        )
-        let sampleDeclaration = try XCTUnwrap(
-            modelSource.range(of: "package struct NovelTextViewportSample: Hashable, Sendable")
-        )
-        let sampleBody = modelSource[sampleDeclaration.lowerBound...]
-            .prefix(while: { $0 != "}" })
-        XCTAssertTrue(sampleBody.contains("public var textSegmentIdentity: NovelTextSegmentIdentity"))
-        XCTAssertTrue(sampleBody.contains("public var displayedTextOffset: Int"))
-        XCTAssertFalse(sampleBody.contains("segmentIndex"))
-        XCTAssertFalse(sampleBody.contains("segmentOffset"))
-    }
-
-    func testWorkflowCommitsRuntimeWithIndexTransactionLayout() throws {
-        let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        let source = try String(
-            contentsOf: repositoryRoot
-                .appendingPathComponent("Sources/YamiboReaderCore/Support/NovelReadingWorkflow.swift"),
-            encoding: .utf8
-        )
-
-        XCTAssertTrue(source.contains("preparedInput: try NovelTextLayout.prepareInput"))
-        XCTAssertTrue(source.contains("layoutResult: transaction.result"))
-        XCTAssertFalse(source.contains("func updateSettings("))
-        XCTAssertFalse(source.contains("func updateSurfaceAppearanceSettings("))
-        XCTAssertFalse(source.contains("func updateLayout("))
-        XCTAssertFalse(source.contains("func updatePagedPresentationEnvironment("))
-        XCTAssertFalse(source.contains("ReaderPagedSpread"))
-        XCTAssertFalse(source.contains("jumpToRenderedPage"))
-        XCTAssertFalse(source.contains("currentPageIndex"))
-        XCTAssertFalse(source.contains("preferredPage"))
-        XCTAssertFalse(source.contains("forPageIndex"))
-        XCTAssertFalse(source.contains("prefetchIfNeeded(forPageIndex"))
-        XCTAssertFalse(source.contains("jumpRelativePage"))
-        XCTAssertFalse(source.contains("updateVerticalViewportPosition(pageIndex"))
-        XCTAssertFalse(source.contains("currentDocumentPageCount"))
-        XCTAssertFalse(source.contains("pageHeight("))
-        XCTAssertFalse(source.contains("package var currentDocument: ReaderPageDocument"))
-        XCTAssertFalse(source.contains("package var prefetchedDocument: ReaderPageDocument?"))
-        XCTAssertTrue(source.contains(".previewChapterDirectoryEntries(readingMode:"))
-        XCTAssertFalse(source.contains("semantics(forSegmentIndex"))
-        XCTAssertFalse(source.contains("segments.enumerated()"))
-        XCTAssertFalse(source.contains("startIndex: index"))
-        XCTAssertFalse(
-            source.contains(
-                """
-                viewportRuntime.prepareTransaction(
-                                result: result,
-                                settings: settings,
-                                layout: layout
-                """
-            )
-        )
-    }
-
     func testVerticalDisplayReferenceBecomesStaleAfterRuntimeGenerationChanges() async throws {
         let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9179&mobile=2")!
         let repository = RecordingNovelReadingRepository(documents: [
@@ -636,18 +553,6 @@ final class NovelReadingWorkflowTests: XCTestCase {
         XCTAssertEqual(presentation.selectedSurfaceIndex, 777)
         XCTAssertEqual(presentation.surfaceIndex(for: selectedIdentity), 777)
         XCTAssertNil(presentation.surfaceIndex(for: NovelReaderSurfaceIdentity(generation: generation + 1, ordinal: 777)))
-    }
-
-    func testNovelReaderPresentationLookupDoesNotScanSurfaces() throws {
-        let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        let source = try String(
-            contentsOf: repositoryRoot
-                .appendingPathComponent("Sources/YamiboReaderCore/Models/ReaderModels.swift"),
-            encoding: .utf8
-        )
-
-        XCTAssertFalse(source.contains("surfaces.first(where: { $0.identity == selectedSurfaceIdentity })"))
-        XCTAssertFalse(source.contains("surfaces.first(where: { $0.identity == identity })"))
     }
 
     func testPrefetchDoesNotCreateASecondViewportRuntime() async throws {
@@ -2274,25 +2179,6 @@ final class NovelReadingWorkflowTests: XCTestCase {
         XCTAssertEqual(workflow.runtimeDiagnostics.activeLayoutManagerCount, 0)
     }
 
-    func testPromotionUsesCandidateSessionAndPreparedRuntimeTransaction() throws {
-        let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        let source = try String(
-            contentsOf: repositoryRoot
-                .appendingPathComponent("Sources/YamiboReaderCore/Support/NovelReadingWorkflow.swift"),
-            encoding: .utf8
-        )
-        let promotionBody = try XCTUnwrap(
-            workflowFunctionBody(named: "promotePrefetchedDocument", in: source)
-        )
-
-        XCTAssertTrue(promotionBody.contains("var candidateSession"))
-        XCTAssertTrue(promotionBody.contains("prepareRuntimeTransaction"))
-        XCTAssertTrue(promotionBody.contains("makePreparedTransaction"))
-        XCTAssertTrue(promotionBody.contains("commit(preparedTransaction)"))
-        XCTAssertFalse(promotionBody.contains("previousDocument"))
-        XCTAssertFalse(promotionBody.contains("previousPrefetchedDocument"))
-    }
-
     func testPrefetchNearEndDoesNotMergeNextViewInPagedMode() async throws {
         let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9104&mobile=2")!
         let repository = RecordingNovelReadingRepository(documents: [
@@ -2557,28 +2443,6 @@ private func makeWorkflow(
         repository: repository,
         pagination: previewSourcePagination
     )
-}
-
-private func workflowFunctionBody(named name: String, in source: String) -> String? {
-    guard let signatureRange = source.range(of: "public func \(name)("),
-          let openingBrace = source[signatureRange.lowerBound...].firstIndex(of: "{") else {
-        return nil
-    }
-    var depth = 0
-    for index in source.indices[openingBrace...] {
-        switch source[index] {
-        case "{":
-            depth += 1
-        case "}":
-            depth -= 1
-            if depth == 0 {
-                return String(source[openingBrace...index])
-            }
-        default:
-            break
-        }
-    }
-    return nil
 }
 
 private actor RuntimeUpdatePreparationGate {

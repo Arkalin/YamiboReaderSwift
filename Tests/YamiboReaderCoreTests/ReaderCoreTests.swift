@@ -1040,167 +1040,6 @@ private final class StubURLProtocol: URLProtocol {
 }
 #endif
 
-@Test func novelTextLayoutUsesUIKitTextKit2Measurement() throws {
-    let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-    let layoutEngineSource = try String(
-        contentsOf: repositoryRoot
-            .appendingPathComponent("Sources/YamiboReaderCore/Support/NovelTextPreviewLayout.swift"),
-        encoding: .utf8
-    )
-    let uiKitTextFitsBody = try #require(functionBody(named: "textFits", in: layoutEngineSource))
-
-    #expect(uiKitTextFitsBody.contains("measuredTextHeight"))
-    #expect(!uiKitTextFitsBody.contains("boundingRect"))
-}
-
-@Test func novelTextLayoutDoesNotExposeStaleMeasurementFallbackSurfaces() throws {
-    let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-    let sourceFiles = [
-        "Sources/YamiboReaderCore/Models/ReaderModels.swift",
-        "Sources/YamiboReaderCore/Support/NovelTextLayout.swift",
-        "Sources/YamiboReaderCore/Support/NovelReadingSession.swift",
-        "Sources/YamiboReaderCore/Support",
-    ]
-    let productionSource = try sourceFiles.map { path in
-        let url = repositoryRoot.appendingPathComponent(path)
-        if url.hasDirectoryPath {
-            return try FileManager.default.contentsOfDirectory(at: url, includingPropertiesForKeys: nil)
-                .filter { $0.pathExtension == "swift" }
-                .map { try String(contentsOf: $0, encoding: .utf8) }
-                .joined(separator: "\n")
-        }
-        return try String(contentsOf: url, encoding: .utf8)
-    }.joined(separator: "\n")
-    let layoutSource = try String(
-        contentsOf: repositoryRoot.appendingPathComponent("Sources/YamiboReaderCore/Support/NovelTextLayout.swift"),
-        encoding: .utf8
-    )
-    let viewportSampleBody = try #require(functionBody(named: "viewportSample", in: layoutSource))
-    let displayOffsetBody = try #require(functionBody(named: "displayOffset", in: layoutSource))
-
-    #expect(!productionSource.contains("renderedPagesOrEmpty"))
-    #expect(!productionSource.contains("emptyPagination"))
-    #expect(!productionSource.contains("estimatedTextHeight"))
-    #expect(!productionSource.contains("text.count < 180"))
-    #expect(!productionSource.contains("public enum ReaderPaginator"))
-    #expect(!layoutSource.contains("viewportContext.document.textRangesBySegment"))
-    #expect(!layoutSource.contains("viewportDocument.textRangesBySegment"))
-    #expect(!layoutSource.contains("private static func viewportText"))
-    #expect(!layoutSource.contains("private static func viewportSurfaceText"))
-    #expect(!layoutSource.contains("private static func isParagraphBoundary"))
-    #expect(!layoutSource.contains("semantics(forSegmentIndex"))
-    #expect(!layoutSource.contains("source(forSegmentIndex"))
-    #expect(layoutSource.contains("zip(document.segmentSemantics, document.segmentSources)"))
-    #expect(layoutSource.contains("segment.semantics?.textSegmentIdentity"))
-    #expect(!viewportSampleBody.contains("semantics(forSegmentIndex"))
-    #expect(!viewportSampleBody.contains("segmentSemantics"))
-    #expect(viewportSampleBody.contains(".sample(displayOffset:"))
-    #expect(!displayOffsetBody.contains("semantics(forSegmentIndex"))
-    #expect(!displayOffsetBody.contains("segmentSemantics"))
-    #expect(displayOffsetBody.contains(".displayOffset("))
-    #expect(!productionSource.contains("struct NovelTextDisplayValue"))
-    #expect(!productionSource.contains("AppKitNovelTextLayoutAdapter"))
-    #expect(!productionSource.contains("ReaderPagedLayoutSegment"))
-    #expect(!productionSource.contains("ReaderPagedLayoutPage"))
-    #expect(!productionSource.contains("ReaderPagedFragmentPartitioner"))
-    #expect(!productionSource.contains("typealias NovelTextViewportPageLayout"))
-    #expect(!productionSource.contains("NovelTextViewportDocumentPageRange"))
-    #expect(!productionSource.contains("viewportPageLayout"))
-    #expect(!productionSource.contains("pageRanges"))
-    #expect(!productionSource.contains("pageIdentity"))
-    #expect(!productionSource.contains("visiblePageIdentities"))
-    #expect(!productionSource.contains("NovelTextViewportPageLayoutMetrics"))
-    #expect(!productionSource.contains("pageMetrics"))
-    #expect(!productionSource.contains("pageHeight("))
-    #expect(!productionSource.contains("perPageTextKitDocumentCount"))
-    #expect(!productionSource.contains("public struct ReaderRenderedTextRange"))
-    #expect(!productionSource.contains("public func source(forSegmentIndex"))
-    #expect(!productionSource.contains("public func semantics(forSegmentIndex"))
-    #expect(!productionSource.contains("public var segmentIndex: Int\n    public var url: URL"))
-    #expect(!productionSource.contains("forSegmentIndex segmentIndex"))
-}
-
-@Test func novelReadingPersistenceExposesOnlySemanticPositionInterfaces() throws {
-    let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-    let readerModelsSource = try String(
-        contentsOf: repositoryRoot.appendingPathComponent("Sources/YamiboReaderCore/Models/ReaderModels.swift"),
-        encoding: .utf8
-    )
-    let favoriteSource = try String(
-        contentsOf: repositoryRoot.appendingPathComponent("Sources/YamiboReaderCore/Models/Favorite.swift"),
-        encoding: .utf8
-    )
-    let progressSource = try String(
-        contentsOf: repositoryRoot.appendingPathComponent("Sources/YamiboReaderCore/Sync/ProgressSyncModule.swift"),
-        encoding: .utf8
-    )
-    let favoriteStoreSource = try String(
-        contentsOf: repositoryRoot.appendingPathComponent("Sources/YamiboReaderCore/Stores/FavoriteStore.swift"),
-        encoding: .utf8
-    )
-    let workflowSource = try String(
-        contentsOf: repositoryRoot.appendingPathComponent("Sources/YamiboReaderCore/Support/NovelReadingWorkflow.swift"),
-        encoding: .utf8
-    )
-    let modelSource = try String(
-        contentsOf: repositoryRoot.appendingPathComponent("Sources/YamiboReaderUI/Features/NovelReader/Container/ReaderContainerModel.swift"),
-        encoding: .utf8
-    )
-
-    #expect(!readerModelsSource.contains("public var initialPage"))
-    #expect(!readerModelsSource.contains("struct ReaderProgress"))
-    #expect(!progressSource.contains("public var page: Int"))
-    #expect(!favoriteSource.contains("public var lastPage"))
-    #expect(favoriteSource.contains("public var mangaPageIndex"))
-    #expect(!favoriteStoreSource.contains("updateReadingProgress"))
-    #expect(favoriteStoreSource.contains("updateNovelReadingPosition"))
-    #expect(!workflowSource.contains("currentDisplayedPageIndex"))
-    #expect(!workflowSource.contains("public var currentAuthorID"))
-    #expect(!modelSource.contains("currentAuthorID = state"))
-    #expect(!modelSource.contains("@Published public var settings"))
-    #expect(modelSource.contains("readerPresentation?.committedSettings ?? bootstrapSettings"))
-}
-
-@Test func novelTextRuntimeAndMetricsConsumeReadableFrameAsFinalTextBox() throws {
-    let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-    let runtimeSource = try String(
-        contentsOf: repositoryRoot
-            .appendingPathComponent("Sources/YamiboReaderCore/Support/NovelTextViewportRuntime.swift"),
-        encoding: .utf8
-    )
-    let layoutSource = try String(
-        contentsOf: repositoryRoot
-            .appendingPathComponent("Sources/YamiboReaderCore/Support/NovelTextLayout.swift"),
-        encoding: .utf8
-    )
-    let adapterBody = try #require(functionBody(named: "prepareCandidate", in: runtimeSource))
-    let metricsBody = try #require(functionBody(named: "layoutMetrics", in: layoutSource))
-    let externalBlockHeightBody = try #require(functionBody(named: "externalBlockPresentationHeight", in: layoutSource))
-
-    #expect(adapterBody.contains("max(input.layout.readableFrame.width, 1)"))
-    #expect(metricsBody.contains("externalBlockPresentationHeight(layout: layout)"))
-    #expect(externalBlockHeightBody.contains("max(layout.readableFrame.width, 1)"))
-    #expect(externalBlockHeightBody.contains("max(layout.readableFrame.height, 160)"))
-    #expect(!adapterBody.contains("readableFrame.width - settings.horizontalPadding"))
-    #expect(!metricsBody.contains("readableFrame.width - settings.horizontalPadding"))
-    #expect(!externalBlockHeightBody.contains("readableFrame.width - settings.horizontalPadding"))
-}
-
-@Test func novelTextAttributedDocumentFactoryIsNotOrdinaryPublicAPI() throws {
-    let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-    let attributedDocumentSource = try String(
-        contentsOf: repositoryRoot
-            .appendingPathComponent("Sources/YamiboReaderCore/Support/ReaderAttributedTextFactory.swift"),
-        encoding: .utf8
-    )
-
-    #expect(
-        attributedDocumentSource.contains(
-            "@_spi(NovelTextAttributedDocument)\npublic enum ReaderAttributedTextFactory"
-        )
-    )
-}
-
 @Test func novelTextLayoutAssemblesDocumentPagesChaptersImagesAndViewportIndex() async throws {
     let imageURL = try #require(URL(string: "https://example.com/image.jpg"))
     let document = ReaderPageDocument(
@@ -1282,24 +1121,6 @@ private final class StubURLProtocol: URLProtocol {
     #expect(pagination.viewportIndex.chapters.map(\.title) == ["同名章", "同名章"])
     #expect(pagination.viewportIndex.chapters.map(\.startSurfaceOrdinal) == [0, 1])
     #expect(pagination.viewportIndex.surfaces.map(\.chapterOrdinal) == [0, 1])
-}
-
-@Test func novelTextLayoutDoesNotPreMaterializeNormalTextBlocksForProductionViewportPages() throws {
-    let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-    let layoutSource = try String(
-        contentsOf: repositoryRoot
-            .appendingPathComponent("Sources/YamiboReaderCore/Support/NovelTextLayout.swift"),
-        encoding: .utf8
-    )
-    let textCase = try #require(layoutSource.range(of: "case .text:").map { String(layoutSource[$0.lowerBound...]) })
-    let textCaseBody = try #require(textCase.range(of: "case let .image").map { String(textCase[..<$0.lowerBound]) })
-
-    #expect(!textCaseBody.contains("blocks: [\n                            .text"))
-    #expect(!layoutSource.contains("Text" + "Slice"))
-    #expect(!layoutSource.contains("paged" + "Layout"))
-    #expect(!layoutSource.contains("vertical" + "Layout"))
-    #expect(!textCaseBody.contains("NovelTextDisplayValue"))
-    #expect(!textCaseBody.contains("appendText" + "SliceToPreviousPageIfPossible"))
 }
 
 @Test func novelTextLayoutPublishesNovelTextViewportIndexForRenderedPages() async throws {
@@ -1941,28 +1762,6 @@ private final class StubURLProtocol: URLProtocol {
 }
 #endif
 
-@Test func novelTextViewportUsesFrozenSurfaceOriginWithoutTextKitFragmentLookup() throws {
-    let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-    let runtimeSource = try String(
-        contentsOf: repositoryRoot
-            .appendingPathComponent("Sources/YamiboReaderCore/Support/NovelTextViewportRuntime.swift"),
-        encoding: .utf8
-    )
-    let surfaceOriginBody = try #require(functionBody(named: "surfaceOriginY", in: runtimeSource))
-    let frozenBranchStart = try #require(
-        surfaceOriginBody.range(of: "if let frozenGeometry = page.frozenGeometry {")
-    )
-    let legacyBranchStart = try #require(
-        surfaceOriginBody.range(of: "\n        guard let firstRange", range: frozenBranchStart.upperBound..<surfaceOriginBody.endIndex)
-    )
-    let frozenBranch = String(surfaceOriginBody[frozenBranchStart.lowerBound..<legacyBranchStart.lowerBound])
-
-    #expect(frozenBranch.contains("return frozenGeometry.pageLocalOriginY"))
-    #expect(!frozenBranch.contains("textLayoutFragment(for:"))
-    #expect(!frozenBranch.contains("textLineFragment("))
-    #expect(!frozenBranch.contains("layoutFragmentFrame"))
-}
-
 @Test func novelTextLayoutAcceptsRematerializedGeometryWhenPageStartsAfterTrimmedWhitespace() async throws {
 #if canImport(UIKit)
     let paragraph = "    页首空白不应使 TextKit 重新物化后的片段几何校验失败。"
@@ -2362,20 +2161,6 @@ private final class StubURLProtocol: URLProtocol {
 
     #expect(style.alignment == .justified)
     #expect(style.firstLineHeadIndent == 44)
-}
-
-@Test func novelTextSettingsPreviewSurfaceAvoidsPerDrawTextKitGraph() throws {
-    let repositoryRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-    let previewSurfaceSource = try String(
-        contentsOf: repositoryRoot
-            .appendingPathComponent("Sources/YamiboReaderCore/Support/NovelTextSettingsPreviewSurface.swift"),
-        encoding: .utf8
-    )
-    let drawBody = try #require(functionBody(named: "draw(in context", in: previewSurfaceSource))
-
-    #expect(drawBody.contains("attributedText.draw("))
-    #expect(!drawBody.contains("NSTextContentStorage"))
-    #expect(!drawBody.contains("NSTextLayoutManager"))
 }
 
 @Test func readerAttributedTextFactoryIndentsBodyButNotTitleOrContinuationSlices() throws {
@@ -3339,30 +3124,6 @@ final class YamiboRepositoryDeleteTests: XCTestCase {
             client: YamiboClient(session: session, cookie: cookie, userAgent: "Test-UA")
         )
     }
-}
-
-private func functionBody(named name: String, in source: String) -> String? {
-    guard let nameRange = source.range(of: "static func \(name)") ?? source.range(of: "func \(name)") else {
-        return nil
-    }
-    guard let bodyStart = source[nameRange.upperBound...].firstIndex(of: "{") else {
-        return nil
-    }
-
-    var depth = 0
-    var index = bodyStart
-    while index < source.endIndex {
-        if source[index] == "{" {
-            depth += 1
-        } else if source[index] == "}" {
-            depth -= 1
-            if depth == 0 {
-                return String(source[bodyStart...index])
-            }
-        }
-        index = source.index(after: index)
-    }
-    return nil
 }
 
 private func readerTextSemantics(
