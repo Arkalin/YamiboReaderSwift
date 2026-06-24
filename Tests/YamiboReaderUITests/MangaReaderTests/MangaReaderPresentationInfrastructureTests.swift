@@ -18,7 +18,7 @@ struct MangaReaderPresentationInfrastructureTests {
         #expect(!source.contains("LazyVStack"))
     }
 
-    @Test func verticalViewportSupportsFullScreenDoubleTapZoom() throws {
+    @Test func verticalViewportSupportsFullStreamDoubleTapAndPinchZoom() throws {
         let source = try sourceFile("Sources/YamiboReaderUI/Features/Reader/MangaReader/Presentation/MangaVerticalCollectionViewport.swift")
         let viewSource = try sourceFile("Sources/YamiboReaderUI/Features/Reader/MangaReader/Presentation/MangaReaderView.swift")
 
@@ -31,15 +31,23 @@ struct MangaReaderPresentationInfrastructureTests {
         #expect(source.contains("recognizer.numberOfTapsRequired = 2"))
         #expect(source.contains("tapGesture.require(toFail: context.coordinator.doubleTapGesture)"))
         #expect(source.contains("@objc private func handleDoubleTap"))
+        #expect(source.contains("lazy var pinchGesture = UIPinchGestureRecognizer"))
+        #expect(source.contains("@objc private func handlePinch"))
         #expect(source.contains("if parent.isChromeVisible"))
         #expect(source.contains("guard parent.zoomEnabled"))
-        #expect(source.contains("cell.toggleZoom(at: location)"))
-        #expect(source.contains("private let zoomScrollView = UIScrollView()"))
-        #expect(source.contains("zoomScrollView.maximumZoomScale = MangaPageZoomPolicy.maximumScale"))
-        #expect(source.contains("MangaPageZoomPolicy.doubleTapTargetScale"))
+        #expect(source.contains("private(set) var verticalZoomScale = MangaPageZoomPolicy.minimumScale"))
+        #expect(source.contains("MangaVerticalCollectionZoomLayout.itemWidth"))
+        #expect(source.contains("MangaVerticalCollectionZoomLayout.estimatedItemHeight"))
+        #expect(source.contains("MangaVerticalCollectionZoomLayout.doubleTapTargetScale"))
+        #expect(source.contains("MangaVerticalCollectionZoomLayout.anchoredContentOffset"))
+        #expect(source.contains("setVerticalZoomScale("))
         #expect(!source.contains("private static let doubleTapZoomScale"))
         #expect(!source.contains("private static let maximumZoomScale"))
-        #expect(source.contains("collectionView.isScrollEnabled = false"))
+        #expect(!source.contains("cell.toggleZoom(at: location)"))
+        #expect(!source.contains("private let zoomScrollView = UIScrollView()"))
+        #expect(!source.contains("zoomScrollView.maximumZoomScale"))
+        #expect(!source.contains("activeZoomCell"))
+        #expect(!source.contains("collectionView.isScrollEnabled = false"))
         #expect(!source.contains("MangaPagedCenterTapHitTesting.acceptsCenterTap"))
     }
 
