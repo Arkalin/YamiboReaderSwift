@@ -36,6 +36,9 @@ public struct MangaReaderView: View {
                 presentation: model.presentation,
                 imagePipeline: model.imagePipeline,
                 isChromeVisible: isChromeVisible,
+                onRetryInitialLoad: {
+                    Task { await model.retryInitialLoad() }
+                },
                 onCurrentPageChange: { globalIndex in
                     model.updateCurrentPage(globalIndex: globalIndex)
                 },
@@ -676,12 +679,14 @@ private struct MangaReaderProgressPreviewImageArea: View {
                     .scaledToFit()
                     .padding(4)
             } else if isLoading {
-                ProgressView()
-                    .tint(.white)
+                ReaderLoadStateView(status: .loading, tint: .white)
             } else {
-                Image(systemName: hasFailed ? "exclamationmark.triangle" : "photo")
-                    .font(.title2.weight(.semibold))
-                    .foregroundStyle(.secondary)
+                ReaderLoadStateView(
+                    status: hasFailed
+                        ? .failed(title: L10n.string("image.load_failed"), message: "")
+                        : .loading,
+                    tint: hasFailed ? Color.secondary : .white
+                )
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -777,6 +782,7 @@ private struct MangaReaderPresentationContent: View {
     let presentation: MangaReaderPresentation
     let imagePipeline: MangaImagePipeline?
     let isChromeVisible: Bool
+    let onRetryInitialLoad: () -> Void
     let onCurrentPageChange: (Int) -> Void
     let onTap: () -> Void
 
@@ -785,8 +791,8 @@ private struct MangaReaderPresentationContent: View {
             Color.black.ignoresSafeArea()
 
             switch presentation.state {
-            case let .loading(loading):
-                MangaReaderLoadingContent(title: loading.title)
+            case .loading:
+                ReaderLoadStateView(status: .loading, tint: .white)
             case let .loaded(loaded):
                 MangaReaderLoadedContent(
                     loaded: loaded,
@@ -797,7 +803,11 @@ private struct MangaReaderPresentationContent: View {
                     onTap: onTap
                 )
             case let .failed(error):
-                MangaReaderFailedContent(error: error)
+                ReaderLoadStateView(
+                    status: .failed(message: error.message),
+                    retryAction: onRetryInitialLoad,
+                    tint: .white
+                )
             }
 
             brightnessOverlay(brightness: presentation.settings.brightness)
@@ -818,20 +828,6 @@ private struct MangaReaderPresentationContent: View {
                 .ignoresSafeArea()
                 .allowsHitTesting(false)
         }
-    }
-}
-
-private struct MangaReaderLoadingContent: View {
-    let title: String
-
-    var body: some View {
-        VStack(spacing: 16) {
-            MangaReaderTitleHeader(title: title)
-            ProgressView(L10n.string("manga.loading"))
-                .tint(.white)
-        }
-        .multilineTextAlignment(.center)
-        .padding(16)
     }
 }
 
@@ -902,42 +898,7 @@ private struct MangaReaderLoadedContent: View {
                 }
             }
         } else {
-            ProgressView(L10n.string("manga.loading"))
-                .tint(.white)
-        }
-    }
-}
-
-private struct MangaReaderFailedContent: View {
-    let error: MangaReaderErrorPresentation
-
-    var body: some View {
-        VStack(spacing: 12) {
-            Label(error.title, systemImage: "exclamationmark.triangle")
-                .font(.headline)
-            Text(error.message)
-                .font(.body)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .multilineTextAlignment(.center)
-        .padding(16)
-    }
-}
-
-private struct MangaReaderTitleHeader: View {
-    let title: String
-
-    var body: some View {
-        VStack(spacing: 8) {
-            Label(L10n.string("manga.reader.title"), systemImage: "book.pages")
-                .font(.headline)
-                .foregroundStyle(.secondary)
-
-            Text(title)
-                .font(.title2)
-                .fontWeight(.semibold)
-                .fixedSize(horizontal: false, vertical: true)
+            ReaderLoadStateView(status: .loading, tint: .white)
         }
     }
 }

@@ -510,10 +510,6 @@ private final class MangaVerticalCollectionPageCell: UICollectionViewCell {
     static let defaultEstimatedHeight: CGFloat = 560
 
     private let imageView = UIImageView()
-    private let activityIndicator = UIActivityIndicatorView(style: .medium)
-    private let failureLabel = UILabel()
-    private let retryButton = UIButton(type: .system)
-    private let failureStack = UIStackView()
     private var task: Task<Void, Never>?
     private var page: MangaReaderPageProjection?
     private var imagePipeline: MangaImagePipeline?
@@ -545,30 +541,13 @@ private final class MangaVerticalCollectionPageCell: UICollectionViewCell {
         onHeightToWidthRatioChange = nil
         heightToWidthRatio = 1 / Self.defaultWidthToHeightAspectRatio
         imageView.image = nil
-        activityIndicator.stopAnimating()
-        setFailureStackVisible(false)
+        imageView.isHidden = false
+        contentConfiguration = nil
     }
 
     override func layoutSubviews() {
         super.layoutSubviews()
         imageView.frame = contentView.bounds
-        activityIndicator.center = CGPoint(x: contentView.bounds.midX, y: contentView.bounds.midY)
-
-        guard !failureStack.isHidden else {
-            failureStack.frame = .zero
-            return
-        }
-
-        let horizontalInset: CGFloat = contentView.bounds.width >= 32 ? 16 : 0
-        let availableWidth = max(contentView.bounds.width - horizontalInset * 2, 0)
-        let fittingSize = CGSize(width: availableWidth, height: CGFloat.greatestFiniteMagnitude)
-        let stackSize = failureStack.systemLayoutSizeFitting(fittingSize)
-        failureStack.frame = CGRect(
-            x: contentView.bounds.midX - min(stackSize.width, availableWidth) / 2,
-            y: contentView.bounds.midY - stackSize.height / 2,
-            width: min(stackSize.width, availableWidth),
-            height: stackSize.height
-        )
     }
 
     override func preferredLayoutAttributesFitting(
@@ -615,26 +594,6 @@ private final class MangaVerticalCollectionPageCell: UICollectionViewCell {
         imageView.contentMode = .scaleAspectFit
         imageView.backgroundColor = .black
         contentView.addSubview(imageView)
-
-        activityIndicator.color = .white
-        contentView.addSubview(activityIndicator)
-
-        failureLabel.text = L10n.string("image.load_failed")
-        failureLabel.textColor = .secondaryLabel
-        failureLabel.font = .preferredFont(forTextStyle: .caption1)
-        failureLabel.textAlignment = .center
-        failureLabel.numberOfLines = 0
-
-        retryButton.setTitle(L10n.string("common.retry"), for: .normal)
-        retryButton.addTarget(self, action: #selector(retryImageLoad), for: .touchUpInside)
-
-        failureStack.axis = .vertical
-        failureStack.alignment = .center
-        failureStack.spacing = 8
-        failureStack.addArrangedSubview(failureLabel)
-        failureStack.addArrangedSubview(retryButton)
-        contentView.addSubview(failureStack)
-        setFailureStackVisible(false)
     }
 
     private func startLoad() {
@@ -652,7 +611,6 @@ private final class MangaVerticalCollectionPageCell: UICollectionViewCell {
         }
     }
 
-    @objc
     private func retryImageLoad() {
         task?.cancel()
         startLoad()
@@ -660,14 +618,18 @@ private final class MangaVerticalCollectionPageCell: UICollectionViewCell {
 
     private func showLoading() {
         imageView.image = nil
-        setFailureStackVisible(false)
-        activityIndicator.startAnimating()
+        imageView.isHidden = true
+        contentConfiguration = UIHostingConfiguration {
+            ReaderLoadStateView(status: .loading, tint: .white)
+        }
+        .background(Color.black)
+        .margins(.all, 0)
     }
 
     private func show(image: UIImage, pageID: String) {
         guard currentPageID == pageID else { return }
-        activityIndicator.stopAnimating()
-        setFailureStackVisible(false)
+        contentConfiguration = nil
+        imageView.isHidden = false
         imageView.image = image
         setNeedsLayout()
         updateHeightToWidthRatio(for: image)
@@ -675,20 +637,20 @@ private final class MangaVerticalCollectionPageCell: UICollectionViewCell {
 
     private func showFailure(pageID: String) {
         guard currentPageID == pageID else { return }
-        activityIndicator.stopAnimating()
         imageView.image = nil
-        setFailureStackVisible(true)
-        setNeedsLayout()
-    }
-
-    private func setFailureStackVisible(_ isVisible: Bool) {
-        failureLabel.isHidden = !isVisible
-        retryButton.isHidden = !isVisible
-        failureStack.isHidden = !isVisible
-        failureStack.isUserInteractionEnabled = isVisible
-        if !isVisible {
-            failureStack.frame = .zero
+        imageView.isHidden = true
+        contentConfiguration = UIHostingConfiguration { [weak self] in
+            ReaderLoadStateView(
+                status: .failed(title: L10n.string("image.load_failed"), message: ""),
+                retryAction: {
+                    self?.retryImageLoad()
+                },
+                tint: .white
+            )
         }
+        .background(Color.black)
+        .margins(.all, 0)
+        setNeedsLayout()
     }
 
     private func updateHeightToWidthRatio(for image: UIImage) {

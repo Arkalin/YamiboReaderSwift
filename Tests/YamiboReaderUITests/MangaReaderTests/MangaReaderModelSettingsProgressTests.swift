@@ -48,6 +48,100 @@ final class MangaReaderModelSettingsProgressTests: XCTestCase {
         XCTAssertEqual(fixture.model.applePencilPageTurnSettings, applePencilSettings)
     }
 
+    func testRetryInitialLoadReloadsAfterFailedInitialLoad() async throws {
+        let keyPrefix = UUID().uuidString
+        let settingsStore = SettingsStore(key: "\(keyPrefix).settings")
+        let resumeRouteStore = ReaderResumeRouteStore(key: "\(keyPrefix).resume")
+        let favoriteStore = FavoriteStore(key: "\(keyPrefix).favorites")
+        try await settingsStore.save(AppSettings())
+
+        let originalURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=700&mobile=2"))
+        let chapterURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=701&mobile=2"))
+        let context = MangaLaunchContext(
+            originalThreadURL: originalURL,
+            chapterURL: chapterURL,
+            displayTitle: "测试漫画",
+            source: .forum,
+            initialPage: 0,
+            directoryName: nil
+        )
+        let document = MangaChapterDocument(
+            tid: "701",
+            ownerPostID: "9001",
+            chapterTitle: "第1话",
+            chapterURL: chapterURL,
+            imageURLs: [
+                try XCTUnwrap(URL(string: "https://img.example.com/701-0.jpg")),
+                try XCTUnwrap(URL(string: "https://img.example.com/701-1.jpg"))
+            ]
+        )
+        let loader = RetryableMangaChapterDocumentLoader(outputs: [
+            .failure(.offline),
+            .success(document)
+        ])
+        let repository = StubMangaDirectoryRepository(
+            seed: MangaDirectorySeed(
+                currentChapter: MangaChapter(
+                    tid: "701",
+                    rawTitle: "第1话",
+                    chapterNumber: 1,
+                    url: chapterURL
+                ),
+                cleanBookName: "Resolved Directory",
+                firstPostID: "9001"
+            )
+        )
+        let store = StubMangaDirectoryStore()
+        let appContext = YamiboAppContext(
+            sessionStore: SessionStore(key: "\(keyPrefix).session"),
+            settingsStore: settingsStore,
+            readerResumeRouteStore: resumeRouteStore,
+            favoriteStore: favoriteStore
+        )
+        #if os(iOS)
+        let dependencies = MangaReaderModelDependencies(
+            makeDocumentLoader: { loader },
+            makeDirectoryRepository: { repository },
+            makeDirectoryStore: { store },
+            makeImageDataLoader: { StubMangaImageDataLoader() },
+            progressSync: ProgressSyncModule(
+                adapter: FavoriteLibraryProgressSyncAdapter(favoriteStore: favoriteStore),
+                debounceNanoseconds: 0
+            )
+        )
+        #else
+        let dependencies = MangaReaderModelDependencies(
+            makeDocumentLoader: { loader },
+            makeDirectoryRepository: { repository },
+            makeDirectoryStore: { store },
+            progressSync: ProgressSyncModule(
+                adapter: FavoriteLibraryProgressSyncAdapter(favoriteStore: favoriteStore),
+                debounceNanoseconds: 0
+            )
+        )
+        #endif
+        let model = MangaReaderModel(context: context, appContext: appContext, dependencies: dependencies)
+
+        await model.prepare()
+
+        guard case .failed = model.presentation.state else {
+            XCTFail("Expected initial failure")
+            return
+        }
+        let initialLoadCount = await loader.currentLoadCount()
+        XCTAssertEqual(initialLoadCount, 1)
+
+        await model.retryInitialLoad()
+
+        guard case let .loaded(loaded) = model.presentation.state else {
+            XCTFail("Expected retry to load manga")
+            return
+        }
+        XCTAssertEqual(loaded.pages.count, 2)
+        let retryLoadCount = await loader.currentLoadCount()
+        XCTAssertEqual(retryLoadCount, 2)
+    }
+
     func testApplySettingsUpdatesPresentationAndPersistsOnlyMangaSettings() async throws {
         let initialReaderSettings = ReaderAppearanceSettings(fontScale: 1.2, readingMode: .vertical)
         let initialApplePencilSettings = ApplePencilPageTurnSettings(
@@ -501,6 +595,38 @@ private actor StubMangaChapterDocumentLoader: MangaChapterDocumentLoading {
 
     func loadChapterDocument(at url: URL) async throws -> MangaChapterDocument {
         document
+    }
+}
+
+private actor RetryableMangaChapterDocumentLoader: MangaChapterDocumentLoading {
+    enum Output: Sendable {
+        case success(MangaChapterDocument)
+        case failure(YamiboError)
+    }
+
+    private var outputs: [Output]
+    private var loadCountValue = 0
+
+    func currentLoadCount() -> Int {
+        loadCountValue
+    }
+
+    init(outputs: [Output]) {
+        self.outputs = outputs
+    }
+
+    func loadChapterDocument(at url: URL) async throws -> MangaChapterDocument {
+        loadCountValue += 1
+        guard !outputs.isEmpty else {
+            throw YamiboError.unreadableBody
+        }
+
+        switch outputs.removeFirst() {
+        case let .success(document):
+            return document
+        case let .failure(error):
+            throw error
+        }
     }
 }
 
