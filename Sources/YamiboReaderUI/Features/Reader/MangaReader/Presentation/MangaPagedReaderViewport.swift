@@ -34,6 +34,7 @@ struct MangaPagedReaderViewport: UIViewRepresentable {
         let collectionView = MangaPagedReaderCollectionView(frame: .zero, collectionViewLayout: layout)
         collectionView.isPagingEnabled = true
         collectionView.alwaysBounceHorizontal = true
+        collectionView.contentInsetAdjustmentBehavior = .never
         collectionView.backgroundColor = pageEdgeFillColor
         collectionView.showsHorizontalScrollIndicator = false
         collectionView.showsVerticalScrollIndicator = false
@@ -700,6 +701,7 @@ private extension ReaderPagedPageTurnCell {
                 zoomEnabled: zoomEnabled,
                 surfaceInteraction: surfaceInteraction
             )
+            .ignoresSafeArea(.container, edges: .bottom)
         }
         .margins(.all, 0)
     }

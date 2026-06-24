@@ -149,6 +149,14 @@ struct MangaReaderPresentationInfrastructureTests {
         #expect(source.contains("pageEdgeFillStyle.placeholderForeground(for: colorScheme)"))
     }
 
+    @Test func pagedViewportLetsFitHeightPagesUseBottomSafeArea() throws {
+        let source = try sourceFile("Sources/YamiboReaderUI/Features/Reader/MangaReader/Presentation/MangaPagedReaderViewport.swift")
+
+        #expect(source.contains("collectionView.contentInsetAdjustmentBehavior = .never"))
+        #expect(source.contains(".ignoresSafeArea(.container, edges: .bottom)"))
+        #expect(source.contains("case .fitHeight:\n            containerSize.height / imageSize.height"))
+    }
+
     @Test func settingsSheetShowsPageEdgeFillAfterPageScaleMode() throws {
         let source = try sourceFile("Sources/YamiboReaderUI/Features/Reader/MangaReader/Settings/MangaReaderSettingsSheet.swift")
         let scaleRange = try #require(source.range(of: "MangaReaderPageScaleModeMenuRow("))
