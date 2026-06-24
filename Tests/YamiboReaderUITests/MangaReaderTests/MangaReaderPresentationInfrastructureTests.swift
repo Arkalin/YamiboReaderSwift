@@ -262,6 +262,25 @@ struct MangaReaderPresentationInfrastructureTests {
         #expect(!source.contains("requestZoomReset"))
     }
 
+    @Test func pageCurlRefreshesVisiblePagesWhenZoomInteractionAvailabilityChanges() throws {
+        let source = try sourceFile("Sources/YamiboReaderUI/Features/Reader/MangaReader/Presentation/MangaPagedReaderViewport.swift")
+        let pageCurlRange = try #require(source.range(of: "struct MangaPagedPageCurlReaderViewport"))
+        let surfaceModelRange = try #require(source.range(of: "private struct MangaPagedReaderContentIdentity"))
+        let pageCurlSource = String(source[pageCurlRange.lowerBound..<surfaceModelRange.lowerBound])
+        let updateRange = try #require(pageCurlSource.range(of: "fileprivate func update("))
+        let updateEndRange = try #require(pageCurlSource.range(of: "func pageViewController("))
+        let updateSource = String(pageCurlSource[updateRange.lowerBound..<updateEndRange.lowerBound])
+        let visibleRefreshRange = try #require(updateSource.range(of: "updateVisiblePageCurlPagesIfNeeded(in: pageViewController)"))
+        let unchangedSelectionReturnRange = try #require(
+            updateSource.range(of: "guard didChangeContentIdentity || currentSelectionIndex != targetSelectionIndex else")
+        )
+
+        #expect(pageCurlSource.contains("private var pageCurlSurfaceInteractionIdentity: MangaPagedReaderSurfaceInteractionIdentity?"))
+        #expect(pageCurlSource.contains("private func updateVisiblePageCurlPagesIfNeeded(in pageViewController: UIPageViewController)"))
+        #expect(pageCurlSource.contains("controller.updateRootView(rootView(for: controller.leaf), pageBackgroundColor: parent.pageEdgeFillColor)"))
+        #expect(visibleRefreshRange.lowerBound < unchangedSelectionReturnRange.lowerBound)
+    }
+
     @Test func readerLoadedContentGatesTwoPageSpreadsToIPadLandscapeSetting() throws {
         let source = try sourceFile("Sources/YamiboReaderUI/Features/Reader/MangaReader/Presentation/MangaReaderView.swift")
         let policySource = try sourceFile("Sources/YamiboReaderUI/Features/Reader/MangaReader/Presentation/MangaPagedLayoutPolicy.swift")

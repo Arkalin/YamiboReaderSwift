@@ -902,6 +902,7 @@ struct MangaPagedPageCurlReaderViewport: UIViewControllerRepresentable {
         private var currentSelectionIndex: Int?
         private var lastReportedGlobalIndex: Int?
         private var pageSurfaceInteractions: [String: MangaPagedReaderPageSurfaceInteraction] = [:]
+        private var pageCurlSurfaceInteractionIdentity: MangaPagedReaderSurfaceInteractionIdentity?
         private var pageCurlPageAppearanceGenerations: [String: Int] = [:]
         private var pageCurlSpreadHiddenEdges: Set<MangaPagedImageSurfaceHorizontalEdge> = []
         private var pageCurlSteadyScale: CGFloat = 1
@@ -946,6 +947,7 @@ struct MangaPagedPageCurlReaderViewport: UIViewControllerRepresentable {
             let didChangeContentIdentity = contentIdentity != nextContentIdentity
             if didChangeContentIdentity {
                 pageSurfaceInteractions = [:]
+                pageCurlSurfaceInteractionIdentity = nil
                 pageCurlPageAppearanceGenerations = [:]
                 resetPageCurlSpreadZoom(in: containerViewController, animated: false)
             }
@@ -962,6 +964,7 @@ struct MangaPagedPageCurlReaderViewport: UIViewControllerRepresentable {
                 plan: parent.plan,
                 viewportPlacement: parent.viewportPlacement
             )
+            updateVisiblePageCurlPagesIfNeeded(in: pageViewController)
             guard didChangeContentIdentity || currentSelectionIndex != targetSelectionIndex else {
                 return
             }
@@ -970,6 +973,19 @@ struct MangaPagedPageCurlReaderViewport: UIViewControllerRepresentable {
                 selectionIndex: targetSelectionIndex,
                 animated: !didChangeContentIdentity && parent.viewportPlacement?.animated == true
             )
+        }
+
+        private func updateVisiblePageCurlPagesIfNeeded(in pageViewController: UIPageViewController) {
+            let nextIdentity = MangaPagedReaderSurfaceInteractionIdentity(
+                isChromeVisible: parent.isChromeVisible,
+                zoomEnabled: parent.zoomEnabled
+            )
+            guard nextIdentity != pageCurlSurfaceInteractionIdentity else { return }
+            pageCurlSurfaceInteractionIdentity = nextIdentity
+
+            for case let controller as MangaPagedPageCurlHostingController in pageViewController.viewControllers ?? [] {
+                controller.updateRootView(rootView(for: controller.leaf), pageBackgroundColor: parent.pageEdgeFillColor)
+            }
         }
 
         func pageViewController(
