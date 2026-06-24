@@ -261,13 +261,22 @@ struct MangaReaderPresentationInfrastructureTests {
 
         #expect(source.contains("let zoomEnabled: Bool"))
         #expect(source.contains("zoomEnabled: parent.zoomEnabled"))
+        #expect(source.contains("lazy var doubleTapGesture: UITapGestureRecognizer"))
+        #expect(source.contains("recognizer.numberOfTapsRequired = 2"))
+        #expect(source.contains("tapGesture.require(toFail: context.coordinator.doubleTapGesture)"))
+        #expect(source.contains("@objc private func handleDoubleTap"))
+        #expect(source.contains("MangaPagedCenterTapHitTesting.acceptsCenterTap"))
+        #expect(source.contains("surfaceInteraction.requestZoomToggle"))
+        #expect(source.contains("@Published private(set) var zoomToggleRequest"))
+        #expect(source.contains("func requestZoomToggle(at location: CGPoint)"))
+        #expect(source.contains(".onReceive(surfaceInteraction.$zoomToggleRequest)"))
         #expect(source.contains("isZoomInteractionEnabled: !isChromeVisible && zoomEnabled"))
-        #expect(source.contains("SpatialTapGesture(count: 2"))
         #expect(source.contains("MagnifyGesture()"))
         #expect(source.contains("DragGesture()"))
         #expect(source.contains("guard isZoomInteractionEnabled else { return }"))
         #expect(source.contains(".onChange(of: isZoomInteractionEnabled)"))
         #expect(source.contains("resetZoomState(animated: true)"))
+        #expect(!source.contains("SpatialTapGesture(count: 2"))
     }
 
     @Test func pagedViewportKeepsZoomStateSeparateFromReadingPositionUpdates() throws {

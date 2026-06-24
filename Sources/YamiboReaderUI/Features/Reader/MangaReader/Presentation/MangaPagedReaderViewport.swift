@@ -48,7 +48,11 @@ struct MangaPagedReaderViewport: UIViewRepresentable {
         }
         context.coordinator.tapGesture.cancelsTouchesInView = false
         context.coordinator.tapGesture.delegate = context.coordinator
+        context.coordinator.tapGesture.require(toFail: context.coordinator.doubleTapGesture)
         collectionView.addGestureRecognizer(context.coordinator.tapGesture)
+        context.coordinator.doubleTapGesture.cancelsTouchesInView = false
+        context.coordinator.doubleTapGesture.delegate = context.coordinator
+        collectionView.addGestureRecognizer(context.coordinator.doubleTapGesture)
         context.coordinator.quickFadePanGesture.delegate = context.coordinator
         collectionView.addGestureRecognizer(context.coordinator.quickFadePanGesture)
         context.coordinator.updateGestureState(in: collectionView)
@@ -77,6 +81,11 @@ struct MangaPagedReaderViewport: UIViewRepresentable {
         private var lastReportedGlobalIndex: Int?
         private var lastAppliedPlacementRevision: Int?
         lazy var tapGesture = UITapGestureRecognizer(target: self, action: #selector(handleTap(_:)))
+        lazy var doubleTapGesture: UITapGestureRecognizer = {
+            let recognizer = UITapGestureRecognizer(target: self, action: #selector(handleDoubleTap(_:)))
+            recognizer.numberOfTapsRequired = 2
+            return recognizer
+        }()
         lazy var quickFadePanGesture = UIPanGestureRecognizer(target: self, action: #selector(handleQuickFadePan(_:)))
 
         var callbackScheduler: SwiftUIViewUpdateCallbackScheduler {
@@ -322,13 +331,50 @@ struct MangaPagedReaderViewport: UIViewRepresentable {
             }
         }
 
+        @objc private func handleDoubleTap(_ recognizer: UITapGestureRecognizer) {
+            guard recognizer.state == .ended,
+                  let collectionView = recognizer.view as? UICollectionView else {
+                return
+            }
+            let location = recognizer.location(in: collectionView)
+            guard MangaPagedCenterTapHitTesting.acceptsCenterTap(at: location, in: collectionView.bounds) else {
+                return
+            }
+
+            if parent.isChromeVisible {
+                let onTap = parent.onTap
+                callbackScheduler.publish {
+                    onTap()
+                }
+                return
+            }
+
+            guard parent.zoomEnabled,
+                  let pageIndex = currentPageIndex(in: collectionView),
+                  let page = parent.plan.page(at: pageIndex),
+                  let surfaceInteraction = pageSurfaceInteractions[page.id] else {
+                return
+            }
+            surfaceInteraction.requestZoomToggle(at: surfaceLocation(for: pageIndex, location: location, in: collectionView))
+        }
+
         @objc private func handleQuickFadePan(_ recognizer: UIPanGestureRecognizer) {
             guard !parent.isChromeVisible else { return }
             pagingDriver.handleQuickFadePan(recognizer, inputs: pagingInputs)
         }
 
         func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
-            touch.view?.isDescendant(ofType: UIControl.self) != true
+            guard touch.view?.isDescendant(ofType: UIControl.self) != true else {
+                return false
+            }
+            guard gestureRecognizer === doubleTapGesture,
+                  let collectionView = gestureRecognizer.view as? UICollectionView else {
+                return true
+            }
+            return MangaPagedCenterTapHitTesting.acceptsCenterTap(
+                at: touch.location(in: collectionView),
+                in: collectionView.bounds
+            )
         }
 
         func gestureRecognizer(
@@ -483,6 +529,21 @@ struct MangaPagedReaderViewport: UIViewRepresentable {
             }
         }
 
+        private func surfaceLocation(
+            for pageIndex: Int,
+            location: CGPoint,
+            in collectionView: UICollectionView
+        ) -> CGPoint {
+            let indexPath = IndexPath(item: viewportIndex(forPageIndex: pageIndex), section: 0)
+            if let cell = collectionView.cellForItem(at: indexPath) {
+                return collectionView.convert(location, to: cell.contentView)
+            }
+            return CGPoint(
+                x: location.x - collectionView.bounds.minX,
+                y: location.y - collectionView.bounds.minY
+            )
+        }
+
         private func directionalTapZone(for zone: ReaderPagedTapZone) -> ReaderPagedTapZone {
             guard parent.settings.pageTurnDirection == .rightToLeft else {
                 return zone
@@ -571,8 +632,14 @@ private struct MangaPagedReaderEdgeRevealRequest {
     let edge: MangaPagedImageSurfaceHorizontalEdge?
 }
 
+private struct MangaPagedReaderZoomToggleRequest {
+    let sequence: Int
+    let location: CGPoint?
+}
+
 private final class MangaPagedReaderPageSurfaceInteraction: ObservableObject {
     @Published private(set) var edgeRevealRequest = MangaPagedReaderEdgeRevealRequest(sequence: 0, edge: nil)
+    @Published private(set) var zoomToggleRequest = MangaPagedReaderZoomToggleRequest(sequence: 0, location: nil)
 
     private var requestSequence = 0
     private(set) var hiddenEdges: Set<MangaPagedImageSurfaceHorizontalEdge> = []
@@ -590,6 +657,11 @@ private final class MangaPagedReaderPageSurfaceInteraction: ObservableObject {
         requestSequence += 1
         edgeRevealRequest = MangaPagedReaderEdgeRevealRequest(sequence: requestSequence, edge: edge)
         return true
+    }
+
+    func requestZoomToggle(at location: CGPoint) {
+        requestSequence += 1
+        zoomToggleRequest = MangaPagedReaderZoomToggleRequest(sequence: requestSequence, location: location)
     }
 }
 
@@ -758,7 +830,6 @@ private struct MangaPagedReaderScaledImage: View {
             .frame(width: proxy.size.width, height: proxy.size.height)
             .contentShape(Rectangle())
             .clipped()
-            .simultaneousGesture(doubleTapGesture(containerSize: containerSize))
             .simultaneousGesture(magnifyGesture(containerSize: containerSize))
             .simultaneousGesture(dragGesture(containerSize: containerSize))
             .onChange(of: isZoomInteractionEnabled) { _, isEnabled in
@@ -784,6 +855,13 @@ private struct MangaPagedReaderScaledImage: View {
                 guard let edge = request.edge else { return }
                 revealHiddenContent(on: edge, containerSize: containerSize)
             }
+            .onReceive(surfaceInteraction.$zoomToggleRequest) { request in
+                guard isZoomInteractionEnabled,
+                      let location = request.location else {
+                    return
+                }
+                toggleZoom(at: location, containerSize: containerSize)
+            }
             .onDisappear {
                 surfaceInteraction.updateHiddenEdges([])
             }
@@ -792,18 +870,6 @@ private struct MangaPagedReaderScaledImage: View {
 
     private var zoomScale: CGFloat {
         clampedScale(steadyScale * gestureScale)
-    }
-
-    private func doubleTapGesture(containerSize: CGSize) -> some Gesture {
-        SpatialTapGesture(count: 2, coordinateSpace: .local)
-            .onEnded { value in
-                guard isZoomInteractionEnabled else { return }
-                if steadyScale > 1.05 {
-                    resetZoomState(animated: true)
-                } else {
-                    zoomIn(to: value.location, containerSize: containerSize)
-                }
-            }
     }
 
     private func magnifyGesture(containerSize: CGSize) -> some Gesture {
@@ -854,6 +920,14 @@ private struct MangaPagedReaderScaledImage: View {
                 steadyUserOffset = layout.clampedUserOffset(proposed)
                 gestureUserOffset = .zero
             }
+    }
+
+    private func toggleZoom(at location: CGPoint, containerSize: CGSize) {
+        if steadyScale > 1.05 {
+            resetZoomState(animated: true)
+        } else {
+            zoomIn(to: location, containerSize: containerSize)
+        }
     }
 
     private func zoomIn(to location: CGPoint, containerSize: CGSize) {

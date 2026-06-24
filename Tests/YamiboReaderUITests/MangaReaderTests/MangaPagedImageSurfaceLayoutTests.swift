@@ -5,6 +5,27 @@ import Testing
 
 @Suite("MangaReaderTests: Paged Image Surface Layout")
 struct MangaPagedImageSurfaceLayoutTests {
+    @Test func centerTapHitTestingAcceptsOnlyMiddleThirdInsideBounds() {
+        let bounds = CGRect(x: 20, y: 40, width: 360, height: 720)
+
+        #expect(!MangaPagedCenterTapHitTesting.acceptsCenterTap(at: CGPoint(x: 139.9, y: 400), in: bounds))
+        #expect(MangaPagedCenterTapHitTesting.acceptsCenterTap(at: CGPoint(x: 140, y: 400), in: bounds))
+        #expect(MangaPagedCenterTapHitTesting.acceptsCenterTap(at: CGPoint(x: 260, y: 400), in: bounds))
+        #expect(!MangaPagedCenterTapHitTesting.acceptsCenterTap(at: CGPoint(x: 260.1, y: 400), in: bounds))
+
+        #expect(!MangaPagedCenterTapHitTesting.acceptsCenterTap(at: CGPoint(x: 200, y: 39.9), in: bounds))
+        #expect(!MangaPagedCenterTapHitTesting.acceptsCenterTap(at: CGPoint(x: 200, y: 760), in: bounds))
+        #expect(!MangaPagedCenterTapHitTesting.acceptsCenterTap(at: CGPoint(x: 379.9, y: 400), in: bounds))
+
+        #expect(!MangaPagedCenterTapHitTesting.acceptsCenterTap(at: CGPoint(x: 200, y: 400), in: .zero))
+        #expect(!MangaPagedCenterTapHitTesting.acceptsCenterTap(
+            at: CGPoint(x: 200, y: 400),
+            in: CGRect(x: 20, y: 40, width: 360, height: 0)
+        ))
+        #expect(ReaderPagedTapZone.zone(for: CGPoint(x: 140, y: 400), in: bounds) == .toggleChrome)
+        #expect(ReaderPagedTapZone.zone(for: CGPoint(x: 260, y: 400), in: bounds) == .toggleChrome)
+    }
+
     @Test func fitWidthKeepsFixedPageSurfaceWithVerticalBlankSpace() {
         let layout = MangaPagedImageSurfaceLayout(
             imageSize: CGSize(width: 800, height: 600),
