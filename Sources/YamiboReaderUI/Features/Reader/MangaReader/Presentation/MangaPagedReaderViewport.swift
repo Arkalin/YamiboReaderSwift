@@ -517,6 +517,7 @@ struct MangaPagedReaderViewport: UIViewRepresentable {
                 pageEdgeFillStyle: parent.settings.pageEdgeFillStyle,
                 isChromeVisible: parent.isChromeVisible,
                 zoomEnabled: parent.zoomEnabled,
+                allowsUnzoomedSurfacePan: parent.settings.pagedTurnStyle == .quickFade,
                 colorScheme: parent.colorScheme
             )
             cell.resetPageTurnVisuals()
@@ -787,6 +788,7 @@ private extension ReaderPagedPageTurnCell {
         pageEdgeFillStyle: MangaPageEdgeFillStyle,
         isChromeVisible: Bool,
         zoomEnabled: Bool,
+        allowsUnzoomedSurfacePan: Bool,
         colorScheme: ColorScheme
     ) {
         let pageEdgeFillColor = pageEdgeFillStyle.uiColor(for: colorScheme)
@@ -801,7 +803,8 @@ private extension ReaderPagedPageTurnCell {
                 pageScaleMode: pageScaleMode,
                 pageEdgeFillStyle: pageEdgeFillStyle,
                 isChromeVisible: isChromeVisible,
-                zoomEnabled: zoomEnabled
+                zoomEnabled: zoomEnabled,
+                allowsUnzoomedSurfacePan: allowsUnzoomedSurfacePan
             )
             .ignoresSafeArea(
                 .container,
@@ -827,6 +830,7 @@ private struct MangaPagedReaderSpreadSurface: View {
     let pageEdgeFillStyle: MangaPageEdgeFillStyle
     let isChromeVisible: Bool
     let zoomEnabled: Bool
+    let allowsUnzoomedSurfacePan: Bool
 
     var body: some View {
         ZStack {
@@ -859,6 +863,7 @@ private struct MangaPagedReaderSpreadSurface: View {
                     pageEdgeFillStyle: pageEdgeFillStyle,
                     isChromeVisible: isChromeVisible,
                     zoomEnabled: zoomEnabled,
+                    allowsUnzoomedSurfacePan: allowsUnzoomedSurfacePan,
                     surfaceInteraction: surface.surfaceInteraction
                 )
             }
@@ -876,6 +881,7 @@ private struct MangaPagedReaderPageSurface: View {
     let pageEdgeFillStyle: MangaPageEdgeFillStyle
     let isChromeVisible: Bool
     let zoomEnabled: Bool
+    let allowsUnzoomedSurfacePan: Bool
     let surfaceInteraction: MangaPagedReaderPageSurfaceInteraction
 
     @State private var loadedImage: UIImage?
@@ -896,6 +902,7 @@ private struct MangaPagedReaderPageSurface: View {
                     initialHorizontalAlignment: initialHorizontalAlignment,
                     pageEdgeFillStyle: pageEdgeFillStyle,
                     isZoomInteractionEnabled: !isChromeVisible && zoomEnabled,
+                    allowsUnzoomedSurfacePan: allowsUnzoomedSurfacePan,
                     surfaceInteraction: surfaceInteraction
                 )
             } else if loadingPageID == page.id {
@@ -964,6 +971,7 @@ private struct MangaPagedReaderScaledImage: View {
     let initialHorizontalAlignment: MangaPagedImageSurfaceInitialHorizontalAlignment
     let pageEdgeFillStyle: MangaPageEdgeFillStyle
     let isZoomInteractionEnabled: Bool
+    let allowsUnzoomedSurfacePan: Bool
     let surfaceInteraction: MangaPagedReaderPageSurfaceInteraction
 
     @State private var steadyScale: CGFloat = 1
@@ -991,7 +999,10 @@ private struct MangaPagedReaderScaledImage: View {
             .contentShape(Rectangle())
             .clipped()
             .simultaneousGesture(magnifyGesture(containerSize: containerSize))
-            .simultaneousGesture(dragGesture(containerSize: containerSize))
+            .simultaneousGesture(
+                dragGesture(containerSize: containerSize),
+                including: surfaceDragGestureMask
+            )
             .onChange(of: isZoomInteractionEnabled) { _, isEnabled in
                 guard !isEnabled else { return }
                 resetZoomState(animated: true)
@@ -1032,6 +1043,14 @@ private struct MangaPagedReaderScaledImage: View {
         clampedScale(steadyScale * gestureScale)
     }
 
+    private var surfaceDragGestureMask: GestureMask {
+        surfaceDragGestureEnabled ? .gesture : .subviews
+    }
+
+    private var surfaceDragGestureEnabled: Bool {
+        isZoomInteractionEnabled && (allowsUnzoomedSurfacePan || MangaPageZoomPolicy.isActive(zoomScale))
+    }
+
     private func magnifyGesture(containerSize: CGSize) -> some Gesture {
         MagnifyGesture()
             .onChanged { value in
@@ -1058,7 +1077,7 @@ private struct MangaPagedReaderScaledImage: View {
     private func dragGesture(containerSize: CGSize) -> some Gesture {
         DragGesture()
             .onChanged { value in
-                guard isZoomInteractionEnabled else { return }
+                guard surfaceDragGestureEnabled else { return }
                 let layout = imageSurfaceLayout(containerSize: containerSize, scale: zoomScale)
                 let proposed = CGSize(
                     width: steadyUserOffset.width + value.translation.width,
@@ -1071,7 +1090,10 @@ private struct MangaPagedReaderScaledImage: View {
                 )
             }
             .onEnded { value in
-                guard isZoomInteractionEnabled else { return }
+                guard surfaceDragGestureEnabled else {
+                    gestureUserOffset = .zero
+                    return
+                }
                 let layout = imageSurfaceLayout(containerSize: containerSize, scale: steadyScale)
                 let proposed = CGSize(
                     width: steadyUserOffset.width + value.translation.width,
