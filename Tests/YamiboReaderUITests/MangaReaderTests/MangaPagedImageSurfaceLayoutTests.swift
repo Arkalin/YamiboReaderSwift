@@ -73,6 +73,11 @@ struct MangaPagedImageSurfaceLayoutTests {
             hiddenEdges: hiddenEdges,
             physicalEdge: .left
         ))
+        #expect(!MangaPagedSurfaceEdgeInteraction.shouldDeferPageTurnPanToSurfaceContent(
+            zoomEnabled: true,
+            hiddenEdges: [],
+            physicalEdge: .right
+        ))
     }
 
     @Test func fitWidthKeepsFixedPageSurfaceWithVerticalBlankSpace() {

@@ -64,6 +64,13 @@ struct MangaPagedReaderViewport: UIViewRepresentable {
         collectionView.addGestureRecognizer(context.coordinator.doubleTapGesture)
         context.coordinator.quickFadePanGesture.delegate = context.coordinator
         collectionView.addGestureRecognizer(context.coordinator.quickFadePanGesture)
+        collectionView.shouldBeginPanGesture = { [weak coordinator, weak collectionView] recognizer in
+            guard let coordinator,
+                  let collectionView else {
+                return true
+            }
+            return coordinator.collectionViewPanShouldBegin(recognizer, in: collectionView)
+        }
         context.coordinator.updateGestureState(in: collectionView)
         return collectionView
     }
@@ -441,7 +448,21 @@ struct MangaPagedReaderViewport: UIViewRepresentable {
                   pagingDriver.quickFadePanShouldBegin(panRecognizer, inputs: pagingInputs) else {
                 return false
             }
-            if shouldDeferQuickFadePanToSurfaceContent(panRecognizer, in: collectionView) {
+            if shouldDeferPageTurnPanToSurfaceContent(panRecognizer, in: collectionView) {
+                return false
+            }
+            return true
+        }
+
+        func collectionViewPanShouldBegin(
+            _ panRecognizer: UIPanGestureRecognizer,
+            in collectionView: UICollectionView
+        ) -> Bool {
+            guard !parent.isChromeVisible,
+                  parent.settings.pagedTurnStyle != .quickFade else {
+                return false
+            }
+            if shouldDeferPageTurnPanToSurfaceContent(panRecognizer, in: collectionView) {
                 return false
             }
             return true
@@ -455,7 +476,7 @@ struct MangaPagedReaderViewport: UIViewRepresentable {
             quickFadePanGesture.isEnabled = !parent.isChromeVisible && parent.settings.pagedTurnStyle == .quickFade
         }
 
-        private func shouldDeferQuickFadePanToSurfaceContent(
+        private func shouldDeferPageTurnPanToSurfaceContent(
             _ recognizer: UIPanGestureRecognizer,
             in collectionView: UICollectionView
         ) -> Bool {
@@ -527,7 +548,7 @@ struct MangaPagedReaderViewport: UIViewRepresentable {
                 pageEdgeFillStyle: parent.settings.pageEdgeFillStyle,
                 isChromeVisible: parent.isChromeVisible,
                 zoomEnabled: parent.zoomEnabled,
-                allowsUnzoomedSurfacePan: parent.settings.pagedTurnStyle == .quickFade,
+                allowsUnzoomedSurfacePan: true,
                 spreadSurfaceInteraction: spreadSurfaceInteraction(for: spread),
                 colorScheme: parent.colorScheme
             )
@@ -879,7 +900,6 @@ struct MangaPagedPageCurlReaderViewport: UIViewControllerRepresentable {
         private var currentSelectionIndex: Int?
         private var lastReportedGlobalIndex: Int?
         private var pageSurfaceInteractions: [String: MangaPagedReaderPageSurfaceInteraction] = [:]
-        private var pageSurfaceInitialHorizontalAlignments: [String: MangaPagedImageSurfaceInitialHorizontalAlignment] = [:]
         private weak var activePageViewController: UIPageViewController?
         private weak var pageCurlBackColorPageViewController: UIPageViewController?
         private var pageCurlBackColorDisplayLink: CADisplayLink?
@@ -902,7 +922,6 @@ struct MangaPagedPageCurlReaderViewport: UIViewControllerRepresentable {
             let didChangeContentIdentity = contentIdentity != nextContentIdentity
             if didChangeContentIdentity {
                 pageSurfaceInteractions = [:]
-                pageSurfaceInitialHorizontalAlignments = [:]
             }
             contentIdentity = nextContentIdentity
             configureGestures(in: pageViewController)
@@ -1011,6 +1030,13 @@ struct MangaPagedPageCurlReaderViewport: UIViewControllerRepresentable {
 
         func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
             touch.view?.isDescendant(ofType: UIControl.self) != true
+        }
+
+        func gestureRecognizer(
+            _ gestureRecognizer: UIGestureRecognizer,
+            shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
+        ) -> Bool {
+            gestureRecognizer is UIPanGestureRecognizer || otherGestureRecognizer is UIPanGestureRecognizer
         }
 
         func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
@@ -1165,17 +1191,12 @@ struct MangaPagedPageCurlReaderViewport: UIViewControllerRepresentable {
             for page: MangaReaderPageProjection,
             pageIndex: Int
         ) -> MangaPagedImageSurfaceInitialHorizontalAlignment {
-            if let alignment = pageSurfaceInitialHorizontalAlignments[page.id] {
-                return alignment
-            }
-            let alignment = MangaPagedImageSurfaceInitialHorizontalAlignment.enteringPage(
+            MangaPagedImageSurfaceInitialHorizontalAlignment.enteringPage(
                 pageTurnDirection: parent.settings.pageTurnDirection,
                 pageScaleMode: parent.effectivePageScaleMode,
                 currentPageIndex: parent.plan.currentPageIndex,
                 targetPageIndex: pageIndex
             )
-            pageSurfaceInitialHorizontalAlignments[page.id] = alignment
-            return alignment
         }
 
         private func surfaceInteraction(for page: MangaReaderPageProjection) -> MangaPagedReaderPageSurfaceInteraction {
@@ -1504,10 +1525,23 @@ private final class MangaPagedReaderPageSurfaceInteraction: ObservableObject {
 
 private final class MangaPagedReaderCollectionView: UICollectionView {
     var onLayoutSubviews: (() -> Void)?
+    var shouldBeginPanGesture: ((UIPanGestureRecognizer) -> Bool)?
 
     override func layoutSubviews() {
         super.layoutSubviews()
         onLayoutSubviews?()
+    }
+
+    override func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        guard super.gestureRecognizerShouldBegin(gestureRecognizer) else {
+            return false
+        }
+        guard gestureRecognizer === panGestureRecognizer,
+              let panRecognizer = gestureRecognizer as? UIPanGestureRecognizer,
+              let shouldBeginPanGesture else {
+            return true
+        }
+        return shouldBeginPanGesture(panRecognizer)
     }
 }
 

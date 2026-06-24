@@ -177,12 +177,14 @@ struct MangaReaderPresentationInfrastructureTests {
 
         #expect(consumeRange.lowerBound < directionalRange.lowerBound)
         #expect(pageCurlSource.contains("func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool"))
+        #expect(pageCurlSource.contains("func gestureRecognizer(\n            _ gestureRecognizer: UIGestureRecognizer,\n            shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer\n        ) -> Bool"))
         #expect(pageCurlSource.contains("shouldDeferPageCurlPanToSurfaceContent(panRecognizer, in: pageViewController)"))
         #expect(pageCurlSource.contains("private func shouldDeferPageCurlPanToSurfaceContent"))
         #expect(pageCurlSource.contains("pageCurlSurfaceInteraction("))
         #expect(pageCurlSource.contains("onPhysicalEdge: physicalEdge"))
         #expect(pageCurlSource.contains("surfaceInteraction.consumeTap(onPhysicalEdge: physicalEdge)"))
         #expect(pageCurlSource.contains("allowsUnzoomedSurfacePan: true"))
+        #expect(!pageCurlSource.contains("pageSurfaceInitialHorizontalAlignments"))
     }
 
     @Test func readerLoadedContentGatesTwoPageSpreadsToIPadLandscapeSetting() throws {
@@ -326,10 +328,10 @@ struct MangaReaderPresentationInfrastructureTests {
         let shouldBeginSource = String(source[shouldBeginRange.lowerBound..<updateGestureRange.lowerBound])
 
         #expect(shouldBeginSource.contains("pagingDriver.quickFadePanShouldBegin(panRecognizer, inputs: pagingInputs)"))
-        #expect(shouldBeginSource.contains("shouldDeferQuickFadePanToSurfaceContent(panRecognizer, in: collectionView)"))
+        #expect(shouldBeginSource.contains("shouldDeferPageTurnPanToSurfaceContent(panRecognizer, in: collectionView)"))
         #expect(shouldBeginSource.contains("return false"))
 
-        let deferRange = try #require(source.range(of: "private func shouldDeferQuickFadePanToSurfaceContent"))
+        let deferRange = try #require(source.range(of: "private func shouldDeferPageTurnPanToSurfaceContent"))
         let updateVisibleRange = try #require(source.range(of: "private func updateVisiblePageSurfacesIfNeeded"))
         let interactionRange = try #require(source.range(of: "private final class MangaPagedReaderPageSurfaceInteraction"))
         let collectionViewRange = try #require(source.range(of: "private final class MangaPagedReaderCollectionView"))
@@ -351,10 +353,14 @@ struct MangaReaderPresentationInfrastructureTests {
         #expect(interactionSource.contains("hiddenEdges.contains(edge)"))
     }
 
-    @Test func pagedViewportLetsSlidePanWinWhenSurfaceIsUnzoomed() throws {
+    @Test func pagedViewportDefersSlidePanToUnzoomedSurfaceWhenHiddenContentRemains() throws {
         let source = try sourceFile("Sources/YamiboReaderUI/Features/Reader/MangaReader/Presentation/MangaPagedReaderViewport.swift")
 
-        #expect(source.contains("allowsUnzoomedSurfacePan: parent.settings.pagedTurnStyle == .quickFade"))
+        #expect(source.contains("collectionView.shouldBeginPanGesture = { [weak coordinator, weak collectionView] recognizer in"))
+        #expect(source.contains("func collectionViewPanShouldBegin"))
+        #expect(source.contains("shouldDeferPageTurnPanToSurfaceContent(panRecognizer, in: collectionView)"))
+        #expect(source.contains("allowsUnzoomedSurfacePan: true"))
+        #expect(!source.contains("allowsUnzoomedSurfacePan: parent.settings.pagedTurnStyle == .quickFade"))
         #expect(source.contains("allowsUnzoomedSurfacePan: allowsUnzoomedSurfacePan"))
         #expect(!source.contains(".simultaneousGesture(dragGesture(containerSize: containerSize))"))
 
