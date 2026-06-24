@@ -6,13 +6,51 @@ enum MangaPagedImageSurfaceHorizontalEdge: CaseIterable, Hashable {
     case right
 }
 
+enum MangaPagedImageSurfaceInitialHorizontalAlignment: Hashable, Sendable {
+    case left
+    case right
+
+    init(pageTurnDirection: MangaPageTurnDirection) {
+        switch pageTurnDirection {
+        case .leftToRight:
+            self = .left
+        case .rightToLeft:
+            self = .right
+        }
+    }
+
+    static func enteringPage(
+        pageTurnDirection: MangaPageTurnDirection,
+        pageScaleMode: MangaPageScaleMode,
+        currentPageIndex: Int?,
+        targetPageIndex: Int
+    ) -> Self {
+        let defaultAlignment = Self(pageTurnDirection: pageTurnDirection)
+        guard pageScaleMode == .fitHeight,
+              let currentPageIndex,
+              abs(targetPageIndex - currentPageIndex) == 1 else {
+            return defaultAlignment
+        }
+        return targetPageIndex < currentPageIndex ? defaultAlignment.opposite : defaultAlignment
+    }
+
+    private var opposite: Self {
+        switch self {
+        case .left:
+            .right
+        case .right:
+            .left
+        }
+    }
+}
+
 struct MangaPagedImageSurfaceLayout: Equatable {
     private static let edgeVisibilityTolerance: CGFloat = 0.5
 
     let imageSize: CGSize
     let containerSize: CGSize
     let pageScaleMode: MangaPageScaleMode
-    let pageTurnDirection: MangaPageTurnDirection
+    let initialHorizontalAlignment: MangaPagedImageSurfaceInitialHorizontalAlignment
     let zoomScale: CGFloat
 
     var fittedImageSize: CGSize {
@@ -44,7 +82,7 @@ struct MangaPagedImageSurfaceLayout: Equatable {
         guard horizontalOverflow > 0 else { return .zero }
 
         return CGSize(
-            width: pageTurnDirection == .rightToLeft ? -horizontalOverflow : horizontalOverflow,
+            width: initialHorizontalAlignment == .right ? -horizontalOverflow : horizontalOverflow,
             height: 0
         )
     }

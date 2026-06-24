@@ -170,6 +170,23 @@ struct MangaReaderPresentationInfrastructureTests {
         #expect(physicalSource.contains("case .toggleChrome:\n                nil"))
     }
 
+    @Test func pagedViewportConfiguresInitialHorizontalAlignmentWhenCellsBecomeVisible() throws {
+        let source = try sourceFile("Sources/YamiboReaderUI/Features/Reader/MangaReader/Presentation/MangaPagedReaderViewport.swift")
+
+        #expect(source.contains("func collectionView(\n            _ collectionView: UICollectionView,\n            willDisplay cell: UICollectionViewCell,"))
+        #expect(source.contains("private var pageSurfaceInitialHorizontalAlignments: [String: MangaPagedImageSurfaceInitialHorizontalAlignment] = [:]"))
+        #expect(source.contains("pageSurfaceInitialHorizontalAlignments = [:]"))
+        #expect(source.contains("refreshInitialHorizontalAlignment: true"))
+        #expect(source.contains("refreshInitialHorizontalAlignment: false"))
+        #expect(source.contains("initialHorizontalAlignment(\n                    for: page,\n                    pageIndex: pageIndex,\n                    refresh: refreshInitialHorizontalAlignment\n                )"))
+        #expect(source.contains("private func initialHorizontalAlignment("))
+        #expect(source.contains("MangaPagedImageSurfaceInitialHorizontalAlignment.enteringPage("))
+        #expect(source.contains("currentPageIndex: parent.plan.currentPageIndex"))
+        #expect(source.contains("targetPageIndex: pageIndex"))
+        #expect(source.contains("let initialHorizontalAlignment: MangaPagedImageSurfaceInitialHorizontalAlignment"))
+        #expect(source.contains(".onChange(of: initialHorizontalAlignment)"))
+    }
+
     @Test func pagedViewportQuickFadePanDefersToPhysicalHiddenSurfaceEdges() throws {
         let source = try sourceFile("Sources/YamiboReaderUI/Features/Reader/MangaReader/Presentation/MangaPagedReaderViewport.swift")
         let shouldBeginRange = try #require(source.range(of: "func gestureRecognizerShouldBegin"))

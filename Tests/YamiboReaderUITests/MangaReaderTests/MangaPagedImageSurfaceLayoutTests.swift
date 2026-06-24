@@ -10,7 +10,7 @@ struct MangaPagedImageSurfaceLayoutTests {
             imageSize: CGSize(width: 800, height: 600),
             containerSize: CGSize(width: 400, height: 800),
             pageScaleMode: .fitWidth,
-            pageTurnDirection: .leftToRight,
+            initialHorizontalAlignment: .left,
             zoomScale: 1
         )
 
@@ -20,25 +20,80 @@ struct MangaPagedImageSurfaceLayoutTests {
         #expect(layout.clampedUserOffset(CGSize(width: 80, height: 80)) == .zero)
     }
 
-    @Test func fitHeightInitialOverflowAlignmentFollowsPageTurnDirection() {
-        let leftToRight = MangaPagedImageSurfaceLayout(
-            imageSize: CGSize(width: 1200, height: 800),
-            containerSize: CGSize(width: 400, height: 800),
-            pageScaleMode: .fitHeight,
+    @Test func fitHeightInitialOverflowAlignmentFollowsInputEdge() {
+        let left = Self.layout(initialHorizontalAlignment: .left)
+        let right = Self.layout(initialHorizontalAlignment: .right)
+
+        #expect(left.fittedImageSize == CGSize(width: 1200, height: 800))
+        #expect(left.displayOffset(forUserOffset: .zero) == CGSize(width: 400, height: 0))
+        #expect(right.displayOffset(forUserOffset: .zero) == CGSize(width: -400, height: 0))
+    }
+
+    @Test func fitHeightAdjacentEntryAlignmentShowsOppositeEdgeWhenReturningLeftToRight() {
+        let forward = MangaPagedImageSurfaceInitialHorizontalAlignment.enteringPage(
             pageTurnDirection: .leftToRight,
-            zoomScale: 1
-        )
-        let rightToLeft = MangaPagedImageSurfaceLayout(
-            imageSize: CGSize(width: 1200, height: 800),
-            containerSize: CGSize(width: 400, height: 800),
             pageScaleMode: .fitHeight,
-            pageTurnDirection: .rightToLeft,
-            zoomScale: 1
+            currentPageIndex: 0,
+            targetPageIndex: 1
+        )
+        let backward = MangaPagedImageSurfaceInitialHorizontalAlignment.enteringPage(
+            pageTurnDirection: .leftToRight,
+            pageScaleMode: .fitHeight,
+            currentPageIndex: 1,
+            targetPageIndex: 0
         )
 
-        #expect(leftToRight.fittedImageSize == CGSize(width: 1200, height: 800))
-        #expect(leftToRight.displayOffset(forUserOffset: .zero) == CGSize(width: 400, height: 0))
-        #expect(rightToLeft.displayOffset(forUserOffset: .zero) == CGSize(width: -400, height: 0))
+        #expect(forward == .left)
+        #expect(backward == .right)
+        #expect(Self.layout(initialHorizontalAlignment: forward).displayOffset(forUserOffset: .zero) == CGSize(width: 400, height: 0))
+        #expect(Self.layout(initialHorizontalAlignment: backward).displayOffset(forUserOffset: .zero) == CGSize(width: -400, height: 0))
+    }
+
+    @Test func fitHeightAdjacentEntryAlignmentShowsOppositeEdgeWhenReturningRightToLeft() {
+        let forward = MangaPagedImageSurfaceInitialHorizontalAlignment.enteringPage(
+            pageTurnDirection: .rightToLeft,
+            pageScaleMode: .fitHeight,
+            currentPageIndex: 0,
+            targetPageIndex: 1
+        )
+        let backward = MangaPagedImageSurfaceInitialHorizontalAlignment.enteringPage(
+            pageTurnDirection: .rightToLeft,
+            pageScaleMode: .fitHeight,
+            currentPageIndex: 1,
+            targetPageIndex: 0
+        )
+
+        #expect(forward == .right)
+        #expect(backward == .left)
+        #expect(Self.layout(initialHorizontalAlignment: forward).displayOffset(forUserOffset: .zero) == CGSize(width: -400, height: 0))
+        #expect(Self.layout(initialHorizontalAlignment: backward).displayOffset(forUserOffset: .zero) == CGSize(width: 400, height: 0))
+    }
+
+    @Test func initialEntryAlignmentUsesDefaultForNonAdjacentInitialAndFitWidthEntries() {
+        #expect(
+            MangaPagedImageSurfaceInitialHorizontalAlignment.enteringPage(
+                pageTurnDirection: .leftToRight,
+                pageScaleMode: .fitHeight,
+                currentPageIndex: 4,
+                targetPageIndex: 1
+            ) == .left
+        )
+        #expect(
+            MangaPagedImageSurfaceInitialHorizontalAlignment.enteringPage(
+                pageTurnDirection: .leftToRight,
+                pageScaleMode: .fitHeight,
+                currentPageIndex: nil,
+                targetPageIndex: 1
+            ) == .left
+        )
+        #expect(
+            MangaPagedImageSurfaceInitialHorizontalAlignment.enteringPage(
+                pageTurnDirection: .leftToRight,
+                pageScaleMode: .fitWidth,
+                currentPageIndex: 1,
+                targetPageIndex: 0
+            ) == .left
+        )
     }
 
     @Test func fitHeightHorizontalOverflowPanIsBoundedFromInitialAlignment() {
@@ -46,7 +101,7 @@ struct MangaPagedImageSurfaceLayoutTests {
             imageSize: CGSize(width: 1200, height: 800),
             containerSize: CGSize(width: 400, height: 800),
             pageScaleMode: .fitHeight,
-            pageTurnDirection: .leftToRight,
+            initialHorizontalAlignment: .left,
             zoomScale: 1
         )
 
@@ -56,20 +111,8 @@ struct MangaPagedImageSurfaceLayoutTests {
     }
 
     @Test func fitHeightReportsHiddenPhysicalEdgesFromInitialAlignment() {
-        let leftToRight = MangaPagedImageSurfaceLayout(
-            imageSize: CGSize(width: 1200, height: 800),
-            containerSize: CGSize(width: 400, height: 800),
-            pageScaleMode: .fitHeight,
-            pageTurnDirection: .leftToRight,
-            zoomScale: 1
-        )
-        let rightToLeft = MangaPagedImageSurfaceLayout(
-            imageSize: CGSize(width: 1200, height: 800),
-            containerSize: CGSize(width: 400, height: 800),
-            pageScaleMode: .fitHeight,
-            pageTurnDirection: .rightToLeft,
-            zoomScale: 1
-        )
+        let leftToRight = Self.layout(initialHorizontalAlignment: .left)
+        let rightToLeft = Self.layout(initialHorizontalAlignment: .right)
 
         #expect(!leftToRight.hasHiddenContent(on: .left, fromUserOffset: .zero))
         #expect(leftToRight.hasHiddenContent(on: .right, fromUserOffset: .zero))
@@ -87,7 +130,7 @@ struct MangaPagedImageSurfaceLayoutTests {
             imageSize: CGSize(width: 1200, height: 800),
             containerSize: CGSize(width: 400, height: 800),
             pageScaleMode: .fitHeight,
-            pageTurnDirection: .leftToRight,
+            initialHorizontalAlignment: .left,
             zoomScale: 1
         )
         let centeredUserOffset = CGSize(width: -400, height: 0)
@@ -104,14 +147,14 @@ struct MangaPagedImageSurfaceLayoutTests {
             imageSize: CGSize(width: 400, height: 800),
             containerSize: CGSize(width: 400, height: 800),
             pageScaleMode: .fitHeight,
-            pageTurnDirection: .leftToRight,
+            initialHorizontalAlignment: .left,
             zoomScale: 1
         )
         let fitWidth = MangaPagedImageSurfaceLayout(
             imageSize: CGSize(width: 1200, height: 800),
             containerSize: CGSize(width: 400, height: 800),
             pageScaleMode: .fitWidth,
-            pageTurnDirection: .leftToRight,
+            initialHorizontalAlignment: .right,
             zoomScale: 1
         )
 
@@ -128,11 +171,23 @@ struct MangaPagedImageSurfaceLayoutTests {
             imageSize: CGSize(width: 800, height: 1_200),
             containerSize: CGSize(width: 400, height: 800),
             pageScaleMode: .fitWidth,
-            pageTurnDirection: .leftToRight,
+            initialHorizontalAlignment: .left,
             zoomScale: 2
         )
 
         #expect(layout.contentSize == CGSize(width: 800, height: 1_200))
         #expect(layout.clampedUserOffset(CGSize(width: 600, height: -900)) == CGSize(width: 200, height: -200))
+    }
+
+    private static func layout(
+        initialHorizontalAlignment: MangaPagedImageSurfaceInitialHorizontalAlignment
+    ) -> MangaPagedImageSurfaceLayout {
+        MangaPagedImageSurfaceLayout(
+            imageSize: CGSize(width: 1200, height: 800),
+            containerSize: CGSize(width: 400, height: 800),
+            pageScaleMode: .fitHeight,
+            initialHorizontalAlignment: initialHorizontalAlignment,
+            zoomScale: 1
+        )
     }
 }
