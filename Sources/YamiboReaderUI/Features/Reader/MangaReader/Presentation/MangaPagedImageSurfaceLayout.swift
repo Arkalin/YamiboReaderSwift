@@ -36,6 +36,46 @@ enum MangaPagedCenterTapHitTesting {
     }
 }
 
+enum MangaPagedSurfaceEdgeInteraction {
+    static func physicalEdge(forTapZone zone: ReaderPagedTapZone) -> MangaPagedImageSurfaceHorizontalEdge? {
+        switch zone {
+        case .previous:
+            .left
+        case .next:
+            .right
+        case .toggleChrome:
+            nil
+        }
+    }
+
+    static func physicalEdge(
+        horizontalVelocityX: CGFloat,
+        horizontalTranslationX: CGFloat
+    ) -> MangaPagedImageSurfaceHorizontalEdge? {
+        if horizontalVelocityX != 0 {
+            return horizontalVelocityX < 0 ? .right : .left
+        }
+
+        guard horizontalTranslationX != 0 else { return nil }
+        return horizontalTranslationX < 0 ? .right : .left
+    }
+
+    static func shouldRevealHiddenContent(
+        on edge: MangaPagedImageSurfaceHorizontalEdge,
+        hiddenEdges: Set<MangaPagedImageSurfaceHorizontalEdge>
+    ) -> Bool {
+        hiddenEdges.contains(edge)
+    }
+
+    static func shouldDeferPageTurnPanToSurfaceContent(
+        zoomEnabled: Bool,
+        hiddenEdges: Set<MangaPagedImageSurfaceHorizontalEdge>,
+        physicalEdge: MangaPagedImageSurfaceHorizontalEdge
+    ) -> Bool {
+        zoomEnabled && shouldRevealHiddenContent(on: physicalEdge, hiddenEdges: hiddenEdges)
+    }
+}
+
 enum MangaPagedImageSurfaceHorizontalEdge: CaseIterable, Hashable {
     case left
     case right

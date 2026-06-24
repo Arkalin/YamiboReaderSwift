@@ -165,6 +165,26 @@ struct MangaReaderPresentationInfrastructureTests {
         #expect(source.contains("private enum MangaPageCurlPrivateBackColor"))
     }
 
+    @Test func pageCurlViewportConsumesHiddenPhysicalSurfaceEdgesBeforePageTurn() throws {
+        let source = try sourceFile("Sources/YamiboReaderUI/Features/Reader/MangaReader/Presentation/MangaPagedReaderViewport.swift")
+        let pageCurlRange = try #require(source.range(of: "struct MangaPagedPageCurlReaderViewport"))
+        let pageCurlSource = String(source[pageCurlRange.lowerBound..<source.endIndex])
+        let tapRange = try #require(pageCurlSource.range(of: "func handleTap(_ recognizer: UITapGestureRecognizer)"))
+        let gestureRange = try #require(pageCurlSource.range(of: "func gestureRecognizer("))
+        let tapSource = String(pageCurlSource[tapRange.lowerBound..<gestureRange.lowerBound])
+        let consumeRange = try #require(tapSource.range(of: "if consumeSurfaceEdgeTap(for: zone, in: pageViewController)"))
+        let directionalRange = try #require(tapSource.range(of: "switch directionalTapZone(for: zone)"))
+
+        #expect(consumeRange.lowerBound < directionalRange.lowerBound)
+        #expect(pageCurlSource.contains("func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool"))
+        #expect(pageCurlSource.contains("shouldDeferPageCurlPanToSurfaceContent(panRecognizer, in: pageViewController)"))
+        #expect(pageCurlSource.contains("private func shouldDeferPageCurlPanToSurfaceContent"))
+        #expect(pageCurlSource.contains("pageCurlSurfaceInteraction("))
+        #expect(pageCurlSource.contains("onPhysicalEdge: physicalEdge"))
+        #expect(pageCurlSource.contains("surfaceInteraction.consumeTap(onPhysicalEdge: physicalEdge)"))
+        #expect(pageCurlSource.contains("allowsUnzoomedSurfacePan: true"))
+    }
+
     @Test func readerLoadedContentGatesTwoPageSpreadsToIPadLandscapeSetting() throws {
         let source = try sourceFile("Sources/YamiboReaderUI/Features/Reader/MangaReader/Presentation/MangaReaderView.swift")
         let policySource = try sourceFile("Sources/YamiboReaderUI/Features/Reader/MangaReader/Presentation/MangaPagedLayoutPolicy.swift")
@@ -272,17 +292,14 @@ struct MangaReaderPresentationInfrastructureTests {
         #expect(directionalZoneRange.lowerBound < pageTurnRange.lowerBound)
 
         let consumeRange = try #require(source.range(of: "private func consumeSurfaceEdgeTap"))
-        let physicalRange = try #require(source.range(of: "private func physicalHorizontalEdge"))
-        let directionalRange = try #require(source.range(of: "private func directionalTapZone"))
-        let consumeSource = String(source[consumeRange.lowerBound..<physicalRange.lowerBound])
-        let physicalSource = String(source[physicalRange.lowerBound..<directionalRange.lowerBound])
+        let requestZoomRange = try #require(source.range(of: "private func requestSpreadZoomToggle"))
+        let consumeSource = String(source[consumeRange.lowerBound..<requestZoomRange.lowerBound])
 
-        #expect(consumeSource.contains("physicalHorizontalEdge(for: zone)"))
+        #expect(consumeSource.contains("MangaPagedSurfaceEdgeInteraction.physicalEdge(forTapZone: zone)"))
+        #expect(consumeSource.contains("MangaPagedSurfaceEdgeInteraction.shouldRevealHiddenContent("))
         #expect(consumeSource.contains("surfaceInteraction.consumeTap(onPhysicalEdge: physicalEdge)"))
         #expect(!consumeSource.contains("directionalTapZone"))
-        #expect(physicalSource.contains("case .previous:\n                .left"))
-        #expect(physicalSource.contains("case .next:\n                .right"))
-        #expect(physicalSource.contains("case .toggleChrome:\n                nil"))
+        #expect(!source.contains("private func physicalHorizontalEdge"))
     }
 
     @Test func pagedViewportConfiguresInitialHorizontalAlignmentWhenCellsBecomeVisible() throws {
@@ -313,26 +330,22 @@ struct MangaReaderPresentationInfrastructureTests {
         #expect(shouldBeginSource.contains("return false"))
 
         let deferRange = try #require(source.range(of: "private func shouldDeferQuickFadePanToSurfaceContent"))
-        let physicalEdgeRange = try #require(source.range(of: "private func physicalHiddenContentEdge"))
         let updateVisibleRange = try #require(source.range(of: "private func updateVisiblePageSurfacesIfNeeded"))
         let interactionRange = try #require(source.range(of: "private final class MangaPagedReaderPageSurfaceInteraction"))
         let collectionViewRange = try #require(source.range(of: "private final class MangaPagedReaderCollectionView"))
-        let deferSource = String(source[deferRange.lowerBound..<physicalEdgeRange.lowerBound])
-        let physicalEdgeSource = String(source[physicalEdgeRange.lowerBound..<updateVisibleRange.lowerBound])
+        let deferSource = String(source[deferRange.lowerBound..<updateVisibleRange.lowerBound])
         let interactionSource = String(source[interactionRange.lowerBound..<collectionViewRange.lowerBound])
 
         #expect(deferSource.contains("parent.zoomEnabled"))
         #expect(deferSource.contains("parent.plan.usesTwoPageSpread"))
         #expect(deferSource.contains("currentSpreadSurfaceInteraction(in: collectionView)"))
         #expect(deferSource.contains("currentPageSurfaceInteraction(in: collectionView)"))
-        #expect(deferSource.contains("currentPageIndex(in: collectionView)"))
-        #expect(deferSource.contains("surfaceInteraction.hasHiddenContent(onPhysicalEdge: physicalEdge)"))
+        #expect(deferSource.contains("MangaPagedSurfaceEdgeInteraction.physicalEdge("))
+        #expect(deferSource.contains("MangaPagedSurfaceEdgeInteraction.shouldDeferPageTurnPanToSurfaceContent("))
+        #expect(deferSource.contains("hiddenEdges: surfaceInteraction.hiddenEdges"))
         #expect(!deferSource.contains("directionalTapZone"))
 
-        #expect(physicalEdgeSource.contains("return velocity.x < 0 ? .right : .left"))
-        #expect(physicalEdgeSource.contains("return translation.x < 0 ? .right : .left"))
-        #expect(!physicalEdgeSource.contains("pageTurnDirection"))
-        #expect(!physicalEdgeSource.contains("directional"))
+        #expect(!source.contains("private func physicalHiddenContentEdge"))
 
         #expect(interactionSource.contains("func hasHiddenContent(onPhysicalEdge edge: MangaPagedImageSurfaceHorizontalEdge) -> Bool"))
         #expect(interactionSource.contains("hiddenEdges.contains(edge)"))

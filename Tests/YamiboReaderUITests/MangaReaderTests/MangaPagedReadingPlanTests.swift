@@ -227,6 +227,31 @@ struct MangaPagedReadingPlanTests {
         #expect(rotatingToTwoPage.spineLocation == .mid)
         #expect(rotatingToTwoPage.doubleSidedUpdate == true)
     }
+
+    @Test func pageCurlSelectionResolverIgnoresAlreadyAppliedPlacementAfterPageTurn() throws {
+        let pages = try makePagedPlanPages(pageCountsByTID: [("700", 3)])
+        let placement = MangaReaderViewportPlacement(targetPageIndex: 0, revision: 1)
+        var resolver = MangaPagedPageCurlSelectionResolver()
+
+        let initialPlan = MangaPagedReadingPlan(
+            pages: pages,
+            currentPageIndex: 0,
+            pageTurnDirection: .rightToLeft,
+            usesTwoPageSpread: false
+        )
+        #expect(resolver.selectionIndex(plan: initialPlan, viewportPlacement: placement) == 0)
+
+        let turnedPlan = MangaPagedReadingPlan(
+            pages: pages,
+            currentPageIndex: 1,
+            pageTurnDirection: .rightToLeft,
+            usesTwoPageSpread: false
+        )
+        #expect(resolver.selectionIndex(plan: turnedPlan, viewportPlacement: placement) == 1)
+
+        let jumpPlacement = MangaReaderViewportPlacement(targetPageIndex: 2, revision: 2)
+        #expect(resolver.selectionIndex(plan: turnedPlan, viewportPlacement: jumpPlacement) == 2)
+    }
 }
 
 private func makePagedPlanPages() throws -> [MangaReaderPageProjection] {
