@@ -9,6 +9,8 @@ struct MangaVerticalCollectionViewport: UIViewRepresentable {
     let currentPageIndex: Int?
     let viewportPlacement: MangaReaderViewportPlacement?
     let imagePipeline: MangaImagePipeline
+    let isChromeVisible: Bool
+    let zoomEnabled: Bool
     let onCurrentPageChange: (Int) -> Void
     let onTap: () -> Void
 
@@ -38,7 +40,11 @@ struct MangaVerticalCollectionViewport: UIViewRepresentable {
         }
         context.coordinator.tapGesture.cancelsTouchesInView = false
         context.coordinator.tapGesture.delegate = context.coordinator
+        context.coordinator.tapGesture.require(toFail: context.coordinator.doubleTapGesture)
         collectionView.addGestureRecognizer(context.coordinator.tapGesture)
+        context.coordinator.doubleTapGesture.cancelsTouchesInView = false
+        context.coordinator.doubleTapGesture.delegate = context.coordinator
+        collectionView.addGestureRecognizer(context.coordinator.doubleTapGesture)
         return collectionView
     }
 
@@ -73,7 +79,13 @@ struct MangaVerticalCollectionViewport: UIViewRepresentable {
         private var pendingReportedGlobalIndex: Int?
         private var currentPagePublishDisplayLink: CADisplayLink?
         private var lastAppliedPlacementRevision: Int?
+        private weak var activeZoomCell: MangaVerticalCollectionPageCell?
         lazy var tapGesture = UITapGestureRecognizer(target: self, action: #selector(handleTap(_:)))
+        lazy var doubleTapGesture: UITapGestureRecognizer = {
+            let recognizer = UITapGestureRecognizer(target: self, action: #selector(handleDoubleTap(_:)))
+            recognizer.numberOfTapsRequired = 2
+            return recognizer
+        }()
 
         init(parent: MangaVerticalCollectionViewport) {
             self.parent = parent
@@ -93,6 +105,7 @@ struct MangaVerticalCollectionViewport: UIViewRepresentable {
             lastReportedGlobalIndex = nil
             pendingReportedGlobalIndex = nil
             cancelPendingCurrentPagePublish()
+            resetActiveZoom(in: collectionView, animated: false)
 
             if parent.pages.isEmpty {
                 pendingInitialPageIndex = nil
@@ -139,6 +152,9 @@ struct MangaVerticalCollectionViewport: UIViewRepresentable {
                     if let collectionView {
                         self?.publishCurrentPageIfNeeded(from: collectionView)
                     }
+                },
+                onZoomActiveChange: { [weak self, weak collectionView, weak cell] isActive in
+                    self?.setZoomActive(isActive, for: cell, in: collectionView)
                 }
             )
             return cell
@@ -205,6 +221,7 @@ struct MangaVerticalCollectionViewport: UIViewRepresentable {
                 return
             }
 
+            resetActiveZoom(in: collectionView, animated: true)
             collectionView.scrollToItem(
                 at: IndexPath(item: targetIndex, section: 0),
                 at: .top,
@@ -222,6 +239,32 @@ struct MangaVerticalCollectionViewport: UIViewRepresentable {
             }
         }
 
+        @objc private func handleDoubleTap(_ recognizer: UITapGestureRecognizer) {
+            guard recognizer.state == .ended,
+                  let collectionView = recognizer.view as? UICollectionView else {
+                return
+            }
+
+            if parent.isChromeVisible {
+                let onTap = parent.onTap
+                callbackScheduler.publish {
+                    onTap()
+                }
+                return
+            }
+
+            guard parent.zoomEnabled,
+                  let cell = zoomTargetCell(for: recognizer, in: collectionView) else {
+                return
+            }
+            if activeZoomCell !== cell {
+                activeZoomCell?.resetZoom(animated: true)
+            }
+            let location = recognizer.location(in: cell.contentView)
+            let isZoomActive = cell.toggleZoom(at: location)
+            setZoomActive(isZoomActive, for: cell, in: collectionView)
+        }
+
         func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
             touch.view?.isDescendant(ofType: UIControl.self) != true
         }
@@ -231,6 +274,39 @@ struct MangaVerticalCollectionViewport: UIViewRepresentable {
             shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
         ) -> Bool {
             true
+        }
+
+        private func zoomTargetCell(
+            for recognizer: UITapGestureRecognizer,
+            in collectionView: UICollectionView
+        ) -> MangaVerticalCollectionPageCell? {
+            let location = recognizer.location(in: collectionView)
+            guard let indexPath = collectionView.indexPathForItem(at: location) else { return nil }
+            return collectionView.cellForItem(at: indexPath) as? MangaVerticalCollectionPageCell
+        }
+
+        private func setZoomActive(
+            _ isActive: Bool,
+            for cell: MangaVerticalCollectionPageCell?,
+            in collectionView: UICollectionView?
+        ) {
+            guard let collectionView, let cell else { return }
+            if isActive {
+                if activeZoomCell !== cell {
+                    activeZoomCell?.resetZoom(animated: true)
+                }
+                activeZoomCell = cell
+                collectionView.isScrollEnabled = false
+            } else if activeZoomCell === cell {
+                activeZoomCell = nil
+                collectionView.isScrollEnabled = true
+            }
+        }
+
+        private func resetActiveZoom(in collectionView: UICollectionView, animated: Bool) {
+            activeZoomCell?.resetZoom(animated: animated)
+            activeZoomCell = nil
+            collectionView.isScrollEnabled = true
         }
 
         private func publishCurrentPageIfNeeded(from collectionView: UICollectionView) {
@@ -306,11 +382,12 @@ private final class MangaVerticalCollectionView: UICollectionView {
     }
 }
 
-private final class MangaVerticalCollectionPageCell: UICollectionViewCell {
+private final class MangaVerticalCollectionPageCell: UICollectionViewCell, UIScrollViewDelegate {
     static let reuseIdentifier = "MangaVerticalCollectionPageCell"
     static let defaultWidthToHeightAspectRatio: CGFloat = 0.72
     static let defaultEstimatedHeight: CGFloat = 560
 
+    private let zoomScrollView = UIScrollView()
     private let imageView = UIImageView()
     private let activityIndicator = UIActivityIndicatorView(style: .medium)
     private let failureLabel = UILabel()
@@ -322,6 +399,8 @@ private final class MangaVerticalCollectionPageCell: UICollectionViewCell {
     private var currentPageID: String?
     private var heightToWidthRatio = 1 / defaultWidthToHeightAspectRatio
     private var onHeightToWidthRatioChange: ((CGFloat) -> Void)?
+    private var onZoomActiveChange: ((Bool) -> Void)?
+    private var isResettingZoom = false
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -345,15 +424,22 @@ private final class MangaVerticalCollectionPageCell: UICollectionViewCell {
         imagePipeline = nil
         currentPageID = nil
         onHeightToWidthRatioChange = nil
+        onZoomActiveChange = nil
         heightToWidthRatio = 1 / Self.defaultWidthToHeightAspectRatio
         imageView.image = nil
+        resetZoom(animated: false)
         activityIndicator.stopAnimating()
         setFailureStackVisible(false)
     }
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        imageView.frame = contentView.bounds
+        zoomScrollView.frame = contentView.bounds
+        if !MangaPageZoomPolicy.isActive(zoomScrollView.zoomScale) {
+            imageView.frame = zoomScrollView.bounds
+            zoomScrollView.contentSize = imageView.bounds.size
+        }
+        centerZoomedImage()
         activityIndicator.center = CGPoint(x: contentView.bounds.midX, y: contentView.bounds.midY)
 
         guard !failureStack.isHidden else {
@@ -386,11 +472,13 @@ private final class MangaVerticalCollectionPageCell: UICollectionViewCell {
         page: MangaReaderPageProjection,
         imagePipeline: MangaImagePipeline,
         knownHeightToWidthRatio: CGFloat?,
-        onHeightToWidthRatioChange: @escaping (CGFloat) -> Void
+        onHeightToWidthRatioChange: @escaping (CGFloat) -> Void,
+        onZoomActiveChange: @escaping (Bool) -> Void
     ) {
         self.page = page
         self.imagePipeline = imagePipeline
         self.onHeightToWidthRatioChange = onHeightToWidthRatioChange
+        self.onZoomActiveChange = onZoomActiveChange
         if let knownHeightToWidthRatio {
             heightToWidthRatio = knownHeightToWidthRatio
         }
@@ -414,9 +502,19 @@ private final class MangaVerticalCollectionPageCell: UICollectionViewCell {
         contentView.backgroundColor = .black
         contentView.clipsToBounds = true
 
+        zoomScrollView.delegate = self
+        zoomScrollView.minimumZoomScale = MangaPageZoomPolicy.minimumScale
+        zoomScrollView.maximumZoomScale = MangaPageZoomPolicy.maximumScale
+        zoomScrollView.bouncesZoom = true
+        zoomScrollView.showsHorizontalScrollIndicator = false
+        zoomScrollView.showsVerticalScrollIndicator = false
+        zoomScrollView.isScrollEnabled = false
+        zoomScrollView.backgroundColor = .black
+        contentView.addSubview(zoomScrollView)
+
         imageView.contentMode = .scaleAspectFit
         imageView.backgroundColor = .black
-        contentView.addSubview(imageView)
+        zoomScrollView.addSubview(imageView)
 
         activityIndicator.color = .white
         contentView.addSubview(activityIndicator)
@@ -437,6 +535,52 @@ private final class MangaVerticalCollectionPageCell: UICollectionViewCell {
         failureStack.addArrangedSubview(retryButton)
         contentView.addSubview(failureStack)
         setFailureStackVisible(false)
+    }
+
+    func viewForZooming(in scrollView: UIScrollView) -> UIView? {
+        imageView.image == nil ? nil : imageView
+    }
+
+    func scrollViewDidZoom(_ scrollView: UIScrollView) {
+        centerZoomedImage()
+        guard !isResettingZoom else {
+            if !MangaPageZoomPolicy.isActive(scrollView.zoomScale) {
+                isResettingZoom = false
+                setZoomInteractionActive(false)
+            }
+            return
+        }
+        updateZoomInteractionState()
+    }
+
+    func toggleZoom(at location: CGPoint) -> Bool {
+        guard imageView.image != nil else { return false }
+        if MangaPageZoomPolicy.isZoomedForDoubleTapReset(zoomScrollView.zoomScale) {
+            resetZoom(animated: true)
+            return false
+        }
+
+        let targetScale = MangaPageZoomPolicy.doubleTapTargetScale
+        let locationInScrollView = zoomScrollView.convert(location, from: contentView)
+        isResettingZoom = false
+        zoomScrollView.zoom(to: zoomRect(for: targetScale, centeredAt: locationInScrollView), animated: true)
+        setZoomInteractionActive(true)
+        return true
+    }
+
+    func resetZoom(animated: Bool) {
+        guard MangaPageZoomPolicy.isActive(zoomScrollView.zoomScale) else {
+            isResettingZoom = false
+            setZoomInteractionActive(false)
+            return
+        }
+        isResettingZoom = animated
+        zoomScrollView.setZoomScale(MangaPageZoomPolicy.minimumScale, animated: animated)
+        if !animated {
+            isResettingZoom = false
+            centerZoomedImage()
+            setZoomInteractionActive(false)
+        }
     }
 
     private func startLoad() {
@@ -461,6 +605,7 @@ private final class MangaVerticalCollectionPageCell: UICollectionViewCell {
     }
 
     private func showLoading() {
+        resetZoom(animated: false)
         imageView.image = nil
         setFailureStackVisible(false)
         activityIndicator.startAnimating()
@@ -471,11 +616,13 @@ private final class MangaVerticalCollectionPageCell: UICollectionViewCell {
         activityIndicator.stopAnimating()
         setFailureStackVisible(false)
         imageView.image = image
+        setNeedsLayout()
         updateHeightToWidthRatio(for: image)
     }
 
     private func showFailure(pageID: String) {
         guard currentPageID == pageID else { return }
+        resetZoom(animated: false)
         activityIndicator.stopAnimating()
         imageView.image = nil
         setFailureStackVisible(true)
@@ -499,6 +646,36 @@ private final class MangaVerticalCollectionPageCell: UICollectionViewCell {
         guard abs(nextRatio - heightToWidthRatio) > 0.001 else { return }
         heightToWidthRatio = nextRatio
         onHeightToWidthRatioChange?(nextRatio)
+    }
+
+    private func zoomRect(for scale: CGFloat, centeredAt center: CGPoint) -> CGRect {
+        let size = CGSize(
+            width: zoomScrollView.bounds.width / scale,
+            height: zoomScrollView.bounds.height / scale
+        )
+        return CGRect(
+            x: center.x - size.width / 2,
+            y: center.y - size.height / 2,
+            width: size.width,
+            height: size.height
+        )
+    }
+
+    private func centerZoomedImage() {
+        let boundsSize = zoomScrollView.bounds.size
+        var frame = imageView.frame
+        frame.origin.x = frame.width < boundsSize.width ? (boundsSize.width - frame.width) / 2 : 0
+        frame.origin.y = frame.height < boundsSize.height ? (boundsSize.height - frame.height) / 2 : 0
+        imageView.frame = frame
+    }
+
+    private func updateZoomInteractionState() {
+        setZoomInteractionActive(MangaPageZoomPolicy.isActive(zoomScrollView.zoomScale))
+    }
+
+    private func setZoomInteractionActive(_ isActive: Bool) {
+        zoomScrollView.isScrollEnabled = isActive
+        onZoomActiveChange?(isActive)
     }
 }
 #endif

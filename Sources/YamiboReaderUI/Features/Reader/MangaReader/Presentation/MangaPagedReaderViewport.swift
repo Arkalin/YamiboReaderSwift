@@ -795,9 +795,6 @@ private struct MangaPagedReaderPageSurface: View {
 }
 
 private struct MangaPagedReaderScaledImage: View {
-    private static let maximumZoomScale: CGFloat = 4
-    private static let doubleTapZoomScale: CGFloat = 2
-
     let image: UIImage
     let pageID: String
     let pageScaleMode: MangaPageScaleMode
@@ -923,7 +920,7 @@ private struct MangaPagedReaderScaledImage: View {
     }
 
     private func toggleZoom(at location: CGPoint, containerSize: CGSize) {
-        if steadyScale > 1.05 {
+        if MangaPageZoomPolicy.isZoomedForDoubleTapReset(steadyScale) {
             resetZoomState(animated: true)
         } else {
             zoomIn(to: location, containerSize: containerSize)
@@ -931,7 +928,7 @@ private struct MangaPagedReaderScaledImage: View {
     }
 
     private func zoomIn(to location: CGPoint, containerSize: CGSize) {
-        let targetScale = min(Self.maximumZoomScale, Self.doubleTapZoomScale)
+        let targetScale = MangaPageZoomPolicy.doubleTapTargetScale
         let targetLayout = imageSurfaceLayout(containerSize: containerSize, scale: targetScale)
         let center = CGPoint(x: containerSize.width / 2, y: containerSize.height / 2)
         let targetLocation = CGRect(origin: .zero, size: containerSize).contains(location)
@@ -1023,7 +1020,7 @@ private struct MangaPagedReaderScaledImage: View {
     }
 
     private func clampedScale(_ scale: CGFloat) -> CGFloat {
-        min(Self.maximumZoomScale, max(1, scale))
+        MangaPageZoomPolicy.clampedScale(scale)
     }
 }
 

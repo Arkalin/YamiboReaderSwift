@@ -1,6 +1,30 @@
 import CoreGraphics
 import YamiboReaderCore
 
+enum MangaPageZoomPolicy {
+    static let minimumScale: CGFloat = 1
+    static let doubleTapScale: CGFloat = 2
+    static let maximumScale: CGFloat = 4
+    static let resetThreshold: CGFloat = 1.05
+    static let activeThreshold: CGFloat = 1.01
+
+    static var doubleTapTargetScale: CGFloat {
+        min(maximumScale, doubleTapScale)
+    }
+
+    static func clampedScale(_ scale: CGFloat) -> CGFloat {
+        min(maximumScale, max(minimumScale, scale))
+    }
+
+    static func isZoomedForDoubleTapReset(_ scale: CGFloat) -> Bool {
+        scale > resetThreshold
+    }
+
+    static func isActive(_ scale: CGFloat) -> Bool {
+        scale > activeThreshold
+    }
+}
+
 enum MangaPagedCenterTapHitTesting {
     static func acceptsCenterTap(at point: CGPoint, in bounds: CGRect) -> Bool {
         guard bounds.width > 0,
