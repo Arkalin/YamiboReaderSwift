@@ -142,6 +142,23 @@ struct MangaReaderPresentationInfrastructureTests {
         #expect(!source.contains("NovelReaderSurface"))
     }
 
+    @Test func pageCurlPagedViewportUsesUIPageViewControllerBookSpine() throws {
+        let viewSource = try sourceFile("Sources/YamiboReaderUI/Features/Reader/MangaReader/Presentation/MangaReaderView.swift")
+        let source = try sourceFile("Sources/YamiboReaderUI/Features/Reader/MangaReader/Presentation/MangaPagedReaderViewport.swift")
+
+        #expect(viewSource.contains("if settings.pagedTurnStyle == .pageCurl"))
+        #expect(viewSource.contains("MangaPagedPageCurlReaderViewport("))
+        #expect(source.contains("struct MangaPagedPageCurlReaderViewport: UIViewControllerRepresentable"))
+        #expect(source.contains("UIPageViewController(\n            transitionStyle: .pageCurl"))
+        #expect(source.contains("options: [.spineLocation: spineLocation.rawValue]"))
+        #expect(source.contains("return parent.sequence.usesTwoPageSpread ? .mid : .min"))
+        #expect(source.contains("pageViewController.isDoubleSided = parent.sequence.usesTwoPageSpread"))
+        #expect(source.contains("MangaPagedPageCurlSequence(plan: plan)"))
+        #expect(source.contains("publishCurrentPageIfNeeded(selectionIndex: selectionIndex)"))
+        #expect(source.contains("parent.sequence.globalIndex(forSelectionIndex: selectionIndex)"))
+        #expect(source.contains("private enum MangaPageCurlPrivateBackColor"))
+    }
+
     @Test func readerLoadedContentGatesTwoPageSpreadsToIPadLandscapeSetting() throws {
         let source = try sourceFile("Sources/YamiboReaderUI/Features/Reader/MangaReader/Presentation/MangaReaderView.swift")
         let policySource = try sourceFile("Sources/YamiboReaderUI/Features/Reader/MangaReader/Presentation/MangaPagedLayoutPolicy.swift")

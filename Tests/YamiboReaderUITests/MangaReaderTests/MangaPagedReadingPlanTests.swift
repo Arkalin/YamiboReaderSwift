@@ -107,6 +107,104 @@ struct MangaPagedReadingPlanTests {
         #expect(plan.spreads[1].pageIndexForHorizontalLocation(75, width: 100) == 2)
         #expect(plan.currentChapterPageLabel == "3")
     }
+
+    @Test func pageCurlSequenceMapsSinglePagesThroughPhysicalBookOrder() throws {
+        let pages = try makePagedPlanPages(pageCountsByTID: [("700", 3)])
+        let ltrPlan = MangaPagedReadingPlan(
+            pages: pages,
+            currentPageIndex: 0,
+            pageTurnDirection: .leftToRight,
+            usesTwoPageSpread: false
+        )
+        let rtlPlan = MangaPagedReadingPlan(
+            pages: pages,
+            currentPageIndex: 0,
+            pageTurnDirection: .rightToLeft,
+            usesTwoPageSpread: false
+        )
+
+        let ltrSequence = MangaPagedPageCurlSequence(plan: ltrPlan)
+        let rtlSequence = MangaPagedPageCurlSequence(plan: rtlPlan)
+
+        #expect(ltrSequence.pageCount == 3)
+        #expect(ltrSequence.leaves.map(\.pageIndex) == [0, 1, 2])
+        #expect(ltrSequence.leafIndexes(forSelectionIndex: 1) == [1])
+        #expect(ltrSequence.selectionIndex(forLeafIndexes: [2]) == 2)
+        #expect(ltrSequence.globalIndex(forSelectionIndex: 2) == 2)
+        #expect(ltrSequence.leafIndex(after: 1) == 2)
+
+        #expect(rtlSequence.pageCount == 3)
+        #expect(rtlSequence.leaves.map(\.pageIndex) == [2, 1, 0])
+        #expect(rtlSequence.leafIndexes(forSelectionIndex: 0) == [2])
+        #expect(rtlSequence.selectionIndex(forLeafIndexes: [0]) == 2)
+        #expect(rtlSequence.globalIndex(forSelectionIndex: 2) == 2)
+        #expect(rtlSequence.leafIndex(before: 2) == 1)
+    }
+
+    @Test func pageCurlSequenceMapsTwoPageBlankLeavesWithoutCreatingPagePositions() throws {
+        let pages = try makePagedPlanPages(pageCountsByTID: [("700", 3), ("701", 2)])
+        let ltrPlan = MangaPagedReadingPlan(
+            pages: pages,
+            currentPageIndex: 2,
+            pageTurnDirection: .leftToRight,
+            usesTwoPageSpread: true
+        )
+        let rtlPlan = MangaPagedReadingPlan(
+            pages: pages,
+            currentPageIndex: 2,
+            pageTurnDirection: .rightToLeft,
+            usesTwoPageSpread: true
+        )
+
+        let ltrSequence = MangaPagedPageCurlSequence(plan: ltrPlan)
+        let rtlSequence = MangaPagedPageCurlSequence(plan: rtlPlan)
+
+        #expect(ltrSequence.pageCount == 3)
+        #expect(ltrSequence.leafIndexes(forSelectionIndex: 1) == [2, 3])
+        #expect(ltrSequence.leaves.map(\.pageIndex) == [0, 1, 2, nil, 3, 4])
+        #expect(ltrSequence.selectionIndex(forLeafIndexes: [3]) == 1)
+        #expect(ltrSequence.pageIndex(forSelectionIndex: 1) == 2)
+        #expect(ltrSequence.globalIndex(forSelectionIndex: 1) == 2)
+
+        #expect(rtlSequence.pageCount == 3)
+        #expect(rtlSequence.leafIndexes(forSelectionIndex: 1) == [2, 3])
+        #expect(rtlSequence.leaves.map(\.pageIndex) == [4, 3, nil, 2, 1, 0])
+        #expect(rtlSequence.selectionIndex(forLeafIndexes: [2]) == 1)
+        #expect(rtlSequence.pageIndex(forSelectionIndex: 1) == 2)
+        #expect(rtlSequence.globalIndex(forSelectionIndex: 1) == 2)
+        #expect(rtlSequence.leaves[2].pageIndex == nil)
+    }
+
+    @Test func pageCurlSequenceProvidesBlankPresentationLeavesForEmptyPlans() {
+        let singlePageSequence = MangaPagedPageCurlSequence(
+            plan: MangaPagedReadingPlan(
+                pages: [],
+                currentPageIndex: nil,
+                pageTurnDirection: .leftToRight,
+                usesTwoPageSpread: false
+            )
+        )
+        let spreadSequence = MangaPagedPageCurlSequence(
+            plan: MangaPagedReadingPlan(
+                pages: [],
+                currentPageIndex: nil,
+                pageTurnDirection: .rightToLeft,
+                usesTwoPageSpread: true
+            )
+        )
+
+        #expect(singlePageSequence.pageCount == 1)
+        #expect(singlePageSequence.leafIndexes(forSelectionIndex: 0) == [0])
+        #expect(singlePageSequence.leaves.map(\.pageIndex) == [nil])
+        #expect(singlePageSequence.pageIndex(forSelectionIndex: 0) == nil)
+        #expect(singlePageSequence.globalIndex(forSelectionIndex: 0) == nil)
+
+        #expect(spreadSequence.pageCount == 1)
+        #expect(spreadSequence.leafIndexes(forSelectionIndex: 0) == [0, 1])
+        #expect(spreadSequence.leaves.map(\.pageIndex) == [nil, nil])
+        #expect(spreadSequence.pageIndex(forSelectionIndex: 0) == nil)
+        #expect(spreadSequence.globalIndex(forSelectionIndex: 0) == nil)
+    }
 }
 
 private func makePagedPlanPages() throws -> [MangaReaderPageProjection] {

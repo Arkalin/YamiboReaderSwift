@@ -846,22 +846,37 @@ private struct MangaReaderLoadedContent: View {
                         isPadDevice: UIDevice.current.userInterfaceIdiom == .pad,
                         availableSize: proxy.size
                     )
-                    MangaPagedReaderViewport(
-                        plan: MangaPagedReadingPlan(
-                            pages: loaded.pages,
-                            currentPageIndex: loaded.currentPageIndex,
-                            pageTurnDirection: settings.pageTurnDirection,
-                            usesTwoPageSpread: usesTwoPageSpread
-                        ),
-                        viewportPlacement: loaded.viewportPlacement,
-                        settings: settings,
-                        imagePipeline: imagePipeline,
-                        isChromeVisible: isChromeVisible,
-                        zoomEnabled: settings.zoomEnabled,
-                        onCurrentPageChange: onCurrentPageChange,
-                        onTap: onTap
+                    let plan = MangaPagedReadingPlan(
+                        pages: loaded.pages,
+                        currentPageIndex: loaded.currentPageIndex,
+                        pageTurnDirection: settings.pageTurnDirection,
+                        usesTwoPageSpread: usesTwoPageSpread
                     )
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    if settings.pagedTurnStyle == .pageCurl {
+                        MangaPagedPageCurlReaderViewport(
+                            plan: plan,
+                            viewportPlacement: loaded.viewportPlacement,
+                            settings: settings,
+                            imagePipeline: imagePipeline,
+                            isChromeVisible: isChromeVisible,
+                            zoomEnabled: settings.zoomEnabled,
+                            onCurrentPageChange: onCurrentPageChange,
+                            onTap: onTap
+                        )
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    } else {
+                        MangaPagedReaderViewport(
+                            plan: plan,
+                            viewportPlacement: loaded.viewportPlacement,
+                            settings: settings,
+                            imagePipeline: imagePipeline,
+                            isChromeVisible: isChromeVisible,
+                            zoomEnabled: settings.zoomEnabled,
+                            onCurrentPageChange: onCurrentPageChange,
+                            onTap: onTap
+                        )
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
                 }
             }
         } else {

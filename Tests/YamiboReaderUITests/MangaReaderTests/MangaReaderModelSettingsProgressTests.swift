@@ -309,7 +309,9 @@ final class MangaReaderModelSettingsProgressTests: XCTestCase {
         XCTAssertTrue(source.contains("switch settings.readingMode"))
         XCTAssertTrue(source.contains("MangaVerticalCollectionViewport("))
         XCTAssertTrue(source.contains("MangaPagedReaderViewport("))
-        XCTAssertTrue(source.contains("plan: MangaPagedReadingPlan("))
+        XCTAssertTrue(source.contains("let plan = MangaPagedReadingPlan("))
+        XCTAssertTrue(source.contains("if settings.pagedTurnStyle == .pageCurl"))
+        XCTAssertTrue(source.contains("MangaPagedPageCurlReaderViewport("))
         XCTAssertTrue(source.contains("isChromeVisible: isChromeVisible"))
         XCTAssertTrue(source.contains("zoomEnabled: settings.zoomEnabled"))
     }
