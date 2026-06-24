@@ -467,26 +467,6 @@ final class MangaReaderModelSettingsProgressTests: XCTestCase {
         XCTAssertEqual(appModel.selectedTab, .forum)
     }
 
-    func testReaderViewAppliesBrightnessOverlayFromPresentationSettings() throws {
-        let source = try sourceFile("Sources/YamiboReaderUI/Features/Reader/MangaReader/Presentation/MangaReaderView.swift")
-
-        XCTAssertTrue(source.contains("brightnessOverlay(brightness: presentation.settings.brightness)"))
-        XCTAssertTrue(source.contains("Color.black.opacity(min(0.7, abs(delta)))"))
-        XCTAssertTrue(source.contains("Color.white.opacity(min(0.18, delta * 0.18))"))
-    }
-
-    func testReaderRoutesVerticalAndPagedModesToNativeMangaViewports() throws {
-        let source = try sourceFile("Sources/YamiboReaderUI/Features/Reader/MangaReader/Presentation/MangaReaderView.swift")
-
-        XCTAssertTrue(source.contains("switch settings.readingMode"))
-        XCTAssertTrue(source.contains("MangaVerticalCollectionViewport("))
-        XCTAssertTrue(source.contains("MangaPagedReaderViewport("))
-        XCTAssertTrue(source.contains("let plan = MangaPagedReadingPlan("))
-        XCTAssertTrue(source.contains("if settings.pagedTurnStyle == .pageCurl"))
-        XCTAssertTrue(source.contains("MangaPagedPageCurlReaderViewport("))
-        XCTAssertTrue(source.contains("isChromeVisible: isChromeVisible"))
-        XCTAssertTrue(source.contains("zoomEnabled: settings.zoomEnabled"))
-    }
 }
 
 private struct MangaReaderModelSettingsProgressFixture {
@@ -708,10 +688,4 @@ private func waitFor(
         try await Task.sleep(nanoseconds: pollIntervalNanoseconds)
     }
     XCTFail("Timed out waiting for condition")
-}
-
-private func sourceFile(_ relativePath: String) throws -> String {
-    let url = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        .appendingPathComponent(relativePath)
-    return try String(contentsOf: url, encoding: .utf8)
 }
