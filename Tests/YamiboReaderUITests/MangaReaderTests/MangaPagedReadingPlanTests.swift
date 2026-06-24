@@ -205,6 +205,28 @@ struct MangaPagedReadingPlanTests {
         #expect(spreadSequence.pageIndex(forSelectionIndex: 0) == nil)
         #expect(spreadSequence.globalIndex(forSelectionIndex: 0) == nil)
     }
+
+    @Test func pageCurlSpineConfigurationDoesNotDisableDoubleSidedWhileCurrentSpineIsMid() {
+        let rotatingToSinglePage = MangaPagedPageCurlSpineConfiguration.configuration(
+            usesTwoPageSpread: false,
+            currentSpineLocation: .mid
+        )
+        let stableSinglePage = MangaPagedPageCurlSpineConfiguration.configuration(
+            usesTwoPageSpread: false,
+            currentSpineLocation: .min
+        )
+        let rotatingToTwoPage = MangaPagedPageCurlSpineConfiguration.configuration(
+            usesTwoPageSpread: true,
+            currentSpineLocation: .min
+        )
+
+        #expect(rotatingToSinglePage.spineLocation == .min)
+        #expect(rotatingToSinglePage.doubleSidedUpdate == nil)
+        #expect(stableSinglePage.spineLocation == .min)
+        #expect(stableSinglePage.doubleSidedUpdate == false)
+        #expect(rotatingToTwoPage.spineLocation == .mid)
+        #expect(rotatingToTwoPage.doubleSidedUpdate == true)
+    }
 }
 
 private func makePagedPlanPages() throws -> [MangaReaderPageProjection] {

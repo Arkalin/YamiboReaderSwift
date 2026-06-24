@@ -377,3 +377,30 @@ private extension Array where Element == MangaPagedPageCurlLeaf {
         isEmpty ? fallback : self
     }
 }
+
+enum MangaPagedPageCurlSpineLocation: Equatable, Sendable {
+    case min
+    case mid
+}
+
+struct MangaPagedPageCurlSpineConfiguration: Equatable, Sendable {
+    let spineLocation: MangaPagedPageCurlSpineLocation
+    let doubleSidedUpdate: Bool?
+
+    static func configuration(
+        usesTwoPageSpread: Bool,
+        currentSpineLocation: MangaPagedPageCurlSpineLocation
+    ) -> MangaPagedPageCurlSpineConfiguration {
+        if usesTwoPageSpread {
+            return MangaPagedPageCurlSpineConfiguration(
+                spineLocation: .mid,
+                doubleSidedUpdate: true
+            )
+        }
+
+        return MangaPagedPageCurlSpineConfiguration(
+            spineLocation: .min,
+            doubleSidedUpdate: currentSpineLocation == .mid ? nil : false
+        )
+    }
+}
