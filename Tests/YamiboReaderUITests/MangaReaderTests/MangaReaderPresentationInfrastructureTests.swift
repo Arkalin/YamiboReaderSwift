@@ -144,15 +144,18 @@ struct MangaReaderPresentationInfrastructureTests {
 
     @Test func readerLoadedContentGatesTwoPageSpreadsToIPadLandscapeSetting() throws {
         let source = try sourceFile("Sources/YamiboReaderUI/Features/Reader/MangaReader/Presentation/MangaReaderView.swift")
+        let policySource = try sourceFile("Sources/YamiboReaderUI/Features/Reader/MangaReader/Presentation/MangaPagedLayoutPolicy.swift")
 
         #expect(source.contains("GeometryReader { proxy in"))
         #expect(source.contains("pageTurnDirection: settings.pageTurnDirection"))
-        #expect(source.contains("usesTwoPageSpread: usesTwoPageSpread(in: proxy.size)"))
-        #expect(source.contains("private func usesTwoPageSpread(in size: CGSize) -> Bool"))
-        #expect(source.contains("settings.readingMode == .paged"))
-        #expect(source.contains("settings.showsTwoPagesInLandscapeOnPad"))
-        #expect(source.contains("UIDevice.current.userInterfaceIdiom == .pad"))
-        #expect(source.contains("size.width > size.height"))
+        #expect(source.contains("let usesTwoPageSpread = MangaPagedLayoutPolicy.usesTwoPageSpread("))
+        #expect(source.contains("isPadDevice: UIDevice.current.userInterfaceIdiom == .pad"))
+        #expect(source.contains("availableSize: proxy.size"))
+        #expect(source.contains("usesTwoPageSpread: usesTwoPageSpread"))
+        #expect(policySource.contains("settings.readingMode == .paged"))
+        #expect(policySource.contains("settings.showsTwoPagesInLandscapeOnPad"))
+        #expect(policySource.contains("isPadDevice"))
+        #expect(policySource.contains("availableSize.width > availableSize.height"))
     }
 
     @Test func pagedViewportAppliesConfiguredPageEdgeFillStyle() throws {
@@ -178,12 +181,26 @@ struct MangaReaderPresentationInfrastructureTests {
         #expect(layoutSource.contains("case .fitHeight:\n            containerSize.height / imageSize.height"))
     }
 
+    @Test func pagedViewportUsesEffectivePageScaleModeForRenderedSurfaces() throws {
+        let source = try sourceFile("Sources/YamiboReaderUI/Features/Reader/MangaReader/Presentation/MangaPagedReaderViewport.swift")
+
+        #expect(source.contains("private var effectivePageScaleMode: MangaPageScaleMode"))
+        #expect(source.contains("MangaPagedLayoutPolicy.effectivePageScaleMode("))
+        #expect(source.contains("usesTwoPageSpread: plan.usesTwoPageSpread"))
+        #expect(source.contains("pageScaleMode: parent.effectivePageScaleMode"))
+        #expect(!source.contains("pageScaleMode: parent.settings.pageScaleMode"))
+    }
+
     @Test func settingsSheetShowsPageEdgeFillAfterPageScaleMode() throws {
         let source = try sourceFile("Sources/YamiboReaderUI/Features/Reader/MangaReader/Settings/MangaReaderSettingsSheet.swift")
         let scaleRange = try #require(source.range(of: "MangaReaderPageScaleModeMenuRow("))
         let edgeFillRange = try #require(source.range(of: "MangaReaderPageEdgeFillMenuRow("))
 
         #expect(scaleRange.lowerBound < edgeFillRange.lowerBound)
+        #expect(source.contains("let usesTwoPageSpread = MangaPagedLayoutPolicy.usesTwoPageSpread("))
+        #expect(source.contains("availableSize: proxy.size"))
+        #expect(source.contains("if !usesTwoPageSpread"))
+        #expect(source.contains("scaleMode: effectivePageScaleMode"))
         #expect(source.contains("L10n.string(\"manga.page_edge_fill\")"))
         #expect(source.contains("ForEach(MangaPageEdgeFillStyle.allCases, id: \\.self)"))
         #expect(source.contains("edgeFillStyle: settings.pageEdgeFillStyle"))

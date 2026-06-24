@@ -823,12 +823,17 @@ private struct MangaReaderLoadedContent: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             case .paged:
                 GeometryReader { proxy in
+                    let usesTwoPageSpread = MangaPagedLayoutPolicy.usesTwoPageSpread(
+                        settings: settings,
+                        isPadDevice: UIDevice.current.userInterfaceIdiom == .pad,
+                        availableSize: proxy.size
+                    )
                     MangaPagedReaderViewport(
                         plan: MangaPagedReadingPlan(
                             pages: loaded.pages,
                             currentPageIndex: loaded.currentPageIndex,
                             pageTurnDirection: settings.pageTurnDirection,
-                            usesTwoPageSpread: usesTwoPageSpread(in: proxy.size)
+                            usesTwoPageSpread: usesTwoPageSpread
                         ),
                         viewportPlacement: loaded.viewportPlacement,
                         settings: settings,
@@ -845,13 +850,6 @@ private struct MangaReaderLoadedContent: View {
             ProgressView(L10n.string("manga.loading"))
                 .tint(.white)
         }
-    }
-
-    private func usesTwoPageSpread(in size: CGSize) -> Bool {
-        settings.readingMode == .paged &&
-            settings.showsTwoPagesInLandscapeOnPad &&
-            UIDevice.current.userInterfaceIdiom == .pad &&
-            size.width > size.height
     }
 }
 

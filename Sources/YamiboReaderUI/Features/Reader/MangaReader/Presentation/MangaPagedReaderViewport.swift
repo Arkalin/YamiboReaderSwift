@@ -21,6 +21,13 @@ struct MangaPagedReaderViewport: UIViewRepresentable {
         settings.pageEdgeFillStyle.uiColor(for: colorScheme)
     }
 
+    private var effectivePageScaleMode: MangaPageScaleMode {
+        MangaPagedLayoutPolicy.effectivePageScaleMode(
+            settings: settings,
+            usesTwoPageSpread: plan.usesTwoPageSpread
+        )
+    }
+
     func makeCoordinator() -> Coordinator {
         Coordinator(parent: self)
     }
@@ -141,7 +148,7 @@ struct MangaPagedReaderViewport: UIViewRepresentable {
         func updateContentIfNeeded(in collectionView: UICollectionView) {
             let nextIdentity = MangaPagedReaderContentIdentity(
                 spreadIDs: parent.plan.spreads.map(\.id),
-                pageScaleMode: parent.settings.pageScaleMode,
+                pageScaleMode: parent.effectivePageScaleMode,
                 pagedTurnStyle: parent.settings.pagedTurnStyle,
                 pageTurnDirection: parent.settings.pageTurnDirection,
                 pageEdgeFillStyle: parent.settings.pageEdgeFillStyle,
@@ -479,7 +486,7 @@ struct MangaPagedReaderViewport: UIViewRepresentable {
                     refreshInitialHorizontalAlignment: refreshInitialHorizontalAlignment
                 ),
                 imagePipeline: parent.imagePipeline,
-                pageScaleMode: parent.settings.pageScaleMode,
+                pageScaleMode: parent.effectivePageScaleMode,
                 pageEdgeFillStyle: parent.settings.pageEdgeFillStyle,
                 isChromeVisible: parent.isChromeVisible,
                 zoomEnabled: parent.zoomEnabled,
@@ -516,7 +523,7 @@ struct MangaPagedReaderViewport: UIViewRepresentable {
 
             let alignment = MangaPagedImageSurfaceInitialHorizontalAlignment.enteringPage(
                 pageTurnDirection: parent.settings.pageTurnDirection,
-                pageScaleMode: parent.settings.pageScaleMode,
+                pageScaleMode: parent.effectivePageScaleMode,
                 currentPageIndex: parent.plan.currentPageIndex,
                 targetPageIndex: pageIndex
             )
