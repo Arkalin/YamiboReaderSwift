@@ -295,7 +295,14 @@ private func makeAdjacentPrefetchFixture(
         directoryName: directory.cleanBookName
     )
     return AdjacentPrefetchFixture(
-        model: MangaReaderModel(context: context, appContext: appContext, dependencies: dependencies),
+        model: MangaReaderModel(
+            context: context,
+            appContext: appContext,
+            dependencies: dependencies,
+            onReaderResumeRouteChange: { route in
+                try? await resumeRouteStore.saveReadingPosition(route)
+            }
+        ),
         resumeRouteStore: resumeRouteStore
     )
 }

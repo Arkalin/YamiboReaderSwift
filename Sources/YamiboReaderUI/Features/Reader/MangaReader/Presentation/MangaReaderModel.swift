@@ -94,6 +94,7 @@ public final class MangaReaderModel: ObservableObject {
 
     private let appContext: YamiboAppContext
     private let dependencies: MangaReaderModelDependencies
+    private let onReaderResumeRouteChange: ReaderResumeRouteChangeHandler
     private var readerRepository: ReaderRepository?
     private var workflow: MangaReaderWorkflow?
     private var hasPrepared = false
@@ -139,10 +140,15 @@ public final class MangaReaderModel: ObservableObject {
         adjacentPrefetchTask?.cancel()
     }
 
-    public init(context: MangaLaunchContext, appContext: YamiboAppContext) {
+    public init(
+        context: MangaLaunchContext,
+        appContext: YamiboAppContext,
+        onReaderResumeRouteChange: @escaping ReaderResumeRouteChangeHandler = { _ in }
+    ) {
         self.context = context
         self.appContext = appContext
         self.dependencies = MangaReaderModelDependencies(appContext: appContext)
+        self.onReaderResumeRouteChange = onReaderResumeRouteChange
         #if os(iOS)
         self.imagePipeline = nil
         #endif
@@ -154,11 +160,13 @@ public final class MangaReaderModel: ObservableObject {
     init(
         context: MangaLaunchContext,
         appContext: YamiboAppContext,
-        dependencies: MangaReaderModelDependencies
+        dependencies: MangaReaderModelDependencies,
+        onReaderResumeRouteChange: @escaping ReaderResumeRouteChangeHandler = { _ in }
     ) {
         self.context = context
         self.appContext = appContext
         self.dependencies = dependencies
+        self.onReaderResumeRouteChange = onReaderResumeRouteChange
         #if os(iOS)
         self.imagePipeline = nil
         #endif
@@ -592,7 +600,7 @@ public final class MangaReaderModel: ObservableObject {
             return .native(context)
         }
 
-        try? await appContext.readerResumeRouteStore.saveReadingPosition(.manga(snapshot.resumeRoute))
+        await onReaderResumeRouteChange(.manga(snapshot.resumeRoute))
         try? await dependencies.progressSync.flush(.manga(snapshot.progress))
         lastQueuedProgressSnapshot = snapshot
         return snapshot.resumeRoute
@@ -667,8 +675,8 @@ public final class MangaReaderModel: ObservableObject {
         guard let snapshot else { return }
         lastQueuedProgressSnapshot = snapshot
         let progressSync = dependencies.progressSync
-        Task { [appContext, snapshot, progressSync] in
-            try? await appContext.readerResumeRouteStore.saveReadingPosition(.manga(snapshot.resumeRoute))
+        Task { [onReaderResumeRouteChange, snapshot, progressSync] in
+            await onReaderResumeRouteChange(.manga(snapshot.resumeRoute))
             await progressSync.queue(.manga(snapshot.progress))
         }
     }

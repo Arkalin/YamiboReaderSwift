@@ -38,7 +38,10 @@ public struct ReaderContainerView: View {
         _model = StateObject(wrappedValue: ReaderContainerModel(
             context: context,
             appContext: appModel.appContext,
-            initialSettings: initialSettings
+            initialSettings: initialSettings,
+            onReaderResumeRouteChange: { route in
+                appModel.updateReaderResumeRoute(route)
+            }
         ))
         _chromeState = State(initialValue: ReaderChromeState(
             showsChrome: initialSettings?.readingMode != .vertical

@@ -50,6 +50,7 @@ public final class ReaderContainerModel: ObservableObject {
     private var usesPadPresentation = false
     private var chapterDirectoryAnchors: [Int: NovelChapterAnchor] = [:]
     private let runtimeAdapter: (any NovelTextLayoutRuntimeAdapter)?
+    private let onReaderResumeRouteChange: ReaderResumeRouteChangeHandler
     package var runtimeUpdatePreparation: NovelReadingWorkflowRuntimeUpdatePreparation = { $0 }
     package var readerPageDocumentNavigationOverlayPreparation: (@MainActor () async -> Void) = {
         await Task.yield()
@@ -83,10 +84,12 @@ public final class ReaderContainerModel: ObservableObject {
     public init(
         context: ReaderLaunchContext,
         appContext: YamiboAppContext,
-        initialSettings: ReaderAppearanceSettings? = nil
+        initialSettings: ReaderAppearanceSettings? = nil,
+        onReaderResumeRouteChange: @escaping ReaderResumeRouteChangeHandler = { _ in }
     ) {
         self.context = context
         self.appContext = appContext
+        self.onReaderResumeRouteChange = onReaderResumeRouteChange
         if let initialSettings {
             bootstrapSettings = initialSettings
         }
@@ -104,10 +107,12 @@ public final class ReaderContainerModel: ObservableObject {
         context: ReaderLaunchContext,
         appContext: YamiboAppContext,
         initialSettings: ReaderAppearanceSettings? = nil,
-        runtimeAdapter: any NovelTextLayoutRuntimeAdapter
+        runtimeAdapter: any NovelTextLayoutRuntimeAdapter,
+        onReaderResumeRouteChange: @escaping ReaderResumeRouteChangeHandler = { _ in }
     ) {
         self.context = context
         self.appContext = appContext
+        self.onReaderResumeRouteChange = onReaderResumeRouteChange
         if let initialSettings {
             bootstrapSettings = initialSettings
         }
@@ -1182,7 +1187,7 @@ public final class ReaderContainerModel: ObservableObject {
     }
 
     private func persistReaderResumeRoute(_ resumeContext: ReaderLaunchContext) async {
-        try? await appContext.readerResumeRouteStore.saveReadingPosition(.novel(resumeContext))
+        await onReaderResumeRouteChange(.novel(resumeContext))
     }
 
     private func resumeContext(for snapshot: NovelReadingPosition) -> ReaderLaunchContext {

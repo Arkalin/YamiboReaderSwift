@@ -1431,7 +1431,10 @@ final class ReaderContainerModelTests: XCTestCase {
                     source: .forum
                 ),
                 appContext: appContext,
-                pagination: readerModelSegmentPagination
+                pagination: readerModelSegmentPagination,
+                onReaderResumeRouteChange: { route in
+                    try? await readerResumeRouteStore.saveReadingPosition(route)
+                }
             )
         }
 
@@ -1472,15 +1475,23 @@ final class ReaderContainerModelTests: XCTestCase {
             favoriteStore: favoriteStore,
             readerCacheStore: cacheStore
         )
+        let appModel = await MainActor.run {
+            YamiboAppModel(appContext: appContext)
+        }
         let model = await MainActor.run {
-            ReaderContainerModel(
-                context: ReaderLaunchContext(
-                    threadURL: document.threadURL,
-                    threadTitle: "测试线程",
-                    source: .forum
-                ),
+            let context = ReaderLaunchContext(
+                threadURL: document.threadURL,
+                threadTitle: "测试线程",
+                source: .forum
+            )
+            appModel.presentReader(context)
+            return ReaderContainerModel(
+                context: context,
                 appContext: appContext,
-                pagination: readerModelSegmentPagination
+                pagination: readerModelSegmentPagination,
+                onReaderResumeRouteChange: { route in
+                    appModel.updateReaderResumeRoute(route)
+                }
             )
         }
 
@@ -1493,7 +1504,9 @@ final class ReaderContainerModelTests: XCTestCase {
             await readerResumeRouteStore.load() != nil
         }
 
-        readerResumeRouteStore.clearSync()
+        await MainActor.run {
+            appModel.dismissReader()
+        }
         await model.saveProgress()
         try await Task.sleep(nanoseconds: 100_000_000)
 
@@ -3231,13 +3244,15 @@ private extension ReaderContainerModel {
         context: ReaderLaunchContext,
         appContext: YamiboAppContext,
         initialSettings: ReaderAppearanceSettings? = nil,
-        pagination: @escaping NovelTextLayoutFixture = readerModelSegmentPagination
+        pagination: @escaping NovelTextLayoutFixture = readerModelSegmentPagination,
+        onReaderResumeRouteChange: @escaping ReaderResumeRouteChangeHandler = { _ in }
     ) {
         self.init(
             context: context,
             appContext: appContext,
             initialSettings: initialSettings,
-            runtimeAdapter: ReaderModelFixtureRuntimeAdapter(fixture: pagination)
+            runtimeAdapter: ReaderModelFixtureRuntimeAdapter(fixture: pagination),
+            onReaderResumeRouteChange: onReaderResumeRouteChange
         )
     }
 }
