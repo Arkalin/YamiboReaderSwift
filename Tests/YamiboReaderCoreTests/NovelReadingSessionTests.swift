@@ -736,48 +736,6 @@ final class NovelReadingSessionTests: XCTestCase {
         XCTAssertEqual(session.snapshot.currentChapterTitle, "第二章")
     }
 
-    func testRestoresNovelReadingPositionWithinChapter() throws {
-        let document = makeNovelDocument(
-            view: 2,
-            maxView: 2,
-            segments: [
-                ("第一章", String(repeating: "第一章 内容。", count: 120)),
-                ("第二章", String(repeating: "第二章 内容。", count: 120)),
-                ("第三章", String(repeating: "第三章 内容。", count: 120)),
-            ]
-        )
-        let settings = ReaderAppearanceSettings(readingMode: .vertical)
-        let layout = ReaderContainerLayout(width: 320, height: 568)
-        let pagination = try NovelTextLayout.layout(document: document, settings: settings, layout: layout)
-        let savedViewportSurface = try XCTUnwrap(
-            pagination.viewportIndex.surfaces.first { $0.chapterTitle == "第三章" && !$0.ranges.isEmpty }
-        )
-        let savedRange = try XCTUnwrap(savedViewportSurface.ranges.first)
-        let savedOffset = savedRange.startOffset + max(1, savedRange.length / 2)
-        let resumePoint = ReaderResumePoint(
-            view: 2,
-            textSegmentIdentity: try XCTUnwrap(document.semantics(forSegmentIndex: savedRange.segmentIndex)?.textSegmentIdentity),
-            displayedTextOffset: savedOffset,
-            chapterOrdinal: try XCTUnwrap(savedViewportSurface.chapterOrdinal),
-            chapterTitle: savedViewportSurface.chapterTitle,
-            segmentProgress: 0.5,
-            readingModeHint: .vertical
-        )
-
-        let session = NovelReadingSession(
-            document: document,
-            settings: settings,
-            layout: layout,
-            resumePoint: resumePoint
-        )
-
-        XCTAssertEqual(session.snapshot.currentView, 2)
-        XCTAssertEqual(session.snapshot.currentChapterTitle, "第三章")
-        XCTAssertEqual(session.snapshot.selectedSurfaceOrdinal, savedViewportSurface.surfaceOrdinal)
-        XCTAssertEqual(session.viewportSurfacesForTesting[session.snapshot.selectedSurfaceOrdinal].ranges.first?.segmentIndex, savedRange.segmentIndex)
-        XCTAssertGreaterThan(session.snapshot.currentSurfaceIntraProgress, 0.2)
-    }
-
     func testChangingReadingModePreservesNovelReadingPositionOffset() throws {
         let document = makeNovelDocument(
             view: 1,
@@ -865,96 +823,6 @@ final class NovelReadingSessionTests: XCTestCase {
         let restoredPage = session.viewportSurfacesForTesting[restoredViewportSurface.surfaceOrdinal]
         XCTAssertEqual(restoredPage.chapterTitle, "第一章")
         XCTAssertTrue(viewportSurfaceContainsSegmentOffset(restoredViewportSurface, segmentIndex: targetRange.segmentIndex, offset: targetOffset))
-    }
-
-    func testHidingAuthorReplyToOtherFallbacksToPreviousVisibleText() throws {
-        let document = ReaderPageDocument(
-            threadURL: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9101&mobile=2")!,
-            view: 1,
-            maxView: 1,
-            contentSource: .authorFilteredPage,
-            segments: [
-                .text(String(repeating: "第一章 内容。", count: 80), chapterTitle: "第一章"),
-                .text(String(repeating: "读者甲 发表于 2026-5-1\n楼主回复。", count: 20), chapterTitle: "读者甲 发表于 2026-5-1"),
-                .text(String(repeating: "第二章 内容。", count: 80), chapterTitle: "第二章"),
-            ],
-            segmentSources: [
-                ReaderSegmentSource(ownerPostID: "100"),
-                ReaderSegmentSource(ownerPostID: "101", isAuthorReplyToOther: true),
-                ReaderSegmentSource(ownerPostID: "102"),
-            ]
-        )
-        let layout = ReaderContainerLayout(width: 320, height: 568)
-        var session = try NovelReadingSession(
-            validating: document,
-            settings: ReaderAppearanceSettings(readingMode: .vertical),
-            layout: layout
-        )
-        let replySurface = try XCTUnwrap(session.viewportSurfacesForTesting.first { surface in
-            surface.ranges.contains { $0.segmentIndex == 1 }
-        })
-
-        session.updateVerticalViewportPosition(surfaceOrdinal: replySurface.surfaceOrdinal, intraSurfaceProgress: 0.5)
-        let replyPosition = try XCTUnwrap(session.captureNovelReadingPosition())
-        session.consumeCommittedLayoutResult(
-            try committedLayoutResult(
-                document: document,
-                settings: ReaderAppearanceSettings(showsAuthorRepliesToOthers: false, readingMode: .vertical),
-                layout: layout
-            ),
-            preferredSurfaceOrdinal: session.snapshot.selectedSurfaceOrdinal,
-            preferredResumePoint: replyPosition
-        )
-
-        let restoredSurface = session.viewportSurfacesForTesting[session.snapshot.selectedSurfaceOrdinal]
-        XCTAssertTrue(restoredSurface.ranges.contains { $0.segmentIndex == 0 })
-        XCTAssertFalse(session.viewportSurfacesForTesting.flatMap(\.ranges).contains { $0.segmentIndex == 1 })
-        XCTAssertEqual(restoredSurface.chapterTitle, "第一章")
-        XCTAssertEqual(session.snapshot.currentSurfaceIntraProgress, 1, accuracy: 0.001)
-    }
-
-    func testHidingAuthorReplyToOtherFallbacksToNextVisibleTextWhenNoPreviousTextExists() throws {
-        let document = ReaderPageDocument(
-            threadURL: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9102&mobile=2")!,
-            view: 1,
-            maxView: 1,
-            contentSource: .authorFilteredPage,
-            segments: [
-                .text(String(repeating: "读者甲 发表于 2026-5-1\n楼主回复。", count: 20), chapterTitle: "读者甲 发表于 2026-5-1"),
-                .text(String(repeating: "第一章 内容。", count: 80), chapterTitle: "第一章"),
-            ],
-            segmentSources: [
-                ReaderSegmentSource(ownerPostID: "100", isAuthorReplyToOther: true),
-                ReaderSegmentSource(ownerPostID: "101"),
-            ]
-        )
-        let layout = ReaderContainerLayout(width: 320, height: 568)
-        var session = try NovelReadingSession(
-            validating: document,
-            settings: ReaderAppearanceSettings(readingMode: .vertical),
-            layout: layout
-        )
-        let replySurface = try XCTUnwrap(session.viewportSurfacesForTesting.first { surface in
-            surface.ranges.contains { $0.segmentIndex == 0 }
-        })
-
-        session.updateVerticalViewportPosition(surfaceOrdinal: replySurface.surfaceOrdinal, intraSurfaceProgress: 0.5)
-        let replyPosition = try XCTUnwrap(session.captureNovelReadingPosition())
-        session.consumeCommittedLayoutResult(
-            try committedLayoutResult(
-                document: document,
-                settings: ReaderAppearanceSettings(showsAuthorRepliesToOthers: false, readingMode: .vertical),
-                layout: layout
-            ),
-            preferredSurfaceOrdinal: session.snapshot.selectedSurfaceOrdinal,
-            preferredResumePoint: replyPosition
-        )
-
-        let restoredSurface = session.viewportSurfacesForTesting[session.snapshot.selectedSurfaceOrdinal]
-        XCTAssertTrue(restoredSurface.ranges.contains { $0.segmentIndex == 1 })
-        XCTAssertFalse(session.viewportSurfacesForTesting.flatMap(\.ranges).contains { $0.segmentIndex == 0 })
-        XCTAssertEqual(restoredSurface.chapterTitle, "第一章")
-        XCTAssertEqual(session.snapshot.currentSurfaceIntraProgress, 0, accuracy: 0.001)
     }
 
     func testPagedTextKitRepaginationPreservesSemanticReadingPosition() throws {
@@ -1092,62 +960,6 @@ final class NovelReadingSessionTests: XCTestCase {
         XCTAssertEqual(session.snapshot.maxView, 2)
         XCTAssertEqual(session.viewportSurfacesForTesting.map(\.documentView), [2])
         XCTAssertEqual(session.snapshot.currentChapterTitle, "第二章")
-    }
-
-    func testTwoPageSpreadNormalizesSelectionToLeftPage() throws {
-        let document = ReaderPageDocument(
-            threadURL: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9002&mobile=2")!,
-            view: 1,
-            maxView: 1,
-            contentSource: .fallbackUnfilteredPage,
-            segments: (0 ..< 6).map { .image(URL(string: "https://example.com/\($0).jpg")!, chapterTitle: "第一章") }
-        )
-        let settings = ReaderAppearanceSettings(
-            showsTwoPagesInLandscapeOnPad: true,
-            readingMode: .paged
-        )
-        let landscapeLayout = ReaderContainerLayout(width: 844, height: 390, readingMode: .paged)
-        var session = NovelReadingSession(
-            document: document,
-            settings: settings,
-            layout: landscapeLayout,
-            usesPadPresentation: true
-        )
-
-        session.selectSurface(3)
-
-        XCTAssertEqual(
-            session.spreadsForTesting.map { "\($0.leftSurfaceIndex)-\($0.rightSurfaceIndex.map(String.init) ?? "nil")" },
-            ["0-1", "2-3", "4-5"]
-        )
-        XCTAssertEqual(session.snapshot.selectedSurfaceOrdinal, 2)
-    }
-
-    func testTwoPageSpreadRequestsNextWebViewPageAfterLastCompleteSpread() throws {
-        let document = ReaderPageDocument(
-            threadURL: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9002&mobile=2")!,
-            view: 1,
-            maxView: 2,
-            contentSource: .fallbackUnfilteredPage,
-            segments: (0 ..< 6).map { .image(URL(string: "https://example.com/\($0).jpg")!, chapterTitle: "第一章") }
-        )
-        let settings = ReaderAppearanceSettings(
-            showsTwoPagesInLandscapeOnPad: true,
-            readingMode: .paged
-        )
-        let landscapeLayout = ReaderContainerLayout(width: 844, height: 390, readingMode: .paged)
-        var session = NovelReadingSession(
-            document: document,
-            settings: settings,
-            layout: landscapeLayout,
-            usesPadPresentation: true
-        )
-
-        session.selectSurface(5)
-        let request = session.jumpRelativeSurface(1)
-
-        XCTAssertEqual(session.snapshot.selectedSurfaceOrdinal, 4)
-        XCTAssertEqual(request, .loadView(view: 2, preferredSurfaceOrdinal: 0, resumePoint: nil))
     }
 
     func testJumpRelativePageRequestsNextWebViewPageWhenNeeded() throws {

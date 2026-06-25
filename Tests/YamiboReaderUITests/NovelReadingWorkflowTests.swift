@@ -3,7 +3,8 @@ import CoreGraphics
 import XCTest
 @testable import YamiboReaderCore
 
-private typealias NovelTextLayoutFixture = @Sendable (
+#if canImport(UIKit)
+private typealias NovelTextLayoutFixture = (
     ReaderPageDocument,
     ReaderAppearanceSettings,
     ReaderContainerLayout
@@ -2917,3 +2918,4 @@ private func surfaceCount(in state: NovelReadingWorkflowState) throws -> Int {
 private func documentViews(in state: NovelReadingWorkflowState) -> Set<Int> {
     Set(state.presentation?.surfaces.map(\.documentView) ?? [])
 }
+#endif

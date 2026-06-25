@@ -31,7 +31,6 @@ let package = Package(
             name: "YamiboReaderCoreTests",
             dependencies: [
                 "YamiboReaderCore",
-                "YamiboReaderUI",
             ]
         ),
         .testTarget(

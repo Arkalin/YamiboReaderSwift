@@ -1,0 +1,25 @@
+{
+  "configurations" : [
+    {
+      "id" : "A7A88C2B-5F5D-4687-8E5C-7E7DCCB4F29A",
+      "name" : "YamiboReaderUITests",
+      "options" : {
+
+      }
+    }
+  ],
+  "defaultOptions" : {
+    "testTimeoutsEnabled" : true
+  },
+  "testTargets" : [
+    {
+      "parallelizable" : false,
+      "target" : {
+        "containerPath" : "container:YamiboReader.xcodeproj",
+        "identifier" : "91A000000000000000000010",
+        "name" : "YamiboReaderUITests"
+      }
+    }
+  ],
+  "version" : 1
+}
