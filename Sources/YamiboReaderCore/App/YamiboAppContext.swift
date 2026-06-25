@@ -98,6 +98,10 @@ public final class YamiboAppContext: YamiboRepositoryProviding, Sendable {
         )
     }
 
+    public func makeProfileAvatarLoader() -> any YamiboProfileAvatarLoading {
+        YamiboProfileAvatarLoader(session: session, sessionStore: sessionStore)
+    }
+
     public func makeThreadOpenResolver() async -> ThreadOpenResolver {
         let sessionState = await sessionStore.load()
         let client = YamiboClient(

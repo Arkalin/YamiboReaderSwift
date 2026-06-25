@@ -16,6 +16,10 @@ _Avoid_: app account, local user, session
 The Yamibo forum profile data for one **Yamibo Account**, including public identity, avatar, user group, and forum credit fields.
 _Avoid_: personal homepage, profile web page, account card
 
+**Yamibo Profile Avatar**:
+The profile image associated with a **Yamibo Profile** for the current **Yamibo Account**.
+_Avoid_: generic authenticated image, account icon, user picture
+
 **Yamibo User Group**:
 The Yamibo forum permission tier assigned to a **Yamibo Account** from its forum credit totals.
 _Avoid_: rank, role, level
@@ -46,6 +50,7 @@ _Avoid_: reset application, clear data, delete account
 - Archived **Favorite Library** metadata is matched by canonical thread URL, not Yamibo remote favorite ID, because a remote favorite ID can change when the same thread is removed and re-added.
 - When archived **Favorite Library** metadata restores a favorite whose collection no longer exists, the favorite is restored at the root while preserving display name, hidden state, and reading positions.
 - **Mine Home** presents the current **Yamibo Account** through its **Yamibo Profile**.
+- A **Yamibo Profile Avatar** belongs to a **Yamibo Profile**, not to a generic app image-loading model.
 - A **Yamibo Profile** identifies the account's current **Yamibo User Group** and forum credit totals.
 - **Forum Credit Progress** uses the account's total forum credits and the next **Yamibo User Group** threshold.
 - **Mine Home** may show a cached **Yamibo Profile** while refreshing it, and a failed refresh does not end the **Yamibo Account** authentication state.
