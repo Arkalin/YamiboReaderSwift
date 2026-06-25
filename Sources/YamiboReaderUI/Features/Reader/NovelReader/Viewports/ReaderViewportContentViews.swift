@@ -32,7 +32,8 @@ struct ReaderPresentationSpreadContent: View {
     let surfaces: [NovelReaderSurface]
     let settings: ReaderAppearanceSettings
     let refererURL: URL
-    let sessionState: SessionState
+    let imageDataLoader: any NovelInlineImageDataLoading
+    let imageCacheNamespace: NovelInlineImageCacheNamespace
     let topInset: CGFloat
     let bottomInset: CGFloat
     let displayReferenceProvider: @MainActor (NovelReaderSurfaceIdentity) -> NovelTextViewportDisplayReference?
@@ -60,7 +61,8 @@ struct ReaderPresentationSpreadContent: View {
                     fallbackSurfaceIndex: surfaceIndex,
                     settings: settings,
                     refererURL: refererURL,
-                    sessionState: sessionState,
+                    imageDataLoader: imageDataLoader,
+                    imageCacheNamespace: imageCacheNamespace,
                     onImageTap: onImageTap
                 )
                 .padding(.horizontal, settings.horizontalPadding)
@@ -83,7 +85,8 @@ struct ReaderViewportSurfaceContent: View {
     let fallbackSurfaceIndex: Int?
     let settings: ReaderAppearanceSettings
     let refererURL: URL
-    let sessionState: SessionState
+    let imageDataLoader: any NovelInlineImageDataLoading
+    let imageCacheNamespace: NovelInlineImageCacheNamespace
     let onImageTap: (URL, String?) -> Void
 
     init(
@@ -93,7 +96,8 @@ struct ReaderViewportSurfaceContent: View {
         fallbackSurfaceIndex: Int?,
         settings: ReaderAppearanceSettings,
         refererURL: URL,
-        sessionState: SessionState,
+        imageDataLoader: any NovelInlineImageDataLoading,
+        imageCacheNamespace: NovelInlineImageCacheNamespace,
         onImageTap: @escaping (URL, String?) -> Void = { _, _ in }
     ) {
         self.surface = surface
@@ -102,7 +106,8 @@ struct ReaderViewportSurfaceContent: View {
         self.fallbackSurfaceIndex = fallbackSurfaceIndex
         self.settings = settings
         self.refererURL = refererURL
-        self.sessionState = sessionState
+        self.imageDataLoader = imageDataLoader
+        self.imageCacheNamespace = imageCacheNamespace
         self.onImageTap = onImageTap
     }
 
@@ -126,7 +131,8 @@ struct ReaderViewportSurfaceContent: View {
                     block: block,
                     displayReference: displayReference,
                     refererURL: refererURL,
-                    sessionState: sessionState,
+                    imageDataLoader: imageDataLoader,
+                    imageCacheNamespace: imageCacheNamespace,
                     title: surface?.chapterTitle,
                     onImageTap: onImageTap
                 )
@@ -144,7 +150,8 @@ struct ReaderViewportSurfaceContent: View {
                     block: block,
                     displayReference: displayReference,
                     refererURL: refererURL,
-                    sessionState: sessionState,
+                    imageDataLoader: imageDataLoader,
+                    imageCacheNamespace: imageCacheNamespace,
                     title: surface?.chapterTitle,
                     onImageTap: onImageTap
                 )
@@ -195,7 +202,8 @@ private struct ReaderViewportBlockView: View {
     let block: ReaderViewportDisplayBlock
     let displayReference: NovelTextViewportDisplayReference?
     let refererURL: URL
-    let sessionState: SessionState
+    let imageDataLoader: any NovelInlineImageDataLoading
+    let imageCacheNamespace: NovelInlineImageCacheNamespace
     let title: String?
     let onImageTap: (URL, String?) -> Void
 
@@ -213,7 +221,8 @@ private struct ReaderViewportBlockView: View {
             ReaderInlineViewportImage(
                 url: url,
                 refererURL: refererURL,
-                sessionState: sessionState,
+                imageDataLoader: imageDataLoader,
+                imageCacheNamespace: imageCacheNamespace,
                 title: title,
                 onTap: onImageTap
             )
@@ -221,7 +230,8 @@ private struct ReaderViewportBlockView: View {
             AuthenticatedReaderImage(
                 url: url,
                 refererURL: refererURL,
-                sessionState: sessionState
+                imageDataLoader: imageDataLoader,
+                imageCacheNamespace: imageCacheNamespace
             )
 #endif
         case let .footer(text):
@@ -243,19 +253,26 @@ final class ReaderImageLoader: ObservableObject {
 
     private let url: URL
     private let refererURL: URL
-    private let sessionState: SessionState
+    private let imageDataLoader: any NovelInlineImageDataLoading
+    private let imageCacheNamespace: NovelInlineImageCacheNamespace
 
-    init(url: URL, refererURL: URL, sessionState: SessionState) {
+    init(
+        url: URL,
+        refererURL: URL,
+        imageDataLoader: any NovelInlineImageDataLoading,
+        imageCacheNamespace: NovelInlineImageCacheNamespace
+    ) {
         self.url = url
         self.refererURL = refererURL
-        self.sessionState = sessionState
+        self.imageDataLoader = imageDataLoader
+        self.imageCacheNamespace = imageCacheNamespace
     }
 
     func loadIfNeeded() async {
         let requestIdentity = ReaderInlineImageRequestIdentity(
             url: url,
             refererURL: refererURL,
-            sessionState: sessionState
+            cacheNamespace: imageCacheNamespace
         )
         if let cachedImage = ReaderInlineImageMemoryCache.image(for: requestIdentity) {
             image = cachedImage
@@ -268,9 +285,8 @@ final class ReaderImageLoader: ObservableObject {
         defer { isLoading = false }
 
         do {
-            let (data, response) = try await URLSession.shared.data(for: requestIdentity.urlRequest)
-            guard let http = response as? HTTPURLResponse, 200 ..< 300 ~= http.statusCode,
-                  let image = UIImage(data: data) else {
+            let data = try await imageDataLoader.imageData(for: url, refererURL: refererURL)
+            guard let image = UIImage(data: data) else {
                 didFail = true
                 return
             }
@@ -290,12 +306,18 @@ final class ReaderImageLoader: ObservableObject {
 private struct AuthenticatedReaderImage: View {
     @StateObject private var loader: ReaderImageLoader
 
-    init(url: URL, refererURL: URL, sessionState: SessionState) {
+    init(
+        url: URL,
+        refererURL: URL,
+        imageDataLoader: any NovelInlineImageDataLoading,
+        imageCacheNamespace: NovelInlineImageCacheNamespace
+    ) {
         _loader = StateObject(
             wrappedValue: ReaderImageLoader(
                 url: url,
                 refererURL: refererURL,
-                sessionState: sessionState
+                imageDataLoader: imageDataLoader,
+                imageCacheNamespace: imageCacheNamespace
             )
         )
     }
@@ -337,32 +359,23 @@ private struct AuthenticatedReaderImage: View {
 struct ReaderInlineImageRequestIdentity: Hashable {
     let url: URL
     let refererURL: URL
-    let userAgent: String
-    let cookie: String
+    let cacheNamespace: NovelInlineImageCacheNamespace
 
-    init(url: URL, refererURL: URL, sessionState: SessionState) {
+    init(
+        url: URL,
+        refererURL: URL,
+        cacheNamespace: NovelInlineImageCacheNamespace
+    ) {
         self.url = url
         self.refererURL = refererURL
-        userAgent = sessionState.userAgent
-        cookie = sessionState.cookie
-    }
-
-    var urlRequest: URLRequest {
-        var request = URLRequest(url: url)
-        request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
-        if !cookie.isEmpty {
-            request.setValue(cookie, forHTTPHeaderField: "Cookie")
-        }
-        request.setValue(refererURL.absoluteString, forHTTPHeaderField: "Referer")
-        return request
+        self.cacheNamespace = cacheNamespace
     }
 
     var cacheKey: String {
         [
             url.absoluteString,
             refererURL.absoluteString,
-            userAgent,
-            cookie
+            cacheNamespace.value
         ].joined(separator: "\u{1F}")
     }
 }

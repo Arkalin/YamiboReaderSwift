@@ -17,7 +17,8 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
     let surfaces: [NovelReaderSurface]
     let settings: ReaderAppearanceSettings
     let refererURL: URL
-    let sessionState: SessionState
+    let imageDataLoader: any NovelInlineImageDataLoading
+    let imageCacheNamespace: NovelInlineImageCacheNamespace
     let topInset: CGFloat
     let bottomInset: CGFloat
     let scrollRequest: ReaderVerticalScrollRequest?
@@ -186,7 +187,8 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
                 textHeight: displaySurface.presentationHeight,
                 settings: parent.settings,
                 refererURL: parent.refererURL,
-                sessionState: parent.sessionState,
+                imageDataLoader: parent.imageDataLoader,
+                imageCacheNamespace: parent.imageCacheNamespace,
                 contentWidth: max(verticalItemWidth(in: collectionView) - parent.settings.horizontalPadding * 2, 1),
                 topPadding: displaySurface.surfaceIndex == 0 ? 16 : 0,
                 onImageTap: parent.onImageTap
@@ -621,7 +623,8 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
     private var currentPage: ReaderVerticalViewportDisplaySurface?
     private var currentSettings = ReaderAppearanceSettings()
     private var currentRefererURL: URL?
-    private var currentSessionState = SessionState()
+    private var currentImageDataLoader: (any NovelInlineImageDataLoading)?
+    private var currentImageCacheNamespace = NovelInlineImageCacheNamespace(value: "unavailable")
     private var currentContentWidth: CGFloat = 0
     private var currentTopPadding: CGFloat = 0
     private var currentDisplayReference: NovelTextViewportDisplayReference?
@@ -673,7 +676,8 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
 
     private func reconfigureForCurrentTraitCollection() {
         guard let currentPage,
-              let currentRefererURL else {
+              let currentRefererURL,
+              let currentImageDataLoader else {
             return
         }
         configure(
@@ -682,7 +686,8 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
             textHeight: currentTextHeight,
             settings: currentSettings,
             refererURL: currentRefererURL,
-            sessionState: currentSessionState,
+            imageDataLoader: currentImageDataLoader,
+            imageCacheNamespace: currentImageCacheNamespace,
             contentWidth: currentContentWidth,
             topPadding: currentTopPadding,
             onImageTap: currentOnImageTap
@@ -695,7 +700,8 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
         textHeight: CGFloat?,
         settings: ReaderAppearanceSettings,
         refererURL: URL,
-        sessionState: SessionState,
+        imageDataLoader: any NovelInlineImageDataLoading,
+        imageCacheNamespace: NovelInlineImageCacheNamespace,
         contentWidth: CGFloat,
         topPadding: CGFloat,
         onImageTap: @escaping (URL, String?) -> Void
@@ -705,7 +711,8 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
         currentTextHeight = textHeight
         currentSettings = settings
         currentRefererURL = refererURL
-        currentSessionState = sessionState
+        currentImageDataLoader = imageDataLoader
+        currentImageCacheNamespace = imageCacheNamespace
         currentContentWidth = contentWidth
         currentTopPadding = topPadding
         currentOnImageTap = onImageTap
@@ -719,7 +726,8 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
                 page: page,
                 contentWidth: contentWidth,
                 refererURL: refererURL,
-                sessionState: sessionState,
+                imageDataLoader: imageDataLoader,
+                imageCacheNamespace: imageCacheNamespace,
                 displayReference: displayReference,
                 textHeight: textHeight,
                 onImageTap: onImageTap
@@ -801,7 +809,8 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
         page: ReaderVerticalViewportDisplaySurface,
         contentWidth: CGFloat,
         refererURL: URL,
-        sessionState: SessionState,
+        imageDataLoader: any NovelInlineImageDataLoading,
+        imageCacheNamespace: NovelInlineImageCacheNamespace,
         displayReference: NovelTextViewportDisplayReference?,
         textHeight: CGFloat?,
         onImageTap: @escaping (URL, String?) -> Void
@@ -817,7 +826,8 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
             return makeImageBlockView(
                 url: url,
                 refererURL: refererURL,
-                sessionState: sessionState,
+                imageDataLoader: imageDataLoader,
+                imageCacheNamespace: imageCacheNamespace,
                 preferredHeight: textHeight,
                 title: page.chapterTitle,
                 onImageTap: onImageTap
@@ -844,14 +854,22 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
     private func makeImageBlockView(
         url: URL,
         refererURL: URL,
-        sessionState: SessionState,
+        imageDataLoader: any NovelInlineImageDataLoading,
+        imageCacheNamespace: NovelInlineImageCacheNamespace,
         preferredHeight: CGFloat?,
         title: String?,
         onImageTap: @escaping (URL, String?) -> Void
     ) -> BlockView {
         let height = max(preferredHeight ?? bounds.height, 1)
         let imageView = ReaderVerticalViewportImageView()
-        imageView.configure(url: url, refererURL: refererURL, sessionState: sessionState, title: title, onTap: onImageTap)
+        imageView.configure(
+            url: url,
+            refererURL: refererURL,
+            imageDataLoader: imageDataLoader,
+            imageCacheNamespace: imageCacheNamespace,
+            title: title,
+            onTap: onImageTap
+        )
         return BlockView(view: imageView, height: height, displayReference: nil)
     }
 
@@ -967,14 +985,15 @@ final class ReaderVerticalViewportImageView: UIView {
     func configure(
         url: URL,
         refererURL: URL,
-        sessionState: SessionState,
+        imageDataLoader: any NovelInlineImageDataLoading,
+        imageCacheNamespace: NovelInlineImageCacheNamespace,
         title: String?,
         onTap: @escaping (URL, String?) -> Void
     ) {
         let nextRequestIdentity = ReaderInlineImageRequestIdentity(
             url: url,
             refererURL: refererURL,
-            sessionState: sessionState
+            cacheNamespace: imageCacheNamespace
         )
         self.url = url
         self.title = title
@@ -992,10 +1011,8 @@ final class ReaderVerticalViewportImageView: UIView {
         activityIndicator.startAnimating()
         task = Task { [weak self] in
             do {
-                let (data, response) = try await URLSession.shared.data(for: nextRequestIdentity.urlRequest)
+                let data = try await imageDataLoader.imageData(for: url, refererURL: refererURL)
                 guard !Task.isCancelled,
-                      let http = response as? HTTPURLResponse,
-                      200 ..< 300 ~= http.statusCode,
                       let image = UIImage(data: data) else {
                     self?.showFailure()
                     return
@@ -1057,7 +1074,8 @@ final class ReaderVerticalViewportImageView: UIView {
 struct ReaderInlineViewportImage: UIViewRepresentable {
     let url: URL
     let refererURL: URL
-    let sessionState: SessionState
+    let imageDataLoader: any NovelInlineImageDataLoading
+    let imageCacheNamespace: NovelInlineImageCacheNamespace
     let title: String?
     let onTap: (URL, String?) -> Void
 
@@ -1069,7 +1087,8 @@ struct ReaderInlineViewportImage: UIViewRepresentable {
         uiView.configure(
             url: url,
             refererURL: refererURL,
-            sessionState: sessionState,
+            imageDataLoader: imageDataLoader,
+            imageCacheNamespace: imageCacheNamespace,
             title: title,
             onTap: onTap
         )

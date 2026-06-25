@@ -82,6 +82,22 @@ public final class YamiboAppContext: YamiboRepositoryProviding, Sendable {
         return ReaderRepository(client: client, cacheStore: readerCacheStore)
     }
 
+    public func makeNovelInlineImageLoadingContext() async -> NovelInlineImageLoadingContext {
+        let sessionState = await sessionStore.load()
+        let client = YamiboClient(
+            session: session,
+            cookie: sessionState.cookie,
+            userAgent: sessionState.userAgent
+        )
+        return NovelInlineImageLoadingContext(
+            loader: YamiboNovelInlineImageDataLoader(client: client),
+            cacheNamespace: NovelInlineImageCacheNamespace.namespace(
+                cookie: sessionState.cookie,
+                userAgent: sessionState.userAgent
+            )
+        )
+    }
+
     public func makeThreadOpenResolver() async -> ThreadOpenResolver {
         let sessionState = await sessionStore.load()
         let client = YamiboClient(

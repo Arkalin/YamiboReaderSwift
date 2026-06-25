@@ -9,7 +9,8 @@ struct ReaderPresentationSpreadCollectionViewport: UIViewRepresentable {
     let surfaces: [NovelReaderSurface]
     let settings: ReaderAppearanceSettings
     let refererURL: URL
-    let sessionState: SessionState
+    let imageDataLoader: any NovelInlineImageDataLoading
+    let imageCacheNamespace: NovelInlineImageCacheNamespace
     let topInset: CGFloat
     let bottomInset: CGFloat
     let selectionIndex: Int
@@ -32,7 +33,7 @@ struct ReaderPresentationSpreadCollectionViewport: UIViewRepresentable {
                 surfaces: surfaces,
                 settings: settings,
                 refererURL: refererURL,
-                sessionState: sessionState,
+                imageCacheNamespace: imageCacheNamespace,
                 topInset: topInset,
                 bottomInset: bottomInset
             )
@@ -148,7 +149,8 @@ struct ReaderPresentationSpreadCollectionViewport: UIViewRepresentable {
                         surfaces: parent.surfaces,
                         settings: parent.settings,
                         refererURL: parent.refererURL,
-                        sessionState: parent.sessionState,
+                        imageDataLoader: parent.imageDataLoader,
+                        imageCacheNamespace: parent.imageCacheNamespace,
                         topInset: parent.topInset,
                         bottomInset: parent.bottomInset,
                         displayReferenceProvider: parent.displayReferenceProvider,

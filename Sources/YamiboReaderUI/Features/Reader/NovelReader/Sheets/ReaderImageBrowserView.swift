@@ -8,7 +8,8 @@ struct ReaderImageBrowserView: View {
     let url: URL
     let title: String
     let refererURL: URL
-    let sessionState: SessionState
+    let imageDataLoader: any NovelInlineImageDataLoading
+    let imageCacheNamespace: NovelInlineImageCacheNamespace
     let onDismiss: () -> Void
 
     @StateObject private var loader: ReaderImageLoader
@@ -19,19 +20,22 @@ struct ReaderImageBrowserView: View {
         url: URL,
         title: String,
         refererURL: URL,
-        sessionState: SessionState,
+        imageDataLoader: any NovelInlineImageDataLoading,
+        imageCacheNamespace: NovelInlineImageCacheNamespace,
         onDismiss: @escaping () -> Void
     ) {
         self.url = url
         self.title = title
         self.refererURL = refererURL
-        self.sessionState = sessionState
+        self.imageDataLoader = imageDataLoader
+        self.imageCacheNamespace = imageCacheNamespace
         self.onDismiss = onDismiss
         _loader = StateObject(
             wrappedValue: ReaderImageLoader(
                 url: url,
                 refererURL: refererURL,
-                sessionState: sessionState
+                imageDataLoader: imageDataLoader,
+                imageCacheNamespace: imageCacheNamespace
             )
         )
     }

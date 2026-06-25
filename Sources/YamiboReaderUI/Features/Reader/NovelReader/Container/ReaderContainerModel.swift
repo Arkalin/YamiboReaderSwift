@@ -1,6 +1,16 @@
 import SwiftUI
 import YamiboReaderCore
 
+private enum ReaderInlineImageUnavailableError: Error {
+    case unavailable
+}
+
+private actor ReaderInlineImageUnavailableDataLoader: NovelInlineImageDataLoading {
+    func imageData(for _: URL, refererURL _: URL) async throws -> Data {
+        throw ReaderInlineImageUnavailableError.unavailable
+    }
+}
+
 @MainActor
 public final class ReaderContainerModel: ObservableObject {
     @Published public private(set) var isLoading = false
@@ -22,6 +32,10 @@ public final class ReaderContainerModel: ObservableObject {
     @Published public private(set) var isLoadingChapterDirectory = false
     @Published public private(set) var chapterDirectoryError: String?
     @Published public private(set) var readerPresentation: NovelReaderPresentation?
+    @Published public private(set) var inlineImageLoadingContext = NovelInlineImageLoadingContext(
+        loader: ReaderInlineImageUnavailableDataLoader(),
+        cacheNamespace: NovelInlineImageCacheNamespace(value: "unavailable")
+    )
     public private(set) var chromeProgressSnapshot = ReaderChromeProgressSnapshot.empty
 
     public let context: ReaderLaunchContext
@@ -412,6 +426,7 @@ public final class ReaderContainerModel: ObservableObject {
         latestRequestedLayout = layout
         layoutRequestSequence &+= 1
         if repository == nil {
+            inlineImageLoadingContext = await appContext.makeNovelInlineImageLoadingContext()
             repository = await appContext.makeReaderRepository()
             let appSettings = await appContext.settingsStore.load()
             bootstrapSettings = appSettings.reader
