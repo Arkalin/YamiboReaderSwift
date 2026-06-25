@@ -40,6 +40,10 @@ _Avoid_: captcha, verification code, password hint
 Ending the current **Yamibo Account** authentication state in the app while preserving user-owned library, reading, sync, and app settings.
 _Avoid_: reset application, clear data, delete account
 
+**App Continuity**:
+The app workflow that keeps the **Favorite Library**, reader resume route, WebDAV sync, and current reading entry consistent across launch, foreground refresh, local data changes, and backgrounding.
+_Avoid_: app sync, startup restore, lifecycle handler
+
 ## Relationships
 
 - A **Favorite Library** is remote-favorite-first: Yamibo remote favorites decide which remote-backed favorite entries exist, while local metadata preserves user-owned reading and organization state for those entries.
@@ -57,3 +61,4 @@ _Avoid_: reset application, clear data, delete account
 - A **Security Question** may be required to authenticate a **Yamibo Account**.
 - A **Yamibo Account** stores authentication state in the app, not the account password.
 - **Yamibo Sign Out** clears current authentication and cached profile state without clearing the **Favorite Library** or reading settings.
+- **App Continuity** may use WebDAV sync before restoring a reader resume route so the restored entry reflects the latest user-owned **Favorite Library** reading metadata.

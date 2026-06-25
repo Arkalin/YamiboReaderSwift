@@ -18,7 +18,13 @@ public struct MangaReaderView: View {
         self.context = context
         self.appModel = appModel
         _model = StateObject(
-            wrappedValue: MangaReaderModel(context: context, appContext: appModel.appContext)
+            wrappedValue: MangaReaderModel(
+                context: context,
+                appContext: appModel.appContext,
+                onReaderResumeRouteChange: { route in
+                    appModel.updateReaderResumeRoute(route)
+                }
+            )
         )
     }
 

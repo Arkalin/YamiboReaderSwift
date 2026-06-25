@@ -553,7 +553,10 @@ private func makeFixture(
     let model = MangaReaderModel(
         context: context,
         appContext: appContext,
-        dependencies: dependencies
+        dependencies: dependencies,
+        onReaderResumeRouteChange: { route in
+            try? await resumeRouteStore.saveReadingPosition(route)
+        }
     )
 
     return MangaReaderModelSettingsProgressFixture(
