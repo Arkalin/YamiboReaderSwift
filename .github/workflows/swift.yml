@@ -21,6 +21,22 @@ jobs:
         xcodebuild -version
         swift --version
     - name: Build
-      run: swift build -v
-    - name: Run tests
-      run: swift test -v
+      run: |
+        xcodebuild build \
+          -project YamiboReader.xcodeproj \
+          -scheme YamiboReader \
+          -destination 'platform=iOS Simulator,name=iPhone 16' \
+          CODE_SIGNING_ALLOWED=NO
+    - name: Run core tests
+      run: swift test --filter YamiboReaderCoreTests
+    - name: Run UI tests
+      run: |
+        xcodebuild test \
+          -quiet \
+          -project YamiboReader.xcodeproj \
+          -scheme YamiboReader \
+          -testPlan YamiboReaderUITests \
+          -destination 'platform=iOS Simulator,name=iPhone 16' \
+          -only-testing:YamiboReaderUITests \
+          -collect-test-diagnostics never \
+          CODE_SIGNING_ALLOWED=NO
