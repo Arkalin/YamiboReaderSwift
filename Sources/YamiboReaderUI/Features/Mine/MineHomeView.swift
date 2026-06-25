@@ -28,7 +28,8 @@ public struct MineHomeView: View {
                 if viewModel.isLoggedIn {
                     MineProfileSection(
                         profile: viewModel.profile,
-                        sessionState: viewModel.session,
+                        avatarLoader: viewModel.profileAvatarLoader,
+                        avatarReloadDate: viewModel.session.lastUpdatedAt,
                         isRefreshing: viewModel.isRefreshingProfile,
                         showSignOutConfirmation: {
                             showingSignOutConfirmation = true
@@ -121,12 +122,14 @@ final class MineHomeViewModel {
     var isSigningOut = false
 
     let loginQuestions = YamiboLoginQuestion.defaultQuestions
+    @ObservationIgnored let profileAvatarLoader: any YamiboProfileAvatarLoading
 
     private let appContext: YamiboAppContext
     @ObservationIgnored private var lastAutomaticProfileRefreshCredential: String?
 
     init(appContext: YamiboAppContext) {
         self.appContext = appContext
+        profileAvatarLoader = appContext.makeProfileAvatarLoader()
     }
 
     var isLoggedIn: Bool {
@@ -233,7 +236,8 @@ final class MineHomeViewModel {
 
 private struct MineProfileSection: View {
     let profile: YamiboProfile?
-    let sessionState: SessionState
+    let avatarLoader: any YamiboProfileAvatarLoading
+    let avatarReloadDate: Date?
     let isRefreshing: Bool
     let showSignOutConfirmation: () -> Void
 
@@ -241,7 +245,11 @@ private struct MineProfileSection: View {
         Section {
             if let profile {
                 Button(action: showSignOutConfirmation) {
-                    MineProfileCard(profile: profile, sessionState: sessionState)
+                    MineProfileCard(
+                        profile: profile,
+                        avatarLoader: avatarLoader,
+                        avatarReloadDate: avatarReloadDate
+                    )
                 }
                 .buttonStyle(.plain)
                 .listRowInsets(EdgeInsets(top: 16, leading: 16, bottom: 16, trailing: 16))
@@ -255,14 +263,15 @@ private struct MineProfileSection: View {
 
 private struct MineProfileCard: View {
     let profile: YamiboProfile
-    let sessionState: SessionState
+    let avatarLoader: any YamiboProfileAvatarLoading
+    let avatarReloadDate: Date?
 
     var body: some View {
         HStack(alignment: .center, spacing: 16) {
             MineAvatarView(
-                url: profile.avatarURL,
-                cookie: sessionState.cookie,
-                userAgent: sessionState.userAgent
+                profile: profile,
+                avatarLoader: avatarLoader,
+                avatarReloadDate: avatarReloadDate
             )
             .frame(width: 72, height: 72)
 
@@ -486,9 +495,9 @@ private struct MineSettingsRow: View {
 }
 
 private struct MineAvatarView: View {
-    let url: URL?
-    let cookie: String
-    let userAgent: String
+    let profile: YamiboProfile
+    let avatarLoader: any YamiboProfileAvatarLoading
+    let avatarReloadDate: Date?
 
     @State private var image: Image?
 
@@ -510,25 +519,14 @@ private struct MineAvatarView: View {
             }
         }
         .clipShape(Circle())
-        .task(id: AvatarRequestIdentity(url: url, cookie: cookie, userAgent: userAgent)) {
+        .task(id: MineAvatarTaskIdentity(profile: profile, avatarReloadDate: avatarReloadDate)) {
             image = await loadImage()
         }
     }
 
     private func loadImage() async -> Image? {
-        guard let url else { return nil }
-        var request = URLRequest(url: url)
-        request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
-        if !cookie.isEmpty {
-            request.setValue(cookie, forHTTPHeaderField: "Cookie")
-        }
-
         do {
-            let (data, response) = try await URLSession.shared.data(for: request)
-            guard let httpResponse = response as? HTTPURLResponse,
-                  200 ..< 300 ~= httpResponse.statusCode else {
-                return nil
-            }
+            guard let data = try await avatarLoader.avatarData(for: profile) else { return nil }
             return platformImage(from: data)
         } catch {
             return nil
@@ -545,8 +543,14 @@ private struct MineAvatarView: View {
     }
 }
 
-private struct AvatarRequestIdentity: Hashable {
-    let url: URL?
-    let cookie: String
-    let userAgent: String
+private struct MineAvatarTaskIdentity: Hashable {
+    let uid: String
+    let avatarURL: URL?
+    let avatarReloadDate: Date?
+
+    init(profile: YamiboProfile, avatarReloadDate: Date?) {
+        uid = profile.uid
+        avatarURL = profile.avatarURL
+        self.avatarReloadDate = avatarReloadDate
+    }
 }
