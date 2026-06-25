@@ -99,7 +99,8 @@ struct ReaderPagedPageCurlViewport: UIViewControllerRepresentable {
     let surfaces: [NovelReaderSurface]
     let settings: ReaderAppearanceSettings
     let refererURL: URL
-    let sessionState: SessionState
+    let imageDataLoader: any NovelInlineImageDataLoading
+    let imageCacheNamespace: NovelInlineImageCacheNamespace
     let topInset: CGFloat
     let bottomInset: CGFloat
     let selectionIndex: Int
@@ -137,7 +138,7 @@ struct ReaderPagedPageCurlViewport: UIViewControllerRepresentable {
                 surfaces: surfaces,
                 settings: settings,
                 refererURL: refererURL,
-                sessionState: sessionState,
+                imageCacheNamespace: imageCacheNamespace,
                 topInset: topInset,
                 bottomInset: bottomInset
             )
@@ -424,7 +425,8 @@ struct ReaderPagedPageCurlViewport: UIViewControllerRepresentable {
                     surfaces: parent.surfaces,
                     settings: parent.settings,
                     refererURL: parent.refererURL,
-                    sessionState: parent.sessionState,
+                    imageDataLoader: parent.imageDataLoader,
+                    imageCacheNamespace: parent.imageCacheNamespace,
                     topInset: parent.topInset,
                     bottomInset: parent.bottomInset,
                     displayReferenceProvider: parent.displayReferenceProvider,
@@ -606,7 +608,8 @@ private struct ReaderPagedPageCurlLeafView: View {
     let surfaces: [NovelReaderSurface]
     let settings: ReaderAppearanceSettings
     let refererURL: URL
-    let sessionState: SessionState
+    let imageDataLoader: any NovelInlineImageDataLoading
+    let imageCacheNamespace: NovelInlineImageCacheNamespace
     let topInset: CGFloat
     let bottomInset: CGFloat
     let displayReferenceProvider: @MainActor (NovelReaderSurfaceIdentity) -> NovelTextViewportDisplayReference?
@@ -623,7 +626,8 @@ private struct ReaderPagedPageCurlLeafView: View {
                     fallbackSurfaceIndex: surfaceIndex,
                     settings: settings,
                     refererURL: refererURL,
-                    sessionState: sessionState,
+                    imageDataLoader: imageDataLoader,
+                    imageCacheNamespace: imageCacheNamespace,
                     onImageTap: onImageTap
                 )
                 .padding(.horizontal, settings.horizontalPadding)

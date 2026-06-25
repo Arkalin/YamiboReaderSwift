@@ -20,7 +20,7 @@ struct ReaderPagedViewportContentIdentity: Equatable {
     var surfaces: [NovelReaderSurface]
     var settings: ReaderAppearanceSettings
     var refererURL: URL
-    var sessionState: ReaderPagedViewportSessionIdentity
+    var imageCacheNamespace: NovelInlineImageCacheNamespace
     var topInset: CGFloat
     var bottomInset: CGFloat
 
@@ -28,14 +28,14 @@ struct ReaderPagedViewportContentIdentity: Equatable {
         surfaces: [NovelReaderSurface],
         settings: ReaderAppearanceSettings,
         refererURL: URL,
-        sessionState: SessionState,
+        imageCacheNamespace: NovelInlineImageCacheNamespace,
         topInset: CGFloat,
         bottomInset: CGFloat
     ) {
         self.surfaces = surfaces
         self.settings = settings
         self.refererURL = refererURL
-        self.sessionState = ReaderPagedViewportSessionIdentity(sessionState)
+        self.imageCacheNamespace = imageCacheNamespace
         self.topInset = topInset
         self.bottomInset = bottomInset
     }
@@ -44,16 +44,6 @@ struct ReaderPagedViewportContentIdentity: Equatable {
 struct ReaderPagedSpreadViewportContentIdentity: Equatable {
     var spreads: [NovelReaderPresentationSpread]
     var content: ReaderPagedViewportContentIdentity
-}
-
-struct ReaderPagedViewportSessionIdentity: Equatable {
-    var userAgent: String
-    var cookie: String
-
-    init(_ sessionState: SessionState) {
-        userAgent = sessionState.userAgent
-        cookie = sessionState.cookie
-    }
 }
 
 #endif

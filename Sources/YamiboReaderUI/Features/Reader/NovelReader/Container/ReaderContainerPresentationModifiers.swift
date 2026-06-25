@@ -87,7 +87,8 @@ struct ReaderContainerPresentationModifier: ViewModifier {
                     url: item.url,
                     title: item.title,
                     refererURL: model.forumURL,
-                    sessionState: model.sessionState
+                    imageDataLoader: model.inlineImageLoadingContext.loader,
+                    imageCacheNamespace: model.inlineImageLoadingContext.cacheNamespace
                 ) {
                     imageBrowserItem = nil
                 }
