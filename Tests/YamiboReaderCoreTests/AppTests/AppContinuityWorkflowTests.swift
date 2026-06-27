@@ -61,6 +61,38 @@ import Testing
 }
 
 @MainActor
+@Test func appContinuityDoesNotRestoreOrphanMangaRouteWithoutFavoriteProgress() async throws {
+    let keyPrefix = UUID().uuidString
+    let favoriteStore = FavoriteStore(key: "\(keyPrefix).favorites")
+    let resumeRouteStore = ReaderResumeRouteStore(key: "\(keyPrefix).resume")
+    let originalURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=700&mobile=2"))
+    let route = MangaPresentationRoute.native(
+        MangaLaunchContext(
+            originalThreadURL: originalURL,
+            chapterURL: originalURL,
+            displayTitle: "大家不可以忘記三之昔的一個貢獻",
+            source: .resume,
+            initialPage: 0
+        )
+    )
+    try await resumeRouteStore.save(.manga(route))
+    let workflow = AppContinuityWorkflow(
+        appContext: YamiboAppContext(
+            readerResumeRouteStore: resumeRouteStore,
+            favoriteStore: favoriteStore
+        )
+    )
+
+    let restoredRoute = await workflow.restoreExplicitly(
+        canRestoreReaderRoute: true,
+        reconcilesWithFavoriteProgress: true
+    )
+
+    #expect(restoredRoute == nil)
+    #expect(await resumeRouteStore.load() == nil)
+}
+
+@MainActor
 @Test func appContinuityIgnoresLateReadingPositionAfterRouteDismissal() async throws {
     let keyPrefix = UUID().uuidString
     let resumeRouteStore = ReaderResumeRouteStore(key: "\(keyPrefix).resume")
