@@ -50,7 +50,7 @@ struct MangaPagedReadingPlan: Hashable, Sendable {
     init(
         pages: [MangaReaderPageProjection],
         currentPageIndex: Int?,
-        pageTurnDirection: MangaPageTurnDirection = .rightToLeft,
+        pageTurnDirection: MangaPageTurnDirection = .leftToRight,
         usesTwoPageSpread: Bool = false
     ) {
         self.pages = pages
