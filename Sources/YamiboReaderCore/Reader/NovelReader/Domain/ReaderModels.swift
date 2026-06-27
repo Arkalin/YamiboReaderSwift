@@ -144,22 +144,39 @@ public struct ReaderInlineTextStyleRange: Codable, Hashable, Sendable {
     }
 }
 
+public enum ReaderBlockTextStyle: String, Codable, Hashable, Sendable {
+    case quote
+}
+
+public struct ReaderBlockTextStyleRange: Codable, Hashable, Sendable {
+    public var style: ReaderBlockTextStyle
+    public var range: ReaderCharacterRange
+
+    public init(style: ReaderBlockTextStyle, range: ReaderCharacterRange) {
+        self.style = style
+        self.range = range
+    }
+}
+
 public struct ReaderSegmentSemantics: Hashable, Sendable {
     public var chapterIdentity: NovelChapterIdentity?
     public var textSegmentIdentity: NovelTextSegmentIdentity?
     public var chapterTitleRange: ReaderCharacterRange?
     public var inlineTextStyles: [ReaderInlineTextStyleRange]
+    public var blockTextStyles: [ReaderBlockTextStyleRange]
 
     public init(
         chapterIdentity: NovelChapterIdentity? = nil,
         textSegmentIdentity: NovelTextSegmentIdentity? = nil,
         chapterTitleRange: ReaderCharacterRange? = nil,
-        inlineTextStyles: [ReaderInlineTextStyleRange] = []
+        inlineTextStyles: [ReaderInlineTextStyleRange] = [],
+        blockTextStyles: [ReaderBlockTextStyleRange] = []
     ) {
         self.chapterIdentity = chapterIdentity
         self.textSegmentIdentity = textSegmentIdentity
         self.chapterTitleRange = chapterTitleRange
         self.inlineTextStyles = inlineTextStyles
+        self.blockTextStyles = blockTextStyles
     }
 }
 
@@ -169,6 +186,7 @@ extension ReaderSegmentSemantics: Codable {
         case textSegmentIdentity
         case chapterTitleRange
         case inlineTextStyles
+        case blockTextStyles
     }
 
     public init(from decoder: any Decoder) throws {
@@ -177,7 +195,8 @@ extension ReaderSegmentSemantics: Codable {
             chapterIdentity: try container.decodeIfPresent(NovelChapterIdentity.self, forKey: .chapterIdentity),
             textSegmentIdentity: try container.decodeIfPresent(NovelTextSegmentIdentity.self, forKey: .textSegmentIdentity),
             chapterTitleRange: try container.decodeIfPresent(ReaderCharacterRange.self, forKey: .chapterTitleRange),
-            inlineTextStyles: try container.decodeIfPresent([ReaderInlineTextStyleRange].self, forKey: .inlineTextStyles) ?? []
+            inlineTextStyles: try container.decodeIfPresent([ReaderInlineTextStyleRange].self, forKey: .inlineTextStyles) ?? [],
+            blockTextStyles: try container.decodeIfPresent([ReaderBlockTextStyleRange].self, forKey: .blockTextStyles) ?? []
         )
     }
 
@@ -187,6 +206,7 @@ extension ReaderSegmentSemantics: Codable {
         try container.encodeIfPresent(textSegmentIdentity, forKey: .textSegmentIdentity)
         try container.encodeIfPresent(chapterTitleRange, forKey: .chapterTitleRange)
         try container.encode(inlineTextStyles, forKey: .inlineTextStyles)
+        try container.encode(blockTextStyles, forKey: .blockTextStyles)
     }
 }
 
@@ -254,7 +274,7 @@ extension ReaderSegment: Codable {
 }
 
 public struct ReaderPageDocument: Codable, Hashable, Sendable {
-    public static let schemaVersion = 4
+    public static let schemaVersion = 5
 
     public var threadURL: URL
     public var view: Int
@@ -493,6 +513,16 @@ extension ReaderPageDocument {
                         )
                     }
                 }
+                for blockStyle in semantics?.blockTextStyles ?? [] {
+                    let range = blockStyle.range
+                    guard range.location >= 0,
+                          range.length >= 0,
+                          range.upperBound <= text.count else {
+                        throw DecodingError.dataCorrupted(
+                            DecodingError.Context(codingPath: [], debugDescription: "Block text style range is outside segment text.")
+                        )
+                    }
+                }
 
             case .image:
                 if semantics?.textSegmentIdentity != nil {
@@ -503,6 +533,11 @@ extension ReaderPageDocument {
                 if semantics?.inlineTextStyles.isEmpty == false {
                     throw DecodingError.dataCorrupted(
                         DecodingError.Context(codingPath: [], debugDescription: "Image segment cannot carry inline text styles.")
+                    )
+                }
+                if semantics?.blockTextStyles.isEmpty == false {
+                    throw DecodingError.dataCorrupted(
+                        DecodingError.Context(codingPath: [], debugDescription: "Image segment cannot carry block text styles.")
                     )
                 }
             }
@@ -1417,17 +1452,20 @@ package struct NovelTextViewportDocument: Hashable, Sendable {
     public var textRangesBySegment: [Int: ReaderRenderedTextRange]
     public var insertedSeparatorRanges: [ReaderRenderedTextRange]
     public var inlineTextStylesBySegment: [Int: [ReaderInlineTextStyleRange]]
+    public var blockTextStyles: [ReaderBlockTextStyleRange]
 
     public init(
         text: String,
         textRangesBySegment: [Int: ReaderRenderedTextRange],
         insertedSeparatorRanges: [ReaderRenderedTextRange],
-        inlineTextStylesBySegment: [Int: [ReaderInlineTextStyleRange]] = [:]
+        inlineTextStylesBySegment: [Int: [ReaderInlineTextStyleRange]] = [:],
+        blockTextStyles: [ReaderBlockTextStyleRange] = []
     ) {
         self.text = text
         self.textRangesBySegment = textRangesBySegment
         self.insertedSeparatorRanges = insertedSeparatorRanges
         self.inlineTextStylesBySegment = inlineTextStylesBySegment
+        self.blockTextStyles = blockTextStyles
     }
 }
 

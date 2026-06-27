@@ -9,6 +9,7 @@ enum ReaderHTMLDOMParser {
     struct ParsedMessage {
         let segments: [ReaderSegment]
         let segmentInlineStyles: [[ReaderInlineTextStyleRange]]
+        let segmentBlockStyles: [[ReaderBlockTextStyleRange]]
         let chapterTitle: String?
         let ownerPostID: String?
         let isOwnerPost: Bool
@@ -18,11 +19,13 @@ enum ReaderHTMLDOMParser {
     private struct ParsedSegment {
         let segment: ReaderSegment
         let inlineTextStyles: [ReaderInlineTextStyleRange]
+        let blockTextStyles: [ReaderBlockTextStyleRange]
     }
 
     private struct StyledCharacter {
         let character: Character
         let isBold: Bool
+        let isQuote: Bool
     }
 
     static func parse(html: String) throws -> Context {
@@ -108,6 +111,7 @@ enum ReaderHTMLDOMParser {
             return ParsedMessage(
                 segments: [],
                 segmentInlineStyles: [],
+                segmentBlockStyles: [],
                 chapterTitle: nil,
                 ownerPostID: postID(from: element),
                 isOwnerPost: isOwnerPost(element),
@@ -131,6 +135,7 @@ enum ReaderHTMLDOMParser {
         return ParsedMessage(
             segments: parsedSegments.map(\.segment),
             segmentInlineStyles: parsedSegments.map(\.inlineTextStyles),
+            segmentBlockStyles: parsedSegments.map(\.blockTextStyles),
             chapterTitle: chapterTitle,
             ownerPostID: postID(from: element),
             isOwnerPost: isOwnerPost(element),
@@ -217,7 +222,8 @@ enum ReaderHTMLDOMParser {
                 segments.append(
                     ParsedSegment(
                         segment: .image(url, chapterTitle: chapterTitle),
-                        inlineTextStyles: []
+                        inlineTextStyles: [],
+                        blockTextStyles: []
                     )
                 )
             }
@@ -286,25 +292,27 @@ enum ReaderHTMLDOMParser {
             segments.append(
                 ParsedSegment(
                     segment: .text(normalized.text, chapterTitle: chapterTitle),
-                    inlineTextStyles: normalized.inlineTextStyles
+                    inlineTextStyles: normalized.inlineTextStyles,
+                    blockTextStyles: normalized.blockTextStyles
                 )
             )
             text = []
         }
 
-        func appendText(_ value: String, isBold: Bool) {
+        func appendText(_ value: String, isBold: Bool, isQuote: Bool) {
             for character in value {
-                text.append(StyledCharacter(character: character, isBold: isBold))
+                text.append(StyledCharacter(character: character, isBold: isBold, isQuote: isQuote))
             }
         }
 
-        func appendSegments(from node: Node, isBold: Bool) throws {
+        func appendSegments(from node: Node, isBold: Bool, isQuote: Bool) throws {
             if let textNode = node as? TextNode {
                 appendText(
                     textNode
                     .getWholeText()
                     .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression),
-                    isBold: isBold
+                    isBold: isBold,
+                    isQuote: isQuote
                 )
                 return
             }
@@ -312,37 +320,44 @@ enum ReaderHTMLDOMParser {
             if let element = node as? Element {
                 let tagName = element.tagName().lowercased()
                 let nextBold = resolvedBoldState(for: element, tagName: tagName, inheritedBold: isBold)
+                let nextQuote = isQuote || isQuoteBlock(element, tagName: tagName)
                 if tagName == "br" {
-                    appendText("\n", isBold: nextBold)
+                    appendText("\n", isBold: nextBold, isQuote: nextQuote)
                     return
                 }
                 if tagName == "img" {
                     guard let url = try imageURL(from: element) else { return }
                     flushText()
-                    segments.append(ParsedSegment(segment: .image(url, chapterTitle: chapterTitle), inlineTextStyles: []))
+                    segments.append(
+                        ParsedSegment(
+                            segment: .image(url, chapterTitle: chapterTitle),
+                            inlineTextStyles: [],
+                            blockTextStyles: []
+                        )
+                    )
                     return
                 }
                 if tagName == "li" {
-                    appendText("• ", isBold: nextBold)
+                    appendText("• ", isBold: nextBold, isQuote: nextQuote)
                 }
 
                 for child in element.getChildNodes() {
-                    try appendSegments(from: child, isBold: nextBold)
+                    try appendSegments(from: child, isBold: nextBold, isQuote: nextQuote)
                 }
 
                 if blockBreakTags.contains(tagName) {
-                    appendText("\n", isBold: nextBold)
+                    appendText("\n", isBold: nextBold, isQuote: false)
                 }
                 return
             }
 
             for child in node.getChildNodes() {
-                try appendSegments(from: child, isBold: isBold)
+                try appendSegments(from: child, isBold: isBold, isQuote: isQuote)
             }
         }
 
         for child in body.getChildNodes() {
-            try appendSegments(from: child, isBold: false)
+            try appendSegments(from: child, isBold: false, isQuote: false)
         }
         flushText()
 
@@ -397,6 +412,10 @@ enum ReaderHTMLDOMParser {
         return isBold
     }
 
+    private static func isQuoteBlock(_ element: Element, tagName: String) -> Bool {
+        tagName == "blockquote" || element.hasClass("quote")
+    }
+
     private static func inlineFontWeightBoldState(for element: Element) -> Bool? {
         let style = (try? element.attr("style"))?.lowercased() ?? ""
         guard !style.isEmpty else { return nil }
@@ -425,11 +444,17 @@ enum ReaderHTMLDOMParser {
 
     private static func normalizeStyledText(
         _ text: [StyledCharacter]
-    ) -> (text: String, inlineTextStyles: [ReaderInlineTextStyleRange]) {
+    ) -> (
+        text: String,
+        inlineTextStyles: [ReaderInlineTextStyleRange],
+        blockTextStyles: [ReaderBlockTextStyleRange]
+    ) {
         let normalizedLineBreaks = normalizeStyledLineBreaks(text)
         var lines: [[StyledCharacter]] = [[]]
+        var lineBreaks: [StyledCharacter] = []
         for character in normalizedLineBreaks {
             if character.character == "\n" {
+                lineBreaks.append(character)
                 lines.append([])
             } else {
                 lines[lines.count - 1].append(character)
@@ -439,7 +464,14 @@ enum ReaderHTMLDOMParser {
         var normalized: [StyledCharacter] = []
         for (index, line) in lines.enumerated() {
             if index > 0 {
-                normalized.append(StyledCharacter(character: "\n", isBold: false))
+                let lineBreak = lineBreaks[index - 1]
+                normalized.append(
+                    StyledCharacter(
+                        character: "\n",
+                        isBold: false,
+                        isQuote: lineBreak.isQuote
+                    )
+                )
             }
             normalized.append(contentsOf: normalizeStyledLine(line))
         }
@@ -449,7 +481,9 @@ enum ReaderHTMLDOMParser {
 
         var output = ""
         var inlineTextStyles: [ReaderInlineTextStyleRange] = []
+        var blockTextStyles: [ReaderBlockTextStyleRange] = []
         var boldStart: Int?
+        var quoteStart: Int?
         for character in normalized {
             let location = output.count
             if character.isBold {
@@ -467,6 +501,21 @@ enum ReaderHTMLDOMParser {
                 }
                 boldStart = nil
             }
+            if character.isQuote {
+                if quoteStart == nil {
+                    quoteStart = location
+                }
+            } else if let start = quoteStart {
+                if location > start {
+                    blockTextStyles.append(
+                        ReaderBlockTextStyleRange(
+                            style: .quote,
+                            range: ReaderCharacterRange(location: start, length: location - start)
+                        )
+                    )
+                }
+                quoteStart = nil
+            }
             output.append(character.character)
         }
         if let start = boldStart, output.count > start {
@@ -477,7 +526,15 @@ enum ReaderHTMLDOMParser {
                 )
             )
         }
-        return (output, inlineTextStyles)
+        if let start = quoteStart, output.count > start {
+            blockTextStyles.append(
+                ReaderBlockTextStyleRange(
+                    style: .quote,
+                    range: ReaderCharacterRange(location: start, length: output.count - start)
+                )
+            )
+        }
+        return (output, inlineTextStyles, blockTextStyles)
     }
 
     private static func normalizeStyledLineBreaks(_ text: [StyledCharacter]) -> [StyledCharacter] {
@@ -486,12 +543,24 @@ enum ReaderHTMLDOMParser {
         while index < text.count {
             let character = text[index]
             if character.character == "\r" {
-                result.append(StyledCharacter(character: "\n", isBold: character.isBold))
+                result.append(
+                    StyledCharacter(
+                        character: "\n",
+                        isBold: character.isBold,
+                        isQuote: character.isQuote
+                    )
+                )
                 if index + 1 < text.count, text[index + 1].character == "\n" {
                     index += 1
                 }
             } else if character.character == "\u{00A0}" {
-                result.append(StyledCharacter(character: " ", isBold: character.isBold))
+                result.append(
+                    StyledCharacter(
+                        character: " ",
+                        isBold: character.isBold,
+                        isQuote: character.isQuote
+                    )
+                )
             } else {
                 result.append(character)
             }
@@ -503,19 +572,28 @@ enum ReaderHTMLDOMParser {
     private static func normalizeStyledLine(_ line: [StyledCharacter]) -> [StyledCharacter] {
         var result: [StyledCharacter] = []
         var pendingWhitespaceIsBold = false
+        var pendingWhitespaceIsQuote = false
         var hasPendingWhitespace = false
 
         for character in line {
             if character.character == " " || character.character == "\t" {
                 hasPendingWhitespace = true
                 pendingWhitespaceIsBold = pendingWhitespaceIsBold || character.isBold
+                pendingWhitespaceIsQuote = pendingWhitespaceIsQuote || character.isQuote
                 continue
             }
             if hasPendingWhitespace, !result.isEmpty {
-                result.append(StyledCharacter(character: " ", isBold: pendingWhitespaceIsBold))
+                result.append(
+                    StyledCharacter(
+                        character: " ",
+                        isBold: pendingWhitespaceIsBold,
+                        isQuote: pendingWhitespaceIsQuote
+                    )
+                )
             }
             hasPendingWhitespace = false
             pendingWhitespaceIsBold = false
+            pendingWhitespaceIsQuote = false
             result.append(character)
         }
 
@@ -529,7 +607,13 @@ enum ReaderHTMLDOMParser {
             if character.character == "\n" {
                 newlineCount += 1
                 if newlineCount <= 2 {
-                    result.append(StyledCharacter(character: "\n", isBold: false))
+                    result.append(
+                        StyledCharacter(
+                            character: "\n",
+                            isBold: false,
+                            isQuote: character.isQuote
+                        )
+                    )
                 }
             } else {
                 newlineCount = 0

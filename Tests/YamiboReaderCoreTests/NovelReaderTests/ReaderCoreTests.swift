@@ -456,6 +456,38 @@ private final class StubURLProtocol: URLProtocol {
 
     #expect(document.source(forSegmentIndex: 0)?.isAuthorReplyToOther == true)
     #expect(document.source(forSegmentIndex: 1)?.isAuthorReplyToOther == false)
+
+    let firstText: String
+    if case let .text(text, _) = document.segments[0] {
+        firstText = text
+    } else {
+        Issue.record("Expected the first segment to be text.")
+        return
+    }
+    let secondText: String
+    if case let .text(text, _) = document.segments[1] {
+        secondText = text
+    } else {
+        Issue.record("Expected the second segment to be text.")
+        return
+    }
+    let firstQuote = "读者甲 发表于 2026-5-1 12:00\n引用内容"
+    let secondQuote = "这里是小说正文里的引用排版。"
+
+    #expect(firstText.hasPrefix(firstQuote))
+    #expect(document.semantics(forSegmentIndex: 0)?.blockTextStyles == [
+        ReaderBlockTextStyleRange(
+            style: .quote,
+            range: ReaderCharacterRange(location: 0, length: firstQuote.count)
+        )
+    ])
+    #expect(document.semantics(forSegmentIndex: 1)?.blockTextStyles == [
+        ReaderBlockTextStyleRange(
+            style: .quote,
+            range: ReaderCharacterRange(location: "第一章\n".count, length: secondQuote.count)
+        )
+    ])
+    #expect(secondText.contains("\n正文继续。"))
 }
 
 @Test func readerHTMLParserExtractsAttachmentImagesFromSiblingImgOne() async throws {
@@ -591,6 +623,36 @@ private final class StubURLProtocol: URLProtocol {
     #expect(parsed.segmentSemantics[1]?.inlineTextStyles == [])
     #expect(parsed.segmentSemantics[2]?.inlineTextStyles == [
         ReaderInlineTextStyleRange(style: .bold, range: ReaderCharacterRange(location: 0, length: 2))
+    ])
+}
+
+@Test func readerHTMLParserKeepsQuoteRangesAlignedAcrossBoldAndImages() async throws {
+    let html = #"""
+    <html>
+      <body>
+        <div class="message">
+          序章<br><blockquote><strong>前文</strong><img src="images/first.jpg" />后文</blockquote>
+        </div>
+      </body>
+    </html>
+    """#
+
+    let parsed = ReaderHTMLParser.parseSegments(from: html)
+
+    #expect(parsed.segments == [
+        .text("序章\n前文", chapterTitle: "序章"),
+        .image(try #require(URL(string: "https://bbs.yamibo.com/images/first.jpg")), chapterTitle: "序章"),
+        .text("后文", chapterTitle: "序章")
+    ])
+    #expect(parsed.segmentSemantics[0]?.inlineTextStyles == [
+        ReaderInlineTextStyleRange(style: .bold, range: ReaderCharacterRange(location: 3, length: 2))
+    ])
+    #expect(parsed.segmentSemantics[0]?.blockTextStyles == [
+        ReaderBlockTextStyleRange(style: .quote, range: ReaderCharacterRange(location: 3, length: 2))
+    ])
+    #expect(parsed.segmentSemantics[1]?.blockTextStyles == [])
+    #expect(parsed.segmentSemantics[2]?.blockTextStyles == [
+        ReaderBlockTextStyleRange(style: .quote, range: ReaderCharacterRange(location: 0, length: 2))
     ])
 }
 
@@ -2321,6 +2383,48 @@ private final class StubURLProtocol: URLProtocol {
     ])
 }
 
+@Test func novelTextLayoutTransformsQuoteRangesAndProjectsDocumentOffsets() throws {
+    let document = ReaderPageDocument(
+        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=307&mobile=2")),
+        view: 1,
+        maxView: 1,
+        segments: [
+            .text("前段", chapterTitle: nil),
+            .text("繁體引用結束", chapterTitle: nil),
+        ],
+        segmentSemantics: [
+            ReaderSegmentSemantics(
+                chapterIdentity: NovelChapterIdentity(rawValue: "chapter-1"),
+                textSegmentIdentity: NovelTextSegmentIdentity(rawValue: "text-1")
+            ),
+            ReaderSegmentSemantics(
+                chapterIdentity: NovelChapterIdentity(rawValue: "chapter-1"),
+                textSegmentIdentity: NovelTextSegmentIdentity(rawValue: "text-2"),
+                blockTextStyles: [
+                    ReaderBlockTextStyleRange(style: .quote, range: ReaderCharacterRange(location: 2, length: 2))
+                ]
+            ),
+        ]
+    )
+
+    let preparedInput = try NovelTextLayout.prepareInput(
+        document: document,
+        settings: ReaderAppearanceSettings(readingMode: .paged, translationMode: .simplified),
+        layout: ReaderContainerLayout(width: 390, height: 844)
+    )
+
+    #expect(preparedInput.viewportContextSeed.document.text == "前段\n\n繁体引用结束")
+    #expect(preparedInput.annotatedSegments[1].semantics?.blockTextStyles == [
+        ReaderBlockTextStyleRange(style: .quote, range: ReaderCharacterRange(location: 2, length: 2))
+    ])
+    #expect(preparedInput.viewportContextSeed.document.blockTextStyles == [
+        ReaderBlockTextStyleRange(
+            style: .quote,
+            range: ReaderCharacterRange(location: "前段\n\n繁体".count, length: 2)
+        )
+    ])
+}
+
 @Test func readerAttributedTextFactoryAppliesInlineBoldWithoutChangingNormalBody() throws {
     let document = ReaderPageDocument(
         threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=305&mobile=2")),
@@ -2377,6 +2481,53 @@ private final class StubURLProtocol: URLProtocol {
                 textSegmentIdentity: NovelTextSegmentIdentity(rawValue: "text-1"),
                 inlineTextStyles: [
                     ReaderInlineTextStyleRange(style: .bold, range: ReaderCharacterRange(location: 3, length: 2))
+                ]
+            )
+        ]
+    )
+    let settings = ReaderAppearanceSettings(readingMode: .paged)
+    let layout = ReaderContainerLayout(width: 390, height: 844)
+
+    let first = try runtime.prepareTransaction(
+        preparedInput: NovelTextLayout.prepareInput(document: plain, settings: settings, layout: layout)
+    )
+    #expect(runtime.commit(first))
+    let second = try runtime.prepareTransaction(
+        preparedInput: NovelTextLayout.prepareInput(document: styled, settings: settings, layout: layout)
+    )
+    #expect(runtime.commit(second))
+
+    #expect(runtime.runtimeTransactionDiagnostics.semanticAttributedDocumentBuildCount == 2)
+    #expect(runtime.runtimeTransactionDiagnostics.semanticAttributedDocumentReuseCount == 0)
+}
+
+@MainActor
+@Test func novelTextRuntimeRebuildsSemanticDocumentWhenOnlyBlockStylesChange() throws {
+    let runtime = NovelTextViewportRuntimeOwner()
+    let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=308&mobile=2"))
+    let plain = ReaderPageDocument(
+        threadURL: threadURL,
+        view: 1,
+        maxView: 1,
+        segments: [.text("同一段正文", chapterTitle: nil)],
+        segmentSemantics: [
+            ReaderSegmentSemantics(
+                chapterIdentity: NovelChapterIdentity(rawValue: "chapter-1"),
+                textSegmentIdentity: NovelTextSegmentIdentity(rawValue: "text-1")
+            )
+        ]
+    )
+    let styled = ReaderPageDocument(
+        threadURL: threadURL,
+        view: 1,
+        maxView: 1,
+        segments: [.text("同一段正文", chapterTitle: nil)],
+        segmentSemantics: [
+            ReaderSegmentSemantics(
+                chapterIdentity: NovelChapterIdentity(rawValue: "chapter-1"),
+                textSegmentIdentity: NovelTextSegmentIdentity(rawValue: "text-1"),
+                blockTextStyles: [
+                    ReaderBlockTextStyleRange(style: .quote, range: ReaderCharacterRange(location: 3, length: 2))
                 ]
             )
         ]
@@ -2478,6 +2629,9 @@ private final class StubURLProtocol: URLProtocol {
                 chapterTitleRange: ReaderCharacterRange(location: 0, length: "第一章".count),
                 inlineTextStyles: [
                     ReaderInlineTextStyleRange(style: .bold, range: ReaderCharacterRange(location: 4, length: 2))
+                ],
+                blockTextStyles: [
+                    ReaderBlockTextStyleRange(style: .quote, range: ReaderCharacterRange(location: 4, length: 2))
                 ]
             )
         ]
@@ -2501,6 +2655,9 @@ private final class StubURLProtocol: URLProtocol {
     let inlineTextStyles = try #require(firstSemantics["inlineTextStyles"] as? [[String: Any]])
     let firstInlineStyle = try #require(inlineTextStyles.first)
     let firstInlineRange = try #require(firstInlineStyle["range"] as? [String: Any])
+    let blockTextStyles = try #require(firstSemantics["blockTextStyles"] as? [[String: Any]])
+    let firstBlockStyle = try #require(blockTextStyles.first)
+    let firstBlockRange = try #require(firstBlockStyle["range"] as? [String: Any])
 
     #expect(object["schemaVersion"] as? Int == ReaderPageDocument.schemaVersion)
     #expect(chapterIdentity["rawValue"] as? String != nil)
@@ -2510,9 +2667,12 @@ private final class StubURLProtocol: URLProtocol {
     #expect(firstInlineStyle["style"] as? String == ReaderInlineTextStyle.bold.rawValue)
     #expect(firstInlineRange["location"] as? Int == 4)
     #expect(firstInlineRange["length"] as? Int == 2)
+    #expect(firstBlockStyle["style"] as? String == ReaderBlockTextStyle.quote.rawValue)
+    #expect(firstBlockRange["location"] as? Int == 4)
+    #expect(firstBlockRange["length"] as? Int == 2)
 }
 
-@Test func readerPageDocumentDecodeDefaultsMissingInlineTextStylesToEmpty() async throws {
+@Test func readerPageDocumentDecodeDefaultsMissingStyleRangesToEmpty() async throws {
     let json = #"""
     {
       "schemaVersion": 3,
@@ -2542,6 +2702,7 @@ private final class StubURLProtocol: URLProtocol {
     let document = try decoder.decode(ReaderPageDocument.self, from: json)
 
     #expect(document.segmentSemantics.first??.inlineTextStyles == [])
+    #expect(document.segmentSemantics.first??.blockTextStyles == [])
 }
 
 @Test func readerPageDocumentLegacyDecodeSynthesizesIdentitiesWithoutGroupingEqualTitles() async throws {

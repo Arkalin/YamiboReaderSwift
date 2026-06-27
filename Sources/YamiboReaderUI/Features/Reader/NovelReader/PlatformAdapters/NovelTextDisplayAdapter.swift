@@ -84,11 +84,12 @@ final class NovelTextViewportReferenceUIView: UIView, @preconcurrency UIEditMenu
         guard !displayReference.isStale else {
             return
         }
+        displayReference.drawBlockBackgrounds(in: context, bounds: self.bounds)
         drawSelectionHighlight(
             displayReference: displayReference,
             in: context
         )
-        displayReference.draw(in: context, bounds: self.bounds)
+        displayReference.drawText(in: context, bounds: self.bounds)
     }
 
     override var canBecomeFirstResponder: Bool {

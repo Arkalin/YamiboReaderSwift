@@ -417,12 +417,20 @@ public enum NovelTextLayout {
                     String(inlineStyle.range.length),
                 ].joined(separator: ":")
             }.joined(separator: ",")
+            let blockStyles = (segment.semantics?.blockTextStyles ?? []).map { blockStyle in
+                [
+                    blockStyle.style.rawValue,
+                    String(blockStyle.range.location),
+                    String(blockStyle.range.length),
+                ].joined(separator: ":")
+            }.joined(separator: ",")
             return [
                 String(segment.index),
                 segment.semantics?.chapterIdentity?.rawValue ?? "",
                 segment.semantics?.textSegmentIdentity?.rawValue ?? "",
                 segment.chapterTitle ?? "",
                 inlineStyles,
+                blockStyles,
                 segment.textContent,
             ].joined(separator: "\u{1f}")
         }.joined(separator: "\u{1e}")
@@ -522,6 +530,7 @@ public enum NovelTextLayout {
         var textRangesBySegment: [Int: ReaderRenderedTextRange] = [:]
         var insertedSeparatorRanges: [ReaderRenderedTextRange] = []
         var inlineTextStylesBySegment: [Int: [ReaderInlineTextStyleRange]] = [:]
+        var blockTextStyles: [ReaderBlockTextStyleRange] = []
         var externalBlocks: [NovelTextViewportExternalBlock] = []
         var lastTextSegmentIndex: Int?
 
@@ -552,6 +561,21 @@ public enum NovelTextLayout {
                    !inlineTextStyles.isEmpty {
                     inlineTextStylesBySegment[annotatedSegment.index] = inlineTextStyles
                 }
+                blockTextStyles.append(
+                    contentsOf: (annotatedSegment.semantics?.blockTextStyles ?? []).compactMap { blockStyle in
+                        guard blockStyle.range.length > 0,
+                              blockStyle.range.upperBound <= text.count else {
+                            return nil
+                        }
+                        return ReaderBlockTextStyleRange(
+                            style: blockStyle.style,
+                            range: ReaderCharacterRange(
+                                location: startOffset + blockStyle.range.location,
+                                length: blockStyle.range.length
+                            )
+                        )
+                    }
+                )
                 lastTextSegmentIndex = annotatedSegment.index
 
             case let .image(url, _):
@@ -581,7 +605,8 @@ public enum NovelTextLayout {
                 text: composedText,
                 textRangesBySegment: textRangesBySegment,
                 insertedSeparatorRanges: insertedSeparatorRanges,
-                inlineTextStylesBySegment: inlineTextStylesBySegment
+                inlineTextStylesBySegment: inlineTextStylesBySegment,
+                blockTextStyles: blockTextStyles
             ),
             externalBlocks: externalBlocks,
             diagnostics: NovelTextViewportDiagnostics(indexBuildCount: 1)
@@ -766,74 +791,118 @@ public enum NovelTextLayout {
     ) -> (segment: ReaderSegment, semantics: ReaderSegmentSemantics?)? {
         switch segment {
         case let .text(text, chapterTitle):
-            let transformed = transformTextAndInlineStyles(
+            let transformed = transformTextAndStyles(
                 text: text,
                 inlineTextStyles: semantics?.inlineTextStyles ?? [],
+                blockTextStyles: semantics?.blockTextStyles ?? [],
                 mode: settings.translationMode
             )
             var transformedSemantics = semantics
             transformedSemantics?.inlineTextStyles = transformed.inlineTextStyles
+            transformedSemantics?.blockTextStyles = transformed.blockTextStyles
             return (.text(transformed.text, chapterTitle: chapterTitle), transformedSemantics)
         case let .image(url, chapterTitle):
             return settings.loadsInlineImages ? (.image(url, chapterTitle: chapterTitle), semantics) : nil
         }
     }
 
-    private static func transformTextAndInlineStyles(
+    private static func transformTextAndStyles(
         text: String,
         inlineTextStyles: [ReaderInlineTextStyleRange],
+        blockTextStyles: [ReaderBlockTextStyleRange],
         mode: ReaderTranslationMode
-    ) -> (text: String, inlineTextStyles: [ReaderInlineTextStyleRange]) {
-        guard mode != .none, !inlineTextStyles.isEmpty else {
-            return (ReaderTextTransformer.transform(text, mode: mode), inlineTextStyles)
+    ) -> (
+        text: String,
+        inlineTextStyles: [ReaderInlineTextStyleRange],
+        blockTextStyles: [ReaderBlockTextStyleRange]
+    ) {
+        guard mode != .none else {
+            return (
+                ReaderTextTransformer.transform(text, mode: mode),
+                inlineTextStyles,
+                blockTextStyles
+            )
         }
 
-        let sortedStyles = inlineTextStyles.sorted {
-            if $0.range.location != $1.range.location {
-                return $0.range.location < $1.range.location
-            }
-            return $0.range.length < $1.range.length
+        guard !inlineTextStyles.isEmpty || !blockTextStyles.isEmpty else {
+            return (ReaderTextTransformer.transform(text, mode: mode), inlineTextStyles, blockTextStyles)
         }
+
+        let boundaries = styleBoundaries(
+            textCount: text.count,
+            inlineTextStyles: inlineTextStyles,
+            blockTextStyles: blockTextStyles
+        )
         var output = ""
-        var transformedStyles: [ReaderInlineTextStyleRange] = []
-        var cursor = 0
+        var transformedOffsets: [Int: Int] = [0: 0]
 
-        for inlineStyle in sortedStyles {
-            let start = min(max(inlineStyle.range.location, cursor), text.count)
-            let end = min(max(inlineStyle.range.upperBound, start), text.count)
-            if start > cursor {
-                output += ReaderTextTransformer.transform(
-                    substring(in: text, range: cursor ..< start),
-                    mode: mode
-                )
-            }
-            let transformedStart = output.count
+        for index in 0..<(boundaries.count - 1) {
+            let start = boundaries[index]
+            let end = boundaries[index + 1]
+            transformedOffsets[start] = output.count
             output += ReaderTextTransformer.transform(
                 substring(in: text, range: start ..< end),
                 mode: mode
             )
-            let transformedEnd = output.count
-            if transformedEnd > transformedStart {
-                transformedStyles.append(
-                    ReaderInlineTextStyleRange(
-                        style: inlineStyle.style,
-                        range: ReaderCharacterRange(
-                            location: transformedStart,
-                            length: transformedEnd - transformedStart
-                        )
-                    )
-                )
-            }
-            cursor = end
+            transformedOffsets[end] = output.count
         }
 
-        if cursor < text.count {
-            output += ReaderTextTransformer.transform(
-                substring(in: text, range: cursor ..< text.count),
-                mode: mode
-            )
+        return (
+            output,
+            inlineTextStyles.compactMap { transformedInlineStyle($0, transformedOffsets: transformedOffsets) },
+            blockTextStyles.compactMap { transformedBlockStyle($0, transformedOffsets: transformedOffsets) }
+        )
+    }
+
+    private static func styleBoundaries(
+        textCount: Int,
+        inlineTextStyles: [ReaderInlineTextStyleRange],
+        blockTextStyles: [ReaderBlockTextStyleRange]
+    ) -> [Int] {
+        var boundaries = Set([0, textCount])
+        for range in inlineTextStyles.map(\.range) + blockTextStyles.map(\.range) {
+            let start = min(max(range.location, 0), textCount)
+            let end = min(max(range.upperBound, start), textCount)
+            boundaries.insert(start)
+            boundaries.insert(end)
         }
-        return (output, transformedStyles)
+        return boundaries.sorted()
+    }
+
+    private static func transformedInlineStyle(
+        _ style: ReaderInlineTextStyleRange,
+        transformedOffsets: [Int: Int]
+    ) -> ReaderInlineTextStyleRange? {
+        guard let transformedStart = transformedOffsets[style.range.location],
+              let transformedEnd = transformedOffsets[style.range.upperBound],
+              transformedEnd > transformedStart else {
+            return nil
+        }
+        return ReaderInlineTextStyleRange(
+            style: style.style,
+            range: ReaderCharacterRange(
+                location: transformedStart,
+                length: transformedEnd - transformedStart
+            )
+        )
+    }
+
+    private static func transformedBlockStyle(
+        _ style: ReaderBlockTextStyleRange,
+        transformedOffsets: [Int: Int]
+    ) -> ReaderBlockTextStyleRange? {
+        guard let transformedStart = transformedOffsets[style.range.location],
+              let transformedEnd = transformedOffsets[style.range.upperBound],
+              transformedEnd > transformedStart else {
+            return nil
+        }
+        return ReaderBlockTextStyleRange(
+            style: style.style,
+            range: ReaderCharacterRange(
+                location: transformedStart,
+                length: transformedEnd - transformedStart
+            )
+        )
     }
 
     private static func substring(in text: String, range: Range<Int>) -> String {
