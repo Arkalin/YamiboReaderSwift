@@ -11,6 +11,16 @@ public struct ForumNavigationRequest: Identifiable, Hashable, Sendable {
     }
 }
 
+public struct ClipboardForumLinkPrompt: Identifiable, Equatable, Sendable {
+    public let url: URL
+
+    public var id: String { url.absoluteString }
+
+    public init(url: URL) {
+        self.url = url
+    }
+}
+
 @MainActor
 @Observable
 public final class YamiboAppModel {
@@ -24,6 +34,7 @@ public final class YamiboAppModel {
     public private(set) var suspendedMangaRoute: MangaPresentationRoute?
     public private(set) var suspendedMangaWebContext: MangaWebContext?
     public private(set) var forumNavigationRequest: ForumNavigationRequest?
+    public var clipboardForumLinkPrompt: ClipboardForumLinkPrompt?
 
     public let appContext: YamiboAppContext
 
@@ -59,6 +70,10 @@ public final class YamiboAppModel {
 
     public func synchronizeWebDAVIfNeeded() {
         appContinuity.foregroundBecameActive()
+    }
+
+    public var hasActiveReaderPresentation: Bool {
+        activeReaderContext != nil || activeMangaRoute != nil
     }
 
     public func scheduleWebDAVUploadForLocalChange(touchesAppSettings: Bool = false) {
@@ -174,6 +189,34 @@ public final class YamiboAppModel {
             selectedTab = .forum
             forumNavigationRequest = ForumNavigationRequest(url: url)
         }
+    }
+
+    public func openForumURL(_ url: URL) {
+        if activeReaderContext != nil {
+            dismissReader(openThreadInForum: url)
+            return
+        }
+
+        if activeMangaRoute != nil {
+            dismissManga(openThreadInForum: url)
+            return
+        }
+
+        selectedTab = .forum
+        forumNavigationRequest = ForumNavigationRequest(url: url)
+    }
+
+    public func presentClipboardForumLinkPrompt(url: URL) {
+        clipboardForumLinkPrompt = ClipboardForumLinkPrompt(url: url)
+    }
+
+    public func dismissClipboardForumLinkPrompt() {
+        clipboardForumLinkPrompt = nil
+    }
+
+    public func confirmClipboardForumLinkPrompt(_ prompt: ClipboardForumLinkPrompt) {
+        clipboardForumLinkPrompt = nil
+        openForumURL(prompt.url)
     }
 
     public func updateReaderResumeRoute(_ route: ReaderResumeRoute) {

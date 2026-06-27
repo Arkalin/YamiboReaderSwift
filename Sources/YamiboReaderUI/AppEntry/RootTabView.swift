@@ -1,11 +1,18 @@
 import SwiftUI
 import YamiboReaderCore
 
+#if os(iOS)
+import UIKit
+#endif
+
 public struct RootTabView: View {
     private let forumURL = URL(string: "https://bbs.yamibo.com/forum.php?mobile=2")!
     private let appModel: YamiboAppModel
 
     @Environment(\.scenePhase) private var scenePhase
+    #if os(iOS)
+    @State private var clipboardForumLinkPasteboardReader = ClipboardForumLinkPasteboardReader()
+    #endif
 
     public init(appModel: YamiboAppModel, initialTab: AppTab = .forum) {
         self.appModel = appModel
@@ -32,6 +39,7 @@ public struct RootTabView: View {
             switch newPhase {
             case .active:
                 appModel.synchronizeWebDAVIfNeeded()
+                presentClipboardForumLinkPromptIfNeeded()
             case .background:
                 appModel.flushWebDAVSyncBeforeBackground()
             case .inactive:
@@ -40,6 +48,7 @@ public struct RootTabView: View {
                 break
             }
         }
+        .modifier(ClipboardForumLinkPromptAlert(appModel: appModel, isActive: !appModel.hasActiveReaderPresentation))
     }
 
     private var content: some View {
@@ -100,6 +109,47 @@ public struct RootTabView: View {
             appModel.scheduleWebDAVUploadForLocalChange(touchesAppSettings: true)
         }
     }
+
+    private func presentClipboardForumLinkPromptIfNeeded() {
+        #if os(iOS)
+        Task { @MainActor in
+            guard let url = await clipboardForumLinkPasteboardReader.promptURL(from: UIPasteboard.general) else { return }
+            appModel.presentClipboardForumLinkPrompt(url: url)
+        }
+        #endif
+    }
+}
+
+private struct ClipboardForumLinkPromptAlert: ViewModifier {
+    let appModel: YamiboAppModel
+    let isActive: Bool
+
+    func body(content: Content) -> some View {
+        content
+            .alert(item: promptBinding) { prompt in
+                Alert(
+                    title: Text(L10n.string("clipboard_forum_link.title")),
+                    message: Text(prompt.url.absoluteString),
+                    primaryButton: .default(Text(L10n.string("clipboard_forum_link.open"))) {
+                        appModel.confirmClipboardForumLinkPrompt(prompt)
+                    },
+                    secondaryButton: .cancel(Text(L10n.string("common.cancel"))) {
+                        appModel.dismissClipboardForumLinkPrompt()
+                    }
+                )
+            }
+    }
+
+    private var promptBinding: Binding<ClipboardForumLinkPrompt?> {
+        Binding(
+            get: { isActive ? appModel.clipboardForumLinkPrompt : nil },
+            set: { prompt in
+                if prompt == nil, isActive {
+                    appModel.dismissClipboardForumLinkPrompt()
+                }
+            }
+        )
+    }
 }
 
 private struct ReaderPresentationModifier: ViewModifier {
@@ -111,6 +161,7 @@ private struct ReaderPresentationModifier: ViewModifier {
             .fullScreenCover(item: binding(for: \.activeReaderContext)) { context in
                 ReaderContainerView(context: context, appModel: appModel)
                     .ignoresSafeArea()
+                    .modifier(ClipboardForumLinkPromptAlert(appModel: appModel, isActive: true))
             }
             .fullScreenCover(
                 isPresented: Binding(
@@ -124,6 +175,7 @@ private struct ReaderPresentationModifier: ViewModifier {
             ) {
                 MangaPresentationHostView(appModel: appModel)
                     .ignoresSafeArea()
+                    .modifier(ClipboardForumLinkPromptAlert(appModel: appModel, isActive: true))
             }
         #else
         content
