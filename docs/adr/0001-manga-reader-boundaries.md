@@ -24,7 +24,7 @@ Domain language follows `docs/contexts/manga-reader/CONTEXT.md`:
 Create visible target boundary roots without moving existing production files:
 
 ```text
-Sources/YamiboReaderCore/MangaReader/
+Sources/YamiboReaderCore/Reader/MangaReader/
   Domain/
   Application/
   Data/

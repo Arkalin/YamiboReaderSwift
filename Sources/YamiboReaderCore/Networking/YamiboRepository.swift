@@ -44,31 +44,11 @@ public actor YamiboRepository {
         }
     }
 
-    public func fetchMangaTagList(tagID: String, page: Int = 1) async throws -> [MangaChapter] {
-        let html = try await client.fetchHTML(
-            for: .tag(id: tagID, page: page),
-            userAgent: YamiboDefaults.desktopTagUserAgent
-        )
-        let chapters = MangaHTMLParser.parseListHTML(html)
-        if chapters.isEmpty {
-            throw inferContentError(from: html, fallback: .parsingFailed(context: L10n.string("context.manga_directory")))
-        }
-        return chapters
-    }
-
-    public func searchManga(keyword: String, forumID: String = "30") async throws -> [MangaChapter] {
-        let html = try await client.fetchHTML(for: .search(keyword: keyword, forumID: forumID))
-        if MangaHTMLParser.isFloodControlOrError(html) {
-            throw YamiboError.floodControl
-        }
-        return MangaHTMLParser.parseListHTML(html)
-    }
-
     private func inferContentError(from html: String, fallback: YamiboError) -> YamiboError {
         if isLoginPage(html) {
             return .notAuthenticated
         }
-        if MangaHTMLParser.isFloodControlOrError(html) {
+        if isFloodControlOrError(html) {
             return .floodControl
         }
         return fallback
@@ -84,6 +64,13 @@ public actor YamiboRepository {
             "class=\"pg_logging\""
         ]
         return markers.contains { html.localizedCaseInsensitiveContains($0) }
+    }
+
+    private func isFloodControlOrError(_ html: String) -> Bool {
+        guard !html.contains("没有找到匹配结果") else { return false }
+        return html.contains("只能进行一次搜索")
+            || html.contains("防灌水")
+            || html.contains("指定的搜索词长度")
     }
 
     private func extractFormHash(from html: String) -> String? {

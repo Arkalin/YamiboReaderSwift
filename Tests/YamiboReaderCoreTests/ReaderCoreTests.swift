@@ -2789,7 +2789,7 @@ private final class StubURLProtocol: URLProtocol {
     let directory = URL(fileURLWithPath: NSTemporaryDirectory())
         .appendingPathComponent(UUID().uuidString, isDirectory: true)
     let cacheStore = ReaderCacheStore(baseDirectory: directory)
-    let repository = ReaderRepository(
+    let repository = NovelReaderRepository(
         client: YamiboClient(session: session, cookie: "sid=reader", userAgent: "Test-UA"),
         cacheStore: cacheStore
     )
@@ -2819,7 +2819,7 @@ private final class StubURLProtocol: URLProtocol {
     let directory = URL(fileURLWithPath: NSTemporaryDirectory())
         .appendingPathComponent(UUID().uuidString, isDirectory: true)
     let cacheStore = ReaderCacheStore(baseDirectory: directory)
-    let repository = ReaderRepository(
+    let repository = NovelReaderRepository(
         client: YamiboClient(session: session, cookie: "sid=reader", userAgent: "Test-UA"),
         cacheStore: cacheStore
     )
@@ -2889,7 +2889,7 @@ private final class StubURLProtocol: URLProtocol {
         )
     )
     try rewriteCachedReaderDocumentSchemaVersion(in: directory, to: 3)
-    let repository = ReaderRepository(
+    let repository = NovelReaderRepository(
         client: YamiboClient(session: session, cookie: "sid=reader", userAgent: "Test-UA"),
         cacheStore: ReaderCacheStore(baseDirectory: directory)
     )
@@ -2922,7 +2922,7 @@ private final class StubURLProtocol: URLProtocol {
         )
     )
     try rewriteCachedReaderDocumentSchemaVersion(in: directory, to: 3)
-    let repository = ReaderRepository(
+    let repository = NovelReaderRepository(
         client: YamiboClient(session: session, cookie: "sid=reader", userAgent: "Test-UA"),
         cacheStore: ReaderCacheStore(baseDirectory: directory)
     )
@@ -2944,7 +2944,7 @@ private final class StubURLProtocol: URLProtocol {
     let directory = URL(fileURLWithPath: NSTemporaryDirectory())
         .appendingPathComponent(UUID().uuidString, isDirectory: true)
     let cacheStore = ReaderCacheStore(baseDirectory: directory)
-    let repository = ReaderRepository(
+    let repository = NovelReaderRepository(
         client: YamiboClient(session: session, cookie: "sid=reader", userAgent: "Test-UA"),
         cacheStore: cacheStore
     )
@@ -2971,7 +2971,7 @@ private final class StubURLProtocol: URLProtocol {
     let directory = URL(fileURLWithPath: NSTemporaryDirectory())
         .appendingPathComponent(UUID().uuidString, isDirectory: true)
     let cacheStore = ReaderCacheStore(baseDirectory: directory)
-    let repository = ReaderRepository(
+    let repository = NovelReaderRepository(
         client: YamiboClient(session: session, cookie: "sid=reader", userAgent: "Test-UA"),
         cacheStore: cacheStore
     )
@@ -2993,13 +2993,12 @@ private final class StubURLProtocol: URLProtocol {
     #expect(loaded.source(forSegmentIndex: 0)?.ownerPostID == "41257246")
 }
 
-@Test func readerRepositoryLoadsChapterCommentsFromAuthorFilteredPageWhenTargetHasAuthorID() async throws {
+@Test func readerChapterCommentsRepositoryLoadsChapterCommentsFromAuthorFilteredPageWhenTargetHasAuthorID() async throws {
     let configuration = URLSessionConfiguration.ephemeral
     configuration.protocolClasses = [StubURLProtocol.self]
     let session = URLSession(configuration: configuration)
-    let repository = ReaderRepository(
-        client: YamiboClient(session: session, cookie: "sid=reader", userAgent: "Test-UA"),
-        cacheStore: ReaderCacheStore(baseDirectory: URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString, isDirectory: true))
+    let repository = ReaderChapterCommentsRepository(
+        client: YamiboClient(session: session, cookie: "sid=reader", userAgent: "Test-UA")
     )
     let target = ReaderChapterCommentTarget(
         threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=26&mobile=2")),
@@ -3014,13 +3013,12 @@ private final class StubURLProtocol: URLProtocol {
     #expect(page.comments.map(\.body) == ["完整评分理由"])
 }
 
-@Test func readerRepositoryLoadsSamePageRepliesFromUnfilteredPageForAuthorFilteredTarget() async throws {
+@Test func readerChapterCommentsRepositoryLoadsSamePageRepliesFromUnfilteredPageForAuthorFilteredTarget() async throws {
     let configuration = URLSessionConfiguration.ephemeral
     configuration.protocolClasses = [StubURLProtocol.self]
     let session = URLSession(configuration: configuration)
-    let repository = ReaderRepository(
-        client: YamiboClient(session: session, cookie: "sid=reader", userAgent: "Test-UA"),
-        cacheStore: ReaderCacheStore(baseDirectory: URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString, isDirectory: true))
+    let repository = ReaderChapterCommentsRepository(
+        client: YamiboClient(session: session, cookie: "sid=reader", userAgent: "Test-UA")
     )
     let target = ReaderChapterCommentTarget(
         threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?authorid=42&mod=viewthread&tid=27&mobile=2")),
@@ -3039,13 +3037,12 @@ private final class StubURLProtocol: URLProtocol {
     #expect(page.nextView == nil)
 }
 
-@Test func readerRepositoryReloadsUnfilteredRepliesIgnoringURLCache() async throws {
+@Test func readerChapterCommentsRepositoryReloadsUnfilteredRepliesIgnoringURLCache() async throws {
     let configuration = URLSessionConfiguration.ephemeral
     configuration.protocolClasses = [StubURLProtocol.self]
     let session = URLSession(configuration: configuration)
-    let repository = ReaderRepository(
-        client: YamiboClient(session: session, cookie: "sid=reader", userAgent: "Test-UA"),
-        cacheStore: ReaderCacheStore(baseDirectory: URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString, isDirectory: true))
+    let repository = ReaderChapterCommentsRepository(
+        client: YamiboClient(session: session, cookie: "sid=reader", userAgent: "Test-UA")
     )
     let target = ReaderChapterCommentTarget(
         threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?authorid=42&mod=viewthread&tid=28&mobile=2")),
@@ -3062,13 +3059,12 @@ private final class StubURLProtocol: URLProtocol {
     #expect(StubURLProtocol.tid28UnfilteredCachePolicy == .reloadIgnoringLocalCacheData)
 }
 
-@Test func readerRepositoryFindsRealUnfilteredPageForAuthorFilteredChapterComments() async throws {
+@Test func readerChapterCommentsRepositoryFindsRealUnfilteredPageForAuthorFilteredChapterComments() async throws {
     let configuration = URLSessionConfiguration.ephemeral
     configuration.protocolClasses = [StubURLProtocol.self]
     let session = URLSession(configuration: configuration)
-    let repository = ReaderRepository(
-        client: YamiboClient(session: session, cookie: "sid=reader", userAgent: "Test-UA"),
-        cacheStore: ReaderCacheStore(baseDirectory: URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString, isDirectory: true))
+    let repository = ReaderChapterCommentsRepository(
+        client: YamiboClient(session: session, cookie: "sid=reader", userAgent: "Test-UA")
     )
     let target = ReaderChapterCommentTarget(
         threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?authorid=42&mod=viewthread&tid=29&mobile=2")),

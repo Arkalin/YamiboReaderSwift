@@ -72,14 +72,24 @@ public final class YamiboAppContext: YamiboRepositoryProviding, Sendable {
         return YamiboRepository(client: client)
     }
 
-    public func makeReaderRepository() async -> ReaderRepository {
+    public func makeNovelReaderRepository() async -> NovelReaderRepository {
         let sessionState = await sessionStore.load()
         let client = YamiboClient(
             session: session,
             cookie: sessionState.cookie,
             userAgent: sessionState.userAgent
         )
-        return ReaderRepository(client: client, cacheStore: readerCacheStore)
+        return NovelReaderRepository(client: client, cacheStore: readerCacheStore)
+    }
+
+    public func makeReaderChapterCommentsRepository() async -> ReaderChapterCommentsRepository {
+        let sessionState = await sessionStore.load()
+        let client = YamiboClient(
+            session: session,
+            cookie: sessionState.cookie,
+            userAgent: sessionState.userAgent
+        )
+        return ReaderChapterCommentsRepository(client: client)
     }
 
     public func makeNovelInlineImageLoadingContext() async -> NovelInlineImageLoadingContext {

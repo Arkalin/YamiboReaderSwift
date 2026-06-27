@@ -16,7 +16,7 @@ public protocol NovelReadingPageRepository: Sendable {
     ) async throws
 }
 
-extension ReaderRepository: NovelReadingPageRepository {}
+extension NovelReaderRepository: NovelReadingPageRepository {}
 
 public struct NovelReadingInitialPosition: Equatable, Sendable {
     public var resumePoint: ReaderResumePoint?

@@ -41,7 +41,8 @@ public final class ReaderContainerModel: ObservableObject {
     public let context: ReaderLaunchContext
 
     private let appContext: YamiboAppContext
-    private var repository: ReaderRepository?
+    private var repository: NovelReaderRepository?
+    private var chapterCommentsRepository: ReaderChapterCommentsRepository?
     private var readingWorkflow: NovelReadingWorkflow?
     private var appearanceSettingsApplicationSequence: UInt64 = 0
     private var layout: ReaderContainerLayout = .zero
@@ -64,14 +65,14 @@ public final class ReaderContainerModel: ObservableObject {
                 guard let self else {
                     throw ReaderChapterCommentsUnavailableError()
                 }
-                let repository = await self.ensureReaderRepository()
+                let repository = await self.ensureChapterCommentsRepository()
                 return try await repository.loadChapterComments(for: target)
             },
             loadMore: { [weak self] target, view in
                 guard let self else {
                     throw ReaderChapterCommentsUnavailableError()
                 }
-                let repository = await self.ensureReaderRepository()
+                let repository = await self.ensureChapterCommentsRepository()
                 return try await repository.loadMoreChapterComments(for: target, view: view)
             }
         ),
@@ -432,7 +433,7 @@ public final class ReaderContainerModel: ObservableObject {
         layoutRequestSequence &+= 1
         if repository == nil {
             inlineImageLoadingContext = await appContext.makeNovelInlineImageLoadingContext()
-            repository = await appContext.makeReaderRepository()
+            repository = await appContext.makeNovelReaderRepository()
             let appSettings = await appContext.settingsStore.load()
             bootstrapSettings = appSettings.reader
             applePencilPageTurnSettings = appSettings.applePencilPageTurn
@@ -1000,9 +1001,9 @@ public final class ReaderContainerModel: ObservableObject {
         }
     }
 
-    private func ensureReaderRepository() async -> ReaderRepository {
+    private func ensureNovelReaderRepository() async -> NovelReaderRepository {
         if repository == nil {
-            repository = await appContext.makeReaderRepository()
+            repository = await appContext.makeNovelReaderRepository()
         }
         guard let repository else {
             preconditionFailure("Reader repository should be initialized")
@@ -1010,15 +1011,25 @@ public final class ReaderContainerModel: ObservableObject {
         return repository
     }
 
+    private func ensureChapterCommentsRepository() async -> ReaderChapterCommentsRepository {
+        if chapterCommentsRepository == nil {
+            chapterCommentsRepository = await appContext.makeReaderChapterCommentsRepository()
+        }
+        guard let chapterCommentsRepository else {
+            preconditionFailure("Reader chapter comments repository should be initialized")
+        }
+        return chapterCommentsRepository
+    }
+
     private func ensureReadingWorkflow() async -> NovelReadingWorkflow? {
-        let repository = await ensureReaderRepository()
+        let repository = await ensureNovelReaderRepository()
         if readingWorkflow == nil {
             readingWorkflow = makeReadingWorkflow(repository: repository)
         }
         return readingWorkflow
     }
 
-    private func makeReadingWorkflow(repository: ReaderRepository) -> NovelReadingWorkflow {
+    private func makeReadingWorkflow(repository: NovelReaderRepository) -> NovelReadingWorkflow {
         if let runtimeAdapter {
             return NovelReadingWorkflow(
                 context: context,
