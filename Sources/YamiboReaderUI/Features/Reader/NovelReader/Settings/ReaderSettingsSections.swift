@@ -8,6 +8,9 @@ struct ReaderBooksTextSection: View {
     let palette: ReaderBooksSheetPalette
     let onFontScaleChange: (Double) -> Void
     let onFontFamilyChange: (ReaderFontFamily) -> Void
+    let onSelectOriginalText: () -> Void
+    let onSelectSimplifiedText: () -> Void
+    let onSelectTraditionalText: () -> Void
 
     var body: some View {
         ReaderBooksSettingsSection(title: L10n.string("reader.section.text"), palette: palette) {
@@ -21,6 +24,14 @@ struct ReaderBooksTextSection: View {
                 selectedFamily: settings.fontFamily,
                 palette: palette,
                 onSelect: onFontFamilyChange
+            )
+            ReaderBooksDivider(palette: palette)
+            ReaderBooksTranslationPicker(
+                selectedModeRawValue: settings.translationMode.rawValue,
+                palette: palette,
+                onSelectOriginal: onSelectOriginalText,
+                onSelectSimplified: onSelectSimplifiedText,
+                onSelectTraditional: onSelectTraditionalText
             )
         }
     }
@@ -121,9 +132,6 @@ struct ReaderBooksDisplaySection: View {
     @Binding var showsTwoPagesInLandscapeOnPad: Bool
     let onBackgroundStyleChange: (ReaderBackgroundStyle) -> Void
     let onReadingModeChange: (ReaderReadingMode, ReaderPagedTurnStyle) -> Void
-    let onSelectOriginalText: () -> Void
-    let onSelectSimplifiedText: () -> Void
-    let onSelectTraditionalText: () -> Void
 
     var body: some View {
         ReaderBooksSettingsSection(title: L10n.string("reader.section.display"), palette: palette) {
@@ -147,14 +155,6 @@ struct ReaderBooksDisplaySection: View {
                     isOn: $showsTwoPagesInLandscapeOnPad
                 )
             }
-            ReaderBooksDivider(palette: palette)
-            ReaderBooksTranslationPicker(
-                selectedModeRawValue: settings.translationMode.rawValue,
-                palette: palette,
-                onSelectOriginal: onSelectOriginalText,
-                onSelectSimplified: onSelectSimplifiedText,
-                onSelectTraditional: onSelectTraditionalText
-            )
         }
     }
 }
