@@ -42,11 +42,14 @@ public final class AppContinuityWorkflow {
         guard canRestoreReaderRoute else { return nil }
         guard let route = await appContext.readerResumeRouteStore.load() else { return nil }
 
-        let restoredRoute = if reconcilesWithFavoriteProgress {
-            await routeReconciledWithFavoriteProgress(route)
-        } else {
-            route
+        guard let restoredRoute = await restorableRoute(
+            from: route,
+            reconcilesWithFavoriteProgress: reconcilesWithFavoriteProgress
+        ) else {
+            await appContext.readerResumeRouteStore.clear()
+            return nil
         }
+
         if restoredRoute != route {
             try? await appContext.readerResumeRouteStore.save(restoredRoute)
         }
@@ -144,38 +147,98 @@ public final class AppContinuityWorkflow {
         }
     }
 
-    private func routeReconciledWithFavoriteProgress(_ route: ReaderResumeRoute) async -> ReaderResumeRoute {
+    private func restorableRoute(
+        from route: ReaderResumeRoute,
+        reconcilesWithFavoriteProgress: Bool
+    ) async -> ReaderResumeRoute? {
+        if reconcilesWithFavoriteProgress {
+            if let route = await routeReconciledWithFavoriteProgress(route) {
+                return route
+            }
+        }
+        if route.hasLocalReadingProgress {
+            return route
+        }
+        if !reconcilesWithFavoriteProgress {
+            return await routeReconciledWithFavoriteProgress(route)
+        }
+        return nil
+    }
+
+    private func routeReconciledWithFavoriteProgress(_ route: ReaderResumeRoute) async -> ReaderResumeRoute? {
         switch route {
         case let .novel(context):
             guard let favorite = await appContext.favoriteStore.favorite(for: context.threadURL),
                   favorite.hasNovelReadingProgress
             else {
-                return route
+                return nil
             }
             return .novel(context.reconciledWithFavoriteProgress(favorite))
         case let .manga(route):
-            let route = await mangaRouteReconciledWithFavoriteProgress(route)
+            guard let route = await mangaRouteReconciledWithFavoriteProgress(route) else {
+                return nil
+            }
             return .manga(route)
         }
     }
 
-    private func mangaRouteReconciledWithFavoriteProgress(_ route: MangaPresentationRoute) async -> MangaPresentationRoute {
+    private func mangaRouteReconciledWithFavoriteProgress(_ route: MangaPresentationRoute) async -> MangaPresentationRoute? {
         switch route {
         case let .native(context):
             guard let favorite = await appContext.favoriteStore.favorite(for: context.originalThreadURL),
                   favorite.hasMangaReadingProgress
             else {
-                return route
+                return nil
             }
             return .native(context.reconciledWithFavoriteProgress(favorite))
         case let .web(context):
             guard let favorite = await appContext.favoriteStore.favorite(for: context.originalThreadURL),
                   favorite.hasMangaReadingProgress
             else {
-                return route
+                return nil
             }
             return .web(context.reconciledWithFavoriteProgress(favorite))
         }
+    }
+}
+
+private extension ReaderResumeRoute {
+    var hasLocalReadingProgress: Bool {
+        switch self {
+        case let .novel(context):
+            context.hasLocalReadingProgress
+        case let .manga(route):
+            route.hasLocalReadingProgress
+        }
+    }
+}
+
+private extension ReaderLaunchContext {
+    var hasLocalReadingProgress: Bool {
+        initialResumePoint != nil || (initialView ?? 1) > 1
+    }
+}
+
+private extension MangaPresentationRoute {
+    var hasLocalReadingProgress: Bool {
+        switch self {
+        case let .native(context):
+            context.hasLocalReadingProgress
+        case let .web(context):
+            context.hasLocalReadingProgress
+        }
+    }
+}
+
+private extension MangaLaunchContext {
+    var hasLocalReadingProgress: Bool {
+        initialPage > 0 || chapterURL != originalThreadURL
+    }
+}
+
+private extension MangaWebContext {
+    var hasLocalReadingProgress: Bool {
+        initialPage > 0 || currentURL != originalThreadURL
     }
 }
 
