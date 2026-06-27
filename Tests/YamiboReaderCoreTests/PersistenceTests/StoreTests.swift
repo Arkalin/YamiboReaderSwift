@@ -323,7 +323,7 @@ import Testing
 
     #expect(decoded.readingMode == .paged)
     #expect(decoded.pagedTurnStyle == .pageCurl)
-    #expect(decoded.pageTurnDirection == .rightToLeft)
+    #expect(decoded.pageTurnDirection == .leftToRight)
 }
 
 @Test func mangaReaderSettingsDecodesLegacyPayloadWithAscendingDirectorySortOrder() async throws {

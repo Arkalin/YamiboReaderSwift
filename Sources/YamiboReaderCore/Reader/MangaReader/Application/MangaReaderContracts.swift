@@ -196,7 +196,7 @@ public struct MangaReaderSettings: Codable, Hashable, Sendable {
     public init(
         readingMode: MangaReadingMode = .vertical,
         pagedTurnStyle: ReaderPagedTurnStyle = .slide,
-        pageTurnDirection: MangaPageTurnDirection = .rightToLeft,
+        pageTurnDirection: MangaPageTurnDirection = .leftToRight,
         pageScaleMode: MangaPageScaleMode = .fitWidth,
         pageEdgeFillStyle: MangaPageEdgeFillStyle = .black,
         brightness: Double = 1,
@@ -231,7 +231,7 @@ public struct MangaReaderSettings: Codable, Hashable, Sendable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         readingMode = try container.decodeIfPresent(MangaReadingMode.self, forKey: .readingMode) ?? .vertical
         pagedTurnStyle = try container.decodeIfPresent(ReaderPagedTurnStyle.self, forKey: .pagedTurnStyle) ?? .slide
-        pageTurnDirection = try container.decodeIfPresent(MangaPageTurnDirection.self, forKey: .pageTurnDirection) ?? .rightToLeft
+        pageTurnDirection = try container.decodeIfPresent(MangaPageTurnDirection.self, forKey: .pageTurnDirection) ?? .leftToRight
         pageScaleMode = try container.decodeIfPresent(MangaPageScaleMode.self, forKey: .pageScaleMode) ?? .fitWidth
         pageEdgeFillStyle = try container.decodeIfPresent(MangaPageEdgeFillStyle.self, forKey: .pageEdgeFillStyle) ?? .black
         brightness = try container.decodeIfPresent(Double.self, forKey: .brightness) ?? 1
