@@ -153,20 +153,20 @@ final class MineHomeViewModel {
             lastAutomaticProfileRefreshCredential = nil
             return
         }
-        guard profileNeedsAutomaticRefresh else { return }
         guard lastAutomaticProfileRefreshCredential != credential else { return }
+        guard canAttemptAutomaticProfileRefresh else { return }
 
         lastAutomaticProfileRefreshCredential = credential
         await refreshProfile(presentsErrors: profile == nil)
     }
 
-    private var profileNeedsAutomaticRefresh: Bool {
-        guard let profile else { return true }
+    private var canAttemptAutomaticProfileRefresh: Bool {
+        guard profile != nil else { return true }
         guard let accountUID = session.accountUID?.trimmingCharacters(in: .whitespacesAndNewlines),
               !accountUID.isEmpty else {
             return false
         }
-        return profile.uid.trimmingCharacters(in: .whitespacesAndNewlines) != accountUID
+        return true
     }
 
     func refreshProfile() async {

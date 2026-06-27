@@ -5,7 +5,7 @@ import XCTest
 
 @MainActor
 final class MineHomeViewModelTests: XCTestCase {
-    func testLoadUsesCachedProfileWithoutRefreshingAutomatically() async throws {
+    func testLoadRefreshesMatchingCachedProfileOncePerCredential() async throws {
         let fixture = try await makeMineHomeFixture(
             accountUID: "535977",
             cachedProfile: makeProfile(uid: "535977")
@@ -21,7 +21,7 @@ final class MineHomeViewModelTests: XCTestCase {
         await viewModel.load()
         await viewModel.load()
 
-        XCTAssertEqual(requestCount, 0)
+        XCTAssertEqual(requestCount, 1)
         XCTAssertEqual(viewModel.profile?.uid, "535977")
     }
 
@@ -58,7 +58,7 @@ final class MineHomeViewModelTests: XCTestCase {
         await viewModel.load()
         await viewModel.refreshProfile()
 
-        XCTAssertEqual(requestCount, 1)
+        XCTAssertEqual(requestCount, 2)
         XCTAssertEqual(viewModel.profile?.uid, "535977")
     }
 
@@ -79,6 +79,52 @@ final class MineHomeViewModelTests: XCTestCase {
         await viewModel.load()
 
         XCTAssertEqual(requestCount, 1)
+        XCTAssertEqual(viewModel.profile?.uid, "535977")
+    }
+
+    func testAutomaticRefreshFailureKeepsCachedProfileWithoutPresentingError() async throws {
+        let fixture = try await makeMineHomeFixture(
+            accountUID: "535977",
+            cachedProfile: makeProfile(uid: "535977")
+        )
+        nonisolated(unsafe) var requestCount = 0
+        MineProfileRefreshTestURLProtocol.handler = { _ in
+            requestCount += 1
+            throw MineProfileRefreshTestError.missingHandler
+        }
+        defer { MineProfileRefreshTestURLProtocol.handler = nil }
+
+        let viewModel = MineHomeViewModel(appContext: fixture.appContext)
+        await viewModel.load()
+
+        XCTAssertEqual(requestCount, 1)
+        XCTAssertNil(viewModel.errorMessage)
+        XCTAssertEqual(viewModel.profile?.uid, "535977")
+    }
+
+    func testManualRefreshFailurePresentsErrorWhenCachedProfileExists() async throws {
+        let fixture = try await makeMineHomeFixture(
+            accountUID: "535977",
+            cachedProfile: makeProfile(uid: "535977")
+        )
+        nonisolated(unsafe) var requestCount = 0
+        nonisolated(unsafe) var shouldFail = false
+        MineProfileRefreshTestURLProtocol.handler = { request in
+            requestCount += 1
+            if shouldFail {
+                throw MineProfileRefreshTestError.missingHandler
+            }
+            return profileResponse(for: request, uid: "535977")
+        }
+        defer { MineProfileRefreshTestURLProtocol.handler = nil }
+
+        let viewModel = MineHomeViewModel(appContext: fixture.appContext)
+        await viewModel.load()
+        shouldFail = true
+        await viewModel.refreshProfile()
+
+        XCTAssertEqual(requestCount, 2)
+        XCTAssertNotNil(viewModel.errorMessage)
         XCTAssertEqual(viewModel.profile?.uid, "535977")
     }
 }
