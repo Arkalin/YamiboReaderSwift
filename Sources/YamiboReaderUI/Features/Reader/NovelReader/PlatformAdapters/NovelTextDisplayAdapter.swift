@@ -113,13 +113,22 @@ final class NovelTextViewportReferenceUIView: UIView, @preconcurrency UIEditMenu
         suggestedActions: [UIMenuElement]
     ) -> UIMenu? {
         guard selectionController?.hasSelection == true else { return nil }
+        if !suggestedActions.isEmpty {
+            return UIMenu(children: suggestedActions)
+        }
         let copyAction = UIAction(
-            title: L10n.string("reader.copy"),
-            image: UIImage(systemName: "doc.on.doc")
+            title: L10n.string("reader.copy")
         ) { [weak self] _ in
             self?.selectionController?.copySelection()
         }
         return UIMenu(children: [copyAction])
+    }
+
+    func editMenuInteraction(
+        _ interaction: UIEditMenuInteraction,
+        targetRectFor configuration: UIEditMenuConfiguration
+    ) -> CGRect {
+        selectionController?.menuTargetRect(in: self) ?? bounds
     }
 
     override func layoutSubviews() {
@@ -157,12 +166,14 @@ final class NovelTextViewportReferenceUIView: UIView, @preconcurrency UIEditMenu
         case .began:
             guard selectionController.beginSelection(in: self, at: point) else { return }
             becomeFirstResponder()
-            showCopyMenu()
+            dismissCopyMenu()
         case .changed:
             selectionController.updateSelection(in: self, at: point)
+        case .ended:
+            selectionController.updateSelection(in: self, at: point)
             showCopyMenu()
-        case .ended, .cancelled, .failed:
-            showCopyMenu()
+        case .cancelled, .failed:
+            dismissCopyMenu()
         default:
             break
         }
