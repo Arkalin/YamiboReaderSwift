@@ -151,10 +151,10 @@
 "favorites.move_to_collection" = "移动到合集";
 "favorites.move_to_root" = "<全部>";
 "favorites.new_tag" = "新建标签";
-"favorites.progress.page" = "读至第 %d 页";
+"favorites.progress.page" = "第 %d 页";
 "favorites.progress.page_web" = "第%d页 / 网页第%d页";
-"favorites.progress.page_web_spaced" = "读至第 %d 页 · 网页第 %d 页";
-"favorites.progress.page_with_chapter" = "读至第 %d 页 · %@";
+"favorites.progress.page_web_spaced" = "第 %d 页 · 网页第 %d 页";
+"favorites.progress.page_with_chapter" = "第 %d 页 · %@";
 "favorites.progress.novel_page_web" = "页内 %d %% · 网页 %d / %d";
 "favorites.progress.novel_percent" = "%d %%";
 "favorites.progress.novel_web" = "网页 %d / %d";
