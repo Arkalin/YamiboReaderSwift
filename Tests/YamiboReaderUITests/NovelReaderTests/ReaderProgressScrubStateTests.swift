@@ -308,6 +308,60 @@ final class ReaderProgressScrubStateTests: XCTestCase {
         )
     }
 
+    func testFinalSpreadProgressFillIsFull() {
+        let surfaceCount = 416
+        let surfaces = (0..<surfaceCount).map { index in
+            NovelReaderSurface(
+                identity: NovelReaderSurfaceIdentity(generation: 1, ordinal: index),
+                presentationIndex: index,
+                kind: .text,
+                documentView: 1,
+                chapterTitle: nil,
+                presentationSize: .zero
+            )
+        }
+        let spreads = stride(from: 0, to: surfaceCount, by: 2).map { leftIndex in
+            NovelReaderPresentationSpread(
+                index: leftIndex / 2,
+                leftSurfaceIndex: leftIndex,
+                leftSurfaceIdentity: surfaces[leftIndex].identity,
+                rightSurfaceIndex: leftIndex + 1 < surfaceCount ? leftIndex + 1 : nil,
+                rightSurfaceIdentity: leftIndex + 1 < surfaceCount ? surfaces[leftIndex + 1].identity : nil,
+                chapterTitle: nil
+            )
+        }
+        let projection = NovelReaderProgressProjection(
+            readingMode: .paged,
+            usesTwoPageSpread: true,
+            pageTurnDirection: .leftToRight,
+            surfaces: surfaces,
+            selectedSurfaceIndex: 414,
+            spreads: spreads,
+            readingState: NovelReaderReadingState(
+                currentView: 1,
+                maxView: 1,
+                currentChapterTitle: nil,
+                authorID: nil,
+                currentSurfaceIntraProgress: 0
+            )
+        )
+        let presentation = ReaderBottomChromeLayoutPresentation()
+
+        XCTAssertEqual(projection.displayedPageLabel, "415-416")
+        XCTAssertEqual(projection.selectedSurfaceIndex, 415)
+        XCTAssertEqual(projection.currentSurfaceNumber, 416)
+        XCTAssertEqual(projection.currentProgressFraction, 1)
+        XCTAssertEqual(projection.currentProgressPercentText, "100%")
+        XCTAssertEqual(
+            presentation.capsuleProgressFillExtent(
+                position: projection.currentProgressFraction,
+                length: presentation.maxChromeWidth,
+                edgeInset: presentation.capsuleChapterTickRoundedEdgeInset
+            ),
+            presentation.maxChromeWidth
+        )
+    }
+
     func testIntegratedProgressChromeContractsAcrossPagedAndVerticalModes() {
         let paged = ReaderProgressChromePresentation(readingMode: .paged, isChromeVisible: true)
         let verticalVisible = ReaderProgressChromePresentation(readingMode: .vertical, isChromeVisible: true)

@@ -1750,19 +1750,26 @@ public struct NovelReaderProgressProjection: Hashable, Sendable {
         let surfaceCount = max(surfaces.count, 1)
         let maxSurfaceIndex = max(surfaceCount - 1, 0)
         let normalizedSelectedIndex = min(max(selectedSurfaceIndex, 0), maxSurfaceIndex)
-        let selectedSurface = surfaces.indices.contains(normalizedSelectedIndex) ? surfaces[normalizedSelectedIndex] : nil
+        let progressSurfaceIndex = Self.progressSurfaceIndex(
+            selectedSurfaceIndex: normalizedSelectedIndex,
+            maxSurfaceIndex: maxSurfaceIndex,
+            spreads: spreads,
+            usesTwoPageSpread: usesTwoPageSpread,
+            pageTurnDirection: pageTurnDirection
+        )
+        let selectedSurface = surfaces.indices.contains(progressSurfaceIndex) ? surfaces[progressSurfaceIndex] : nil
         let displayedView = selectedSurface?.documentView ?? readingState.currentView
         let visibleSurfaceIndexes = surfaces.indices.filter { surfaces[$0].documentView == displayedView }
-        let fallbackVisibleSurfaceIndex = visibleSurfaceIndexes.first ?? normalizedSelectedIndex
+        let fallbackVisibleSurfaceIndex = visibleSurfaceIndexes.first ?? progressSurfaceIndex
         let displayedPageIndex = visibleSurfaceIndexes.first.map {
-            max(normalizedSelectedIndex - $0, 0)
-        } ?? normalizedSelectedIndex
+            max(progressSurfaceIndex - $0, 0)
+        } ?? progressSurfaceIndex
         let displayedPageCount = max(visibleSurfaceIndexes.count, 1)
         let displayedPageLabel = Self.displayedPageLabel(
             displayedPageIndex: displayedPageIndex,
             displayedPageCount: displayedPageCount,
             displayedView: displayedView,
-            selectedSurfaceIndex: normalizedSelectedIndex,
+            selectedSurfaceIndex: progressSurfaceIndex,
             surfaces: surfaces,
             spreads: spreads,
             usesTwoPageSpread: usesTwoPageSpread
@@ -1771,7 +1778,7 @@ public struct NovelReaderProgressProjection: Hashable, Sendable {
         case .vertical:
             displayedPageCount > 1 ? Double(displayedPageIndex) / Double(displayedPageCount - 1) : 0
         case .paged:
-            surfaceCount > 1 ? Double(normalizedSelectedIndex) / Double(surfaceCount - 1) : 0
+            surfaceCount > 1 ? Double(progressSurfaceIndex) / Double(surfaceCount - 1) : 0
         }
         let percent = Int((fraction * 100).rounded())
 
@@ -1780,8 +1787,8 @@ public struct NovelReaderProgressProjection: Hashable, Sendable {
             usesTwoPageSpread: usesTwoPageSpread,
             pageTurnDirection: pageTurnDirection,
             surfaceCount: surfaceCount,
-            selectedSurfaceIndex: normalizedSelectedIndex,
-            currentSurfaceNumber: normalizedSelectedIndex + 1,
+            selectedSurfaceIndex: progressSurfaceIndex,
+            currentSurfaceNumber: progressSurfaceIndex + 1,
             displayedView: displayedView,
             displayedPageIndex: displayedPageIndex,
             displayedPageCount: displayedPageCount,
@@ -1792,6 +1799,29 @@ public struct NovelReaderProgressProjection: Hashable, Sendable {
             visibleSurfaceIndexes: Array(visibleSurfaceIndexes),
             fallbackVisibleSurfaceIndex: fallbackVisibleSurfaceIndex
         )
+    }
+
+    private static func progressSurfaceIndex(
+        selectedSurfaceIndex: Int,
+        maxSurfaceIndex: Int,
+        spreads: [NovelReaderPresentationSpread],
+        usesTwoPageSpread: Bool,
+        pageTurnDirection: ReaderPageTurnDirection
+    ) -> Int {
+        let clampedSelectedIndex = min(max(selectedSurfaceIndex, 0), max(maxSurfaceIndex, 0))
+        guard usesTwoPageSpread,
+              let spread = spreads.first(where: {
+                $0.leftSurfaceIndex == clampedSelectedIndex || $0.rightSurfaceIndex == clampedSelectedIndex
+              }) else {
+            return clampedSelectedIndex
+        }
+        let progressIndex = switch pageTurnDirection {
+        case .leftToRight:
+            spread.rightSurfaceIndex ?? spread.leftSurfaceIndex
+        case .rightToLeft:
+            spread.leftSurfaceIndex
+        }
+        return min(max(progressIndex, 0), max(maxSurfaceIndex, 0))
     }
 
     private static func displayedPageLabel(
