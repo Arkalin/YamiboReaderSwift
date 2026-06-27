@@ -142,7 +142,7 @@ struct ReaderBooksDisplaySection: View {
                 onSelect: onBackgroundStyleChange
             )
             ReaderBooksDivider(palette: palette)
-            ReaderBooksReadingModeMenuRow(
+            ReaderBooksReadingModePicker(
                 settings: settings,
                 palette: palette,
                 onSelect: onReadingModeChange

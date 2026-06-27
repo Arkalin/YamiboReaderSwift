@@ -353,7 +353,7 @@ final class MangaPresentationRouteTests: XCTestCase {
     }
 
     func testPresentMangaFromWebStoresSuspendedContextAndDismissRestoresWeb() {
-        let appModel = YamiboAppModel(appContext: YamiboAppContext())
+        let appModel = makeIsolatedAppModel()
         let webContext = MangaWebContext(
             currentURL: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=700&mobile=2")!,
             originalThreadURL: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=700&mobile=2")!,
@@ -387,7 +387,7 @@ final class MangaPresentationRouteTests: XCTestCase {
     }
 
     func testPresentMangaAfterAutomaticFallbackDoesNotRestoreWebOnDismiss() {
-        let appModel = YamiboAppModel(appContext: YamiboAppContext())
+        let appModel = makeIsolatedAppModel()
         let originalURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=704&mobile=2")!
         let webContext = MangaWebContext(
             currentURL: originalURL,
@@ -417,7 +417,7 @@ final class MangaPresentationRouteTests: XCTestCase {
     }
 
     func testDismissMangaToOriginalPostClearsSuspendedContext() {
-        let appModel = YamiboAppModel(appContext: YamiboAppContext())
+        let appModel = makeIsolatedAppModel()
         let originalURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=701&mobile=2")!
         let webContext = MangaWebContext(
             currentURL: originalURL,
@@ -441,7 +441,7 @@ final class MangaPresentationRouteTests: XCTestCase {
     }
 
     func testSelectingFavoritesAfterMangaOpenedForumRestoresManga() {
-        let appModel = YamiboAppModel(appContext: YamiboAppContext(), initialTab: .favorites)
+        let appModel = makeIsolatedAppModel(initialTab: .favorites)
         let originalURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=704&mobile=2")!
         let context = MangaLaunchContext(
             originalThreadURL: originalURL,
@@ -464,7 +464,7 @@ final class MangaPresentationRouteTests: XCTestCase {
     }
 
     func testMangaPresentationDismissCallbackDoesNotClearSuspendedMangaRoute() {
-        let appModel = YamiboAppModel(appContext: YamiboAppContext(), initialTab: .favorites)
+        let appModel = makeIsolatedAppModel(initialTab: .favorites)
         let originalURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=704&mobile=2")!
         let context = MangaLaunchContext(
             originalThreadURL: originalURL,
@@ -486,7 +486,7 @@ final class MangaPresentationRouteTests: XCTestCase {
     }
 
     func testDismissReaderToOriginalPostSelectsForumAndCreatesNavigationRequest() {
-        let appModel = YamiboAppModel(appContext: YamiboAppContext(), initialTab: .mine)
+        let appModel = makeIsolatedAppModel(initialTab: .mine)
         let originalURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=703&mobile=2")!
         let context = ReaderLaunchContext(
             threadURL: originalURL,
@@ -504,7 +504,7 @@ final class MangaPresentationRouteTests: XCTestCase {
     }
 
     func testDismissReaderToOriginalPostSuspendsProvidedLatestContext() {
-        let appModel = YamiboAppModel(appContext: YamiboAppContext(), initialTab: .mine)
+        let appModel = makeIsolatedAppModel(initialTab: .mine)
         let originalURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=703&mobile=2")!
         let staleContext = ReaderLaunchContext(
             threadURL: originalURL,
@@ -538,7 +538,7 @@ final class MangaPresentationRouteTests: XCTestCase {
     }
 
     func testSelectingFavoritesAfterReaderOpenedForumRestoresLatestSuspendedReader() {
-        let appModel = YamiboAppModel(appContext: YamiboAppContext(), initialTab: .favorites)
+        let appModel = makeIsolatedAppModel(initialTab: .favorites)
         let originalURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=703&mobile=2")!
         let staleContext = ReaderLaunchContext(
             threadURL: originalURL,
@@ -572,7 +572,7 @@ final class MangaPresentationRouteTests: XCTestCase {
     }
 
     func testFallbackMangaToWebDisablesAutoOpenLoop() {
-        let appModel = YamiboAppModel(appContext: YamiboAppContext())
+        let appModel = makeIsolatedAppModel()
         let context = MangaWebContext(
             currentURL: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=702&mobile=2")!,
             originalThreadURL: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=700&mobile=2")!,
@@ -609,6 +609,20 @@ private func makeAppModelWithReaderResumeRouteStore() async throws -> (YamiboApp
         YamiboAppModel(appContext: context)
     }
     return (appModel, store)
+}
+
+@MainActor
+private func makeIsolatedAppModel(initialTab: AppTab = .forum) -> YamiboAppModel {
+    let suiteName = "manga-presentation-route-\(UUID().uuidString)"
+    let defaults = UserDefaults(suiteName: suiteName)!
+    defaults.removePersistentDomain(forName: suiteName)
+    let context = YamiboAppContext(
+        sessionStore: SessionStore(defaults: defaults, key: "session"),
+        settingsStore: SettingsStore(defaults: defaults, key: "settings"),
+        readerResumeRouteStore: ReaderResumeRouteStore(defaults: defaults, key: "reader-route"),
+        favoriteStore: FavoriteStore(defaults: defaults, key: "favorites")
+    )
+    return YamiboAppModel(appContext: context, initialTab: initialTab)
 }
 
 private func waitForReaderResumeRoute(

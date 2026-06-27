@@ -208,57 +208,74 @@ struct ReaderBooksSliderLeadingIcon: View {
     }
 }
 
-struct ReaderBooksReadingModeMenuRow: View {
+struct ReaderBooksReadingModePicker: View {
     let settings: ReaderAppearanceSettings
     let palette: ReaderBooksSheetPalette
     let onSelect: (ReaderReadingMode, ReaderPagedTurnStyle) -> Void
 
+    private let columns = [
+        GridItem(.flexible(), spacing: 10),
+        GridItem(.flexible(), spacing: 10),
+    ]
+
+    private var selectedMode: ReaderBooksReadingModeOption {
+        ReaderBooksReadingModeOption(settings)
+    }
+
     var body: some View {
-        HStack(spacing: 12) {
+        VStack(alignment: .leading, spacing: 12) {
             Text(L10n.string("reading_mode.title"))
                 .font(.title3.weight(.semibold))
                 .foregroundStyle(palette.primaryText)
-                .lineLimit(2)
-                .minimumScaleFactor(0.85)
 
-            Spacer(minLength: 8)
-
-            Menu {
-                Picker(
-                    L10n.string("reading_mode.title"),
-                    selection: Binding(
-                        get: { ReaderBooksReadingModeMenuOption(settings) },
-                        set: { option in
-                            guard option.isSelectable else { return }
-                            onSelect(option.readingMode, option.pagedTurnStyle ?? settings.pagedTurnStyle)
-                        }
-                    )
-                ) {
-                    ForEach(ReaderBooksReadingModeMenuOption.allCases, id: \.self) { option in
-                        Label(option.title, systemImage: option.systemImageName)
-                            .tag(option)
-                            .disabled(!option.isSelectable)
+            LazyVGrid(columns: columns, spacing: 10) {
+                ForEach(ReaderBooksReadingModeOption.allCases, id: \.self) { option in
+                    ReaderBooksReadingModeButton(
+                        option: option,
+                        isSelected: selectedMode == option,
+                        palette: palette
+                    ) {
+                        onSelect(option.readingMode, option.pagedTurnStyle ?? settings.pagedTurnStyle)
                     }
                 }
-            } label: {
-                HStack(spacing: 8) {
-                    Text(ReaderBooksReadingModeMenuOption(settings).title)
-                        .font(.system(size: 18))
-                        .foregroundStyle(palette.secondaryText)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.78)
-
-                    Image(systemName: "chevron.up.chevron.down")
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(palette.secondaryText.opacity(0.75))
-                }
             }
-            .buttonStyle(.plain)
         }
     }
 }
 
-private enum ReaderBooksReadingModeMenuOption: CaseIterable, Hashable {
+private struct ReaderBooksReadingModeButton: View {
+    let option: ReaderBooksReadingModeOption
+    let isSelected: Bool
+    let palette: ReaderBooksSheetPalette
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Image(systemName: option.systemImageName)
+                    .font(.headline.weight(.semibold))
+                    .frame(width: 24)
+
+                Text(option.title)
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.78)
+            }
+            .foregroundStyle(isSelected ? Color.white : palette.primaryText)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
+            .padding(.horizontal, 10)
+            .background(
+                isSelected ? palette.confirmButtonBackground : palette.segmentedBackground,
+                in: RoundedRectangle(cornerRadius: 18, style: .continuous)
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(option.title)
+    }
+}
+
+private enum ReaderBooksReadingModeOption: CaseIterable, Hashable {
     case slide
     case pageCurl
     case quickFade
@@ -326,10 +343,6 @@ private enum ReaderBooksReadingModeMenuOption: CaseIterable, Hashable {
         case .scroll:
             nil
         }
-    }
-
-    var isSelectable: Bool {
-        true
     }
 }
 
