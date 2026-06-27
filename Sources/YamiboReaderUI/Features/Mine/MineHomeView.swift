@@ -11,7 +11,6 @@ public struct MineHomeView: View {
     @State private var viewModel: MineHomeViewModel
     @State private var showingLoginSheet = false
     @State private var showingSettingsSheet = false
-    @State private var showingAboutSheet = false
     @State private var showingSignOutConfirmation = false
 
     private let appContext: YamiboAppContext
@@ -46,9 +45,6 @@ public struct MineHomeView: View {
                 MineSettingsSection(
                     showSettings: {
                         showingSettingsSheet = true
-                    },
-                    showAbout: {
-                        showingAboutSheet = true
                     }
                 )
             }
@@ -99,9 +95,6 @@ public struct MineHomeView: View {
                 SystemSettingsView(appContext: appContext) {
                     await appModel.bootstrap()
                 }
-            }
-            .sheet(isPresented: $showingAboutSheet) {
-                AboutView(appContext: appContext)
             }
         }
     }
@@ -547,7 +540,6 @@ private struct MineLoginSection: View {
 
 private struct MineSettingsSection: View {
     let showSettings: () -> Void
-    let showAbout: () -> Void
 
     var body: some View {
         Section {
@@ -556,13 +548,6 @@ private struct MineSettingsSection: View {
                 systemImage: "gearshape.fill",
                 tint: .gray,
                 action: showSettings
-            )
-
-            MineSettingsRow(
-                title: L10n.string("about.title"),
-                systemImage: "info.circle.fill",
-                tint: .blue,
-                action: showAbout
             )
         }
     }
