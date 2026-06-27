@@ -95,7 +95,7 @@ public final class MangaReaderModel: ObservableObject {
     private let appContext: YamiboAppContext
     private let dependencies: MangaReaderModelDependencies
     private let onReaderResumeRouteChange: ReaderResumeRouteChangeHandler
-    private var readerRepository: ReaderRepository?
+    private var chapterCommentsRepository: ReaderChapterCommentsRepository?
     private var workflow: MangaReaderWorkflow?
     private var hasPrepared = false
     private var committedSettings = MangaReaderSettings()
@@ -116,14 +116,14 @@ public final class MangaReaderModel: ObservableObject {
                 guard let self else {
                     throw ReaderChapterCommentsUnavailableError()
                 }
-                let repository = await self.ensureReaderRepository()
+                let repository = await self.ensureChapterCommentsRepository()
                 return try await repository.loadChapterComments(for: target)
             },
             loadMore: { [weak self] target, view in
                 guard let self else {
                     throw ReaderChapterCommentsUnavailableError()
                 }
-                let repository = await self.ensureReaderRepository()
+                let repository = await self.ensureChapterCommentsRepository()
                 return try await repository.loadMoreChapterComments(for: target, view: view)
             }
         ),
@@ -798,14 +798,14 @@ public final class MangaReaderModel: ObservableObject {
         return normalized?.isEmpty == false ? normalized : nil
     }
 
-    private func ensureReaderRepository() async -> ReaderRepository {
-        if readerRepository == nil {
-            readerRepository = await appContext.makeReaderRepository()
+    private func ensureChapterCommentsRepository() async -> ReaderChapterCommentsRepository {
+        if chapterCommentsRepository == nil {
+            chapterCommentsRepository = await appContext.makeReaderChapterCommentsRepository()
         }
-        guard let readerRepository else {
-            preconditionFailure("Reader repository should be initialized")
+        guard let chapterCommentsRepository else {
+            preconditionFailure("Reader chapter comments repository should be initialized")
         }
-        return readerRepository
+        return chapterCommentsRepository
     }
 
     private func syncChapterComments(from module: ReaderChapterCommentsModule) {

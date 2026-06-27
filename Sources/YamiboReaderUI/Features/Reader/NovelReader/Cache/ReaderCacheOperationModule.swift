@@ -130,9 +130,9 @@ public protocol ReaderCacheOperationRepository: Sendable {
 }
 
 public struct ReaderRepositoryCacheOperationAdapter: ReaderCacheOperationRepository {
-    private let repository: ReaderRepository
+    private let repository: NovelReaderRepository
 
-    public init(repository: ReaderRepository) {
+    public init(repository: NovelReaderRepository) {
         self.repository = repository
     }
 
