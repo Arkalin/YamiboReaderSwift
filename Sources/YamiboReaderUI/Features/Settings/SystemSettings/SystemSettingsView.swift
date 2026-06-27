@@ -12,6 +12,7 @@ public struct SystemSettingsView: View {
     @StateObject private var viewModel: SystemSettingsViewModel
     @State private var showingWebDAVSettings = false
     @State private var showingPeripheralSettings = false
+    @State private var showingAboutSheet = false
     @State private var pendingConfirmation: SystemSettingsConfirmation?
     @State private var activeAppearanceCategory: FavoriteAppearanceCategory?
     @State private var showingFavoriteBackgroundPicker = false
@@ -141,6 +142,18 @@ public struct SystemSettingsView: View {
                     }
                     .disabled(viewModel.isBusy)
                 }
+
+                Section(L10n.string("settings.section.support")) {
+                    Button {
+                        showingAboutSheet = true
+                    } label: {
+                        SystemSettingsRow(
+                            title: aboutSettingsTitle,
+                            titleColor: .accentColor
+                        )
+                    }
+                    .disabled(viewModel.isBusy)
+                }
             }
             .navigationTitle(L10n.string("settings.title"))
             .toolbar(content: toolbarContent)
@@ -150,6 +163,9 @@ public struct SystemSettingsView: View {
             }
             .sheet(isPresented: $showingWebDAVSettings) {
                 WebDAVSyncSettingsView(appContext: appContext)
+            }
+            .sheet(isPresented: $showingAboutSheet) {
+                AboutView(appContext: appContext)
             }
             .navigationDestination(isPresented: $showingPeripheralSettings) {
                 SystemSettingsPeripheralPageTurnView(viewModel: viewModel)
@@ -251,6 +267,14 @@ public struct SystemSettingsView: View {
         viewModel.favoriteBackground.isEnabled
             ? L10n.string("settings.favorite_background.custom")
             : L10n.string("settings.favorite_background.default")
+    }
+
+    private var aboutSettingsTitle: String {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+        return L10n.string(
+            "settings.about_app_with_version",
+            version?.isEmpty == false ? version! : "--"
+        )
     }
 
     private var favoriteBackgroundEditorIsPresented: Binding<Bool> {

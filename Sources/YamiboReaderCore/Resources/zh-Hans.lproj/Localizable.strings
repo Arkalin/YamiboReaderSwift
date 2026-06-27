@@ -385,9 +385,11 @@
 "settings.reset_application" = "初始化应用";
 "settings.reset_application_message" = "这将清空登录态、收藏本地状态、全部缓存、漫画目录和应用设置，并移除网页持久化数据。";
 "settings.resetting_application" = "初始化应用中…";
+"settings.about_app_with_version" = "关于Yamibo Reader(%@)";
 "settings.section.appearance" = "外观";
 "settings.section.general" = "通用";
 "settings.section.storage" = "存储管理";
+"settings.section.support" = "支持";
 "settings.shortcuts_open_failed" = "无法打开快捷指令，请手动打开“快捷指令 > 自动化”创建百合会签到自动化。";
 "settings.show_web_title_url" = "显示网页标题和网址";
 "settings.title" = "设置";
