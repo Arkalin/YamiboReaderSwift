@@ -1015,6 +1015,19 @@ public final class NovelTextViewportDisplayReference {
 
 #if canImport(UIKit)
     public func draw(in context: CGContext, bounds: CGRect) {
+        drawBlockBackgrounds(in: context, bounds: bounds)
+        drawText(in: context, bounds: bounds)
+    }
+
+    public func drawBlockBackgrounds(in context: CGContext, bounds: CGRect) {
+        runtimeOwner?.drawBlockBackgrounds(
+            surfaceIdentity: surfaceIdentity,
+            in: context,
+            bounds: bounds
+        )
+    }
+
+    public func drawText(in context: CGContext, bounds: CGRect) {
         runtimeOwner?.draw(
             surfaceIdentity: surfaceIdentity,
             in: context,
@@ -1867,6 +1880,104 @@ final class NovelTextViewportRuntimeOwner {
     }
 
 #if canImport(UIKit)
+    func drawBlockBackgrounds(
+        surfaceIdentity: NovelReaderSurfaceIdentity,
+        in context: CGContext,
+        bounds: CGRect
+    ) {
+        let surfaceOrdinal = surfaceIdentity.ordinal
+        guard isCurrent(surfaceIdentity) else {
+            staleDrawingAttemptCount += 1
+            return
+        }
+        prepareSurfaceForDrawing(surfaceOrdinal)
+        guard
+        let result,
+        let textContentStorage,
+        let textLayoutManager,
+        let page = result.viewportIndex.surfaces.first(where: { $0.surfaceOrdinal == surfaceOrdinal }),
+        let surfaceOriginY = surfaceOriginY(
+            page: page,
+            result: result,
+            textContentStorage: textContentStorage,
+            textLayoutManager: textLayoutManager
+        ),
+        let pageCharacterRange = characterRange(for: page, result: result)
+        else {
+            return
+        }
+
+        let documentClipRange = page.frozenGeometry.map {
+            CGRect(
+                x: 0,
+                y: $0.documentClipMinY,
+                width: max(layout.readableFrame.width, 1),
+                height: max($0.documentClipMaxY - $0.documentClipMinY, 1)
+            )
+        }
+        let clipMaxY = page.frozenGeometry.map {
+            surfaceOriginY + $0.contentHeight
+        } ?? surfaceOriginY + bounds.height
+        let pageClipRect = NovelTextViewportDrawingGeometry.clipRect(
+            bounds: bounds,
+            surfaceOriginY: surfaceOriginY,
+            documentClipMaxY: clipMaxY
+        )
+
+        context.saveGState()
+        context.clip(to: pageClipRect)
+        context.translateBy(x: bounds.minX, y: bounds.minY - surfaceOriginY)
+        context.setFillColor(quoteBlockBackgroundColor().cgColor)
+        for blockStyle in result.viewportContext.document.blockTextStyles where blockStyle.style == .quote {
+            let quoteRange = blockStyle.range.location..<blockStyle.range.upperBound
+            guard let visibleQuoteRange = intersection(quoteRange, pageCharacterRange),
+                  let utf16Range = utf16Range(in: result.viewportContext.document.text, characterRange: visibleQuoteRange),
+                  let start = textContentStorage.location(
+                    textContentStorage.documentRange.location,
+                    offsetBy: utf16Range.location
+                  ),
+                  let end = textContentStorage.location(start, offsetBy: utf16Range.length),
+                  let textRange = NSTextRange(location: start, end: end) else {
+                continue
+            }
+
+            var backgroundRect: CGRect?
+            textLayoutManager.enumerateTextSegments(
+                in: textRange,
+                type: .standard,
+                options: []
+            ) { _, rect, _, _ in
+                var clippedRect = rect
+                if let documentClipRange {
+                    clippedRect = clippedRect.intersection(documentClipRange)
+                }
+                guard !clippedRect.isNull,
+                      clippedRect.width.isFinite,
+                      clippedRect.height.isFinite,
+                      clippedRect.width > 0,
+                      clippedRect.height > 0 else {
+                    return true
+                }
+                let paddedRect = clippedRect.insetBy(dx: -10, dy: -6)
+                backgroundRect = backgroundRect.map { $0.union(paddedRect) } ?? paddedRect
+                return true
+            }
+
+            guard let backgroundRect,
+                  backgroundRect.width > 0,
+                  backgroundRect.height > 0 else {
+                continue
+            }
+            let path = UIBezierPath(
+                roundedRect: backgroundRect,
+                cornerRadius: min(8, max(backgroundRect.height / 2, 0))
+            ).cgPath
+            context.addPath(path)
+            context.fillPath()
+        }
+        context.restoreGState()
+    }
+
     func draw(
         surfaceIdentity: NovelReaderSurfaceIdentity,
         in context: CGContext,
@@ -1966,6 +2077,25 @@ final class NovelTextViewportRuntimeOwner {
         drawingAccessCount += 1
         lastDrawnSurfaceIdentity = surfaceIdentity
         lastDrawnDocumentRange = documentRange
+    }
+
+    private func quoteBlockBackgroundColor() -> UIColor {
+        UIColor { traits in
+            if traits.userInterfaceStyle == .dark {
+                return UIColor(white: 1, alpha: 0.10)
+            }
+
+            switch self.settings.backgroundStyle {
+            case .system:
+                return UIColor(white: 1, alpha: 0.58)
+            case .paper:
+                return UIColor(red: 1.0, green: 0.97, blue: 0.88, alpha: 0.68)
+            case .mint:
+                return UIColor(white: 1, alpha: 0.62)
+            case .sakura:
+                return UIColor(white: 1, alpha: 0.60)
+            }
+        }
     }
 
     private func pageStartLocation(

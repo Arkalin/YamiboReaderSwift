@@ -150,11 +150,12 @@ public enum ReaderHTMLParser {
                 )
             )
             partial.segmentSemantics.append(
-                contentsOf: zip(message.segments, message.segmentInlineStyles).map { segment, inlineTextStyles in
+                contentsOf: message.segments.indices.map { index in
                     segmentSemantics(
-                        segment: segment,
+                        segment: message.segments[index],
                         chapterIdentity: chapterIdentity,
-                        inlineTextStyles: inlineTextStyles,
+                        inlineTextStyles: message.segmentInlineStyles[index],
+                        blockTextStyles: message.segmentBlockStyles[index],
                         textOccurrenceByChapter: &textOccurrenceByChapter
                     )
                 }
@@ -183,6 +184,7 @@ public enum ReaderHTMLParser {
         segment: ReaderSegment,
         chapterIdentity: NovelChapterIdentity?,
         inlineTextStyles: [ReaderInlineTextStyleRange],
+        blockTextStyles: [ReaderBlockTextStyleRange],
         textOccurrenceByChapter: inout [NovelChapterIdentity: Int]
     ) -> ReaderSegmentSemantics? {
         guard let chapterIdentity else { return nil }
@@ -194,7 +196,8 @@ public enum ReaderHTMLParser {
                 chapterIdentity: chapterIdentity,
                 textSegmentIdentity: NovelTextSegmentIdentity(rawValue: "\(chapterIdentity.rawValue)#text:\(textOccurrence)"),
                 chapterTitleRange: chapterTitleRange(chapterTitle: chapterTitle, text: text),
-                inlineTextStyles: inlineTextStyles
+                inlineTextStyles: inlineTextStyles,
+                blockTextStyles: blockTextStyles
             )
 
         case .image:
