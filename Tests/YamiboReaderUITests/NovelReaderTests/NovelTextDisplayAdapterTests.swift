@@ -159,6 +159,27 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         )
     }
 
+    func testNovelPageTurnDirectionMapsGesturesAndTapZones() {
+        XCTAssertEqual(ReaderPageTurnDirection.leftToRight.horizontalNavigationDirection, .leftSwipeAdvances)
+        XCTAssertEqual(ReaderPageTurnDirection.rightToLeft.horizontalNavigationDirection, .rightSwipeAdvances)
+
+        XCTAssertEqual(ReaderPageTurnDirection.leftToRight.directionalTapZone(for: .previous), .previous)
+        XCTAssertEqual(ReaderPageTurnDirection.leftToRight.directionalTapZone(for: .next), .next)
+        XCTAssertEqual(ReaderPageTurnDirection.rightToLeft.directionalTapZone(for: .previous), .next)
+        XCTAssertEqual(ReaderPageTurnDirection.rightToLeft.directionalTapZone(for: .next), .previous)
+        XCTAssertEqual(ReaderPageTurnDirection.rightToLeft.directionalTapZone(for: .toggleChrome), .toggleChrome)
+
+        XCTAssertEqual(ReaderPageTurnDirection.leftToRight.progressFillDirection, .leftToRight)
+        XCTAssertEqual(ReaderPageTurnDirection.rightToLeft.progressFillDirection, .rightToLeft)
+    }
+
+    func testNovelPageTurnDirectionMapsPagedItemOrder() {
+        XCTAssertEqual(ReaderPageTurnDirection.leftToRight.itemIndex(forSelectionIndex: 0, itemCount: 4), 0)
+        XCTAssertEqual(ReaderPageTurnDirection.leftToRight.selectionIndex(forItemIndex: 3, itemCount: 4), 3)
+        XCTAssertEqual(ReaderPageTurnDirection.rightToLeft.itemIndex(forSelectionIndex: 0, itemCount: 4), 3)
+        XCTAssertEqual(ReaderPageTurnDirection.rightToLeft.selectionIndex(forItemIndex: 0, itemCount: 4), 3)
+    }
+
     func testPageCurlSequenceMapsSinglePagesBySurfaceIndex() {
         let surfaces = makePageCurlSurfaces(count: 3)
         let sequence = ReaderPagedPageCurlSequence(
@@ -171,6 +192,22 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertEqual(sequence.leafIndexes(forSelectionIndex: 1), [1])
         XCTAssertEqual(sequence.selectionIndex(forLeafIndexes: [2]), 2)
         XCTAssertEqual(sequence.leaves.map(\.surfaceIndex), [0, 1, 2])
+    }
+
+    func testPageCurlSequenceReversesPhysicalBookOrderForRightToLeftDirection() {
+        let surfaces = makePageCurlSurfaces(count: 3)
+        let sequence = ReaderPagedPageCurlSequence(
+            surfaces: surfaces,
+            spreads: [],
+            usesTwoPageSpread: false,
+            pageTurnDirection: .rightToLeft
+        )
+
+        XCTAssertEqual(sequence.pageCount, 3)
+        XCTAssertEqual(sequence.leafIndexes(forSelectionIndex: 0), [2])
+        XCTAssertEqual(sequence.leafIndexes(forSelectionIndex: 2), [0])
+        XCTAssertEqual(sequence.selectionIndex(forLeafIndexes: [0]), 2)
+        XCTAssertEqual(sequence.leaves.map(\.surfaceIndex), [2, 1, 0])
     }
 
     func testPageCurlSequenceMapsTwoPageSpreadsAndBlankTail() {
@@ -203,6 +240,40 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertEqual(sequence.leafIndexes(forSelectionIndex: 1), [2, 3])
         XCTAssertEqual(sequence.selectionIndex(forLeafIndexes: [3]), 1)
         XCTAssertEqual(sequence.leaves.map(\.surfaceIndex), [0, 1, 2, nil])
+    }
+
+    func testPageCurlSequenceReversesTwoPageSpreadOrderForRightToLeftDirection() {
+        let surfaces = makePageCurlSurfaces(count: 3)
+        let spreads = [
+            NovelReaderPresentationSpread(
+                index: 0,
+                leftSurfaceIndex: 0,
+                leftSurfaceIdentity: surfaces[0].identity,
+                rightSurfaceIndex: 1,
+                rightSurfaceIdentity: surfaces[1].identity,
+                chapterTitle: nil
+            ),
+            NovelReaderPresentationSpread(
+                index: 1,
+                leftSurfaceIndex: 2,
+                leftSurfaceIdentity: surfaces[2].identity,
+                rightSurfaceIndex: nil,
+                rightSurfaceIdentity: nil,
+                chapterTitle: nil
+            )
+        ]
+        let sequence = ReaderPagedPageCurlSequence(
+            surfaces: surfaces,
+            spreads: spreads,
+            usesTwoPageSpread: true,
+            pageTurnDirection: .rightToLeft
+        )
+
+        XCTAssertEqual(sequence.pageCount, 2)
+        XCTAssertEqual(sequence.leafIndexes(forSelectionIndex: 0), [2, 3])
+        XCTAssertEqual(sequence.leafIndexes(forSelectionIndex: 1), [0, 1])
+        XCTAssertEqual(sequence.selectionIndex(forLeafIndexes: [0]), 1)
+        XCTAssertEqual(sequence.leaves.map(\.surfaceIndex), [2, nil, 0, 1])
     }
 
     func testPageCurlSequenceProvidesBlankControllersForEmptyContent() {

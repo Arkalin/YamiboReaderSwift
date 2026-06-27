@@ -61,6 +61,18 @@ public enum ReaderPagedTurnStyle: String, Codable, Hashable, CaseIterable, Senda
     }
 }
 
+public enum ReaderPageTurnDirection: String, Codable, Hashable, CaseIterable, Sendable {
+    case leftToRight
+    case rightToLeft
+
+    public var title: String {
+        switch self {
+        case .leftToRight: L10n.string("reader.page_turn_direction.left_to_right")
+        case .rightToLeft: L10n.string("reader.page_turn_direction.right_to_left")
+        }
+    }
+}
+
 public enum ReaderTranslationMode: String, Codable, Hashable, CaseIterable, Sendable {
     case none
     case simplified
@@ -111,6 +123,7 @@ public struct ReaderAppearanceSettings: Codable, Hashable, Sendable {
     public var backgroundStyle: ReaderBackgroundStyle
     public var readingMode: ReaderReadingMode
     public var pagedTurnStyle: ReaderPagedTurnStyle
+    public var pageTurnDirection: ReaderPageTurnDirection
     public var translationMode: ReaderTranslationMode
 
     public init(
@@ -127,6 +140,7 @@ public struct ReaderAppearanceSettings: Codable, Hashable, Sendable {
         backgroundStyle: ReaderBackgroundStyle = .system,
         readingMode: ReaderReadingMode = .paged,
         pagedTurnStyle: ReaderPagedTurnStyle = .slide,
+        pageTurnDirection: ReaderPageTurnDirection = .leftToRight,
         translationMode: ReaderTranslationMode = .none
     ) {
         self.fontScale = fontScale
@@ -142,6 +156,7 @@ public struct ReaderAppearanceSettings: Codable, Hashable, Sendable {
         self.backgroundStyle = backgroundStyle
         self.readingMode = readingMode
         self.pagedTurnStyle = pagedTurnStyle
+        self.pageTurnDirection = pageTurnDirection
         self.translationMode = translationMode
     }
 
@@ -159,6 +174,7 @@ public struct ReaderAppearanceSettings: Codable, Hashable, Sendable {
         case backgroundStyle
         case readingMode
         case pagedTurnStyle
+        case pageTurnDirection
         case translationMode
     }
 
@@ -177,6 +193,7 @@ public struct ReaderAppearanceSettings: Codable, Hashable, Sendable {
         backgroundStyle = try container.decodeIfPresent(ReaderBackgroundStyle.self, forKey: .backgroundStyle) ?? .system
         readingMode = try container.decodeIfPresent(ReaderReadingMode.self, forKey: .readingMode) ?? .paged
         pagedTurnStyle = try container.decodeIfPresent(ReaderPagedTurnStyle.self, forKey: .pagedTurnStyle) ?? .slide
+        pageTurnDirection = try container.decodeIfPresent(ReaderPageTurnDirection.self, forKey: .pageTurnDirection) ?? .leftToRight
         translationMode = try container.decodeIfPresent(ReaderTranslationMode.self, forKey: .translationMode) ?? .none
     }
 
@@ -195,6 +212,7 @@ public struct ReaderAppearanceSettings: Codable, Hashable, Sendable {
         try container.encode(backgroundStyle, forKey: .backgroundStyle)
         try container.encode(readingMode, forKey: .readingMode)
         try container.encode(pagedTurnStyle, forKey: .pagedTurnStyle)
+        try container.encode(pageTurnDirection, forKey: .pageTurnDirection)
         try container.encode(translationMode, forKey: .translationMode)
     }
 }

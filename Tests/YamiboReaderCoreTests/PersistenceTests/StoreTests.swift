@@ -165,6 +165,7 @@ import Testing
             backgroundStyle: .paper,
             readingMode: .vertical,
             pagedTurnStyle: .quickFade,
+            pageTurnDirection: .rightToLeft,
             translationMode: .traditional
         ),
         manga: MangaReaderSettings(
@@ -305,14 +306,16 @@ import Testing
     #expect(decoded.showsAuthorRepliesToOthers == true)
     #expect(decoded.showsTwoPagesInLandscapeOnPad == false)
     #expect(decoded.pagedTurnStyle == .slide)
+    #expect(decoded.pageTurnDirection == .leftToRight)
     #expect(decoded.fontScale == 1.2)
     #expect(decoded.lineHeightScale == 1.5)
 }
 
-@Test func readerAppearanceSettingsEncodesAndDecodesPageCurlTurnStyle() throws {
+@Test func readerAppearanceSettingsEncodesAndDecodesPagedTurnOptions() throws {
     let settings = ReaderAppearanceSettings(
         readingMode: .paged,
-        pagedTurnStyle: .pageCurl
+        pagedTurnStyle: .pageCurl,
+        pageTurnDirection: .rightToLeft
     )
 
     let encoded = try JSONEncoder().encode(settings)
@@ -320,6 +323,7 @@ import Testing
 
     #expect(decoded.readingMode == .paged)
     #expect(decoded.pagedTurnStyle == .pageCurl)
+    #expect(decoded.pageTurnDirection == .rightToLeft)
 }
 
 @Test func mangaReaderSettingsDecodesLegacyPayloadWithAscendingDirectorySortOrder() async throws {

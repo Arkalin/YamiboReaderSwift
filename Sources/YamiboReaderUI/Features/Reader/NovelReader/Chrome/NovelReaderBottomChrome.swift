@@ -7,6 +7,7 @@ import UIKit
 struct NovelReaderBottomChrome: View {
     let progress: ReaderChromeProgress
     let readingMode: ReaderReadingMode
+    let fillDirection: ReaderProgressFillDirection
     let bottomInset: CGFloat
     let isVisible: Bool
     let onShowChapters: () -> Void
@@ -178,6 +179,7 @@ struct NovelReaderBottomChrome: View {
             ReaderDirectoryProgressCapsule(
                 title: progress.primaryText,
                 progressFraction: displayedProgressFraction,
+                fillDirection: fillDirection,
                 showsFill: progressChromePresentation.showsHorizontalFill,
                 supportsScrub: progressChromePresentation.supportsHorizontalScrub && sliderHasAvailableRange,
                 isScrubbing: scrubState.phase == .scrubbing,

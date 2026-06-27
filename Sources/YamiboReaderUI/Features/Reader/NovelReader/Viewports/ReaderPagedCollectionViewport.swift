@@ -100,7 +100,7 @@ struct ReaderPagedCollectionViewport: UIViewRepresentable {
                 itemCount: parent.surfaces.count,
                 selectionIndex: parent.selectionIndex,
                 pagedTurnStyle: parent.settings.pagedTurnStyle,
-                horizontalNavigationDirection: .leftSwipeAdvances,
+                horizontalNavigationDirection: parent.settings.pageTurnDirection.horizontalNavigationDirection,
                 pagerIdentity: parent.pagerIdentity,
                 scrollAnimationRequest: parent.scrollAnimationRequest,
                 canBoundaryPageTurn: parent.canBoundaryPageTurn,
@@ -115,6 +115,18 @@ struct ReaderPagedCollectionViewport: UIViewRepresentable {
                             traitCollection: traitCollection
                         ),
                         overlayAlpha: overlayAlpha
+                    )
+                },
+                itemIndexForSelectionIndex: { [parent] selectionIndex in
+                    parent.settings.pageTurnDirection.itemIndex(
+                        forSelectionIndex: selectionIndex,
+                        itemCount: parent.surfaces.count
+                    )
+                },
+                selectionIndexForItemIndex: { [parent] itemIndex in
+                    parent.settings.pageTurnDirection.selectionIndex(
+                        forItemIndex: itemIndex,
+                        itemCount: parent.surfaces.count
                     )
                 }
             )
@@ -136,8 +148,12 @@ struct ReaderPagedCollectionViewport: UIViewRepresentable {
                 withReuseIdentifier: Self.reuseIdentifier,
                 for: indexPath
             ) as! ReaderPagedPageTurnCell
-            let surface = parent.surfaces.indices.contains(indexPath.item)
-                ? parent.surfaces[indexPath.item]
+            let surfaceIndex = parent.settings.pageTurnDirection.selectionIndex(
+                forItemIndex: indexPath.item,
+                itemCount: parent.surfaces.count
+            )
+            let surface = parent.surfaces.indices.contains(surfaceIndex)
+                ? parent.surfaces[surfaceIndex]
                 : nil
             let displayReference = surface.flatMap { parent.displayReferenceProvider($0.identity) }
             cell.backgroundColor = .clear
@@ -147,7 +163,7 @@ struct ReaderPagedCollectionViewport: UIViewRepresentable {
                         surface: surface,
                         displayReference: displayReference,
                         fallbackDocumentView: surface?.documentView,
-                        fallbackSurfaceIndex: indexPath.item,
+                        fallbackSurfaceIndex: surfaceIndex,
                         settings: parent.settings,
                         refererURL: parent.refererURL,
                         imageDataLoader: parent.imageDataLoader,
@@ -210,13 +226,14 @@ struct ReaderPagedCollectionViewport: UIViewRepresentable {
                 return
             }
             let zone = ReaderPagedTapZone.zone(for: location, in: collectionView.bounds)
+            let directionalZone = parent.settings.pageTurnDirection.directionalTapZone(for: zone)
             if !parent.isChromeVisible,
-               pagingDriver.animateAdjacentSelection(for: zone, in: collectionView, inputs: pagingInputs) {
+               pagingDriver.animateAdjacentSelection(for: directionalZone, in: collectionView, inputs: pagingInputs) {
                 return
             }
             let onPageTapZone = parent.onPageTapZone
             callbackScheduler.publish {
-                onPageTapZone(zone)
+                onPageTapZone(directionalZone)
             }
         }
 

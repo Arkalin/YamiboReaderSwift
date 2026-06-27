@@ -112,7 +112,8 @@ struct ReaderSettingsPanel: View {
                         set: { draftSettings.showsTwoPagesInLandscapeOnPad = $0 }
                     ),
                     onBackgroundStyleChange: setBackgroundStyle,
-                    onReadingModeChange: setReadingMode
+                    onReadingModeChange: setReadingMode,
+                    onPageTurnDirectionChange: setPageTurnDirection
                 )
 
                 ReaderBooksMiscSection(
@@ -156,6 +157,7 @@ struct ReaderSettingsPanel: View {
             draftSettings.pagedTurnStyle = pagedTurnStyle
         }
     }
+    private func setPageTurnDirection(_ value: ReaderPageTurnDirection) { draftSettings.pageTurnDirection = value }
     private func setTranslationMode(_ value: ReaderTranslationMode) { draftSettings.translationMode = value }
     private func setImageLoading(_ value: Bool) { draftSettings.loadsInlineImages = value }
     private func setAuthorReplyVisibility(_ value: Bool) { draftSettings.showsAuthorRepliesToOthers = value }

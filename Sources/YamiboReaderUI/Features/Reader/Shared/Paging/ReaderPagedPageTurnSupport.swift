@@ -48,9 +48,64 @@ enum ReaderPagedPageTurnPresentation {
     }
 }
 
-enum ReaderPagedHorizontalNavigationDirection {
+enum ReaderPagedHorizontalNavigationDirection: Equatable {
     case leftSwipeAdvances
     case rightSwipeAdvances
+}
+
+extension ReaderPageTurnDirection {
+    var horizontalNavigationDirection: ReaderPagedHorizontalNavigationDirection {
+        switch self {
+        case .leftToRight:
+            .leftSwipeAdvances
+        case .rightToLeft:
+            .rightSwipeAdvances
+        }
+    }
+
+    var progressFillDirection: ReaderProgressFillDirection {
+        switch self {
+        case .leftToRight:
+            .leftToRight
+        case .rightToLeft:
+            .rightToLeft
+        }
+    }
+
+    func directionalTapZone(for zone: ReaderPagedTapZone) -> ReaderPagedTapZone {
+        switch (self, zone) {
+        case (.rightToLeft, .previous):
+            .next
+        case (.rightToLeft, .next):
+            .previous
+        default:
+            zone
+        }
+    }
+
+    func itemIndex(forSelectionIndex selectionIndex: Int, itemCount: Int) -> Int {
+        let clampedSelectionIndex = clampedIndex(selectionIndex, itemCount: itemCount)
+        switch self {
+        case .leftToRight:
+            return clampedSelectionIndex
+        case .rightToLeft:
+            return max(itemCount - 1, 0) - clampedSelectionIndex
+        }
+    }
+
+    func selectionIndex(forItemIndex itemIndex: Int, itemCount: Int) -> Int {
+        let clampedItemIndex = clampedIndex(itemIndex, itemCount: itemCount)
+        switch self {
+        case .leftToRight:
+            return clampedItemIndex
+        case .rightToLeft:
+            return max(itemCount - 1, 0) - clampedItemIndex
+        }
+    }
+
+    private func clampedIndex(_ index: Int, itemCount: Int) -> Int {
+        min(max(index, 0), max(itemCount - 1, 0))
+    }
 }
 
 struct ReaderPagedBoundaryPageTurn {

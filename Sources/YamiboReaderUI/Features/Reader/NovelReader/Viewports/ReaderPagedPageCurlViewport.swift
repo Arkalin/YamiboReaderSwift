@@ -24,37 +24,45 @@ struct ReaderPagedPageCurlSequence: Equatable {
     init(
         surfaces: [NovelReaderSurface],
         spreads: [NovelReaderPresentationSpread],
-        usesTwoPageSpread: Bool
+        usesTwoPageSpread: Bool,
+        pageTurnDirection: ReaderPageTurnDirection = .leftToRight
     ) {
         self.usesTwoPageSpread = usesTwoPageSpread
         if usesTwoPageSpread {
-            var nextLeaves: [ReaderPagedPageCurlLeaf] = []
-            for spread in spreads {
-                nextLeaves.append(
+            let leafGroups = spreads.map { spread in
+                [
                     ReaderPagedPageCurlLeaf(
-                        index: nextLeaves.count,
+                        index: 0,
                         kind: .surface(spread.leftSurfaceIndex),
                         selectionIndex: spread.index
-                    )
-                )
-                nextLeaves.append(
+                    ),
                     ReaderPagedPageCurlLeaf(
-                        index: nextLeaves.count,
+                        index: 0,
                         kind: spread.rightSurfaceIndex.map(ReaderPagedPageCurlLeaf.Kind.surface) ?? .blank,
                         selectionIndex: spread.index
-                    )
-                )
+                    ),
+                ]
             }
-            leaves = nextLeaves.isEmpty ? Self.emptySpreadLeaves : nextLeaves
+            let orderedLeaves = Self.physicalBookOrder(
+                leafGroups: leafGroups,
+                pageTurnDirection: pageTurnDirection
+            )
+            leaves = orderedLeaves.isEmpty ? Self.emptySpreadLeaves : Self.indexedLeaves(from: orderedLeaves)
         } else {
-            let nextLeaves = surfaces.indices.map { index in
-                ReaderPagedPageCurlLeaf(
-                    index: index,
-                    kind: .surface(index),
-                    selectionIndex: index
-                )
+            let leafGroups = surfaces.indices.map { index in
+                [
+                    ReaderPagedPageCurlLeaf(
+                        index: 0,
+                        kind: .surface(index),
+                        selectionIndex: index
+                    ),
+                ]
             }
-            leaves = nextLeaves.isEmpty ? [Self.emptySingleLeaf] : nextLeaves
+            let orderedLeaves = Self.physicalBookOrder(
+                leafGroups: leafGroups,
+                pageTurnDirection: pageTurnDirection
+            )
+            leaves = orderedLeaves.isEmpty ? [Self.emptySingleLeaf] : Self.indexedLeaves(from: orderedLeaves)
         }
     }
 
@@ -75,19 +83,46 @@ struct ReaderPagedPageCurlSequence: Equatable {
 
     func leafIndexes(forSelectionIndex selectionIndex: Int) -> [Int] {
         guard !leaves.isEmpty else { return [] }
-        if usesTwoPageSpread {
-            let clampedSelection = min(max(selectionIndex, 0), max(pageCount - 1, 0))
-            let startIndex = clampedSelection * 2
-            return [startIndex, startIndex + 1].filter { leaves.indices.contains($0) }
+        let clampedSelection = min(max(selectionIndex, 0), max(pageCount - 1, 0))
+        let indexes = leaves
+            .filter { $0.selectionIndex == clampedSelection }
+            .map(\.index)
+        if indexes.isEmpty {
+            return usesTwoPageSpread ? [0, 1].filter { leaves.indices.contains($0) } : [0]
         }
-        let clampedSelection = min(max(selectionIndex, 0), max(leaves.count - 1, 0))
-        return [clampedSelection]
+        return indexes
     }
 
     func selectionIndex(forLeafIndexes leafIndexes: [Int]) -> Int? {
         leafIndexes
             .compactMap { leaves.indices.contains($0) ? leaves[$0].selectionIndex : nil }
             .min()
+    }
+
+    func firstLeafIndex(forSelectionIndex selectionIndex: Int) -> Int? {
+        leafIndexes(forSelectionIndex: selectionIndex).first
+    }
+
+    private static func physicalBookOrder(
+        leafGroups: [[ReaderPagedPageCurlLeaf]],
+        pageTurnDirection: ReaderPageTurnDirection
+    ) -> [ReaderPagedPageCurlLeaf] {
+        switch pageTurnDirection {
+        case .leftToRight:
+            leafGroups.flatMap { $0 }
+        case .rightToLeft:
+            leafGroups.reversed().flatMap { $0 }
+        }
+    }
+
+    private static func indexedLeaves(from leaves: [ReaderPagedPageCurlLeaf]) -> [ReaderPagedPageCurlLeaf] {
+        leaves.enumerated().map { index, leaf in
+            ReaderPagedPageCurlLeaf(
+                index: index,
+                kind: leaf.kind,
+                selectionIndex: leaf.selectionIndex
+            )
+        }
     }
 }
 
@@ -127,7 +162,8 @@ struct ReaderPagedPageCurlViewport: UIViewControllerRepresentable {
         ReaderPagedPageCurlSequence(
             surfaces: surfaces,
             spreads: spreads,
-            usesTwoPageSpread: usesTwoPageSpread
+            usesTwoPageSpread: usesTwoPageSpread,
+            pageTurnDirection: settings.pageTurnDirection
         )
     }
 
@@ -301,9 +337,10 @@ struct ReaderPagedPageCurlViewport: UIViewControllerRepresentable {
             }
 
             let zone = ReaderPagedTapZone.zone(for: location, in: containerView.bounds)
+            let directionalZone = parent.settings.pageTurnDirection.directionalTapZone(for: zone)
             let onPageTapZone = parent.onPageTapZone
             callbackScheduler.publish {
-                onPageTapZone(zone)
+                onPageTapZone(directionalZone)
             }
         }
 
@@ -320,6 +357,7 @@ struct ReaderPagedPageCurlViewport: UIViewControllerRepresentable {
                 translation: recognizer.translation(in: view),
                 velocity: recognizer.velocity(in: view),
                 viewportWidth: view.bounds.width,
+                horizontalNavigationDirection: parent.settings.pageTurnDirection.horizontalNavigationDirection,
                 canBoundaryPageTurn: parent.canBoundaryPageTurn
             ) else {
                 return
@@ -350,7 +388,11 @@ struct ReaderPagedPageCurlViewport: UIViewControllerRepresentable {
             }
             let velocity = panRecognizer.velocity(in: view)
             guard abs(velocity.x) > abs(velocity.y) else { return false }
-            let delta = velocity.x < 0 ? 1 : -1
+            let physicalDelta = velocity.x < 0 ? 1 : -1
+            let delta = ReaderPagedBoundaryPageTurn.directionalDelta(
+                physicalDelta,
+                direction: parent.settings.pageTurnDirection.horizontalNavigationDirection
+            )
             let targetItem = parent.selectionIndex + delta
             guard targetItem < 0 || targetItem >= parent.sequence.pageCount else { return true }
             return parent.canBoundaryPageTurn(delta)
@@ -389,8 +431,12 @@ struct ReaderPagedPageCurlViewport: UIViewControllerRepresentable {
             }
 
             let direction: UIPageViewController.NavigationDirection = {
-                guard let currentSelectionIndex else { return .forward }
-                return parent.selectionIndex >= currentSelectionIndex ? .forward : .reverse
+                guard let currentSelectionIndex,
+                      let currentLeafIndex = parent.sequence.firstLeafIndex(forSelectionIndex: currentSelectionIndex),
+                      let targetLeafIndex = parent.sequence.firstLeafIndex(forSelectionIndex: parent.selectionIndex) else {
+                    return .forward
+                }
+                return targetLeafIndex >= currentLeafIndex ? .forward : .reverse
             }()
 
             pageViewController.setViewControllers(

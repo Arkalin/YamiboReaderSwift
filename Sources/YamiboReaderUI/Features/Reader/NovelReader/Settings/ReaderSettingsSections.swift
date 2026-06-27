@@ -132,6 +132,7 @@ struct ReaderBooksDisplaySection: View {
     @Binding var showsTwoPagesInLandscapeOnPad: Bool
     let onBackgroundStyleChange: (ReaderBackgroundStyle) -> Void
     let onReadingModeChange: (ReaderReadingMode, ReaderPagedTurnStyle) -> Void
+    let onPageTurnDirectionChange: (ReaderPageTurnDirection) -> Void
 
     var body: some View {
         ReaderBooksSettingsSection(title: L10n.string("reader.section.display"), palette: palette) {
@@ -147,6 +148,14 @@ struct ReaderBooksDisplaySection: View {
                 palette: palette,
                 onSelect: onReadingModeChange
             )
+            if settings.readingMode == .paged {
+                ReaderBooksDivider(palette: palette)
+                ReaderBooksPageTurnDirectionPicker(
+                    direction: settings.pageTurnDirection,
+                    palette: palette,
+                    onSelect: onPageTurnDirectionChange
+                )
+            }
             if showsTwoPageToggle {
                 ReaderBooksDivider(palette: palette)
                 ReaderBooksToggleRow(
