@@ -9,6 +9,7 @@ import UIKit
 
 public struct MineHomeView: View {
     @State private var viewModel: MineHomeViewModel
+    @State private var showingLoginSheet = false
     @State private var showingSettingsSheet = false
     @State private var showingAboutSheet = false
     @State private var showingSignOutConfirmation = false
@@ -36,7 +37,9 @@ public struct MineHomeView: View {
                         }
                     )
                 } else {
-                    MineLoginSection(viewModel: viewModel)
+                    MineLoggedOutProfileSection {
+                        showingLoginSheet = true
+                    }
                 }
 
                 MineSettingsSection(
@@ -87,6 +90,11 @@ public struct MineHomeView: View {
                         .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                 }
             }
+            .sheet(isPresented: $showingLoginSheet) {
+                MineLoginSheet(viewModel: viewModel) {
+                    showingLoginSheet = false
+                }
+            }
             .sheet(isPresented: $showingSettingsSheet) {
                 SystemSettingsView(appContext: appContext) {
                     await appModel.bootstrap()
@@ -100,7 +108,7 @@ public struct MineHomeView: View {
 
     private var errorIsPresented: Binding<Bool> {
         Binding(
-            get: { viewModel.errorMessage != nil },
+            get: { viewModel.errorMessage != nil && !showingLoginSheet },
             set: { isPresented in
                 if !isPresented {
                     viewModel.errorMessage = nil
@@ -261,6 +269,95 @@ private struct MineProfileSection: View {
     }
 }
 
+private struct MineLoggedOutProfileSection: View {
+    let showLogin: () -> Void
+
+    var body: some View {
+        Section {
+            Button(action: showLogin) {
+                MineLoggedOutProfileCard()
+            }
+            .buttonStyle(.plain)
+            .listRowInsets(EdgeInsets(top: 16, leading: 16, bottom: 16, trailing: 16))
+            .accessibilityLabel(L10n.string("mine.tap_to_login"))
+            .accessibilityHint(L10n.string("mine.login_card_hint"))
+        }
+    }
+}
+
+private struct MineLoggedOutProfileCard: View {
+    var body: some View {
+        HStack(alignment: .center, spacing: 16) {
+            ZStack {
+                Circle()
+                    .fill(.secondary.opacity(0.14))
+
+                Image(systemName: "person.crop.circle.fill")
+                    .resizable()
+                    .scaledToFit()
+                    .foregroundStyle(.secondary)
+                    .padding(3)
+            }
+            .frame(width: 72, height: 72)
+            .clipShape(Circle())
+
+            Text(L10n.string("mine.tap_to_login"))
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.tertiary)
+        }
+        .frame(minHeight: 96)
+        .contentShape(Rectangle())
+    }
+}
+
+private struct MineLoginSheet: View {
+    let viewModel: MineHomeViewModel
+    let close: () -> Void
+
+    var body: some View {
+        NavigationStack {
+            List {
+                MineLoginSection(viewModel: viewModel, onLoginSuccess: close)
+            }
+            #if os(iOS)
+            .listStyle(.insetGrouped)
+            #else
+            .listStyle(.inset)
+            #endif
+            .navigationTitle(L10n.string("mine.login"))
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(L10n.string("common.cancel"), action: close)
+                }
+            }
+            .alert(L10n.string("common.operation_failed"), isPresented: errorIsPresented, actions: {
+                Button(L10n.string("common.ok")) {
+                    viewModel.errorMessage = nil
+                }
+            }, message: {
+                Text(viewModel.errorMessage ?? "")
+            })
+        }
+    }
+
+    private var errorIsPresented: Binding<Bool> {
+        Binding(
+            get: { viewModel.errorMessage != nil },
+            set: { isPresented in
+                if !isPresented {
+                    viewModel.errorMessage = nil
+                }
+            }
+        )
+    }
+}
+
 private struct MineProfileCard: View {
     let profile: YamiboProfile
     let avatarLoader: any YamiboProfileAvatarLoading
@@ -374,6 +471,7 @@ private struct MineProfileLoadingCard: View {
 
 private struct MineLoginSection: View {
     let viewModel: MineHomeViewModel
+    let onLoginSuccess: () -> Void
 
     @AppStorage("yamibo.login.username") private var username = ""
     @State private var password = ""
@@ -416,6 +514,7 @@ private struct MineLoginSection: View {
                     if didLogin {
                         password = ""
                         answer = ""
+                        onLoginSuccess()
                     }
                 }
             } label: {

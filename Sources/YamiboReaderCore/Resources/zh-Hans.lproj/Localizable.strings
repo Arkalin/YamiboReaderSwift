@@ -248,6 +248,7 @@
 "manga_web.title" = "网页漫画模式";
 "mine.credit_progress_format" = "%d/%d";
 "mine.login" = "登录";
+"mine.login_card_hint" = "轻点打开登录表单";
 "mine.login_password" = "密码";
 "mine.login_username" = "用户名 / Email / UID";
 "mine.profile_card_sign_out_hint" = "轻点可退出登录";
@@ -255,6 +256,7 @@
 "mine.security_question" = "安全提问";
 "mine.sign_out" = "退出登录";
 "mine.signing_out" = "退出登录中…";
+"mine.tap_to_login" = "点击登录";
 "mine.uid_format" = "UID %@";
 "mine.unknown_user" = "未知用户";
 "reader.background.paper" = "纸张";
