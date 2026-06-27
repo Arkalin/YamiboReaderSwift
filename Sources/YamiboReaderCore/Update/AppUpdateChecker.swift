@@ -33,17 +33,20 @@ public enum AppUpdateCheckResult: Equatable, Sendable {
 public struct AppUpdateChecker: Sendable {
     public static let defaultSourceURL = URL(string: "https://raw.githubusercontent.com/Arkalin/YamiboReaderSwift/main/app-repo.json")!
 
+    let session: URLSession?
     private let fetchData: @Sendable (URL) async throws -> (Data, URLResponse)
 
-    public init(session: URLSession = .shared) {
+    public init(session: URLSession = YamiboNetworkConfiguration.makeSession()) {
+        self.session = session
         fetchData = { url in
-            var request = URLRequest(url: url)
+            var request = YamiboNetworkConfiguration.makeRequest(url: url)
             request.setValue("application/json", forHTTPHeaderField: "Accept")
             return try await session.data(for: request)
         }
     }
 
     init(fetchData: @escaping @Sendable (URL) async throws -> (Data, URLResponse)) {
+        session = nil
         self.fetchData = fetchData
     }
 

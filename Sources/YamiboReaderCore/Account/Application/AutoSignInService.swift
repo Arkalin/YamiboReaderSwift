@@ -38,7 +38,7 @@ public struct AutoSignInService: Sendable {
     public init(
         sessionStore: SessionStore,
         autoSignInStore: AutoSignInStore,
-        session: URLSession = .shared,
+        session: URLSession = YamiboNetworkConfiguration.makeSession(),
         verificationDelayNanoseconds: UInt64 = 3_000_000_000
     ) {
         self.sessionStore = sessionStore

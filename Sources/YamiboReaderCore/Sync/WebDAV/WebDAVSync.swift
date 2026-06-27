@@ -257,17 +257,17 @@ public enum WebDAVSyncError: LocalizedError, Equatable, Sendable {
 }
 
 public struct WebDAVClient: Sendable {
-    private let session: URLSession
+    let session: URLSession
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
 
-    public init(session: URLSession = .shared) {
+    public init(session: URLSession = YamiboNetworkConfiguration.makeSession()) {
         self.session = session
     }
 
     public func fetchPayload(settings: WebDAVSyncSettings) async throws -> WebDAVSyncPayload {
         let config = try configuration(from: settings)
-        var request = URLRequest(url: config.fileURL)
+        var request = YamiboNetworkConfiguration.makeRequest(url: config.fileURL)
         request.httpMethod = "GET"
         applyHeaders(to: &request, configuration: config)
 
@@ -295,7 +295,7 @@ public struct WebDAVClient: Sendable {
         let config = try configuration(from: settings)
         try await createDirectoryIfNeeded(configuration: config)
 
-        var request = URLRequest(url: config.fileURL)
+        var request = YamiboNetworkConfiguration.makeRequest(url: config.fileURL)
         request.httpMethod = "PUT"
         request.httpBody = try encoder.encode(payload)
         request.setValue("application/json; charset=utf-8", forHTTPHeaderField: "Content-Type")
@@ -308,7 +308,7 @@ public struct WebDAVClient: Sendable {
     }
 
     private func createDirectoryIfNeeded(configuration: Configuration) async throws {
-        var request = URLRequest(url: configuration.directoryURL)
+        var request = YamiboNetworkConfiguration.makeRequest(url: configuration.directoryURL)
         request.httpMethod = "MKCOL"
         applyHeaders(to: &request, configuration: configuration)
 

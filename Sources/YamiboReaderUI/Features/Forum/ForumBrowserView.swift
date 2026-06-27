@@ -42,7 +42,7 @@ public final class ForumBrowserModel: ObservableObject {
 
     public func load(_ url: URL) {
         currentURL = url
-        webView?.load(URLRequest(url: url))
+        webView?.load(YamiboNetworkConfiguration.makeRequest(url: url))
     }
 
     public func reload() {
