@@ -76,7 +76,10 @@ struct ReaderSettingsPanel: View {
                     settings: draftSettings,
                     palette: palette,
                     onFontScaleChange: setFontScale,
-                    onFontFamilyChange: setFontFamily
+                    onFontFamilyChange: setFontFamily,
+                    onSelectOriginalText: { setTranslationMode(.none) },
+                    onSelectSimplifiedText: { setTranslationMode(.simplified) },
+                    onSelectTraditionalText: { setTranslationMode(.traditional) }
                 )
 
                 ReaderBooksLayoutSection(
@@ -109,10 +112,7 @@ struct ReaderSettingsPanel: View {
                         set: { draftSettings.showsTwoPagesInLandscapeOnPad = $0 }
                     ),
                     onBackgroundStyleChange: setBackgroundStyle,
-                    onReadingModeChange: setReadingMode,
-                    onSelectOriginalText: { setTranslationMode(.none) },
-                    onSelectSimplifiedText: { setTranslationMode(.simplified) },
-                    onSelectTraditionalText: { setTranslationMode(.traditional) }
+                    onReadingModeChange: setReadingMode
                 )
 
                 ReaderBooksMiscSection(
