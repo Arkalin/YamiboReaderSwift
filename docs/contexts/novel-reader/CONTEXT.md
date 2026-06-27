@@ -28,6 +28,10 @@ _Avoid_: reader view model fields, published pagination state, UI snapshot
 The opaque, generation-scoped identity of one presented text or external-block surface, composed from runtime generation and surface ordinal without exposing page-index semantics.
 _Avoid_: page index, rendered page index, collection index path
 
+**Novel Page Turn Direction**:
+The user's preferred horizontal page order for paged novel reading modes.
+_Avoid_: swipe direction, gesture direction
+
 **Novel Text Layout**:
 The native text layout process that turns a novel reader page document's text segments into rendered page ranges, vertical chunk ranges, measured heights, display layouts, and chapter starts.
 _Avoid_: layout engine, textkit wrapper, paginator internals, reader paginator, text view fallback
@@ -145,6 +149,7 @@ _Avoid_: attributed string helper, UI text style factory, platform text builder,
 - Selection, completed scrolling, and scrub interactions return a **Novel Reader Surface Identity** together with the generation and revision from which the interaction began.
 - Navigation revisions within one generation preserve the surface collection and identities while changing only semantic position and selection. A new layout generation atomically replaces the complete surface collection, and platform collections treat every new-generation surface as a new item.
 - The authoritative Index produces only an ordered paged-surface projection. The Workflow derives one-page or two-page spread presentation from that committed surface collection and current device presentation environment.
+- In paged reading mode, **Novel Page Turn Direction** controls physical collection order, tap-zone navigation, horizontal boundary gestures, page-curl book order, and directional chrome feedback such as progress fill direction. It does not change **Novel Reading Position** identity or semantic surface ordering.
 - A spread references one or two **Novel Reader Surface Identity** values, never crosses reader page document identity, and may pair adjacent chapters or an external-block surface with its neighbor.
 - An odd trailing surface uses an empty presentation slot rather than a fabricated surface. Changing single-page versus two-page presentation publishes a new revision in the same generation when text container geometry is unchanged.
 - Container width, readable height, padding, or any other change that alters text surface geometry requires a new generation even when the resulting spread mode is unchanged.

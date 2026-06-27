@@ -104,7 +104,7 @@ struct ReaderPresentationSpreadCollectionViewport: UIViewRepresentable {
                 itemCount: parent.spreads.count,
                 selectionIndex: parent.selectionIndex,
                 pagedTurnStyle: parent.settings.pagedTurnStyle,
-                horizontalNavigationDirection: .leftSwipeAdvances,
+                horizontalNavigationDirection: parent.settings.pageTurnDirection.horizontalNavigationDirection,
                 pagerIdentity: parent.pagerIdentity,
                 scrollAnimationRequest: parent.scrollAnimationRequest,
                 canBoundaryPageTurn: parent.canBoundaryPageTurn,
@@ -119,6 +119,18 @@ struct ReaderPresentationSpreadCollectionViewport: UIViewRepresentable {
                             traitCollection: traitCollection
                         ),
                         overlayAlpha: overlayAlpha
+                    )
+                },
+                itemIndexForSelectionIndex: { [parent] selectionIndex in
+                    parent.settings.pageTurnDirection.itemIndex(
+                        forSelectionIndex: selectionIndex,
+                        itemCount: parent.spreads.count
+                    )
+                },
+                selectionIndexForItemIndex: { [parent] itemIndex in
+                    parent.settings.pageTurnDirection.selectionIndex(
+                        forItemIndex: itemIndex,
+                        itemCount: parent.spreads.count
                     )
                 }
             )
@@ -140,7 +152,11 @@ struct ReaderPresentationSpreadCollectionViewport: UIViewRepresentable {
                 withReuseIdentifier: Self.reuseIdentifier,
                 for: indexPath
             ) as! ReaderPagedPageTurnCell
-            let spread = parent.spreads[indexPath.item]
+            let spreadIndex = parent.settings.pageTurnDirection.selectionIndex(
+                forItemIndex: indexPath.item,
+                itemCount: parent.spreads.count
+            )
+            let spread = parent.spreads[spreadIndex]
             cell.backgroundColor = .clear
             cell.contentConfiguration = UIHostingConfiguration {
                 ReaderPagedPageSurfaceContainer(settings: parent.settings) {
@@ -208,13 +224,14 @@ struct ReaderPresentationSpreadCollectionViewport: UIViewRepresentable {
                 return
             }
             let zone = ReaderPagedTapZone.zone(for: location, in: collectionView.bounds)
+            let directionalZone = parent.settings.pageTurnDirection.directionalTapZone(for: zone)
             if !parent.isChromeVisible,
-               pagingDriver.animateAdjacentSelection(for: zone, in: collectionView, inputs: pagingInputs) {
+               pagingDriver.animateAdjacentSelection(for: directionalZone, in: collectionView, inputs: pagingInputs) {
                 return
             }
             let onPageTapZone = parent.onPageTapZone
             callbackScheduler.publish {
-                onPageTapZone(zone)
+                onPageTapZone(directionalZone)
             }
         }
 

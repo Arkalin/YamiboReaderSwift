@@ -243,6 +243,68 @@ struct ReaderBooksReadingModePicker: View {
     }
 }
 
+struct ReaderBooksPageTurnDirectionPicker: View {
+    let direction: ReaderPageTurnDirection
+    let palette: ReaderBooksSheetPalette
+    let onSelect: (ReaderPageTurnDirection) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(L10n.string("reader.page_turn_direction"))
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(palette.primaryText)
+
+            HStack(spacing: 8) {
+                ForEach(ReaderPageTurnDirection.allCases, id: \.self) { option in
+                    ReaderBooksPageTurnDirectionButton(
+                        direction: option,
+                        isSelected: direction == option,
+                        palette: palette
+                    ) {
+                        onSelect(option)
+                    }
+                }
+            }
+            .padding(6)
+            .background(palette.segmentedBackground, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        }
+    }
+}
+
+private struct ReaderBooksPageTurnDirectionButton: View {
+    let direction: ReaderPageTurnDirection
+    let isSelected: Bool
+    let palette: ReaderBooksSheetPalette
+    let action: () -> Void
+
+    private var systemImageName: String {
+        switch direction {
+        case .leftToRight:
+            "arrow.right"
+        case .rightToLeft:
+            "arrow.left"
+        }
+    }
+
+    var body: some View {
+        Button(action: action) {
+            Label(direction.title, systemImage: systemImageName)
+                .font(.subheadline.weight(.semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.78)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 10)
+                .foregroundStyle(isSelected ? Color.white : palette.primaryText)
+                .background(
+                    isSelected ? palette.confirmButtonBackground : Color.clear,
+                    in: RoundedRectangle(cornerRadius: 20, style: .continuous)
+                )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(direction.title)
+    }
+}
+
 private struct ReaderBooksReadingModeButton: View {
     let option: ReaderBooksReadingModeOption
     let isSelected: Bool

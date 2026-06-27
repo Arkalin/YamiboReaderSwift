@@ -318,6 +318,9 @@
 "reader.next_web_page" = "下一网页";
 "reader.no_cacheable_pages" = "当前没有可缓存的网页页码";
 "reader.page_number_spaced" = "第 %d 页";
+"reader.page_turn_direction" = "翻页方向";
+"reader.page_turn_direction.left_to_right" = "从左向右";
+"reader.page_turn_direction.right_to_left" = "从右向左";
 "reader.previous_chapter" = "上一章";
 "reader.previous_web_page" = "上一网页";
 "reader.progress" = "第 %@ / %d 页 · 网页第 %d / %d 页";

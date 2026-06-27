@@ -584,6 +584,7 @@ public struct ReaderContainerView: View {
         NovelReaderBottomChrome(
             progress: model.chromeProgressSnapshot.chromeProgress,
             readingMode: model.settings.readingMode,
+            fillDirection: model.settings.pageTurnDirection.progressFillDirection,
             bottomInset: bottomInset,
             isVisible: isVisible,
             onShowChapters: openChapterDrawer,
