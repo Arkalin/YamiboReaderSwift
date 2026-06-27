@@ -32,12 +32,13 @@ public struct MineHomeView: View {
                         avatarLoader: viewModel.profileAvatarLoader,
                         avatarReloadDate: viewModel.session.lastUpdatedAt,
                         isRefreshing: viewModel.isRefreshingProfile,
+                        isInteractionDisabled: viewModel.isBusy,
                         showSignOutConfirmation: {
                             showingSignOutConfirmation = true
                         }
                     )
                 } else {
-                    MineLoggedOutProfileSection {
+                    MineLoggedOutProfileSection(isInteractionDisabled: viewModel.isBusy) {
                         showingLoginSheet = true
                     }
                 }
@@ -57,7 +58,6 @@ public struct MineHomeView: View {
             .listStyle(.inset)
             #endif
             .navigationTitle(L10n.string("tab.mine"))
-            .disabled(viewModel.isBusy)
             .refreshable {
                 await viewModel.refreshProfile()
             }
@@ -247,6 +247,7 @@ private struct MineProfileSection: View {
     let avatarLoader: any YamiboProfileAvatarLoading
     let avatarReloadDate: Date?
     let isRefreshing: Bool
+    let isInteractionDisabled: Bool
     let showSignOutConfirmation: () -> Void
 
     var body: some View {
@@ -260,9 +261,11 @@ private struct MineProfileSection: View {
                     )
                 }
                 .buttonStyle(.plain)
+                .disabled(isInteractionDisabled)
                 .listRowInsets(EdgeInsets(top: 16, leading: 16, bottom: 16, trailing: 16))
             } else {
                 MineProfileLoadingCard(isRefreshing: isRefreshing)
+                    .allowsHitTesting(!isInteractionDisabled)
                     .listRowInsets(EdgeInsets(top: 16, leading: 16, bottom: 16, trailing: 16))
             }
         }
@@ -270,6 +273,7 @@ private struct MineProfileSection: View {
 }
 
 private struct MineLoggedOutProfileSection: View {
+    let isInteractionDisabled: Bool
     let showLogin: () -> Void
 
     var body: some View {
@@ -278,6 +282,7 @@ private struct MineLoggedOutProfileSection: View {
                 MineLoggedOutProfileCard()
             }
             .buttonStyle(.plain)
+            .disabled(isInteractionDisabled)
             .listRowInsets(EdgeInsets(top: 16, leading: 16, bottom: 16, trailing: 16))
             .accessibilityLabel(L10n.string("mine.tap_to_login"))
             .accessibilityHint(L10n.string("mine.login_card_hint"))
