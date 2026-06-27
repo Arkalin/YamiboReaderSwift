@@ -243,6 +243,21 @@ final class MangaReaderModelSettingsProgressTests: XCTestCase {
         XCTAssertEqual(savedCount, 1)
     }
 
+    func testViewportPageReportClearsStaleViewportPlacement() async throws {
+        let fixture = try await makeFixture(initialPage: 1)
+
+        await fixture.model.prepare()
+        fixture.model.updateCurrentPage(globalIndex: 2)
+
+        guard case let .loaded(loaded) = fixture.model.presentation.state else {
+            XCTFail("Expected loaded presentation")
+            return
+        }
+        XCTAssertEqual(loaded.currentPageIndex, 2)
+        XCTAssertEqual(loaded.currentPage?.localIndex, 2)
+        XCTAssertNil(loaded.viewportPlacement)
+    }
+
     func testSaveProgressFlushesLatestPageIntoExistingFavoriteAndResumeRoute() async throws {
         let favoriteStore = FavoriteStore(key: "\(UUID().uuidString).favorites")
         let fixture = try await makeFixture(

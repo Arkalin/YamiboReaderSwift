@@ -118,6 +118,7 @@ public final class MangaReaderWorkflow {
         guard var window else { return presentation }
         _ = window.moveToLoadedPage(at: globalIndex)
         self.window = window
+        currentViewportPlacement = nil
         presentation = loadedPresentation(from: window)
         return presentation
     }
