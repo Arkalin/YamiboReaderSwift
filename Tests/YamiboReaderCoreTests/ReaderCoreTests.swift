@@ -875,7 +875,7 @@ private final class StubURLProtocol: URLProtocol {
     let configuration = URLSessionConfiguration.ephemeral
     configuration.protocolClasses = [StubURLProtocol.self]
     let session = URLSession(configuration: configuration)
-    let repository = YamiboRepository(
+    let repository = FavoriteRepository(
         client: YamiboClient(session: session, cookie: "sid=1; favorite-delete-success=1", userAgent: "Test-UA")
     )
 
@@ -3080,14 +3080,14 @@ private final class StubURLProtocol: URLProtocol {
     #expect(page.nextView == 5)
 }
 
-final class YamiboRepositoryDeleteTests: XCTestCase {
+final class FavoriteRepositoryDeleteTests: XCTestCase {
     func testDeletesFavoriteUsingFormhashAndFavoriteID() async throws {
-        let repository = makeRepository(cookie: "sid=1; favorite-delete-success=1")
+        let repository = makeFavoriteRepository(cookie: "sid=1; favorite-delete-success=1")
         try await repository.deleteFavorite(remoteFavoriteID: "55")
     }
 
     func testThrowsWhenDeleteFormhashIsMissing() async {
-        let repository = makeRepository(cookie: "sid=1; missing-token=1")
+        let repository = makeFavoriteRepository(cookie: "sid=1; missing-token=1")
 
         do {
             try await repository.deleteFavorite(remoteFavoriteID: "55")
@@ -3100,7 +3100,7 @@ final class YamiboRepositoryDeleteTests: XCTestCase {
     }
 
     func testThrowsWhenDeleteResponseIsFailure() async {
-        let repository = makeRepository(cookie: "sid=1")
+        let repository = makeFavoriteRepository(cookie: "sid=1")
 
         do {
             try await repository.deleteFavorite(remoteFavoriteID: "999")
@@ -3112,11 +3112,11 @@ final class YamiboRepositoryDeleteTests: XCTestCase {
         }
     }
 
-    private func makeRepository(cookie: String) -> YamiboRepository {
+    private func makeFavoriteRepository(cookie: String) -> FavoriteRepository {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [StubURLProtocol.self]
         let session = URLSession(configuration: configuration)
-        return YamiboRepository(
+        return FavoriteRepository(
             client: YamiboClient(session: session, cookie: cookie, userAgent: "Test-UA")
         )
     }
