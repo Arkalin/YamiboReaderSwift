@@ -45,7 +45,15 @@ private func makeAppModel() throws -> YamiboAppModel {
 }
 
 private func makeAppContext() throws -> YamiboAppContext {
-    YamiboAppContext()
+    let suiteName = "manga-route-skeleton-\(UUID().uuidString)"
+    let defaults = try #require(UserDefaults(suiteName: suiteName))
+    defaults.removePersistentDomain(forName: suiteName)
+    return YamiboAppContext(
+        sessionStore: SessionStore(defaults: defaults, key: "session"),
+        settingsStore: SettingsStore(defaults: defaults, key: "settings"),
+        readerResumeRouteStore: ReaderResumeRouteStore(defaults: defaults, key: "reader-route"),
+        favoriteStore: FavoriteStore(defaults: defaults, key: "favorites")
+    )
 }
 
 private func makeLaunchContext(tid: String) throws -> MangaLaunchContext {
