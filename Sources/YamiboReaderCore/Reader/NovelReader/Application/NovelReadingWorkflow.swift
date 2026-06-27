@@ -241,7 +241,7 @@ public final class NovelReadingWorkflow {
             authorID: cacheContext(forView: view).authorID
         )
         return try await repository.loadPage(request)
-            .previewChapterDirectoryEntries(readingMode: settings.readingMode)
+            .previewChapterDirectoryEntries(settings: settings)
     }
 
     package func loadChapter(_ anchor: NovelChapterAnchor) async throws -> NovelReadingWorkflowState {
@@ -986,10 +986,16 @@ public final class NovelReadingWorkflow {
 
 private extension ReaderPageDocument {
     func previewChapterDirectoryEntries(
-        readingMode: ReaderReadingMode
+        settings: ReaderAppearanceSettings
     ) -> [NovelChapterDirectoryEntry] {
         var seenIdentities: Set<NovelChapterIdentity> = []
-        return zip(segments, segmentSemantics).compactMap { segment, semantics in
+        return segments.indices.compactMap { index in
+            let segment = segments[index]
+            let semantics = semantics(forSegmentIndex: index)
+            let source = source(forSegmentIndex: index)
+            if source?.isAuthorReplyToOther == true, !settings.showsAuthorRepliesToOthers {
+                return nil
+            }
             guard let semantics,
                   let chapterIdentity = semantics.chapterIdentity,
                   seenIdentities.insert(chapterIdentity).inserted else {
@@ -1011,7 +1017,7 @@ private extension ReaderPageDocument {
                         chapterTitle: title,
                         segmentProgress: 0,
                         authorID: resolvedAuthorID,
-                        readingModeHint: readingMode
+                        readingModeHint: settings.readingMode
                     )
                 )
             }

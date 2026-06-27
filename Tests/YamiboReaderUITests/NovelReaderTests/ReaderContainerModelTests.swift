@@ -1262,6 +1262,66 @@ final class ReaderContainerModelTests: XCTestCase {
         }
     }
 
+    func testChapterDirectoryPreviewHidesAuthorRepliesToOthersAcrossWebViews() async throws {
+        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=889900&mobile=2")!
+        let documents = [
+            ReaderPageDocument(
+                threadURL: threadURL,
+                view: 1,
+                maxView: 2,
+                resolvedAuthorID: "42",
+                contentSource: .authorFilteredPage,
+                segments: [
+                    .text(String(repeating: "第一章 正文。", count: 40), chapterTitle: "第一章"),
+                    .text(String(repeating: "读者甲 发表于 2026-5-1\n楼主回复。", count: 12), chapterTitle: "读者甲 发表于 2026-5-1"),
+                ],
+                segmentSources: [
+                    ReaderSegmentSource(ownerPostID: "1001"),
+                    ReaderSegmentSource(ownerPostID: "1002", isAuthorReplyToOther: true),
+                ]
+            ),
+            ReaderPageDocument(
+                threadURL: threadURL,
+                view: 2,
+                maxView: 2,
+                resolvedAuthorID: "42",
+                contentSource: .authorFilteredPage,
+                segments: [
+                    .text(String(repeating: "第二章 正文。", count: 40), chapterTitle: "第二章"),
+                    .text(String(repeating: "读者乙 发表于 2026-5-2\n楼主回复。", count: 12), chapterTitle: "读者乙 发表于 2026-5-2"),
+                    .text(String(repeating: "第三章 正文。", count: 40), chapterTitle: "第三章"),
+                ],
+                segmentSources: [
+                    ReaderSegmentSource(ownerPostID: "2001"),
+                    ReaderSegmentSource(ownerPostID: "2002", isAuthorReplyToOther: true),
+                    ReaderSegmentSource(ownerPostID: "2003"),
+                ]
+            ),
+        ]
+        let model = try await makeModel(
+            documents: documents,
+            settings: ReaderAppearanceSettings(showsAuthorRepliesToOthers: false, readingMode: .vertical),
+            launchContext: ReaderLaunchContext(
+                threadURL: threadURL,
+                threadTitle: "测试线程",
+                source: .forum,
+                authorID: "42"
+            )
+        )
+
+        await MainActor.run {
+            XCTAssertEqual(model.visibleChapterDirectoryChapters.map(\.title), ["第一章"])
+        }
+
+        await model.previewChapterDirectoryWebView(2)
+
+        await MainActor.run {
+            XCTAssertNil(model.chapterDirectoryError)
+            XCTAssertEqual(model.visibleChapterDirectoryView, 2)
+            XCTAssertEqual(model.visibleChapterDirectoryChapters.map(\.title), ["第二章", "第三章"])
+        }
+    }
+
     func testUpdatingLayoutRepaginatesPagedContentAndKeepsCurrentSegment() async throws {
         let model = try await makeModel(
             documents: [
