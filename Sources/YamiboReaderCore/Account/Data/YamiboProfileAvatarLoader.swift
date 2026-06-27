@@ -11,7 +11,7 @@ public actor YamiboProfileAvatarLoader: YamiboProfileAvatarLoading {
     private var inFlightTasks: [RequestKey: Task<Data, Error>] = [:]
 
     public init(
-        session: URLSession = .shared,
+        session: URLSession = YamiboNetworkConfiguration.makeSession(),
         sessionStore: any SessionStoring
     ) {
         self.session = session
@@ -69,7 +69,7 @@ public actor YamiboProfileAvatarLoader: YamiboProfileAvatarLoading {
         sessionState: SessionState,
         session: URLSession
     ) async throws -> Data {
-        var request = URLRequest(url: avatarURL)
+        var request = YamiboNetworkConfiguration.makeRequest(url: avatarURL)
         request.setValue("image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8", forHTTPHeaderField: "Accept")
         request.setValue(sessionState.userAgent, forHTTPHeaderField: "User-Agent")
         let cookie = sessionState.cookie.trimmingCharacters(in: .whitespacesAndNewlines)

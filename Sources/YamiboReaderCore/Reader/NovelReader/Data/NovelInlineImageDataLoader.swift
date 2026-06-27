@@ -71,7 +71,7 @@ public actor YamiboNovelInlineImageDataLoader: NovelInlineImageDataLoading {
         refererURL: URL,
         client: YamiboClient
     ) async throws -> Data {
-        var request = URLRequest(url: imageURL)
+        var request = YamiboNetworkConfiguration.makeRequest(url: imageURL)
         request.setValue("image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8", forHTTPHeaderField: "Accept")
         request.setValue(client.userAgent, forHTTPHeaderField: "User-Agent")
         if let cookie = client.cookie?.trimmingCharacters(in: .whitespacesAndNewlines),

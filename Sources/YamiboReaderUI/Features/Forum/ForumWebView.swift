@@ -122,7 +122,7 @@ public struct IOSForumWebView: UIViewRepresentable {
             }
 
             if navigationAction.targetFrame == nil, isInternal(url) {
-                webView.load(URLRequest(url: url))
+                webView.load(YamiboNetworkConfiguration.makeRequest(url: url))
                 decisionHandler(.cancel)
                 return
             }
@@ -144,7 +144,7 @@ public struct IOSForumWebView: UIViewRepresentable {
         ) -> WKWebView? {
             if let url = navigationAction.request.url {
                 if isInternal(url) {
-                    webView.load(URLRequest(url: url))
+                    webView.load(YamiboNetworkConfiguration.makeRequest(url: url))
                 } else {
                     UIApplication.shared.open(url)
                 }

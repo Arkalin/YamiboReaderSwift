@@ -28,7 +28,7 @@ public actor YamiboMangaImageDataLoader: MangaImageDataLoading {
         refererURL: URL?,
         client: YamiboClient
     ) async throws -> Data {
-        var request = URLRequest(url: url)
+        var request = YamiboNetworkConfiguration.makeRequest(url: url)
         request.setValue("image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8", forHTTPHeaderField: "Accept")
         request.setValue(client.userAgent, forHTTPHeaderField: "User-Agent")
         if let cookie = client.cookie?.mangaReaderTrimmedNonEmpty {

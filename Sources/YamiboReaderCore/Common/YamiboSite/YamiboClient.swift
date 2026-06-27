@@ -6,7 +6,7 @@ public struct YamiboClient: Sendable {
     public var userAgent: String
 
     public init(
-        session: URLSession = .shared,
+        session: URLSession = YamiboNetworkConfiguration.makeSession(),
         cookie: String? = nil,
         userAgent: String = YamiboDefaults.defaultMobileUserAgent
     ) {
@@ -36,7 +36,7 @@ public struct YamiboClient: Sendable {
         fields: [(String, String)],
         userAgent: String? = nil
     ) async throws -> String {
-        var request = URLRequest(url: url)
+        var request = YamiboNetworkConfiguration.makeRequest(url: url)
         request.httpMethod = "POST"
         request.httpBody = formBody(fields)
         request.setValue("application/x-www-form-urlencoded; charset=utf-8", forHTTPHeaderField: "Content-Type")
@@ -55,8 +55,7 @@ public struct YamiboClient: Sendable {
         userAgent: String? = nil,
         cachePolicy: URLRequest.CachePolicy = .useProtocolCachePolicy
     ) async throws -> String {
-        var request = URLRequest(url: url)
-        request.cachePolicy = cachePolicy
+        var request = YamiboNetworkConfiguration.makeRequest(url: url, cachePolicy: cachePolicy)
         request.setValue("text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8", forHTTPHeaderField: "Accept")
         if let cookie, !cookie.isEmpty {
             request.setValue(cookie, forHTTPHeaderField: "Cookie")

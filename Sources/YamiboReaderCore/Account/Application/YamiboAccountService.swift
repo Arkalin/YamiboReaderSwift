@@ -11,7 +11,7 @@ public struct YamiboAccountService: Sendable {
     private let userAgent: String
 
     public init(
-        session: URLSession = .shared,
+        session: URLSession = YamiboNetworkConfiguration.makeSession(),
         sessionStore: SessionStore,
         profileStore: YamiboProfileStore,
         userAgent: String = YamiboDefaults.defaultMobileUserAgent

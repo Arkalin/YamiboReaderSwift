@@ -28,7 +28,7 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
     public let mangaDirectorySearchCooldownState: MangaDirectorySearchCooldownState
     public let mangaChapterDocumentStore: FileMangaChapterDocumentStore
     public let mangaImageDataCacheStore: FileMangaImageDataCacheStore
-    private let session: URLSession
+    let session: URLSession
 
     public init(
         sessionStore: SessionStore = SessionStore(),
@@ -44,7 +44,7 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         mangaDirectorySearchCooldownState: MangaDirectorySearchCooldownState = MangaDirectorySearchCooldownState(),
         mangaChapterDocumentStore: FileMangaChapterDocumentStore = FileMangaChapterDocumentStore(),
         mangaImageDataCacheStore: FileMangaImageDataCacheStore = FileMangaImageDataCacheStore(),
-        session: URLSession = .shared
+        session: URLSession = YamiboNetworkConfiguration.makeSession()
     ) {
         self.sessionStore = sessionStore
         self.profileStore = profileStore
