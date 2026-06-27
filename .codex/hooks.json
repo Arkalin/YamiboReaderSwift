@@ -2,6 +2,17 @@
   "hooks": {
     "PreToolUse": [
       {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/usr/bin/python3 \"$(git rev-parse --show-toplevel)/.codex/hooks/pre_tool_use_no_source_assertion_tests.py\"",
+            "timeout": 10,
+            "statusMessage": "Checking for source-code assertion tests"
+          }
+        ]
+      },
+      {
         "matcher": "Bash",
         "hooks": [
           {
