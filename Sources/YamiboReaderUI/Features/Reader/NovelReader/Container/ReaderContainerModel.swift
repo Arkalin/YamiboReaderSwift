@@ -320,7 +320,7 @@ public final class ReaderContainerModel: ObservableObject {
 
     public func selectPagedViewportIndex(_ selectionIndex: Int) {
         let targetSurfaceIndex = isTwoPageSpreadActive
-            ? leftSurfaceIndex(forSpreadIndex: selectionIndex)
+            ? progressSurfaceIndex(forSpreadIndex: selectionIndex)
             : selectionIndex
         selectSurface(targetSurfaceIndex)
     }
@@ -1223,17 +1223,22 @@ public final class ReaderContainerModel: ObservableObject {
         })?.index ?? 0
     }
 
-    private func leftSurfaceIndex(forSpreadIndex spreadIndex: Int) -> Int {
+    private func progressSurfaceIndex(forSpreadIndex spreadIndex: Int) -> Int {
         guard let spread = presentationSpreads.first(where: { $0.index == spreadIndex }) ?? presentationSpreads.last else {
             return 0
         }
-        return spread.leftSurfaceIndex
+        switch settings.pageTurnDirection {
+        case .leftToRight:
+            return spread.rightSurfaceIndex ?? spread.leftSurfaceIndex
+        case .rightToLeft:
+            return spread.leftSurfaceIndex
+        }
     }
 
     private func normalizedPagedSurfaceIndex(_ surfaceIndex: Int) -> Int {
         let clampedIndex = max(0, min(surfaceIndex, max(readerSurfaces.count - 1, 0)))
         guard isTwoPageSpreadActive else { return clampedIndex }
-        return leftSurfaceIndex(forSpreadIndex: spreadIndex(forSurfaceIndex: clampedIndex))
+        return progressSurfaceIndex(forSpreadIndex: spreadIndex(forSurfaceIndex: clampedIndex))
     }
 
     private func cacheContext(forView view: Int) -> (authorID: String?, contentSource: ReaderContentSource?) {

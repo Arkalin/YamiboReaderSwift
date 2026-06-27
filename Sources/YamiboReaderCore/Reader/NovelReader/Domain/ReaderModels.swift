@@ -1690,6 +1690,7 @@ public struct NovelReaderReadingState: Hashable, Sendable {
 public struct NovelReaderProgressProjection: Hashable, Sendable {
     public var readingMode: ReaderReadingMode
     public var usesTwoPageSpread: Bool
+    public var pageTurnDirection: ReaderPageTurnDirection
     public var surfaceCount: Int
     public var selectedSurfaceIndex: Int
     public var currentSurfaceNumber: Int
@@ -1706,6 +1707,7 @@ public struct NovelReaderProgressProjection: Hashable, Sendable {
     public init(
         readingMode: ReaderReadingMode,
         usesTwoPageSpread: Bool,
+        pageTurnDirection: ReaderPageTurnDirection = .leftToRight,
         surfaceCount: Int,
         selectedSurfaceIndex: Int,
         currentSurfaceNumber: Int,
@@ -1721,6 +1723,7 @@ public struct NovelReaderProgressProjection: Hashable, Sendable {
     ) {
         self.readingMode = readingMode
         self.usesTwoPageSpread = usesTwoPageSpread
+        self.pageTurnDirection = pageTurnDirection
         self.surfaceCount = max(surfaceCount, 1)
         self.selectedSurfaceIndex = max(selectedSurfaceIndex, 0)
         self.currentSurfaceNumber = min(max(currentSurfaceNumber, 1), self.surfaceCount)
@@ -1738,6 +1741,7 @@ public struct NovelReaderProgressProjection: Hashable, Sendable {
     public init(
         readingMode: ReaderReadingMode,
         usesTwoPageSpread: Bool,
+        pageTurnDirection: ReaderPageTurnDirection = .leftToRight,
         surfaces: [NovelReaderSurface],
         selectedSurfaceIndex: Int,
         spreads: [NovelReaderPresentationSpread],
@@ -1774,6 +1778,7 @@ public struct NovelReaderProgressProjection: Hashable, Sendable {
         self.init(
             readingMode: readingMode,
             usesTwoPageSpread: usesTwoPageSpread,
+            pageTurnDirection: pageTurnDirection,
             surfaceCount: surfaceCount,
             selectedSurfaceIndex: normalizedSelectedIndex,
             currentSurfaceNumber: normalizedSelectedIndex + 1,
@@ -1798,15 +1803,23 @@ public struct NovelReaderProgressProjection: Hashable, Sendable {
         spreads: [NovelReaderPresentationSpread],
         usesTwoPageSpread: Bool
     ) -> String {
-        let leftSurfaceNumber = displayedPageIndex + 1
+        let selectedSurfaceNumber = displayedPageIndex + 1
         guard usesTwoPageSpread,
-              let spread = spreads.first(where: { $0.leftSurfaceIndex == selectedSurfaceIndex }),
-              let rightSurfaceIndex = spread.rightSurfaceIndex,
+              let spread = spreads.first(where: {
+                $0.leftSurfaceIndex == selectedSurfaceIndex || $0.rightSurfaceIndex == selectedSurfaceIndex
+              }) else {
+            return "\(selectedSurfaceNumber)"
+        }
+        let firstVisibleSurfaceIndex = surfaces.indices.first {
+            surfaces[$0].documentView == displayedView
+        } ?? 0
+        let leftSurfaceNumber = max(spread.leftSurfaceIndex - firstVisibleSurfaceIndex + 1, 1)
+        guard let rightSurfaceIndex = spread.rightSurfaceIndex,
               surfaces.indices.contains(rightSurfaceIndex),
               surfaces[rightSurfaceIndex].documentView == displayedView else {
             return "\(leftSurfaceNumber)"
         }
-        let rightSurfaceNumber = displayedPageIndex + 2
+        let rightSurfaceNumber = max(rightSurfaceIndex - firstVisibleSurfaceIndex + 1, leftSurfaceNumber)
         return "\(leftSurfaceNumber)-\(min(rightSurfaceNumber, displayedPageCount))"
     }
 }
@@ -1862,6 +1875,7 @@ public struct NovelReaderPresentation: Hashable, Sendable {
         self.progressProjection = progressProjection ?? NovelReaderProgressProjection(
             readingMode: committedSettings.readingMode,
             usesTwoPageSpread: usesTwoPageSpread,
+            pageTurnDirection: committedSettings.pageTurnDirection,
             surfaces: surfaces,
             selectedSurfaceIndex: resolvedSelectedSurfaceIndex ?? 0,
             spreads: spreads,

@@ -707,6 +707,8 @@ final class ReaderContainerModelTests: XCTestCase {
                 model.presentationSpreads.map { "\($0.leftSurfaceIndex)-\($0.rightSurfaceIndex.map(String.init) ?? "nil")" },
                 ["0-1", "2-3", "4-nil"]
             )
+            XCTAssertEqual(model.selectedSurfaceIndex, 1)
+            XCTAssertEqual(model.currentSurfaceNumber, 2)
             XCTAssertEqual(model.pagedViewportSelectionIndex, 0)
             XCTAssertTrue(model.progressText.contains("第 1-2 / 5 页"))
 
@@ -717,7 +719,7 @@ final class ReaderContainerModelTests: XCTestCase {
         }
     }
 
-    func testTwoPageSpreadMapsSliderAndPagingToSpreadLeftAnchor() async throws {
+    func testLeftToRightTwoPageSpreadMapsSliderAndPagingToRightAnchor() async throws {
         let document = makeImageDocument(view: 1, maxView: 1, surfaceCount: 6)
         let model = try await makeModel(
             documents: [document],
@@ -737,9 +739,53 @@ final class ReaderContainerModelTests: XCTestCase {
         )
 
         await MainActor.run {
+            XCTAssertEqual(model.targetSurfaceIndex(forProgressValue: 1), 1)
+            XCTAssertEqual(model.targetSurfaceIndex(forProgressValue: 5), 5)
+
+            model.jumpToSurface(0)
+            XCTAssertEqual(model.selectedSurfaceIndex, 1)
+            model.jumpToSurface(3)
+            XCTAssertEqual(model.selectedSurfaceIndex, 3)
+        }
+
+        await model.jumpRelativeSurface(1)
+        await MainActor.run {
+            XCTAssertEqual(model.selectedSurfaceIndex, 5)
+            XCTAssertEqual(model.currentSurfaceNumber, 6)
+        }
+
+        await MainActor.run {
+            model.selectPagedViewportIndex(1)
+            XCTAssertEqual(model.selectedSurfaceIndex, 3)
+        }
+    }
+
+    func testRightToLeftTwoPageSpreadMapsSliderAndPagingToLeftAnchor() async throws {
+        let document = makeImageDocument(view: 1, maxView: 1, surfaceCount: 6)
+        let model = try await makeModel(
+            documents: [document],
+            settings: ReaderAppearanceSettings(
+                showsTwoPagesInLandscapeOnPad: true,
+                readingMode: .paged,
+                pageTurnDirection: .rightToLeft
+            )
+        )
+
+        await model.commitNovelTextPresentationEnvironment(isPad: true)
+        await model.commitNovelTextLayout(
+            ReaderContainerLayout(
+                width: 844,
+                height: 390,
+                readingMode: .paged
+            )
+        )
+
+        await MainActor.run {
             XCTAssertEqual(model.targetSurfaceIndex(forProgressValue: 1), 0)
             XCTAssertEqual(model.targetSurfaceIndex(forProgressValue: 5), 4)
 
+            model.jumpToSurface(1)
+            XCTAssertEqual(model.selectedSurfaceIndex, 0)
             model.jumpToSurface(3)
             XCTAssertEqual(model.selectedSurfaceIndex, 2)
         }
@@ -779,7 +825,7 @@ final class ReaderContainerModelTests: XCTestCase {
 
         await MainActor.run {
             model.jumpToSurface(5)
-            XCTAssertEqual(model.selectedSurfaceIndex, 4)
+            XCTAssertEqual(model.selectedSurfaceIndex, 5)
             XCTAssertEqual(model.pagedViewportSelectionIndex, 2)
         }
 
@@ -787,7 +833,7 @@ final class ReaderContainerModelTests: XCTestCase {
 
         await MainActor.run {
             XCTAssertEqual(model.currentView, 2)
-            XCTAssertEqual(model.selectedSurfaceIndex, 0)
+            XCTAssertEqual(model.selectedSurfaceIndex, 1)
             XCTAssertEqual(model.pagedViewportSelectionIndex, 0)
         }
     }

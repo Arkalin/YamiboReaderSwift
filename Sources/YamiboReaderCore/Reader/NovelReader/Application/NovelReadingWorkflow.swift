@@ -356,7 +356,8 @@ public final class NovelReadingWorkflow {
                 settings: update.settings,
                 layout: update.layout,
                 usesPadPresentation: update.usesPadPresentation
-            )
+            ),
+            pageTurnDirection: update.settings.pageTurnDirection
         )
         guard requestSequence == runtimeUpdateRequestSequence,
               !Task.isCancelled else {
@@ -743,7 +744,8 @@ public final class NovelReadingWorkflow {
                 settings: settings,
                 layout: layout,
                 usesPadPresentation: usesPadPresentation
-            )
+            ),
+            pageTurnDirection: settings.pageTurnDirection
         )
         let documentCacheContext = cacheContext(for: document)
         let cachedViews = await repository.cachedViews(
@@ -892,6 +894,7 @@ public final class NovelReadingWorkflow {
         let progressProjection = NovelReaderProgressProjection(
             readingMode: settings.readingMode,
             usesTwoPageSpread: usesTwoPageSpread,
+            pageTurnDirection: settings.pageTurnDirection,
             surfaces: surfaces,
             selectedSurfaceIndex: selectedSurfaceIndex ?? 0,
             spreads: spreads,

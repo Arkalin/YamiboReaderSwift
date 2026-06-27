@@ -63,7 +63,7 @@ _Avoid_: double page position, two-page progress, spread position
 - **Manga Reader Settings** includes a **Manga Page Turn Direction** for paged **Manga Reading Mode** behavior.
 - **Manga Reader Settings** includes a **Manga Page Scale Mode** for paged **Manga Reading Mode** behavior.
 - **Manga Reader Settings** includes a **Manga Page Edge Fill** for blank page-surface areas in paged **Manga Reading Mode** behavior.
-- A **Manga Page Spread** may show two adjacent pages in iPad landscape, but the current **Manga Reading Position** remains page-level.
+- A **Manga Page Spread** may show two adjacent pages in iPad landscape, but the current **Manga Reading Position** remains page-level. In two-page paged reading, the current position uses the visual page on the progress edge: right page for left-to-right page turns, left page for right-to-left page turns, falling back to the only real page when the progress-edge slot is blank.
 - In paged **Manga Reading Mode**, **Manga Page Turn Direction** also controls directional chrome feedback such as progress fill direction, while progress identity remains based on page `localIndex`.
 - In paged **Manga Reading Mode**, **Manga Page Scale Mode** applies to the whole page surface: fit-width pages may include top and bottom blank space, and page turns move that complete surface rather than only the image.
 - In paged **Manga Reading Mode**, fit-height pages may include left and right blank space or horizontally draggable overflow. Initial overflow alignment follows **Manga Page Turn Direction**.

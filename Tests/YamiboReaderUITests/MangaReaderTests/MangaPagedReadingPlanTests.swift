@@ -73,8 +73,12 @@ struct MangaPagedReadingPlanTests {
 
         #expect(ltrPlan.spreads[0].leftPage?.id == "700#0")
         #expect(ltrPlan.spreads[0].rightPage?.id == "700#1")
+        #expect(ltrPlan.pageIndex(forSpreadAt: 0) == 1)
+        #expect(ltrPlan.globalIndex(forSpreadAt: 0) == 1)
         #expect(rtlPlan.spreads[0].leftPage?.id == "700#1")
         #expect(rtlPlan.spreads[0].rightPage?.id == "700#0")
+        #expect(rtlPlan.pageIndex(forSpreadAt: 0) == 1)
+        #expect(rtlPlan.globalIndex(forSpreadAt: 0) == 1)
     }
 
     @Test func planDisplaysLogicalChapterPageRangeForTwoPageSpread() throws {
@@ -165,6 +169,8 @@ struct MangaPagedReadingPlanTests {
         #expect(ltrSequence.selectionIndex(forLeafIndexes: [3]) == 1)
         #expect(ltrSequence.pageIndex(forSelectionIndex: 1) == 2)
         #expect(ltrSequence.globalIndex(forSelectionIndex: 1) == 2)
+        #expect(ltrSequence.pageIndex(forSelectionIndex: 0) == 1)
+        #expect(ltrSequence.globalIndex(forSelectionIndex: 0) == 1)
 
         #expect(rtlSequence.pageCount == 3)
         #expect(rtlSequence.leafIndexes(forSelectionIndex: 1) == [2, 3])

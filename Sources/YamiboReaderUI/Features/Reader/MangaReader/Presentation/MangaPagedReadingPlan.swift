@@ -177,10 +177,6 @@ struct MangaPagedReadingPlan: Hashable, Sendable {
             let pageIndexes = pairsWithSecondPage
                 ? [firstPageIndex, secondPageIndex]
                 : [firstPageIndex]
-            let preferredPageIndex = currentPageIndex.flatMap { currentPageIndex in
-                pageIndexes.contains(currentPageIndex) ? currentPageIndex : nil
-            } ?? firstPageIndex
-            let preferredPage = pages[preferredPageIndex]
             let leftPageIndex: Int?
             let rightPageIndex: Int?
 
@@ -203,6 +199,14 @@ struct MangaPagedReadingPlan: Hashable, Sendable {
                     rightPageIndex = firstPageIndex
                 }
             }
+
+            let preferredPageIndex: Int = switch pageTurnDirection {
+            case .leftToRight:
+                rightPageIndex ?? leftPageIndex ?? firstPageIndex
+            case .rightToLeft:
+                leftPageIndex ?? rightPageIndex ?? firstPageIndex
+            }
+            let preferredPage = pages[preferredPageIndex]
 
             spreads.append(
                 MangaPageSpread(
