@@ -11,6 +11,35 @@ struct NovelTextSurfaceLayoutSlice: Equatable {
     let clipRect: CGRect
 }
 
+package struct NovelTextSelectionAnchor: Hashable, Sendable {
+    public var generation: UInt64
+    public var documentOffset: Int
+
+    public init(generation: UInt64, documentOffset: Int) {
+        self.generation = generation
+        self.documentOffset = max(0, documentOffset)
+    }
+}
+
+package struct NovelTextSelectionRange: Hashable, Sendable {
+    public var generation: UInt64
+    public var lowerBound: Int
+    public var upperBound: Int
+
+    public init?(generation: UInt64, lowerBound: Int, upperBound: Int) {
+        let normalizedLower = max(0, min(lowerBound, upperBound))
+        let normalizedUpper = max(0, max(lowerBound, upperBound))
+        guard normalizedUpper > normalizedLower else { return nil }
+        self.generation = generation
+        self.lowerBound = normalizedLower
+        self.upperBound = normalizedUpper
+    }
+
+    public var range: Range<Int> {
+        lowerBound..<upperBound
+    }
+}
+
 enum NovelTextSurfaceFragmentPartitioner {
     static func partition(
         _ segments: [NovelTextSurfaceLayoutFragment],
@@ -941,6 +970,49 @@ public final class NovelTextViewportDisplayReference {
 #endif
     }
 
+    package func selectionAnchor(at referencePoint: CGPoint) -> NovelTextSelectionAnchor? {
+#if canImport(UIKit)
+        runtimeOwner?.selectionAnchor(
+            surfaceIdentity: surfaceIdentity,
+            referencePoint: referencePoint
+        )
+#else
+        nil
+#endif
+    }
+
+    package func expandedSelectionRange(
+        around anchor: NovelTextSelectionAnchor
+    ) -> NovelTextSelectionRange? {
+        runtimeOwner?.expandedSelectionRange(around: anchor)
+    }
+
+    package func selectionRange(
+        from start: NovelTextSelectionAnchor,
+        to end: NovelTextSelectionAnchor
+    ) -> NovelTextSelectionRange? {
+        runtimeOwner?.selectionRange(from: start, to: end)
+    }
+
+    package func selectionRects(
+        for selectionRange: NovelTextSelectionRange
+    ) -> [CGRect] {
+#if canImport(UIKit)
+        runtimeOwner?.selectionRects(
+            for: selectionRange,
+            surfaceIdentity: surfaceIdentity
+        ) ?? []
+#else
+        []
+#endif
+    }
+
+    package func selectedText(
+        for selectionRange: NovelTextSelectionRange
+    ) -> String? {
+        runtimeOwner?.selectedText(for: selectionRange)
+    }
+
 #if canImport(UIKit)
     public func draw(in context: CGContext, bounds: CGRect) {
         runtimeOwner?.draw(
@@ -1518,7 +1590,281 @@ final class NovelTextViewportRuntimeOwner {
             sourceDocument: document
         )
     }
+
+    func selectionAnchor(
+        surfaceIdentity: NovelReaderSurfaceIdentity,
+        referencePoint: CGPoint
+    ) -> NovelTextSelectionAnchor? {
+        guard let documentOffset = characterDocumentOffset(
+            surfaceIdentity: surfaceIdentity,
+            referencePoint: referencePoint
+        ) else {
+            return nil
+        }
+        return NovelTextSelectionAnchor(
+            generation: surfaceIdentity.generation,
+            documentOffset: documentOffset
+        )
+    }
+
+    func selectionRects(
+        for selectionRange: NovelTextSelectionRange,
+        surfaceIdentity: NovelReaderSurfaceIdentity
+    ) -> [CGRect] {
+        guard selectionRange.generation == activeGeneration,
+              isCurrent(surfaceIdentity),
+              let result,
+              let textContentStorage,
+              let textLayoutManager,
+              let page = result.viewportIndex.surfaces.first(where: { $0.surfaceOrdinal == surfaceIdentity.ordinal }),
+              !page.ranges.isEmpty,
+              let pageCharacterRange = characterRange(for: page, result: result),
+              let intersection = intersection(selectionRange.range, pageCharacterRange),
+              let utf16Range = utf16Range(in: result.viewportContext.document.text, characterRange: intersection),
+              let start = textContentStorage.location(textContentStorage.documentRange.location, offsetBy: utf16Range.location),
+              let end = textContentStorage.location(start, offsetBy: utf16Range.length),
+              let textRange = NSTextRange(location: start, end: end),
+              let surfaceOriginY = surfaceOriginY(
+                  page: page,
+                  result: result,
+                  textContentStorage: textContentStorage,
+                  textLayoutManager: textLayoutManager
+              ) else {
+            return []
+        }
+
+        let documentClipRange = page.frozenGeometry.map {
+            CGRect(
+                x: 0,
+                y: $0.documentClipMinY,
+                width: max(layout.readableFrame.width, 1),
+                height: max($0.documentClipMaxY - $0.documentClipMinY, 1)
+            )
+        }
+        var rects: [CGRect] = []
+        textLayoutManager.enumerateTextSegments(
+            in: textRange,
+            type: .standard,
+            options: []
+        ) { _, rect, _, _ in
+            var clippedRect = rect
+            if let documentClipRange {
+                clippedRect = clippedRect.intersection(documentClipRange)
+            }
+            guard !clippedRect.isNull,
+                  clippedRect.width.isFinite,
+                  clippedRect.height.isFinite,
+                  clippedRect.width > 0,
+                  clippedRect.height > 0 else {
+                return true
+            }
+            rects.append(
+                CGRect(
+                    x: clippedRect.minX,
+                    y: clippedRect.minY - surfaceOriginY,
+                    width: clippedRect.width,
+                    height: clippedRect.height
+                )
+            )
+            return true
+        }
+        return rects
+    }
 #endif
+
+    func expandedSelectionRange(
+        around anchor: NovelTextSelectionAnchor
+    ) -> NovelTextSelectionRange? {
+        guard anchor.generation == activeGeneration,
+              let text = result?.viewportContext.document.text,
+              !text.isEmpty,
+              let characterRange = selectableCharacterRange(around: anchor.documentOffset, in: text) else {
+            return nil
+        }
+        return NovelTextSelectionRange(
+            generation: anchor.generation,
+            lowerBound: characterRange.lowerBound,
+            upperBound: characterRange.upperBound
+        )
+    }
+
+    func selectionRange(
+        from start: NovelTextSelectionAnchor,
+        to end: NovelTextSelectionAnchor
+    ) -> NovelTextSelectionRange? {
+        guard start.generation == activeGeneration,
+              end.generation == activeGeneration,
+              let text = result?.viewportContext.document.text else {
+            return nil
+        }
+        let lowerBound = min(start.documentOffset, end.documentOffset)
+        let upperBound = max(start.documentOffset, end.documentOffset)
+        return NovelTextSelectionRange(
+            generation: start.generation,
+            lowerBound: min(max(lowerBound, 0), text.count),
+            upperBound: min(max(upperBound, 0), text.count)
+        )
+    }
+
+    func selectedText(for selectionRange: NovelTextSelectionRange) -> String? {
+        guard selectionRange.generation == activeGeneration,
+              let text = result?.viewportContext.document.text,
+              let start = text.index(text.startIndex, offsetBy: selectionRange.lowerBound, limitedBy: text.endIndex),
+              let end = text.index(text.startIndex, offsetBy: selectionRange.upperBound, limitedBy: text.endIndex),
+              start < end else {
+            return nil
+        }
+        return String(text[start..<end])
+    }
+
+#if canImport(UIKit)
+    private func characterDocumentOffset(
+        surfaceIdentity: NovelReaderSurfaceIdentity,
+        referencePoint: CGPoint
+    ) -> Int? {
+        let surfaceOrdinal = surfaceIdentity.ordinal
+        guard isCurrent(surfaceIdentity),
+              let result,
+              let textContentStorage,
+              let textLayoutManager,
+              let page = result.viewportIndex.surfaces.first(where: { $0.surfaceOrdinal == surfaceOrdinal }),
+              !page.ranges.isEmpty,
+              let pageCharacterRange = characterRange(for: page, result: result),
+              let surfaceOriginY = surfaceOriginY(
+                  page: page,
+                  result: result,
+                  textContentStorage: textContentStorage,
+                  textLayoutManager: textLayoutManager
+              ),
+              let fragment = closestLayoutFragment(
+                  to: CGPoint(x: referencePoint.x, y: surfaceOriginY + referencePoint.y),
+                  textContentStorage: textContentStorage,
+                  textLayoutManager: textLayoutManager
+              ) else {
+            return nil
+        }
+
+        let documentStart = textContentStorage.documentRange.location
+        let fragmentStart = textContentStorage.offset(from: documentStart, to: fragment.rangeInElement.location)
+        guard fragmentStart != NSNotFound else { return nil }
+        let fragmentPoint = CGPoint(
+            x: referencePoint.x - fragment.layoutFragmentFrame.minX,
+            y: surfaceOriginY + referencePoint.y - fragment.layoutFragmentFrame.minY
+        )
+        let lineOffset: Int
+        if let lineFragment = fragment.textLineFragment(
+            forVerticalOffset: fragmentPoint.y,
+            requiresExactMatch: false
+        ) {
+            let linePoint = CGPoint(
+                x: fragmentPoint.x - lineFragment.typographicBounds.minX,
+                y: fragmentPoint.y - lineFragment.typographicBounds.minY
+            )
+            lineOffset = min(
+                max(lineFragment.characterIndex(for: linePoint), lineFragment.characterRange.location),
+                lineFragment.characterRange.location + lineFragment.characterRange.length
+            )
+        } else {
+            lineOffset = 0
+        }
+        let utf16Offset = fragmentStart + lineOffset
+        guard let characterOffset = characterOffset(
+            in: result.viewportContext.document.text,
+            fromUTF16Offset: utf16Offset
+        ) else {
+            return nil
+        }
+        return min(max(characterOffset, pageCharacterRange.lowerBound), pageCharacterRange.upperBound)
+    }
+#endif
+
+    private func characterRange(
+        for page: NovelTextViewportIndexSurface,
+        result: NovelTextLayoutResult
+    ) -> Range<Int>? {
+        if let frozenGeometry = page.frozenGeometry,
+           frozenGeometry.documentEndOffset > frozenGeometry.documentStartOffset {
+            return frozenGeometry.documentStartOffset..<frozenGeometry.documentEndOffset
+        }
+        let ranges = page.ranges.compactMap {
+            result.viewportContext.document.documentOffsets(forSurfaceRange: $0)
+        }
+        guard let lowerBound = ranges.map(\.lowerBound).min(),
+              let upperBound = ranges.map(\.upperBound).max(),
+              upperBound > lowerBound else {
+            return nil
+        }
+        return lowerBound..<upperBound
+    }
+
+    private func intersection(_ lhs: Range<Int>, _ rhs: Range<Int>) -> Range<Int>? {
+        let lowerBound = max(lhs.lowerBound, rhs.lowerBound)
+        let upperBound = min(lhs.upperBound, rhs.upperBound)
+        guard upperBound > lowerBound else { return nil }
+        return lowerBound..<upperBound
+    }
+
+    private func selectableCharacterRange(
+        around documentOffset: Int,
+        in text: String
+    ) -> Range<Int>? {
+        let clampedOffset = min(max(documentOffset, 0), text.count)
+        let effectiveOffset = clampedOffset == text.count ? max(text.count - 1, 0) : clampedOffset
+        guard let index = text.index(text.startIndex, offsetBy: effectiveOffset, limitedBy: text.endIndex),
+              index < text.endIndex,
+              !text[index].isWhitespace else {
+            return nil
+        }
+
+        let wordCharacterSet = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "_"))
+        if text[index].unicodeScalars.allSatisfy({ wordCharacterSet.contains($0) }) {
+            var start = index
+            while start > text.startIndex {
+                let previous = text.index(before: start)
+                guard text[previous].unicodeScalars.allSatisfy({ wordCharacterSet.contains($0) }) else {
+                    break
+                }
+                start = previous
+            }
+            var end = text.index(after: index)
+            while end < text.endIndex,
+                  text[end].unicodeScalars.allSatisfy({ wordCharacterSet.contains($0) }) {
+                end = text.index(after: end)
+            }
+            return text.distance(from: text.startIndex, to: start)..<text.distance(from: text.startIndex, to: end)
+        }
+
+        let end = text.index(after: index)
+        return effectiveOffset..<text.distance(from: text.startIndex, to: end)
+    }
+
+    private func characterOffset(in text: String, fromUTF16Offset offset: Int) -> Int? {
+        guard offset >= 0,
+              let utf16Index = text.utf16.index(
+                  text.utf16.startIndex,
+                  offsetBy: offset,
+                  limitedBy: text.utf16.endIndex
+              ),
+              let stringIndex = String.Index(utf16Index, within: text) else {
+            return nil
+        }
+        return text.distance(from: text.startIndex, to: stringIndex)
+    }
+
+    private func utf16Range(in text: String, characterRange: Range<Int>) -> NSRange? {
+        guard characterRange.lowerBound >= 0,
+              characterRange.upperBound >= characterRange.lowerBound,
+              let start = text.index(text.startIndex, offsetBy: characterRange.lowerBound, limitedBy: text.endIndex),
+              let end = text.index(text.startIndex, offsetBy: characterRange.upperBound, limitedBy: text.endIndex),
+              let utf16Start = start.samePosition(in: text.utf16),
+              let utf16End = end.samePosition(in: text.utf16) else {
+            return nil
+        }
+        return NSRange(
+            location: text.utf16.distance(from: text.utf16.startIndex, to: utf16Start),
+            length: text.utf16.distance(from: utf16Start, to: utf16End)
+        )
+    }
 
 #if canImport(UIKit)
     func draw(

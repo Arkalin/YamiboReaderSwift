@@ -16,6 +16,7 @@ struct ReaderPagedCollectionViewport: UIViewRepresentable {
     let pagerIdentity: ReaderPagedPagerIdentity
     let scrollAnimationRequest: ReaderPagedScrollAnimationRequest?
     let displayReferenceProvider: @MainActor (NovelReaderSurfaceIdentity) -> NovelTextViewportDisplayReference?
+    let selectionController: NovelTextSelectionController?
     let isChromeVisible: Bool
     let canBoundaryPageTurn: (Int) -> Bool
     let onSelectionChange: (Int) -> Void
@@ -70,11 +71,13 @@ struct ReaderPagedCollectionViewport: UIViewRepresentable {
             coordinator?.scrollToPendingSelectionIfPossible(in: collectionView, animated: false)
         }
         context.coordinator.updateGestureState(in: collectionView)
+        selectionController?.configure(mode: .paged)
         return collectionView
     }
 
     func updateUIView(_ collectionView: UICollectionView, context: Context) {
         context.coordinator.parent = self
+        selectionController?.configure(mode: .paged)
         context.coordinator.updateGestureState(in: collectionView)
         context.coordinator.callbackScheduler.performViewUpdate {
             context.coordinator.updateContentAndRequestSelectionScroll(
@@ -162,6 +165,7 @@ struct ReaderPagedCollectionViewport: UIViewRepresentable {
                     ReaderViewportSurfaceContent(
                         surface: surface,
                         displayReference: displayReference,
+                        selectionController: parent.selectionController,
                         fallbackDocumentView: surface?.documentView,
                         fallbackSurfaceIndex: surfaceIndex,
                         settings: parent.settings,
@@ -217,6 +221,10 @@ struct ReaderPagedCollectionViewport: UIViewRepresentable {
                 return
             }
             let location = recognizer.location(in: collectionView)
+            if parent.selectionController?.hasSelection == true {
+                parent.selectionController?.clearSelection()
+                return
+            }
             if let imageView = collectionView.firstDescendant(
                 ofType: ReaderVerticalViewportImageView.self,
                 containing: location

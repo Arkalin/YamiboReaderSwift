@@ -31,6 +31,7 @@ public struct ReaderContainerView: View {
     @State private var topChromeHeight: CGFloat = 0
     @State private var bottomChromeHeight: CGFloat = 0
     @State private var pagedScrollAnimationRequest: ReaderPagedScrollAnimationRequest?
+    @State private var novelTextSelectionController = NovelTextSelectionController()
     private let appModel: YamiboAppModel
 
     public init(context: ReaderLaunchContext, appModel: YamiboAppModel) {
@@ -139,6 +140,12 @@ public struct ReaderContainerView: View {
             .modifier(readerPresentationModifier())
             .modifier(readerStateObserverModifier())
             .modifier(readerChromeHeightObserverModifier())
+            .onChange(of: model.readerPresentation?.generation) { _, _ in
+                novelTextSelectionController.clearSelection()
+            }
+            .onChange(of: model.settings.readingMode) { _, _ in
+                novelTextSelectionController.clearSelection()
+            }
         }
     }
 
@@ -278,6 +285,7 @@ public struct ReaderContainerView: View {
                     displayReferenceProvider: { surfaceIdentity in
                         model.novelTextViewportDisplayReference(for: surfaceIdentity)
                     },
+                    selectionController: novelTextSelectionController,
                     isChromeVisible: chromeState.showsChrome,
                     canBoundaryPageTurn: { delta in
                         canNavigatePagedBoundary(delta: delta)
@@ -317,6 +325,7 @@ public struct ReaderContainerView: View {
                     displayReferenceProvider: { surfaceIdentity in
                         model.novelTextViewportDisplayReference(for: surfaceIdentity)
                     },
+                    selectionController: novelTextSelectionController,
                     isChromeVisible: chromeState.showsChrome,
                     canBoundaryPageTurn: { delta in
                         canNavigatePagedBoundary(delta: delta)
@@ -355,6 +364,7 @@ public struct ReaderContainerView: View {
                     displayReferenceProvider: { surfaceIdentity in
                         model.novelTextViewportDisplayReference(for: surfaceIdentity)
                     },
+                    selectionController: novelTextSelectionController,
                     isChromeVisible: chromeState.showsChrome,
                     canBoundaryPageTurn: { delta in
                         canNavigatePagedBoundary(delta: delta)
@@ -397,6 +407,7 @@ public struct ReaderContainerView: View {
             displayReferenceProvider: { surfaceIdentity in
                 model.novelTextViewportDisplayReference(for: surfaceIdentity)
             },
+            selectionController: novelTextSelectionController,
             isChromeVisible: chromeState.showsChrome,
             onVisibleSurfaceIdentitiesChange: { surfaceIdentities in
                 model.updateNovelTextViewportVisibleSurfaceIdentities(surfaceIdentities)

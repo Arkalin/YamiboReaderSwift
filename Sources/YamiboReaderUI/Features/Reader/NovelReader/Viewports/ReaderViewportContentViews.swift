@@ -37,6 +37,7 @@ struct ReaderPresentationSpreadContent: View {
     let topInset: CGFloat
     let bottomInset: CGFloat
     let displayReferenceProvider: @MainActor (NovelReaderSurfaceIdentity) -> NovelTextViewportDisplayReference?
+    let selectionController: NovelTextSelectionController?
     let onImageTap: (URL, String?) -> Void
 
     var body: some View {
@@ -57,6 +58,7 @@ struct ReaderPresentationSpreadContent: View {
                 ReaderViewportSurfaceContent(
                     surface: surface,
                     displayReference: surface.flatMap { displayReferenceProvider($0.identity) },
+                    selectionController: selectionController,
                     fallbackDocumentView: surface?.documentView,
                     fallbackSurfaceIndex: surfaceIndex,
                     settings: settings,
@@ -81,6 +83,7 @@ struct ReaderPresentationSpreadContent: View {
 struct ReaderViewportSurfaceContent: View {
     let surface: NovelReaderSurface?
     let displayReference: NovelTextViewportDisplayReference?
+    let selectionController: NovelTextSelectionController?
     let fallbackDocumentView: Int?
     let fallbackSurfaceIndex: Int?
     let settings: ReaderAppearanceSettings
@@ -92,6 +95,7 @@ struct ReaderViewportSurfaceContent: View {
     init(
         surface: NovelReaderSurface?,
         displayReference: NovelTextViewportDisplayReference? = nil,
+        selectionController: NovelTextSelectionController? = nil,
         fallbackDocumentView: Int?,
         fallbackSurfaceIndex: Int?,
         settings: ReaderAppearanceSettings,
@@ -102,6 +106,7 @@ struct ReaderViewportSurfaceContent: View {
     ) {
         self.surface = surface
         self.displayReference = displayReference
+        self.selectionController = selectionController
         self.fallbackDocumentView = fallbackDocumentView
         self.fallbackSurfaceIndex = fallbackSurfaceIndex
         self.settings = settings
@@ -130,6 +135,7 @@ struct ReaderViewportSurfaceContent: View {
                 ReaderViewportBlockView(
                     block: block,
                     displayReference: displayReference,
+                    selectionController: selectionController,
                     refererURL: refererURL,
                     imageDataLoader: imageDataLoader,
                     imageCacheNamespace: imageCacheNamespace,
@@ -149,6 +155,7 @@ struct ReaderViewportSurfaceContent: View {
                 ReaderViewportBlockView(
                     block: block,
                     displayReference: displayReference,
+                    selectionController: selectionController,
                     refererURL: refererURL,
                     imageDataLoader: imageDataLoader,
                     imageCacheNamespace: imageCacheNamespace,
@@ -201,6 +208,7 @@ struct ReaderViewportSurfaceContent: View {
 private struct ReaderViewportBlockView: View {
     let block: ReaderViewportDisplayBlock
     let displayReference: NovelTextViewportDisplayReference?
+    let selectionController: NovelTextSelectionController?
     let refererURL: URL
     let imageDataLoader: any NovelInlineImageDataLoading
     let imageCacheNamespace: NovelInlineImageCacheNamespace
@@ -211,7 +219,10 @@ private struct ReaderViewportBlockView: View {
         switch block {
         case .text:
             if let displayReference, !displayReference.isStale {
-                NativeNovelTextViewportReferenceView(displayReference: displayReference)
+                NativeNovelTextViewportReferenceView(
+                    displayReference: displayReference,
+                    selectionController: selectionController
+                )
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             } else {
                 Color.clear.frame(height: 1)
