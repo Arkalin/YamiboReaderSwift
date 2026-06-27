@@ -47,8 +47,7 @@ public struct IOSForumWebView: UIViewRepresentable {
         private weak var webView: WKWebView?
         private var didPrepareInitialLoad = false
         private var sessionObservationTask: Task<Void, Never>?
-        private var lastInjectedCookieHeader: String?
-        private var lastInjectedAuthenticationCookieValue: String?
+        private var sessionSyncState = ForumWebSessionSyncState()
 
         init(model: ForumBrowserModel, appContext: YamiboAppContext) {
             self.model = model
@@ -184,37 +183,20 @@ public struct IOSForumWebView: UIViewRepresentable {
                 webView.customUserAgent = userAgent
             }
 
-            let authenticationValue = SessionState.authenticationCookieValue(in: sessionState.cookie)
-            if authenticationValue != nil {
-                let cookieChanged = sessionState.cookie != lastInjectedCookieHeader
-                let authenticationChanged = authenticationValue != lastInjectedAuthenticationCookieValue
-                guard cookieChanged || authenticationChanged else { return }
-
-                await injectCookies(sessionState.cookie, into: webView)
-                lastInjectedCookieHeader = sessionState.cookie
-                lastInjectedAuthenticationCookieValue = authenticationValue
-
-                if reloadIfNeeded || authenticationChanged {
+            switch sessionSyncState.action(for: sessionState, reloadIfNeeded: reloadIfNeeded) {
+            case .none:
+                return
+            case let .injectCookies(cookieHeader, reload):
+                await injectCookies(cookieHeader, into: webView)
+                if reload {
                     reloadOrLoad(webView)
                 }
-                return
-            }
-
-            if sessionState.cookie.isEmpty {
-                let hadSynchronizedCookies = lastInjectedCookieHeader != nil || lastInjectedAuthenticationCookieValue != nil
+            case let .clearCookies(reload):
                 await clearYamiboCookies(in: webView)
-                lastInjectedCookieHeader = sessionState.cookie
-                lastInjectedAuthenticationCookieValue = nil
-                if reloadIfNeeded, hadSynchronizedCookies {
+                if reload {
                     reloadOrLoad(webView)
                 }
-                return
             }
-
-            guard sessionState.cookie != lastInjectedCookieHeader else { return }
-            await injectCookies(sessionState.cookie, into: webView)
-            lastInjectedCookieHeader = sessionState.cookie
-            lastInjectedAuthenticationCookieValue = nil
         }
 
         @MainActor
@@ -276,6 +258,7 @@ public struct IOSForumWebView: UIViewRepresentable {
                 .joined(separator: "; ")
 
             let userAgent = webView.customUserAgent ?? YamiboDefaults.defaultMobileUserAgent
+            sessionSyncState.markPersistedWebSession(cookieHeader: header)
             try await appContext.sessionStore.updateWebSession(
                 cookie: header,
                 userAgent: userAgent,
