@@ -143,7 +143,7 @@ final class NovelReadingSessionRuntimeTests: XCTestCase {
         XCTAssertEqual(session.snapshot.currentSurfaceIntraProgress, 0, accuracy: 0.001)
     }
 
-    func testTwoPageSpreadNormalizesSelectionToLeftPage() throws {
+    func testLeftToRightTwoPageSpreadNormalizesSelectionToRightPage() throws {
         let document = ReaderPageDocument(
             threadURL: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9002&mobile=2")!,
             view: 1,
@@ -154,6 +154,36 @@ final class NovelReadingSessionRuntimeTests: XCTestCase {
         let settings = ReaderAppearanceSettings(
             showsTwoPagesInLandscapeOnPad: true,
             readingMode: .paged
+        )
+        let landscapeLayout = ReaderContainerLayout(width: 844, height: 390, readingMode: .paged)
+        var session = NovelReadingSession(
+            document: document,
+            settings: settings,
+            layout: landscapeLayout,
+            usesPadPresentation: true
+        )
+
+        session.selectSurface(3)
+
+        XCTAssertEqual(
+            session.spreadsForTesting.map { "\($0.leftSurfaceIndex)-\($0.rightSurfaceIndex.map(String.init) ?? "nil")" },
+            ["0-1", "2-3", "4-5"]
+        )
+        XCTAssertEqual(session.snapshot.selectedSurfaceOrdinal, 3)
+    }
+
+    func testRightToLeftTwoPageSpreadNormalizesSelectionToLeftPage() throws {
+        let document = ReaderPageDocument(
+            threadURL: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9002&mobile=2")!,
+            view: 1,
+            maxView: 1,
+            contentSource: .fallbackUnfilteredPage,
+            segments: (0 ..< 6).map { .image(URL(string: "https://example.com/\($0).jpg")!, chapterTitle: "第一章") }
+        )
+        let settings = ReaderAppearanceSettings(
+            showsTwoPagesInLandscapeOnPad: true,
+            readingMode: .paged,
+            pageTurnDirection: .rightToLeft
         )
         let landscapeLayout = ReaderContainerLayout(width: 844, height: 390, readingMode: .paged)
         var session = NovelReadingSession(
@@ -195,7 +225,7 @@ final class NovelReadingSessionRuntimeTests: XCTestCase {
         session.selectSurface(5)
         let request = session.jumpRelativeSurface(1)
 
-        XCTAssertEqual(session.snapshot.selectedSurfaceOrdinal, 4)
+        XCTAssertEqual(session.snapshot.selectedSurfaceOrdinal, 5)
         XCTAssertEqual(request, .loadView(view: 2, preferredSurfaceOrdinal: 0, resumePoint: nil))
     }
 }
@@ -242,7 +272,8 @@ private extension NovelReadingSession {
                 settings: settings,
                 layout: layout,
                 usesPadPresentation: usesPadPresentation
-            )
+            ),
+            pageTurnDirection: settings.pageTurnDirection
         )
     }
 
@@ -273,7 +304,8 @@ private extension NovelReadingSession {
                 settings: settings,
                 layout: layout,
                 usesPadPresentation: usesPadPresentation
-            )
+            ),
+            pageTurnDirection: settings.pageTurnDirection
         )
     }
 }

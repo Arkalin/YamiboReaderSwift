@@ -21,6 +21,7 @@ private struct ReaderProgressScrubData: Equatable, Sendable {
     var chapterTitlesBySurfaceIndex: [Int: String]
     var chapterTickStartIndexes: Set<Int>
     var isTwoPageSpreadActive: Bool
+    var pageTurnDirection: ReaderPageTurnDirection
 
     func targetSurfaceIndex(for value: Double) -> Int {
         guard surfaceCount > 1 else { return 0 }
@@ -28,7 +29,7 @@ private struct ReaderProgressScrubData: Equatable, Sendable {
         case .paged:
             let target = min(max(Int(value.rounded()), 0), max(surfaceCount - 1, 0))
             guard isTwoPageSpreadActive else { return target }
-            return max(0, min(target - (target % 2), max(surfaceCount - 1, 0)))
+            return twoPageAnchorSurfaceIndex(containing: target)
         case .vertical:
             guard !visibleSurfaceIndexes.isEmpty,
                   visibleSurfaceIndexes.count > 1 else {
@@ -40,6 +41,16 @@ private struct ReaderProgressScrubData: Equatable, Sendable {
                 max(visibleSurfaceIndexes.count - 1, 0)
             )
             return visibleSurfaceIndexes[localSurfaceIndex]
+        }
+    }
+
+    func twoPageAnchorSurfaceIndex(containing surfaceIndex: Int) -> Int {
+        let spreadStartIndex = surfaceIndex - (surfaceIndex % 2)
+        switch pageTurnDirection {
+        case .leftToRight:
+            return min(spreadStartIndex + 1, max(surfaceCount - 1, 0))
+        case .rightToLeft:
+            return spreadStartIndex
         }
     }
 
@@ -87,7 +98,8 @@ public struct ReaderChromeProgressSnapshot: Equatable, Sendable {
                 fallbackVisibleSurfaceIndex: 0,
                 chapterTitlesBySurfaceIndex: [:],
                 chapterTickStartIndexes: [],
-                isTwoPageSpreadActive: false
+                isTwoPageSpreadActive: false,
+                pageTurnDirection: .leftToRight
             )
         )
     }
@@ -156,7 +168,8 @@ public struct ReaderChromeProgressSnapshot: Equatable, Sendable {
                 fallbackVisibleSurfaceIndex: projection.fallbackVisibleSurfaceIndex,
                 chapterTitlesBySurfaceIndex: chapterTitlesBySurfaceIndex,
                 chapterTickStartIndexes: tickStartIndexes,
-                isTwoPageSpreadActive: projection.usesTwoPageSpread
+                isTwoPageSpreadActive: projection.usesTwoPageSpread,
+                pageTurnDirection: projection.pageTurnDirection
             )
         )
     }
@@ -290,7 +303,9 @@ private extension ReaderProgressScrubData {
         switch readingMode {
         case .paged:
             if isTwoPageSpreadActive {
-                return stride(from: 0, through: max(surfaceCount - 1, 0), by: 2).map { $0 }
+                return stride(from: 0, through: max(surfaceCount - 1, 0), by: 2).map {
+                    twoPageAnchorSurfaceIndex(containing: $0)
+                }
             }
             return Array(0 ... max(surfaceCount - 1, 0))
         case .vertical:

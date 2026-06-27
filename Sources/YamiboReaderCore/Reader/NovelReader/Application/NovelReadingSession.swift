@@ -64,6 +64,7 @@ package struct NovelReadingSession: Sendable {
     private var chapters: [ReaderChapter]
     private var spreads: [NovelReadingSpread]
     private var usesPagedSpread: Bool
+    private var pageTurnDirection: ReaderPageTurnDirection
     private var pendingResumePoint: ReaderResumePoint?
     private var preservedTextResumePoint: ReaderResumePoint?
 
@@ -73,12 +74,14 @@ package struct NovelReadingSession: Sendable {
         preferredSurfaceOrdinal: Int = 0,
         resumePoint: ReaderResumePoint? = nil,
         currentAuthorID: String? = nil,
-        usesPagedSpread: Bool = false
+        usesPagedSpread: Bool = false,
+        pageTurnDirection: ReaderPageTurnDirection = .leftToRight
     ) {
         self.init(
             unpaginatedDocument: document,
             currentAuthorID: currentAuthorID,
-            usesPagedSpread: usesPagedSpread
+            usesPagedSpread: usesPagedSpread,
+            pageTurnDirection: pageTurnDirection
         )
         preservedTextResumePoint = resumePoint
         consumeCommittedLayoutResult(
@@ -95,12 +98,14 @@ package struct NovelReadingSession: Sendable {
         preferredSurfaceOrdinal: Int = 0,
         resumePoint: ReaderResumePoint? = nil,
         currentAuthorID: String? = nil,
-        usesPagedSpread: Bool = false
+        usesPagedSpread: Bool = false,
+        pageTurnDirection: ReaderPageTurnDirection = .leftToRight
     ) throws {
         self.init(
             unpaginatedDocument: document,
             currentAuthorID: currentAuthorID,
-            usesPagedSpread: usesPagedSpread
+            usesPagedSpread: usesPagedSpread,
+            pageTurnDirection: pageTurnDirection
         )
         preservedTextResumePoint = resumePoint
         try validateCommittedLayoutResult(layoutResult, for: document)
@@ -115,7 +120,8 @@ package struct NovelReadingSession: Sendable {
     private init(
         unpaginatedDocument document: ReaderPageDocument,
         currentAuthorID: String?,
-        usesPagedSpread: Bool
+        usesPagedSpread: Bool,
+        pageTurnDirection: ReaderPageTurnDirection
     ) {
         self.currentDocument = document
         self.layoutResult = nil
@@ -123,6 +129,7 @@ package struct NovelReadingSession: Sendable {
         self.chapters = []
         self.spreads = []
         self.usesPagedSpread = usesPagedSpread
+        self.pageTurnDirection = pageTurnDirection
         self.pendingResumePoint = nil
         self.preservedTextResumePoint = nil
         self.snapshot = NovelReadingSnapshot(
@@ -142,10 +149,14 @@ package struct NovelReadingSession: Sendable {
         _ layoutResult: NovelTextLayoutResult,
         preferredSurfaceOrdinal: Int,
         preferredResumePoint: ReaderResumePoint?,
-        usesPagedSpread: Bool? = nil
+        usesPagedSpread: Bool? = nil,
+        pageTurnDirection: ReaderPageTurnDirection? = nil
     ) {
         if let usesPagedSpread {
             self.usesPagedSpread = usesPagedSpread
+        }
+        if let pageTurnDirection {
+            self.pageTurnDirection = pageTurnDirection
         }
         consumeCommittedLayoutResult(
             layoutResult,
@@ -160,10 +171,14 @@ package struct NovelReadingSession: Sendable {
         for document: ReaderPageDocument,
         preferredSurfaceOrdinal: Int,
         preferredResumePoint: ReaderResumePoint?,
-        usesPagedSpread: Bool? = nil
+        usesPagedSpread: Bool? = nil,
+        pageTurnDirection: ReaderPageTurnDirection? = nil
     ) {
         if let usesPagedSpread {
             self.usesPagedSpread = usesPagedSpread
+        }
+        if let pageTurnDirection {
+            self.pageTurnDirection = pageTurnDirection
         }
         currentDocument = document
         applyCommittedLayoutResult(
@@ -189,13 +204,13 @@ package struct NovelReadingSession: Sendable {
                 spreads: spreads
             ) + delta
             if targetSpreadIndex >= 0, targetSpreadIndex < spreads.count {
-                selectSurface(leftSurfaceIndex(forSpreadIndex: targetSpreadIndex, spreads: spreads))
+                selectSurface(progressSurfaceIndex(forSpreadIndex: targetSpreadIndex, spreads: spreads))
                 return nil
             }
             if targetSpreadIndex < 0 {
                 let previousView = max(snapshot.currentView - 1, 1)
                 guard previousView < snapshot.currentView else {
-                    selectSurface(leftSurfaceIndex(forSpreadIndex: 0, spreads: spreads))
+                    selectSurface(progressSurfaceIndex(forSpreadIndex: 0, spreads: spreads))
                     return nil
                 }
                 return .loadView(view: previousView, preferredSurfaceOrdinal: .max, resumePoint: nil)
@@ -203,7 +218,7 @@ package struct NovelReadingSession: Sendable {
 
             let nextView = min(snapshot.currentView + 1, snapshot.maxView)
             guard nextView > snapshot.currentView else {
-                selectSurface(leftSurfaceIndex(forSpreadIndex: max(spreads.count - 1, 0), spreads: spreads))
+                selectSurface(progressSurfaceIndex(forSpreadIndex: max(spreads.count - 1, 0), spreads: spreads))
                 return nil
             }
             return .loadView(view: nextView, preferredSurfaceOrdinal: 0, resumePoint: nil)
@@ -506,11 +521,16 @@ package struct NovelReadingSession: Sendable {
         })?.index ?? 0
     }
 
-    private func leftSurfaceIndex(forSpreadIndex spreadIndex: Int, spreads: [NovelReadingSpread]) -> Int {
+    private func progressSurfaceIndex(forSpreadIndex spreadIndex: Int, spreads: [NovelReadingSpread]) -> Int {
         guard let spread = spreads.first(where: { $0.index == spreadIndex }) ?? spreads.last else {
             return 0
         }
-        return spread.leftSurfaceIndex
+        switch pageTurnDirection {
+        case .leftToRight:
+            return spread.rightSurfaceIndex ?? spread.leftSurfaceIndex
+        case .rightToLeft:
+            return spread.leftSurfaceIndex
+        }
     }
 
     private func normalizedPagedSurfaceOrdinal(
@@ -520,7 +540,7 @@ package struct NovelReadingSession: Sendable {
     ) -> Int {
         let clampedIndex = max(0, min(surfaceOrdinal, max(surfaces.count - 1, 0)))
         guard usesPagedSpread else { return clampedIndex }
-        return leftSurfaceIndex(
+        return progressSurfaceIndex(
             forSpreadIndex: spreadIndex(forSurfaceOrdinal: clampedIndex, surfaces: surfaces, spreads: spreads),
             spreads: spreads
         )
