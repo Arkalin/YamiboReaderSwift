@@ -66,19 +66,20 @@ final class NovelTextSelectionController {
         at point: CGPoint
     ) {
         guard let baseAnchor,
-              let displayReference = view.displayReference,
+              let selectionTarget = selectionTarget(startingFrom: view, point: point),
+              let displayReference = selectionTarget.view.displayReference,
               !displayReference.isStale else {
             return
         }
         if mode == .paged, displayReference.surfaceIdentity != activeSurfaceIdentity {
             return
         }
-        guard let anchor = displayReference.selectionAnchor(at: point),
+        guard let anchor = displayReference.selectionAnchor(at: selectionTarget.point),
               let range = displayReference.selectionRange(from: baseAnchor, to: anchor) else {
             return
         }
         selectionRangeValue = range
-        autoScrollIfNeeded(from: view, point: point)
+        autoScrollIfNeeded(from: selectionTarget.view, point: selectionTarget.point)
         refreshSelectionDisplay()
     }
 
@@ -135,6 +136,57 @@ final class NovelTextSelectionController {
             .allObjects
             .compactMap(\.displayReference)
             .first { !$0.isStale && $0.generation == selectionRangeValue?.generation }
+    }
+
+    private func selectionTarget(
+        startingFrom view: NovelTextViewportReferenceUIView,
+        point: CGPoint
+    ) -> (view: NovelTextViewportReferenceUIView, point: CGPoint)? {
+        guard mode == .vertical,
+              let scrollView = verticalScrollView,
+              view.window != nil else {
+            return (view, point)
+        }
+
+        let pointInScrollView = view.convert(point, to: scrollView)
+        let candidates = registeredViews.allObjects.filter {
+            $0.window != nil && $0.displayReference?.isStale == false
+        }
+        if let containingView = candidates.first(where: { candidate in
+            let candidatePoint = scrollView.convert(pointInScrollView, to: candidate)
+            return candidate.point(inside: candidatePoint, with: nil)
+        }) {
+            return (
+                containingView,
+                scrollView.convert(pointInScrollView, to: containingView)
+            )
+        }
+
+        guard let nearestView = candidates.min(by: { lhs, rhs in
+            distance(from: pointInScrollView, to: lhs, in: scrollView) <
+                distance(from: pointInScrollView, to: rhs, in: scrollView)
+        }) else {
+            return (view, point)
+        }
+        let nearestPoint = scrollView.convert(pointInScrollView, to: nearestView)
+        return (
+            nearestView,
+            CGPoint(
+                x: min(max(nearestPoint.x, nearestView.bounds.minX), nearestView.bounds.maxX),
+                y: min(max(nearestPoint.y, nearestView.bounds.minY), nearestView.bounds.maxY)
+            )
+        )
+    }
+
+    private func distance(
+        from point: CGPoint,
+        to view: UIView,
+        in scrollView: UIScrollView
+    ) -> CGFloat {
+        let frame = view.convert(view.bounds, to: scrollView)
+        let dx = max(frame.minX - point.x, 0, point.x - frame.maxX)
+        let dy = max(frame.minY - point.y, 0, point.y - frame.maxY)
+        return hypot(dx, dy)
     }
 
     private func dismissMenus() {
