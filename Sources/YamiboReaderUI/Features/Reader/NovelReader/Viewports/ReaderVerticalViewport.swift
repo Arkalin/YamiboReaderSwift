@@ -23,6 +23,7 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
     let bottomInset: CGFloat
     let scrollRequest: ReaderVerticalScrollRequest?
     let displayReferenceProvider: @MainActor (NovelReaderSurfaceIdentity) -> NovelTextViewportDisplayReference?
+    let selectionController: NovelTextSelectionController?
     let isChromeVisible: Bool
     let onVisibleSurfaceIdentitiesChange: ([NovelReaderSurfaceIdentity]) -> Void
     let onScrollRequestHandled: (ReaderVerticalScrollRequest) -> Void
@@ -73,11 +74,15 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
         context.coordinator.tapGesture.delegate = context.coordinator
         collectionView.addGestureRecognizer(context.coordinator.tapGesture)
         onScrollViewReady(collectionView)
+        selectionController?.configure(mode: .vertical)
+        selectionController?.attachVerticalScrollView(collectionView)
         return collectionView
     }
 
     func updateUIView(_ collectionView: UICollectionView, context: Context) {
         context.coordinator.parent = self
+        selectionController?.configure(mode: .vertical)
+        selectionController?.attachVerticalScrollView(collectionView)
         context.coordinator.callbackScheduler.performViewUpdate {
             context.coordinator.updateLineSpacing(in: collectionView)
             context.coordinator.reloadDataIfNeeded(in: collectionView, contentIdentity: contentIdentity)
@@ -184,6 +189,7 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
             cell.configure(
                 page: displaySurface,
                 displayReference: displayReference,
+                selectionController: parent.selectionController,
                 textHeight: displaySurface.presentationHeight,
                 settings: parent.settings,
                 refererURL: parent.refererURL,
@@ -292,6 +298,10 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
             guard recognizer.state == .ended else { return }
             if let collectionView = recognizer.view as? UICollectionView {
                 let location = recognizer.location(in: collectionView)
+                if parent.selectionController?.hasSelection == true {
+                    parent.selectionController?.clearSelection()
+                    return
+                }
                 if let imageView = collectionView.firstDescendant(
                     ofType: ReaderVerticalViewportImageView.self,
                     containing: location
@@ -628,6 +638,7 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
     private var currentContentWidth: CGFloat = 0
     private var currentTopPadding: CGFloat = 0
     private var currentDisplayReference: NovelTextViewportDisplayReference?
+    private weak var currentSelectionController: NovelTextSelectionController?
     private var currentTextHeight: CGFloat?
     private var currentOnImageTap: (URL, String?) -> Void = { _, _ in }
     private var lastAppliedLayoutSize = CGSize.zero
@@ -651,6 +662,7 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
         super.prepareForReuse()
         currentPage = nil
         currentDisplayReference = nil
+        currentSelectionController = nil
         currentTextHeight = nil
         currentOnImageTap = { _, _ in }
         lastAppliedLayoutSize = .zero
@@ -683,6 +695,7 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
         configure(
             page: currentPage,
             displayReference: currentDisplayReference,
+            selectionController: currentSelectionController,
             textHeight: currentTextHeight,
             settings: currentSettings,
             refererURL: currentRefererURL,
@@ -697,6 +710,7 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
     func configure(
         page: ReaderVerticalViewportDisplaySurface,
         displayReference: NovelTextViewportDisplayReference?,
+        selectionController: NovelTextSelectionController?,
         textHeight: CGFloat?,
         settings: ReaderAppearanceSettings,
         refererURL: URL,
@@ -708,6 +722,7 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
     ) {
         currentPage = page
         currentDisplayReference = displayReference
+        currentSelectionController = selectionController
         currentTextHeight = textHeight
         currentSettings = settings
         currentRefererURL = refererURL
@@ -729,6 +744,7 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
                 imageDataLoader: imageDataLoader,
                 imageCacheNamespace: imageCacheNamespace,
                 displayReference: displayReference,
+                selectionController: selectionController,
                 textHeight: textHeight,
                 onImageTap: onImageTap
             )
@@ -812,6 +828,7 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
         imageDataLoader: any NovelInlineImageDataLoading,
         imageCacheNamespace: NovelInlineImageCacheNamespace,
         displayReference: NovelTextViewportDisplayReference?,
+        selectionController: NovelTextSelectionController?,
         textHeight: CGFloat?,
         onImageTap: @escaping (URL, String?) -> Void
     ) -> BlockView {
@@ -820,6 +837,7 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
             return makeTextBlockView(
                 contentWidth: contentWidth,
                 displayReference: displayReference,
+                selectionController: selectionController,
                 textHeight: textHeight
             )
         case let .image(url):
@@ -840,10 +858,12 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
     private func makeTextBlockView(
         contentWidth: CGFloat,
         displayReference: NovelTextViewportDisplayReference?,
+        selectionController: NovelTextSelectionController?,
         textHeight: CGFloat?
     ) -> BlockView {
         let surface = NovelTextViewportReferenceUIView()
         surface.displayReference = displayReference
+        surface.selectionController = selectionController
         return BlockView(
             view: surface,
             height: max(textHeight ?? bounds.height, 1),
@@ -921,6 +941,9 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
 
     private func removeBlockSubviews() {
         for blockView in blockViews {
+            if let textView = blockView.view as? NovelTextViewportReferenceUIView {
+                textView.selectionController = nil
+            }
             blockView.view.removeFromSuperview()
         }
         blockViews.removeAll()

@@ -143,6 +143,7 @@ struct ReaderPagedPageCurlViewport: UIViewControllerRepresentable {
     let pagerIdentity: ReaderPagedPagerIdentity
     let scrollAnimationRequest: ReaderPagedScrollAnimationRequest?
     let displayReferenceProvider: @MainActor (NovelReaderSurfaceIdentity) -> NovelTextViewportDisplayReference?
+    let selectionController: NovelTextSelectionController?
     let isChromeVisible: Bool
     let canBoundaryPageTurn: (Int) -> Bool
     let onSelectionChange: (Int) -> Void
@@ -217,11 +218,13 @@ struct ReaderPagedPageCurlViewport: UIViewControllerRepresentable {
         context.coordinator.configureGestures(in: pageViewController)
         context.coordinator.configureSpine(in: pageViewController)
         context.coordinator.setCurrentSelection(in: pageViewController, animated: false)
+        selectionController?.configure(mode: .paged)
         return pageViewController
     }
 
     func updateUIViewController(_ pageViewController: UIPageViewController, context: Context) {
         context.coordinator.parent = self
+        selectionController?.configure(mode: .paged)
         context.coordinator.callbackScheduler.performViewUpdate {
             context.coordinator.update(
                 pageViewController,
@@ -327,6 +330,10 @@ struct ReaderPagedPageCurlViewport: UIViewControllerRepresentable {
                 return
             }
             let location = recognizer.location(in: containerView)
+            if parent.selectionController?.hasSelection == true {
+                parent.selectionController?.clearSelection()
+                return
+            }
             if let imageView = containerView.firstDescendant(
                 ofType: ReaderVerticalViewportImageView.self,
                 containing: location
@@ -476,6 +483,7 @@ struct ReaderPagedPageCurlViewport: UIViewControllerRepresentable {
                     topInset: parent.topInset,
                     bottomInset: parent.bottomInset,
                     displayReferenceProvider: parent.displayReferenceProvider,
+                    selectionController: parent.selectionController,
                     onImageTap: parent.onImageTap
                 ),
                 pageBackgroundColor: parent.pageBackgroundColor
@@ -659,6 +667,7 @@ private struct ReaderPagedPageCurlLeafView: View {
     let topInset: CGFloat
     let bottomInset: CGFloat
     let displayReferenceProvider: @MainActor (NovelReaderSurfaceIdentity) -> NovelTextViewportDisplayReference?
+    let selectionController: NovelTextSelectionController?
     let onImageTap: (URL, String?) -> Void
 
     var body: some View {
@@ -668,6 +677,7 @@ private struct ReaderPagedPageCurlLeafView: View {
                 ReaderViewportSurfaceContent(
                     surface: surface,
                     displayReference: surface.flatMap { displayReferenceProvider($0.identity) },
+                    selectionController: selectionController,
                     fallbackDocumentView: surface?.documentView,
                     fallbackSurfaceIndex: surfaceIndex,
                     settings: settings,
