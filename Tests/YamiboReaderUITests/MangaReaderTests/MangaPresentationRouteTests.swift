@@ -503,6 +503,92 @@ final class MangaPresentationRouteTests: XCTestCase {
         XCTAssertEqual(appModel.forumNavigationRequest?.url, originalURL)
     }
 
+    func testOpenForumURLExitsActiveReaderAndCreatesNavigationRequest() {
+        let appModel = makeIsolatedAppModel(initialTab: .mine)
+        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=703&mobile=2")!
+        let clipboardURL = URL(string: "https://bbs.yamibo.com/thread-900-1-1.html")!
+        let context = ReaderLaunchContext(
+            threadURL: threadURL,
+            threadTitle: "测试小说",
+            source: .forum
+        )
+
+        appModel.presentReader(context)
+        appModel.openForumURL(clipboardURL)
+
+        XCTAssertNil(appModel.activeReaderContext)
+        XCTAssertEqual(appModel.suspendedReaderContext, context)
+        XCTAssertEqual(appModel.selectedTab, .forum)
+        XCTAssertEqual(appModel.forumNavigationRequest?.url, clipboardURL)
+    }
+
+    func testConfirmClipboardForumLinkPromptExitsActiveReaderAndCreatesNavigationRequest() {
+        let appModel = makeIsolatedAppModel(initialTab: .mine)
+        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=703&mobile=2")!
+        let clipboardURL = URL(string: "https://bbs.yamibo.com/thread-902-1-1.html")!
+        let context = ReaderLaunchContext(
+            threadURL: threadURL,
+            threadTitle: "测试小说",
+            source: .forum
+        )
+
+        appModel.presentReader(context)
+        appModel.presentClipboardForumLinkPrompt(url: clipboardURL)
+        let prompt = appModel.clipboardForumLinkPrompt!
+        appModel.confirmClipboardForumLinkPrompt(prompt)
+
+        XCTAssertNil(appModel.clipboardForumLinkPrompt)
+        XCTAssertNil(appModel.activeReaderContext)
+        XCTAssertEqual(appModel.suspendedReaderContext, context)
+        XCTAssertEqual(appModel.selectedTab, .forum)
+        XCTAssertEqual(appModel.forumNavigationRequest?.url, clipboardURL)
+    }
+
+    func testOpenForumURLExitsActiveMangaAndCreatesNavigationRequest() {
+        let appModel = makeIsolatedAppModel(initialTab: .mine)
+        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=704&mobile=2")!
+        let clipboardURL = URL(string: "https://bbs.yamibo.com/thread-901-1-1.html")!
+        let context = MangaLaunchContext(
+            originalThreadURL: threadURL,
+            chapterURL: threadURL,
+            displayTitle: "测试漫画",
+            source: .forum,
+            initialPage: 2
+        )
+
+        appModel.presentManga(context)
+        appModel.openForumURL(clipboardURL)
+
+        XCTAssertNil(appModel.activeMangaRoute)
+        XCTAssertEqual(appModel.suspendedMangaRoute, .native(context))
+        XCTAssertEqual(appModel.selectedTab, .forum)
+        XCTAssertEqual(appModel.forumNavigationRequest?.url, clipboardURL)
+    }
+
+    func testConfirmClipboardForumLinkPromptExitsActiveMangaAndCreatesNavigationRequest() {
+        let appModel = makeIsolatedAppModel(initialTab: .mine)
+        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=704&mobile=2")!
+        let clipboardURL = URL(string: "https://bbs.yamibo.com/thread-903-1-1.html")!
+        let context = MangaLaunchContext(
+            originalThreadURL: threadURL,
+            chapterURL: threadURL,
+            displayTitle: "测试漫画",
+            source: .forum,
+            initialPage: 2
+        )
+
+        appModel.presentManga(context)
+        appModel.presentClipboardForumLinkPrompt(url: clipboardURL)
+        let prompt = appModel.clipboardForumLinkPrompt!
+        appModel.confirmClipboardForumLinkPrompt(prompt)
+
+        XCTAssertNil(appModel.clipboardForumLinkPrompt)
+        XCTAssertNil(appModel.activeMangaRoute)
+        XCTAssertEqual(appModel.suspendedMangaRoute, .native(context))
+        XCTAssertEqual(appModel.selectedTab, .forum)
+        XCTAssertEqual(appModel.forumNavigationRequest?.url, clipboardURL)
+    }
+
     func testDismissReaderToOriginalPostSuspendsProvidedLatestContext() {
         let appModel = makeIsolatedAppModel(initialTab: .mine)
         let originalURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=703&mobile=2")!
