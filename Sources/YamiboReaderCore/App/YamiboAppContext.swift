@@ -3,11 +3,11 @@ import Foundation
 import WebKit
 #endif
 
-public protocol YamiboRepositoryProviding {
-    func makeRepository() async -> YamiboRepository
+public protocol FavoriteRepositoryProviding {
+    func makeFavoriteRepository() async -> FavoriteRepository
 }
 
-public final class YamiboAppContext: YamiboRepositoryProviding, Sendable {
+public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
     private static let resettableUserDefaultsKeys = [
         "yamibo.favorite.filter",
         "yamibo.favorite.sort",
@@ -62,14 +62,14 @@ public final class YamiboAppContext: YamiboRepositoryProviding, Sendable {
         self.session = session
     }
 
-    public func makeRepository() async -> YamiboRepository {
+    public func makeFavoriteRepository() async -> FavoriteRepository {
         let sessionState = await sessionStore.load()
         let client = YamiboClient(
             session: session,
             cookie: sessionState.cookie,
             userAgent: sessionState.userAgent
         )
-        return YamiboRepository(client: client)
+        return FavoriteRepository(client: client)
     }
 
     public func makeNovelReaderRepository() async -> NovelReaderRepository {

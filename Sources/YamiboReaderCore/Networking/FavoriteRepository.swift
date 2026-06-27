@@ -1,6 +1,6 @@
 import Foundation
 
-public actor YamiboRepository {
+public actor FavoriteRepository {
     private let client: YamiboClient
 
     public init(client: YamiboClient) {

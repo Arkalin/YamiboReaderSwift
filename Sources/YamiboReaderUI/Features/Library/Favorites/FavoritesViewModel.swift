@@ -195,7 +195,7 @@ public final class FavoritesViewModel: ObservableObject {
         defer { isLoading = false }
 
         do {
-            let repository = await appContext.makeRepository()
+            let repository = await appContext.makeFavoriteRepository()
             let remote = try await repository.fetchFavorites()
             favorites = try await favoriteStore.mergeRemoteFavorites(remote)
             collections = await favoriteStore.loadCollections()
@@ -510,7 +510,7 @@ public final class FavoritesViewModel: ObservableObject {
             defer { deletingFavoriteID = nil }
 
             do {
-                let repository = await appContext.makeRepository()
+                let repository = await appContext.makeFavoriteRepository()
                 try await repository.deleteFavorite(remoteFavoriteID: remoteFavoriteID)
                 applySnapshot(try await favoriteStore.deleteFavorites(ids: [favorite.id]))
                 changed = true
