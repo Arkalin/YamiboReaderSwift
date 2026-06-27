@@ -39,7 +39,7 @@ struct NativeNovelTextSettingsPreviewView: UIViewRepresentable {
 }
 
 @MainActor
-final class NovelTextViewportReferenceUIView: UIView {
+final class NovelTextViewportReferenceUIView: UIView, @preconcurrency UIEditMenuInteractionDelegate {
     var displayReference: NovelTextViewportDisplayReference? {
         didSet {
             guard oldValue !== displayReference else { return }
@@ -58,6 +58,7 @@ final class NovelTextViewportReferenceUIView: UIView {
     }
 
     private var lastDrawBounds: CGRect = .zero
+    private lazy var editMenuInteraction = UIEditMenuInteraction(delegate: self)
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -102,6 +103,25 @@ final class NovelTextViewportReferenceUIView: UIView {
         selectionController?.copySelection()
     }
 
+    func dismissCopyMenu() {
+        editMenuInteraction.dismissMenu()
+    }
+
+    func editMenuInteraction(
+        _ interaction: UIEditMenuInteraction,
+        menuFor configuration: UIEditMenuConfiguration,
+        suggestedActions: [UIMenuElement]
+    ) -> UIMenu? {
+        guard selectionController?.hasSelection == true else { return nil }
+        let copyAction = UIAction(
+            title: L10n.string("reader.copy"),
+            image: UIImage(systemName: "doc.on.doc")
+        ) { [weak self] _ in
+            self?.selectionController?.copySelection()
+        }
+        return UIMenu(children: [copyAction])
+    }
+
     override func layoutSubviews() {
         super.layoutSubviews()
         guard self.bounds != self.lastDrawBounds else { return }
@@ -127,6 +147,7 @@ final class NovelTextViewportReferenceUIView: UIView {
         )
         longPressRecognizer.minimumPressDuration = 0.35
         addGestureRecognizer(longPressRecognizer)
+        addInteraction(editMenuInteraction)
     }
 
     @objc private func handleLongPress(_ recognizer: UILongPressGestureRecognizer) {
@@ -150,7 +171,12 @@ final class NovelTextViewportReferenceUIView: UIView {
     private func showCopyMenu() {
         guard selectionController?.hasSelection == true else { return }
         let targetRect = selectionController?.menuTargetRect(in: self) ?? bounds
-        UIMenuController.shared.showMenu(from: self, rect: targetRect)
+        editMenuInteraction.presentEditMenu(
+            with: UIEditMenuConfiguration(
+                identifier: nil,
+                sourcePoint: CGPoint(x: targetRect.midX, y: targetRect.minY)
+            )
+        )
     }
 
     private func drawSelectionHighlight(

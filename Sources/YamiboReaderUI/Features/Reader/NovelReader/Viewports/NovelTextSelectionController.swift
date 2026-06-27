@@ -87,7 +87,7 @@ final class NovelTextSelectionController {
         selectionRangeValue = nil
         baseAnchor = nil
         activeSurfaceIdentity = nil
-        UIMenuController.shared.hideMenu()
+        dismissMenus()
         refreshSelectionDisplay()
     }
 
@@ -135,6 +135,12 @@ final class NovelTextSelectionController {
             .allObjects
             .compactMap(\.displayReference)
             .first { !$0.isStale && $0.generation == selectionRangeValue?.generation }
+    }
+
+    private func dismissMenus() {
+        for view in registeredViews.allObjects {
+            view.dismissCopyMenu()
+        }
     }
 
     private func autoScrollIfNeeded(
