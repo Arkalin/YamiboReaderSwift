@@ -181,52 +181,6 @@ private struct MangaReaderCacheQueueToolbarButton: View {
     }
 }
 
-private struct MangaReaderCacheDownloadQueueIcon: View {
-    let isActive: Bool
-    @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
-
-    var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: !isAnimated)) { context in
-            let progress = isAnimated ? animationProgress(at: context.date) : 0
-            ZStack {
-                RoundedRectangle(cornerRadius: 3, style: .continuous)
-                    .strokeBorder(lineWidth: 1.7)
-                    .frame(width: 18, height: 14)
-                    .offset(y: 3)
-
-                Image(systemName: "arrow.down")
-                    .font(.system(size: 12, weight: .bold))
-                    .offset(y: arrowYOffset(progress: progress))
-                    .opacity(arrowOpacity(progress: progress))
-            }
-            .frame(width: 24, height: 24)
-        }
-    }
-
-    private var isAnimated: Bool {
-        isActive && !accessibilityReduceMotion
-    }
-
-    private func animationProgress(at date: Date) -> Double {
-        let duration = 1.05
-        return date.timeIntervalSinceReferenceDate
-            .truncatingRemainder(dividingBy: duration) / duration
-    }
-
-    private func arrowYOffset(progress: Double) -> CGFloat {
-        guard isAnimated else { return -1 }
-        return -7 + CGFloat(progress) * 13
-    }
-
-    private func arrowOpacity(progress: Double) -> Double {
-        guard isAnimated else { return 1 }
-        if progress < 0.76 {
-            return 1
-        }
-        return max(0, 1 - ((progress - 0.76) / 0.24))
-    }
-}
-
 private struct MangaReaderCacheErrorBanner: View {
     let message: String
 
