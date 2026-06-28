@@ -297,7 +297,11 @@ final class SystemSettingsViewModel: ObservableObject {
 
     func confirmPendingMangaOfflineCacheCleanup() async -> Bool {
         guard let confirmation = pendingMangaOfflineCacheCleanupConfirmation else { return false }
-        return await clearMangaOfflineCache(favoriteIDs: confirmation.favoriteIDs)
+        return await confirmMangaOfflineCacheCleanup(confirmation)
+    }
+
+    func confirmMangaOfflineCacheCleanup(_ confirmation: MangaOfflineCacheCleanupConfirmation) async -> Bool {
+        await clearMangaOfflineCache(favoriteIDs: confirmation.favoriteIDs)
     }
 
     func setMangaOfflineCacheCleanupSelectionMode(_ isSelecting: Bool) {
