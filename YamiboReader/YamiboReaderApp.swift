@@ -2,17 +2,29 @@ import SwiftUI
 #if canImport(AppIntents)
 import AppIntents
 #endif
+#if os(iOS)
+import UIKit
+#endif
 import YamiboReaderCore
 import YamiboReaderUI
 
 @main
 struct YamiboReaderApp: App {
+    #if os(iOS)
+    @UIApplicationDelegateAdaptor(YamiboAppDelegate.self) private var appDelegate
+    #endif
+
     @State private var appModel: YamiboAppModel
     @State private var showsLaunchAnimation = true
 
     init() {
         let initialTab = YamiboReaderApp.resolveInitialTab()
-        _appModel = State(initialValue: YamiboAppModel(appContext: YamiboAppContext(), initialTab: initialTab))
+        let appContext = YamiboAppContext()
+        #if os(iOS)
+        YamiboAppDelegate.appContext = appContext
+        #endif
+        Self.registerMangaOfflineCacheBackgroundTasks(appContext: appContext)
+        _appModel = State(initialValue: YamiboAppModel(appContext: appContext, initialTab: initialTab))
         #if canImport(AppIntents)
         YamiboAppShortcutsProvider.updateAppShortcutParameters()
         #endif
@@ -38,7 +50,42 @@ struct YamiboReaderApp: App {
         let settings = SettingsStore.loadSync()
         return AppTabLaunchResolver.resolveInitialTab(homePage: settings.homePage)
     }
+
+    private static func registerMangaOfflineCacheBackgroundTasks(appContext: YamiboAppContext) {
+        #if os(iOS) && canImport(BackgroundTasks)
+        guard #available(iOS 26.0, *) else { return }
+        MangaOfflineCacheContinuedProcessingCoordinator.registerLaunchHandler(
+            coordinator: appContext.mangaOfflineCacheContinuedProcessingCoordinator,
+            continueQueue: {
+                let executor = await appContext.makeMangaOfflineCacheQueueExecutor()
+                try? await executor.continueQueue(submitsUserInitiatedRun: false)
+            },
+            pauseQueue: {
+                let executor = await appContext.makeMangaOfflineCacheQueueExecutor()
+                try? await executor.pauseQueue()
+            }
+        )
+        #endif
+    }
 }
+
+#if os(iOS)
+private final class YamiboAppDelegate: NSObject, UIApplicationDelegate {
+    static var appContext: YamiboAppContext?
+
+    func application(
+        _ application: UIApplication,
+        handleEventsForBackgroundURLSession identifier: String,
+        completionHandler: @escaping () -> Void
+    ) {
+        Self.appContext?.mangaOfflineCacheBackgroundDownloadTransport
+            .setBackgroundEventsCompletionHandler(
+                completionHandler,
+                forSessionIdentifier: identifier
+            )
+    }
+}
+#endif
 
 private struct LaunchAnimationView: View {
     let onCompletion: () -> Void
