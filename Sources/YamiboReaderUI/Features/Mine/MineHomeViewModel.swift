@@ -75,10 +75,9 @@ final class MineHomeViewModel {
         isLoading = true
         defer { isLoading = false }
 
-        startObservingOfflineCacheQueueUpdates()
         session = await appContext.sessionStore.load()
         profile = await appContext.profileStore.load()
-        await refreshOfflineCacheQueue()
+        await loadOfflineCacheQueue()
 
         guard isLoggedIn,
               let credential = SessionState.authenticationCookieValue(in: session.cookie) else {
@@ -142,6 +141,11 @@ final class MineHomeViewModel {
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    func loadOfflineCacheQueue() async {
+        startObservingOfflineCacheQueueUpdates()
+        await refreshOfflineCacheQueue()
     }
 
     func refreshOfflineCacheQueue() async {

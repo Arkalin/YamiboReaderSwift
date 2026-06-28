@@ -56,11 +56,13 @@ public final class MangaReaderCacheViewModel: ObservableObject {
     @Published public private(set) var favorite: Favorite?
     @Published public private(set) var prompt: MangaReaderCachePrompt?
     @Published public private(set) var errorMessage: String?
+    @Published public private(set) var offlineCacheQueueEntryCount = 0
 
     private let context: MangaLaunchContext
     private let panel: MangaDirectoryPanelPresentation
     private let favoriteStore: any FavoriteStoring
     private let offlineCacheStore: any MangaOfflineCacheStoring
+    private var offlineCacheUpdatesTask: Task<Void, Never>?
 
     public init(
         context: MangaLaunchContext,
@@ -74,16 +76,26 @@ public final class MangaReaderCacheViewModel: ObservableObject {
         self.offlineCacheStore = offlineCacheStore
     }
 
+    deinit {
+        offlineCacheUpdatesTask?.cancel()
+    }
+
     public var allChapterTIDs: Set<String> {
         Set(rows.map(\.chapter.tid))
     }
 
     public func load() async {
+        startObservingOfflineCacheUpdates()
         favorite = await favoriteStore.favorite(for: context.originalThreadURL)
         await refreshRows()
     }
 
     public func refreshRows() async {
+        await refreshChapterRows()
+        await refreshOfflineCacheQueueEntryCount()
+    }
+
+    private func refreshChapterRows() async {
         let ownerName = offlineCacheOwnerName
         var nextRows: [MangaReaderCacheRow] = []
         for chapter in panel.displayChapters {
@@ -96,6 +108,13 @@ public final class MangaReaderCacheViewModel: ObservableObject {
             nextRows.append(MangaReaderCacheRow(chapter: chapter, state: state))
         }
         rows = nextRows
+    }
+
+    private func refreshOfflineCacheQueueEntryCount() async {
+        let works = await offlineCacheStore.allOfflineCacheWorks()
+        offlineCacheQueueEntryCount = MangaOfflineCacheQueueProjection
+            .project(works: works)
+            .unfinishedCount
     }
 
     public func selectionState(for selectedTIDs: Set<String>) -> MangaReaderCacheSelectionState {
@@ -166,6 +185,17 @@ public final class MangaReaderCacheViewModel: ObservableObject {
 
     public func clearPrompt() {
         prompt = nil
+    }
+
+    private func startObservingOfflineCacheUpdates() {
+        guard offlineCacheUpdatesTask == nil else { return }
+        let updates = offlineCacheStore.offlineCacheUpdates()
+        offlineCacheUpdatesTask = Task { @MainActor [weak self] in
+            for await _ in updates {
+                guard !Task.isCancelled else { return }
+                await self?.refreshRows()
+            }
+        }
     }
 
     private var presentationTitle: String {

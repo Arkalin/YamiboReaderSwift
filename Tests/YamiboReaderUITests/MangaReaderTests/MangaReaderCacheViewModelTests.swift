@@ -22,6 +22,41 @@ final class MangaReaderCacheViewModelTests: XCTestCase {
         XCTAssertEqual(fixture.model.rows.map(\.state), [.cached, .uncached, .caching])
     }
 
+    func testLoadProjectsExistingOfflineCacheQueueEntryCount() async throws {
+        let fixture = try await makeCacheFixture(chapters: [
+            cacheChapter(tid: "100", number: 1),
+            cacheChapter(tid: "200", number: 2)
+        ])
+        _ = try await fixture.store.enqueueOfflineCacheWork(cacheWorkRequest(favorite: fixture.favorite, tid: "100"))
+        _ = try await fixture.store.enqueueOfflineCacheWork(cacheWorkRequest(favorite: fixture.favorite, tid: "200"))
+
+        await fixture.model.load()
+
+        XCTAssertEqual(fixture.model.offlineCacheQueueEntryCount, 2)
+    }
+
+    func testOfflineCacheQueueUpdatesRefreshEntryCountAndRows() async throws {
+        let fixture = try await makeCacheFixture(chapters: [cacheChapter(tid: "100", number: 1)])
+
+        await fixture.model.load()
+        XCTAssertEqual(fixture.model.offlineCacheQueueEntryCount, 0)
+        XCTAssertEqual(fixture.model.rows.map(\.state), [.uncached])
+
+        _ = try await fixture.store.enqueueOfflineCacheWork(cacheWorkRequest(favorite: fixture.favorite, tid: "100"))
+
+        try await waitForMangaReaderCacheCondition {
+            fixture.model.offlineCacheQueueEntryCount == 1
+                && fixture.model.rows.map(\.state) == [.caching]
+        }
+
+        try await fixture.store.cancelOfflineCacheWork(ownerName: fixture.favorite.title, tid: "100")
+
+        try await waitForMangaReaderCacheCondition {
+            fixture.model.offlineCacheQueueEntryCount == 0
+                && fixture.model.rows.map(\.state) == [.uncached]
+        }
+    }
+
     func testFailedQueueWorkProjectsAsCaching() async throws {
         let fixture = try await makeCacheFixture(chapters: [cacheChapter(tid: "100", number: 1)])
         _ = try await fixture.store.enqueueOfflineCacheWork(cacheWorkRequest(favorite: fixture.favorite, tid: "100"))
@@ -189,4 +224,17 @@ private func cacheWorkRequest(favorite: Favorite, tid: String) throws -> MangaOf
         chapterTitle: "第\(tid)话",
         chapterURL: try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(tid)&page=1"))
     )
+}
+
+private func waitForMangaReaderCacheCondition(
+    timeoutNanoseconds: UInt64 = 2_000_000_000,
+    condition: @escaping @MainActor () -> Bool
+) async throws {
+    let start = ContinuousClock.now
+    while await MainActor.run(body: condition) == false {
+        if start.duration(to: .now) > .nanoseconds(Int64(timeoutNanoseconds)) {
+            throw YamiboError.underlying("Timed out waiting for condition")
+        }
+        try await Task.sleep(nanoseconds: 10_000_000)
+    }
 }

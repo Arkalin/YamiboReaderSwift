@@ -4,24 +4,26 @@ import YamiboReaderCore
 #if os(iOS)
 struct MangaReaderCacheSheet: View {
     @StateObject private var model: MangaReaderCacheViewModel
+    @State private var queueViewModel: MineHomeViewModel
     @Environment(\.dismiss) private var dismiss
     @State private var isSelecting = false
     @State private var selectedTIDs: Set<String> = []
+    @State private var isQueuePresented = false
 
     init(
         context: MangaLaunchContext,
         panel: MangaDirectoryPanelPresentation,
-        favoriteStore: any FavoriteStoring,
-        offlineCacheStore: any MangaOfflineCacheStoring
+        appContext: YamiboAppContext
     ) {
         _model = StateObject(
             wrappedValue: MangaReaderCacheViewModel(
                 context: context,
                 panel: panel,
-                favoriteStore: favoriteStore,
-                offlineCacheStore: offlineCacheStore
+                favoriteStore: appContext.favoriteStore,
+                offlineCacheStore: appContext.mangaOfflineCacheStore
             )
         )
+        _queueViewModel = State(initialValue: MineHomeViewModel(appContext: appContext))
     }
 
     var body: some View {
@@ -55,6 +57,15 @@ struct MangaReaderCacheSheet: View {
                     .accessibilityLabel(L10n.string("common.close"))
                 }
 
+                ToolbarItem(placement: .topBarTrailing) {
+                    MangaReaderCacheQueueToolbarButton(
+                        entryCount: model.offlineCacheQueueEntryCount,
+                        action: {
+                            isQueuePresented = true
+                        }
+                    )
+                }
+
                 if isSelecting && usesSystemSelectionBottomToolbar {
                     ToolbarItem(placement: .bottomBar) {
                         MangaReaderCacheSelectionToolbar(
@@ -73,6 +84,9 @@ struct MangaReaderCacheSheet: View {
                         onDelete: deleteSelection
                     )
                 }
+            }
+            .sheet(isPresented: $isQueuePresented) {
+                MineOfflineCacheQueueSheet(viewModel: queueViewModel)
             }
             .task {
                 await model.load()
@@ -139,6 +153,77 @@ struct MangaReaderCacheSheet: View {
         guard model.errorMessage == nil else { return }
         isSelecting = false
         selectedTIDs = []
+    }
+}
+
+private struct MangaReaderCacheQueueToolbarButton: View {
+    let entryCount: Int
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                MangaReaderCacheDownloadQueueIcon(isActive: entryCount > 0)
+                Text(verbatim: "\(entryCount)")
+                    .font(.caption.monospacedDigit().weight(.semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                    .frame(minWidth: 12, alignment: .trailing)
+            }
+            .frame(minWidth: 48, minHeight: 32, alignment: .center)
+            .foregroundStyle(entryCount > 0 ? Color.accentColor : Color.secondary)
+            .contentShape(Rectangle())
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(
+            L10n.string("manga.offline_cache.queue_button_accessibility_format", entryCount)
+        )
+    }
+}
+
+private struct MangaReaderCacheDownloadQueueIcon: View {
+    let isActive: Bool
+    @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: !isAnimated)) { context in
+            let progress = isAnimated ? animationProgress(at: context.date) : 0
+            ZStack {
+                RoundedRectangle(cornerRadius: 3, style: .continuous)
+                    .strokeBorder(lineWidth: 1.7)
+                    .frame(width: 18, height: 14)
+                    .offset(y: 3)
+
+                Image(systemName: "arrow.down")
+                    .font(.system(size: 12, weight: .bold))
+                    .offset(y: arrowYOffset(progress: progress))
+                    .opacity(arrowOpacity(progress: progress))
+            }
+            .frame(width: 24, height: 24)
+        }
+    }
+
+    private var isAnimated: Bool {
+        isActive && !accessibilityReduceMotion
+    }
+
+    private func animationProgress(at date: Date) -> Double {
+        let duration = 1.05
+        return date.timeIntervalSinceReferenceDate
+            .truncatingRemainder(dividingBy: duration) / duration
+    }
+
+    private func arrowYOffset(progress: Double) -> CGFloat {
+        guard isAnimated else { return -1 }
+        return -7 + CGFloat(progress) * 13
+    }
+
+    private func arrowOpacity(progress: Double) -> Double {
+        guard isAnimated else { return 1 }
+        if progress < 0.76 {
+            return 1
+        }
+        return max(0, 1 - ((progress - 0.76) / 0.24))
     }
 }
 

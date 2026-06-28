@@ -227,6 +227,39 @@ final class MineHomeViewModelTests: XCTestCase {
         XCTAssertNotNil(row.speedText)
     }
 
+    func testLoadOfflineCacheQueueAutomaticallyRefreshesWhenStoreChanges() async throws {
+        let fixture = try await makeMineHomeFixture()
+        let viewModel = MineHomeViewModel(appContext: fixture.appContext)
+
+        await viewModel.loadOfflineCacheQueue()
+        XCTAssertEqual(viewModel.offlineCacheQueueEntryCount, 0)
+
+        _ = try await fixture.offlineCacheStore.enqueueOfflineCacheWork(
+            try makeMineOfflineCacheWorkRequest(ownerName: "作品A", tid: "100")
+        )
+
+        try await waitForMineHomeCondition {
+            viewModel.offlineCacheQueueEntryCount == 1
+                && viewModel.offlineCacheQueueGroups.first?.ownerName == "作品A"
+        }
+    }
+
+    func testLoadOfflineCacheQueueDoesNotRefreshProfile() async throws {
+        let fixture = try await makeMineHomeFixture(accountUID: "535977")
+        nonisolated(unsafe) var requestCount = 0
+        MineProfileRefreshTestURLProtocol.handler = { request in
+            requestCount += 1
+            return profileResponse(for: request, uid: "535977")
+        }
+        defer { MineProfileRefreshTestURLProtocol.handler = nil }
+        let viewModel = MineHomeViewModel(appContext: fixture.appContext)
+
+        await viewModel.loadOfflineCacheQueue()
+
+        XCTAssertEqual(requestCount, 0)
+        XCTAssertNil(viewModel.profile)
+    }
+
     func testOfflineCacheQueueEmptyStateHidesControls() async throws {
         let fixture = try await makeMineHomeFixture()
         let viewModel = MineHomeViewModel(appContext: fixture.appContext)
