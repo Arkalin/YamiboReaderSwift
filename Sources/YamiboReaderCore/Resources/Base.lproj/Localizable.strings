@@ -254,11 +254,14 @@
 "manga_web.loading" = "正在载入网页漫画…";
 "manga_web.skeleton.message" = "网页漫画模式将在后续阶段重新接入。";
 "manga_web.title" = "网页漫画模式";
+"mine.check_in" = "签到";
 "mine.credit_progress_format" = "%d/%d";
+"mine.download_queue" = "下载队列";
 "mine.login" = "登录";
 "mine.login_card_hint" = "轻点打开登录表单";
 "mine.login_password" = "密码";
 "mine.login_username" = "用户名 / Email / UID";
+"mine.my_likes" = "我的喜欢";
 "mine.profile_card_sign_out_hint" = "轻点可退出登录";
 "mine.security_answer" = "答案";
 "mine.security_question" = "安全提问";
