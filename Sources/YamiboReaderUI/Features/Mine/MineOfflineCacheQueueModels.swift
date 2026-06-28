@@ -8,6 +8,7 @@ struct MineOfflineCacheQueueOwnerGroup: Hashable, Identifiable {
     var progressText: String
     var percentageText: String
     var currentSpeedText: String?
+    var failureStatusText: String?
     var chapters: [MineOfflineCacheQueueChapterRow]
 
     var id: String { ownerName }
@@ -36,6 +37,7 @@ struct MineOfflineCacheQueueOwnerGroup: Hashable, Identifiable {
             Int((progressFraction * 100).rounded())
         )
         currentSpeedText = MineOfflineCacheQueueSpeedText.make(bytesPerSecond: currentBytesPerSecond)
+        failureStatusText = rows.first { $0.failureStatusText != nil }?.failureStatusText
         chapters = rows
     }
 }

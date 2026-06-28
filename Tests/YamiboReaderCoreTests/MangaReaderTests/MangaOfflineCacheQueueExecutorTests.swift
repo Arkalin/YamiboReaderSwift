@@ -184,6 +184,31 @@ struct MangaReaderTestsMangaOfflineCacheQueueExecutor {
         #expect(await acquirer.requestedURLs == [imageURLs[1]])
     }
 
+    @Test func emptyImageDataFailsWorkWithoutAdvancingProgress() async throws {
+        let store = FileMangaOfflineCacheStore(baseDirectory: try makeTemporaryExecutorDirectory())
+        let imageURLs = try makeImageURLs(tid: "550", count: 2)
+        _ = try await store.enqueueOfflineCacheWork(
+            try makeExecutorWorkRequest(ownerName: "favorite-a", tid: "550", targetImageURLs: imageURLs)
+        )
+        let acquirer = EmptyImageThenFailingAcquirer(emptyImageURL: imageURLs[0])
+        let executor = MangaOfflineCacheQueueExecutor(
+            store: store,
+            chapterDocumentLoader: RecordingChapterDocumentLoader(),
+            imageAcquirer: acquirer,
+            maxConcurrentImageTransfers: 1
+        )
+
+        try await executor.continueQueue()
+        await executor.waitForIdle()
+
+        let failedWork = try #require(await store.offlineCacheWork(ownerName: "favorite-a", tid: "550"))
+        #expect(failedWork.state == .failed)
+        #expect(failedWork.completedImageURLs.isEmpty)
+        #expect(failedWork.progress == MangaOfflineCacheProgress(completedImageCount: 0, targetImageCount: 2))
+        #expect(await store.offlineImageData(for: imageURLs[0]) == nil)
+        #expect(await acquirer.requestedURLs == [imageURLs[0]])
+    }
+
     @Test func continueReconcilesPersistedProgressAgainstOfflineImageStorage() async throws {
         let store = FileMangaOfflineCacheStore(baseDirectory: try makeTemporaryExecutorDirectory())
         let imageURLs = try makeImageURLs(tid: "600", count: 2)
@@ -518,6 +543,23 @@ private actor RetryOfflineImageAcquirer: MangaOfflineCacheImageAcquiring {
             throw YamiboError.offline
         }
         return MangaOfflineCacheImageAcquisition(data: imageURL == failingImageURL ? Data([2]) : Data([1]), source: .network)
+    }
+}
+
+private actor EmptyImageThenFailingAcquirer: MangaOfflineCacheImageAcquiring {
+    private(set) var requestedURLs: [URL] = []
+    private let emptyImageURL: URL
+
+    init(emptyImageURL: URL) {
+        self.emptyImageURL = emptyImageURL
+    }
+
+    func acquireImageData(for imageURL: URL, refererURL: URL?) async throws -> MangaOfflineCacheImageAcquisition {
+        requestedURLs.append(imageURL)
+        if imageURL == emptyImageURL {
+            return MangaOfflineCacheImageAcquisition(data: Data(), source: .network)
+        }
+        throw YamiboError.offline
     }
 }
 

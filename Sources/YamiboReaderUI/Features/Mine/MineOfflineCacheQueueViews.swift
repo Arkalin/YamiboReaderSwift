@@ -310,6 +310,13 @@ private struct MineOfflineCacheQueueOwnerRow: View {
                             .foregroundStyle(secondaryColor)
                             .lineLimit(1)
                     }
+
+                    if let failureStatusText = group.failureStatusText {
+                        Text(failureStatusText)
+                            .font(.caption)
+                            .foregroundStyle(isDimmed ? Color.secondary.opacity(0.55) : Color.red)
+                            .lineLimit(1)
+                    }
                 }
             }
 
