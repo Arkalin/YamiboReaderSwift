@@ -13,6 +13,7 @@ public struct MangaReaderView: View {
     @State private var isDirectoryPresented = false
     @State private var isChapterCommentsPresented = false
     @State private var isSettingsPresented = false
+    @State private var isCachePresented = false
     @State private var imageSavePresentation = MangaImageSavePresentationState()
     @State private var isSavingImage = false
 
@@ -90,6 +91,9 @@ public struct MangaReaderView: View {
                     onShowSettings: {
                         isSettingsPresented = true
                     },
+                    onShowCache: {
+                        isCachePresented = true
+                    },
                     onOpenOriginalPost: openOriginalPost,
                     onJumpToLocalPage: { targetIndex in
                         Task { await model.jumpToPage(localIndex: targetIndex) }
@@ -143,6 +147,18 @@ public struct MangaReaderView: View {
         }
         .sheet(isPresented: $isSettingsPresented) {
             MangaReaderSettingsSheet(model: model)
+        }
+        .sheet(isPresented: $isCachePresented) {
+            if case let .loaded(loaded) = model.presentation.state {
+                MangaReaderCacheSheet(
+                    context: context,
+                    panel: loaded.directoryPanel,
+                    favoriteStore: appModel.appContext.favoriteStore,
+                    offlineCacheStore: appModel.appContext.mangaOfflineCacheStore
+                )
+            } else {
+                MangaDirectoryUnavailableSheet()
+            }
         }
         .confirmationDialog(
             L10n.string("image.actions.title"),
@@ -203,6 +219,7 @@ public struct MangaReaderView: View {
             !isDirectoryPresented &&
             !isChapterCommentsPresented &&
             !isSettingsPresented &&
+            !isCachePresented &&
             !isDismissing &&
             !isChromeVisible
     }
@@ -370,6 +387,7 @@ private struct MangaReaderFloatingControls: View {
     let onShowDirectory: () -> Void
     let onShowComments: () -> Void
     let onShowSettings: () -> Void
+    let onShowCache: () -> Void
     let onOpenOriginalPost: () -> Void
     let onJumpToLocalPage: (Int) -> Void
 
@@ -397,6 +415,7 @@ private struct MangaReaderFloatingControls: View {
                 onShowDirectory: onShowDirectory,
                 onShowComments: onShowComments,
                 onShowSettings: onShowSettings,
+                onShowCache: onShowCache,
                 onOpenOriginalPost: onOpenOriginalPost,
                 onJumpToLocalPage: onJumpToLocalPage
             )
@@ -472,6 +491,7 @@ private struct MangaReaderBottomControls: View {
     let onShowDirectory: () -> Void
     let onShowComments: () -> Void
     let onShowSettings: () -> Void
+    let onShowCache: () -> Void
     let onOpenOriginalPost: () -> Void
     let onJumpToLocalPage: (Int) -> Void
 
@@ -516,7 +536,8 @@ private struct MangaReaderBottomControls: View {
                         cacheTitle: L10n.string("reader.cache"),
                         onOpenOriginalPost: onOpenOriginalPost,
                         onShowComments: onShowComments,
-                        onShowSettings: onShowSettings
+                        onShowSettings: onShowSettings,
+                        onShowCache: onShowCache
                     )
                     .opacity(staticControlVisibility.opacity)
                     .allowsHitTesting(staticControlVisibility.allowsHitTesting)
@@ -825,6 +846,7 @@ private struct MangaReaderStaticActionControls: View {
     let onOpenOriginalPost: () -> Void
     let onShowComments: () -> Void
     let onShowSettings: () -> Void
+    let onShowCache: () -> Void
 
     var body: some View {
         let layout = ReaderBottomChromeLayoutPresentation()
@@ -857,9 +879,8 @@ private struct MangaReaderStaticActionControls: View {
             Spacer(minLength: layout.actionButtonSpacing)
             bottomActionButton(
                 title: cacheTitle,
-                isEnabled: false,
                 systemName: "square.and.arrow.down",
-                handler: {}
+                handler: onShowCache
             )
         }
         .frame(maxWidth: .infinity)
