@@ -13,6 +13,8 @@ public struct MangaReaderView: View {
     @State private var isDirectoryPresented = false
     @State private var isChapterCommentsPresented = false
     @State private var isSettingsPresented = false
+    @State private var imageSavePresentation = MangaImageSavePresentationState()
+    @State private var isSavingImage = false
 
     public init(context: MangaLaunchContext, appModel: YamiboAppModel) {
         self.context = context
@@ -47,6 +49,10 @@ public struct MangaReaderView: View {
                 },
                 onCurrentPageChange: { globalIndex in
                     model.updateCurrentPage(globalIndex: globalIndex)
+                },
+                onPageLongPress: { page in
+                    guard !isSavingImage else { return }
+                    imageSavePresentation.presentActions(for: page)
                 },
                 onTap: {
                     toggleChrome()
@@ -138,6 +144,43 @@ public struct MangaReaderView: View {
         .sheet(isPresented: $isSettingsPresented) {
             MangaReaderSettingsSheet(model: model)
         }
+        .confirmationDialog(
+            L10n.string("image.actions.title"),
+            isPresented: Binding(
+                get: { imageSavePresentation.isActionDialogPresented },
+                set: { imageSavePresentation.setActionDialogPresented($0) }
+            ),
+            titleVisibility: .visible
+        ) {
+            if let target = imageSavePresentation.actionTarget {
+                Button(L10n.string("image.save_to_photos")) {
+                    Task {
+                        await saveImage(target.page)
+                    }
+                }
+                .disabled(isSavingImage)
+            }
+
+            Button(L10n.string("common.cancel"), role: .cancel) {
+                imageSavePresentation.clearActionTarget()
+            }
+        }
+        .overlay(alignment: .bottom) {
+            if let feedback = imageSavePresentation.feedback {
+                MangaImageSaveFeedbackToast(feedback: feedback)
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 28)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .animation(.easeInOut(duration: 0.18), value: imageSavePresentation.feedback?.id)
+        .task(id: imageSavePresentation.feedback?.id) {
+            guard let feedback = imageSavePresentation.feedback else { return }
+            try? await Task.sleep(nanoseconds: 1_800_000_000)
+            await MainActor.run {
+                imageSavePresentation.clearFeedback(id: feedback.id)
+            }
+        }
     }
 
     private func toggleChrome() {
@@ -182,6 +225,32 @@ public struct MangaReaderView: View {
                 openThreadInForum: context.originalThreadURL,
                 suspendedRoute: latestRoute
             )
+        }
+    }
+
+    @MainActor
+    private func saveImage(_ page: MangaReaderPageProjection) async {
+        guard !isSavingImage else { return }
+        imageSavePresentation.clearActionTarget()
+        guard let imagePipeline = model.imagePipeline else {
+            imageSavePresentation.finishSave(with: .failure(message: L10n.string("image.save_failed")))
+            return
+        }
+
+        isSavingImage = true
+        defer {
+            isSavingImage = false
+        }
+
+        do {
+            let data = try await imagePipeline.imageData(for: page)
+            let photoSaver = MangaImagePhotoSaver()
+            try await photoSaver.saveImageData(data)
+            imageSavePresentation.finishSave(with: .success)
+        } catch MangaImagePhotoSaveError.authorizationDenied {
+            imageSavePresentation.finishSave(with: .failure(message: L10n.string("image.save_photo_permission_denied")))
+        } catch {
+            imageSavePresentation.finishSave(with: .failure(message: L10n.string("image.save_failed")))
         }
     }
 
@@ -254,6 +323,39 @@ private struct MangaReaderChromeSummary: Equatable, Sendable {
     let pageSummary: String
     let pagePreviewTargets: [Int: MangaReaderPageProjection]
     let progress: ReaderChromeProgress
+}
+
+private struct MangaImageSaveFeedbackToast: View {
+    let feedback: MangaImageSaveFeedback
+
+    var body: some View {
+        Label {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(feedback.title)
+                    .font(.headline)
+                Text(feedback.message)
+                    .font(.subheadline)
+            }
+        } icon: {
+            Image(systemName: systemImageName)
+                .font(.title3.weight(.semibold))
+        }
+        .foregroundStyle(.primary)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .shadow(color: .black.opacity(0.22), radius: 14, x: 0, y: 8)
+        .accessibilityElement(children: .combine)
+    }
+
+    private var systemImageName: String {
+        switch feedback.kind {
+        case .success:
+            "checkmark.circle.fill"
+        case .failure:
+            "exclamationmark.triangle.fill"
+        }
+    }
 }
 
 private struct MangaReaderFloatingControls: View {
@@ -790,6 +892,7 @@ private struct MangaReaderPresentationContent: View {
     let isChromeVisible: Bool
     let onRetryInitialLoad: () -> Void
     let onCurrentPageChange: (Int) -> Void
+    let onPageLongPress: (MangaReaderPageProjection) -> Void
     let onTap: () -> Void
 
     var body: some View {
@@ -806,6 +909,7 @@ private struct MangaReaderPresentationContent: View {
                     imagePipeline: imagePipeline,
                     isChromeVisible: isChromeVisible,
                     onCurrentPageChange: onCurrentPageChange,
+                    onPageLongPress: onPageLongPress,
                     onTap: onTap
                 )
             case let .failed(error):
@@ -843,6 +947,7 @@ private struct MangaReaderLoadedContent: View {
     let imagePipeline: MangaImagePipeline?
     let isChromeVisible: Bool
     let onCurrentPageChange: (Int) -> Void
+    let onPageLongPress: (MangaReaderPageProjection) -> Void
     let onTap: () -> Void
 
     var body: some View {
@@ -859,6 +964,7 @@ private struct MangaReaderLoadedContent: View {
                     isChromeVisible: isChromeVisible,
                     zoomEnabled: settings.zoomEnabled,
                     onCurrentPageChange: onCurrentPageChange,
+                    onPageLongPress: onPageLongPress,
                     onTap: onTap
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -884,6 +990,7 @@ private struct MangaReaderLoadedContent: View {
                             isChromeVisible: isChromeVisible,
                             zoomEnabled: settings.zoomEnabled,
                             onCurrentPageChange: onCurrentPageChange,
+                            onPageLongPress: onPageLongPress,
                             onTap: onTap
                         )
                         .id(plan.usesTwoPageSpread)
@@ -897,6 +1004,7 @@ private struct MangaReaderLoadedContent: View {
                             isChromeVisible: isChromeVisible,
                             zoomEnabled: settings.zoomEnabled,
                             onCurrentPageChange: onCurrentPageChange,
+                            onPageLongPress: onPageLongPress,
                             onTap: onTap
                         )
                         .frame(maxWidth: .infinity, maxHeight: .infinity)

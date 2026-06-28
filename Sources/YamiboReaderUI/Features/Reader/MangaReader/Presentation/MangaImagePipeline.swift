@@ -66,6 +66,10 @@ final class MangaImagePipeline {
         }
     }
 
+    func imageData(for page: MangaReaderPageProjection) async throws -> Data {
+        try await dataLoader.imageData(for: page.imageURL, refererURL: page.refererURL)
+    }
+
     private func loadImage(for page: MangaReaderPageProjection, key: String) async {
         do {
             let data = try await dataLoader.imageData(for: page.imageURL, refererURL: page.refererURL)

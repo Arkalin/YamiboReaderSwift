@@ -13,6 +13,7 @@ struct MangaPagedReaderViewport: UIViewRepresentable {
     let isChromeVisible: Bool
     let zoomEnabled: Bool
     let onCurrentPageChange: (Int) -> Void
+    let onPageLongPress: (MangaReaderPageProjection) -> Void
     let onTap: () -> Void
 
     @Environment(\.colorScheme) private var colorScheme
@@ -574,7 +575,14 @@ struct MangaPagedReaderViewport: UIViewRepresentable {
                     pageIndex: pageIndex,
                     refresh: refreshInitialHorizontalAlignment
                 ),
-                surfaceInteraction: surfaceInteraction(for: page)
+                surfaceInteraction: surfaceInteraction(for: page),
+                onLongPress: { [weak self] page in
+                    guard let self else { return }
+                    let onPageLongPress = self.parent.onPageLongPress
+                    self.callbackScheduler.publish {
+                        onPageLongPress(page)
+                    }
+                }
             )
         }
 
@@ -822,6 +830,7 @@ struct MangaPagedPageCurlReaderViewport: UIViewControllerRepresentable {
     let isChromeVisible: Bool
     let zoomEnabled: Bool
     let onCurrentPageChange: (Int) -> Void
+    let onPageLongPress: (MangaReaderPageProjection) -> Void
     let onTap: () -> Void
 
     @Environment(\.colorScheme) private var colorScheme
@@ -1431,7 +1440,14 @@ struct MangaPagedPageCurlReaderViewport: UIViewControllerRepresentable {
                 page: page,
                 surfaceIdentity: pageCurlPageSurfaceIdentity(for: page),
                 initialHorizontalAlignment: initialHorizontalAlignment(for: page, pageIndex: pageIndex),
-                surfaceInteraction: surfaceInteraction(for: page)
+                surfaceInteraction: surfaceInteraction(for: page),
+                onLongPress: { [weak self] page in
+                    guard let self else { return }
+                    let onPageLongPress = self.parent.onPageLongPress
+                    self.callbackScheduler.publish {
+                        onPageLongPress(page)
+                    }
+                }
             )
         }
 
@@ -2187,6 +2203,7 @@ private struct MangaPagedReaderSpreadPageSurface {
     let surfaceIdentity: MangaPagedReaderPageAppearanceIdentity
     let initialHorizontalAlignment: MangaPagedImageSurfaceInitialHorizontalAlignment
     let surfaceInteraction: MangaPagedReaderPageSurfaceInteraction
+    let onLongPress: (MangaReaderPageProjection) -> Void
 }
 
 private struct MangaPagedReaderPageAppearanceIdentity: Hashable {
@@ -2266,7 +2283,8 @@ private struct MangaPagedReaderPageSlot: View {
                     isChromeVisible: isChromeVisible,
                     zoomEnabled: zoomEnabled && isPageZoomEnabled,
                     allowsUnzoomedSurfacePan: allowsUnzoomedSurfacePan && isPageZoomEnabled,
-                    surfaceInteraction: surface.surfaceInteraction
+                    surfaceInteraction: surface.surfaceInteraction,
+                    onLongPress: surface.onLongPress
                 )
             }
         }
@@ -2539,6 +2557,7 @@ private struct MangaPagedReaderPageSurface: View {
     let zoomEnabled: Bool
     let allowsUnzoomedSurfacePan: Bool
     let surfaceInteraction: MangaPagedReaderPageSurfaceInteraction
+    let onLongPress: (MangaReaderPageProjection) -> Void
 
     @State private var loadedImage: UIImage?
     @State private var loadedPageID: String?
@@ -2559,7 +2578,10 @@ private struct MangaPagedReaderPageSurface: View {
                     pageEdgeFillStyle: pageEdgeFillStyle,
                     isZoomInteractionEnabled: !isChromeVisible && zoomEnabled,
                     allowsUnzoomedSurfacePan: allowsUnzoomedSurfacePan,
-                    surfaceInteraction: surfaceInteraction
+                    surfaceInteraction: surfaceInteraction,
+                    onLongPress: {
+                        onLongPress(page)
+                    }
                 )
                 .id(surfaceIdentity)
             } else if loadingPageID == page.id {
@@ -2637,6 +2659,7 @@ private struct MangaPagedReaderScaledImage: View {
     let isZoomInteractionEnabled: Bool
     let allowsUnzoomedSurfacePan: Bool
     let surfaceInteraction: MangaPagedReaderPageSurfaceInteraction
+    let onLongPress: () -> Void
 
     @State private var steadyScale: CGFloat = 1
     @State private var gestureScale: CGFloat = 1
@@ -2650,6 +2673,10 @@ private struct MangaPagedReaderScaledImage: View {
             let layout = imageSurfaceLayout(containerSize: containerSize, scale: zoomScale)
             let userOffset = proposedUserOffset(layout: layout)
             let displayOffset = layout.displayOffset(forUserOffset: userOffset)
+            let longPressFrame = MangaPageLongPressHitTesting.allowedFrame(
+                in: CGRect(origin: .zero, size: containerSize),
+                imageFrame: layout.displayedImageFrame(forUserOffset: userOffset)
+            )
             let hiddenEdges = hiddenHorizontalEdges(layout: layout, userOffset: userOffset)
             let isSurfaceZoomActive = isZoomInteractionEnabled && MangaPageZoomPolicy.isActive(zoomScale)
 
@@ -2659,6 +2686,10 @@ private struct MangaPagedReaderScaledImage: View {
                     .resizable()
                     .frame(width: layout.contentSize.width, height: layout.contentSize.height)
                     .offset(displayOffset)
+                MangaPagedReaderLongPressHitRegion(
+                    frame: longPressFrame,
+                    onLongPress: onLongPress
+                )
             }
             .frame(width: proxy.size.width, height: proxy.size.height)
             .contentShape(Rectangle())
@@ -2899,6 +2930,21 @@ private struct MangaPagedReaderScaledImage: View {
 
     private func clampedScale(_ scale: CGFloat) -> CGFloat {
         MangaPageZoomPolicy.clampedScale(scale)
+    }
+}
+
+private struct MangaPagedReaderLongPressHitRegion: View {
+    let frame: CGRect
+    let onLongPress: () -> Void
+
+    var body: some View {
+        if frame.width > 0, frame.height > 0 {
+            Color.clear
+                .contentShape(Rectangle())
+                .frame(width: frame.width, height: frame.height)
+                .position(x: frame.midX, y: frame.midY)
+                .onLongPressGesture(minimumDuration: 0.45, perform: onLongPress)
+        }
     }
 }
 

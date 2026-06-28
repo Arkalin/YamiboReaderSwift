@@ -190,8 +190,14 @@
 "forum.history" = "浏览历史";
 "forum.open_native_failed" = "无法原生打开";
 "forum.unsupported_native_thread" = "当前帖子不适合原生阅读。";
+"image.actions.title" = "图片操作";
 "image.load_failed" = "图片加载失败";
 "image.loading" = "加载图片中…";
+"image.save_failed" = "保存图片失败，请稍后重试。";
+"image.save_photo_permission_denied" = "无法写入系统相册，请在系统设置中允许保存照片。";
+"image.save_success_message" = "图片已保存到系统相册。";
+"image.save_success_title" = "保存成功";
+"image.save_to_photos" = "保存图片";
 "manga.brightness" = "亮度";
 "manga.chapter.final" = "终";
 "manga.chapter_list" = "目录";
