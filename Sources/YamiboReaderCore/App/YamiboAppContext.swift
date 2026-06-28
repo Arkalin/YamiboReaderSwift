@@ -38,7 +38,7 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         settingsStore: SettingsStore = SettingsStore(),
         webDAVSyncSettingsStore: WebDAVSyncSettingsStore = WebDAVSyncSettingsStore(),
         readerResumeRouteStore: ReaderResumeRouteStore = ReaderResumeRouteStore(),
-        favoriteStore: FavoriteStore = FavoriteStore(),
+        favoriteStore: FavoriteStore? = nil,
         readerCacheStore: ReaderCacheStore = ReaderCacheStore(),
         favoriteBackgroundImageStore: FavoriteBackgroundImageStore = FavoriteBackgroundImageStore(),
         mangaDirectoryStore: FileMangaDirectoryStore = FileMangaDirectoryStore(),
@@ -54,7 +54,7 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         self.settingsStore = settingsStore
         self.webDAVSyncSettingsStore = webDAVSyncSettingsStore
         self.readerResumeRouteStore = readerResumeRouteStore
-        self.favoriteStore = favoriteStore
+        self.favoriteStore = favoriteStore ?? FavoriteStore(mangaOfflineCacheStore: mangaOfflineCacheStore)
         self.readerCacheStore = readerCacheStore
         self.favoriteBackgroundImageStore = favoriteBackgroundImageStore
         self.mangaDirectoryStore = mangaDirectoryStore

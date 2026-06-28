@@ -840,6 +840,153 @@ private enum WebDAVTestError: Error {
     #expect(uploadedPayload?.library.archivedMetadata == [archive])
 }
 
+@Test func webDAVServiceUploadDoesNotSerializeMangaOfflineCacheState() async throws {
+    let suiteName = makeWebDAVDefaultsSuiteName(prefix: "webdav-upload-offline-boundary")
+    UserDefaults(suiteName: suiteName)?.removePersistentDomain(forName: suiteName)
+    let rootDirectory = makeWebDAVTemporaryDirectory(prefix: "webdav-upload-offline-boundary")
+    let offlineStore = FileMangaOfflineCacheStore(baseDirectory: rootDirectory.appendingPathComponent("offline", isDirectory: true))
+    let settingsStore = WebDAVSyncSettingsStore(defaults: try makeWebDAVDefaults(suiteName: suiteName), key: "webdav")
+    let favoriteStore = FavoriteStore(
+        defaults: try makeWebDAVDefaults(suiteName: suiteName),
+        key: "favorites",
+        mangaOfflineCacheStore: offlineStore
+    )
+    let sessionStore = SessionStore(defaults: try makeWebDAVDefaults(suiteName: suiteName), key: "session")
+    let host = "upload-offline-boundary.example.com"
+    let settings = WebDAVSyncSettings(baseURLString: "https://\(host)", username: "admin", password: "secret")
+    let favoriteURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=960&mobile=2"))
+    let favorite = Favorite(id: "favorite-offline", title: "离线漫画", url: favoriteURL, type: .manga)
+    let imageURL = try #require(URL(string: "https://img.example.com/webdav-offline-boundary.jpg"))
+
+    try await sessionStore.save(SessionState(cookie: "sid=local", isLoggedIn: true, accountUID: "123"))
+    try await favoriteStore.saveFavorites([favorite])
+    try await offlineStore.saveOfflineImageData(Data([9]), for: imageURL)
+    try await offlineStore.saveMembership(MangaOfflineCacheMembership(
+        favoriteID: favorite.id,
+        favoriteTitle: favorite.title,
+        favoriteURL: favorite.url,
+        tid: "960",
+        chapterTitle: "第960话",
+        chapterURL: favoriteURL,
+        imageURLs: [imageURL]
+    ))
+    _ = try await offlineStore.enqueueOfflineCacheWork(MangaOfflineCacheWorkRequest(
+        favoriteID: favorite.id,
+        favoriteTitle: favorite.title,
+        favoriteURL: favorite.url,
+        tid: "961",
+        chapterTitle: "第961话",
+        chapterURL: favoriteURL,
+        targetImageURLs: [imageURL]
+    ))
+
+    var uploadedPayloadData: Data?
+    WebDAVTestURLProtocol.setHandler(for: host) { request in
+        switch request.httpMethod {
+        case "GET":
+            return (Data(), HTTPURLResponse(url: request.url!, statusCode: 404, httpVersion: nil, headerFields: nil)!)
+        case "MKCOL":
+            return (Data(), HTTPURLResponse(url: request.url!, statusCode: 201, httpVersion: nil, headerFields: nil)!)
+        case "PUT":
+            uploadedPayloadData = request.webDAVBodyData()
+            return (Data(), HTTPURLResponse(url: request.url!, statusCode: 201, httpVersion: nil, headerFields: nil)!)
+        default:
+            Issue.record("Unexpected method \(request.httpMethod ?? "nil")")
+            return (Data(), HTTPURLResponse(url: request.url!, statusCode: 500, httpVersion: nil, headerFields: nil)!)
+        }
+    }
+    defer { WebDAVTestURLProtocol.removeHandler(for: host) }
+
+    let service = WebDAVSyncService(
+        settingsStore: settingsStore,
+        favoriteStore: favoriteStore,
+        sessionStore: sessionStore,
+        client: WebDAVClient(session: makeWebDAVTestSession())
+    )
+
+    _ = try await service.upload(using: settings)
+
+    let payloadData = try #require(uploadedPayloadData)
+    let payloadObject = try #require(JSONSerialization.jsonObject(with: payloadData) as? [String: Any])
+    let libraryObject = try #require(payloadObject["library"] as? [String: Any])
+    #expect(libraryObject["mangaOfflineCache"] == nil)
+    #expect(libraryObject["offlineCache"] == nil)
+    #expect(libraryObject["queueWorks"] == nil)
+    #expect((try JSONDecoder().decode(WebDAVSyncPayload.self, from: payloadData)).library.favorites == [favorite])
+    #expect(await offlineStore.membership(favoriteID: favorite.id, tid: "960") != nil)
+    #expect(await offlineStore.offlineCacheWork(favoriteID: favorite.id, tid: "961") != nil)
+}
+
+@Test func webDAVServiceDownloadFavoriteRemovalCleansOwnedMangaOfflineCache() async throws {
+    let suiteName = makeWebDAVDefaultsSuiteName(prefix: "webdav-download-offline-cleanup")
+    UserDefaults(suiteName: suiteName)?.removePersistentDomain(forName: suiteName)
+    let rootDirectory = makeWebDAVTemporaryDirectory(prefix: "webdav-download-offline-cleanup")
+    let offlineStore = FileMangaOfflineCacheStore(baseDirectory: rootDirectory.appendingPathComponent("offline", isDirectory: true))
+    let settingsStore = WebDAVSyncSettingsStore(defaults: try makeWebDAVDefaults(suiteName: suiteName), key: "webdav")
+    let favoriteStore = FavoriteStore(
+        defaults: try makeWebDAVDefaults(suiteName: suiteName),
+        key: "favorites",
+        mangaOfflineCacheStore: offlineStore
+    )
+    let sessionStore = SessionStore(defaults: try makeWebDAVDefaults(suiteName: suiteName), key: "session")
+    let host = "download-offline-cleanup.example.com"
+    let settings = WebDAVSyncSettings(baseURLString: "https://\(host)", username: "admin", password: "secret")
+    let favoriteURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=962&mobile=2"))
+    let favorite = Favorite(id: "favorite-webdav-removed", title: "被同步移除", url: favoriteURL, type: .manga)
+    let imageURL = try #require(URL(string: "https://img.example.com/webdav-download-cleanup.jpg"))
+    let payload = WebDAVSyncPayload(
+        updatedAt: Date(timeIntervalSince1970: 2_000),
+        accountUID: "123",
+        library: FavoriteLibrarySnapshot(favorites: [], collections: [])
+    )
+    let encodedPayload = try JSONEncoder().encode(payload)
+
+    try await sessionStore.save(SessionState(cookie: "sid=local", isLoggedIn: true, accountUID: "123"))
+    try await favoriteStore.saveFavorites([favorite])
+    try await offlineStore.saveOfflineImageData(Data([8]), for: imageURL)
+    try await offlineStore.saveMembership(MangaOfflineCacheMembership(
+        favoriteID: favorite.id,
+        favoriteTitle: favorite.title,
+        favoriteURL: favorite.url,
+        tid: "962",
+        chapterTitle: "第962话",
+        chapterURL: favoriteURL,
+        imageURLs: [imageURL]
+    ))
+    _ = try await offlineStore.enqueueOfflineCacheWork(MangaOfflineCacheWorkRequest(
+        favoriteID: favorite.id,
+        favoriteTitle: favorite.title,
+        favoriteURL: favorite.url,
+        tid: "963",
+        chapterTitle: "第963话",
+        chapterURL: favoriteURL,
+        targetImageURLs: [imageURL]
+    ))
+
+    WebDAVTestURLProtocol.setHandler(for: host) { request in
+        #expect(request.httpMethod == "GET")
+        return (
+            encodedPayload,
+            HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
+        )
+    }
+    defer { WebDAVTestURLProtocol.removeHandler(for: host) }
+
+    let service = WebDAVSyncService(
+        settingsStore: settingsStore,
+        favoriteStore: favoriteStore,
+        sessionStore: sessionStore,
+        client: WebDAVClient(session: makeWebDAVTestSession())
+    )
+
+    _ = try await service.download(using: settings)
+
+    #expect(await favoriteStore.loadFavorites() == [])
+    #expect(await offlineStore.membership(favoriteID: favorite.id, tid: "962") == nil)
+    #expect(await offlineStore.offlineCacheWork(favoriteID: favorite.id, tid: "963") == nil)
+    #expect(await offlineStore.offlineImageData(for: imageURL) == nil)
+}
+
 @Test func webDAVSyncRoundTripsFavoriteTagsAndAssociations() async throws {
     let uploadSuiteName = makeWebDAVDefaultsSuiteName(prefix: "webdav-tag-upload")
     let downloadSuiteName = makeWebDAVDefaultsSuiteName(prefix: "webdav-tag-download")

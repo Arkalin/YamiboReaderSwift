@@ -47,6 +47,7 @@ public actor FavoriteStore: FavoriteStoring {
     private let tagsKey: String
     private let archivedMetadataKey: String
     private let syncMetadataKey: String
+    private let mangaOfflineCacheStore: (any MangaOfflineCacheStoring)?
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
 
@@ -54,13 +55,18 @@ public actor FavoriteStore: FavoriteStoring {
     fileprivate static let collectionEntryPrefix = "collection:"
     fileprivate static let favoriteEntryPrefix = "favorite:"
 
-    public init(defaults: UserDefaults = .standard, key: String = "yamibo.favorites") {
+    public init(
+        defaults: UserDefaults = .standard,
+        key: String = "yamibo.favorites",
+        mangaOfflineCacheStore: (any MangaOfflineCacheStoring)? = nil
+    ) {
         self.defaults = defaults
         self.key = key
         collectionsKey = "\(key).collections"
         tagsKey = "\(key).tags"
         archivedMetadataKey = "\(key).archivedMetadata"
         syncMetadataKey = "\(key).syncMetadata"
+        self.mangaOfflineCacheStore = mangaOfflineCacheStore
     }
 
     public func loadFavorites() async -> [Favorite] {
@@ -112,22 +118,26 @@ public actor FavoriteStore: FavoriteStoring {
     }
 
     public func saveFavorites(_ favorites: [Favorite]) async throws {
+        let previousSnapshot = await loadLibrarySnapshot()
         let collections = await loadCollections()
-        _ = try persistLibrary(
+        let persisted = try persistLibrary(
             favorites: favorites,
             collections: collections,
             metadataUpdate: Self.touchUserOwnedChanges(date: .now)
         )
+        try await cleanupMangaOfflineCacheForRemovedFavorites(previous: previousSnapshot, next: persisted)
     }
 
     public func saveLibrarySnapshot(_ snapshot: FavoriteLibrarySnapshot) async throws {
-        _ = try persistLibrary(
+        let previousSnapshot = await loadLibrarySnapshot()
+        let persisted = try persistLibrary(
             favorites: snapshot.favorites,
             collections: snapshot.collections,
             tags: snapshot.tags,
             archivedMetadata: snapshot.archivedMetadata,
             syncMetadata: snapshot.syncMetadata
         )
+        try await cleanupMangaOfflineCacheForRemovedFavorites(previous: previousSnapshot, next: persisted)
     }
 
     public func createTag(
@@ -212,7 +222,8 @@ public actor FavoriteStore: FavoriteStoring {
     }
 
     public func mergeRemoteFavorites(_ favorites: [Favorite]) async throws -> [Favorite] {
-        var library = FavoriteLibrary(snapshot: await loadLibrarySnapshot())
+        let previousSnapshot = await loadLibrarySnapshot()
+        var library = FavoriteLibrary(snapshot: previousSnapshot)
         library.reconcileRemoteFavorites(favorites)
         let snapshot = try persistLibrary(
             favorites: library.snapshot.favorites,
@@ -221,6 +232,7 @@ public actor FavoriteStore: FavoriteStoring {
             archivedMetadata: library.snapshot.archivedMetadata,
             metadataUpdate: Self.touchRemoteFavorites(date: .now)
         )
+        try await cleanupMangaOfflineCacheForRemovedFavorites(previous: previousSnapshot, next: snapshot)
         return snapshot.favorites
     }
 
@@ -631,11 +643,13 @@ public actor FavoriteStore: FavoriteStoring {
         guard !selectedIDs.isEmpty else { return snapshot }
 
         let updatedFavorites = snapshot.favorites.filter { !selectedIDs.contains($0.id) }
-        return try persistLibrary(
+        let persisted = try persistLibrary(
             favorites: updatedFavorites,
             collections: snapshot.collections,
             metadataUpdate: Self.touchUserOwnedChanges(date: .now)
         )
+        try await cleanupMangaOfflineCacheForRemovedFavorites(previous: snapshot, next: persisted)
+        return persisted
     }
 
     public func favorite(for url: URL) async -> Favorite? {
@@ -787,13 +801,27 @@ public actor FavoriteStore: FavoriteStoring {
     }
 
     public func clearAll() async throws {
-        _ = try persistLibrary(
+        let previousSnapshot = await loadLibrarySnapshot()
+        let persisted = try persistLibrary(
             favorites: [],
             collections: [],
             tags: [],
             archivedMetadata: [],
             metadataUpdate: Self.touchUserOwnedChanges(date: .now)
         )
+        try await cleanupMangaOfflineCacheForRemovedFavorites(previous: previousSnapshot, next: persisted)
+    }
+
+    private func cleanupMangaOfflineCacheForRemovedFavorites(
+        previous: FavoriteLibrarySnapshot,
+        next: FavoriteLibrarySnapshot
+    ) async throws {
+        guard let mangaOfflineCacheStore else { return }
+        let nextFavoriteIDs = Set(next.favorites.map(\.id))
+        let removedFavoriteIDs = Set(previous.favorites.map(\.id)).subtracting(nextFavoriteIDs)
+        for favoriteID in removedFavoriteIDs {
+            try await mangaOfflineCacheStore.removeMemberships(forFavoriteID: favoriteID)
+        }
     }
 
     private func persistLibrary(

@@ -144,6 +144,67 @@ private enum YamiboAccountTestError: Error {
     #expect(cachedProfile == profile)
 }
 
+@Test func yamiboAccountServiceClearLocalAuthenticationPreservesFavoriteLibraryAndMangaOfflineCache() async throws {
+    let suiteName = "yamibo-account-signout-preserves-local-data-\(UUID().uuidString)"
+    let rootDirectory = FileManager.default.temporaryDirectory
+        .appendingPathComponent("yamibo-account-signout-preserves-local-data-\(UUID().uuidString)", isDirectory: true)
+    let defaults = try #require(UserDefaults(suiteName: suiteName))
+    defaults.removePersistentDomain(forName: suiteName)
+    let sessionStore = SessionStore(defaults: try #require(UserDefaults(suiteName: suiteName)), key: "session")
+    let profileStore = YamiboProfileStore(defaults: try #require(UserDefaults(suiteName: suiteName)), key: "profile")
+    let favoriteStore = FavoriteStore(defaults: try #require(UserDefaults(suiteName: suiteName)), key: "favorites")
+    let offlineStore = FileMangaOfflineCacheStore(
+        baseDirectory: rootDirectory.appendingPathComponent("offline", isDirectory: true)
+    )
+    let service = YamiboAccountService(
+        session: makeAccountTestSession(),
+        sessionStore: sessionStore,
+        profileStore: profileStore
+    )
+    let favoriteURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=970&mobile=2"))
+    let favorite = Favorite(id: "favorite-signout", title: "退出保留漫画", url: favoriteURL, type: .manga)
+    let imageURL = try #require(URL(string: "https://img.example.com/signout-offline.jpg"))
+
+    try await sessionStore.save(SessionState(cookie: "sid=1; EeqY_2132_auth=token", isLoggedIn: true, accountUID: "535977"))
+    try await profileStore.save(YamiboProfile(
+        uid: "535977",
+        username: "arkalin",
+        userGroup: "百合花蕾",
+        points: 29,
+        partner: 377,
+        totalPoints: 155
+    ))
+    try await favoriteStore.saveFavorites([favorite])
+    try await offlineStore.saveOfflineImageData(Data([7]), for: imageURL)
+    try await offlineStore.saveMembership(MangaOfflineCacheMembership(
+        favoriteID: favorite.id,
+        favoriteTitle: favorite.title,
+        favoriteURL: favorite.url,
+        tid: "970",
+        chapterTitle: "第970话",
+        chapterURL: favoriteURL,
+        imageURLs: [imageURL]
+    ))
+    _ = try await offlineStore.enqueueOfflineCacheWork(MangaOfflineCacheWorkRequest(
+        favoriteID: favorite.id,
+        favoriteTitle: favorite.title,
+        favoriteURL: favorite.url,
+        tid: "971",
+        chapterTitle: "第971话",
+        chapterURL: favoriteURL,
+        targetImageURLs: [imageURL]
+    ))
+
+    try await service.clearLocalAuthentication()
+
+    #expect(await sessionStore.load() == SessionState())
+    #expect(await profileStore.load() == nil)
+    #expect(await favoriteStore.loadFavorites() == [favorite])
+    #expect(await offlineStore.membership(favoriteID: favorite.id, tid: "970") != nil)
+    #expect(await offlineStore.offlineCacheWork(favoriteID: favorite.id, tid: "971") != nil)
+    #expect(await offlineStore.offlineImageData(for: imageURL) == Data([7]))
+}
+
 private func makeAccountTestSession() -> URLSession {
     let configuration = URLSessionConfiguration.ephemeral
     configuration.protocolClasses = [YamiboAccountTestURLProtocol.self]
