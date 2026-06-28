@@ -88,6 +88,42 @@ final class MangaReaderCacheViewModelTests: XCTestCase {
         XCTAssertEqual(fixture.model.rows.map(\.state), [.cached, .caching, .caching])
     }
 
+    func testCacheCommandStartsOfflineCacheQueueAfterEnqueuingNewChapters() async throws {
+        let controller = RecordingMangaReaderCacheQueueController()
+        let fixture = try await makeCacheFixture(
+            chapters: [cacheChapter(tid: "100", number: 1)],
+            offlineCacheQueueControllerProvider: { controller }
+        )
+
+        await fixture.model.load()
+        await fixture.model.cacheSelected(tids: ["100"])
+
+        let events = await controller.snapshotEvents()
+        XCTAssertEqual(events, ["continue"])
+    }
+
+    func testCacheCommandDoesNotContinueQueueWhenFailedWorkIsPresent() async throws {
+        let controller = RecordingMangaReaderCacheQueueController()
+        let fixture = try await makeCacheFixture(
+            chapters: [
+                cacheChapter(tid: "100", number: 1),
+                cacheChapter(tid: "200", number: 2)
+            ],
+            offlineCacheQueueControllerProvider: { controller }
+        )
+        _ = try await fixture.store.enqueueOfflineCacheWork(cacheWorkRequest(favorite: fixture.favorite, tid: "200"))
+        try await fixture.store.markOfflineCacheWorkFailed(ownerName: fixture.favorite.title, tid: "200", message: "Timeout")
+
+        await fixture.model.load()
+        await fixture.model.cacheSelected(tids: ["100", "200"])
+
+        let events = await controller.snapshotEvents()
+        XCTAssertEqual(events, [])
+        let works = await fixture.store.allOfflineCacheWorks()
+        XCTAssertEqual(Set(works.map(\.tid)), ["100", "200"])
+        XCTAssertEqual(works.first(where: { $0.tid == "200" })?.state, .failed)
+    }
+
     func testDeleteCommandRemovesCachedMembershipAndCancelsUnfinishedOrFailedWork() async throws {
         let fixture = try await makeCacheFixture(chapters: [
             cacheChapter(tid: "100", number: 1),
@@ -152,7 +188,8 @@ private struct MangaReaderCacheFixture {
 @MainActor
 private func makeCacheFixture(
     chapters: [MangaChapter],
-    saveFavorite: Bool = true
+    saveFavorite: Bool = true,
+    offlineCacheQueueControllerProvider: (@Sendable () async -> any MangaOfflineCacheQueueControlling)? = nil
 ) async throws -> MangaReaderCacheFixture {
     let suiteName = YamiboTestDefaults.suiteName(prefix: "manga-reader-cache")
     let favoriteStore = try FavoriteStore(testSuiteName: suiteName, key: "favorites")
@@ -187,11 +224,36 @@ private func makeCacheFixture(
             context: context,
             panel: panel,
             favoriteStore: favoriteStore,
-            offlineCacheStore: offlineStore
+            offlineCacheStore: offlineStore,
+            offlineCacheQueueControllerProvider: offlineCacheQueueControllerProvider
         ),
         favorite: favorite,
         store: offlineStore
     )
+}
+
+private actor RecordingMangaReaderCacheQueueController: MangaOfflineCacheQueueControlling {
+    private var events: [String] = []
+
+    func snapshotEvents() -> [String] {
+        events
+    }
+
+    func continueQueue() async throws {
+        events.append("continue")
+    }
+
+    func pauseQueue() async throws {
+        events.append("pause")
+    }
+
+    func cancelChapter(ownerName: String, tid: String) async throws {
+        events.append("cancel:\(ownerName):\(tid)")
+    }
+
+    func cancelOwnerGroup(ownerName: String) async throws {
+        events.append("cancel-group:\(ownerName)")
+    }
 }
 
 private func cacheChapter(tid: String, number: Double) throws -> MangaChapter {

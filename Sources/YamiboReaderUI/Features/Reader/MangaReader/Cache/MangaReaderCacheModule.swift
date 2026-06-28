@@ -62,18 +62,22 @@ public final class MangaReaderCacheViewModel: ObservableObject {
     private let panel: MangaDirectoryPanelPresentation
     private let favoriteStore: any FavoriteStoring
     private let offlineCacheStore: any MangaOfflineCacheStoring
+    private let offlineCacheQueueControllerProvider: (@Sendable () async -> any MangaOfflineCacheQueueControlling)?
+    private var offlineCacheQueueController: (any MangaOfflineCacheQueueControlling)?
     private var offlineCacheUpdatesTask: Task<Void, Never>?
 
     public init(
         context: MangaLaunchContext,
         panel: MangaDirectoryPanelPresentation,
         favoriteStore: any FavoriteStoring,
-        offlineCacheStore: any MangaOfflineCacheStoring
+        offlineCacheStore: any MangaOfflineCacheStoring,
+        offlineCacheQueueControllerProvider: (@Sendable () async -> any MangaOfflineCacheQueueControlling)? = nil
     ) {
         self.context = context
         self.panel = panel
         self.favoriteStore = favoriteStore
         self.offlineCacheStore = offlineCacheStore
+        self.offlineCacheQueueControllerProvider = offlineCacheQueueControllerProvider
     }
 
     deinit {
@@ -151,8 +155,9 @@ public final class MangaReaderCacheViewModel: ObservableObject {
         guard !targetTIDs.isEmpty else { return }
 
         do {
+            var didEnqueueWork = false
             for chapter in panel.displayChapters where targetTIDs.contains(chapter.tid) {
-                _ = try await offlineCacheStore.enqueueOfflineCacheWork(
+                let result = try await offlineCacheStore.enqueueOfflineCacheWork(
                     MangaOfflineCacheWorkRequest(
                         ownerName: ownerName,
                         tid: chapter.tid,
@@ -160,10 +165,17 @@ public final class MangaReaderCacheViewModel: ObservableObject {
                         chapterURL: chapter.url
                     )
                 )
+                if case .enqueued = result {
+                    didEnqueueWork = true
+                }
+            }
+            if didEnqueueWork {
+                try await continueOfflineCacheQueueIfAllowed()
             }
             await refreshRows()
         } catch {
             errorMessage = error.localizedDescription
+            await refreshRows()
         }
     }
 
@@ -196,6 +208,23 @@ public final class MangaReaderCacheViewModel: ObservableObject {
                 await self?.refreshRows()
             }
         }
+    }
+
+    private func continueOfflineCacheQueueIfAllowed() async throws {
+        let works = await offlineCacheStore.allOfflineCacheWorks()
+        guard works.allSatisfy({ $0.state != .failed }) else { return }
+        guard let controller = await offlineCacheController() else { return }
+        try await controller.continueQueue()
+    }
+
+    private func offlineCacheController() async -> (any MangaOfflineCacheQueueControlling)? {
+        if let offlineCacheQueueController {
+            return offlineCacheQueueController
+        }
+        guard let offlineCacheQueueControllerProvider else { return nil }
+        let controller = await offlineCacheQueueControllerProvider()
+        offlineCacheQueueController = controller
+        return controller
     }
 
     private var presentationTitle: String {
