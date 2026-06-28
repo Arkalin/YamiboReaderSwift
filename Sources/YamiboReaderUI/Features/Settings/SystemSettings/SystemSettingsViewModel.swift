@@ -53,6 +53,14 @@ final class SystemSettingsViewModel: ObservableObject {
         selectedMangaOfflineCacheOwnerNames.count
     }
 
+    var mangaOfflineCacheCleanupSelectionActionState: MangaOfflineCacheCleanupSelectionActionState {
+        MangaOfflineCacheCleanupSelectionActionState(
+            selectedOwnerCount: selectedMangaOfflineCacheOwnerNames.count,
+            canDelete: !selectedMangaOfflineCacheOwnerNames.isEmpty
+                && activeAction != .clearingMangaOfflineCache
+        )
+    }
+
     func load() async {
         activeAction = .loading
         defer { activeAction = nil }
