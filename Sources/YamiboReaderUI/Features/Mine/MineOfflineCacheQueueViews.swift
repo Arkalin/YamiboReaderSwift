@@ -51,7 +51,7 @@ struct MineOfflineCacheQueueSheet: View {
             .background(MineOfflineCacheQueuePalette.groupedBackground)
             .navigationTitle(L10n.string("mine.download_queue"))
             .task {
-                await viewModel.refreshOfflineCacheQueue()
+                await viewModel.loadOfflineCacheQueue()
             }
             .refreshable {
                 await viewModel.refreshOfflineCacheQueue()

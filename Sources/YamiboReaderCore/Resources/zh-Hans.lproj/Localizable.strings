@@ -224,6 +224,7 @@
 "manga.offline_cache.add_favorite_title" = "需要收藏";
 "manga.offline_cache.caching" = "缓存中";
 "manga.offline_cache.chapter_section" = "章节";
+"manga.offline_cache.queue_button_accessibility_format" = "下载队列，%d 项任务";
 "manga.offline_cache.title" = "漫画缓存";
 "manga.offline_cache.uncached" = "未缓存";
 "manga.double_tap_zoom" = "双击缩放";

@@ -153,8 +153,7 @@ public struct MangaReaderView: View {
                 MangaReaderCacheSheet(
                     context: context,
                     panel: loaded.directoryPanel,
-                    favoriteStore: appModel.appContext.favoriteStore,
-                    offlineCacheStore: appModel.appContext.mangaOfflineCacheStore
+                    appContext: appModel.appContext
                 )
             } else {
                 MangaDirectoryUnavailableSheet()
