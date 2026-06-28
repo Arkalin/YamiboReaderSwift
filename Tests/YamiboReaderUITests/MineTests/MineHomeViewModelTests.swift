@@ -192,6 +192,40 @@ final class MineHomeViewModelTests: XCTestCase {
         XCTAssertEqual(failedRow.failureStatusText, "Timeout")
     }
 
+    func testOfflineCacheQueueAutomaticallyRefreshesWhenStoreProgressChanges() async throws {
+        let fixture = try await makeMineHomeFixture()
+        let firstImage = try XCTUnwrap(URL(string: "https://img.example.com/100-1.jpg"))
+        let secondImage = try XCTUnwrap(URL(string: "https://img.example.com/100-2.jpg"))
+        _ = try await fixture.offlineCacheStore.enqueueOfflineCacheWork(
+            try makeMineOfflineCacheWorkRequest(
+                favoriteID: "favorite-a",
+                tid: "100",
+                targetImageURLs: [firstImage, secondImage]
+            )
+        )
+        let viewModel = MineHomeViewModel(appContext: fixture.appContext)
+
+        await viewModel.load()
+        XCTAssertEqual(viewModel.offlineCacheQueueGroups.first?.chapters.first?.completedImageCount, 0)
+
+        try await fixture.offlineCacheStore.updateOfflineCacheWorkProgress(
+            favoriteID: "favorite-a",
+            tid: "100",
+            targetImageURLs: [firstImage, secondImage],
+            completedImageURLs: [firstImage],
+            currentBytesPerSecond: 4096
+        )
+
+        try await waitForMineHomeCondition {
+            viewModel.offlineCacheQueueGroups.first?.chapters.first?.completedImageCount == 1
+        }
+        let row = try XCTUnwrap(viewModel.offlineCacheQueueGroups.first?.chapters.first)
+        XCTAssertEqual(row.completedImageCount, 1)
+        XCTAssertEqual(row.targetImageCount, 2)
+        XCTAssertEqual(row.percentageText, L10n.string("mine.offline_queue.percent_format", 50))
+        XCTAssertNotNil(row.speedText)
+    }
+
     func testOfflineCacheQueueEmptyStateHidesControls() async throws {
         let fixture = try await makeMineHomeFixture()
         let viewModel = MineHomeViewModel(appContext: fixture.appContext)
@@ -496,4 +530,17 @@ private func makeMineDirectoryChapter(tid: String, chapterNumber: Double) throws
 
 private func makeMineTemporaryDirectory() -> URL {
     FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+}
+
+private func waitForMineHomeCondition(
+    timeoutNanoseconds: UInt64 = 2_000_000_000,
+    condition: @escaping @MainActor () -> Bool
+) async throws {
+    let start = ContinuousClock.now
+    while await MainActor.run(body: condition) == false {
+        if start.duration(to: .now) > .nanoseconds(Int64(timeoutNanoseconds)) {
+            throw YamiboError.underlying("Timed out waiting for condition")
+        }
+        try await Task.sleep(nanoseconds: 10_000_000)
+    }
 }
