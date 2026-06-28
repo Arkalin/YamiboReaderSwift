@@ -37,7 +37,21 @@ public struct MineHomeView: View {
                     }
                 }
 
-                MineCheckInSection()
+                MineCheckInSection(
+                    isLoggedIn: viewModel.isLoggedIn,
+                    isCheckingIn: viewModel.isCheckingIn,
+                    hasCheckedInToday: viewModel.hasCheckedInToday,
+                    isInteractionDisabled: viewModel.isBusy,
+                    checkIn: {
+                        if viewModel.isLoggedIn {
+                            Task {
+                                await viewModel.checkIn()
+                            }
+                        } else {
+                            showingLoginSheet = true
+                        }
+                    }
+                )
                 MineLibraryEntriesSection(
                     offlineCacheQueueCount: viewModel.offlineCacheQueueEntryCount,
                     showOfflineCacheQueue: {
@@ -68,6 +82,13 @@ public struct MineHomeView: View {
                 }
             }, message: {
                 Text(viewModel.errorMessage ?? "")
+            })
+            .alert(L10n.string("mine.check_in"), isPresented: checkInResultIsPresented, actions: {
+                Button(L10n.string("common.ok")) {
+                    viewModel.checkInResultMessage = nil
+                }
+            }, message: {
+                Text(viewModel.checkInResultMessage ?? "")
             })
             .confirmationDialog(
                 L10n.string("mine.sign_out"),
@@ -110,6 +131,17 @@ public struct MineHomeView: View {
             set: { isPresented in
                 if !isPresented {
                     viewModel.errorMessage = nil
+                }
+            }
+        )
+    }
+
+    private var checkInResultIsPresented: Binding<Bool> {
+        Binding(
+            get: { viewModel.checkInResultMessage != nil },
+            set: { isPresented in
+                if !isPresented {
+                    viewModel.checkInResultMessage = nil
                 }
             }
         )

@@ -474,7 +474,7 @@ private func makeFixture() throws -> SystemSettingsFixture {
     )
     let appContext = YamiboAppContext(
         sessionStore: SessionStore(defaults: try makeDefaults(suiteName: suiteName), key: "session"),
-        autoSignInStore: AutoSignInStore(defaults: try makeDefaults(suiteName: suiteName), keyPrefix: "auto-sign-in"),
+        checkInStore: YamiboCheckInStore(defaults: try makeDefaults(suiteName: suiteName), keyPrefix: "check-in"),
         settingsStore: settingsStore,
         webDAVSyncSettingsStore: WebDAVSyncSettingsStore(defaults: try makeDefaults(suiteName: suiteName), key: "webdav"),
         readerResumeRouteStore: ReaderResumeRouteStore(defaults: try makeDefaults(suiteName: suiteName), key: "reader-resume-route"),

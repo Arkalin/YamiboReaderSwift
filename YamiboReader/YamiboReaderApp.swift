@@ -151,21 +151,21 @@ private struct LaunchAnimationView: View {
 }
 
 #if canImport(AppIntents)
-struct YamiboSignInIntent: AppIntent {
+struct YamiboCheckInIntent: AppIntent {
     static let title = LocalizedStringResource(
-        "app.intent.sign_in.title",
+        "app.intent.check_in.title",
         table: "Localizable"
     )
     static let description = IntentDescription(
         LocalizedStringResource(
-            "app.intent.sign_in.description",
+            "app.intent.check_in.description",
             table: "Localizable"
         )
     )
     static let openAppWhenRun = false
 
     func perform() async throws -> some IntentResult & ProvidesDialog {
-        let result = await YamiboAppContext().makeAutoSignInService().signInIfNeeded(force: false)
+        let result = await YamiboAppContext().makeCheckInService().checkInIfNeeded(force: false)
         return .result(dialog: IntentDialog(stringLiteral: result.message))
     }
 }
@@ -174,14 +174,14 @@ struct YamiboAppShortcutsProvider: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
         return [
             AppShortcut(
-                intent: YamiboSignInIntent(),
+                intent: YamiboCheckInIntent(),
                 phrases: [
                     "使用 \(.applicationName) 进行百合会签到",
                     "在 \(.applicationName) 里进行百合会签到",
                     "让 \(.applicationName) 完成百合会签到"
                 ],
                 shortTitle: LocalizedStringResource(
-                    "app.intent.sign_in.title",
+                    "app.intent.check_in.title",
                     table: "Localizable"
                 ),
                 systemImageName: "checkmark.circle"

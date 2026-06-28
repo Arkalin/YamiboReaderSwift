@@ -17,13 +17,46 @@ struct MineSettingsSection: View {
 }
 
 struct MineCheckInSection: View {
+    let isLoggedIn: Bool
+    let isCheckingIn: Bool
+    let hasCheckedInToday: Bool
+    let isInteractionDisabled: Bool
+    let checkIn: () -> Void
+
     var body: some View {
         Section {
-            MineEntryDisplayRow(
-                title: L10n.string("mine.check_in"),
+            MineEntryButtonRow(
+                title: title,
                 systemImage: "checkmark.seal.fill",
-                tint: .green
+                tint: .green,
+                showsProgress: isCheckingIn,
+                showsDisclosureIndicator: !hasCheckedInToday,
+                action: checkIn
             )
+            .disabled(isInteractionDisabled || hasCheckedInToday)
+            .accessibilityHint(
+                accessibilityHint
+            )
+        }
+    }
+
+    private var title: String {
+        if isCheckingIn {
+            L10n.string("mine.checking_in")
+        } else if hasCheckedInToday {
+            L10n.string("yamibo_check_in.already_checked_in_today")
+        } else {
+            L10n.string("mine.check_in")
+        }
+    }
+
+    private var accessibilityHint: String {
+        if hasCheckedInToday {
+            L10n.string("mine.check_in_checked_hint")
+        } else if isLoggedIn {
+            L10n.string("mine.check_in_hint")
+        } else {
+            L10n.string("mine.check_in_login_hint")
         }
     }
 }
@@ -70,11 +103,20 @@ private struct MineEntryButtonRow: View {
     let systemImage: String
     let tint: Color
     var badgeText: String? = nil
+    var showsProgress = false
+    var showsDisclosureIndicator = true
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            MineEntryRowContent(title: title, systemImage: systemImage, tint: tint, badgeText: badgeText)
+            MineEntryRowContent(
+                title: title,
+                systemImage: systemImage,
+                tint: tint,
+                badgeText: badgeText,
+                showsProgress: showsProgress,
+                showsDisclosureIndicator: showsDisclosureIndicator
+            )
         }
         .buttonStyle(.plain)
     }
@@ -85,6 +127,8 @@ private struct MineEntryRowContent: View {
     let systemImage: String
     let tint: Color
     var badgeText: String? = nil
+    var showsProgress = false
+    var showsDisclosureIndicator = true
 
     var body: some View {
         HStack(spacing: 12) {
@@ -109,9 +153,14 @@ private struct MineEntryRowContent: View {
                     .background(.secondary.opacity(0.12), in: Capsule())
             }
 
-            Image(systemName: "chevron.right")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.tertiary)
+            if showsProgress {
+                ProgressView()
+                    .controlSize(.small)
+            } else if showsDisclosureIndicator {
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+            }
         }
         .contentShape(Rectangle())
     }

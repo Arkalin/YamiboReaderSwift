@@ -41,7 +41,7 @@ public struct SystemSettingsView: View {
                     )
 
                     Button {
-                        openAutoSignInAutomationCreator()
+                        openCheckInAutomationCreator()
                     } label: {
                         SystemSettingsRow(
                             title: L10n.string("settings.auto_sign_in"),
@@ -316,7 +316,7 @@ public struct SystemSettingsView: View {
         )
     }
 
-    private func openAutoSignInAutomationCreator() {
+    private func openCheckInAutomationCreator() {
         guard let url = URL(string: "shortcuts://create-automation") else {
             viewModel.errorMessage = L10n.string("settings.shortcuts_open_failed")
             return

@@ -1,8 +1,8 @@
 import Foundation
 
-public enum AutoSignInResult: Equatable, Sendable {
+public enum YamiboCheckInResult: Equatable, Sendable {
     case success
-    case alreadySignedToday
+    case alreadyCheckedInToday
     case skippedToday
     case notAuthenticated
     case parseFailed
@@ -12,50 +12,54 @@ public enum AutoSignInResult: Equatable, Sendable {
     public var message: String {
         switch self {
         case .success:
-            L10n.string("auto_sign_in.success")
-        case .alreadySignedToday, .skippedToday:
-            L10n.string("auto_sign_in.already_signed_today")
+            L10n.string("yamibo_check_in.success")
+        case .alreadyCheckedInToday, .skippedToday:
+            L10n.string("yamibo_check_in.already_checked_in_today")
         case .notAuthenticated:
-            L10n.string("auto_sign_in.not_authenticated")
+            L10n.string("yamibo_check_in.not_authenticated")
         case .parseFailed:
-            L10n.string("auto_sign_in.parse_failed")
+            L10n.string("yamibo_check_in.parse_failed")
         case .verificationFailed:
-            L10n.string("auto_sign_in.verification_failed")
+            L10n.string("yamibo_check_in.verification_failed")
         case let .networkFailed(message):
             message
         }
     }
 }
 
-public struct AutoSignInService: Sendable {
-    public static let signPageURL = URL(string: "https://bbs.yamibo.com/plugin.php?id=zqlj_sign&mobile=2")!
+public protocol YamiboCheckInServicing: Sendable {
+    func checkInIfNeeded(force: Bool) async -> YamiboCheckInResult
+}
+
+public struct YamiboCheckInService: YamiboCheckInServicing, Sendable {
+    public static let checkInPageURL = URL(string: "https://bbs.yamibo.com/plugin.php?id=zqlj_sign&mobile=2")!
 
     private let sessionStore: SessionStore
-    private let autoSignInStore: AutoSignInStore
+    private let checkInStore: YamiboCheckInStore
     private let session: URLSession
     private let verificationDelayNanoseconds: UInt64
 
     public init(
         sessionStore: SessionStore,
-        autoSignInStore: AutoSignInStore,
+        checkInStore: YamiboCheckInStore,
         session: URLSession = YamiboNetworkConfiguration.makeSession(),
         verificationDelayNanoseconds: UInt64 = 3_000_000_000
     ) {
         self.sessionStore = sessionStore
-        self.autoSignInStore = autoSignInStore
+        self.checkInStore = checkInStore
         self.session = session
         self.verificationDelayNanoseconds = verificationDelayNanoseconds
     }
 
-    public func signInIfNeeded(force: Bool = false) async -> AutoSignInResult {
+    public func checkInIfNeeded(force: Bool = false) async -> YamiboCheckInResult {
         let sessionState = await sessionStore.load()
         guard sessionState.isLoggedIn, !sessionState.cookie.isEmpty else {
             return .notAuthenticated
         }
 
         if !force {
-            let needsSignIn = await autoSignInStore.needsSignIn(session: sessionState)
-            if !needsSignIn {
+            let needsCheckIn = await checkInStore.needsCheckIn(session: sessionState)
+            if !needsCheckIn {
                 return .skippedToday
             }
         }
@@ -66,24 +70,24 @@ public struct AutoSignInService: Sendable {
             userAgent: sessionState.userAgent
         )
 
-        let signPageHTML: String
+        let checkInPageHTML: String
         do {
-            signPageHTML = try await client.fetchHTML(url: Self.signPageURL)
+            checkInPageHTML = try await client.fetchHTML(url: Self.checkInPageURL)
         } catch {
             return mapNetworkError(error)
         }
 
-        if Self.isAlreadySigned(in: signPageHTML) {
-            await autoSignInStore.markSignedIn(session: sessionState)
-            return .alreadySignedToday
+        if Self.isAlreadyCheckedIn(in: checkInPageHTML) {
+            await checkInStore.markCheckedIn(session: sessionState)
+            return .alreadyCheckedInToday
         }
 
-        guard let signURL = Self.extractSignURL(from: signPageHTML) else {
+        guard let checkInURL = Self.extractCheckInURL(from: checkInPageHTML) else {
             return .parseFailed
         }
 
         do {
-            _ = try await client.fetchHTML(url: signURL)
+            _ = try await client.fetchHTML(url: checkInURL)
         } catch {
             return mapNetworkError(error)
         }
@@ -93,30 +97,30 @@ public struct AutoSignInService: Sendable {
         }
 
         do {
-            let verificationHTML = try await client.fetchHTML(url: Self.signPageURL)
-            guard Self.isAlreadySigned(in: verificationHTML) else {
+            let verificationHTML = try await client.fetchHTML(url: Self.checkInPageURL)
+            guard Self.isAlreadyCheckedIn(in: verificationHTML) else {
                 return .verificationFailed
             }
-            await autoSignInStore.markSignedIn(session: sessionState)
+            await checkInStore.markCheckedIn(session: sessionState)
             return .success
         } catch {
             return mapNetworkError(error)
         }
     }
 
-    private func mapNetworkError(_ error: Error) -> AutoSignInResult {
+    private func mapNetworkError(_ error: Error) -> YamiboCheckInResult {
         if let yamiboError = error as? YamiboError, yamiboError == .notAuthenticated {
             return .notAuthenticated
         }
-        let message = (error as? LocalizedError)?.errorDescription ?? L10n.string("auto_sign_in.network_failed")
-        return .networkFailed(message.isEmpty ? L10n.string("auto_sign_in.network_failed") : message)
+        let message = (error as? LocalizedError)?.errorDescription ?? L10n.string("yamibo_check_in.network_failed")
+        return .networkFailed(message.isEmpty ? L10n.string("yamibo_check_in.network_failed") : message)
     }
 
-    private static func isAlreadySigned(in html: String) -> Bool {
+    private static func isAlreadyCheckedIn(in html: String) -> Bool {
         html.contains(#"class="btna">今日已打卡</a>"#)
     }
 
-    private static func extractSignURL(from html: String) -> URL? {
+    private static func extractCheckInURL(from html: String) -> URL? {
         guard html.contains(#"class="btna">点击打卡</a>"#) else {
             return nil
         }

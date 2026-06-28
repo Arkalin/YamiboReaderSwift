@@ -166,7 +166,7 @@ private enum WebDAVTestError: Error {
     let settingsStore = WebDAVSyncSettingsStore(defaults: try makeWebDAVDefaults(suiteName: suiteName), key: "webdav")
     let favoriteStore = FavoriteStore(defaults: try makeWebDAVDefaults(suiteName: suiteName), key: "favorites")
     let sessionStore = SessionStore(defaults: try makeWebDAVDefaults(suiteName: suiteName), key: "session")
-    let autoSignInStore = AutoSignInStore(defaults: try makeWebDAVDefaults(suiteName: suiteName), keyPrefix: "auto-sign")
+    let checkInStore = YamiboCheckInStore(defaults: try makeWebDAVDefaults(suiteName: suiteName), keyPrefix: "check-in")
     let appSettingsStore = SettingsStore(defaults: try makeWebDAVDefaults(suiteName: suiteName), key: "settings")
     let readerCacheStore = ReaderCacheStore(baseDirectory: rootDirectory.appendingPathComponent("reader-cache", isDirectory: true))
 
@@ -180,7 +180,7 @@ private enum WebDAVTestError: Error {
     try await appSettingsStore.save(AppSettings(reader: ReaderAppearanceSettings(readingMode: .vertical)))
     let localSession = SessionState(cookie: "foo=1; EeqY_2132_auth=local-user", userAgent: "Local-UA", isLoggedIn: true, accountUID: "100")
     try await sessionStore.save(localSession)
-    await autoSignInStore.markSignedIn(session: localSession)
+    await checkInStore.markCheckedIn(session: localSession)
 
     let localURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=901&mobile=2"))
     try await readerCacheStore.save(
@@ -227,7 +227,7 @@ private enum WebDAVTestError: Error {
     #expect(loadedLibrary.favorites == [favorite])
     #expect(loadedLibrary.collections == [collection])
     #expect(await sessionStore.load() == localSession)
-    #expect(await autoSignInStore.lastSignedDate(session: localSession) != nil)
+    #expect(await checkInStore.lastCheckedInDate(session: localSession) != nil)
     #expect(await appSettingsStore.load().reader.readingMode == .vertical)
     #expect(await readerCacheStore.totalDiskUsageBytes() > 0)
 }
