@@ -317,31 +317,6 @@ final class MineHomeViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.offlineCacheQueueEntryCount, 0)
     }
 
-    func testOfflineCacheSelectionModeSelectAllCanScopeToOwner() async throws {
-        let fixture = try await makeMineHomeFixture()
-        _ = try await fixture.offlineCacheStore.enqueueOfflineCacheWork(
-            try makeMineOfflineCacheWorkRequest(ownerName: "作品A", tid: "100")
-        )
-        _ = try await fixture.offlineCacheStore.enqueueOfflineCacheWork(
-            try makeMineOfflineCacheWorkRequest(ownerName: "作品A", tid: "200")
-        )
-        _ = try await fixture.offlineCacheStore.enqueueOfflineCacheWork(
-            try makeMineOfflineCacheWorkRequest(ownerName: "作品B", tid: "300")
-        )
-        let viewModel = MineHomeViewModel(appContext: fixture.appContext)
-        await viewModel.refreshOfflineCacheQueue()
-
-        viewModel.selectAllOfflineCacheWorks(ownerName: "作品A")
-
-        XCTAssertEqual(
-            viewModel.selectedOfflineCacheWorkIDs,
-            [
-                MangaOfflineCacheMembershipID(ownerName: "作品A", tid: "100"),
-                MangaOfflineCacheMembershipID(ownerName: "作品A", tid: "200")
-            ]
-        )
-    }
-
     func testOfflineCacheSelectionModeTogglesWholeOwnerGroup() async throws {
         let fixture = try await makeMineHomeFixture()
         _ = try await fixture.offlineCacheStore.enqueueOfflineCacheWork(

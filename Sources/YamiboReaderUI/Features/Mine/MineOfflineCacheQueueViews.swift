@@ -1,6 +1,12 @@
 import SwiftUI
 import YamiboReaderCore
 
+#if os(iOS)
+import UIKit
+#elseif os(macOS)
+import AppKit
+#endif
+
 struct MineOfflineCacheQueueSheet: View {
     let viewModel: MineHomeViewModel
     @Environment(\.dismiss) private var dismiss
@@ -8,42 +14,41 @@ struct MineOfflineCacheQueueSheet: View {
 
     var body: some View {
         NavigationStack {
-            List {
-                if viewModel.offlineCacheQueueIsEmpty {
-                    MineOfflineCacheQueueEmptyState()
-                } else {
-                    if viewModel.showsOfflineCacheQueueControls {
-                        MineOfflineCacheQueueControls(viewModel: viewModel)
-                    }
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    if viewModel.offlineCacheQueueIsEmpty {
+                        MineOfflineCacheQueueEmptyState()
+                    } else {
+                        if viewModel.showsOfflineCacheQueueControls {
+                            MineOfflineCacheQueueControls(viewModel: viewModel)
+                        }
 
-                    ForEach(viewModel.offlineCacheQueueGroups) { group in
-                        Section {
-                            MineOfflineCacheQueueOwnerRow(
-                                group: group,
-                                isSelecting: viewModel.isOfflineCacheQueueSelectionMode,
-                                isSelected: viewModel.isOfflineCacheOwnerSelected(ownerName: group.ownerName),
-                                open: {
-                                    viewModel.setOfflineCacheQueueSelectionMode(false)
-                                    selectedOwnerName = group.ownerName
-                                },
-                                toggleSelection: {
-                                    viewModel.toggleOfflineCacheOwnerSelection(ownerName: group.ownerName)
-                                },
-                                cancel: {
-                                    Task {
-                                        await viewModel.cancelOfflineCacheOwnerGroup(ownerName: group.ownerName)
+                        LazyVStack(spacing: 10) {
+                            ForEach(viewModel.offlineCacheQueueGroups) { group in
+                                MineOfflineCacheQueueOwnerRow(
+                                    group: group,
+                                    isSelecting: viewModel.isOfflineCacheQueueSelectionMode,
+                                    isSelected: viewModel.isOfflineCacheOwnerSelected(ownerName: group.ownerName),
+                                    open: {
+                                        viewModel.setOfflineCacheQueueSelectionMode(false)
+                                        selectedOwnerName = group.ownerName
+                                    },
+                                    toggleSelection: {
+                                        viewModel.toggleOfflineCacheOwnerSelection(ownerName: group.ownerName)
+                                    },
+                                    cancel: {
+                                        Task {
+                                            await viewModel.cancelOfflineCacheOwnerGroup(ownerName: group.ownerName)
+                                        }
                                     }
-                                }
-                            )
+                                )
+                            }
                         }
                     }
                 }
+                .padding(16)
             }
-            #if os(iOS)
-            .listStyle(.insetGrouped)
-            #else
-            .listStyle(.inset)
-            #endif
+            .background(MineOfflineCacheQueuePalette.groupedBackground)
             .navigationTitle(L10n.string("mine.download_queue"))
             .task {
                 await viewModel.refreshOfflineCacheQueue()
@@ -61,8 +66,12 @@ struct MineOfflineCacheQueueSheet: View {
             }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button(L10n.string("common.close")) {
-                        dismiss()
+                    if viewModel.isOfflineCacheQueueSelectionMode {
+                        MineOfflineCacheQueueSelectAllButton(viewModel: viewModel)
+                    } else {
+                        Button(L10n.string("common.close")) {
+                            dismiss()
+                        }
                     }
                 }
 
@@ -79,25 +88,17 @@ struct MineOfflineCacheQueueSheet: View {
                     }
                 }
 
-                if viewModel.isOfflineCacheQueueSelectionMode {
-                    #if os(iOS)
+                #if os(iOS)
+                if viewModel.isOfflineCacheQueueSelectionMode && usesSystemSelectionBottomToolbar {
                     ToolbarItem(placement: .bottomBar) {
-                        MineOfflineCacheQueueSelectAllButton(viewModel: viewModel)
+                        MineOfflineCacheQueueSelectionToolbar(viewModel: viewModel)
                     }
-                    ToolbarItem(placement: .bottomBar) {
-                        Spacer()
-                    }
-                    ToolbarItem(placement: .bottomBar) {
-                        MineOfflineCacheQueueCancelSelectionButton(viewModel: viewModel)
-                    }
-                    #else
-                    ToolbarItem(placement: .secondaryAction) {
-                        MineOfflineCacheQueueSelectAllButton(viewModel: viewModel)
-                    }
-                    ToolbarItem(placement: .confirmationAction) {
-                        MineOfflineCacheQueueCancelSelectionButton(viewModel: viewModel)
-                    }
-                    #endif
+                }
+                #endif
+            }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if viewModel.isOfflineCacheQueueSelectionMode && !usesSystemSelectionBottomToolbar {
+                    MineOfflineCacheQueueSelectionActionBar(viewModel: viewModel)
                 }
             }
             .overlay {
@@ -105,7 +106,17 @@ struct MineOfflineCacheQueueSheet: View {
                     ProgressView()
                 }
             }
+            .sensoryFeedback(.selection, trigger: viewModel.selectedOfflineCacheWorkIDs)
         }
+    }
+
+    private var usesSystemSelectionBottomToolbar: Bool {
+        #if os(iOS)
+        if #available(iOS 26, *) {
+            return true
+        }
+        #endif
+        return false
     }
 
     private var selectedOwnerIsPresented: Binding<Bool> {
@@ -126,10 +137,17 @@ private struct MineOfflineCacheQueueSelectAllButton: View {
     var ownerName: String? = nil
 
     var body: some View {
-        Button(L10n.string("common.select_all")) {
-            viewModel.selectAllOfflineCacheWorks(ownerName: ownerName)
+        Button(title) {
+            viewModel.toggleAllOfflineCacheWorks(ownerName: ownerName)
         }
         .disabled(viewModel.offlineCacheQueueIsEmpty)
+        .accessibilityLabel(title)
+    }
+
+    private var title: String {
+        viewModel.isOfflineCacheWorkSelectionComplete(ownerName: ownerName)
+            ? L10n.string("common.invert_selection")
+            : L10n.string("common.select_all")
     }
 }
 
@@ -142,18 +160,64 @@ private struct MineOfflineCacheQueueCancelSelectionButton: View {
                 await viewModel.cancelSelectedOfflineCacheWorks()
             }
         } label: {
-            Label(
-                L10n.string(
-                    "mine.offline_queue.cancel_selected_format",
-                    viewModel.selectedOfflineCacheWorkCount
-                ),
-                systemImage: "xmark.circle"
-            )
+            VStack(spacing: 3) {
+                Image(systemName: "xmark.circle")
+                    .font(.system(size: 18, weight: .regular))
+                    .frame(width: 24, height: 22)
+
+                Text(L10n.string("common.cancel"))
+                .font(.caption2)
+                .lineLimit(1)
+                .minimumScaleFactor(0.78)
+            }
+            .frame(width: 66)
+            .foregroundStyle(Color.red)
+            .opacity(canCancel ? 1 : 0.35)
+            .contentShape(Rectangle())
         }
-        .disabled(
-            viewModel.selectedOfflineCacheWorkIDs.isEmpty
-                || viewModel.isOfflineCacheQueueCommandRunning
+        .buttonStyle(.plain)
+        .disabled(!canCancel)
+        .accessibilityLabel(
+            L10n.string(
+                "mine.offline_queue.cancel_selected_format",
+                viewModel.selectedOfflineCacheWorkCount
+            )
         )
+    }
+
+    private var canCancel: Bool {
+        !viewModel.selectedOfflineCacheWorkIDs.isEmpty
+            && !viewModel.isOfflineCacheQueueCommandRunning
+    }
+}
+
+private struct MineOfflineCacheQueueSelectionToolbar: View {
+    let viewModel: MineHomeViewModel
+
+    var body: some View {
+        MineOfflineCacheQueueCancelSelectionButton(viewModel: viewModel)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+    }
+}
+
+private struct MineOfflineCacheQueueSelectionActionBar: View {
+    let viewModel: MineHomeViewModel
+    var ownerName: String? = nil
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Divider()
+            HStack {
+                Spacer(minLength: 0)
+                MineOfflineCacheQueueCancelSelectionButton(viewModel: viewModel)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 10)
+            .padding(.bottom, 12)
+        }
+        .background(.ultraThinMaterial)
     }
 }
 
@@ -161,20 +225,28 @@ private struct MineOfflineCacheQueueControls: View {
     let viewModel: MineHomeViewModel
 
     var body: some View {
-        Section {
-            Button {
-                Task {
-                    if viewModel.offlineCacheQueueRunState == .running {
-                        await viewModel.pauseOfflineCacheQueue()
-                    } else {
-                        await viewModel.continueOfflineCacheQueue()
-                    }
+        Button {
+            Task {
+                if viewModel.offlineCacheQueueRunState == .running {
+                    await viewModel.pauseOfflineCacheQueue()
+                } else {
+                    await viewModel.continueOfflineCacheQueue()
                 }
-            } label: {
-                Label(controlTitle, systemImage: controlImage)
             }
-            .disabled(viewModel.isOfflineCacheQueueCommandRunning)
+        } label: {
+            Label(controlTitle, systemImage: controlImage)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Color.accentColor)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(16)
+                .background(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(MineOfflineCacheQueuePalette.cardBackground)
+                )
+                .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
+        .disabled(viewModel.isOfflineCacheQueueCommandRunning)
     }
 
     private var controlTitle: String {
@@ -197,69 +269,91 @@ private struct MineOfflineCacheQueueOwnerRow: View {
     let cancel: () -> Void
 
     var body: some View {
-        Button(action: rowAction) {
-            HStack(spacing: 12) {
-                if isSelecting {
-                    Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                        .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
-                }
+        HStack(spacing: 12) {
+            Image(systemName: "books.vertical.fill")
+                .foregroundStyle(isDimmed ? Color.secondary.opacity(0.55) : Color.indigo)
+                .frame(width: 24)
 
-                Image(systemName: "books.vertical.fill")
-                    .foregroundStyle(.indigo)
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(group.ownerName)
+                            .font(.headline)
+                            .foregroundStyle(titleColor)
+                            .lineLimit(2)
 
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(group.ownerName)
-                                .font(.headline)
-                                .foregroundStyle(.primary)
-                                .lineLimit(2)
-
-                            Text(L10n.string("mine.offline_queue.chapter_count_format", group.chapterCount))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-
-                        Spacer(minLength: 8)
-
-                        Text(group.percentageText)
-                            .font(.caption.monospacedDigit())
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-
-                    ProgressView(value: group.progressFraction)
-
-                    HStack(spacing: 8) {
-                        Text(group.progressText)
+                        Text(L10n.string("mine.offline_queue.chapter_count_format", group.chapterCount))
                             .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-
-                        if let currentSpeedText = group.currentSpeedText {
-                            Text(currentSpeedText)
-                                .font(.caption.monospacedDigit())
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                        }
+                            .foregroundStyle(secondaryColor)
                     }
+
+                    Spacer(minLength: 8)
+
+                    Text(group.percentageText)
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(secondaryColor)
+                        .lineLimit(1)
                 }
 
-                Spacer(minLength: 8)
+                ProgressView(value: group.progressFraction)
+                    .tint(isDimmed ? Color.secondary : Color.accentColor)
 
-                if !isSelecting {
-                    Image(systemName: "chevron.right")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.tertiary)
+                HStack(spacing: 8) {
+                    Text(group.progressText)
+                        .font(.caption)
+                        .foregroundStyle(secondaryColor)
+                        .lineLimit(1)
+
+                    if let currentSpeedText = group.currentSpeedText {
+                        Text(currentSpeedText)
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(secondaryColor)
+                            .lineLimit(1)
+                    }
                 }
             }
+
+            Spacer(minLength: 8)
+
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.tertiary)
+                .frame(width: 10)
+                .opacity(isSelecting ? 0 : 1)
+                .accessibilityHidden(isSelecting)
         }
-        .buttonStyle(.plain)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(MineOfflineCacheQueuePalette.cardBackground)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(isSelecting && isSelected ? Color.accentColor : Color.clear, lineWidth: 2)
+        )
+        .contentShape(Rectangle())
+        .animation(.spring(response: 0.24, dampingFraction: 0.72), value: isSelected)
+        .onTapGesture(perform: rowAction)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
             Button(role: .destructive, action: cancel) {
                 Label(L10n.string("common.cancel"), systemImage: "xmark.circle")
             }
         }
+    }
+
+    private var isDimmed: Bool {
+        isSelecting && !isSelected
+    }
+
+    private var titleColor: Color {
+        isDimmed ? .secondary : .primary
+    }
+
+    private var secondaryColor: Color {
+        isDimmed ? Color.secondary.opacity(0.55) : .secondary
     }
 
     private func rowAction() {
@@ -282,37 +376,38 @@ private struct MineOfflineCacheQueueOwnerSheet: View {
 
     var body: some View {
         NavigationStack {
-            List {
-                if let group {
-                    if viewModel.showsOfflineCacheQueueControls {
-                        MineOfflineCacheQueueControls(viewModel: viewModel)
-                    }
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    if let group {
+                        if viewModel.showsOfflineCacheQueueControls {
+                            MineOfflineCacheQueueControls(viewModel: viewModel)
+                        }
 
-                    ForEach(group.chapters) { chapter in
-                        MineOfflineCacheQueueChapterRowView(
-                            chapter: chapter,
-                            isSelecting: viewModel.isOfflineCacheQueueSelectionMode,
-                            isSelected: viewModel.selectedOfflineCacheWorkIDs.contains(chapter.id),
-                            toggleSelection: {
-                                viewModel.toggleOfflineCacheWorkSelection(chapter.id)
-                            },
-                            cancel: {
-                                Task {
-                                    await viewModel.cancelOfflineCacheChapter(chapter.id)
-                                    dismissIfGroupIsEmpty()
-                                }
+                        LazyVStack(spacing: 10) {
+                            ForEach(group.chapters) { chapter in
+                                MineOfflineCacheQueueChapterRowView(
+                                    chapter: chapter,
+                                    isSelecting: viewModel.isOfflineCacheQueueSelectionMode,
+                                    isSelected: viewModel.selectedOfflineCacheWorkIDs.contains(chapter.id),
+                                    toggleSelection: {
+                                        viewModel.toggleOfflineCacheWorkSelection(chapter.id)
+                                    },
+                                    cancel: {
+                                        Task {
+                                            await viewModel.cancelOfflineCacheChapter(chapter.id)
+                                            dismissIfGroupIsEmpty()
+                                        }
+                                    }
+                                )
                             }
-                        )
+                        }
+                    } else {
+                        MineOfflineCacheQueueEmptyState()
                     }
-                } else {
-                    MineOfflineCacheQueueEmptyState()
                 }
+                .padding(16)
             }
-            #if os(iOS)
-            .listStyle(.insetGrouped)
-            #else
-            .listStyle(.inset)
-            #endif
+            .background(MineOfflineCacheQueuePalette.groupedBackground)
             .navigationTitle(group?.ownerName ?? L10n.string("mine.download_queue"))
             .task {
                 viewModel.setOfflineCacheQueueSelectionMode(false)
@@ -331,8 +426,15 @@ private struct MineOfflineCacheQueueOwnerSheet: View {
             }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button(L10n.string("common.close")) {
-                        dismiss()
+                    if viewModel.isOfflineCacheQueueSelectionMode {
+                        MineOfflineCacheQueueSelectAllButton(
+                            viewModel: viewModel,
+                            ownerName: ownerName
+                        )
+                    } else {
+                        Button(L10n.string("common.close")) {
+                            dismiss()
+                        }
                     }
                 }
 
@@ -349,25 +451,17 @@ private struct MineOfflineCacheQueueOwnerSheet: View {
                     }
                 }
 
-                if viewModel.isOfflineCacheQueueSelectionMode {
-                    #if os(iOS)
+                #if os(iOS)
+                if viewModel.isOfflineCacheQueueSelectionMode && usesSystemSelectionBottomToolbar {
                     ToolbarItem(placement: .bottomBar) {
-                        MineOfflineCacheQueueSelectAllButton(viewModel: viewModel, ownerName: ownerName)
+                        MineOfflineCacheQueueSelectionToolbar(viewModel: viewModel)
                     }
-                    ToolbarItem(placement: .bottomBar) {
-                        Spacer()
-                    }
-                    ToolbarItem(placement: .bottomBar) {
-                        MineOfflineCacheQueueCancelSelectionButton(viewModel: viewModel)
-                    }
-                    #else
-                    ToolbarItem(placement: .secondaryAction) {
-                        MineOfflineCacheQueueSelectAllButton(viewModel: viewModel, ownerName: ownerName)
-                    }
-                    ToolbarItem(placement: .confirmationAction) {
-                        MineOfflineCacheQueueCancelSelectionButton(viewModel: viewModel)
-                    }
-                    #endif
+                }
+                #endif
+            }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if viewModel.isOfflineCacheQueueSelectionMode && !usesSystemSelectionBottomToolbar {
+                    MineOfflineCacheQueueSelectionActionBar(viewModel: viewModel, ownerName: ownerName)
                 }
             }
             .overlay {
@@ -375,7 +469,17 @@ private struct MineOfflineCacheQueueOwnerSheet: View {
                     ProgressView()
                 }
             }
+            .sensoryFeedback(.selection, trigger: viewModel.selectedOfflineCacheWorkIDs)
         }
+    }
+
+    private var usesSystemSelectionBottomToolbar: Bool {
+        #if os(iOS)
+        if #available(iOS 26, *) {
+            return true
+        }
+        #endif
+        return false
     }
 
     private func dismissIfGroupIsEmpty() {
@@ -393,59 +497,76 @@ private struct MineOfflineCacheQueueChapterRowView: View {
     let cancel: () -> Void
 
     var body: some View {
-        Button(action: rowAction) {
-            HStack(spacing: 12) {
-                if isSelecting {
-                    Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                        .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(chapter.title)
+                    .foregroundStyle(titleColor)
+                    .lineLimit(2)
+
+                Spacer(minLength: 8)
+
+                Text(chapter.percentageText)
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(secondaryColor)
+                    .lineLimit(1)
+            }
+
+            ProgressView(value: chapter.progressFraction)
+                .tint(isDimmed ? Color.secondary : Color.accentColor)
+
+            HStack(spacing: 8) {
+                Text(chapter.progressText)
+                    .font(.caption)
+                    .foregroundStyle(secondaryColor)
+                    .lineLimit(1)
+
+                if let speedText = chapter.speedText {
+                    Text(speedText)
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(secondaryColor)
+                        .lineLimit(1)
                 }
 
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Text(chapter.title)
-                            .foregroundStyle(.primary)
-                            .lineLimit(2)
-
-                        Spacer(minLength: 8)
-
-                        Text(chapter.percentageText)
-                            .font(.caption.monospacedDigit())
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-
-                    ProgressView(value: chapter.progressFraction)
-
-                    HStack(spacing: 8) {
-                        Text(chapter.progressText)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-
-                        if let speedText = chapter.speedText {
-                            Text(speedText)
-                                .font(.caption.monospacedDigit())
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                        }
-
-                        if let failureStatusText = chapter.failureStatusText {
-                            Text(failureStatusText)
-                                .font(.caption)
-                                .foregroundStyle(.red)
-                                .lineLimit(1)
-                        }
-                    }
+                if let failureStatusText = chapter.failureStatusText {
+                    Text(failureStatusText)
+                        .font(.caption)
+                        .foregroundStyle(isDimmed ? Color.secondary.opacity(0.55) : Color.red)
+                        .lineLimit(1)
                 }
             }
-            .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(MineOfflineCacheQueuePalette.cardBackground)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(isSelecting && isSelected ? Color.accentColor : Color.clear, lineWidth: 2)
+        )
+        .contentShape(Rectangle())
+        .animation(.spring(response: 0.24, dampingFraction: 0.72), value: isSelected)
+        .onTapGesture(perform: rowAction)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
             Button(role: .destructive, action: cancel) {
                 Label(L10n.string("common.cancel"), systemImage: "xmark.circle")
             }
         }
+    }
+
+    private var isDimmed: Bool {
+        isSelecting && !isSelected
+    }
+
+    private var titleColor: Color {
+        isDimmed ? .secondary : .primary
+    }
+
+    private var secondaryColor: Color {
+        isDimmed ? Color.secondary.opacity(0.55) : .secondary
     }
 
     private func rowAction() {
@@ -456,20 +577,45 @@ private struct MineOfflineCacheQueueChapterRowView: View {
 
 private struct MineOfflineCacheQueueEmptyState: View {
     var body: some View {
-        Section {
-            VStack(spacing: 10) {
-                Image(systemName: "tray")
-                    .font(.title2)
-                    .foregroundStyle(.secondary)
-                Text(L10n.string("mine.offline_queue.empty_title"))
-                    .font(.headline)
-                Text(L10n.string("mine.offline_queue.empty_message"))
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 32)
+        VStack(spacing: 10) {
+            Image(systemName: "tray")
+                .font(.title2)
+                .foregroundStyle(.secondary)
+            Text(L10n.string("mine.offline_queue.empty_title"))
+                .font(.headline)
+            Text(L10n.string("mine.offline_queue.empty_message"))
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
         }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 32)
+        .padding(.horizontal, 16)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(MineOfflineCacheQueuePalette.cardBackground)
+        )
+    }
+}
+
+private enum MineOfflineCacheQueuePalette {
+    static var groupedBackground: Color {
+        #if os(iOS)
+        Color(uiColor: .systemGroupedBackground)
+        #elseif os(macOS)
+        Color(nsColor: .windowBackgroundColor)
+        #else
+        Color.clear
+        #endif
+    }
+
+    static var cardBackground: Color {
+        #if os(iOS)
+        Color(uiColor: .secondarySystemGroupedBackground)
+        #elseif os(macOS)
+        Color(nsColor: .controlBackgroundColor)
+        #else
+        Color.clear
+        #endif
     }
 }

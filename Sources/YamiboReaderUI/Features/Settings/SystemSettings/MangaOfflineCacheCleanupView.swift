@@ -1,37 +1,43 @@
 import SwiftUI
 import YamiboReaderCore
 
+#if os(iOS)
+import UIKit
+#elseif os(macOS)
+import AppKit
+#endif
+
 struct MangaOfflineCacheCleanupView: View {
     @ObservedObject var viewModel: SystemSettingsViewModel
 
     var body: some View {
-        List {
-            if viewModel.mangaOfflineCacheCleanupIsEmpty {
-                MangaOfflineCacheCleanupEmptyState()
-            } else {
-                Section {
-                    ForEach(viewModel.mangaOfflineCacheCleanupRows) { row in
-                        MangaOfflineCacheCleanupRowView(
-                            row: row,
-                            isSelecting: viewModel.isMangaOfflineCacheCleanupSelectionMode,
-                            isSelected: viewModel.selectedMangaOfflineCacheOwnerNames.contains(row.ownerName),
-                            select: {
-                                viewModel.toggleMangaOfflineCacheCleanupSelection(ownerName: row.ownerName)
-                            },
-                            delete: {
-                                viewModel.requestMangaOfflineCacheCleanup(ownerName: row.ownerName)
-                            }
-                        )
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                if viewModel.mangaOfflineCacheCleanupIsEmpty {
+                    MangaOfflineCacheCleanupEmptyState()
+                } else {
+                    LazyVStack(spacing: 10) {
+                        ForEach(viewModel.mangaOfflineCacheCleanupRows) { row in
+                            MangaOfflineCacheCleanupRowView(
+                                row: row,
+                                isSelecting: viewModel.isMangaOfflineCacheCleanupSelectionMode,
+                                isSelected: viewModel.selectedMangaOfflineCacheOwnerNames.contains(row.ownerName),
+                                select: {
+                                    viewModel.toggleMangaOfflineCacheCleanupSelection(ownerName: row.ownerName)
+                                },
+                                delete: {
+                                    viewModel.requestMangaOfflineCacheCleanup(ownerName: row.ownerName)
+                                }
+                            )
+                        }
                     }
                 }
             }
+            .padding(16)
         }
-        #if os(iOS)
-        .listStyle(.insetGrouped)
-        #else
-        .listStyle(.inset)
-        #endif
+        .background(MangaOfflineCacheCleanupPalette.groupedBackground)
         .navigationTitle(L10n.string("settings.manga_offline_cache.title"))
+        .navigationBarBackButtonHidden(viewModel.isMangaOfflineCacheCleanupSelectionMode)
         .task {
             await viewModel.refreshMangaOfflineCacheCleanup()
         }
@@ -39,6 +45,12 @@ struct MangaOfflineCacheCleanupView: View {
             await viewModel.refreshMangaOfflineCacheCleanup()
         }
         .toolbar {
+            if viewModel.isMangaOfflineCacheCleanupSelectionMode {
+                ToolbarItem(placement: .cancellationAction) {
+                    MangaOfflineCacheCleanupSelectAllButton(viewModel: viewModel)
+                }
+            }
+
             ToolbarItem(placement: .primaryAction) {
                 if !viewModel.mangaOfflineCacheCleanupIsEmpty {
                     Button(
@@ -54,25 +66,17 @@ struct MangaOfflineCacheCleanupView: View {
                 }
             }
 
-            if viewModel.isMangaOfflineCacheCleanupSelectionMode {
-                #if os(iOS)
+            #if os(iOS)
+            if viewModel.isMangaOfflineCacheCleanupSelectionMode && usesSystemSelectionBottomToolbar {
                 ToolbarItem(placement: .bottomBar) {
-                    MangaOfflineCacheCleanupSelectAllButton(viewModel: viewModel)
+                    MangaOfflineCacheCleanupSelectionToolbar(viewModel: viewModel)
                 }
-                ToolbarItem(placement: .bottomBar) {
-                    Spacer()
-                }
-                ToolbarItem(placement: .bottomBar) {
-                    MangaOfflineCacheCleanupDeleteSelectionButton(viewModel: viewModel)
-                }
-                #else
-                ToolbarItem(placement: .secondaryAction) {
-                    MangaOfflineCacheCleanupSelectAllButton(viewModel: viewModel)
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    MangaOfflineCacheCleanupDeleteSelectionButton(viewModel: viewModel)
-                }
-                #endif
+            }
+            #endif
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if viewModel.isMangaOfflineCacheCleanupSelectionMode && !usesSystemSelectionBottomToolbar {
+                MangaOfflineCacheCleanupSelectionActionBar(viewModel: viewModel)
             }
         }
         .overlay {
@@ -86,6 +90,7 @@ struct MangaOfflineCacheCleanupView: View {
                 .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             }
         }
+        .sensoryFeedback(.selection, trigger: viewModel.selectedMangaOfflineCacheOwnerNames)
         .alert(
             viewModel.pendingMangaOfflineCacheCleanupConfirmation?.title ?? "",
             isPresented: confirmationIsPresented,
@@ -102,6 +107,15 @@ struct MangaOfflineCacheCleanupView: View {
         } message: { confirmation in
             Text(confirmation.message)
         }
+    }
+
+    private var usesSystemSelectionBottomToolbar: Bool {
+        #if os(iOS)
+        if #available(iOS 26, *) {
+            return true
+        }
+        #endif
+        return false
     }
 
     private var confirmationIsPresented: Binding<Bool> {
@@ -126,32 +140,39 @@ private struct MangaOfflineCacheCleanupRowView: View {
     let delete: () -> Void
 
     var body: some View {
-        Button(action: rowAction) {
-            HStack(spacing: 12) {
-                if isSelecting {
-                    Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                        .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
-                }
+        HStack(spacing: 12) {
+            Image(systemName: "externaldrive.fill")
+                .foregroundStyle(isDimmed ? Color.secondary.opacity(0.55) : Color.indigo)
+                .frame(width: 24)
 
-                Image(systemName: "externaldrive.fill")
-                    .foregroundStyle(.indigo)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(row.title)
+                    .foregroundStyle(titleColor)
+                    .lineLimit(2)
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(row.title)
-                        .foregroundStyle(.primary)
-                        .lineLimit(2)
-
-                    Text(row.byteCountLabel)
-                        .font(.caption.monospacedDigit())
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-
-                Spacer(minLength: 8)
+                Text(row.byteCountLabel)
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(secondaryColor)
+                    .lineLimit(1)
             }
-            .contentShape(Rectangle())
+
+            Spacer(minLength: 8)
         }
-        .buttonStyle(.plain)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(MangaOfflineCacheCleanupPalette.cardBackground)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(isSelecting && isSelected ? Color.accentColor : Color.clear, lineWidth: 2)
+        )
+        .contentShape(Rectangle())
+        .animation(.spring(response: 0.24, dampingFraction: 0.72), value: isSelected)
+        .onTapGesture(perform: rowAction)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
             Button(role: .destructive) {
                 delete()
@@ -159,6 +180,18 @@ private struct MangaOfflineCacheCleanupRowView: View {
                 Label(L10n.string("common.delete"), systemImage: "trash")
             }
         }
+    }
+
+    private var isDimmed: Bool {
+        isSelecting && !isSelected
+    }
+
+    private var titleColor: Color {
+        isDimmed ? .secondary : .primary
+    }
+
+    private var secondaryColor: Color {
+        isDimmed ? Color.secondary.opacity(0.55) : .secondary
     }
 
     private func rowAction() {
@@ -174,10 +207,17 @@ private struct MangaOfflineCacheCleanupSelectAllButton: View {
     let viewModel: SystemSettingsViewModel
 
     var body: some View {
-        Button(L10n.string("common.select_all")) {
-            viewModel.selectAllMangaOfflineCacheCleanupRows()
+        Button(title) {
+            viewModel.toggleAllMangaOfflineCacheCleanupRows()
         }
         .disabled(viewModel.mangaOfflineCacheCleanupIsEmpty)
+        .accessibilityLabel(title)
+    }
+
+    private var title: String {
+        viewModel.isMangaOfflineCacheCleanupSelectionComplete
+            ? L10n.string("common.invert_selection")
+            : L10n.string("common.select_all")
     }
 }
 
@@ -188,39 +228,109 @@ private struct MangaOfflineCacheCleanupDeleteSelectionButton: View {
         Button(role: .destructive) {
             viewModel.requestSelectedMangaOfflineCacheCleanup()
         } label: {
-            Label(
-                L10n.string(
-                    "settings.manga_offline_cache.delete_selected_format",
-                    viewModel.selectedMangaOfflineCacheOwnerCount
-                ),
-                systemImage: "trash"
-            )
+            VStack(spacing: 3) {
+                Image(systemName: "trash")
+                    .font(.system(size: 18, weight: .regular))
+                    .frame(width: 24, height: 22)
+
+                Text(L10n.string("common.delete"))
+                .font(.caption2)
+                .lineLimit(1)
+                .minimumScaleFactor(0.78)
+            }
+            .frame(width: 66)
+            .foregroundStyle(Color.red)
+            .opacity(canDelete ? 1 : 0.35)
+            .contentShape(Rectangle())
         }
-        .disabled(
-            viewModel.selectedMangaOfflineCacheOwnerNames.isEmpty
-                || viewModel.activeAction == .clearingMangaOfflineCache
+        .buttonStyle(.plain)
+        .disabled(!canDelete)
+        .accessibilityLabel(
+            L10n.string(
+                "settings.manga_offline_cache.delete_selected_format",
+                viewModel.selectedMangaOfflineCacheOwnerCount
+            )
         )
+    }
+
+    private var canDelete: Bool {
+        !viewModel.selectedMangaOfflineCacheOwnerNames.isEmpty
+            && viewModel.activeAction != .clearingMangaOfflineCache
+    }
+}
+
+private struct MangaOfflineCacheCleanupSelectionToolbar: View {
+    let viewModel: SystemSettingsViewModel
+
+    var body: some View {
+        MangaOfflineCacheCleanupDeleteSelectionButton(viewModel: viewModel)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+    }
+}
+
+private struct MangaOfflineCacheCleanupSelectionActionBar: View {
+    let viewModel: SystemSettingsViewModel
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Divider()
+            HStack {
+                Spacer(minLength: 0)
+                MangaOfflineCacheCleanupDeleteSelectionButton(viewModel: viewModel)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 10)
+            .padding(.bottom, 12)
+        }
+        .background(.ultraThinMaterial)
     }
 }
 
 private struct MangaOfflineCacheCleanupEmptyState: View {
     var body: some View {
-        Section {
-            VStack(spacing: 10) {
-                Image(systemName: "tray")
-                    .font(.title2)
-                    .foregroundStyle(.secondary)
+        VStack(spacing: 10) {
+            Image(systemName: "tray")
+                .font(.title2)
+                .foregroundStyle(.secondary)
 
-                Text(L10n.string("settings.manga_offline_cache.empty_title"))
-                    .font(.headline)
+            Text(L10n.string("settings.manga_offline_cache.empty_title"))
+                .font(.headline)
 
-                Text(L10n.string("settings.manga_offline_cache.empty_message"))
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 32)
+            Text(L10n.string("settings.manga_offline_cache.empty_message"))
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
         }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 32)
+        .padding(.horizontal, 16)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(MangaOfflineCacheCleanupPalette.cardBackground)
+        )
+    }
+}
+
+private enum MangaOfflineCacheCleanupPalette {
+    static var groupedBackground: Color {
+        #if os(iOS)
+        Color(uiColor: .systemGroupedBackground)
+        #elseif os(macOS)
+        Color(nsColor: .windowBackgroundColor)
+        #else
+        Color.clear
+        #endif
+    }
+
+    static var cardBackground: Color {
+        #if os(iOS)
+        Color(uiColor: .secondarySystemGroupedBackground)
+        #elseif os(macOS)
+        Color(nsColor: .controlBackgroundColor)
+        #else
+        Color.clear
+        #endif
     }
 }

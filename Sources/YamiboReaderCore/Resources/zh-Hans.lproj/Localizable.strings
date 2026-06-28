@@ -265,12 +265,12 @@
 "mine.download_queue" = "下载队列";
 "mine.offline_queue.cancel_selected_format" = "取消 %d 项";
 "mine.offline_queue.chapter_count_format" = "%d 个未完成章节";
-"mine.offline_queue.continue" = "继续队列";
+"mine.offline_queue.continue" = "继续";
 "mine.offline_queue.empty_message" = "未完成、暂停或失败的漫画缓存任务会显示在这里。";
 "mine.offline_queue.empty_title" = "队列为空";
 "mine.offline_queue.failed" = "失败";
 "mine.offline_queue.image_progress_format" = "%d / %d 张图片";
-"mine.offline_queue.pause" = "暂停队列";
+"mine.offline_queue.pause" = "暂停";
 "mine.offline_queue.percent_format" = "%d %%";
 "mine.offline_queue.preparing" = "准备图片列表";
 "mine.offline_queue.speed_format" = "%@/s";
@@ -401,7 +401,7 @@
 "settings.manga_offline_cache.confirm_batch_title" = "确认删除漫画离线缓存";
 "settings.manga_offline_cache.confirm_single_message" = "将删除“%@”的漫画离线缓存、未完成任务和失败任务。";
 "settings.manga_offline_cache.confirm_single_title" = "确认删除漫画离线缓存";
-"settings.manga_offline_cache.delete_selected_format" = "删除已选 %d 项";
+"settings.manga_offline_cache.delete_selected_format" = "删除 %d 项";
 "settings.manga_offline_cache.empty_message" = "没有可清理的漫画离线缓存或未完成任务。";
 "settings.manga_offline_cache.empty_title" = "暂无漫画离线缓存";
 "settings.manga_offline_cache.title" = "漫画离线缓存";
