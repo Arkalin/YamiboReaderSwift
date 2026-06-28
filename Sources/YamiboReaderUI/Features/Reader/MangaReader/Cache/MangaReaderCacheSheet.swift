@@ -434,7 +434,12 @@ private struct MangaReaderCacheChapterSection: View {
     }
 
     private func toggleSelection(_ tid: String) {
-        guard isSelecting else { return }
+        if !isSelecting {
+            isSelecting = true
+            selectedTIDs.insert(tid)
+            return
+        }
+
         if selectedTIDs.contains(tid) {
             selectedTIDs.remove(tid)
         } else {
