@@ -89,12 +89,16 @@ public actor FileMangaOfflineCacheStore: MangaOfflineCacheStoring {
         await ensureIndexLoaded()
         do {
             let key = membershipKey(favoriteID: favoriteID, tid: tid)
-            queueWorks.removeValue(forKey: key)
-            guard let removed = memberships.removeValue(forKey: key) else {
+            let canceled = queueWorks.removeValue(forKey: key)
+            let removed = memberships.removeValue(forKey: key)
+            let canceledImageURLs = canceled.map { $0.targetImageURLs + $0.completedImageURLs } ?? []
+            if let removed {
+                try removeUnreferencedImages(afterRemoving: [removed], additionalImageURLs: canceledImageURLs)
+            } else {
+                try removeUnreferencedImages(forImageURLs: canceledImageURLs)
                 try persistIndex()
                 return
             }
-            try removeUnreferencedImages(afterRemoving: [removed])
             try persistIndex()
         } catch {
             throw persistenceError(from: error)
@@ -105,16 +109,21 @@ public actor FileMangaOfflineCacheStore: MangaOfflineCacheStoring {
         await ensureIndexLoaded()
         do {
             let normalizedFavoriteID = favoriteID.trimmingCharacters(in: .whitespacesAndNewlines)
+            let canceled = queueWorks.values.filter { $0.favoriteID == normalizedFavoriteID }
             let removed = memberships.filter { $0.value.favoriteID == normalizedFavoriteID }
             queueWorks = queueWorks.filter { $0.value.favoriteID != normalizedFavoriteID }
             guard !removed.isEmpty else {
+                try removeUnreferencedImages(forImageURLs: canceled.flatMap { $0.targetImageURLs + $0.completedImageURLs })
                 try persistIndex()
                 return
             }
             for key in removed.keys {
                 memberships.removeValue(forKey: key)
             }
-            try removeUnreferencedImages(afterRemoving: Array(removed.values))
+            try removeUnreferencedImages(
+                afterRemoving: Array(removed.values),
+                additionalImageURLs: canceled.flatMap { $0.targetImageURLs + $0.completedImageURLs }
+            )
             try persistIndex()
         } catch {
             throw persistenceError(from: error)
@@ -245,6 +254,26 @@ public actor FileMangaOfflineCacheStore: MangaOfflineCacheStoring {
         }
     }
 
+    public func prepareOfflineCacheWorkForRun(
+        favoriteID: String,
+        tid: String,
+        targetImageURLs: [URL]?,
+        completedImageURLs: [URL]
+    ) async throws {
+        await ensureIndexLoaded()
+        do {
+            let key = membershipKey(favoriteID: favoriteID, tid: tid)
+            guard let work = queueWorks[key] else { return }
+            queueWorks[key] = work.preparingForRun(
+                targetImageURLs: targetImageURLs,
+                completedImageURLs: completedImageURLs
+            )
+            try persistIndex()
+        } catch {
+            throw persistenceError(from: error)
+        }
+    }
+
     public func markOfflineCacheWorkFailed(favoriteID: String, tid: String, message: String?) async throws {
         await ensureIndexLoaded()
         do {
@@ -260,7 +289,10 @@ public actor FileMangaOfflineCacheStore: MangaOfflineCacheStoring {
     public func cancelOfflineCacheWork(favoriteID: String, tid: String) async throws {
         await ensureIndexLoaded()
         do {
-            queueWorks.removeValue(forKey: membershipKey(favoriteID: favoriteID, tid: tid))
+            let canceled = queueWorks.removeValue(forKey: membershipKey(favoriteID: favoriteID, tid: tid))
+            if let canceled {
+                try removeUnreferencedImages(forImageURLs: canceled.targetImageURLs + canceled.completedImageURLs)
+            }
             try persistIndex()
         } catch {
             throw persistenceError(from: error)
@@ -271,7 +303,9 @@ public actor FileMangaOfflineCacheStore: MangaOfflineCacheStoring {
         await ensureIndexLoaded()
         do {
             let normalizedFavoriteID = favoriteID.trimmingCharacters(in: .whitespacesAndNewlines)
+            let canceled = queueWorks.values.filter { $0.favoriteID == normalizedFavoriteID }
             queueWorks = queueWorks.filter { $0.value.favoriteID != normalizedFavoriteID }
+            try removeUnreferencedImages(forImageURLs: canceled.flatMap { $0.targetImageURLs + $0.completedImageURLs })
             try persistIndex()
         } catch {
             throw persistenceError(from: error)
@@ -367,15 +401,31 @@ public actor FileMangaOfflineCacheStore: MangaOfflineCacheStoring {
         queueRunState = .paused
     }
 
-    private func removeUnreferencedImages(afterRemoving removedMemberships: [MangaOfflineCacheMembership]) throws {
+    private func removeUnreferencedImages(
+        afterRemoving removedMemberships: [MangaOfflineCacheMembership],
+        additionalImageURLs: [URL] = []
+    ) throws {
         let remainingImageKeys = Set(memberships.values.flatMap { membership in
             membership.imageURLs.map { imageKey(for: $0) }
         })
-        let removedImageKeys = Set(removedMemberships.flatMap { membership in
-            membership.imageURLs.map { imageKey(for: $0) }
-        })
+        let removedImageKeys = Set(
+            removedMemberships.flatMap { membership in
+                membership.imageURLs.map { imageKey(for: $0) }
+            } + additionalImageURLs.map { imageKey(for: $0) }
+        )
 
         for key in removedImageKeys where !remainingImageKeys.contains(key) {
+            removeImage(forKey: key)
+        }
+    }
+
+    private func removeUnreferencedImages(forImageURLs imageURLs: [URL]) throws {
+        let remainingImageKeys = Set(memberships.values.flatMap { membership in
+            membership.imageURLs.map { imageKey(for: $0) }
+        })
+        let candidateImageKeys = Set(imageURLs.map { imageKey(for: $0) })
+
+        for key in candidateImageKeys where !remainingImageKeys.contains(key) {
             removeImage(forKey: key)
         }
     }

@@ -129,6 +129,27 @@ struct MangaReaderTestsMangaOfflineCacheQueue {
         #expect(await store.offlineCacheState(favoriteID: "favorite-a", tid: "100") == .uncached)
     }
 
+    @Test func membershipDeletionRemovesPartialOfflineBytesForCanceledQueueWork() async throws {
+        let store = FileMangaOfflineCacheStore(baseDirectory: try makeTemporaryOfflineCacheQueueDirectory())
+        let imageURL = try #require(URL(string: "https://img.example.com/100-1.jpg"))
+
+        _ = try await store.enqueueOfflineCacheWork(
+            try makeOfflineCacheWorkRequest(favoriteID: "favorite-a", tid: "100", targetImageURLs: [imageURL])
+        )
+        try await store.saveOfflineImageData(Data([1]), for: imageURL)
+        try await store.updateOfflineCacheWorkProgress(
+            favoriteID: "favorite-a",
+            tid: "100",
+            targetImageURLs: [imageURL],
+            completedImageURLs: [imageURL]
+        )
+
+        try await store.removeMembership(favoriteID: "favorite-a", tid: "100")
+
+        #expect(await store.offlineCacheWork(favoriteID: "favorite-a", tid: "100") == nil)
+        #expect(await store.offlineImageData(for: imageURL) == nil)
+    }
+
     @Test func completedMembershipLeavesQueueWhenAllOfflineImagesArePresent() async throws {
         let store = FileMangaOfflineCacheStore(baseDirectory: try makeTemporaryOfflineCacheQueueDirectory())
         let firstImage = try #require(URL(string: "https://img.example.com/100-1.jpg"))
