@@ -26,44 +26,23 @@ struct MangaReaderCacheSheet: View {
 
     var body: some View {
         NavigationStack {
-            List {
-                if let errorMessage = model.errorMessage {
-                    Section {
-                        Label(errorMessage, systemImage: "exclamationmark.triangle")
-                            .foregroundStyle(.orange)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    if let errorMessage = model.errorMessage {
+                        MangaReaderCacheErrorBanner(message: errorMessage)
                     }
-                }
 
-                Section {
-                    if model.rows.isEmpty {
-                        ContentUnavailableView(L10n.string("manga.no_chapters"), systemImage: "books.vertical")
-                    } else {
-                        ForEach(model.rows) { row in
-                            MangaReaderCacheRowView(
-                                row: row,
-                                isSelecting: isSelecting,
-                                isSelected: selectedTIDs.contains(row.id),
-                                onToggleSelection: {
-                                    toggleSelection(row.id)
-                                }
-                            )
-                            .contentShape(Rectangle())
-                            .onTapGesture {
-                                guard isSelecting else { return }
-                                toggleSelection(row.id)
-                            }
-                        }
-                    }
-                } header: {
-                    MangaReaderCacheSelectionHeader(
-                        isSelecting: isSelecting,
+                    MangaReaderCacheChapterSection(
+                        rows: model.rows,
+                        isSelecting: $isSelecting,
+                        selectedTIDs: $selectedTIDs,
                         isAllSelected: selectionState.isAllSelected,
-                        isEmpty: model.rows.isEmpty,
-                        onToggleAll: toggleAll,
-                        onToggleSelectionMode: toggleSelectionMode
+                        onToggleAll: toggleAll
                     )
                 }
+                .padding(16)
             }
+            .background(Color(uiColor: .systemGroupedBackground))
             .navigationTitle(L10n.string("manga.offline_cache.title"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -104,6 +83,7 @@ struct MangaReaderCacheSheet: View {
             .onChange(of: model.allChapterTIDs) { _, validTIDs in
                 selectedTIDs.formIntersection(validTIDs)
             }
+            .sensoryFeedback(.selection, trigger: selectedTIDs)
             .alert(item: Binding(get: { model.prompt }, set: { _ in model.clearPrompt() })) { prompt in
                 switch prompt {
                 case let .addFavorite(title):
@@ -130,28 +110,11 @@ struct MangaReaderCacheSheet: View {
         return false
     }
 
-    private func toggleSelection(_ tid: String) {
-        if selectedTIDs.contains(tid) {
-            selectedTIDs.remove(tid)
-        } else {
-            selectedTIDs.insert(tid)
-        }
-    }
-
     private func toggleAll() {
         if selectionState.isAllSelected {
             selectedTIDs = []
         } else {
             selectedTIDs = model.allChapterTIDs
-        }
-    }
-
-    private func toggleSelectionMode() {
-        if isSelecting {
-            isSelecting = false
-            selectedTIDs = []
-        } else {
-            isSelecting = true
         }
     }
 
@@ -179,6 +142,80 @@ struct MangaReaderCacheSheet: View {
     }
 }
 
+private struct MangaReaderCacheErrorBanner: View {
+    let message: String
+
+    var body: some View {
+        Label(message, systemImage: "exclamationmark.triangle")
+            .font(.caption)
+            .foregroundStyle(.orange)
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(Color(uiColor: .secondarySystemGroupedBackground))
+            )
+    }
+}
+
+private struct MangaReaderCacheChapterSection: View {
+    let rows: [MangaReaderCacheRow]
+    @Binding var isSelecting: Bool
+    @Binding var selectedTIDs: Set<String>
+    let isAllSelected: Bool
+    let onToggleAll: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            MangaReaderCacheSelectionHeader(
+                isSelecting: isSelecting,
+                isAllSelected: isAllSelected,
+                isEmpty: rows.isEmpty,
+                onToggleAll: onToggleAll,
+                onToggleSelectionMode: toggleSelectionMode
+            )
+            .frame(height: 38, alignment: .center)
+
+            if rows.isEmpty {
+                ContentUnavailableView(L10n.string("manga.no_chapters"), systemImage: "books.vertical")
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+            } else {
+                LazyVStack(spacing: 10) {
+                    ForEach(rows) { row in
+                        MangaReaderCacheRowView(
+                            row: row,
+                            isSelecting: isSelecting,
+                            isSelected: selectedTIDs.contains(row.id),
+                            onToggleSelection: {
+                                toggleSelection(row.id)
+                            }
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    private func toggleSelectionMode() {
+        if isSelecting {
+            isSelecting = false
+            selectedTIDs = []
+        } else {
+            isSelecting = true
+        }
+    }
+
+    private func toggleSelection(_ tid: String) {
+        guard isSelecting else { return }
+        if selectedTIDs.contains(tid) {
+            selectedTIDs.remove(tid)
+        } else {
+            selectedTIDs.insert(tid)
+        }
+    }
+}
+
 private struct MangaReaderCacheSelectionHeader: View {
     let isSelecting: Bool
     let isAllSelected: Bool
@@ -192,9 +229,12 @@ private struct MangaReaderCacheSelectionHeader: View {
                 Button(isAllSelected ? L10n.string("common.deselect_all") : L10n.string("common.select_all")) {
                     onToggleAll()
                 }
+                .font(.subheadline.weight(.semibold))
                 .disabled(isEmpty)
             } else {
                 Text(L10n.string("manga.offline_cache.chapter_section"))
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.secondary)
             }
 
             Spacer(minLength: 0)
@@ -202,9 +242,10 @@ private struct MangaReaderCacheSelectionHeader: View {
             Button(isSelecting ? L10n.string("common.done") : L10n.string("common.select")) {
                 onToggleSelectionMode()
             }
+            .font(.subheadline.weight(.semibold))
+            .buttonStyle(.plain)
             .disabled(isEmpty && !isSelecting)
         }
-        .font(.subheadline.weight(.semibold))
     }
 }
 
@@ -216,36 +257,56 @@ private struct MangaReaderCacheRowView: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            if isSelecting {
-                Button(action: onToggleSelection) {
-                    Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                        .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(isSelected ? L10n.string("common.deselect_all") : L10n.string("common.select"))
-            }
+            Text(MangaChapterDisplayFormatter.displayNumber(for: row.chapter))
+                .font(.caption.weight(.bold))
+                .foregroundStyle(numberColor)
+                .frame(width: 34, alignment: .leading)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(row.chapter.rawTitle)
                     .font(.subheadline)
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(titleColor)
                     .lineLimit(2)
-
-                Text(MangaChapterDisplayFormatter.displayNumber(for: row.chapter))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
-            Spacer(minLength: 0)
-
-            MangaReaderCacheStateBadge(state: row.state)
+            MangaReaderCacheStateBadge(state: row.state, isDimmed: isDimmed)
         }
-        .padding(.vertical, 4)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color(uiColor: .secondarySystemGroupedBackground))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(isSelecting && isSelected ? Color.accentColor : Color.clear, lineWidth: 2)
+        )
+        .contentShape(Rectangle())
+        .animation(.spring(response: 0.24, dampingFraction: 0.72), value: isSelected)
+        .onTapGesture {
+            onToggleSelection()
+        }
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    private var isDimmed: Bool {
+        isSelecting && !isSelected
+    }
+
+    private var titleColor: Color {
+        isDimmed ? .secondary : .primary
+    }
+
+    private var numberColor: Color {
+        isDimmed ? Color.secondary.opacity(0.55) : .secondary
     }
 }
 
 private struct MangaReaderCacheStateBadge: View {
     let state: MangaOfflineCacheState
+    let isDimmed: Bool
 
     var body: some View {
         Label(title, systemImage: systemImage)
@@ -279,13 +340,16 @@ private struct MangaReaderCacheStateBadge: View {
     }
 
     private var tint: Color {
+        if isDimmed {
+            return Color.secondary.opacity(0.55)
+        }
         switch state {
         case .cached:
-            .green
+            return Color.green
         case .uncached:
-            .secondary
+            return Color.secondary
         case .caching:
-            .orange
+            return Color.orange
         }
     }
 }
