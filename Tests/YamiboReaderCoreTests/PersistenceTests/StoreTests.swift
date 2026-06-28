@@ -323,7 +323,7 @@ import Testing
 
     #expect(decoded.readingMode == .paged)
     #expect(decoded.pagedTurnStyle == .pageCurl)
-    #expect(decoded.pageTurnDirection == .leftToRight)
+    #expect(decoded.pageTurnDirection == .rightToLeft)
 }
 
 @Test func mangaReaderSettingsDecodesLegacyPayloadWithAscendingDirectorySortOrder() async throws {
@@ -339,7 +339,7 @@ import Testing
 
     #expect(decoded.readingMode == .paged)
     #expect(decoded.pagedTurnStyle == .slide)
-    #expect(decoded.pageTurnDirection == .rightToLeft)
+    #expect(decoded.pageTurnDirection == .leftToRight)
     #expect(decoded.pageScaleMode == .fitWidth)
     #expect(decoded.pageEdgeFillStyle == .black)
     #expect(decoded.showsTwoPagesInLandscapeOnPad == false)
