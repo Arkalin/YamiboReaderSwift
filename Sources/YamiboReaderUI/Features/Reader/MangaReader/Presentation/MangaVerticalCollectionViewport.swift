@@ -518,6 +518,7 @@ private final class MangaVerticalCollectionPageCell: UICollectionViewCell {
     static let defaultEstimatedHeight: CGFloat = 560
 
     private let imageView = UIImageView()
+    private let loadStateOverlay = ReaderLoadStateOverlayView()
     private var task: Task<Void, Never>?
     private var page: MangaReaderPageProjection?
     private var imagePipeline: MangaImagePipeline?
@@ -553,7 +554,7 @@ private final class MangaVerticalCollectionPageCell: UICollectionViewCell {
         heightToWidthRatio = 1 / Self.defaultWidthToHeightAspectRatio
         imageView.image = nil
         imageView.isHidden = false
-        contentConfiguration = nil
+        loadStateOverlay.hide()
     }
 
     override func layoutSubviews() {
@@ -608,6 +609,15 @@ private final class MangaVerticalCollectionPageCell: UICollectionViewCell {
         imageView.backgroundColor = .black
         contentView.addSubview(imageView)
 
+        loadStateOverlay.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(loadStateOverlay)
+        NSLayoutConstraint.activate([
+            loadStateOverlay.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
+            loadStateOverlay.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
+            loadStateOverlay.topAnchor.constraint(equalTo: contentView.topAnchor),
+            loadStateOverlay.bottomAnchor.constraint(equalTo: contentView.bottomAnchor)
+        ])
+
         longPressGesture.minimumPressDuration = 0.45
         longPressGesture.cancelsTouchesInView = false
         contentView.addGestureRecognizer(longPressGesture)
@@ -636,16 +646,12 @@ private final class MangaVerticalCollectionPageCell: UICollectionViewCell {
     private func showLoading() {
         imageView.image = nil
         imageView.isHidden = true
-        contentConfiguration = UIHostingConfiguration {
-            ReaderLoadStateView(status: .loading, tint: .white)
-        }
-        .background(Color.black)
-        .margins(.all, 0)
+        loadStateOverlay.show(status: .loading, tintColor: .white)
     }
 
     private func show(image: UIImage, pageID: String) {
         guard currentPageID == pageID else { return }
-        contentConfiguration = nil
+        loadStateOverlay.hide()
         imageView.isHidden = false
         imageView.image = image
         setNeedsLayout()
@@ -656,17 +662,13 @@ private final class MangaVerticalCollectionPageCell: UICollectionViewCell {
         guard currentPageID == pageID else { return }
         imageView.image = nil
         imageView.isHidden = true
-        contentConfiguration = UIHostingConfiguration { [weak self] in
-            ReaderLoadStateView(
-                status: .failed(title: L10n.string("image.load_failed"), message: ""),
-                retryAction: {
-                    self?.retryImageLoad()
-                },
-                tint: .white
-            )
-        }
-        .background(Color.black)
-        .margins(.all, 0)
+        loadStateOverlay.show(
+            status: .failed(title: L10n.string("image.load_failed"), message: ""),
+            retryAction: { [weak self] in
+                self?.retryImageLoad()
+            },
+            tintColor: .white
+        )
         setNeedsLayout()
     }
 
