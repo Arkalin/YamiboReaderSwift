@@ -21,6 +21,9 @@ final class MineHomeViewModel {
     var isRefreshingProfile = false
     var isLoggingIn = false
     var isSigningOut = false
+    var isCheckingIn = false
+    var hasCheckedInToday = false
+    var checkInResultMessage: String?
     var offlineCacheQueueRunState = MangaOfflineCacheQueueRunState.paused
     var offlineCacheQueueGroups: [MineOfflineCacheQueueOwnerGroup] = []
     var offlineCacheQueueEntryCount = 0
@@ -33,16 +36,19 @@ final class MineHomeViewModel {
     @ObservationIgnored let profileAvatarLoader: any YamiboProfileAvatarLoading
 
     private let appContext: YamiboAppContext
+    @ObservationIgnored private let checkInService: any YamiboCheckInServicing
     @ObservationIgnored private var offlineCacheQueueController: (any MangaOfflineCacheQueueControlling)?
     @ObservationIgnored private var offlineCacheQueueUpdatesTask: Task<Void, Never>?
     @ObservationIgnored private var lastAutomaticProfileRefreshCredential: String?
 
     init(
         appContext: YamiboAppContext,
-        offlineCacheQueueController: (any MangaOfflineCacheQueueControlling)? = nil
+        offlineCacheQueueController: (any MangaOfflineCacheQueueControlling)? = nil,
+        checkInService: (any YamiboCheckInServicing)? = nil
     ) {
         self.appContext = appContext
         self.offlineCacheQueueController = offlineCacheQueueController
+        self.checkInService = checkInService ?? appContext.makeCheckInService()
         profileAvatarLoader = appContext.makeProfileAvatarLoader()
     }
 
@@ -55,7 +61,7 @@ final class MineHomeViewModel {
     }
 
     var isBusy: Bool {
-        isLoading || isLoggingIn || isSigningOut
+        isLoading || isLoggingIn || isSigningOut || isCheckingIn
     }
 
     var offlineCacheQueueIsEmpty: Bool {
@@ -77,6 +83,7 @@ final class MineHomeViewModel {
 
         session = await appContext.sessionStore.load()
         profile = await appContext.profileStore.load()
+        await refreshCheckInState()
         await loadOfflineCacheQueue()
 
         guard isLoggedIn,
@@ -119,7 +126,9 @@ final class MineHomeViewModel {
                 )
             )
             session = await appContext.sessionStore.load()
+            await refreshCheckInState()
             errorMessage = nil
+            checkInResultMessage = nil
             return true
         } catch {
             errorMessage = error.localizedDescription
@@ -137,10 +146,50 @@ final class MineHomeViewModel {
             session = await appContext.sessionStore.load()
             profile = await appContext.profileStore.load()
             lastAutomaticProfileRefreshCredential = nil
+            hasCheckedInToday = false
             errorMessage = nil
+            checkInResultMessage = nil
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    func checkIn() async {
+        guard !isCheckingIn else { return }
+        guard !hasCheckedInToday else {
+            checkInResultMessage = YamiboCheckInResult.alreadyCheckedInToday.message
+            errorMessage = nil
+            return
+        }
+        isCheckingIn = true
+        defer { isCheckingIn = false }
+
+        let result = await checkInService.checkInIfNeeded(force: false)
+        checkInResultMessage = nil
+        switch result {
+        case .success:
+            hasCheckedInToday = true
+            checkInResultMessage = result.message
+            errorMessage = nil
+            await refreshProfile(presentsErrors: false)
+        case .alreadyCheckedInToday, .skippedToday:
+            hasCheckedInToday = true
+            checkInResultMessage = YamiboCheckInResult.alreadyCheckedInToday.message
+            errorMessage = nil
+        case .notAuthenticated:
+            hasCheckedInToday = false
+            errorMessage = result.message
+        case .parseFailed, .verificationFailed, .networkFailed:
+            errorMessage = result.message
+        }
+    }
+
+    private func refreshCheckInState() async {
+        guard isLoggedIn else {
+            hasCheckedInToday = false
+            return
+        }
+        hasCheckedInToday = !(await appContext.checkInStore.needsCheckIn(session: session))
     }
 
     func loadOfflineCacheQueue() async {
@@ -339,7 +388,10 @@ final class MineHomeViewModel {
             try? await appContext.makeAccountService().clearLocalAuthentication()
             session = await appContext.sessionStore.load()
             profile = await appContext.profileStore.load()
-            errorMessage = YamiboError.notAuthenticated.localizedDescription
+            await refreshCheckInState()
+            if presentsErrors {
+                errorMessage = YamiboError.notAuthenticated.localizedDescription
+            }
         } catch {
             if presentsErrors {
                 errorMessage = error.localizedDescription

@@ -1,16 +1,16 @@
 import CryptoKit
 import Foundation
 
-public struct AutoSignInSnapshot: Codable, Equatable, Sendable {
-    public var signedDatesByAccountHash: [String: String]
+public struct YamiboCheckInSnapshot: Codable, Equatable, Sendable {
+    public var checkedInDatesByAccountHash: [String: String]
 
-    public init(signedDatesByAccountHash: [String: String] = [:]) {
-        self.signedDatesByAccountHash = signedDatesByAccountHash
+    public init(checkedInDatesByAccountHash: [String: String] = [:]) {
+        self.checkedInDatesByAccountHash = checkedInDatesByAccountHash
     }
 }
 
-public actor AutoSignInStore {
-    public static let didChangeNotification = Notification.Name("yamibo.autoSignInStore.didChange")
+public actor YamiboCheckInStore {
+    public static let didChangeNotification = Notification.Name("yamibo.checkInStore.didChange")
     public static let changeIDUserInfoKey = "changeID"
 
     public nonisolated let changeID = UUID().uuidString
@@ -39,23 +39,23 @@ public actor AutoSignInStore {
         self.formatter = formatter
     }
 
-    public func needsSignIn(session: SessionState) async -> Bool {
+    public func needsCheckIn(session: SessionState) async -> Bool {
         guard let key = storageKey(for: session) else { return true }
         return defaults.string(forKey: key) != currentDateString()
     }
 
-    public func markSignedIn(session: SessionState) async {
+    public func markCheckedIn(session: SessionState) async {
         guard let key = storageKey(for: session) else { return }
         defaults.set(currentDateString(), forKey: key)
         postChangeNotification()
     }
 
-    public func lastSignedDate(session: SessionState) async -> String? {
+    public func lastCheckedInDate(session: SessionState) async -> String? {
         guard let key = storageKey(for: session) else { return nil }
         return defaults.string(forKey: key)
     }
 
-    public func exportSnapshot() async -> AutoSignInSnapshot {
+    public func exportSnapshot() async -> YamiboCheckInSnapshot {
         let prefix = "\(keyPrefix)."
         let values = defaults.dictionaryRepresentation().reduce(into: [String: String]()) { partial, item in
             guard item.key.hasPrefix(prefix), let date = item.value as? String else { return }
@@ -63,15 +63,15 @@ public actor AutoSignInStore {
             guard !hash.isEmpty else { return }
             partial[hash] = date
         }
-        return AutoSignInSnapshot(signedDatesByAccountHash: values)
+        return YamiboCheckInSnapshot(checkedInDatesByAccountHash: values)
     }
 
-    public func importSnapshot(_ snapshot: AutoSignInSnapshot) async {
+    public func importSnapshot(_ snapshot: YamiboCheckInSnapshot) async {
         let prefix = "\(keyPrefix)."
         for key in defaults.dictionaryRepresentation().keys where key.hasPrefix(prefix) {
             defaults.removeObject(forKey: key)
         }
-        for (hash, date) in snapshot.signedDatesByAccountHash where !hash.isEmpty && !date.isEmpty {
+        for (hash, date) in snapshot.checkedInDatesByAccountHash where !hash.isEmpty && !date.isEmpty {
             defaults.set(date, forKey: "\(prefix)\(hash)")
         }
         postChangeNotification()

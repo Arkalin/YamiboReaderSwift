@@ -40,6 +40,10 @@ _Avoid_: captcha, verification code, password hint
 Ending the current **Yamibo Account** authentication state in the app while preserving user-owned library, reading, sync, and app settings.
 _Avoid_: reset application, clear data, delete account
 
+**Yamibo Check-In**:
+The Yamibo forum daily check-in action for the current **Yamibo Account**, available from Mine Home and app automation entry points.
+_Avoid_: sign in, login, automatic-only sign-in
+
 **App Continuity**:
 The app workflow that keeps the **Favorite Library**, reader resume route, WebDAV sync, and current reading entry consistent across launch, foreground refresh, local data changes, and backgrounding.
 _Avoid_: app sync, startup restore, lifecycle handler
@@ -66,4 +70,5 @@ _Avoid_: app sync, startup restore, lifecycle handler
 - A **Yamibo Account** stores authentication state in the app, not the account password.
 - **Yamibo Sign Out** clears current authentication and cached profile state without clearing the **Favorite Library** or reading settings.
 - **Yamibo Sign Out** preserves manga offline cache records, queued work, and image bytes because they are owned by the local **Favorite Library** rather than the current authentication state.
+- **Yamibo Check-In** is distinct from Yamibo Account login and may reuse the latest local daily check-in record to avoid unnecessary forum requests.
 - **App Continuity** may use WebDAV sync before restoring a reader resume route so the restored entry reflects the latest user-owned **Favorite Library** reading metadata.

@@ -17,7 +17,7 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
 
     public let sessionStore: SessionStore
     public let profileStore: YamiboProfileStore
-    public let autoSignInStore: AutoSignInStore
+    public let checkInStore: YamiboCheckInStore
     public let settingsStore: SettingsStore
     public let webDAVSyncSettingsStore: WebDAVSyncSettingsStore
     public let readerResumeRouteStore: ReaderResumeRouteStore
@@ -37,7 +37,7 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
     public init(
         sessionStore: SessionStore = SessionStore(),
         profileStore: YamiboProfileStore = YamiboProfileStore(),
-        autoSignInStore: AutoSignInStore = AutoSignInStore(),
+        checkInStore: YamiboCheckInStore = YamiboCheckInStore(),
         settingsStore: SettingsStore = SettingsStore(),
         webDAVSyncSettingsStore: WebDAVSyncSettingsStore = WebDAVSyncSettingsStore(),
         readerResumeRouteStore: ReaderResumeRouteStore = ReaderResumeRouteStore(),
@@ -55,7 +55,7 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
     ) {
         self.sessionStore = sessionStore
         self.profileStore = profileStore
-        self.autoSignInStore = autoSignInStore
+        self.checkInStore = checkInStore
         self.settingsStore = settingsStore
         self.webDAVSyncSettingsStore = webDAVSyncSettingsStore
         self.readerResumeRouteStore = readerResumeRouteStore
@@ -201,10 +201,10 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         return await mangaOfflineCacheQueueExecutorBox.setIfEmpty(executor)
     }
 
-    public func makeAutoSignInService() -> AutoSignInService {
-        AutoSignInService(
+    public func makeCheckInService() -> any YamiboCheckInServicing {
+        YamiboCheckInService(
             sessionStore: sessionStore,
-            autoSignInStore: autoSignInStore,
+            checkInStore: checkInStore,
             session: session
         )
     }

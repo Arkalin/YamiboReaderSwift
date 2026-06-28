@@ -128,6 +128,125 @@ final class MineHomeViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.profile?.uid, "535977")
     }
 
+    func testManualCheckInUsesSharedServiceWithoutForceAndShowsSkippedTodayMessage() async throws {
+        let fixture = try await makeMineHomeFixture()
+        let checkInService = RecordingCheckInService(result: .skippedToday)
+        let viewModel = MineHomeViewModel(
+            appContext: fixture.appContext,
+            checkInService: checkInService
+        )
+
+        await viewModel.checkIn()
+
+        let forces = await checkInService.snapshotForces()
+        XCTAssertEqual(forces, [false])
+        XCTAssertEqual(
+            viewModel.checkInResultMessage,
+            YamiboCheckInResult.alreadyCheckedInToday.message
+        )
+        XCTAssertNil(viewModel.errorMessage)
+        XCTAssertFalse(viewModel.isCheckingIn)
+        XCTAssertTrue(viewModel.hasCheckedInToday)
+    }
+
+    func testManualCheckInAlreadyCheckedInShowsTodayMessage() async throws {
+        let fixture = try await makeMineHomeFixture()
+        let checkInService = RecordingCheckInService(result: .alreadyCheckedInToday)
+        let viewModel = MineHomeViewModel(
+            appContext: fixture.appContext,
+            checkInService: checkInService
+        )
+
+        await viewModel.checkIn()
+
+        let forces = await checkInService.snapshotForces()
+        XCTAssertEqual(forces, [false])
+        XCTAssertEqual(
+            viewModel.checkInResultMessage,
+            YamiboCheckInResult.alreadyCheckedInToday.message
+        )
+        XCTAssertNil(viewModel.errorMessage)
+        XCTAssertTrue(viewModel.hasCheckedInToday)
+    }
+
+    func testManualCheckInSuccessRefreshesProfileWithoutOverwritingResult() async throws {
+        let fixture = try await makeMineHomeFixture(accountUID: "535977")
+        let checkInService = RecordingCheckInService(result: .success)
+        nonisolated(unsafe) var requestCount = 0
+        MineProfileRefreshTestURLProtocol.handler = { request in
+            requestCount += 1
+            return profileResponse(for: request, uid: "535977")
+        }
+        defer { MineProfileRefreshTestURLProtocol.handler = nil }
+
+        let viewModel = MineHomeViewModel(
+            appContext: fixture.appContext,
+            checkInService: checkInService
+        )
+        viewModel.session = await fixture.appContext.sessionStore.load()
+
+        await viewModel.checkIn()
+
+        let forces = await checkInService.snapshotForces()
+        XCTAssertEqual(forces, [false])
+        XCTAssertEqual(requestCount, 1)
+        XCTAssertEqual(viewModel.profile?.uid, "535977")
+        XCTAssertEqual(viewModel.checkInResultMessage, YamiboCheckInResult.success.message)
+        XCTAssertNil(viewModel.errorMessage)
+        XCTAssertTrue(viewModel.hasCheckedInToday)
+    }
+
+    func testManualCheckInFailurePresentsError() async throws {
+        let fixture = try await makeMineHomeFixture()
+        let checkInService = RecordingCheckInService(result: .verificationFailed)
+        let viewModel = MineHomeViewModel(
+            appContext: fixture.appContext,
+            checkInService: checkInService
+        )
+
+        await viewModel.checkIn()
+
+        let forces = await checkInService.snapshotForces()
+        XCTAssertEqual(forces, [false])
+        XCTAssertNil(viewModel.checkInResultMessage)
+        XCTAssertEqual(viewModel.errorMessage, YamiboCheckInResult.verificationFailed.message)
+        XCTAssertFalse(viewModel.isCheckingIn)
+        XCTAssertFalse(viewModel.hasCheckedInToday)
+    }
+
+    func testLoadShowsCheckedInTodayWhenLocalRecordExists() async throws {
+        let fixture = try await makeMineHomeFixture(cachedProfile: makeProfile(uid: "535977"))
+        let session = await fixture.appContext.sessionStore.load()
+        await fixture.checkInStore.markCheckedIn(session: session)
+        let viewModel = MineHomeViewModel(appContext: fixture.appContext)
+
+        await viewModel.load()
+
+        XCTAssertTrue(viewModel.hasCheckedInToday)
+    }
+
+    func testManualCheckInDoesNotCallServiceWhenTodayAlreadyRecorded() async throws {
+        let fixture = try await makeMineHomeFixture(cachedProfile: makeProfile(uid: "535977"))
+        let session = await fixture.appContext.sessionStore.load()
+        await fixture.checkInStore.markCheckedIn(session: session)
+        let checkInService = RecordingCheckInService(result: .success)
+        let viewModel = MineHomeViewModel(
+            appContext: fixture.appContext,
+            checkInService: checkInService
+        )
+        await viewModel.load()
+
+        await viewModel.checkIn()
+
+        let forces = await checkInService.snapshotForces()
+        XCTAssertTrue(forces.isEmpty)
+        XCTAssertEqual(
+            viewModel.checkInResultMessage,
+            YamiboCheckInResult.alreadyCheckedInToday.message
+        )
+        XCTAssertTrue(viewModel.hasCheckedInToday)
+    }
+
     func testOfflineCacheQueueProjectsEntryCountGroupingOrderingProgressSpeedAndFailure() async throws {
         let fixture = try await makeMineHomeFixture()
         let activeImage = try XCTUnwrap(URL(string: "https://img.example.com/100-1.jpg"))
@@ -385,6 +504,7 @@ final class MineHomeViewModelTests: XCTestCase {
 
 private struct MineHomeViewModelFixture {
     let appContext: YamiboAppContext
+    let checkInStore: YamiboCheckInStore
     let offlineCacheStore: FileMangaOfflineCacheStore
     let directoryStore: FileMangaDirectoryStore
 }
@@ -396,6 +516,10 @@ private func makeMineHomeFixture(
     let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "mine-home-view-model")
     let sessionStore = try SessionStore(testSuiteName: defaultsSuiteName, key: "session")
     let profileStore = try YamiboProfileStore(testSuiteName: defaultsSuiteName, key: "profile")
+    let checkInStore = YamiboCheckInStore(
+        defaults: try YamiboTestDefaults.defaults(suiteName: defaultsSuiteName),
+        keyPrefix: "check-in"
+    )
     let offlineCacheStore = FileMangaOfflineCacheStore(baseDirectory: makeMineTemporaryDirectory())
     let directoryStore = FileMangaDirectoryStore(baseDirectory: makeMineTemporaryDirectory())
     try await sessionStore.save(
@@ -413,12 +537,14 @@ private func makeMineHomeFixture(
     let appContext = YamiboAppContext(
         sessionStore: sessionStore,
         profileStore: profileStore,
+        checkInStore: checkInStore,
         mangaDirectoryStore: directoryStore,
         mangaOfflineCacheStore: offlineCacheStore,
         session: makeProfileRefreshTestSession()
     )
     return MineHomeViewModelFixture(
         appContext: appContext,
+        checkInStore: checkInStore,
         offlineCacheStore: offlineCacheStore,
         directoryStore: directoryStore
     )
@@ -458,6 +584,24 @@ private final class MineProfileRefreshTestURLProtocol: URLProtocol {
 
 private enum MineProfileRefreshTestError: Error {
     case missingHandler
+}
+
+private actor RecordingCheckInService: YamiboCheckInServicing {
+    private let result: YamiboCheckInResult
+    private var forces: [Bool] = []
+
+    init(result: YamiboCheckInResult) {
+        self.result = result
+    }
+
+    func checkInIfNeeded(force: Bool) async -> YamiboCheckInResult {
+        forces.append(force)
+        return result
+    }
+
+    func snapshotForces() -> [Bool] {
+        forces
+    }
 }
 
 private func makeProfileRefreshTestSession() -> URLSession {
