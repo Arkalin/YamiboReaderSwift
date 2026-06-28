@@ -12,6 +12,9 @@ public final class MangaOfflineCacheContinuedProcessingCoordinator: MangaOffline
     private let subtitle: String
     private var activeTaskCompletion: (@Sendable (Bool) -> Void)?
     private var activeProgress: Progress?
+    #if os(iOS) && canImport(BackgroundTasks)
+    private var launchHandler: LaunchHandler?
+    #endif
 
     public init(
         title: String = L10n.string("mine.download_queue"),
@@ -24,8 +27,10 @@ public final class MangaOfflineCacheContinuedProcessingCoordinator: MangaOffline
     public func submitUserInitiatedRun() async {
         #if os(iOS) && canImport(BackgroundTasks)
         guard #available(iOS 26.0, *) else { return }
+        let identifier = Self.makeTaskIdentifier()
+        guard registerLaunchHandler(for: identifier) else { return }
         let request = BGContinuedProcessingTaskRequest(
-            identifier: Self.makeTaskIdentifier(),
+            identifier: identifier,
             title: title,
             subtitle: subtitle
         )
@@ -68,6 +73,26 @@ public final class MangaOfflineCacheContinuedProcessingCoordinator: MangaOffline
     }
 
     #if os(iOS) && canImport(BackgroundTasks)
+    private struct LaunchHandler: Sendable {
+        var queue: DispatchQueue?
+        var continueQueue: @Sendable () async -> Void
+        var pauseQueue: @Sendable () async -> Void
+    }
+
+    @available(iOS 26.0, *)
+    public static func configureLaunchHandler(
+        coordinator: MangaOfflineCacheContinuedProcessingCoordinator,
+        queue: DispatchQueue? = nil,
+        continueQueue: @escaping @Sendable () async -> Void,
+        pauseQueue: @escaping @Sendable () async -> Void
+    ) {
+        coordinator.configureLaunchHandler(
+            queue: queue,
+            continueQueue: continueQueue,
+            pauseQueue: pauseQueue
+        )
+    }
+
     @available(iOS 26.0, *)
     public static func registerLaunchHandler(
         coordinator: MangaOfflineCacheContinuedProcessingCoordinator,
@@ -75,20 +100,47 @@ public final class MangaOfflineCacheContinuedProcessingCoordinator: MangaOffline
         continueQueue: @escaping @Sendable () async -> Void,
         pauseQueue: @escaping @Sendable () async -> Void
     ) {
-        BGTaskScheduler.shared.register(
-            forTaskWithIdentifier: permittedIdentifier,
-            using: queue
+        configureLaunchHandler(
+            coordinator: coordinator,
+            queue: queue,
+            continueQueue: continueQueue,
+            pauseQueue: pauseQueue
+        )
+    }
+
+    @available(iOS 26.0, *)
+    private func configureLaunchHandler(
+        queue: DispatchQueue?,
+        continueQueue: @escaping @Sendable () async -> Void,
+        pauseQueue: @escaping @Sendable () async -> Void
+    ) {
+        lock.withLock {
+            launchHandler = LaunchHandler(
+                queue: queue,
+                continueQueue: continueQueue,
+                pauseQueue: pauseQueue
+            )
+        }
+    }
+
+    @available(iOS 26.0, *)
+    private func registerLaunchHandler(for identifier: String) -> Bool {
+        guard let launchHandler = lock.withLock({ launchHandler }) else { return false }
+
+        return BGTaskScheduler.shared.register(
+            forTaskWithIdentifier: identifier,
+            using: launchHandler.queue
         ) { task in
             guard let task = task as? BGContinuedProcessingTask else {
                 task.setTaskCompleted(success: false)
                 return
             }
-            coordinator.attach(
+            self.attach(
                 task: task,
-                pauseQueue: pauseQueue
+                pauseQueue: launchHandler.pauseQueue
             )
             Task {
-                await continueQueue()
+                await launchHandler.continueQueue()
             }
         }
     }

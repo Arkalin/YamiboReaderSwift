@@ -54,7 +54,7 @@ struct YamiboReaderApp: App {
     private static func registerMangaOfflineCacheBackgroundTasks(appContext: YamiboAppContext) {
         #if os(iOS) && canImport(BackgroundTasks)
         guard #available(iOS 26.0, *) else { return }
-        MangaOfflineCacheContinuedProcessingCoordinator.registerLaunchHandler(
+        MangaOfflineCacheContinuedProcessingCoordinator.configureLaunchHandler(
             coordinator: appContext.mangaOfflineCacheContinuedProcessingCoordinator,
             continueQueue: {
                 let executor = await appContext.makeMangaOfflineCacheQueueExecutor()
