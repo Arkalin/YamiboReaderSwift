@@ -54,6 +54,10 @@ _Avoid_: app sync, startup restore, lifecycle handler
 - Archived **Favorite Library** metadata is matched by canonical thread URL, not Yamibo remote favorite ID, because a remote favorite ID can change when the same thread is removed and re-added.
 - When archived **Favorite Library** metadata restores a favorite whose collection no longer exists, the favorite is restored at the root while preserving display name, hidden state, and reading positions.
 - **Mine Home** presents the current **Yamibo Account** through its **Yamibo Profile**.
+- **Mine Home** may expose manga offline cache progress, grouped by **Favorite Library** entry, while the offline cache work remains owned by the Manga Reader context.
+- **Mine Home** represents pending manga offline cache activity by unfinished chapter work count, not by completed cached chapters or favorite group count.
+- Manga offline cache records and image bytes are device-local content availability data and are not synchronized as **Favorite Library** metadata through WebDAV.
+- Manga offline cache completion does not update **Favorite Library** reading progress, resume routes, or recent-reading timestamps.
 - A **Yamibo Profile Avatar** belongs to a **Yamibo Profile**, not to a generic app image-loading model.
 - A **Yamibo Profile** identifies the account's current **Yamibo User Group** and forum credit totals.
 - **Forum Credit Progress** uses the account's total forum credits and the next **Yamibo User Group** threshold.
@@ -61,4 +65,5 @@ _Avoid_: app sync, startup restore, lifecycle handler
 - A **Security Question** may be required to authenticate a **Yamibo Account**.
 - A **Yamibo Account** stores authentication state in the app, not the account password.
 - **Yamibo Sign Out** clears current authentication and cached profile state without clearing the **Favorite Library** or reading settings.
+- **Yamibo Sign Out** preserves manga offline cache records, queued work, and image bytes because they are owned by the local **Favorite Library** rather than the current authentication state.
 - **App Continuity** may use WebDAV sync before restoring a reader resume route so the restored entry reflects the latest user-owned **Favorite Library** reading metadata.
