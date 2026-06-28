@@ -242,6 +242,127 @@ struct MangaReaderTestsMangaOfflineCacheQueueExecutor {
         #expect(await networkLoader.requestedURLs == [imageURLs[1]])
     }
 
+    @Test func transparentCacheMissesUseBackgroundTransport() async throws {
+        let transparentCache = FileMangaImageDataCacheStore(baseDirectory: try makeTemporaryExecutorDirectory())
+        let imageURLs = try makeImageURLs(tid: "710", count: 2)
+        try await transparentCache.save(Data([7]), for: imageURLs[0])
+        let transport = RecordingImageTransport(dataByURL: [imageURLs[1]: Data([8])])
+        let networkLoader = RecordingNetworkImageLoader(dataByURL: [:])
+        let acquirer = MangaOfflineCacheImageAcquirer(
+            transparentCache: transparentCache,
+            networkLoader: networkLoader,
+            backgroundTransport: transport
+        )
+        let refererURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?tid=710"))
+
+        let cacheHit = try await acquirer.acquireImageData(for: imageURLs[0], refererURL: refererURL)
+        let miss = try await acquirer.acquireImageData(for: imageURLs[1], refererURL: refererURL)
+
+        #expect(cacheHit == MangaOfflineCacheImageAcquisition(data: Data([7]), source: .transparentCache))
+        #expect(miss == MangaOfflineCacheImageAcquisition(data: Data([8]), source: .network))
+        #expect(await transport.requests == [ImageTransportRequest(imageURL: imageURLs[1], refererURL: refererURL)])
+        #expect(await networkLoader.requestedURLs.isEmpty)
+    }
+
+    @Test func observerReceivesSubmissionProgressAndSuccessfulFinish() async throws {
+        let store = FileMangaOfflineCacheStore(baseDirectory: try makeTemporaryExecutorDirectory())
+        let imageURLs = try makeImageURLs(tid: "720", count: 2)
+        _ = try await store.enqueueOfflineCacheWork(
+            try makeExecutorWorkRequest(favoriteID: "favorite-a", tid: "720", targetImageURLs: imageURLs)
+        )
+        let acquirer = RecordingOfflineImageAcquirer()
+        await acquirer.setData(for: imageURLs)
+        let observer = RecordingQueueRunObserver()
+        let executor = MangaOfflineCacheQueueExecutor(
+            store: store,
+            chapterDocumentLoader: RecordingChapterDocumentLoader(),
+            imageAcquirer: acquirer,
+            runObserver: observer,
+            maxConcurrentImageTransfers: 1
+        )
+
+        try await executor.continueQueue()
+        await executor.waitForIdle()
+
+        #expect(await observer.submissionCount == 1)
+        #expect(await observer.progressUpdates == [
+            MangaOfflineCacheProgress(completedImageCount: 0, targetImageCount: 2),
+            MangaOfflineCacheProgress(completedImageCount: 1, targetImageCount: 2),
+            MangaOfflineCacheProgress(completedImageCount: 2, targetImageCount: 2)
+        ])
+        #expect(await observer.finishResults == [true])
+    }
+
+    @Test func observerIsNotResubmittedForSystemContinuedProcessingLaunch() async throws {
+        let store = FileMangaOfflineCacheStore(baseDirectory: try makeTemporaryExecutorDirectory())
+        let imageURLs = try makeImageURLs(tid: "730", count: 1)
+        _ = try await store.enqueueOfflineCacheWork(
+            try makeExecutorWorkRequest(favoriteID: "favorite-a", tid: "730", targetImageURLs: imageURLs)
+        )
+        let acquirer = RecordingOfflineImageAcquirer()
+        await acquirer.setData(for: imageURLs)
+        let observer = RecordingQueueRunObserver()
+        let executor = MangaOfflineCacheQueueExecutor(
+            store: store,
+            chapterDocumentLoader: RecordingChapterDocumentLoader(),
+            imageAcquirer: acquirer,
+            runObserver: observer
+        )
+
+        try await executor.continueQueue(submitsUserInitiatedRun: false)
+        await executor.waitForIdle()
+
+        #expect(await observer.submissionCount == 0)
+        #expect(await observer.finishResults == [true])
+    }
+
+    @Test func continueWhileAlreadyRunningDoesNotSubmitAnotherContinuedProcessingRun() async throws {
+        let store = FileMangaOfflineCacheStore(baseDirectory: try makeTemporaryExecutorDirectory())
+        let imageURLs = try makeImageURLs(tid: "735", count: 2)
+        _ = try await store.enqueueOfflineCacheWork(
+            try makeExecutorWorkRequest(favoriteID: "favorite-a", tid: "735", targetImageURLs: imageURLs)
+        )
+        let acquirer = FirstImageOnlyImmediateAcquirer(firstImageURL: imageURLs[0])
+        let observer = RecordingQueueRunObserver()
+        let executor = MangaOfflineCacheQueueExecutor(
+            store: store,
+            chapterDocumentLoader: RecordingChapterDocumentLoader(),
+            imageAcquirer: acquirer,
+            runObserver: observer
+        )
+
+        try await executor.continueQueue()
+        try await waitUntil {
+            await store.offlineCacheWork(favoriteID: "favorite-a", tid: "735")?.completedImageURLs == [imageURLs[0]]
+        }
+        try await executor.continueQueue()
+        try await executor.pauseQueue()
+        await executor.waitForIdle()
+
+        #expect(await observer.submissionCount == 1)
+    }
+
+    @Test func urlSessionDownloadTransportReturnsDownloadedDataAndReferer() async throws {
+        let harness = MangaReaderDataTestHarness()
+        defer { harness.reset() }
+        let imageURL = try #require(URL(string: "https://img.example.com/740-1.jpg"))
+        let refererURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?tid=740"))
+        harness.setHandler { request in
+            #expect(request.url == imageURL)
+            #expect(request.value(forHTTPHeaderField: "Referer") == refererURL.absoluteString)
+            return MangaReaderDataTestResponse(data: Data([7, 4, 0]))
+        }
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [MangaReaderDataTestURLProtocol.self]
+        configuration.httpAdditionalHeaders = ["X-Manga-Test-ID": harness.testID]
+        let transport = MangaOfflineCacheBackgroundDownloadTransport(configuration: configuration)
+
+        let data = try await transport.downloadImageData(for: imageURL, refererURL: refererURL)
+
+        #expect(data == Data([7, 4, 0]))
+        #expect(harness.requests.count == 1)
+    }
+
     @Test func chapterCancellationRemovesPartialOfflineBytesForCanceledWork() async throws {
         let store = FileMangaOfflineCacheStore(baseDirectory: try makeTemporaryExecutorDirectory())
         let imageURLs = try makeImageURLs(tid: "800", count: 2)
@@ -416,6 +537,55 @@ private actor RecordingNetworkImageLoader: MangaImageDataLoading {
             throw YamiboError.invalidResponse(statusCode: 404)
         }
         return data
+    }
+}
+
+private struct ImageTransportRequest: Hashable, Sendable {
+    var imageURL: URL
+    var refererURL: URL?
+}
+
+private actor RecordingImageTransport: MangaOfflineCacheImageTransporting {
+    private(set) var requests: [ImageTransportRequest] = []
+    private let dataByURL: [URL: Data]
+
+    init(dataByURL: [URL: Data]) {
+        self.dataByURL = dataByURL
+    }
+
+    func downloadImageData(for imageURL: URL, refererURL: URL?) async throws -> Data {
+        requests.append(ImageTransportRequest(imageURL: imageURL, refererURL: refererURL))
+        guard let data = dataByURL[imageURL] else {
+            throw YamiboError.invalidResponse(statusCode: 404)
+        }
+        return data
+    }
+}
+
+private actor RecordingQueueRunObserver: MangaOfflineCacheQueueRunObserving {
+    private(set) var submissionCount = 0
+    private(set) var progressUpdates: [MangaOfflineCacheProgress] = []
+    private(set) var finishResults: [Bool] = []
+
+    func submitUserInitiatedRun() async {
+        submissionCount += 1
+    }
+
+    func queueRunDidUpdateProgress(completedImageCount: Int, targetImageCount: Int) async {
+        progressUpdates.append(
+            MangaOfflineCacheProgress(
+                completedImageCount: completedImageCount,
+                targetImageCount: targetImageCount
+            )
+        )
+    }
+
+    func queueRunDidFinish(success: Bool) async {
+        finishResults.append(success)
+    }
+
+    func queueRunDidCancel() async {
+        finishResults.append(false)
     }
 }
 

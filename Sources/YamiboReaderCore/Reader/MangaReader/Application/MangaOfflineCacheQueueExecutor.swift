@@ -19,16 +19,30 @@ public protocol MangaOfflineCacheImageAcquiring: Sendable {
     func acquireImageData(for imageURL: URL, refererURL: URL?) async throws -> MangaOfflineCacheImageAcquisition
 }
 
+public protocol MangaOfflineCacheImageTransporting: Sendable {
+    func downloadImageData(for imageURL: URL, refererURL: URL?) async throws -> Data
+}
+
+public protocol MangaOfflineCacheQueueRunObserving: Sendable {
+    func submitUserInitiatedRun() async
+    func queueRunDidUpdateProgress(completedImageCount: Int, targetImageCount: Int) async
+    func queueRunDidFinish(success: Bool) async
+    func queueRunDidCancel() async
+}
+
 public actor MangaOfflineCacheImageAcquirer: MangaOfflineCacheImageAcquiring {
     private let transparentCache: any MangaImageDataCaching
     private let networkLoader: any MangaImageDataLoading
+    private let backgroundTransport: (any MangaOfflineCacheImageTransporting)?
 
     public init(
         transparentCache: any MangaImageDataCaching,
-        networkLoader: any MangaImageDataLoading
+        networkLoader: any MangaImageDataLoading,
+        backgroundTransport: (any MangaOfflineCacheImageTransporting)? = nil
     ) {
         self.transparentCache = transparentCache
         self.networkLoader = networkLoader
+        self.backgroundTransport = backgroundTransport
     }
 
     public func acquireImageData(for imageURL: URL, refererURL: URL?) async throws -> MangaOfflineCacheImageAcquisition {
@@ -36,7 +50,12 @@ public actor MangaOfflineCacheImageAcquirer: MangaOfflineCacheImageAcquiring {
             return MangaOfflineCacheImageAcquisition(data: cached, source: .transparentCache)
         }
 
-        let data = try await networkLoader.imageData(for: imageURL, refererURL: refererURL)
+        let data: Data
+        if let backgroundTransport {
+            data = try await backgroundTransport.downloadImageData(for: imageURL, refererURL: refererURL)
+        } else {
+            data = try await networkLoader.imageData(for: imageURL, refererURL: refererURL)
+        }
         return MangaOfflineCacheImageAcquisition(data: data, source: .network)
     }
 }
@@ -45,6 +64,7 @@ public actor MangaOfflineCacheQueueExecutor {
     private let store: any MangaOfflineCacheStoring
     private let chapterDocumentLoader: any MangaChapterDocumentLoading
     private let imageAcquirer: any MangaOfflineCacheImageAcquiring
+    private let runObserver: (any MangaOfflineCacheQueueRunObserving)?
     private let maxConcurrentImageTransfers: Int
     private var runTask: Task<Void, Never>?
     private var runGeneration = 0
@@ -53,20 +73,29 @@ public actor MangaOfflineCacheQueueExecutor {
         store: any MangaOfflineCacheStoring,
         chapterDocumentLoader: any MangaChapterDocumentLoading,
         imageAcquirer: any MangaOfflineCacheImageAcquiring,
+        runObserver: (any MangaOfflineCacheQueueRunObserving)? = nil,
         maxConcurrentImageTransfers: Int = 3
     ) {
         self.store = store
         self.chapterDocumentLoader = chapterDocumentLoader
         self.imageAcquirer = imageAcquirer
+        self.runObserver = runObserver
         self.maxConcurrentImageTransfers = max(1, maxConcurrentImageTransfers)
     }
 
     public func continueQueue() async throws {
+        try await continueQueue(submitsUserInitiatedRun: true)
+    }
+
+    public func continueQueue(submitsUserInitiatedRun: Bool) async throws {
         try await store.setOfflineCacheQueueRunState(.running)
         if let runTask, !runTask.isCancelled {
             return
         }
 
+        if submitsUserInitiatedRun {
+            await runObserver?.submitUserInitiatedRun()
+        }
         runGeneration += 1
         let generation = runGeneration
         runTask = Task { [weak self] in
@@ -79,6 +108,7 @@ public actor MangaOfflineCacheQueueExecutor {
         runTask?.cancel()
         runTask = nil
         try await store.setOfflineCacheQueueRunState(.paused)
+        await runObserver?.queueRunDidCancel()
     }
 
     public func cancelChapter(favoriteID: String, tid: String) async throws {
@@ -86,6 +116,7 @@ public actor MangaOfflineCacheQueueExecutor {
         runGeneration += 1
         runTask?.cancel()
         runTask = nil
+        await runObserver?.queueRunDidCancel()
         try await store.cancelOfflineCacheWork(favoriteID: favoriteID, tid: tid)
         if wasRunning {
             try await continueQueue()
@@ -97,6 +128,7 @@ public actor MangaOfflineCacheQueueExecutor {
         runGeneration += 1
         runTask?.cancel()
         runTask = nil
+        await runObserver?.queueRunDidCancel()
         try await store.cancelOfflineCacheWorks(forFavoriteID: favoriteID)
         if wasRunning {
             try await continueQueue()
@@ -111,11 +143,13 @@ public actor MangaOfflineCacheQueueExecutor {
     private func runQueue(generation: Int) async {
         while !Task.isCancelled {
             guard await store.offlineCacheQueueRunState() == .running else {
+                await runObserver?.queueRunDidFinish(success: false)
                 await finishRun(generation: generation, pauseQueue: false)
                 return
             }
 
             guard let work = await store.allOfflineCacheWorks().first else {
+                await runObserver?.queueRunDidFinish(success: true)
                 await finishRun(generation: generation, pauseQueue: true)
                 return
             }
@@ -131,11 +165,13 @@ public actor MangaOfflineCacheQueueExecutor {
                     tid: work.tid,
                     message: Self.failureMessage(from: error)
                 )
+                await runObserver?.queueRunDidFinish(success: false)
                 await finishRun(generation: generation, pauseQueue: true)
                 return
             }
         }
 
+        await runObserver?.queueRunDidFinish(success: false)
         await finishRun(generation: generation, pauseQueue: false)
     }
 
@@ -165,6 +201,10 @@ public actor MangaOfflineCacheQueueExecutor {
             tid: documentBackedWork.tid,
             targetImageURLs: targetImageURLs,
             completedImageURLs: completedImageURLs
+        )
+        await runObserver?.queueRunDidUpdateProgress(
+            completedImageCount: completedImageURLs.count,
+            targetImageCount: targetImageURLs.count
         )
 
         if completedImageURLs.count < targetImageURLs.count {
@@ -263,6 +303,10 @@ public actor MangaOfflineCacheQueueExecutor {
                     targetImageURLs: targetImageURLs,
                     completedImageURLs: completed,
                     currentBytesPerSecond: result.bytesPerSecond
+                )
+                await runObserver?.queueRunDidUpdateProgress(
+                    completedImageCount: completed.count,
+                    targetImageCount: targetImageURLs.count
                 )
                 submitNext()
             }

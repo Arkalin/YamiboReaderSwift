@@ -29,7 +29,10 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
     public let mangaChapterDocumentStore: FileMangaChapterDocumentStore
     public let mangaImageDataCacheStore: FileMangaImageDataCacheStore
     public let mangaOfflineCacheStore: FileMangaOfflineCacheStore
+    public let mangaOfflineCacheBackgroundDownloadTransport: MangaOfflineCacheBackgroundDownloadTransport
+    public let mangaOfflineCacheContinuedProcessingCoordinator: MangaOfflineCacheContinuedProcessingCoordinator
     let session: URLSession
+    private let mangaOfflineCacheQueueExecutorBox = MangaOfflineCacheQueueExecutorBox()
 
     public init(
         sessionStore: SessionStore = SessionStore(),
@@ -46,6 +49,8 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         mangaChapterDocumentStore: FileMangaChapterDocumentStore = FileMangaChapterDocumentStore(),
         mangaImageDataCacheStore: FileMangaImageDataCacheStore = FileMangaImageDataCacheStore(),
         mangaOfflineCacheStore: FileMangaOfflineCacheStore = FileMangaOfflineCacheStore(),
+        mangaOfflineCacheBackgroundDownloadTransport: MangaOfflineCacheBackgroundDownloadTransport = MangaOfflineCacheBackgroundDownloadTransport(),
+        mangaOfflineCacheContinuedProcessingCoordinator: MangaOfflineCacheContinuedProcessingCoordinator = MangaOfflineCacheContinuedProcessingCoordinator(),
         session: URLSession = YamiboNetworkConfiguration.makeSession()
     ) {
         self.sessionStore = sessionStore
@@ -62,6 +67,8 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         self.mangaChapterDocumentStore = mangaChapterDocumentStore
         self.mangaImageDataCacheStore = mangaImageDataCacheStore
         self.mangaOfflineCacheStore = mangaOfflineCacheStore
+        self.mangaOfflineCacheBackgroundDownloadTransport = mangaOfflineCacheBackgroundDownloadTransport
+        self.mangaOfflineCacheContinuedProcessingCoordinator = mangaOfflineCacheContinuedProcessingCoordinator
         self.session = session
     }
 
@@ -171,20 +178,27 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
     }
 
     public func makeMangaOfflineCacheQueueExecutor() async -> MangaOfflineCacheQueueExecutor {
+        if let executor = await mangaOfflineCacheQueueExecutorBox.value {
+            return executor
+        }
+
         let sessionState = await sessionStore.load()
         let client = YamiboClient(
             session: session,
             cookie: sessionState.cookie,
             userAgent: sessionState.userAgent
         )
-        return MangaOfflineCacheQueueExecutor(
+        let executor = MangaOfflineCacheQueueExecutor(
             store: mangaOfflineCacheStore,
             chapterDocumentLoader: await makeMangaChapterDocumentLoader(),
             imageAcquirer: MangaOfflineCacheImageAcquirer(
                 transparentCache: mangaImageDataCacheStore,
-                networkLoader: YamiboMangaImageDataLoader(client: client)
-            )
+                networkLoader: YamiboMangaImageDataLoader(client: client),
+                backgroundTransport: mangaOfflineCacheBackgroundDownloadTransport
+            ),
+            runObserver: mangaOfflineCacheContinuedProcessingCoordinator
         )
+        return await mangaOfflineCacheQueueExecutorBox.setIfEmpty(executor)
     }
 
     public func makeAutoSignInService() -> AutoSignInService {
@@ -262,6 +276,18 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
             }
         }
         #endif
+    }
+}
+
+private actor MangaOfflineCacheQueueExecutorBox {
+    var value: MangaOfflineCacheQueueExecutor?
+
+    func setIfEmpty(_ executor: MangaOfflineCacheQueueExecutor) -> MangaOfflineCacheQueueExecutor {
+        if let value {
+            return value
+        }
+        value = executor
+        return executor
     }
 }
 
