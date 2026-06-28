@@ -2,7 +2,7 @@ import Foundation
 import Observation
 import YamiboReaderCore
 
-protocol MangaOfflineCacheQueueControlling: Sendable {
+public protocol MangaOfflineCacheQueueControlling: Sendable {
     func continueQueue() async throws
     func pauseQueue() async throws
     func cancelChapter(ownerName: String, tid: String) async throws
