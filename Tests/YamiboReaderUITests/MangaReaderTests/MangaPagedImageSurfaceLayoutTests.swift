@@ -39,6 +39,106 @@ struct MangaPagedImageSurfaceLayoutTests {
         #expect(ReaderPagedTapZone.zone(for: CGPoint(x: 260, y: 400), in: bounds) == .toggleChrome)
     }
 
+    @Test func pageLongPressHitTestingAcceptsOnlyMiddleThirdOfLoadedImage() {
+        let pageBounds = CGRect(x: 20, y: 40, width: 360, height: 720)
+        let imageFrame = CGRect(x: 80, y: 100, width: 240, height: 600)
+
+        #expect(!MangaPageLongPressHitTesting.acceptsPageLongPress(
+            at: CGPoint(x: 139.9, y: 400),
+            in: pageBounds,
+            imageFrame: imageFrame
+        ))
+        #expect(MangaPageLongPressHitTesting.acceptsPageLongPress(
+            at: CGPoint(x: 140, y: 400),
+            in: pageBounds,
+            imageFrame: imageFrame
+        ))
+        #expect(MangaPageLongPressHitTesting.acceptsPageLongPress(
+            at: CGPoint(x: 260, y: 400),
+            in: pageBounds,
+            imageFrame: imageFrame
+        ))
+        #expect(!MangaPageLongPressHitTesting.acceptsPageLongPress(
+            at: CGPoint(x: 260.1, y: 400),
+            in: pageBounds,
+            imageFrame: imageFrame
+        ))
+        #expect(!MangaPageLongPressHitTesting.acceptsPageLongPress(
+            at: CGPoint(x: 200, y: 99.9),
+            in: pageBounds,
+            imageFrame: imageFrame
+        ))
+        #expect(!MangaPageLongPressHitTesting.acceptsPageLongPress(
+            at: CGPoint(x: 200, y: 700.1),
+            in: pageBounds,
+            imageFrame: imageFrame
+        ))
+    }
+
+    @Test func pageLongPressHitTestingScopesMiddleThirdToEachTwoPageSlot() {
+        let leftSlot = CGRect(x: 0, y: 0, width: 300, height: 800)
+        let rightSlot = CGRect(x: 300, y: 0, width: 300, height: 800)
+
+        #expect(!MangaPageLongPressHitTesting.acceptsPageLongPress(
+            at: CGPoint(x: 99.9, y: 400),
+            in: leftSlot,
+            imageFrame: leftSlot
+        ))
+        #expect(MangaPageLongPressHitTesting.acceptsPageLongPress(
+            at: CGPoint(x: 100, y: 400),
+            in: leftSlot,
+            imageFrame: leftSlot
+        ))
+        #expect(MangaPageLongPressHitTesting.acceptsPageLongPress(
+            at: CGPoint(x: 200, y: 400),
+            in: leftSlot,
+            imageFrame: leftSlot
+        ))
+        #expect(!MangaPageLongPressHitTesting.acceptsPageLongPress(
+            at: CGPoint(x: 200.1, y: 400),
+            in: leftSlot,
+            imageFrame: leftSlot
+        ))
+
+        #expect(!MangaPageLongPressHitTesting.acceptsPageLongPress(
+            at: CGPoint(x: 399.9, y: 400),
+            in: rightSlot,
+            imageFrame: rightSlot
+        ))
+        #expect(MangaPageLongPressHitTesting.acceptsPageLongPress(
+            at: CGPoint(x: 400, y: 400),
+            in: rightSlot,
+            imageFrame: rightSlot
+        ))
+        #expect(MangaPageLongPressHitTesting.acceptsPageLongPress(
+            at: CGPoint(x: 500, y: 400),
+            in: rightSlot,
+            imageFrame: rightSlot
+        ))
+        #expect(!MangaPageLongPressHitTesting.acceptsPageLongPress(
+            at: CGPoint(x: 500.1, y: 400),
+            in: rightSlot,
+            imageFrame: rightSlot
+        ))
+    }
+
+    @Test func pageLongPressHitFrameIntersectsWithDisplayedPagedImage() {
+        let layout = MangaPagedImageSurfaceLayout(
+            imageSize: CGSize(width: 800, height: 600),
+            containerSize: CGSize(width: 400, height: 800),
+            pageScaleMode: .fitWidth,
+            initialHorizontalAlignment: .left,
+            zoomScale: 1
+        )
+
+        #expect(layout.displayedImageFrame(forUserOffset: .zero) == CGRect(x: 0, y: 250, width: 400, height: 300))
+        let thirdWidth = CGFloat(400) / 3
+        #expect(MangaPageLongPressHitTesting.allowedFrame(
+            in: CGRect(x: 0, y: 0, width: 400, height: 800),
+            imageFrame: layout.displayedImageFrame(forUserOffset: .zero)
+        ) == CGRect(x: thirdWidth, y: 250, width: thirdWidth, height: 300))
+    }
+
     @Test func surfaceDragIntentRequiresDeliberateHorizontalUnzoomedDrag() {
         #expect(MangaPagedSurfaceDragIntent.unzoomedHorizontalTranslation(CGSize(width: 8, height: 0)) == nil)
         #expect(MangaPagedSurfaceDragIntent.unzoomedHorizontalTranslation(CGSize(width: 20, height: 24)) == nil)

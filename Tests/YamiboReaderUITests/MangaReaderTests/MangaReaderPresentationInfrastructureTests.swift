@@ -1,15 +1,112 @@
 import Foundation
 import Testing
+import XCTest
 @testable import YamiboReaderCore
 @testable import YamiboReaderUI
 
 #if os(iOS)
+import Photos
 import UIKit
 #endif
 
 @Suite("MangaReaderTests: Presentation Infrastructure")
 struct MangaReaderPresentationInfrastructureTests {
     #if os(iOS)
+    @MainActor
+    @Test func imagePipelineReturnsOriginalImageData() async throws {
+        let loader = RecordingMangaPipelineDataLoader(outputs: [.success(Self.pngData)])
+        let pipeline = MangaImagePipeline(dataLoader: loader)
+        let page = try makePipelinePage()
+
+        let data = try await pipeline.imageData(for: page)
+
+        #expect(data == Self.pngData)
+        #expect(await loader.callCount == 1)
+    }
+
+    @Test func imageSaveSuccessFeedbackIsAvailableWhileActionDialogDismisses() async throws {
+        let page = try makePipelinePage()
+        var state = MangaImageSavePresentationState()
+
+        state.presentActions(for: page)
+        state.finishSave(with: .success)
+
+        #expect(state.feedback?.message == L10n.string("image.save_success_message"))
+    }
+
+    @MainActor
+    @Test func imagePipelinePropagatesOriginalImageDataFailures() async throws {
+        let loader = RecordingMangaPipelineDataLoader(outputs: [.failure(MangaPipelineTestError.loaderFailure)])
+        let pipeline = MangaImagePipeline(dataLoader: loader)
+        let page = try makePipelinePage()
+
+        await #expect(throws: MangaPipelineTestError.loaderFailure) {
+            _ = try await pipeline.imageData(for: page)
+        }
+        #expect(await loader.callCount == 1)
+    }
+
+    @MainActor
+    @Test func photoSaverWritesWhenAlreadyAuthorized() async throws {
+        let writer = FakeMangaPhotoLibraryWriter(status: .authorized)
+        let saver = MangaImagePhotoSaver(photoLibrary: writer)
+
+        try await saver.saveImageData(Self.pngData)
+
+        #expect(writer.requestAuthorizationCallCount == 0)
+        #expect(writer.performChangesCallCount == 1)
+    }
+
+    @MainActor
+    @Test func photoSaverRequestsAuthorizationWhenUndetermined() async throws {
+        let writer = FakeMangaPhotoLibraryWriter(status: .notDetermined, requestedStatus: .authorized)
+        let saver = MangaImagePhotoSaver(photoLibrary: writer)
+
+        try await saver.saveImageData(Self.pngData)
+
+        #expect(writer.requestAuthorizationCallCount == 1)
+        #expect(writer.performChangesCallCount == 1)
+    }
+
+    @MainActor
+    @Test func photoSaverThrowsWhenAuthorizationDenied() async throws {
+        let writer = FakeMangaPhotoLibraryWriter(status: .denied)
+        let saver = MangaImagePhotoSaver(photoLibrary: writer)
+
+        await #expect(throws: MangaImagePhotoSaveError.authorizationDenied) {
+            try await saver.saveImageData(Self.pngData)
+        }
+        #expect(writer.requestAuthorizationCallCount == 0)
+        #expect(writer.performChangesCallCount == 0)
+    }
+
+    @MainActor
+    @Test func photoSaverFallsBackToDecodedImageWhenDataResourceWriteFails() async throws {
+        let writer = FakeMangaPhotoLibraryWriter(
+            status: .authorized,
+            performResults: [.failure(MangaPipelineTestError.loaderFailure), .success(())]
+        )
+        let saver = MangaImagePhotoSaver(photoLibrary: writer)
+
+        try await saver.saveImageData(Self.pngData)
+
+        #expect(writer.performChangesCallCount == 2)
+    }
+
+    @MainActor
+    @Test func photoSaverPropagatesWriteFailureWhenDataCannotDecodeForFallback() async throws {
+        let writer = FakeMangaPhotoLibraryWriter(
+            status: .authorized,
+            performResults: [.failure(MangaPipelineTestError.loaderFailure)]
+        )
+        let saver = MangaImagePhotoSaver(photoLibrary: writer)
+
+        await #expect(throws: MangaPipelineTestError.loaderFailure) {
+            try await saver.saveImageData(Data([0, 1, 2]))
+        }
+        #expect(writer.performChangesCallCount == 1)
+    }
+
     @MainActor
     @Test func imagePipelineDeduplicatesConcurrentLoads() async throws {
         let loader = RecordingMangaPipelineDataLoader(outputs: [.success(Self.pngData)], delayNanoseconds: 50_000_000)
@@ -76,12 +173,57 @@ struct MangaReaderPresentationInfrastructureTests {
     }
 
     private static let pngData = Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=")!
-    #endif
+#endif
 }
 
 #if os(iOS)
+final class MangaImageSavePresentationStateXCTests: XCTestCase {
+    func testSuccessFeedbackIsAvailableWhileActionDialogDismisses() throws {
+        let page = try makePipelinePage()
+        var state = MangaImageSavePresentationState()
+
+        state.presentActions(for: page)
+        state.finishSave(with: .success)
+
+        XCTAssertEqual(state.feedback?.message, L10n.string("image.save_success_message"))
+    }
+}
+
 private enum MangaPipelineTestError: Error, Equatable {
     case loaderFailure
+}
+
+private final class FakeMangaPhotoLibraryWriter: MangaImagePhotoLibraryWriting {
+    private let status: PHAuthorizationStatus
+    private let requestedStatus: PHAuthorizationStatus
+    private var performResults: [Result<Void, Error>]
+    private(set) var requestAuthorizationCallCount = 0
+    private(set) var performChangesCallCount = 0
+
+    init(
+        status: PHAuthorizationStatus,
+        requestedStatus: PHAuthorizationStatus = .authorized,
+        performResults: [Result<Void, Error>] = [.success(())]
+    ) {
+        self.status = status
+        self.requestedStatus = requestedStatus
+        self.performResults = performResults
+    }
+
+    func authorizationStatus(for accessLevel: PHAccessLevel) -> PHAuthorizationStatus {
+        status
+    }
+
+    func requestAuthorization(for accessLevel: PHAccessLevel) async -> PHAuthorizationStatus {
+        requestAuthorizationCallCount += 1
+        return requestedStatus
+    }
+
+    func performChanges(_ changes: @escaping () -> Void) async throws {
+        performChangesCallCount += 1
+        let result = performResults.isEmpty ? .success(()) : performResults.removeFirst()
+        try result.get()
+    }
 }
 
 private actor RecordingMangaPipelineDataLoader: MangaImageDataLoading {

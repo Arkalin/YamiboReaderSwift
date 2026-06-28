@@ -36,6 +36,48 @@ enum MangaPagedCenterTapHitTesting {
     }
 }
 
+enum MangaPageLongPressHitTesting {
+    static func acceptsPageLongPress(
+        at point: CGPoint,
+        in pageBounds: CGRect,
+        imageFrame: CGRect
+    ) -> Bool {
+        contains(point, in: allowedFrame(in: pageBounds, imageFrame: imageFrame))
+    }
+
+    static func allowedFrame(in pageBounds: CGRect, imageFrame: CGRect) -> CGRect {
+        guard pageBounds.width > 0,
+              pageBounds.height > 0,
+              imageFrame.width > 0,
+              imageFrame.height > 0 else {
+            return .zero
+        }
+
+        let frame = centerThirdFrame(in: pageBounds).intersection(imageFrame)
+        guard !frame.isNull, !frame.isEmpty else { return .zero }
+        return frame
+    }
+
+    static func centerThirdFrame(in bounds: CGRect) -> CGRect {
+        guard bounds.width > 0, bounds.height > 0 else { return .zero }
+        let thirdWidth = bounds.width / 3
+        return CGRect(
+            x: bounds.minX + thirdWidth,
+            y: bounds.minY,
+            width: thirdWidth,
+            height: bounds.height
+        )
+    }
+
+    private static func contains(_ point: CGPoint, in rect: CGRect) -> Bool {
+        guard rect.width > 0, rect.height > 0 else { return false }
+        return point.x >= rect.minX &&
+            point.x <= rect.maxX &&
+            point.y >= rect.minY &&
+            point.y <= rect.maxY
+    }
+}
+
 enum MangaPagedSurfaceDragIntent {
     static let minimumUnzoomedHorizontalTranslation: CGFloat = 12
 
@@ -220,6 +262,16 @@ struct MangaPagedImageSurfaceLayout: Equatable {
         return CGSize(
             width: restingOffset.width + clampedUserOffset.width,
             height: restingOffset.height + clampedUserOffset.height
+        )
+    }
+
+    func displayedImageFrame(forUserOffset userOffset: CGSize) -> CGRect {
+        let offset = displayOffset(forUserOffset: userOffset)
+        return CGRect(
+            x: (containerSize.width - contentSize.width) / 2 + offset.width,
+            y: (containerSize.height - contentSize.height) / 2 + offset.height,
+            width: contentSize.width,
+            height: contentSize.height
         )
     }
 

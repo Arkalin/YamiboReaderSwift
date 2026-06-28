@@ -12,6 +12,7 @@ struct MangaVerticalCollectionViewport: UIViewRepresentable {
     let isChromeVisible: Bool
     let zoomEnabled: Bool
     let onCurrentPageChange: (Int) -> Void
+    let onPageLongPress: (MangaReaderPageProjection) -> Void
     let onTap: () -> Void
 
     func makeCoordinator() -> Coordinator {
@@ -174,6 +175,13 @@ struct MangaVerticalCollectionViewport: UIViewRepresentable {
                     collectionView?.collectionViewLayout.invalidateLayout()
                     if let collectionView {
                         self?.publishCurrentPageIfNeeded(from: collectionView)
+                    }
+                },
+                onLongPress: { [weak self] page in
+                    guard let self else { return }
+                    let onPageLongPress = self.parent.onPageLongPress
+                    self.callbackScheduler.publish {
+                        onPageLongPress(page)
                     }
                 }
             )
@@ -516,6 +524,8 @@ private final class MangaVerticalCollectionPageCell: UICollectionViewCell {
     private var currentPageID: String?
     private var heightToWidthRatio = 1 / defaultWidthToHeightAspectRatio
     private var onHeightToWidthRatioChange: ((CGFloat) -> Void)?
+    private var onLongPress: ((MangaReaderPageProjection) -> Void)?
+    private lazy var longPressGesture = UILongPressGestureRecognizer(target: self, action: #selector(handleLongPress(_:)))
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -539,6 +549,7 @@ private final class MangaVerticalCollectionPageCell: UICollectionViewCell {
         imagePipeline = nil
         currentPageID = nil
         onHeightToWidthRatioChange = nil
+        onLongPress = nil
         heightToWidthRatio = 1 / Self.defaultWidthToHeightAspectRatio
         imageView.image = nil
         imageView.isHidden = false
@@ -563,11 +574,13 @@ private final class MangaVerticalCollectionPageCell: UICollectionViewCell {
         page: MangaReaderPageProjection,
         imagePipeline: MangaImagePipeline,
         knownHeightToWidthRatio: CGFloat?,
-        onHeightToWidthRatioChange: @escaping (CGFloat) -> Void
+        onHeightToWidthRatioChange: @escaping (CGFloat) -> Void,
+        onLongPress: @escaping (MangaReaderPageProjection) -> Void
     ) {
         self.page = page
         self.imagePipeline = imagePipeline
         self.onHeightToWidthRatioChange = onHeightToWidthRatioChange
+        self.onLongPress = onLongPress
         if let knownHeightToWidthRatio {
             heightToWidthRatio = knownHeightToWidthRatio
         }
@@ -594,6 +607,10 @@ private final class MangaVerticalCollectionPageCell: UICollectionViewCell {
         imageView.contentMode = .scaleAspectFit
         imageView.backgroundColor = .black
         contentView.addSubview(imageView)
+
+        longPressGesture.minimumPressDuration = 0.45
+        longPressGesture.cancelsTouchesInView = false
+        contentView.addGestureRecognizer(longPressGesture)
     }
 
     private func startLoad() {
@@ -660,6 +677,26 @@ private final class MangaVerticalCollectionPageCell: UICollectionViewCell {
         guard abs(nextRatio - heightToWidthRatio) > 0.001 else { return }
         heightToWidthRatio = nextRatio
         onHeightToWidthRatioChange?(nextRatio)
+    }
+
+    @objc private func handleLongPress(_ recognizer: UILongPressGestureRecognizer) {
+        let imageFrame = ReaderImageHitTesting.aspectFitImageFrame(
+            imageSize: imageView.image?.size ?? .zero,
+            containerSize: imageView.bounds.size
+        )
+        let imageFrameInPage = imageView.convert(imageFrame, to: contentView)
+
+        guard recognizer.state == .began,
+              let page,
+              imageView.image != nil,
+              MangaPageLongPressHitTesting.acceptsPageLongPress(
+                  at: recognizer.location(in: contentView),
+                  in: contentView.bounds,
+                  imageFrame: imageFrameInPage
+              ) else {
+            return
+        }
+        onLongPress?(page)
     }
 }
 
