@@ -66,5 +66,16 @@ public protocol MangaOfflineCacheStoring: Sendable {
     func offlineImageData(for imageURL: URL) async -> Data?
     func saveOfflineImageData(_ data: Data, for imageURL: URL) async throws
     func diskUsageByFavorite() async -> [MangaOfflineCacheFavoriteUsage]
+    func offlineCacheWork(favoriteID: String, tid: String) async -> MangaOfflineCacheWork?
+    func allOfflineCacheWorks() async -> [MangaOfflineCacheWork]
+    func enqueueOfflineCacheWork(_ request: MangaOfflineCacheWorkRequest) async throws -> MangaOfflineCacheEnqueueResult
+    func updateOfflineCacheWorkProgress(favoriteID: String, tid: String, targetImageURLs: [URL]?, completedImageURLs: [URL]) async throws
+    func markOfflineCacheWorkFailed(favoriteID: String, tid: String, message: String?) async throws
+    func cancelOfflineCacheWork(favoriteID: String, tid: String) async throws
+    func cancelOfflineCacheWorks(forFavoriteID favoriteID: String) async throws
+    func clearOfflineCacheQueue() async throws
+    func offlineCacheQueueRunState() async -> MangaOfflineCacheQueueRunState
+    func setOfflineCacheQueueRunState(_ state: MangaOfflineCacheQueueRunState) async throws
+    func offlineCacheState(favoriteID: String, tid: String) async -> MangaOfflineCacheState
     func clearAll() async throws
 }
