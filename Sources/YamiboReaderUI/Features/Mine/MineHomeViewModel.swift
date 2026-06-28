@@ -223,6 +223,22 @@ final class MineHomeViewModel {
         }
     }
 
+    func isOfflineCacheFavoriteSelected(favoriteID: String) -> Bool {
+        let ids = offlineCacheWorkIDs(favoriteID: favoriteID)
+        return !ids.isEmpty && ids.isSubset(of: selectedOfflineCacheWorkIDs)
+    }
+
+    func toggleOfflineCacheFavoriteSelection(favoriteID: String) {
+        let ids = offlineCacheWorkIDs(favoriteID: favoriteID)
+        guard !ids.isEmpty else { return }
+
+        if ids.isSubset(of: selectedOfflineCacheWorkIDs) {
+            selectedOfflineCacheWorkIDs.subtract(ids)
+        } else {
+            selectedOfflineCacheWorkIDs.formUnion(ids)
+        }
+    }
+
     func selectAllOfflineCacheWorks(favoriteID: String? = nil) {
         let groups = favoriteID.map { id in
             offlineCacheQueueGroups.filter { $0.favoriteID == id }
@@ -230,6 +246,15 @@ final class MineHomeViewModel {
         selectedOfflineCacheWorkIDs = Set(groups.flatMap { group in
             group.chapters.map(\.id)
         })
+    }
+
+    private func offlineCacheWorkIDs(favoriteID: String) -> Set<MangaOfflineCacheMembershipID> {
+        Set(
+            offlineCacheQueueGroups
+                .first { $0.favoriteID == favoriteID }?
+                .chapters
+                .map(\.id) ?? []
+        )
     }
 
     private func performOfflineCacheQueueCommand(_ command: @escaping @MainActor () async throws -> Void) async {

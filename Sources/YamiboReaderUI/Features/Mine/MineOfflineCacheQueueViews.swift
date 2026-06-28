@@ -20,9 +20,14 @@ struct MineOfflineCacheQueueSheet: View {
                         Section {
                             MineOfflineCacheQueueFavoriteRow(
                                 group: group,
+                                isSelecting: viewModel.isOfflineCacheQueueSelectionMode,
+                                isSelected: viewModel.isOfflineCacheFavoriteSelected(favoriteID: group.favoriteID),
                                 open: {
                                     viewModel.setOfflineCacheQueueSelectionMode(false)
                                     selectedFavoriteID = group.favoriteID
+                                },
+                                toggleSelection: {
+                                    viewModel.toggleOfflineCacheFavoriteSelection(favoriteID: group.favoriteID)
                                 },
                                 cancel: {
                                     Task {
@@ -60,6 +65,40 @@ struct MineOfflineCacheQueueSheet: View {
                         dismiss()
                     }
                 }
+
+                ToolbarItem(placement: .primaryAction) {
+                    if !viewModel.offlineCacheQueueIsEmpty {
+                        Button(
+                            viewModel.isOfflineCacheQueueSelectionMode
+                                ? L10n.string("common.done")
+                                : L10n.string("common.select")
+                        ) {
+                            viewModel.setOfflineCacheQueueSelectionMode(!viewModel.isOfflineCacheQueueSelectionMode)
+                        }
+                        .disabled(viewModel.isOfflineCacheQueueCommandRunning)
+                    }
+                }
+
+                if viewModel.isOfflineCacheQueueSelectionMode {
+                    #if os(iOS)
+                    ToolbarItem(placement: .bottomBar) {
+                        MineOfflineCacheQueueSelectAllButton(viewModel: viewModel)
+                    }
+                    ToolbarItem(placement: .bottomBar) {
+                        Spacer()
+                    }
+                    ToolbarItem(placement: .bottomBar) {
+                        MineOfflineCacheQueueCancelSelectionButton(viewModel: viewModel)
+                    }
+                    #else
+                    ToolbarItem(placement: .secondaryAction) {
+                        MineOfflineCacheQueueSelectAllButton(viewModel: viewModel)
+                    }
+                    ToolbarItem(placement: .confirmationAction) {
+                        MineOfflineCacheQueueCancelSelectionButton(viewModel: viewModel)
+                    }
+                    #endif
+                }
             }
             .overlay {
                 if viewModel.isLoadingOfflineCacheQueue {
@@ -84,7 +123,7 @@ struct MineOfflineCacheQueueSheet: View {
 
 private struct MineOfflineCacheQueueSelectAllButton: View {
     let viewModel: MineHomeViewModel
-    let favoriteID: String
+    var favoriteID: String? = nil
 
     var body: some View {
         Button(L10n.string("common.select_all")) {
@@ -151,38 +190,68 @@ private struct MineOfflineCacheQueueControls: View {
 
 private struct MineOfflineCacheQueueFavoriteRow: View {
     let group: MineOfflineCacheQueueFavoriteGroup
+    let isSelecting: Bool
+    let isSelected: Bool
     let open: () -> Void
+    let toggleSelection: () -> Void
     let cancel: () -> Void
 
     var body: some View {
-        Button(action: open) {
+        Button(action: rowAction) {
             HStack(spacing: 12) {
+                if isSelecting {
+                    Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                        .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
+                }
+
                 Image(systemName: "books.vertical.fill")
                     .foregroundStyle(.indigo)
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(group.favoriteTitle)
-                        .font(.headline)
-                        .foregroundStyle(.primary)
-                        .lineLimit(2)
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(group.favoriteTitle)
+                                .font(.headline)
+                                .foregroundStyle(.primary)
+                                .lineLimit(2)
 
-                    Text(L10n.string("mine.offline_queue.chapter_count_format", group.chapterCount))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                            Text(L10n.string("mine.offline_queue.chapter_count_format", group.chapterCount))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Spacer(minLength: 8)
+
+                        Text(group.percentageText)
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+
+                    ProgressView(value: group.progressFraction)
+
+                    HStack(spacing: 8) {
+                        Text(group.progressText)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+
+                        if let currentSpeedText = group.currentSpeedText {
+                            Text(currentSpeedText)
+                                .font(.caption.monospacedDigit())
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+                    }
                 }
 
                 Spacer(minLength: 8)
 
-                if let currentSpeedText = group.currentSpeedText {
-                    Text(currentSpeedText)
-                        .font(.caption.monospacedDigit())
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                if !isSelecting {
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.tertiary)
                 }
-
-                Image(systemName: "chevron.right")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.tertiary)
             }
         }
         .buttonStyle(.plain)
@@ -190,6 +259,14 @@ private struct MineOfflineCacheQueueFavoriteRow: View {
             Button(role: .destructive, action: cancel) {
                 Label(L10n.string("common.cancel"), systemImage: "xmark.circle")
             }
+        }
+    }
+
+    private func rowAction() {
+        if isSelecting {
+            toggleSelection()
+        } else {
+            open()
         }
     }
 }
@@ -207,6 +284,10 @@ private struct MineOfflineCacheQueueFavoriteSheet: View {
         NavigationStack {
             List {
                 if let group {
+                    if viewModel.showsOfflineCacheQueueControls {
+                        MineOfflineCacheQueueControls(viewModel: viewModel)
+                    }
+
                     ForEach(group.chapters) { chapter in
                         MineOfflineCacheQueueChapterRowView(
                             chapter: chapter,

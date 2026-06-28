@@ -5,6 +5,9 @@ struct MineOfflineCacheQueueFavoriteGroup: Hashable, Identifiable {
     var favoriteID: String
     var favoriteTitle: String
     var chapterCount: Int
+    var progressFraction: Double
+    var progressText: String
+    var percentageText: String
     var currentSpeedText: String?
     var chapters: [MineOfflineCacheQueueChapterRow]
 
@@ -12,10 +15,29 @@ struct MineOfflineCacheQueueFavoriteGroup: Hashable, Identifiable {
 
     init(group: MangaOfflineCacheQueueGroup) {
         let rows = group.works.map(MineOfflineCacheQueueChapterRow.init(work:))
+        let completedImageCount = group.works.reduce(0) { $0 + $1.progress.completedImageCount }
+        let targetImageCount = group.works.reduce(0) { $0 + $1.progress.targetImageCount }
+        let currentBytesPerSecond = group.works.reduce(0) { $0 + $1.currentBytesPerSecond }
         favoriteID = group.favoriteID
         favoriteTitle = group.favoriteTitle
         chapterCount = rows.count
-        currentSpeedText = rows.first { $0.speedText != nil }?.speedText
+        progressFraction = targetImageCount > 0
+            ? min(max(Double(completedImageCount) / Double(targetImageCount), 0), 1)
+            : 0
+        if targetImageCount > 0 {
+            progressText = L10n.string(
+                "mine.offline_queue.image_progress_format",
+                completedImageCount,
+                targetImageCount
+            )
+        } else {
+            progressText = L10n.string("mine.offline_queue.preparing")
+        }
+        percentageText = L10n.string(
+            "mine.offline_queue.percent_format",
+            Int((progressFraction * 100).rounded())
+        )
+        currentSpeedText = MineOfflineCacheQueueSpeedText.make(bytesPerSecond: currentBytesPerSecond)
         chapters = rows
     }
 }
@@ -57,10 +79,12 @@ struct MineOfflineCacheQueueChapterRow: Hashable, Identifiable {
         } else {
             failureStatusText = nil
         }
-        speedText = Self.speedText(bytesPerSecond: work.currentBytesPerSecond)
+        speedText = MineOfflineCacheQueueSpeedText.make(bytesPerSecond: work.currentBytesPerSecond)
     }
+}
 
-    private static func speedText(bytesPerSecond: Int) -> String? {
+private enum MineOfflineCacheQueueSpeedText {
+    static func make(bytesPerSecond: Int) -> String? {
         guard bytesPerSecond > 0 else { return nil }
         let formatter = ByteCountFormatter()
         formatter.countStyle = .file
