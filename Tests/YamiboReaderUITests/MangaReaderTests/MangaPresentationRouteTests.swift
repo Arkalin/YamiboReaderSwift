@@ -285,6 +285,38 @@ final class MangaPresentationRouteTests: XCTestCase {
         try await waitForReaderResumeRoute(store, equals: nil)
     }
 
+    func testMangaResumeRouteUpdateKeepsActivePresentationRouteStable() async throws {
+        let (appModel, store) = try await makeAppModelWithReaderResumeRouteStore()
+        let originalURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=726&mobile=2"))
+        let originalChapterURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=727&mobile=2"))
+        let nextChapterURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=728&mobile=2"))
+        let originalContext = MangaLaunchContext(
+            originalThreadURL: originalURL,
+            chapterURL: originalChapterURL,
+            displayTitle: "测试漫画",
+            source: .favorites,
+            initialPage: 12,
+            directoryName: "Resolved Directory"
+        )
+        let resumeContext = MangaLaunchContext(
+            originalThreadURL: originalURL,
+            chapterURL: nextChapterURL,
+            displayTitle: "测试漫画",
+            source: .resume,
+            initialPage: 0,
+            directoryName: "Resolved Directory"
+        )
+
+        appModel.presentManga(originalContext)
+        try await waitForReaderResumeRoute(store, equals: .manga(.native(originalContext)))
+
+        appModel.updateReaderResumeRoute(.manga(.native(resumeContext)))
+
+        XCTAssertEqual(appModel.activeMangaRoute, .native(originalContext))
+        try await waitForReaderResumeRoute(store, equals: .manga(.native(resumeContext)))
+        XCTAssertEqual(appModel.activeMangaRoute, .native(originalContext))
+    }
+
     func testPresentingMangaWebPersistsResumeRouteAndOpenForumClearsIt() async throws {
         let (appModel, store) = try await makeAppModelWithReaderResumeRouteStore()
         let originalURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=724&mobile=2"))
