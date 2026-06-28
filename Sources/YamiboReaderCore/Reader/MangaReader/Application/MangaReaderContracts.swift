@@ -13,6 +13,7 @@ public struct MangaLaunchContext: Codable, Hashable, Identifiable, Sendable {
     public var source: MangaLaunchSource
     public var initialPage: Int
     public var directoryName: String?
+    public var offlineCacheFavoriteID: String?
 
     public var id: String {
         "\(originalThreadURL.absoluteString)#\(chapterURL.absoluteString)"
@@ -24,7 +25,8 @@ public struct MangaLaunchContext: Codable, Hashable, Identifiable, Sendable {
         displayTitle: String,
         source: MangaLaunchSource,
         initialPage: Int = 0,
-        directoryName: String? = nil
+        directoryName: String? = nil,
+        offlineCacheFavoriteID: String? = nil
     ) {
         self.originalThreadURL = originalThreadURL
         self.chapterURL = chapterURL
@@ -32,6 +34,7 @@ public struct MangaLaunchContext: Codable, Hashable, Identifiable, Sendable {
         self.source = source
         self.initialPage = max(0, initialPage)
         self.directoryName = directoryName
+        self.offlineCacheFavoriteID = offlineCacheFavoriteID?.mangaReaderTrimmedNonEmpty
     }
 }
 

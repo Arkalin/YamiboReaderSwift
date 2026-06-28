@@ -48,6 +48,35 @@ public protocol MangaDirectoryPersisting: Sendable {
 
 public protocol MangaImageDataLoading: Sendable {
     func imageData(for url: URL, refererURL: URL?) async throws -> Data
+    func imageData(
+        for url: URL,
+        refererURL: URL?,
+        offlineCacheContext: MangaImageOfflineCacheContext?
+    ) async throws -> Data
+}
+
+public struct MangaImageOfflineCacheContext: Hashable, Sendable {
+    public var favoriteID: String
+    public var tid: String
+
+    public init?(favoriteID: String?, tid: String) {
+        guard let favoriteID = favoriteID?.mangaReaderTrimmedNonEmpty,
+              let tid = tid.mangaReaderTrimmedNonEmpty else {
+            return nil
+        }
+        self.favoriteID = favoriteID
+        self.tid = tid
+    }
+}
+
+public extension MangaImageDataLoading {
+    func imageData(
+        for url: URL,
+        refererURL: URL?,
+        offlineCacheContext: MangaImageOfflineCacheContext?
+    ) async throws -> Data {
+        try await imageData(for: url, refererURL: refererURL)
+    }
 }
 
 public protocol MangaImageDataCaching: Sendable {

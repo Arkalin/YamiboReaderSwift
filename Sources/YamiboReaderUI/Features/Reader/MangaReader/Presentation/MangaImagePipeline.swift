@@ -13,15 +13,18 @@ final class MangaImagePipeline {
     static let defaultMemoryLimitBytes = 80 * 1024 * 1024
 
     private let dataLoader: any MangaImageDataLoading
+    private let offlineCacheContext: (MangaReaderPageProjection) -> MangaImageOfflineCacheContext?
     private let cache = NSCache<NSString, UIImage>()
     private var inFlightContinuations: [String: [CheckedContinuation<UIImage, Error>]] = [:]
     private var prefetchingKeys = Set<String>()
 
     init(
         dataLoader: any MangaImageDataLoading,
+        offlineCacheContext: @escaping (MangaReaderPageProjection) -> MangaImageOfflineCacheContext? = { _ in nil },
         memoryLimitBytes: Int = defaultMemoryLimitBytes
     ) {
         self.dataLoader = dataLoader
+        self.offlineCacheContext = offlineCacheContext
         cache.totalCostLimit = memoryLimitBytes
     }
 
@@ -67,12 +70,20 @@ final class MangaImagePipeline {
     }
 
     func imageData(for page: MangaReaderPageProjection) async throws -> Data {
-        try await dataLoader.imageData(for: page.imageURL, refererURL: page.refererURL)
+        try await dataLoader.imageData(
+            for: page.imageURL,
+            refererURL: page.refererURL,
+            offlineCacheContext: offlineCacheContext(page)
+        )
     }
 
     private func loadImage(for page: MangaReaderPageProjection, key: String) async {
         do {
-            let data = try await dataLoader.imageData(for: page.imageURL, refererURL: page.refererURL)
+            let data = try await dataLoader.imageData(
+                for: page.imageURL,
+                refererURL: page.refererURL,
+                offlineCacheContext: offlineCacheContext(page)
+            )
             guard let image = UIImage(data: data) else {
                 throw MangaImagePipelineError.invalidImageData
             }

@@ -437,6 +437,42 @@ struct MangaReaderTestsWorkflow {
         #expect(await store.savedDirectories.isEmpty)
     }
 
+    @Test func offlineCachedCurrentChapterLoadsWithoutLocalDirectory() async throws {
+        let document = try makeWorkflowDocument(tid: "700", pageCount: 2)
+        let offlineStore = FileMangaOfflineCacheStore(baseDirectory: try makeTemporaryWorkflowOfflineCacheDirectory())
+        for imageURL in document.imageURLs {
+            try await offlineStore.saveOfflineImageData(Data([7]), for: imageURL)
+        }
+        try await offlineStore.saveMembership(
+            MangaOfflineCacheMembership(
+                favoriteID: "favorite-700",
+                favoriteTitle: "测试漫画",
+                favoriteURL: try #require(URL(string: "https://bbs.yamibo.com/thread-700-1-1.html")),
+                tid: "700",
+                chapterTitle: document.chapterTitle,
+                chapterURL: document.chapterURL,
+                imageURLs: document.imageURLs
+            )
+        )
+        let repository = RecordingMangaDirectoryRepository(output: .failure(.offline))
+        let store = RecordingMangaDirectoryStore()
+        let workflow = MangaReaderWorkflow(
+            context: try makeWorkflowContext(tid: "700", offlineCacheFavoriteID: "favorite-700"),
+            documentLoader: RecordingMangaChapterDocumentLoader(output: .document(document)),
+            directoryRepository: repository,
+            directoryStore: store,
+            offlineCacheStore: offlineStore
+        )
+
+        let presentation = await workflow.prepare()
+
+        let loaded = try #require(loadedPresentation(in: presentation))
+        #expect(loaded.pages.map(\.id) == ["700#0", "700#1"])
+        #expect(loaded.readingPosition == MangaReadingPosition(tid: "700", localIndex: 0))
+        #expect(await repository.seedURLs == [document.chapterURL])
+        #expect(await store.savedDirectories.isEmpty)
+    }
+
     @Test func workflowUpdatesDirectoryPreservingCurrentReadingPosition() async throws {
         let document = try makeWorkflowDocument(tid: "700", pageCount: 2)
         let directory = makeWorkflowDirectory(
@@ -956,7 +992,8 @@ private actor RecordingMangaDirectoryStore: MangaDirectoryPersisting {
 private func makeWorkflowContext(
     tid: String,
     initialPage: Int = 0,
-    directoryName: String? = nil
+    directoryName: String? = nil,
+    offlineCacheFavoriteID: String? = nil
 ) throws -> MangaLaunchContext {
     let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(tid)&mobile=2"))
     return MangaLaunchContext(
@@ -965,7 +1002,8 @@ private func makeWorkflowContext(
         displayTitle: "测试漫画",
         source: .forum,
         initialPage: initialPage,
-        directoryName: directoryName
+        directoryName: directoryName,
+        offlineCacheFavoriteID: offlineCacheFavoriteID
     )
 }
 
@@ -1018,6 +1056,10 @@ private func makeWorkflowDocument(tid: String, pageCount: Int) throws -> MangaCh
 
 private func makeWorkflowURL(tid: String) -> URL {
     URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(tid)&mobile=2")!
+}
+
+private func makeTemporaryWorkflowOfflineCacheDirectory() throws -> URL {
+    FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
 }
 
 private func loadedPresentation(in presentation: MangaReaderPresentation?) -> MangaReaderLoadedPresentation? {
