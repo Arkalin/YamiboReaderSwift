@@ -35,7 +35,7 @@ jobs:
               }
             }
           '
-        )
+        )"
         if [[ -z "${device_line}" ]]; then
           echo "No available iPhone simulator found" >&2
           xcrun simctl list devices available >&2
