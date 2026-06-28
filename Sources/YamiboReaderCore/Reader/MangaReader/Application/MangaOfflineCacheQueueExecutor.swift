@@ -221,7 +221,7 @@ public actor MangaOfflineCacheQueueExecutor {
         var completed = targetImageURLs.filter { completedKeys.contains($0.absoluteString) }
         let pending = targetImageURLs.filter { !completedKeys.contains($0.absoluteString) }
 
-        try await withThrowingTaskGroup(of: URL.self) { group in
+        try await withThrowingTaskGroup(of: MangaOfflineCacheImageTransferResult.self) { group in
             var pendingIterator = pending.makeIterator()
             var activeCount = 0
 
@@ -235,13 +235,17 @@ public actor MangaOfflineCacheQueueExecutor {
                     guard await store.offlineCacheWork(favoriteID: work.favoriteID, tid: work.tid) != nil else {
                         throw CancellationError()
                     }
+                    let startedAt = Date()
                     let acquisition = try await imageAcquirer.acquireImageData(for: imageURL, refererURL: work.chapterURL)
                     try Task.checkCancellation()
                     guard await store.offlineCacheWork(favoriteID: work.favoriteID, tid: work.tid) != nil else {
                         throw CancellationError()
                     }
                     try await store.saveOfflineImageData(acquisition.data, for: imageURL)
-                    return imageURL
+                    return MangaOfflineCacheImageTransferResult(
+                        imageURL: imageURL,
+                        bytesPerSecond: Self.bytesPerSecond(byteCount: acquisition.data.count, startedAt: startedAt)
+                    )
                 }
             }
 
@@ -249,15 +253,16 @@ public actor MangaOfflineCacheQueueExecutor {
                 submitNext()
             }
 
-            while let imageURL = try await group.next() {
+            while let result = try await group.next() {
                 activeCount -= 1
-                completedKeys.insert(imageURL.absoluteString)
+                completedKeys.insert(result.imageURL.absoluteString)
                 completed = targetImageURLs.filter { completedKeys.contains($0.absoluteString) }
                 try await store.updateOfflineCacheWorkProgress(
                     favoriteID: work.favoriteID,
                     tid: work.tid,
                     targetImageURLs: targetImageURLs,
-                    completedImageURLs: completed
+                    completedImageURLs: completed,
+                    currentBytesPerSecond: result.bytesPerSecond
                 )
                 submitNext()
             }
@@ -285,4 +290,14 @@ public actor MangaOfflineCacheQueueExecutor {
         }
         return error.localizedDescription
     }
+
+    private static func bytesPerSecond(byteCount: Int, startedAt: Date) -> Int {
+        let elapsed = max(Date().timeIntervalSince(startedAt), 0.001)
+        return max(0, Int(Double(byteCount) / elapsed))
+    }
+}
+
+private struct MangaOfflineCacheImageTransferResult: Sendable {
+    var imageURL: URL
+    var bytesPerSecond: Int
 }

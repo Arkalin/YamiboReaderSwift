@@ -7,11 +7,92 @@ import YamiboReaderCore
 import UIKit
 #endif
 
+protocol MangaOfflineCacheQueueControlling: Sendable {
+    func continueQueue() async throws
+    func pauseQueue() async throws
+    func cancelChapter(favoriteID: String, tid: String) async throws
+    func cancelFavoriteGroup(favoriteID: String) async throws
+}
+
+extension MangaOfflineCacheQueueExecutor: MangaOfflineCacheQueueControlling {}
+
+struct MineOfflineCacheQueueFavoriteGroup: Hashable, Identifiable {
+    var favoriteID: String
+    var favoriteTitle: String
+    var chapterCount: Int
+    var currentSpeedText: String?
+    var chapters: [MineOfflineCacheQueueChapterRow]
+
+    var id: String { favoriteID }
+
+    init(group: MangaOfflineCacheQueueGroup) {
+        let rows = group.works.map(MineOfflineCacheQueueChapterRow.init(work:))
+        favoriteID = group.favoriteID
+        favoriteTitle = group.favoriteTitle
+        chapterCount = rows.count
+        currentSpeedText = rows.first { $0.speedText != nil }?.speedText
+        chapters = rows
+    }
+}
+
+struct MineOfflineCacheQueueChapterRow: Hashable, Identifiable {
+    var id: MangaOfflineCacheMembershipID
+    var title: String
+    var completedImageCount: Int
+    var targetImageCount: Int
+    var progressFraction: Double
+    var progressText: String
+    var percentageText: String
+    var failureStatusText: String?
+    var speedText: String?
+
+    init(work: MangaOfflineCacheWork) {
+        id = work.id
+        title = work.chapterTitle.isEmpty ? work.tid : work.chapterTitle
+        completedImageCount = work.progress.completedImageCount
+        targetImageCount = work.progress.targetImageCount
+        progressFraction = work.progress.fractionCompleted
+        if targetImageCount > 0 {
+            progressText = L10n.string(
+                "mine.offline_queue.image_progress_format",
+                completedImageCount,
+                targetImageCount
+            )
+        } else {
+            progressText = L10n.string("mine.offline_queue.preparing")
+        }
+        percentageText = L10n.string(
+            "mine.offline_queue.percent_format",
+            Int((progressFraction * 100).rounded())
+        )
+        if work.state == .failed {
+            failureStatusText = work.failureMessage?.isEmpty == false
+                ? work.failureMessage
+                : L10n.string("mine.offline_queue.failed")
+        } else {
+            failureStatusText = nil
+        }
+        speedText = Self.speedText(bytesPerSecond: work.currentBytesPerSecond)
+    }
+
+    private static func speedText(bytesPerSecond: Int) -> String? {
+        guard bytesPerSecond > 0 else { return nil }
+        let formatter = ByteCountFormatter()
+        formatter.countStyle = .file
+        formatter.allowedUnits = [.useBytes, .useKB, .useMB]
+        return L10n.string(
+            "mine.offline_queue.speed_format",
+            formatter.string(fromByteCount: Int64(bytesPerSecond))
+        )
+    }
+}
+
 public struct MineHomeView: View {
     @State private var viewModel: MineHomeViewModel
     @State private var showingLoginSheet = false
     @State private var showingSettingsSheet = false
     @State private var showingSignOutConfirmation = false
+    @State private var showingOfflineCacheQueueSheet = false
 
     private let appContext: YamiboAppContext
     private let appModel: YamiboAppModel
@@ -43,7 +124,12 @@ public struct MineHomeView: View {
                 }
 
                 MineCheckInSection()
-                MineLibraryEntriesSection()
+                MineLibraryEntriesSection(
+                    offlineCacheQueueCount: viewModel.offlineCacheQueueEntryCount,
+                    showOfflineCacheQueue: {
+                        showingOfflineCacheQueueSheet = true
+                    }
+                )
                 MineSettingsSection(
                     showSettings: {
                         showingSettingsSheet = true
@@ -98,6 +184,9 @@ public struct MineHomeView: View {
                     await appModel.bootstrap()
                 }
             }
+            .sheet(isPresented: $showingOfflineCacheQueueSheet) {
+                MineOfflineCacheQueueSheet(viewModel: viewModel)
+            }
         }
     }
 
@@ -123,15 +212,27 @@ final class MineHomeViewModel {
     var isRefreshingProfile = false
     var isLoggingIn = false
     var isSigningOut = false
+    var offlineCacheQueueRunState = MangaOfflineCacheQueueRunState.paused
+    var offlineCacheQueueGroups: [MineOfflineCacheQueueFavoriteGroup] = []
+    var offlineCacheQueueEntryCount = 0
+    var isLoadingOfflineCacheQueue = false
+    var isOfflineCacheQueueCommandRunning = false
+    var selectedOfflineCacheWorkIDs: Set<MangaOfflineCacheMembershipID> = []
+    var isOfflineCacheQueueSelectionMode = false
 
     let loginQuestions = YamiboLoginQuestion.defaultQuestions
     @ObservationIgnored let profileAvatarLoader: any YamiboProfileAvatarLoading
 
     private let appContext: YamiboAppContext
+    @ObservationIgnored private var offlineCacheQueueController: (any MangaOfflineCacheQueueControlling)?
     @ObservationIgnored private var lastAutomaticProfileRefreshCredential: String?
 
-    init(appContext: YamiboAppContext) {
+    init(
+        appContext: YamiboAppContext,
+        offlineCacheQueueController: (any MangaOfflineCacheQueueControlling)? = nil
+    ) {
         self.appContext = appContext
+        self.offlineCacheQueueController = offlineCacheQueueController
         profileAvatarLoader = appContext.makeProfileAvatarLoader()
     }
 
@@ -143,6 +244,18 @@ final class MineHomeViewModel {
         isLoading || isLoggingIn || isSigningOut
     }
 
+    var offlineCacheQueueIsEmpty: Bool {
+        offlineCacheQueueEntryCount == 0
+    }
+
+    var showsOfflineCacheQueueControls: Bool {
+        !offlineCacheQueueIsEmpty
+    }
+
+    var selectedOfflineCacheWorkCount: Int {
+        selectedOfflineCacheWorkIDs.count
+    }
+
     func load() async {
         guard !isLoading else { return }
         isLoading = true
@@ -150,6 +263,7 @@ final class MineHomeViewModel {
 
         session = await appContext.sessionStore.load()
         profile = await appContext.profileStore.load()
+        await refreshOfflineCacheQueue()
 
         guard isLoggedIn,
               let credential = SessionState.authenticationCookieValue(in: session.cookie) else {
@@ -213,6 +327,128 @@ final class MineHomeViewModel {
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    func refreshOfflineCacheQueue() async {
+        guard !isLoadingOfflineCacheQueue else { return }
+        isLoadingOfflineCacheQueue = true
+        defer { isLoadingOfflineCacheQueue = false }
+
+        let store = appContext.makeMangaOfflineCacheStore()
+        let works = await store.allOfflineCacheWorks()
+        let directoriesByFavoriteID = await offlineCacheDirectoriesByFavoriteID(for: works)
+        let projection = MangaOfflineCacheQueueProjection.project(
+            works: works,
+            directoriesByFavoriteID: directoriesByFavoriteID
+        )
+        offlineCacheQueueGroups = projection.groups.map(MineOfflineCacheQueueFavoriteGroup.init(group:))
+        offlineCacheQueueEntryCount = projection.unfinishedCount
+        offlineCacheQueueRunState = await store.offlineCacheQueueRunState()
+
+        let visibleIDs = Set(offlineCacheQueueGroups.flatMap { group in group.chapters.map(\.id) })
+        selectedOfflineCacheWorkIDs.formIntersection(visibleIDs)
+        if selectedOfflineCacheWorkIDs.isEmpty && offlineCacheQueueIsEmpty {
+            isOfflineCacheQueueSelectionMode = false
+        }
+    }
+
+    func continueOfflineCacheQueue() async {
+        await performOfflineCacheQueueCommand {
+            try await (await self.offlineCacheController()).continueQueue()
+        }
+    }
+
+    func pauseOfflineCacheQueue() async {
+        await performOfflineCacheQueueCommand {
+            try await (await self.offlineCacheController()).pauseQueue()
+        }
+    }
+
+    func cancelOfflineCacheChapter(_ id: MangaOfflineCacheMembershipID) async {
+        await performOfflineCacheQueueCommand {
+            try await (await self.offlineCacheController()).cancelChapter(
+                favoriteID: id.favoriteID,
+                tid: id.tid
+            )
+        }
+    }
+
+    func cancelOfflineCacheFavoriteGroup(favoriteID: String) async {
+        await performOfflineCacheQueueCommand {
+            try await (await self.offlineCacheController()).cancelFavoriteGroup(favoriteID: favoriteID)
+        }
+    }
+
+    func cancelSelectedOfflineCacheWorks() async {
+        let ids = selectedOfflineCacheWorkIDs
+        guard !ids.isEmpty else { return }
+
+        await performOfflineCacheQueueCommand {
+            let controller = await self.offlineCacheController()
+            for id in ids {
+                try await controller.cancelChapter(favoriteID: id.favoriteID, tid: id.tid)
+            }
+        }
+        selectedOfflineCacheWorkIDs.removeAll()
+        isOfflineCacheQueueSelectionMode = false
+    }
+
+    func setOfflineCacheQueueSelectionMode(_ isSelecting: Bool) {
+        isOfflineCacheQueueSelectionMode = isSelecting
+        if !isSelecting {
+            selectedOfflineCacheWorkIDs.removeAll()
+        }
+    }
+
+    func toggleOfflineCacheWorkSelection(_ id: MangaOfflineCacheMembershipID) {
+        if selectedOfflineCacheWorkIDs.contains(id) {
+            selectedOfflineCacheWorkIDs.remove(id)
+        } else {
+            selectedOfflineCacheWorkIDs.insert(id)
+        }
+    }
+
+    func selectAllOfflineCacheWorks() {
+        selectedOfflineCacheWorkIDs = Set(offlineCacheQueueGroups.flatMap { group in
+            group.chapters.map(\.id)
+        })
+    }
+
+    private func performOfflineCacheQueueCommand(_ command: @escaping @MainActor () async throws -> Void) async {
+        guard !isOfflineCacheQueueCommandRunning else { return }
+        isOfflineCacheQueueCommandRunning = true
+        defer { isOfflineCacheQueueCommandRunning = false }
+
+        do {
+            try await command()
+            errorMessage = nil
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+        await refreshOfflineCacheQueue()
+    }
+
+    private func offlineCacheController() async -> any MangaOfflineCacheQueueControlling {
+        if let offlineCacheQueueController {
+            return offlineCacheQueueController
+        }
+
+        let controller = await appContext.makeMangaOfflineCacheQueueExecutor()
+        offlineCacheQueueController = controller
+        return controller
+    }
+
+    private func offlineCacheDirectoriesByFavoriteID(
+        for works: [MangaOfflineCacheWork]
+    ) async -> [String: MangaDirectory] {
+        var directoriesByFavoriteID: [String: MangaDirectory] = [:]
+        for work in works.sorted(by: { $0.insertionIndex < $1.insertionIndex }) {
+            guard directoriesByFavoriteID[work.favoriteID] == nil else { continue }
+            if let directory = try? await appContext.mangaDirectoryStore.directory(containingTID: work.tid) {
+                directoriesByFavoriteID[work.favoriteID] = directory
+            }
+        }
+        return directoriesByFavoriteID
     }
 
     private func refreshProfile(presentsErrors: Bool) async {
@@ -540,6 +776,303 @@ private struct MineLoginSection: View {
     }
 }
 
+private struct MineOfflineCacheQueueSheet: View {
+    let viewModel: MineHomeViewModel
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            List {
+                if viewModel.offlineCacheQueueIsEmpty {
+                    MineOfflineCacheQueueEmptyState()
+                } else {
+                    if viewModel.showsOfflineCacheQueueControls {
+                        MineOfflineCacheQueueControls(viewModel: viewModel)
+                    }
+
+                    ForEach(viewModel.offlineCacheQueueGroups) { group in
+                        Section {
+                            MineOfflineCacheQueueFavoriteRow(
+                                group: group,
+                                cancel: {
+                                    Task {
+                                        await viewModel.cancelOfflineCacheFavoriteGroup(favoriteID: group.favoriteID)
+                                    }
+                                }
+                            )
+
+                            ForEach(group.chapters) { chapter in
+                                MineOfflineCacheQueueChapterRowView(
+                                    chapter: chapter,
+                                    isSelecting: viewModel.isOfflineCacheQueueSelectionMode,
+                                    isSelected: viewModel.selectedOfflineCacheWorkIDs.contains(chapter.id),
+                                    toggleSelection: {
+                                        viewModel.toggleOfflineCacheWorkSelection(chapter.id)
+                                    },
+                                    cancel: {
+                                        Task {
+                                            await viewModel.cancelOfflineCacheChapter(chapter.id)
+                                        }
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            #if os(iOS)
+            .listStyle(.insetGrouped)
+            #else
+            .listStyle(.inset)
+            #endif
+            .navigationTitle(L10n.string("mine.download_queue"))
+            .task {
+                await viewModel.refreshOfflineCacheQueue()
+            }
+            .refreshable {
+                await viewModel.refreshOfflineCacheQueue()
+            }
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(L10n.string("common.close")) {
+                        dismiss()
+                    }
+                }
+
+                ToolbarItem(placement: .primaryAction) {
+                    if !viewModel.offlineCacheQueueIsEmpty {
+                        Button(
+                            viewModel.isOfflineCacheQueueSelectionMode
+                                ? L10n.string("common.done")
+                                : L10n.string("common.select")
+                        ) {
+                            viewModel.setOfflineCacheQueueSelectionMode(!viewModel.isOfflineCacheQueueSelectionMode)
+                        }
+                        .disabled(viewModel.isOfflineCacheQueueCommandRunning)
+                    }
+                }
+
+                if viewModel.isOfflineCacheQueueSelectionMode {
+                    #if os(iOS)
+                    ToolbarItem(placement: .bottomBar) {
+                        MineOfflineCacheQueueSelectAllButton(viewModel: viewModel)
+                    }
+                    ToolbarItem(placement: .bottomBar) {
+                        Spacer()
+                    }
+                    ToolbarItem(placement: .bottomBar) {
+                        MineOfflineCacheQueueCancelSelectionButton(viewModel: viewModel)
+                    }
+                    #else
+                    ToolbarItem(placement: .secondaryAction) {
+                        MineOfflineCacheQueueSelectAllButton(viewModel: viewModel)
+                    }
+                    ToolbarItem(placement: .confirmationAction) {
+                        MineOfflineCacheQueueCancelSelectionButton(viewModel: viewModel)
+                    }
+                    #endif
+                }
+            }
+            .overlay {
+                if viewModel.isLoadingOfflineCacheQueue {
+                    ProgressView()
+                }
+            }
+        }
+    }
+}
+
+private struct MineOfflineCacheQueueSelectAllButton: View {
+    let viewModel: MineHomeViewModel
+
+    var body: some View {
+        Button(L10n.string("common.select_all")) {
+            viewModel.selectAllOfflineCacheWorks()
+        }
+        .disabled(viewModel.offlineCacheQueueIsEmpty)
+    }
+}
+
+private struct MineOfflineCacheQueueCancelSelectionButton: View {
+    let viewModel: MineHomeViewModel
+
+    var body: some View {
+        Button(role: .destructive) {
+            Task {
+                await viewModel.cancelSelectedOfflineCacheWorks()
+            }
+        } label: {
+            Label(
+                L10n.string(
+                    "mine.offline_queue.cancel_selected_format",
+                    viewModel.selectedOfflineCacheWorkCount
+                ),
+                systemImage: "xmark.circle"
+            )
+        }
+        .disabled(
+            viewModel.selectedOfflineCacheWorkIDs.isEmpty
+                || viewModel.isOfflineCacheQueueCommandRunning
+        )
+    }
+}
+
+private struct MineOfflineCacheQueueControls: View {
+    let viewModel: MineHomeViewModel
+
+    var body: some View {
+        Section {
+            Button {
+                Task {
+                    if viewModel.offlineCacheQueueRunState == .running {
+                        await viewModel.pauseOfflineCacheQueue()
+                    } else {
+                        await viewModel.continueOfflineCacheQueue()
+                    }
+                }
+            } label: {
+                Label(controlTitle, systemImage: controlImage)
+            }
+            .disabled(viewModel.isOfflineCacheQueueCommandRunning)
+        }
+    }
+
+    private var controlTitle: String {
+        viewModel.offlineCacheQueueRunState == .running
+            ? L10n.string("mine.offline_queue.pause")
+            : L10n.string("mine.offline_queue.continue")
+    }
+
+    private var controlImage: String {
+        viewModel.offlineCacheQueueRunState == .running ? "pause.fill" : "play.fill"
+    }
+}
+
+private struct MineOfflineCacheQueueFavoriteRow: View {
+    let group: MineOfflineCacheQueueFavoriteGroup
+    let cancel: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "books.vertical.fill")
+                .foregroundStyle(.indigo)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(group.favoriteTitle)
+                    .font(.headline)
+                    .lineLimit(2)
+
+                Text(L10n.string("mine.offline_queue.chapter_count_format", group.chapterCount))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer(minLength: 8)
+
+            if let currentSpeedText = group.currentSpeedText {
+                Text(currentSpeedText)
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+        }
+        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+            Button(role: .destructive, action: cancel) {
+                Label(L10n.string("common.cancel"), systemImage: "xmark.circle")
+            }
+        }
+    }
+}
+
+private struct MineOfflineCacheQueueChapterRowView: View {
+    let chapter: MineOfflineCacheQueueChapterRow
+    let isSelecting: Bool
+    let isSelected: Bool
+    let toggleSelection: () -> Void
+    let cancel: () -> Void
+
+    var body: some View {
+        Button(action: rowAction) {
+            HStack(spacing: 12) {
+                if isSelecting {
+                    Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                        .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Text(chapter.title)
+                            .foregroundStyle(.primary)
+                            .lineLimit(2)
+
+                        Spacer(minLength: 8)
+
+                        Text(chapter.percentageText)
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+
+                    ProgressView(value: chapter.progressFraction)
+
+                    HStack(spacing: 8) {
+                        Text(chapter.progressText)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+
+                        if let speedText = chapter.speedText {
+                            Text(speedText)
+                                .font(.caption.monospacedDigit())
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+
+                        if let failureStatusText = chapter.failureStatusText {
+                            Text(failureStatusText)
+                                .font(.caption)
+                                .foregroundStyle(.red)
+                                .lineLimit(1)
+                        }
+                    }
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+            Button(role: .destructive, action: cancel) {
+                Label(L10n.string("common.cancel"), systemImage: "xmark.circle")
+            }
+        }
+    }
+
+    private func rowAction() {
+        guard isSelecting else { return }
+        toggleSelection()
+    }
+}
+
+private struct MineOfflineCacheQueueEmptyState: View {
+    var body: some View {
+        Section {
+            VStack(spacing: 10) {
+                Image(systemName: "tray")
+                    .font(.title2)
+                    .foregroundStyle(.secondary)
+                Text(L10n.string("mine.offline_queue.empty_title"))
+                    .font(.headline)
+                Text(L10n.string("mine.offline_queue.empty_message"))
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 32)
+        }
+    }
+}
+
 private struct MineSettingsSection: View {
     let showSettings: () -> Void
 
@@ -568,6 +1101,9 @@ private struct MineCheckInSection: View {
 }
 
 private struct MineLibraryEntriesSection: View {
+    let offlineCacheQueueCount: Int
+    let showOfflineCacheQueue: () -> Void
+
     var body: some View {
         Section {
             MineEntryDisplayRow(
@@ -580,10 +1116,12 @@ private struct MineLibraryEntriesSection: View {
                 systemImage: "heart.fill",
                 tint: .pink
             )
-            MineEntryDisplayRow(
+            MineEntryButtonRow(
                 title: L10n.string("mine.download_queue"),
                 systemImage: "arrow.down.circle.fill",
-                tint: .indigo
+                tint: .indigo,
+                badgeText: String(offlineCacheQueueCount),
+                action: showOfflineCacheQueue
             )
         }
     }
@@ -603,11 +1141,12 @@ private struct MineEntryButtonRow: View {
     let title: String
     let systemImage: String
     let tint: Color
+    var badgeText: String? = nil
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            MineEntryRowContent(title: title, systemImage: systemImage, tint: tint)
+            MineEntryRowContent(title: title, systemImage: systemImage, tint: tint, badgeText: badgeText)
         }
         .buttonStyle(.plain)
     }
@@ -617,6 +1156,7 @@ private struct MineEntryRowContent: View {
     let title: String
     let systemImage: String
     let tint: Color
+    var badgeText: String? = nil
 
     var body: some View {
         HStack(spacing: 12) {
@@ -630,6 +1170,16 @@ private struct MineEntryRowContent: View {
                 .foregroundStyle(.primary)
 
             Spacer(minLength: 8)
+
+            if let badgeText {
+                Text(badgeText)
+                    .font(.caption.monospacedDigit().weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(.secondary.opacity(0.12), in: Capsule())
+            }
 
             Image(systemName: "chevron.right")
                 .font(.caption.weight(.semibold))

@@ -134,6 +134,7 @@ public struct MangaOfflineCacheWork: Codable, Hashable, Identifiable, Sendable {
     public var completedImageURLs: [URL]
     public var state: MangaOfflineCacheWorkState
     public var failureMessage: String?
+    public var currentBytesPerSecond: Int
     public var insertionIndex: Int
     public var createdAt: Date
     public var updatedAt: Date
@@ -160,6 +161,7 @@ public struct MangaOfflineCacheWork: Codable, Hashable, Identifiable, Sendable {
         completedImageURLs: [URL] = [],
         state: MangaOfflineCacheWorkState = .paused,
         failureMessage: String? = nil,
+        currentBytesPerSecond: Int = 0,
         insertionIndex: Int,
         createdAt: Date = .now,
         updatedAt: Date = .now
@@ -177,9 +179,30 @@ public struct MangaOfflineCacheWork: Codable, Hashable, Identifiable, Sendable {
         if self.failureMessage?.isEmpty == true {
             self.failureMessage = nil
         }
+        self.currentBytesPerSecond = max(0, currentBytesPerSecond)
         self.insertionIndex = max(1, insertionIndex)
         self.createdAt = createdAt.mangaOfflineCacheRoundedToSeconds
         self.updatedAt = updatedAt.mangaOfflineCacheRoundedToSeconds
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            favoriteID: try container.decode(String.self, forKey: .favoriteID),
+            favoriteTitle: try container.decode(String.self, forKey: .favoriteTitle),
+            favoriteURL: try container.decode(URL.self, forKey: .favoriteURL),
+            tid: try container.decode(String.self, forKey: .tid),
+            chapterTitle: try container.decode(String.self, forKey: .chapterTitle),
+            chapterURL: try container.decode(URL.self, forKey: .chapterURL),
+            targetImageURLs: try container.decode([URL].self, forKey: .targetImageURLs),
+            completedImageURLs: try container.decode([URL].self, forKey: .completedImageURLs),
+            state: try container.decode(MangaOfflineCacheWorkState.self, forKey: .state),
+            failureMessage: try container.decodeIfPresent(String.self, forKey: .failureMessage),
+            currentBytesPerSecond: try container.decodeIfPresent(Int.self, forKey: .currentBytesPerSecond) ?? 0,
+            insertionIndex: try container.decode(Int.self, forKey: .insertionIndex),
+            createdAt: try container.decode(Date.self, forKey: .createdAt),
+            updatedAt: try container.decode(Date.self, forKey: .updatedAt)
+        )
     }
 
     public init(request: MangaOfflineCacheWorkRequest, insertionIndex: Int, now: Date = .now) {
@@ -194,6 +217,7 @@ public struct MangaOfflineCacheWork: Codable, Hashable, Identifiable, Sendable {
             completedImageURLs: [],
             state: .paused,
             failureMessage: nil,
+            currentBytesPerSecond: 0,
             insertionIndex: insertionIndex,
             createdAt: now,
             updatedAt: now
@@ -212,6 +236,7 @@ public struct MangaOfflineCacheWork: Codable, Hashable, Identifiable, Sendable {
             completedImageURLs: completedImageURLs,
             state: .failed,
             failureMessage: message,
+            currentBytesPerSecond: 0,
             insertionIndex: insertionIndex,
             createdAt: createdAt,
             updatedAt: date
@@ -221,6 +246,7 @@ public struct MangaOfflineCacheWork: Codable, Hashable, Identifiable, Sendable {
     public func updatingProgress(
         targetImageURLs: [URL]? = nil,
         completedImageURLs: [URL],
+        currentBytesPerSecond: Int? = nil,
         at date: Date = .now
     ) -> MangaOfflineCacheWork {
         MangaOfflineCacheWork(
@@ -234,6 +260,7 @@ public struct MangaOfflineCacheWork: Codable, Hashable, Identifiable, Sendable {
             completedImageURLs: completedImageURLs,
             state: state,
             failureMessage: failureMessage,
+            currentBytesPerSecond: currentBytesPerSecond ?? self.currentBytesPerSecond,
             insertionIndex: insertionIndex,
             createdAt: createdAt,
             updatedAt: date
@@ -256,6 +283,7 @@ public struct MangaOfflineCacheWork: Codable, Hashable, Identifiable, Sendable {
             completedImageURLs: completedImageURLs,
             state: .paused,
             failureMessage: nil,
+            currentBytesPerSecond: 0,
             insertionIndex: insertionIndex,
             createdAt: createdAt,
             updatedAt: date

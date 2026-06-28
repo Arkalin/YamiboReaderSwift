@@ -102,6 +102,7 @@ struct MangaReaderTestsMangaOfflineCacheQueueExecutor {
         let work = try #require(await store.offlineCacheWork(favoriteID: "favorite-a", tid: "400"))
         #expect(work.completedImageURLs == [imageURLs[0]])
         #expect(work.progress == MangaOfflineCacheProgress(completedImageCount: 1, targetImageCount: 4))
+        #expect(work.currentBytesPerSecond == 0)
         #expect(await store.offlineCacheQueueRunState() == .paused)
         #expect(await store.offlineImageData(for: imageURLs[0]) == Data([1]))
         #expect(await store.offlineImageData(for: imageURLs[1]) == nil)
@@ -149,7 +150,8 @@ struct MangaReaderTestsMangaOfflineCacheQueueExecutor {
             favoriteID: "favorite-a",
             tid: "600",
             targetImageURLs: imageURLs,
-            completedImageURLs: imageURLs
+            completedImageURLs: imageURLs,
+            currentBytesPerSecond: nil
         )
         let acquirer = RecordingOfflineImageAcquirer()
         await acquirer.setData(for: [imageURLs[1]])
@@ -204,7 +206,8 @@ struct MangaReaderTestsMangaOfflineCacheQueueExecutor {
             favoriteID: "favorite-a",
             tid: "800",
             targetImageURLs: imageURLs,
-            completedImageURLs: [imageURLs[0]]
+            completedImageURLs: [imageURLs[0]],
+            currentBytesPerSecond: nil
         )
         let executor = MangaOfflineCacheQueueExecutor(
             store: store,
@@ -234,13 +237,15 @@ struct MangaReaderTestsMangaOfflineCacheQueueExecutor {
             favoriteID: "favorite-a",
             tid: "900",
             targetImageURLs: canceledImages,
-            completedImageURLs: canceledImages
+            completedImageURLs: canceledImages,
+            currentBytesPerSecond: nil
         )
         try await store.updateOfflineCacheWorkProgress(
             favoriteID: "favorite-b",
             tid: "901",
             targetImageURLs: retainedImages,
-            completedImageURLs: retainedImages
+            completedImageURLs: retainedImages,
+            currentBytesPerSecond: nil
         )
         let executor = MangaOfflineCacheQueueExecutor(
             store: store,

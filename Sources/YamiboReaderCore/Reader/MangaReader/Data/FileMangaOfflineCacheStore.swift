@@ -238,7 +238,8 @@ public actor FileMangaOfflineCacheStore: MangaOfflineCacheStoring {
         favoriteID: String,
         tid: String,
         targetImageURLs: [URL]?,
-        completedImageURLs: [URL]
+        completedImageURLs: [URL],
+        currentBytesPerSecond: Int? = nil
     ) async throws {
         await ensureIndexLoaded()
         do {
@@ -246,7 +247,8 @@ public actor FileMangaOfflineCacheStore: MangaOfflineCacheStoring {
             guard let work = queueWorks[key] else { return }
             queueWorks[key] = work.updatingProgress(
                 targetImageURLs: targetImageURLs,
-                completedImageURLs: completedImageURLs
+                completedImageURLs: completedImageURLs,
+                currentBytesPerSecond: currentBytesPerSecond
             )
             try persistIndex()
         } catch {
@@ -332,6 +334,15 @@ public actor FileMangaOfflineCacheStore: MangaOfflineCacheStoring {
         await ensureIndexLoaded()
         do {
             queueRunState = state
+            if state == .paused {
+                queueWorks = queueWorks.mapValues { work in
+                    work.updatingProgress(
+                        targetImageURLs: work.targetImageURLs,
+                        completedImageURLs: work.completedImageURLs,
+                        currentBytesPerSecond: 0
+                    )
+                }
+            }
             try persistIndex()
         } catch {
             throw persistenceError(from: error)
