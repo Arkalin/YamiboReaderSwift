@@ -239,11 +239,27 @@ final class MineHomeViewModel {
         }
     }
 
-    func selectAllOfflineCacheWorks(ownerName: String? = nil) {
+    func isOfflineCacheWorkSelectionComplete(ownerName: String? = nil) -> Bool {
+        let ids = offlineCacheWorkIDs(ownerName: ownerName)
+        return !ids.isEmpty && ids.isSubset(of: selectedOfflineCacheWorkIDs)
+    }
+
+    func toggleAllOfflineCacheWorks(ownerName: String? = nil) {
+        let ids = offlineCacheWorkIDs(ownerName: ownerName)
+        guard !ids.isEmpty else { return }
+
+        if ids.isSubset(of: selectedOfflineCacheWorkIDs) {
+            selectedOfflineCacheWorkIDs.subtract(ids)
+        } else {
+            selectedOfflineCacheWorkIDs.formUnion(ids)
+        }
+    }
+
+    private func offlineCacheWorkIDs(ownerName: String?) -> Set<MangaOfflineCacheMembershipID> {
         let groups = ownerName.map { name in
             offlineCacheQueueGroups.filter { $0.ownerName == name }
         } ?? offlineCacheQueueGroups
-        selectedOfflineCacheWorkIDs = Set(groups.flatMap { group in
+        return Set(groups.flatMap { group in
             group.chapters.map(\.id)
         })
     }

@@ -321,8 +321,20 @@ final class SystemSettingsViewModel: ObservableObject {
         }
     }
 
-    func selectAllMangaOfflineCacheCleanupRows() {
-        selectedMangaOfflineCacheOwnerNames = Set(mangaOfflineCacheCleanupRows.map(\.ownerName))
+    var isMangaOfflineCacheCleanupSelectionComplete: Bool {
+        let visibleOwnerNames = Set(mangaOfflineCacheCleanupRows.map(\.ownerName))
+        return !visibleOwnerNames.isEmpty && visibleOwnerNames.isSubset(of: selectedMangaOfflineCacheOwnerNames)
+    }
+
+    func toggleAllMangaOfflineCacheCleanupRows() {
+        let visibleOwnerNames = Set(mangaOfflineCacheCleanupRows.map(\.ownerName))
+        guard !visibleOwnerNames.isEmpty else { return }
+
+        if visibleOwnerNames.isSubset(of: selectedMangaOfflineCacheOwnerNames) {
+            selectedMangaOfflineCacheOwnerNames.subtract(visibleOwnerNames)
+        } else {
+            selectedMangaOfflineCacheOwnerNames.formUnion(visibleOwnerNames)
+        }
     }
 
     private func clearMangaOfflineCache(ownerNames: [String]) async -> Bool {

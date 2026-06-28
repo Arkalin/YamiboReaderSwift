@@ -226,7 +226,7 @@ private struct MangaReaderCacheSelectionHeader: View {
     var body: some View {
         HStack {
             if isSelecting {
-                Button(isAllSelected ? L10n.string("common.deselect_all") : L10n.string("common.select_all")) {
+                Button(isAllSelected ? L10n.string("common.invert_selection") : L10n.string("common.select_all")) {
                     onToggleAll()
                 }
                 .font(.subheadline.weight(.semibold))
