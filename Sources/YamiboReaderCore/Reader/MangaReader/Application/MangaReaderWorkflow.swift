@@ -35,6 +35,7 @@ public final class MangaReaderWorkflow {
     private let context: MangaLaunchContext
     private let documentLoader: any MangaChapterDocumentLoading
     private let directoryWorkflow: MangaDirectoryWorkflow
+    private let offlineCacheStore: (any MangaOfflineCacheStoring)?
     private let adjacentPrefetchPolicy: MangaAdjacentChapterPrefetchPolicy
     private var window: MangaChapterWindow?
     private var settings: MangaReaderSettings
@@ -47,6 +48,7 @@ public final class MangaReaderWorkflow {
         documentLoader: any MangaChapterDocumentLoading,
         directoryRepository: any MangaDirectoryRepository,
         directoryStore: any MangaDirectoryPersisting,
+        offlineCacheStore: (any MangaOfflineCacheStoring)? = nil,
         settings: MangaReaderSettings = MangaReaderSettings(),
         directoryWorkflowConfiguration: MangaDirectoryWorkflowConfiguration = MangaDirectoryWorkflowConfiguration(),
         directorySearchCooldownState: MangaDirectorySearchCooldownState = MangaDirectorySearchCooldownState(),
@@ -54,6 +56,7 @@ public final class MangaReaderWorkflow {
     ) {
         self.context = context
         self.documentLoader = documentLoader
+        self.offlineCacheStore = offlineCacheStore
         self.adjacentPrefetchPolicy = adjacentPrefetchPolicy
         self.directoryWorkflow = MangaDirectoryWorkflow(
             repository: directoryRepository,
@@ -80,10 +83,21 @@ public final class MangaReaderWorkflow {
 
         do {
             let document = try await documentLoader.loadChapterDocument(at: context.chapterURL)
-            let resolution = try await directoryWorkflow.resolveInitialDirectory(
-                context: context,
-                document: document
-            )
+            let resolution: MangaDirectoryResolutionResult
+            do {
+                resolution = try await directoryWorkflow.resolveInitialDirectory(
+                    context: context,
+                    document: document
+                )
+            } catch {
+                guard let offlineDirectory = await offlineReadableCurrentChapterDirectory(for: document) else {
+                    throw error
+                }
+                resolution = MangaDirectoryResolutionResult(
+                    directory: offlineDirectory,
+                    shouldAutoUpdateAfterInitialLoad: false
+                )
+            }
             let directory = resolution.directory
             let requestedPosition = MangaReadingPosition(
                 tid: document.tid,
@@ -111,6 +125,38 @@ public final class MangaReaderWorkflow {
         }
 
         return presentation
+    }
+
+    private func offlineReadableCurrentChapterDirectory(for document: MangaChapterDocument) async -> MangaDirectory? {
+        guard let offlineCacheStore,
+              let favoriteID = context.offlineCacheFavoriteID?.mangaReaderTrimmedNonEmpty,
+              let membership = await offlineCacheStore.membership(favoriteID: favoriteID, tid: document.tid),
+              membership.imageURLs.map(\.absoluteString) == document.imageURLs.map(\.absoluteString),
+              !membership.imageURLs.isEmpty
+        else {
+            return nil
+        }
+
+        for imageURL in membership.imageURLs {
+            guard await offlineCacheStore.offlineImageData(for: imageURL) != nil else {
+                return nil
+            }
+        }
+
+        let title = context.displayTitle.mangaReaderTrimmedNonEmpty ?? membership.favoriteTitle
+        return MangaDirectory(
+            cleanBookName: title,
+            strategy: .pendingSearch,
+            sourceKey: title,
+            chapters: [
+                MangaChapter(
+                    tid: document.tid,
+                    rawTitle: document.chapterTitle,
+                    chapterNumber: MangaTitleCleaner.extractChapterNumber(document.chapterTitle),
+                    url: membership.chapterURL
+                )
+            ]
+        )
     }
 
     @discardableResult

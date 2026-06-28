@@ -280,7 +280,8 @@ private extension MangaLaunchContext {
             displayTitle: favorite.resolvedDisplayTitle,
             source: .resume,
             initialPage: favorite.mangaPageIndex,
-            directoryName: directoryName
+            directoryName: directoryName,
+            offlineCacheFavoriteID: favorite.id
         )
     }
 }

@@ -17,6 +17,100 @@ struct MangaReaderTestsCachedImageDataLoader {
         #expect(await cache.saveCallCount == 0)
     }
 
+    @Test func matchingOfflineMembershipReadsRetainedBytesBeforeTransparentCacheAndNetwork() async throws {
+        let imageURL = try #require(URL(string: "https://img.example.com/offline.jpg"))
+        let offlineStore = FileMangaOfflineCacheStore(baseDirectory: try makeTemporaryCachedImageLoaderDirectory())
+        try await offlineStore.saveOfflineImageData(Data([7]), for: imageURL)
+        try await offlineStore.saveMembership(makeCachedImageLoaderMembership(imageURLs: [imageURL]))
+        let cache = RecordingMangaImageDataCache(initialData: [imageURL.absoluteString: Data([1])])
+        let upstream = RecordingMangaImageDataLoader(results: [.success(Data([9]))])
+        let loader = CachedMangaImageDataLoader(
+            cache: cache,
+            upstream: upstream,
+            offlineCacheStore: offlineStore
+        )
+
+        let data = try await loader.imageData(
+            for: imageURL,
+            refererURL: nil,
+            offlineCacheContext: MangaImageOfflineCacheContext(favoriteID: "favorite-a", tid: "100")
+        )
+
+        #expect(data == Data([7]))
+        #expect(await cache.dataCallCount == 0)
+        #expect(await upstream.callCount == 0)
+    }
+
+    @Test func missingOfflineBytesForMatchingMembershipFallsBackToTransparentCache() async throws {
+        let imageURL = try #require(URL(string: "https://img.example.com/fallback-cache.jpg"))
+        let offlineStore = FileMangaOfflineCacheStore(baseDirectory: try makeTemporaryCachedImageLoaderDirectory())
+        try await offlineStore.saveMembership(makeCachedImageLoaderMembership(imageURLs: [imageURL]))
+        let cache = RecordingMangaImageDataCache(initialData: [imageURL.absoluteString: Data([2])])
+        let upstream = RecordingMangaImageDataLoader(results: [.success(Data([9]))])
+        let loader = CachedMangaImageDataLoader(
+            cache: cache,
+            upstream: upstream,
+            offlineCacheStore: offlineStore
+        )
+
+        let data = try await loader.imageData(
+            for: imageURL,
+            refererURL: nil,
+            offlineCacheContext: MangaImageOfflineCacheContext(favoriteID: "favorite-a", tid: "100")
+        )
+
+        #expect(data == Data([2]))
+        #expect(await upstream.callCount == 0)
+    }
+
+    @Test func nonMemberImageKeepsTransparentCacheThenNetworkBehaviorWithoutCreatingMembership() async throws {
+        let memberImageURL = try #require(URL(string: "https://img.example.com/member.jpg"))
+        let requestedImageURL = try #require(URL(string: "https://img.example.com/non-member.jpg"))
+        let offlineStore = FileMangaOfflineCacheStore(baseDirectory: try makeTemporaryCachedImageLoaderDirectory())
+        try await offlineStore.saveOfflineImageData(Data([7]), for: requestedImageURL)
+        try await offlineStore.saveMembership(makeCachedImageLoaderMembership(imageURLs: [memberImageURL]))
+        let cache = RecordingMangaImageDataCache(initialData: [requestedImageURL.absoluteString: Data([3])])
+        let upstream = RecordingMangaImageDataLoader(results: [.success(Data([9]))])
+        let loader = CachedMangaImageDataLoader(
+            cache: cache,
+            upstream: upstream,
+            offlineCacheStore: offlineStore
+        )
+
+        let data = try await loader.imageData(
+            for: requestedImageURL,
+            refererURL: nil,
+            offlineCacheContext: MangaImageOfflineCacheContext(favoriteID: "favorite-a", tid: "100")
+        )
+
+        #expect(data == Data([3]))
+        #expect(await upstream.callCount == 0)
+        #expect(await offlineStore.membership(favoriteID: "favorite-a", tid: "missing") == nil)
+    }
+
+    @Test func matchingMembershipFallsBackToNetworkWhenOfflineAndTransparentBytesAreMissing() async throws {
+        let imageURL = try #require(URL(string: "https://img.example.com/fallback-network.jpg"))
+        let offlineStore = FileMangaOfflineCacheStore(baseDirectory: try makeTemporaryCachedImageLoaderDirectory())
+        try await offlineStore.saveMembership(makeCachedImageLoaderMembership(imageURLs: [imageURL]))
+        let cache = RecordingMangaImageDataCache()
+        let upstream = RecordingMangaImageDataLoader(results: [.success(Data([4]))])
+        let loader = CachedMangaImageDataLoader(
+            cache: cache,
+            upstream: upstream,
+            offlineCacheStore: offlineStore
+        )
+
+        let data = try await loader.imageData(
+            for: imageURL,
+            refererURL: nil,
+            offlineCacheContext: MangaImageOfflineCacheContext(favoriteID: "favorite-a", tid: "100")
+        )
+
+        #expect(data == Data([4]))
+        #expect(await upstream.callCount == 1)
+        #expect(await cache.data(for: imageURL) == Data([4]))
+    }
+
     @Test func missFetchesSavesAndThenHitsCache() async throws {
         let imageURL = try #require(URL(string: "https://img.example.com/miss.jpg"))
         let cache = RecordingMangaImageDataCache()
@@ -103,6 +197,7 @@ struct MangaReaderTestsCachedImageDataLoader {
 private actor RecordingMangaImageDataCache: MangaImageDataCaching {
     private var storage: [String: Data]
     private let failsSave: Bool
+    private(set) var dataCallCount = 0
     private(set) var saveCallCount = 0
 
     init(initialData: [String: Data] = [:], failsSave: Bool = false) {
@@ -111,7 +206,8 @@ private actor RecordingMangaImageDataCache: MangaImageDataCaching {
     }
 
     func data(for imageURL: URL) async -> Data? {
-        storage[imageURL.absoluteString]
+        dataCallCount += 1
+        return storage[imageURL.absoluteString]
     }
 
     func save(_ data: Data, for imageURL: URL) async throws {
@@ -170,4 +266,20 @@ private actor RecordingMangaImageDataLoader: MangaImageDataLoading {
         let result = results.isEmpty ? Result<Data, Error>.failure(YamiboError.unreadableBody) : results.removeFirst()
         return try result.get()
     }
+}
+
+private func makeCachedImageLoaderMembership(imageURLs: [URL]) throws -> MangaOfflineCacheMembership {
+    MangaOfflineCacheMembership(
+        favoriteID: "favorite-a",
+        favoriteTitle: "作品",
+        favoriteURL: try #require(URL(string: "https://bbs.yamibo.com/thread-100-1-1.html")),
+        tid: "100",
+        chapterTitle: "第100话",
+        chapterURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100")),
+        imageURLs: imageURLs
+    )
+}
+
+private func makeTemporaryCachedImageLoaderDirectory() throws -> URL {
+    FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
 }

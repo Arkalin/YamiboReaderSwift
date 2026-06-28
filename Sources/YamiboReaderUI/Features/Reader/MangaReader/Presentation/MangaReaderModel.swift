@@ -5,6 +5,7 @@ struct MangaReaderModelDependencies {
     var makeDocumentLoader: @Sendable () async -> any MangaChapterDocumentLoading
     var makeDirectoryRepository: @Sendable () async -> any MangaDirectoryRepository
     var makeDirectoryStore: @Sendable () -> any MangaDirectoryPersisting
+    var makeOfflineCacheStore: @Sendable () -> (any MangaOfflineCacheStoring)?
     var makeDirectorySearchCooldownState: @Sendable () -> MangaDirectorySearchCooldownState
     var directoryWorkflowConfiguration: MangaDirectoryWorkflowConfiguration
     #if os(iOS)
@@ -17,6 +18,7 @@ struct MangaReaderModelDependencies {
         makeDocumentLoader: @escaping @Sendable () async -> any MangaChapterDocumentLoading,
         makeDirectoryRepository: @escaping @Sendable () async -> any MangaDirectoryRepository,
         makeDirectoryStore: @escaping @Sendable () -> any MangaDirectoryPersisting,
+        makeOfflineCacheStore: @escaping @Sendable () -> (any MangaOfflineCacheStoring)? = { nil },
         makeDirectorySearchCooldownState: @escaping @Sendable () -> MangaDirectorySearchCooldownState = {
             MangaDirectorySearchCooldownState()
         },
@@ -27,6 +29,7 @@ struct MangaReaderModelDependencies {
         self.makeDocumentLoader = makeDocumentLoader
         self.makeDirectoryRepository = makeDirectoryRepository
         self.makeDirectoryStore = makeDirectoryStore
+        self.makeOfflineCacheStore = makeOfflineCacheStore
         self.makeDirectorySearchCooldownState = makeDirectorySearchCooldownState
         self.directoryWorkflowConfiguration = directoryWorkflowConfiguration
         self.makeImageDataLoader = makeImageDataLoader
@@ -37,6 +40,7 @@ struct MangaReaderModelDependencies {
         makeDocumentLoader: @escaping @Sendable () async -> any MangaChapterDocumentLoading,
         makeDirectoryRepository: @escaping @Sendable () async -> any MangaDirectoryRepository,
         makeDirectoryStore: @escaping @Sendable () -> any MangaDirectoryPersisting,
+        makeOfflineCacheStore: @escaping @Sendable () -> (any MangaOfflineCacheStoring)? = { nil },
         makeDirectorySearchCooldownState: @escaping @Sendable () -> MangaDirectorySearchCooldownState = {
             MangaDirectorySearchCooldownState()
         },
@@ -46,6 +50,7 @@ struct MangaReaderModelDependencies {
         self.makeDocumentLoader = makeDocumentLoader
         self.makeDirectoryRepository = makeDirectoryRepository
         self.makeDirectoryStore = makeDirectoryStore
+        self.makeOfflineCacheStore = makeOfflineCacheStore
         self.makeDirectorySearchCooldownState = makeDirectorySearchCooldownState
         self.directoryWorkflowConfiguration = directoryWorkflowConfiguration
         self.progressSync = progressSync
@@ -58,6 +63,7 @@ struct MangaReaderModelDependencies {
             makeDocumentLoader: { await appContext.makeMangaChapterDocumentLoader() },
             makeDirectoryRepository: { await appContext.makeMangaDirectoryRepository() },
             makeDirectoryStore: { appContext.makeMangaDirectoryStore() },
+            makeOfflineCacheStore: { appContext.makeMangaOfflineCacheStore() },
             makeDirectorySearchCooldownState: { appContext.mangaDirectorySearchCooldownState },
             makeImageDataLoader: { await appContext.makeMangaImageDataLoader() },
             progressSync: ProgressSyncModule(
@@ -69,6 +75,7 @@ struct MangaReaderModelDependencies {
             makeDocumentLoader: { await appContext.makeMangaChapterDocumentLoader() },
             makeDirectoryRepository: { await appContext.makeMangaDirectoryRepository() },
             makeDirectoryStore: { appContext.makeMangaDirectoryStore() },
+            makeOfflineCacheStore: { appContext.makeMangaOfflineCacheStore() },
             makeDirectorySearchCooldownState: { appContext.mangaDirectorySearchCooldownState },
             progressSync: ProgressSyncModule(
                 adapter: FavoriteLibraryProgressSyncAdapter(favoriteStore: appContext.favoriteStore)
@@ -110,6 +117,7 @@ public final class MangaReaderModel: ObservableObject {
     private var lastQueuedProgressSnapshot: MangaReaderProgressSnapshot?
     private var directoryMutationGeneration = 0
     private var chapterJumpGeneration = 0
+    private var offlineCacheFavoriteID: String?
     private lazy var chapterCommentsModule = ReaderChapterCommentsModule(
         adapter: ReaderChapterCommentsModule.Adapter(
             loadInitial: { [weak self] target in
@@ -185,15 +193,23 @@ public final class MangaReaderModel: ObservableObject {
         committedSettings = Self.normalizedSettings(appSettings.manga)
         applePencilPageTurnSettings = appSettings.applePencilPageTurn
         presentation = presentationWithCommittedSettings(presentation)
+        let offlineCacheFavoriteID = await resolvedOfflineCacheFavoriteID()
+        self.offlineCacheFavoriteID = offlineCacheFavoriteID
 
         #if os(iOS)
-        let imagePipeline = MangaImagePipeline(dataLoader: await dependencies.makeImageDataLoader())
+        let imagePipeline = MangaImagePipeline(
+            dataLoader: await dependencies.makeImageDataLoader(),
+            offlineCacheContext: { page in
+                MangaImageOfflineCacheContext(favoriteID: offlineCacheFavoriteID, tid: page.tid)
+            }
+        )
         #endif
         let workflow = MangaReaderWorkflow(
             context: context,
             documentLoader: await dependencies.makeDocumentLoader(),
             directoryRepository: await dependencies.makeDirectoryRepository(),
             directoryStore: dependencies.makeDirectoryStore(),
+            offlineCacheStore: dependencies.makeOfflineCacheStore(),
             settings: committedSettings,
             directoryWorkflowConfiguration: dependencies.directoryWorkflowConfiguration,
             directorySearchCooldownState: dependencies.makeDirectorySearchCooldownState()
@@ -217,6 +233,7 @@ public final class MangaReaderModel: ObservableObject {
         imagePipeline = nil
         #endif
         hasPrepared = false
+        offlineCacheFavoriteID = nil
         lastQueuedProgressSnapshot = nil
         directoryCooldownExpiresAt = nil
         forcedSearchShortcutExpiresAt = nil
@@ -227,6 +244,14 @@ public final class MangaReaderModel: ObservableObject {
         )
 
         await prepare()
+    }
+
+    private func resolvedOfflineCacheFavoriteID() async -> String? {
+        let favoriteID = context.offlineCacheFavoriteID?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let favoriteID, !favoriteID.isEmpty {
+            return favoriteID
+        }
+        return await appContext.favoriteStore.favorite(for: context.originalThreadURL)?.id
     }
 
     public func updateCurrentPage(globalIndex: Int) {
@@ -777,7 +802,8 @@ public final class MangaReaderModel: ObservableObject {
             displayTitle: context.displayTitle,
             source: .resume,
             initialPage: currentPage.localIndex,
-            directoryName: directoryName
+            directoryName: directoryName,
+            offlineCacheFavoriteID: offlineCacheFavoriteID ?? context.offlineCacheFavoriteID
         )
         return MangaReaderProgressSnapshot(
             progress: progress,

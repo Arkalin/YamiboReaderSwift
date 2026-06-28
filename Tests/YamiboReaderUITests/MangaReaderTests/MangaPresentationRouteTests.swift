@@ -201,7 +201,8 @@ final class MangaPresentationRouteTests: XCTestCase {
             displayTitle: "远端漫画",
             source: .resume,
             initialPage: 7,
-            directoryName: "本地目录"
+            directoryName: "本地目录",
+            offlineCacheFavoriteID: remoteFavorite.id
         )
         XCTAssertEqual(appModel.activeMangaRoute, .native(expectedContext))
         let restoredRoute = await fixture.resumeRouteStore.load()

@@ -552,7 +552,8 @@ public final class FavoritesViewModel: ObservableObject {
                     chapterURL: mode == .start ? latestFavorite.url : (latestFavorite.lastMangaURL ?? latestFavorite.url),
                     displayTitle: latestFavorite.resolvedDisplayTitle,
                     source: .favorites,
-                    initialPage: mode == .start ? 0 : latestFavorite.mangaPageIndex
+                    initialPage: mode == .start ? 0 : latestFavorite.mangaPageIndex,
+                    offlineCacheFavoriteID: latestFavorite.id
                 )
             )
         case .other:
@@ -623,15 +624,14 @@ public final class FavoritesViewModel: ObservableObject {
         for favorite: Favorite,
         mode: FavoriteLaunchMode
     ) -> MangaLaunchContext {
-        guard mode == .start else { return context }
-
         return MangaLaunchContext(
             originalThreadURL: context.originalThreadURL,
-            chapterURL: favorite.url,
+            chapterURL: mode == .start ? favorite.url : context.chapterURL,
             displayTitle: favorite.resolvedDisplayTitle,
             source: context.source,
-            initialPage: 0,
-            directoryName: context.directoryName
+            initialPage: mode == .start ? 0 : context.initialPage,
+            directoryName: context.directoryName,
+            offlineCacheFavoriteID: favorite.id
         )
     }
 }

@@ -161,7 +161,8 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         )
         return CachedMangaImageDataLoader(
             cache: mangaImageDataCacheStore,
-            upstream: YamiboMangaImageDataLoader(client: client)
+            upstream: YamiboMangaImageDataLoader(client: client),
+            offlineCacheStore: mangaOfflineCacheStore
         )
     }
 
