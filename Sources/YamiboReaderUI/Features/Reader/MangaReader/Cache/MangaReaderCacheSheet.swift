@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 import YamiboReaderCore
 
@@ -9,6 +10,7 @@ struct MangaReaderCacheSheet: View {
     @State private var isSelecting = false
     @State private var selectedTIDs: Set<String> = []
     @State private var isQueuePresented = false
+    @State private var cacheQueueBadgeFlight: MangaReaderCacheQueueBadgeFlight?
 
     init(
         context: MangaLaunchContext,
@@ -111,6 +113,19 @@ struct MangaReaderCacheSheet: View {
                 }
             }
         }
+        .overlayPreferenceValue(MangaReaderCacheQueueBadgeAnchorPreferenceKey.self) { anchors in
+            GeometryReader { proxy in
+                MangaReaderCacheQueueBadgeFlightLayer(
+                    flight: cacheQueueBadgeFlight,
+                    sourceFrame: anchors[.cacheButton].map { proxy[$0] },
+                    destinationFrame: anchors[.queueButton].map { proxy[$0] },
+                    containerSize: proxy.size,
+                    safeAreaInsets: proxy.safeAreaInsets,
+                    onFinished: clearCacheQueueBadgeFlight
+                )
+            }
+            .allowsHitTesting(false)
+        }
     }
 
     private var selectionState: MangaReaderCacheSelectionState {
@@ -134,8 +149,13 @@ struct MangaReaderCacheSheet: View {
 
     private func cacheSelection() {
         let targets = selectedTIDs
-        Task {
+        let uncachedSelectionCount = selectionState.uncachedSelectedTIDs.count
+        Task { @MainActor in
             await model.cacheSelected(tids: targets)
+            if model.errorMessage == nil, model.prompt == nil {
+                cacheQueueBadgeFlight = MangaReaderCacheQueueBadgeFlight(count: uncachedSelectionCount)
+                await Task.yield()
+            }
             exitSelectionModeIfActionFinished()
         }
     }
@@ -154,6 +174,173 @@ struct MangaReaderCacheSheet: View {
         isSelecting = false
         selectedTIDs = []
     }
+
+    @MainActor
+    private func clearCacheQueueBadgeFlight(_ id: UUID) {
+        guard cacheQueueBadgeFlight?.id == id else { return }
+        cacheQueueBadgeFlight = nil
+    }
+}
+
+private struct MangaReaderCacheQueueBadgeFlight: Identifiable, Equatable {
+    let id = UUID()
+    let count: Int
+}
+
+private enum MangaReaderCacheQueueBadgeAnchorRole: Hashable {
+    case cacheButton
+    case queueButton
+}
+
+private struct MangaReaderCacheQueueBadgeAnchorPreferenceKey: PreferenceKey {
+    static let defaultValue: [MangaReaderCacheQueueBadgeAnchorRole: Anchor<CGRect>] = [:]
+
+    static func reduce(
+        value: inout [MangaReaderCacheQueueBadgeAnchorRole: Anchor<CGRect>],
+        nextValue: () -> [MangaReaderCacheQueueBadgeAnchorRole: Anchor<CGRect>]
+    ) {
+        value.merge(nextValue(), uniquingKeysWith: { _, next in next })
+    }
+}
+
+private struct MangaReaderCacheQueueBadgeAnchorModifier: ViewModifier {
+    let role: MangaReaderCacheQueueBadgeAnchorRole?
+
+    func body(content: Content) -> some View {
+        content.anchorPreference(
+            key: MangaReaderCacheQueueBadgeAnchorPreferenceKey.self,
+            value: .bounds
+        ) { anchor in
+            guard let role else { return [:] }
+            return [role: anchor]
+        }
+    }
+}
+
+private extension View {
+    func mangaReaderCacheQueueBadgeAnchor(
+        _ role: MangaReaderCacheQueueBadgeAnchorRole?
+    ) -> some View {
+        modifier(MangaReaderCacheQueueBadgeAnchorModifier(role: role))
+    }
+}
+
+private struct MangaReaderCacheQueueBadgeFlightLayer: View {
+    let flight: MangaReaderCacheQueueBadgeFlight?
+    let sourceFrame: CGRect?
+    let destinationFrame: CGRect?
+    let containerSize: CGSize
+    let safeAreaInsets: EdgeInsets
+    let onFinished: @MainActor (UUID) -> Void
+
+    var body: some View {
+        if let flight {
+            MangaReaderCacheQueueBadgeFlightView(
+                flight: flight,
+                source: sourcePoint,
+                destination: destinationPoint,
+                onFinished: onFinished
+            )
+        }
+    }
+
+    private var sourcePoint: CGPoint {
+        if let sourceFrame {
+            return CGPoint(x: sourceFrame.midX, y: max(12, sourceFrame.minY - 12))
+        }
+
+        return CGPoint(
+            x: max(34, containerSize.width / 2 - 41),
+            y: max(28, containerSize.height - safeAreaInsets.bottom - 76)
+        )
+    }
+
+    private var destinationPoint: CGPoint {
+        if let destinationFrame {
+            return CGPoint(x: destinationFrame.midX, y: destinationFrame.midY)
+        }
+
+        return CGPoint(
+            x: max(24, containerSize.width - 42),
+            y: max(24, safeAreaInsets.top + 24)
+        )
+    }
+}
+
+private struct MangaReaderCacheQueueBadgeFlightView: View {
+    private static let flightDurationMilliseconds: UInt64 = 720
+    private static let reduceMotionDurationMilliseconds: UInt64 = 180
+
+    let flight: MangaReaderCacheQueueBadgeFlight
+    let source: CGPoint
+    let destination: CGPoint
+    let onFinished: @MainActor (UUID) -> Void
+    @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
+    @State private var hasArrived = false
+    @State private var didStart = false
+
+    var body: some View {
+        MangaReaderCacheQueueFlightBadge(count: flight.count)
+            .scaleEffect(hasArrived ? 0.55 : 1)
+            .opacity(hasArrived ? 0 : 1)
+            .position(displayedPosition)
+            .accessibilityHidden(true)
+            .onAppear {
+                startFlight()
+            }
+            .id(flight.id)
+    }
+
+    private var displayedPosition: CGPoint {
+        if accessibilityReduceMotion {
+            return source
+        }
+        return hasArrived ? destination : source
+    }
+
+    @MainActor
+    private func startFlight() {
+        guard !didStart else { return }
+        didStart = true
+
+        withAnimation(animation) {
+            hasArrived = true
+        }
+
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(removalDelayMilliseconds))
+            onFinished(flight.id)
+        }
+    }
+
+    private var animation: Animation {
+        if accessibilityReduceMotion {
+            return .easeOut(duration: 0.18)
+        }
+        return .timingCurve(0.22, 0.86, 0.18, 1.0, duration: 0.72)
+    }
+
+    private var removalDelayMilliseconds: UInt64 {
+        accessibilityReduceMotion
+            ? Self.reduceMotionDurationMilliseconds
+            : Self.flightDurationMilliseconds
+    }
+}
+
+private struct MangaReaderCacheQueueFlightBadge: View {
+    let count: Int
+
+    var body: some View {
+        Text(verbatim: "\(count)")
+            .font(.caption2.monospacedDigit().weight(.bold))
+            .foregroundStyle(.white)
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
+            .padding(.horizontal, count < 10 ? 0 : 6)
+            .frame(minWidth: 22, minHeight: 22)
+            .background(Capsule().fill(Color.red))
+            .shadow(color: Color.black.opacity(0.18), radius: 4, x: 0, y: 2)
+    }
 }
 
 private struct MangaReaderCacheQueueToolbarButton: View {
@@ -164,6 +351,7 @@ private struct MangaReaderCacheQueueToolbarButton: View {
         Button(action: action) {
             HStack(spacing: 5) {
                 MangaReaderCacheDownloadQueueIcon(isActive: entryCount > 0)
+                    .mangaReaderCacheQueueBadgeAnchor(.queueButton)
                 Text(verbatim: "\(entryCount)")
                     .font(.caption.monospacedDigit().weight(.semibold))
                     .lineLimit(1)
@@ -405,6 +593,7 @@ private struct MangaReaderCacheSelectionToolbar: View {
                 systemImage: "square.and.arrow.down",
                 role: nil,
                 isEnabled: selectionState.canCache,
+                badgeAnchorRole: .cacheButton,
                 action: onCache
             )
             toolbarButton(
@@ -424,6 +613,7 @@ private struct MangaReaderCacheSelectionToolbar: View {
         systemImage: String,
         role: ButtonRole?,
         isEnabled: Bool,
+        badgeAnchorRole: MangaReaderCacheQueueBadgeAnchorRole? = nil,
         action: @escaping () -> Void
     ) -> some View {
         Button(role: role, action: action) {
@@ -442,6 +632,7 @@ private struct MangaReaderCacheSelectionToolbar: View {
         }
         .buttonStyle(.plain)
         .disabled(!isEnabled)
+        .mangaReaderCacheQueueBadgeAnchor(badgeAnchorRole)
         .accessibilityLabel(title)
     }
 }
