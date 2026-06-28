@@ -101,7 +101,8 @@ struct MangaReaderTestsMangaOfflineCacheQueue {
             favoriteID: "favorite-a",
             tid: "100",
             targetImageURLs: [firstImage, secondImage, thirdImage],
-            completedImageURLs: [firstImage, secondImage]
+            completedImageURLs: [firstImage, secondImage],
+            currentBytesPerSecond: nil
         )
 
         let readingStore = FileMangaOfflineCacheStore(baseDirectory: directory)
@@ -141,7 +142,8 @@ struct MangaReaderTestsMangaOfflineCacheQueue {
             favoriteID: "favorite-a",
             tid: "100",
             targetImageURLs: [imageURL],
-            completedImageURLs: [imageURL]
+            completedImageURLs: [imageURL],
+            currentBytesPerSecond: nil
         )
 
         try await store.removeMembership(favoriteID: "favorite-a", tid: "100")

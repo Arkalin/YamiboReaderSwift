@@ -263,6 +263,17 @@
 "mine.check_in" = "签到";
 "mine.credit_progress_format" = "%d/%d";
 "mine.download_queue" = "下载队列";
+"mine.offline_queue.cancel_selected_format" = "取消 %d 项";
+"mine.offline_queue.chapter_count_format" = "%d 个未完成章节";
+"mine.offline_queue.continue" = "继续队列";
+"mine.offline_queue.empty_message" = "未完成、暂停或失败的漫画缓存任务会显示在这里。";
+"mine.offline_queue.empty_title" = "队列为空";
+"mine.offline_queue.failed" = "失败";
+"mine.offline_queue.image_progress_format" = "%d / %d 张图片";
+"mine.offline_queue.pause" = "暂停队列";
+"mine.offline_queue.percent_format" = "%d %%";
+"mine.offline_queue.preparing" = "准备图片列表";
+"mine.offline_queue.speed_format" = "%@/s";
 "mine.login" = "登录";
 "mine.login_card_hint" = "轻点打开登录表单";
 "mine.login_password" = "密码";

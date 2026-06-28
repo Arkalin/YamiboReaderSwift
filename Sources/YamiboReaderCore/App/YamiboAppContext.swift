@@ -170,6 +170,23 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         mangaOfflineCacheStore
     }
 
+    public func makeMangaOfflineCacheQueueExecutor() async -> MangaOfflineCacheQueueExecutor {
+        let sessionState = await sessionStore.load()
+        let client = YamiboClient(
+            session: session,
+            cookie: sessionState.cookie,
+            userAgent: sessionState.userAgent
+        )
+        return MangaOfflineCacheQueueExecutor(
+            store: mangaOfflineCacheStore,
+            chapterDocumentLoader: await makeMangaChapterDocumentLoader(),
+            imageAcquirer: MangaOfflineCacheImageAcquirer(
+                transparentCache: mangaImageDataCacheStore,
+                networkLoader: YamiboMangaImageDataLoader(client: client)
+            )
+        )
+    }
+
     public func makeAutoSignInService() -> AutoSignInService {
         AutoSignInService(
             sessionStore: sessionStore,
