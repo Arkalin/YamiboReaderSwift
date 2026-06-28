@@ -224,9 +224,8 @@ public final class YamiboAppModel {
         case let .novel(context):
             guard activeReaderContext != nil else { return }
             activeReaderContext = context
-        case let .manga(route):
+        case .manga:
             guard activeMangaRoute != nil else { return }
-            activeMangaRoute = route
         }
         appContinuity.readerReadingPositionChanged(route)
     }
