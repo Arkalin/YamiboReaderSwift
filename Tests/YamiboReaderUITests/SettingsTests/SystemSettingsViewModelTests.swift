@@ -290,6 +290,35 @@ final class SystemSettingsViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.pendingMangaOfflineCacheCleanupConfirmation?.ownerNames, ["作品A", "作品B"])
     }
 
+    func testMangaOfflineCacheCleanupSelectionActionStateEnablesDeleteWhenOwnerIsSelected() async throws {
+        let fixture = try makeFixture()
+        let imageURL = try XCTUnwrap(URL(string: "https://img.example.com/offline-selection-state.jpg"))
+        try await fixture.mangaOfflineCacheStore.saveOfflineImageData(Data([1]), for: imageURL)
+        try await fixture.mangaOfflineCacheStore.saveMembership(
+            try makeMangaOfflineMembership(ownerName: "作品A", tid: "310", imageURLs: [imageURL])
+        )
+        let viewModel = SystemSettingsViewModel(appContext: fixture.appContext)
+        await viewModel.refreshMangaOfflineCacheCleanup()
+
+        viewModel.setMangaOfflineCacheCleanupSelectionMode(true)
+        XCTAssertEqual(
+            viewModel.mangaOfflineCacheCleanupSelectionActionState,
+            MangaOfflineCacheCleanupSelectionActionState(selectedOwnerCount: 0, canDelete: false)
+        )
+
+        viewModel.toggleMangaOfflineCacheCleanupSelection(ownerName: "作品A")
+        XCTAssertEqual(
+            viewModel.mangaOfflineCacheCleanupSelectionActionState,
+            MangaOfflineCacheCleanupSelectionActionState(selectedOwnerCount: 1, canDelete: true)
+        )
+
+        viewModel.toggleMangaOfflineCacheCleanupSelection(ownerName: "作品A")
+        XCTAssertEqual(
+            viewModel.mangaOfflineCacheCleanupSelectionActionState,
+            MangaOfflineCacheCleanupSelectionActionState(selectedOwnerCount: 0, canDelete: false)
+        )
+    }
+
     func testMangaOfflineCacheCleanupConfirmDeletesMembershipsWorksAndUnsharedOfflineBytes() async throws {
         let fixture = try makeFixture()
         let removedImage = try XCTUnwrap(URL(string: "https://img.example.com/remove.jpg"))

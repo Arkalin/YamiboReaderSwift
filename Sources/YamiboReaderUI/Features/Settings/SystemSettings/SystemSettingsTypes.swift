@@ -25,6 +25,11 @@ struct MangaOfflineCacheCleanupRow: Hashable, Identifiable {
     }
 }
 
+struct MangaOfflineCacheCleanupSelectionActionState: Equatable {
+    let selectedOwnerCount: Int
+    let canDelete: Bool
+}
+
 struct MangaOfflineCacheCleanupConfirmation: Identifiable, Equatable {
     var ownerNames: [String]
     var ownerTitles: [String]

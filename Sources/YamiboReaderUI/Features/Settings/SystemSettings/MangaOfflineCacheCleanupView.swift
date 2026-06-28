@@ -69,14 +69,20 @@ struct MangaOfflineCacheCleanupView: View {
             #if os(iOS)
             if viewModel.isMangaOfflineCacheCleanupSelectionMode && usesSystemSelectionBottomToolbar {
                 ToolbarItem(placement: .bottomBar) {
-                    MangaOfflineCacheCleanupSelectionToolbar(viewModel: viewModel)
+                    MangaOfflineCacheCleanupSelectionToolbar(
+                        actionState: viewModel.mangaOfflineCacheCleanupSelectionActionState,
+                        onDelete: viewModel.requestSelectedMangaOfflineCacheCleanup
+                    )
                 }
             }
             #endif
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if viewModel.isMangaOfflineCacheCleanupSelectionMode && !usesSystemSelectionBottomToolbar {
-                MangaOfflineCacheCleanupSelectionActionBar(viewModel: viewModel)
+                MangaOfflineCacheCleanupSelectionActionBar(
+                    actionState: viewModel.mangaOfflineCacheCleanupSelectionActionState,
+                    onDelete: viewModel.requestSelectedMangaOfflineCacheCleanup
+                )
             }
         }
         .overlay {
@@ -222,62 +228,64 @@ private struct MangaOfflineCacheCleanupSelectAllButton: View {
 }
 
 private struct MangaOfflineCacheCleanupDeleteSelectionButton: View {
-    let viewModel: SystemSettingsViewModel
+    let actionState: MangaOfflineCacheCleanupSelectionActionState
+    let onDelete: () -> Void
 
     var body: some View {
-        Button(role: .destructive) {
-            viewModel.requestSelectedMangaOfflineCacheCleanup()
-        } label: {
+        Button(role: .destructive, action: onDelete) {
             VStack(spacing: 3) {
                 Image(systemName: "trash")
                     .font(.system(size: 18, weight: .regular))
                     .frame(width: 24, height: 22)
 
                 Text(L10n.string("common.delete"))
-                .font(.caption2)
-                .lineLimit(1)
-                .minimumScaleFactor(0.78)
+                    .font(.caption2)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.78)
             }
             .frame(width: 66)
             .foregroundStyle(Color.red)
-            .opacity(canDelete ? 1 : 0.35)
+            .opacity(actionState.canDelete ? 1 : 0.35)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .disabled(!canDelete)
+        .disabled(!actionState.canDelete)
         .accessibilityLabel(
             L10n.string(
                 "settings.manga_offline_cache.delete_selected_format",
-                viewModel.selectedMangaOfflineCacheOwnerCount
+                actionState.selectedOwnerCount
             )
         )
-    }
-
-    private var canDelete: Bool {
-        !viewModel.selectedMangaOfflineCacheOwnerNames.isEmpty
-            && viewModel.activeAction != .clearingMangaOfflineCache
     }
 }
 
 private struct MangaOfflineCacheCleanupSelectionToolbar: View {
-    let viewModel: SystemSettingsViewModel
+    let actionState: MangaOfflineCacheCleanupSelectionActionState
+    let onDelete: () -> Void
 
     var body: some View {
-        MangaOfflineCacheCleanupDeleteSelectionButton(viewModel: viewModel)
+        MangaOfflineCacheCleanupDeleteSelectionButton(
+            actionState: actionState,
+            onDelete: onDelete
+        )
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
     }
 }
 
 private struct MangaOfflineCacheCleanupSelectionActionBar: View {
-    let viewModel: SystemSettingsViewModel
+    let actionState: MangaOfflineCacheCleanupSelectionActionState
+    let onDelete: () -> Void
 
     var body: some View {
         VStack(spacing: 0) {
             Divider()
             HStack {
                 Spacer(minLength: 0)
-                MangaOfflineCacheCleanupDeleteSelectionButton(viewModel: viewModel)
+                MangaOfflineCacheCleanupDeleteSelectionButton(
+                    actionState: actionState,
+                    onDelete: onDelete
+                )
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, 20)
