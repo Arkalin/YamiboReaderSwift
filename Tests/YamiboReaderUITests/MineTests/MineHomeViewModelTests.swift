@@ -180,6 +180,9 @@ final class MineHomeViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.offlineCacheQueueEntryCount, 3)
         XCTAssertEqual(viewModel.offlineCacheQueueGroups.map(\.favoriteID), ["favorite-b", "favorite-a"])
         XCTAssertEqual(viewModel.offlineCacheQueueGroups[1].chapters.map(\.id.tid), ["100", "200"])
+        XCTAssertEqual(viewModel.offlineCacheQueueGroups[1].progressText, L10n.string("mine.offline_queue.image_progress_format", 1, 2))
+        XCTAssertEqual(viewModel.offlineCacheQueueGroups[1].percentageText, L10n.string("mine.offline_queue.percent_format", 50))
+        XCTAssertEqual(viewModel.offlineCacheQueueGroups[1].progressFraction, 0.5)
 
         let activeRow = viewModel.offlineCacheQueueGroups[1].chapters[0]
         XCTAssertEqual(activeRow.completedImageCount, 1)
@@ -339,6 +342,38 @@ final class MineHomeViewModelTests: XCTestCase {
                 MangaOfflineCacheMembershipID(favoriteID: "favorite-a", tid: "200")
             ]
         )
+    }
+
+    func testOfflineCacheSelectionModeTogglesWholeFavoriteGroup() async throws {
+        let fixture = try await makeMineHomeFixture()
+        _ = try await fixture.offlineCacheStore.enqueueOfflineCacheWork(
+            try makeMineOfflineCacheWorkRequest(favoriteID: "favorite-a", tid: "100")
+        )
+        _ = try await fixture.offlineCacheStore.enqueueOfflineCacheWork(
+            try makeMineOfflineCacheWorkRequest(favoriteID: "favorite-a", tid: "200")
+        )
+        _ = try await fixture.offlineCacheStore.enqueueOfflineCacheWork(
+            try makeMineOfflineCacheWorkRequest(favoriteID: "favorite-b", tid: "300")
+        )
+        let viewModel = MineHomeViewModel(appContext: fixture.appContext)
+        await viewModel.refreshOfflineCacheQueue()
+
+        viewModel.toggleOfflineCacheFavoriteSelection(favoriteID: "favorite-a")
+
+        XCTAssertTrue(viewModel.isOfflineCacheFavoriteSelected(favoriteID: "favorite-a"))
+        XCTAssertFalse(viewModel.isOfflineCacheFavoriteSelected(favoriteID: "favorite-b"))
+        XCTAssertEqual(
+            viewModel.selectedOfflineCacheWorkIDs,
+            [
+                MangaOfflineCacheMembershipID(favoriteID: "favorite-a", tid: "100"),
+                MangaOfflineCacheMembershipID(favoriteID: "favorite-a", tid: "200")
+            ]
+        )
+
+        viewModel.toggleOfflineCacheFavoriteSelection(favoriteID: "favorite-a")
+
+        XCTAssertFalse(viewModel.isOfflineCacheFavoriteSelected(favoriteID: "favorite-a"))
+        XCTAssertTrue(viewModel.selectedOfflineCacheWorkIDs.isEmpty)
     }
 }
 
