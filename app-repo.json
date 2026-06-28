@@ -13,6 +13,13 @@
       "iconURL": "https://raw.githubusercontent.com/Arkalin/YamiboReaderSwift/main/YamiboReader/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png",
       "versions": [
         {
+          "version": "0.5.0",
+          "date": "2026-06-28T15:04:55Z",
+          "localizedDescription": "重构漫画阅读器并优化性能，新增漫画阅读器翻页方向、翻页动画、边缘填充设置、漫画章节缓存，以及小说阅读器翻页方向和手动签到功能，并修复已知问题。",
+          "downloadURL": "https://github.com/Arkalin/YamiboReaderSwift/releases/download/v0.5.0/YamiboReader_v0.5.0_unsigned.ipa",
+          "size": 11097848
+        },
+        {
           "version": "0.4.4",
           "date": "2026-06-16T16:12:46Z",
           "localizedDescription": "“我的”页改用原生 UI，并修复了一些已知问题。",
