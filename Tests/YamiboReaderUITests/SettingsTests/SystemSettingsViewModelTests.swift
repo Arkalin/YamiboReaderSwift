@@ -337,6 +337,27 @@ final class SystemSettingsViewModelTests: XCTestCase {
         XCTAssertTrue(viewModel.selectedMangaOfflineCacheFavoriteIDs.isEmpty)
     }
 
+    func testMangaOfflineCacheCleanupConfirmUsesCapturedConfirmationAfterPendingDismissal() async throws {
+        let fixture = try makeFixture()
+        let imageURL = try XCTUnwrap(URL(string: "https://img.example.com/dismiss-race.jpg"))
+        try await fixture.mangaOfflineCacheStore.saveOfflineImageData(Data([1]), for: imageURL)
+        try await fixture.mangaOfflineCacheStore.saveMembership(
+            try makeMangaOfflineMembership(favoriteID: "favorite-a", tid: "310", imageURLs: [imageURL])
+        )
+        let viewModel = SystemSettingsViewModel(appContext: fixture.appContext)
+        await viewModel.refreshMangaOfflineCacheCleanup()
+
+        viewModel.requestMangaOfflineCacheCleanup(favoriteID: "favorite-a")
+        let confirmation = try XCTUnwrap(viewModel.pendingMangaOfflineCacheCleanupConfirmation)
+        viewModel.cancelMangaOfflineCacheCleanupConfirmation()
+        let didDelete = await viewModel.confirmMangaOfflineCacheCleanup(confirmation)
+
+        let removedMembership = await fixture.mangaOfflineCacheStore.membership(favoriteID: "favorite-a", tid: "310")
+        XCTAssertTrue(didDelete)
+        XCTAssertNil(removedMembership)
+        XCTAssertTrue(viewModel.mangaOfflineCacheCleanupRows.isEmpty)
+    }
+
     func testMangaOfflineCacheCleanupPreservesTransparentMangaCaches() async throws {
         let fixture = try makeFixture()
         try await seedMangaIndexCache(fixture)

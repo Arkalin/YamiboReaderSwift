@@ -90,10 +90,10 @@ struct MangaOfflineCacheCleanupView: View {
             viewModel.pendingMangaOfflineCacheCleanupConfirmation?.title ?? "",
             isPresented: confirmationIsPresented,
             presenting: viewModel.pendingMangaOfflineCacheCleanupConfirmation
-        ) { _ in
+        ) { confirmation in
             Button(L10n.string("common.delete"), role: .destructive) {
                 Task {
-                    _ = await viewModel.confirmPendingMangaOfflineCacheCleanup()
+                    _ = await viewModel.confirmMangaOfflineCacheCleanup(confirmation)
                 }
             }
             Button(L10n.string("common.cancel"), role: .cancel) {
@@ -109,7 +109,9 @@ struct MangaOfflineCacheCleanupView: View {
             get: { viewModel.pendingMangaOfflineCacheCleanupConfirmation != nil },
             set: { isPresented in
                 if !isPresented {
-                    viewModel.cancelMangaOfflineCacheCleanupConfirmation()
+                    Task { @MainActor in
+                        viewModel.cancelMangaOfflineCacheCleanupConfirmation()
+                    }
                 }
             }
         )
