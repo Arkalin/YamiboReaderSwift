@@ -28,6 +28,7 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
     public let mangaDirectorySearchCooldownState: MangaDirectorySearchCooldownState
     public let mangaChapterDocumentStore: FileMangaChapterDocumentStore
     public let mangaImageDataCacheStore: FileMangaImageDataCacheStore
+    public let mangaOfflineCacheStore: FileMangaOfflineCacheStore
     let session: URLSession
 
     public init(
@@ -44,6 +45,7 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         mangaDirectorySearchCooldownState: MangaDirectorySearchCooldownState = MangaDirectorySearchCooldownState(),
         mangaChapterDocumentStore: FileMangaChapterDocumentStore = FileMangaChapterDocumentStore(),
         mangaImageDataCacheStore: FileMangaImageDataCacheStore = FileMangaImageDataCacheStore(),
+        mangaOfflineCacheStore: FileMangaOfflineCacheStore = FileMangaOfflineCacheStore(),
         session: URLSession = YamiboNetworkConfiguration.makeSession()
     ) {
         self.sessionStore = sessionStore
@@ -59,6 +61,7 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         self.mangaDirectorySearchCooldownState = mangaDirectorySearchCooldownState
         self.mangaChapterDocumentStore = mangaChapterDocumentStore
         self.mangaImageDataCacheStore = mangaImageDataCacheStore
+        self.mangaOfflineCacheStore = mangaOfflineCacheStore
         self.session = session
     }
 
@@ -162,6 +165,10 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         )
     }
 
+    public func makeMangaOfflineCacheStore() -> any MangaOfflineCacheStoring {
+        mangaOfflineCacheStore
+    }
+
     public func makeAutoSignInService() -> AutoSignInService {
         AutoSignInService(
             sessionStore: sessionStore,
@@ -209,6 +216,7 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         await mangaDirectorySearchCooldownState.clear()
         try await mangaChapterDocumentStore.clearAll()
         try await mangaImageDataCacheStore.clearAll()
+        try await mangaOfflineCacheStore.clearAll()
         try await favoriteBackgroundImageStore.deleteAll()
         clearLocalUIState()
         await clearWebData()

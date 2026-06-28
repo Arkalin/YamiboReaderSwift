@@ -55,3 +55,16 @@ public protocol MangaImageDataCaching: Sendable {
     func save(_ data: Data, for imageURL: URL) async throws
     func clearAll() async throws
 }
+
+public protocol MangaOfflineCacheStoring: Sendable {
+    func membership(favoriteID: String, tid: String) async -> MangaOfflineCacheMembership?
+    func memberships(forFavoriteID favoriteID: String) async -> [MangaOfflineCacheMembership]
+    func allMemberships() async -> [MangaOfflineCacheMembership]
+    func saveMembership(_ membership: MangaOfflineCacheMembership) async throws
+    func removeMembership(favoriteID: String, tid: String) async throws
+    func removeMemberships(forFavoriteID favoriteID: String) async throws
+    func offlineImageData(for imageURL: URL) async -> Data?
+    func saveOfflineImageData(_ data: Data, for imageURL: URL) async throws
+    func diskUsageByFavorite() async -> [MangaOfflineCacheFavoriteUsage]
+    func clearAll() async throws
+}
