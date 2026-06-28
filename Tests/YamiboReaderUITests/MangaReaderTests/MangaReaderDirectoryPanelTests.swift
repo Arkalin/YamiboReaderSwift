@@ -198,8 +198,8 @@ private func makeDirectoryPanelFixture(
     appSettings: AppSettings = AppSettings(),
     configuration: MangaDirectoryWorkflowConfiguration = MangaDirectoryWorkflowConfiguration()
 ) async throws -> MangaReaderDirectoryPanelFixture {
-    let keyPrefix = UUID().uuidString
-    let settingsStore = SettingsStore(key: "\(keyPrefix).settings")
+    let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "manga-directory-panel")
+    let settingsStore = try SettingsStore(testSuiteName: defaultsSuiteName, key: "settings")
     try await settingsStore.save(appSettings)
 
     let resolvedDocument = try document ?? makeDocument(tid: "700", pageCount: 1)
@@ -223,10 +223,10 @@ private func makeDirectoryPanelFixture(
         uniqueKeysWithValues: ([resolvedDocument] + extraDocuments).map { ($0.chapterURL, $0) }
     )
     let appContext = YamiboAppContext(
-        sessionStore: SessionStore(key: "\(keyPrefix).session"),
+        sessionStore: try SessionStore(testSuiteName: defaultsSuiteName, key: "session"),
         settingsStore: settingsStore,
-        readerResumeRouteStore: ReaderResumeRouteStore(key: "\(keyPrefix).resume"),
-        favoriteStore: FavoriteStore(key: "\(keyPrefix).favorites")
+        readerResumeRouteStore: try ReaderResumeRouteStore(testSuiteName: defaultsSuiteName, key: "resume"),
+        favoriteStore: try FavoriteStore(testSuiteName: defaultsSuiteName, key: "favorites")
     )
     #if os(iOS)
     let dependencies = MangaReaderModelDependencies(

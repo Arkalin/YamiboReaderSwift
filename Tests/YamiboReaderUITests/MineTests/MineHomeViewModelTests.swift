@@ -137,9 +137,9 @@ private func makeMineHomeFixture(
     accountUID: String? = nil,
     cachedProfile: YamiboProfile? = nil
 ) async throws -> MineHomeViewModelFixture {
-    let keyPrefix = "mine-home-view-model-\(UUID().uuidString)"
-    let sessionStore = SessionStore(key: "\(keyPrefix).session")
-    let profileStore = YamiboProfileStore(key: "\(keyPrefix).profile")
+    let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "mine-home-view-model")
+    let sessionStore = try SessionStore(testSuiteName: defaultsSuiteName, key: "session")
+    let profileStore = try YamiboProfileStore(testSuiteName: defaultsSuiteName, key: "profile")
     try await sessionStore.save(
         SessionState(
             cookie: "EeqY_2132_auth=token",

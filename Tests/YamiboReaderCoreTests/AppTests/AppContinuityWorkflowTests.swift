@@ -4,9 +4,9 @@ import Testing
 
 @MainActor
 @Test func appContinuityRestoreReconcilesNovelRouteWithFavoriteLibraryProgress() async throws {
-    let keyPrefix = UUID().uuidString
-    let favoriteStore = FavoriteStore(key: "\(keyPrefix).favorites")
-    let resumeRouteStore = ReaderResumeRouteStore(key: "\(keyPrefix).resume")
+    let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "app-continuity-restore-novel")
+    let favoriteStore = try FavoriteStore(testSuiteName: defaultsSuiteName, key: "favorites")
+    let resumeRouteStore = try ReaderResumeRouteStore(testSuiteName: defaultsSuiteName, key: "resume")
     let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=901&mobile=2"))
     let staleRoute = ReaderResumeRoute.novel(
         ReaderLaunchContext(
@@ -62,9 +62,9 @@ import Testing
 
 @MainActor
 @Test func appContinuityDoesNotRestoreOrphanMangaRouteWithoutFavoriteProgress() async throws {
-    let keyPrefix = UUID().uuidString
-    let favoriteStore = FavoriteStore(key: "\(keyPrefix).favorites")
-    let resumeRouteStore = ReaderResumeRouteStore(key: "\(keyPrefix).resume")
+    let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "app-continuity-orphan-manga")
+    let favoriteStore = try FavoriteStore(testSuiteName: defaultsSuiteName, key: "favorites")
+    let resumeRouteStore = try ReaderResumeRouteStore(testSuiteName: defaultsSuiteName, key: "resume")
     let originalURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=700&mobile=2"))
     let route = MangaPresentationRoute.native(
         MangaLaunchContext(
@@ -94,8 +94,8 @@ import Testing
 
 @MainActor
 @Test func appContinuityIgnoresLateReadingPositionAfterRouteDismissal() async throws {
-    let keyPrefix = UUID().uuidString
-    let resumeRouteStore = ReaderResumeRouteStore(key: "\(keyPrefix).resume")
+    let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "app-continuity-dismissal")
+    let resumeRouteStore = try ReaderResumeRouteStore(testSuiteName: defaultsSuiteName, key: "resume")
     let workflow = AppContinuityWorkflow(
         appContext: YamiboAppContext(readerResumeRouteStore: resumeRouteStore)
     )

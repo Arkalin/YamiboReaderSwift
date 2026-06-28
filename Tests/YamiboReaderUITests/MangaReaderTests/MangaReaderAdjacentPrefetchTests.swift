@@ -251,13 +251,13 @@ private func makeAdjacentPrefetchFixture(
     directory: MangaDirectory,
     progressSync: ProgressSyncModule? = nil
 ) async throws -> AdjacentPrefetchFixture {
-    let keyPrefix = UUID().uuidString
-    let settingsStore = SettingsStore(key: "\(keyPrefix).settings")
+    let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "manga-adjacent-prefetch")
+    let settingsStore = try SettingsStore(testSuiteName: defaultsSuiteName, key: "settings")
     try await settingsStore.save(AppSettings())
-    let resumeRouteStore = ReaderResumeRouteStore(key: "\(keyPrefix).resume")
-    let favoriteStore = FavoriteStore(key: "\(keyPrefix).favorites")
+    let resumeRouteStore = try ReaderResumeRouteStore(testSuiteName: defaultsSuiteName, key: "resume")
+    let favoriteStore = try FavoriteStore(testSuiteName: defaultsSuiteName, key: "favorites")
     let appContext = YamiboAppContext(
-        sessionStore: SessionStore(key: "\(keyPrefix).session"),
+        sessionStore: try SessionStore(testSuiteName: defaultsSuiteName, key: "session"),
         settingsStore: settingsStore,
         readerResumeRouteStore: resumeRouteStore,
         favoriteStore: favoriteStore

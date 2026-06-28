@@ -1057,8 +1057,8 @@ final class ReaderContainerModelTests: XCTestCase {
     }
 
     func testLayoutSettingsFailureKeepsCommittedSettingsAndDoesNotPersistDraft() async throws {
-        let keyPrefix = UUID().uuidString
-        let settingsStore = SettingsStore(key: "\(keyPrefix).settings")
+        let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "reader-container-model")
+        let settingsStore = try SettingsStore(testSuiteName: defaultsSuiteName, key: "settings")
         let cacheStore = ReaderCacheStore(
             baseDirectory: FileManager.default.temporaryDirectory
                 .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -1069,9 +1069,9 @@ final class ReaderContainerModelTests: XCTestCase {
         try await cacheStore.save(document)
 
         let appContext = YamiboAppContext(
-            sessionStore: SessionStore(key: "\(keyPrefix).session"),
+            sessionStore: try SessionStore(testSuiteName: defaultsSuiteName, key: "session"),
             settingsStore: settingsStore,
-            favoriteStore: FavoriteStore(key: "\(keyPrefix).favorites"),
+            favoriteStore: try FavoriteStore(testSuiteName: defaultsSuiteName, key: "favorites"),
             readerCacheStore: cacheStore
         )
         let model = await MainActor.run {
@@ -1107,8 +1107,8 @@ final class ReaderContainerModelTests: XCTestCase {
     }
 
     func testSurfaceOnlyAppearanceSettingsPublishRevisionWithoutRuntimeRebuild() async throws {
-        let keyPrefix = UUID().uuidString
-        let settingsStore = SettingsStore(key: "\(keyPrefix).settings")
+        let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "reader-container-model")
+        let settingsStore = try SettingsStore(testSuiteName: defaultsSuiteName, key: "settings")
         let cacheStore = ReaderCacheStore(
             baseDirectory: FileManager.default.temporaryDirectory
                 .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -1118,9 +1118,9 @@ final class ReaderContainerModelTests: XCTestCase {
         try await settingsStore.save(AppSettings(reader: initialSettings))
         try await cacheStore.save(document)
         let appContext = YamiboAppContext(
-            sessionStore: SessionStore(key: "\(keyPrefix).session"),
+            sessionStore: try SessionStore(testSuiteName: defaultsSuiteName, key: "session"),
             settingsStore: settingsStore,
-            favoriteStore: FavoriteStore(key: "\(keyPrefix).favorites"),
+            favoriteStore: try FavoriteStore(testSuiteName: defaultsSuiteName, key: "favorites"),
             readerCacheStore: cacheStore
         )
         let model = await MainActor.run {
@@ -1153,8 +1153,8 @@ final class ReaderContainerModelTests: XCTestCase {
     }
 
     func testApplySettingsPersistsSharedApplePencilSettingsWithoutOverwritingMangaSettings() async throws {
-        let keyPrefix = UUID().uuidString
-        let settingsStore = SettingsStore(key: "\(keyPrefix).settings")
+        let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "reader-container-model")
+        let settingsStore = try SettingsStore(testSuiteName: defaultsSuiteName, key: "settings")
         let cacheStore = ReaderCacheStore(
             baseDirectory: FileManager.default.temporaryDirectory
                 .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -1177,9 +1177,9 @@ final class ReaderContainerModelTests: XCTestCase {
         try await cacheStore.save(document)
 
         let appContext = YamiboAppContext(
-            sessionStore: SessionStore(key: "\(keyPrefix).session"),
+            sessionStore: try SessionStore(testSuiteName: defaultsSuiteName, key: "session"),
             settingsStore: settingsStore,
-            favoriteStore: FavoriteStore(key: "\(keyPrefix).favorites"),
+            favoriteStore: try FavoriteStore(testSuiteName: defaultsSuiteName, key: "favorites"),
             readerCacheStore: cacheStore
         )
         let model = await MainActor.run {
@@ -1385,9 +1385,9 @@ final class ReaderContainerModelTests: XCTestCase {
     }
 
     func testWorkflowBackedPreviewAndProgressStayAlignedAfterVerticalViewportMovement() async throws {
-        let keyPrefix = UUID().uuidString
-        let settingsStore = SettingsStore(key: "\(keyPrefix).settings")
-        let favoriteStore = FavoriteStore(key: "\(keyPrefix).favorites")
+        let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "reader-container-model")
+        let settingsStore = try SettingsStore(testSuiteName: defaultsSuiteName, key: "settings")
+        let favoriteStore = try FavoriteStore(testSuiteName: defaultsSuiteName, key: "favorites")
         let cacheStore = ReaderCacheStore(
             baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         )
@@ -1412,7 +1412,7 @@ final class ReaderContainerModelTests: XCTestCase {
         ])
 
         let appContext = YamiboAppContext(
-            sessionStore: SessionStore(key: "\(keyPrefix).session"),
+            sessionStore: try SessionStore(testSuiteName: defaultsSuiteName, key: "session"),
             settingsStore: settingsStore,
             favoriteStore: favoriteStore,
             readerCacheStore: cacheStore
@@ -1469,9 +1469,9 @@ final class ReaderContainerModelTests: XCTestCase {
     }
 
     func testForumNovelProgressDoesNotCreateFavorite() async throws {
-        let keyPrefix = UUID().uuidString
-        let settingsStore = SettingsStore(key: "\(keyPrefix).settings")
-        let favoriteStore = FavoriteStore(key: "\(keyPrefix).favorites")
+        let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "reader-container-model")
+        let settingsStore = try SettingsStore(testSuiteName: defaultsSuiteName, key: "settings")
+        let favoriteStore = try FavoriteStore(testSuiteName: defaultsSuiteName, key: "favorites")
         let cacheStore = ReaderCacheStore(
             baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         )
@@ -1481,7 +1481,7 @@ final class ReaderContainerModelTests: XCTestCase {
         try await cacheStore.save(document)
 
         let appContext = YamiboAppContext(
-            sessionStore: SessionStore(key: "\(keyPrefix).session"),
+            sessionStore: try SessionStore(testSuiteName: defaultsSuiteName, key: "session"),
             settingsStore: settingsStore,
             favoriteStore: favoriteStore,
             readerCacheStore: cacheStore
@@ -1510,10 +1510,10 @@ final class ReaderContainerModelTests: XCTestCase {
     }
 
     func testNovelProgressPersistsReaderResumeRoute() async throws {
-        let keyPrefix = UUID().uuidString
-        let settingsStore = SettingsStore(key: "\(keyPrefix).settings")
-        let favoriteStore = FavoriteStore(key: "\(keyPrefix).favorites")
-        let readerResumeRouteStore = ReaderResumeRouteStore(key: "\(keyPrefix).readerRoute")
+        let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "reader-container-model")
+        let settingsStore = try SettingsStore(testSuiteName: defaultsSuiteName, key: "settings")
+        let favoriteStore = try FavoriteStore(testSuiteName: defaultsSuiteName, key: "favorites")
+        let readerResumeRouteStore = try ReaderResumeRouteStore(testSuiteName: defaultsSuiteName, key: "readerRoute")
         let cacheStore = ReaderCacheStore(
             baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         )
@@ -1523,7 +1523,7 @@ final class ReaderContainerModelTests: XCTestCase {
         try await cacheStore.save(document)
 
         let appContext = YamiboAppContext(
-            sessionStore: SessionStore(key: "\(keyPrefix).session"),
+            sessionStore: try SessionStore(testSuiteName: defaultsSuiteName, key: "session"),
             settingsStore: settingsStore,
             readerResumeRouteStore: readerResumeRouteStore,
             favoriteStore: favoriteStore,
@@ -1562,10 +1562,10 @@ final class ReaderContainerModelTests: XCTestCase {
     }
 
     func testLateNovelSaveAfterDismissDoesNotRecreateReaderResumeRoute() async throws {
-        let keyPrefix = UUID().uuidString
-        let settingsStore = SettingsStore(key: "\(keyPrefix).settings")
-        let favoriteStore = FavoriteStore(key: "\(keyPrefix).favorites")
-        let readerResumeRouteStore = ReaderResumeRouteStore(key: "\(keyPrefix).readerRoute")
+        let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "reader-container-model")
+        let settingsStore = try SettingsStore(testSuiteName: defaultsSuiteName, key: "settings")
+        let favoriteStore = try FavoriteStore(testSuiteName: defaultsSuiteName, key: "favorites")
+        let readerResumeRouteStore = try ReaderResumeRouteStore(testSuiteName: defaultsSuiteName, key: "readerRoute")
         let cacheStore = ReaderCacheStore(
             baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         )
@@ -1575,7 +1575,7 @@ final class ReaderContainerModelTests: XCTestCase {
         try await cacheStore.save(document)
 
         let appContext = YamiboAppContext(
-            sessionStore: SessionStore(key: "\(keyPrefix).session"),
+            sessionStore: try SessionStore(testSuiteName: defaultsSuiteName, key: "session"),
             settingsStore: settingsStore,
             readerResumeRouteStore: readerResumeRouteStore,
             favoriteStore: favoriteStore,
@@ -1621,9 +1621,9 @@ final class ReaderContainerModelTests: XCTestCase {
     }
 
     func testForumNovelProgressUpdatesExistingFavorite() async throws {
-        let keyPrefix = UUID().uuidString
-        let settingsStore = SettingsStore(key: "\(keyPrefix).settings")
-        let favoriteStore = FavoriteStore(key: "\(keyPrefix).favorites")
+        let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "reader-container-model")
+        let settingsStore = try SettingsStore(testSuiteName: defaultsSuiteName, key: "settings")
+        let favoriteStore = try FavoriteStore(testSuiteName: defaultsSuiteName, key: "favorites")
         let cacheStore = ReaderCacheStore(
             baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         )
@@ -1635,7 +1635,7 @@ final class ReaderContainerModelTests: XCTestCase {
         ])
 
         let appContext = YamiboAppContext(
-            sessionStore: SessionStore(key: "\(keyPrefix).session"),
+            sessionStore: try SessionStore(testSuiteName: defaultsSuiteName, key: "session"),
             settingsStore: settingsStore,
             favoriteStore: favoriteStore,
             readerCacheStore: cacheStore
@@ -1665,9 +1665,9 @@ final class ReaderContainerModelTests: XCTestCase {
     }
 
     func testVerticalModePersistsSemanticResumePoint() async throws {
-        let keyPrefix = UUID().uuidString
-        let settingsStore = SettingsStore(key: "\(keyPrefix).settings")
-        let favoriteStore = FavoriteStore(key: "\(keyPrefix).favorites")
+        let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "reader-container-model")
+        let settingsStore = try SettingsStore(testSuiteName: defaultsSuiteName, key: "settings")
+        let favoriteStore = try FavoriteStore(testSuiteName: defaultsSuiteName, key: "favorites")
         let cacheStore = ReaderCacheStore(
             baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         )
@@ -1688,7 +1688,7 @@ final class ReaderContainerModelTests: XCTestCase {
         ])
 
         let appContext = YamiboAppContext(
-            sessionStore: SessionStore(key: "\(keyPrefix).session"),
+            sessionStore: try SessionStore(testSuiteName: defaultsSuiteName, key: "session"),
             settingsStore: settingsStore,
             favoriteStore: favoriteStore,
             readerCacheStore: cacheStore
@@ -1731,9 +1731,9 @@ final class ReaderContainerModelTests: XCTestCase {
     }
 
     func testVerticalModeRestoresStoredResumePointWithinChapter() async throws {
-        let keyPrefix = UUID().uuidString
-        let settingsStore = SettingsStore(key: "\(keyPrefix).settings")
-        let favoriteStore = FavoriteStore(key: "\(keyPrefix).favorites")
+        let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "reader-container-model")
+        let settingsStore = try SettingsStore(testSuiteName: defaultsSuiteName, key: "settings")
+        let favoriteStore = try FavoriteStore(testSuiteName: defaultsSuiteName, key: "favorites")
         let cacheStore = ReaderCacheStore(
             baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         )
@@ -1787,7 +1787,7 @@ final class ReaderContainerModelTests: XCTestCase {
         ])
 
         let appContext = YamiboAppContext(
-            sessionStore: SessionStore(key: "\(keyPrefix).session"),
+            sessionStore: try SessionStore(testSuiteName: defaultsSuiteName, key: "session"),
             settingsStore: settingsStore,
             favoriteStore: favoriteStore,
             readerCacheStore: cacheStore
@@ -1816,9 +1816,9 @@ final class ReaderContainerModelTests: XCTestCase {
     }
 
     func testVerticalModePersistsSmallIntraPageScrollAndRestoresIt() async throws {
-        let keyPrefix = UUID().uuidString
-        let settingsStore = SettingsStore(key: "\(keyPrefix).settings")
-        let favoriteStore = FavoriteStore(key: "\(keyPrefix).favorites")
+        let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "reader-container-model")
+        let settingsStore = try SettingsStore(testSuiteName: defaultsSuiteName, key: "settings")
+        let favoriteStore = try FavoriteStore(testSuiteName: defaultsSuiteName, key: "favorites")
         let cacheStore = ReaderCacheStore(
             baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         )
@@ -1840,7 +1840,7 @@ final class ReaderContainerModelTests: XCTestCase {
         ])
 
         let appContext = YamiboAppContext(
-            sessionStore: SessionStore(key: "\(keyPrefix).session"),
+            sessionStore: try SessionStore(testSuiteName: defaultsSuiteName, key: "session"),
             settingsStore: settingsStore,
             favoriteStore: favoriteStore,
             readerCacheStore: cacheStore
@@ -1892,9 +1892,9 @@ final class ReaderContainerModelTests: XCTestCase {
     }
 
     func testStoredResumePointDeterminesPositionWhenPreparingReader() async throws {
-        let keyPrefix = UUID().uuidString
-        let settingsStore = SettingsStore(key: "\(keyPrefix).settings")
-        let favoriteStore = FavoriteStore(key: "\(keyPrefix).favorites")
+        let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "reader-container-model")
+        let settingsStore = try SettingsStore(testSuiteName: defaultsSuiteName, key: "settings")
+        let favoriteStore = try FavoriteStore(testSuiteName: defaultsSuiteName, key: "favorites")
         let cacheStore = ReaderCacheStore(
             baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         )
@@ -1947,7 +1947,7 @@ final class ReaderContainerModelTests: XCTestCase {
         ])
 
         let appContext = YamiboAppContext(
-            sessionStore: SessionStore(key: "\(keyPrefix).session"),
+            sessionStore: try SessionStore(testSuiteName: defaultsSuiteName, key: "session"),
             settingsStore: settingsStore,
             favoriteStore: favoriteStore,
             readerCacheStore: cacheStore
@@ -1976,9 +1976,9 @@ final class ReaderContainerModelTests: XCTestCase {
     }
 
     func testPagedFavoriteLaunchKeepsSelectionOnSavedResumePoint() async throws {
-        let keyPrefix = UUID().uuidString
-        let settingsStore = SettingsStore(key: "\(keyPrefix).settings")
-        let favoriteStore = FavoriteStore(key: "\(keyPrefix).favorites")
+        let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "reader-container-model")
+        let settingsStore = try SettingsStore(testSuiteName: defaultsSuiteName, key: "settings")
+        let favoriteStore = try FavoriteStore(testSuiteName: defaultsSuiteName, key: "favorites")
         let cacheStore = ReaderCacheStore(
             baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         )
@@ -2027,7 +2027,7 @@ final class ReaderContainerModelTests: XCTestCase {
         ])
 
         let appContext = YamiboAppContext(
-            sessionStore: SessionStore(key: "\(keyPrefix).session"),
+            sessionStore: try SessionStore(testSuiteName: defaultsSuiteName, key: "session"),
             settingsStore: settingsStore,
             favoriteStore: favoriteStore,
             readerCacheStore: cacheStore
@@ -2112,9 +2112,9 @@ final class ReaderContainerModelTests: XCTestCase {
                 .text(String(repeating: "第一章 内容。", count: 320), chapterTitle: "第一章")
             ]
         )
-        let keyPrefix = UUID().uuidString
-        let settingsStore = SettingsStore(key: "\(keyPrefix).settings")
-        let favoriteStore = FavoriteStore(key: "\(keyPrefix).favorites")
+        let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "reader-container-model")
+        let settingsStore = try SettingsStore(testSuiteName: defaultsSuiteName, key: "settings")
+        let favoriteStore = try FavoriteStore(testSuiteName: defaultsSuiteName, key: "favorites")
         let cacheStore = ReaderCacheStore(
             baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         )
@@ -2123,7 +2123,7 @@ final class ReaderContainerModelTests: XCTestCase {
         try await cacheStore.save(document)
 
         let appContext = YamiboAppContext(
-            sessionStore: SessionStore(key: "\(keyPrefix).session"),
+            sessionStore: try SessionStore(testSuiteName: defaultsSuiteName, key: "session"),
             settingsStore: settingsStore,
             favoriteStore: favoriteStore,
             readerCacheStore: cacheStore
@@ -2389,10 +2389,11 @@ final class ReaderContainerModelTests: XCTestCase {
             )
         }
 
+        let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "reader-container-author-cache")
         let appContext = YamiboAppContext(
-            sessionStore: SessionStore(key: "\(UUID().uuidString).session"),
-            settingsStore: SettingsStore(key: "\(UUID().uuidString).settings"),
-            favoriteStore: FavoriteStore(key: "\(UUID().uuidString).favorites"),
+            sessionStore: try SessionStore(testSuiteName: defaultsSuiteName, key: "session"),
+            settingsStore: try SettingsStore(testSuiteName: defaultsSuiteName, key: "settings"),
+            favoriteStore: try FavoriteStore(testSuiteName: defaultsSuiteName, key: "favorites"),
             readerCacheStore: cacheStore,
             session: session
         )
@@ -2848,10 +2849,10 @@ private func makeModel(
     cacheStore: ReaderCacheStore? = nil,
     pagination: @escaping NovelTextLayoutFixture = readerModelSegmentPagination
 ) async throws -> ReaderContainerModel {
-    let keyPrefix = UUID().uuidString
-    let sessionStore = SessionStore(key: "\(keyPrefix).session")
-    let settingsStore = SettingsStore(key: "\(keyPrefix).settings")
-    let favoriteStore = FavoriteStore(key: "\(keyPrefix).favorites")
+    let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "reader-container-model")
+    let sessionStore = try SessionStore(testSuiteName: defaultsSuiteName, key: "session")
+    let settingsStore = try SettingsStore(testSuiteName: defaultsSuiteName, key: "settings")
+    let favoriteStore = try FavoriteStore(testSuiteName: defaultsSuiteName, key: "favorites")
     let cacheDirectory = FileManager.default.temporaryDirectory
         .appendingPathComponent(UUID().uuidString, isDirectory: true)
     let resolvedCacheStore = cacheStore ?? ReaderCacheStore(baseDirectory: cacheDirectory)

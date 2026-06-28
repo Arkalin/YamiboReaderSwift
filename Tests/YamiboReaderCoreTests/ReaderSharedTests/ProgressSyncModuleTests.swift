@@ -46,8 +46,8 @@ import Testing
 }
 
 @Test func favoriteLibraryProgressSyncDoesNotCreateMissingFavorite() async throws {
-    let keyPrefix = UUID().uuidString
-    let favoriteStore = FavoriteStore(key: "\(keyPrefix).favorites")
+    let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "progress-sync-missing-favorite")
+    let favoriteStore = try FavoriteStore(testSuiteName: defaultsSuiteName, key: "favorites")
     let adapter = FavoriteLibraryProgressSyncAdapter(favoriteStore: favoriteStore)
     let sync = ProgressSyncModule(adapter: adapter, debounceNanoseconds: 0)
     let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=6&mobile=2")!
@@ -59,8 +59,8 @@ import Testing
 }
 
 @Test func favoriteLibraryProgressSyncMapsReadingPositionsToExistingFavoriteFields() async throws {
-    let keyPrefix = UUID().uuidString
-    let favoriteStore = FavoriteStore(key: "\(keyPrefix).favorites")
+    let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "progress-sync-existing-favorite")
+    let favoriteStore = try FavoriteStore(testSuiteName: defaultsSuiteName, key: "favorites")
     let adapter = FavoriteLibraryProgressSyncAdapter(favoriteStore: favoriteStore)
     let sync = ProgressSyncModule(adapter: adapter, debounceNanoseconds: 0)
     let novelURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=7&mobile=2")!

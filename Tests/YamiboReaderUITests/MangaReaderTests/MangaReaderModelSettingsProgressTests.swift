@@ -49,10 +49,10 @@ final class MangaReaderModelSettingsProgressTests: XCTestCase {
     }
 
     func testRetryInitialLoadReloadsAfterFailedInitialLoad() async throws {
-        let keyPrefix = UUID().uuidString
-        let settingsStore = SettingsStore(key: "\(keyPrefix).settings")
-        let resumeRouteStore = ReaderResumeRouteStore(key: "\(keyPrefix).resume")
-        let favoriteStore = FavoriteStore(key: "\(keyPrefix).favorites")
+        let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "manga-retry-initial-load")
+        let settingsStore = try SettingsStore(testSuiteName: defaultsSuiteName, key: "settings")
+        let resumeRouteStore = try ReaderResumeRouteStore(testSuiteName: defaultsSuiteName, key: "resume")
+        let favoriteStore = try FavoriteStore(testSuiteName: defaultsSuiteName, key: "favorites")
         try await settingsStore.save(AppSettings())
 
         let originalURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=700&mobile=2"))
@@ -93,7 +93,7 @@ final class MangaReaderModelSettingsProgressTests: XCTestCase {
         )
         let store = StubMangaDirectoryStore()
         let appContext = YamiboAppContext(
-            sessionStore: SessionStore(key: "\(keyPrefix).session"),
+            sessionStore: try SessionStore(testSuiteName: defaultsSuiteName, key: "session"),
             settingsStore: settingsStore,
             readerResumeRouteStore: resumeRouteStore,
             favoriteStore: favoriteStore
@@ -259,7 +259,8 @@ final class MangaReaderModelSettingsProgressTests: XCTestCase {
     }
 
     func testSaveProgressFlushesLatestPageIntoExistingFavoriteAndResumeRoute() async throws {
-        let favoriteStore = FavoriteStore(key: "\(UUID().uuidString).favorites")
+        let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "manga-save-progress-existing")
+        let favoriteStore = try FavoriteStore(testSuiteName: defaultsSuiteName, key: "favorites")
         let fixture = try await makeFixture(
             favoriteStore: favoriteStore,
             progressSync: ProgressSyncModule(
@@ -292,7 +293,8 @@ final class MangaReaderModelSettingsProgressTests: XCTestCase {
     }
 
     func testSaveProgressDoesNotCreateMissingFavorite() async throws {
-        let favoriteStore = FavoriteStore(key: "\(UUID().uuidString).favorites")
+        let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "manga-save-progress-missing")
+        let favoriteStore = try FavoriteStore(testSuiteName: defaultsSuiteName, key: "favorites")
         let fixture = try await makeFixture(
             favoriteStore: favoriteStore,
             progressSync: ProgressSyncModule(
@@ -444,12 +446,13 @@ final class MangaReaderModelSettingsProgressTests: XCTestCase {
     }
 
     func testDismissMangaOpeningForumPreservesSuppliedLatestSuspendedRoute() throws {
+        let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "manga-dismiss-forum")
         let appModel = YamiboAppModel(
             appContext: YamiboAppContext(
-                sessionStore: SessionStore(key: "\(UUID().uuidString).session"),
-                settingsStore: SettingsStore(key: "\(UUID().uuidString).settings"),
-                readerResumeRouteStore: ReaderResumeRouteStore(key: "\(UUID().uuidString).resume"),
-                favoriteStore: FavoriteStore(key: "\(UUID().uuidString).favorites")
+                sessionStore: try SessionStore(testSuiteName: defaultsSuiteName, key: "session"),
+                settingsStore: try SettingsStore(testSuiteName: defaultsSuiteName, key: "settings"),
+                readerResumeRouteStore: try ReaderResumeRouteStore(testSuiteName: defaultsSuiteName, key: "resume"),
+                favoriteStore: try FavoriteStore(testSuiteName: defaultsSuiteName, key: "favorites")
             )
         )
         let originalURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=700&mobile=2"))
@@ -497,12 +500,18 @@ private struct MangaReaderModelSettingsProgressFixture {
 private func makeFixture(
     initialPage: Int = 0,
     appSettings: AppSettings = AppSettings(),
-    favoriteStore: FavoriteStore = FavoriteStore(key: "\(UUID().uuidString).favorites"),
+    favoriteStore: FavoriteStore? = nil,
     progressSync: ProgressSyncModule? = nil
 ) async throws -> MangaReaderModelSettingsProgressFixture {
-    let keyPrefix = UUID().uuidString
-    let settingsStore = SettingsStore(key: "\(keyPrefix).settings")
-    let resumeRouteStore = ReaderResumeRouteStore(key: "\(keyPrefix).resume")
+    let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "manga-settings-progress-fixture")
+    let settingsStore = try SettingsStore(testSuiteName: defaultsSuiteName, key: "settings")
+    let resumeRouteStore = try ReaderResumeRouteStore(testSuiteName: defaultsSuiteName, key: "resume")
+    let resolvedFavoriteStore: FavoriteStore
+    if let favoriteStore {
+        resolvedFavoriteStore = favoriteStore
+    } else {
+        resolvedFavoriteStore = try FavoriteStore(testSuiteName: defaultsSuiteName, key: "favorites")
+    }
     try await settingsStore.save(appSettings)
 
     let originalURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=700&mobile=2"))
@@ -540,13 +549,13 @@ private func makeFixture(
     )
     let store = StubMangaDirectoryStore()
     let appContext = YamiboAppContext(
-        sessionStore: SessionStore(key: "\(keyPrefix).session"),
+        sessionStore: try SessionStore(testSuiteName: defaultsSuiteName, key: "session"),
         settingsStore: settingsStore,
         readerResumeRouteStore: resumeRouteStore,
-        favoriteStore: favoriteStore
+        favoriteStore: resolvedFavoriteStore
     )
     let resolvedProgressSync = progressSync ?? ProgressSyncModule(
-        adapter: FavoriteLibraryProgressSyncAdapter(favoriteStore: favoriteStore),
+        adapter: FavoriteLibraryProgressSyncAdapter(favoriteStore: resolvedFavoriteStore),
         debounceNanoseconds: 0
     )
     #if os(iOS)
