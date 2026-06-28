@@ -851,7 +851,7 @@ private struct MangaReaderStaticActionControls: View {
             bottomActionButton(
                 title: bookmarkTitle,
                 isEnabled: false,
-                systemName: "bookmark",
+                systemName: "heart",
                 handler: {}
             )
             Spacer(minLength: layout.actionButtonSpacing)

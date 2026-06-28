@@ -98,7 +98,7 @@ struct NovelReaderBottomChrome: View {
             bottomActionButton(
                 action: ReaderBottomAction(kind: .bookmark, isDisabled: true),
                 title: "书签",
-                systemName: "bookmark",
+                systemName: "heart",
                 handler: {}
             )
             Spacer(minLength: chromeLayout.actionButtonSpacing)
