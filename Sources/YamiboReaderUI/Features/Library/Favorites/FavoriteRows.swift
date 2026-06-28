@@ -666,7 +666,7 @@ func favoriteMangaChapterLabel(from rawTitle: String) -> String? {
         chapterNumber: chapterNumber
     )
 
-    guard !displayNumber.isEmpty else { return nil }
+    guard !displayNumber.isEmpty, displayNumber != "-" else { return nil }
     return L10n.string("favorites.manga_chapter", displayNumber)
 }
 
