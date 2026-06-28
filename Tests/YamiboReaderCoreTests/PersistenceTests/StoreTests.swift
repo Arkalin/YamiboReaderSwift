@@ -542,7 +542,7 @@ import Testing
     #expect(listClock > baseClock)
 }
 
-@Test func favoriteStoreDeletingFavoriteRemovesOwnedMangaOfflineCache() async throws {
+@Test func favoriteStoreDeletingFavoritePreservesOwnedMangaOfflineCache() async throws {
     let defaults = try #require(UserDefaults(suiteName: makeIsolatedDefaultsSuiteName(prefix: "favorite-delete-offline-cache")))
     let root = makeTemporaryDirectory(prefix: "favorite-delete-offline-cache")
     let offlineStore = FileMangaOfflineCacheStore(baseDirectory: root.appendingPathComponent("offline", isDirectory: true))
@@ -560,28 +560,22 @@ import Testing
     try await offlineStore.saveOfflineImageData(Data([2]), for: sharedImage)
     try await offlineStore.saveOfflineImageData(Data([3]), for: workImage)
     try await offlineStore.saveMembership(makeMangaOfflineMembership(
-        favoriteID: removedFavorite.id,
-        favoriteTitle: removedFavorite.title,
-        favoriteURL: removedFavorite.url,
+        ownerName: removedFavorite.title,
         tid: "335",
         imageURLs: [removedImage, sharedImage]
     ))
     try await offlineStore.saveMembership(makeMangaOfflineMembership(
-        favoriteID: remainingFavorite.id,
-        favoriteTitle: remainingFavorite.title,
-        favoriteURL: remainingFavorite.url,
+        ownerName: remainingFavorite.title,
         tid: "336",
         imageURLs: [sharedImage]
     ))
     _ = try await offlineStore.enqueueOfflineCacheWork(makeMangaOfflineWorkRequest(
-        favoriteID: removedFavorite.id,
-        favoriteTitle: removedFavorite.title,
-        favoriteURL: removedFavorite.url,
+        ownerName: removedFavorite.title,
         tid: "337",
         targetImageURLs: [workImage]
     ))
     try await offlineStore.updateOfflineCacheWorkProgress(
-        favoriteID: removedFavorite.id,
+        ownerName: removedFavorite.title,
         tid: "337",
         targetImageURLs: [workImage],
         completedImageURLs: [workImage],
@@ -590,15 +584,15 @@ import Testing
 
     _ = try await store.deleteFavorites(ids: [removedFavorite.id])
 
-    #expect(await offlineStore.membership(favoriteID: removedFavorite.id, tid: "335") == nil)
-    #expect(await offlineStore.offlineCacheWork(favoriteID: removedFavorite.id, tid: "337") == nil)
-    #expect(await offlineStore.offlineImageData(for: removedImage) == nil)
-    #expect(await offlineStore.offlineImageData(for: workImage) == nil)
+    #expect(await offlineStore.membership(ownerName: removedFavorite.title, tid: "335") != nil)
+    #expect(await offlineStore.offlineCacheWork(ownerName: removedFavorite.title, tid: "337") != nil)
+    #expect(await offlineStore.offlineImageData(for: removedImage) == Data([1]))
+    #expect(await offlineStore.offlineImageData(for: workImage) == Data([3]))
     #expect(await offlineStore.offlineImageData(for: sharedImage) == Data([2]))
-    #expect(await offlineStore.membership(favoriteID: remainingFavorite.id, tid: "336") != nil)
+    #expect(await offlineStore.membership(ownerName: remainingFavorite.title, tid: "336") != nil)
 }
 
-@Test func favoriteStoreRemoteReconcileRemovesMangaOfflineCacheForDisappearingFavorite() async throws {
+@Test func favoriteStoreRemoteReconcilePreservesMangaOfflineCacheForDisappearingFavorite() async throws {
     let defaults = try #require(UserDefaults(suiteName: makeIsolatedDefaultsSuiteName(prefix: "favorite-reconcile-offline-cache")))
     let root = makeTemporaryDirectory(prefix: "favorite-reconcile-offline-cache")
     let offlineStore = FileMangaOfflineCacheStore(baseDirectory: root.appendingPathComponent("offline", isDirectory: true))
@@ -610,9 +604,7 @@ import Testing
     try await store.saveFavorites([favorite])
     try await offlineStore.saveOfflineImageData(Data([4]), for: imageURL)
     try await offlineStore.saveMembership(makeMangaOfflineMembership(
-        favoriteID: favorite.id,
-        favoriteTitle: favorite.title,
-        favoriteURL: favorite.url,
+        ownerName: favorite.title,
         tid: "338",
         imageURLs: [imageURL]
     ))
@@ -620,8 +612,8 @@ import Testing
     _ = try await store.mergeRemoteFavorites([])
 
     #expect(await store.loadFavorites() == [])
-    #expect(await offlineStore.membership(favoriteID: favorite.id, tid: "338") == nil)
-    #expect(await offlineStore.offlineImageData(for: imageURL) == nil)
+    #expect(await offlineStore.membership(ownerName: favorite.title, tid: "338") != nil)
+    #expect(await offlineStore.offlineImageData(for: imageURL) == Data([4]))
 }
 
 @Test func favoriteStoreCreatingNovelFavoriteFromReadingPositionTouchesListAndReadingClocks() async throws {
@@ -1869,9 +1861,7 @@ import Testing
     )
     try await mangaOfflineCacheStore.saveMembership(
         MangaOfflineCacheMembership(
-            favoriteID: threadURL.absoluteString,
-            favoriteTitle: "测试漫画",
-            favoriteURL: threadURL,
+            ownerName: "测试漫画",
             tid: "700",
             chapterTitle: "测试漫画",
             chapterURL: threadURL,
@@ -1880,9 +1870,7 @@ import Testing
     )
     _ = try await mangaOfflineCacheStore.enqueueOfflineCacheWork(
         MangaOfflineCacheWorkRequest(
-            favoriteID: threadURL.absoluteString,
-            favoriteTitle: "测试漫画",
-            favoriteURL: threadURL,
+            ownerName: "测试漫画",
             tid: "701",
             chapterTitle: "测试漫画续篇",
             chapterURL: threadURL,
@@ -1923,16 +1911,12 @@ import Testing
 }
 
 private func makeMangaOfflineMembership(
-    favoriteID: String,
-    favoriteTitle: String,
-    favoriteURL: URL,
+    ownerName: String,
     tid: String,
     imageURLs: [URL]
 ) throws -> MangaOfflineCacheMembership {
     MangaOfflineCacheMembership(
-        favoriteID: favoriteID,
-        favoriteTitle: favoriteTitle,
-        favoriteURL: favoriteURL,
+        ownerName: ownerName,
         tid: tid,
         chapterTitle: "第\(tid)话",
         chapterURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(tid)&mobile=2")),
@@ -1941,16 +1925,12 @@ private func makeMangaOfflineMembership(
 }
 
 private func makeMangaOfflineWorkRequest(
-    favoriteID: String,
-    favoriteTitle: String,
-    favoriteURL: URL,
+    ownerName: String,
     tid: String,
     targetImageURLs: [URL]
 ) throws -> MangaOfflineCacheWorkRequest {
     MangaOfflineCacheWorkRequest(
-        favoriteID: favoriteID,
-        favoriteTitle: favoriteTitle,
-        favoriteURL: favoriteURL,
+        ownerName: ownerName,
         tid: tid,
         chapterTitle: "第\(tid)话",
         chapterURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(tid)&mobile=2")),

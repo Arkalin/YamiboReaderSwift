@@ -84,12 +84,12 @@ public final class MangaReaderCacheViewModel: ObservableObject {
     }
 
     public func refreshRows() async {
-        let owner = favorite
+        let ownerName = offlineCacheOwnerName
         var nextRows: [MangaReaderCacheRow] = []
         for chapter in panel.displayChapters {
             let state: MangaOfflineCacheState
-            if let owner {
-                state = await offlineCacheStore.offlineCacheState(favoriteID: owner.id, tid: chapter.tid)
+            if let ownerName {
+                state = await offlineCacheStore.offlineCacheState(ownerName: ownerName, tid: chapter.tid)
             } else {
                 state = .uncached
             }
@@ -122,10 +122,11 @@ public final class MangaReaderCacheViewModel: ObservableObject {
 
     public func cacheSelected(tids selectedTIDs: Set<String>) async {
         errorMessage = nil
-        guard let owner = favorite else {
+        guard favorite != nil else {
             prompt = .addFavorite(title: presentationTitle)
             return
         }
+        guard let ownerName = offlineCacheOwnerName else { return }
 
         let targetTIDs = selectionState(for: selectedTIDs).uncachedSelectedTIDs
         guard !targetTIDs.isEmpty else { return }
@@ -134,9 +135,7 @@ public final class MangaReaderCacheViewModel: ObservableObject {
             for chapter in panel.displayChapters where targetTIDs.contains(chapter.tid) {
                 _ = try await offlineCacheStore.enqueueOfflineCacheWork(
                     MangaOfflineCacheWorkRequest(
-                        favoriteID: owner.id,
-                        favoriteTitle: owner.resolvedDisplayTitle,
-                        favoriteURL: owner.url,
+                        ownerName: ownerName,
                         tid: chapter.tid,
                         chapterTitle: chapter.rawTitle,
                         chapterURL: chapter.url
@@ -151,13 +150,13 @@ public final class MangaReaderCacheViewModel: ObservableObject {
 
     public func deleteSelected(tids selectedTIDs: Set<String>) async {
         errorMessage = nil
-        guard let owner = favorite else { return }
+        guard let ownerName = offlineCacheOwnerName else { return }
         let targetTIDs = selectionState(for: selectedTIDs).removableSelectedTIDs
         guard !targetTIDs.isEmpty else { return }
 
         do {
             for chapter in panel.displayChapters where targetTIDs.contains(chapter.tid) {
-                try await offlineCacheStore.removeMembership(favoriteID: owner.id, tid: chapter.tid)
+                try await offlineCacheStore.removeMembership(ownerName: ownerName, tid: chapter.tid)
             }
             await refreshRows()
         } catch {
@@ -172,5 +171,10 @@ public final class MangaReaderCacheViewModel: ObservableObject {
     private var presentationTitle: String {
         let title = context.displayTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         return title.isEmpty ? panel.directoryTitle : title
+    }
+
+    private var offlineCacheOwnerName: String? {
+        let ownerName = panel.directoryTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        return ownerName.isEmpty ? nil : ownerName
     }
 }

@@ -14,12 +14,12 @@ struct MangaOfflineCacheCleanupView: View {
                         MangaOfflineCacheCleanupRowView(
                             row: row,
                             isSelecting: viewModel.isMangaOfflineCacheCleanupSelectionMode,
-                            isSelected: viewModel.selectedMangaOfflineCacheFavoriteIDs.contains(row.favoriteID),
+                            isSelected: viewModel.selectedMangaOfflineCacheOwnerNames.contains(row.ownerName),
                             select: {
-                                viewModel.toggleMangaOfflineCacheCleanupSelection(favoriteID: row.favoriteID)
+                                viewModel.toggleMangaOfflineCacheCleanupSelection(ownerName: row.ownerName)
                             },
                             delete: {
-                                viewModel.requestMangaOfflineCacheCleanup(favoriteID: row.favoriteID)
+                                viewModel.requestMangaOfflineCacheCleanup(ownerName: row.ownerName)
                             }
                         )
                     }
@@ -191,13 +191,13 @@ private struct MangaOfflineCacheCleanupDeleteSelectionButton: View {
             Label(
                 L10n.string(
                     "settings.manga_offline_cache.delete_selected_format",
-                    viewModel.selectedMangaOfflineCacheFavoriteCount
+                    viewModel.selectedMangaOfflineCacheOwnerCount
                 ),
                 systemImage: "trash"
             )
         }
         .disabled(
-            viewModel.selectedMangaOfflineCacheFavoriteIDs.isEmpty
+            viewModel.selectedMangaOfflineCacheOwnerNames.isEmpty
                 || viewModel.activeAction == .clearingMangaOfflineCache
         )
     }

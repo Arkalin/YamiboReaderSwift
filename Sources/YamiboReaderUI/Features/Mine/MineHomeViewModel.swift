@@ -5,8 +5,8 @@ import YamiboReaderCore
 protocol MangaOfflineCacheQueueControlling: Sendable {
     func continueQueue() async throws
     func pauseQueue() async throws
-    func cancelChapter(favoriteID: String, tid: String) async throws
-    func cancelFavoriteGroup(favoriteID: String) async throws
+    func cancelChapter(ownerName: String, tid: String) async throws
+    func cancelOwnerGroup(ownerName: String) async throws
 }
 
 extension MangaOfflineCacheQueueExecutor: MangaOfflineCacheQueueControlling {}
@@ -22,7 +22,7 @@ final class MineHomeViewModel {
     var isLoggingIn = false
     var isSigningOut = false
     var offlineCacheQueueRunState = MangaOfflineCacheQueueRunState.paused
-    var offlineCacheQueueGroups: [MineOfflineCacheQueueFavoriteGroup] = []
+    var offlineCacheQueueGroups: [MineOfflineCacheQueueOwnerGroup] = []
     var offlineCacheQueueEntryCount = 0
     var isLoadingOfflineCacheQueue = false
     var isOfflineCacheQueueCommandRunning = false
@@ -151,12 +151,12 @@ final class MineHomeViewModel {
 
         let store = appContext.makeMangaOfflineCacheStore()
         let works = await store.allOfflineCacheWorks()
-        let directoriesByFavoriteID = await offlineCacheDirectoriesByFavoriteID(for: works)
+        let directoriesByOwnerName = await offlineCacheDirectoriesByOwnerName(for: works)
         let projection = MangaOfflineCacheQueueProjection.project(
             works: works,
-            directoriesByFavoriteID: directoriesByFavoriteID
+            directoriesByOwnerName: directoriesByOwnerName
         )
-        offlineCacheQueueGroups = projection.groups.map(MineOfflineCacheQueueFavoriteGroup.init(group:))
+        offlineCacheQueueGroups = projection.groups.map(MineOfflineCacheQueueOwnerGroup.init(group:))
         offlineCacheQueueEntryCount = projection.unfinishedCount
         offlineCacheQueueRunState = await store.offlineCacheQueueRunState()
 
@@ -182,15 +182,15 @@ final class MineHomeViewModel {
     func cancelOfflineCacheChapter(_ id: MangaOfflineCacheMembershipID) async {
         await performOfflineCacheQueueCommand {
             try await (await self.offlineCacheController()).cancelChapter(
-                favoriteID: id.favoriteID,
+                ownerName: id.ownerName,
                 tid: id.tid
             )
         }
     }
 
-    func cancelOfflineCacheFavoriteGroup(favoriteID: String) async {
+    func cancelOfflineCacheOwnerGroup(ownerName: String) async {
         await performOfflineCacheQueueCommand {
-            try await (await self.offlineCacheController()).cancelFavoriteGroup(favoriteID: favoriteID)
+            try await (await self.offlineCacheController()).cancelOwnerGroup(ownerName: ownerName)
         }
     }
 
@@ -201,7 +201,7 @@ final class MineHomeViewModel {
         await performOfflineCacheQueueCommand {
             let controller = await self.offlineCacheController()
             for id in ids {
-                try await controller.cancelChapter(favoriteID: id.favoriteID, tid: id.tid)
+                try await controller.cancelChapter(ownerName: id.ownerName, tid: id.tid)
             }
         }
         selectedOfflineCacheWorkIDs.removeAll()
@@ -223,13 +223,13 @@ final class MineHomeViewModel {
         }
     }
 
-    func isOfflineCacheFavoriteSelected(favoriteID: String) -> Bool {
-        let ids = offlineCacheWorkIDs(favoriteID: favoriteID)
+    func isOfflineCacheOwnerSelected(ownerName: String) -> Bool {
+        let ids = offlineCacheWorkIDs(ownerName: ownerName)
         return !ids.isEmpty && ids.isSubset(of: selectedOfflineCacheWorkIDs)
     }
 
-    func toggleOfflineCacheFavoriteSelection(favoriteID: String) {
-        let ids = offlineCacheWorkIDs(favoriteID: favoriteID)
+    func toggleOfflineCacheOwnerSelection(ownerName: String) {
+        let ids = offlineCacheWorkIDs(ownerName: ownerName)
         guard !ids.isEmpty else { return }
 
         if ids.isSubset(of: selectedOfflineCacheWorkIDs) {
@@ -239,19 +239,19 @@ final class MineHomeViewModel {
         }
     }
 
-    func selectAllOfflineCacheWorks(favoriteID: String? = nil) {
-        let groups = favoriteID.map { id in
-            offlineCacheQueueGroups.filter { $0.favoriteID == id }
+    func selectAllOfflineCacheWorks(ownerName: String? = nil) {
+        let groups = ownerName.map { name in
+            offlineCacheQueueGroups.filter { $0.ownerName == name }
         } ?? offlineCacheQueueGroups
         selectedOfflineCacheWorkIDs = Set(groups.flatMap { group in
             group.chapters.map(\.id)
         })
     }
 
-    private func offlineCacheWorkIDs(favoriteID: String) -> Set<MangaOfflineCacheMembershipID> {
+    private func offlineCacheWorkIDs(ownerName: String) -> Set<MangaOfflineCacheMembershipID> {
         Set(
             offlineCacheQueueGroups
-                .first { $0.favoriteID == favoriteID }?
+                .first { $0.ownerName == ownerName }?
                 .chapters
                 .map(\.id) ?? []
         )
@@ -293,17 +293,17 @@ final class MineHomeViewModel {
         }
     }
 
-    private func offlineCacheDirectoriesByFavoriteID(
+    private func offlineCacheDirectoriesByOwnerName(
         for works: [MangaOfflineCacheWork]
     ) async -> [String: MangaDirectory] {
-        var directoriesByFavoriteID: [String: MangaDirectory] = [:]
+        var directoriesByOwnerName: [String: MangaDirectory] = [:]
         for work in works.sorted(by: { $0.insertionIndex < $1.insertionIndex }) {
-            guard directoriesByFavoriteID[work.favoriteID] == nil else { continue }
-            if let directory = try? await appContext.mangaDirectoryStore.directory(containingTID: work.tid) {
-                directoriesByFavoriteID[work.favoriteID] = directory
+            guard directoriesByOwnerName[work.ownerName] == nil else { continue }
+            if let directory = try? await appContext.mangaDirectoryStore.directory(named: work.ownerName) {
+                directoriesByOwnerName[work.ownerName] = directory
             }
         }
-        return directoriesByFavoriteID
+        return directoriesByOwnerName
     }
 
     private func refreshProfile(presentsErrors: Bool) async {

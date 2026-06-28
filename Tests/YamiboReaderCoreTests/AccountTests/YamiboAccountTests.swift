@@ -177,18 +177,14 @@ private enum YamiboAccountTestError: Error {
     try await favoriteStore.saveFavorites([favorite])
     try await offlineStore.saveOfflineImageData(Data([7]), for: imageURL)
     try await offlineStore.saveMembership(MangaOfflineCacheMembership(
-        favoriteID: favorite.id,
-        favoriteTitle: favorite.title,
-        favoriteURL: favorite.url,
+        ownerName: favorite.title,
         tid: "970",
         chapterTitle: "第970话",
         chapterURL: favoriteURL,
         imageURLs: [imageURL]
     ))
     _ = try await offlineStore.enqueueOfflineCacheWork(MangaOfflineCacheWorkRequest(
-        favoriteID: favorite.id,
-        favoriteTitle: favorite.title,
-        favoriteURL: favorite.url,
+        ownerName: favorite.title,
         tid: "971",
         chapterTitle: "第971话",
         chapterURL: favoriteURL,
@@ -200,8 +196,8 @@ private enum YamiboAccountTestError: Error {
     #expect(await sessionStore.load() == SessionState())
     #expect(await profileStore.load() == nil)
     #expect(await favoriteStore.loadFavorites() == [favorite])
-    #expect(await offlineStore.membership(favoriteID: favorite.id, tid: "970") != nil)
-    #expect(await offlineStore.offlineCacheWork(favoriteID: favorite.id, tid: "971") != nil)
+    #expect(await offlineStore.membership(ownerName: favorite.title, tid: "970") != nil)
+    #expect(await offlineStore.offlineCacheWork(ownerName: favorite.title, tid: "971") != nil)
     #expect(await offlineStore.offlineImageData(for: imageURL) == Data([7]))
 }
 

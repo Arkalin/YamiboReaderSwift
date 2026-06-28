@@ -56,15 +56,15 @@ public protocol MangaImageDataLoading: Sendable {
 }
 
 public struct MangaImageOfflineCacheContext: Hashable, Sendable {
-    public var favoriteID: String
+    public var ownerName: String
     public var tid: String
 
-    public init?(favoriteID: String?, tid: String) {
-        guard let favoriteID = favoriteID?.mangaReaderTrimmedNonEmpty,
+    public init?(ownerName: String?, tid: String) {
+        guard let ownerName = ownerName?.mangaReaderTrimmedNonEmpty,
               let tid = tid.mangaReaderTrimmedNonEmpty else {
             return nil
         }
-        self.favoriteID = favoriteID
+        self.ownerName = ownerName
         self.tid = tid
     }
 }
@@ -87,32 +87,33 @@ public protocol MangaImageDataCaching: Sendable {
 
 public protocol MangaOfflineCacheStoring: Sendable {
     func offlineCacheUpdates() -> AsyncStream<Void>
-    func membership(favoriteID: String, tid: String) async -> MangaOfflineCacheMembership?
-    func memberships(forFavoriteID favoriteID: String) async -> [MangaOfflineCacheMembership]
+    func membership(ownerName: String, tid: String) async -> MangaOfflineCacheMembership?
+    func memberships(forOwnerName ownerName: String) async -> [MangaOfflineCacheMembership]
     func allMemberships() async -> [MangaOfflineCacheMembership]
     func saveMembership(_ membership: MangaOfflineCacheMembership) async throws
-    func removeMembership(favoriteID: String, tid: String) async throws
-    func removeMemberships(forFavoriteID favoriteID: String) async throws
+    func removeMembership(ownerName: String, tid: String) async throws
+    func removeMemberships(forOwnerName ownerName: String) async throws
+    func renameOwner(from oldOwnerName: String, to newOwnerName: String) async throws
     func offlineImageData(for imageURL: URL) async -> Data?
     func saveOfflineImageData(_ data: Data, for imageURL: URL) async throws
-    func diskUsageByFavorite() async -> [MangaOfflineCacheFavoriteUsage]
-    func offlineCacheWork(favoriteID: String, tid: String) async -> MangaOfflineCacheWork?
+    func diskUsageByOwner() async -> [MangaOfflineCacheOwnerUsage]
+    func offlineCacheWork(ownerName: String, tid: String) async -> MangaOfflineCacheWork?
     func allOfflineCacheWorks() async -> [MangaOfflineCacheWork]
     func enqueueOfflineCacheWork(_ request: MangaOfflineCacheWorkRequest) async throws -> MangaOfflineCacheEnqueueResult
     func updateOfflineCacheWorkProgress(
-        favoriteID: String,
+        ownerName: String,
         tid: String,
         targetImageURLs: [URL]?,
         completedImageURLs: [URL],
         currentBytesPerSecond: Int?
     ) async throws
-    func prepareOfflineCacheWorkForRun(favoriteID: String, tid: String, targetImageURLs: [URL]?, completedImageURLs: [URL]) async throws
-    func markOfflineCacheWorkFailed(favoriteID: String, tid: String, message: String?) async throws
-    func cancelOfflineCacheWork(favoriteID: String, tid: String) async throws
-    func cancelOfflineCacheWorks(forFavoriteID favoriteID: String) async throws
+    func prepareOfflineCacheWorkForRun(ownerName: String, tid: String, targetImageURLs: [URL]?, completedImageURLs: [URL]) async throws
+    func markOfflineCacheWorkFailed(ownerName: String, tid: String, message: String?) async throws
+    func cancelOfflineCacheWork(ownerName: String, tid: String) async throws
+    func cancelOfflineCacheWorks(forOwnerName ownerName: String) async throws
     func clearOfflineCacheQueue() async throws
     func offlineCacheQueueRunState() async -> MangaOfflineCacheQueueRunState
     func setOfflineCacheQueueRunState(_ state: MangaOfflineCacheQueueRunState) async throws
-    func offlineCacheState(favoriteID: String, tid: String) async -> MangaOfflineCacheState
+    func offlineCacheState(ownerName: String, tid: String) async -> MangaOfflineCacheState
     func clearAll() async throws
 }

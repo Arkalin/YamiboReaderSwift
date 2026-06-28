@@ -133,32 +133,30 @@ final class MineHomeViewModelTests: XCTestCase {
         let activeImage = try XCTUnwrap(URL(string: "https://img.example.com/100-1.jpg"))
         let pendingImage = try XCTUnwrap(URL(string: "https://img.example.com/100-2.jpg"))
         _ = try await fixture.offlineCacheStore.enqueueOfflineCacheWork(
-            try makeMineOfflineCacheWorkRequest(favoriteID: "favorite-b", favoriteTitle: "作品B", tid: "300")
+            try makeMineOfflineCacheWorkRequest(ownerName: "作品B", tid: "300")
         )
         _ = try await fixture.offlineCacheStore.enqueueOfflineCacheWork(
             try makeMineOfflineCacheWorkRequest(
-                favoriteID: "favorite-a",
-                favoriteTitle: "作品A",
+                ownerName: "作品A",
                 tid: "200"
             )
         )
         _ = try await fixture.offlineCacheStore.enqueueOfflineCacheWork(
             try makeMineOfflineCacheWorkRequest(
-                favoriteID: "favorite-a",
-                favoriteTitle: "作品A",
+                ownerName: "作品A",
                 tid: "100",
                 targetImageURLs: [activeImage, pendingImage]
             )
         )
         try await fixture.offlineCacheStore.updateOfflineCacheWorkProgress(
-            favoriteID: "favorite-a",
+            ownerName: "作品A",
             tid: "100",
             targetImageURLs: [activeImage, pendingImage],
             completedImageURLs: [activeImage],
             currentBytesPerSecond: 2048
         )
         try await fixture.offlineCacheStore.markOfflineCacheWorkFailed(
-            favoriteID: "favorite-a",
+            ownerName: "作品A",
             tid: "200",
             message: "Timeout"
         )
@@ -178,7 +176,7 @@ final class MineHomeViewModelTests: XCTestCase {
         await viewModel.refreshOfflineCacheQueue()
 
         XCTAssertEqual(viewModel.offlineCacheQueueEntryCount, 3)
-        XCTAssertEqual(viewModel.offlineCacheQueueGroups.map(\.favoriteID), ["favorite-b", "favorite-a"])
+        XCTAssertEqual(viewModel.offlineCacheQueueGroups.map(\.ownerName), ["作品B", "作品A"])
         XCTAssertEqual(viewModel.offlineCacheQueueGroups[1].chapters.map(\.id.tid), ["100", "200"])
         XCTAssertEqual(viewModel.offlineCacheQueueGroups[1].progressText, L10n.string("mine.offline_queue.image_progress_format", 1, 2))
         XCTAssertEqual(viewModel.offlineCacheQueueGroups[1].percentageText, L10n.string("mine.offline_queue.percent_format", 50))
@@ -201,7 +199,7 @@ final class MineHomeViewModelTests: XCTestCase {
         let secondImage = try XCTUnwrap(URL(string: "https://img.example.com/100-2.jpg"))
         _ = try await fixture.offlineCacheStore.enqueueOfflineCacheWork(
             try makeMineOfflineCacheWorkRequest(
-                favoriteID: "favorite-a",
+                ownerName: "作品A",
                 tid: "100",
                 targetImageURLs: [firstImage, secondImage]
             )
@@ -212,7 +210,7 @@ final class MineHomeViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.offlineCacheQueueGroups.first?.chapters.first?.completedImageCount, 0)
 
         try await fixture.offlineCacheStore.updateOfflineCacheWorkProgress(
-            favoriteID: "favorite-a",
+            ownerName: "作品A",
             tid: "100",
             targetImageURLs: [firstImage, secondImage],
             completedImageURLs: [firstImage],
@@ -243,7 +241,7 @@ final class MineHomeViewModelTests: XCTestCase {
     func testOfflineCacheQueueCommandsUseQueueControllerAndRefreshProjection() async throws {
         let fixture = try await makeMineHomeFixture()
         _ = try await fixture.offlineCacheStore.enqueueOfflineCacheWork(
-            try makeMineOfflineCacheWorkRequest(favoriteID: "favorite-a", tid: "100")
+            try makeMineOfflineCacheWorkRequest(ownerName: "作品A", tid: "100")
         )
         let controller = RecordingOfflineCacheQueueController(store: fixture.offlineCacheStore)
         let viewModel = MineHomeViewModel(
@@ -254,25 +252,25 @@ final class MineHomeViewModelTests: XCTestCase {
         await viewModel.refreshOfflineCacheQueue()
         await viewModel.continueOfflineCacheQueue()
         await viewModel.pauseOfflineCacheQueue()
-        await viewModel.cancelOfflineCacheChapter(MangaOfflineCacheMembershipID(favoriteID: "favorite-a", tid: "100"))
+        await viewModel.cancelOfflineCacheChapter(MangaOfflineCacheMembershipID(ownerName: "作品A", tid: "100"))
 
         let events = await controller.snapshotEvents()
-        let canceledWork = await fixture.offlineCacheStore.offlineCacheWork(favoriteID: "favorite-a", tid: "100")
-        XCTAssertEqual(events, ["continue", "pause", "cancel:favorite-a:100"])
+        let canceledWork = await fixture.offlineCacheStore.offlineCacheWork(ownerName: "作品A", tid: "100")
+        XCTAssertEqual(events, ["continue", "pause", "cancel:作品A:100"])
         XCTAssertEqual(viewModel.offlineCacheQueueEntryCount, 0)
         XCTAssertNil(canceledWork)
     }
 
-    func testOfflineCacheFavoriteGroupCancelPreservesCompletedCachedMembership() async throws {
+    func testOfflineCacheOwnerGroupCancelPreservesCompletedCachedMembership() async throws {
         let fixture = try await makeMineHomeFixture()
         let cachedImage = try XCTUnwrap(URL(string: "https://img.example.com/100-1.jpg"))
         _ = try await fixture.offlineCacheStore.enqueueOfflineCacheWork(
-            try makeMineOfflineCacheWorkRequest(favoriteID: "favorite-a", tid: "200")
+            try makeMineOfflineCacheWorkRequest(ownerName: "作品A", tid: "200")
         )
         try await fixture.offlineCacheStore.saveOfflineImageData(Data([1]), for: cachedImage)
         try await fixture.offlineCacheStore.saveMembership(
             try makeMineOfflineCacheMembership(
-                favoriteID: "favorite-a",
+                ownerName: "作品A",
                 tid: "100",
                 imageURLs: [cachedImage]
             )
@@ -283,10 +281,10 @@ final class MineHomeViewModelTests: XCTestCase {
             offlineCacheQueueController: controller
         )
 
-        await viewModel.cancelOfflineCacheFavoriteGroup(favoriteID: "favorite-a")
+        await viewModel.cancelOfflineCacheOwnerGroup(ownerName: "作品A")
 
-        let canceledWork = await fixture.offlineCacheStore.offlineCacheWork(favoriteID: "favorite-a", tid: "200")
-        let completedMembership = await fixture.offlineCacheStore.membership(favoriteID: "favorite-a", tid: "100")
+        let canceledWork = await fixture.offlineCacheStore.offlineCacheWork(ownerName: "作品A", tid: "200")
+        let completedMembership = await fixture.offlineCacheStore.membership(ownerName: "作品A", tid: "100")
         XCTAssertNil(canceledWork)
         XCTAssertNotNil(completedMembership)
         XCTAssertEqual(viewModel.offlineCacheQueueEntryCount, 0)
@@ -295,10 +293,10 @@ final class MineHomeViewModelTests: XCTestCase {
     func testOfflineCacheSelectionModeBatchCancelsSelectedWork() async throws {
         let fixture = try await makeMineHomeFixture()
         _ = try await fixture.offlineCacheStore.enqueueOfflineCacheWork(
-            try makeMineOfflineCacheWorkRequest(favoriteID: "favorite-a", tid: "100")
+            try makeMineOfflineCacheWorkRequest(ownerName: "作品A", tid: "100")
         )
         _ = try await fixture.offlineCacheStore.enqueueOfflineCacheWork(
-            try makeMineOfflineCacheWorkRequest(favoriteID: "favorite-a", tid: "200")
+            try makeMineOfflineCacheWorkRequest(ownerName: "作品A", tid: "200")
         )
         let controller = RecordingOfflineCacheQueueController(store: fixture.offlineCacheStore)
         let viewModel = MineHomeViewModel(
@@ -308,71 +306,71 @@ final class MineHomeViewModelTests: XCTestCase {
         await viewModel.refreshOfflineCacheQueue()
 
         viewModel.setOfflineCacheQueueSelectionMode(true)
-        viewModel.toggleOfflineCacheWorkSelection(MangaOfflineCacheMembershipID(favoriteID: "favorite-a", tid: "100"))
-        viewModel.toggleOfflineCacheWorkSelection(MangaOfflineCacheMembershipID(favoriteID: "favorite-a", tid: "200"))
+        viewModel.toggleOfflineCacheWorkSelection(MangaOfflineCacheMembershipID(ownerName: "作品A", tid: "100"))
+        viewModel.toggleOfflineCacheWorkSelection(MangaOfflineCacheMembershipID(ownerName: "作品A", tid: "200"))
         await viewModel.cancelSelectedOfflineCacheWorks()
 
         let events = await controller.snapshotEvents()
-        XCTAssertEqual(Set(events), ["cancel:favorite-a:100", "cancel:favorite-a:200"])
+        XCTAssertEqual(Set(events), ["cancel:作品A:100", "cancel:作品A:200"])
         XCTAssertFalse(viewModel.isOfflineCacheQueueSelectionMode)
         XCTAssertTrue(viewModel.selectedOfflineCacheWorkIDs.isEmpty)
         XCTAssertEqual(viewModel.offlineCacheQueueEntryCount, 0)
     }
 
-    func testOfflineCacheSelectionModeSelectAllCanScopeToFavorite() async throws {
+    func testOfflineCacheSelectionModeSelectAllCanScopeToOwner() async throws {
         let fixture = try await makeMineHomeFixture()
         _ = try await fixture.offlineCacheStore.enqueueOfflineCacheWork(
-            try makeMineOfflineCacheWorkRequest(favoriteID: "favorite-a", tid: "100")
+            try makeMineOfflineCacheWorkRequest(ownerName: "作品A", tid: "100")
         )
         _ = try await fixture.offlineCacheStore.enqueueOfflineCacheWork(
-            try makeMineOfflineCacheWorkRequest(favoriteID: "favorite-a", tid: "200")
+            try makeMineOfflineCacheWorkRequest(ownerName: "作品A", tid: "200")
         )
         _ = try await fixture.offlineCacheStore.enqueueOfflineCacheWork(
-            try makeMineOfflineCacheWorkRequest(favoriteID: "favorite-b", tid: "300")
+            try makeMineOfflineCacheWorkRequest(ownerName: "作品B", tid: "300")
         )
         let viewModel = MineHomeViewModel(appContext: fixture.appContext)
         await viewModel.refreshOfflineCacheQueue()
 
-        viewModel.selectAllOfflineCacheWorks(favoriteID: "favorite-a")
+        viewModel.selectAllOfflineCacheWorks(ownerName: "作品A")
 
         XCTAssertEqual(
             viewModel.selectedOfflineCacheWorkIDs,
             [
-                MangaOfflineCacheMembershipID(favoriteID: "favorite-a", tid: "100"),
-                MangaOfflineCacheMembershipID(favoriteID: "favorite-a", tid: "200")
+                MangaOfflineCacheMembershipID(ownerName: "作品A", tid: "100"),
+                MangaOfflineCacheMembershipID(ownerName: "作品A", tid: "200")
             ]
         )
     }
 
-    func testOfflineCacheSelectionModeTogglesWholeFavoriteGroup() async throws {
+    func testOfflineCacheSelectionModeTogglesWholeOwnerGroup() async throws {
         let fixture = try await makeMineHomeFixture()
         _ = try await fixture.offlineCacheStore.enqueueOfflineCacheWork(
-            try makeMineOfflineCacheWorkRequest(favoriteID: "favorite-a", tid: "100")
+            try makeMineOfflineCacheWorkRequest(ownerName: "作品A", tid: "100")
         )
         _ = try await fixture.offlineCacheStore.enqueueOfflineCacheWork(
-            try makeMineOfflineCacheWorkRequest(favoriteID: "favorite-a", tid: "200")
+            try makeMineOfflineCacheWorkRequest(ownerName: "作品A", tid: "200")
         )
         _ = try await fixture.offlineCacheStore.enqueueOfflineCacheWork(
-            try makeMineOfflineCacheWorkRequest(favoriteID: "favorite-b", tid: "300")
+            try makeMineOfflineCacheWorkRequest(ownerName: "作品B", tid: "300")
         )
         let viewModel = MineHomeViewModel(appContext: fixture.appContext)
         await viewModel.refreshOfflineCacheQueue()
 
-        viewModel.toggleOfflineCacheFavoriteSelection(favoriteID: "favorite-a")
+        viewModel.toggleOfflineCacheOwnerSelection(ownerName: "作品A")
 
-        XCTAssertTrue(viewModel.isOfflineCacheFavoriteSelected(favoriteID: "favorite-a"))
-        XCTAssertFalse(viewModel.isOfflineCacheFavoriteSelected(favoriteID: "favorite-b"))
+        XCTAssertTrue(viewModel.isOfflineCacheOwnerSelected(ownerName: "作品A"))
+        XCTAssertFalse(viewModel.isOfflineCacheOwnerSelected(ownerName: "作品B"))
         XCTAssertEqual(
             viewModel.selectedOfflineCacheWorkIDs,
             [
-                MangaOfflineCacheMembershipID(favoriteID: "favorite-a", tid: "100"),
-                MangaOfflineCacheMembershipID(favoriteID: "favorite-a", tid: "200")
+                MangaOfflineCacheMembershipID(ownerName: "作品A", tid: "100"),
+                MangaOfflineCacheMembershipID(ownerName: "作品A", tid: "200")
             ]
         )
 
-        viewModel.toggleOfflineCacheFavoriteSelection(favoriteID: "favorite-a")
+        viewModel.toggleOfflineCacheOwnerSelection(ownerName: "作品A")
 
-        XCTAssertFalse(viewModel.isOfflineCacheFavoriteSelected(favoriteID: "favorite-a"))
+        XCTAssertFalse(viewModel.isOfflineCacheOwnerSelected(ownerName: "作品A"))
         XCTAssertTrue(viewModel.selectedOfflineCacheWorkIDs.isEmpty)
     }
 }
@@ -535,27 +533,24 @@ private actor RecordingOfflineCacheQueueController: MangaOfflineCacheQueueContro
         try await store.setOfflineCacheQueueRunState(.paused)
     }
 
-    func cancelChapter(favoriteID: String, tid: String) async throws {
-        recordedEvents.append("cancel:\(favoriteID):\(tid)")
-        try await store.cancelOfflineCacheWork(favoriteID: favoriteID, tid: tid)
+    func cancelChapter(ownerName: String, tid: String) async throws {
+        recordedEvents.append("cancel:\(ownerName):\(tid)")
+        try await store.cancelOfflineCacheWork(ownerName: ownerName, tid: tid)
     }
 
-    func cancelFavoriteGroup(favoriteID: String) async throws {
-        recordedEvents.append("cancel-group:\(favoriteID)")
-        try await store.cancelOfflineCacheWorks(forFavoriteID: favoriteID)
+    func cancelOwnerGroup(ownerName: String) async throws {
+        recordedEvents.append("cancel-group:\(ownerName)")
+        try await store.cancelOfflineCacheWorks(forOwnerName: ownerName)
     }
 }
 
 private func makeMineOfflineCacheWorkRequest(
-    favoriteID: String,
-    favoriteTitle: String = "作品",
+    ownerName: String,
     tid: String,
     targetImageURLs: [URL] = []
 ) throws -> MangaOfflineCacheWorkRequest {
     MangaOfflineCacheWorkRequest(
-        favoriteID: favoriteID,
-        favoriteTitle: favoriteTitle,
-        favoriteURL: try XCTUnwrap(URL(string: "https://bbs.yamibo.com/thread-\(tid)-1-1.html")),
+        ownerName: ownerName,
         tid: tid,
         chapterTitle: "第\(tid)话",
         chapterURL: try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(tid)&page=1")),
@@ -564,14 +559,12 @@ private func makeMineOfflineCacheWorkRequest(
 }
 
 private func makeMineOfflineCacheMembership(
-    favoriteID: String,
+    ownerName: String,
     tid: String,
     imageURLs: [URL]
 ) throws -> MangaOfflineCacheMembership {
     MangaOfflineCacheMembership(
-        favoriteID: favoriteID,
-        favoriteTitle: "作品",
-        favoriteURL: try XCTUnwrap(URL(string: "https://bbs.yamibo.com/thread-\(tid)-1-1.html")),
+        ownerName: ownerName,
         tid: tid,
         chapterTitle: "第\(tid)话",
         chapterURL: try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(tid)&page=1")),

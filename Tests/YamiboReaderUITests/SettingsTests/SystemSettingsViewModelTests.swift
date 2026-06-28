@@ -202,7 +202,7 @@ final class SystemSettingsViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.mangaIndexCacheBytes, indexBytesBeforeClear)
     }
 
-    func testMangaOfflineCacheCleanupFiltersFavoritesWithMembershipOrWorkAndShowsUsage() async throws {
+    func testMangaOfflineCacheCleanupFiltersOwnersWithMembershipOrWorkAndShowsUsage() async throws {
         let fixture = try makeFixture()
         let favoriteAURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=310&mobile=2"))
         let favoriteBURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=320&mobile=2"))
@@ -217,13 +217,13 @@ final class SystemSettingsViewModelTests: XCTestCase {
         try await fixture.mangaOfflineCacheStore.saveOfflineImageData(Data(repeating: 1, count: 4), for: membershipImage)
         try await fixture.mangaOfflineCacheStore.saveOfflineImageData(Data(repeating: 2, count: 7), for: workImage)
         try await fixture.mangaOfflineCacheStore.saveMembership(
-            try makeMangaOfflineMembership(favoriteID: "favorite-a", tid: "310", imageURLs: [membershipImage])
+            try makeMangaOfflineMembership(ownerName: "作品A", tid: "310", imageURLs: [membershipImage])
         )
         _ = try await fixture.mangaOfflineCacheStore.enqueueOfflineCacheWork(
-            try makeMangaOfflineWorkRequest(favoriteID: "favorite-b", tid: "320", targetImageURLs: [workImage])
+            try makeMangaOfflineWorkRequest(ownerName: "作品B", tid: "320", targetImageURLs: [workImage])
         )
         try await fixture.mangaOfflineCacheStore.updateOfflineCacheWorkProgress(
-            favoriteID: "favorite-b",
+            ownerName: "作品B",
             tid: "320",
             targetImageURLs: [workImage],
             completedImageURLs: [workImage],
@@ -233,8 +233,8 @@ final class SystemSettingsViewModelTests: XCTestCase {
         let viewModel = SystemSettingsViewModel(appContext: fixture.appContext)
         await viewModel.refreshMangaOfflineCacheCleanup()
 
-        XCTAssertEqual(viewModel.mangaOfflineCacheCleanupRows.map(\.favoriteID), ["favorite-a", "favorite-b"])
-        XCTAssertEqual(viewModel.mangaOfflineCacheCleanupRows.map(\.title), ["本地名A", "远端标题B"])
+        XCTAssertEqual(viewModel.mangaOfflineCacheCleanupRows.map(\.ownerName), ["作品A", "作品B"])
+        XCTAssertEqual(viewModel.mangaOfflineCacheCleanupRows.map(\.title), ["作品A", "作品B"])
         XCTAssertEqual(viewModel.mangaOfflineCacheCleanupRows.map(\.byteCount), [4, 7])
         XCTAssertFalse(viewModel.mangaOfflineCacheCleanupIsEmpty)
     }
@@ -254,40 +254,40 @@ final class SystemSettingsViewModelTests: XCTestCase {
         let imageURL = try XCTUnwrap(URL(string: "https://img.example.com/offline-single.jpg"))
         try await fixture.mangaOfflineCacheStore.saveOfflineImageData(Data([1]), for: imageURL)
         try await fixture.mangaOfflineCacheStore.saveMembership(
-            try makeMangaOfflineMembership(favoriteID: "favorite-a", tid: "310", imageURLs: [imageURL])
+            try makeMangaOfflineMembership(ownerName: "作品A", tid: "310", imageURLs: [imageURL])
         )
         let viewModel = SystemSettingsViewModel(appContext: fixture.appContext)
         await viewModel.refreshMangaOfflineCacheCleanup()
 
-        viewModel.requestMangaOfflineCacheCleanup(favoriteID: "favorite-a")
-        XCTAssertEqual(viewModel.pendingMangaOfflineCacheCleanupConfirmation?.favoriteIDs, ["favorite-a"])
+        viewModel.requestMangaOfflineCacheCleanup(ownerName: "作品A")
+        XCTAssertEqual(viewModel.pendingMangaOfflineCacheCleanupConfirmation?.ownerNames, ["作品A"])
 
         viewModel.cancelMangaOfflineCacheCleanupConfirmation()
-        viewModel.requestMangaOfflineCacheSwipeCleanup(favoriteID: "favorite-a")
-        XCTAssertEqual(viewModel.pendingMangaOfflineCacheCleanupConfirmation?.favoriteIDs, ["favorite-a"])
+        viewModel.requestMangaOfflineCacheSwipeCleanup(ownerName: "作品A")
+        XCTAssertEqual(viewModel.pendingMangaOfflineCacheCleanupConfirmation?.ownerNames, ["作品A"])
     }
 
-    func testMangaOfflineCacheCleanupBatchDeleteUsesOneConfirmationForSelectedFavorites() async throws {
+    func testMangaOfflineCacheCleanupBatchDeleteUsesOneConfirmationForSelectedOwners() async throws {
         let fixture = try makeFixture()
         let firstImage = try XCTUnwrap(URL(string: "https://img.example.com/offline-batch-1.jpg"))
         let secondImage = try XCTUnwrap(URL(string: "https://img.example.com/offline-batch-2.jpg"))
         try await fixture.mangaOfflineCacheStore.saveOfflineImageData(Data([1]), for: firstImage)
         try await fixture.mangaOfflineCacheStore.saveOfflineImageData(Data([2]), for: secondImage)
         try await fixture.mangaOfflineCacheStore.saveMembership(
-            try makeMangaOfflineMembership(favoriteID: "favorite-a", tid: "310", imageURLs: [firstImage])
+            try makeMangaOfflineMembership(ownerName: "作品A", tid: "310", imageURLs: [firstImage])
         )
         try await fixture.mangaOfflineCacheStore.saveMembership(
-            try makeMangaOfflineMembership(favoriteID: "favorite-b", tid: "320", imageURLs: [secondImage])
+            try makeMangaOfflineMembership(ownerName: "作品B", tid: "320", imageURLs: [secondImage])
         )
         let viewModel = SystemSettingsViewModel(appContext: fixture.appContext)
         await viewModel.refreshMangaOfflineCacheCleanup()
 
         viewModel.setMangaOfflineCacheCleanupSelectionMode(true)
-        viewModel.toggleMangaOfflineCacheCleanupSelection(favoriteID: "favorite-a")
-        viewModel.toggleMangaOfflineCacheCleanupSelection(favoriteID: "favorite-b")
+        viewModel.toggleMangaOfflineCacheCleanupSelection(ownerName: "作品A")
+        viewModel.toggleMangaOfflineCacheCleanupSelection(ownerName: "作品B")
         viewModel.requestSelectedMangaOfflineCacheCleanup()
 
-        XCTAssertEqual(viewModel.pendingMangaOfflineCacheCleanupConfirmation?.favoriteIDs, ["favorite-a", "favorite-b"])
+        XCTAssertEqual(viewModel.pendingMangaOfflineCacheCleanupConfirmation?.ownerNames, ["作品A", "作品B"])
     }
 
     func testMangaOfflineCacheCleanupConfirmDeletesMembershipsWorksAndUnsharedOfflineBytes() async throws {
@@ -299,16 +299,16 @@ final class SystemSettingsViewModelTests: XCTestCase {
         try await fixture.mangaOfflineCacheStore.saveOfflineImageData(Data([2]), for: sharedImage)
         try await fixture.mangaOfflineCacheStore.saveOfflineImageData(Data([3]), for: workImage)
         try await fixture.mangaOfflineCacheStore.saveMembership(
-            try makeMangaOfflineMembership(favoriteID: "favorite-a", tid: "310", imageURLs: [removedImage, sharedImage])
+            try makeMangaOfflineMembership(ownerName: "作品A", tid: "310", imageURLs: [removedImage, sharedImage])
         )
         try await fixture.mangaOfflineCacheStore.saveMembership(
-            try makeMangaOfflineMembership(favoriteID: "favorite-b", tid: "320", imageURLs: [sharedImage])
+            try makeMangaOfflineMembership(ownerName: "作品B", tid: "320", imageURLs: [sharedImage])
         )
         _ = try await fixture.mangaOfflineCacheStore.enqueueOfflineCacheWork(
-            try makeMangaOfflineWorkRequest(favoriteID: "favorite-a", tid: "311", targetImageURLs: [workImage])
+            try makeMangaOfflineWorkRequest(ownerName: "作品A", tid: "311", targetImageURLs: [workImage])
         )
         try await fixture.mangaOfflineCacheStore.updateOfflineCacheWorkProgress(
-            favoriteID: "favorite-a",
+            ownerName: "作品A",
             tid: "311",
             targetImageURLs: [workImage],
             completedImageURLs: [workImage],
@@ -317,11 +317,11 @@ final class SystemSettingsViewModelTests: XCTestCase {
         let viewModel = SystemSettingsViewModel(appContext: fixture.appContext)
         await viewModel.refreshMangaOfflineCacheCleanup()
 
-        viewModel.requestMangaOfflineCacheCleanup(favoriteID: "favorite-a")
+        viewModel.requestMangaOfflineCacheCleanup(ownerName: "作品A")
         let didDelete = await viewModel.confirmPendingMangaOfflineCacheCleanup()
 
-        let removedMembership = await fixture.mangaOfflineCacheStore.membership(favoriteID: "favorite-a", tid: "310")
-        let removedWork = await fixture.mangaOfflineCacheStore.offlineCacheWork(favoriteID: "favorite-a", tid: "311")
+        let removedMembership = await fixture.mangaOfflineCacheStore.membership(ownerName: "作品A", tid: "310")
+        let removedWork = await fixture.mangaOfflineCacheStore.offlineCacheWork(ownerName: "作品A", tid: "311")
         let removedImageData = await fixture.mangaOfflineCacheStore.offlineImageData(for: removedImage)
         let workImageData = await fixture.mangaOfflineCacheStore.offlineImageData(for: workImage)
         let sharedImageData = await fixture.mangaOfflineCacheStore.offlineImageData(for: sharedImage)
@@ -332,9 +332,9 @@ final class SystemSettingsViewModelTests: XCTestCase {
         XCTAssertNil(removedImageData)
         XCTAssertNil(workImageData)
         XCTAssertEqual(sharedImageData, Data([2]))
-        XCTAssertEqual(viewModel.mangaOfflineCacheCleanupRows.map(\.favoriteID), ["favorite-b"])
+        XCTAssertEqual(viewModel.mangaOfflineCacheCleanupRows.map(\.ownerName), ["作品B"])
         XCTAssertFalse(viewModel.isMangaOfflineCacheCleanupSelectionMode)
-        XCTAssertTrue(viewModel.selectedMangaOfflineCacheFavoriteIDs.isEmpty)
+        XCTAssertTrue(viewModel.selectedMangaOfflineCacheOwnerNames.isEmpty)
     }
 
     func testMangaOfflineCacheCleanupConfirmUsesCapturedConfirmationAfterPendingDismissal() async throws {
@@ -342,17 +342,17 @@ final class SystemSettingsViewModelTests: XCTestCase {
         let imageURL = try XCTUnwrap(URL(string: "https://img.example.com/dismiss-race.jpg"))
         try await fixture.mangaOfflineCacheStore.saveOfflineImageData(Data([1]), for: imageURL)
         try await fixture.mangaOfflineCacheStore.saveMembership(
-            try makeMangaOfflineMembership(favoriteID: "favorite-a", tid: "310", imageURLs: [imageURL])
+            try makeMangaOfflineMembership(ownerName: "作品A", tid: "310", imageURLs: [imageURL])
         )
         let viewModel = SystemSettingsViewModel(appContext: fixture.appContext)
         await viewModel.refreshMangaOfflineCacheCleanup()
 
-        viewModel.requestMangaOfflineCacheCleanup(favoriteID: "favorite-a")
+        viewModel.requestMangaOfflineCacheCleanup(ownerName: "作品A")
         let confirmation = try XCTUnwrap(viewModel.pendingMangaOfflineCacheCleanupConfirmation)
         viewModel.cancelMangaOfflineCacheCleanupConfirmation()
         let didDelete = await viewModel.confirmMangaOfflineCacheCleanup(confirmation)
 
-        let removedMembership = await fixture.mangaOfflineCacheStore.membership(favoriteID: "favorite-a", tid: "310")
+        let removedMembership = await fixture.mangaOfflineCacheStore.membership(ownerName: "作品A", tid: "310")
         XCTAssertTrue(didDelete)
         XCTAssertNil(removedMembership)
         XCTAssertTrue(viewModel.mangaOfflineCacheCleanupRows.isEmpty)
@@ -365,7 +365,7 @@ final class SystemSettingsViewModelTests: XCTestCase {
         let imageURL = try XCTUnwrap(URL(string: "https://img.example.com/901-1.jpg"))
         try await fixture.mangaOfflineCacheStore.saveOfflineImageData(Data([1]), for: imageURL)
         try await fixture.mangaOfflineCacheStore.saveMembership(
-            try makeMangaOfflineMembership(favoriteID: "favorite-a", tid: "901", imageURLs: [imageURL])
+            try makeMangaOfflineMembership(ownerName: "作品A", tid: "901", imageURLs: [imageURL])
         )
         let directoryBytesBeforeClear = await fixture.mangaDirectoryStore.totalDiskUsageBytes()
         let chapterDocumentBytesBeforeClear = await fixture.mangaChapterDocumentStore.totalDiskUsageBytes()
@@ -373,7 +373,7 @@ final class SystemSettingsViewModelTests: XCTestCase {
         let viewModel = SystemSettingsViewModel(appContext: fixture.appContext)
         await viewModel.refreshMangaOfflineCacheCleanup()
 
-        viewModel.requestMangaOfflineCacheCleanup(favoriteID: "favorite-a")
+        viewModel.requestMangaOfflineCacheCleanup(ownerName: "作品A")
         let didDelete = await viewModel.confirmPendingMangaOfflineCacheCleanup()
 
         let directoryBytesAfterClear = await fixture.mangaDirectoryStore.totalDiskUsageBytes()
@@ -531,19 +531,17 @@ private func seedMangaOfflineCache(_ fixture: SystemSettingsFixture) async throw
     let imageURL = try XCTUnwrap(URL(string: "https://img.example.com/offline-seed.jpg"))
     try await fixture.mangaOfflineCacheStore.saveOfflineImageData(Data(repeating: 9, count: 2048), for: imageURL)
     try await fixture.mangaOfflineCacheStore.saveMembership(
-        try makeMangaOfflineMembership(favoriteID: "favorite-seed", tid: "902", imageURLs: [imageURL])
+        try makeMangaOfflineMembership(ownerName: "favorite-seed", tid: "902", imageURLs: [imageURL])
     )
 }
 
 private func makeMangaOfflineMembership(
-    favoriteID: String,
+    ownerName: String,
     tid: String,
     imageURLs: [URL]
 ) throws -> MangaOfflineCacheMembership {
     MangaOfflineCacheMembership(
-        favoriteID: favoriteID,
-        favoriteTitle: "作品 \(favoriteID)",
-        favoriteURL: try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(tid)&mobile=2")),
+        ownerName: ownerName,
         tid: tid,
         chapterTitle: "第\(tid)话",
         chapterURL: try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(tid)&mobile=2")),
@@ -552,14 +550,12 @@ private func makeMangaOfflineMembership(
 }
 
 private func makeMangaOfflineWorkRequest(
-    favoriteID: String,
+    ownerName: String,
     tid: String,
     targetImageURLs: [URL]
 ) throws -> MangaOfflineCacheWorkRequest {
     MangaOfflineCacheWorkRequest(
-        favoriteID: favoriteID,
-        favoriteTitle: "作品 \(favoriteID)",
-        favoriteURL: try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(tid)&mobile=2")),
+        ownerName: ownerName,
         tid: tid,
         chapterTitle: "第\(tid)话",
         chapterURL: try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(tid)&mobile=2")),

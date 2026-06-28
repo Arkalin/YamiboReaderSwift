@@ -20,6 +20,10 @@ _Avoid_: loaded chapter, chapter HTML
 The user-selected manga chapters intended to be readable without network access, including explicit offline-cache membership, the needed **Manga Chapter Documents**, and manga image bytes.
 _Avoid_: manga cache, chapter cache, transparent cache
 
+**Manga Offline Cache Owner**:
+The manga title identity that owns a set of **Manga Offline Cache** chapters, using the authoritative `cleanBookName` from the owning **Manga Directory**.
+_Avoid_: favorite owner, download owner, raw thread title
+
 **Manga Offline Cache State**:
 The chapter-level availability of a **Manga Offline Cache** item in the manga reader cache sheet: cached, uncached, or caching. A chapter is cached only when it has offline-cache membership, its **Manga Chapter Document**, and all image bytes for that document locally available.
 _Avoid_: partial cache, image cache hit, document cache hit
@@ -78,22 +82,28 @@ _Avoid_: double page position, two-page progress, spread position
 - A **Manga Offline Cache** depends on one or more **Manga Chapter Documents** and their manga image bytes being available locally.
 - A **Manga Offline Cache** is managed at chapter granularity from the chapters in a **Manga Directory**.
 - A chapter belongs to the **Manga Offline Cache** only through explicit offline-cache membership; transparent document or image cache hits do not by themselves create that membership.
-- **Manga Offline Cache** membership is owned by a **Favorite Library** entry and chapter `tid`, with the normalized chapter URL retained as recovery and loading metadata.
+- **Manga Offline Cache** membership is owned by a **Manga Offline Cache Owner** and chapter `tid`, with the normalized chapter URL retained as recovery and loading metadata.
+- **Manga Offline Cache** identity, state lookup, deletion, grouping, and disk usage are based on **Manga Offline Cache Owner** and chapter `tid`; favorite identity is not part of the offline-cache data model.
+- The **Manga Offline Cache Owner** comes from the current **Manga Directory** `cleanBookName`; favorite titles, display titles, and chapter titles are not authoritative owner sources.
+- Two manga sources with the same **Manga Offline Cache Owner** are treated as the same offline-cache owner; accidental collisions are resolved by renaming the relevant **Manga Directory**.
+- Renaming a **Manga Directory** also renames the matching **Manga Offline Cache Owner** so existing offline-cache membership, unfinished work, and visible storage usage remain attached to the corrected manga title.
+- Deleting a **Manga Directory** does not delete **Manga Offline Cache** content owned by the same manga title.
 - When cached work has a chapter `tid`, the `tid` remains authoritative and a stale chapter URL may be rebuilt or normalized before treating the work as failed.
 - **Manga Offline Cache** image bytes are user-retained offline content and are not governed by the transparent image byte cache's reclaim policy.
 - A completed **Manga Offline Cache** preserves the cached **Manga Chapter Document** and image URL set as the offline-readable version; later remote chapter changes do not automatically invalidate that membership.
 - A **Manga Offline Cache State** is chapter-level; the first version does not expose a partial-cache state.
 - A **Manga Offline Cache State** of caching means there is **Manga Offline Cache Work** for that chapter, including work recovered after an app restart.
-- A **Manga Offline Cache Queue** groups **Manga Offline Cache Work** by the owning **Favorite Library** entry when presented outside the manga reader.
-- A **Manga Offline Cache Queue** group uses the owning **Favorite Library** entry identity, while keeping the favorite's canonical thread URL and display title as recovery metadata.
-- A manga chapter can enter the **Manga Offline Cache Queue** only through an owning **Favorite Library** entry; non-favorite manga must be added to the **Favorite Library** first.
-- System storage management clears **Manga Offline Cache** content by owning **Favorite Library** entry rather than by individual chapter.
-- Clearing **Manga Offline Cache** content for a **Favorite Library** entry removes that entry's completed memberships, unfinished or failed work, and offline image bytes, while reusable transparent manga caches may remain available.
+- A **Manga Offline Cache Queue** groups **Manga Offline Cache Work** by the owning **Manga Offline Cache Owner** when presented outside the manga reader.
+- A **Manga Offline Cache Queue** group uses the **Manga Offline Cache Owner** as its title; favorite titles or URLs may be kept as recovery metadata but do not define queue group identity.
+- A manga chapter can enter the **Manga Offline Cache Queue** only from a manga that is present in the **Favorite Library**, even though the resulting **Manga Offline Cache** content is owned by **Manga Offline Cache Owner** rather than by the favorite entry.
+- The **Favorite Library** gate applies only to creating new **Manga Offline Cache Work**; existing offline-cache membership can still be read, shown, or deleted through the matching **Manga Offline Cache Owner** after the favorite entry is removed.
+- System storage management clears **Manga Offline Cache** content by **Manga Offline Cache Owner** rather than by individual chapter.
+- Clearing **Manga Offline Cache** content for a **Manga Offline Cache Owner** removes that owner's completed memberships, unfinished or failed work, and offline image bytes, while reusable transparent manga caches may remain available.
 - Adding a chapter to the **Manga Offline Cache Queue** is idempotent; existing cached or caching chapters are not duplicated or reordered.
 - Adding a chapter from the manga reader cache sheet does not retry failed work; failed work resumes only through continuing the **Manga Offline Cache Queue**.
 - **Manga Offline Cache Work** executes in the order it was added; queue groups are ordered by their earliest unfinished work, while chapters inside a group follow **Manga Directory** order.
 - The first-version **Manga Offline Cache Queue** does not support user-driven reordering.
-- Removing the owning **Favorite Library** entry cancels its **Manga Offline Cache Work** and deletes its cached chapter membership and image bytes.
+- Removing a **Favorite Library** entry does not remove **Manga Offline Cache** content owned by the same manga title.
 - Canceling **Manga Offline Cache Work** stops that chapter from becoming cached and removes locally stored image bytes for that chapter, while reusable **Manga Directory** and **Manga Chapter Document** data may remain available.
 - Canceling a **Manga Offline Cache Queue** group cancels that group's unfinished or failed work without deleting already completed cached chapters that have left the queue.
 - Deleting a cached chapter from the **Manga Offline Cache** removes its offline-cache membership and locally stored image bytes, while reusable **Manga Directory** and **Manga Chapter Document** data may remain available.

@@ -25,7 +25,7 @@ final class MangaReaderCacheViewModelTests: XCTestCase {
     func testFailedQueueWorkProjectsAsCaching() async throws {
         let fixture = try await makeCacheFixture(chapters: [cacheChapter(tid: "100", number: 1)])
         _ = try await fixture.store.enqueueOfflineCacheWork(cacheWorkRequest(favorite: fixture.favorite, tid: "100"))
-        try await fixture.store.markOfflineCacheWorkFailed(favoriteID: fixture.favorite.id, tid: "100", message: "Timeout")
+        try await fixture.store.markOfflineCacheWorkFailed(ownerName: fixture.favorite.title, tid: "100", message: "Timeout")
 
         await fixture.model.load()
 
@@ -42,7 +42,7 @@ final class MangaReaderCacheViewModelTests: XCTestCase {
         try await fixture.store.saveOfflineImageData(Data([1]), for: cachedImage)
         try await fixture.store.saveMembership(cacheMembership(favorite: fixture.favorite, tid: "100", imageURLs: [cachedImage]))
         _ = try await fixture.store.enqueueOfflineCacheWork(cacheWorkRequest(favorite: fixture.favorite, tid: "300"))
-        try await fixture.store.markOfflineCacheWorkFailed(favoriteID: fixture.favorite.id, tid: "300", message: "Timeout")
+        try await fixture.store.markOfflineCacheWorkFailed(ownerName: fixture.favorite.title, tid: "300", message: "Timeout")
 
         await fixture.model.load()
         await fixture.model.cacheSelected(tids: ["100", "200", "300"])
@@ -64,12 +64,12 @@ final class MangaReaderCacheViewModelTests: XCTestCase {
         try await fixture.store.saveMembership(cacheMembership(favorite: fixture.favorite, tid: "100", imageURLs: [cachedImage]))
         _ = try await fixture.store.enqueueOfflineCacheWork(cacheWorkRequest(favorite: fixture.favorite, tid: "200"))
         _ = try await fixture.store.enqueueOfflineCacheWork(cacheWorkRequest(favorite: fixture.favorite, tid: "300"))
-        try await fixture.store.markOfflineCacheWorkFailed(favoriteID: fixture.favorite.id, tid: "300", message: "Timeout")
+        try await fixture.store.markOfflineCacheWorkFailed(ownerName: fixture.favorite.title, tid: "300", message: "Timeout")
 
         await fixture.model.load()
         await fixture.model.deleteSelected(tids: ["100", "200", "300"])
 
-        let deletedMembership = await fixture.store.membership(favoriteID: fixture.favorite.id, tid: "100")
+        let deletedMembership = await fixture.store.membership(ownerName: fixture.favorite.title, tid: "100")
         let deletedImageData = await fixture.store.offlineImageData(for: cachedImage)
         let remainingWorks = await fixture.store.allOfflineCacheWorks()
         XCTAssertNil(deletedMembership)
@@ -87,6 +87,24 @@ final class MangaReaderCacheViewModelTests: XCTestCase {
         XCTAssertEqual(fixture.model.prompt, .addFavorite(title: "测试漫画"))
         let works = await fixture.store.allOfflineCacheWorks()
         XCTAssertTrue(works.isEmpty)
+    }
+
+    func testNonFavoriteDeleteCommandCanRemoveExistingOfflineCache() async throws {
+        let fixture = try await makeCacheFixture(chapters: [cacheChapter(tid: "100", number: 1)], saveFavorite: false)
+        let cachedImage = try XCTUnwrap(URL(string: "https://img.example.com/nonfavorite-100-1.jpg"))
+        try await fixture.store.saveOfflineImageData(Data([1]), for: cachedImage)
+        try await fixture.store.saveMembership(cacheMembership(favorite: fixture.favorite, tid: "100", imageURLs: [cachedImage]))
+
+        await fixture.model.load()
+        XCTAssertEqual(fixture.model.rows.map(\.state), [.cached])
+
+        await fixture.model.deleteSelected(tids: ["100"])
+
+        let deletedMembership = await fixture.store.membership(ownerName: fixture.favorite.title, tid: "100")
+        let deletedImageData = await fixture.store.offlineImageData(for: cachedImage)
+        XCTAssertNil(deletedMembership)
+        XCTAssertNil(deletedImageData)
+        XCTAssertEqual(fixture.model.rows.map(\.state), [.uncached])
     }
 }
 
@@ -156,9 +174,7 @@ private func cacheMembership(
     imageURLs: [URL]
 ) throws -> MangaOfflineCacheMembership {
     MangaOfflineCacheMembership(
-        favoriteID: favorite.id,
-        favoriteTitle: favorite.resolvedDisplayTitle,
-        favoriteURL: favorite.url,
+        ownerName: favorite.title,
         tid: tid,
         chapterTitle: "第\(tid)话",
         chapterURL: try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(tid)&page=1")),
@@ -168,9 +184,7 @@ private func cacheMembership(
 
 private func cacheWorkRequest(favorite: Favorite, tid: String) throws -> MangaOfflineCacheWorkRequest {
     MangaOfflineCacheWorkRequest(
-        favoriteID: favorite.id,
-        favoriteTitle: favorite.resolvedDisplayTitle,
-        favoriteURL: favorite.url,
+        ownerName: favorite.title,
         tid: tid,
         chapterTitle: "第\(tid)话",
         chapterURL: try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(tid)&page=1"))

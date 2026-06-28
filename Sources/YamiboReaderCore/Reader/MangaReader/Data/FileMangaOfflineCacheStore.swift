@@ -2,8 +2,8 @@ import CryptoKit
 import Foundation
 
 public actor FileMangaOfflineCacheStore: MangaOfflineCacheStoring {
-    private static let schemaVersion = 2
-    private static let supportedSchemaVersions: Set<Int> = [1, 2]
+    private static let schemaVersion = 3
+    private static let supportedSchemaVersions: Set<Int> = [3]
 
     private let fileManager: FileManager
     private let baseDirectory: URL
@@ -44,16 +44,16 @@ public actor FileMangaOfflineCacheStore: MangaOfflineCacheStoring {
         updateNotifier.stream()
     }
 
-    public func membership(favoriteID: String, tid: String) async -> MangaOfflineCacheMembership? {
+    public func membership(ownerName: String, tid: String) async -> MangaOfflineCacheMembership? {
         await ensureIndexLoaded()
-        return memberships[membershipKey(favoriteID: favoriteID, tid: tid)]
+        return memberships[membershipKey(ownerName: ownerName, tid: tid)]
     }
 
-    public func memberships(forFavoriteID favoriteID: String) async -> [MangaOfflineCacheMembership] {
+    public func memberships(forOwnerName ownerName: String) async -> [MangaOfflineCacheMembership] {
         await ensureIndexLoaded()
-        let normalizedFavoriteID = favoriteID.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedOwnerName = ownerName.trimmingCharacters(in: .whitespacesAndNewlines)
         return memberships.values
-            .filter { $0.favoriteID == normalizedFavoriteID }
+            .filter { $0.ownerName == normalizedOwnerName }
             .sorted(by: membershipSort)
     }
 
@@ -65,17 +65,15 @@ public actor FileMangaOfflineCacheStore: MangaOfflineCacheStoring {
     public func saveMembership(_ membership: MangaOfflineCacheMembership) async throws {
         await ensureIndexLoaded()
         do {
-            guard membership.favoriteID.mangaReaderTrimmedNonEmpty != nil else {
-                throw YamiboError.persistenceFailed("Favorite identity is empty")
+            guard membership.ownerName.mangaReaderTrimmedNonEmpty != nil else {
+                throw YamiboError.persistenceFailed("Offline cache owner is empty")
             }
             guard membership.tid.mangaReaderTrimmedNonEmpty != nil else {
                 throw YamiboError.persistenceFailed("Chapter tid is empty")
             }
 
             let normalized = MangaOfflineCacheMembership(
-                favoriteID: membership.favoriteID,
-                favoriteTitle: membership.favoriteTitle,
-                favoriteURL: membership.favoriteURL,
+                ownerName: membership.ownerName,
                 tid: membership.tid,
                 chapterTitle: membership.chapterTitle,
                 chapterURL: membership.chapterURL,
@@ -91,10 +89,10 @@ public actor FileMangaOfflineCacheStore: MangaOfflineCacheStoring {
         }
     }
 
-    public func removeMembership(favoriteID: String, tid: String) async throws {
+    public func removeMembership(ownerName: String, tid: String) async throws {
         await ensureIndexLoaded()
         do {
-            let key = membershipKey(favoriteID: favoriteID, tid: tid)
+            let key = membershipKey(ownerName: ownerName, tid: tid)
             let canceled = queueWorks.removeValue(forKey: key)
             let removed = memberships.removeValue(forKey: key)
             let canceledImageURLs = canceled.map { $0.targetImageURLs + $0.completedImageURLs } ?? []
@@ -113,13 +111,13 @@ public actor FileMangaOfflineCacheStore: MangaOfflineCacheStoring {
         }
     }
 
-    public func removeMemberships(forFavoriteID favoriteID: String) async throws {
+    public func removeMemberships(forOwnerName ownerName: String) async throws {
         await ensureIndexLoaded()
         do {
-            let normalizedFavoriteID = favoriteID.trimmingCharacters(in: .whitespacesAndNewlines)
-            let canceled = queueWorks.values.filter { $0.favoriteID == normalizedFavoriteID }
-            let removed = memberships.filter { $0.value.favoriteID == normalizedFavoriteID }
-            queueWorks = queueWorks.filter { $0.value.favoriteID != normalizedFavoriteID }
+            let normalizedOwnerName = ownerName.trimmingCharacters(in: .whitespacesAndNewlines)
+            let canceled = queueWorks.values.filter { $0.ownerName == normalizedOwnerName }
+            let removed = memberships.filter { $0.value.ownerName == normalizedOwnerName }
+            queueWorks = queueWorks.filter { $0.value.ownerName != normalizedOwnerName }
             guard !removed.isEmpty else {
                 try removeUnreferencedImages(forImageURLs: canceled.flatMap { $0.targetImageURLs + $0.completedImageURLs })
                 try persistIndex()
@@ -133,6 +131,59 @@ public actor FileMangaOfflineCacheStore: MangaOfflineCacheStoring {
                 afterRemoving: Array(removed.values),
                 additionalImageURLs: canceled.flatMap { $0.targetImageURLs + $0.completedImageURLs }
             )
+            try persistIndex()
+            notifyOfflineCacheDidChange()
+        } catch {
+            throw persistenceError(from: error)
+        }
+    }
+
+    public func renameOwner(from oldOwnerName: String, to newOwnerName: String) async throws {
+        await ensureIndexLoaded()
+        do {
+            guard let oldOwnerName = oldOwnerName.mangaReaderTrimmedNonEmpty,
+                  let newOwnerName = newOwnerName.mangaReaderTrimmedNonEmpty,
+                  oldOwnerName != newOwnerName else {
+                return
+            }
+
+            let targetMemberships = memberships.values.filter { $0.ownerName == oldOwnerName }
+            let targetWorks = queueWorks.values.filter { $0.ownerName == oldOwnerName }
+            guard !targetMemberships.isEmpty || !targetWorks.isEmpty else { return }
+
+            memberships = memberships.filter { $0.value.ownerName != oldOwnerName }
+            queueWorks = queueWorks.filter { $0.value.ownerName != oldOwnerName }
+
+            for membership in targetMemberships {
+                let renamed = MangaOfflineCacheMembership(
+                    ownerName: newOwnerName,
+                    tid: membership.tid,
+                    chapterTitle: membership.chapterTitle,
+                    chapterURL: membership.chapterURL,
+                    imageURLs: membership.imageURLs,
+                    createdAt: membership.createdAt
+                )
+                memberships[membershipKey(for: renamed.id)] = renamed
+            }
+
+            for work in targetWorks {
+                let renamed = MangaOfflineCacheWork(
+                    ownerName: newOwnerName,
+                    tid: work.tid,
+                    chapterTitle: work.chapterTitle,
+                    chapterURL: work.chapterURL,
+                    targetImageURLs: work.targetImageURLs,
+                    completedImageURLs: work.completedImageURLs,
+                    state: work.state,
+                    failureMessage: work.failureMessage,
+                    currentBytesPerSecond: work.currentBytesPerSecond,
+                    insertionIndex: work.insertionIndex,
+                    createdAt: work.createdAt,
+                    updatedAt: work.updatedAt
+                )
+                queueWorks[membershipKey(for: renamed.id)] = renamed
+            }
+
             try persistIndex()
             notifyOfflineCacheDidChange()
         } catch {
@@ -182,41 +233,41 @@ public actor FileMangaOfflineCacheStore: MangaOfflineCacheStoring {
         }
     }
 
-    public func diskUsageByFavorite() async -> [MangaOfflineCacheFavoriteUsage] {
+    public func diskUsageByOwner() async -> [MangaOfflineCacheOwnerUsage] {
         await ensureIndexLoaded()
-        var usageByFavorite: [String: Int] = [:]
-        var imageKeysByFavorite: [String: Set<String>] = [:]
+        var usageByOwner: [String: Int] = [:]
+        var imageKeysByOwner: [String: Set<String>] = [:]
 
         for membership in memberships.values {
-            var keys = imageKeysByFavorite[membership.favoriteID, default: []]
+            var keys = imageKeysByOwner[membership.ownerName, default: []]
             for imageURL in membership.imageURLs {
                 keys.insert(imageKey(for: imageURL))
             }
-            imageKeysByFavorite[membership.favoriteID] = keys
+            imageKeysByOwner[membership.ownerName] = keys
         }
 
         for work in queueWorks.values {
-            var keys = imageKeysByFavorite[work.favoriteID, default: []]
+            var keys = imageKeysByOwner[work.ownerName, default: []]
             for imageURL in work.targetImageURLs + work.completedImageURLs {
                 keys.insert(imageKey(for: imageURL))
             }
-            imageKeysByFavorite[work.favoriteID] = keys
+            imageKeysByOwner[work.ownerName] = keys
         }
 
-        for (favoriteID, imageKeys) in imageKeysByFavorite {
-            usageByFavorite[favoriteID] = imageKeys.reduce(0) { total, key in
+        for (ownerName, imageKeys) in imageKeysByOwner {
+            usageByOwner[ownerName] = imageKeys.reduce(0) { total, key in
                 total + (images[key]?.byteCount ?? 0)
             }
         }
 
-        return usageByFavorite
-            .map { MangaOfflineCacheFavoriteUsage(favoriteID: $0.key, byteCount: $0.value) }
-            .sorted { lhs, rhs in lhs.favoriteID.localizedStandardCompare(rhs.favoriteID) == .orderedAscending }
+        return usageByOwner
+            .map { MangaOfflineCacheOwnerUsage(ownerName: $0.key, byteCount: $0.value) }
+            .sorted { lhs, rhs in lhs.ownerName.localizedStandardCompare(rhs.ownerName) == .orderedAscending }
     }
 
-    public func offlineCacheWork(favoriteID: String, tid: String) async -> MangaOfflineCacheWork? {
+    public func offlineCacheWork(ownerName: String, tid: String) async -> MangaOfflineCacheWork? {
         await ensureIndexLoaded()
-        return queueWorks[membershipKey(favoriteID: favoriteID, tid: tid)]
+        return queueWorks[membershipKey(ownerName: ownerName, tid: tid)]
     }
 
     public func allOfflineCacheWorks() async -> [MangaOfflineCacheWork] {
@@ -227,14 +278,14 @@ public actor FileMangaOfflineCacheStore: MangaOfflineCacheStoring {
     public func enqueueOfflineCacheWork(_ request: MangaOfflineCacheWorkRequest) async throws -> MangaOfflineCacheEnqueueResult {
         await ensureIndexLoaded()
         do {
-            guard request.favoriteID.mangaReaderTrimmedNonEmpty != nil else {
-                throw YamiboError.persistenceFailed("Favorite identity is empty")
+            guard request.ownerName.mangaReaderTrimmedNonEmpty != nil else {
+                throw YamiboError.persistenceFailed("Offline cache owner is empty")
             }
             guard request.tid.mangaReaderTrimmedNonEmpty != nil else {
                 throw YamiboError.persistenceFailed("Chapter tid is empty")
             }
 
-            let key = membershipKey(favoriteID: request.favoriteID, tid: request.tid)
+            let key = membershipKey(ownerName: request.ownerName, tid: request.tid)
             if let membership = memberships[key], isMembershipComplete(membership) {
                 return .alreadyCached(membership)
             }
@@ -256,7 +307,7 @@ public actor FileMangaOfflineCacheStore: MangaOfflineCacheStoring {
     }
 
     public func updateOfflineCacheWorkProgress(
-        favoriteID: String,
+        ownerName: String,
         tid: String,
         targetImageURLs: [URL]?,
         completedImageURLs: [URL],
@@ -264,7 +315,7 @@ public actor FileMangaOfflineCacheStore: MangaOfflineCacheStoring {
     ) async throws {
         await ensureIndexLoaded()
         do {
-            let key = membershipKey(favoriteID: favoriteID, tid: tid)
+            let key = membershipKey(ownerName: ownerName, tid: tid)
             guard let work = queueWorks[key] else { return }
             queueWorks[key] = work.updatingProgress(
                 targetImageURLs: targetImageURLs,
@@ -279,14 +330,14 @@ public actor FileMangaOfflineCacheStore: MangaOfflineCacheStoring {
     }
 
     public func prepareOfflineCacheWorkForRun(
-        favoriteID: String,
+        ownerName: String,
         tid: String,
         targetImageURLs: [URL]?,
         completedImageURLs: [URL]
     ) async throws {
         await ensureIndexLoaded()
         do {
-            let key = membershipKey(favoriteID: favoriteID, tid: tid)
+            let key = membershipKey(ownerName: ownerName, tid: tid)
             guard let work = queueWorks[key] else { return }
             queueWorks[key] = work.preparingForRun(
                 targetImageURLs: targetImageURLs,
@@ -299,10 +350,10 @@ public actor FileMangaOfflineCacheStore: MangaOfflineCacheStoring {
         }
     }
 
-    public func markOfflineCacheWorkFailed(favoriteID: String, tid: String, message: String?) async throws {
+    public func markOfflineCacheWorkFailed(ownerName: String, tid: String, message: String?) async throws {
         await ensureIndexLoaded()
         do {
-            let key = membershipKey(favoriteID: favoriteID, tid: tid)
+            let key = membershipKey(ownerName: ownerName, tid: tid)
             guard let work = queueWorks[key] else { return }
             queueWorks[key] = work.markingFailed(message: message)
             try persistIndex()
@@ -312,10 +363,10 @@ public actor FileMangaOfflineCacheStore: MangaOfflineCacheStoring {
         }
     }
 
-    public func cancelOfflineCacheWork(favoriteID: String, tid: String) async throws {
+    public func cancelOfflineCacheWork(ownerName: String, tid: String) async throws {
         await ensureIndexLoaded()
         do {
-            let canceled = queueWorks.removeValue(forKey: membershipKey(favoriteID: favoriteID, tid: tid))
+            let canceled = queueWorks.removeValue(forKey: membershipKey(ownerName: ownerName, tid: tid))
             if let canceled {
                 try removeUnreferencedImages(forImageURLs: canceled.targetImageURLs + canceled.completedImageURLs)
             }
@@ -326,12 +377,12 @@ public actor FileMangaOfflineCacheStore: MangaOfflineCacheStoring {
         }
     }
 
-    public func cancelOfflineCacheWorks(forFavoriteID favoriteID: String) async throws {
+    public func cancelOfflineCacheWorks(forOwnerName ownerName: String) async throws {
         await ensureIndexLoaded()
         do {
-            let normalizedFavoriteID = favoriteID.trimmingCharacters(in: .whitespacesAndNewlines)
-            let canceled = queueWorks.values.filter { $0.favoriteID == normalizedFavoriteID }
-            queueWorks = queueWorks.filter { $0.value.favoriteID != normalizedFavoriteID }
+            let normalizedOwnerName = ownerName.trimmingCharacters(in: .whitespacesAndNewlines)
+            let canceled = queueWorks.values.filter { $0.ownerName == normalizedOwnerName }
+            queueWorks = queueWorks.filter { $0.value.ownerName != normalizedOwnerName }
             try removeUnreferencedImages(forImageURLs: canceled.flatMap { $0.targetImageURLs + $0.completedImageURLs })
             try persistIndex()
             notifyOfflineCacheDidChange()
@@ -377,9 +428,9 @@ public actor FileMangaOfflineCacheStore: MangaOfflineCacheStoring {
         }
     }
 
-    public func offlineCacheState(favoriteID: String, tid: String) async -> MangaOfflineCacheState {
+    public func offlineCacheState(ownerName: String, tid: String) async -> MangaOfflineCacheState {
         await ensureIndexLoaded()
-        let key = membershipKey(favoriteID: favoriteID, tid: tid)
+        let key = membershipKey(ownerName: ownerName, tid: tid)
         if let membership = memberships[key], isMembershipComplete(membership) {
             return .cached
         }
@@ -423,11 +474,8 @@ public actor FileMangaOfflineCacheStore: MangaOfflineCacheStoring {
             return
         }
 
-        guard
-            let envelope = try? decoder.decode(MangaOfflineCacheIndexEnvelope.self, from: data),
-            Self.supportedSchemaVersions.contains(envelope.version)
-        else {
-            clearStoreDirectory()
+        guard let envelope = try? decoder.decode(MangaOfflineCacheIndexEnvelope.self, from: data),
+              Self.supportedSchemaVersions.contains(envelope.version) else {
             memberships = [:]
             images = [:]
             queueWorks = [:]
@@ -505,12 +553,6 @@ public actor FileMangaOfflineCacheStore: MangaOfflineCacheStoring {
         }
     }
 
-    private func clearStoreDirectory() {
-        if fileManager.fileExists(atPath: baseDirectory.path) {
-            try? fileManager.removeItem(at: baseDirectory)
-        }
-    }
-
     private func isMembershipComplete(_ membership: MangaOfflineCacheMembership) -> Bool {
         guard !membership.imageURLs.isEmpty else { return false }
         return membership.imageURLs.allSatisfy { imageURL in
@@ -540,11 +582,11 @@ public actor FileMangaOfflineCacheStore: MangaOfflineCacheStoring {
     }
 
     private func membershipKey(for id: MangaOfflineCacheMembershipID) -> String {
-        membershipKey(favoriteID: id.favoriteID, tid: id.tid)
+        membershipKey(ownerName: id.ownerName, tid: id.tid)
     }
 
-    private func membershipKey(favoriteID: String, tid: String) -> String {
-        "\(favoriteID.trimmingCharacters(in: .whitespacesAndNewlines))|\(tid.trimmingCharacters(in: .whitespacesAndNewlines))"
+    private func membershipKey(ownerName: String, tid: String) -> String {
+        "\(ownerName.trimmingCharacters(in: .whitespacesAndNewlines))|\(tid.trimmingCharacters(in: .whitespacesAndNewlines))"
     }
 
     private func imageKey(for imageURL: URL) -> String {
@@ -568,8 +610,8 @@ public actor FileMangaOfflineCacheStore: MangaOfflineCacheStoring {
     }
 
     private func membershipSort(_ lhs: MangaOfflineCacheMembership, _ rhs: MangaOfflineCacheMembership) -> Bool {
-        if lhs.favoriteID != rhs.favoriteID {
-            return lhs.favoriteID.localizedStandardCompare(rhs.favoriteID) == .orderedAscending
+        if lhs.ownerName != rhs.ownerName {
+            return lhs.ownerName.localizedStandardCompare(rhs.ownerName) == .orderedAscending
         }
         return lhs.tid.localizedStandardCompare(rhs.tid) == .orderedAscending
     }
@@ -578,8 +620,8 @@ public actor FileMangaOfflineCacheStore: MangaOfflineCacheStoring {
         if lhs.insertionIndex != rhs.insertionIndex {
             return lhs.insertionIndex < rhs.insertionIndex
         }
-        if lhs.favoriteID != rhs.favoriteID {
-            return lhs.favoriteID.localizedStandardCompare(rhs.favoriteID) == .orderedAscending
+        if lhs.ownerName != rhs.ownerName {
+            return lhs.ownerName.localizedStandardCompare(rhs.ownerName) == .orderedAscending
         }
         return lhs.tid.localizedStandardCompare(rhs.tid) == .orderedAscending
     }

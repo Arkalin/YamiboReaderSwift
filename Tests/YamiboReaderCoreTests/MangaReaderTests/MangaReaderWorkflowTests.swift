@@ -104,8 +104,7 @@ struct MangaReaderTestsWorkflow {
         _ = workflow.moveToLoadedPage(at: 12)
         let movedLoaded = try #require(loadedPresentation(in: workflow.presentation))
         #expect(movedLoaded.currentPageIndex == 12)
-        #expect(movedLoaded.viewportPlacement?.targetPageIndex == 11)
-        #expect(movedLoaded.viewportPlacement?.revision == initialRevision)
+        #expect(movedLoaded.viewportPlacement == nil)
 
         var pageCurlSettings = workflow.presentation.settings
         pageCurlSettings.pagedTurnStyle = .pageCurl
@@ -437,7 +436,7 @@ struct MangaReaderTestsWorkflow {
         #expect(await store.savedDirectories.isEmpty)
     }
 
-    @Test func offlineCachedCurrentChapterLoadsWithoutLocalDirectory() async throws {
+    @Test func offlineCachedCurrentChapterLoadsFromDirectoryOwnerWithoutLocalDirectory() async throws {
         let document = try makeWorkflowDocument(tid: "700", pageCount: 2)
         let offlineStore = FileMangaOfflineCacheStore(baseDirectory: try makeTemporaryWorkflowOfflineCacheDirectory())
         for imageURL in document.imageURLs {
@@ -445,9 +444,7 @@ struct MangaReaderTestsWorkflow {
         }
         try await offlineStore.saveMembership(
             MangaOfflineCacheMembership(
-                favoriteID: "favorite-700",
-                favoriteTitle: "测试漫画",
-                favoriteURL: try #require(URL(string: "https://bbs.yamibo.com/thread-700-1-1.html")),
+                ownerName: "测试漫画",
                 tid: "700",
                 chapterTitle: document.chapterTitle,
                 chapterURL: document.chapterURL,
@@ -457,7 +454,7 @@ struct MangaReaderTestsWorkflow {
         let repository = RecordingMangaDirectoryRepository(output: .failure(.offline))
         let store = RecordingMangaDirectoryStore()
         let workflow = MangaReaderWorkflow(
-            context: try makeWorkflowContext(tid: "700", offlineCacheFavoriteID: "favorite-700"),
+            context: try makeWorkflowContext(tid: "700", directoryName: "测试漫画"),
             documentLoader: RecordingMangaChapterDocumentLoader(output: .document(document)),
             directoryRepository: repository,
             directoryStore: store,

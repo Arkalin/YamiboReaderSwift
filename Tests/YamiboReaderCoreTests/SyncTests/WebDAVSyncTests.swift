@@ -862,18 +862,14 @@ private enum WebDAVTestError: Error {
     try await favoriteStore.saveFavorites([favorite])
     try await offlineStore.saveOfflineImageData(Data([9]), for: imageURL)
     try await offlineStore.saveMembership(MangaOfflineCacheMembership(
-        favoriteID: favorite.id,
-        favoriteTitle: favorite.title,
-        favoriteURL: favorite.url,
+        ownerName: favorite.title,
         tid: "960",
         chapterTitle: "第960话",
         chapterURL: favoriteURL,
         imageURLs: [imageURL]
     ))
     _ = try await offlineStore.enqueueOfflineCacheWork(MangaOfflineCacheWorkRequest(
-        favoriteID: favorite.id,
-        favoriteTitle: favorite.title,
-        favoriteURL: favorite.url,
+        ownerName: favorite.title,
         tid: "961",
         chapterTitle: "第961话",
         chapterURL: favoriteURL,
@@ -913,11 +909,11 @@ private enum WebDAVTestError: Error {
     #expect(libraryObject["offlineCache"] == nil)
     #expect(libraryObject["queueWorks"] == nil)
     #expect((try JSONDecoder().decode(WebDAVSyncPayload.self, from: payloadData)).library.favorites == [favorite])
-    #expect(await offlineStore.membership(favoriteID: favorite.id, tid: "960") != nil)
-    #expect(await offlineStore.offlineCacheWork(favoriteID: favorite.id, tid: "961") != nil)
+    #expect(await offlineStore.membership(ownerName: favorite.title, tid: "960") != nil)
+    #expect(await offlineStore.offlineCacheWork(ownerName: favorite.title, tid: "961") != nil)
 }
 
-@Test func webDAVServiceDownloadFavoriteRemovalCleansOwnedMangaOfflineCache() async throws {
+@Test func webDAVServiceDownloadFavoriteRemovalPreservesMangaOfflineCache() async throws {
     let suiteName = makeWebDAVDefaultsSuiteName(prefix: "webdav-download-offline-cleanup")
     UserDefaults(suiteName: suiteName)?.removePersistentDomain(forName: suiteName)
     let rootDirectory = makeWebDAVTemporaryDirectory(prefix: "webdav-download-offline-cleanup")
@@ -945,18 +941,14 @@ private enum WebDAVTestError: Error {
     try await favoriteStore.saveFavorites([favorite])
     try await offlineStore.saveOfflineImageData(Data([8]), for: imageURL)
     try await offlineStore.saveMembership(MangaOfflineCacheMembership(
-        favoriteID: favorite.id,
-        favoriteTitle: favorite.title,
-        favoriteURL: favorite.url,
+        ownerName: favorite.title,
         tid: "962",
         chapterTitle: "第962话",
         chapterURL: favoriteURL,
         imageURLs: [imageURL]
     ))
     _ = try await offlineStore.enqueueOfflineCacheWork(MangaOfflineCacheWorkRequest(
-        favoriteID: favorite.id,
-        favoriteTitle: favorite.title,
-        favoriteURL: favorite.url,
+        ownerName: favorite.title,
         tid: "963",
         chapterTitle: "第963话",
         chapterURL: favoriteURL,
@@ -982,9 +974,9 @@ private enum WebDAVTestError: Error {
     _ = try await service.download(using: settings)
 
     #expect(await favoriteStore.loadFavorites() == [])
-    #expect(await offlineStore.membership(favoriteID: favorite.id, tid: "962") == nil)
-    #expect(await offlineStore.offlineCacheWork(favoriteID: favorite.id, tid: "963") == nil)
-    #expect(await offlineStore.offlineImageData(for: imageURL) == nil)
+    #expect(await offlineStore.membership(ownerName: favorite.title, tid: "962") != nil)
+    #expect(await offlineStore.offlineCacheWork(ownerName: favorite.title, tid: "963") != nil)
+    #expect(await offlineStore.offlineImageData(for: imageURL) == Data([8]))
 }
 
 @Test func webDAVSyncRoundTripsFavoriteTagsAndAssociations() async throws {
