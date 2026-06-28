@@ -315,6 +315,31 @@ final class MineHomeViewModelTests: XCTestCase {
         XCTAssertTrue(viewModel.selectedOfflineCacheWorkIDs.isEmpty)
         XCTAssertEqual(viewModel.offlineCacheQueueEntryCount, 0)
     }
+
+    func testOfflineCacheSelectionModeSelectAllCanScopeToFavorite() async throws {
+        let fixture = try await makeMineHomeFixture()
+        _ = try await fixture.offlineCacheStore.enqueueOfflineCacheWork(
+            try makeMineOfflineCacheWorkRequest(favoriteID: "favorite-a", tid: "100")
+        )
+        _ = try await fixture.offlineCacheStore.enqueueOfflineCacheWork(
+            try makeMineOfflineCacheWorkRequest(favoriteID: "favorite-a", tid: "200")
+        )
+        _ = try await fixture.offlineCacheStore.enqueueOfflineCacheWork(
+            try makeMineOfflineCacheWorkRequest(favoriteID: "favorite-b", tid: "300")
+        )
+        let viewModel = MineHomeViewModel(appContext: fixture.appContext)
+        await viewModel.refreshOfflineCacheQueue()
+
+        viewModel.selectAllOfflineCacheWorks(favoriteID: "favorite-a")
+
+        XCTAssertEqual(
+            viewModel.selectedOfflineCacheWorkIDs,
+            [
+                MangaOfflineCacheMembershipID(favoriteID: "favorite-a", tid: "100"),
+                MangaOfflineCacheMembershipID(favoriteID: "favorite-a", tid: "200")
+            ]
+        )
+    }
 }
 
 private struct MineHomeViewModelFixture {

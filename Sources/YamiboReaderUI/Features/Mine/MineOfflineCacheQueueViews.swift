@@ -4,6 +4,7 @@ import YamiboReaderCore
 struct MineOfflineCacheQueueSheet: View {
     let viewModel: MineHomeViewModel
     @Environment(\.dismiss) private var dismiss
+    @State private var selectedFavoriteID: String?
 
     var body: some View {
         NavigationStack {
@@ -19,28 +20,16 @@ struct MineOfflineCacheQueueSheet: View {
                         Section {
                             MineOfflineCacheQueueFavoriteRow(
                                 group: group,
+                                open: {
+                                    viewModel.setOfflineCacheQueueSelectionMode(false)
+                                    selectedFavoriteID = group.favoriteID
+                                },
                                 cancel: {
                                     Task {
                                         await viewModel.cancelOfflineCacheFavoriteGroup(favoriteID: group.favoriteID)
                                     }
                                 }
                             )
-
-                            ForEach(group.chapters) { chapter in
-                                MineOfflineCacheQueueChapterRowView(
-                                    chapter: chapter,
-                                    isSelecting: viewModel.isOfflineCacheQueueSelectionMode,
-                                    isSelected: viewModel.selectedOfflineCacheWorkIDs.contains(chapter.id),
-                                    toggleSelection: {
-                                        viewModel.toggleOfflineCacheWorkSelection(chapter.id)
-                                    },
-                                    cancel: {
-                                        Task {
-                                            await viewModel.cancelOfflineCacheChapter(chapter.id)
-                                        }
-                                    }
-                                )
-                            }
                         }
                     }
                 }
@@ -57,45 +46,19 @@ struct MineOfflineCacheQueueSheet: View {
             .refreshable {
                 await viewModel.refreshOfflineCacheQueue()
             }
+            .sheet(isPresented: selectedFavoriteIsPresented) {
+                if let favoriteID = selectedFavoriteID {
+                    MineOfflineCacheQueueFavoriteSheet(
+                        viewModel: viewModel,
+                        favoriteID: favoriteID
+                    )
+                }
+            }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(L10n.string("common.close")) {
                         dismiss()
                     }
-                }
-
-                ToolbarItem(placement: .primaryAction) {
-                    if !viewModel.offlineCacheQueueIsEmpty {
-                        Button(
-                            viewModel.isOfflineCacheQueueSelectionMode
-                                ? L10n.string("common.done")
-                                : L10n.string("common.select")
-                        ) {
-                            viewModel.setOfflineCacheQueueSelectionMode(!viewModel.isOfflineCacheQueueSelectionMode)
-                        }
-                        .disabled(viewModel.isOfflineCacheQueueCommandRunning)
-                    }
-                }
-
-                if viewModel.isOfflineCacheQueueSelectionMode {
-                    #if os(iOS)
-                    ToolbarItem(placement: .bottomBar) {
-                        MineOfflineCacheQueueSelectAllButton(viewModel: viewModel)
-                    }
-                    ToolbarItem(placement: .bottomBar) {
-                        Spacer()
-                    }
-                    ToolbarItem(placement: .bottomBar) {
-                        MineOfflineCacheQueueCancelSelectionButton(viewModel: viewModel)
-                    }
-                    #else
-                    ToolbarItem(placement: .secondaryAction) {
-                        MineOfflineCacheQueueSelectAllButton(viewModel: viewModel)
-                    }
-                    ToolbarItem(placement: .confirmationAction) {
-                        MineOfflineCacheQueueCancelSelectionButton(viewModel: viewModel)
-                    }
-                    #endif
                 }
             }
             .overlay {
@@ -105,14 +68,27 @@ struct MineOfflineCacheQueueSheet: View {
             }
         }
     }
+
+    private var selectedFavoriteIsPresented: Binding<Bool> {
+        Binding(
+            get: { selectedFavoriteID != nil },
+            set: { isPresented in
+                if !isPresented {
+                    selectedFavoriteID = nil
+                    viewModel.setOfflineCacheQueueSelectionMode(false)
+                }
+            }
+        )
+    }
 }
 
 private struct MineOfflineCacheQueueSelectAllButton: View {
     let viewModel: MineHomeViewModel
+    let favoriteID: String
 
     var body: some View {
         Button(L10n.string("common.select_all")) {
-            viewModel.selectAllOfflineCacheWorks()
+            viewModel.selectAllOfflineCacheWorks(favoriteID: favoriteID)
         }
         .disabled(viewModel.offlineCacheQueueIsEmpty)
     }
@@ -175,36 +151,155 @@ private struct MineOfflineCacheQueueControls: View {
 
 private struct MineOfflineCacheQueueFavoriteRow: View {
     let group: MineOfflineCacheQueueFavoriteGroup
+    let open: () -> Void
     let cancel: () -> Void
 
     var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "books.vertical.fill")
-                .foregroundStyle(.indigo)
+        Button(action: open) {
+            HStack(spacing: 12) {
+                Image(systemName: "books.vertical.fill")
+                    .foregroundStyle(.indigo)
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text(group.favoriteTitle)
-                    .font(.headline)
-                    .lineLimit(2)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(group.favoriteTitle)
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+                        .lineLimit(2)
 
-                Text(L10n.string("mine.offline_queue.chapter_count_format", group.chapterCount))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
+                    Text(L10n.string("mine.offline_queue.chapter_count_format", group.chapterCount))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
 
-            Spacer(minLength: 8)
+                Spacer(minLength: 8)
 
-            if let currentSpeedText = group.currentSpeedText {
-                Text(currentSpeedText)
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                if let currentSpeedText = group.currentSpeedText {
+                    Text(currentSpeedText)
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
             }
         }
+        .buttonStyle(.plain)
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
             Button(role: .destructive, action: cancel) {
                 Label(L10n.string("common.cancel"), systemImage: "xmark.circle")
             }
+        }
+    }
+}
+
+private struct MineOfflineCacheQueueFavoriteSheet: View {
+    let viewModel: MineHomeViewModel
+    let favoriteID: String
+    @Environment(\.dismiss) private var dismiss
+
+    private var group: MineOfflineCacheQueueFavoriteGroup? {
+        viewModel.offlineCacheQueueGroups.first { $0.favoriteID == favoriteID }
+    }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                if let group {
+                    ForEach(group.chapters) { chapter in
+                        MineOfflineCacheQueueChapterRowView(
+                            chapter: chapter,
+                            isSelecting: viewModel.isOfflineCacheQueueSelectionMode,
+                            isSelected: viewModel.selectedOfflineCacheWorkIDs.contains(chapter.id),
+                            toggleSelection: {
+                                viewModel.toggleOfflineCacheWorkSelection(chapter.id)
+                            },
+                            cancel: {
+                                Task {
+                                    await viewModel.cancelOfflineCacheChapter(chapter.id)
+                                    dismissIfGroupIsEmpty()
+                                }
+                            }
+                        )
+                    }
+                } else {
+                    MineOfflineCacheQueueEmptyState()
+                }
+            }
+            #if os(iOS)
+            .listStyle(.insetGrouped)
+            #else
+            .listStyle(.inset)
+            #endif
+            .navigationTitle(group?.favoriteTitle ?? L10n.string("mine.download_queue"))
+            .task {
+                viewModel.setOfflineCacheQueueSelectionMode(false)
+                await viewModel.refreshOfflineCacheQueue()
+                dismissIfGroupIsEmpty()
+            }
+            .refreshable {
+                await viewModel.refreshOfflineCacheQueue()
+                dismissIfGroupIsEmpty()
+            }
+            .onChange(of: viewModel.offlineCacheQueueEntryCount) {
+                dismissIfGroupIsEmpty()
+            }
+            .onDisappear {
+                viewModel.setOfflineCacheQueueSelectionMode(false)
+            }
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(L10n.string("common.close")) {
+                        dismiss()
+                    }
+                }
+
+                ToolbarItem(placement: .primaryAction) {
+                    if group != nil {
+                        Button(
+                            viewModel.isOfflineCacheQueueSelectionMode
+                                ? L10n.string("common.done")
+                                : L10n.string("common.select")
+                        ) {
+                            viewModel.setOfflineCacheQueueSelectionMode(!viewModel.isOfflineCacheQueueSelectionMode)
+                        }
+                        .disabled(viewModel.isOfflineCacheQueueCommandRunning)
+                    }
+                }
+
+                if viewModel.isOfflineCacheQueueSelectionMode {
+                    #if os(iOS)
+                    ToolbarItem(placement: .bottomBar) {
+                        MineOfflineCacheQueueSelectAllButton(viewModel: viewModel, favoriteID: favoriteID)
+                    }
+                    ToolbarItem(placement: .bottomBar) {
+                        Spacer()
+                    }
+                    ToolbarItem(placement: .bottomBar) {
+                        MineOfflineCacheQueueCancelSelectionButton(viewModel: viewModel)
+                    }
+                    #else
+                    ToolbarItem(placement: .secondaryAction) {
+                        MineOfflineCacheQueueSelectAllButton(viewModel: viewModel, favoriteID: favoriteID)
+                    }
+                    ToolbarItem(placement: .confirmationAction) {
+                        MineOfflineCacheQueueCancelSelectionButton(viewModel: viewModel)
+                    }
+                    #endif
+                }
+            }
+            .overlay {
+                if viewModel.isLoadingOfflineCacheQueue {
+                    ProgressView()
+                }
+            }
+        }
+    }
+
+    private func dismissIfGroupIsEmpty() {
+        if group == nil {
+            dismiss()
         }
     }
 }

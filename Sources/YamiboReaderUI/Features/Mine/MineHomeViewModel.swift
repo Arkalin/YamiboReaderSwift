@@ -223,8 +223,11 @@ final class MineHomeViewModel {
         }
     }
 
-    func selectAllOfflineCacheWorks() {
-        selectedOfflineCacheWorkIDs = Set(offlineCacheQueueGroups.flatMap { group in
+    func selectAllOfflineCacheWorks(favoriteID: String? = nil) {
+        let groups = favoriteID.map { id in
+            offlineCacheQueueGroups.filter { $0.favoriteID == id }
+        } ?? offlineCacheQueueGroups
+        selectedOfflineCacheWorkIDs = Set(groups.flatMap { group in
             group.chapters.map(\.id)
         })
     }
