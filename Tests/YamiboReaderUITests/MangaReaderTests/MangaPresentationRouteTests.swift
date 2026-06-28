@@ -679,17 +679,13 @@ final class MangaPresentationRouteTests: XCTestCase {
 }
 
 private func makeAppModelWithReaderResumeRouteStore() async throws -> (YamiboAppModel, ReaderResumeRouteStore) {
-    let suiteName = "reader-resume-app-model-tests-\(UUID().uuidString)"
-    try XCTUnwrap(UserDefaults(suiteName: suiteName)).removePersistentDomain(forName: suiteName)
-    let store = ReaderResumeRouteStore(
-        defaults: try XCTUnwrap(UserDefaults(suiteName: suiteName)),
-        key: "reader-route"
-    )
+    let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "reader-resume-app-model-tests")
+    let store = try ReaderResumeRouteStore(testSuiteName: defaultsSuiteName, key: "reader-route")
     let context = YamiboAppContext(
-        sessionStore: SessionStore(defaults: try XCTUnwrap(UserDefaults(suiteName: suiteName)), key: "session"),
-        settingsStore: SettingsStore(defaults: try XCTUnwrap(UserDefaults(suiteName: suiteName)), key: "settings"),
+        sessionStore: try SessionStore(testSuiteName: defaultsSuiteName, key: "session"),
+        settingsStore: try SettingsStore(testSuiteName: defaultsSuiteName, key: "settings"),
         readerResumeRouteStore: store,
-        favoriteStore: FavoriteStore(defaults: try XCTUnwrap(UserDefaults(suiteName: suiteName)), key: "favorites")
+        favoriteStore: try FavoriteStore(testSuiteName: defaultsSuiteName, key: "favorites")
     )
     let appModel = await MainActor.run {
         YamiboAppModel(appContext: context)
@@ -699,14 +695,12 @@ private func makeAppModelWithReaderResumeRouteStore() async throws -> (YamiboApp
 
 @MainActor
 private func makeIsolatedAppModel(initialTab: AppTab = .forum) -> YamiboAppModel {
-    let suiteName = "manga-presentation-route-\(UUID().uuidString)"
-    let defaults = UserDefaults(suiteName: suiteName)!
-    defaults.removePersistentDomain(forName: suiteName)
+    let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "manga-presentation-route")
     let context = YamiboAppContext(
-        sessionStore: SessionStore(defaults: defaults, key: "session"),
-        settingsStore: SettingsStore(defaults: defaults, key: "settings"),
-        readerResumeRouteStore: ReaderResumeRouteStore(defaults: defaults, key: "reader-route"),
-        favoriteStore: FavoriteStore(defaults: defaults, key: "favorites")
+        sessionStore: try! SessionStore(testSuiteName: defaultsSuiteName, key: "session"),
+        settingsStore: try! SettingsStore(testSuiteName: defaultsSuiteName, key: "settings"),
+        readerResumeRouteStore: try! ReaderResumeRouteStore(testSuiteName: defaultsSuiteName, key: "reader-route"),
+        favoriteStore: try! FavoriteStore(testSuiteName: defaultsSuiteName, key: "favorites")
     )
     return YamiboAppModel(appContext: context, initialTab: initialTab)
 }
@@ -737,12 +731,13 @@ private struct AppModelWebDAVFixture: Sendable {
 }
 
 private func makeAppModelWebDAVFixture(suiteName: String) throws -> AppModelWebDAVFixture {
+    let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: suiteName)
     return AppModelWebDAVFixture(
-        sessionStore: SessionStore(key: "\(suiteName).session"),
-        settingsStore: SettingsStore(key: "\(suiteName).settings"),
-        webDAVSettingsStore: WebDAVSyncSettingsStore(key: "\(suiteName).webdav"),
-        resumeRouteStore: ReaderResumeRouteStore(key: "\(suiteName).reader-route"),
-        favoriteStore: FavoriteStore(key: "\(suiteName).favorites"),
+        sessionStore: try SessionStore(testSuiteName: defaultsSuiteName, key: "session"),
+        settingsStore: try SettingsStore(testSuiteName: defaultsSuiteName, key: "settings"),
+        webDAVSettingsStore: try WebDAVSyncSettingsStore(testSuiteName: defaultsSuiteName, key: "webdav"),
+        resumeRouteStore: try ReaderResumeRouteStore(testSuiteName: defaultsSuiteName, key: "reader-route"),
+        favoriteStore: try FavoriteStore(testSuiteName: defaultsSuiteName, key: "favorites"),
         session: makeAppModelWebDAVTestSession()
     )
 }
