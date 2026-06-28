@@ -79,6 +79,53 @@ struct MangaReaderTestsMangaOfflineCacheQueueExecutor {
         #expect(await store.offlineCacheState(favoriteID: "favorite-a", tid: "300") == .cached)
     }
 
+    @Test func cacheCompletionDoesNotUpdateReadingProgressResumeRouteOrRecentReading() async throws {
+        let suiteName = "manga-offline-cache-no-progress-side-effects-\(UUID().uuidString)"
+        try #require(UserDefaults(suiteName: suiteName)).removePersistentDomain(forName: suiteName)
+        let store = FileMangaOfflineCacheStore(baseDirectory: try makeTemporaryExecutorDirectory())
+        let favoriteStore = FavoriteStore(defaults: try #require(UserDefaults(suiteName: suiteName)), key: "favorites")
+        let resumeRouteStore = ReaderResumeRouteStore(defaults: try #require(UserDefaults(suiteName: suiteName)), key: "resume-route")
+        let favoriteURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=350&mobile=2"))
+        let chapterURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=350&page=2&mobile=2"))
+        let favorite = Favorite(
+            id: "favorite-progress",
+            title: "阅读进度漫画",
+            url: favoriteURL,
+            mangaPageIndex: 5,
+            lastChapter: "既有章节",
+            type: .manga,
+            lastMangaURL: chapterURL,
+            lastReadAt: Date(timeIntervalSince1970: 1_700_000_000)
+        )
+        let resumeRoute = ReaderResumeRoute.manga(.native(MangaLaunchContext(
+            originalThreadURL: favoriteURL,
+            chapterURL: chapterURL,
+            displayTitle: "阅读进度漫画",
+            source: .resume,
+            initialPage: 5
+        )))
+        let imageURLs = try makeImageURLs(tid: "350", count: 2)
+        try await favoriteStore.saveFavorites([favorite])
+        try await resumeRouteStore.save(resumeRoute)
+        _ = try await store.enqueueOfflineCacheWork(
+            try makeExecutorWorkRequest(favoriteID: favorite.id, tid: "350", targetImageURLs: imageURLs)
+        )
+        let acquirer = RecordingOfflineImageAcquirer()
+        await acquirer.setData(for: imageURLs)
+        let executor = MangaOfflineCacheQueueExecutor(
+            store: store,
+            chapterDocumentLoader: RecordingChapterDocumentLoader(),
+            imageAcquirer: acquirer
+        )
+
+        try await executor.continueQueue()
+        await executor.waitForIdle()
+
+        #expect(await store.offlineCacheState(favoriteID: favorite.id, tid: "350") == .cached)
+        #expect(await favoriteStore.favorite(id: favorite.id) == favorite)
+        #expect(await resumeRouteStore.load() == resumeRoute)
+    }
+
     @Test func pauseCancelsInFlightTransfersAndPreservesCompletedProgress() async throws {
         let store = FileMangaOfflineCacheStore(baseDirectory: try makeTemporaryExecutorDirectory())
         let imageURLs = try makeImageURLs(tid: "400", count: 4)
