@@ -1713,6 +1713,9 @@ import Testing
     let mangaImageDataCacheStore = FileMangaImageDataCacheStore(
         baseDirectory: rootDirectory.appendingPathComponent("manga-image-data", isDirectory: true)
     )
+    let mangaOfflineCacheStore = FileMangaOfflineCacheStore(
+        baseDirectory: rootDirectory.appendingPathComponent("manga-offline-cache", isDirectory: true)
+    )
     let appContext = YamiboAppContext(
         sessionStore: sessionStore,
         settingsStore: settingsStore,
@@ -1722,7 +1725,8 @@ import Testing
         favoriteBackgroundImageStore: favoriteBackgroundImageStore,
         mangaDirectoryStore: mangaDirectoryStore,
         mangaChapterDocumentStore: mangaChapterDocumentStore,
-        mangaImageDataCacheStore: mangaImageDataCacheStore
+        mangaImageDataCacheStore: mangaImageDataCacheStore,
+        mangaOfflineCacheStore: mangaOfflineCacheStore
     )
 
     let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=700&mobile=2"))
@@ -1776,6 +1780,22 @@ import Testing
         Data(repeating: 6, count: 128),
         for: try #require(URL(string: "https://img.example.com/reset.jpg"))
     )
+    let offlineImageURL = try #require(URL(string: "https://img.example.com/offline-reset.jpg"))
+    try await mangaOfflineCacheStore.saveOfflineImageData(
+        Data(repeating: 7, count: 64),
+        for: offlineImageURL
+    )
+    try await mangaOfflineCacheStore.saveMembership(
+        MangaOfflineCacheMembership(
+            favoriteID: threadURL.absoluteString,
+            favoriteTitle: "测试漫画",
+            favoriteURL: threadURL,
+            tid: "700",
+            chapterTitle: "测试漫画",
+            chapterURL: threadURL,
+            imageURLs: [offlineImageURL]
+        )
+    )
 
     try await appContext.resetApplicationData()
 
@@ -1788,6 +1808,8 @@ import Testing
     let mangaDirectoryBytes = await mangaDirectoryStore.totalDiskUsageBytes()
     let mangaChapterDocumentBytes = await mangaChapterDocumentStore.totalDiskUsageBytes()
     let mangaImageDataCacheBytes = await mangaImageDataCacheStore.totalDiskUsageBytes()
+    let mangaOfflineCacheBytes = await mangaOfflineCacheStore.totalDiskUsageBytes()
+    let mangaOfflineMemberships = await mangaOfflineCacheStore.allMemberships()
 
     #expect(session == SessionState())
     #expect(settings == AppSettings())
@@ -1798,6 +1820,8 @@ import Testing
     #expect(mangaDirectoryBytes == 0)
     #expect(mangaChapterDocumentBytes == 0)
     #expect(mangaImageDataCacheBytes == 0)
+    #expect(mangaOfflineCacheBytes == 0)
+    #expect(mangaOfflineMemberships.isEmpty)
 }
 
 private func makeIsolatedDefaults(prefix: String) throws -> UserDefaults {
