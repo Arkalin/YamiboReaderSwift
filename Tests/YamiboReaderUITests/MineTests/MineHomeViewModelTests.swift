@@ -300,6 +300,7 @@ final class MineHomeViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.offlineCacheQueueGroups[1].progressText, L10n.string("mine.offline_queue.image_progress_format", 1, 2))
         XCTAssertEqual(viewModel.offlineCacheQueueGroups[1].percentageText, L10n.string("mine.offline_queue.percent_format", 50))
         XCTAssertEqual(viewModel.offlineCacheQueueGroups[1].progressFraction, 0.5)
+        XCTAssertEqual(viewModel.offlineCacheQueueGroups[1].failureStatusText, "Timeout")
 
         let activeRow = viewModel.offlineCacheQueueGroups[1].chapters[0]
         XCTAssertEqual(activeRow.completedImageCount, 1)

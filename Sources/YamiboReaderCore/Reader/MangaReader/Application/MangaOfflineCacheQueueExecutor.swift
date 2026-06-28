@@ -275,6 +275,9 @@ public actor MangaOfflineCacheQueueExecutor {
                     }
                     let startedAt = Date()
                     let acquisition = try await imageAcquirer.acquireImageData(for: imageURL, refererURL: work.chapterURL)
+                    guard !acquisition.data.isEmpty else {
+                        throw YamiboError.invalidResponse(statusCode: nil)
+                    }
                     try Task.checkCancellation()
                     guard await store.offlineCacheWork(ownerName: work.ownerName, tid: work.tid) != nil else {
                         throw CancellationError()
