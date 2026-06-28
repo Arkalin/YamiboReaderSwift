@@ -16,6 +16,7 @@ public actor FileMangaOfflineCacheStore: MangaOfflineCacheStoring {
     private var queueWorks: [String: MangaOfflineCacheWork] = [:]
     private var queueRunState: MangaOfflineCacheQueueRunState = .paused
     private var didLoadIndex = false
+    private let updateNotifier = MangaOfflineCacheUpdateNotifier()
 
     public init(
         fileManager: FileManager = .default,
@@ -37,6 +38,10 @@ public actor FileMangaOfflineCacheStore: MangaOfflineCacheStoring {
         encoder.outputFormatting = [.sortedKeys]
         encoder.dateEncodingStrategy = .iso8601
         decoder.dateDecodingStrategy = .iso8601
+    }
+
+    nonisolated public func offlineCacheUpdates() -> AsyncStream<Void> {
+        updateNotifier.stream()
     }
 
     public func membership(favoriteID: String, tid: String) async -> MangaOfflineCacheMembership? {
@@ -80,6 +85,7 @@ public actor FileMangaOfflineCacheStore: MangaOfflineCacheStoring {
             memberships[membershipKey(for: normalized.id)] = normalized
             removeCompletedQueueWorkIfNeeded(for: normalized)
             try persistIndex()
+            notifyOfflineCacheDidChange()
         } catch {
             throw persistenceError(from: error)
         }
@@ -97,9 +103,11 @@ public actor FileMangaOfflineCacheStore: MangaOfflineCacheStoring {
             } else {
                 try removeUnreferencedImages(forImageURLs: canceledImageURLs)
                 try persistIndex()
+                notifyOfflineCacheDidChange()
                 return
             }
             try persistIndex()
+            notifyOfflineCacheDidChange()
         } catch {
             throw persistenceError(from: error)
         }
@@ -115,6 +123,7 @@ public actor FileMangaOfflineCacheStore: MangaOfflineCacheStoring {
             guard !removed.isEmpty else {
                 try removeUnreferencedImages(forImageURLs: canceled.flatMap { $0.targetImageURLs + $0.completedImageURLs })
                 try persistIndex()
+                notifyOfflineCacheDidChange()
                 return
             }
             for key in removed.keys {
@@ -125,6 +134,7 @@ public actor FileMangaOfflineCacheStore: MangaOfflineCacheStoring {
                 additionalImageURLs: canceled.flatMap { $0.targetImageURLs + $0.completedImageURLs }
             )
             try persistIndex()
+            notifyOfflineCacheDidChange()
         } catch {
             throw persistenceError(from: error)
         }
@@ -151,6 +161,7 @@ public actor FileMangaOfflineCacheStore: MangaOfflineCacheStoring {
             guard !data.isEmpty else {
                 removeImage(forKey: key)
                 try persistIndex()
+                notifyOfflineCacheDidChange()
                 return
             }
 
@@ -165,6 +176,7 @@ public actor FileMangaOfflineCacheStore: MangaOfflineCacheStoring {
             images[key] = MangaOfflineCacheImageMetadata(fileName: fileName, byteCount: data.count)
             removeCompletedQueueWorkReferencingImage(forKey: key)
             try persistIndex()
+            notifyOfflineCacheDidChange()
         } catch {
             throw persistenceError(from: error)
         }
@@ -236,6 +248,7 @@ public actor FileMangaOfflineCacheStore: MangaOfflineCacheStoring {
             )
             queueWorks[key] = work
             try persistIndex()
+            notifyOfflineCacheDidChange()
             return .enqueued(work)
         } catch {
             throw persistenceError(from: error)
@@ -259,6 +272,7 @@ public actor FileMangaOfflineCacheStore: MangaOfflineCacheStoring {
                 currentBytesPerSecond: currentBytesPerSecond
             )
             try persistIndex()
+            notifyOfflineCacheDidChange()
         } catch {
             throw persistenceError(from: error)
         }
@@ -279,6 +293,7 @@ public actor FileMangaOfflineCacheStore: MangaOfflineCacheStoring {
                 completedImageURLs: completedImageURLs
             )
             try persistIndex()
+            notifyOfflineCacheDidChange()
         } catch {
             throw persistenceError(from: error)
         }
@@ -291,6 +306,7 @@ public actor FileMangaOfflineCacheStore: MangaOfflineCacheStoring {
             guard let work = queueWorks[key] else { return }
             queueWorks[key] = work.markingFailed(message: message)
             try persistIndex()
+            notifyOfflineCacheDidChange()
         } catch {
             throw persistenceError(from: error)
         }
@@ -304,6 +320,7 @@ public actor FileMangaOfflineCacheStore: MangaOfflineCacheStoring {
                 try removeUnreferencedImages(forImageURLs: canceled.targetImageURLs + canceled.completedImageURLs)
             }
             try persistIndex()
+            notifyOfflineCacheDidChange()
         } catch {
             throw persistenceError(from: error)
         }
@@ -317,6 +334,7 @@ public actor FileMangaOfflineCacheStore: MangaOfflineCacheStoring {
             queueWorks = queueWorks.filter { $0.value.favoriteID != normalizedFavoriteID }
             try removeUnreferencedImages(forImageURLs: canceled.flatMap { $0.targetImageURLs + $0.completedImageURLs })
             try persistIndex()
+            notifyOfflineCacheDidChange()
         } catch {
             throw persistenceError(from: error)
         }
@@ -328,6 +346,7 @@ public actor FileMangaOfflineCacheStore: MangaOfflineCacheStoring {
             queueWorks = [:]
             queueRunState = .paused
             try persistIndex()
+            notifyOfflineCacheDidChange()
         } catch {
             throw persistenceError(from: error)
         }
@@ -352,6 +371,7 @@ public actor FileMangaOfflineCacheStore: MangaOfflineCacheStoring {
                 }
             }
             try persistIndex()
+            notifyOfflineCacheDidChange()
         } catch {
             throw persistenceError(from: error)
         }
@@ -379,6 +399,7 @@ public actor FileMangaOfflineCacheStore: MangaOfflineCacheStoring {
             images = [:]
             queueWorks = [:]
             queueRunState = .paused
+            notifyOfflineCacheDidChange()
         } catch {
             throw persistenceError(from: error)
         }
@@ -465,6 +486,10 @@ public actor FileMangaOfflineCacheStore: MangaOfflineCacheStoring {
         )
         let data = try encoder.encode(envelope)
         try data.write(to: indexURL, options: [.atomic])
+    }
+
+    private func notifyOfflineCacheDidChange() {
+        updateNotifier.notify()
     }
 
     private func ensureBaseDirectoryExists() throws {
@@ -601,4 +626,36 @@ private struct MangaOfflineCacheIndexEnvelope: Codable {
 private struct MangaOfflineCacheImageMetadata: Codable {
     var fileName: String
     var byteCount: Int
+}
+
+private final class MangaOfflineCacheUpdateNotifier: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuations: [UUID: AsyncStream<Void>.Continuation] = [:]
+
+    func stream() -> AsyncStream<Void> {
+        AsyncStream { continuation in
+            let id = UUID()
+            lock.withLock {
+                continuations[id] = continuation
+            }
+            continuation.onTermination = { [weak self] _ in
+                self?.removeContinuation(id: id)
+            }
+        }
+    }
+
+    func notify() {
+        let activeContinuations = lock.withLock {
+            Array(continuations.values)
+        }
+        for continuation in activeContinuations {
+            continuation.yield(())
+        }
+    }
+
+    private func removeContinuation(id: UUID) {
+        _ = lock.withLock {
+            continuations.removeValue(forKey: id)
+        }
+    }
 }

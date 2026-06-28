@@ -225,6 +225,7 @@ final class MineHomeViewModel {
 
     private let appContext: YamiboAppContext
     @ObservationIgnored private var offlineCacheQueueController: (any MangaOfflineCacheQueueControlling)?
+    @ObservationIgnored private var offlineCacheQueueUpdatesTask: Task<Void, Never>?
     @ObservationIgnored private var lastAutomaticProfileRefreshCredential: String?
 
     init(
@@ -234,6 +235,10 @@ final class MineHomeViewModel {
         self.appContext = appContext
         self.offlineCacheQueueController = offlineCacheQueueController
         profileAvatarLoader = appContext.makeProfileAvatarLoader()
+    }
+
+    deinit {
+        offlineCacheQueueUpdatesTask?.cancel()
     }
 
     var isLoggedIn: Bool {
@@ -261,6 +266,7 @@ final class MineHomeViewModel {
         isLoading = true
         defer { isLoading = false }
 
+        startObservingOfflineCacheQueueUpdates()
         session = await appContext.sessionStore.load()
         profile = await appContext.profileStore.load()
         await refreshOfflineCacheQueue()
@@ -436,6 +442,18 @@ final class MineHomeViewModel {
         let controller = await appContext.makeMangaOfflineCacheQueueExecutor()
         offlineCacheQueueController = controller
         return controller
+    }
+
+    private func startObservingOfflineCacheQueueUpdates() {
+        guard offlineCacheQueueUpdatesTask == nil else { return }
+        let store = appContext.makeMangaOfflineCacheStore()
+        let updates = store.offlineCacheUpdates()
+        offlineCacheQueueUpdatesTask = Task { @MainActor [weak self] in
+            for await _ in updates {
+                guard !Task.isCancelled else { return }
+                await self?.refreshOfflineCacheQueue()
+            }
+        }
     }
 
     private func offlineCacheDirectoriesByFavoriteID(

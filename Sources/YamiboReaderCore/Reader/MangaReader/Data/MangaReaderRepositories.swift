@@ -86,6 +86,7 @@ public protocol MangaImageDataCaching: Sendable {
 }
 
 public protocol MangaOfflineCacheStoring: Sendable {
+    func offlineCacheUpdates() -> AsyncStream<Void>
     func membership(favoriteID: String, tid: String) async -> MangaOfflineCacheMembership?
     func memberships(forFavoriteID favoriteID: String) async -> [MangaOfflineCacheMembership]
     func allMemberships() async -> [MangaOfflineCacheMembership]
