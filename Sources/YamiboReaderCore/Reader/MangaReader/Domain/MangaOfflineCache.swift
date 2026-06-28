@@ -240,6 +240,28 @@ public struct MangaOfflineCacheWork: Codable, Hashable, Identifiable, Sendable {
         )
     }
 
+    public func preparingForRun(
+        targetImageURLs: [URL]? = nil,
+        completedImageURLs: [URL],
+        at date: Date = .now
+    ) -> MangaOfflineCacheWork {
+        MangaOfflineCacheWork(
+            favoriteID: favoriteID,
+            favoriteTitle: favoriteTitle,
+            favoriteURL: favoriteURL,
+            tid: tid,
+            chapterTitle: chapterTitle,
+            chapterURL: chapterURL,
+            targetImageURLs: targetImageURLs ?? self.targetImageURLs,
+            completedImageURLs: completedImageURLs,
+            state: .paused,
+            failureMessage: nil,
+            insertionIndex: insertionIndex,
+            createdAt: createdAt,
+            updatedAt: date
+        )
+    }
+
     private static func uniqueURLs(_ urls: [URL]) -> [URL] {
         var seen: Set<String> = []
         var output: [URL] = []
