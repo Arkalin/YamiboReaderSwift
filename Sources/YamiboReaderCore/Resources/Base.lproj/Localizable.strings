@@ -220,6 +220,12 @@
 "manga.loading" = "加载漫画中…";
 "manga.name" = "漫画名称";
 "manga.no_chapters" = "暂无章节";
+"manga.offline_cache.add_favorite_message" = "请先将“%@”加入收藏，再缓存章节。";
+"manga.offline_cache.add_favorite_title" = "需要收藏";
+"manga.offline_cache.caching" = "缓存中";
+"manga.offline_cache.chapter_section" = "章节";
+"manga.offline_cache.title" = "漫画缓存";
+"manga.offline_cache.uncached" = "未缓存";
 "manga.double_tap_zoom" = "双击缩放";
 "manga.page_turn_direction" = "翻页方向";
 "manga.page_turn_direction.left_to_right" = "从左向右";
