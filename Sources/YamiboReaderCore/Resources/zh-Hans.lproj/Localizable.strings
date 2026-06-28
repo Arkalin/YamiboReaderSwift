@@ -396,6 +396,15 @@
 "settings.confirm_clear_manga_index_cache" = "确认清除漫画索引缓存";
 "settings.confirm_clear_novel_cache" = "确认清除小说缓存";
 "settings.confirm_reset_application" = "确认初始化应用";
+"settings.manga_offline_cache.cleanup" = "漫画离线缓存";
+"settings.manga_offline_cache.confirm_batch_message" = "将删除已选 %d 个收藏条目的漫画离线缓存、未完成任务和失败任务。";
+"settings.manga_offline_cache.confirm_batch_title" = "确认删除漫画离线缓存";
+"settings.manga_offline_cache.confirm_single_message" = "将删除“%@”的漫画离线缓存、未完成任务和失败任务。";
+"settings.manga_offline_cache.confirm_single_title" = "确认删除漫画离线缓存";
+"settings.manga_offline_cache.delete_selected_format" = "删除已选 %d 项";
+"settings.manga_offline_cache.empty_message" = "没有可清理的漫画离线缓存或未完成任务。";
+"settings.manga_offline_cache.empty_title" = "暂无漫画离线缓存";
+"settings.manga_offline_cache.title" = "漫画离线缓存";
 "settings.favorite_background" = "收藏页背景";
 "settings.favorite_background.custom" = "自定义";
 "settings.favorite_background.default" = "默认";

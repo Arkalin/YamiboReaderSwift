@@ -62,6 +62,32 @@ struct MangaReaderTestsMangaOfflineCacheStore {
         ])
     }
 
+    @Test func usageIncludesUnfinishedWorkOwnerAndStoredWorkImages() async throws {
+        let store = FileMangaOfflineCacheStore(baseDirectory: try makeTemporaryOfflineCacheDirectory())
+        let completedImage = try #require(URL(string: "https://img.example.com/work-complete.jpg"))
+        let missingImage = try #require(URL(string: "https://img.example.com/work-missing.jpg"))
+
+        try await store.saveOfflineImageData(Data(repeating: 4, count: 6), for: completedImage)
+        _ = try await store.enqueueOfflineCacheWork(
+            makeOfflineWorkRequest(
+                favoriteID: "favorite-work",
+                tid: "40",
+                targetImageURLs: [completedImage, missingImage]
+            )
+        )
+        try await store.updateOfflineCacheWorkProgress(
+            favoriteID: "favorite-work",
+            tid: "40",
+            targetImageURLs: [completedImage, missingImage],
+            completedImageURLs: [completedImage],
+            currentBytesPerSecond: nil
+        )
+
+        #expect(await store.diskUsageByFavorite() == [
+            MangaOfflineCacheFavoriteUsage(favoriteID: "favorite-work", byteCount: 6)
+        ])
+    }
+
     @Test func deletingMembershipPreservesImagesReferencedByRemainingMemberships() async throws {
         let directory = try makeTemporaryOfflineCacheDirectory()
         let store = FileMangaOfflineCacheStore(baseDirectory: directory)
@@ -157,6 +183,22 @@ private func makeOfflineMembership(
         chapterTitle: "第\(tid)话",
         chapterURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(tid)&page=5")),
         imageURLs: imageURLs
+    )
+}
+
+private func makeOfflineWorkRequest(
+    favoriteID: String,
+    tid: String,
+    targetImageURLs: [URL]
+) throws -> MangaOfflineCacheWorkRequest {
+    MangaOfflineCacheWorkRequest(
+        favoriteID: favoriteID,
+        favoriteTitle: "作品 \(favoriteID)",
+        favoriteURL: try #require(URL(string: "https://bbs.yamibo.com/thread-\(tid)-1-1.html")),
+        tid: tid,
+        chapterTitle: "第\(tid)话",
+        chapterURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(tid)&page=5")),
+        targetImageURLs: targetImageURLs
     )
 }
 
