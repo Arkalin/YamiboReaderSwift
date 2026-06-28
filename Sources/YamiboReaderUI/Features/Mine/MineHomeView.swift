@@ -42,6 +42,8 @@ public struct MineHomeView: View {
                     }
                 }
 
+                MineCheckInSection()
+                MineLibraryEntriesSection()
                 MineSettingsSection(
                     showSettings: {
                         showingSettingsSheet = true
@@ -543,7 +545,7 @@ private struct MineSettingsSection: View {
 
     var body: some View {
         Section {
-            MineSettingsRow(
+            MineEntryButtonRow(
                 title: L10n.string("settings.title"),
                 systemImage: "gearshape.fill",
                 tint: .gray,
@@ -553,7 +555,51 @@ private struct MineSettingsSection: View {
     }
 }
 
-private struct MineSettingsRow: View {
+private struct MineCheckInSection: View {
+    var body: some View {
+        Section {
+            MineEntryDisplayRow(
+                title: L10n.string("mine.check_in"),
+                systemImage: "checkmark.seal.fill",
+                tint: .green
+            )
+        }
+    }
+}
+
+private struct MineLibraryEntriesSection: View {
+    var body: some View {
+        Section {
+            MineEntryDisplayRow(
+                title: L10n.string("forum.history"),
+                systemImage: "clock.arrow.circlepath",
+                tint: .blue
+            )
+            MineEntryDisplayRow(
+                title: L10n.string("mine.my_likes"),
+                systemImage: "heart.fill",
+                tint: .pink
+            )
+            MineEntryDisplayRow(
+                title: L10n.string("mine.download_queue"),
+                systemImage: "arrow.down.circle.fill",
+                tint: .indigo
+            )
+        }
+    }
+}
+
+private struct MineEntryDisplayRow: View {
+    let title: String
+    let systemImage: String
+    let tint: Color
+
+    var body: some View {
+        MineEntryRowContent(title: title, systemImage: systemImage, tint: tint)
+    }
+}
+
+private struct MineEntryButtonRow: View {
     let title: String
     let systemImage: String
     let tint: Color
@@ -561,25 +607,35 @@ private struct MineSettingsRow: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 12) {
-                Image(systemName: systemImage)
-                    .font(.body.weight(.semibold))
-                    .foregroundStyle(.white)
-                    .frame(width: 28, height: 28)
-                    .background(tint, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-
-                Text(title)
-                    .foregroundStyle(.primary)
-
-                Spacer(minLength: 8)
-
-                Image(systemName: "chevron.right")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.tertiary)
-            }
-            .contentShape(Rectangle())
+            MineEntryRowContent(title: title, systemImage: systemImage, tint: tint)
         }
         .buttonStyle(.plain)
+    }
+}
+
+private struct MineEntryRowContent: View {
+    let title: String
+    let systemImage: String
+    let tint: Color
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: systemImage)
+                .font(.body.weight(.semibold))
+                .foregroundStyle(.white)
+                .frame(width: 28, height: 28)
+                .background(tint, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+
+            Text(title)
+                .foregroundStyle(.primary)
+
+            Spacer(minLength: 8)
+
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.tertiary)
+        }
+        .contentShape(Rectangle())
     }
 }
 
