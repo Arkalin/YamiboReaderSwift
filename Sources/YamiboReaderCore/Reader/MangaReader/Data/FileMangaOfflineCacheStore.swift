@@ -183,6 +183,14 @@ public actor FileMangaOfflineCacheStore: MangaOfflineCacheStoring {
             imageKeysByFavorite[membership.favoriteID] = keys
         }
 
+        for work in queueWorks.values {
+            var keys = imageKeysByFavorite[work.favoriteID, default: []]
+            for imageURL in work.targetImageURLs + work.completedImageURLs {
+                keys.insert(imageKey(for: imageURL))
+            }
+            imageKeysByFavorite[work.favoriteID] = keys
+        }
+
         for (favoriteID, imageKeys) in imageKeysByFavorite {
             usageByFavorite[favoriteID] = imageKeys.reduce(0) { total, key in
                 total + (images[key]?.byteCount ?? 0)

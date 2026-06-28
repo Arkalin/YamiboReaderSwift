@@ -1,3 +1,4 @@
+import Foundation
 import YamiboReaderCore
 
 enum SystemSettingsAction: Equatable {
@@ -5,7 +6,49 @@ enum SystemSettingsAction: Equatable {
     case clearingNovelCache
     case clearingMangaIndexCache
     case clearingMangaImageCache
+    case clearingMangaOfflineCache
     case resettingApplication
+}
+
+struct MangaOfflineCacheCleanupRow: Hashable, Identifiable {
+    var favoriteID: String
+    var title: String
+    var byteCount: Int
+
+    var id: String { favoriteID }
+
+    var byteCountLabel: String {
+        let formatter = ByteCountFormatter()
+        formatter.countStyle = .file
+        formatter.allowedUnits = [.useBytes, .useKB, .useMB, .useGB]
+        return formatter.string(fromByteCount: Int64(max(0, byteCount)))
+    }
+}
+
+struct MangaOfflineCacheCleanupConfirmation: Identifiable, Equatable {
+    var favoriteIDs: [String]
+    var favoriteTitles: [String]
+
+    var id: String { favoriteIDs.joined(separator: "|") }
+
+    init(favoriteIDs: [String], favoriteTitles: [String]) {
+        self.favoriteIDs = favoriteIDs
+        self.favoriteTitles = favoriteTitles
+    }
+
+    var title: String {
+        if favoriteIDs.count == 1 {
+            return L10n.string("settings.manga_offline_cache.confirm_single_title")
+        }
+        return L10n.string("settings.manga_offline_cache.confirm_batch_title")
+    }
+
+    var message: String {
+        if let firstTitle = favoriteTitles.first, favoriteIDs.count == 1 {
+            return L10n.string("settings.manga_offline_cache.confirm_single_message", firstTitle)
+        }
+        return L10n.string("settings.manga_offline_cache.confirm_batch_message", favoriteIDs.count)
+    }
 }
 
 enum SystemSettingsConfirmation: String, Identifiable {
