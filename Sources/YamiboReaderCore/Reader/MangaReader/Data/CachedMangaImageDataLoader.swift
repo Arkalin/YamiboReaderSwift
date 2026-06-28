@@ -58,7 +58,7 @@ public actor CachedMangaImageDataLoader: MangaImageDataLoading {
     private func offlineImageData(for url: URL, context: MangaImageOfflineCacheContext?) async -> Data? {
         guard let context, let offlineCacheStore else { return nil }
         guard let membership = await offlineCacheStore.membership(
-            favoriteID: context.favoriteID,
+            ownerName: context.ownerName,
             tid: context.tid
         ) else {
             return nil

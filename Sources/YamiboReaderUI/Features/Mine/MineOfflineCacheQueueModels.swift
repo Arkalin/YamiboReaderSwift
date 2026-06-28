@@ -1,9 +1,8 @@
 import Foundation
 import YamiboReaderCore
 
-struct MineOfflineCacheQueueFavoriteGroup: Hashable, Identifiable {
-    var favoriteID: String
-    var favoriteTitle: String
+struct MineOfflineCacheQueueOwnerGroup: Hashable, Identifiable {
+    var ownerName: String
     var chapterCount: Int
     var progressFraction: Double
     var progressText: String
@@ -11,15 +10,14 @@ struct MineOfflineCacheQueueFavoriteGroup: Hashable, Identifiable {
     var currentSpeedText: String?
     var chapters: [MineOfflineCacheQueueChapterRow]
 
-    var id: String { favoriteID }
+    var id: String { ownerName }
 
     init(group: MangaOfflineCacheQueueGroup) {
         let rows = group.works.map(MineOfflineCacheQueueChapterRow.init(work:))
         let completedImageCount = group.works.reduce(0) { $0 + $1.progress.completedImageCount }
         let targetImageCount = group.works.reduce(0) { $0 + $1.progress.targetImageCount }
         let currentBytesPerSecond = group.works.reduce(0) { $0 + $1.currentBytesPerSecond }
-        favoriteID = group.favoriteID
-        favoriteTitle = group.favoriteTitle
+        ownerName = group.ownerName
         chapterCount = rows.count
         progressFraction = targetImageCount > 0
             ? min(max(Double(completedImageCount) / Double(targetImageCount), 0), 1)

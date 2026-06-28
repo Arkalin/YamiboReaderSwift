@@ -111,25 +111,25 @@ public actor MangaOfflineCacheQueueExecutor {
         await runObserver?.queueRunDidCancel()
     }
 
-    public func cancelChapter(favoriteID: String, tid: String) async throws {
+    public func cancelChapter(ownerName: String, tid: String) async throws {
         let wasRunning = await store.offlineCacheQueueRunState() == .running
         runGeneration += 1
         runTask?.cancel()
         runTask = nil
         await runObserver?.queueRunDidCancel()
-        try await store.cancelOfflineCacheWork(favoriteID: favoriteID, tid: tid)
+        try await store.cancelOfflineCacheWork(ownerName: ownerName, tid: tid)
         if wasRunning {
             try await continueQueue()
         }
     }
 
-    public func cancelFavoriteGroup(favoriteID: String) async throws {
+    public func cancelOwnerGroup(ownerName: String) async throws {
         let wasRunning = await store.offlineCacheQueueRunState() == .running
         runGeneration += 1
         runTask?.cancel()
         runTask = nil
         await runObserver?.queueRunDidCancel()
-        try await store.cancelOfflineCacheWorks(forFavoriteID: favoriteID)
+        try await store.cancelOfflineCacheWorks(forOwnerName: ownerName)
         if wasRunning {
             try await continueQueue()
         }
@@ -161,7 +161,7 @@ public actor MangaOfflineCacheQueueExecutor {
                 return
             } catch {
                 try? await store.markOfflineCacheWorkFailed(
-                    favoriteID: work.favoriteID,
+                    ownerName: work.ownerName,
                     tid: work.tid,
                     message: Self.failureMessage(from: error)
                 )
@@ -185,7 +185,7 @@ public actor MangaOfflineCacheQueueExecutor {
 
     private func process(_ work: MangaOfflineCacheWork) async throws {
         try Task.checkCancellation()
-        guard await store.offlineCacheWork(favoriteID: work.favoriteID, tid: work.tid) != nil else {
+        guard await store.offlineCacheWork(ownerName: work.ownerName, tid: work.tid) != nil else {
             throw CancellationError()
         }
 
@@ -197,7 +197,7 @@ public actor MangaOfflineCacheQueueExecutor {
 
         var completedImageURLs = await reconciledCompletedImageURLs(targetImageURLs)
         try await store.prepareOfflineCacheWorkForRun(
-            favoriteID: documentBackedWork.favoriteID,
+            ownerName: documentBackedWork.ownerName,
             tid: documentBackedWork.tid,
             targetImageURLs: targetImageURLs,
             completedImageURLs: completedImageURLs
@@ -218,9 +218,7 @@ public actor MangaOfflineCacheQueueExecutor {
         try Task.checkCancellation()
         try await store.saveMembership(
             MangaOfflineCacheMembership(
-                favoriteID: documentBackedWork.favoriteID,
-                favoriteTitle: documentBackedWork.favoriteTitle,
-                favoriteURL: documentBackedWork.favoriteURL,
+                ownerName: documentBackedWork.ownerName,
                 tid: documentBackedWork.tid,
                 chapterTitle: documentBackedWork.chapterTitle,
                 chapterURL: documentBackedWork.chapterURL,
@@ -272,13 +270,13 @@ public actor MangaOfflineCacheQueueExecutor {
                 activeCount += 1
                 group.addTask { [store, imageAcquirer] in
                     try Task.checkCancellation()
-                    guard await store.offlineCacheWork(favoriteID: work.favoriteID, tid: work.tid) != nil else {
+                    guard await store.offlineCacheWork(ownerName: work.ownerName, tid: work.tid) != nil else {
                         throw CancellationError()
                     }
                     let startedAt = Date()
                     let acquisition = try await imageAcquirer.acquireImageData(for: imageURL, refererURL: work.chapterURL)
                     try Task.checkCancellation()
-                    guard await store.offlineCacheWork(favoriteID: work.favoriteID, tid: work.tid) != nil else {
+                    guard await store.offlineCacheWork(ownerName: work.ownerName, tid: work.tid) != nil else {
                         throw CancellationError()
                     }
                     try await store.saveOfflineImageData(acquisition.data, for: imageURL)
@@ -298,7 +296,7 @@ public actor MangaOfflineCacheQueueExecutor {
                 completedKeys.insert(result.imageURL.absoluteString)
                 completed = targetImageURLs.filter { completedKeys.contains($0.absoluteString) }
                 try await store.updateOfflineCacheWorkProgress(
-                    favoriteID: work.favoriteID,
+                    ownerName: work.ownerName,
                     tid: work.tid,
                     targetImageURLs: targetImageURLs,
                     completedImageURLs: completed,

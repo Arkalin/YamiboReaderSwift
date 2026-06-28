@@ -129,8 +129,8 @@ public final class MangaReaderWorkflow {
 
     private func offlineReadableCurrentChapterDirectory(for document: MangaChapterDocument) async -> MangaDirectory? {
         guard let offlineCacheStore,
-              let favoriteID = context.offlineCacheFavoriteID?.mangaReaderTrimmedNonEmpty,
-              let membership = await offlineCacheStore.membership(favoriteID: favoriteID, tid: document.tid),
+              let ownerName = context.directoryName?.mangaReaderTrimmedNonEmpty,
+              let membership = await offlineCacheStore.membership(ownerName: ownerName, tid: document.tid),
               membership.imageURLs.map(\.absoluteString) == document.imageURLs.map(\.absoluteString),
               !membership.imageURLs.isEmpty
         else {
@@ -143,7 +143,7 @@ public final class MangaReaderWorkflow {
             }
         }
 
-        let title = context.displayTitle.mangaReaderTrimmedNonEmpty ?? membership.favoriteTitle
+        let title = ownerName
         return MangaDirectory(
             cleanBookName: title,
             strategy: .pendingSearch,

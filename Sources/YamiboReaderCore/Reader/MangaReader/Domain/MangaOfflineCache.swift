@@ -1,19 +1,17 @@
 import Foundation
 
 public struct MangaOfflineCacheMembershipID: Codable, Hashable, Sendable {
-    public var favoriteID: String
+    public var ownerName: String
     public var tid: String
 
-    public init(favoriteID: String, tid: String) {
-        self.favoriteID = favoriteID.trimmingCharacters(in: .whitespacesAndNewlines)
+    public init(ownerName: String, tid: String) {
+        self.ownerName = ownerName.trimmingCharacters(in: .whitespacesAndNewlines)
         self.tid = tid.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
 
 public struct MangaOfflineCacheMembership: Codable, Hashable, Identifiable, Sendable {
-    public var favoriteID: String
-    public var favoriteTitle: String
-    public var favoriteURL: URL
+    public var ownerName: String
     public var tid: String
     public var chapterTitle: String
     public var chapterURL: URL
@@ -21,22 +19,18 @@ public struct MangaOfflineCacheMembership: Codable, Hashable, Identifiable, Send
     public var createdAt: Date
 
     public var id: MangaOfflineCacheMembershipID {
-        MangaOfflineCacheMembershipID(favoriteID: favoriteID, tid: tid)
+        MangaOfflineCacheMembershipID(ownerName: ownerName, tid: tid)
     }
 
     public init(
-        favoriteID: String,
-        favoriteTitle: String,
-        favoriteURL: URL,
+        ownerName: String,
         tid: String,
         chapterTitle: String,
         chapterURL: URL,
         imageURLs: [URL],
         createdAt: Date = .now
     ) {
-        self.favoriteID = favoriteID.trimmingCharacters(in: .whitespacesAndNewlines)
-        self.favoriteTitle = favoriteTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        self.favoriteURL = favoriteURL
+        self.ownerName = ownerName.trimmingCharacters(in: .whitespacesAndNewlines)
         self.tid = tid.trimmingCharacters(in: .whitespacesAndNewlines)
         self.chapterTitle = chapterTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         self.chapterURL = MangaReaderDataSupport.normalizedChapterURL(chapterURL, tid: self.tid)
@@ -45,12 +39,12 @@ public struct MangaOfflineCacheMembership: Codable, Hashable, Identifiable, Send
     }
 }
 
-public struct MangaOfflineCacheFavoriteUsage: Codable, Equatable, Sendable {
-    public var favoriteID: String
+public struct MangaOfflineCacheOwnerUsage: Codable, Equatable, Sendable {
+    public var ownerName: String
     public var byteCount: Int
 
-    public init(favoriteID: String, byteCount: Int) {
-        self.favoriteID = favoriteID
+    public init(ownerName: String, byteCount: Int) {
+        self.ownerName = ownerName
         self.byteCount = max(0, byteCount)
     }
 }
@@ -72,26 +66,20 @@ public enum MangaOfflineCacheQueueRunState: String, Codable, Hashable, Sendable 
 }
 
 public struct MangaOfflineCacheWorkRequest: Hashable, Sendable {
-    public var favoriteID: String
-    public var favoriteTitle: String
-    public var favoriteURL: URL
+    public var ownerName: String
     public var tid: String
     public var chapterTitle: String
     public var chapterURL: URL
     public var targetImageURLs: [URL]
 
     public init(
-        favoriteID: String,
-        favoriteTitle: String,
-        favoriteURL: URL,
+        ownerName: String,
         tid: String,
         chapterTitle: String,
         chapterURL: URL,
         targetImageURLs: [URL] = []
     ) {
-        self.favoriteID = favoriteID.trimmingCharacters(in: .whitespacesAndNewlines)
-        self.favoriteTitle = favoriteTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        self.favoriteURL = favoriteURL
+        self.ownerName = ownerName.trimmingCharacters(in: .whitespacesAndNewlines)
         self.tid = tid.trimmingCharacters(in: .whitespacesAndNewlines)
         self.chapterTitle = chapterTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         self.chapterURL = MangaReaderDataSupport.normalizedChapterURL(chapterURL, tid: self.tid)
@@ -124,9 +112,7 @@ public struct MangaOfflineCacheProgress: Codable, Hashable, Sendable {
 }
 
 public struct MangaOfflineCacheWork: Codable, Hashable, Identifiable, Sendable {
-    public var favoriteID: String
-    public var favoriteTitle: String
-    public var favoriteURL: URL
+    public var ownerName: String
     public var tid: String
     public var chapterTitle: String
     public var chapterURL: URL
@@ -140,7 +126,7 @@ public struct MangaOfflineCacheWork: Codable, Hashable, Identifiable, Sendable {
     public var updatedAt: Date
 
     public var id: MangaOfflineCacheMembershipID {
-        MangaOfflineCacheMembershipID(favoriteID: favoriteID, tid: tid)
+        MangaOfflineCacheMembershipID(ownerName: ownerName, tid: tid)
     }
 
     public var progress: MangaOfflineCacheProgress {
@@ -151,9 +137,7 @@ public struct MangaOfflineCacheWork: Codable, Hashable, Identifiable, Sendable {
     }
 
     public init(
-        favoriteID: String,
-        favoriteTitle: String,
-        favoriteURL: URL,
+        ownerName: String,
         tid: String,
         chapterTitle: String,
         chapterURL: URL,
@@ -166,9 +150,7 @@ public struct MangaOfflineCacheWork: Codable, Hashable, Identifiable, Sendable {
         createdAt: Date = .now,
         updatedAt: Date = .now
     ) {
-        self.favoriteID = favoriteID.trimmingCharacters(in: .whitespacesAndNewlines)
-        self.favoriteTitle = favoriteTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        self.favoriteURL = favoriteURL
+        self.ownerName = ownerName.trimmingCharacters(in: .whitespacesAndNewlines)
         self.tid = tid.trimmingCharacters(in: .whitespacesAndNewlines)
         self.chapterTitle = chapterTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         self.chapterURL = MangaReaderDataSupport.normalizedChapterURL(chapterURL, tid: self.tid)
@@ -188,9 +170,7 @@ public struct MangaOfflineCacheWork: Codable, Hashable, Identifiable, Sendable {
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.init(
-            favoriteID: try container.decode(String.self, forKey: .favoriteID),
-            favoriteTitle: try container.decode(String.self, forKey: .favoriteTitle),
-            favoriteURL: try container.decode(URL.self, forKey: .favoriteURL),
+            ownerName: try container.decode(String.self, forKey: .ownerName),
             tid: try container.decode(String.self, forKey: .tid),
             chapterTitle: try container.decode(String.self, forKey: .chapterTitle),
             chapterURL: try container.decode(URL.self, forKey: .chapterURL),
@@ -207,9 +187,7 @@ public struct MangaOfflineCacheWork: Codable, Hashable, Identifiable, Sendable {
 
     public init(request: MangaOfflineCacheWorkRequest, insertionIndex: Int, now: Date = .now) {
         self.init(
-            favoriteID: request.favoriteID,
-            favoriteTitle: request.favoriteTitle,
-            favoriteURL: request.favoriteURL,
+            ownerName: request.ownerName,
             tid: request.tid,
             chapterTitle: request.chapterTitle,
             chapterURL: request.chapterURL,
@@ -226,9 +204,7 @@ public struct MangaOfflineCacheWork: Codable, Hashable, Identifiable, Sendable {
 
     public func markingFailed(message: String?, at date: Date = .now) -> MangaOfflineCacheWork {
         MangaOfflineCacheWork(
-            favoriteID: favoriteID,
-            favoriteTitle: favoriteTitle,
-            favoriteURL: favoriteURL,
+            ownerName: ownerName,
             tid: tid,
             chapterTitle: chapterTitle,
             chapterURL: chapterURL,
@@ -250,9 +226,7 @@ public struct MangaOfflineCacheWork: Codable, Hashable, Identifiable, Sendable {
         at date: Date = .now
     ) -> MangaOfflineCacheWork {
         MangaOfflineCacheWork(
-            favoriteID: favoriteID,
-            favoriteTitle: favoriteTitle,
-            favoriteURL: favoriteURL,
+            ownerName: ownerName,
             tid: tid,
             chapterTitle: chapterTitle,
             chapterURL: chapterURL,
@@ -273,9 +247,7 @@ public struct MangaOfflineCacheWork: Codable, Hashable, Identifiable, Sendable {
         at date: Date = .now
     ) -> MangaOfflineCacheWork {
         MangaOfflineCacheWork(
-            favoriteID: favoriteID,
-            favoriteTitle: favoriteTitle,
-            favoriteURL: favoriteURL,
+            ownerName: ownerName,
             tid: tid,
             chapterTitle: chapterTitle,
             chapterURL: chapterURL,
@@ -320,25 +292,16 @@ public enum MangaOfflineCacheEnqueueResult: Hashable, Sendable {
 }
 
 public struct MangaOfflineCacheQueueGroup: Hashable, Identifiable, Sendable {
-    public var favoriteID: String
-    public var favoriteTitle: String
-    public var favoriteURL: URL
+    public var ownerName: String
     public var works: [MangaOfflineCacheWork]
 
-    public var id: String { favoriteID }
+    public var id: String { ownerName }
     public var earliestInsertionIndex: Int {
         works.map(\.insertionIndex).min() ?? .max
     }
 
-    public init(
-        favoriteID: String,
-        favoriteTitle: String,
-        favoriteURL: URL,
-        works: [MangaOfflineCacheWork]
-    ) {
-        self.favoriteID = favoriteID
-        self.favoriteTitle = favoriteTitle
-        self.favoriteURL = favoriteURL
+    public init(ownerName: String, works: [MangaOfflineCacheWork]) {
+        self.ownerName = ownerName
         self.works = works
     }
 }
@@ -356,23 +319,19 @@ public struct MangaOfflineCacheQueueProjection: Hashable, Sendable {
 
     public static func project(
         works: [MangaOfflineCacheWork],
-        directoriesByFavoriteID: [String: MangaDirectory] = [:]
+        directoriesByOwnerName: [String: MangaDirectory] = [:]
     ) -> MangaOfflineCacheQueueProjection {
-        let grouped = Dictionary(grouping: works, by: \.favoriteID)
-        let groups = grouped.values.map { favoriteWorks in
-            let sortedWorks = sortWorks(favoriteWorks, directory: directoriesByFavoriteID[favoriteWorks[0].favoriteID])
-            return MangaOfflineCacheQueueGroup(
-                favoriteID: favoriteWorks[0].favoriteID,
-                favoriteTitle: favoriteWorks[0].favoriteTitle,
-                favoriteURL: favoriteWorks[0].favoriteURL,
-                works: sortedWorks
-            )
+        let grouped = Dictionary(grouping: works, by: \.ownerName)
+        let groups = grouped.values.map { ownerWorks in
+            let ownerName = ownerWorks[0].ownerName
+            let sortedWorks = sortWorks(ownerWorks, directory: directoriesByOwnerName[ownerName])
+            return MangaOfflineCacheQueueGroup(ownerName: ownerName, works: sortedWorks)
         }
         .sorted { lhs, rhs in
             if lhs.earliestInsertionIndex != rhs.earliestInsertionIndex {
                 return lhs.earliestInsertionIndex < rhs.earliestInsertionIndex
             }
-            return lhs.favoriteID.localizedStandardCompare(rhs.favoriteID) == .orderedAscending
+            return lhs.ownerName.localizedStandardCompare(rhs.ownerName) == .orderedAscending
         }
         return MangaOfflineCacheQueueProjection(groups: groups)
     }

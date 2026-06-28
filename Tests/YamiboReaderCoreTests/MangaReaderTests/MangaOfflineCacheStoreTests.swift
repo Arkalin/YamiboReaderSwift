@@ -4,7 +4,7 @@ import Testing
 
 @Suite("MangaReaderTests: Manga Offline Cache Store")
 struct MangaReaderTestsMangaOfflineCacheStore {
-    @Test func savesMembershipWithFavoriteAndChapterIdentityAcrossStoreInstances() async throws {
+    @Test func savesMembershipWithOwnerAndChapterIdentityAcrossStoreInstances() async throws {
         let directory = try makeTemporaryOfflineCacheDirectory()
         let chapterURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=900&page=3"))
         let imageURL = try #require(URL(string: "https://img.example.com/page-1.jpg"))
@@ -12,9 +12,7 @@ struct MangaReaderTestsMangaOfflineCacheStore {
         let writingStore = FileMangaOfflineCacheStore(baseDirectory: directory)
         try await writingStore.saveMembership(
             MangaOfflineCacheMembership(
-                favoriteID: "favorite-1",
-                favoriteTitle: "作品",
-                favoriteURL: try #require(URL(string: "https://bbs.yamibo.com/thread-900-1-1.html")),
+                ownerName: "作品",
                 tid: "900",
                 chapterTitle: "第1话",
                 chapterURL: chapterURL,
@@ -23,16 +21,15 @@ struct MangaReaderTestsMangaOfflineCacheStore {
         )
 
         let readingStore = FileMangaOfflineCacheStore(baseDirectory: directory)
-        let loaded = await readingStore.membership(favoriteID: "favorite-1", tid: "900")
+        let loaded = await readingStore.membership(ownerName: "作品", tid: "900")
 
-        #expect(loaded?.id == MangaOfflineCacheMembershipID(favoriteID: "favorite-1", tid: "900"))
+        #expect(loaded?.id == MangaOfflineCacheMembershipID(ownerName: "作品", tid: "900"))
         #expect(loaded?.chapterURL.absoluteString == "https://bbs.yamibo.com/forum.php?mobile=2&mod=viewthread&page=1&tid=900")
-        #expect(loaded?.favoriteTitle == "作品")
         #expect(loaded?.chapterTitle == "第1话")
         #expect(loaded?.imageURLs == [imageURL])
     }
 
-    @Test func usageReportsStoredOfflineImagesByOwningFavorite() async throws {
+    @Test func usageReportsStoredOfflineImagesByOwner() async throws {
         let directory = try makeTemporaryOfflineCacheDirectory()
         let store = FileMangaOfflineCacheStore(baseDirectory: directory)
         let firstImage = try #require(URL(string: "https://img.example.com/shared.jpg"))
@@ -40,14 +37,14 @@ struct MangaReaderTestsMangaOfflineCacheStore {
 
         try await store.saveOfflineImageData(Data(repeating: 1, count: 3), for: firstImage)
         try await store.saveOfflineImageData(Data(repeating: 2, count: 5), for: secondImage)
-        try await store.saveMembership(makeOfflineMembership(favoriteID: "favorite-a", tid: "1", imageURLs: [firstImage]))
-        try await store.saveMembership(makeOfflineMembership(favoriteID: "favorite-b", tid: "2", imageURLs: [firstImage, secondImage]))
+        try await store.saveMembership(makeOfflineMembership(ownerName: "作品A", tid: "1", imageURLs: [firstImage]))
+        try await store.saveMembership(makeOfflineMembership(ownerName: "作品B", tid: "2", imageURLs: [firstImage, secondImage]))
 
-        let usage = await store.diskUsageByFavorite()
+        let usage = await store.diskUsageByOwner()
 
         #expect(usage == [
-            MangaOfflineCacheFavoriteUsage(favoriteID: "favorite-a", byteCount: 3),
-            MangaOfflineCacheFavoriteUsage(favoriteID: "favorite-b", byteCount: 8)
+            MangaOfflineCacheOwnerUsage(ownerName: "作品A", byteCount: 3),
+            MangaOfflineCacheOwnerUsage(ownerName: "作品B", byteCount: 8)
         ])
     }
 
@@ -55,10 +52,10 @@ struct MangaReaderTestsMangaOfflineCacheStore {
         let store = FileMangaOfflineCacheStore(baseDirectory: try makeTemporaryOfflineCacheDirectory())
         let missingImage = try #require(URL(string: "https://img.example.com/missing.jpg"))
 
-        try await store.saveMembership(makeOfflineMembership(favoriteID: "favorite-a", tid: "1", imageURLs: [missingImage]))
+        try await store.saveMembership(makeOfflineMembership(ownerName: "作品A", tid: "1", imageURLs: [missingImage]))
 
-        #expect(await store.diskUsageByFavorite() == [
-            MangaOfflineCacheFavoriteUsage(favoriteID: "favorite-a", byteCount: 0)
+        #expect(await store.diskUsageByOwner() == [
+            MangaOfflineCacheOwnerUsage(ownerName: "作品A", byteCount: 0)
         ])
     }
 
@@ -70,22 +67,74 @@ struct MangaReaderTestsMangaOfflineCacheStore {
         try await store.saveOfflineImageData(Data(repeating: 4, count: 6), for: completedImage)
         _ = try await store.enqueueOfflineCacheWork(
             makeOfflineWorkRequest(
-                favoriteID: "favorite-work",
+                ownerName: "作品Work",
                 tid: "40",
                 targetImageURLs: [completedImage, missingImage]
             )
         )
         try await store.updateOfflineCacheWorkProgress(
-            favoriteID: "favorite-work",
+            ownerName: "作品Work",
             tid: "40",
             targetImageURLs: [completedImage, missingImage],
             completedImageURLs: [completedImage],
             currentBytesPerSecond: nil
         )
 
-        #expect(await store.diskUsageByFavorite() == [
-            MangaOfflineCacheFavoriteUsage(favoriteID: "favorite-work", byteCount: 6)
+        #expect(await store.diskUsageByOwner() == [
+            MangaOfflineCacheOwnerUsage(ownerName: "作品Work", byteCount: 6)
         ])
+    }
+
+    @Test func renameOwnerMovesMembershipsAndQueueWorksWithoutDroppingImages() async throws {
+        let directory = try makeTemporaryOfflineCacheDirectory()
+        let store = FileMangaOfflineCacheStore(baseDirectory: directory)
+        let cachedImage = try #require(URL(string: "https://img.example.com/rename-cached.jpg"))
+        let workImage = try #require(URL(string: "https://img.example.com/rename-work.jpg"))
+
+        try await store.saveOfflineImageData(Data([1, 2, 3]), for: cachedImage)
+        try await store.saveOfflineImageData(Data([4, 5]), for: workImage)
+        try await store.saveMembership(makeOfflineMembership(ownerName: "旧作品名", tid: "1", imageURLs: [cachedImage]))
+        _ = try await store.enqueueOfflineCacheWork(makeOfflineWorkRequest(ownerName: "旧作品名", tid: "2", targetImageURLs: [workImage]))
+        try await store.updateOfflineCacheWorkProgress(
+            ownerName: "旧作品名",
+            tid: "2",
+            targetImageURLs: [workImage],
+            completedImageURLs: [workImage],
+            currentBytesPerSecond: 128
+        )
+
+        try await store.renameOwner(from: "旧作品名", to: "新作品名")
+
+        #expect(await store.membership(ownerName: "旧作品名", tid: "1") == nil)
+        #expect(await store.offlineCacheWork(ownerName: "旧作品名", tid: "2") == nil)
+        #expect(await store.membership(ownerName: "新作品名", tid: "1")?.ownerName == "新作品名")
+        #expect(await store.offlineCacheWork(ownerName: "新作品名", tid: "2")?.ownerName == "新作品名")
+        #expect(await store.offlineImageData(for: cachedImage) == Data([1, 2, 3]))
+        #expect(await store.offlineImageData(for: workImage) == Data([4, 5]))
+        #expect(await store.diskUsageByOwner() == [
+            MangaOfflineCacheOwnerUsage(ownerName: "新作品名", byteCount: 5)
+        ])
+    }
+
+    @Test func unsupportedLegacyIndexIsIgnoredWithoutDeletingExistingFiles() async throws {
+        let directory = try makeTemporaryOfflineCacheDirectory()
+        let imagesDirectory = directory.appendingPathComponent("images", isDirectory: true)
+        let indexURL = directory.appendingPathComponent("index.json", isDirectory: false)
+        let legacyImageURL = imagesDirectory.appendingPathComponent("legacy.bin", isDirectory: false)
+        try FileManager.default.createDirectory(at: imagesDirectory, withIntermediateDirectories: true)
+        try Data([9, 9, 9]).write(to: legacyImageURL)
+        let legacyIndex = """
+        {"version":2,"memberships":{},"images":{},"queueWorks":{},"queueRunState":"paused"}
+        """
+        try Data(legacyIndex.utf8).write(to: indexURL)
+
+        let store = FileMangaOfflineCacheStore(baseDirectory: directory)
+
+        #expect(await store.allMemberships().isEmpty)
+        #expect(await store.allOfflineCacheWorks().isEmpty)
+        #expect(await store.totalDiskUsageBytes() == 0)
+        #expect(FileManager.default.fileExists(atPath: indexURL.path))
+        #expect(FileManager.default.fileExists(atPath: legacyImageURL.path))
     }
 
     @Test func deletingMembershipPreservesImagesReferencedByRemainingMemberships() async throws {
@@ -96,16 +145,16 @@ struct MangaReaderTestsMangaOfflineCacheStore {
 
         try await store.saveOfflineImageData(Data([1, 2, 3]), for: sharedImage)
         try await store.saveOfflineImageData(Data([4, 5]), for: firstOnlyImage)
-        try await store.saveMembership(makeOfflineMembership(favoriteID: "favorite-a", tid: "1", imageURLs: [sharedImage, firstOnlyImage]))
-        try await store.saveMembership(makeOfflineMembership(favoriteID: "favorite-a", tid: "2", imageURLs: [sharedImage]))
+        try await store.saveMembership(makeOfflineMembership(ownerName: "作品A", tid: "1", imageURLs: [sharedImage, firstOnlyImage]))
+        try await store.saveMembership(makeOfflineMembership(ownerName: "作品A", tid: "2", imageURLs: [sharedImage]))
 
-        try await store.removeMembership(favoriteID: "favorite-a", tid: "1")
+        try await store.removeMembership(ownerName: "作品A", tid: "1")
 
-        #expect(await store.membership(favoriteID: "favorite-a", tid: "1") == nil)
+        #expect(await store.membership(ownerName: "作品A", tid: "1") == nil)
         #expect(await store.offlineImageData(for: sharedImage) == Data([1, 2, 3]))
         #expect(await store.offlineImageData(for: firstOnlyImage) == nil)
-        #expect(await store.diskUsageByFavorite() == [
-            MangaOfflineCacheFavoriteUsage(favoriteID: "favorite-a", byteCount: 3)
+        #expect(await store.diskUsageByOwner() == [
+            MangaOfflineCacheOwnerUsage(ownerName: "作品A", byteCount: 3)
         ])
     }
 
@@ -144,9 +193,9 @@ struct MangaReaderTestsMangaOfflineCacheStore {
         )
         try await imageCacheStore.save(Data([9, 9]), for: imageURL)
         try await offlineStore.saveOfflineImageData(Data([1]), for: imageURL)
-        try await offlineStore.saveMembership(makeOfflineMembership(favoriteID: "favorite-a", tid: "100", imageURLs: [imageURL]))
+        try await offlineStore.saveMembership(makeOfflineMembership(ownerName: "透明目录", tid: "100", imageURLs: [imageURL]))
 
-        try await offlineStore.removeMembership(favoriteID: "favorite-a", tid: "100")
+        try await offlineStore.removeMembership(ownerName: "透明目录", tid: "100")
 
         #expect(try await directoryStore.directory(named: "透明目录")?.chapters.map(\.tid) == ["100"])
         #expect(await documentStore.document(for: chapterURL)?.tid == "100")
@@ -160,25 +209,23 @@ struct MangaReaderTestsMangaOfflineCacheStore {
         let imageURL = try #require(URL(string: "https://img.example.com/clear.jpg"))
 
         try await store.saveOfflineImageData(Data([7]), for: imageURL)
-        try await store.saveMembership(makeOfflineMembership(favoriteID: "favorite-a", tid: "1", imageURLs: [imageURL]))
+        try await store.saveMembership(makeOfflineMembership(ownerName: "作品A", tid: "1", imageURLs: [imageURL]))
 
         try await store.clearAll()
 
-        #expect(await store.membership(favoriteID: "favorite-a", tid: "1") == nil)
+        #expect(await store.membership(ownerName: "作品A", tid: "1") == nil)
         #expect(await store.offlineImageData(for: imageURL) == nil)
-        #expect(await store.diskUsageByFavorite().isEmpty)
+        #expect(await store.diskUsageByOwner().isEmpty)
     }
 }
 
 private func makeOfflineMembership(
-    favoriteID: String,
+    ownerName: String,
     tid: String,
     imageURLs: [URL]
 ) throws -> MangaOfflineCacheMembership {
     MangaOfflineCacheMembership(
-        favoriteID: favoriteID,
-        favoriteTitle: "作品 \(favoriteID)",
-        favoriteURL: try #require(URL(string: "https://bbs.yamibo.com/thread-\(tid)-1-1.html")),
+        ownerName: ownerName,
         tid: tid,
         chapterTitle: "第\(tid)话",
         chapterURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(tid)&page=5")),
@@ -187,14 +234,12 @@ private func makeOfflineMembership(
 }
 
 private func makeOfflineWorkRequest(
-    favoriteID: String,
+    ownerName: String,
     tid: String,
     targetImageURLs: [URL]
 ) throws -> MangaOfflineCacheWorkRequest {
     MangaOfflineCacheWorkRequest(
-        favoriteID: favoriteID,
-        favoriteTitle: "作品 \(favoriteID)",
-        favoriteURL: try #require(URL(string: "https://bbs.yamibo.com/thread-\(tid)-1-1.html")),
+        ownerName: ownerName,
         tid: tid,
         chapterTitle: "第\(tid)话",
         chapterURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(tid)&page=5")),

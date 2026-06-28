@@ -117,7 +117,7 @@ public final class MangaReaderModel: ObservableObject {
     private var lastQueuedProgressSnapshot: MangaReaderProgressSnapshot?
     private var directoryMutationGeneration = 0
     private var chapterJumpGeneration = 0
-    private var offlineCacheFavoriteID: String?
+    private var offlineCacheOwnerName: String?
     private lazy var chapterCommentsModule = ReaderChapterCommentsModule(
         adapter: ReaderChapterCommentsModule.Adapter(
             loadInitial: { [weak self] target in
@@ -193,14 +193,11 @@ public final class MangaReaderModel: ObservableObject {
         committedSettings = Self.normalizedSettings(appSettings.manga)
         applePencilPageTurnSettings = appSettings.applePencilPageTurn
         presentation = presentationWithCommittedSettings(presentation)
-        let offlineCacheFavoriteID = await resolvedOfflineCacheFavoriteID()
-        self.offlineCacheFavoriteID = offlineCacheFavoriteID
-
         #if os(iOS)
         let imagePipeline = MangaImagePipeline(
             dataLoader: await dependencies.makeImageDataLoader(),
-            offlineCacheContext: { page in
-                MangaImageOfflineCacheContext(favoriteID: offlineCacheFavoriteID, tid: page.tid)
+            offlineCacheContext: { [weak self] page in
+                MangaImageOfflineCacheContext(ownerName: self?.offlineCacheOwnerName, tid: page.tid)
             }
         )
         #endif
@@ -220,6 +217,7 @@ public final class MangaReaderModel: ObservableObject {
         #endif
         presentation = workflow.presentation
         presentation = await workflow.prepare()
+        updateOfflineCacheOwnerName(from: presentation)
         refreshDirectoryPanelTiming(errorMessage: nil)
         if workflow.shouldAutoUpdateDirectoryAfterPrepare {
             startAutomaticDirectoryUpdate()
@@ -233,7 +231,7 @@ public final class MangaReaderModel: ObservableObject {
         imagePipeline = nil
         #endif
         hasPrepared = false
-        offlineCacheFavoriteID = nil
+        offlineCacheOwnerName = nil
         lastQueuedProgressSnapshot = nil
         directoryCooldownExpiresAt = nil
         forcedSearchShortcutExpiresAt = nil
@@ -244,14 +242,6 @@ public final class MangaReaderModel: ObservableObject {
         )
 
         await prepare()
-    }
-
-    private func resolvedOfflineCacheFavoriteID() async -> String? {
-        let favoriteID = context.offlineCacheFavoriteID?.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let favoriteID, !favoriteID.isEmpty {
-            return favoriteID
-        }
-        return await appContext.favoriteStore.favorite(for: context.originalThreadURL)?.id
     }
 
     public func updateCurrentPage(globalIndex: Int) {
@@ -557,10 +547,24 @@ public final class MangaReaderModel: ObservableObject {
 
         setDirectoryPanelCommandState(isUpdating: true, errorMessage: nil)
         do {
-            _ = try await workflow.renameDirectory(cleanBookName: cleanBookName, searchKeyword: searchKeyword)
+            let oldOwnerName = offlineCacheOwnerName
+            let updated = try await workflow.renameDirectory(cleanBookName: cleanBookName, searchKeyword: searchKeyword)
+            let cacheRenameError: Error?
+            if let oldOwnerName,
+               oldOwnerName != updated.cleanBookName,
+               let offlineCacheStore = dependencies.makeOfflineCacheStore() {
+                do {
+                    try await offlineCacheStore.renameOwner(from: oldOwnerName, to: updated.cleanBookName)
+                    cacheRenameError = nil
+                } catch {
+                    cacheRenameError = error
+                }
+            } else {
+                cacheRenameError = nil
+            }
             guard !Task.isCancelled, directoryMutationGeneration == mutationGeneration else { return }
             publishPresentation(workflow.presentation, previousProgressSnapshot: previousProgressSnapshot)
-            refreshDirectoryPanelTiming(errorMessage: nil)
+            refreshDirectoryPanelTiming(errorMessage: cacheRenameError?.localizedDescription)
         } catch is CancellationError {
             guard directoryMutationGeneration == mutationGeneration else { return }
             refreshDirectoryPanelTiming(errorMessage: currentDirectoryPanelErrorMessage)
@@ -688,6 +692,7 @@ public final class MangaReaderModel: ObservableObject {
         if nextPresentation != presentation {
             presentation = nextPresentation
         }
+        updateOfflineCacheOwnerName(from: nextPresentation)
         let nextProgressSnapshot = progressSnapshot(from: nextPresentation)
         guard nextProgressSnapshot != previousProgressSnapshot
             || nextProgressSnapshot != lastQueuedProgressSnapshot else {
@@ -704,6 +709,14 @@ public final class MangaReaderModel: ObservableObject {
             await onReaderResumeRouteChange(.manga(snapshot.resumeRoute))
             await progressSync.queue(.manga(snapshot.progress))
         }
+    }
+
+    private func updateOfflineCacheOwnerName(from presentation: MangaReaderPresentation) {
+        guard case let .loaded(loaded) = presentation.state else {
+            offlineCacheOwnerName = nil
+            return
+        }
+        offlineCacheOwnerName = normalizedDirectoryName(loaded.directoryTitle)
     }
 
     private func currentPageIndex(in presentation: MangaReaderPresentation) -> Int? {
@@ -803,7 +816,7 @@ public final class MangaReaderModel: ObservableObject {
             source: .resume,
             initialPage: currentPage.localIndex,
             directoryName: directoryName,
-            offlineCacheFavoriteID: offlineCacheFavoriteID ?? context.offlineCacheFavoriteID
+            offlineCacheFavoriteID: context.offlineCacheFavoriteID
         )
         return MangaReaderProgressSnapshot(
             progress: progress,

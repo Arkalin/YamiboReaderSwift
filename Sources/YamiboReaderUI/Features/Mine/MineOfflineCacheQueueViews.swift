@@ -4,7 +4,7 @@ import YamiboReaderCore
 struct MineOfflineCacheQueueSheet: View {
     let viewModel: MineHomeViewModel
     @Environment(\.dismiss) private var dismiss
-    @State private var selectedFavoriteID: String?
+    @State private var selectedOwnerName: String?
 
     var body: some View {
         NavigationStack {
@@ -18,20 +18,20 @@ struct MineOfflineCacheQueueSheet: View {
 
                     ForEach(viewModel.offlineCacheQueueGroups) { group in
                         Section {
-                            MineOfflineCacheQueueFavoriteRow(
+                            MineOfflineCacheQueueOwnerRow(
                                 group: group,
                                 isSelecting: viewModel.isOfflineCacheQueueSelectionMode,
-                                isSelected: viewModel.isOfflineCacheFavoriteSelected(favoriteID: group.favoriteID),
+                                isSelected: viewModel.isOfflineCacheOwnerSelected(ownerName: group.ownerName),
                                 open: {
                                     viewModel.setOfflineCacheQueueSelectionMode(false)
-                                    selectedFavoriteID = group.favoriteID
+                                    selectedOwnerName = group.ownerName
                                 },
                                 toggleSelection: {
-                                    viewModel.toggleOfflineCacheFavoriteSelection(favoriteID: group.favoriteID)
+                                    viewModel.toggleOfflineCacheOwnerSelection(ownerName: group.ownerName)
                                 },
                                 cancel: {
                                     Task {
-                                        await viewModel.cancelOfflineCacheFavoriteGroup(favoriteID: group.favoriteID)
+                                        await viewModel.cancelOfflineCacheOwnerGroup(ownerName: group.ownerName)
                                     }
                                 }
                             )
@@ -51,11 +51,11 @@ struct MineOfflineCacheQueueSheet: View {
             .refreshable {
                 await viewModel.refreshOfflineCacheQueue()
             }
-            .sheet(isPresented: selectedFavoriteIsPresented) {
-                if let favoriteID = selectedFavoriteID {
-                    MineOfflineCacheQueueFavoriteSheet(
+            .sheet(isPresented: selectedOwnerIsPresented) {
+                if let ownerName = selectedOwnerName {
+                    MineOfflineCacheQueueOwnerSheet(
                         viewModel: viewModel,
-                        favoriteID: favoriteID
+                        ownerName: ownerName
                     )
                 }
             }
@@ -108,12 +108,12 @@ struct MineOfflineCacheQueueSheet: View {
         }
     }
 
-    private var selectedFavoriteIsPresented: Binding<Bool> {
+    private var selectedOwnerIsPresented: Binding<Bool> {
         Binding(
-            get: { selectedFavoriteID != nil },
+            get: { selectedOwnerName != nil },
             set: { isPresented in
                 if !isPresented {
-                    selectedFavoriteID = nil
+                    selectedOwnerName = nil
                     viewModel.setOfflineCacheQueueSelectionMode(false)
                 }
             }
@@ -123,11 +123,11 @@ struct MineOfflineCacheQueueSheet: View {
 
 private struct MineOfflineCacheQueueSelectAllButton: View {
     let viewModel: MineHomeViewModel
-    var favoriteID: String? = nil
+    var ownerName: String? = nil
 
     var body: some View {
         Button(L10n.string("common.select_all")) {
-            viewModel.selectAllOfflineCacheWorks(favoriteID: favoriteID)
+            viewModel.selectAllOfflineCacheWorks(ownerName: ownerName)
         }
         .disabled(viewModel.offlineCacheQueueIsEmpty)
     }
@@ -188,8 +188,8 @@ private struct MineOfflineCacheQueueControls: View {
     }
 }
 
-private struct MineOfflineCacheQueueFavoriteRow: View {
-    let group: MineOfflineCacheQueueFavoriteGroup
+private struct MineOfflineCacheQueueOwnerRow: View {
+    let group: MineOfflineCacheQueueOwnerGroup
     let isSelecting: Bool
     let isSelected: Bool
     let open: () -> Void
@@ -210,7 +210,7 @@ private struct MineOfflineCacheQueueFavoriteRow: View {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(group.favoriteTitle)
+                            Text(group.ownerName)
                                 .font(.headline)
                                 .foregroundStyle(.primary)
                                 .lineLimit(2)
@@ -271,13 +271,13 @@ private struct MineOfflineCacheQueueFavoriteRow: View {
     }
 }
 
-private struct MineOfflineCacheQueueFavoriteSheet: View {
+private struct MineOfflineCacheQueueOwnerSheet: View {
     let viewModel: MineHomeViewModel
-    let favoriteID: String
+    let ownerName: String
     @Environment(\.dismiss) private var dismiss
 
-    private var group: MineOfflineCacheQueueFavoriteGroup? {
-        viewModel.offlineCacheQueueGroups.first { $0.favoriteID == favoriteID }
+    private var group: MineOfflineCacheQueueOwnerGroup? {
+        viewModel.offlineCacheQueueGroups.first { $0.ownerName == ownerName }
     }
 
     var body: some View {
@@ -313,7 +313,7 @@ private struct MineOfflineCacheQueueFavoriteSheet: View {
             #else
             .listStyle(.inset)
             #endif
-            .navigationTitle(group?.favoriteTitle ?? L10n.string("mine.download_queue"))
+            .navigationTitle(group?.ownerName ?? L10n.string("mine.download_queue"))
             .task {
                 viewModel.setOfflineCacheQueueSelectionMode(false)
                 await viewModel.refreshOfflineCacheQueue()
@@ -352,7 +352,7 @@ private struct MineOfflineCacheQueueFavoriteSheet: View {
                 if viewModel.isOfflineCacheQueueSelectionMode {
                     #if os(iOS)
                     ToolbarItem(placement: .bottomBar) {
-                        MineOfflineCacheQueueSelectAllButton(viewModel: viewModel, favoriteID: favoriteID)
+                        MineOfflineCacheQueueSelectAllButton(viewModel: viewModel, ownerName: ownerName)
                     }
                     ToolbarItem(placement: .bottomBar) {
                         Spacer()
@@ -362,7 +362,7 @@ private struct MineOfflineCacheQueueFavoriteSheet: View {
                     }
                     #else
                     ToolbarItem(placement: .secondaryAction) {
-                        MineOfflineCacheQueueSelectAllButton(viewModel: viewModel, favoriteID: favoriteID)
+                        MineOfflineCacheQueueSelectAllButton(viewModel: viewModel, ownerName: ownerName)
                     }
                     ToolbarItem(placement: .confirmationAction) {
                         MineOfflineCacheQueueCancelSelectionButton(viewModel: viewModel)

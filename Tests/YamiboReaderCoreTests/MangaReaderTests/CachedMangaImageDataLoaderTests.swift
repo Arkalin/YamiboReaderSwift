@@ -33,7 +33,7 @@ struct MangaReaderTestsCachedImageDataLoader {
         let data = try await loader.imageData(
             for: imageURL,
             refererURL: nil,
-            offlineCacheContext: MangaImageOfflineCacheContext(favoriteID: "favorite-a", tid: "100")
+            offlineCacheContext: MangaImageOfflineCacheContext(ownerName: "favorite-a", tid: "100")
         )
 
         #expect(data == Data([7]))
@@ -56,7 +56,7 @@ struct MangaReaderTestsCachedImageDataLoader {
         let data = try await loader.imageData(
             for: imageURL,
             refererURL: nil,
-            offlineCacheContext: MangaImageOfflineCacheContext(favoriteID: "favorite-a", tid: "100")
+            offlineCacheContext: MangaImageOfflineCacheContext(ownerName: "favorite-a", tid: "100")
         )
 
         #expect(data == Data([2]))
@@ -80,12 +80,12 @@ struct MangaReaderTestsCachedImageDataLoader {
         let data = try await loader.imageData(
             for: requestedImageURL,
             refererURL: nil,
-            offlineCacheContext: MangaImageOfflineCacheContext(favoriteID: "favorite-a", tid: "100")
+            offlineCacheContext: MangaImageOfflineCacheContext(ownerName: "favorite-a", tid: "100")
         )
 
         #expect(data == Data([3]))
         #expect(await upstream.callCount == 0)
-        #expect(await offlineStore.membership(favoriteID: "favorite-a", tid: "missing") == nil)
+        #expect(await offlineStore.membership(ownerName: "favorite-a", tid: "missing") == nil)
     }
 
     @Test func matchingMembershipFallsBackToNetworkWhenOfflineAndTransparentBytesAreMissing() async throws {
@@ -103,7 +103,7 @@ struct MangaReaderTestsCachedImageDataLoader {
         let data = try await loader.imageData(
             for: imageURL,
             refererURL: nil,
-            offlineCacheContext: MangaImageOfflineCacheContext(favoriteID: "favorite-a", tid: "100")
+            offlineCacheContext: MangaImageOfflineCacheContext(ownerName: "favorite-a", tid: "100")
         )
 
         #expect(data == Data([4]))
@@ -270,9 +270,7 @@ private actor RecordingMangaImageDataLoader: MangaImageDataLoading {
 
 private func makeCachedImageLoaderMembership(imageURLs: [URL]) throws -> MangaOfflineCacheMembership {
     MangaOfflineCacheMembership(
-        favoriteID: "favorite-a",
-        favoriteTitle: "作品",
-        favoriteURL: try #require(URL(string: "https://bbs.yamibo.com/thread-100-1-1.html")),
+        ownerName: "favorite-a",
         tid: "100",
         chapterTitle: "第100话",
         chapterURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100")),

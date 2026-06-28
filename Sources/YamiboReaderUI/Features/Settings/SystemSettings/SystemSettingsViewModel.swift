@@ -13,7 +13,7 @@ final class SystemSettingsViewModel: ObservableObject {
     @Published private(set) var mangaImageCacheBytes = 0
     @Published private(set) var mangaOfflineCacheBytes = 0
     @Published private(set) var mangaOfflineCacheCleanupRows: [MangaOfflineCacheCleanupRow] = []
-    @Published private(set) var selectedMangaOfflineCacheFavoriteIDs: Set<String> = []
+    @Published private(set) var selectedMangaOfflineCacheOwnerNames: Set<String> = []
     @Published var isMangaOfflineCacheCleanupSelectionMode = false
     @Published private(set) var pendingMangaOfflineCacheCleanupConfirmation: MangaOfflineCacheCleanupConfirmation?
     @Published private(set) var activeAction: SystemSettingsAction?
@@ -49,8 +49,8 @@ final class SystemSettingsViewModel: ObservableObject {
         mangaOfflineCacheCleanupRows.isEmpty
     }
 
-    var selectedMangaOfflineCacheFavoriteCount: Int {
-        selectedMangaOfflineCacheFavoriteIDs.count
+    var selectedMangaOfflineCacheOwnerCount: Int {
+        selectedMangaOfflineCacheOwnerNames.count
     }
 
     func load() async {
@@ -253,7 +253,7 @@ final class SystemSettingsViewModel: ObservableObject {
             mangaImageCacheBytes = 0
             mangaOfflineCacheBytes = 0
             mangaOfflineCacheCleanupRows = []
-            selectedMangaOfflineCacheFavoriteIDs = []
+            selectedMangaOfflineCacheOwnerNames = []
             isMangaOfflineCacheCleanupSelectionMode = false
             pendingMangaOfflineCacheCleanupConfirmation = nil
             return true
@@ -279,16 +279,16 @@ final class SystemSettingsViewModel: ObservableObject {
         await refreshMangaOfflineCacheCleanupRows()
     }
 
-    func requestMangaOfflineCacheCleanup(favoriteID: String) {
-        prepareMangaOfflineCacheCleanupConfirmation(favoriteIDs: [favoriteID])
+    func requestMangaOfflineCacheCleanup(ownerName: String) {
+        prepareMangaOfflineCacheCleanupConfirmation(ownerNames: [ownerName])
     }
 
-    func requestMangaOfflineCacheSwipeCleanup(favoriteID: String) {
-        requestMangaOfflineCacheCleanup(favoriteID: favoriteID)
+    func requestMangaOfflineCacheSwipeCleanup(ownerName: String) {
+        requestMangaOfflineCacheCleanup(ownerName: ownerName)
     }
 
     func requestSelectedMangaOfflineCacheCleanup() {
-        prepareMangaOfflineCacheCleanupConfirmation(favoriteIDs: Array(selectedMangaOfflineCacheFavoriteIDs))
+        prepareMangaOfflineCacheCleanupConfirmation(ownerNames: Array(selectedMangaOfflineCacheOwnerNames))
     }
 
     func cancelMangaOfflineCacheCleanupConfirmation() {
@@ -301,44 +301,44 @@ final class SystemSettingsViewModel: ObservableObject {
     }
 
     func confirmMangaOfflineCacheCleanup(_ confirmation: MangaOfflineCacheCleanupConfirmation) async -> Bool {
-        await clearMangaOfflineCache(favoriteIDs: confirmation.favoriteIDs)
+        await clearMangaOfflineCache(ownerNames: confirmation.ownerNames)
     }
 
     func setMangaOfflineCacheCleanupSelectionMode(_ isSelecting: Bool) {
         isMangaOfflineCacheCleanupSelectionMode = isSelecting
         if !isSelecting {
-            selectedMangaOfflineCacheFavoriteIDs.removeAll()
+            selectedMangaOfflineCacheOwnerNames.removeAll()
         }
     }
 
-    func toggleMangaOfflineCacheCleanupSelection(favoriteID: String) {
-        let visibleIDs = Set(mangaOfflineCacheCleanupRows.map(\.favoriteID))
-        guard visibleIDs.contains(favoriteID) else { return }
-        if selectedMangaOfflineCacheFavoriteIDs.contains(favoriteID) {
-            selectedMangaOfflineCacheFavoriteIDs.remove(favoriteID)
+    func toggleMangaOfflineCacheCleanupSelection(ownerName: String) {
+        let visibleIDs = Set(mangaOfflineCacheCleanupRows.map(\.ownerName))
+        guard visibleIDs.contains(ownerName) else { return }
+        if selectedMangaOfflineCacheOwnerNames.contains(ownerName) {
+            selectedMangaOfflineCacheOwnerNames.remove(ownerName)
         } else {
-            selectedMangaOfflineCacheFavoriteIDs.insert(favoriteID)
+            selectedMangaOfflineCacheOwnerNames.insert(ownerName)
         }
     }
 
     func selectAllMangaOfflineCacheCleanupRows() {
-        selectedMangaOfflineCacheFavoriteIDs = Set(mangaOfflineCacheCleanupRows.map(\.favoriteID))
+        selectedMangaOfflineCacheOwnerNames = Set(mangaOfflineCacheCleanupRows.map(\.ownerName))
     }
 
-    private func clearMangaOfflineCache(favoriteIDs: [String]) async -> Bool {
-        let normalizedFavoriteIDs = normalizedMangaOfflineCacheFavoriteIDs(favoriteIDs)
-        guard !normalizedFavoriteIDs.isEmpty else { return false }
+    private func clearMangaOfflineCache(ownerNames: [String]) async -> Bool {
+        let normalizedOwnerNames = normalizedMangaOfflineCacheOwnerNames(ownerNames)
+        guard !normalizedOwnerNames.isEmpty else { return false }
 
         activeAction = .clearingMangaOfflineCache
         defer { activeAction = nil }
 
         do {
-            for favoriteID in normalizedFavoriteIDs {
-                try await appContext.mangaOfflineCacheStore.removeMemberships(forFavoriteID: favoriteID)
+            for ownerName in normalizedOwnerNames {
+                try await appContext.mangaOfflineCacheStore.removeMemberships(forOwnerName: ownerName)
             }
             pendingMangaOfflineCacheCleanupConfirmation = nil
-            selectedMangaOfflineCacheFavoriteIDs.subtract(normalizedFavoriteIDs)
-            if selectedMangaOfflineCacheFavoriteIDs.isEmpty {
+            selectedMangaOfflineCacheOwnerNames.subtract(normalizedOwnerNames)
+            if selectedMangaOfflineCacheOwnerNames.isEmpty {
                 isMangaOfflineCacheCleanupSelectionMode = false
             }
             await refreshStorageUsage()
@@ -354,31 +354,17 @@ final class SystemSettingsViewModel: ObservableObject {
         let store = appContext.mangaOfflineCacheStore
         let memberships = await store.allMemberships()
         let works = await store.allOfflineCacheWorks()
-        let usageByFavoriteID = Dictionary(
-            uniqueKeysWithValues: await store.diskUsageByFavorite().map { ($0.favoriteID, $0.byteCount) }
+        let usageByOwnerName = Dictionary(
+            uniqueKeysWithValues: await store.diskUsageByOwner().map { ($0.ownerName, $0.byteCount) }
         )
-        let favoritesByID = Dictionary(
-            uniqueKeysWithValues: await appContext.favoriteStore.loadFavorites().map { ($0.id, $0) }
-        )
-        let membershipTitles = Dictionary(grouping: memberships, by: \.favoriteID).mapValues { memberships in
-            memberships.first?.favoriteTitle ?? ""
-        }
-        let workTitles = Dictionary(grouping: works, by: \.favoriteID).mapValues { works in
-            works.first?.favoriteTitle ?? ""
-        }
-        let favoriteIDs = Set(memberships.map(\.favoriteID)).union(works.map(\.favoriteID))
+        let ownerNames = Set(memberships.map(\.ownerName)).union(works.map(\.ownerName))
 
-        mangaOfflineCacheCleanupRows = favoriteIDs
-            .map { favoriteID in
+        mangaOfflineCacheCleanupRows = ownerNames
+            .map { ownerName in
                 MangaOfflineCacheCleanupRow(
-                    favoriteID: favoriteID,
-                    title: cleanupTitle(
-                        favoriteID: favoriteID,
-                        favoritesByID: favoritesByID,
-                        membershipTitles: membershipTitles,
-                        workTitles: workTitles
-                    ),
-                    byteCount: usageByFavoriteID[favoriteID] ?? 0
+                    ownerName: ownerName,
+                    title: ownerName,
+                    byteCount: usageByOwnerName[ownerName] ?? 0
                 )
             }
             .sorted { lhs, rhs in
@@ -386,56 +372,33 @@ final class SystemSettingsViewModel: ObservableObject {
                 if titleComparison != .orderedSame {
                     return titleComparison == .orderedAscending
                 }
-                return lhs.favoriteID.localizedStandardCompare(rhs.favoriteID) == .orderedAscending
+                return lhs.ownerName.localizedStandardCompare(rhs.ownerName) == .orderedAscending
             }
 
-        let visibleIDs = Set(mangaOfflineCacheCleanupRows.map(\.favoriteID))
-        selectedMangaOfflineCacheFavoriteIDs.formIntersection(visibleIDs)
-        if selectedMangaOfflineCacheFavoriteIDs.isEmpty && mangaOfflineCacheCleanupRows.isEmpty {
+        let visibleIDs = Set(mangaOfflineCacheCleanupRows.map(\.ownerName))
+        selectedMangaOfflineCacheOwnerNames.formIntersection(visibleIDs)
+        if selectedMangaOfflineCacheOwnerNames.isEmpty && mangaOfflineCacheCleanupRows.isEmpty {
             isMangaOfflineCacheCleanupSelectionMode = false
         }
     }
 
-    private func prepareMangaOfflineCacheCleanupConfirmation(favoriteIDs: [String]) {
-        let normalizedFavoriteIDs = normalizedMangaOfflineCacheFavoriteIDs(favoriteIDs)
-        guard !normalizedFavoriteIDs.isEmpty else { return }
-        let rowsByFavoriteID = Dictionary(uniqueKeysWithValues: mangaOfflineCacheCleanupRows.map { ($0.favoriteID, $0) })
+    private func prepareMangaOfflineCacheCleanupConfirmation(ownerNames: [String]) {
+        let normalizedOwnerNames = normalizedMangaOfflineCacheOwnerNames(ownerNames)
+        guard !normalizedOwnerNames.isEmpty else { return }
+        let rowsByOwnerName = Dictionary(uniqueKeysWithValues: mangaOfflineCacheCleanupRows.map { ($0.ownerName, $0) })
         pendingMangaOfflineCacheCleanupConfirmation = MangaOfflineCacheCleanupConfirmation(
-            favoriteIDs: normalizedFavoriteIDs,
-            favoriteTitles: normalizedFavoriteIDs.map { rowsByFavoriteID[$0]?.title ?? $0 }
+            ownerNames: normalizedOwnerNames,
+            ownerTitles: normalizedOwnerNames.map { rowsByOwnerName[$0]?.title ?? $0 }
         )
     }
 
-    private func normalizedMangaOfflineCacheFavoriteIDs(_ favoriteIDs: [String]) -> [String] {
-        let visibleIDs = Set(mangaOfflineCacheCleanupRows.map(\.favoriteID))
+    private func normalizedMangaOfflineCacheOwnerNames(_ ownerNames: [String]) -> [String] {
+        let visibleIDs = Set(mangaOfflineCacheCleanupRows.map(\.ownerName))
         var seen: Set<String> = []
-        return favoriteIDs
+        return ownerNames
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty && visibleIDs.contains($0) && seen.insert($0).inserted }
             .sorted { $0.localizedStandardCompare($1) == .orderedAscending }
-    }
-
-    private func cleanupTitle(
-        favoriteID: String,
-        favoritesByID: [String: Favorite],
-        membershipTitles: [String: String],
-        workTitles: [String: String]
-    ) -> String {
-        if let title = trimmedNonEmpty(favoritesByID[favoriteID]?.resolvedDisplayTitle) {
-            return title
-        }
-        if let title = trimmedNonEmpty(membershipTitles[favoriteID]) {
-            return title
-        }
-        if let title = trimmedNonEmpty(workTitles[favoriteID]) {
-            return title
-        }
-        return favoriteID
-    }
-
-    private func trimmedNonEmpty(_ value: String?) -> String? {
-        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return trimmed.isEmpty ? nil : trimmed
     }
 
     private func cacheLabel(for bytes: Int) -> String {
