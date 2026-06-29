@@ -48,7 +48,7 @@ struct MineOfflineCacheQueueSheet: View {
                 }
                 .padding(16)
             }
-            .background(MineOfflineCacheQueuePalette.groupedBackground)
+            .background(YamiboColors.SystemSurface.groupedBackground)
             .navigationTitle(L10n.string("mine.download_queue"))
             .task {
                 await viewModel.loadOfflineCacheQueue()
@@ -241,7 +241,7 @@ private struct MineOfflineCacheQueueControls: View {
                 .padding(16)
                 .background(
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .fill(MineOfflineCacheQueuePalette.cardBackground)
+                        .fill(YamiboColors.SystemSurface.secondaryGroupedBackground)
                 )
                 .contentShape(Rectangle())
         }
@@ -334,7 +334,7 @@ private struct MineOfflineCacheQueueOwnerRow: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(MineOfflineCacheQueuePalette.cardBackground)
+                .fill(YamiboColors.SystemSurface.secondaryGroupedBackground)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -414,7 +414,7 @@ private struct MineOfflineCacheQueueOwnerSheet: View {
                 }
                 .padding(16)
             }
-            .background(MineOfflineCacheQueuePalette.groupedBackground)
+            .background(YamiboColors.SystemSurface.groupedBackground)
             .navigationTitle(group?.ownerName ?? L10n.string("mine.download_queue"))
             .task {
                 viewModel.setOfflineCacheQueueSelectionMode(false)
@@ -547,7 +547,7 @@ private struct MineOfflineCacheQueueChapterRowView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(MineOfflineCacheQueuePalette.cardBackground)
+                .fill(YamiboColors.SystemSurface.secondaryGroupedBackground)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -600,29 +600,7 @@ private struct MineOfflineCacheQueueEmptyState: View {
         .padding(.horizontal, 16)
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(MineOfflineCacheQueuePalette.cardBackground)
+                .fill(YamiboColors.SystemSurface.secondaryGroupedBackground)
         )
-    }
-}
-
-private enum MineOfflineCacheQueuePalette {
-    static var groupedBackground: Color {
-        #if os(iOS)
-        Color(uiColor: .systemGroupedBackground)
-        #elseif os(macOS)
-        Color(nsColor: .windowBackgroundColor)
-        #else
-        Color.clear
-        #endif
-    }
-
-    static var cardBackground: Color {
-        #if os(iOS)
-        Color(uiColor: .secondarySystemGroupedBackground)
-        #elseif os(macOS)
-        Color(nsColor: .controlBackgroundColor)
-        #else
-        Color.clear
-        #endif
     }
 }

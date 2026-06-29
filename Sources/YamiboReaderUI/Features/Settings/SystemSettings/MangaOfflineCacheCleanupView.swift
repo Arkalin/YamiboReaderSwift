@@ -1,12 +1,6 @@
 import SwiftUI
 import YamiboReaderCore
 
-#if os(iOS)
-import UIKit
-#elseif os(macOS)
-import AppKit
-#endif
-
 struct MangaOfflineCacheCleanupView: View {
     @ObservedObject var viewModel: SystemSettingsViewModel
 
@@ -35,7 +29,7 @@ struct MangaOfflineCacheCleanupView: View {
             }
             .padding(16)
         }
-        .background(MangaOfflineCacheCleanupPalette.groupedBackground)
+        .background(YamiboColors.SystemSurface.groupedBackground)
         .navigationTitle(L10n.string("settings.manga_offline_cache.title"))
         .navigationBarBackButtonHidden(viewModel.isMangaOfflineCacheCleanupSelectionMode)
         .task {
@@ -169,7 +163,7 @@ private struct MangaOfflineCacheCleanupRowView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(MangaOfflineCacheCleanupPalette.cardBackground)
+                .fill(YamiboColors.SystemSurface.secondaryGroupedBackground)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -316,29 +310,7 @@ private struct MangaOfflineCacheCleanupEmptyState: View {
         .padding(.horizontal, 16)
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(MangaOfflineCacheCleanupPalette.cardBackground)
+                .fill(YamiboColors.SystemSurface.secondaryGroupedBackground)
         )
-    }
-}
-
-private enum MangaOfflineCacheCleanupPalette {
-    static var groupedBackground: Color {
-        #if os(iOS)
-        Color(uiColor: .systemGroupedBackground)
-        #elseif os(macOS)
-        Color(nsColor: .windowBackgroundColor)
-        #else
-        Color.clear
-        #endif
-    }
-
-    static var cardBackground: Color {
-        #if os(iOS)
-        Color(uiColor: .secondarySystemGroupedBackground)
-        #elseif os(macOS)
-        Color(nsColor: .controlBackgroundColor)
-        #else
-        Color.clear
-        #endif
     }
 }

@@ -160,7 +160,7 @@ struct FavoriteBackgroundEditorView: View {
     private var editorBackground: some View {
         ZStack {
             #if canImport(UIKit)
-            Color(uiColor: .systemBackground)
+            YamiboColors.SystemSurface.background
             #else
             Color(.sRGB, white: colorScheme == .dark ? 0.08 : 1, opacity: 1)
             #endif

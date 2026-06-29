@@ -51,7 +51,7 @@ struct MangaDirectorySheet: View {
                 }
                 .padding(16)
             }
-            .background(Color(uiColor: .systemGroupedBackground))
+            .background(YamiboColors.SystemSurface.groupedBackground)
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 if isSelecting && !usesSystemSelectionBottomToolbar {
                     MangaDirectorySelectionActionBar(
@@ -266,7 +266,7 @@ private struct MangaDirectoryMetadataSection: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Color(uiColor: .secondarySystemGroupedBackground))
+                .fill(YamiboColors.SystemSurface.secondaryGroupedBackground)
         )
     }
 }
@@ -388,7 +388,7 @@ private struct MangaDirectorySortToggleButton: View {
             .padding(.vertical, 8)
             .background(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color(uiColor: .secondarySystemGroupedBackground))
+                    .fill(YamiboColors.SystemSurface.secondaryGroupedBackground)
             )
         }
         .buttonStyle(.plain)
@@ -542,7 +542,7 @@ private struct MangaDirectoryChapterRow: View {
         if isCurrent {
             return Color.orange.opacity(isSelecting && !isSelected ? 0.06 : 0.12)
         }
-        return Color(uiColor: .secondarySystemGroupedBackground)
+        return YamiboColors.SystemSurface.secondaryGroupedBackground
     }
 
     private var swipeActionWidth: CGFloat {

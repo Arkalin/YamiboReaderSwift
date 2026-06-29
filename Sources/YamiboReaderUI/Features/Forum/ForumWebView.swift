@@ -81,7 +81,7 @@ public struct IOSForumWebView: UIViewRepresentable {
         }
 
         func applyAppearance(to webView: WKWebView) {
-            let backgroundColor = UIColor(hex: 0xFFF3D6)
+            let backgroundColor = YamiboColors.Site.creamBackgroundUIColor
             webView.overrideUserInterfaceStyle = .light
             webView.backgroundColor = backgroundColor
             webView.scrollView.backgroundColor = backgroundColor

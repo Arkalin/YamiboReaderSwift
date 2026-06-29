@@ -13,17 +13,97 @@ struct FavoriteSearchModifier: ViewModifier {
         #if os(iOS)
         content
             .navigationBarTitleDisplayMode(.inline)
-            .searchable(
-                text: $searchText,
-                placement: .navigationBarDrawer(displayMode: .automatic),
-                prompt: L10n.string("common.search")
-            )
         #else
         content
             .searchable(text: $searchText, prompt: L10n.string("common.search"))
         #endif
     }
 }
+
+#if os(iOS)
+struct FavoriteNativeSearchBar: UIViewRepresentable {
+    @Binding var text: String
+    @Environment(\.colorScheme) private var colorScheme
+
+    func makeUIView(context: Context) -> UISearchBar {
+        let searchBar = UISearchBar(frame: .zero)
+        searchBar.delegate = context.coordinator
+        searchBar.placeholder = L10n.string("common.search")
+        searchBar.searchBarStyle = .minimal
+        searchBar.autocapitalizationType = .none
+        searchBar.autocorrectionType = .no
+        searchBar.enablesReturnKeyAutomatically = false
+        return searchBar
+    }
+
+    func updateUIView(_ searchBar: UISearchBar, context: Context) {
+        if searchBar.text != text {
+            searchBar.text = text
+        }
+        let textColor = UIColor(hex: colorScheme == .dark ? 0xF4E7D1 : 0x2E1A0E)
+        let secondaryTextColor = UIColor(hex: colorScheme == .dark ? 0xD6A083 : 0x6D3A2B).withAlphaComponent(0.72)
+
+        searchBar.backgroundColor = .clear
+        searchBar.barTintColor = .clear
+        searchBar.backgroundImage = .transparentPixel
+        searchBar.setSearchFieldBackgroundImage(.transparentPixel, for: .normal)
+        searchBar.tintColor = secondaryTextColor
+
+        let textField = searchBar.searchTextField
+        textField.backgroundColor = .clear
+        textField.background = nil
+        textField.textColor = textColor
+        textField.tintColor = secondaryTextColor
+        textField.leftView?.tintColor = secondaryTextColor
+        textField.attributedPlaceholder = NSAttributedString(
+            string: L10n.string("common.search"),
+            attributes: [.foregroundColor: secondaryTextColor]
+        )
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(text: $text)
+    }
+
+    final class Coordinator: NSObject, UISearchBarDelegate {
+        @Binding private var text: String
+
+        init(text: Binding<String>) {
+            _text = text
+        }
+
+        func searchBar(_ searchBar: UISearchBar, textDidChange searchText: String) {
+            text = searchText
+        }
+
+        func searchBarTextDidBeginEditing(_ searchBar: UISearchBar) {
+            searchBar.setShowsCancelButton(true, animated: true)
+        }
+
+        func searchBarTextDidEndEditing(_ searchBar: UISearchBar) {
+            searchBar.setShowsCancelButton(false, animated: true)
+        }
+
+        func searchBarSearchButtonClicked(_ searchBar: UISearchBar) {
+            searchBar.resignFirstResponder()
+        }
+
+        func searchBarCancelButtonClicked(_ searchBar: UISearchBar) {
+            searchBar.text = ""
+            text = ""
+            searchBar.resignFirstResponder()
+            searchBar.setShowsCancelButton(false, animated: true)
+        }
+    }
+}
+
+private extension UIImage {
+    static var transparentPixel: UIImage {
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: 1, height: 1))
+        return renderer.image { _ in }
+    }
+}
+#endif
 
 private struct FavoriteSortMenuButton: View {
     @Binding var sortRawValue: String
@@ -182,25 +262,6 @@ private extension FavoriteFilter {
     }
     #endif
 }
-
-#if canImport(UIKit)
-private extension FavoriteAppearanceColor {
-    var uiColor: UIColor {
-        switch self {
-        case .red: .systemRed
-        case .pink: .systemPink
-        case .orange: .systemOrange
-        case .yellow: .systemYellow
-        case .green: .systemGreen
-        case .mint: .systemMint
-        case .cyan: .systemCyan
-        case .blue: .systemBlue
-        case .purple: .systemPurple
-        case .gray: .systemGray
-        }
-    }
-}
-#endif
 
 struct FavoriteToolbarModifier: ViewModifier {
     @Binding var filterRawValue: String

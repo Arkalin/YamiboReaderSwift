@@ -109,11 +109,15 @@ public struct FavoritesView: View {
                     }
                 )
             )
+            .forumNavigationBarStyle()
     }
 
     private var favoritesListLayout: some View {
         GeometryReader { geometry in
             ZStack {
+                ForumColors.creamBackground
+                    .ignoresSafeArea()
+
                 FavoriteBackgroundLayer(
                     settings: viewModel.favoriteBackground,
                     imageData: viewModel.favoriteBackgroundImageData
@@ -327,13 +331,24 @@ public struct FavoritesView: View {
 
     private var twoColumnFavoritesList: some View {
         ScrollView {
-            HStack(alignment: .top, spacing: 20) {
-                twoColumnFavoritesColumn(entries: leftColumnEntries, column: .left)
-                twoColumnFavoritesColumn(entries: rightColumnEntries, column: .right)
+            VStack(spacing: 10) {
+                #if os(iOS)
+                favoriteSearchHeader
+                    .padding(.horizontal, 16)
+                    .padding(.top, 8)
+                #endif
+
+                HStack(alignment: .top, spacing: 20) {
+                    twoColumnFavoritesColumn(entries: leftColumnEntries, column: .left)
+                    twoColumnFavoritesColumn(entries: rightColumnEntries, column: .right)
+                }
+                .padding(.horizontal, 16)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
+            .padding(.bottom, 8)
         }
+        #if os(iOS)
+        .scrollDismissesKeyboard(.interactively)
+        #endif
     }
 
     private func twoColumnFavoritesColumn(
@@ -381,6 +396,13 @@ public struct FavoritesView: View {
 
     private func singleColumnFavoritesList(entries: [FavoriteListEntry]) -> some View {
         List {
+            #if os(iOS)
+            favoriteSearchHeader
+                .listRowSeparator(.hidden)
+                .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 4, trailing: 16))
+                .listRowBackground(Color.clear)
+            #endif
+
             ForEach(entries) { entry in
                 row(for: entry)
                     .listRowSeparator(.hidden)
@@ -393,7 +415,19 @@ public struct FavoritesView: View {
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
         .background(Color.clear)
+        #if os(iOS)
+        .scrollDismissesKeyboard(.interactively)
+        #endif
     }
+
+    #if os(iOS)
+    private var favoriteSearchHeader: some View {
+        FavoriteNativeSearchBar(text: $searchText)
+            .frame(height: 46)
+            .padding(.horizontal, 8)
+            .favoriteSearchGlassSurface()
+    }
+    #endif
 
     @ViewBuilder
     private func overlayContent() -> some View {
@@ -761,11 +795,7 @@ public struct FavoritesView: View {
     #endif
 
     private var selectionActionBarBackground: Color {
-        #if canImport(UIKit)
-        Color(uiColor: .systemGray6)
-        #else
-        Color.gray.opacity(0.12)
-        #endif
+        YamiboColors.SystemSurface.selectionBarBackground
     }
 
     private func selectionActionButton(
@@ -1344,5 +1374,33 @@ public struct FavoritesView: View {
             Image(systemName: systemImage)
                 .font(.caption.weight(.semibold))
         }
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func favoriteSearchGlassSurface() -> some View {
+        #if os(iOS)
+        if #available(iOS 26.0, *) {
+            glassEffect(
+                .regular
+                    .tint(ForumColors.creamSurface.opacity(0.18))
+                    .interactive(),
+                in: .rect(cornerRadius: 23)
+            )
+        } else {
+            favoriteSearchMaterialFallback()
+        }
+        #else
+        favoriteSearchMaterialFallback()
+        #endif
+    }
+
+    private func favoriteSearchMaterialFallback() -> some View {
+        background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 23, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 23, style: .continuous)
+                    .strokeBorder(ForumColors.border, lineWidth: 1)
+            }
     }
 }

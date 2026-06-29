@@ -484,38 +484,3 @@ private struct FavoriteTagEditorView: View {
         }
     }
 }
-
-extension FavoriteTagColor {
-    var swiftUIColor: Color {
-        switch self {
-        case .red: .red
-        case .orange: .orange
-        case .yellow: .yellow
-        case .green: .green
-        case .blue: .blue
-        case .purple: .purple
-        case .pink: .pink
-        case .gray: .gray
-        }
-    }
-
-    var iconTextColor: Color {
-        relativeLuminance > 0.52 ? .black : .white
-    }
-
-    private var relativeLuminance: Double {
-        let components: (red: Double, green: Double, blue: Double) = switch self {
-        case .red: (1.00, 0.23, 0.19)
-        case .orange: (1.00, 0.58, 0.00)
-        case .yellow: (1.00, 0.80, 0.00)
-        case .green: (0.20, 0.78, 0.35)
-        case .blue: (0.00, 0.48, 1.00)
-        case .purple: (0.69, 0.32, 0.87)
-        case .pink: (1.00, 0.18, 0.33)
-        case .gray: (0.56, 0.56, 0.58)
-        }
-
-        return 0.2126 * components.red + 0.7152 * components.green + 0.0722 * components.blue
-    }
-}
-
