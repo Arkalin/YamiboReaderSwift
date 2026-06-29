@@ -20,10 +20,7 @@ public struct ForumNavigationHostView: View {
             ForumHomeView(
                 model: model,
                 onBoardTap: openBoard,
-                onCarouselTap: openCarouselItem,
-                onSearchTap: {
-                    path.append(.search(fid: nil))
-                }
+                onCarouselTap: openCarouselItem
             )
             .navigationDestination(for: ForumDestination.self) { destination in
                 switch destination {
@@ -46,6 +43,7 @@ public struct ForumNavigationHostView: View {
                             openPostThreadFallback(fid: fid)
                         }
                     )
+                    .forumNavigationBarStyle()
                 case let .search(fid):
                     ForumSearchView(
                         model: ForumSearchViewModel(forumID: fid, appContext: appContext),
@@ -55,6 +53,7 @@ public struct ForumNavigationHostView: View {
                             route($0, source: .external)
                         }
                     )
+                    .forumNavigationBarStyle()
                 case let .userSpace(uid, name, section, subPage):
                     UserSpaceView(
                         model: UserSpaceViewModel(
@@ -74,6 +73,7 @@ public struct ForumNavigationHostView: View {
                             path.append(.web($0))
                         }
                     )
+                    .forumNavigationBarStyle()
                 case let .messageCenter(tab):
                     MessageCenterView(
                         model: MessageCenterViewModel(initialTab: tab, appContext: appContext),
@@ -83,6 +83,7 @@ public struct ForumNavigationHostView: View {
                             path.append(.web($0))
                         }
                     )
+                    .forumNavigationBarStyle()
                 case let .privateMessage(uid, name):
                     PrivateMessageView(
                         model: PrivateMessageViewModel(
@@ -91,6 +92,7 @@ public struct ForumNavigationHostView: View {
                             appContext: appContext
                         )
                     )
+                    .forumNavigationBarStyle()
                 case let .blog(blogID, uid, title):
                     BlogReaderView(
                         model: BlogReaderViewModel(blogID: blogID, uid: uid, titleHint: title, appContext: appContext),
@@ -99,6 +101,7 @@ public struct ForumNavigationHostView: View {
                             path.append(.web($0))
                         }
                     )
+                    .forumNavigationBarStyle()
                 case let .web(url):
                     ForumBrowserView(
                         url: url,
@@ -106,9 +109,22 @@ public struct ForumNavigationHostView: View {
                         appModel: appModel,
                         listensToForumNavigationRequest: false
                     )
+                    .forumNavigationBarStyle()
                 }
             }
             .navigationTitle(L10n.string("forum.default_title"))
+            .yamiboInlineNavigationTitleDisplayMode()
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        path.append(.search(fid: nil))
+                    } label: {
+                        Image(systemName: "magnifyingglass")
+                    }
+                    .accessibilityLabel(L10n.string("forum.home.search_placeholder"))
+                }
+            }
+            .forumNavigationBarStyle()
         }
         .task {
             await model.load()
@@ -222,6 +238,14 @@ public struct ForumNavigationHostView: View {
         }
     }
 
+}
+
+private extension View {
+    func forumNavigationBarStyle() -> some View {
+        toolbarBackground(ForumColors.brownDeep, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
+            .toolbarColorScheme(.dark, for: .navigationBar)
+    }
 }
 
 private enum ForumDestination: Hashable {

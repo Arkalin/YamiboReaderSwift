@@ -5,7 +5,6 @@ struct ForumHomeView: View {
     let model: ForumHomeViewModel
     let onBoardTap: (ForumBoardSummary) -> Void
     let onCarouselTap: (ForumHomeCarouselItem) -> Void
-    let onSearchTap: () -> Void
 
     var body: some View {
         Group {
@@ -24,8 +23,7 @@ struct ForumHomeView: View {
                     toggleCategory: model.toggleCategory,
                     refresh: refresh,
                     onBoardTap: onBoardTap,
-                    onCarouselTap: onCarouselTap,
-                    onSearchTap: onSearchTap
+                    onCarouselTap: onCarouselTap
                 )
             }
         }
@@ -52,13 +50,10 @@ private struct ForumHomeContentView: View {
     let refresh: () async -> Void
     let onBoardTap: (ForumBoardSummary) -> Void
     let onCarouselTap: (ForumHomeCarouselItem) -> Void
-    let onSearchTap: () -> Void
 
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 14, pinnedViews: []) {
-                ForumHomeHeaderView(onSearchTap: onSearchTap)
-
                 if !carouselItems.isEmpty {
                     ForumHomeCarouselView(items: carouselItems, onTap: onCarouselTap)
                 }
@@ -88,36 +83,6 @@ private struct ForumHomeContentView: View {
             }
         }
         .forumPageBackground()
-    }
-}
-
-private struct ForumHomeHeaderView: View {
-    let onSearchTap: () -> Void
-
-    var body: some View {
-        HStack(spacing: 14) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("百合会")
-                    .font(.title2.weight(.semibold))
-                    .foregroundStyle(ForumColors.brownDeep)
-                Text(L10n.string("forum.default_title"))
-                    .font(.caption)
-                    .foregroundStyle(ForumColors.secondaryText)
-            }
-
-            Spacer(minLength: 8)
-
-            Button(action: onSearchTap) {
-                Label(L10n.string("forum.home.search_placeholder"), systemImage: "magnifyingglass")
-                    .labelStyle(.iconOnly)
-                    .font(.title3)
-                    .frame(width: 42, height: 42)
-                    .foregroundStyle(ForumColors.textDark)
-                    .background(ForumColors.mutedFill, in: Circle())
-            }
-            .accessibilityLabel(L10n.string("forum.home.search_placeholder"))
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
