@@ -242,9 +242,22 @@ public struct ForumNavigationHostView: View {
 
 private extension View {
     func forumNavigationBarStyle() -> some View {
-        toolbarBackground(ForumColors.brownDeep, for: .navigationBar)
+        modifier(ForumNavigationBarStyleModifier())
+    }
+}
+
+private struct ForumNavigationBarStyleModifier: ViewModifier {
+    @Environment(\.colorScheme) private var colorScheme
+
+    func body(content: Content) -> some View {
+        #if os(iOS)
+        content
+            .toolbarBackground(ForumColors.navigationBarBackground(for: colorScheme), for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbarColorScheme(.dark, for: .navigationBar)
+        #else
+        content
+        #endif
     }
 }
 

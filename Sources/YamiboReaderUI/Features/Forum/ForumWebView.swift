@@ -28,8 +28,7 @@ public struct IOSForumWebView: UIViewRepresentable {
 
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.isOpaque = false
-        webView.backgroundColor = UIColor(red: 1, green: 243.0 / 255.0, blue: 214.0 / 255.0, alpha: 1)
-        webView.scrollView.backgroundColor = webView.backgroundColor
+        context.coordinator.applyAppearance(to: webView)
         webView.scrollView.contentInsetAdjustmentBehavior = .never
         webView.navigationDelegate = context.coordinator
         webView.uiDelegate = context.coordinator
@@ -39,6 +38,7 @@ public struct IOSForumWebView: UIViewRepresentable {
 
     public func updateUIView(_ view: WKWebView, context: Context) {
         context.coordinator.attach(view)
+        context.coordinator.applyAppearance(to: view)
         if isSelected {
             context.coordinator.synchronizeCurrentSession(reloadIfNeeded: true)
         }
@@ -49,6 +49,7 @@ public struct IOSForumWebView: UIViewRepresentable {
         private let appContext: YamiboAppContext
         private weak var webView: WKWebView?
         private var didPrepareInitialLoad = false
+        private var didApplyAppearance = false
         private var sessionObservationTask: Task<Void, Never>?
         private var sessionSyncState = ForumWebSessionSyncState()
 
@@ -77,6 +78,19 @@ public struct IOSForumWebView: UIViewRepresentable {
                     model.load(model.currentURL ?? YamiboRoute.baseURL)
                 }
             }
+        }
+
+        func applyAppearance(to webView: WKWebView) {
+            let backgroundColor = UIColor(hex: 0xFFF3D6)
+            webView.overrideUserInterfaceStyle = .light
+            webView.backgroundColor = backgroundColor
+            webView.scrollView.backgroundColor = backgroundColor
+
+            guard !didApplyAppearance else { return }
+            didApplyAppearance = true
+            webView.configuration.userContentController.removeAllUserScripts()
+            webView.configuration.userContentController.addUserScript(.yamiboHideChromeScript)
+            webView.applyForumAppearance()
         }
 
         func synchronizeCurrentSession(reloadIfNeeded: Bool) {
@@ -271,9 +285,20 @@ public struct IOSForumWebView: UIViewRepresentable {
     }
 }
 
+private extension WKWebView {
+    func applyForumAppearance() {
+        evaluateJavaScript(WKUserScript.yamiboHideChromeSource)
+    }
+}
+
 private extension WKUserScript {
     static let yamiboHideChromeScript = WKUserScript(
-        source: """
+        source: yamiboHideChromeSource,
+        injectionTime: .atDocumentEnd,
+        forMainFrameOnly: false
+    )
+
+    static let yamiboHideChromeSource = """
         (function() {
             var style = document.getElementById('yamibo-hide-style');
             if (!style) {
@@ -282,18 +307,17 @@ private extension WKUserScript {
                 (document.head || document.documentElement).appendChild(style);
             }
             style.innerHTML = [
-                "html,body{background:\(ForumColors.creamBackgroundHex) !important;color:\(ForumColors.htmlTextDarkHex) !important;}",
-                "#wrap,.wrap,.wp,.ct2,.mn,.bm,.bm_c,.threadlist,.tl{background:\(ForumColors.creamBackgroundHex) !important;}",
+                "html,body{background:#FFF3D6 !important;color:#6E2B19 !important;}",
+                "#wrap,.wrap,.wp,.ct2,.mn,.bm,.bm_c,.threadlist,.tl{background:#FFF3D6 !important;color:#6E2B19 !important;}",
                 ".bm,.bm_c,.tl th,.tl td{border-color:rgba(109,58,43,0.18) !important;}",
+                ".bm_h,.bm_h h2,.bm_h h3{background:#FFF7E0 !important;color:#6E2B19 !important;}",
+                "a{color:#6E2B19 !important;}",
                 ".foot.flex-box:not(.foot_reply){display:none !important;}",
                 ".foot_height{display:none !important;}",
                 ".my,.mz{visibility:hidden !important;pointer-events:none !important;}"
             ].join(" ");
         })();
-        """,
-        injectionTime: .atDocumentEnd,
-        forMainFrameOnly: false
-    )
+        """
 }
 
 private extension WKHTTPCookieStore {
@@ -328,4 +352,5 @@ private extension String {
         return trimmed.isEmpty ? nil : trimmed
     }
 }
+
 #endif

@@ -227,6 +227,42 @@ import Testing
     #expect(page.pageNavigation == nil)
 }
 
+@Test func parseForumBoardAllowsThreadTitlesMentioningLoginAfter() throws {
+    let html = #"""
+    <html>
+    <head><title>管理版 -  百合会</title></head>
+    <body id="forum" class="pg_forumdisplay">
+      <div class="header cl"><h2>管理版</h2></div>
+      <div class="forumdisplay-top cl">
+        <h2><img src="data/attachment/common/c7/common_16_icon.gif" alt="管理版" />管理版</h2>
+        <p>今日: <span>0</span>主题: <span>4948</span>排名: <span>27</span></p>
+      </div>
+      <div class="threadlist cl">
+        <ul>
+          <li class="list_top">
+            <a href="forum.php?mod=viewthread&amp;tid=123&amp;mobile=2">
+              <span class="micon">置顶</span>
+              <em>请被盗号的会员重新登录后设定安全提问</em>
+            </a>
+          </li>
+          <li class="list">
+            <a href="forum.php?mod=viewthread&amp;tid=456&amp;mobile=2">
+              <div class="threadlist_tit cl"><em>开通了使用指南版块，有问题先看使用指南</em></div>
+            </a>
+          </li>
+        </ul>
+      </div>
+    </body>
+    </html>
+    """#
+
+    let page = try ForumHTMLParser.parseBoardPage(from: html, fid: "16")
+
+    #expect(page.board.name == "管理版")
+    #expect(page.pinnedItems.first?.title == "请被盗号的会员重新登录后设定安全提问")
+    #expect(page.threads.first?.tid == "456")
+}
+
 @Test func parseBoardFavoriteResultReturnsServerMessage() throws {
     let html = #"""
     <html>

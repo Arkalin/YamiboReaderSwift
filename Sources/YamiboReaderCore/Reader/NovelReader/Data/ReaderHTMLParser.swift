@@ -66,9 +66,11 @@ public enum ReaderHTMLParser {
     public static func isNotAuthenticated(_ html: String) -> Bool {
         let markers = [
             "请先登录",
-            "登录后",
+            "请登录后",
             "您需要先登录",
-            "需要登录后才能"
+            "需要登录后才能",
+            "登录后才能继续",
+            "登录后才能查看"
         ]
         return markers.contains { html.localizedCaseInsensitiveContains($0) }
     }
