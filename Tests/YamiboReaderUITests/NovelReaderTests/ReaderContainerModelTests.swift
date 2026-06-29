@@ -154,6 +154,42 @@ final class ReaderContainerModelTests: XCTestCase {
         }
     }
 
+    func testNavigationHistoryRestoresPreviousNovelReadingPositionAcrossWebViews() async throws {
+        let model = try await makeModel(
+            documents: [
+                makeDocument(view: 1, maxView: 2, chapterTitles: ["第一章", "第二章"]),
+                makeDocument(view: 2, maxView: 2, chapterTitles: ["第三章", "第四章"]),
+            ]
+        )
+
+        await MainActor.run {
+            XCTAssertEqual(model.currentView, 1)
+            XCTAssertFalse(model.canNavigateBack)
+            XCTAssertFalse(model.canNavigateForward)
+        }
+
+        await model.jumpToWebView(2)
+        await MainActor.run {
+            XCTAssertEqual(model.currentView, 2)
+            XCTAssertTrue(model.canNavigateBack)
+            XCTAssertFalse(model.canNavigateForward)
+        }
+
+        await model.navigateBack()
+        await MainActor.run {
+            XCTAssertEqual(model.currentView, 1)
+            XCTAssertFalse(model.canNavigateBack)
+            XCTAssertTrue(model.canNavigateForward)
+        }
+
+        await model.navigateForward()
+        await MainActor.run {
+            XCTAssertEqual(model.currentView, 2)
+            XCTAssertTrue(model.canNavigateBack)
+            XCTAssertFalse(model.canNavigateForward)
+        }
+    }
+
     func testPreviousWebViewBoundaryNavigationLandsOnPreviousLastSurfaceAfterOverlay() async throws {
         let model = try await makeModel(
             documents: [

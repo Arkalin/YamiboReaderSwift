@@ -8,6 +8,7 @@ YamiboReader uses multiple domain context documents. Start here, then read the c
 | --- | --- | --- |
 | Manga Reader | `docs/contexts/manga-reader/CONTEXT.md` | Continuous manga chapter loading, manga directories, manga page position, or manga reader ambiguity. |
 | Novel Reader | `docs/contexts/novel-reader/CONTEXT.md` | Native novel reading, TextKit 2 layout, runtime generations, reader presentation, positions, surfaces, and SwiftUI adapters. |
+| Reader Navigation | `docs/contexts/reader-navigation/CONTEXT.md` | Cross-reader navigation behavior shared by manga and novel readers, including non-linear jumps and return anchors. |
 | Library and Account | `docs/contexts/library-account/CONTEXT.md` | Favorites, local reading metadata, WebDAV sync, Yamibo accounts, profile display, forum credit progress, security questions, or sign out. |
 
 ## Implementation Landmarks

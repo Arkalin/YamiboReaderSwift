@@ -50,6 +50,7 @@
 "common.back" = "返回";
 "common.close" = "关闭";
 "common.collapse" = "收起";
+"common.forward" = "前进";
 "common.create" = "创建";
 "common.current" = "当前";
 "common.delete" = "删除";

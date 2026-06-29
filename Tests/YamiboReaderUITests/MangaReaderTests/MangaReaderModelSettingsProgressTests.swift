@@ -258,6 +258,38 @@ final class MangaReaderModelSettingsProgressTests: XCTestCase {
         XCTAssertNil(loaded.viewportPlacement)
     }
 
+    func testNavigationHistoryRestoresPreviousMangaReadingPositionAfterNonlinearPageJump() async throws {
+        let fixture = try await makeFixture(initialPage: 0)
+
+        await fixture.model.prepare()
+        XCTAssertFalse(fixture.model.canNavigateBack)
+        XCTAssertFalse(fixture.model.canNavigateForward)
+
+        await fixture.model.jumpToPage(localIndex: 2)
+        XCTAssertTrue(fixture.model.canNavigateBack)
+        XCTAssertFalse(fixture.model.canNavigateForward)
+
+        await fixture.model.navigateBack()
+
+        guard case let .loaded(backLoaded) = fixture.model.presentation.state else {
+            XCTFail("Expected loaded presentation after navigating back")
+            return
+        }
+        XCTAssertEqual(backLoaded.currentPage?.localIndex, 0)
+        XCTAssertFalse(fixture.model.canNavigateBack)
+        XCTAssertTrue(fixture.model.canNavigateForward)
+
+        await fixture.model.navigateForward()
+
+        guard case let .loaded(forwardLoaded) = fixture.model.presentation.state else {
+            XCTFail("Expected loaded presentation after navigating forward")
+            return
+        }
+        XCTAssertEqual(forwardLoaded.currentPage?.localIndex, 2)
+        XCTAssertTrue(fixture.model.canNavigateBack)
+        XCTAssertFalse(fixture.model.canNavigateForward)
+    }
+
     func testSaveProgressFlushesLatestPageIntoExistingFavoriteAndResumeRoute() async throws {
         let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "manga-save-progress-existing")
         let favoriteStore = try FavoriteStore(testSuiteName: defaultsSuiteName, key: "favorites")

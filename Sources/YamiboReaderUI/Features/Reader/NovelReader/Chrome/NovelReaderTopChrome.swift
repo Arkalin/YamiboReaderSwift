@@ -9,6 +9,8 @@ struct NovelReaderTopChrome: View {
 
     let model: ReaderContainerModel
     let topInset: CGFloat
+    let onNavigateBack: () -> Void
+    let onNavigateForward: () -> Void
     let onClose: () -> Void
     let onRefresh: () -> Void
     @Environment(\.colorScheme) private var colorScheme
@@ -20,26 +22,49 @@ struct NovelReaderTopChrome: View {
         )
 
         ReaderGlassContainer(spacing: 12) {
-            let closeButtonSize: CGFloat = 44
+            let chromeButtonSize: CGFloat = 44
+            let historyIconSize: CGFloat = 19
+            let buttonSpacing: CGFloat = 8
+            let leadingControlsWidth = model.canNavigateBack ? historyIconSize : 0
+            let trailingControlsWidth = chromeButtonSize
+                + (model.canNavigateForward ? historyIconSize + buttonSpacing : 0)
+            let titleSidePadding = max(leadingControlsWidth, trailingControlsWidth) + 16
 
             ZStack {
                 chapterTitleView(summary.chapterTitle)
                     .frame(maxWidth: .infinity)
-                    .padding(.horizontal, closeButtonSize + 16)
+                    .padding(.horizontal, titleSidePadding)
                     .offset(y: shouldLiftPagedChapterTitle ? -pagedChapterTitleTopLift : 0)
 
-                HStack {
+                HStack(spacing: buttonSpacing) {
+                    if model.canNavigateBack {
+                        ReaderChromeHistoryButton(
+                            direction: .back,
+                            title: L10n.string("common.back"),
+                            action: onNavigateBack
+                        )
+                    }
+
                     Spacer(minLength: 0)
+
+                    if model.canNavigateForward {
+                        ReaderChromeHistoryButton(
+                            direction: .forward,
+                            title: L10n.string("common.forward"),
+                            action: onNavigateForward
+                        )
+                    }
+
                     ReaderChromeCircleButton(
                         systemName: "xmark",
                         title: L10n.string("common.close"),
                         tint: readerChromeButtonTint(for: colorScheme),
                         action: onClose
                     )
-                    .frame(width: closeButtonSize, height: closeButtonSize)
+                    .frame(width: chromeButtonSize, height: chromeButtonSize)
                 }
             }
-            .frame(maxWidth: .infinity, minHeight: closeButtonSize)
+            .frame(maxWidth: .infinity, minHeight: chromeButtonSize)
             .padding(.horizontal, 4)
         }
         .frame(maxWidth: .infinity)

@@ -93,6 +93,7 @@ public final class MangaReaderModel: ObservableObject {
     @Published public private(set) var isLoadingMoreChapterComments = false
     @Published public private(set) var chapterCommentsLoadMoreError: String?
     @Published public private(set) var chapterCommentsRefreshError: String?
+    @Published private var navigationHistory = ReaderNavigationHistory<MangaReadingPosition>()
 
     public let context: MangaLaunchContext
     #if os(iOS)
@@ -114,6 +115,8 @@ public final class MangaReaderModel: ObservableObject {
     private var chapterJumpTask: Task<Void, Never>?
     private var adjacentPrefetchTask: Task<Void, Never>?
     private var readerContentGeneration = 0
+    private var navigationRequestGeneration = 0
+    private var currentStableReadingPosition: MangaReadingPosition?
     private var lastQueuedProgressSnapshot: MangaReaderProgressSnapshot?
     private var directoryMutationGeneration = 0
     private var chapterJumpGeneration = 0
@@ -217,6 +220,7 @@ public final class MangaReaderModel: ObservableObject {
         #endif
         presentation = workflow.presentation
         presentation = await workflow.prepare()
+        currentStableReadingPosition = stableReadingPosition(from: presentation)
         updateOfflineCacheOwnerName(from: presentation)
         refreshDirectoryPanelTiming(errorMessage: nil)
         if workflow.shouldAutoUpdateDirectoryAfterPrepare {
@@ -232,6 +236,8 @@ public final class MangaReaderModel: ObservableObject {
         #endif
         hasPrepared = false
         offlineCacheOwnerName = nil
+        navigationHistory = ReaderNavigationHistory()
+        currentStableReadingPosition = nil
         lastQueuedProgressSnapshot = nil
         directoryCooldownExpiresAt = nil
         forcedSearchShortcutExpiresAt = nil
@@ -260,6 +266,8 @@ public final class MangaReaderModel: ObservableObject {
               let currentPage = loaded.currentPage else {
             return
         }
+        let navigationGeneration = beginNavigationRequest()
+        let sourcePosition = currentStableReadingPosition
         let itemCount = max(currentPage.chapterPageCount, 1)
         let targetLocalIndex = min(max(localIndex, 0), itemCount - 1)
         guard let targetPage = loaded.pages.first(where: { page in
@@ -267,12 +275,16 @@ public final class MangaReaderModel: ObservableObject {
         }) else {
             return
         }
+        let targetPosition = MangaReadingPosition(tid: targetPage.tid, localIndex: targetPage.localIndex)
 
         adjacentPrefetchTask?.cancel()
         readerContentGeneration += 1
         let previousProgressSnapshot = progressSnapshot(from: presentation)
         let nextPresentation = workflow.jumpToLoadedPage(at: targetPage.globalIndex)
         publishPresentation(nextPresentation, previousProgressSnapshot: previousProgressSnapshot)
+        if isCurrentNavigationRequest(navigationGeneration) {
+            recordSuccessfulNonlinearNavigation(from: sourcePosition, to: targetPosition)
+        }
         scheduleAdjacentPrefetch(around: currentPageIndex(in: nextPresentation) ?? targetPage.globalIndex)
     }
 
@@ -443,10 +455,33 @@ public final class MangaReaderModel: ObservableObject {
         invalidateReaderContent()
         chapterJumpGeneration += 1
         let generation = chapterJumpGeneration
+        let navigationGeneration = beginNavigationRequest()
+        let sourcePosition = currentStableReadingPosition
         chapterJumpTask = Task { @MainActor [weak self] in
-            await self?.performJumpToChapter(chapter, jumpGeneration: generation)
+            await self?.performJumpToChapter(
+                chapter,
+                sourcePosition: sourcePosition,
+                navigationGeneration: navigationGeneration,
+                jumpGeneration: generation
+            )
         }
         await chapterJumpTask?.value
+    }
+
+    public var canNavigateBack: Bool {
+        currentStableReadingPosition != nil && navigationHistory.canGoBack
+    }
+
+    public var canNavigateForward: Bool {
+        currentStableReadingPosition != nil && navigationHistory.canGoForward
+    }
+
+    public func navigateBack() async {
+        await restoreNavigationAnchor(direction: .back)
+    }
+
+    public func navigateForward() async {
+        await restoreNavigationAnchor(direction: .forward)
     }
 
     private func startAutomaticDirectoryUpdate() {
@@ -601,7 +636,12 @@ public final class MangaReaderModel: ObservableObject {
         }
     }
 
-    private func performJumpToChapter(_ chapter: MangaChapter, jumpGeneration: Int) async {
+    private func performJumpToChapter(
+        _ chapter: MangaChapter,
+        sourcePosition: MangaReadingPosition?,
+        navigationGeneration: Int,
+        jumpGeneration: Int
+    ) async {
         guard let workflow else { return }
         let previousProgressSnapshot = progressSnapshot(from: presentation)
         defer {
@@ -614,6 +654,12 @@ public final class MangaReaderModel: ObservableObject {
             let nextPresentation = try await workflow.jumpToChapter(chapter)
             guard !Task.isCancelled, chapterJumpGeneration == jumpGeneration else { return }
             publishPresentation(nextPresentation, previousProgressSnapshot: previousProgressSnapshot)
+            if isCurrentNavigationRequest(navigationGeneration) {
+                recordSuccessfulNonlinearNavigation(
+                    from: sourcePosition,
+                    to: MangaReadingPosition(tid: chapter.tid, localIndex: 0)
+                )
+            }
             refreshDirectoryPanelTiming(errorMessage: nil)
         } catch is CancellationError {
             return
@@ -671,6 +717,15 @@ public final class MangaReaderModel: ObservableObject {
         readerContentGeneration += 1
     }
 
+    private func beginNavigationRequest() -> Int {
+        navigationRequestGeneration += 1
+        return navigationRequestGeneration
+    }
+
+    private func isCurrentNavigationRequest(_ generation: Int) -> Bool {
+        navigationRequestGeneration == generation
+    }
+
     private func cancelReaderTasks() {
         directoryTickTask?.cancel()
         directoryTickTask = nil
@@ -693,6 +748,7 @@ public final class MangaReaderModel: ObservableObject {
             presentation = nextPresentation
         }
         updateOfflineCacheOwnerName(from: nextPresentation)
+        currentStableReadingPosition = stableReadingPosition(from: nextPresentation)
         let nextProgressSnapshot = progressSnapshot(from: nextPresentation)
         guard nextProgressSnapshot != previousProgressSnapshot
             || nextProgressSnapshot != lastQueuedProgressSnapshot else {
@@ -722,6 +778,83 @@ public final class MangaReaderModel: ObservableObject {
     private func currentPageIndex(in presentation: MangaReaderPresentation) -> Int? {
         guard case let .loaded(loaded) = presentation.state else { return nil }
         return loaded.currentPageIndex
+    }
+
+    private func stableReadingPosition(from presentation: MangaReaderPresentation) -> MangaReadingPosition? {
+        guard case let .loaded(loaded) = presentation.state else { return nil }
+        if let readingPosition = loaded.readingPosition {
+            return readingPosition
+        }
+        guard let currentPage = loaded.currentPage else { return nil }
+        return MangaReadingPosition(tid: currentPage.tid, localIndex: currentPage.localIndex)
+    }
+
+    private enum NavigationRestoreDirection {
+        case back
+        case forward
+    }
+
+    private func restoreNavigationAnchor(direction: NavigationRestoreDirection) async {
+        guard let sourcePosition = currentStableReadingPosition else { return }
+        let navigationGeneration = beginNavigationRequest()
+
+        while let targetPosition = navigationTarget(for: direction) {
+            guard let workflow else { return }
+            adjacentPrefetchTask?.cancel()
+            readerContentGeneration += 1
+            let previousProgressSnapshot = progressSnapshot(from: presentation)
+            do {
+                let nextPresentation = try await workflow.jumpToPosition(targetPosition)
+                publishPresentation(nextPresentation, previousProgressSnapshot: previousProgressSnapshot)
+                guard isCurrentNavigationRequest(navigationGeneration) else { return }
+                commitNavigationRestore(direction: direction, sourcePosition: sourcePosition)
+                scheduleAdjacentPrefetch(around: currentPageIndex(in: nextPresentation) ?? 0)
+                return
+            } catch is CancellationError {
+                return
+            } catch {
+                guard isCurrentNavigationRequest(navigationGeneration) else { return }
+                discardNavigationTarget(for: direction)
+            }
+        }
+    }
+
+    private func navigationTarget(for direction: NavigationRestoreDirection) -> MangaReadingPosition? {
+        switch direction {
+        case .back:
+            navigationHistory.peekBack()
+        case .forward:
+            navigationHistory.peekForward()
+        }
+    }
+
+    private func commitNavigationRestore(
+        direction: NavigationRestoreDirection,
+        sourcePosition: MangaReadingPosition
+    ) {
+        switch direction {
+        case .back:
+            navigationHistory.commitBack(from: sourcePosition)
+        case .forward:
+            navigationHistory.commitForward(from: sourcePosition)
+        }
+    }
+
+    private func discardNavigationTarget(for direction: NavigationRestoreDirection) {
+        switch direction {
+        case .back:
+            navigationHistory.discardBackCandidate()
+        case .forward:
+            navigationHistory.discardForwardCandidate()
+        }
+    }
+
+    private func recordSuccessfulNonlinearNavigation(
+        from sourcePosition: MangaReadingPosition?,
+        to targetPosition: MangaReadingPosition
+    ) {
+        guard let sourcePosition else { return }
+        navigationHistory.recordNonlinearJump(from: sourcePosition, to: targetPosition)
     }
 
     private var currentDirectoryPanelErrorMessage: String? {

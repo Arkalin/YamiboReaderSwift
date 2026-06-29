@@ -81,6 +81,14 @@ public struct MangaReaderView: View {
                     ),
                     readingMode: model.presentation.settings.readingMode,
                     pageTurnDirection: model.presentation.settings.pageTurnDirection,
+                    canNavigateBack: model.canNavigateBack,
+                    canNavigateForward: model.canNavigateForward,
+                    onNavigateBack: {
+                        Task { await model.navigateBack() }
+                    },
+                    onNavigateForward: {
+                        Task { await model.navigateForward() }
+                    },
                     onClose: closeReader,
                     onShowDirectory: {
                         isDirectoryPresented = true
@@ -382,6 +390,10 @@ private struct MangaReaderFloatingControls: View {
     let summary: MangaReaderChromeSummary?
     let readingMode: MangaReadingMode
     let pageTurnDirection: MangaPageTurnDirection
+    let canNavigateBack: Bool
+    let canNavigateForward: Bool
+    let onNavigateBack: () -> Void
+    let onNavigateForward: () -> Void
     let onClose: () -> Void
     let onShowDirectory: () -> Void
     let onShowComments: () -> Void
@@ -398,6 +410,10 @@ private struct MangaReaderFloatingControls: View {
                 MangaReaderTopChrome(
                     title: summary?.headerTitle,
                     topInset: topInset,
+                    canNavigateBack: canNavigateBack,
+                    canNavigateForward: canNavigateForward,
+                    onNavigateBack: onNavigateBack,
+                    onNavigateForward: onNavigateForward,
                     onClose: onClose
                 )
                 .transition(.opacity)
@@ -426,31 +442,58 @@ private struct MangaReaderFloatingControls: View {
 private struct MangaReaderTopChrome: View {
     let title: String?
     let topInset: CGFloat
+    let canNavigateBack: Bool
+    let canNavigateForward: Bool
+    let onNavigateBack: () -> Void
+    let onNavigateForward: () -> Void
     let onClose: () -> Void
 
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         ReaderGlassContainer(spacing: 12) {
-            let closeButtonSize: CGFloat = 44
+            let chromeButtonSize: CGFloat = 44
+            let historyIconSize: CGFloat = 19
+            let buttonSpacing: CGFloat = 8
+            let leadingControlsWidth = canNavigateBack ? historyIconSize : 0
+            let trailingControlsWidth = chromeButtonSize
+                + (canNavigateForward ? historyIconSize + buttonSpacing : 0)
+            let titleSidePadding = max(leadingControlsWidth, trailingControlsWidth) + 16
 
             ZStack {
                 MangaReaderTopChapterTitle(title: title)
                     .frame(maxWidth: .infinity)
-                    .padding(.horizontal, closeButtonSize + 16)
+                    .padding(.horizontal, titleSidePadding)
 
-                HStack {
+                HStack(spacing: buttonSpacing) {
+                    if canNavigateBack {
+                        ReaderChromeHistoryButton(
+                            direction: .back,
+                            title: L10n.string("common.back"),
+                            action: onNavigateBack
+                        )
+                    }
+
                     Spacer(minLength: 0)
+
+                    if canNavigateForward {
+                        ReaderChromeHistoryButton(
+                            direction: .forward,
+                            title: L10n.string("common.forward"),
+                            action: onNavigateForward
+                        )
+                    }
+
                     ReaderChromeCircleButton(
                         systemName: "xmark",
                         title: L10n.string("common.close"),
                         tint: readerChromeButtonTint(for: colorScheme),
                         action: onClose
                     )
-                    .frame(width: closeButtonSize, height: closeButtonSize)
+                    .frame(width: chromeButtonSize, height: chromeButtonSize)
                 }
             }
-            .frame(maxWidth: .infinity, minHeight: closeButtonSize)
+            .frame(maxWidth: .infinity, minHeight: chromeButtonSize)
             .padding(.horizontal, 4)
         }
         .frame(maxWidth: .infinity)

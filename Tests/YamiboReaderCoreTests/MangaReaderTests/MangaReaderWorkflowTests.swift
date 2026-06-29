@@ -188,6 +188,26 @@ struct MangaReaderTestsWorkflow {
         #expect(lastPage.readingPosition == MangaReadingPosition(tid: "700", localIndex: 1))
     }
 
+    @Test func workflowJumpToPositionClampsLoadedChapterPosition() async throws {
+        let document = try makeWorkflowDocument(tid: "700", pageCount: 2)
+        let workflow = MangaReaderWorkflow(
+            context: try makeWorkflowContext(tid: "700", initialPage: 0),
+            documentLoader: RecordingMangaChapterDocumentLoader(output: .document(document)),
+            directoryRepository: RecordingMangaDirectoryRepository(
+                output: .seed(makeWorkflowSeed(currentTID: "700", tagIDs: ["12"]))
+            ),
+            directoryStore: RecordingMangaDirectoryStore()
+        )
+
+        _ = await workflow.prepare()
+        let presentation = try await workflow.jumpToPosition(MangaReadingPosition(tid: "700", localIndex: 99))
+        let loaded = try #require(loadedPresentation(in: presentation))
+
+        #expect(loaded.currentPage?.id == "700#1")
+        #expect(loaded.currentPageIndex == 1)
+        #expect(loaded.readingPosition == MangaReadingPosition(tid: "700", localIndex: 1))
+    }
+
     @Test func existingDirectoryNameIsReusedWithoutSeedOrSave() async throws {
         let document = try makeWorkflowDocument(tid: "700", pageCount: 1)
         let existingDirectory = makeWorkflowDirectory(

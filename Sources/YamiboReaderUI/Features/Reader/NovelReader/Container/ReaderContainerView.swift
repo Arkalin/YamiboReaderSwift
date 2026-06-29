@@ -577,6 +577,12 @@ public struct ReaderContainerView: View {
         NovelReaderTopChrome(
             model: model,
             topInset: topInset,
+            onNavigateBack: {
+                Task { await model.navigateBack() }
+            },
+            onNavigateForward: {
+                Task { await model.navigateForward() }
+            },
             onClose: closeReader,
             onRefresh: refreshReader
         )

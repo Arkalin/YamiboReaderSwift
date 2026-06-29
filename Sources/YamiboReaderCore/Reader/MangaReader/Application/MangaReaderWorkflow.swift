@@ -352,6 +352,47 @@ public final class MangaReaderWorkflow {
         return presentation
     }
 
+    @discardableResult
+    public func jumpToPosition(_ position: MangaReadingPosition) async throws -> MangaReaderPresentation {
+        try Task.checkCancellation()
+
+        guard var window else {
+            throw YamiboError.underlying("Manga reader workflow is not prepared.")
+        }
+
+        let pages = MangaReaderPageProjection.projections(from: window)
+        if let loadedPosition = window.clampedPosition(position),
+           let loadedIndex = MangaReaderPageProjection.resolvedPageIndex(for: loadedPosition, in: pages) {
+            _ = window.moveToLoadedPage(at: loadedIndex)
+            self.window = window
+            presentation = loadedPresentation(from: window, placementPageIndex: loadedIndex)
+            return presentation
+        }
+
+        guard let chapter = window.directory.chapters.first(where: { $0.tid == position.tid }) else {
+            throw YamiboError.underlying("Manga reader target chapter is unavailable.")
+        }
+
+        let document = try await documentLoader.loadChapterDocument(at: chapter.url)
+        try Task.checkCancellation()
+
+        let targetPosition = MangaReadingPosition(tid: document.tid, localIndex: position.localIndex)
+        let result = window.insertAdjacentDocument(document, preserving: targetPosition)
+        switch result {
+        case .changed:
+            break
+        case let .unchanged(_, reason):
+            if reason != .duplicateChapter {
+                _ = window.reset(to: document, position: targetPosition)
+            }
+        }
+
+        self.window = window
+        let targetIndex = MangaReaderPageProjection.resolvedPageIndex(for: window)
+        presentation = loadedPresentation(from: window, placementPageIndex: targetIndex)
+        return presentation
+    }
+
     public func currentDirectorySearchCooldownExpiresAt() async -> Date? {
         await directoryWorkflow.cooldownExpiresAt()
     }

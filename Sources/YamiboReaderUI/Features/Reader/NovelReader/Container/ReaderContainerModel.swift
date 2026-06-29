@@ -32,6 +32,7 @@ public final class ReaderContainerModel: ObservableObject {
     @Published public private(set) var isLoadingChapterDirectory = false
     @Published public private(set) var chapterDirectoryError: String?
     @Published public private(set) var readerPresentation: NovelReaderPresentation?
+    @Published private var navigationHistory = ReaderNavigationHistory<ReaderResumePoint>()
     @Published public private(set) var inlineImageLoadingContext = NovelInlineImageLoadingContext(
         loader: ReaderInlineImageUnavailableDataLoader(),
         cacheNamespace: NovelInlineImageCacheNamespace(value: "unavailable")
@@ -48,8 +49,10 @@ public final class ReaderContainerModel: ObservableObject {
     private var layout: ReaderContainerLayout = .zero
     private var latestRequestedLayout: ReaderContainerLayout = .zero
     private var layoutRequestSequence: UInt64 = 0
+    private var navigationRequestSequence: UInt64 = 0
     private var usesPadPresentation = false
     private var chapterDirectoryAnchors: [Int: NovelChapterAnchor] = [:]
+    private var currentStableResumePoint: ReaderResumePoint?
     private let runtimeAdapter: (any NovelTextLayoutRuntimeAdapter)?
     private let onReaderResumeRouteChange: ReaderResumeRouteChangeHandler
     package var runtimeUpdatePreparation: NovelReadingWorkflowRuntimeUpdatePreparation = { $0 }
@@ -381,6 +384,14 @@ public final class ReaderContainerModel: ObservableObject {
         readingWorkflow?.captureNovelReadingPosition()
     }
 
+    public var canNavigateBack: Bool {
+        currentStableResumePoint != nil && navigationHistory.canGoBack
+    }
+
+    public var canNavigateForward: Bool {
+        currentStableResumePoint != nil && navigationHistory.canGoForward
+    }
+
     public func handleMemoryPressure() {
         readingWorkflow?.handleMemoryPressure()
     }
@@ -392,6 +403,8 @@ public final class ReaderContainerModel: ObservableObject {
         isApplyingAppearanceSettings = false
         readingWorkflow?.close()
         readingWorkflow = nil
+        navigationHistory = ReaderNavigationHistory()
+        currentStableResumePoint = nil
         chromeProgressSnapshot = .empty
         readerPresentation = nil
     }
@@ -686,7 +699,20 @@ public final class ReaderContainerModel: ObservableObject {
     }
 
     package func jumpToSurface(_ surfaceIndex: Int) {
+        let navigationSequence = beginNavigationRequest()
+        let sourceResumePoint = currentStableResumePoint
         selectSurface(surfaceIndex)
+        if isCurrentNavigationRequest(navigationSequence) {
+            recordSuccessfulNonlinearNavigation(from: sourceResumePoint, to: currentStableResumePoint)
+        }
+    }
+
+    public func navigateBack() async {
+        await restoreNavigationAnchor(direction: .back)
+    }
+
+    public func navigateForward() async {
+        await restoreNavigationAnchor(direction: .forward)
     }
 
     public func jumpRelativeSurface(_ delta: Int) async {
@@ -734,14 +760,19 @@ public final class ReaderContainerModel: ObservableObject {
     }
 
     public func jumpToWebView(_ view: Int, preferredSurfaceOrdinal: Int) async {
+        let navigationSequence = beginNavigationRequest()
+        let sourceResumePoint = currentStableResumePoint
         let clampedView = max(1, min(maxView, view))
 
         if readingWorkflow?.canPromotePrefetchedDocument(forView: clampedView) == true {
-            await promotePrefetchedDocument(
+            let didPromote = await promotePrefetchedDocument(
                 startingAt: preferredSurfaceOrdinal,
                 preferredResumePoint: nil,
                 showsReaderPageDocumentNavigationOverlay: true
             )
+            if didPromote, isCurrentNavigationRequest(navigationSequence) {
+                recordSuccessfulNonlinearNavigation(from: sourceResumePoint, to: currentStableResumePoint)
+            }
             return
         }
 
@@ -750,13 +781,16 @@ public final class ReaderContainerModel: ObservableObject {
             return
         }
 
-        await load(
+        let didLoad = await load(
             view: clampedView,
             preferredSurfaceOrdinal: preferredSurfaceOrdinal,
             preferredResumePoint: nil,
             forceRefresh: false,
             showsReaderPageDocumentNavigationOverlay: true
         )
+        if didLoad, isCurrentNavigationRequest(navigationSequence) {
+            recordSuccessfulNonlinearNavigation(from: sourceResumePoint, to: currentStableResumePoint)
+        }
     }
 
     public func resetChapterDirectoryBrowsing() {
@@ -800,6 +834,8 @@ public final class ReaderContainerModel: ObservableObject {
     }
 
     public func jumpToChapterDirectoryChapter(_ chapter: ReaderChapter) async {
+        let navigationSequence = beginNavigationRequest()
+        let sourceResumePoint = currentStableResumePoint
         let targetView = visibleChapterDirectoryView
         let anchor = chapterDirectoryAnchors[chapter.ordinal]
         resetChapterDirectoryBrowsing()
@@ -809,13 +845,16 @@ public final class ReaderContainerModel: ObservableObject {
         }
         guard let anchor,
               let workflow = await ensureReadingWorkflow() else {
-            await load(
+            let didLoad = await load(
                 view: targetView,
                 preferredSurfaceOrdinal: 0,
                 preferredResumePoint: nil,
                 forceRefresh: false,
                 showsReaderPageDocumentNavigationOverlay: true
             )
+            if didLoad, isCurrentNavigationRequest(navigationSequence) {
+                recordSuccessfulNonlinearNavigation(from: sourceResumePoint, to: currentStableResumePoint)
+            }
             return
         }
         await beginReaderPageDocumentNavigation()
@@ -827,6 +866,9 @@ public final class ReaderContainerModel: ObservableObject {
             syncFromWorkflowState(state)
             isLoading = false
             scheduleProgressSync()
+            if isCurrentNavigationRequest(navigationSequence) {
+                recordSuccessfulNonlinearNavigation(from: sourceResumePoint, to: currentStableResumePoint)
+            }
         } catch {
             errorMessage = error.localizedDescription
             isLoading = false
@@ -941,14 +983,16 @@ public final class ReaderContainerModel: ObservableObject {
         }
     }
 
+    @discardableResult
     private func load(
         view: Int,
         preferredSurfaceOrdinal: Int,
         preferredResumePoint: ReaderResumePoint?,
         forceRefresh: Bool,
-        showsReaderPageDocumentNavigationOverlay: Bool = false
-    ) async {
-        guard let workflow = await ensureReadingWorkflow() else { return }
+        showsReaderPageDocumentNavigationOverlay: Bool = false,
+        reportsError: Bool = true
+    ) async -> Bool {
+        guard let workflow = await ensureReadingWorkflow() else { return false }
         if showsReaderPageDocumentNavigationOverlay {
             await beginReaderPageDocumentNavigation()
         }
@@ -972,9 +1016,13 @@ public final class ReaderContainerModel: ObservableObject {
             Task {
                 await prefetchIfNeeded(for: selectedSurfaceIndex)
             }
+            return true
         } catch {
-            errorMessage = error.localizedDescription
+            if reportsError {
+                errorMessage = error.localizedDescription
+            }
             isLoading = false
+            return false
         }
     }
 
@@ -1064,6 +1112,15 @@ public final class ReaderContainerModel: ObservableObject {
         )
     }
 
+    private func beginNavigationRequest() -> UInt64 {
+        navigationRequestSequence &+= 1
+        return navigationRequestSequence
+    }
+
+    private func isCurrentNavigationRequest(_ sequence: UInt64) -> Bool {
+        navigationRequestSequence == sequence
+    }
+
     private func syncChapterComments(from module: ReaderChapterCommentsModule) {
         chapterCommentsState = module.state
         isLoadingMoreChapterComments = module.isLoadingMore
@@ -1074,7 +1131,88 @@ public final class ReaderContainerModel: ObservableObject {
     private func syncFromWorkflowState(_ state: NovelReadingWorkflowState) {
         chromeProgressSnapshot = state.presentation.map(ReaderChromeProgressSnapshot.init) ?? .empty
         readerPresentation = state.presentation
+        currentStableResumePoint = readingWorkflow?.captureNovelReadingPosition()
         syncCachedViews(state.cachedViews)
+    }
+
+    private enum NavigationRestoreDirection {
+        case back
+        case forward
+    }
+
+    private func restoreNavigationAnchor(direction: NavigationRestoreDirection) async {
+        guard let sourceResumePoint = currentStableResumePoint else { return }
+        let navigationSequence = beginNavigationRequest()
+
+        while let targetResumePoint = navigationTarget(for: direction) {
+            let didRestore = await restoreResumePoint(targetResumePoint)
+            if didRestore {
+                guard isCurrentNavigationRequest(navigationSequence) else { return }
+                commitNavigationRestore(direction: direction, sourceResumePoint: sourceResumePoint)
+                scheduleProgressSync()
+                return
+            }
+            guard isCurrentNavigationRequest(navigationSequence) else { return }
+            discardNavigationTarget(for: direction)
+        }
+    }
+
+    private func restoreResumePoint(_ resumePoint: ReaderResumePoint) async -> Bool {
+        if readingWorkflow?.canPromotePrefetchedDocument(forView: resumePoint.view) == true {
+            return await promotePrefetchedDocument(
+                startingAt: 0,
+                preferredResumePoint: resumePoint,
+                showsReaderPageDocumentNavigationOverlay: true,
+                reportsError: false
+            )
+        }
+
+        return await load(
+            view: resumePoint.view,
+            preferredSurfaceOrdinal: 0,
+            preferredResumePoint: resumePoint,
+            forceRefresh: false,
+            showsReaderPageDocumentNavigationOverlay: true,
+            reportsError: false
+        )
+    }
+
+    private func navigationTarget(for direction: NavigationRestoreDirection) -> ReaderResumePoint? {
+        switch direction {
+        case .back:
+            navigationHistory.peekBack()
+        case .forward:
+            navigationHistory.peekForward()
+        }
+    }
+
+    private func commitNavigationRestore(
+        direction: NavigationRestoreDirection,
+        sourceResumePoint: ReaderResumePoint
+    ) {
+        switch direction {
+        case .back:
+            navigationHistory.commitBack(from: sourceResumePoint)
+        case .forward:
+            navigationHistory.commitForward(from: sourceResumePoint)
+        }
+    }
+
+    private func discardNavigationTarget(for direction: NavigationRestoreDirection) {
+        switch direction {
+        case .back:
+            navigationHistory.discardBackCandidate()
+        case .forward:
+            navigationHistory.discardForwardCandidate()
+        }
+    }
+
+    private func recordSuccessfulNonlinearNavigation(
+        from sourceResumePoint: ReaderResumePoint?,
+        to targetResumePoint: ReaderResumePoint?
+    ) {
+        guard let sourceResumePoint, let targetResumePoint else { return }
+        navigationHistory.recordNonlinearJump(from: sourceResumePoint, to: targetResumePoint)
     }
 
     private func beginReaderPageDocumentNavigation() async {
@@ -1289,15 +1427,18 @@ public final class ReaderContainerModel: ObservableObject {
         return summary
     }
 
-    private func promotePrefetchedDocument(startingAt preferredSurfaceOrdinal: Int) async {
+    @discardableResult
+    private func promotePrefetchedDocument(startingAt preferredSurfaceOrdinal: Int) async -> Bool {
         await promotePrefetchedDocument(startingAt: preferredSurfaceOrdinal, preferredResumePoint: nil)
     }
 
+    @discardableResult
     private func promotePrefetchedDocument(
         startingAt preferredSurfaceOrdinal: Int,
         preferredResumePoint: ReaderResumePoint?,
-        showsReaderPageDocumentNavigationOverlay: Bool = false
-    ) async {
+        showsReaderPageDocumentNavigationOverlay: Bool = false,
+        reportsError: Bool = true
+    ) async -> Bool {
         if showsReaderPageDocumentNavigationOverlay {
             await beginReaderPageDocumentNavigation()
         }
@@ -1310,11 +1451,15 @@ public final class ReaderContainerModel: ObservableObject {
             guard let workflowState = try await readingWorkflow?.promotePrefetchedDocument(
                 preferredSurfaceOrdinal: preferredSurfaceOrdinal,
                 resumePoint: preferredResumePoint
-            ) else { return }
+            ) else { return false }
             syncFromWorkflowState(workflowState)
             await prefetchIfNeeded(for: selectedSurfaceIndex)
+            return true
         } catch {
-            errorMessage = error.localizedDescription
+            if reportsError {
+                errorMessage = error.localizedDescription
+            }
+            return false
         }
     }
 

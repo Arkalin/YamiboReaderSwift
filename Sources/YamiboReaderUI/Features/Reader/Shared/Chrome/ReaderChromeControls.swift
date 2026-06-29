@@ -154,6 +154,49 @@ struct ReaderChromeCircleButton: View {
     }
 }
 
+enum ReaderChromeHistoryDirection {
+    case back
+    case forward
+}
+
+struct ReaderChromeHistoryButton: View {
+    let direction: ReaderChromeHistoryDirection
+    let title: String
+    let action: () -> Void
+
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .symbolRenderingMode(.palette)
+                .foregroundStyle(symbolColor, fillColor)
+                .font(.system(size: 17, weight: .semibold))
+                .frame(width: 19, height: 19)
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(title)
+    }
+
+    private var systemName: String {
+        switch direction {
+        case .back:
+            "arrow.uturn.backward.circle.fill"
+        case .forward:
+            "arrow.uturn.forward.circle.fill"
+        }
+    }
+
+    private var fillColor: Color {
+        colorScheme == .dark ? Color.white.opacity(0.86) : Color(red: 0.20, green: 0.16, blue: 0.12)
+    }
+
+    private var symbolColor: Color {
+        colorScheme == .dark ? Color.black.opacity(0.82) : Color(red: 0.96, green: 0.90, blue: 0.80)
+    }
+}
+
 struct ReaderChromeCapsuleButton: View {
     let title: String
     let systemName: String
