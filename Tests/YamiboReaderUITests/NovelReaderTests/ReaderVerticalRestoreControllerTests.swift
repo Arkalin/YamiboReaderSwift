@@ -3,6 +3,35 @@ import XCTest
 @testable import YamiboReaderUI
 
 final class ReaderVerticalRestoreControllerTests: XCTestCase {
+    func testScrollRequestIdentitySeparatesRepeatedSemanticRestores() {
+        let anchor = ReaderVerticalTextAnchor(
+            position: ReaderResumePoint(
+                view: 1,
+                textSegmentIdentity: NovelTextSegmentIdentity(rawValue: "text-3"),
+                displayedTextOffset: 42,
+                chapterOrdinal: 0,
+                segmentProgress: 0,
+                readingModeHint: .vertical
+            )
+        )
+        let first = ReaderVerticalScrollRequest(
+            commandID: 1,
+            view: 1,
+            surfaceIndex: 12,
+            intraSurfaceProgress: 0.59,
+            textAnchor: anchor
+        )
+        let second = ReaderVerticalScrollRequest(
+            commandID: 2,
+            view: 1,
+            surfaceIndex: 12,
+            intraSurfaceProgress: 0.59,
+            textAnchor: anchor
+        )
+
+        XCTAssertNotEqual(first, second)
+    }
+
     func testActiveRestoreSuppressesViewportSamplingIncludingForcedSave() {
         var controller = ReaderVerticalRestoreController()
         let request = ReaderVerticalScrollRequest(surfaceIndex: 81, intraSurfaceProgress: 0.0194)

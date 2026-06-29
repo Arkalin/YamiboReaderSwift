@@ -17,6 +17,7 @@ public struct ReaderContainerView: View {
     @State private var chapterCommentsTarget: ReaderChapterCommentTarget?
     @State private var chromeState = ReaderChromeState()
     @State private var verticalScrollRequest: ReaderVerticalScrollRequest?
+    @State private var verticalScrollRequestCommandID: UInt64 = 0
     @State private var verticalRestoreController = ReaderVerticalRestoreController()
     @State private var verticalRestoreRetryTask: Task<Void, Never>?
     @State private var verticalViewportPositionUpdateTask: Task<Void, Never>?
@@ -578,10 +579,10 @@ public struct ReaderContainerView: View {
             model: model,
             topInset: topInset,
             onNavigateBack: {
-                Task { await model.navigateBack() }
+                Task { await navigateBackFromChrome() }
             },
             onNavigateForward: {
-                Task { await model.navigateForward() }
+                Task { await navigateForwardFromChrome() }
             },
             onClose: closeReader,
             onRefresh: refreshReader
@@ -939,6 +940,16 @@ public struct ReaderContainerView: View {
         restoreVerticalPositionIfNeeded()
     }
 
+    private func navigateBackFromChrome() async {
+        await model.navigateBack()
+        restoreVerticalPositionIfNeeded()
+    }
+
+    private func navigateForwardFromChrome() async {
+        await model.navigateForward()
+        restoreVerticalPositionIfNeeded()
+    }
+
     private func goRelativePage(_ delta: Int) async {
         pagedScrollAnimationRequest = nil
         await model.jumpRelativeSurface(delta)
@@ -1081,7 +1092,9 @@ public struct ReaderContainerView: View {
         let textAnchor = resumePoint?.view == model.visibleView
             ? resumePoint.map(ReaderVerticalTextAnchor.init(position:))
             : nil
+        verticalScrollRequestCommandID &+= 1
         let request = ReaderVerticalScrollRequest(
+            commandID: verticalScrollRequestCommandID,
             view: model.visibleView,
             surfaceIndex: model.selectedSurfaceIndex,
             intraSurfaceProgress: model.currentSurfaceIntraProgress,

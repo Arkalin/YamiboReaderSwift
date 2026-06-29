@@ -10,6 +10,7 @@ struct ReaderVerticalTextAnchor: Equatable, Sendable {
 }
 
 struct ReaderVerticalScrollRequest: Equatable, Sendable {
+    let commandID: UInt64
     let view: Int?
     let surfaceIndex: Int
     let intraSurfaceProgress: Double
@@ -21,6 +22,23 @@ struct ReaderVerticalScrollRequest: Equatable, Sendable {
         intraSurfaceProgress: Double,
         textAnchor: ReaderVerticalTextAnchor? = nil
     ) {
+        self.init(
+            commandID: 0,
+            view: view,
+            surfaceIndex: surfaceIndex,
+            intraSurfaceProgress: intraSurfaceProgress,
+            textAnchor: textAnchor
+        )
+    }
+
+    init(
+        commandID: UInt64,
+        view: Int? = nil,
+        surfaceIndex: Int,
+        intraSurfaceProgress: Double,
+        textAnchor: ReaderVerticalTextAnchor? = nil
+    ) {
+        self.commandID = commandID
         self.view = view
         self.surfaceIndex = surfaceIndex
         self.intraSurfaceProgress = intraSurfaceProgress
