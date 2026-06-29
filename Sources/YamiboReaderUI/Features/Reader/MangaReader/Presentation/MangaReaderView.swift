@@ -453,7 +453,7 @@ private struct MangaReaderTopChrome: View {
     var body: some View {
         ReaderGlassContainer(spacing: 12) {
             let chromeButtonSize: CGFloat = 44
-            let historyIconSize: CGFloat = 19
+            let historyIconSize = ReaderChromeHistoryButton.controlSize(isGlassBacked: true)
             let buttonSpacing: CGFloat = 8
             let leadingControlsWidth = canNavigateBack ? historyIconSize : 0
             let trailingControlsWidth = chromeButtonSize
@@ -470,6 +470,7 @@ private struct MangaReaderTopChrome: View {
                         ReaderChromeHistoryButton(
                             direction: .back,
                             title: L10n.string("common.back"),
+                            isGlassBacked: true,
                             action: onNavigateBack
                         )
                     }
@@ -480,6 +481,7 @@ private struct MangaReaderTopChrome: View {
                         ReaderChromeHistoryButton(
                             direction: .forward,
                             title: L10n.string("common.forward"),
+                            isGlassBacked: true,
                             action: onNavigateForward
                         )
                     }

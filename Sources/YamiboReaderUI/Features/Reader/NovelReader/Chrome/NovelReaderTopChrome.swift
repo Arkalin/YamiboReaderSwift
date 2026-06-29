@@ -23,7 +23,10 @@ struct NovelReaderTopChrome: View {
 
         ReaderGlassContainer(spacing: 12) {
             let chromeButtonSize: CGFloat = 44
-            let historyIconSize: CGFloat = 19
+            let historyButtonsUseGlassBackground = model.settings.readingMode == .vertical
+            let historyIconSize = ReaderChromeHistoryButton.controlSize(
+                isGlassBacked: historyButtonsUseGlassBackground
+            )
             let buttonSpacing: CGFloat = 8
             let leadingControlsWidth = model.canNavigateBack ? historyIconSize : 0
             let trailingControlsWidth = chromeButtonSize
@@ -41,6 +44,7 @@ struct NovelReaderTopChrome: View {
                         ReaderChromeHistoryButton(
                             direction: .back,
                             title: L10n.string("common.back"),
+                            isGlassBacked: historyButtonsUseGlassBackground,
                             action: onNavigateBack
                         )
                     }
@@ -51,6 +55,7 @@ struct NovelReaderTopChrome: View {
                         ReaderChromeHistoryButton(
                             direction: .forward,
                             title: L10n.string("common.forward"),
+                            isGlassBacked: historyButtonsUseGlassBackground,
                             action: onNavigateForward
                         )
                     }

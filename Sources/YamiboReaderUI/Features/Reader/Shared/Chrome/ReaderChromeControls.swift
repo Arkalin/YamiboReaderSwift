@@ -162,21 +162,37 @@ enum ReaderChromeHistoryDirection {
 struct ReaderChromeHistoryButton: View {
     let direction: ReaderChromeHistoryDirection
     let title: String
+    var isGlassBacked = false
     let action: () -> Void
 
     @Environment(\.colorScheme) private var colorScheme
+    private let iconSize: CGFloat = 19
+    private let glassSize: CGFloat = 27
 
     var body: some View {
         Button(action: action) {
-            Image(systemName: systemName)
-                .symbolRenderingMode(.palette)
-                .foregroundStyle(symbolColor, fillColor)
-                .font(.system(size: 17, weight: .semibold))
-                .frame(width: 19, height: 19)
+            icon
+                .modifier(ReaderChromeHistoryButtonGlassModifier(
+                    isGlassBacked: isGlassBacked,
+                    size: glassSize,
+                    tint: readerChromePanelTint(for: colorScheme)
+                ))
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel(title)
+    }
+
+    static func controlSize(isGlassBacked: Bool) -> CGFloat {
+        isGlassBacked ? 27 : 19
+    }
+
+    private var icon: some View {
+        Image(systemName: systemName)
+            .symbolRenderingMode(.palette)
+            .foregroundStyle(symbolColor, fillColor)
+            .font(.system(size: 17, weight: .semibold))
+            .frame(width: iconSize, height: iconSize)
     }
 
     private var systemName: String {
@@ -194,6 +210,22 @@ struct ReaderChromeHistoryButton: View {
 
     private var symbolColor: Color {
         colorScheme == .dark ? Color.black.opacity(0.82) : Color(red: 0.96, green: 0.90, blue: 0.80)
+    }
+}
+
+private struct ReaderChromeHistoryButtonGlassModifier: ViewModifier {
+    let isGlassBacked: Bool
+    let size: CGFloat
+    let tint: Color
+
+    func body(content: Content) -> some View {
+        if isGlassBacked {
+            content
+                .frame(width: size, height: size)
+                .readerChromePanel(cornerRadius: size / 2, tint: tint)
+        } else {
+            content
+        }
     }
 }
 
