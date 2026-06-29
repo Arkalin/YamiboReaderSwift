@@ -28,7 +28,7 @@ final class ClipboardForumLinkPasteboardReaderTests: XCTestCase {
         let promptURL = await reader.promptURL(from: pasteboard)
         let url = try XCTUnwrap(promptURL)
 
-        XCTAssertEqual(url.absoluteString, "https://bbs.yamibo.com/thread-101-1-1.html")
+        XCTAssertEqual(url.absoluteString, "https://bbs.yamibo.com/thread-101-1-1.html?mobile=2")
         XCTAssertEqual(pasteboard.containsWebURLPatternCallCount, 1)
         XCTAssertEqual(pasteboard.stringReadCount, 1)
     }

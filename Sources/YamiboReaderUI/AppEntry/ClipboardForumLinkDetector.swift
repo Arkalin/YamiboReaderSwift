@@ -58,7 +58,7 @@ public struct ClipboardForumLinkDetector: Sendable {
                   url.host?.lowercased() == "bbs.yamibo.com" else {
                 continue
             }
-            return url
+            return mobileForumURL(from: url)
         }
 
         return nil
@@ -89,6 +89,20 @@ public struct ClipboardForumLinkDetector: Sendable {
             return true
         }
         return #""'<>[]{}()（）［］【】「」『』“”‘’"#.contains(character)
+    }
+
+    private static func mobileForumURL(from url: URL) -> URL {
+        guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+            return url
+        }
+
+        let queryItems = components.queryItems ?? []
+        guard !queryItems.contains(where: { $0.name == "mobile" && $0.value == "2" }) else {
+            return url
+        }
+
+        components.queryItems = queryItems + [URLQueryItem(name: "mobile", value: "2")]
+        return components.url ?? url
     }
 }
 
