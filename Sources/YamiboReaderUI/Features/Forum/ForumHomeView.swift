@@ -6,16 +6,15 @@ struct ForumHomeView: View {
     let onBoardTap: (ForumBoardSummary) -> Void
     let onCarouselTap: (ForumHomeCarouselItem) -> Void
     let onSearchTap: () -> Void
-    let onWebFallbackTap: () -> Void
 
     var body: some View {
         Group {
             if model.isLoading && model.page == nil {
                 ForumHomeLoadingView()
             } else if let error = model.errorMessage, model.page == nil {
-                ForumHomeErrorView(message: error, retry: retry, openWebFallback: onWebFallbackTap)
+                ForumHomeErrorView(message: error, retry: retry)
             } else if model.categories.isEmpty {
-                ForumHomeEmptyView(openWebFallback: onWebFallbackTap)
+                ForumHomeEmptyView()
             } else {
                 ForumHomeContentView(
                     categories: model.categories,
@@ -343,7 +342,6 @@ private struct ForumHomeLoadingView: View {
 private struct ForumHomeErrorView: View {
     let message: String
     let retry: () -> Void
-    let openWebFallback: () -> Void
 
     var body: some View {
         ContentUnavailableView {
@@ -351,30 +349,17 @@ private struct ForumHomeErrorView: View {
         } description: {
             Text(message)
         } actions: {
-            ViewThatFits {
-                HStack {
-                    Button(L10n.string("common.retry"), action: retry)
-                    Button(L10n.string("forum.home.open_web_fallback"), action: openWebFallback)
-                }
-                VStack {
-                    Button(L10n.string("common.retry"), action: retry)
-                    Button(L10n.string("forum.home.open_web_fallback"), action: openWebFallback)
-                }
-            }
+            Button(L10n.string("common.retry"), action: retry)
         }
     }
 }
 
 private struct ForumHomeEmptyView: View {
-    let openWebFallback: () -> Void
-
     var body: some View {
         ContentUnavailableView {
             Label(L10n.string("forum.home.empty"), systemImage: "rectangle.stack")
         } description: {
-            Text(L10n.string("forum.home.parser_fallback"))
-        } actions: {
-            Button(L10n.string("forum.home.open_web_fallback"), action: openWebFallback)
+            Text(L10n.string("forum.home.empty_message"))
         }
     }
 }

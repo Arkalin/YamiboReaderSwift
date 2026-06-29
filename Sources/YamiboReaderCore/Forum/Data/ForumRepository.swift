@@ -19,6 +19,22 @@ public actor ForumRepository {
         await cacheStore.loadHome(allowExpired: allowExpired)
     }
 
+    public func cachedForumBoard(
+        fid: String,
+        page: Int = 1,
+        filterID: String? = nil,
+        orderID: String? = nil,
+        allowExpired: Bool = false
+    ) async -> ForumBoardPage? {
+        await cacheStore.loadBoard(
+            fid: fid,
+            page: page,
+            filterID: filterID,
+            orderID: orderID,
+            allowExpired: allowExpired
+        )
+    }
+
     public func fetchForumHome(preferCache: Bool = true) async throws -> ForumHomePage {
         if preferCache, let cached = await cacheStore.loadHome() {
             return cached

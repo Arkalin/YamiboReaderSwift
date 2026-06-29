@@ -36,6 +36,8 @@ public struct ForumBoardSummary: Codable, Equatable, Identifiable, Hashable, Sen
     public var name: String
     public var detail: String?
     public var todayCount: Int?
+    public var threadCount: Int?
+    public var rank: Int?
     public var iconURL: URL?
     public var url: URL
 
@@ -46,6 +48,8 @@ public struct ForumBoardSummary: Codable, Equatable, Identifiable, Hashable, Sen
         name: String,
         detail: String? = nil,
         todayCount: Int? = nil,
+        threadCount: Int? = nil,
+        rank: Int? = nil,
         iconURL: URL? = nil,
         url: URL
     ) {
@@ -53,6 +57,8 @@ public struct ForumBoardSummary: Codable, Equatable, Identifiable, Hashable, Sen
         self.name = name
         self.detail = detail
         self.todayCount = todayCount
+        self.threadCount = threadCount
+        self.rank = rank
         self.iconURL = iconURL
         self.url = url
     }
@@ -114,6 +120,10 @@ public struct ForumThreadSummary: Codable, Equatable, Identifiable, Hashable, Se
     public var url: URL
     public var authorName: String?
     public var authorID: String?
+    public var authorAvatarURL: URL?
+    public var description: String?
+    public var tag: String?
+    public var isPoll: Bool
     public var replyCount: Int?
     public var viewCount: Int?
     public var lastActivityText: String?
@@ -126,6 +136,10 @@ public struct ForumThreadSummary: Codable, Equatable, Identifiable, Hashable, Se
         url: URL,
         authorName: String? = nil,
         authorID: String? = nil,
+        authorAvatarURL: URL? = nil,
+        description: String? = nil,
+        tag: String? = nil,
+        isPoll: Bool = false,
         replyCount: Int? = nil,
         viewCount: Int? = nil,
         lastActivityText: String? = nil
@@ -135,6 +149,10 @@ public struct ForumThreadSummary: Codable, Equatable, Identifiable, Hashable, Se
         self.url = url
         self.authorName = authorName
         self.authorID = authorID
+        self.authorAvatarURL = authorAvatarURL
+        self.description = description
+        self.tag = tag
+        self.isPoll = isPoll
         self.replyCount = replyCount
         self.viewCount = viewCount
         self.lastActivityText = lastActivityText

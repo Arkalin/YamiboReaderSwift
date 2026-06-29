@@ -21,13 +21,28 @@ public struct ForumNavigationHostView: View {
                 model: model,
                 onBoardTap: openBoard,
                 onCarouselTap: openCarouselItem,
-                onSearchTap: openSearchFallback,
-                onWebFallbackTap: openHomeFallback
+                onSearchTap: openSearchFallback
             )
             .navigationDestination(for: ForumDestination.self) { destination in
                 switch destination {
-                case let .board(fid, title):
-                    ForumBoardPlaceholderView(fid: fid, title: title, openWeb: openWebFallback)
+                case let .board(fid, title, page):
+                    ForumBoardView(
+                        model: ForumBoardViewModel(
+                            fid: fid,
+                            title: title,
+                            initialPage: page ?? 1,
+                            appContext: appContext
+                        ),
+                        onSubBoardTap: openBoard,
+                        onPinnedTap: openPinnedItem,
+                        onThreadTap: openThread,
+                        onSearchTap: {
+                            openBoardSearchFallback(fid: fid)
+                        },
+                        onPostThreadTap: {
+                            openPostThreadFallback(fid: fid)
+                        }
+                    )
                 case let .web(url):
                     ForumBrowserView(
                         url: url,
@@ -59,8 +74,8 @@ public struct ForumNavigationHostView: View {
         switch ForumRouteResolver.resolve(url: url, source: source) {
         case .home:
             path = []
-        case let .board(fid, title, _):
-            path.append(.board(fid: fid, title: title))
+        case let .board(fid, title, page):
+            path.append(.board(fid: fid, title: title, page: page))
         case let .thread(threadURL):
             openThread(threadURL, title: nil)
         case let .web(url):
@@ -69,7 +84,7 @@ public struct ForumNavigationHostView: View {
     }
 
     private func openBoard(_ board: ForumBoardSummary) {
-        path.append(.board(fid: board.fid, title: board.name))
+        path.append(.board(fid: board.fid, title: board.name, page: nil))
     }
 
     private func openCarouselItem(_ item: ForumHomeCarouselItem) {
@@ -99,6 +114,18 @@ public struct ForumNavigationHostView: View {
         }
     }
 
+    private func openThread(_ thread: ForumThreadSummary) {
+        openThread(thread.url, title: thread.title)
+    }
+
+    private func openPinnedItem(_ item: ForumPinnedItem) {
+        if item.threadID != nil {
+            openThread(item.url, title: item.title)
+        } else {
+            path.append(.web(item.url))
+        }
+    }
+
     private func openSearchFallback() {
         var components = URLComponents(url: YamiboRoute.baseURL, resolvingAgainstBaseURL: false)!
         components.path = "/search.php"
@@ -111,37 +138,35 @@ public struct ForumNavigationHostView: View {
         }
     }
 
-    private func openHomeFallback() {
-        path.append(.web(YamiboRoute.forumHome.url))
+    private func openBoardSearchFallback(fid: String) {
+        var components = URLComponents(url: YamiboRoute.baseURL, resolvingAgainstBaseURL: false)!
+        components.path = "/search.php"
+        components.queryItems = [
+            .init(name: "mod", value: "curforum"),
+            .init(name: "srhfid", value: fid),
+            .init(name: "mobile", value: "2")
+        ]
+        if let url = components.url {
+            path.append(.web(url))
+        }
     }
 
-    private func openWebFallback(fid: String) {
-        path.append(.web(ForumRouteResolver.boardURL(fid: fid)))
+    private func openPostThreadFallback(fid: String) {
+        var components = URLComponents(url: YamiboRoute.baseURL, resolvingAgainstBaseURL: false)!
+        components.path = "/forum.php"
+        components.queryItems = [
+            .init(name: "mod", value: "post"),
+            .init(name: "action", value: "newthread"),
+            .init(name: "fid", value: fid),
+            .init(name: "mobile", value: "2")
+        ]
+        if let url = components.url {
+            path.append(.web(url))
+        }
     }
 }
 
 private enum ForumDestination: Hashable {
-    case board(fid: String, title: String?)
+    case board(fid: String, title: String?, page: Int?)
     case web(URL)
-}
-
-private struct ForumBoardPlaceholderView: View {
-    let fid: String
-    let title: String?
-    let openWeb: (String) -> Void
-
-    var body: some View {
-        ContentUnavailableView {
-            Label(title ?? L10n.string("forum.board"), systemImage: "list.bullet.rectangle")
-        } description: {
-            Text(L10n.string("forum.board.placeholder_message"))
-        } actions: {
-            Button {
-                openWeb(fid)
-            } label: {
-                Label(L10n.string("forum.home.open_web_fallback"), systemImage: "safari")
-            }
-        }
-        .navigationTitle(title ?? L10n.string("forum.board"))
-    }
 }
