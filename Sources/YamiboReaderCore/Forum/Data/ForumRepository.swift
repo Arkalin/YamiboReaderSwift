@@ -23,14 +23,16 @@ public actor ForumRepository {
         fid: String,
         page: Int = 1,
         filterID: String? = nil,
-        orderID: String? = nil,
+        orderFilter: String? = nil,
+        orderBy: String? = nil,
         allowExpired: Bool = false
     ) async -> ForumBoardPage? {
         await cacheStore.loadBoard(
             fid: fid,
             page: page,
             filterID: filterID,
-            orderID: orderID,
+            orderFilter: orderFilter,
+            orderBy: orderBy,
             allowExpired: allowExpired
         )
     }
@@ -51,20 +53,65 @@ public actor ForumRepository {
         title: String? = nil,
         page: Int = 1,
         filterID: String? = nil,
-        orderID: String? = nil,
+        orderFilter: String? = nil,
+        orderBy: String? = nil,
         preferCache: Bool = true
     ) async throws -> ForumBoardPage {
         if preferCache,
-           let cached = await cacheStore.loadBoard(fid: fid, page: page, filterID: filterID, orderID: orderID) {
+           let cached = await cacheStore.loadBoard(fid: fid, page: page, filterID: filterID, orderFilter: orderFilter, orderBy: orderBy) {
             return cached
         }
 
         let html = try await client.fetchHTML(
-            for: .forumBoard(fid: fid, page: page, filterID: filterID, orderID: orderID),
+            for: .forumBoard(fid: fid, page: page, filterID: filterID, orderFilter: orderFilter, orderBy: orderBy),
             cachePolicy: .reloadIgnoringLocalCacheData
         )
         let board = try ForumHTMLParser.parseBoardPage(from: html, fid: fid, title: title, fetchedAt: now())
-        try await cacheStore.saveBoard(board, fid: fid, pageNumber: page, filterID: filterID, orderID: orderID)
+        try await cacheStore.saveBoard(board, fid: fid, pageNumber: page, filterID: filterID, orderFilter: orderFilter, orderBy: orderBy)
         return board
+    }
+
+    public func addBoardFavorite(fid: String, formHash: String?) async throws -> String {
+        guard let formHash = formHash?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !formHash.isEmpty else {
+            throw YamiboError.missingForumBoardFavoriteToken
+        }
+
+        let html = try await client.fetchHTML(
+            for: .forumBoardFavorite(fid: fid, formHash: formHash),
+            cachePolicy: .reloadIgnoringLocalCacheData
+        )
+        return try ForumHTMLParser.parseBoardFavoriteResult(from: html)
+    }
+
+    public func searchForum(query: String, forumID: String?, formHash: String?) async throws -> ForumSearchPage {
+        let normalizedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedQuery.isEmpty else {
+            throw YamiboError.parsingFailed(context: L10n.string("context.forum_search"))
+        }
+        guard let formHash = formHash?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !formHash.isEmpty else {
+            throw YamiboError.missingForumSearchToken
+        }
+
+        let html = try await client.fetchHTML(
+            for: .forumSearch(keyword: normalizedQuery, forumID: forumID, formHash: formHash),
+            cachePolicy: .reloadIgnoringLocalCacheData
+        )
+        return try ForumHTMLParser.parseSearchPage(from: html, query: normalizedQuery)
+    }
+
+    public func searchForumPage(query: String, searchID: String, page: Int) async throws -> ForumSearchPage {
+        let normalizedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedSearchID = searchID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedQuery.isEmpty, !normalizedSearchID.isEmpty else {
+            throw YamiboError.parsingFailed(context: L10n.string("context.forum_search"))
+        }
+
+        let html = try await client.fetchHTML(
+            for: .forumSearchPage(searchID: normalizedSearchID, page: page),
+            cachePolicy: .reloadIgnoringLocalCacheData
+        )
+        return try ForumHTMLParser.parseSearchPage(from: html, query: normalizedQuery)
     }
 }

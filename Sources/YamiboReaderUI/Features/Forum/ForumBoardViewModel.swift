@@ -7,7 +7,8 @@ protocol ForumBoardPageLoading: Sendable {
         fid: String,
         page: Int,
         filterID: String?,
-        orderID: String?,
+        orderFilter: String?,
+        orderBy: String?,
         allowExpired: Bool
     ) async -> ForumBoardPage?
 
@@ -16,9 +17,12 @@ protocol ForumBoardPageLoading: Sendable {
         title: String?,
         page: Int,
         filterID: String?,
-        orderID: String?,
+        orderFilter: String?,
+        orderBy: String?,
         preferCache: Bool
     ) async throws -> ForumBoardPage
+
+    func addBoardFavorite(fid: String, formHash: String?) async throws -> String
 }
 
 extension ForumRepository: ForumBoardPageLoading {}
@@ -26,12 +30,22 @@ extension ForumRepository: ForumBoardPageLoading {}
 @MainActor
 @Observable
 final class ForumBoardViewModel {
+    private struct PageSnapshot {
+        var page: ForumBoardPage?
+        var errorMessage: String?
+        var currentPage: Int
+        var selectedFilterID: String?
+        var selectedOrderOptionID: String?
+    }
+
     var page: ForumBoardPage?
     var errorMessage: String?
+    var favoriteMessage: String?
     var isLoading = false
     var isRefreshing = false
+    var isFavoriting = false
     var selectedFilterID: String?
-    var selectedOrderID: String?
+    var selectedOrderOptionID: String?
     var currentPage: Int
 
     let fid: String
@@ -39,6 +53,7 @@ final class ForumBoardViewModel {
 
     @ObservationIgnored private let repositoryProvider: @Sendable () async -> any ForumBoardPageLoading
     @ObservationIgnored private var generation = 0
+    @ObservationIgnored private var pageHistory: [PageSnapshot] = []
 
     init(fid: String, title: String?, initialPage: Int = 1, appContext: YamiboAppContext) {
         self.fid = fid
@@ -83,6 +98,10 @@ final class ForumBoardViewModel {
         page?.pageNavigation
     }
 
+    var canRestorePreviousPage: Bool {
+        !pageHistory.isEmpty
+    }
+
     var filters: [ForumFilterOption] {
         page?.filters ?? []
     }
@@ -96,7 +115,11 @@ final class ForumBoardViewModel {
     }
 
     var selectedOrderTitle: String {
-        orders.first(where: { $0.id == selectedOrderID })?.title ?? L10n.string("forum.board.all")
+        selectedOrderOption?.title ?? L10n.string("forum.board.all")
+    }
+
+    private var selectedOrderOption: ForumOrderOption? {
+        orders.first(where: { $0.id == selectedOrderOptionID })
     }
 
     func load() async {
@@ -111,7 +134,8 @@ final class ForumBoardViewModel {
             fid: fid,
             page: currentPage,
             filterID: selectedFilterID,
-            orderID: selectedOrderID,
+            orderFilter: selectedOrderOption?.filter,
+            orderBy: selectedOrderOption?.orderBy,
             allowExpired: false
         ) {
             apply(cached)
@@ -130,6 +154,7 @@ final class ForumBoardViewModel {
     func goToPage(_ page: Int) async {
         let nextPage = max(1, page)
         guard nextPage != currentPage else { return }
+        pushCurrentPageSnapshot()
         generation += 1
         let requestGeneration = generation
         currentPage = nextPage
@@ -142,14 +167,43 @@ final class ForumBoardViewModel {
         guard selectedFilterID != id else { return }
         selectedFilterID = id
         currentPage = 1
+        pageHistory.removeAll()
         await reloadForOptionChange()
     }
 
     func selectOrder(id: String?) async {
-        guard selectedOrderID != id else { return }
-        selectedOrderID = id
+        guard selectedOrderOptionID != id else { return }
+        selectedOrderOptionID = id
         currentPage = 1
+        pageHistory.removeAll()
         await reloadForOptionChange()
+    }
+
+    @discardableResult
+    func restorePreviousPage() -> Bool {
+        guard let snapshot = pageHistory.popLast() else { return false }
+        generation += 1
+        page = snapshot.page
+        errorMessage = snapshot.errorMessage
+        currentPage = snapshot.currentPage
+        selectedFilterID = snapshot.selectedFilterID
+        selectedOrderOptionID = snapshot.selectedOrderOptionID
+        isLoading = false
+        isRefreshing = false
+        return true
+    }
+
+    func addFavorite() async {
+        guard !isFavoriting else { return }
+        isFavoriting = true
+        defer { isFavoriting = false }
+
+        do {
+            let repository = await repositoryProvider()
+            favoriteMessage = try await repository.addBoardFavorite(fid: fid, formHash: page?.formHash)
+        } catch {
+            favoriteMessage = error.localizedDescription
+        }
     }
 
     private func reloadForOptionChange() async {
@@ -180,7 +234,8 @@ final class ForumBoardViewModel {
                 title: initialTitle,
                 page: pageNumber,
                 filterID: selectedFilterID,
-                orderID: selectedOrderID,
+                orderFilter: selectedOrderOption?.filter,
+                orderBy: selectedOrderOption?.orderBy,
                 preferCache: preferCache
             )
             guard requestGeneration == generation else { return }
@@ -197,5 +252,17 @@ final class ForumBoardViewModel {
     private func apply(_ page: ForumBoardPage) {
         self.page = page
         currentPage = page.pageNavigation?.currentPage ?? currentPage
+    }
+
+    private func pushCurrentPageSnapshot() {
+        pageHistory.append(
+            PageSnapshot(
+                page: page,
+                errorMessage: errorMessage,
+                currentPage: currentPage,
+                selectedFilterID: selectedFilterID,
+                selectedOrderOptionID: selectedOrderOptionID
+            )
+        )
     }
 }

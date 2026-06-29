@@ -29,6 +29,7 @@ struct ForumHomeView: View {
                 )
             }
         }
+        .forumPageBackground()
     }
 
     private func retry() {
@@ -86,6 +87,7 @@ private struct ForumHomeContentView: View {
                     .padding(.top, 8)
             }
         }
+        .forumPageBackground()
     }
 }
 
@@ -97,9 +99,10 @@ private struct ForumHomeHeaderView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("百合会")
                     .font(.title2.weight(.semibold))
+                    .foregroundStyle(ForumColors.brownDeep)
                 Text(L10n.string("forum.default_title"))
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(ForumColors.secondaryText)
             }
 
             Spacer(minLength: 8)
@@ -109,7 +112,8 @@ private struct ForumHomeHeaderView: View {
                     .labelStyle(.iconOnly)
                     .font(.title3)
                     .frame(width: 42, height: 42)
-                    .background(.quaternary, in: Circle())
+                    .foregroundStyle(ForumColors.textDark)
+                    .background(ForumColors.mutedFill, in: Circle())
             }
             .accessibilityLabel(L10n.string("forum.home.search_placeholder"))
         }
@@ -175,18 +179,18 @@ private struct ForumCarouselImageButton: View {
                         .scaledToFill()
                 case .failure:
                     ZStack {
-                        Rectangle().fill(.quaternary)
+                        Rectangle().fill(ForumColors.creamSurface)
                         Image(systemName: "photo")
                             .font(.title)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(ForumColors.secondaryText)
                     }
                 case .empty:
                     ZStack {
-                        Rectangle().fill(.quaternary)
+                        Rectangle().fill(ForumColors.creamSurface)
                         ProgressView()
                     }
                 @unknown default:
-                    Rectangle().fill(.quaternary)
+                    Rectangle().fill(ForumColors.creamSurface)
                 }
             }
             .frame(maxWidth: .infinity)
@@ -194,6 +198,7 @@ private struct ForumCarouselImageButton: View {
             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
         .buttonStyle(.plain)
+        .disabled(!item.isThreadTarget)
     }
 }
 
@@ -215,11 +220,11 @@ private struct ForumCategorySectionView: View {
                 HStack(spacing: 10) {
                     Text(title)
                         .font(.headline)
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(ForumColors.brownDeep)
                     Spacer()
                     Image(systemName: "chevron.down")
                         .font(.footnote.weight(.semibold))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(ForumColors.secondaryText)
                         .rotationEffect(.degrees(isExpanded ? 0 : -90))
                 }
                 .contentShape(Rectangle())
@@ -266,23 +271,23 @@ private struct ForumBoardRowView: View {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Text(name)
                             .font(.body.weight(.semibold))
-                            .foregroundStyle(.primary)
+                            .foregroundStyle(ForumColors.textDark)
                             .lineLimit(1)
 
                         if let todayCount {
                             Text(L10n.string("forum.home.today_count", todayCount))
                                 .font(.caption2.weight(.medium))
-                                .foregroundStyle(.red)
+                                .foregroundStyle(ForumColors.redAccent)
                                 .padding(.horizontal, 7)
                                 .padding(.vertical, 3)
-                                .background(.red.opacity(0.1), in: Capsule())
+                                .background(ForumColors.redAccent.opacity(0.12), in: Capsule())
                         }
                     }
 
                     if let detail {
                         Text(detail)
                             .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(ForumColors.secondaryText)
                             .lineLimit(2)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
@@ -290,14 +295,10 @@ private struct ForumBoardRowView: View {
 
                 Image(systemName: "chevron.right")
                     .font(.footnote.weight(.semibold))
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(ForumColors.tertiaryText)
             }
             .padding(12)
-            .background(.background, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(.quaternary, lineWidth: 1)
-            }
+            .forumCardBackground()
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("forum-board-row-\(fid)")
@@ -318,11 +319,11 @@ private struct ForumBoardIconView: View {
             default:
                 Image(systemName: "text.bubble")
                     .font(.title3)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(ForumColors.secondaryText)
             }
         }
         .frame(width: 38, height: 38)
-        .background(.quaternary, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .background(ForumColors.mutedFill, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         .accessibilityHidden(true)
     }
 }
@@ -333,9 +334,10 @@ private struct ForumHomeLoadingView: View {
             ProgressView()
             Text(L10n.string("common.loading"))
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(ForumColors.secondaryText)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .forumPageBackground()
     }
 }
 

@@ -66,6 +66,60 @@ public enum ForumHTMLParser {
         )
     }
 
+    public static func parseBoardFavoriteResult(from html: String) throws -> String {
+        if ReaderHTMLParser.isNotAuthenticated(html) {
+            throw YamiboError.notAuthenticated
+        }
+        if ReaderHTMLParser.isFloodControlOrError(html) {
+            throw YamiboError.floodControl
+        }
+
+        let document = try SwiftSoup.parse(html, YamiboRoute.baseURL.absoluteString)
+        let message = (
+            (try? document.select(".jump_c, .alert_info, .messagetext, .showmessage, .wp").first()?.text())
+                ?? (try? document.body()?.text())
+                ?? ""
+        ).normalizedForumText
+
+        if message.contains("请先登录") || message.contains("請先登錄") || message.contains("请登录") {
+            throw YamiboError.notAuthenticated
+        }
+        if message.contains("失败") || message.contains("失敗") || message.contains("错误") || message.contains("錯誤") {
+            throw YamiboError.forumBoardFavoriteFailed
+        }
+        if message.contains("已收藏") || message.contains("收藏成功") || message.contains("成功收藏") {
+            return message
+        }
+
+        guard !message.isEmpty else {
+            throw YamiboError.forumBoardFavoriteFailed
+        }
+        return L10n.string("forum.board.favorite_success")
+    }
+
+    public static func parseSearchPage(from html: String, query: String) throws -> ForumSearchPage {
+        if ReaderHTMLParser.isNotAuthenticated(html) {
+            throw YamiboError.notAuthenticated
+        }
+        if ReaderHTMLParser.isFloodControlOrError(html) {
+            throw YamiboError.floodControl
+        }
+
+        let document = try SwiftSoup.parse(html, YamiboRoute.baseURL.absoluteString)
+        let results = parseThreadSummaries(in: document)
+        guard !results.isEmpty else {
+            throw YamiboError.parsingFailed(context: L10n.string("context.forum_search"))
+        }
+
+        return ForumSearchPage(
+            query: query,
+            searchID: parseSearchID(in: document, html: html),
+            totalCount: parseSearchTotalCount(in: document),
+            results: results,
+            pageNavigation: parsePageNavigation(in: document)
+        )
+    }
+
     private static func parseCategories(in document: Document) -> [ForumCategory] {
         let headers = (try? document.select(".forumlist .subforumshow")) ?? Elements()
         var categories: [ForumCategory] = []
@@ -293,7 +347,7 @@ public enum ForumHTMLParser {
     }
 
     private static func parsePageNavigation(in document: Document) -> ForumPageNavigation? {
-        guard let pager = try? document.select(".pg").first() else { return ForumPageNavigation(currentPage: 1) }
+        guard let pager = try? document.select(".pg").first() else { return nil }
         let currentText = ((try? pager.select("strong").first()?.text()) ?? "").normalizedForumText
         let currentPage = Int(currentText) ?? 1
         let pagerText = ((try? pager.text()) ?? "").normalizedForumText
@@ -307,6 +361,28 @@ public enum ForumHTMLParser {
             .flatMap(Int.init)
 
         return ForumPageNavigation(currentPage: currentPage, totalPages: totalPages)
+    }
+
+    private static func parseSearchID(in document: Document, html: String) -> String? {
+        let links = (try? document.select("a[href*='searchid=']")) ?? Elements()
+        for link in links {
+            guard let url = HTMLTextExtractor.absoluteURL(from: (try? link.attr("href")) ?? ""),
+                  let searchID = queryValue("searchid", in: url) else {
+                continue
+            }
+            return searchID
+        }
+
+        return HTMLTextExtractor.firstMatch(pattern: #"searchid=(\d+)"#, in: html)?
+            .dropFirst()
+            .first?
+            .nilIfBlank
+    }
+
+    private static func parseSearchTotalCount(in document: Document) -> Int? {
+        let text = ((try? document.select(".result, .searchlist, .threadlist_box").first()?.text()) ?? "").normalizedForumText
+        guard text.contains("找到") || text.localizedCaseInsensitiveContains("result") else { return nil }
+        return firstInteger(in: text)
     }
 
     private static func parseOrderOptions(in document: Document) -> [ForumOrderOption] {

@@ -145,6 +145,26 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         return ForumRepository(client: client, cacheStore: forumCacheStore)
     }
 
+    public func makeUserSpaceRepository() async -> UserSpaceRepository {
+        let sessionState = await sessionStore.load()
+        let client = YamiboClient(
+            session: session,
+            cookie: sessionState.cookie,
+            userAgent: sessionState.userAgent
+        )
+        return UserSpaceRepository(client: client)
+    }
+
+    public func makeBlogReaderRepository() async -> BlogReaderRepository {
+        let sessionState = await sessionStore.load()
+        let client = YamiboClient(
+            session: session,
+            cookie: sessionState.cookie,
+            userAgent: sessionState.userAgent
+        )
+        return BlogReaderRepository(client: client)
+    }
+
     public func makeMangaChapterDocumentLoader() async -> any MangaChapterDocumentLoading {
         let sessionState = await sessionStore.load()
         let client = YamiboClient(

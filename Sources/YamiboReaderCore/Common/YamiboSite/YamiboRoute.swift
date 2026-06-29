@@ -42,9 +42,31 @@ public enum YamiboRoute: Sendable {
     case tag(id: String, page: Int)
     case search(keyword: String, forumID: String)
     case searchPage(searchID: String, page: Int)
+    case forumSearch(keyword: String, forumID: String?, formHash: String)
+    case forumSearchPage(searchID: String, page: Int)
     case thread(url: URL, page: Int, authorID: String?)
     case forumHome
-    case forumBoard(fid: String, page: Int, filterID: String?, orderID: String?)
+    case forumBoard(fid: String, page: Int, filterID: String?, orderFilter: String?, orderBy: String?)
+    case forumBoardFavorite(fid: String, formHash: String)
+    case userSpaceProfile(uid: String?)
+    case userSpaceThreads(uid: String?, page: Int)
+    case userSpaceReplies(uid: String?, page: Int)
+    case userSpaceBlogs(uid: String?, page: Int)
+    case userSpaceMyBlogs(uid: String?, page: Int)
+    case userSpaceFriendBlogs(page: Int)
+    case userSpaceViewAllBlogs(filter: UserSpaceViewAllBlogFilter, page: Int)
+    case userSpaceFriends(uid: String?, page: Int)
+    case userSpaceFriendPage(type: UserSpaceFriendType, page: Int)
+    case userSpaceAddFriendForm(uid: String)
+    case userSpaceAddFriendSubmit(uid: String)
+    case userSpaceBlogEditor
+    case userSpacePrivateMessages(page: Int)
+    case userSpaceNotices(page: Int)
+    case userSpaceSendPrivateMessage
+    case privateMessage(uid: String, page: Int?)
+    case privateMessageSend(privateMessageID: String, uid: String)
+    case blog(blogID: String, uid: String?, page: Int)
+    case blogComment(blogID: String, uid: String)
 
     public var url: URL {
         switch self {
@@ -143,6 +165,35 @@ public enum YamiboRoute: Sendable {
                 .init(name: "page", value: String(page))
             ]
             return components.url!
+        case let .forumSearch(keyword, forumID, formHash):
+            var components = URLComponents(url: Self.baseURL, resolvingAgainstBaseURL: false)!
+            components.path = "/search.php"
+            var items: [URLQueryItem] = [
+                .init(name: "mod", value: "forum"),
+                .init(name: "searchsubmit", value: "yes"),
+                .init(name: "mobile", value: "2"),
+                .init(name: "formhash", value: formHash),
+                .init(name: "srchtxt", value: keyword),
+                .init(name: "srchtype", value: "title")
+            ]
+            if let forumID, !forumID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                items.append(.init(name: "srchfid[]", value: forumID))
+            }
+            components.queryItems = items
+            return components.url!
+        case let .forumSearchPage(searchID, page):
+            var components = URLComponents(url: Self.baseURL, resolvingAgainstBaseURL: false)!
+            components.path = "/search.php"
+            components.queryItems = [
+                .init(name: "mod", value: "forum"),
+                .init(name: "orderby", value: "dateline"),
+                .init(name: "ascdesc", value: "desc"),
+                .init(name: "searchsubmit", value: "yes"),
+                .init(name: "mobile", value: "2"),
+                .init(name: "searchid", value: searchID),
+                .init(name: "page", value: String(max(1, page)))
+            ]
+            return components.url!
         case let .thread(url, page, authorID):
             let decodedURLString = HTMLTextExtractor.decodeHTMLEntities(url.absoluteString)
             var components = URLComponents(
@@ -179,7 +230,7 @@ public enum YamiboRoute: Sendable {
                 .init(name: "mobile", value: "2")
             ]
             return components.url!
-        case let .forumBoard(fid, page, filterID, orderID):
+        case let .forumBoard(fid, page, filterID, orderFilter, orderBy):
             var components = URLComponents(url: Self.baseURL, resolvingAgainstBaseURL: false)!
             components.path = "/forum.php"
             var items: [URLQueryItem] = [
@@ -192,11 +243,225 @@ public enum YamiboRoute: Sendable {
                 items.append(.init(name: "filter", value: "typeid"))
                 items.append(.init(name: "typeid", value: filterID))
             }
-            if let orderID, !orderID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                items.append(.init(name: "orderby", value: orderID))
+            if let orderFilter, !orderFilter.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                items.append(.init(name: "filter", value: orderFilter))
+            }
+            if let orderBy, !orderBy.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                items.append(.init(name: "orderby", value: orderBy))
             }
             components.queryItems = items
             return components.url!
+        case let .forumBoardFavorite(fid, formHash):
+            var components = URLComponents(url: Self.baseURL, resolvingAgainstBaseURL: false)!
+            components.path = "/home.php"
+            components.queryItems = [
+                .init(name: "mod", value: "spacecp"),
+                .init(name: "ac", value: "favorite"),
+                .init(name: "type", value: "forum"),
+                .init(name: "id", value: fid),
+                .init(name: "handlekey", value: "favoriteforum"),
+                .init(name: "formhash", value: formHash),
+                .init(name: "mobile", value: "2")
+            ]
+            return components.url!
+        case let .userSpaceProfile(uid):
+            return userSpaceURL(uid: uid, doValue: "profile", page: nil)
+        case let .userSpaceThreads(uid, page):
+            return userSpaceURL(uid: uid, doValue: "thread", page: page)
+        case let .userSpaceReplies(uid, page):
+            return userSpaceURL(uid: uid, doValue: "thread", page: page, view: "reply")
+        case let .userSpaceBlogs(uid, page):
+            return userSpaceURL(uid: uid, doValue: "blog", page: page, view: "me")
+        case let .userSpaceMyBlogs(uid, page):
+            return userSpaceURL(uid: uid, doValue: "blog", page: page)
+        case let .userSpaceFriendBlogs(page):
+            return userSpaceURL(uid: nil, doValue: "blog", page: page, view: "we")
+        case let .userSpaceViewAllBlogs(filter, page):
+            return userSpaceURL(
+                uid: nil,
+                doValue: "blog",
+                page: page,
+                view: "all",
+                extraItems: [.init(name: "order", value: filter.routeOrderValue)]
+            )
+        case let .userSpaceFriends(uid, page):
+            return userSpaceURL(uid: uid, doValue: "friend", page: page, view: "me")
+        case let .userSpaceFriendPage(type, page):
+            return userSpaceURL(
+                uid: nil,
+                doValue: "friend",
+                page: page,
+                view: type.routeViewValue,
+                extraItems: type.routeExtraItems
+            )
+        case let .userSpaceAddFriendForm(uid), let .userSpaceAddFriendSubmit(uid):
+            return userSpaceAddFriendURL(uid: uid)
+        case .userSpaceBlogEditor:
+            var components = URLComponents(url: Self.baseURL, resolvingAgainstBaseURL: false)!
+            components.path = "/home.php"
+            components.queryItems = [
+                .init(name: "mod", value: "spacecp"),
+                .init(name: "ac", value: "blog"),
+                .init(name: "mobile", value: "2")
+            ]
+            return components.url!
+        case let .userSpacePrivateMessages(page):
+            return userSpaceURL(uid: nil, doValue: "pm", page: page)
+        case let .userSpaceNotices(page):
+            return userSpaceURL(uid: nil, doValue: "notice", page: page)
+        case .userSpaceSendPrivateMessage:
+            var components = URLComponents(url: Self.baseURL, resolvingAgainstBaseURL: false)!
+            components.path = "/home.php"
+            components.queryItems = [
+                .init(name: "mod", value: "spacecp"),
+                .init(name: "ac", value: "pm"),
+                .init(name: "op", value: "showmsg"),
+                .init(name: "mobile", value: "2")
+            ]
+            return components.url!
+        case let .privateMessage(uid, page):
+            return privateMessageURL(uid: uid, page: page)
+        case let .privateMessageSend(privateMessageID, uid):
+            return privateMessageSendURL(privateMessageID: privateMessageID, uid: uid)
+        case let .blog(blogID, uid, page):
+            var components = URLComponents(url: Self.baseURL, resolvingAgainstBaseURL: false)!
+            components.path = "/home.php"
+            var items: [URLQueryItem] = [
+                .init(name: "mod", value: "space"),
+                .init(name: "do", value: "blog"),
+                .init(name: "id", value: blogID),
+                .init(name: "mobile", value: "2"),
+                .init(name: "page", value: String(max(1, page)))
+            ]
+            if let uid, !uid.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                items.append(.init(name: "uid", value: uid))
+            }
+            components.queryItems = items
+            return components.url!
+        case let .blogComment(blogID, uid):
+            var components = URLComponents(url: Self.baseURL, resolvingAgainstBaseURL: false)!
+            components.path = "/home.php"
+            components.queryItems = [
+                .init(name: "mod", value: "spacecp"),
+                .init(name: "ac", value: "comment"),
+                .init(name: "op", value: "add"),
+                .init(name: "id", value: blogID),
+                .init(name: "idtype", value: "blogid"),
+                .init(name: "uid", value: uid),
+                .init(name: "mobile", value: "2")
+            ]
+            return components.url!
+        }
+    }
+
+    private func userSpaceURL(
+        uid: String?,
+        doValue: String,
+        page: Int?,
+        view: String? = nil,
+        extraItems: [URLQueryItem] = []
+    ) -> URL {
+        var components = URLComponents(url: Self.baseURL, resolvingAgainstBaseURL: false)!
+        components.path = "/home.php"
+        var items: [URLQueryItem] = [
+            .init(name: "mod", value: "space"),
+            .init(name: "do", value: doValue),
+            .init(name: "mobile", value: "2")
+        ]
+        if let uid, !uid.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            items.append(.init(name: "uid", value: uid))
+        } else if doValue == "profile" {
+            items.append(.init(name: "mycenter", value: "1"))
+        }
+        if let view {
+            items.append(.init(name: "view", value: view))
+        }
+        if let page {
+            items.append(.init(name: "page", value: String(max(1, page))))
+        }
+        items.append(contentsOf: extraItems)
+        components.queryItems = items
+        return components.url!
+    }
+
+    private func userSpaceAddFriendURL(uid: String) -> URL {
+        var components = URLComponents(url: Self.baseURL, resolvingAgainstBaseURL: false)!
+        components.path = "/home.php"
+        components.queryItems = [
+            .init(name: "mod", value: "spacecp"),
+            .init(name: "ac", value: "friend"),
+            .init(name: "op", value: "add"),
+            .init(name: "uid", value: uid),
+            .init(name: "handlekey", value: "addfriendhk_\(uid)"),
+            .init(name: "inajax", value: "1"),
+            .init(name: "mobile", value: "2")
+        ]
+        return components.url!
+    }
+
+    private func privateMessageURL(uid: String, page: Int?) -> URL {
+        var components = URLComponents(url: Self.baseURL, resolvingAgainstBaseURL: false)!
+        components.path = "/home.php"
+        var items: [URLQueryItem] = [
+            .init(name: "mod", value: "spacecp"),
+            .init(name: "ac", value: "pm"),
+            .init(name: "op", value: "showmsg"),
+            .init(name: "touid", value: uid),
+            .init(name: "mobile", value: "2")
+        ]
+        if let page {
+            items.append(.init(name: "page", value: String(max(1, page))))
+        }
+        components.queryItems = items
+        return components.url!
+    }
+
+    private func privateMessageSendURL(privateMessageID: String, uid: String) -> URL {
+        var components = URLComponents(url: Self.baseURL, resolvingAgainstBaseURL: false)!
+        components.path = "/home.php"
+        components.queryItems = [
+            .init(name: "mod", value: "spacecp"),
+            .init(name: "ac", value: "pm"),
+            .init(name: "op", value: "send"),
+            .init(name: "pmid", value: privateMessageID),
+            .init(name: "touid", value: uid),
+            .init(name: "mobile", value: "2")
+        ]
+        return components.url!
+    }
+}
+
+private extension UserSpaceViewAllBlogFilter {
+    var routeOrderValue: String {
+        switch self {
+        case .latest:
+            "dateline"
+        case .hot:
+            "hot"
+        }
+    }
+}
+
+private extension UserSpaceFriendType {
+    var routeViewValue: String {
+        switch self {
+        case .myFriend:
+            "me"
+        case .onlineMember:
+            "online"
+        case .myVisitor:
+            "visitor"
+        case .myTrace:
+            "trace"
+        }
+    }
+
+    var routeExtraItems: [URLQueryItem] {
+        switch self {
+        case .onlineMember:
+            [.init(name: "type", value: "member")]
+        case .myFriend, .myVisitor, .myTrace:
+            []
         }
     }
 }

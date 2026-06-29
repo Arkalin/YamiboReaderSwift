@@ -27,6 +27,9 @@ public struct IOSForumWebView: UIViewRepresentable {
         configuration.userContentController.addUserScript(.yamiboHideChromeScript)
 
         let webView = WKWebView(frame: .zero, configuration: configuration)
+        webView.isOpaque = false
+        webView.backgroundColor = UIColor(red: 1, green: 243.0 / 255.0, blue: 214.0 / 255.0, alpha: 1)
+        webView.scrollView.backgroundColor = webView.backgroundColor
         webView.scrollView.contentInsetAdjustmentBehavior = .never
         webView.navigationDelegate = context.coordinator
         webView.uiDelegate = context.coordinator
@@ -278,7 +281,14 @@ private extension WKUserScript {
                 style.id = 'yamibo-hide-style';
                 (document.head || document.documentElement).appendChild(style);
             }
-            style.innerHTML = ".foot.flex-box:not(.foot_reply){display:none !important;} .foot_height{display:none !important;} .my,.mz{visibility:hidden !important;pointer-events:none !important;}";
+            style.innerHTML = [
+                "html,body{background:\(ForumColors.creamBackgroundHex) !important;color:\(ForumColors.htmlTextDarkHex) !important;}",
+                "#wrap,.wrap,.wp,.ct2,.mn,.bm,.bm_c,.threadlist,.tl{background:\(ForumColors.creamBackgroundHex) !important;}",
+                ".bm,.bm_c,.tl th,.tl td{border-color:rgba(109,58,43,0.18) !important;}",
+                ".foot.flex-box:not(.foot_reply){display:none !important;}",
+                ".foot_height{display:none !important;}",
+                ".my,.mz{visibility:hidden !important;pointer-events:none !important;}"
+            ].join(" ");
         })();
         """,
         injectionTime: .atDocumentEnd,

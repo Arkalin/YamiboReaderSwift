@@ -73,6 +73,10 @@ public struct ForumHomeCarouselItem: Codable, Equatable, Identifiable, Sendable 
         "\(targetURL.absoluteString)#\(imageURL.absoluteString)"
     }
 
+    public var isThreadTarget: Bool {
+        threadID?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+    }
+
     public init(targetURL: URL, imageURL: URL, threadID: String? = nil) {
         self.targetURL = targetURL
         self.imageURL = imageURL
@@ -217,17 +221,20 @@ public struct ForumOrderOption: Codable, Equatable, Identifiable, Hashable, Send
 public struct ForumSearchPage: Codable, Equatable, Sendable {
     public var query: String
     public var searchID: String?
+    public var totalCount: Int?
     public var results: [ForumThreadSummary]
     public var pageNavigation: ForumPageNavigation?
 
     public init(
         query: String,
         searchID: String? = nil,
+        totalCount: Int? = nil,
         results: [ForumThreadSummary],
         pageNavigation: ForumPageNavigation? = nil
     ) {
         self.query = query
         self.searchID = searchID
+        self.totalCount = totalCount
         self.results = results
         self.pageNavigation = pageNavigation
     }

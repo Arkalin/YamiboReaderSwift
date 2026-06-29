@@ -42,10 +42,11 @@ public actor ForumCacheStore {
         fid: String,
         page: Int = 1,
         filterID: String? = nil,
-        orderID: String? = nil,
+        orderFilter: String? = nil,
+        orderBy: String? = nil,
         allowExpired: Bool = false
     ) async -> ForumBoardPage? {
-        guard let entry: ForumCacheEntry<ForumBoardPage> = load(fileName: boardFileName(fid: fid, page: page, filterID: filterID, orderID: orderID)) else {
+        guard let entry: ForumCacheEntry<ForumBoardPage> = load(fileName: boardFileName(fid: fid, page: page, filterID: filterID, orderFilter: orderFilter, orderBy: orderBy)) else {
             return nil
         }
         guard allowExpired || !isExpired(entry.fetchedAt, ttl: Self.boardTTL) else { return nil }
@@ -57,11 +58,12 @@ public actor ForumCacheStore {
         fid: String,
         pageNumber: Int = 1,
         filterID: String? = nil,
-        orderID: String? = nil
+        orderFilter: String? = nil,
+        orderBy: String? = nil
     ) async throws {
         try save(
             ForumCacheEntry(value: page, fetchedAt: page.fetchedAt),
-            fileName: boardFileName(fid: fid, page: pageNumber, filterID: filterID, orderID: orderID)
+            fileName: boardFileName(fid: fid, page: pageNumber, filterID: filterID, orderFilter: orderFilter, orderBy: orderBy)
         )
     }
 
@@ -93,12 +95,13 @@ public actor ForumCacheStore {
         now().timeIntervalSince(fetchedAt) > ttl
     }
 
-    private func boardFileName(fid: String, page: Int, filterID: String?, orderID: String?) -> String {
+    private func boardFileName(fid: String, page: Int, filterID: String?, orderFilter: String?, orderBy: String?) -> String {
         let key = [
             fid,
             String(max(1, page)),
             filterID?.nilIfBlank ?? "all",
-            orderID?.nilIfBlank ?? "default"
+            orderFilter?.nilIfBlank ?? "default",
+            orderBy?.nilIfBlank ?? "default"
         ].joined(separator: "_")
         return "board_\(stableIdentifier(for: key)).json"
     }

@@ -21,7 +21,9 @@ public struct ForumNavigationHostView: View {
                 model: model,
                 onBoardTap: openBoard,
                 onCarouselTap: openCarouselItem,
-                onSearchTap: openSearchFallback
+                onSearchTap: {
+                    path.append(.search(fid: nil))
+                }
             )
             .navigationDestination(for: ForumDestination.self) { destination in
                 switch destination {
@@ -36,11 +38,65 @@ public struct ForumNavigationHostView: View {
                         onSubBoardTap: openBoard,
                         onPinnedTap: openPinnedItem,
                         onThreadTap: openThread,
+                        onAuthorTap: openUserSpace,
                         onSearchTap: {
-                            openBoardSearchFallback(fid: fid)
+                            path.append(.search(fid: fid))
                         },
                         onPostThreadTap: {
                             openPostThreadFallback(fid: fid)
+                        }
+                    )
+                case let .search(fid):
+                    ForumSearchView(
+                        model: ForumSearchViewModel(forumID: fid, appContext: appContext),
+                        onThreadTap: openThread,
+                        onAuthorTap: openUserSpace,
+                        onURLSubmit: {
+                            route($0, source: .external)
+                        }
+                    )
+                case let .userSpace(uid, name, section, subPage):
+                    UserSpaceView(
+                        model: UserSpaceViewModel(
+                            uid: uid,
+                            titleHint: name,
+                            initialSection: section,
+                            initialSubPage: subPage,
+                            appContext: appContext
+                        ),
+                        onThreadTap: openThread,
+                        onUserTap: openUserSpace,
+                        onSectionTap: openUserSpaceSection,
+                        onBlogTap: openBlog,
+                        onPrivateMessageTap: openPrivateMessage,
+                        onMessageCenterTap: openMessageCenter,
+                        onWebTap: {
+                            path.append(.web($0))
+                        }
+                    )
+                case let .messageCenter(tab):
+                    MessageCenterView(
+                        model: MessageCenterViewModel(initialTab: tab, appContext: appContext),
+                        onPrivateMessageTap: openPrivateMessage,
+                        onUserTap: openUserSpace,
+                        onWebTap: {
+                            path.append(.web($0))
+                        }
+                    )
+                case let .privateMessage(uid, name):
+                    PrivateMessageView(
+                        model: PrivateMessageViewModel(
+                            uid: uid,
+                            titleHint: name,
+                            appContext: appContext
+                        )
+                    )
+                case let .blog(blogID, uid, title):
+                    BlogReaderView(
+                        model: BlogReaderViewModel(blogID: blogID, uid: uid, titleHint: title, appContext: appContext),
+                        onUserTap: openUserSpace,
+                        onWebTap: {
+                            path.append(.web($0))
                         }
                     )
                 case let .web(url):
@@ -78,6 +134,14 @@ public struct ForumNavigationHostView: View {
             path.append(.board(fid: fid, title: title, page: page))
         case let .thread(threadURL):
             openThread(threadURL, title: nil)
+        case let .userSpace(uid, name):
+            path.append(.userSpace(uid: uid, name: name, section: .space, subPage: .profile))
+        case let .messageCenter(tab):
+            path.append(.messageCenter(tab: tab))
+        case let .privateMessage(uid, name):
+            path.append(.privateMessage(uid: uid, name: name))
+        case let .blog(blogID, uid, title):
+            path.append(.blog(blogID: blogID, uid: uid, title: title))
         case let .web(url):
             path.append(.web(url))
         }
@@ -88,10 +152,8 @@ public struct ForumNavigationHostView: View {
     }
 
     private func openCarouselItem(_ item: ForumHomeCarouselItem) {
-        if item.threadID != nil {
+        if item.isThreadTarget {
             openThread(item.targetURL, title: nil)
-        } else {
-            path.append(.web(item.targetURL))
         }
     }
 
@@ -118,36 +180,31 @@ public struct ForumNavigationHostView: View {
         openThread(thread.url, title: thread.title)
     }
 
+    private func openUserSpace(uid: String, name: String?) {
+        path.append(.userSpace(uid: uid, name: name, section: .space, subPage: .profile))
+    }
+
+    private func openUserSpaceSection(uid: String?, name: String?, section: UserSpaceSection, subPage: UserSpaceSubPage) {
+        path.append(.userSpace(uid: uid, name: name, section: section, subPage: subPage))
+    }
+
+    private func openBlog(_ blog: UserSpaceBlogSummary) {
+        path.append(.blog(blogID: blog.blogID, uid: blog.authorID, title: blog.title))
+    }
+
+    private func openPrivateMessage(uid: String, name: String?) {
+        path.append(.privateMessage(uid: uid, name: name))
+    }
+
+    private func openMessageCenter(tab: MessageCenterTab) {
+        path.append(.messageCenter(tab: tab))
+    }
+
     private func openPinnedItem(_ item: ForumPinnedItem) {
         if item.threadID != nil {
             openThread(item.url, title: item.title)
         } else {
             path.append(.web(item.url))
-        }
-    }
-
-    private func openSearchFallback() {
-        var components = URLComponents(url: YamiboRoute.baseURL, resolvingAgainstBaseURL: false)!
-        components.path = "/search.php"
-        components.queryItems = [
-            .init(name: "mod", value: "forum"),
-            .init(name: "mobile", value: "2")
-        ]
-        if let url = components.url {
-            path.append(.web(url))
-        }
-    }
-
-    private func openBoardSearchFallback(fid: String) {
-        var components = URLComponents(url: YamiboRoute.baseURL, resolvingAgainstBaseURL: false)!
-        components.path = "/search.php"
-        components.queryItems = [
-            .init(name: "mod", value: "curforum"),
-            .init(name: "srhfid", value: fid),
-            .init(name: "mobile", value: "2")
-        ]
-        if let url = components.url {
-            path.append(.web(url))
         }
     }
 
@@ -164,9 +221,15 @@ public struct ForumNavigationHostView: View {
             path.append(.web(url))
         }
     }
+
 }
 
 private enum ForumDestination: Hashable {
     case board(fid: String, title: String?, page: Int?)
+    case search(fid: String?)
+    case userSpace(uid: String?, name: String?, section: UserSpaceSection, subPage: UserSpaceSubPage)
+    case messageCenter(tab: MessageCenterTab)
+    case privateMessage(uid: String, name: String?)
+    case blog(blogID: String, uid: String?, title: String?)
     case web(URL)
 }

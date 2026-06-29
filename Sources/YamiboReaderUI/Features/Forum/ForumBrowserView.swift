@@ -148,6 +148,8 @@ public struct ForumBrowserView: View {
                 }
             }
         }
+        .forumPageBackground()
+        .tint(ForumColors.brownDeep)
         .sheet(isPresented: $showingHistory) {
             ForumHistorySheet(model: model, showingHistory: $showingHistory)
         }
@@ -232,10 +234,10 @@ private struct ForumHistorySheet: View {
                 } label: {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(entry.title)
-                            .foregroundStyle(.primary)
+                            .foregroundStyle(ForumColors.textDark)
                         Text(entry.url.absoluteString)
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(ForumColors.secondaryText)
                             .lineLimit(1)
                     }
                 }
@@ -269,6 +271,7 @@ struct ForumBrowserChrome: View {
         .padding(.horizontal, 16)
         .padding(.top, 12)
         .padding(.bottom, 10)
+        .background(ForumColors.navBarBackground)
     }
 }
 
@@ -367,7 +370,7 @@ struct ForumBrowserLocationLabel: View {
                 .lineLimit(1)
             Text(model.currentURL?.absoluteString ?? "")
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(ForumColors.secondaryText)
                 .lineLimit(1)
         }
         .frame(maxWidth: .infinity, alignment: .leading)

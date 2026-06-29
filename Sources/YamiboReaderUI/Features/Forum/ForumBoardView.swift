@@ -5,6 +5,7 @@ struct ForumBoardView: View {
     let onSubBoardTap: (ForumBoardSummary) -> Void
     let onPinnedTap: (ForumPinnedItem) -> Void
     let onThreadTap: (ForumThreadSummary) -> Void
+    let onAuthorTap: (String, String?) -> Void
     let onSearchTap: () -> Void
     let onPostThreadTap: () -> Void
 
@@ -17,6 +18,7 @@ struct ForumBoardView: View {
         onSubBoardTap: @escaping (ForumBoardSummary) -> Void,
         onPinnedTap: @escaping (ForumPinnedItem) -> Void,
         onThreadTap: @escaping (ForumThreadSummary) -> Void,
+        onAuthorTap: @escaping (String, String?) -> Void,
         onSearchTap: @escaping () -> Void,
         onPostThreadTap: @escaping () -> Void
     ) {
@@ -24,6 +26,7 @@ struct ForumBoardView: View {
         self.onSubBoardTap = onSubBoardTap
         self.onPinnedTap = onPinnedTap
         self.onThreadTap = onThreadTap
+        self.onAuthorTap = onAuthorTap
         self.onSearchTap = onSearchTap
         self.onPostThreadTap = onPostThreadTap
     }
@@ -49,10 +52,36 @@ struct ForumBoardView: View {
             showOrders: { showsOrderDialog = true },
             onSubBoardTap: onSubBoardTap,
             onPinnedTap: onPinnedTap,
-            onThreadTap: onThreadTap
+            onThreadTap: onThreadTap,
+            onAuthorTap: onAuthorTap
         )
+        .forumPageBackground()
+        .tint(ForumColors.brownDeep)
         .navigationTitle(model.title)
+        .navigationBarBackButtonHidden(model.canRestorePreviousPage)
         .toolbar {
+            if model.canRestorePreviousPage {
+                #if os(iOS)
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        _ = model.restorePreviousPage()
+                    } label: {
+                        Image(systemName: "chevron.left")
+                    }
+                    .accessibilityLabel(L10n.string("common.back"))
+                }
+                #else
+                ToolbarItem(placement: .automatic) {
+                    Button {
+                        _ = model.restorePreviousPage()
+                    } label: {
+                        Image(systemName: "chevron.left")
+                    }
+                    .accessibilityLabel(L10n.string("common.back"))
+                }
+                #endif
+            }
+
             ToolbarItemGroup(placement: .primaryAction) {
                 Button(action: onSearchTap) {
                     Image(systemName: "magnifyingglass")
@@ -63,6 +92,17 @@ struct ForumBoardView: View {
                     Button(action: onPostThreadTap) {
                         Label(L10n.string("forum.board.post_thread"), systemImage: "square.and.pencil")
                     }
+                    Button {
+                        Task {
+                            await model.addFavorite()
+                        }
+                    } label: {
+                        Label(
+                            model.isFavoriting ? L10n.string("forum.board.favoriting") : L10n.string("forum.board.favorite"),
+                            systemImage: "star"
+                        )
+                    }
+                    .disabled(model.isFavoriting)
                 } label: {
                     Image(systemName: "ellipsis.circle")
                 }
@@ -96,6 +136,23 @@ struct ForumBoardView: View {
                     Task { await model.selectOrder(id: option.id) }
                 }
             }
+        }
+        .alert(
+            L10n.string("forum.board.favorite"),
+            isPresented: Binding(
+                get: { model.favoriteMessage != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        model.favoriteMessage = nil
+                    }
+                }
+            )
+        ) {
+            Button(L10n.string("common.ok")) {
+                model.favoriteMessage = nil
+            }
+        } message: {
+            Text(model.favoriteMessage ?? "")
         }
         .task {
             await model.load()
@@ -140,6 +197,7 @@ private struct ForumBoardBodyView: View {
     let onSubBoardTap: (ForumBoardSummary) -> Void
     let onPinnedTap: (ForumPinnedItem) -> Void
     let onThreadTap: (ForumThreadSummary) -> Void
+    let onAuthorTap: (String, String?) -> Void
 
     var body: some View {
         if isLoading && page == nil {
@@ -164,7 +222,8 @@ private struct ForumBoardBodyView: View {
                 showOrders: showOrders,
                 onSubBoardTap: onSubBoardTap,
                 onPinnedTap: onPinnedTap,
-                onThreadTap: onThreadTap
+                onThreadTap: onThreadTap,
+                onAuthorTap: onAuthorTap
             )
         } else {
             ForumBoardEmptyView(retry: retry)
@@ -190,6 +249,7 @@ private struct ForumBoardContentView: View {
     let onSubBoardTap: (ForumBoardSummary) -> Void
     let onPinnedTap: (ForumPinnedItem) -> Void
     let onThreadTap: (ForumThreadSummary) -> Void
+    let onAuthorTap: (String, String?) -> Void
 
     var body: some View {
         ScrollView {
@@ -218,20 +278,12 @@ private struct ForumBoardContentView: View {
                     ForumBoardNoThreadsView()
                 } else {
                     ForEach(threads) { thread in
-                        ForumThreadRowView(
-                            tid: thread.tid,
-                            title: thread.title,
-                            authorName: thread.authorName,
-                            authorAvatarURL: thread.authorAvatarURL,
-                            description: thread.description,
-                            tag: thread.tag,
-                            isPoll: thread.isPoll,
-                            replyCount: thread.replyCount,
-                            viewCount: thread.viewCount,
-                            lastActivityText: thread.lastActivityText,
-                            onTap: {
+                        ForumThreadSummaryRowView(
+                            thread: thread,
+                            onThreadTap: {
                                 onThreadTap(thread)
-                            }
+                            },
+                            onAuthorTap: onAuthorTap
                         )
                     }
                 }
@@ -253,6 +305,7 @@ private struct ForumBoardContentView: View {
                     .padding(.top, 8)
             }
         }
+        .forumPageBackground()
     }
 }
 
@@ -281,7 +334,14 @@ private struct ForumBoardStatsView: View {
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .background(
+            LinearGradient(
+                colors: [ForumColors.brownDeep, ForumColors.brownPrimary.opacity(0.85)],
+                startPoint: .leading,
+                endPoint: .trailing
+            ),
+            in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+        )
     }
 
     private var statChips: some View {
@@ -326,15 +386,15 @@ private struct ForumStatChipView: View {
     var body: some View {
         HStack(spacing: 4) {
             Text(label)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.white.opacity(0.78))
             Text(value)
                 .fontWeight(.semibold)
-                .foregroundStyle(.red)
+                .foregroundStyle(ForumColors.redAccent)
         }
         .font(.caption)
         .padding(.horizontal, 9)
         .padding(.vertical, 5)
-        .background(.background.opacity(0.72), in: Capsule())
+        .background(.white.opacity(0.14), in: Capsule())
     }
 }
 
@@ -346,6 +406,7 @@ private struct ForumSubBoardSectionView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(L10n.string("forum.board.sub_boards"))
                 .font(.headline)
+                .foregroundStyle(ForumColors.brownPrimary)
 
             ScrollView(.horizontal) {
                 LazyHStack(spacing: 10) {
@@ -356,13 +417,10 @@ private struct ForumSubBoardSectionView: View {
                             Label(board.name, systemImage: "folder")
                                 .font(.subheadline.weight(.medium))
                                 .lineLimit(1)
+                                .foregroundStyle(ForumColors.textDark)
                                 .padding(.horizontal, 12)
                                 .padding(.vertical, 9)
-                                .background(.background, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                                .overlay {
-                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                        .stroke(.quaternary, lineWidth: 1)
-                                }
+                                .forumCardBackground()
                         }
                         .buttonStyle(.plain)
                     }
@@ -381,6 +439,7 @@ private struct ForumPinnedSectionView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(L10n.string("forum.board.pinned"))
                 .font(.headline)
+                .foregroundStyle(ForumColors.brownPrimary)
 
             ForEach(items) { item in
                 ForumPinnedRowView(
@@ -407,152 +466,23 @@ private struct ForumPinnedRowView: View {
             HStack(spacing: 10) {
                 Text(kind == .announcement ? L10n.string("forum.board.announcement") : L10n.string("forum.board.pinned_badge"))
                     .font(.caption2.weight(.bold))
-                    .foregroundStyle(kind == .announcement ? Color.orange : Color.accentColor)
+                    .foregroundStyle(ForumColors.textDark)
                     .padding(.horizontal, 7)
                     .padding(.vertical, 3)
-                    .background((kind == .announcement ? Color.orange : Color.accentColor).opacity(0.12), in: Capsule())
+                    .background(ForumColors.orangeAccent, in: Capsule())
 
                 Text(title)
                     .font(.subheadline.weight(.medium))
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(ForumColors.textDark)
                     .lineLimit(1)
 
                 Spacer(minLength: 0)
             }
             .padding(11)
-            .background(.background, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(.quaternary, lineWidth: 1)
-            }
+            .forumCardBackground(fill: kind == .announcement ? ForumColors.announcementBackground : ForumColors.pinnedBackground)
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("forum-pinned-row-\(id)")
-    }
-}
-
-private struct ForumThreadRowView: View {
-    let tid: String
-    let title: String
-    let authorName: String?
-    let authorAvatarURL: URL?
-    let description: String?
-    let tag: String?
-    let isPoll: Bool
-    let replyCount: Int?
-    let viewCount: Int?
-    let lastActivityText: String?
-    let onTap: () -> Void
-
-    var body: some View {
-        Button(action: onTap) {
-            VStack(alignment: .leading, spacing: 10) {
-                ForumThreadMetaView(
-                    authorName: authorName,
-                    authorAvatarURL: authorAvatarURL,
-                    lastActivityText: lastActivityText
-                )
-
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    if isPoll {
-                        Image(systemName: "chart.bar.doc.horizontal")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    Text(title)
-                        .font(.body.weight(.semibold))
-                        .foregroundStyle(.primary)
-                        .multilineTextAlignment(.leading)
-                }
-
-                if let description {
-                    Text(description)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(3)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-
-                ForumThreadFooterView(tag: tag, viewCount: viewCount, replyCount: replyCount)
-            }
-            .padding(13)
-            .background(.background, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(.quaternary, lineWidth: 1)
-            }
-        }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier("forum-thread-row-\(tid)")
-    }
-}
-
-private struct ForumThreadMetaView: View {
-    let authorName: String?
-    let authorAvatarURL: URL?
-    let lastActivityText: String?
-
-    var body: some View {
-        HStack(spacing: 8) {
-            AsyncImage(url: authorAvatarURL) { phase in
-                switch phase {
-                case let .success(image):
-                    image
-                        .resizable()
-                        .scaledToFill()
-                default:
-                    Image(systemName: "person.crop.circle")
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .frame(width: 26, height: 26)
-            .clipShape(Circle())
-            .accessibilityHidden(true)
-
-            if let authorName {
-                Text(authorName)
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(.tint)
-                    .lineLimit(1)
-            }
-
-            if let lastActivityText {
-                Text(lastActivityText)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-        }
-    }
-}
-
-private struct ForumThreadFooterView: View {
-    let tag: String?
-    let viewCount: Int?
-    let replyCount: Int?
-
-    var body: some View {
-        HStack(spacing: 12) {
-            if let viewCount {
-                Label(String(viewCount), systemImage: "eye")
-            }
-            if let replyCount {
-                Label(String(replyCount), systemImage: "bubble.right")
-            }
-
-            Spacer(minLength: 0)
-
-            if let tag {
-                Text("#\(tag)")
-                    .lineLimit(1)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
-                    .background(.orange.opacity(0.12), in: Capsule())
-            }
-        }
-        .font(.caption)
-        .foregroundStyle(.secondary)
     }
 }
 
@@ -573,7 +503,7 @@ private struct ForumPageNavigationView: View {
 
             Text(pageText)
                 .font(.subheadline.weight(.medium))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(ForumColors.secondaryText)
 
             Spacer()
 
@@ -587,6 +517,7 @@ private struct ForumPageNavigationView: View {
         }
         .buttonStyle(.bordered)
         .controlSize(.small)
+        .tint(ForumColors.brownDeep)
         .padding(.top, 4)
     }
 
@@ -604,9 +535,10 @@ private struct ForumBoardLoadingView: View {
             ProgressView()
             Text(L10n.string("common.loading"))
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(ForumColors.secondaryText)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .forumPageBackground()
     }
 }
 

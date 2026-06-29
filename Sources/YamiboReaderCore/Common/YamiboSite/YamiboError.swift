@@ -17,6 +17,9 @@ public enum YamiboError: LocalizedError, Equatable, Sendable {
     case missingFavoriteDeleteToken
     case missingFavoriteDeleteID
     case favoriteDeleteFailed
+    case missingForumBoardFavoriteToken
+    case forumBoardFavoriteFailed
+    case missingForumSearchToken
     case underlying(String)
 
     public var errorDescription: String? {
@@ -58,6 +61,12 @@ public enum YamiboError: LocalizedError, Equatable, Sendable {
             return L10n.string("error.missing_favorite_delete_id")
         case .favoriteDeleteFailed:
             return L10n.string("error.favorite_delete_failed")
+        case .missingForumBoardFavoriteToken:
+            return L10n.string("error.missing_forum_board_favorite_token")
+        case .forumBoardFavoriteFailed:
+            return L10n.string("error.forum_board_favorite_failed")
+        case .missingForumSearchToken:
+            return L10n.string("error.missing_forum_search_token")
         case let .underlying(message):
             return message
         }

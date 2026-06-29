@@ -9,6 +9,10 @@ public enum ForumResolvedRoute: Equatable, Hashable, Sendable {
     case home
     case board(fid: String, title: String?, page: Int?)
     case thread(URL)
+    case userSpace(uid: String, name: String?)
+    case messageCenter(tab: MessageCenterTab)
+    case privateMessage(uid: String, name: String?)
+    case blog(blogID: String, uid: String?, title: String?)
     case web(URL)
 }
 
@@ -25,6 +29,22 @@ public enum ForumRouteResolver {
 
         if isThreadURL(resolvedURL) {
             return .thread(resolvedURL)
+        }
+
+        if let blog = blogRoute(from: resolvedURL) {
+            return .blog(blogID: blog.blogID, uid: blog.uid, title: nil)
+        }
+
+        if let uid = privateMessageID(from: resolvedURL) {
+            return .privateMessage(uid: uid, name: nil)
+        }
+
+        if let tab = messageCenterTab(from: resolvedURL) {
+            return .messageCenter(tab: tab)
+        }
+
+        if let uid = userSpaceID(from: resolvedURL) {
+            return .userSpace(uid: uid, name: nil)
         }
 
         if isForumHomeURL(resolvedURL) {
@@ -46,6 +66,14 @@ public enum ForumRouteResolver {
             components.queryItems?.append(.init(name: "page", value: String(page)))
         }
         return components.url!
+    }
+
+    public static func userSpaceURL(uid: String) -> URL {
+        YamiboRoute.userSpaceProfile(uid: uid).url
+    }
+
+    public static func blogURL(blogID: String, uid: String?) -> URL {
+        YamiboRoute.blog(blogID: blogID, uid: uid, page: 1).url
     }
 
     private static func boardRoute(from url: URL) -> (fid: String, page: Int?)? {
@@ -74,6 +102,65 @@ public enum ForumRouteResolver {
             return true
         }
         return HTMLTextExtractor.firstMatch(pattern: #"thread-\d+-\d+-\d+\.html"#, in: url.absoluteString) != nil
+    }
+
+    private static func userSpaceID(from url: URL) -> String? {
+        if let components = URLComponents(url: url, resolvingAgainstBaseURL: false) {
+            let items = components.queryItems ?? []
+            if items.value(named: "mod") == "space",
+               items.value(named: "do") != "blog",
+               let uid = items.value(named: "uid")?.nilIfBlank {
+                return uid
+            }
+        }
+
+        return HTMLTextExtractor.firstMatch(pattern: #"space-uid-(\d+)"#, in: url.absoluteString)?
+            .dropFirst()
+            .first?
+            .nilIfBlank
+    }
+
+    private static func privateMessageID(from url: URL) -> String? {
+        guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return nil }
+        let items = components.queryItems ?? []
+        guard items.value(named: "mod") == "spacecp",
+              items.value(named: "ac") == "pm",
+              items.value(named: "op") == "showmsg",
+              let uid = items.value(named: "touid")?.nilIfBlank else {
+            return nil
+        }
+        return uid
+    }
+
+    private static func messageCenterTab(from url: URL) -> MessageCenterTab? {
+        guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return nil }
+        let items = components.queryItems ?? []
+        guard items.value(named: "mod") == "space" else { return nil }
+        switch items.value(named: "do") {
+        case "pm":
+            return .privateMessages
+        case "notice":
+            return .notices
+        default:
+            return nil
+        }
+    }
+
+    private static func blogRoute(from url: URL) -> (blogID: String, uid: String?)? {
+        if let components = URLComponents(url: url, resolvingAgainstBaseURL: false) {
+            let items = components.queryItems ?? []
+            if items.value(named: "do") == "blog",
+               let blogID = (items.value(named: "id") ?? items.value(named: "blogid"))?.nilIfBlank {
+                return (blogID, items.value(named: "uid")?.nilIfBlank)
+            }
+        }
+
+        if let match = HTMLTextExtractor.firstMatch(pattern: #"blog-(\d+)-(\d+)"#, in: url.absoluteString),
+           match.count >= 3 {
+            return (match[2], match[1])
+        }
+
+        return nil
     }
 
     private static func isForumHomeURL(_ url: URL) -> Bool {
