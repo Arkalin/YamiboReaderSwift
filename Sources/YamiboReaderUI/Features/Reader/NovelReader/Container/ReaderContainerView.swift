@@ -439,7 +439,7 @@ public struct ReaderContainerView: View {
                 verticalScrollCoordinator.onViewportMetricsChange = {
                     Task { @MainActor in
                         tryAdvanceVerticalRestore()
-                        scheduleVerticalViewportPositionUpdate()
+                        applyVerticalViewportPositionUpdate(for: .viewportGeometryChanged)
                     }
                 }
                 verticalScrollCoordinator.onBoundaryPullStateChange = { state in
@@ -452,15 +452,15 @@ public struct ReaderContainerView: View {
                 guard verticalSurfaceFrames != frames else { return }
                 verticalSurfaceFrames = frames
                 tryAdvanceVerticalRestore()
-                scheduleVerticalViewportPositionUpdate()
+                applyVerticalViewportPositionUpdate(for: .viewportGeometryChanged)
             },
             onTextViewportSampleChange: { sample in
                 guard verticalTextViewportSample != sample else { return }
                 verticalTextViewportSample = sample
-                scheduleVerticalViewportPositionUpdate()
+                applyVerticalViewportPositionUpdate(for: .textViewportSampleChanged)
             },
             onViewportChange: {
-                scheduleVerticalViewportPositionUpdate()
+                applyVerticalViewportPositionUpdate(for: .viewportGeometryChanged)
             },
             onScrollSettled: {
                 updateVerticalViewportPosition()
@@ -1119,6 +1119,17 @@ public struct ReaderContainerView: View {
         if let sample = verticalTextViewportSample {
             model.updateVerticalViewportPosition(sample: sample)
             rememberCurrentVerticalPositioningFingerprint()
+        }
+    }
+
+    private func applyVerticalViewportPositionUpdate(for trigger: ReaderVerticalViewportPositionUpdateTiming.Trigger) {
+        switch ReaderVerticalViewportPositionUpdateTiming.updateMode(for: trigger) {
+        case .immediate:
+            verticalViewportPositionUpdateTask?.cancel()
+            verticalViewportPositionUpdateTask = nil
+            updateVerticalViewportPosition()
+        case .deferred:
+            scheduleVerticalViewportPositionUpdate()
         }
     }
 
