@@ -11,6 +11,11 @@ private actor ReaderInlineImageUnavailableDataLoader: NovelInlineImageDataLoadin
     }
 }
 
+private struct NovelReaderLinearReadingPageKey: Equatable, Sendable {
+    var view: Int
+    var surfaceIndex: Int
+}
+
 @MainActor
 public final class ReaderContainerModel: ObservableObject {
     @Published public private(set) var isLoading = false
@@ -33,6 +38,7 @@ public final class ReaderContainerModel: ObservableObject {
     @Published public private(set) var chapterDirectoryError: String?
     @Published public private(set) var readerPresentation: NovelReaderPresentation?
     @Published private var navigationHistory = ReaderNavigationHistory<ReaderResumePoint>()
+    private var linearReadingHistoryExpiration = ReaderNavigationLinearReadingExpiration<NovelReaderLinearReadingPageKey>()
     @Published public private(set) var inlineImageLoadingContext = NovelInlineImageLoadingContext(
         loader: ReaderInlineImageUnavailableDataLoader(),
         cacheNamespace: NovelInlineImageCacheNamespace(value: "unavailable")
@@ -403,7 +409,7 @@ public final class ReaderContainerModel: ObservableObject {
         isApplyingAppearanceSettings = false
         readingWorkflow?.close()
         readingWorkflow = nil
-        navigationHistory = ReaderNavigationHistory()
+        resetNavigationHistory()
         currentStableResumePoint = nil
         chromeProgressSnapshot = .empty
         readerPresentation = nil
@@ -508,12 +514,15 @@ public final class ReaderContainerModel: ObservableObject {
     }
 
     public func loadCurrent(forceRefresh: Bool) async {
-        await load(
+        let didLoad = await load(
             view: displayedView,
             preferredSurfaceOrdinal: displayedPageIndex,
             preferredResumePoint: readingWorkflow?.captureNovelReadingPosition(),
             forceRefresh: forceRefresh
         )
+        if didLoad {
+            resetNavigationHistory()
+        }
     }
 
     public func loadAdjacent(delta: Int) async {
@@ -617,6 +626,10 @@ public final class ReaderContainerModel: ObservableObject {
     }
 
     public func selectSurface(_ surfaceIndex: Int) {
+        selectSurface(surfaceIndex, recordsLinearReading: true)
+    }
+
+    private func selectSurface(_ surfaceIndex: Int, recordsLinearReading: Bool) {
         guard let presentation = readerPresentation,
               presentation.surfaces.indices.contains(surfaceIndex) else {
             return
@@ -626,6 +639,9 @@ public final class ReaderContainerModel: ObservableObject {
             presentationRevision: presentation.revision
         ) {
             syncFromWorkflowState(state)
+            if recordsLinearReading {
+                recordLinearReadingForNavigationHistory()
+            }
         }
         scheduleProgressSync()
 
@@ -650,7 +666,11 @@ public final class ReaderContainerModel: ObservableObject {
             intraSurfaceProgress: normalizedProgress,
             presentationRevision: presentation.revision
         ) else { return }
+        let oldSurfaceIndex = selectedSurfaceIndex
         syncFromWorkflowState(state)
+        if oldSurfaceIndex != selectedSurfaceIndex {
+            recordLinearReadingForNavigationHistory()
+        }
         scheduleProgressSync()
 
         Task {
@@ -675,6 +695,9 @@ public final class ReaderContainerModel: ObservableObject {
             presentationRevision: presentation.revision
         ) {
             syncFromWorkflowState(state)
+            if oldSurfaceIndex != selectedSurfaceIndex {
+                recordLinearReadingForNavigationHistory()
+            }
             let newResumePoint = currentNovelResumePoint
             let didChangePosition = oldSurfaceIndex != selectedSurfaceIndex ||
                 oldProgress != currentSurfaceIntraProgress ||
@@ -701,7 +724,7 @@ public final class ReaderContainerModel: ObservableObject {
     package func jumpToSurface(_ surfaceIndex: Int) {
         let navigationSequence = beginNavigationRequest()
         let sourceResumePoint = currentStableResumePoint
-        selectSurface(surfaceIndex)
+        selectSurface(surfaceIndex, recordsLinearReading: false)
         if isCurrentNavigationRequest(navigationSequence) {
             recordSuccessfulNonlinearNavigation(from: sourceResumePoint, to: currentStableResumePoint)
         }
@@ -727,24 +750,31 @@ public final class ReaderContainerModel: ObservableObject {
         syncFromWorkflowState(result.state)
         switch result.request {
         case nil:
+            recordLinearReadingForNavigationHistory()
             scheduleProgressSync()
             Task {
                 await prefetchIfNeeded(for: selectedSurfaceIndex)
             }
         case let .loadView(view, preferredSurfaceOrdinal, resumePoint):
-            await load(
+            let didLoad = await load(
                 view: view,
                 preferredSurfaceOrdinal: preferredSurfaceOrdinal,
                 preferredResumePoint: resumePoint,
                 forceRefresh: false,
                 showsReaderPageDocumentNavigationOverlay: true
             )
+            if didLoad {
+                recordLinearReadingForNavigationHistory()
+            }
         case let .promotePrefetched(preferredSurfaceOrdinal, resumePoint):
-            await promotePrefetchedDocument(
+            let didPromote = await promotePrefetchedDocument(
                 startingAt: preferredSurfaceOrdinal,
                 preferredResumePoint: resumePoint,
                 showsReaderPageDocumentNavigationOverlay: true
             )
+            if didPromote {
+                recordLinearReadingForNavigationHistory()
+            }
         }
     }
 
@@ -1205,6 +1235,7 @@ public final class ReaderContainerModel: ObservableObject {
         case .forward:
             navigationHistory.commitForward(from: sourceResumePoint)
         }
+        armLinearReadingHistoryExpirationIfNeeded()
     }
 
     private func discardNavigationTarget(for direction: NavigationRestoreDirection) {
@@ -1214,14 +1245,51 @@ public final class ReaderContainerModel: ObservableObject {
         case .forward:
             navigationHistory.discardForwardCandidate()
         }
+        resetLinearReadingHistoryExpirationIfHistoryIsEmpty()
     }
 
     private func recordSuccessfulNonlinearNavigation(
         from sourceResumePoint: ReaderResumePoint?,
         to targetResumePoint: ReaderResumePoint?
     ) {
-        guard let sourceResumePoint, let targetResumePoint else { return }
+        guard let sourceResumePoint, let targetResumePoint, sourceResumePoint != targetResumePoint else { return }
         navigationHistory.recordNonlinearJump(from: sourceResumePoint, to: targetResumePoint)
+        armLinearReadingHistoryExpirationIfNeeded()
+    }
+
+    private func recordLinearReadingForNavigationHistory() {
+        guard navigationHistory.canGoBack || navigationHistory.canGoForward else {
+            linearReadingHistoryExpiration.reset()
+            return
+        }
+        guard let pageKey = currentLinearReadingPageKey else { return }
+        if linearReadingHistoryExpiration.recordLinearReading(at: pageKey) {
+            navigationHistory.clear()
+        }
+    }
+
+    private func armLinearReadingHistoryExpirationIfNeeded() {
+        guard navigationHistory.canGoBack || navigationHistory.canGoForward,
+              let pageKey = currentLinearReadingPageKey else {
+            linearReadingHistoryExpiration.reset()
+            return
+        }
+        linearReadingHistoryExpiration.arm(at: pageKey)
+    }
+
+    private func resetNavigationHistory() {
+        navigationHistory = ReaderNavigationHistory()
+        linearReadingHistoryExpiration.reset()
+    }
+
+    private func resetLinearReadingHistoryExpirationIfHistoryIsEmpty() {
+        guard !navigationHistory.canGoBack, !navigationHistory.canGoForward else { return }
+        linearReadingHistoryExpiration.reset()
+    }
+
+    private var currentLinearReadingPageKey: NovelReaderLinearReadingPageKey? {
+        guard currentStableResumePoint != nil, readerPresentation != nil else { return nil }
+        return NovelReaderLinearReadingPageKey(view: currentView, surfaceIndex: selectedSurfaceIndex)
     }
 
     private func beginReaderPageDocumentNavigation() async {

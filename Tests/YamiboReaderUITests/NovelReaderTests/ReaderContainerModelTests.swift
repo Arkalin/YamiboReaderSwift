@@ -190,6 +190,60 @@ final class ReaderContainerModelTests: XCTestCase {
         }
     }
 
+    func testNavigationHistoryClearsAfterFiveLinearPagedSurfaceTurns() async throws {
+        let model = try await makeModel(
+            documents: [
+                makeDocument(view: 1, maxView: 1, chapterTitles: ["第一章", "第二章"]),
+            ]
+        )
+
+        await MainActor.run {
+            model.jumpToSurface(1)
+            XCTAssertTrue(model.canNavigateBack)
+            XCTAssertFalse(model.canNavigateForward)
+        }
+
+        for _ in 0..<4 {
+            await model.jumpRelativeSurface(1)
+        }
+        await MainActor.run {
+            XCTAssertTrue(model.canNavigateBack)
+            XCTAssertFalse(model.canNavigateForward)
+        }
+
+        await model.jumpRelativeSurface(1)
+        await MainActor.run {
+            XCTAssertFalse(model.canNavigateBack)
+            XCTAssertFalse(model.canNavigateForward)
+        }
+    }
+
+    func testNavigationHistoryClearsAfterFiveLinearVerticalSurfaceChanges() async throws {
+        let model = try await makeModel(
+            documents: [
+                makeDocument(view: 1, maxView: 1, chapterTitles: ["第一章", "第二章"]),
+            ],
+            settings: ReaderAppearanceSettings(readingMode: .vertical)
+        )
+
+        await MainActor.run {
+            model.jumpToSurface(1)
+            XCTAssertTrue(model.canNavigateBack)
+            model.updateVerticalViewportPosition(surfaceIndex: 1, intraSurfaceProgress: 0.2, force: true)
+            model.updateVerticalViewportPosition(surfaceIndex: 1, intraSurfaceProgress: 0.5, force: true)
+            XCTAssertTrue(model.canNavigateBack)
+
+            for surfaceIndex in 2...5 {
+                model.updateVerticalViewportPosition(surfaceIndex: surfaceIndex, intraSurfaceProgress: 0.3, force: true)
+            }
+            XCTAssertTrue(model.canNavigateBack)
+
+            model.updateVerticalViewportPosition(surfaceIndex: 6, intraSurfaceProgress: 0.3, force: true)
+            XCTAssertFalse(model.canNavigateBack)
+            XCTAssertFalse(model.canNavigateForward)
+        }
+    }
+
     func testNavigationHistoryRestoreDoesNotPresentReaderPageDocumentNavigationOverlay() async throws {
         let model = try await makeModel(
             documents: [

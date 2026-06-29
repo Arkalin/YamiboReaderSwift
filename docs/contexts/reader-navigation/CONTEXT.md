@@ -42,3 +42,4 @@ _Avoid_: right stack, redo stack, next stack
 - **Reader Back Stack** and **Reader Forward Stack** each retain at most ten **Reader Return Anchors**.
 - A **Reader Return Anchor** stores a reader-semantic position rather than a UI surface index or displayed page label.
 - **Reader Navigation History** may cross reader document boundaries when the target **Reader Return Anchor** can be resolved in the current reader session.
+- After a successful non-linear jump or a successful backward/forward restore, five ordinary linear page or surface changes expire **Reader Navigation History** and clear both **Reader Back Stack** and **Reader Forward Stack**. Repeated reports of the same stable reading position do not count toward this expiration.

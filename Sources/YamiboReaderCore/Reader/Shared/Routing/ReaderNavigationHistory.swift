@@ -19,6 +19,11 @@ public struct ReaderNavigationHistory<Anchor: Equatable & Sendable>: Equatable, 
         !forwardStack.isEmpty
     }
 
+    public mutating func clear() {
+        backStack.removeAll()
+        forwardStack.removeAll()
+    }
+
     public func peekBack() -> Anchor? {
         backStack.last
     }

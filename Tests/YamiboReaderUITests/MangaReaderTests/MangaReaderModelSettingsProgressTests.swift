@@ -290,6 +290,45 @@ final class MangaReaderModelSettingsProgressTests: XCTestCase {
         XCTAssertFalse(fixture.model.canNavigateForward)
     }
 
+    func testNavigationHistoryClearsAfterFiveLinearCurrentPageUpdates() async throws {
+        let fixture = try await makeFixture(initialPage: 0, imageCount: 7)
+
+        await fixture.model.prepare()
+        await fixture.model.jumpToPage(localIndex: 1)
+        XCTAssertTrue(fixture.model.canNavigateBack)
+        XCTAssertFalse(fixture.model.canNavigateForward)
+
+        for globalIndex in 2...5 {
+            fixture.model.updateCurrentPage(globalIndex: globalIndex)
+        }
+        XCTAssertTrue(fixture.model.canNavigateBack)
+
+        fixture.model.updateCurrentPage(globalIndex: 6)
+        XCTAssertFalse(fixture.model.canNavigateBack)
+        XCTAssertFalse(fixture.model.canNavigateForward)
+    }
+
+    func testNavigationHistoryClearsAfterFiveLinearPagedRelativeTurns() async throws {
+        let fixture = try await makeFixture(
+            initialPage: 0,
+            imageCount: 7,
+            appSettings: AppSettings(manga: MangaReaderSettings(readingMode: .paged))
+        )
+
+        await fixture.model.prepare()
+        await fixture.model.jumpToPage(localIndex: 1)
+        XCTAssertTrue(fixture.model.canNavigateBack)
+
+        for _ in 0..<4 {
+            await fixture.model.jumpRelativePage(1, usesTwoPageSpread: false)
+        }
+        XCTAssertTrue(fixture.model.canNavigateBack)
+
+        await fixture.model.jumpRelativePage(1, usesTwoPageSpread: false)
+        XCTAssertFalse(fixture.model.canNavigateBack)
+        XCTAssertFalse(fixture.model.canNavigateForward)
+    }
+
     func testSaveProgressFlushesLatestPageIntoExistingFavoriteAndResumeRoute() async throws {
         let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "manga-save-progress-existing")
         let favoriteStore = try FavoriteStore(testSuiteName: defaultsSuiteName, key: "favorites")
@@ -531,6 +570,7 @@ private struct MangaReaderModelSettingsProgressFixture {
 @MainActor
 private func makeFixture(
     initialPage: Int = 0,
+    imageCount: Int = 3,
     appSettings: AppSettings = AppSettings(),
     favoriteStore: FavoriteStore? = nil,
     progressSync: ProgressSyncModule? = nil
@@ -561,11 +601,9 @@ private func makeFixture(
         ownerPostID: "9001",
         chapterTitle: "第1话",
         chapterURL: chapterURL,
-        imageURLs: [
-            try XCTUnwrap(URL(string: "https://img.example.com/701-0.jpg")),
-            try XCTUnwrap(URL(string: "https://img.example.com/701-1.jpg")),
-            try XCTUnwrap(URL(string: "https://img.example.com/701-2.jpg"))
-        ]
+        imageURLs: try (0..<max(imageCount, 1)).map { index in
+            try XCTUnwrap(URL(string: "https://img.example.com/701-\(index).jpg"))
+        }
     )
     let repository = StubMangaDirectoryRepository(
         seed: MangaDirectorySeed(

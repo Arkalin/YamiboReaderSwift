@@ -94,6 +94,7 @@ public final class MangaReaderModel: ObservableObject {
     @Published public private(set) var chapterCommentsLoadMoreError: String?
     @Published public private(set) var chapterCommentsRefreshError: String?
     @Published private var navigationHistory = ReaderNavigationHistory<MangaReadingPosition>()
+    private var linearReadingHistoryExpiration = ReaderNavigationLinearReadingExpiration<MangaReadingPosition>()
 
     public let context: MangaLaunchContext
     #if os(iOS)
@@ -236,7 +237,7 @@ public final class MangaReaderModel: ObservableObject {
         #endif
         hasPrepared = false
         offlineCacheOwnerName = nil
-        navigationHistory = ReaderNavigationHistory()
+        resetNavigationHistory()
         currentStableReadingPosition = nil
         lastQueuedProgressSnapshot = nil
         directoryCooldownExpiresAt = nil
@@ -257,6 +258,7 @@ public final class MangaReaderModel: ObservableObject {
         let previousProgressSnapshot = progressSnapshot(from: presentation)
         let nextPresentation = workflow.moveToLoadedPage(at: globalIndex)
         publishPresentation(nextPresentation, previousProgressSnapshot: previousProgressSnapshot)
+        recordLinearReadingForNavigationHistory()
         scheduleAdjacentPrefetch(around: currentPageIndex(in: nextPresentation) ?? globalIndex)
     }
 
@@ -320,6 +322,7 @@ public final class MangaReaderModel: ObservableObject {
         let previousProgressSnapshot = progressSnapshot(from: presentation)
         let nextPresentation = workflow.jumpToLoadedPage(at: targetGlobalIndex, animated: true)
         publishPresentation(nextPresentation, previousProgressSnapshot: previousProgressSnapshot)
+        recordLinearReadingForNavigationHistory()
         scheduleAdjacentPrefetch(around: currentPageIndex(in: nextPresentation) ?? targetGlobalIndex)
     }
 
@@ -838,6 +841,7 @@ public final class MangaReaderModel: ObservableObject {
         case .forward:
             navigationHistory.commitForward(from: sourcePosition)
         }
+        armLinearReadingHistoryExpirationIfNeeded()
     }
 
     private func discardNavigationTarget(for direction: NavigationRestoreDirection) {
@@ -847,14 +851,46 @@ public final class MangaReaderModel: ObservableObject {
         case .forward:
             navigationHistory.discardForwardCandidate()
         }
+        resetLinearReadingHistoryExpirationIfHistoryIsEmpty()
     }
 
     private func recordSuccessfulNonlinearNavigation(
         from sourcePosition: MangaReadingPosition?,
         to targetPosition: MangaReadingPosition
     ) {
-        guard let sourcePosition else { return }
+        guard let sourcePosition, sourcePosition != targetPosition else { return }
         navigationHistory.recordNonlinearJump(from: sourcePosition, to: targetPosition)
+        armLinearReadingHistoryExpirationIfNeeded()
+    }
+
+    private func recordLinearReadingForNavigationHistory() {
+        guard navigationHistory.canGoBack || navigationHistory.canGoForward else {
+            linearReadingHistoryExpiration.reset()
+            return
+        }
+        guard let position = currentStableReadingPosition else { return }
+        if linearReadingHistoryExpiration.recordLinearReading(at: position) {
+            navigationHistory.clear()
+        }
+    }
+
+    private func armLinearReadingHistoryExpirationIfNeeded() {
+        guard navigationHistory.canGoBack || navigationHistory.canGoForward,
+              let position = currentStableReadingPosition else {
+            linearReadingHistoryExpiration.reset()
+            return
+        }
+        linearReadingHistoryExpiration.arm(at: position)
+    }
+
+    private func resetNavigationHistory() {
+        navigationHistory = ReaderNavigationHistory()
+        linearReadingHistoryExpiration.reset()
+    }
+
+    private func resetLinearReadingHistoryExpirationIfHistoryIsEmpty() {
+        guard !navigationHistory.canGoBack, !navigationHistory.canGoForward else { return }
+        linearReadingHistoryExpiration.reset()
     }
 
     private var currentDirectoryPanelErrorMessage: String? {
