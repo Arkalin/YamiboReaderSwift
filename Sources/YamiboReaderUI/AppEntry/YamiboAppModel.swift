@@ -5,9 +5,11 @@ import YamiboReaderCore
 public struct ForumNavigationRequest: Identifiable, Hashable, Sendable {
     public let id = UUID()
     public let url: URL
+    public let source: ForumNavigationSource
 
-    public init(url: URL) {
+    public init(url: URL, source: ForumNavigationSource = .external) {
         self.url = url
+        self.source = source
     }
 }
 
@@ -159,7 +161,11 @@ public final class YamiboAppModel {
         presentManga(context)
     }
 
-    public func dismissReader(openThreadInForum url: URL? = nil, suspendedContext: ReaderLaunchContext? = nil) {
+    public func dismissReader(
+        openThreadInForum url: URL? = nil,
+        suspendedContext: ReaderLaunchContext? = nil,
+        forumNavigationSource: ForumNavigationSource = .readerOrigin
+    ) {
         if url != nil {
             suspendedReaderContext = suspendedContext ?? activeReaderContext
         } else {
@@ -169,13 +175,14 @@ public final class YamiboAppModel {
         appContinuity.readerRouteDismissed()
         if let url {
             selectedTab = .forum
-            forumNavigationRequest = ForumNavigationRequest(url: url)
+            forumNavigationRequest = ForumNavigationRequest(url: url, source: forumNavigationSource)
         }
     }
 
     public func dismissManga(
         openThreadInForum url: URL? = nil,
-        suspendedRoute: MangaPresentationRoute? = nil
+        suspendedRoute: MangaPresentationRoute? = nil,
+        forumNavigationSource: ForumNavigationSource = .readerOrigin
     ) {
         if url != nil {
             suspendedMangaRoute = suspendedRoute ?? activeMangaRoute
@@ -187,18 +194,18 @@ public final class YamiboAppModel {
         appContinuity.readerRouteDismissed()
         if let url {
             selectedTab = .forum
-            forumNavigationRequest = ForumNavigationRequest(url: url)
+            forumNavigationRequest = ForumNavigationRequest(url: url, source: forumNavigationSource)
         }
     }
 
     public func openForumURL(_ url: URL) {
         if activeReaderContext != nil {
-            dismissReader(openThreadInForum: url)
+            dismissReader(openThreadInForum: url, forumNavigationSource: .external)
             return
         }
 
         if activeMangaRoute != nil {
-            dismissManga(openThreadInForum: url)
+            dismissManga(openThreadInForum: url, forumNavigationSource: .external)
             return
         }
 

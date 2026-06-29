@@ -43,6 +43,8 @@ public enum YamiboRoute: Sendable {
     case search(keyword: String, forumID: String)
     case searchPage(searchID: String, page: Int)
     case thread(url: URL, page: Int, authorID: String?)
+    case forumHome
+    case forumBoard(fid: String, page: Int, filterID: String?, orderID: String?)
 
     public var url: URL {
         switch self {
@@ -169,6 +171,31 @@ public enum YamiboRoute: Sendable {
             components.queryItems = items
                 .map { URLQueryItem(name: $0.key, value: $0.value) }
                 .sorted { $0.name < $1.name }
+            return components.url!
+        case .forumHome:
+            var components = URLComponents(url: Self.baseURL, resolvingAgainstBaseURL: false)!
+            components.path = "/forum.php"
+            components.queryItems = [
+                .init(name: "mobile", value: "2")
+            ]
+            return components.url!
+        case let .forumBoard(fid, page, filterID, orderID):
+            var components = URLComponents(url: Self.baseURL, resolvingAgainstBaseURL: false)!
+            components.path = "/forum.php"
+            var items: [URLQueryItem] = [
+                .init(name: "mod", value: "forumdisplay"),
+                .init(name: "fid", value: fid),
+                .init(name: "mobile", value: "2"),
+                .init(name: "page", value: String(max(1, page)))
+            ]
+            if let filterID, !filterID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                items.append(.init(name: "filter", value: "typeid"))
+                items.append(.init(name: "typeid", value: filterID))
+            }
+            if let orderID, !orderID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                items.append(.init(name: "orderby", value: orderID))
+            }
+            components.queryItems = items
             return components.url!
         }
     }

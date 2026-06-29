@@ -6,7 +6,6 @@ import UIKit
 #endif
 
 public struct RootTabView: View {
-    private let forumURL = URL(string: "https://bbs.yamibo.com/forum.php?mobile=2")!
     private let appModel: YamiboAppModel
 
     @Environment(\.scenePhase) private var scenePhase
@@ -55,15 +54,10 @@ public struct RootTabView: View {
         let favoriteStore = appModel.appContext.favoriteStore
 
         return TabView(selection: selectedTabBinding) {
-            ForumBrowserView(
-                url: forumURL,
-                appContext: appModel.appContext,
-                appModel: appModel,
-                listensToForumNavigationRequest: true
-            )
+            ForumNavigationHostView(appContext: appModel.appContext, appModel: appModel)
                 .tag(AppTab.forum)
                 .tabItem {
-                    Label(L10n.string("tab.forum"), systemImage: "globe.asia.australia")
+                    Label(L10n.string("tab.forum"), systemImage: "text.bubble")
                 }
 
             FavoritesNavigationHostView(favoriteStore: favoriteStore, appContext: appModel.appContext, appModel: appModel)

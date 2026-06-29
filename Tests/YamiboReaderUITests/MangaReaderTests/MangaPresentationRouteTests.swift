@@ -471,6 +471,7 @@ final class MangaPresentationRouteTests: XCTestCase {
         XCTAssertNil(appModel.suspendedMangaWebContext)
         XCTAssertEqual(appModel.selectedTab, .forum)
         XCTAssertEqual(appModel.forumNavigationRequest?.url, originalURL)
+        XCTAssertEqual(appModel.forumNavigationRequest?.source, .readerOrigin)
     }
 
     func testSelectingFavoritesAfterMangaOpenedForumRestoresManga() {
@@ -534,6 +535,7 @@ final class MangaPresentationRouteTests: XCTestCase {
         XCTAssertEqual(appModel.suspendedReaderContext, context)
         XCTAssertEqual(appModel.selectedTab, .forum)
         XCTAssertEqual(appModel.forumNavigationRequest?.url, originalURL)
+        XCTAssertEqual(appModel.forumNavigationRequest?.source, .readerOrigin)
     }
 
     func testOpenForumURLExitsActiveReaderAndCreatesNavigationRequest() {
@@ -553,6 +555,7 @@ final class MangaPresentationRouteTests: XCTestCase {
         XCTAssertEqual(appModel.suspendedReaderContext, context)
         XCTAssertEqual(appModel.selectedTab, .forum)
         XCTAssertEqual(appModel.forumNavigationRequest?.url, clipboardURL)
+        XCTAssertEqual(appModel.forumNavigationRequest?.source, .external)
     }
 
     func testConfirmClipboardForumLinkPromptExitsActiveReaderAndCreatesNavigationRequest() {
@@ -575,6 +578,7 @@ final class MangaPresentationRouteTests: XCTestCase {
         XCTAssertEqual(appModel.suspendedReaderContext, context)
         XCTAssertEqual(appModel.selectedTab, .forum)
         XCTAssertEqual(appModel.forumNavigationRequest?.url, clipboardURL)
+        XCTAssertEqual(appModel.forumNavigationRequest?.source, .external)
     }
 
     func testOpenForumURLExitsActiveMangaAndCreatesNavigationRequest() {
@@ -596,6 +600,7 @@ final class MangaPresentationRouteTests: XCTestCase {
         XCTAssertEqual(appModel.suspendedMangaRoute, .native(context))
         XCTAssertEqual(appModel.selectedTab, .forum)
         XCTAssertEqual(appModel.forumNavigationRequest?.url, clipboardURL)
+        XCTAssertEqual(appModel.forumNavigationRequest?.source, .external)
     }
 
     func testConfirmClipboardForumLinkPromptExitsActiveMangaAndCreatesNavigationRequest() {
@@ -620,6 +625,7 @@ final class MangaPresentationRouteTests: XCTestCase {
         XCTAssertEqual(appModel.suspendedMangaRoute, .native(context))
         XCTAssertEqual(appModel.selectedTab, .forum)
         XCTAssertEqual(appModel.forumNavigationRequest?.url, clipboardURL)
+        XCTAssertEqual(appModel.forumNavigationRequest?.source, .external)
     }
 
     func testDismissReaderToOriginalPostSuspendsProvidedLatestContext() {
@@ -654,6 +660,7 @@ final class MangaPresentationRouteTests: XCTestCase {
         XCTAssertEqual(appModel.suspendedReaderContext, latestContext)
         XCTAssertEqual(appModel.selectedTab, .forum)
         XCTAssertEqual(appModel.forumNavigationRequest?.url, originalURL)
+        XCTAssertEqual(appModel.forumNavigationRequest?.source, .readerOrigin)
     }
 
     func testSelectingFavoritesAfterReaderOpenedForumRestoresLatestSuspendedReader() {

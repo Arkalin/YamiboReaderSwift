@@ -29,6 +29,7 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
     public let mangaChapterDocumentStore: FileMangaChapterDocumentStore
     public let mangaImageDataCacheStore: FileMangaImageDataCacheStore
     public let mangaOfflineCacheStore: FileMangaOfflineCacheStore
+    public let forumCacheStore: ForumCacheStore
     public let mangaOfflineCacheBackgroundDownloadTransport: MangaOfflineCacheBackgroundDownloadTransport
     public let mangaOfflineCacheContinuedProcessingCoordinator: MangaOfflineCacheContinuedProcessingCoordinator
     let session: URLSession
@@ -49,6 +50,7 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         mangaChapterDocumentStore: FileMangaChapterDocumentStore = FileMangaChapterDocumentStore(),
         mangaImageDataCacheStore: FileMangaImageDataCacheStore = FileMangaImageDataCacheStore(),
         mangaOfflineCacheStore: FileMangaOfflineCacheStore = FileMangaOfflineCacheStore(),
+        forumCacheStore: ForumCacheStore = ForumCacheStore(),
         mangaOfflineCacheBackgroundDownloadTransport: MangaOfflineCacheBackgroundDownloadTransport = MangaOfflineCacheBackgroundDownloadTransport(),
         mangaOfflineCacheContinuedProcessingCoordinator: MangaOfflineCacheContinuedProcessingCoordinator = MangaOfflineCacheContinuedProcessingCoordinator(),
         session: URLSession = YamiboNetworkConfiguration.makeSession()
@@ -67,6 +69,7 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         self.mangaChapterDocumentStore = mangaChapterDocumentStore
         self.mangaImageDataCacheStore = mangaImageDataCacheStore
         self.mangaOfflineCacheStore = mangaOfflineCacheStore
+        self.forumCacheStore = forumCacheStore
         self.mangaOfflineCacheBackgroundDownloadTransport = mangaOfflineCacheBackgroundDownloadTransport
         self.mangaOfflineCacheContinuedProcessingCoordinator = mangaOfflineCacheContinuedProcessingCoordinator
         self.session = session
@@ -130,6 +133,16 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
             userAgent: sessionState.userAgent
         )
         return ThreadOpenResolver(client: client)
+    }
+
+    public func makeForumRepository() async -> ForumRepository {
+        let sessionState = await sessionStore.load()
+        let client = YamiboClient(
+            session: session,
+            cookie: sessionState.cookie,
+            userAgent: sessionState.userAgent
+        )
+        return ForumRepository(client: client, cacheStore: forumCacheStore)
     }
 
     public func makeMangaChapterDocumentLoader() async -> any MangaChapterDocumentLoading {
@@ -249,6 +262,7 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         try await mangaChapterDocumentStore.clearAll()
         try await mangaImageDataCacheStore.clearAll()
         try await mangaOfflineCacheStore.clearAll()
+        try await forumCacheStore.clearAll()
         try await favoriteBackgroundImageStore.deleteAll()
         clearLocalUIState()
         await clearWebData()

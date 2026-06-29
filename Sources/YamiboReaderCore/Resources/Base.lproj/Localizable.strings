@@ -85,6 +85,7 @@
 "context.manga_images" = "漫画图片";
 "context.novel_body" = "小说正文";
 "context.profile_page" = "个人资料页";
+"context.forum_home" = "论坛首页";
 "context.thread_title" = "帖子标题";
 "error.empty_html" = "返回内容为空";
 "error.favorite_delete_failed" = "删除收藏失败，请稍后重试";
@@ -188,6 +189,15 @@
 "favorites.tags_select_all" = "全选";
 "favorites.tags_selected_count" = "已选择 %d 个标签";
 "forum.default_title" = "百合会论坛";
+"forum.board" = "版块";
+"forum.board.opening" = "正在打开版块…";
+"forum.board.placeholder_message" = "版块列表将在下一步继续原生化。";
+"forum.home.empty" = "暂无论坛版块";
+"forum.home.open_web_fallback" = "用网页继续";
+"forum.home.parser_fallback" = "页面结构已变化，可先使用网页继续。";
+"forum.home.refresh_failed" = "刷新失败：%@";
+"forum.home.search_placeholder" = "搜索论坛";
+"forum.home.today_count" = "今日 %d";
 "forum.history" = "浏览历史";
 "forum.open_native_failed" = "无法原生打开";
 "forum.unsupported_native_thread" = "当前帖子不适合原生阅读。";

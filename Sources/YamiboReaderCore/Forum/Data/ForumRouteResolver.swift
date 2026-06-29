@@ -1,0 +1,106 @@
+import Foundation
+
+public enum ForumNavigationSource: String, Codable, Hashable, Sendable {
+    case external
+    case readerOrigin
+}
+
+public enum ForumResolvedRoute: Equatable, Hashable, Sendable {
+    case home
+    case board(fid: String, title: String?, page: Int?)
+    case thread(URL)
+    case web(URL)
+}
+
+public enum ForumRouteResolver {
+    public static func resolve(url: URL, source: ForumNavigationSource = .external) -> ForumResolvedRoute {
+        let resolvedURL = URL(string: url.absoluteString, relativeTo: YamiboRoute.baseURL)?.absoluteURL ?? url.absoluteURL
+        guard source != .readerOrigin else {
+            return .web(resolvedURL)
+        }
+
+        if let board = boardRoute(from: resolvedURL) {
+            return .board(fid: board.fid, title: nil, page: board.page)
+        }
+
+        if isThreadURL(resolvedURL) {
+            return .thread(resolvedURL)
+        }
+
+        if isForumHomeURL(resolvedURL) {
+            return .home
+        }
+
+        return .web(resolvedURL)
+    }
+
+    public static func boardURL(fid: String, page: Int? = nil) -> URL {
+        var components = URLComponents(url: YamiboRoute.baseURL, resolvingAgainstBaseURL: false)!
+        components.path = "/forum.php"
+        components.queryItems = [
+            .init(name: "mod", value: "forumdisplay"),
+            .init(name: "fid", value: fid),
+            .init(name: "mobile", value: "2")
+        ]
+        if let page, page > 1 {
+            components.queryItems?.append(.init(name: "page", value: String(page)))
+        }
+        return components.url!
+    }
+
+    private static func boardRoute(from url: URL) -> (fid: String, page: Int?)? {
+        if let components = URLComponents(url: url, resolvingAgainstBaseURL: false) {
+            let items = components.queryItems ?? []
+            let mod = items.value(named: "mod")
+            if mod == "forumdisplay", let fid = items.value(named: "fid")?.nilIfBlank {
+                return (fid, items.value(named: "page").flatMap(Int.init))
+            }
+        }
+
+        if let match = HTMLTextExtractor.firstMatch(pattern: #"forum-(\d+)-(\d+)\.html"#, in: url.absoluteString),
+           match.count >= 3 {
+            return (match[1], Int(match[2]))
+        }
+
+        return nil
+    }
+
+    private static func isThreadURL(_ url: URL) -> Bool {
+        guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+            return HTMLTextExtractor.firstMatch(pattern: #"thread-\d+-\d+-\d+\.html"#, in: url.absoluteString) != nil
+        }
+        let items = components.queryItems ?? []
+        if items.value(named: "tid")?.nilIfBlank != nil {
+            return true
+        }
+        return HTMLTextExtractor.firstMatch(pattern: #"thread-\d+-\d+-\d+\.html"#, in: url.absoluteString) != nil
+    }
+
+    private static func isForumHomeURL(_ url: URL) -> Bool {
+        guard url.host == YamiboRoute.baseURL.host else { return false }
+        let path = url.path.isEmpty ? "/" : url.path
+        if path == "/" || path == "/index.php" {
+            return true
+        }
+        guard path == "/forum.php" else { return false }
+        let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        let queryItems = components?.queryItems ?? []
+        let mod = queryItems.value(named: "mod")?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return (mod == nil || mod?.isEmpty == true)
+            && queryItems.value(named: "fid") == nil
+            && queryItems.value(named: "tid") == nil
+    }
+}
+
+private extension Array where Element == URLQueryItem {
+    func value(named name: String) -> String? {
+        first(where: { $0.name == name })?.value
+    }
+}
+
+private extension String {
+    var nilIfBlank: String? {
+        let value = trimmingCharacters(in: .whitespacesAndNewlines)
+        return value.isEmpty ? nil : value
+    }
+}
