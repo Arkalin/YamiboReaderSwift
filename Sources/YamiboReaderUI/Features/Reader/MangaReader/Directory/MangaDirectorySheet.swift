@@ -456,7 +456,7 @@ private struct MangaDirectoryChapterRow: View {
                     .foregroundStyle(numberColor)
                     .frame(width: 34, alignment: .leading)
 
-                VStack(alignment: .leading, spacing: 6) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
                     TruncationAwareText(
                         chapter.rawTitle,
                         font: UIFont.preferredFont(forTextStyle: .subheadline),
@@ -465,6 +465,7 @@ private struct MangaDirectoryChapterRow: View {
                     )
                     .font(.subheadline)
                     .foregroundStyle(titleColor)
+                    .layoutPriority(1)
 
                     if isTruncated {
                         Button(isExpanded ? L10n.string("common.collapse") : L10n.string("common.expand")) {
@@ -473,6 +474,8 @@ private struct MangaDirectoryChapterRow: View {
                         .font(.caption.weight(.semibold))
                         .buttonStyle(.plain)
                         .foregroundStyle(accentColor)
+                        .lineLimit(1)
+                        .fixedSize()
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
