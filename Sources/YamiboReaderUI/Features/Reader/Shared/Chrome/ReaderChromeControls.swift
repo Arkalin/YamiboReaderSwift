@@ -166,6 +166,7 @@ struct ReaderChromeHistoryButton: View {
     let action: () -> Void
 
     @Environment(\.colorScheme) private var colorScheme
+    private static let hitTargetSize: CGFloat = 44
     private let iconSize: CGFloat = 19
     private let glassSize: CGFloat = 27
 
@@ -177,14 +178,15 @@ struct ReaderChromeHistoryButton: View {
                     size: glassSize,
                     tint: readerChromePanelTint(for: colorScheme)
                 ))
-                .contentShape(Circle())
+                .frame(width: Self.hitTargetSize, height: Self.hitTargetSize)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel(title)
     }
 
     static func controlSize(isGlassBacked: Bool) -> CGFloat {
-        isGlassBacked ? 27 : 19
+        hitTargetSize
     }
 
     private var icon: some View {
