@@ -199,21 +199,34 @@ private struct ForumCategorySectionView: View {
             .accessibilityHint(L10n.string(isExpanded ? "common.collapse" : "common.expand"))
 
             if isExpanded {
-                LazyVStack(spacing: 8) {
-                    ForEach(boards) { board in
-                        ForumBoardRowView(
-                            fid: board.fid,
-                            name: board.name,
-                            detail: board.detail,
-                            todayCount: board.todayCount,
-                            iconURL: board.iconURL,
-                            onTap: {
-                                onBoardTap(board)
-                            }
-                        )
+                ForumCategoryBoardListView(
+                    boards: boards,
+                    onBoardTap: onBoardTap
+                )
+                .transition(.opacity)
+            }
+        }
+        .clipped()
+    }
+}
+
+private struct ForumCategoryBoardListView: View {
+    let boards: [ForumBoardSummary]
+    let onBoardTap: (ForumBoardSummary) -> Void
+
+    var body: some View {
+        LazyVStack(spacing: 8) {
+            ForEach(boards) { board in
+                ForumBoardRowView(
+                    fid: board.fid,
+                    name: board.name,
+                    detail: board.detail,
+                    todayCount: board.todayCount,
+                    iconURL: board.iconURL,
+                    onTap: {
+                        onBoardTap(board)
                     }
-                }
-                .transition(.opacity.combined(with: .move(edge: .top)))
+                )
             }
         }
     }
