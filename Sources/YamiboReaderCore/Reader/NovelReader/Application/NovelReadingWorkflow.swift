@@ -479,6 +479,17 @@ public final class NovelReadingWorkflow {
         return try? updateStateFromSession(cachedViews: state?.cachedViews ?? [])
     }
 
+    public func restoreResumePointInCurrentDocument(
+        _ resumePoint: ReaderResumePoint
+    ) -> NovelReadingWorkflowState? {
+        guard let state,
+              state.snapshot.currentView == resumePoint.view,
+              session?.restoreResumePoint(resumePoint) == true else {
+            return nil
+        }
+        return try? updateStateFromSession(cachedViews: state.cachedViews)
+    }
+
     public func updateVerticalViewportPosition(
         surfaceIdentity: NovelReaderSurfaceIdentity,
         intraSurfaceProgress: Double,

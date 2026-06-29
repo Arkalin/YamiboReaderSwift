@@ -1158,6 +1158,15 @@ public final class ReaderContainerModel: ObservableObject {
     }
 
     private func restoreResumePoint(_ resumePoint: ReaderResumePoint) async -> Bool {
+        if resumePoint.view == currentView,
+           let state = readingWorkflow?.restoreResumePointInCurrentDocument(resumePoint) {
+            syncFromWorkflowState(state)
+            Task {
+                await prefetchIfNeeded(for: selectedSurfaceIndex)
+            }
+            return true
+        }
+
         if readingWorkflow?.canPromotePrefetchedDocument(forView: resumePoint.view) == true {
             return await promotePrefetchedDocument(
                 startingAt: 0,

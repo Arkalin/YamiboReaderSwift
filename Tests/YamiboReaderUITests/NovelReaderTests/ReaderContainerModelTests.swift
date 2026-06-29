@@ -190,6 +190,39 @@ final class ReaderContainerModelTests: XCTestCase {
         }
     }
 
+    func testNavigationHistoryRestoreDoesNotPresentReaderPageDocumentNavigationOverlay() async throws {
+        let model = try await makeModel(
+            documents: [
+                makeDocument(view: 1, maxView: 1, chapterTitles: ["第一章", "第二章", "第三章"]),
+            ]
+        )
+        let navigationStateRecorder = await MainActor.run {
+            let recorder = ReaderNavigationStateRecorder()
+            model.readerPageDocumentNavigationOverlayPreparation = {}
+            model.readerPageDocumentNavigationStateDidChange = { state in
+                recorder.record(state)
+            }
+            return recorder
+        }
+
+        await MainActor.run {
+            model.jumpToSurface(model.surfaceCount - 1)
+            XCTAssertEqual(model.currentView, 1)
+            XCTAssertEqual(model.currentSurfaceNumber, model.surfaceCount)
+            XCTAssertTrue(model.canNavigateBack)
+            navigationStateRecorder.removeAll()
+        }
+
+        await model.navigateBack()
+
+        await MainActor.run {
+            XCTAssertEqual(model.currentView, 1)
+            XCTAssertEqual(model.currentSurfaceNumber, 1)
+            XCTAssertFalse(model.isNavigatingReaderPageDocument)
+            XCTAssertEqual(navigationStateRecorder.states, [])
+        }
+    }
+
     func testPreviousWebViewBoundaryNavigationLandsOnPreviousLastSurfaceAfterOverlay() async throws {
         let model = try await makeModel(
             documents: [
@@ -2977,6 +3010,10 @@ private final class ReaderNavigationStateRecorder {
 
     func record(_ state: Bool) {
         states.append(state)
+    }
+
+    func removeAll() {
+        states.removeAll()
     }
 }
 

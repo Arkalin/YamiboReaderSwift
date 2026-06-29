@@ -194,6 +194,16 @@ package struct NovelReadingSession: Sendable {
     }
 
     @discardableResult
+    public mutating func restoreResumePoint(_ resumePoint: ReaderResumePoint) -> Bool {
+        guard let target = resolveResumePoint(resumePoint, in: surfaces) else {
+            return false
+        }
+        setCurrentLocation(target)
+        preserveCurrentTextResumePointIfAvailable()
+        return true
+    }
+
+    @discardableResult
     public mutating func jumpRelativeSurface(_ delta: Int) -> NovelReadingNavigationRequest? {
         guard delta != 0 else { return nil }
 
