@@ -647,7 +647,7 @@ public actor FavoriteStore: FavoriteStoring {
 
     public func favorite(for url: URL) async -> Favorite? {
         await loadFavorites().first { favorite in
-            favorite.url == url || favorite.id == url.absoluteString
+            Self.favorite(favorite, matches: url)
         }
     }
 
@@ -689,9 +689,7 @@ public actor FavoriteStore: FavoriteStoring {
         let chapterTitle = resumePoint?.chapterTitle ?? position.chapterTitle
         let authorID = resumePoint?.authorID ?? position.authorID
 
-        if let index = favorites.firstIndex(where: {
-            $0.url == position.threadURL || $0.id == position.threadURL.absoluteString
-        }) {
+        if let index = favorites.firstIndex(where: { Self.favorite($0, matches: position.threadURL) }) {
             favorites[index].lastView = view
             favorites[index].mangaPageIndex = 0
             favorites[index].lastChapter = chapterTitle
@@ -752,7 +750,7 @@ public actor FavoriteStore: FavoriteStoring {
         let snapshot = await loadLibrarySnapshot()
         var favorites = snapshot.favorites
 
-        if let index = favorites.firstIndex(where: { $0.url == url || $0.id == url.absoluteString }) {
+        if let index = favorites.firstIndex(where: { Self.favorite($0, matches: url) }) {
             favorites[index].lastMangaURL = chapterURL
             favorites[index].lastChapter = chapterTitle
             favorites[index].mangaPageIndex = max(0, pageIndex)
@@ -958,7 +956,15 @@ public actor FavoriteStore: FavoriteStoring {
     }
 
     private static func canonicalURLKey(for url: URL) -> String {
-        ReaderCacheIdentity.canonicalThreadURL(from: url).absoluteString
+        FavoriteLibraryURLIdentity.canonicalThreadURLKey(for: url)
+    }
+
+    private static func canonicalThreadURL(for url: URL) -> URL {
+        FavoriteLibraryURLIdentity.canonicalThreadURL(from: url)
+    }
+
+    private static func favorite(_ favorite: Favorite, matches url: URL) -> Bool {
+        FavoriteLibraryURLIdentity.favorite(favorite, matches: url)
     }
 
     private static func canonicalURLKeys(
@@ -980,7 +986,7 @@ public actor FavoriteStore: FavoriteStoring {
             records[canonicalURLKey(for: favorite.url)] = FavoriteClockRecord(favorite: favorite)
         }
         for archive in snapshot.archivedMetadata {
-            records[archive.canonicalThreadURL.absoluteString] = FavoriteClockRecord(archive: archive)
+            records[canonicalURLKey(for: archive.canonicalThreadURL)] = FavoriteClockRecord(archive: archive)
         }
         return records
     }
@@ -1103,6 +1109,7 @@ public actor FavoriteStore: FavoriteStoring {
     ) -> [FavoriteMetadataArchiveEntry] {
         archivedMetadata.map { entry in
             var entry = entry
+            entry.canonicalThreadURL = Self.canonicalThreadURL(for: entry.canonicalThreadURL)
             entry.tagIDs = sanitizedTagIDs(entry.tagIDs, validTagIDs: validTagIDs)
             return entry
         }

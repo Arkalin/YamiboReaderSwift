@@ -474,6 +474,41 @@ import Testing
     #expect(loaded?.lastReadAt == readAt)
 }
 
+@Test func favoriteStoreFindsFavoriteByCanonicalThreadURL() async throws {
+    let defaults = try #require(UserDefaults(suiteName: "favorite-canonical-lookup-tests"))
+    defaults.removePersistentDomain(forName: "favorite-canonical-lookup-tests")
+    let store = FavoriteStore(defaults: defaults, key: "favorites")
+    let listURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=302&extra=page%3D1&mobile=2"))
+    let detailURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=302&mobile=2"))
+    let favorite = Favorite(title: "列表收藏", url: listURL, type: .novel)
+    try await store.saveFavorites([favorite])
+
+    let loaded = await store.favorite(for: detailURL)
+
+    #expect(loaded?.id == favorite.id)
+}
+
+@Test func favoriteStoreUpdatesNovelReadingPositionByCanonicalThreadURL() async throws {
+    let defaults = try #require(UserDefaults(suiteName: "favorite-canonical-progress-tests"))
+    defaults.removePersistentDomain(forName: "favorite-canonical-progress-tests")
+    let store = FavoriteStore(defaults: defaults, key: "favorites")
+    let listURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=303&extra=page%3D1&mobile=2"))
+    let readerURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=303&mobile=2"))
+    let favorite = Favorite(title: "列表收藏", url: listURL, type: .novel)
+    try await store.saveFavorites([favorite])
+
+    let updated = try await store.updateNovelReadingPosition(
+        NovelReadingPosition(threadURL: readerURL, view: 4, chapterTitle: "第四章")
+    )
+    let favorites = await store.loadFavorites()
+
+    #expect(updated.id == favorite.id)
+    #expect(favorites.count == 1)
+    #expect(favorites.first?.url == listURL)
+    #expect(favorites.first?.lastView == 4)
+    #expect(favorites.first?.lastChapter == "第四章")
+}
+
 @Test func favoriteStoreRemoteRefreshTouchesOnlyRemoteFavoritesClock() async throws {
     let defaults = try #require(UserDefaults(suiteName: "favorite-remote-clock-tests"))
     defaults.removePersistentDomain(forName: "favorite-remote-clock-tests")

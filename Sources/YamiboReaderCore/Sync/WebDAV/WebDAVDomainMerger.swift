@@ -342,7 +342,7 @@ struct WebDAVDomainMerger: Sendable {
             records[canonicalURLKey(for: favorite.url)] = FavoriteMergeRecord(favorite: favorite)
         }
         for archive in snapshot.archivedMetadata {
-            records[archive.canonicalThreadURL.absoluteString] = FavoriteMergeRecord(archive: archive)
+            records[canonicalURLKey(for: archive.canonicalThreadURL)] = FavoriteMergeRecord(archive: archive)
         }
         return records
     }
@@ -366,7 +366,7 @@ struct WebDAVDomainMerger: Sendable {
     }
 
     private func canonicalURLKey(for url: URL) -> String {
-        ReaderCacheIdentity.canonicalThreadURL(from: url).absoluteString
+        FavoriteLibraryURLIdentity.canonicalThreadURLKey(for: url)
     }
 
     private func sanitizedTagIDs(_ tagIDs: [String], validTagIDs: Set<String>) -> [String] {

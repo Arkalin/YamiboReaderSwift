@@ -124,8 +124,8 @@ public struct FavoriteLibrarySnapshot: Codable, Equatable, Sendable {
 
     public var favoriteCanonicalURLKeys: Set<String> {
         Set(
-            favorites.map { ReaderCacheIdentity.canonicalThreadURL(from: $0.url).absoluteString } +
-                archivedMetadata.map(\.canonicalThreadURL.absoluteString)
+            favorites.map { FavoriteLibraryURLIdentity.canonicalThreadURLKey(for: $0.url) } +
+                archivedMetadata.map { FavoriteLibraryURLIdentity.canonicalThreadURLKey(for: $0.canonicalThreadURL) }
         )
     }
 }
@@ -205,7 +205,7 @@ public struct FavoriteMetadataArchiveEntry: Codable, Equatable, Sendable {
 
     public init(favorite: Favorite) {
         self.init(
-            canonicalThreadURL: ReaderCacheIdentity.canonicalThreadURL(from: favorite.url),
+            canonicalThreadURL: FavoriteLibraryURLIdentity.canonicalThreadURL(from: favorite.url),
             displayName: favorite.displayName,
             mangaPageIndex: favorite.mangaPageIndex,
             lastView: favorite.lastView,
@@ -289,7 +289,10 @@ public struct FavoriteLibrary: Equatable, Sendable {
             favorites.filter { $0.parentCollectionID == nil }.map(\.manualOrder).min() ?? 0,
             collections.map(\.manualOrder).min() ?? 0
         )
-        let archiveByURL = Dictionary(uniqueKeysWithValues: archivedMetadata.map { ($0.canonicalThreadURL, $0) })
+        var archiveByURL: [URL: FavoriteMetadataArchiveEntry] = [:]
+        for archive in archivedMetadata {
+            archiveByURL[Self.canonicalThreadURL(from: archive.canonicalThreadURL)] = archive
+        }
         var restoredArchiveURLs = Set<URL>()
 
         let unsortedRemoteNewFavorites = remoteFavorites
@@ -305,7 +308,7 @@ public struct FavoriteLibrary: Equatable, Sendable {
                         validCollectionIDs: validCollectionIDs,
                         validTagIDs: validTagIDs
                     )
-                    restoredArchiveURLs.insert(archive.canonicalThreadURL)
+                    restoredArchiveURLs.insert(canonicalURL)
                 }
                 return remoteFavorite
             }
@@ -318,7 +321,10 @@ public struct FavoriteLibrary: Equatable, Sendable {
                 }
                 return remoteFavorite
             }
-        let remoteByCanonicalURL = Dictionary(uniqueKeysWithValues: remoteFavorites.map { (Self.canonicalThreadURL(for: $0), $0) })
+        var remoteByCanonicalURL: [URL: Favorite] = [:]
+        for remoteFavorite in remoteFavorites {
+            remoteByCanonicalURL[Self.canonicalThreadURL(for: remoteFavorite)] = remoteFavorite
+        }
         let remoteCanonicalURLs = Set(remoteByCanonicalURL.keys)
         let removedFavorites = favorites.filter { localFavorite in
             !remoteCanonicalURLs.contains(Self.canonicalThreadURL(for: localFavorite))
@@ -328,7 +334,7 @@ public struct FavoriteLibrary: Equatable, Sendable {
             into: archivedMetadata,
             validTagIDs: validTagIDs
         )
-            .filter { !restoredArchiveURLs.contains($0.canonicalThreadURL) }
+            .filter { !restoredArchiveURLs.contains(Self.canonicalThreadURL(from: $0.canonicalThreadURL)) }
 
         favorites = remoteNewFavorites + favorites.compactMap { localFavorite in
             if let remoteFavorite = remoteByCanonicalURL[Self.canonicalThreadURL(for: localFavorite)] {
@@ -347,7 +353,11 @@ public struct FavoriteLibrary: Equatable, Sendable {
     }
 
     private static func canonicalThreadURL(for favorite: Favorite) -> URL {
-        ReaderCacheIdentity.canonicalThreadURL(from: favorite.url)
+        canonicalThreadURL(from: favorite.url)
+    }
+
+    private static func canonicalThreadURL(from url: URL) -> URL {
+        FavoriteLibraryURLIdentity.canonicalThreadURL(from: url)
     }
 
     private static func upsertingArchiveEntries(
@@ -355,11 +365,14 @@ public struct FavoriteLibrary: Equatable, Sendable {
         into archivedMetadata: [FavoriteMetadataArchiveEntry],
         validTagIDs: Set<String>
     ) -> [FavoriteMetadataArchiveEntry] {
-        var entriesByURL = Dictionary(uniqueKeysWithValues: archivedMetadata.map { ($0.canonicalThreadURL, $0) })
+        var entriesByURL: [URL: FavoriteMetadataArchiveEntry] = [:]
+        for archive in archivedMetadata {
+            entriesByURL[canonicalThreadURL(from: archive.canonicalThreadURL)] = archive
+        }
         for favorite in favorites {
             var entry = FavoriteMetadataArchiveEntry(favorite: favorite)
             entry.tagIDs = entry.tagIDs.filter { validTagIDs.contains($0) }
-            entriesByURL[entry.canonicalThreadURL] = entry
+            entriesByURL[canonicalThreadURL(from: entry.canonicalThreadURL)] = entry
         }
         return entriesByURL.values.sorted { lhs, rhs in
             lhs.canonicalThreadURL.absoluteString < rhs.canonicalThreadURL.absoluteString
