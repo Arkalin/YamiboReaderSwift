@@ -76,7 +76,7 @@ import Testing
 
     #expect(model.hasReadingProgress)
     #expect(model.headerSummary.isFavorited == false)
-    #expect(model.headerSummary.readingProgressText == "页内 33 % · 网页 4 / 6")
+    #expect(model.headerSummary.readingProgressText == "第四章")
     #expect(context.source == .resume)
     #expect(context.initialView == 4)
     #expect(context.authorID == "77")
@@ -160,7 +160,7 @@ import Testing
     #expect(summary.lastUpdatedText == "2026-6-2 12:00")
     #expect(summary.totalViews == 321)
     #expect(summary.totalReplies == 45)
-    #expect(summary.forumName == "#原创小说")
+    #expect(summary.forumName == "原创小说")
     #expect(summary.chapterCount == 2)
     #expect(summary.coverURL == coverURL)
     #expect(summary.firstFloorPreviewText == "首楼简介\n正文")
@@ -755,8 +755,8 @@ import Testing
     )
 
     #expect(sections[0].chapters.map(\.isCurrentRead) == [false, true])
-    #expect(sections[0].chapters[1].progressText == "20 %")
-    #expect(model.headerSummary.readingProgressText == "20 %")
+    #expect(sections[0].chapters[1].progressText == nil)
+    #expect(model.headerSummary.readingProgressText == "第一章")
 }
 
 @MainActor
@@ -788,7 +788,7 @@ import Testing
         )
     ])
     model.favorite = await favoriteStore.favorite(for: url)
-    #expect(model.headerSummary.readingProgressText == "10 %")
+    #expect(model.headerSummary.readingProgressText == "第一章")
     await Task.yield()
 
     _ = try await favoriteStore.updateNovelReadingPosition(
@@ -818,7 +818,7 @@ import Testing
 
     #expect(model.favorite?.lastView == 2)
     #expect(model.favorite?.novelResumePoint?.chapterTitle == "第二章")
-    #expect(model.headerSummary.readingProgressText == "页内 80 % · 网页 2 / 3")
+    #expect(model.headerSummary.readingProgressText == "第二章")
 }
 
 @MainActor

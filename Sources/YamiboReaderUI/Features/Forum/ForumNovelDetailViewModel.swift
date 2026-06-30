@@ -475,13 +475,13 @@ final class ForumNovelDetailViewModel {
 
     private var forumName: String? {
         if let forumName = Self.trimmedNonEmpty(threadPage?.forumName) {
-            return "#\(forumName)"
+            return forumName
         }
         guard let fid = Self.trimmedNonEmpty(threadPage?.thread.fid)
             ?? Self.trimmedNonEmpty(context.thread.fid) else {
             return nil
         }
-        return "#\(fid)"
+        return fid
     }
 
     private var favoriteTitle: String {
@@ -512,6 +512,10 @@ final class ForumNovelDetailViewModel {
               hasReadingProgress(nil, favorite: favorite) else {
             return nil
         }
+        if let chapterTitle = trimmedNonEmpty(favorite.novelResumePoint?.chapterTitle)
+            ?? trimmedNonEmpty(favorite.lastChapter) {
+            return chapterTitle
+        }
         if let percent = favorite.novelDocumentSurfaceProgressPercent {
             if let maxView = favorite.novelMaxView, maxView > 1 {
                 return L10n.string(
@@ -530,12 +534,14 @@ final class ForumNovelDetailViewModel {
                 maxView
             )
         }
-        return trimmedNonEmpty(favorite.novelResumePoint?.chapterTitle)
-            ?? trimmedNonEmpty(favorite.lastChapter)
-            ?? L10n.string("favorites.progress.page", favorite.lastView)
+        return L10n.string("favorites.progress.page", favorite.lastView)
     }
 
     private static func readingProgressText(from novel: NovelReadingProgressRecord) -> String {
+        if let chapterTitle = trimmedNonEmpty(novel.novelResumePoint?.chapterTitle)
+            ?? trimmedNonEmpty(novel.lastChapter) {
+            return chapterTitle
+        }
         if let percent = novel.novelDocumentSurfaceProgressPercent {
             if let maxView = novel.novelMaxView, maxView > 1 {
                 return L10n.string(
@@ -554,9 +560,7 @@ final class ForumNovelDetailViewModel {
                 maxView
             )
         }
-        return trimmedNonEmpty(novel.novelResumePoint?.chapterTitle)
-            ?? trimmedNonEmpty(novel.lastChapter)
-            ?? L10n.string("favorites.progress.page", novel.lastView)
+        return L10n.string("favorites.progress.page", novel.lastView)
     }
 
     private static func chapterProgressText(
@@ -567,11 +571,7 @@ final class ForumNovelDetailViewModel {
         guard isCurrentReadChapter(chapter, readingProgress: readingProgress, favorite: favorite) else {
             return nil
         }
-        if let percent = readingProgress?.novel?.novelDocumentSurfaceProgressPercent
-            ?? favorite?.novelDocumentSurfaceProgressPercent {
-            return L10n.string("favorites.progress.novel_percent", percent)
-        }
-        return L10n.string("forum.thread_route.current_chapter_hint")
+        return nil
     }
 
     private static func isCurrentReadChapter(
