@@ -92,6 +92,7 @@
 "context.thread_title" = "帖子标题";
 "error.empty_html" = "返回内容为空";
 "error.favorite_delete_failed" = "删除收藏失败，请稍后重试";
+"error.favorite_add_failed" = "添加收藏失败，请稍后重试";
 "error.flood_control" = "论坛触发了防灌水限制，请稍后再试";
 "error.invalid_response" = "未拿到有效的论坛响应";
 "error.invalid_response_with_status" = "论坛响应异常（HTTP %d）";
@@ -101,6 +102,8 @@
 "error.login_verification_required" = "当前账号需要论坛验证，App 暂不支持无网页登录";
 "error.missing_favorite_delete_id" = "当前收藏缺少删除标识，请先下拉刷新";
 "error.missing_favorite_delete_token" = "删除收藏失败：未拿到表单校验码";
+"error.missing_favorite_add_token" = "添加收藏失败：未拿到表单校验码";
+"error.missing_favorite_thread_id" = "添加收藏失败：未识别帖子 ID";
 "error.missing_forum_board_favorite_token" = "收藏本版失败：未拿到表单校验码";
 "error.missing_forum_search_token" = "搜索失败：未拿到表单校验码";
 "error.not_authenticated" = "当前登录态不可用，请重新登录";

@@ -36,6 +36,7 @@ final class ForumThreadReaderViewModel {
 
     @ObservationIgnored private let repositoryProvider: @Sendable () async -> any ForumThreadPageLoading
     @ObservationIgnored private let favoriteStoreProvider: @Sendable () async -> (any FavoriteStoring)?
+    @ObservationIgnored private let favoriteRepositoryProvider: @Sendable () async -> (any ForumThreadFavoriteRemoteOperating)?
     @ObservationIgnored private let inlineImageLoadingContextProvider: @Sendable () async -> NovelInlineImageLoadingContext?
 
     init(context: ThreadReaderLaunchContext, appContext: YamiboAppContext) {
@@ -46,6 +47,9 @@ final class ForumThreadReaderViewModel {
         favoriteStoreProvider = {
             appContext.favoriteStore
         }
+        favoriteRepositoryProvider = {
+            await appContext.makeFavoriteRepository()
+        }
         inlineImageLoadingContextProvider = {
             await appContext.makeNovelInlineImageLoadingContext()
         }
@@ -54,7 +58,8 @@ final class ForumThreadReaderViewModel {
     init(
         context: ThreadReaderLaunchContext,
         repository: any ForumThreadPageLoading,
-        favoriteStore: (any FavoriteStoring)? = nil
+        favoriteStore: (any FavoriteStoring)? = nil,
+        favoriteRepository: (any ForumThreadFavoriteRemoteOperating)? = nil
     ) {
         self.context = context
         repositoryProvider = {
@@ -62,6 +67,9 @@ final class ForumThreadReaderViewModel {
         }
         favoriteStoreProvider = {
             favoriteStore
+        }
+        favoriteRepositoryProvider = {
+            favoriteRepository
         }
         inlineImageLoadingContextProvider = {
             nil
@@ -112,20 +120,24 @@ final class ForumThreadReaderViewModel {
 
         do {
             if let favorite = await favoriteStore.favorite(for: url) {
-                _ = try await favoriteStore.deleteFavorite(id: favorite.id)
+                try await ForumThreadFavoriteSync.removeFavorite(
+                    favorite,
+                    favoriteStore: favoriteStore,
+                    remoteRepository: await favoriteRepositoryProvider()
+                )
                 isFavorited = false
                 return
             }
 
-            let existingFavorites = await favoriteStore.loadFavorites()
-            var favorite = Favorite(
+            _ = try await ForumThreadFavoriteSync.addFavorite(
+                threadURL: url,
                 title: favoriteTitle,
-                url: url,
-                isHidden: false,
-                type: .other
+                type: .other,
+                authorID: nil,
+                formHash: page?.formHash,
+                favoriteStore: favoriteStore,
+                remoteRepository: await favoriteRepositoryProvider()
             )
-            favorite.parentCollectionID = nil
-            try await favoriteStore.saveFavorites(existingFavorites + [favorite])
             isFavorited = true
         } catch {
             favoriteErrorMessage = error.localizedDescription

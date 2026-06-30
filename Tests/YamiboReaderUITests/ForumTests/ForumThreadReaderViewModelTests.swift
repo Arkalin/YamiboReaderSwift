@@ -17,7 +17,7 @@ import Testing
 }
 
 @MainActor
-@Test func forumThreadReaderTogglesLocalFavorite() async throws {
+@Test func forumThreadReaderTogglesRemoteFavoriteAndSyncsLocalState() async throws {
     let fixture = try ForumThreadReaderViewModelFixture()
     let model = fixture.makeModel()
 
@@ -30,11 +30,14 @@ import Testing
     #expect(model.isFavorited)
     #expect(added.title == "解析标题")
     #expect(added.type == .other)
+    #expect(added.remoteFavoriteID == "8801")
+    #expect(await fixture.favoriteRepository.addedThreadURLs == [fixture.threadURL])
 
     await model.toggleFavorite()
 
     #expect(!model.isFavorited)
     #expect(await fixture.favoriteStore.favorite(for: fixture.threadURL) == nil)
+    #expect(await fixture.favoriteRepository.deletedRemoteFavoriteIDs == ["8801"])
 }
 
 private struct ForumThreadReaderViewModelFixture {
@@ -42,6 +45,7 @@ private struct ForumThreadReaderViewModelFixture {
     let threadURL: URL
     let favoriteStore: FavoriteStore
     let repository: FakeForumThreadPageLoader
+    let favoriteRepository: FakeThreadFavoriteRepository
 
     init() throws {
         suiteName = "ForumThreadReaderViewModelTests.\(UUID().uuidString)"
@@ -50,6 +54,7 @@ private struct ForumThreadReaderViewModelFixture {
         threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=704&mobile=2"))
         favoriteStore = FavoriteStore(defaults: defaults, key: "favorites")
         repository = FakeForumThreadPageLoader(threadURL: threadURL)
+        favoriteRepository = FakeThreadFavoriteRepository(threadURL: threadURL)
     }
 
     @MainActor
@@ -60,7 +65,8 @@ private struct ForumThreadReaderViewModelFixture {
                 title: "上下文标题"
             ),
             repository: repository,
-            favoriteStore: favoriteStore
+            favoriteStore: favoriteStore,
+            favoriteRepository: favoriteRepository
         )
     }
 }
@@ -117,5 +123,28 @@ private final class FakeForumThreadPageLoader: ForumThreadPageLoading, @unchecke
 
     func commentPost(threadID: String, postID: String, message: String, formHash: String, page: Int) async throws -> String {
         ""
+    }
+}
+
+private actor FakeThreadFavoriteRepository: ForumThreadFavoriteRemoteOperating {
+    let threadURL: URL
+    var addedThreadURLs: [URL] = []
+    var deletedRemoteFavoriteIDs: [String] = []
+
+    init(threadURL: URL) {
+        self.threadURL = threadURL
+    }
+
+    func addThreadFavorite(threadURL: URL, formHash: String?) async throws -> Favorite? {
+        addedThreadURLs.append(threadURL)
+        return Favorite(title: "远端标题", url: threadURL, remoteFavoriteID: "8801")
+    }
+
+    func deleteFavorite(remoteFavoriteID: String) async throws {
+        deletedRemoteFavoriteIDs.append(remoteFavoriteID)
+    }
+
+    func remoteFavorite(for threadURL: URL, maxPages: Int) async throws -> Favorite? {
+        Favorite(title: "远端标题", url: threadURL, remoteFavoriteID: "8801")
     }
 }

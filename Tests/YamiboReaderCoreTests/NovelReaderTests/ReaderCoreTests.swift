@@ -39,6 +39,57 @@ private final class StubURLProtocol: URLProtocol {
 
         if absolute.contains("mod=space"),
            absolute.contains("do=favorite") {
+            let cookie = request.value(forHTTPHeaderField: "Cookie") ?? ""
+            if cookie.contains("favorite-add-success=1") {
+                return .response(
+                    StubURLProtocolResponse(
+                        statusCode: 200,
+                        body: """
+                        <html><body>
+                          <ul class="sclist">
+                            <li>
+                              <a href="forum.php?mod=viewthread&tid=704&mobile=2">远端收藏</a>
+                              <a class="mdel" href="home.php?mod=spacecp&ac=favorite&op=delete&favid=8801">删除</a>
+                            </li>
+                          </ul>
+                        </body></html>
+                        """
+                    )
+                )
+            }
+            if cookie.contains("favorite-target-page2=1") {
+                if absolute.contains("page=2") {
+                    return .response(
+                        StubURLProtocolResponse(
+                            statusCode: 200,
+                            body: """
+                            <html><body>
+                              <ul class="sclist">
+                                <li>
+                                  <a href="forum.php?mod=viewthread&tid=805&mobile=2">第二页收藏</a>
+                                  <a class="mdel" href="home.php?mod=spacecp&ac=favorite&op=delete&favid=9902">删除</a>
+                                </li>
+                              </ul>
+                              <div class="pg"><a href="home.php?mod=space&do=favorite&type=thread&page=1">1</a><strong>2</strong></div>
+                            </body></html>
+                            """
+                        )
+                    )
+                }
+                return .response(
+                    StubURLProtocolResponse(
+                        statusCode: 200,
+                        body: """
+                        <html><body>
+                          <ul class="sclist">
+                            <li><a href="forum.php?mod=viewthread&tid=804&mobile=2">第一页收藏</a></li>
+                          </ul>
+                          <div class="pg"><strong>1</strong><a href="home.php?mod=space&do=favorite&type=thread&page=2">2</a></div>
+                        </body></html>
+                        """
+                    )
+                )
+            }
             return .response(
                 StubURLProtocolResponse(
                     statusCode: 200,
@@ -50,6 +101,26 @@ private final class StubURLProtocol: URLProtocol {
                       </body>
                     </html>
                     """
+                )
+            )
+        }
+
+        if absolute.contains("do=profile") {
+            return .response(
+                StubURLProtocolResponse(
+                    statusCode: 200,
+                    body: #"<html><body><a href="home.php?mod=spacecp&formhash=profilehash">设置</a></body></html>"#
+                )
+            )
+        }
+
+        if absolute.contains("ac=favorite"),
+           absolute.contains("type=thread"),
+           absolute.contains("id=704") {
+            return .response(
+                StubURLProtocolResponse(
+                    statusCode: 200,
+                    body: "<html><body>信息收藏成功</body></html>"
                 )
             )
         }
@@ -3271,6 +3342,53 @@ final class FavoriteRepositoryDeleteTests: XCTestCase {
         } catch {
             XCTFail("Unexpected error: \(error)")
         }
+    }
+
+    private func makeFavoriteRepository(cookie: String) -> FavoriteRepository {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [StubURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        return FavoriteRepository(
+            client: YamiboClient(session: session, cookie: cookie, userAgent: "Test-UA")
+        )
+    }
+}
+
+final class FavoriteRepositoryThreadFavoriteTests: XCTestCase {
+    func testAddsThreadFavoriteAndBackfillsRemoteFavoriteID() async throws {
+        let repository = makeFavoriteRepository(cookie: "sid=1; favorite-add-success=1")
+        let threadURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=704&mobile=2"))
+
+        let remoteFavorite = try await repository.addThreadFavorite(threadURL: threadURL, formHash: "abc12345")
+
+        XCTAssertEqual(remoteFavorite?.remoteFavoriteID, "8801")
+        XCTAssertEqual(remoteFavorite?.url.absoluteString, "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=704&mobile=2")
+    }
+
+    func testFindsRemoteFavoriteIDAcrossFavoritePages() async throws {
+        let repository = makeFavoriteRepository(cookie: "sid=1; favorite-target-page2=1")
+        let threadURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=805&mobile=2"))
+
+        let remoteFavorite = try await repository.remoteFavorite(for: threadURL)
+
+        XCTAssertEqual(remoteFavorite?.remoteFavoriteID, "9902")
+    }
+
+    func testFavoritePageParserReadsPagination() {
+        let html = """
+        <html><body>
+          <ul class="sclist">
+            <li><a href="forum.php?mod=viewthread&tid=900&mobile=2">收藏</a></li>
+          </ul>
+          <div class="pg"><a href="home.php?page=1">1</a><strong>2</strong><a href="home.php?page=3">3</a></div>
+        </body></html>
+        """
+
+        let page = FavoriteHTMLParser.parseFavoritePage(from: html)
+
+        XCTAssertEqual(page.currentPage, 2)
+        XCTAssertEqual(page.totalPages, 3)
+        XCTAssertEqual(page.favorites.count, 1)
     }
 
     private func makeFavoriteRepository(cookie: String) -> FavoriteRepository {

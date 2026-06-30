@@ -61,10 +61,26 @@ final class ForumNovelDetailViewModel {
     @ObservationIgnored private var loadingChapterPages: Set<Int> = []
     @ObservationIgnored private var chapterPageErrors: [Int: String] = [:]
     @ObservationIgnored private var totalChapterPages = 1
+    @ObservationIgnored private var favoriteUpdatesTask: Task<Void, Never>?
 
     init(context: NovelDetailLaunchContext, appContext: YamiboAppContext) {
         self.context = context
         self.appContext = appContext
+        favoriteUpdatesTask = Task { @MainActor [weak self, favoriteStore = appContext.favoriteStore] in
+            for await notification in NotificationCenter.default.notifications(named: FavoriteStore.didChangeNotification) {
+                guard !Task.isCancelled else { return }
+                guard let self else { return }
+                guard let changeID = notification.userInfo?[FavoriteStore.changeIDUserInfoKey] as? String,
+                      changeID == favoriteStore.changeID else {
+                    continue
+                }
+                await self.refreshFavorite(from: favoriteStore)
+            }
+        }
+    }
+
+    deinit {
+        favoriteUpdatesTask?.cancel()
     }
 
     var navigationTitle: String {
@@ -214,21 +230,25 @@ final class ForumNovelDetailViewModel {
 
         do {
             if let favorite {
-                _ = try await favoriteStore.deleteFavorite(id: favorite.id)
+                try await ForumThreadFavoriteSync.removeFavorite(
+                    favorite,
+                    favoriteStore: favoriteStore,
+                    remoteRepository: await appContext.makeFavoriteRepository()
+                )
                 self.favorite = nil
                 rebuildChapterDirectory()
                 return
             }
 
-            let existingFavorites = await favoriteStore.loadFavorites()
-            let favorite = Favorite(
+            let favorite = try await ForumThreadFavoriteSync.addFavorite(
+                threadURL: url,
                 title: favoriteTitle,
-                url: url,
+                type: .novel,
                 authorID: context.authorID,
-                isHidden: false,
-                type: .novel
+                formHash: threadPage?.formHash,
+                favoriteStore: favoriteStore,
+                remoteRepository: await appContext.makeFavoriteRepository()
             )
-            try await favoriteStore.saveFavorites(existingFavorites + [favorite])
             self.favorite = favorite
             rebuildChapterDirectory()
         } catch {
@@ -240,6 +260,11 @@ final class ForumNovelDetailViewModel {
 
     func clearFavoriteError() {
         favoriteErrorMessage = nil
+    }
+
+    private func refreshFavorite(from favoriteStore: FavoriteStore) async {
+        favorite = await favoriteStore.favorite(for: context.thread.canonicalURL)
+        rebuildChapterDirectory()
     }
 
     static func chapterSections(

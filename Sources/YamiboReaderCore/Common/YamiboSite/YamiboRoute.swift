@@ -36,6 +36,7 @@ public enum YamiboRoute: Sendable {
     case favorites(page: Int)
     case favoriteDeleteForm
     case favoriteDelete
+    case threadFavorite(tid: String, formHash: String)
     case login
     case currentProfile
     case logout(formHash: String)
@@ -106,6 +107,19 @@ public enum YamiboRoute: Sendable {
                 .init(name: "op", value: "delete"),
                 .init(name: "type", value: "all"),
                 .init(name: "checkall", value: "1")
+            ]
+            return components.url!
+        case let .threadFavorite(tid, formHash):
+            var components = URLComponents(url: Self.baseURL, resolvingAgainstBaseURL: false)!
+            components.path = "/home.php"
+            components.queryItems = [
+                .init(name: "mod", value: "spacecp"),
+                .init(name: "ac", value: "favorite"),
+                .init(name: "type", value: "thread"),
+                .init(name: "id", value: tid),
+                .init(name: "handlekey", value: "favoritethread"),
+                .init(name: "formhash", value: formHash),
+                .init(name: "mobile", value: "2")
             ]
             return components.url!
         case .login:

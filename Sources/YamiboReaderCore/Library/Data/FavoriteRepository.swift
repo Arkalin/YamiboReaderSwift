@@ -16,6 +16,59 @@ public actor FavoriteRepository {
         return favorites
     }
 
+    public func fetchFavoritePage(page: Int = 1) async throws -> FavoriteHTMLParser.FavoritePageResult {
+        let html = try await client.fetchHTML(for: .favorites(page: page))
+        let parsed = FavoriteHTMLParser.parseFavoritePage(from: html)
+        if parsed.favorites.isEmpty {
+            throw inferContentError(from: html, fallback: .parsingFailed(context: L10n.string("context.favorites_page")))
+        }
+        return parsed
+    }
+
+    public func addThreadFavorite(threadURL: URL, formHash preferredFormHash: String? = nil) async throws -> Favorite? {
+        guard let tid = Self.threadID(from: threadURL) else {
+            throw YamiboError.missingFavoriteThreadID
+        }
+        let formHash = try await ensureFormHash(preferred: preferredFormHash)
+        let responseHTML = try await client.fetchHTML(for: .threadFavorite(tid: tid, formHash: formHash))
+
+        if isLoginPage(responseHTML) {
+            throw YamiboError.notAuthenticated
+        }
+        guard isFavoriteAddSuccess(responseHTML) else {
+            throw YamiboError.favoriteAddFailed
+        }
+
+        return try? await remoteFavorite(for: threadURL)
+    }
+
+    public func remoteFavorite(for threadURL: URL, maxPages: Int = 30) async throws -> Favorite? {
+        guard maxPages > 0 else { return nil }
+        for page in 1 ... maxPages {
+            let html = try await client.fetchHTML(for: .favorites(page: page))
+            let parsed = FavoriteHTMLParser.parseFavoritePage(from: html)
+            if parsed.favorites.isEmpty {
+                let error = inferContentError(
+                    from: html,
+                    fallback: .parsingFailed(context: L10n.string("context.favorites_page"))
+                )
+                switch error {
+                case .parsingFailed:
+                    return nil
+                default:
+                    throw error
+                }
+            }
+            if let favorite = parsed.favorites.first(where: { Self.sameThread($0.url, threadURL) }) {
+                return favorite
+            }
+            if parsed.currentPage >= parsed.totalPages || page >= parsed.totalPages {
+                return nil
+            }
+        }
+        return nil
+    }
+
     public func deleteFavorite(remoteFavoriteID: String) async throws {
         let formHTML = try await client.fetchHTML(for: .favoriteDeleteForm, userAgent: YamiboDefaults.desktopTagUserAgent)
         if isLoginPage(formHTML) {
@@ -78,6 +131,34 @@ public actor FavoriteRepository {
             ?? HTMLTextExtractor.firstMatch(pattern: #"formhash=([a-zA-Z0-9]+)"#, in: html)?.dropFirst().first
     }
 
+    private func ensureFormHash(preferred: String?) async throws -> String {
+        if let formHash = preferred?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !formHash.isEmpty {
+            return formHash
+        }
+
+        let profileHTML = try await client.fetchHTML(for: .currentProfile)
+        if isLoginPage(profileHTML) {
+            throw YamiboError.notAuthenticated
+        }
+        guard let formHash = extractFormHash(from: profileHTML) else {
+            throw YamiboError.missingFavoriteAddToken
+        }
+        return formHash
+    }
+
+    private func isFavoriteAddSuccess(_ html: String) -> Bool {
+        let markers = [
+            "收藏成功",
+            "信息收藏成功",
+            "已收藏",
+            "您已收藏过",
+            "succeed",
+            "操作成功"
+        ]
+        return markers.contains { html.localizedCaseInsensitiveContains($0) }
+    }
+
     private func isFavoriteDeleteSuccess(_ html: String) -> Bool {
         let markers = [
             "成功",
@@ -86,5 +167,26 @@ public actor FavoriteRepository {
             "收藏删除成功"
         ]
         return markers.contains { html.localizedCaseInsensitiveContains($0) }
+    }
+
+    private static func threadID(from url: URL) -> String? {
+        let resolvedURL = URL(string: url.absoluteString, relativeTo: YamiboRoute.baseURL)?.absoluteURL ?? url.absoluteURL
+        if let value = URLComponents(url: resolvedURL, resolvingAgainstBaseURL: false)?
+            .queryItems?
+            .first(where: { $0.name == "tid" || $0.name == "ptid" })?
+            .value?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+           !value.isEmpty {
+            return value
+        }
+        return MangaTitleCleaner.extractTid(from: resolvedURL.absoluteString)
+    }
+
+    private static func sameThread(_ lhs: URL, _ rhs: URL) -> Bool {
+        guard let lhsThreadID = threadID(from: lhs),
+              let rhsThreadID = threadID(from: rhs) else {
+            return lhs.absoluteString == rhs.absoluteString
+        }
+        return lhsThreadID == rhsThreadID
     }
 }

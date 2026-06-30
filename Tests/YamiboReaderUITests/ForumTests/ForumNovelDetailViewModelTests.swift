@@ -457,6 +457,68 @@ import Testing
 }
 
 @MainActor
+@Test func forumNovelDetailRefreshesReadingProgressWhenFavoriteStoreChanges() async throws {
+    let suiteName = YamiboTestDefaults.suiteName(prefix: "novel-detail-progress-refresh")
+    _ = try YamiboTestDefaults.make(suiteName: suiteName)
+    let favoriteStore = FavoriteStore(
+        defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+        key: "favorites"
+    )
+    let appContext = YamiboAppContext(
+        favoriteStore: favoriteStore,
+        contentCoverStore: ContentCoverStore(
+            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+            key: "content-covers"
+        )
+    )
+    let model = try makeForumNovelDetailViewModel(appContext: appContext)
+    let url = model.context.thread.canonicalURL
+
+    try await favoriteStore.saveFavorites([
+        Favorite(
+            title: "小说标题",
+            url: url,
+            lastView: 1,
+            lastChapter: "第一章",
+            novelDocumentSurfaceProgressPercent: 10,
+            type: .novel
+        )
+    ])
+    model.favorite = await favoriteStore.favorite(for: url)
+    #expect(model.headerSummary.readingProgressText == "10 %")
+    await Task.yield()
+
+    _ = try await favoriteStore.updateNovelReadingPosition(
+        NovelReadingPosition(
+            threadURL: url,
+            view: 2,
+            maxView: 3,
+            chapterTitle: "第二章",
+            authorID: "42",
+            resumePoint: ReaderResumePoint(
+                view: 2,
+                chapterIdentity: NovelChapterIdentity(rawValue: "post:2001#chapter:0"),
+                displayedTextOffset: 80,
+                chapterOrdinal: 1,
+                chapterTitle: "第二章",
+                segmentProgress: 0.8,
+                authorID: "42",
+                readingModeHint: .vertical
+            ),
+            documentSurfaceProgressPercent: 80
+        )
+    )
+
+    for _ in 0..<20 where model.favorite?.lastView != 2 {
+        try await Task.sleep(nanoseconds: 10_000_000)
+    }
+
+    #expect(model.favorite?.lastView == 2)
+    #expect(model.favorite?.novelResumePoint?.chapterTitle == "第二章")
+    #expect(model.headerSummary.readingProgressText == "页内 80 % · 网页 2 / 3")
+}
+
+@MainActor
 private func makeForumNovelDetailViewModel(appContext: YamiboAppContext? = nil) throws -> ForumNovelDetailViewModel {
     let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=900&mobile=2"))
     let resolvedAppContext: YamiboAppContext
