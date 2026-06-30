@@ -22,23 +22,16 @@ public struct ThreadCoverResolver: Sendable {
     public func resolve(
         thread: ThreadIdentity,
         title: String,
-        initialPage: ForumThreadPage?,
         repository: any ThreadCoverPageResolving
     ) async -> URL? {
-        let firstPage: ForumThreadPage
-        if let initialPage {
-            firstPage = initialPage
-        } else {
-            guard let loaded = await loadPage(
-                thread: thread,
-                title: title,
-                authorID: nil,
-                page: 1,
-                repository: repository
-            ) else {
-                return nil
-            }
-            firstPage = loaded
+        guard let firstPage = await loadPage(
+            thread: thread,
+            title: title,
+            authorID: nil,
+            page: 1,
+            repository: repository
+        ) else {
+            return nil
         }
 
         guard let owner = Self.owner(in: firstPage) else {
@@ -153,17 +146,13 @@ private extension ThreadCoverResolver {
             }
             .lazy
             .flatMap { post in
-                post.contentBlocks.compactMap(Self.coverCandidateURL(in:))
+                post.images.compactMap(Self.coverCandidateURL(in:))
             }
             .first
     }
 
-    static func coverCandidateURL(in block: ForumThreadContentBlock) -> URL? {
-        guard case let .image(image) = block.kind,
-              !image.isEmoticon else {
-            return nil
-        }
-        return ContentCoverStore.normalizedCoverURL(from: image.url.absoluteString)
+    static func coverCandidateURL(in image: ForumThreadPostImage) -> URL? {
+        ContentCoverStore.normalizedCoverURL(from: image.url)
     }
 
     static func totalPages(from page: ForumThreadPage, fallback: Int = 1) -> Int {

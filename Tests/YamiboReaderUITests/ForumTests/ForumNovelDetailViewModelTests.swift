@@ -138,6 +138,10 @@ import Testing
                             url: coverURL
                         ))
                     )
+                ],
+                images: [
+                    ForumThreadPostImage(url: ignoredURL.absoluteString),
+                    ForumThreadPostImage(url: coverURL.absoluteString)
                 ]
             )
         ],
@@ -275,6 +279,9 @@ import Testing
                             id: "initial-image",
                             kind: .image(ForumThreadImageBlock(url: initialImage))
                         )
+                    ],
+                    images: [
+                        ForumThreadPostImage(url: initialImage.absoluteString)
                     ]
                 )
             ],
@@ -294,6 +301,7 @@ import Testing
     #expect(cover?.resolvedURL == initialImage)
     #expect(model.headerSummary.coverURL == initialImage)
     #expect(threadPageLoader.threadFetchCalls().isEmpty)
+    #expect(threadPageLoader.novelFetchCalls() == [1])
 }
 
 @MainActor
@@ -335,6 +343,9 @@ import Testing
                         id: "reply",
                         kind: .image(ForumThreadImageBlock(url: replyImage))
                     )
+                ],
+                images: [
+                    ForumThreadPostImage(url: replyImage.absoluteString)
                 ]
             ),
             ForumThreadPost(
@@ -348,6 +359,9 @@ import Testing
                         id: "owner",
                         kind: .image(ForumThreadImageBlock(url: ownerImage))
                     )
+                ],
+                images: [
+                    ForumThreadPostImage(url: ownerImage.absoluteString)
                 ]
             )
         ]
@@ -393,6 +407,9 @@ import Testing
                             url: try #require(URL(string: "https://img.example.com/not-owner-seed.jpg"))
                         ))
                     )
+                ],
+                images: [
+                    ForumThreadPostImage(url: "https://img.example.com/not-owner-seed.jpg")
                 ]
             )
         ]
@@ -405,7 +422,73 @@ import Testing
 }
 
 @MainActor
-@Test func forumNovelDetailReloadFindsOwnerCoverOnLaterThreadPage() async throws {
+@Test func forumNovelDetailReloadBackfillsCoverFromReadingProgress() async throws {
+    let suiteName = YamiboTestDefaults.suiteName(prefix: "novel-detail-history-cover")
+    _ = try YamiboTestDefaults.make(suiteName: suiteName)
+    let favoriteStore = FavoriteStore(
+        defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+        key: "favorites"
+    )
+    let readingProgressStore = ReadingProgressStore(
+        defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+        key: "reading-progress",
+        migratedFromFavoritesKey: "reading-progress-migrated",
+        favoriteStore: favoriteStore
+    )
+    let coverStore = ContentCoverStore(
+        defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+        key: "content-covers"
+    )
+    let appContext = YamiboAppContext(
+        favoriteStore: favoriteStore,
+        readingProgressStore: readingProgressStore,
+        contentCoverStore: coverStore
+    )
+    let historyCover = try #require(URL(string: "https://img.example.com/history-cover.jpg"))
+    try await readingProgressStore.saveNovel(
+        NovelReadingPosition(
+            threadURL: try modelThreadURL(),
+            view: 3,
+            chapterTitle: "第三章",
+            threadCoverURL: historyCover
+        )
+    )
+    let threadPageLoader = FakeForumNovelThreadPageLoader(pages: [
+        1: ForumThreadPage(
+            thread: ThreadIdentity(tid: "900", canonicalURL: try modelThreadURL(), fid: "49"),
+            title: "小说标题",
+            posts: [
+                ForumThreadPost(
+                    postID: "1001",
+                    floorText: "楼主",
+                    author: BlogReaderUser(uid: "42", name: "楼主名", avatarURL: nil),
+                    contentHTML: "",
+                    contentText: "首楼无图",
+                    contentBlocks: []
+                )
+            ],
+            pageNavigation: ForumPageNavigation(currentPage: 1, totalPages: 1)
+        )
+    ])
+    let model = try makeForumNovelDetailViewModel(
+        appContext: appContext,
+        documentLoader: FakeForumNovelDocumentLoader(),
+        threadPageLoader: threadPageLoader
+    )
+
+    await model.reload()
+
+    let key = ContentCoverKey(targetType: .threadNovel, targetID: "900")
+    let cover = try #require(await coverStore.cover(for: key))
+    #expect(cover.automaticCoverURL == historyCover)
+    #expect(model.headerSummary.coverURL == historyCover)
+    #expect(model.continueLaunchContext().threadCoverURL == historyCover)
+    #expect(threadPageLoader.threadFetchCalls().isEmpty)
+    #expect(threadPageLoader.novelFetchCalls() == [1])
+}
+
+@MainActor
+@Test func forumNovelDetailReloadDoesNotScanLaterThreadPagesForCover() async throws {
     let suiteName = YamiboTestDefaults.suiteName(prefix: "novel-detail-later-cover")
     _ = try YamiboTestDefaults.make(suiteName: suiteName)
     let coverStore = ContentCoverStore(
@@ -442,6 +525,9 @@ import Testing
                                 url: try #require(URL(string: "https://img.example.com/reader.jpg"))
                             ))
                         )
+                    ],
+                    images: [
+                        ForumThreadPostImage(url: "https://img.example.com/reader.jpg")
                     ]
                 )
             ],
@@ -464,6 +550,9 @@ import Testing
                                 url: try #require(URL(string: "https://img.example.com/owner-later.jpg"))
                             ))
                         )
+                    ],
+                    images: [
+                        ForumThreadPostImage(url: "https://img.example.com/owner-later.jpg")
                     ]
                 )
             ],
@@ -480,12 +569,10 @@ import Testing
 
     let key = ContentCoverKey(targetType: .threadNovel, targetID: "900")
     let cover = await coverStore.cover(for: key)
-    #expect(cover?.resolvedURL?.absoluteString == "https://img.example.com/owner-later.jpg")
-    #expect(model.headerSummary.coverURL?.absoluteString == "https://img.example.com/owner-later.jpg")
-    #expect(threadPageLoader.threadFetchCalls() == [
-        ForumNovelThreadPageFetch(authorID: "42", page: 1),
-        ForumNovelThreadPageFetch(authorID: "42", page: 2)
-    ])
+    #expect(cover == nil)
+    #expect(model.headerSummary.coverURL == nil)
+    #expect(threadPageLoader.threadFetchCalls().isEmpty)
+    #expect(threadPageLoader.novelFetchCalls() == [1])
 }
 
 @MainActor
@@ -794,6 +881,7 @@ private struct FakeForumNovelDocumentLoader: ForumNovelDocumentLoading {
 
 private final class FakeForumNovelThreadPageLoader: ForumNovelThreadPageLoading, @unchecked Sendable {
     private let pages: [Int: ForumThreadPage]
+    private var recordedNovelFetches: [Int] = []
     private var recordedThreadFetches: [ForumNovelThreadPageFetch] = []
 
     init(pages: [Int: ForumThreadPage]) {
@@ -801,7 +889,8 @@ private final class FakeForumNovelThreadPageLoader: ForumNovelThreadPageLoading,
     }
 
     func fetchNovelThreadPage(context _: NovelDetailLaunchContext, page: Int) async throws -> ForumThreadPage {
-        try #require(pages[page])
+        recordedNovelFetches.append(page)
+        return try #require(pages[page])
     }
 
     func fetchThreadPage(
@@ -816,6 +905,10 @@ private final class FakeForumNovelThreadPageLoader: ForumNovelThreadPageLoading,
 
     func threadFetchCalls() -> [ForumNovelThreadPageFetch] {
         recordedThreadFetches
+    }
+
+    func novelFetchCalls() -> [Int] {
+        recordedNovelFetches
     }
 }
 

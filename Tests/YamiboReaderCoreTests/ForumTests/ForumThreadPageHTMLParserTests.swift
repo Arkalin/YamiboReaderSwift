@@ -111,13 +111,19 @@ import Testing
     let post = try #require(page.posts.first)
     #expect(post.floorText == "1#")
     #expect(post.author.uid == "397633")
+    #expect(post.images == [
+        ForumThreadPostImage(
+            url: "data/attachment/forum/202405/12/194518v77x7wqd77x75hw9.png",
+            altText: "28CA3F415BD916D532FE0D1BF8C291F2.png"
+        )
+    ])
     #expect(
         ThreadCoverResolver.findThreadCoverCandidate(in: page)?.absoluteString ==
         "https://bbs.yamibo.com/data/attachment/forum/202405/12/194518v77x7wqd77x75hw9.png"
     )
 }
 
-@Test func forumThreadPageParserUsesDiscuzLazyImageFileBeforeNoneGifSource() throws {
+@Test func forumThreadPageParserCoverImagesMatchAndroidSrcOnlyExtraction() throws {
     let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=544422&mobile=2"))
     let page = try ForumThreadPageHTMLParser.parsePage(
         from: #"""
@@ -148,9 +154,50 @@ import Testing
         fallbackTitle: nil
     )
 
+    let post = try #require(page.posts.first)
+    #expect(post.images.isEmpty)
+    #expect(ThreadCoverResolver.findThreadCoverCandidate(in: page) == nil)
+}
+
+@Test func forumThreadPageParserExtractsFlatCoverImagesFromNestedMessageAndImgOne() throws {
+    let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=545000&mobile=2"))
+    let page = try ForumThreadPageHTMLParser.parsePage(
+        from: #"""
+        <html>
+        <body>
+          <div class="plc" id="pid5001">
+            <ul class="authi">
+              <li class="mtit">
+                <span class="y">1<sup>#</sup></span>
+                <span class="z"><a href="home.php?mod=space&amp;uid=42&amp;mobile=2">楼主名</a></span>
+              </li>
+            </ul>
+            <div class="message">
+              正文
+              <div class="quote"><img src="data/attachment/forum/quote.jpg" alt="quote"></div>
+              <table><tr><td><img src="//img.example.com/table.jpg" alt="table"></td></tr></table>
+              <img src="static/image/common/icon.gif" alt="icon">
+            </div>
+            <div class="img_one">
+              <img src="/data/attachment/forum/img-one.jpg" alt="one">
+            </div>
+          </div>
+        </body>
+        </html>
+        """#,
+        thread: ThreadIdentity(tid: "545000", canonicalURL: url),
+        fallbackTitle: "图片测试"
+    )
+
+    let post = try #require(page.posts.first)
+    #expect(post.images == [
+        ForumThreadPostImage(url: "data/attachment/forum/quote.jpg", altText: "quote"),
+        ForumThreadPostImage(url: "//img.example.com/table.jpg", altText: "table"),
+        ForumThreadPostImage(url: "/data/attachment/forum/img-one.jpg", altText: "one")
+    ])
     #expect(
         ThreadCoverResolver.findThreadCoverCandidate(in: page)?.absoluteString ==
-        "https://bbs.yamibo.com/data/attachment/forum/202405/12/194518v77x7wqd77x75hw9.png"
+        "https://bbs.yamibo.com/data/attachment/forum/quote.jpg"
     )
 }
 

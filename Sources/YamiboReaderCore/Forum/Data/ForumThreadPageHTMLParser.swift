@@ -188,10 +188,12 @@ public enum ForumThreadPageHTMLParser {
             let manageActions = try manageActions(in: container)
             let contentBody = try bodyWithoutFooterMetadata(from: body)
             let contentHTML = try contentBody.html()
+            let images = try postImages(in: contentBody, container: container)
             let contentBlocks = try ForumThreadHTMLBlockParser.parseBlocks(in: contentBody)
             let contentText = normalizedBodyText(from: contentBlocks)
             guard !contentText.isEmpty
                 || contentBlocks.contains(where: \.isNonTextRenderable)
+                || !images.isEmpty
                 || poll != nil
                 || ratingBlock != nil
                 || !comments.isEmpty
@@ -210,6 +212,7 @@ public enum ForumThreadPageHTMLParser {
                     contentHTML: contentHTML,
                     contentText: contentText,
                     contentBlocks: contentBlocks,
+                    images: images,
                     poll: poll,
                     ratingBlock: ratingBlock,
                     comments: comments,
@@ -221,6 +224,22 @@ public enum ForumThreadPageHTMLParser {
         }
 
         return posts
+    }
+
+    private static func postImages(in body: Element, container: Element) throws -> [ForumThreadPostImage] {
+        let imageElements = try body.select("img").array()
+            + container.select(".img_one img").array()
+        return try imageElements.compactMap { image in
+            let source = try image.attr("src").threadRoutingTrimmedNonEmpty
+            guard let source,
+                  !source.lowercased().contains("static/image/") else {
+                return nil
+            }
+            return ForumThreadPostImage(
+                url: source,
+                altText: try image.attr("alt")
+            )
+        }
     }
 
     private static func postContainers(in document: Document) throws -> [Element] {

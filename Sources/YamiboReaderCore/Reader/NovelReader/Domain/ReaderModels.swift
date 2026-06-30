@@ -14,6 +14,7 @@ public struct ReaderLaunchContext: Codable, Hashable, Identifiable, Sendable {
     public var initialView: Int?
     public var authorID: String?
     public var initialResumePoint: ReaderResumePoint?
+    public var threadCoverURL: URL?
 
     public var id: String { threadURL.absoluteString }
 
@@ -23,7 +24,8 @@ public struct ReaderLaunchContext: Codable, Hashable, Identifiable, Sendable {
         source: ReaderLaunchSource,
         initialView: Int? = nil,
         authorID: String? = nil,
-        initialResumePoint: ReaderResumePoint? = nil
+        initialResumePoint: ReaderResumePoint? = nil,
+        threadCoverURL: URL? = nil
     ) {
         self.threadURL = threadURL
         self.threadTitle = threadTitle
@@ -31,6 +33,7 @@ public struct ReaderLaunchContext: Codable, Hashable, Identifiable, Sendable {
         self.initialView = initialView
         self.authorID = authorID
         self.initialResumePoint = initialResumePoint
+        self.threadCoverURL = threadCoverURL
     }
 }
 

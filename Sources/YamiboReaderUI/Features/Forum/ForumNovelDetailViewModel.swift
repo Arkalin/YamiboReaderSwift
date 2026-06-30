@@ -8,38 +8,11 @@ protocol ForumNovelDocumentLoading: Sendable {
 
 extension NovelReaderRepository: ForumNovelDocumentLoading {}
 
-protocol ForumNovelThreadPageLoading: ThreadCoverPageResolving {
+protocol ForumNovelThreadPageLoading: Sendable {
     func fetchNovelThreadPage(context: NovelDetailLaunchContext, page: Int) async throws -> ForumThreadPage
 }
 
 extension ForumThreadReaderRepository: ForumNovelThreadPageLoading {}
-
-extension ForumNovelThreadPageLoading {
-    func cachedThreadPage(
-        thread _: ThreadIdentity,
-        title _: String,
-        authorID _: String?,
-        page _: Int
-    ) async -> ForumThreadPage? {
-        nil
-    }
-
-    func fetchThreadPage(
-        thread: ThreadIdentity,
-        title: String,
-        authorID: String?,
-        page: Int
-    ) async throws -> ForumThreadPage {
-        try await fetchNovelThreadPage(
-            context: NovelDetailLaunchContext(
-                thread: thread,
-                title: title,
-                authorID: authorID
-            ),
-            page: page
-        )
-    }
-}
 
 struct ForumNovelChapterSummary: Identifiable, Hashable, Sendable {
     var id: String
@@ -186,7 +159,9 @@ final class ForumNovelDetailViewModel {
     }
 
     private var resolvedHeaderCoverURL: URL? {
-        contentCover?.resolvedURL ?? threadPage.flatMap(ThreadCoverResolver.findThreadCoverCandidate(in:))
+        contentCover?.resolvedURL
+            ?? readingProgress?.novel?.threadCoverURL
+            ?? threadPage.flatMap(ThreadCoverResolver.findThreadCoverCandidate(in:))
     }
 
     func reload() async {
@@ -212,7 +187,7 @@ final class ForumNovelDetailViewModel {
             let loadedThreadPage = try await loadedInitialThreadPage
             threadPage = loadedThreadPage
             loadedThreadPages = [1: loadedThreadPage]
-            await refreshContentCover(from: loadedThreadPage, using: threadRepository)
+            await refreshContentCover(from: loadedThreadPage)
             let loaded = try await loadedDocument
             document = loaded
             totalChapterPages = Self.totalPages(from: loadedThreadPage, fallback: 1)
@@ -241,7 +216,8 @@ final class ForumNovelDetailViewModel {
             source: .forum,
             initialView: chapter?.view ?? 1,
             authorID: chapter?.resumePoint?.authorID ?? context.authorID,
-            initialResumePoint: chapter?.resumePoint
+            initialResumePoint: chapter?.resumePoint,
+            threadCoverURL: resolvedHeaderCoverURL
         )
     }
 
@@ -255,7 +231,8 @@ final class ForumNovelDetailViewModel {
             source: hasProgress ? .resume : .forum,
             initialView: resumePoint?.view ?? novelProgress?.lastView ?? favorite?.lastView ?? 1,
             authorID: resumePoint?.authorID ?? novelProgress?.authorID ?? favorite?.authorID ?? context.authorID,
-            initialResumePoint: resumePoint
+            initialResumePoint: resumePoint,
+            threadCoverURL: resolvedHeaderCoverURL
         )
     }
 
@@ -397,30 +374,17 @@ final class ForumNovelDetailViewModel {
     }
 
     func refreshContentCover(from page: ForumThreadPage) async {
-        await refreshContentCover(from: page, using: nil)
-    }
-
-    private func refreshContentCover(
-        from page: ForumThreadPage,
-        using repository: (any ForumNovelThreadPageLoading)?
-    ) async {
         guard let key = contentCoverKey else { return }
-        if let repository,
-           let candidate = await ThreadCoverResolver().resolve(
-               thread: context.thread,
-               title: context.title,
-               initialPage: page,
-               repository: repository
-           ) {
+        if let candidate = ThreadCoverResolver.findThreadCoverCandidate(in: page) {
             do {
                 _ = try await appContext.contentCoverStore.setAutomaticCover(candidate, for: key)
             } catch {
                 return
             }
-        } else if repository == nil,
-                  let candidate = ThreadCoverResolver.findThreadCoverCandidate(in: page) {
+        }
+        if let historyCover = readingProgress?.novel?.threadCoverURL {
             do {
-                _ = try await appContext.contentCoverStore.setAutomaticCover(candidate, for: key)
+                _ = try await appContext.contentCoverStore.setAutomaticCover(historyCover, for: key)
             } catch {
                 return
             }

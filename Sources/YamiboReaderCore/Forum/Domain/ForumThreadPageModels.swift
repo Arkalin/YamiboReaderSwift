@@ -43,6 +43,7 @@ public struct ForumThreadPost: Codable, Equatable, Identifiable, Hashable, Senda
     public var contentHTML: String
     public var contentText: String
     public var contentBlocks: [ForumThreadContentBlock]
+    public var images: [ForumThreadPostImage]
     public var poll: ForumThreadPoll?
     public var ratingBlock: ForumThreadRatingBlock?
     public var comments: [ForumThreadPostComment]
@@ -51,6 +52,24 @@ public struct ForumThreadPost: Codable, Equatable, Identifiable, Hashable, Senda
     public var manageActions: [ForumThreadManageAction]
 
     public var id: String { postID }
+
+    private enum CodingKeys: String, CodingKey {
+        case postID
+        case floorText
+        case author
+        case postedAtText
+        case lastEditedText
+        case contentHTML
+        case contentText
+        case contentBlocks
+        case images
+        case poll
+        case ratingBlock
+        case comments
+        case attachments
+        case isPinned
+        case manageActions
+    }
 
     public init(
         postID: String,
@@ -61,6 +80,7 @@ public struct ForumThreadPost: Codable, Equatable, Identifiable, Hashable, Senda
         contentHTML: String,
         contentText: String,
         contentBlocks: [ForumThreadContentBlock] = [],
+        images: [ForumThreadPostImage] = [],
         poll: ForumThreadPoll? = nil,
         ratingBlock: ForumThreadRatingBlock? = nil,
         comments: [ForumThreadPostComment] = [],
@@ -76,12 +96,48 @@ public struct ForumThreadPost: Codable, Equatable, Identifiable, Hashable, Senda
         self.contentHTML = contentHTML
         self.contentText = contentText.trimmingCharacters(in: .whitespacesAndNewlines)
         self.contentBlocks = contentBlocks
+        self.images = images
         self.poll = poll
         self.ratingBlock = ratingBlock
         self.comments = comments
         self.attachments = attachments
         self.isPinned = isPinned
         self.manageActions = manageActions
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            postID: try container.decode(String.self, forKey: .postID),
+            floorText: try container.decodeIfPresent(String.self, forKey: .floorText),
+            author: try container.decode(BlogReaderUser.self, forKey: .author),
+            postedAtText: try container.decodeIfPresent(String.self, forKey: .postedAtText),
+            lastEditedText: try container.decodeIfPresent(String.self, forKey: .lastEditedText),
+            contentHTML: try container.decode(String.self, forKey: .contentHTML),
+            contentText: try container.decode(String.self, forKey: .contentText),
+            contentBlocks: try container.decodeIfPresent([ForumThreadContentBlock].self, forKey: .contentBlocks) ?? [],
+            images: try container.decodeIfPresent([ForumThreadPostImage].self, forKey: .images) ?? [],
+            poll: try container.decodeIfPresent(ForumThreadPoll.self, forKey: .poll),
+            ratingBlock: try container.decodeIfPresent(ForumThreadRatingBlock.self, forKey: .ratingBlock),
+            comments: try container.decodeIfPresent([ForumThreadPostComment].self, forKey: .comments) ?? [],
+            attachments: try container.decodeIfPresent([ForumThreadAttachmentBlock].self, forKey: .attachments) ?? [],
+            isPinned: try container.decodeIfPresent(Bool.self, forKey: .isPinned) ?? false,
+            manageActions: try container.decodeIfPresent([ForumThreadManageAction].self, forKey: .manageActions) ?? []
+        )
+    }
+}
+
+public struct ForumThreadPostImage: Codable, Equatable, Identifiable, Hashable, Sendable {
+    public var url: String
+    public var altText: String?
+
+    public var id: String {
+        "\(url)\u{1F}\(altText ?? "")"
+    }
+
+    public init(url: String, altText: String? = nil) {
+        self.url = url.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.altText = altText?.threadRoutingTrimmedNonEmpty
     }
 }
 

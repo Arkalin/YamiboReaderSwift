@@ -573,7 +573,8 @@ public final class NovelReadingWorkflow {
             chapterTitle: resumePoint?.chapterTitle ?? snapshot?.currentChapterTitle,
             authorID: resumePoint?.authorID ?? snapshot?.currentAuthorID ?? currentAuthorID ?? context.authorID,
             resumePoint: resumePoint,
-            documentSurfaceProgressPercent: documentSurfaceProgressPercent
+            documentSurfaceProgressPercent: documentSurfaceProgressPercent,
+            threadCoverURL: context.threadCoverURL
         )
     }
 

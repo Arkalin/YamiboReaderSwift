@@ -1357,7 +1357,8 @@ public final class ReaderContainerModel: ObservableObject {
             maxView: maxView,
             chapterTitle: currentChapterTitle,
             authorID: currentAuthorID ?? context.authorID,
-            documentSurfaceProgressPercent: currentDocumentSurfaceProgressPercent
+            documentSurfaceProgressPercent: currentDocumentSurfaceProgressPercent,
+            threadCoverURL: context.threadCoverURL
         )
     }
 

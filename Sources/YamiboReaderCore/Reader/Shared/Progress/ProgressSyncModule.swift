@@ -8,6 +8,7 @@ public struct NovelReadingPosition: Hashable, Sendable {
     public var authorID: String?
     public var resumePoint: ReaderResumePoint?
     public var documentSurfaceProgressPercent: Int?
+    public var threadCoverURL: URL?
 
     public init(
         threadURL: URL,
@@ -16,7 +17,8 @@ public struct NovelReadingPosition: Hashable, Sendable {
         chapterTitle: String? = nil,
         authorID: String? = nil,
         resumePoint: ReaderResumePoint? = nil,
-        documentSurfaceProgressPercent: Int? = nil
+        documentSurfaceProgressPercent: Int? = nil,
+        threadCoverURL: URL? = nil
     ) {
         self.threadURL = threadURL
         self.view = max(1, view)
@@ -25,6 +27,7 @@ public struct NovelReadingPosition: Hashable, Sendable {
         self.authorID = resumePoint?.authorID ?? authorID
         self.resumePoint = resumePoint
         self.documentSurfaceProgressPercent = documentSurfaceProgressPercent.map { min(max($0, 0), 100) }
+        self.threadCoverURL = threadCoverURL
     }
 }
 

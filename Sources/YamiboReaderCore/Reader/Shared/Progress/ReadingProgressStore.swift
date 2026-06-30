@@ -12,6 +12,7 @@ public struct NovelReadingProgressRecord: Codable, Hashable, Sendable {
     public var novelResumePoint: ReaderResumePoint?
     public var novelMaxView: Int?
     public var novelDocumentSurfaceProgressPercent: Int?
+    public var threadCoverURL: URL?
 
     public init(
         lastView: Int = 1,
@@ -19,7 +20,8 @@ public struct NovelReadingProgressRecord: Codable, Hashable, Sendable {
         authorID: String? = nil,
         novelResumePoint: ReaderResumePoint? = nil,
         novelMaxView: Int? = nil,
-        novelDocumentSurfaceProgressPercent: Int? = nil
+        novelDocumentSurfaceProgressPercent: Int? = nil,
+        threadCoverURL: URL? = nil
     ) {
         let resolvedView = max(1, novelResumePoint?.view ?? lastView)
         self.lastView = resolvedView
@@ -28,6 +30,7 @@ public struct NovelReadingProgressRecord: Codable, Hashable, Sendable {
         self.novelResumePoint = novelResumePoint
         self.novelMaxView = novelMaxView.map { max(resolvedView, $0) }
         self.novelDocumentSurfaceProgressPercent = novelDocumentSurfaceProgressPercent.map { min(max($0, 0), 100) }
+        self.threadCoverURL = threadCoverURL
     }
 }
 
@@ -133,7 +136,8 @@ public actor ReadingProgressStore {
                 authorID: position.authorID,
                 novelResumePoint: position.resumePoint,
                 novelMaxView: position.maxView,
-                novelDocumentSurfaceProgressPercent: position.documentSurfaceProgressPercent
+                novelDocumentSurfaceProgressPercent: position.documentSurfaceProgressPercent,
+                threadCoverURL: position.threadCoverURL
             ),
             manga: nil
         )

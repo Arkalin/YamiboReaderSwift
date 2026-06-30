@@ -77,7 +77,6 @@ import Testing
     let resolved = await ThreadCoverResolver().resolve(
         thread: testThread,
         title: "title",
-        initialPage: nil,
         repository: repository
     )
 
@@ -89,34 +88,18 @@ import Testing
     ])
 }
 
-@Test func threadCoverResolverIgnoresNestedQuoteCollapseAndTableImages() throws {
+@Test func threadCoverResolverConsumesFlatPostImages() throws {
     let owner = BlogReaderUser(uid: "7", name: "owner")
-    let nestedURL = try #require(URL(string: "https://img.example.com/nested.jpg"))
-    let topLevelURL = try #require(URL(string: "https://img.example.com/top-level.jpg"))
     let page = threadPage(posts: [
         post(floor: "1#", author: owner),
         post(
             floor: "2#",
             author: owner,
-            blocks: [
-                ForumThreadContentBlock(
-                    id: "quote",
-                    kind: .quote([imageBlock("quote-image", url: nestedURL)])
-                ),
-                ForumThreadContentBlock(
-                    id: "collapse",
-                    kind: .collapse(title: nil, contentBlocks: [imageBlock("collapse-image", url: nestedURL)])
-                ),
-                ForumThreadContentBlock(
-                    id: "table",
-                    kind: .table(rows: [[ForumThreadTableCell(blocks: [imageBlock("table-image", url: nestedURL)])]])
-                ),
-                imageBlock("top", url: topLevelURL)
-            ]
+            images: ["https://img.example.com/flat.jpg"]
         )
     ])
 
-    #expect(ThreadCoverResolver.findThreadCoverCandidate(in: page)?.absoluteString == "https://img.example.com/top-level.jpg")
+    #expect(ThreadCoverResolver.findThreadCoverCandidate(in: page)?.absoluteString == "https://img.example.com/flat.jpg")
 }
 
 @Test func threadCoverResolverNormalizesURLsAndFiltersStaticImages() throws {
@@ -126,10 +109,10 @@ import Testing
         post(
             floor: "2#",
             author: owner,
-            blocks: [
-                imageBlock("none", rawURL: "static/image/common/none.gif"),
-                imageBlock("smiley", rawURL: "static/image/smiley/default/smile.gif"),
-                imageBlock("protocol", rawURL: "//img.example.com/cover.jpg")
+            images: [
+                "static/image/common/none.gif",
+                "static/image/smiley/default/smile.gif",
+                "//img.example.com/cover.jpg"
             ]
         )
     ])
@@ -150,17 +133,20 @@ import Testing
     )
     let repository = FakeThreadCoverPageRepository(cachedPages: [
         ThreadCoverPageKey(authorID: nil, page: 2): cachedSecondPage
+    ], fetchedPages: [
+        ThreadCoverPageKey(authorID: nil, page: 1): firstPage
     ])
 
     let resolved = await ThreadCoverResolver().resolve(
         thread: testThread,
         title: "title",
-        initialPage: firstPage,
         repository: repository
     )
 
     #expect(resolved?.absoluteString == "https://img.example.com/cached.jpg")
-    #expect(await repository.fetchCalls().isEmpty)
+    #expect(await repository.fetchCalls() == [
+        ThreadCoverPageKey(authorID: nil, page: 1)
+    ])
 }
 
 @Test func threadCoverResolverScansAuthorFilteredPagesAfterCacheMiss() async throws {
@@ -182,6 +168,7 @@ import Testing
         totalPages: 2
     )
     let repository = FakeThreadCoverPageRepository(fetchedPages: [
+        ThreadCoverPageKey(authorID: nil, page: 1): firstPage,
         ThreadCoverPageKey(authorID: "7", page: 1): ownerFirstPage,
         ThreadCoverPageKey(authorID: "7", page: 2): ownerSecondPage
     ])
@@ -189,12 +176,12 @@ import Testing
     let resolved = await ThreadCoverResolver().resolve(
         thread: testThread,
         title: "title",
-        initialPage: firstPage,
         repository: repository
     )
 
     #expect(resolved?.absoluteString == "https://img.example.com/author-filtered.jpg")
     #expect(await repository.fetchCalls() == [
+        ThreadCoverPageKey(authorID: nil, page: 1),
         ThreadCoverPageKey(authorID: "7", page: 1),
         ThreadCoverPageKey(authorID: "7", page: 2)
     ])
@@ -223,7 +210,7 @@ private func post(
     floor: String,
     author: BlogReaderUser,
     image: String? = nil,
-    blocks: [ForumThreadContentBlock]? = nil
+    images: [String]? = nil
 ) -> ForumThreadPost {
     ForumThreadPost(
         postID: floor,
@@ -231,18 +218,7 @@ private func post(
         author: author,
         contentHTML: "",
         contentText: "",
-        contentBlocks: blocks ?? image.map { [imageBlock("image-\(floor)", rawURL: $0)] } ?? []
-    )
-}
-
-private func imageBlock(_ id: String, rawURL: String, isEmoticon: Bool = false) -> ForumThreadContentBlock {
-    imageBlock(id, url: URL(string: rawURL)!, isEmoticon: isEmoticon)
-}
-
-private func imageBlock(_ id: String, url: URL, isEmoticon: Bool = false) -> ForumThreadContentBlock {
-    ForumThreadContentBlock(
-        id: id,
-        kind: .image(ForumThreadImageBlock(url: url, isEmoticon: isEmoticon))
+        images: (images ?? image.map { [$0] } ?? []).map { ForumThreadPostImage(url: $0) }
     )
 }
 

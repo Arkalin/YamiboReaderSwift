@@ -1693,6 +1693,7 @@ import Testing
     let threadURL = try #require(URL(string: "https://bbs.yamibo.com/thread-12345-1-1.html"))
     let canonicalURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=12345"))
     let chapterURL = try #require(URL(string: "https://bbs.yamibo.com/thread-12346-1-1.html"))
+    let threadCoverURL = try #require(URL(string: "https://img.example.com/thread-cover.jpg"))
     let resumePoint = ReaderResumePoint(
         view: 3,
         displayedTextOffset: 128,
@@ -1710,7 +1711,8 @@ import Testing
         chapterTitle: "旧章",
         authorID: "1",
         resumePoint: resumePoint,
-        documentSurfaceProgressPercent: 37
+        documentSurfaceProgressPercent: 37,
+        threadCoverURL: threadCoverURL
     ))
 
     let novel = await store.load(for: canonicalURL)
@@ -1721,6 +1723,7 @@ import Testing
     #expect(novel?.novel?.authorID == "42")
     #expect(novel?.novel?.novelMaxView == 8)
     #expect(novel?.novel?.novelDocumentSurfaceProgressPercent == 37)
+    #expect(novel?.novel?.threadCoverURL == threadCoverURL)
     #expect(novel?.novel?.novelResumePoint == resumePoint)
 
     try await store.saveManga(MangaProgressReadingPosition(
