@@ -7,16 +7,33 @@ import YamiboReaderCore
 final class ForumMangaDetailViewModel {
     var directory: MangaDirectory?
     var currentDocument: MangaChapterDocument?
+    var readingProgress: ReadingProgressRecord?
     var isLoading = false
     var errorMessage: String?
 
     let context: MangaDetailLaunchContext
 
     @ObservationIgnored private let appContext: YamiboAppContext
+    @ObservationIgnored private var readingProgressUpdatesTask: Task<Void, Never>?
 
     init(context: MangaDetailLaunchContext, appContext: YamiboAppContext) {
         self.context = context
         self.appContext = appContext
+        readingProgressUpdatesTask = Task { @MainActor [weak self, readingProgressStore = appContext.readingProgressStore] in
+            for await notification in NotificationCenter.default.notifications(named: ReadingProgressStore.didChangeNotification) {
+                guard !Task.isCancelled else { return }
+                guard let self else { return }
+                guard let changeID = notification.userInfo?[ReadingProgressStore.changeIDUserInfoKey] as? String,
+                      changeID == readingProgressStore.changeID else {
+                    continue
+                }
+                readingProgress = await readingProgressStore.load(for: context.thread.canonicalURL)
+            }
+        }
+    }
+
+    deinit {
+        readingProgressUpdatesTask?.cancel()
     }
 
     var navigationTitle: String {
@@ -35,6 +52,7 @@ final class ForumMangaDetailViewModel {
     func reload() async {
         isLoading = true
         errorMessage = nil
+        readingProgress = await appContext.readingProgressStore.load(for: context.thread.canonicalURL)
         defer { isLoading = false }
 
         do {
@@ -69,8 +87,27 @@ final class ForumMangaDetailViewModel {
         } catch {
             currentDocument = nil
             directory = nil
+            readingProgress = await appContext.readingProgressStore.load(for: context.thread.canonicalURL)
             errorMessage = error.localizedDescription
         }
+    }
+
+    var hasReadingProgress: Bool {
+        readingProgress?.manga != nil
+    }
+
+    func continueLaunchContext() -> MangaLaunchContext? {
+        guard let directory else { return nil }
+        let manga = readingProgress?.manga
+        let fallbackChapterURL = directory.chapters.first?.url ?? currentDocument?.chapterURL ?? context.thread.canonicalURL
+        return MangaLaunchContext(
+            originalThreadURL: context.thread.canonicalURL,
+            chapterURL: manga?.lastMangaURL ?? fallbackChapterURL,
+            displayTitle: directory.cleanBookName,
+            source: manga == nil ? .forum : .resume,
+            initialPage: manga?.mangaPageIndex ?? 0,
+            directoryName: directory.cleanBookName
+        )
     }
 
     func launchContext(for chapter: MangaChapter) -> MangaLaunchContext {

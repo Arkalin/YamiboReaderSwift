@@ -237,7 +237,10 @@ private func makeDirectoryPanelFixture(
         directoryWorkflowConfiguration: configuration,
         makeImageDataLoader: { DirectoryPanelImageDataLoader() },
         progressSync: ProgressSyncModule(
-            adapter: FavoriteLibraryProgressSyncAdapter(favoriteStore: appContext.favoriteStore),
+            adapter: FavoriteLibraryProgressSyncAdapter(
+                favoriteStore: appContext.favoriteStore,
+                readingProgressStore: appContext.readingProgressStore
+            ),
             debounceNanoseconds: 0
         )
     )
@@ -249,7 +252,10 @@ private func makeDirectoryPanelFixture(
         makeDirectorySearchCooldownState: { MangaDirectorySearchCooldownState() },
         directoryWorkflowConfiguration: configuration,
         progressSync: ProgressSyncModule(
-            adapter: FavoriteLibraryProgressSyncAdapter(favoriteStore: appContext.favoriteStore),
+            adapter: FavoriteLibraryProgressSyncAdapter(
+                favoriteStore: appContext.favoriteStore,
+                readingProgressStore: appContext.readingProgressStore
+            ),
             debounceNanoseconds: 0
         )
     )

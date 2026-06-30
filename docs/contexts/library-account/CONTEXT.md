@@ -8,6 +8,10 @@ Domain language for favorites, reading metadata, Yamibo accounts, profiles, and 
 The local projection of Yamibo remote favorites plus user-owned reading metadata, display names, hidden state, and collections.
 _Avoid_: favorite store, favorites snapshot, favorites list
 
+**Reading Progress Store**:
+The device-local source of truth for per-thread novel and manga reading position, independent from whether the thread is currently visible in the **Favorite Library**.
+_Avoid_: favorite progress, archive progress, recent route
+
 **Yamibo Account**:
 The authenticated Yamibo forum identity represented by UID, display name, profile, user group, and forum credit totals.
 _Avoid_: app account, local user, session
@@ -51,6 +55,9 @@ _Avoid_: app sync, startup restore, lifecycle handler
 ## Relationships
 
 - A **Favorite Library** is remote-favorite-first: Yamibo remote favorites decide which remote-backed favorite entries exist, while local metadata preserves user-owned reading and organization state for those entries.
+- The **Reading Progress Store** owns current local reading position for novels and manga. Removing a visible favorite does not remove the matching **Reading Progress Store** record.
+- Visible **Favorite Library** entries may mirror the **Reading Progress Store** reading position for favorite-list display and existing WebDAV favorite payload compatibility, but reader resume should prefer the **Reading Progress Store**.
+- The **Reading Progress Store** is device-local in the current schema and is not part of the WebDAV sync payload.
 - A **Favorite Library** persists a novel's **Novel Reading Position** through its semantic resume point and reader page document view; it never stores a novel runtime surface ordinal or displayed page number.
 - Manga page persistence uses the manga-specific `mangaPageIndex` Interface. The historical JSON key `lastPage` may remain as a schema compatibility key, but it is not a Swift Interface and is never written from novel reading.
 - When a Yamibo remote favorite disappears, the **Favorite Library** removes it from the visible library and archives its local metadata so a later remote re-add can restore reading position, display name, hidden state, and collection membership.

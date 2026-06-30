@@ -124,12 +124,15 @@ public actor ProgressSyncModule {
 
 public struct FavoriteLibraryProgressSyncAdapter: ProgressSyncAdapter {
     private let favoriteStore: FavoriteStore
+    private let readingProgressStore: ReadingProgressStore
 
-    public init(favoriteStore: FavoriteStore) {
+    public init(favoriteStore: FavoriteStore, readingProgressStore: ReadingProgressStore) {
         self.favoriteStore = favoriteStore
+        self.readingProgressStore = readingProgressStore
     }
 
     public func saveNovelReadingPosition(_ position: NovelReadingPosition) async throws {
+        _ = try await readingProgressStore.saveNovel(position)
         _ = try await favoriteStore.updateNovelReadingPosition(
             position,
             createIfMissing: false
@@ -137,6 +140,7 @@ public struct FavoriteLibraryProgressSyncAdapter: ProgressSyncAdapter {
     }
 
     public func saveMangaReadingPosition(_ position: MangaProgressReadingPosition) async throws {
+        _ = try await readingProgressStore.saveManga(position)
         _ = try await favoriteStore.updateMangaProgress(
             for: position.threadURL,
             chapterURL: position.chapterURL,

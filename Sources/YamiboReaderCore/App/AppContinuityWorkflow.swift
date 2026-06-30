@@ -168,11 +168,13 @@ public final class AppContinuityWorkflow {
     private func routeReconciledWithFavoriteProgress(_ route: ReaderResumeRoute) async -> ReaderResumeRoute? {
         switch route {
         case let .novel(context):
+            if let progress = await appContext.readingProgressStore.load(for: context.threadURL),
+               progress.hasNovelReadingProgress {
+                return .novel(context.reconciledWithReadingProgress(progress))
+            }
             guard let favorite = await appContext.favoriteStore.favorite(for: context.threadURL),
                   favorite.hasNovelReadingProgress
-            else {
-                return nil
-            }
+            else { return nil }
             return .novel(context.reconciledWithFavoriteProgress(favorite))
         case let .manga(route):
             guard let route = await mangaRouteReconciledWithFavoriteProgress(route) else {
@@ -185,6 +187,10 @@ public final class AppContinuityWorkflow {
     private func mangaRouteReconciledWithFavoriteProgress(_ route: MangaPresentationRoute) async -> MangaPresentationRoute? {
         switch route {
         case let .native(context):
+            if let progress = await appContext.readingProgressStore.load(for: context.originalThreadURL),
+               progress.hasMangaReadingProgress {
+                return .native(context.reconciledWithReadingProgress(progress))
+            }
             guard let favorite = await appContext.favoriteStore.favorite(for: context.originalThreadURL),
                   favorite.hasMangaReadingProgress
             else {
@@ -192,6 +198,10 @@ public final class AppContinuityWorkflow {
             }
             return .native(context.reconciledWithFavoriteProgress(favorite))
         case let .web(context):
+            if let progress = await appContext.readingProgressStore.load(for: context.originalThreadURL),
+               progress.hasMangaReadingProgress {
+                return .web(context.reconciledWithReadingProgress(progress))
+            }
             guard let favorite = await appContext.favoriteStore.favorite(for: context.originalThreadURL),
                   favorite.hasMangaReadingProgress
             else {
@@ -258,7 +268,36 @@ private extension Favorite {
     }
 }
 
+private extension ReadingProgressRecord {
+    var hasNovelReadingProgress: Bool {
+        guard let novel else { return false }
+        return novel.novelResumePoint != nil ||
+            novel.lastView > 1 ||
+            novel.lastChapter != nil ||
+            novel.authorID != nil ||
+            novel.novelMaxView != nil ||
+            novel.novelDocumentSurfaceProgressPercent != nil
+    }
+
+    var hasMangaReadingProgress: Bool {
+        manga != nil
+    }
+}
+
 private extension ReaderLaunchContext {
+    func reconciledWithReadingProgress(_ progress: ReadingProgressRecord) -> ReaderLaunchContext {
+        let novel = progress.novel
+        let resumePoint = novel?.novelResumePoint ?? initialResumePoint
+        return ReaderLaunchContext(
+            threadURL: threadURL,
+            threadTitle: threadTitle,
+            source: .resume,
+            initialView: resumePoint?.view ?? novel?.lastView ?? initialView,
+            authorID: resumePoint?.authorID ?? novel?.authorID ?? authorID,
+            initialResumePoint: resumePoint
+        )
+    }
+
     func reconciledWithFavoriteProgress(_ favorite: Favorite) -> ReaderLaunchContext {
         let resumePoint = favorite.novelResumePoint ?? initialResumePoint
         return ReaderLaunchContext(
@@ -273,6 +312,19 @@ private extension ReaderLaunchContext {
 }
 
 private extension MangaLaunchContext {
+    func reconciledWithReadingProgress(_ progress: ReadingProgressRecord) -> MangaLaunchContext {
+        guard let manga = progress.manga else { return self }
+        return MangaLaunchContext(
+            originalThreadURL: originalThreadURL,
+            chapterURL: manga.lastMangaURL,
+            displayTitle: displayTitle,
+            source: .resume,
+            initialPage: manga.mangaPageIndex,
+            directoryName: directoryName,
+            offlineCacheFavoriteID: offlineCacheFavoriteID
+        )
+    }
+
     func reconciledWithFavoriteProgress(_ favorite: Favorite) -> MangaLaunchContext {
         MangaLaunchContext(
             originalThreadURL: originalThreadURL,
@@ -287,6 +339,18 @@ private extension MangaLaunchContext {
 }
 
 private extension MangaWebContext {
+    func reconciledWithReadingProgress(_ progress: ReadingProgressRecord) -> MangaWebContext {
+        guard let manga = progress.manga else { return self }
+        return MangaWebContext(
+            currentURL: manga.lastMangaURL,
+            originalThreadURL: originalThreadURL,
+            source: .resume,
+            initialPage: manga.mangaPageIndex,
+            autoOpenNative: autoOpenNative,
+            waitingForNativeReturn: waitingForNativeReturn
+        )
+    }
+
     func reconciledWithFavoriteProgress(_ favorite: Favorite) -> MangaWebContext {
         MangaWebContext(
             currentURL: favorite.lastMangaURL ?? currentURL,

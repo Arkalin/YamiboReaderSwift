@@ -40,6 +40,17 @@ extension FavoriteStore {
     }
 }
 
+extension ReadingProgressStore {
+    init(testSuiteName suiteName: String, key: String, favoriteStore: (any FavoriteStoring)? = nil) throws {
+        self.init(
+            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+            key: key,
+            migratedFromFavoritesKey: "\(key).migratedFromFavorites",
+            favoriteStore: favoriteStore
+        )
+    }
+}
+
 extension ReaderResumeRouteStore {
     convenience init(testSuiteName suiteName: String, key: String) throws {
         self.init(defaults: try YamiboTestDefaults.defaults(suiteName: suiteName), key: key)

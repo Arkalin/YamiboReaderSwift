@@ -49,6 +49,7 @@ final class ForumNovelDetailViewModel {
     var chapterSections: [ForumNovelChapterSection] = []
     var expandedChapterPages: Set<Int> = [1]
     var favorite: Favorite?
+    var readingProgress: ReadingProgressRecord?
     var contentCover: ContentCover?
     var isLoading = false
     var errorMessage: String?
@@ -62,6 +63,7 @@ final class ForumNovelDetailViewModel {
     @ObservationIgnored private var chapterPageErrors: [Int: String] = [:]
     @ObservationIgnored private var totalChapterPages = 1
     @ObservationIgnored private var favoriteUpdatesTask: Task<Void, Never>?
+    @ObservationIgnored private var readingProgressUpdatesTask: Task<Void, Never>?
 
     init(context: NovelDetailLaunchContext, appContext: YamiboAppContext) {
         self.context = context
@@ -77,10 +79,22 @@ final class ForumNovelDetailViewModel {
                 await self.refreshFavorite(from: favoriteStore)
             }
         }
+        readingProgressUpdatesTask = Task { @MainActor [weak self, readingProgressStore = appContext.readingProgressStore] in
+            for await notification in NotificationCenter.default.notifications(named: ReadingProgressStore.didChangeNotification) {
+                guard !Task.isCancelled else { return }
+                guard let self else { return }
+                guard let changeID = notification.userInfo?[ReadingProgressStore.changeIDUserInfoKey] as? String,
+                      changeID == readingProgressStore.changeID else {
+                    continue
+                }
+                await self.refreshReadingProgress(from: readingProgressStore)
+            }
+        }
     }
 
     deinit {
         favoriteUpdatesTask?.cancel()
+        readingProgressUpdatesTask?.cancel()
     }
 
     var navigationTitle: String {
@@ -88,7 +102,7 @@ final class ForumNovelDetailViewModel {
     }
 
     var hasReadingProgress: Bool {
-        Self.hasReadingProgress(favorite)
+        Self.hasReadingProgress(readingProgress, favorite: favorite)
     }
 
     var headerSummary: ForumNovelDetailHeaderSummary {
@@ -109,7 +123,7 @@ final class ForumNovelDetailViewModel {
             coverURL: contentCover?.resolvedURL ?? Self.coverCandidate(in: threadPage),
             chapterCount: chapters.count,
             firstFloorPreviewText: Self.firstFloorPreviewText(from: firstPost),
-            readingProgressText: Self.readingProgressText(from: favorite),
+            readingProgressText: Self.readingProgressText(from: readingProgress, favorite: favorite),
             isFavorited: favorite != nil
         )
     }
@@ -126,6 +140,7 @@ final class ForumNovelDetailViewModel {
 
         do {
             favorite = await appContext.favoriteStore.favorite(for: context.thread.canonicalURL)
+            readingProgress = await appContext.readingProgressStore.load(for: context.thread.canonicalURL)
             contentCover = await loadContentCover()
             favoriteErrorMessage = nil
             let repository = await appContext.makeNovelReaderRepository()
@@ -152,6 +167,7 @@ final class ForumNovelDetailViewModel {
             threadPage = nil
             chapters = []
             chapterSections = []
+            readingProgress = await appContext.readingProgressStore.load(for: context.thread.canonicalURL)
             contentCover = await loadContentCover()
             loadedThreadPages = [:]
             chapterPageErrors = [:]
@@ -172,13 +188,15 @@ final class ForumNovelDetailViewModel {
     }
 
     func continueLaunchContext() -> ReaderLaunchContext {
-        let resumePoint = favorite?.novelResumePoint
+        let novelProgress = readingProgress?.novel
+        let resumePoint = novelProgress?.novelResumePoint ?? favorite?.novelResumePoint
+        let hasProgress = Self.hasReadingProgress(readingProgress, favorite: favorite)
         return ReaderLaunchContext(
             threadURL: context.thread.canonicalURL,
             threadTitle: favorite?.resolvedDisplayTitle ?? context.title,
-            source: Self.hasReadingProgress(favorite) ? .resume : .forum,
-            initialView: resumePoint?.view ?? favorite?.lastView ?? 1,
-            authorID: resumePoint?.authorID ?? favorite?.authorID ?? context.authorID,
+            source: hasProgress ? .resume : .forum,
+            initialView: resumePoint?.view ?? novelProgress?.lastView ?? favorite?.lastView ?? 1,
+            authorID: resumePoint?.authorID ?? novelProgress?.authorID ?? favorite?.authorID ?? context.authorID,
             initialResumePoint: resumePoint
         )
     }
@@ -233,6 +251,7 @@ final class ForumNovelDetailViewModel {
                 try await ForumThreadFavoriteSync.removeFavorite(
                     favorite,
                     favoriteStore: favoriteStore,
+                    readingProgressStore: appContext.readingProgressStore,
                     remoteRepository: await appContext.makeFavoriteRepository()
                 )
                 self.favorite = nil
@@ -267,11 +286,17 @@ final class ForumNovelDetailViewModel {
         rebuildChapterDirectory()
     }
 
+    private func refreshReadingProgress(from readingProgressStore: ReadingProgressStore) async {
+        readingProgress = await readingProgressStore.load(for: context.thread.canonicalURL)
+        rebuildChapterDirectory()
+    }
+
     static func chapterSections(
         from loadedPages: [Int: ForumThreadPage],
         totalPages: Int,
         loadingPages: Set<Int> = [],
         pageErrors: [Int: String] = [:],
+        readingProgress: ReadingProgressRecord? = nil,
         favorite: Favorite? = nil
     ) -> [ForumNovelChapterSection] {
         let normalizedTotal = max(1, totalPages)
@@ -282,8 +307,16 @@ final class ForumNovelDetailViewModel {
                 page: page,
                 chapters: chapters.map { chapter in
                     var updatedChapter = chapter
-                    updatedChapter.progressText = chapterProgressText(for: chapter, favorite: favorite)
-                    updatedChapter.isCurrentRead = isCurrentReadChapter(chapter, favorite: favorite)
+                    updatedChapter.progressText = chapterProgressText(
+                        for: chapter,
+                        readingProgress: readingProgress,
+                        favorite: favorite
+                    )
+                    updatedChapter.isCurrentRead = isCurrentReadChapter(
+                        chapter,
+                        readingProgress: readingProgress,
+                        favorite: favorite
+                    )
                     return updatedChapter
                 },
                 isLoaded: pageDocument != nil,
@@ -299,6 +332,7 @@ final class ForumNovelDetailViewModel {
             totalPages: totalChapterPages,
             loadingPages: loadingChapterPages,
             pageErrors: chapterPageErrors,
+            readingProgress: readingProgress,
             favorite: favorite
         )
         chapters = chapterSections.flatMap(\.chapters)
@@ -427,9 +461,13 @@ final class ForumNovelDetailViewModel {
         return trimmedNonEmpty(text)
     }
 
-    private static func readingProgressText(from favorite: Favorite?) -> String? {
+    private static func readingProgressText(from readingProgress: ReadingProgressRecord?, favorite: Favorite?) -> String? {
+        if let novel = readingProgress?.novel,
+           hasReadingProgress(readingProgress, favorite: nil) {
+            return readingProgressText(from: novel)
+        }
         guard let favorite,
-              hasReadingProgress(favorite) else {
+              hasReadingProgress(nil, favorite: favorite) else {
             return nil
         }
         if let percent = favorite.novelDocumentSurfaceProgressPercent {
@@ -455,32 +493,75 @@ final class ForumNovelDetailViewModel {
             ?? L10n.string("favorites.progress.page", favorite.lastView)
     }
 
-    private static func chapterProgressText(for chapter: ForumNovelChapterSummary, favorite: Favorite?) -> String? {
-        guard isCurrentReadChapter(chapter, favorite: favorite),
-              let favorite else {
+    private static func readingProgressText(from novel: NovelReadingProgressRecord) -> String {
+        if let percent = novel.novelDocumentSurfaceProgressPercent {
+            if let maxView = novel.novelMaxView, maxView > 1 {
+                return L10n.string(
+                    "favorites.progress.novel_page_web",
+                    percent,
+                    min(max(novel.lastView, 1), maxView),
+                    maxView
+                )
+            }
+            return L10n.string("favorites.progress.novel_percent", percent)
+        }
+        if let maxView = novel.novelMaxView, maxView > 1 {
+            return L10n.string(
+                "favorites.progress.novel_web",
+                min(max(novel.lastView, 1), maxView),
+                maxView
+            )
+        }
+        return trimmedNonEmpty(novel.novelResumePoint?.chapterTitle)
+            ?? trimmedNonEmpty(novel.lastChapter)
+            ?? L10n.string("favorites.progress.page", novel.lastView)
+    }
+
+    private static func chapterProgressText(
+        for chapter: ForumNovelChapterSummary,
+        readingProgress: ReadingProgressRecord?,
+        favorite: Favorite?
+    ) -> String? {
+        guard isCurrentReadChapter(chapter, readingProgress: readingProgress, favorite: favorite) else {
             return nil
         }
-        if let percent = favorite.novelDocumentSurfaceProgressPercent {
+        if let percent = readingProgress?.novel?.novelDocumentSurfaceProgressPercent
+            ?? favorite?.novelDocumentSurfaceProgressPercent {
             return L10n.string("favorites.progress.novel_percent", percent)
         }
         return L10n.string("forum.thread_route.current_chapter_hint")
     }
 
-    private static func isCurrentReadChapter(_ chapter: ForumNovelChapterSummary, favorite: Favorite?) -> Bool {
-        guard let favorite else { return false }
-        if let resumeIdentity = favorite.novelResumePoint?.chapterIdentity,
+    private static func isCurrentReadChapter(
+        _ chapter: ForumNovelChapterSummary,
+        readingProgress: ReadingProgressRecord?,
+        favorite: Favorite?
+    ) -> Bool {
+        let novel = readingProgress?.novel
+        let resumePoint = novel?.novelResumePoint ?? favorite?.novelResumePoint
+        if let resumeIdentity = resumePoint?.chapterIdentity,
            resumeIdentity == chapter.resumePoint?.chapterIdentity {
             return true
         }
         if let postID = chapter.postID,
-           favorite.novelResumePoint?.chapterIdentity?.rawValue.hasPrefix("post:\(postID)#") == true {
+           resumePoint?.chapterIdentity?.rawValue.hasPrefix("post:\(postID)#") == true {
             return true
         }
-        return favorite.lastView == chapter.view
-            && trimmedNonEmpty(favorite.lastChapter) == trimmedNonEmpty(chapter.title)
+        let lastView = novel?.lastView ?? favorite?.lastView
+        let lastChapter = novel?.lastChapter ?? favorite?.lastChapter
+        return lastView == chapter.view
+            && trimmedNonEmpty(lastChapter) == trimmedNonEmpty(chapter.title)
     }
 
-    private static func hasReadingProgress(_ favorite: Favorite?) -> Bool {
+    private static func hasReadingProgress(_ readingProgress: ReadingProgressRecord?, favorite: Favorite?) -> Bool {
+        if let novel = readingProgress?.novel {
+            return novel.novelResumePoint != nil
+                || novel.lastView > 1
+                || trimmedNonEmpty(novel.lastChapter) != nil
+                || trimmedNonEmpty(novel.authorID) != nil
+                || novel.novelMaxView != nil
+                || novel.novelDocumentSurfaceProgressPercent != nil
+        }
         guard let favorite else { return false }
         return favorite.novelResumePoint != nil
             || favorite.lastView > 1

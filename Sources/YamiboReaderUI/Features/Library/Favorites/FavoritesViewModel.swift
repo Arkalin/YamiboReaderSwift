@@ -512,6 +512,7 @@ public final class FavoritesViewModel: ObservableObject {
             do {
                 let repository = await appContext.makeFavoriteRepository()
                 try await repository.deleteFavorite(remoteFavoriteID: remoteFavoriteID)
+                _ = try await appContext.readingProgressStore.saveFavoriteLegacyProgress(favorite)
                 applySnapshot(try await favoriteStore.deleteFavorites(ids: [favorite.id]))
                 changed = true
             } catch {
@@ -535,24 +536,27 @@ public final class FavoritesViewModel: ObservableObject {
 
         switch latestFavorite.type {
         case .novel:
+            let novelProgress = await appContext.readingProgressStore.load(for: latestFavorite.url)?.novel
+            let resumePoint = novelProgress?.novelResumePoint ?? latestFavorite.novelResumePoint
             return .reader(
                 ReaderLaunchContext(
                     threadURL: latestFavorite.url,
                     threadTitle: latestFavorite.resolvedDisplayTitle,
                     source: .favorites,
-                    initialView: mode == .start ? 1 : nil,
-                    authorID: latestFavorite.authorID,
-                    initialResumePoint: mode == .start ? nil : latestFavorite.novelResumePoint
+                    initialView: mode == .start ? 1 : (resumePoint?.view ?? novelProgress?.lastView),
+                    authorID: novelProgress?.authorID ?? latestFavorite.authorID,
+                    initialResumePoint: mode == .start ? nil : resumePoint
                 )
             )
         case .manga:
+            let mangaProgress = await appContext.readingProgressStore.load(for: latestFavorite.url)?.manga
             return .manga(
                 MangaLaunchContext(
                     originalThreadURL: latestFavorite.url,
-                    chapterURL: mode == .start ? latestFavorite.url : (latestFavorite.lastMangaURL ?? latestFavorite.url),
+                    chapterURL: mode == .start ? latestFavorite.url : (mangaProgress?.lastMangaURL ?? latestFavorite.lastMangaURL ?? latestFavorite.url),
                     displayTitle: latestFavorite.resolvedDisplayTitle,
                     source: .favorites,
-                    initialPage: mode == .start ? 0 : latestFavorite.mangaPageIndex,
+                    initialPage: mode == .start ? 0 : (mangaProgress?.mangaPageIndex ?? latestFavorite.mangaPageIndex),
                     offlineCacheFavoriteID: latestFavorite.id
                 )
             )
@@ -563,23 +567,36 @@ public final class FavoritesViewModel: ObservableObject {
             defer { resolvingFavoriteID = nil }
 
             do {
+                let progress = await appContext.readingProgressStore.load(for: latestFavorite.url)
                 let resolver = await appContext.makeThreadOpenResolver()
                 let target = try await resolver.resolve(
                     threadURL: latestFavorite.url,
                     title: latestFavorite.resolvedDisplayTitle,
                     htmlOverride: nil,
                     favoriteType: .unknown,
-                    favoriteChapterURL: latestFavorite.lastMangaURL,
-                    initialMangaPageIndex: latestFavorite.mangaPageIndex
+                    favoriteChapterURL: progress?.manga?.lastMangaURL ?? latestFavorite.lastMangaURL,
+                    initialMangaPageIndex: progress?.manga?.mangaPageIndex ?? latestFavorite.mangaPageIndex
                 )
 
                 switch target {
                 case let .novel(context):
                     favorites = try await favoriteStore.setType(.novel, for: latestFavorite.id)
-                    return .reader(applyStartModeIfNeeded(to: context, for: latestFavorite, mode: mode))
+                    let contextWithProgress = applyReadingProgressIfNeeded(
+                        to: context,
+                        for: latestFavorite,
+                        progress: progress,
+                        mode: mode
+                    )
+                    return .reader(applyStartModeIfNeeded(to: contextWithProgress, for: latestFavorite, mode: mode))
                 case let .manga(context):
                     favorites = try await favoriteStore.setType(.manga, for: latestFavorite.id)
-                    return .manga(applyStartModeIfNeeded(to: context, for: latestFavorite, mode: mode))
+                    let contextWithProgress = applyReadingProgressIfNeeded(
+                        to: context,
+                        for: latestFavorite,
+                        progress: progress,
+                        mode: mode
+                    )
+                    return .manga(applyStartModeIfNeeded(to: contextWithProgress, for: latestFavorite, mode: mode))
                 case .web:
                     favorites = try await favoriteStore.setType(.other, for: latestFavorite.id)
                     var updated = latestFavorite
@@ -616,6 +633,42 @@ public final class FavoritesViewModel: ObservableObject {
             source: context.source,
             initialView: 1,
             authorID: context.authorID
+        )
+    }
+
+    private func applyReadingProgressIfNeeded(
+        to context: ReaderLaunchContext,
+        for favorite: Favorite,
+        progress: ReadingProgressRecord?,
+        mode: FavoriteLaunchMode
+    ) -> ReaderLaunchContext {
+        guard mode != .start, let novel = progress?.novel else { return context }
+        let resumePoint = novel.novelResumePoint ?? favorite.novelResumePoint
+        return ReaderLaunchContext(
+            threadURL: context.threadURL,
+            threadTitle: context.threadTitle,
+            source: .favorites,
+            initialView: resumePoint?.view ?? novel.lastView,
+            authorID: resumePoint?.authorID ?? novel.authorID ?? context.authorID,
+            initialResumePoint: resumePoint
+        )
+    }
+
+    private func applyReadingProgressIfNeeded(
+        to context: MangaLaunchContext,
+        for favorite: Favorite,
+        progress: ReadingProgressRecord?,
+        mode: FavoriteLaunchMode
+    ) -> MangaLaunchContext {
+        guard mode != .start, let manga = progress?.manga else { return context }
+        return MangaLaunchContext(
+            originalThreadURL: context.originalThreadURL,
+            chapterURL: manga.lastMangaURL,
+            displayTitle: context.displayTitle,
+            source: context.source,
+            initialPage: manga.mangaPageIndex,
+            directoryName: context.directoryName,
+            offlineCacheFavoriteID: favorite.id
         )
     }
 

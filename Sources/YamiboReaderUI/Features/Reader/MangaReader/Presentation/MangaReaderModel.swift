@@ -67,7 +67,10 @@ struct MangaReaderModelDependencies {
             makeDirectorySearchCooldownState: { appContext.mangaDirectorySearchCooldownState },
             makeImageDataLoader: { await appContext.makeMangaImageDataLoader() },
             progressSync: ProgressSyncModule(
-                adapter: FavoriteLibraryProgressSyncAdapter(favoriteStore: appContext.favoriteStore)
+                adapter: FavoriteLibraryProgressSyncAdapter(
+                    favoriteStore: appContext.favoriteStore,
+                    readingProgressStore: appContext.readingProgressStore
+                )
             )
         )
         #else
@@ -78,7 +81,10 @@ struct MangaReaderModelDependencies {
             makeOfflineCacheStore: { appContext.makeMangaOfflineCacheStore() },
             makeDirectorySearchCooldownState: { appContext.mangaDirectorySearchCooldownState },
             progressSync: ProgressSyncModule(
-                adapter: FavoriteLibraryProgressSyncAdapter(favoriteStore: appContext.favoriteStore)
+                adapter: FavoriteLibraryProgressSyncAdapter(
+                    favoriteStore: appContext.favoriteStore,
+                    readingProgressStore: appContext.readingProgressStore
+                )
             )
         )
         #endif

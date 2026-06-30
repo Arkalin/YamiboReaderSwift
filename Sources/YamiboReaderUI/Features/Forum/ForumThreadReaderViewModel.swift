@@ -36,6 +36,7 @@ final class ForumThreadReaderViewModel {
 
     @ObservationIgnored private let repositoryProvider: @Sendable () async -> any ForumThreadPageLoading
     @ObservationIgnored private let favoriteStoreProvider: @Sendable () async -> (any FavoriteStoring)?
+    @ObservationIgnored private let readingProgressStoreProvider: @Sendable () async -> ReadingProgressStore?
     @ObservationIgnored private let favoriteRepositoryProvider: @Sendable () async -> (any ForumThreadFavoriteRemoteOperating)?
     @ObservationIgnored private let inlineImageLoadingContextProvider: @Sendable () async -> NovelInlineImageLoadingContext?
 
@@ -46,6 +47,9 @@ final class ForumThreadReaderViewModel {
         }
         favoriteStoreProvider = {
             appContext.favoriteStore
+        }
+        readingProgressStoreProvider = {
+            appContext.readingProgressStore
         }
         favoriteRepositoryProvider = {
             await appContext.makeFavoriteRepository()
@@ -59,6 +63,7 @@ final class ForumThreadReaderViewModel {
         context: ThreadReaderLaunchContext,
         repository: any ForumThreadPageLoading,
         favoriteStore: (any FavoriteStoring)? = nil,
+        readingProgressStore: ReadingProgressStore? = nil,
         favoriteRepository: (any ForumThreadFavoriteRemoteOperating)? = nil
     ) {
         self.context = context
@@ -67,6 +72,9 @@ final class ForumThreadReaderViewModel {
         }
         favoriteStoreProvider = {
             favoriteStore
+        }
+        readingProgressStoreProvider = {
+            readingProgressStore
         }
         favoriteRepositoryProvider = {
             favoriteRepository
@@ -123,6 +131,7 @@ final class ForumThreadReaderViewModel {
                 try await ForumThreadFavoriteSync.removeFavorite(
                     favorite,
                     favoriteStore: favoriteStore,
+                    readingProgressStore: await readingProgressStoreProvider(),
                     remoteRepository: await favoriteRepositoryProvider()
                 )
                 isFavorited = false

@@ -48,7 +48,11 @@ import Testing
 @Test func favoriteLibraryProgressSyncDoesNotCreateMissingFavorite() async throws {
     let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "progress-sync-missing-favorite")
     let favoriteStore = try FavoriteStore(testSuiteName: defaultsSuiteName, key: "favorites")
-    let adapter = FavoriteLibraryProgressSyncAdapter(favoriteStore: favoriteStore)
+    let readingProgressStore = try ReadingProgressStore(testSuiteName: defaultsSuiteName, key: "reading-progress")
+    let adapter = FavoriteLibraryProgressSyncAdapter(
+        favoriteStore: favoriteStore,
+        readingProgressStore: readingProgressStore
+    )
     let sync = ProgressSyncModule(adapter: adapter, debounceNanoseconds: 0)
     let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=6&mobile=2")!
 
@@ -56,12 +60,18 @@ import Testing
 
     let favorites = await favoriteStore.loadFavorites()
     #expect(favorites.isEmpty)
+    let progress = await readingProgressStore.load(for: threadURL)
+    #expect(progress?.novel?.lastView == 6)
 }
 
 @Test func favoriteLibraryProgressSyncMapsReadingPositionsToExistingFavoriteFields() async throws {
     let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "progress-sync-existing-favorite")
     let favoriteStore = try FavoriteStore(testSuiteName: defaultsSuiteName, key: "favorites")
-    let adapter = FavoriteLibraryProgressSyncAdapter(favoriteStore: favoriteStore)
+    let readingProgressStore = try ReadingProgressStore(testSuiteName: defaultsSuiteName, key: "reading-progress")
+    let adapter = FavoriteLibraryProgressSyncAdapter(
+        favoriteStore: favoriteStore,
+        readingProgressStore: readingProgressStore
+    )
     let sync = ProgressSyncModule(adapter: adapter, debounceNanoseconds: 0)
     let novelURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=7&mobile=2")!
     let mangaURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=8&mobile=2")!
@@ -96,6 +106,8 @@ import Testing
 
     let novel = await favoriteStore.favorite(for: novelURL)
     let manga = await favoriteStore.favorite(for: mangaURL)
+    let novelProgress = await readingProgressStore.load(for: novelURL)
+    let mangaProgress = await readingProgressStore.load(for: mangaURL)
     #expect(novel?.lastView == 2)
     #expect(novel?.novelMaxView == 7)
     #expect(novel?.mangaPageIndex == 0)
@@ -105,6 +117,9 @@ import Testing
     #expect(manga?.lastMangaURL == chapterURL)
     #expect(manga?.lastChapter == "第9话")
     #expect(manga?.mangaPageIndex == 4)
+    #expect(novelProgress?.novel?.novelResumePoint?.displayedTextOffset == 120)
+    #expect(mangaProgress?.manga?.lastMangaURL == chapterURL)
+    #expect(mangaProgress?.manga?.mangaPageIndex == 4)
 }
 
 private actor RecordingProgressSyncAdapter: ProgressSyncAdapter {

@@ -278,8 +278,10 @@
 "forum.thread_route.first_floor_preview" = "首楼预览";
 "forum.thread_route.manga_detail_title" = "漫画详情";
 "forum.thread_route.novel_detail_title" = "小说详情";
+"forum.thread_route.continue_manga" = "继续阅读";
 "forum.thread_route.continue_novel" = "继续阅读";
 "forum.thread_route.posted_at_format" = "发表于 %@";
+"forum.thread_route.read_manga" = "开始阅读";
 "forum.thread_route.read_novel" = "开始阅读";
 "forum.thread_route.thread_reader_title" = "帖子";
 "forum.thread_route.updated_at_format" = "更新于 %@";

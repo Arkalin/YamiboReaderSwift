@@ -21,9 +21,14 @@ struct ForumMangaDetailView: View {
         ForumMangaDetailBodyView(
             directory: model.directory,
             focusedChapterTID: model.focusedChapterTID,
+            hasReadingProgress: model.hasReadingProgress,
             isLoading: model.isLoading,
             errorMessage: model.errorMessage,
             retry: retry,
+            onContinueTap: {
+                guard let context = model.continueLaunchContext() else { return }
+                onChapterTap(context)
+            },
             onChapterTap: { chapter in
                 onChapterTap(model.launchContext(for: chapter))
             },
@@ -46,9 +51,11 @@ struct ForumMangaDetailView: View {
 private struct ForumMangaDetailBodyView: View {
     let directory: MangaDirectory?
     let focusedChapterTID: String?
+    let hasReadingProgress: Bool
     let isLoading: Bool
     let errorMessage: String?
     let retry: () -> Void
+    let onContinueTap: () -> Void
     let onChapterTap: (MangaChapter) -> Void
     let onViewThread: () -> Void
 
@@ -57,7 +64,12 @@ private struct ForumMangaDetailBodyView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 12) {
                     if let directory {
-                        ForumMangaDetailHeader(directory: directory, onViewThread: onViewThread)
+                        ForumMangaDetailHeader(
+                            directory: directory,
+                            hasReadingProgress: hasReadingProgress,
+                            onContinueTap: onContinueTap,
+                            onViewThread: onViewThread
+                        )
 
                         ForEach(directory.chapters) { chapter in
                             ForumMangaChapterRow(
@@ -104,6 +116,8 @@ private struct ForumMangaDetailBodyView: View {
 
 private struct ForumMangaDetailHeader: View {
     let directory: MangaDirectory
+    let hasReadingProgress: Bool
+    let onContinueTap: () -> Void
     let onViewThread: () -> Void
 
     var body: some View {
@@ -122,10 +136,21 @@ private struct ForumMangaDetailHeader: View {
             .font(.caption)
             .foregroundStyle(ForumColors.secondaryText)
 
-            Button(action: onViewThread) {
-                Label(L10n.string("forum.thread_route.view_discussion"), systemImage: "text.bubble")
+            HStack(spacing: 10) {
+                Button(action: onContinueTap) {
+                    Label(
+                        L10n.string(hasReadingProgress ? "forum.thread_route.continue_manga" : "forum.thread_route.read_manga"),
+                        systemImage: "book"
+                    )
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(ForumColors.brownDeep)
+
+                Button(action: onViewThread) {
+                    Label(L10n.string("forum.thread_route.view_discussion"), systemImage: "text.bubble")
+                }
+                .buttonStyle(.bordered)
             }
-            .buttonStyle(.bordered)
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)

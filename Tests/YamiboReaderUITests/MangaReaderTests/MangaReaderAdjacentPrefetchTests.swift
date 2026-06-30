@@ -264,7 +264,10 @@ private func makeAdjacentPrefetchFixture(
     )
     let resolvedLoader = loader ?? AdjacentPrefetchDocumentLoader(documents: [document] + extraDocuments)
     let resolvedProgressSync = progressSync ?? ProgressSyncModule(
-        adapter: FavoriteLibraryProgressSyncAdapter(favoriteStore: favoriteStore),
+        adapter: FavoriteLibraryProgressSyncAdapter(
+            favoriteStore: favoriteStore,
+            readingProgressStore: appContext.readingProgressStore
+        ),
         debounceNanoseconds: 0
     )
     #if os(iOS)

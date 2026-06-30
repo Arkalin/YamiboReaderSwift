@@ -34,12 +34,14 @@ enum ForumThreadFavoriteSync {
     static func removeFavorite(
         _ favorite: Favorite,
         favoriteStore: any FavoriteStoring,
+        readingProgressStore: ReadingProgressStore?,
         remoteRepository: (any ForumThreadFavoriteRemoteOperating)?
     ) async throws {
         if let remoteRepository {
             let remoteFavoriteID = try await remoteFavoriteID(for: favorite, remoteRepository: remoteRepository)
             try await remoteRepository.deleteFavorite(remoteFavoriteID: remoteFavoriteID)
         }
+        _ = try await readingProgressStore?.saveFavoriteLegacyProgress(favorite)
         _ = try await favoriteStore.deleteFavorite(id: favorite.id)
     }
 

@@ -22,6 +22,7 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
     public let webDAVSyncSettingsStore: WebDAVSyncSettingsStore
     public let readerResumeRouteStore: ReaderResumeRouteStore
     public let favoriteStore: FavoriteStore
+    public let readingProgressStore: ReadingProgressStore
     public let contentCoverStore: ContentCoverStore
     public let readerCacheStore: ReaderCacheStore
     public let favoriteBackgroundImageStore: FavoriteBackgroundImageStore
@@ -44,6 +45,7 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         webDAVSyncSettingsStore: WebDAVSyncSettingsStore = WebDAVSyncSettingsStore(),
         readerResumeRouteStore: ReaderResumeRouteStore = ReaderResumeRouteStore(),
         favoriteStore: FavoriteStore? = nil,
+        readingProgressStore: ReadingProgressStore? = nil,
         contentCoverStore: ContentCoverStore = ContentCoverStore(),
         readerCacheStore: ReaderCacheStore = ReaderCacheStore(),
         favoriteBackgroundImageStore: FavoriteBackgroundImageStore = FavoriteBackgroundImageStore(),
@@ -64,6 +66,7 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         self.webDAVSyncSettingsStore = webDAVSyncSettingsStore
         self.readerResumeRouteStore = readerResumeRouteStore
         self.favoriteStore = favoriteStore ?? FavoriteStore(mangaOfflineCacheStore: mangaOfflineCacheStore)
+        self.readingProgressStore = readingProgressStore ?? ReadingProgressStore(favoriteStore: self.favoriteStore)
         self.contentCoverStore = contentCoverStore
         self.readerCacheStore = readerCacheStore
         self.favoriteBackgroundImageStore = favoriteBackgroundImageStore
@@ -284,7 +287,8 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
     }
 
     public func bootstrap() async -> YamiboBootstrapState {
-        YamiboBootstrapState(
+        await readingProgressStore.migrateFromFavoritesIfNeeded()
+        return YamiboBootstrapState(
             session: await sessionStore.load(),
             profile: await profileStore.load(),
             settings: await settingsStore.load(),
@@ -299,6 +303,7 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         try await webDAVSyncSettingsStore.reset()
         await readerResumeRouteStore.clear()
         try await favoriteStore.clearAll()
+        try await readingProgressStore.clearAll()
         try await contentCoverStore.clearAll()
         try await readerCacheStore.clearAll()
         try await mangaDirectoryStore.clearAll()

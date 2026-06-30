@@ -47,6 +47,43 @@ import Testing
 }
 
 @MainActor
+@Test func forumNovelDetailContinueUsesIndependentReadingProgressWithoutFavorite() throws {
+    let model = try makeForumNovelDetailViewModel()
+    let resumePoint = ReaderResumePoint(
+        view: 4,
+        displayedTextOffset: 96,
+        chapterOrdinal: 3,
+        chapterTitle: "第四章",
+        segmentProgress: 0.3,
+        authorID: "77",
+        readingModeHint: .vertical
+    )
+    model.favorite = nil
+    model.readingProgress = ReadingProgressRecord(
+        threadURL: model.context.thread.canonicalURL,
+        kind: .novel,
+        novel: NovelReadingProgressRecord(
+            lastView: 4,
+            lastChapter: "第四章",
+            authorID: "77",
+            novelResumePoint: resumePoint,
+            novelMaxView: 6,
+            novelDocumentSurfaceProgressPercent: 33
+        )
+    )
+
+    let context = model.continueLaunchContext()
+
+    #expect(model.hasReadingProgress)
+    #expect(model.headerSummary.isFavorited == false)
+    #expect(model.headerSummary.readingProgressText == "页内 33 % · 网页 4 / 6")
+    #expect(context.source == .resume)
+    #expect(context.initialView == 4)
+    #expect(context.authorID == "77")
+    #expect(context.initialResumePoint == resumePoint)
+}
+
+@MainActor
 @Test func forumNovelDetailContinueTreatsFavoriteChapterAsReadingProgress() throws {
     let model = try makeForumNovelDetailViewModel()
     model.favorite = Favorite(
