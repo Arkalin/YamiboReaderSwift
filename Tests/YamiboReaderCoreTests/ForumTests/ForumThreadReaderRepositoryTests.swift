@@ -38,6 +38,193 @@ private enum ForumThreadReaderRepositoryTestError: Error {
     case missingHandler
 }
 
+@Suite(.serialized)
+private struct ForumThreadReaderRepositoryTests {
+@Test func forumThreadReaderRepositoryCachesFetchedThreadPages() async throws {
+    defer { ForumThreadReaderRepositoryTestURLProtocol.handler = nil }
+
+    let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+    let cacheStore = ForumCacheStore(baseDirectory: directory)
+    let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=704&mobile=2"))
+    let thread = ThreadIdentity(tid: "704", canonicalURL: threadURL)
+    let repository = ForumThreadReaderRepository(
+        client: YamiboClient(session: makeForumThreadReaderRepositoryTestSession(), cookie: "auth=token", userAgent: "Test-UA"),
+        cacheStore: cacheStore
+    )
+
+    ForumThreadReaderRepositoryTestURLProtocol.handler = { request in
+        let components = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)
+        let items = components?.queryItems ?? []
+        #expect(items.value(named: "tid") == "704")
+        #expect(items.value(named: "page") == "2")
+        #expect(items.value(named: "authorid") == nil)
+        return forumThreadReaderRepositoryHTTPResponse(
+            url: request.url!,
+            body: forumThreadReaderRepositoryThreadHTML(title: "普通缓存页", postID: "4002")
+        )
+    }
+
+    let loaded = try await repository.fetchThreadPage(
+        context: ThreadReaderLaunchContext(thread: thread, title: "上下文标题"),
+        page: 2
+    )
+
+    #expect(loaded.title == "普通缓存页")
+    #expect(await repository.cachedThreadPage(
+        context: ThreadReaderLaunchContext(thread: thread, title: "上下文标题"),
+        page: 2
+    )?.title == "普通缓存页")
+    #expect(await repository.cachedThreadPage(thread: thread, title: "上下文标题", authorID: nil, page: 2)?.title == "普通缓存页")
+}
+
+@Test func forumThreadReaderRepositoryCachesFetchedNovelThreadPagesByAuthor() async throws {
+    defer { ForumThreadReaderRepositoryTestURLProtocol.handler = nil }
+
+    let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+    let cacheStore = ForumCacheStore(baseDirectory: directory)
+    let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=705&mobile=2"))
+    let thread = ThreadIdentity(tid: "705", canonicalURL: threadURL)
+    let repository = ForumThreadReaderRepository(
+        client: YamiboClient(session: makeForumThreadReaderRepositoryTestSession(), cookie: "auth=token", userAgent: "Test-UA"),
+        cacheStore: cacheStore
+    )
+
+    ForumThreadReaderRepositoryTestURLProtocol.handler = { request in
+        let components = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)
+        let items = components?.queryItems ?? []
+        #expect(items.value(named: "tid") == "705")
+        #expect(items.value(named: "page") == "1")
+        #expect(items.value(named: "authorid") == "42")
+        return forumThreadReaderRepositoryHTTPResponse(
+            url: request.url!,
+            body: forumThreadReaderRepositoryThreadHTML(title: "作者缓存页", postID: "5001")
+        )
+    }
+
+    let context = NovelDetailLaunchContext(thread: thread, title: "小说标题", authorID: "42")
+    let loaded = try await repository.fetchNovelThreadPage(context: context, page: 1)
+
+    #expect(loaded.title == "作者缓存页")
+    #expect(await repository.cachedNovelThreadPage(context: context, page: 1)?.title == "作者缓存页")
+    #expect(await repository.cachedThreadPage(thread: thread, title: "小说标题", authorID: "42", page: 1)?.title == "作者缓存页")
+    #expect(await repository.cachedThreadPage(thread: thread, title: "小说标题", authorID: nil, page: 1) == nil)
+}
+
+@Test func forumThreadReaderRepositoryInteractionRequestsDoNotWriteThreadPageCache() async throws {
+    defer { ForumThreadReaderRepositoryTestURLProtocol.handler = nil }
+
+    let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+    let cacheStore = ForumCacheStore(baseDirectory: directory)
+    let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=706&mobile=2"))
+    let thread = ThreadIdentity(tid: "706", canonicalURL: threadURL)
+    let repository = ForumThreadReaderRepository(
+        client: YamiboClient(session: makeForumThreadReaderRepositoryTestSession(), cookie: "auth=token", userAgent: "Test-UA"),
+        cacheStore: cacheStore
+    )
+
+    func expectNoThreadPageCache() async {
+        #expect(await cacheStore.loadThreadPage(thread: thread, page: 1, authorID: nil, allowExpired: true) == nil)
+    }
+
+    ForumThreadReaderRepositoryTestURLProtocol.handler = { request in
+        forumThreadReaderRepositoryHTTPResponse(
+            url: request.url!,
+            body: #"""
+            <html><body>
+              <table>
+                <tr><th>参与人数 1</th><th>积分 +2</th><th>理由</th></tr>
+                <tr><td><a href="home.php?mod=space&amp;uid=77">读者甲</a></td><td>+2</td><td>好</td></tr>
+              </table>
+            </body></html>
+            """#
+        )
+    }
+
+    _ = try await repository.fetchRatingResults(threadID: "706", postID: "6001")
+    await expectNoThreadPageCache()
+
+    ForumThreadReaderRepositoryTestURLProtocol.handler = { request in
+        forumThreadReaderRepositoryHTTPResponse(
+            url: request.url!,
+            body: #"""
+            <root><![CDATA[
+              <select id="rate1"><option value="1">1</option></select>
+            ]]></root>
+            """#
+        )
+    }
+    _ = try await repository.fetchRateOptions(threadID: "706", postID: "6001")
+    await expectNoThreadPageCache()
+
+    ForumThreadReaderRepositoryTestURLProtocol.handler = { request in
+        forumThreadReaderRepositoryHTTPResponse(
+            url: request.url!,
+            body: #"""
+            <html><body>
+              <select><option value="12" selected="selected">选项乙</option></select>
+              <a href="home.php?mod=space&amp;uid=88">读者乙</a>
+            </body></html>
+            """#
+        )
+    }
+    _ = try await repository.fetchPollVoters(threadID: "706", optionID: "12")
+    await expectNoThreadPageCache()
+
+    ForumThreadReaderRepositoryTestURLProtocol.handler = { request in
+        forumThreadReaderRepositoryHTTPResponse(
+            url: request.url!,
+            body: #"<html><body><div class="jump_c">投票成功</div></body></html>"#
+        )
+    }
+    _ = try await repository.votePoll(
+        forumID: "49",
+        threadID: "706",
+        optionIDs: ["12"],
+        formHash: "form123"
+    )
+    await expectNoThreadPageCache()
+
+    ForumThreadReaderRepositoryTestURLProtocol.handler = { request in
+        forumThreadReaderRepositoryHTTPResponse(
+            url: request.url!,
+            body: #"""
+            <root><![CDATA[
+              <div id="messagetext"><p>评分成功</p></div>
+              <script>succeedhandle_rate();</script>
+            ]]></root>
+            """#
+        )
+    }
+    _ = try await repository.ratePost(
+        threadID: "706",
+        postID: "6001",
+        score: 1,
+        reason: "好",
+        formHash: "form123",
+        noticeAuthor: false
+    )
+    await expectNoThreadPageCache()
+
+    ForumThreadReaderRepositoryTestURLProtocol.handler = { request in
+        forumThreadReaderRepositoryHTTPResponse(
+            url: request.url!,
+            body: #"""
+            <root><![CDATA[
+              <div id="messagetext"><p>点评成功</p></div>
+              <script>succeedhandle_comment();</script>
+            ]]></root>
+            """#
+        )
+    }
+    _ = try await repository.commentPost(
+        threadID: "706",
+        postID: "6001",
+        message: "喜欢",
+        formHash: "form123"
+    )
+    await expectNoThreadPageCache()
+}
+
 @Test func forumThreadReaderRepositoryFetchesRatingResultsNatively() async throws {
     defer { ForumThreadReaderRepositoryTestURLProtocol.handler = nil }
 
@@ -335,6 +522,25 @@ private func forumThreadReaderRepositoryHTTPResponse(
         Data(body.utf8),
         HTTPURLResponse(url: url, statusCode: statusCode, httpVersion: nil, headerFields: nil)!
     )
+}
+
+private func forumThreadReaderRepositoryThreadHTML(title: String, postID: String) -> String {
+    #"""
+    <html>
+    <head><title>\#(title) - 百合会</title></head>
+    <body>
+      <div id="post_\#(postID)">
+        <div class="authi">
+          <em title="楼主">楼主</em>
+          <a class="author" href="home.php?mod=space&amp;uid=42&amp;mobile=2">楼主名</a>
+          <em>发表于 2026-6-1 10:00</em>
+        </div>
+        <div class="message" id="postmessage_\#(postID)">正文</div>
+      </div>
+    </body>
+    </html>
+    """#
+}
 }
 
 private extension Array where Element == URLQueryItem {

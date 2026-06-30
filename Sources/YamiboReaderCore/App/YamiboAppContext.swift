@@ -181,7 +181,7 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
             cookie: sessionState.cookie,
             userAgent: sessionState.userAgent
         )
-        return ForumThreadReaderRepository(client: client)
+        return ForumThreadReaderRepository(client: client, cacheStore: forumCacheStore)
     }
 
     public func makeForumRepository() async -> ForumRepository {

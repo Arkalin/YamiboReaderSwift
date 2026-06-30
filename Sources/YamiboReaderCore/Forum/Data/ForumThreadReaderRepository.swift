@@ -2,9 +2,11 @@ import Foundation
 
 public actor ForumThreadReaderRepository: ThreadCoverPageResolving {
     private let client: YamiboClient
+    private let cacheStore: ForumCacheStore
 
-    public init(client: YamiboClient) {
+    public init(client: YamiboClient, cacheStore: ForumCacheStore = ForumCacheStore()) {
         self.client = client
+        self.cacheStore = cacheStore
     }
 
     public func fetchThreadPage(context: ThreadReaderLaunchContext, page: Int = 1) async throws -> ForumThreadPage {
@@ -12,11 +14,13 @@ public actor ForumThreadReaderRepository: ThreadCoverPageResolving {
             for: .thread(url: context.thread.canonicalURL, page: page, authorID: nil),
             cachePolicy: .reloadIgnoringLocalCacheData
         )
-        return try ForumThreadPageHTMLParser.parsePage(
+        let parsed = try ForumThreadPageHTMLParser.parsePage(
             from: html,
             thread: context.thread,
             fallbackTitle: context.title
         )
+        try? await cacheStore.saveThreadPage(parsed, thread: context.thread, pageNumber: page, authorID: nil)
+        return parsed
     }
 
     public func fetchNovelThreadPage(context: NovelDetailLaunchContext, page: Int = 1) async throws -> ForumThreadPage {
@@ -24,20 +28,30 @@ public actor ForumThreadReaderRepository: ThreadCoverPageResolving {
             for: .thread(url: context.thread.canonicalURL, page: page, authorID: context.authorID),
             cachePolicy: .reloadIgnoringLocalCacheData
         )
-        return try ForumThreadPageHTMLParser.parsePage(
+        let parsed = try ForumThreadPageHTMLParser.parsePage(
             from: html,
             thread: context.thread,
             fallbackTitle: context.title
         )
+        try? await cacheStore.saveThreadPage(parsed, thread: context.thread, pageNumber: page, authorID: context.authorID)
+        return parsed
+    }
+
+    public func cachedThreadPage(context: ThreadReaderLaunchContext, page: Int = 1) async -> ForumThreadPage? {
+        await cacheStore.loadThreadPage(thread: context.thread, page: page, authorID: nil)
+    }
+
+    public func cachedNovelThreadPage(context: NovelDetailLaunchContext, page: Int = 1) async -> ForumThreadPage? {
+        await cacheStore.loadThreadPage(thread: context.thread, page: page, authorID: context.authorID)
     }
 
     public func cachedThreadPage(
-        thread _: ThreadIdentity,
+        thread: ThreadIdentity,
         title _: String,
-        authorID _: String?,
-        page _: Int
+        authorID: String?,
+        page: Int
     ) async -> ForumThreadPage? {
-        nil
+        await cacheStore.loadThreadPage(thread: thread, page: page, authorID: authorID)
     }
 
     public func fetchThreadPage(

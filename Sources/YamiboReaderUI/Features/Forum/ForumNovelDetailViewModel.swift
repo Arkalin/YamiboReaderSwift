@@ -9,6 +9,7 @@ protocol ForumNovelDocumentLoading: Sendable {
 extension NovelReaderRepository: ForumNovelDocumentLoading {}
 
 protocol ForumNovelThreadPageLoading: Sendable {
+    func cachedNovelThreadPage(context: NovelDetailLaunchContext, page: Int) async -> ForumThreadPage?
     func fetchNovelThreadPage(context: NovelDetailLaunchContext, page: Int) async throws -> ForumThreadPage
 }
 
@@ -184,8 +185,11 @@ final class ForumNovelDetailViewModel {
                     authorID: context.authorID
                 )
             )
-            async let loadedInitialThreadPage = threadRepository.fetchNovelThreadPage(context: context, page: 1)
-            let loadedThreadPage = try await loadedInitialThreadPage
+            let loadedThreadPage = if let cached = await threadRepository.cachedNovelThreadPage(context: context, page: 1) {
+                cached
+            } else {
+                try await threadRepository.fetchNovelThreadPage(context: context, page: 1)
+            }
             threadPage = loadedThreadPage
             loadedThreadPages = [1: loadedThreadPage]
             await refreshContentCover(from: loadedThreadPage)
@@ -268,7 +272,11 @@ final class ForumNovelDetailViewModel {
 
         do {
             let repository = await threadRepositoryProvider()
-            let loaded = try await repository.fetchNovelThreadPage(context: context, page: normalizedPage)
+            let loaded = if let cached = await repository.cachedNovelThreadPage(context: context, page: normalizedPage) {
+                cached
+            } else {
+                try await repository.fetchNovelThreadPage(context: context, page: normalizedPage)
+            }
             loadedThreadPages[normalizedPage] = loaded
             totalChapterPages = max(totalChapterPages, Self.totalPages(from: loaded, fallback: normalizedPage))
             chapterPageErrors[normalizedPage] = nil

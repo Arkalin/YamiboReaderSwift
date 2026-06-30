@@ -305,6 +305,86 @@ import Testing
 }
 
 @MainActor
+@Test func forumNovelDetailReloadUsesCachedInitialThreadPageWithoutFetching() async throws {
+    let cachedPage = ForumThreadPage(
+        thread: ThreadIdentity(tid: "900", canonicalURL: try modelThreadURL(), fid: "49"),
+        title: "缓存小说标题",
+        posts: [
+            ForumThreadPost(
+                postID: "1001",
+                floorText: "楼主",
+                author: BlogReaderUser(uid: "42", name: "楼主名", avatarURL: nil),
+                contentHTML: "",
+                contentText: "缓存首楼"
+            )
+        ],
+        pageNavigation: ForumPageNavigation(currentPage: 1, totalPages: 1)
+    )
+    let threadPageLoader = FakeForumNovelThreadPageLoader(pages: [:], cachedPages: [1: cachedPage])
+    let model = try makeForumNovelDetailViewModel(
+        documentLoader: FakeForumNovelDocumentLoader(),
+        threadPageLoader: threadPageLoader
+    )
+
+    await model.reload()
+
+    #expect(model.headerSummary.title == "缓存小说标题")
+    #expect(model.chapters.map(\.title) == ["缓存首楼"])
+    #expect(threadPageLoader.cachedNovelCalls() == [1])
+    #expect(threadPageLoader.novelFetchCalls().isEmpty)
+}
+
+@MainActor
+@Test func forumNovelDetailLoadChapterSectionUsesCachedThreadPageWithoutFetching() async throws {
+    let firstPage = ForumThreadPage(
+        thread: ThreadIdentity(tid: "900", canonicalURL: try modelThreadURL(), fid: "49"),
+        title: "小说标题",
+        posts: [
+            ForumThreadPost(
+                postID: "1001",
+                floorText: "楼主",
+                author: BlogReaderUser(uid: "42", name: "楼主名", avatarURL: nil),
+                contentHTML: "",
+                contentText: "第一章"
+            )
+        ],
+        pageNavigation: ForumPageNavigation(currentPage: 1, totalPages: 2)
+    )
+    let secondPage = ForumThreadPage(
+        thread: ThreadIdentity(tid: "900", canonicalURL: try modelThreadURL(), fid: "49"),
+        title: "小说标题",
+        posts: [
+            ForumThreadPost(
+                postID: "2001",
+                floorText: "2#",
+                author: BlogReaderUser(uid: "42", name: "楼主名", avatarURL: nil),
+                contentHTML: "",
+                contentText: "第二章"
+            )
+        ],
+        pageNavigation: ForumPageNavigation(currentPage: 2, totalPages: 2)
+    )
+    let threadPageLoader = FakeForumNovelThreadPageLoader(
+        pages: [:],
+        cachedPages: [
+            1: firstPage,
+            2: secondPage
+        ]
+    )
+    let model = try makeForumNovelDetailViewModel(
+        documentLoader: FakeForumNovelDocumentLoader(),
+        threadPageLoader: threadPageLoader
+    )
+
+    await model.reload()
+    await model.loadChapterSection(page: 2)
+
+    #expect(model.chapterSections.flatMap(\.chapters).map(\.title).contains("第二章"))
+    #expect(threadPageLoader.cachedNovelCalls() == [1, 2])
+    #expect(threadPageLoader.novelFetchCalls().isEmpty)
+}
+
+@MainActor
 @Test func forumNovelDetailRefreshContentCoverStoresOwnerPostCandidateOnly() async throws {
     let suiteName = YamiboTestDefaults.suiteName(prefix: "novel-detail-auto-cover")
     _ = try YamiboTestDefaults.make(suiteName: suiteName)
@@ -986,16 +1066,25 @@ private struct FakeForumNovelDocumentLoader: ForumNovelDocumentLoading {
 
 private final class FakeForumNovelThreadPageLoader: ForumNovelThreadPageLoading, @unchecked Sendable {
     private let pages: [Int: ForumThreadPage]
+    private let cachedPages: [Int: ForumThreadPage]
     private var failuresByPage: [Int: [Error]]
+    private var recordedCachedNovelPages: [Int] = []
     private var recordedNovelFetches: [Int] = []
     private var recordedThreadFetches: [ForumNovelThreadPageFetch] = []
 
     init(
         pages: [Int: ForumThreadPage],
+        cachedPages: [Int: ForumThreadPage] = [:],
         failuresByPage: [Int: [Error]] = [:]
     ) {
         self.pages = pages
+        self.cachedPages = cachedPages
         self.failuresByPage = failuresByPage
+    }
+
+    func cachedNovelThreadPage(context _: NovelDetailLaunchContext, page: Int) async -> ForumThreadPage? {
+        recordedCachedNovelPages.append(page)
+        return cachedPages[page]
     }
 
     func fetchNovelThreadPage(context _: NovelDetailLaunchContext, page: Int) async throws -> ForumThreadPage {
@@ -1030,6 +1119,10 @@ private final class FakeForumNovelThreadPageLoader: ForumNovelThreadPageLoading,
 
     func novelFetchCalls() -> [Int] {
         recordedNovelFetches
+    }
+
+    func cachedNovelCalls() -> [Int] {
+        recordedCachedNovelPages
     }
 }
 

@@ -4,6 +4,8 @@ public actor ForumCacheStore {
     private static let schemaVersion = 1
     public static let homeTTL: TimeInterval = 12 * 60 * 60
     public static let boardTTL: TimeInterval = 2 * 60 * 60
+    public static let threadPageTTL: TimeInterval = 24 * 60 * 60
+    private static let threadPageMaxEntries = 50
 
     private let fileManager: FileManager
     private let baseDirectory: URL
@@ -67,6 +69,41 @@ public actor ForumCacheStore {
         )
     }
 
+    public func loadThreadPage(
+        thread: ThreadIdentity,
+        page: Int = 1,
+        authorID: String? = nil,
+        allowExpired: Bool = false
+    ) async -> ForumThreadPage? {
+        guard let entry: ForumCacheEntry<ForumThreadPage> = load(
+            fileName: threadPageFileName(thread: thread, page: page, authorID: authorID)
+        ) else {
+            return nil
+        }
+        guard allowExpired || !isExpired(entry.fetchedAt, ttl: Self.threadPageTTL) else { return nil }
+        return entry.value
+    }
+
+    public func saveThreadPage(
+        _ page: ForumThreadPage,
+        thread: ThreadIdentity,
+        pageNumber: Int = 1,
+        authorID: String? = nil
+    ) async throws {
+        try save(
+            ForumCacheEntry(value: page, fetchedAt: now()),
+            fileName: threadPageFileName(thread: thread, page: pageNumber, authorID: authorID)
+        )
+        try pruneThreadPageCache()
+    }
+
+    public func clearThreadPages(thread: ThreadIdentity) async throws {
+        let prefix = threadPageFilePrefix(thread: thread)
+        for fileURL in threadPageFileURLs() where fileURL.lastPathComponent.hasPrefix(prefix) {
+            try? fileManager.removeItem(at: fileURL)
+        }
+    }
+
     public func clearAll() async throws {
         guard fileManager.fileExists(atPath: baseDirectory.path) else { return }
         try fileManager.removeItem(at: baseDirectory)
@@ -104,6 +141,52 @@ public actor ForumCacheStore {
             orderBy?.nilIfBlank ?? "default"
         ].joined(separator: "_")
         return "board_\(stableIdentifier(for: key)).json"
+    }
+
+    private func threadPageFileName(thread: ThreadIdentity, page: Int, authorID: String?) -> String {
+        let key = [
+            thread.canonicalURL.absoluteString,
+            String(max(1, page)),
+            authorID?.nilIfBlank ?? "all"
+        ].joined(separator: "_")
+        return "\(threadPageFilePrefix(thread: thread))\(stableIdentifier(for: key)).json"
+    }
+
+    private func threadPageFilePrefix(thread: ThreadIdentity) -> String {
+        "thread_\(stableIdentifier(for: thread.canonicalURL.absoluteString))_"
+    }
+
+    private func threadPageFileURLs() -> [URL] {
+        guard fileManager.fileExists(atPath: baseDirectory.path),
+              let urls = try? fileManager.contentsOfDirectory(
+                at: baseDirectory,
+                includingPropertiesForKeys: nil
+              ) else {
+            return []
+        }
+        return urls.filter { $0.lastPathComponent.hasPrefix("thread_") }
+    }
+
+    private func pruneThreadPageCache() throws {
+        let entries = threadPageFileURLs().compactMap { url -> (url: URL, fetchedAt: Date)? in
+            guard let data = try? Data(contentsOf: url),
+                  let envelope = try? decoder.decode(ForumCacheEnvelope<ForumThreadPage>.self, from: data),
+                  envelope.version == Self.schemaVersion else {
+                return nil
+            }
+            return (url, envelope.entry.fetchedAt)
+        }
+        let expired = entries.filter { isExpired($0.fetchedAt, ttl: Self.threadPageTTL) }
+        for entry in expired {
+            try? fileManager.removeItem(at: entry.url)
+        }
+
+        let retained = entries
+            .filter { candidate in !expired.contains { $0.url == candidate.url } }
+            .sorted { lhs, rhs in lhs.fetchedAt > rhs.fetchedAt }
+        for entry in retained.dropFirst(Self.threadPageMaxEntries) {
+            try? fileManager.removeItem(at: entry.url)
+        }
     }
 
     private func stableIdentifier(for value: String) -> String {

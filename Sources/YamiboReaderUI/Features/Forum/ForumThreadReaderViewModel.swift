@@ -3,6 +3,7 @@ import Observation
 import YamiboReaderCore
 
 protocol ForumThreadPageLoading: Sendable {
+    func cachedThreadPage(context: ThreadReaderLaunchContext, page: Int) async -> ForumThreadPage?
     func fetchThreadPage(context: ThreadReaderLaunchContext, page: Int) async throws -> ForumThreadPage
     func fetchRatingResults(threadID: String, postID: String) async throws -> ForumThreadRatingResultsPage
     func fetchRateOptions(threadID: String, postID: String) async throws -> ForumThreadRateOptionsPage
@@ -103,7 +104,7 @@ final class ForumThreadReaderViewModel {
     }
 
     func refresh() async {
-        await loadPage(currentPage)
+        await loadPage(currentPage, preferCache: false)
     }
 
     func retry() {
@@ -221,7 +222,7 @@ final class ForumThreadReaderViewModel {
         return result
     }
 
-    private func loadPage(_ page: Int) async {
+    private func loadPage(_ page: Int, preferCache: Bool = true) async {
         isLoading = true
         errorMessage = nil
         defer { isLoading = false }
@@ -231,7 +232,11 @@ final class ForumThreadReaderViewModel {
                 inlineImageLoadingContext = await inlineImageLoadingContextProvider()
             }
             let repository = await repositoryProvider()
-            let loaded = try await repository.fetchThreadPage(context: context, page: page)
+            let loaded = if preferCache, let cached = await repository.cachedThreadPage(context: context, page: page) {
+                cached
+            } else {
+                try await repository.fetchThreadPage(context: context, page: page)
+            }
             self.page = loaded
             currentPage = loaded.pageNavigation?.currentPage ?? page
         } catch {

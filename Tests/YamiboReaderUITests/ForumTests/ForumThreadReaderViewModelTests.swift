@@ -40,6 +40,57 @@ import Testing
     #expect(await fixture.favoriteRepository.deletedRemoteFavoriteIDs == ["8801"])
 }
 
+@MainActor
+@Test func forumThreadReaderLoadUsesCachedPageWithoutFetching() async throws {
+    let cachedPage = ForumThreadPage(
+        thread: ThreadIdentity(tid: "704", canonicalURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=704&mobile=2"))),
+        title: "缓存标题",
+        posts: [
+            ForumThreadPost(
+                postID: "cached",
+                author: BlogReaderUser(uid: "42", name: "楼主"),
+                contentHTML: "",
+                contentText: "缓存正文"
+            )
+        ],
+        pageNavigation: ForumPageNavigation(currentPage: 1, totalPages: 4)
+    )
+    let fixture = try ForumThreadReaderViewModelFixture(cachedPages: [1: cachedPage])
+    let model = fixture.makeModel()
+
+    await model.load()
+
+    #expect(model.page?.title == "缓存标题")
+    #expect(fixture.repository.cachedPageCalls() == [1])
+    #expect(fixture.repository.fetchPageCalls().isEmpty)
+}
+
+@MainActor
+@Test func forumThreadReaderRefreshBypassesCachedPageAndFetches() async throws {
+    let cachedPage = ForumThreadPage(
+        thread: ThreadIdentity(tid: "704", canonicalURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=704&mobile=2"))),
+        title: "缓存标题",
+        posts: [
+            ForumThreadPost(
+                postID: "cached",
+                author: BlogReaderUser(uid: "42", name: "楼主"),
+                contentHTML: "",
+                contentText: "缓存正文"
+            )
+        ],
+        pageNavigation: ForumPageNavigation(currentPage: 1, totalPages: 4)
+    )
+    let fixture = try ForumThreadReaderViewModelFixture(cachedPages: [1: cachedPage])
+    let model = fixture.makeModel()
+
+    await model.load()
+    await model.refresh()
+
+    #expect(model.page?.title == "解析标题")
+    #expect(fixture.repository.cachedPageCalls() == [1])
+    #expect(fixture.repository.fetchPageCalls() == [1])
+}
+
 private struct ForumThreadReaderViewModelFixture {
     let suiteName: String
     let threadURL: URL
@@ -47,13 +98,13 @@ private struct ForumThreadReaderViewModelFixture {
     let repository: FakeForumThreadPageLoader
     let favoriteRepository: FakeThreadFavoriteRepository
 
-    init() throws {
+    init(cachedPages: [Int: ForumThreadPage] = [:]) throws {
         suiteName = "ForumThreadReaderViewModelTests.\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suiteName))
         defaults.removePersistentDomain(forName: suiteName)
         threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=704&mobile=2"))
         favoriteStore = FavoriteStore(defaults: defaults, key: "favorites")
-        repository = FakeForumThreadPageLoader(threadURL: threadURL)
+        repository = FakeForumThreadPageLoader(threadURL: threadURL, cachedPages: cachedPages)
         favoriteRepository = FakeThreadFavoriteRepository(threadURL: threadURL)
     }
 
@@ -73,13 +124,23 @@ private struct ForumThreadReaderViewModelFixture {
 
 private final class FakeForumThreadPageLoader: ForumThreadPageLoading, @unchecked Sendable {
     let threadURL: URL
+    private let cachedPages: [Int: ForumThreadPage]
+    private var recordedCachedPages: [Int] = []
+    private var recordedFetchPages: [Int] = []
 
-    init(threadURL: URL) {
+    init(threadURL: URL, cachedPages: [Int: ForumThreadPage] = [:]) {
         self.threadURL = threadURL
+        self.cachedPages = cachedPages
+    }
+
+    func cachedThreadPage(context _: ThreadReaderLaunchContext, page: Int) async -> ForumThreadPage? {
+        recordedCachedPages.append(page)
+        return cachedPages[page]
     }
 
     func fetchThreadPage(context: ThreadReaderLaunchContext, page: Int) async throws -> ForumThreadPage {
-        ForumThreadPage(
+        recordedFetchPages.append(page)
+        return ForumThreadPage(
             thread: ThreadIdentity(tid: "704", canonicalURL: threadURL),
             title: "解析标题",
             posts: [
@@ -92,6 +153,14 @@ private final class FakeForumThreadPageLoader: ForumThreadPageLoading, @unchecke
             ],
             pageNavigation: ForumPageNavigation(currentPage: page, totalPages: 4)
         )
+    }
+
+    func cachedPageCalls() -> [Int] {
+        recordedCachedPages
+    }
+
+    func fetchPageCalls() -> [Int] {
+        recordedFetchPages
     }
 
     func fetchRatingResults(threadID: String, postID: String) async throws -> ForumThreadRatingResultsPage {
