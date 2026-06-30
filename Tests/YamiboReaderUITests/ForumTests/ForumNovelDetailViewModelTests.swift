@@ -86,7 +86,7 @@ import Testing
                 postID: "1001",
                 author: BlogReaderUser(uid: "42", name: "楼主名", avatarURL: nil),
                 postedAtText: "2026-6-1 10:00",
-                lastEditedText: "2026-6-2 12:00",
+                lastEditedText: "本帖最后由 楼主名 于 2026-6-2 12:00 编辑",
                 contentHTML: "",
                 contentText: "首楼简介\n正文",
                 contentBlocks: [
@@ -141,6 +141,28 @@ import Testing
 
     #expect(model.navigationTitle == "文学区版规已更新 请各位会员阅读知悉")
     #expect(model.headerSummary.title == "文学区版规已更新 请各位会员阅读知悉")
+}
+
+@MainActor
+@Test func forumNovelDetailHeaderFallsBackToPostedAtForLastUpdatedText() throws {
+    let model = try makeForumNovelDetailViewModel()
+    model.threadPage = ForumThreadPage(
+        thread: model.context.thread,
+        title: "小说标题",
+        posts: [
+            ForumThreadPost(
+                postID: "1001",
+                author: BlogReaderUser(uid: "42", name: "楼主名", avatarURL: nil),
+                postedAtText: "2026-6-1 10:00",
+                lastEditedText: nil,
+                contentHTML: "",
+                contentText: "正文",
+                contentBlocks: []
+            )
+        ]
+    )
+
+    #expect(model.headerSummary.lastUpdatedText == "2026-6-1 10:00")
 }
 
 @MainActor

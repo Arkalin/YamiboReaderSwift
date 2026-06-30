@@ -621,10 +621,6 @@ private struct FlowStatRow: View {
 
     @ViewBuilder
     private var chips: some View {
-        ForumNovelDetailStatChip(
-            text: String(summary.chapterCount),
-            systemImage: "list.bullet"
-        )
         if let totalViews = summary.totalViews {
             ForumNovelDetailStatChip(
                 text: totalViews.formatted(),

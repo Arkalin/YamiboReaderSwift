@@ -83,7 +83,10 @@ final class ForumNovelDetailViewModel {
             authorID: Self.trimmedNonEmpty(firstPost?.author.uid) ?? context.authorID,
             authorName: Self.trimmedNonEmpty(firstPost?.author.name),
             postedAtText: firstPost?.postedAtText,
-            lastUpdatedText: firstPost?.lastEditedText,
+            lastUpdatedText: Self.lastUpdatedText(
+                editedText: firstPost?.lastEditedText,
+                postedAtText: firstPost?.postedAtText
+            ),
             forumName: forumName,
             totalViews: threadPage?.totalViews,
             totalReplies: threadPage?.totalReplies,
@@ -520,6 +523,32 @@ final class ForumNovelDetailViewModel {
 
     private static func isCoverCandidate(_ image: ForumThreadImageBlock) -> Bool {
         !image.isEmoticon && ContentCoverStore.normalizedCoverURL(from: image.url.absoluteString) != nil
+    }
+
+    private static func lastUpdatedText(editedText: String?, postedAtText: String?) -> String? {
+        guard let editedText = trimmedNonEmpty(editedText) else {
+            return trimmedNonEmpty(postedAtText)
+        }
+        return extractedEditTime(from: editedText) ?? editedText
+    }
+
+    private static func extractedEditTime(from text: String) -> String? {
+        let patterns = [
+            #"(?:本帖最后由|本帖最後由)\s+.+?\s+(?:于|於)\s+(.+?)\s+(?:编辑|編輯)"#,
+            #"(?:最后编辑于|最後編輯於)\s*(.+)"#
+        ]
+        for pattern in patterns {
+            guard let regex = try? NSRegularExpression(pattern: pattern) else { continue }
+            let searchRange = NSRange(text.startIndex ..< text.endIndex, in: text)
+            guard let match = regex.firstMatch(in: text, range: searchRange),
+                  match.numberOfRanges > 1,
+                  let range = Range(match.range(at: 1), in: text),
+                  let value = trimmedNonEmpty(String(text[range])) else {
+                continue
+            }
+            return value
+        }
+        return nil
     }
 
     private static func trimmedNonEmpty(_ value: String?) -> String? {
