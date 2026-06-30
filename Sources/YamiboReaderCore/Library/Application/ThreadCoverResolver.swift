@@ -65,19 +65,22 @@ public struct ThreadCoverResolver: Sendable {
             }
         }
 
-        guard let authorID = Self.validOwnerID(owner.uid) else {
-            return nil
-        }
+        let authorID = Self.validOwnerID(owner.uid)
         var page = 1
         var scanTotal = totalPages
         while page <= scanTotal {
-            let loaded = await loadPage(
-                thread: thread,
-                title: title,
-                authorID: authorID,
-                page: page,
-                repository: repository
-            )
+            let loaded: ForumThreadPage?
+            if page == 1, authorID == nil {
+                loaded = firstPage
+            } else {
+                loaded = await loadPage(
+                    thread: thread,
+                    title: title,
+                    authorID: authorID,
+                    page: page,
+                    repository: repository
+                )
+            }
             guard let loaded else {
                 return nil
             }

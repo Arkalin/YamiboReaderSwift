@@ -59,13 +59,14 @@ import Testing
     #expect(ThreadCoverResolver.findThreadCoverCandidate(in: page)?.absoluteString == "https://img.example.com/name.jpg")
 }
 
-@Test func threadCoverResolverDoesNotFetchRegularPagesWhenOwnerUIDIsInvalid() async throws {
+@Test func threadCoverResolverScansRegularPagesWhenOwnerUIDIsInvalid() async throws {
     let owner = BlogReaderUser(uid: "0", name: "owner")
     let firstPage = threadPage(
         posts: [post(floor: "1#", author: owner)],
         totalPages: 2
     )
     let repository = FakeThreadCoverPageRepository(fetchedPages: [
+        ThreadCoverPageKey(authorID: nil, page: 1): firstPage,
         ThreadCoverPageKey(authorID: nil, page: 2): threadPage(
             posts: [post(floor: "3#", author: owner, image: "https://img.example.com/regular.jpg")],
             currentPage: 2,
@@ -76,12 +77,16 @@ import Testing
     let resolved = await ThreadCoverResolver().resolve(
         thread: testThread,
         title: "title",
-        initialPage: firstPage,
+        initialPage: nil,
         repository: repository
     )
 
-    #expect(resolved == nil)
-    #expect(await repository.fetchCalls().isEmpty)
+    #expect(resolved?.absoluteString == "https://img.example.com/regular.jpg")
+    let fetchCalls = await repository.fetchCalls()
+    #expect(fetchCalls == [
+        ThreadCoverPageKey(authorID: nil, page: 1),
+        ThreadCoverPageKey(authorID: nil, page: 2)
+    ])
 }
 
 @Test func threadCoverResolverIgnoresNestedQuoteCollapseAndTableImages() throws {

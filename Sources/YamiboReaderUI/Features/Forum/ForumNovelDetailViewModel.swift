@@ -41,35 +41,6 @@ extension ForumNovelThreadPageLoading {
     }
 }
 
-private struct ForumNovelCoverPageResolver: ThreadCoverPageResolving {
-    var repository: any ForumNovelThreadPageLoading
-    var cachedPages: [Int: ForumThreadPage]
-
-    func cachedThreadPage(
-        thread _: ThreadIdentity,
-        title _: String,
-        authorID: String?,
-        page: Int
-    ) async -> ForumThreadPage? {
-        guard authorID == nil else { return nil }
-        return cachedPages[page]
-    }
-
-    func fetchThreadPage(
-        thread: ThreadIdentity,
-        title: String,
-        authorID: String?,
-        page: Int
-    ) async throws -> ForumThreadPage {
-        try await repository.fetchThreadPage(
-            thread: thread,
-            title: title,
-            authorID: authorID,
-            page: page
-        )
-    }
-}
-
 struct ForumNovelChapterSummary: Identifiable, Hashable, Sendable {
     var id: String
     var title: String
@@ -201,7 +172,7 @@ final class ForumNovelDetailViewModel {
             forumName: forumName,
             totalViews: threadPage?.totalViews,
             totalReplies: threadPage?.totalReplies,
-            coverURL: contentCover?.resolvedURL ?? ThreadCoverResolver.findThreadCoverCandidate(in: threadPage),
+            coverURL: contentCover?.resolvedURL,
             chapterCount: chapters.count,
             firstFloorPreviewText: Self.firstFloorPreviewText(from: firstPost),
             readingProgressText: Self.readingProgressText(from: readingProgress, favorite: favorite),
@@ -434,11 +405,8 @@ final class ForumNovelDetailViewModel {
            let candidate = await ThreadCoverResolver().resolve(
                thread: context.thread,
                title: context.title,
-               initialPage: page,
-               repository: ForumNovelCoverPageResolver(
-                   repository: repository,
-                   cachedPages: loadedThreadPages
-               )
+               initialPage: nil,
+               repository: repository
            ) {
             do {
                 _ = try await appContext.contentCoverStore.setAutomaticCover(candidate, for: key)

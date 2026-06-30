@@ -103,9 +103,8 @@ import Testing
 }
 
 @MainActor
-@Test func forumNovelDetailHeaderSummaryUsesThreadPageMetadataAndCoverCandidate() throws {
+@Test func forumNovelDetailHeaderSummaryUsesThreadPageMetadataWithoutDirectCoverCandidate() throws {
     let model = try makeForumNovelDetailViewModel()
-    let coverURL = try #require(URL(string: "https://bbs.yamibo.com/data/attachment/forum/cover.jpg"))
     let ignoredURL = try #require(URL(string: "https://bbs.yamibo.com/static/image/smiley/default/none.gif"))
     model.chapters = [
         ForumNovelChapterSummary(id: "1|序章", title: "序章", view: 1),
@@ -134,7 +133,9 @@ import Testing
                     ),
                     ForumThreadContentBlock(
                         id: "cover",
-                        kind: .image(ForumThreadImageBlock(url: coverURL))
+                        kind: .image(ForumThreadImageBlock(
+                            url: try #require(URL(string: "https://bbs.yamibo.com/data/attachment/forum/cover.jpg"))
+                        ))
                     )
                 ]
             )
@@ -156,7 +157,7 @@ import Testing
     #expect(summary.totalReplies == 45)
     #expect(summary.forumName == "#原创小说")
     #expect(summary.chapterCount == 2)
-    #expect(summary.coverURL == coverURL)
+    #expect(summary.coverURL == nil)
     #expect(summary.firstFloorPreviewText == "首楼简介\n正文")
 }
 
@@ -364,63 +365,64 @@ import Testing
         favoriteStore: FavoriteStore(defaults: try YamiboTestDefaults.defaults(suiteName: suiteName), key: "favorites"),
         contentCoverStore: coverStore
     )
+    let threadPageLoader = FakeForumNovelThreadPageLoader(pages: [
+        1: ForumThreadPage(
+            thread: ThreadIdentity(tid: "900", canonicalURL: try modelThreadURL(), fid: "49"),
+            title: "小说标题",
+            posts: [
+                ForumThreadPost(
+                    postID: "1001",
+                    floorText: "1#",
+                    author: BlogReaderUser(uid: "42", name: "楼主名", avatarURL: nil),
+                    contentHTML: "",
+                    contentText: "首楼无图",
+                    contentBlocks: []
+                ),
+                ForumThreadPost(
+                    postID: "1002",
+                    floorText: "2#",
+                    author: BlogReaderUser(uid: "99", name: "读者", avatarURL: nil),
+                    contentHTML: "",
+                    contentText: "读者图",
+                    contentBlocks: [
+                        ForumThreadContentBlock(
+                            id: "reader-image",
+                            kind: .image(ForumThreadImageBlock(
+                                url: try #require(URL(string: "https://img.example.com/reader.jpg"))
+                            ))
+                        )
+                    ]
+                )
+            ],
+            pageNavigation: ForumPageNavigation(currentPage: 1, totalPages: 2)
+        ),
+        2: ForumThreadPage(
+            thread: ThreadIdentity(tid: "900", canonicalURL: try modelThreadURL(), fid: "49"),
+            title: "小说标题",
+            posts: [
+                ForumThreadPost(
+                    postID: "2001",
+                    floorText: "3#",
+                    author: BlogReaderUser(uid: "42", name: "楼主名", avatarURL: nil),
+                    contentHTML: "",
+                    contentText: "楼主补图",
+                    contentBlocks: [
+                        ForumThreadContentBlock(
+                            id: "owner-image",
+                            kind: .image(ForumThreadImageBlock(
+                                url: try #require(URL(string: "https://img.example.com/owner-later.jpg"))
+                            ))
+                        )
+                    ]
+                )
+            ],
+            pageNavigation: ForumPageNavigation(currentPage: 2, totalPages: 2)
+        )
+    ])
     let model = try makeForumNovelDetailViewModel(
         appContext: appContext,
         documentLoader: FakeForumNovelDocumentLoader(),
-        threadPageLoader: FakeForumNovelThreadPageLoader(pages: [
-            1: ForumThreadPage(
-                thread: ThreadIdentity(tid: "900", canonicalURL: modelThreadURL(), fid: "49"),
-                title: "小说标题",
-                posts: [
-                    ForumThreadPost(
-                        postID: "1001",
-                        floorText: "1#",
-                        author: BlogReaderUser(uid: "42", name: "楼主名", avatarURL: nil),
-                        contentHTML: "",
-                        contentText: "首楼无图",
-                        contentBlocks: []
-                    ),
-                    ForumThreadPost(
-                        postID: "1002",
-                        floorText: "2#",
-                        author: BlogReaderUser(uid: "99", name: "读者", avatarURL: nil),
-                        contentHTML: "",
-                        contentText: "读者图",
-                        contentBlocks: [
-                            ForumThreadContentBlock(
-                                id: "reader-image",
-                                kind: .image(ForumThreadImageBlock(
-                                    url: try #require(URL(string: "https://img.example.com/reader.jpg"))
-                                ))
-                            )
-                        ]
-                    )
-                ],
-                pageNavigation: ForumPageNavigation(currentPage: 1, totalPages: 2)
-            ),
-            2: ForumThreadPage(
-                thread: ThreadIdentity(tid: "900", canonicalURL: modelThreadURL(), fid: "49"),
-                title: "小说标题",
-                posts: [
-                    ForumThreadPost(
-                        postID: "2001",
-                        floorText: "3#",
-                        author: BlogReaderUser(uid: "42", name: "楼主名", avatarURL: nil),
-                        contentHTML: "",
-                        contentText: "楼主补图",
-                        contentBlocks: [
-                            ForumThreadContentBlock(
-                                id: "owner-image",
-                                kind: .image(ForumThreadImageBlock(
-                                    url: try #require(URL(string: "https://img.example.com/owner-later.jpg"))
-                                ))
-                            )
-                        ]
-                    )
-                ],
-                pageNavigation: ForumPageNavigation(currentPage: 2, totalPages: 2)
-            )
-        ])
+        threadPageLoader: threadPageLoader
     )
 
     await model.reload()
@@ -429,6 +431,7 @@ import Testing
     let cover = await coverStore.cover(for: key)
     #expect(cover?.resolvedURL?.absoluteString == "https://img.example.com/owner-later.jpg")
     #expect(model.headerSummary.coverURL?.absoluteString == "https://img.example.com/owner-later.jpg")
+    #expect(threadPageLoader.threadFetchCalls().first == ForumNovelThreadPageFetch(authorID: nil, page: 1))
 }
 
 @MainActor
@@ -737,6 +740,7 @@ private struct FakeForumNovelDocumentLoader: ForumNovelDocumentLoading {
 
 private final class FakeForumNovelThreadPageLoader: ForumNovelThreadPageLoading, @unchecked Sendable {
     private let pages: [Int: ForumThreadPage]
+    private var recordedThreadFetches: [ForumNovelThreadPageFetch] = []
 
     init(pages: [Int: ForumThreadPage]) {
         self.pages = pages
@@ -745,4 +749,23 @@ private final class FakeForumNovelThreadPageLoader: ForumNovelThreadPageLoading,
     func fetchNovelThreadPage(context _: NovelDetailLaunchContext, page: Int) async throws -> ForumThreadPage {
         try #require(pages[page])
     }
+
+    func fetchThreadPage(
+        thread _: ThreadIdentity,
+        title _: String,
+        authorID: String?,
+        page: Int
+    ) async throws -> ForumThreadPage {
+        recordedThreadFetches.append(ForumNovelThreadPageFetch(authorID: authorID, page: page))
+        return try #require(pages[page])
+    }
+
+    func threadFetchCalls() -> [ForumNovelThreadPageFetch] {
+        recordedThreadFetches
+    }
+}
+
+private struct ForumNovelThreadPageFetch: Equatable {
+    var authorID: String?
+    var page: Int
 }
