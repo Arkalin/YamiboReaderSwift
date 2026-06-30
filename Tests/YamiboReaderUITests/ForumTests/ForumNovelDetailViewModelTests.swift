@@ -47,6 +47,25 @@ import Testing
 }
 
 @MainActor
+@Test func forumNovelDetailContinueTreatsFavoriteChapterAsReadingProgress() throws {
+    let model = try makeForumNovelDetailViewModel()
+    model.favorite = Favorite(
+        title: "收藏标题",
+        url: model.context.thread.canonicalURL,
+        lastView: 1,
+        lastChapter: "第一章",
+        type: .novel
+    )
+
+    let context = model.continueLaunchContext()
+
+    #expect(model.hasReadingProgress)
+    #expect(context.source == .resume)
+    #expect(context.initialView == 1)
+    #expect(model.headerSummary.readingProgressText == "第一章")
+}
+
+@MainActor
 @Test func forumNovelDetailHeaderSummaryUsesThreadPageMetadataAndCoverCandidate() throws {
     let model = try makeForumNovelDetailViewModel()
     let coverURL = try #require(URL(string: "https://bbs.yamibo.com/data/attachment/forum/cover.jpg"))
@@ -67,8 +86,9 @@ import Testing
                 postID: "1001",
                 author: BlogReaderUser(uid: "42", name: "楼主名", avatarURL: nil),
                 postedAtText: "2026-6-1 10:00",
+                lastEditedText: "2026-6-2 12:00",
                 contentHTML: "",
-                contentText: "",
+                contentText: "首楼简介\n正文",
                 contentBlocks: [
                     ForumThreadContentBlock(
                         id: "ignored",
@@ -89,24 +109,354 @@ import Testing
     let summary = model.headerSummary
 
     #expect(summary.title == "解析标题")
+    #expect(summary.threadURL == model.context.thread.canonicalURL)
+    #expect(summary.authorID == "42")
     #expect(summary.authorName == "楼主名")
     #expect(summary.postedAtText == "2026-6-1 10:00")
+    #expect(summary.lastUpdatedText == "2026-6-2 12:00")
     #expect(summary.totalViews == 321)
     #expect(summary.totalReplies == 45)
     #expect(summary.forumName == "#原创小说")
     #expect(summary.chapterCount == 2)
     #expect(summary.coverURL == coverURL)
+    #expect(summary.firstFloorPreviewText == "首楼简介\n正文")
 }
 
 @MainActor
-private func makeForumNovelDetailViewModel() throws -> ForumNovelDetailViewModel {
+@Test func forumNovelDetailUsesSanitizedDiscuzTitle() throws {
+    let model = try makeForumNovelDetailViewModel()
+    model.threadPage = ForumThreadPage(
+        thread: model.context.thread,
+        title: "文学区版规已更新 请各位会员阅读知悉 - 文學區 - 百合会 - 手机版 - Powered by Discuz!",
+        posts: [
+            ForumThreadPost(
+                postID: "1001",
+                author: BlogReaderUser(uid: "42", name: "楼主名", avatarURL: nil),
+                contentHTML: "",
+                contentText: "正文",
+                contentBlocks: []
+            )
+        ]
+    )
+
+    #expect(model.navigationTitle == "文学区版规已更新 请各位会员阅读知悉")
+    #expect(model.headerSummary.title == "文学区版规已更新 请各位会员阅读知悉")
+}
+
+@MainActor
+@Test func forumNovelDetailHeaderPrefersPersistedContentCover() async throws {
+    let suiteName = YamiboTestDefaults.suiteName(prefix: "novel-detail-cover")
+    _ = try YamiboTestDefaults.make(suiteName: suiteName)
+    let coverStore = ContentCoverStore(
+        defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+        key: "content-covers"
+    )
+    let key = ContentCoverKey(targetType: .threadNovel, targetID: "900")
+    let persisted = try #require(URL(string: "https://img.example.com/persisted.jpg"))
+    let pageCandidate = try #require(URL(string: "https://img.example.com/page.jpg"))
+    try await coverStore.setAutomaticCover(persisted, for: key)
+    let appContext = YamiboAppContext(
+        favoriteStore: FavoriteStore(defaults: try YamiboTestDefaults.defaults(suiteName: suiteName), key: "favorites"),
+        contentCoverStore: coverStore
+    )
+    let model = try makeForumNovelDetailViewModel(appContext: appContext)
+    model.contentCover = await coverStore.cover(for: key)
+    model.threadPage = ForumThreadPage(
+        thread: model.context.thread,
+        title: "小说标题",
+        posts: [
+            ForumThreadPost(
+                postID: "1001",
+                floorText: "1#",
+                author: BlogReaderUser(uid: "42", name: "楼主名", avatarURL: nil),
+                contentHTML: "",
+                contentText: "首楼",
+                contentBlocks: [
+                    ForumThreadContentBlock(
+                        id: "page",
+                        kind: .image(ForumThreadImageBlock(url: pageCandidate))
+                    )
+                ]
+            )
+        ]
+    )
+
+    #expect(model.headerSummary.coverURL == persisted)
+}
+
+@MainActor
+@Test func forumNovelDetailRefreshContentCoverStoresOwnerPostCandidateOnly() async throws {
+    let suiteName = YamiboTestDefaults.suiteName(prefix: "novel-detail-auto-cover")
+    _ = try YamiboTestDefaults.make(suiteName: suiteName)
+    let coverStore = ContentCoverStore(
+        defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+        key: "content-covers"
+    )
+    let appContext = YamiboAppContext(
+        favoriteStore: FavoriteStore(defaults: try YamiboTestDefaults.defaults(suiteName: suiteName), key: "favorites"),
+        contentCoverStore: coverStore
+    )
+    let model = try makeForumNovelDetailViewModel(appContext: appContext)
+    let key = ContentCoverKey(targetType: .threadNovel, targetID: "900")
+    let replyImage = try #require(URL(string: "https://img.example.com/reply.jpg"))
+    let ownerImage = try #require(URL(string: "https://img.example.com/owner.jpg"))
+    let page = ForumThreadPage(
+        thread: model.context.thread,
+        title: "小说标题",
+        posts: [
+            ForumThreadPost(
+                postID: "1001",
+                floorText: "1#",
+                author: BlogReaderUser(uid: "42", name: "楼主名", avatarURL: nil),
+                contentHTML: "",
+                contentText: "首楼无图",
+                contentBlocks: []
+            ),
+            ForumThreadPost(
+                postID: "1002",
+                floorText: "2#",
+                author: BlogReaderUser(uid: "99", name: "读者", avatarURL: nil),
+                contentHTML: "",
+                contentText: "回复图",
+                contentBlocks: [
+                    ForumThreadContentBlock(
+                        id: "reply",
+                        kind: .image(ForumThreadImageBlock(url: replyImage))
+                    )
+                ]
+            ),
+            ForumThreadPost(
+                postID: "1003",
+                floorText: "3#",
+                author: BlogReaderUser(uid: "42", name: "楼主名", avatarURL: nil),
+                contentHTML: "",
+                contentText: "楼主补图",
+                contentBlocks: [
+                    ForumThreadContentBlock(
+                        id: "owner",
+                        kind: .image(ForumThreadImageBlock(url: ownerImage))
+                    )
+                ]
+            )
+        ]
+    )
+
+    #expect(ForumNovelDetailViewModel.coverCandidate(in: page) == ownerImage)
+
+    await model.refreshContentCover(from: page)
+
+    let cover = try #require(await coverStore.cover(for: key))
+    #expect(cover.automaticCoverURL == ownerImage)
+    #expect(model.contentCover?.resolvedURL == ownerImage)
+}
+
+@MainActor
+@Test func forumNovelDetailGroupsChapterDirectoryByThreadPage() throws {
+    let model = try makeForumNovelDetailViewModel()
+    let firstPage = ForumThreadPage(
+        thread: model.context.thread,
+        title: "小说标题",
+        posts: [
+            ForumThreadPost(
+                postID: "1001",
+                floorText: "1#",
+                author: BlogReaderUser(uid: "42", name: "楼主名", avatarURL: nil),
+                contentHTML: "",
+                contentText: "序章\n正文",
+                contentBlocks: []
+            ),
+            ForumThreadPost(
+                postID: "1002",
+                floorText: "2#",
+                author: BlogReaderUser(uid: "42", name: "楼主名", avatarURL: nil),
+                contentHTML: "",
+                contentText: "第一章\n正文",
+                contentBlocks: []
+            )
+        ],
+        pageNavigation: ForumPageNavigation(currentPage: 1, totalPages: 2)
+    )
+    let secondPage = ForumThreadPage(
+        thread: model.context.thread,
+        title: "小说标题",
+        posts: [
+            ForumThreadPost(
+                postID: "2001",
+                floorText: "11#",
+                author: BlogReaderUser(uid: "42", name: "楼主名", avatarURL: nil),
+                contentHTML: "",
+                contentText: "第二章\n正文",
+                contentBlocks: []
+            )
+        ],
+        pageNavigation: ForumPageNavigation(currentPage: 2, totalPages: 2)
+    )
+
+    let sections = ForumNovelDetailViewModel.chapterSections(
+        from: [
+            1: firstPage,
+            2: secondPage
+        ],
+        totalPages: 2
+    )
+
+    #expect(sections.map(\.page) == [1, 2])
+    #expect(sections[0].chapters.map(\.title) == ["序章", "第一章"])
+    #expect(sections[0].chapters.map(\.view) == [1, 1])
+    #expect(sections[0].chapters.map(\.postID) == ["1001", "1002"])
+    #expect(sections[0].chapters[0].resumePoint?.view == 1)
+    #expect(sections[0].chapters[0].resumePoint?.chapterIdentity?.rawValue == "post:1001#chapter:0")
+    #expect(sections[0].chapters[0].resumePoint?.textSegmentIdentity == nil)
+    #expect(sections[1].chapters.map(\.title) == ["第二章"])
+    #expect(sections[1].chapters.map(\.view) == [2])
+    #expect(sections[1].chapters.map(\.floorText) == ["11#"])
+}
+
+@MainActor
+@Test func forumNovelDetailChapterTapUsesPostResumePoint() throws {
+    let model = try makeForumNovelDetailViewModel()
+    let section = ForumNovelDetailViewModel.chapterSections(
+        from: [
+            1: ForumThreadPage(
+                thread: model.context.thread,
+                title: "小说标题",
+                posts: [
+                    ForumThreadPost(
+                        postID: "1001",
+                        floorText: "1#",
+                        author: BlogReaderUser(uid: "42", name: "楼主名", avatarURL: nil),
+                        contentHTML: "",
+                        contentText: "序章\n正文",
+                        contentBlocks: []
+                    )
+                ]
+            )
+        ],
+        totalPages: 1
+    )[0]
+
+    let launchContext = model.launchContext(for: section.chapters[0])
+
+    #expect(launchContext.initialView == 1)
+    #expect(launchContext.authorID == "42")
+    #expect(launchContext.initialResumePoint?.chapterIdentity?.rawValue == "post:1001#chapter:0")
+    #expect(launchContext.initialResumePoint?.chapterTitle == "序章")
+}
+
+@MainActor
+@Test func forumNovelDetailChapterTitleSkipsQuotedText() throws {
+    let model = try makeForumNovelDetailViewModel()
+    let page = ForumThreadPage(
+        thread: model.context.thread,
+        title: "小说标题",
+        posts: [
+            ForumThreadPost(
+                postID: "1001",
+                floorText: "1#",
+                author: BlogReaderUser(uid: "42", name: "楼主名", avatarURL: nil),
+                contentHTML: "",
+                contentText: "引用里的旧标题\n真正章节\n正文",
+                contentBlocks: [
+                    ForumThreadContentBlock(
+                        id: "quote",
+                        kind: .quote([
+                            ForumThreadContentBlock(
+                                id: "quote-text",
+                                kind: .text(ForumThreadTextBlock(text: "引用里的旧标题"))
+                            )
+                        ])
+                    ),
+                    ForumThreadContentBlock(
+                        id: "body",
+                        kind: .text(ForumThreadTextBlock(text: "真正章节\n正文"))
+                    )
+                ]
+            )
+        ]
+    )
+
+    let sections = ForumNovelDetailViewModel.chapterSections(from: [1: page], totalPages: 1)
+
+    #expect(sections[0].chapters.map(\.title) == ["真正章节"])
+}
+
+@MainActor
+@Test func forumNovelDetailMarksCurrentReadChapterFromFavoriteResumePoint() throws {
+    let model = try makeForumNovelDetailViewModel()
+    model.favorite = Favorite(
+        title: "小说标题",
+        url: model.context.thread.canonicalURL,
+        lastView: 1,
+        lastChapter: "第一章",
+        novelResumePoint: ReaderResumePoint(
+            view: 1,
+            chapterIdentity: NovelChapterIdentity(rawValue: "post:1002#chapter:0"),
+            displayedTextOffset: 20,
+            chapterOrdinal: 1,
+            chapterTitle: "第一章",
+            segmentProgress: 0.2,
+            readingModeHint: .vertical
+        ),
+        novelDocumentSurfaceProgressPercent: 20,
+        type: .novel
+    )
+    let firstPage = ForumThreadPage(
+        thread: model.context.thread,
+        title: "小说标题",
+        posts: [
+            ForumThreadPost(
+                postID: "1001",
+                floorText: "1#",
+                author: BlogReaderUser(uid: "42", name: "楼主名", avatarURL: nil),
+                contentHTML: "",
+                contentText: "序章\n正文",
+                contentBlocks: []
+            ),
+            ForumThreadPost(
+                postID: "1002",
+                floorText: "2#",
+                author: BlogReaderUser(uid: "42", name: "楼主名", avatarURL: nil),
+                contentHTML: "",
+                contentText: "第一章\n正文",
+                contentBlocks: []
+            )
+        ]
+    )
+
+    let sections = ForumNovelDetailViewModel.chapterSections(
+        from: [1: firstPage],
+        totalPages: 1,
+        favorite: model.favorite
+    )
+
+    #expect(sections[0].chapters.map(\.isCurrentRead) == [false, true])
+    #expect(sections[0].chapters[1].progressText == "20 %")
+    #expect(model.headerSummary.readingProgressText == "20 %")
+}
+
+@MainActor
+private func makeForumNovelDetailViewModel(appContext: YamiboAppContext? = nil) throws -> ForumNovelDetailViewModel {
     let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=900&mobile=2"))
+    let resolvedAppContext: YamiboAppContext
+    if let appContext {
+        resolvedAppContext = appContext
+    } else {
+        let suiteName = YamiboTestDefaults.suiteName(prefix: "novel-detail")
+        _ = try YamiboTestDefaults.make(suiteName: suiteName)
+        resolvedAppContext = YamiboAppContext(
+            favoriteStore: FavoriteStore(defaults: try YamiboTestDefaults.defaults(suiteName: suiteName), key: "favorites"),
+            contentCoverStore: ContentCoverStore(
+                defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+                key: "content-covers"
+            )
+        )
+    }
     return ForumNovelDetailViewModel(
         context: NovelDetailLaunchContext(
-            thread: ThreadIdentity(tid: "900", canonicalURL: url, fid: YamiboForumTaxonomy.defaultNovelForumIDs.first),
+            thread: ThreadIdentity(tid: "900", canonicalURL: url, fid: "49"),
             title: "小说标题",
             authorID: "42"
         ),
-        appContext: YamiboAppContext()
+        appContext: resolvedAppContext
     )
 }

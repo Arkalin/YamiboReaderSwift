@@ -1774,6 +1774,10 @@ import Testing
     let settingsStore = SettingsStore(defaults: try #require(UserDefaults(suiteName: suiteName)), key: "settings")
     let readerResumeRouteStore = ReaderResumeRouteStore(defaults: try #require(UserDefaults(suiteName: suiteName)), key: "reader-route")
     let favoriteStore = FavoriteStore(defaults: try #require(UserDefaults(suiteName: suiteName)), key: "favorites")
+    let contentCoverStore = ContentCoverStore(
+        defaults: try #require(UserDefaults(suiteName: suiteName)),
+        key: "content-covers"
+    )
     let readerCacheStore = ReaderCacheStore(baseDirectory: rootDirectory.appendingPathComponent("reader-cache", isDirectory: true))
     let favoriteBackgroundImageStore = FavoriteBackgroundImageStore(
         baseDirectory: rootDirectory.appendingPathComponent("favorite-background", isDirectory: true)
@@ -1795,6 +1799,7 @@ import Testing
         settingsStore: settingsStore,
         readerResumeRouteStore: readerResumeRouteStore,
         favoriteStore: favoriteStore,
+        contentCoverStore: contentCoverStore,
         readerCacheStore: readerCacheStore,
         favoriteBackgroundImageStore: favoriteBackgroundImageStore,
         mangaDirectoryStore: mangaDirectoryStore,
@@ -1878,6 +1883,11 @@ import Testing
         )
     )
     try await mangaOfflineCacheStore.setOfflineCacheQueueRunState(.running)
+    let coverKey = ContentCoverKey(targetType: .threadNovel, targetID: "700")
+    try await contentCoverStore.setAutomaticCover(
+        try #require(URL(string: "https://img.example.com/reset-cover.jpg")),
+        for: coverKey
+    )
 
     try await appContext.resetApplicationData()
 
@@ -1885,6 +1895,7 @@ import Testing
     let settings = await settingsStore.load()
     let readerResumeRoute = await readerResumeRouteStore.load()
     let favorites = await favoriteStore.loadFavorites()
+    let contentCover = await contentCoverStore.cover(for: coverKey)
     let readerCacheBytes = await readerCacheStore.totalDiskUsageBytes()
     let backgroundData = await favoriteBackgroundImageStore.loadData(imageID: "background")
     let mangaDirectoryBytes = await mangaDirectoryStore.totalDiskUsageBytes()
@@ -1899,6 +1910,7 @@ import Testing
     #expect(settings == AppSettings())
     #expect(readerResumeRoute == nil)
     #expect(favorites.isEmpty)
+    #expect(contentCover == nil)
     #expect(readerCacheBytes == 0)
     #expect(backgroundData == nil)
     #expect(mangaDirectoryBytes == 0)
@@ -1908,6 +1920,42 @@ import Testing
     #expect(mangaOfflineMemberships.isEmpty)
     #expect(mangaOfflineWorks.isEmpty)
     #expect(mangaOfflineQueueState == .paused)
+}
+
+@Test func contentCoverStoreNormalizesAndFiltersAutomaticCoverURLs() async throws {
+    let defaults = try makeIsolatedDefaults(prefix: "content-cover-normalize")
+    let store = ContentCoverStore(defaults: defaults, key: "content-covers")
+    let key = ContentCoverKey(targetType: .threadNovel, targetID: "900")
+
+    let ignored = try #require(URL(string: "https://bbs.yamibo.com/static/image/smiley/default/none.gif"))
+    let relative = try #require(URL(string: "data/attachment/forum/cover.jpg"))
+
+    #expect(try await store.setAutomaticCover(ignored, for: key) == false)
+    #expect(await store.cover(for: key) == nil)
+    #expect(try await store.setAutomaticCover(relative, for: key) == true)
+
+    let cover = try #require(await store.cover(for: key))
+    #expect(cover.automaticCoverURL?.absoluteString == "https://bbs.yamibo.com/data/attachment/forum/cover.jpg")
+    #expect(cover.resolvedURL == cover.automaticCoverURL)
+}
+
+@Test func contentCoverStoreResolvesManualCoverWhenDynamicDisabled() async throws {
+    let defaults = try makeIsolatedDefaults(prefix: "content-cover-manual")
+    let store = ContentCoverStore(defaults: defaults, key: "content-covers")
+    let key = ContentCoverKey(targetType: .threadNovel, targetID: "901")
+    let automatic = try #require(URL(string: "https://img.example.com/auto.jpg"))
+    let manual = try #require(URL(string: "https://img.example.com/manual.jpg"))
+
+    try await store.setAutomaticCover(automatic, for: key)
+    try await store.setManualCover(manual, for: key)
+
+    var cover = try #require(await store.cover(for: key))
+    #expect(cover.dynamicEnabled == false)
+    #expect(cover.resolvedURL == manual)
+
+    try await store.setDynamicEnabled(true, for: key)
+    cover = try #require(await store.cover(for: key))
+    #expect(cover.resolvedURL == automatic)
 }
 
 private func makeMangaOfflineMembership(

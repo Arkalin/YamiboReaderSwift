@@ -15,8 +15,8 @@ public enum ForumThreadPageHTMLParser {
         }
 
         let document = try SwiftSoup.parse(html, YamiboRoute.baseURL.absoluteString)
-        let title = ReaderHTMLParser.extractPageTitle(from: html)
-            ?? fallbackTitle?.threadRoutingTrimmedNonEmpty
+        let title = ForumThreadTitleSanitizer.sanitize(ReaderHTMLParser.extractPageTitle(from: html))
+            ?? ForumThreadTitleSanitizer.sanitize(fallbackTitle)
             ?? L10n.string("forum.default_title")
         let posts = try parsePosts(in: document)
         guard !posts.isEmpty else {
@@ -99,12 +99,16 @@ public enum ForumThreadPageHTMLParser {
             throw YamiboError.floodControl
         }
 
-        let document = try SwiftSoup.parse(html, YamiboRoute.baseURL.absoluteString)
+        let body = extractCData(from: html) ?? html
+        let document = try SwiftSoup.parse(body, YamiboRoute.baseURL.absoluteString)
         let requestedOptionID = requestedOptionID?.threadRoutingTrimmedNonEmpty
         let options = try pollVoterOptions(in: document, requestedOptionID: requestedOptionID)
         let selectedOptionID = pollSelectedOptionID(in: document) ?? requestedOptionID ?? options.first?.id
         let voters = try pollVoters(in: document)
         guard !options.isEmpty || !voters.isEmpty else {
+            if let message = parseMessageText(from: html) {
+                throw YamiboError.underlying(message)
+            }
             throw YamiboError.parsingFailed(context: L10n.string("forum.thread.poll_voters"))
         }
 

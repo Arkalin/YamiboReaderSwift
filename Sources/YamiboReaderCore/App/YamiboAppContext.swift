@@ -22,6 +22,7 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
     public let webDAVSyncSettingsStore: WebDAVSyncSettingsStore
     public let readerResumeRouteStore: ReaderResumeRouteStore
     public let favoriteStore: FavoriteStore
+    public let contentCoverStore: ContentCoverStore
     public let readerCacheStore: ReaderCacheStore
     public let favoriteBackgroundImageStore: FavoriteBackgroundImageStore
     public let mangaDirectoryStore: FileMangaDirectoryStore
@@ -43,6 +44,7 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         webDAVSyncSettingsStore: WebDAVSyncSettingsStore = WebDAVSyncSettingsStore(),
         readerResumeRouteStore: ReaderResumeRouteStore = ReaderResumeRouteStore(),
         favoriteStore: FavoriteStore? = nil,
+        contentCoverStore: ContentCoverStore = ContentCoverStore(),
         readerCacheStore: ReaderCacheStore = ReaderCacheStore(),
         favoriteBackgroundImageStore: FavoriteBackgroundImageStore = FavoriteBackgroundImageStore(),
         mangaDirectoryStore: FileMangaDirectoryStore = FileMangaDirectoryStore(),
@@ -62,6 +64,7 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         self.webDAVSyncSettingsStore = webDAVSyncSettingsStore
         self.readerResumeRouteStore = readerResumeRouteStore
         self.favoriteStore = favoriteStore ?? FavoriteStore(mangaOfflineCacheStore: mangaOfflineCacheStore)
+        self.contentCoverStore = contentCoverStore
         self.readerCacheStore = readerCacheStore
         self.favoriteBackgroundImageStore = favoriteBackgroundImageStore
         self.mangaDirectoryStore = mangaDirectoryStore
@@ -296,6 +299,7 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         try await webDAVSyncSettingsStore.reset()
         await readerResumeRouteStore.clear()
         try await favoriteStore.clearAll()
+        try await contentCoverStore.clearAll()
         try await readerCacheStore.clearAll()
         try await mangaDirectoryStore.clearAll()
         await mangaDirectorySearchCooldownState.clear()

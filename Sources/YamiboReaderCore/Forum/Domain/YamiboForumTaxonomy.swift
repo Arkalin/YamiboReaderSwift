@@ -2,11 +2,14 @@ import Foundation
 
 public enum YamiboForumTaxonomy {
     public static let defaultNovelForumIDs: Set<String> = [
-        "75"
+        "49",
+        "55"
     ]
 
     public static let defaultMangaForumIDs: Set<String> = [
-        "30"
+        "46",
+        "30",
+        "37"
     ]
 
     public static func threadKind(for fid: String) -> YamiboForumThreadKind {

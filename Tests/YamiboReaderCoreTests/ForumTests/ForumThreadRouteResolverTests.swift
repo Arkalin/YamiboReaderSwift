@@ -44,7 +44,7 @@ private enum ForumThreadRouteResolverTestError: Error {
         threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100&mobile=2")),
         title: "小说标题",
         authorID: "705216",
-        tapContext: ForumThreadTapContext(containingFid: YamiboForumTaxonomy.defaultNovelForumIDs.first)
+        tapContext: ForumThreadTapContext(containingFid: "49")
     )
 
     let target = try await resolver.resolve(request)
@@ -56,6 +56,27 @@ private enum ForumThreadRouteResolverTestError: Error {
     #expect(context.thread.tid == "100")
     #expect(context.title == "小说标题")
     #expect(context.authorID == "705216")
+}
+
+@Test func forumThreadRouteResolverUsesLightNovelSubBoardForNovelDetail() async throws {
+    let resolver = ForumThreadRouteResolver(client: forumThreadRouteTestClient())
+    let request = ThreadRouteRequest(
+        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=101&mobile=2")),
+        title: "轻小说标题",
+        authorID: "705217",
+        tapContext: ForumThreadTapContext(containingFid: "55")
+    )
+
+    let target = try await resolver.resolve(request)
+
+    guard case let .novelDetail(context) = target else {
+        Issue.record("Expected novel detail target, got \(target)")
+        return
+    }
+    #expect(context.thread.tid == "101")
+    #expect(context.thread.fid == "55")
+    #expect(context.title == "轻小说标题")
+    #expect(context.authorID == "705217")
 }
 
 @Test func forumThreadRouteResolverUsesKnownMangaKindWhenTaxonomyMisses() async throws {
@@ -180,7 +201,7 @@ private enum ForumThreadRouteResolverTestError: Error {
             <html>
             <head><title>章节标题 - 文学区 - 百合会</title></head>
             <body>
-              <div class="header"><h2><a href="forum.php?mod=forumdisplay&amp;fid=75&amp;mobile=2">文学区</a></h2></div>
+              <div class="header"><h2><a href="forum.php?mod=forumdisplay&amp;fid=49&amp;mobile=2">文学区</a></h2></div>
               <a href="home.php?mod=space&amp;uid=88&amp;mobile=2" class="mmc">作者</a>
             </body>
             </html>
@@ -195,7 +216,7 @@ private enum ForumThreadRouteResolverTestError: Error {
         return
     }
     #expect(context.thread.tid == "400")
-    #expect(context.thread.fid == "75")
+    #expect(context.thread.fid == "49")
     #expect(context.title == "章节标题 - 文学区 - 百合会")
     #expect(context.authorID == "88")
 }

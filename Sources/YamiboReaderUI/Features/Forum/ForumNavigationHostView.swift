@@ -108,6 +108,7 @@ public struct ForumNavigationHostView: View {
                         onChapterTap: { launchContext in
                             appModel.presentReader(launchContext)
                         },
+                        onUserTap: openUserSpace,
                         onViewThread: {
                             path.append(.threadReader(ThreadReaderLaunchContext(thread: context.thread, title: context.title, authorID: context.authorID)))
                         }

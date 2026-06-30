@@ -39,7 +39,7 @@ import Testing
         fallbackTitle: nil
     )
 
-    #expect(page.title == "普通讨论 - 百合会")
+    #expect(page.title == "普通讨论")
     #expect(page.posts.count == 2)
     #expect(page.posts[0].postID == "1001")
     #expect(page.posts[0].author.uid == "42")
@@ -64,6 +64,28 @@ import Testing
     #expect(page.forumID == "123")
     #expect(page.forumName == "原创小说")
     #expect(page.formHash == "form123")
+}
+
+@Test func forumThreadPageParserStripsDiscuzSiteTitleSuffix() throws {
+    let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=701&mobile=2"))
+    let page = try ForumThreadPageHTMLParser.parsePage(
+        from: #"""
+        <html>
+        <head>
+          <title>文学区版规已更新 请各位会员阅读知悉 - 文學區 - 百合会 - 手机版 - Powered by Discuz!</title>
+        </head>
+        <body>
+          <div id="post_1001">
+            <div class="message">正文</div>
+          </div>
+        </body>
+        </html>
+        """#,
+        thread: ThreadIdentity(tid: "701", canonicalURL: url),
+        fallbackTitle: nil
+    )
+
+    #expect(page.title == "文学区版规已更新 请各位会员阅读知悉")
 }
 
 @Test func forumThreadPageParserExtractsKMPStyleHtmlBlocks() throws {
@@ -487,6 +509,47 @@ private extension ForumThreadTextBlock {
     #expect(page.voters.map(\.name) == ["读者甲", "读者乙"])
     #expect(page.pageNavigation?.currentPage == 2)
     #expect(page.pageNavigation?.totalPages == 5)
+}
+
+@Test func forumThreadPageParserExtractsPollVotersFromAjaxCData() throws {
+    let page = try ForumThreadPageHTMLParser.parsePollVoters(
+        from: #"""
+        <?xml version="1.0" encoding="utf-8"?>
+        <root><![CDATA[
+          <div id="floatlayout_viewvote">
+            <select id="polloptionid">
+              <option value="34677">架空历史</option>
+              <option value="34678" selected="selected">架空正史</option>
+            </select>
+            <ul class="post_box flex-box flex-wrap cl">
+              <li><a href="home.php?mod=space&amp;uid=77&amp;mobile=2">读者甲</a></li>
+              <li><a href="space-uid-88.html">读者乙</a></li>
+            </ul>
+          </div>
+        ]]></root>
+        """#,
+        threadID: "704",
+        requestedOptionID: nil
+    )
+
+    #expect(page.threadID == "704")
+    #expect(page.selectedOptionID == "34678")
+    #expect(page.pollOptions.map(\.id) == ["34677", "34678"])
+    #expect(page.pollOptions.map(\.name) == ["架空历史", "架空正史"])
+    #expect(page.voters.map(\.uid) == ["77", "88"])
+    #expect(page.voters.map(\.name) == ["读者甲", "读者乙"])
+}
+
+@Test func forumThreadPageParserSurfacesPollVotersAjaxPromptMessage() throws {
+    #expect(throws: YamiboError.underlying("投票主题不存在")) {
+        _ = try ForumThreadPageHTMLParser.parsePollVoters(
+            from: #"""
+            <root><![CDATA[<div class="jump_c"><p>投票主题不存在</p></div>]]></root>
+            """#,
+            threadID: "704",
+            requestedOptionID: nil
+        )
+    }
 }
 
 @Test func forumThreadPageParserExtractsPinnedStateAndManageActions() throws {

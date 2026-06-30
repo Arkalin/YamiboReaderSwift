@@ -19,6 +19,18 @@ public actor ForumThreadReaderRepository {
         )
     }
 
+    public func fetchNovelThreadPage(context: NovelDetailLaunchContext, page: Int = 1) async throws -> ForumThreadPage {
+        let html = try await client.fetchHTML(
+            for: .thread(url: context.thread.canonicalURL, page: page, authorID: context.authorID),
+            cachePolicy: .reloadIgnoringLocalCacheData
+        )
+        return try ForumThreadPageHTMLParser.parsePage(
+            from: html,
+            thread: context.thread,
+            fallbackTitle: context.title
+        )
+    }
+
     public func fetchRatingResults(threadID: String, postID: String) async throws -> ForumThreadRatingResultsPage {
         let html = try await client.fetchHTML(
             for: .threadRatingResults(tid: threadID, pid: postID),
