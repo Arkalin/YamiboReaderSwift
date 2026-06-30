@@ -399,9 +399,12 @@ final class ReaderContainerModelTests: XCTestCase {
         )
 
         await MainActor.run {
-            model.jumpToSurface(1)
             let chapters = model.visibleChapterDirectoryChapters
             XCTAssertEqual(chapters.map(\.title), ["同名章", "同名章"])
+            XCTAssertTrue(chapters.indices.contains(1))
+
+            model.jumpToSurface(chapters[1].startIndex)
+
             XCTAssertEqual(model.currentChapterDirectoryIndex, 1)
             XCTAssertFalse(model.isCurrentChapterDirectoryChapter(chapters[0]))
             XCTAssertTrue(model.isCurrentChapterDirectoryChapter(chapters[1]))

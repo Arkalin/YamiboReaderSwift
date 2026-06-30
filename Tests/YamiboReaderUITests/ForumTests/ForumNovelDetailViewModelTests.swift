@@ -335,6 +335,38 @@ import Testing
 }
 
 @MainActor
+@Test func forumNovelDetailReloadKeepsCachedInitialThreadPageWhenReaderDocumentTimesOut() async throws {
+    let cachedPage = ForumThreadPage(
+        thread: ThreadIdentity(tid: "900", canonicalURL: try modelThreadURL(), fid: "49"),
+        title: "缓存小说标题",
+        posts: [
+            ForumThreadPost(
+                postID: "1001",
+                floorText: "楼主",
+                author: BlogReaderUser(uid: "42", name: "楼主名", avatarURL: nil),
+                contentHTML: "",
+                contentText: "缓存首楼\n正文"
+            )
+        ],
+        pageNavigation: ForumPageNavigation(currentPage: 1, totalPages: 1)
+    )
+    let threadPageLoader = FakeForumNovelThreadPageLoader(pages: [:], cachedPages: [1: cachedPage])
+    let model = try makeForumNovelDetailViewModel(
+        documentLoader: FailingForumNovelDocumentLoader(error: URLError(.timedOut)),
+        threadPageLoader: threadPageLoader
+    )
+
+    await model.reload()
+
+    #expect(model.errorMessage == nil)
+    #expect(model.headerSummary.title == "缓存小说标题")
+    #expect(model.headerSummary.firstFloorPreviewText == "缓存首楼\n正文")
+    #expect(model.chapters.map(\.title) == ["缓存首楼"])
+    #expect(threadPageLoader.cachedNovelCalls() == [1])
+    #expect(threadPageLoader.novelFetchCalls().isEmpty)
+}
+
+@MainActor
 @Test func forumNovelDetailLoadChapterSectionUsesCachedThreadPageWithoutFetching() async throws {
     let firstPage = ForumThreadPage(
         thread: ThreadIdentity(tid: "900", canonicalURL: try modelThreadURL(), fid: "49"),
@@ -1061,6 +1093,14 @@ private struct FakeForumNovelDocumentLoader: ForumNovelDocumentLoading {
                 .text("第一章\n正文", chapterTitle: "第一章")
             ]
         )
+    }
+}
+
+private struct FailingForumNovelDocumentLoader: ForumNovelDocumentLoading {
+    let error: Error
+
+    func loadPage(_: ReaderPageRequest) async throws -> ReaderPageDocument {
+        throw error
     }
 }
 

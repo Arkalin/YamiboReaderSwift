@@ -76,6 +76,7 @@ final class ForumNovelDetailViewModel {
     @ObservationIgnored private var loadingChapterPages: Set<Int> = []
     @ObservationIgnored private var chapterPageErrors: [Int: String] = [:]
     @ObservationIgnored private var totalChapterPages = 1
+    @ObservationIgnored private var documentPreloadTask: Task<Void, Never>?
     @ObservationIgnored private var favoriteUpdatesTask: Task<Void, Never>?
     @ObservationIgnored private var readingProgressUpdatesTask: Task<Void, Never>?
     @ObservationIgnored private let novelRepositoryProvider: @Sendable () async -> any ForumNovelDocumentLoading
@@ -120,6 +121,7 @@ final class ForumNovelDetailViewModel {
     }
 
     deinit {
+        documentPreloadTask?.cancel()
         favoriteUpdatesTask?.cancel()
         readingProgressUpdatesTask?.cancel()
     }
@@ -156,7 +158,7 @@ final class ForumNovelDetailViewModel {
     }
 
     func load() async {
-        guard document == nil else { return }
+        guard threadPage == nil else { return }
         await reload()
     }
 
@@ -169,6 +171,8 @@ final class ForumNovelDetailViewModel {
     func reload() async {
         isLoading = true
         errorMessage = nil
+        documentPreloadTask?.cancel()
+        document = nil
         defer { isLoading = false }
 
         do {
@@ -176,15 +180,7 @@ final class ForumNovelDetailViewModel {
             readingProgress = await appContext.readingProgressStore.load(for: context.thread.canonicalURL)
             contentCover = await loadContentCover()
             favoriteErrorMessage = nil
-            let repository = await novelRepositoryProvider()
             let threadRepository = await threadRepositoryProvider()
-            async let loadedDocument = repository.loadPage(
-                ReaderPageRequest(
-                    threadURL: context.thread.canonicalURL,
-                    view: 1,
-                    authorID: context.authorID
-                )
-            )
             let loadedThreadPage = if let cached = await threadRepository.cachedNovelThreadPage(context: context, page: 1) {
                 cached
             } else {
@@ -193,13 +189,12 @@ final class ForumNovelDetailViewModel {
             threadPage = loadedThreadPage
             loadedThreadPages = [1: loadedThreadPage]
             await refreshContentCover(from: loadedThreadPage)
-            let loaded = try await loadedDocument
-            document = loaded
             totalChapterPages = Self.totalPages(from: loadedThreadPage, fallback: 1)
             chapterPageErrors = [:]
             loadingChapterPages = []
             expandedChapterPages = [1]
             rebuildChapterDirectory()
+            preloadReaderDocument()
         } catch {
             document = nil
             threadPage = nil
@@ -211,6 +206,27 @@ final class ForumNovelDetailViewModel {
             chapterPageErrors = [:]
             loadingChapterPages = []
             errorMessage = error.localizedDescription
+        }
+    }
+
+    private func preloadReaderDocument() {
+        let request = ReaderPageRequest(
+            threadURL: context.thread.canonicalURL,
+            view: 1,
+            authorID: context.authorID
+        )
+        let provider = novelRepositoryProvider
+        documentPreloadTask = Task { [weak self] in
+            do {
+                let repository = await provider()
+                let loaded = try await repository.loadPage(request)
+                guard !Task.isCancelled else { return }
+                await MainActor.run {
+                    self?.document = loaded
+                }
+            } catch {
+                return
+            }
         }
     }
 
