@@ -88,16 +88,16 @@ private struct ForumThreadSummaryAuthorView: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            AsyncImage(url: authorAvatarURL) { phase in
-                switch phase {
-                case let .success(image):
-                    image
-                        .resizable()
-                        .scaledToFill()
-                default:
-                    Image(systemName: "person.crop.circle")
-                        .foregroundStyle(ForumColors.secondaryText)
-                }
+            YamiboRemoteImage(url: authorAvatarURL) { image in
+                image
+                    .resizable()
+                    .scaledToFill()
+            } placeholder: {
+                Image(systemName: "person.crop.circle")
+                    .foregroundStyle(ForumColors.secondaryText)
+            } failure: {
+                Image(systemName: "person.crop.circle")
+                    .foregroundStyle(ForumColors.secondaryText)
             }
             .frame(width: 26, height: 26)
             .clipShape(Circle())

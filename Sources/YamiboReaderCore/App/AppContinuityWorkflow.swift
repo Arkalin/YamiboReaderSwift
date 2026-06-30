@@ -168,11 +168,12 @@ public final class AppContinuityWorkflow {
     private func routeReconciledWithFavoriteProgress(_ route: ReaderResumeRoute) async -> ReaderResumeRoute? {
         switch route {
         case let .novel(context):
+            let favorite = await appContext.favoriteStore.favorite(for: context.threadURL)
             if let progress = await appContext.readingProgressStore.load(for: context.threadURL),
                progress.hasNovelReadingProgress {
-                return .novel(context.reconciledWithReadingProgress(progress))
+                return .novel(context.reconciledWithReadingProgress(progress, favorite: favorite))
             }
-            guard let favorite = await appContext.favoriteStore.favorite(for: context.threadURL),
+            guard let favorite,
                   favorite.hasNovelReadingProgress
             else { return nil }
             return .novel(context.reconciledWithFavoriteProgress(favorite))
@@ -187,22 +188,24 @@ public final class AppContinuityWorkflow {
     private func mangaRouteReconciledWithFavoriteProgress(_ route: MangaPresentationRoute) async -> MangaPresentationRoute? {
         switch route {
         case let .native(context):
+            let favorite = await appContext.favoriteStore.favorite(for: context.originalThreadURL)
             if let progress = await appContext.readingProgressStore.load(for: context.originalThreadURL),
                progress.hasMangaReadingProgress {
-                return .native(context.reconciledWithReadingProgress(progress))
+                return .native(context.reconciledWithReadingProgress(progress, favorite: favorite))
             }
-            guard let favorite = await appContext.favoriteStore.favorite(for: context.originalThreadURL),
+            guard let favorite,
                   favorite.hasMangaReadingProgress
             else {
                 return nil
             }
             return .native(context.reconciledWithFavoriteProgress(favorite))
         case let .web(context):
+            let favorite = await appContext.favoriteStore.favorite(for: context.originalThreadURL)
             if let progress = await appContext.readingProgressStore.load(for: context.originalThreadURL),
                progress.hasMangaReadingProgress {
                 return .web(context.reconciledWithReadingProgress(progress))
             }
-            guard let favorite = await appContext.favoriteStore.favorite(for: context.originalThreadURL),
+            guard let favorite,
                   favorite.hasMangaReadingProgress
             else {
                 return nil
@@ -285,12 +288,15 @@ private extension ReadingProgressRecord {
 }
 
 private extension ReaderLaunchContext {
-    func reconciledWithReadingProgress(_ progress: ReadingProgressRecord) -> ReaderLaunchContext {
+    func reconciledWithReadingProgress(
+        _ progress: ReadingProgressRecord,
+        favorite: Favorite?
+    ) -> ReaderLaunchContext {
         let novel = progress.novel
         let resumePoint = novel?.novelResumePoint ?? initialResumePoint
         return ReaderLaunchContext(
             threadURL: threadURL,
-            threadTitle: threadTitle,
+            threadTitle: favorite?.resolvedDisplayTitle ?? threadTitle,
             source: .resume,
             initialView: resumePoint?.view ?? novel?.lastView ?? initialView,
             authorID: resumePoint?.authorID ?? novel?.authorID ?? authorID,
@@ -312,16 +318,19 @@ private extension ReaderLaunchContext {
 }
 
 private extension MangaLaunchContext {
-    func reconciledWithReadingProgress(_ progress: ReadingProgressRecord) -> MangaLaunchContext {
+    func reconciledWithReadingProgress(
+        _ progress: ReadingProgressRecord,
+        favorite: Favorite?
+    ) -> MangaLaunchContext {
         guard let manga = progress.manga else { return self }
         return MangaLaunchContext(
             originalThreadURL: originalThreadURL,
             chapterURL: manga.lastMangaURL,
-            displayTitle: displayTitle,
+            displayTitle: favorite?.resolvedDisplayTitle ?? displayTitle,
             source: .resume,
             initialPage: manga.mangaPageIndex,
             directoryName: directoryName,
-            offlineCacheFavoriteID: offlineCacheFavoriteID
+            offlineCacheFavoriteID: favorite?.id ?? offlineCacheFavoriteID
         )
     }
 

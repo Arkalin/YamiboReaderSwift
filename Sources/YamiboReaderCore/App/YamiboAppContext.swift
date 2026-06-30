@@ -118,9 +118,32 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
             cookie: sessionState.cookie,
             userAgent: sessionState.userAgent
         )
+        let cacheNamespace = YamiboImageCacheNamespace.namespace(
+            cookie: sessionState.cookie,
+            userAgent: sessionState.userAgent
+        )
         return NovelInlineImageLoadingContext(
-            loader: YamiboNovelInlineImageDataLoader(client: client),
+            loader: YamiboNovelInlineImageDataLoader(
+                imageDataLoader: YamiboImageDataLoader(client: client),
+                cacheNamespace: cacheNamespace
+            ),
             cacheNamespace: NovelInlineImageCacheNamespace.namespace(
+                cookie: sessionState.cookie,
+                userAgent: sessionState.userAgent
+            )
+        )
+    }
+
+    public func makeImagePipelineContext() async -> YamiboImageLoadingContext {
+        let sessionState = await sessionStore.load()
+        let client = YamiboClient(
+            session: session,
+            cookie: sessionState.cookie,
+            userAgent: sessionState.userAgent
+        )
+        return YamiboImageLoadingContext(
+            dataLoader: YamiboImageDataLoader(client: client),
+            cacheNamespace: YamiboImageCacheNamespace.namespace(
                 cookie: sessionState.cookie,
                 userAgent: sessionState.userAgent
             )

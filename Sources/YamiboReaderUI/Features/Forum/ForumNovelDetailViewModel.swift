@@ -2,6 +2,18 @@ import Foundation
 import Observation
 import YamiboReaderCore
 
+protocol ForumNovelDocumentLoading: Sendable {
+    func loadPage(_ request: ReaderPageRequest) async throws -> ReaderPageDocument
+}
+
+extension NovelReaderRepository: ForumNovelDocumentLoading {}
+
+protocol ForumNovelThreadPageLoading: Sendable {
+    func fetchNovelThreadPage(context: NovelDetailLaunchContext, page: Int) async throws -> ForumThreadPage
+}
+
+extension ForumThreadReaderRepository: ForumNovelThreadPageLoading {}
+
 struct ForumNovelChapterSummary: Identifiable, Hashable, Sendable {
     var id: String
     var title: String
@@ -64,10 +76,23 @@ final class ForumNovelDetailViewModel {
     @ObservationIgnored private var totalChapterPages = 1
     @ObservationIgnored private var favoriteUpdatesTask: Task<Void, Never>?
     @ObservationIgnored private var readingProgressUpdatesTask: Task<Void, Never>?
+    @ObservationIgnored private let novelRepositoryProvider: @Sendable () async -> any ForumNovelDocumentLoading
+    @ObservationIgnored private let threadRepositoryProvider: @Sendable () async -> any ForumNovelThreadPageLoading
 
-    init(context: NovelDetailLaunchContext, appContext: YamiboAppContext) {
+    init(
+        context: NovelDetailLaunchContext,
+        appContext: YamiboAppContext,
+        novelRepositoryProvider: (@Sendable () async -> any ForumNovelDocumentLoading)? = nil,
+        threadRepositoryProvider: (@Sendable () async -> any ForumNovelThreadPageLoading)? = nil
+    ) {
         self.context = context
         self.appContext = appContext
+        self.novelRepositoryProvider = novelRepositoryProvider ?? {
+            await appContext.makeNovelReaderRepository()
+        }
+        self.threadRepositoryProvider = threadRepositoryProvider ?? {
+            await appContext.makeForumThreadReaderRepository()
+        }
         favoriteUpdatesTask = Task { @MainActor [weak self, favoriteStore = appContext.favoriteStore] in
             for await notification in NotificationCenter.default.notifications(named: FavoriteStore.didChangeNotification) {
                 guard !Task.isCancelled else { return }
@@ -143,20 +168,22 @@ final class ForumNovelDetailViewModel {
             readingProgress = await appContext.readingProgressStore.load(for: context.thread.canonicalURL)
             contentCover = await loadContentCover()
             favoriteErrorMessage = nil
-            let repository = await appContext.makeNovelReaderRepository()
-            let threadRepository = await appContext.makeForumThreadReaderRepository()
-            let loaded = try await repository.loadPage(
+            let repository = await novelRepositoryProvider()
+            let threadRepository = await threadRepositoryProvider()
+            async let loadedDocument = repository.loadPage(
                 ReaderPageRequest(
                     threadURL: context.thread.canonicalURL,
                     view: 1,
                     authorID: context.authorID
                 )
             )
-            let loadedThreadPage = try await threadRepository.fetchNovelThreadPage(context: context)
-            document = loaded
+            async let loadedInitialThreadPage = threadRepository.fetchNovelThreadPage(context: context, page: 1)
+            let loadedThreadPage = try await loadedInitialThreadPage
             threadPage = loadedThreadPage
             loadedThreadPages = [1: loadedThreadPage]
-            await refreshContentCover(from: loadedThreadPage)
+            await refreshContentCover(from: loadedThreadPage, using: threadRepository)
+            let loaded = try await loadedDocument
+            document = loaded
             totalChapterPages = Self.totalPages(from: loadedThreadPage, fallback: 1)
             chapterPageErrors = [:]
             loadingChapterPages = []
@@ -231,7 +258,7 @@ final class ForumNovelDetailViewModel {
         }
 
         do {
-            let repository = await appContext.makeForumThreadReaderRepository()
+            let repository = await threadRepositoryProvider()
             let loaded = try await repository.fetchNovelThreadPage(context: context, page: normalizedPage)
             loadedThreadPages[normalizedPage] = loaded
             totalChapterPages = max(totalChapterPages, Self.totalPages(from: loaded, fallback: normalizedPage))
@@ -339,8 +366,15 @@ final class ForumNovelDetailViewModel {
     }
 
     func refreshContentCover(from page: ForumThreadPage) async {
+        await refreshContentCover(from: page, using: nil)
+    }
+
+    private func refreshContentCover(
+        from page: ForumThreadPage,
+        using repository: (any ForumNovelThreadPageLoading)?
+    ) async {
         guard let key = contentCoverKey else { return }
-        if let candidate = Self.coverCandidate(in: page) {
+        if let candidate = await resolveCoverCandidate(from: page, using: repository) {
             do {
                 _ = try await appContext.contentCoverStore.setAutomaticCover(candidate, for: key)
             } catch {
@@ -348,6 +382,47 @@ final class ForumNovelDetailViewModel {
             }
         }
         contentCover = await appContext.contentCoverStore.cover(for: key)
+    }
+
+    private func resolveCoverCandidate(
+        from page: ForumThreadPage,
+        using repository: (any ForumNovelThreadPageLoading)?
+    ) async -> URL? {
+        if let candidate = Self.coverCandidate(in: page) {
+            return candidate
+        }
+        guard let owner = Self.coverOwner(in: page) else {
+            return nil
+        }
+        let currentPage = page.pageNavigation?.currentPage
+        for pageNumber in loadedThreadPages.keys.sorted() {
+            guard pageNumber != currentPage else { continue }
+            if let candidate = loadedThreadPages[pageNumber].flatMap({ Self.coverCandidate(in: $0, owner: owner) }) {
+                return candidate
+            }
+        }
+        guard let repository else {
+            return nil
+        }
+
+        let totalPages = Self.totalPages(from: page, fallback: 1)
+        guard totalPages > 1 else {
+            return nil
+        }
+        let ownerContext = NovelDetailLaunchContext(
+            thread: context.thread,
+            title: context.title,
+            authorID: Self.trimmedNonEmpty(owner.uid) ?? context.authorID
+        )
+        for pageNumber in 1...totalPages where loadedThreadPages[pageNumber] == nil {
+            guard let loaded = try? await repository.fetchNovelThreadPage(context: ownerContext, page: pageNumber) else {
+                continue
+            }
+            if let candidate = Self.coverCandidate(in: loaded, owner: owner) {
+                return candidate
+            }
+        }
+        return nil
     }
 
     private static func chapterSummaries(from page: ForumThreadPage, page pageNumber: Int) -> [ForumNovelChapterSummary] {
@@ -584,9 +659,17 @@ final class ForumNovelDetailViewModel {
 
     static func coverCandidate(in page: ForumThreadPage?) -> URL? {
         guard let page,
-              let owner = firstFloorPost(in: page.posts)?.author ?? page.posts.first?.author else {
+              let owner = coverOwner(in: page) else {
             return nil
         }
+        return coverCandidate(in: page, owner: owner)
+    }
+
+    private static func coverOwner(in page: ForumThreadPage) -> BlogReaderUser? {
+        firstFloorPost(in: page.posts)?.author ?? page.posts.first?.author
+    }
+
+    private static func coverCandidate(in page: ForumThreadPage, owner: BlogReaderUser) -> URL? {
         let ownerUID = trimmedNonEmpty(owner.uid)
         let ownerName = trimmedNonEmpty(owner.name)
         return page.posts

@@ -957,7 +957,7 @@ final class ReaderVerticalViewportImageView: UIView {
     private var task: Task<Void, Never>?
     private var url: URL?
     private var title: String?
-    private var requestIdentity: ReaderInlineImageRequestIdentity?
+    private var requestIdentity: YamiboImageRequest?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -1013,17 +1013,17 @@ final class ReaderVerticalViewportImageView: UIView {
         title: String?,
         onTap: @escaping (URL, String?) -> Void
     ) {
-        let nextRequestIdentity = ReaderInlineImageRequestIdentity(
+        let nextRequestIdentity = YamiboImageRequest(
             url: url,
             refererURL: refererURL,
-            cacheNamespace: imageCacheNamespace
+            cacheNamespace: imageCacheNamespace.yamiboImageCacheNamespace
         )
         self.url = url
         self.title = title
         guard requestIdentity != nextRequestIdentity else { return }
         requestIdentity = nextRequestIdentity
         task?.cancel()
-        if let cachedImage = ReaderInlineImageMemoryCache.image(for: nextRequestIdentity) {
+        if let cachedImage = YamiboImagePipeline.shared.cachedImage(for: nextRequestIdentity) {
             Task { @MainActor [weak self] in
                 self?.show(image: cachedImage)
             }
@@ -1034,13 +1034,10 @@ final class ReaderVerticalViewportImageView: UIView {
         activityIndicator.startAnimating()
         task = Task { [weak self] in
             do {
-                let data = try await imageDataLoader.imageData(for: url, refererURL: refererURL)
-                guard !Task.isCancelled,
-                      let image = UIImage(data: data) else {
-                    self?.showFailure()
-                    return
+                let image = try await YamiboImagePipeline.shared.image(for: nextRequestIdentity) {
+                    try await imageDataLoader.imageData(for: url, refererURL: refererURL)
                 }
-                ReaderInlineImageMemoryCache.store(image, for: nextRequestIdentity)
+                guard !Task.isCancelled else { return }
                 self?.show(image: image)
             } catch {
                 guard !Task.isCancelled else { return }

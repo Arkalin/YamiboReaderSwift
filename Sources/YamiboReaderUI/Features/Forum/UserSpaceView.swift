@@ -343,15 +343,14 @@ private struct UserSpaceProfileHeaderView: View {
     var body: some View {
         VStack(spacing: 0) {
             ZStack {
-                AsyncImage(url: profile.avatarBackgroundURL ?? profile.avatarURL) { phase in
-                    switch phase {
-                    case let .success(image):
-                        image
-                            .resizable()
-                            .scaledToFill()
-                    default:
-                        Rectangle().fill(ForumColors.brownDeep.opacity(0.24))
-                    }
+                YamiboRemoteImage(url: profile.avatarBackgroundURL ?? profile.avatarURL) { image in
+                    image
+                        .resizable()
+                        .scaledToFill()
+                } placeholder: {
+                    Rectangle().fill(ForumColors.brownDeep.opacity(0.24))
+                } failure: {
+                    Rectangle().fill(ForumColors.brownDeep.opacity(0.24))
                 }
                 .frame(height: 172)
                 .clipped()
@@ -360,17 +359,18 @@ private struct UserSpaceProfileHeaderView: View {
                     .fill(.black.opacity(0.38))
 
                 VStack(spacing: 10) {
-                    AsyncImage(url: profile.avatarURL) { phase in
-                        switch phase {
-                        case let .success(image):
-                            image
-                                .resizable()
-                                .scaledToFill()
-                        default:
-                            Image(systemName: "person.crop.circle.fill")
-                                .resizable()
-                                .foregroundStyle(.white.opacity(0.8))
-                        }
+                    YamiboRemoteImage(url: profile.avatarURL) { image in
+                        image
+                            .resizable()
+                            .scaledToFill()
+                    } placeholder: {
+                        Image(systemName: "person.crop.circle.fill")
+                            .resizable()
+                            .foregroundStyle(.white.opacity(0.8))
+                    } failure: {
+                        Image(systemName: "person.crop.circle.fill")
+                            .resizable()
+                            .foregroundStyle(.white.opacity(0.8))
                     }
                     .frame(width: 64, height: 64)
                     .clipShape(Circle())
@@ -866,14 +866,14 @@ private struct UserSpaceFriendRowView: View {
 
     private var friendContent: some View {
         HStack(spacing: 10) {
-            AsyncImage(url: friend.avatarURL) { phase in
-                switch phase {
-                case let .success(image):
-                    image.resizable().scaledToFill()
-                default:
-                    Image(systemName: "person.crop.circle")
-                        .foregroundStyle(ForumColors.secondaryText)
-                }
+            YamiboRemoteImage(url: friend.avatarURL) { image in
+                image.resizable().scaledToFill()
+            } placeholder: {
+                Image(systemName: "person.crop.circle")
+                    .foregroundStyle(ForumColors.secondaryText)
+            } failure: {
+                Image(systemName: "person.crop.circle")
+                    .foregroundStyle(ForumColors.secondaryText)
             }
             .frame(width: 36, height: 36)
             .clipShape(Circle())
@@ -964,15 +964,16 @@ private struct UserSpaceAddFriendFormView: View {
         Form {
             Section {
                 HStack(spacing: 12) {
-                    AsyncImage(url: avatarURL) { phase in
-                        switch phase {
-                        case let .success(image):
-                            image.resizable().scaledToFill()
-                        default:
-                            Image(systemName: "person.crop.circle")
-                                .font(.largeTitle)
-                                .foregroundStyle(ForumColors.secondaryText)
-                        }
+                    YamiboRemoteImage(url: avatarURL) { image in
+                        image.resizable().scaledToFill()
+                    } placeholder: {
+                        Image(systemName: "person.crop.circle")
+                            .font(.largeTitle)
+                            .foregroundStyle(ForumColors.secondaryText)
+                    } failure: {
+                        Image(systemName: "person.crop.circle")
+                            .font(.largeTitle)
+                            .foregroundStyle(ForumColors.secondaryText)
                     }
                     .frame(width: 52, height: 52)
                     .clipShape(Circle())

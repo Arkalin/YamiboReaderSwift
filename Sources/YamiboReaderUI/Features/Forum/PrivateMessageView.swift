@@ -205,14 +205,14 @@ private struct PrivateMessageAvatarView: View {
     let url: URL?
 
     var body: some View {
-        AsyncImage(url: url) { phase in
-            switch phase {
-            case let .success(image):
-                image.resizable().scaledToFill()
-            default:
-                Image(systemName: "person.crop.circle")
-                    .foregroundStyle(ForumColors.secondaryText)
-            }
+        YamiboRemoteImage(url: url) { image in
+            image.resizable().scaledToFill()
+        } placeholder: {
+            Image(systemName: "person.crop.circle")
+                .foregroundStyle(ForumColors.secondaryText)
+        } failure: {
+            Image(systemName: "person.crop.circle")
+                .foregroundStyle(ForumColors.secondaryText)
         }
         .frame(width: 38, height: 38)
         .clipShape(Circle())

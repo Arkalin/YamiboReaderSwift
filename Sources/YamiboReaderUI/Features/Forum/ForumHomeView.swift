@@ -136,26 +136,21 @@ private struct ForumCarouselImageButton: View {
         Button {
             onTap(item)
         } label: {
-            AsyncImage(url: item.imageURL) { phase in
-                switch phase {
-                case let .success(image):
-                    image
-                        .resizable()
-                        .scaledToFill()
-                case .failure:
-                    ZStack {
-                        Rectangle().fill(ForumColors.creamSurface)
-                        Image(systemName: "photo")
-                            .font(.title)
-                            .foregroundStyle(ForumColors.secondaryText)
-                    }
-                case .empty:
-                    ZStack {
-                        Rectangle().fill(ForumColors.creamSurface)
-                        ProgressView()
-                    }
-                @unknown default:
+            YamiboRemoteImage(url: item.imageURL) { image in
+                image
+                    .resizable()
+                    .scaledToFill()
+            } placeholder: {
+                ZStack {
                     Rectangle().fill(ForumColors.creamSurface)
+                    ProgressView()
+                }
+            } failure: {
+                ZStack {
+                    Rectangle().fill(ForumColors.creamSurface)
+                    Image(systemName: "photo")
+                        .font(.title)
+                        .foregroundStyle(ForumColors.secondaryText)
                 }
             }
             .frame(maxWidth: .infinity)
@@ -288,17 +283,18 @@ private struct ForumBoardIconView: View {
     let name: String
 
     var body: some View {
-        AsyncImage(url: iconURL) { phase in
-            switch phase {
-            case let .success(image):
-                image
-                    .resizable()
-                    .scaledToFit()
-            default:
-                Image(systemName: "text.bubble")
-                    .font(.title3)
-                    .foregroundStyle(ForumColors.secondaryText)
-            }
+        YamiboRemoteImage(url: iconURL) { image in
+            image
+                .resizable()
+                .scaledToFit()
+        } placeholder: {
+            Image(systemName: "text.bubble")
+                .font(.title3)
+                .foregroundStyle(ForumColors.secondaryText)
+        } failure: {
+            Image(systemName: "text.bubble")
+                .font(.title3)
+                .foregroundStyle(ForumColors.secondaryText)
         }
         .frame(width: 38, height: 38)
         .background(ForumColors.mutedFill, in: RoundedRectangle(cornerRadius: 8, style: .continuous))

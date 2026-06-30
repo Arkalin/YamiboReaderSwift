@@ -1869,17 +1869,17 @@ private struct ForumThreadImageBlockView: View {
                 imageCacheNamespace: inlineImageLoadingContext.cacheNamespace
             )
         } else {
-            AsyncImage(url: block.url) { phase in
-                switch phase {
-                case let .success(image):
-                    image
-                        .resizable()
-                        .scaledToFit()
-                case .failure:
-                    ForumThreadImageFailureView()
-                default:
-                    ForumThreadImagePlaceholderView()
-                }
+            YamiboRemoteImage(
+                url: block.url,
+                refererURL: refererURL
+            ) { image in
+                image
+                    .resizable()
+                    .scaledToFit()
+            } placeholder: {
+                ForumThreadImagePlaceholderView()
+            } failure: {
+                ForumThreadImageFailureView()
             }
         }
     }
@@ -1949,28 +1949,27 @@ private struct ForumThreadAuthenticatedImage: View {
 #else
 private struct ForumThreadAuthenticatedImage: View {
     let url: URL
+    let refererURL: URL
 
     init(
         url: URL,
-        refererURL _: URL,
+        refererURL: URL,
         imageDataLoader _: any NovelInlineImageDataLoading,
         imageCacheNamespace _: NovelInlineImageCacheNamespace
     ) {
         self.url = url
+        self.refererURL = refererURL
     }
 
     var body: some View {
-        AsyncImage(url: url) { phase in
-            switch phase {
-            case let .success(image):
-                image
-                    .resizable()
-                    .scaledToFit()
-            case .failure:
-                ForumThreadImageFailureView()
-            default:
-                ForumThreadImagePlaceholderView()
-            }
+        YamiboRemoteImage(url: url, refererURL: refererURL) { image in
+            image
+                .resizable()
+                .scaledToFit()
+        } placeholder: {
+            ForumThreadImagePlaceholderView()
+        } failure: {
+            ForumThreadImageFailureView()
         }
     }
 }
@@ -2021,14 +2020,14 @@ private struct ForumThreadAttachmentIconView: View {
     let iconURL: URL?
 
     var body: some View {
-        AsyncImage(url: iconURL) { phase in
-            switch phase {
-            case let .success(image):
-                image.resizable().scaledToFit()
-            default:
-                Image(systemName: "paperclip")
-                    .foregroundStyle(ForumColors.brownPrimary)
-            }
+        YamiboRemoteImage(url: iconURL) { image in
+            image.resizable().scaledToFit()
+        } placeholder: {
+            Image(systemName: "paperclip")
+                .foregroundStyle(ForumColors.brownPrimary)
+        } failure: {
+            Image(systemName: "paperclip")
+                .foregroundStyle(ForumColors.brownPrimary)
         }
         .frame(width: 34, height: 34)
         .padding(6)
@@ -2204,14 +2203,14 @@ private struct ForumThreadPostHeader: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: 10) {
-            AsyncImage(url: post.author.avatarURL) { phase in
-                switch phase {
-                case let .success(image):
-                    image.resizable().scaledToFill()
-                default:
-                    Image(systemName: "person.crop.circle")
-                        .foregroundStyle(ForumColors.secondaryText)
-                }
+            YamiboRemoteImage(url: post.author.avatarURL) { image in
+                image.resizable().scaledToFill()
+            } placeholder: {
+                Image(systemName: "person.crop.circle")
+                    .foregroundStyle(ForumColors.secondaryText)
+            } failure: {
+                Image(systemName: "person.crop.circle")
+                    .foregroundStyle(ForumColors.secondaryText)
             }
             .frame(width: 38, height: 38)
             .clipShape(Circle())

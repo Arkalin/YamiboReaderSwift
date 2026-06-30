@@ -38,7 +38,7 @@ struct MangaReaderTestsImageDataLoader {
         _ = try await loader.imageData(for: URL(string: "https://img.example.com/a.jpg")!, refererURL: nil)
     }
 
-    @Test func deduplicatesConcurrentRequestsByImageURL() async throws {
+    @Test func deduplicatesConcurrentSameImageRequests() async throws {
         let harness = MangaReaderDataTestHarness()
         defer { harness.reset() }
 
@@ -51,8 +51,9 @@ struct MangaReaderTestsImageDataLoader {
 
         let loader = YamiboMangaImageDataLoader(client: imageClient(session: harness.session))
         let imageURL = URL(string: "https://img.example.com/shared.jpg")!
-        async let first = loader.imageData(for: imageURL, refererURL: URL(string: "https://bbs.yamibo.com/forum.php?tid=1")!)
-        async let second = loader.imageData(for: imageURL, refererURL: URL(string: "https://bbs.yamibo.com/forum.php?tid=2")!)
+        let refererURL = URL(string: "https://bbs.yamibo.com/forum.php?tid=1")!
+        async let first = loader.imageData(for: imageURL, refererURL: refererURL)
+        async let second = loader.imageData(for: imageURL, refererURL: refererURL)
 
         let values = try await [first, second]
 

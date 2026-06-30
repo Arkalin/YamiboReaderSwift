@@ -295,15 +295,16 @@ private struct MessageCenterAvatarView: View {
     let systemImage: String
 
     var body: some View {
-        AsyncImage(url: url) { phase in
-            switch phase {
-            case let .success(image):
-                image.resizable().scaledToFill()
-            default:
-                Image(systemName: systemImage)
-                    .font(.title3)
-                    .foregroundStyle(ForumColors.secondaryText)
-            }
+        YamiboRemoteImage(url: url) { image in
+            image.resizable().scaledToFill()
+        } placeholder: {
+            Image(systemName: systemImage)
+                .font(.title3)
+                .foregroundStyle(ForumColors.secondaryText)
+        } failure: {
+            Image(systemName: systemImage)
+                .font(.title3)
+                .foregroundStyle(ForumColors.secondaryText)
         }
         .frame(width: 42, height: 42)
         .clipShape(Circle())

@@ -14,58 +14,56 @@ final class MangaImagePipeline {
 
     private let dataLoader: any MangaImageDataLoading
     private let offlineCacheContext: (MangaReaderPageProjection) -> MangaImageOfflineCacheContext?
-    private let cache = NSCache<NSString, UIImage>()
-    private var inFlightContinuations: [String: [CheckedContinuation<UIImage, Error>]] = [:]
-    private var prefetchingKeys = Set<String>()
+    private let imagePipeline: YamiboImagePipeline
+    private let cacheNamespace: YamiboImageCacheNamespace
 
     init(
         dataLoader: any MangaImageDataLoading,
         offlineCacheContext: @escaping (MangaReaderPageProjection) -> MangaImageOfflineCacheContext? = { _ in nil },
+        imagePipeline: YamiboImagePipeline = .shared,
+        cacheNamespace: YamiboImageCacheNamespace = YamiboImageCacheNamespace(value: "manga"),
         memoryLimitBytes: Int = defaultMemoryLimitBytes
     ) {
         self.dataLoader = dataLoader
         self.offlineCacheContext = offlineCacheContext
-        cache.totalCostLimit = memoryLimitBytes
+        self.imagePipeline = imagePipeline
+        self.cacheNamespace = cacheNamespace
+        _ = memoryLimitBytes
     }
 
     func cachedImage(for page: MangaReaderPageProjection) -> UIImage? {
-        cache.object(forKey: cacheKey(for: page) as NSString)
+        imagePipeline.cachedImage(for: imageRequest(for: page))
     }
 
     func prefetchImages(for pages: [MangaReaderPageProjection]) {
         for page in pages {
-            let key = cacheKey(for: page)
-            guard cache.object(forKey: key as NSString) == nil,
-                  inFlightContinuations[key] == nil,
-                  prefetchingKeys.insert(key).inserted else {
-                continue
-            }
-
-            Task { @MainActor in
-                defer {
-                    self.prefetchingKeys.remove(key)
-                }
-                _ = try? await self.image(for: page)
+            let imageURL = page.imageURL
+            let refererURL = page.refererURL
+            let offlineContext = offlineCacheContext(page)
+            imagePipeline.prefetchImage(for: imageRequest(for: page)) { [dataLoader] in
+                try await dataLoader.imageData(
+                    for: imageURL,
+                    refererURL: refererURL,
+                    offlineCacheContext: offlineContext
+                )
             }
         }
     }
 
     func image(for page: MangaReaderPageProjection) async throws -> UIImage {
-        let key = cacheKey(for: page)
-        if let cachedImage = cache.object(forKey: key as NSString) {
-            return cachedImage
-        }
-
-        return try await withCheckedThrowingContinuation { continuation in
-            if inFlightContinuations[key] != nil {
-                inFlightContinuations[key, default: []].append(continuation)
-                return
+        let imageURL = page.imageURL
+        let refererURL = page.refererURL
+        let offlineContext = offlineCacheContext(page)
+        do {
+            return try await imagePipeline.image(for: imageRequest(for: page)) { [dataLoader] in
+                try await dataLoader.imageData(
+                    for: imageURL,
+                    refererURL: refererURL,
+                    offlineCacheContext: offlineContext
+                )
             }
-
-            inFlightContinuations[key] = [continuation]
-            Task { @MainActor in
-                await self.loadImage(for: page, key: key)
-            }
+        } catch YamiboImagePipelineError.invalidImageData {
+            throw MangaImagePipelineError.invalidImageData
         }
     }
 
@@ -77,40 +75,12 @@ final class MangaImagePipeline {
         )
     }
 
-    private func loadImage(for page: MangaReaderPageProjection, key: String) async {
-        do {
-            let data = try await dataLoader.imageData(
-                for: page.imageURL,
-                refererURL: page.refererURL,
-                offlineCacheContext: offlineCacheContext(page)
-            )
-            guard let image = UIImage(data: data) else {
-                throw MangaImagePipelineError.invalidImageData
-            }
-            cache.setObject(image, forKey: key as NSString, cost: Self.cost(for: image))
-            finishLoad(for: key, result: .success(image))
-        } catch {
-            finishLoad(for: key, result: .failure(error))
-        }
-    }
-
-    private func finishLoad(for key: String, result: Result<UIImage, Error>) {
-        let continuations = inFlightContinuations.removeValue(forKey: key) ?? []
-        continuations.forEach { continuation in
-            continuation.resume(with: result)
-        }
-    }
-
-    private func cacheKey(for page: MangaReaderPageProjection) -> String {
-        page.imageURL.absoluteString
-    }
-
-    private static func cost(for image: UIImage) -> Int {
-        if let cgImage = image.cgImage {
-            return cgImage.bytesPerRow * cgImage.height
-        }
-        let scale = max(image.scale, 1)
-        return Int(image.size.width * scale * image.size.height * scale * 4)
+    private func imageRequest(for page: MangaReaderPageProjection) -> YamiboImageRequest {
+        YamiboImageRequest(
+            url: page.imageURL,
+            refererURL: page.refererURL,
+            cacheNamespace: cacheNamespace
+        )
     }
 }
 #endif

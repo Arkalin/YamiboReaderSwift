@@ -15,7 +15,7 @@ struct MangaReaderPresentationInfrastructureTests {
     @MainActor
     @Test func imagePipelineReturnsOriginalImageData() async throws {
         let loader = RecordingMangaPipelineDataLoader(outputs: [.success(Self.pngData)])
-        let pipeline = MangaImagePipeline(dataLoader: loader)
+        let pipeline = makeMangaImagePipeline(dataLoader: loader)
         let page = try makePipelinePage()
 
         let data = try await pipeline.imageData(for: page)
@@ -37,7 +37,7 @@ struct MangaReaderPresentationInfrastructureTests {
     @MainActor
     @Test func imagePipelinePropagatesOriginalImageDataFailures() async throws {
         let loader = RecordingMangaPipelineDataLoader(outputs: [.failure(MangaPipelineTestError.loaderFailure)])
-        let pipeline = MangaImagePipeline(dataLoader: loader)
+        let pipeline = makeMangaImagePipeline(dataLoader: loader)
         let page = try makePipelinePage()
 
         await #expect(throws: MangaPipelineTestError.loaderFailure) {
@@ -110,7 +110,7 @@ struct MangaReaderPresentationInfrastructureTests {
     @MainActor
     @Test func imagePipelineDeduplicatesConcurrentLoads() async throws {
         let loader = RecordingMangaPipelineDataLoader(outputs: [.success(Self.pngData)], delayNanoseconds: 50_000_000)
-        let pipeline = MangaImagePipeline(dataLoader: loader)
+        let pipeline = makeMangaImagePipeline(dataLoader: loader)
         let page = try makePipelinePage()
 
         async let first = pipeline.image(for: page)
@@ -125,7 +125,7 @@ struct MangaReaderPresentationInfrastructureTests {
     @MainActor
     @Test func imagePipelineCachesDecodedImages() async throws {
         let loader = RecordingMangaPipelineDataLoader(outputs: [.success(Self.pngData)])
-        let pipeline = MangaImagePipeline(dataLoader: loader)
+        let pipeline = makeMangaImagePipeline(dataLoader: loader)
         let page = try makePipelinePage()
 
         let first = try await pipeline.image(for: page)
@@ -141,7 +141,7 @@ struct MangaReaderPresentationInfrastructureTests {
             .success(Data([0, 1, 2])),
             .success(Self.pngData)
         ])
-        let pipeline = MangaImagePipeline(dataLoader: loader)
+        let pipeline = makeMangaImagePipeline(dataLoader: loader)
         let page = try makePipelinePage()
 
         await #expect(throws: MangaImagePipelineError.invalidImageData) {
@@ -159,7 +159,7 @@ struct MangaReaderPresentationInfrastructureTests {
             .failure(MangaPipelineTestError.loaderFailure),
             .success(Self.pngData)
         ])
-        let pipeline = MangaImagePipeline(dataLoader: loader)
+        let pipeline = makeMangaImagePipeline(dataLoader: loader)
         let page = try makePipelinePage()
 
         await #expect(throws: MangaPipelineTestError.loaderFailure) {
@@ -244,6 +244,15 @@ private actor RecordingMangaPipelineDataLoader: MangaImageDataLoading {
         let output = outputs.isEmpty ? .success(Data()) : outputs.removeFirst()
         return try output.get()
     }
+}
+
+@MainActor
+private func makeMangaImagePipeline(dataLoader: any MangaImageDataLoading) -> MangaImagePipeline {
+    MangaImagePipeline(
+        dataLoader: dataLoader,
+        imagePipeline: YamiboImagePipeline(),
+        cacheNamespace: YamiboImageCacheNamespace(value: "manga-test-\(UUID().uuidString)")
+    )
 }
 
 private func makePipelinePage() throws -> MangaReaderPageProjection {

@@ -205,14 +205,14 @@ private struct BlogReaderAuthorRow: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            AsyncImage(url: user.avatarURL) { phase in
-                switch phase {
-                case let .success(image):
-                    image.resizable().scaledToFill()
-                default:
-                    Image(systemName: "person.crop.circle")
-                        .foregroundStyle(ForumColors.secondaryText)
-                }
+            YamiboRemoteImage(url: user.avatarURL) { image in
+                image.resizable().scaledToFill()
+            } placeholder: {
+                Image(systemName: "person.crop.circle")
+                    .foregroundStyle(ForumColors.secondaryText)
+            } failure: {
+                Image(systemName: "person.crop.circle")
+                    .foregroundStyle(ForumColors.secondaryText)
             }
             .frame(width: 38, height: 38)
             .clipShape(Circle())
@@ -401,14 +401,14 @@ private struct BlogReaderCommentRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 10) {
-                AsyncImage(url: comment.author.avatarURL) { phase in
-                    switch phase {
-                    case let .success(image):
-                        image.resizable().scaledToFill()
-                    default:
-                        Image(systemName: "person.crop.circle")
-                            .foregroundStyle(ForumColors.secondaryText)
-                    }
+                YamiboRemoteImage(url: comment.author.avatarURL) { image in
+                    image.resizable().scaledToFill()
+                } placeholder: {
+                    Image(systemName: "person.crop.circle")
+                        .foregroundStyle(ForumColors.secondaryText)
+                } failure: {
+                    Image(systemName: "person.crop.circle")
+                        .foregroundStyle(ForumColors.secondaryText)
                 }
                 .frame(width: 34, height: 34)
                 .clipShape(Circle())

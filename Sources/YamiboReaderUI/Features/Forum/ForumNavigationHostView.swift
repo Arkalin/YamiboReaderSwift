@@ -5,6 +5,7 @@ public struct ForumNavigationHostView: View {
     @State private var model: ForumHomeViewModel
     @State private var path: [ForumDestination] = []
     @State private var actionErrorMessage: String?
+    @State private var imageLoadingContext: YamiboImageLoadingContext?
 
     private let appContext: YamiboAppContext
     private let appModel: YamiboAppModel
@@ -158,8 +159,19 @@ public struct ForumNavigationHostView: View {
             }
             .forumNavigationBarStyle()
         }
+        .environment(\.yamiboImageLoadingContext, imageLoadingContext)
         .task {
             await model.load()
+            await refreshImageLoadingContext()
+        }
+        .task {
+            for await notification in NotificationCenter.default.notifications(named: SessionStore.didChangeNotification) {
+                guard let changeID = notification.userInfo?[SessionStore.changeIDUserInfoKey] as? String,
+                      changeID == appContext.sessionStore.changeID else {
+                    continue
+                }
+                await refreshImageLoadingContext()
+            }
         }
         .onChange(of: appModel.forumNavigationRequest?.id) { _, _ in
             guard let request = appModel.forumNavigationRequest else { return }
@@ -193,6 +205,10 @@ public struct ForumNavigationHostView: View {
         case let .web(url):
             path.append(.web(url))
         }
+    }
+
+    private func refreshImageLoadingContext() async {
+        imageLoadingContext = await appContext.makeImagePipelineContext()
     }
 
     private func openBoard(_ board: ForumBoardSummary) {

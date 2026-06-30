@@ -443,21 +443,19 @@ private struct ForumNovelDetailHeader: View {
                 .fill(ForumColors.brownPrimary.opacity(0.12))
 
             if let coverURL = summary.coverURL {
-                AsyncImage(url: coverURL) { phase in
-                    switch phase {
-                    case let .success(image):
-                        image
-                            .resizable()
-                            .scaledToFill()
-                    case .failure:
-                        coverPlaceholder(systemImage: "book.closed")
-                    case .empty:
+                YamiboRemoteImage(
+                    url: coverURL,
+                    refererURL: summary.threadURL
+                ) { image in
+                    image
+                        .resizable()
+                        .scaledToFill()
+                } placeholder: {
                         ProgressView()
                             .controlSize(.small)
                             .tint(ForumColors.brownPrimary)
-                    @unknown default:
-                        coverPlaceholder(systemImage: "book.closed")
-                    }
+                } failure: {
+                    coverPlaceholder(systemImage: "book.closed")
                 }
             } else {
                 coverPlaceholder(systemImage: "book.closed")

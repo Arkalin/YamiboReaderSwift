@@ -280,12 +280,15 @@ final class ReaderImageLoader: ObservableObject {
     }
 
     func loadIfNeeded() async {
-        let requestIdentity = ReaderInlineImageRequestIdentity(
+        let url = self.url
+        let refererURL = self.refererURL
+        let imageDataLoader = self.imageDataLoader
+        let request = YamiboImageRequest(
             url: url,
             refererURL: refererURL,
-            cacheNamespace: imageCacheNamespace
+            cacheNamespace: imageCacheNamespace.yamiboImageCacheNamespace
         )
-        if let cachedImage = ReaderInlineImageMemoryCache.image(for: requestIdentity) {
+        if let cachedImage = YamiboImagePipeline.shared.cachedImage(for: request) {
             image = cachedImage
             didFail = false
             return
@@ -296,12 +299,9 @@ final class ReaderImageLoader: ObservableObject {
         defer { isLoading = false }
 
         do {
-            let data = try await imageDataLoader.imageData(for: url, refererURL: refererURL)
-            guard let image = UIImage(data: data) else {
-                didFail = true
-                return
+            let image = try await YamiboImagePipeline.shared.image(for: request) {
+                try await imageDataLoader.imageData(for: url, refererURL: refererURL)
             }
-            ReaderInlineImageMemoryCache.store(image, for: requestIdentity)
             self.image = image
             didFail = false
         } catch {
@@ -367,64 +367,4 @@ private struct AuthenticatedReaderImage: View {
     }
 }
 
-struct ReaderInlineImageRequestIdentity: Hashable {
-    let url: URL
-    let refererURL: URL
-    let cacheNamespace: NovelInlineImageCacheNamespace
-
-    init(
-        url: URL,
-        refererURL: URL,
-        cacheNamespace: NovelInlineImageCacheNamespace
-    ) {
-        self.url = url
-        self.refererURL = refererURL
-        self.cacheNamespace = cacheNamespace
-    }
-
-    var cacheKey: String {
-        [
-            url.absoluteString,
-            refererURL.absoluteString,
-            cacheNamespace.value
-        ].joined(separator: "\u{1F}")
-    }
-}
-
-struct ReaderInlineImageMemoryCache {
-    static let defaultMemoryLimitBytes = 80 * 1024 * 1024
-
-    private static let storage = ReaderInlineImageMemoryCacheStorage(memoryLimitBytes: defaultMemoryLimitBytes)
-
-    private init() {}
-
-    static func image(for requestIdentity: ReaderInlineImageRequestIdentity) -> UIImage? {
-        storage.cache.object(forKey: requestIdentity.cacheKey as NSString)
-    }
-
-    static func store(_ image: UIImage, for requestIdentity: ReaderInlineImageRequestIdentity) {
-        storage.cache.setObject(
-            image,
-            forKey: requestIdentity.cacheKey as NSString,
-            cost: cost(for: image)
-        )
-    }
-
-    private static func cost(for image: UIImage) -> Int {
-        if let cgImage = image.cgImage {
-            return cgImage.bytesPerRow * cgImage.height
-        }
-        let scale = max(image.scale, 1)
-        return Int(image.size.width * scale * image.size.height * scale * 4)
-    }
-}
-
-private final class ReaderInlineImageMemoryCacheStorage: @unchecked Sendable {
-    let cache: NSCache<NSString, UIImage>
-
-    init(memoryLimitBytes: Int) {
-        cache = NSCache<NSString, UIImage>()
-        cache.totalCostLimit = memoryLimitBytes
-    }
-}
 #endif

@@ -310,6 +310,85 @@ import Testing
 }
 
 @MainActor
+@Test func forumNovelDetailReloadFindsOwnerCoverOnLaterThreadPage() async throws {
+    let suiteName = YamiboTestDefaults.suiteName(prefix: "novel-detail-later-cover")
+    _ = try YamiboTestDefaults.make(suiteName: suiteName)
+    let coverStore = ContentCoverStore(
+        defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+        key: "content-covers"
+    )
+    let appContext = YamiboAppContext(
+        favoriteStore: FavoriteStore(defaults: try YamiboTestDefaults.defaults(suiteName: suiteName), key: "favorites"),
+        contentCoverStore: coverStore
+    )
+    let model = try makeForumNovelDetailViewModel(
+        appContext: appContext,
+        documentLoader: FakeForumNovelDocumentLoader(),
+        threadPageLoader: FakeForumNovelThreadPageLoader(pages: [
+            1: ForumThreadPage(
+                thread: ThreadIdentity(tid: "900", canonicalURL: modelThreadURL(), fid: "49"),
+                title: "小说标题",
+                posts: [
+                    ForumThreadPost(
+                        postID: "1001",
+                        floorText: "1#",
+                        author: BlogReaderUser(uid: "42", name: "楼主名", avatarURL: nil),
+                        contentHTML: "",
+                        contentText: "首楼无图",
+                        contentBlocks: []
+                    ),
+                    ForumThreadPost(
+                        postID: "1002",
+                        floorText: "2#",
+                        author: BlogReaderUser(uid: "99", name: "读者", avatarURL: nil),
+                        contentHTML: "",
+                        contentText: "读者图",
+                        contentBlocks: [
+                            ForumThreadContentBlock(
+                                id: "reader-image",
+                                kind: .image(ForumThreadImageBlock(
+                                    url: try #require(URL(string: "https://img.example.com/reader.jpg"))
+                                ))
+                            )
+                        ]
+                    )
+                ],
+                pageNavigation: ForumPageNavigation(currentPage: 1, totalPages: 2)
+            ),
+            2: ForumThreadPage(
+                thread: ThreadIdentity(tid: "900", canonicalURL: modelThreadURL(), fid: "49"),
+                title: "小说标题",
+                posts: [
+                    ForumThreadPost(
+                        postID: "2001",
+                        floorText: "3#",
+                        author: BlogReaderUser(uid: "42", name: "楼主名", avatarURL: nil),
+                        contentHTML: "",
+                        contentText: "楼主补图",
+                        contentBlocks: [
+                            ForumThreadContentBlock(
+                                id: "owner-image",
+                                kind: .image(ForumThreadImageBlock(
+                                    url: try #require(URL(string: "https://img.example.com/owner-later.jpg"))
+                                ))
+                            )
+                        ]
+                    )
+                ],
+                pageNavigation: ForumPageNavigation(currentPage: 2, totalPages: 2)
+            )
+        ])
+    )
+
+    await model.reload()
+
+    let key = ContentCoverKey(targetType: .threadNovel, targetID: "900")
+    let cover = await coverStore.cover(for: key)
+    #expect(cover?.resolvedURL?.absoluteString == "https://img.example.com/owner-later.jpg")
+    #expect(model.headerSummary.coverURL?.absoluteString == "https://img.example.com/owner-later.jpg")
+}
+
+@MainActor
 @Test func forumNovelDetailGroupsChapterDirectoryByThreadPage() throws {
     let model = try makeForumNovelDetailViewModel()
     let firstPage = ForumThreadPage(
@@ -556,8 +635,12 @@ import Testing
 }
 
 @MainActor
-private func makeForumNovelDetailViewModel(appContext: YamiboAppContext? = nil) throws -> ForumNovelDetailViewModel {
-    let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=900&mobile=2"))
+private func makeForumNovelDetailViewModel(
+    appContext: YamiboAppContext? = nil,
+    documentLoader: (any ForumNovelDocumentLoading)? = nil,
+    threadPageLoader: (any ForumNovelThreadPageLoading)? = nil
+) throws -> ForumNovelDetailViewModel {
+    let url = try modelThreadURL()
     let resolvedAppContext: YamiboAppContext
     if let appContext {
         resolvedAppContext = appContext
@@ -572,12 +655,51 @@ private func makeForumNovelDetailViewModel(appContext: YamiboAppContext? = nil) 
             )
         )
     }
+    let novelRepositoryProvider: (@Sendable () async -> any ForumNovelDocumentLoading)? = documentLoader.map { loader in
+        { @Sendable in loader }
+    }
+    let threadRepositoryProvider: (@Sendable () async -> any ForumNovelThreadPageLoading)? = threadPageLoader.map { loader in
+        { @Sendable in loader }
+    }
     return ForumNovelDetailViewModel(
         context: NovelDetailLaunchContext(
             thread: ThreadIdentity(tid: "900", canonicalURL: url, fid: "49"),
             title: "小说标题",
             authorID: "42"
         ),
-        appContext: resolvedAppContext
+        appContext: resolvedAppContext,
+        novelRepositoryProvider: novelRepositoryProvider,
+        threadRepositoryProvider: threadRepositoryProvider
     )
+}
+
+private func modelThreadURL() throws -> URL {
+    try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=900&mobile=2"))
+}
+
+private struct FakeForumNovelDocumentLoader: ForumNovelDocumentLoading {
+    func loadPage(_ request: ReaderPageRequest) async throws -> ReaderPageDocument {
+        ReaderPageDocument(
+            threadURL: request.threadURL,
+            view: request.view,
+            maxView: 1,
+            resolvedAuthorID: request.authorID,
+            contentSource: request.authorID == nil ? .fallbackUnfilteredPage : .authorFilteredPage,
+            segments: [
+                .text("第一章\n正文", chapterTitle: "第一章")
+            ]
+        )
+    }
+}
+
+private final class FakeForumNovelThreadPageLoader: ForumNovelThreadPageLoading, @unchecked Sendable {
+    private let pages: [Int: ForumThreadPage]
+
+    init(pages: [Int: ForumThreadPage]) {
+        self.pages = pages
+    }
+
+    func fetchNovelThreadPage(context _: NovelDetailLaunchContext, page: Int) async throws -> ForumThreadPage {
+        try #require(pages[page])
+    }
 }
