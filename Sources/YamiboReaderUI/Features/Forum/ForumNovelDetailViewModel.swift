@@ -73,6 +73,7 @@ final class ForumNovelDetailViewModel {
     @ObservationIgnored private let appContext: YamiboAppContext
     // Detail-scoped page cache mirroring Android's pagePostsCache; reload owns invalidation.
     @ObservationIgnored private var loadedThreadPages: [Int: ForumThreadPage] = [:]
+    @ObservationIgnored private var resolvedAuthorID: String?
     @ObservationIgnored private var loadingChapterPages: Set<Int> = []
     @ObservationIgnored private var chapterPageErrors: [Int: String] = [:]
     @ObservationIgnored private var totalChapterPages = 1
@@ -136,10 +137,11 @@ final class ForumNovelDetailViewModel {
 
     var headerSummary: ForumNovelDetailHeaderSummary {
         let firstPost = threadPage?.posts.first
+        let previewPost = loadedThreadPages[1]?.posts.first
         return ForumNovelDetailHeaderSummary(
             title: displayTitle(threadPage?.title ?? context.title),
             threadURL: context.thread.canonicalURL,
-            authorID: Self.trimmedNonEmpty(firstPost?.author.uid) ?? context.authorID,
+            authorID: resolvedAuthorID ?? Self.trimmedNonEmpty(firstPost?.author.uid) ?? context.authorID,
             authorName: Self.trimmedNonEmpty(firstPost?.author.name),
             postedAtText: firstPost?.postedAtText,
             lastUpdatedText: Self.lastUpdatedText(
@@ -151,7 +153,7 @@ final class ForumNovelDetailViewModel {
             totalReplies: threadPage?.totalReplies,
             coverURL: resolvedHeaderCoverURL,
             chapterCount: chapters.count,
-            firstFloorPreviewText: Self.firstFloorPreviewText(from: firstPost),
+            firstFloorPreviewText: Self.firstFloorPreviewText(from: previewPost),
             readingProgressText: Self.readingProgressText(from: readingProgress, favorite: favorite),
             isFavorited: favorite != nil
         )
@@ -181,15 +183,23 @@ final class ForumNovelDetailViewModel {
             contentCover = await loadContentCover()
             favoriteErrorMessage = nil
             let threadRepository = await threadRepositoryProvider()
-            let loadedThreadPage = if let cached = await threadRepository.cachedNovelThreadPage(context: context, page: 1) {
+            let headerPage = if let cached = await threadRepository.cachedNovelThreadPage(context: context, page: 1) {
                 cached
             } else {
                 try await threadRepository.fetchNovelThreadPage(context: context, page: 1)
             }
-            threadPage = loadedThreadPage
-            loadedThreadPages = [1: loadedThreadPage]
-            await refreshContentCover(from: loadedThreadPage)
-            totalChapterPages = Self.totalPages(from: loadedThreadPage, fallback: 1)
+            let authorID = try Self.resolveAuthorID(context: context, page: headerPage)
+            resolvedAuthorID = authorID
+            let contentContext = authorScopedContext(authorID: authorID)
+            let contentPage = if let cached = await threadRepository.cachedNovelThreadPage(context: contentContext, page: 1) {
+                cached
+            } else {
+                try await threadRepository.fetchNovelThreadPage(context: contentContext, page: 1)
+            }
+            threadPage = headerPage
+            loadedThreadPages = [1: contentPage]
+            await refreshContentCover(from: headerPage)
+            totalChapterPages = Self.totalPages(from: contentPage, fallback: 1)
             chapterPageErrors = [:]
             loadingChapterPages = []
             expandedChapterPages = [1]
@@ -203,6 +213,7 @@ final class ForumNovelDetailViewModel {
             readingProgress = await appContext.readingProgressStore.load(for: context.thread.canonicalURL)
             contentCover = await loadContentCover()
             loadedThreadPages = [:]
+            resolvedAuthorID = nil
             chapterPageErrors = [:]
             loadingChapterPages = []
             errorMessage = error.localizedDescription
@@ -213,7 +224,7 @@ final class ForumNovelDetailViewModel {
         let request = ReaderPageRequest(
             threadURL: context.thread.canonicalURL,
             view: 1,
-            authorID: context.authorID
+            authorID: resolvedAuthorID ?? context.authorID
         )
         let provider = novelRepositoryProvider
         documentPreloadTask = Task { [weak self] in
@@ -236,7 +247,7 @@ final class ForumNovelDetailViewModel {
             threadTitle: context.title,
             source: .forum,
             initialView: chapter?.view ?? 1,
-            authorID: chapter?.resumePoint?.authorID ?? context.authorID,
+            authorID: chapter?.resumePoint?.authorID ?? resolvedAuthorID ?? context.authorID,
             initialResumePoint: chapter?.resumePoint,
             threadCoverURL: resolvedHeaderCoverURL
         )
@@ -251,7 +262,7 @@ final class ForumNovelDetailViewModel {
             threadTitle: favorite?.resolvedDisplayTitle ?? context.title,
             source: hasProgress ? .resume : .forum,
             initialView: resumePoint?.view ?? novelProgress?.lastView ?? favorite?.lastView ?? 1,
-            authorID: resumePoint?.authorID ?? novelProgress?.authorID ?? favorite?.authorID ?? context.authorID,
+            authorID: resumePoint?.authorID ?? novelProgress?.authorID ?? favorite?.authorID ?? resolvedAuthorID ?? context.authorID,
             initialResumePoint: resumePoint,
             threadCoverURL: resolvedHeaderCoverURL
         )
@@ -288,10 +299,13 @@ final class ForumNovelDetailViewModel {
 
         do {
             let repository = await threadRepositoryProvider()
-            let loaded = if let cached = await repository.cachedNovelThreadPage(context: context, page: normalizedPage) {
+            let authorID = try Self.resolveAuthorID(context: context, page: threadPage)
+            resolvedAuthorID = authorID
+            let contentContext = authorScopedContext(authorID: authorID)
+            let loaded = if let cached = await repository.cachedNovelThreadPage(context: contentContext, page: normalizedPage) {
                 cached
             } else {
-                try await repository.fetchNovelThreadPage(context: context, page: normalizedPage)
+                try await repository.fetchNovelThreadPage(context: contentContext, page: normalizedPage)
             }
             loadedThreadPages[normalizedPage] = loaded
             totalChapterPages = max(totalChapterPages, Self.totalPages(from: loaded, fallback: normalizedPage))
@@ -323,7 +337,7 @@ final class ForumNovelDetailViewModel {
                 threadURL: url,
                 title: favoriteTitle,
                 type: .novel,
-                authorID: context.authorID,
+                authorID: resolvedAuthorID ?? context.authorID,
                 formHash: threadPage?.formHash,
                 favoriteStore: favoriteStore,
                 remoteRepository: await appContext.makeFavoriteRepository()
@@ -513,9 +527,27 @@ final class ForumNovelDetailViewModel {
         displayTitle(threadPage?.title ?? context.title)
     }
 
+    private func authorScopedContext(authorID: String) -> NovelDetailLaunchContext {
+        NovelDetailLaunchContext(
+            thread: context.thread,
+            title: context.title,
+            authorID: authorID
+        )
+    }
+
     private func displayTitle(_ value: String?) -> String {
         ForumThreadTitleSanitizer.sanitize(value)
             ?? context.thread.canonicalURL.absoluteString
+    }
+
+    private static func resolveAuthorID(context: NovelDetailLaunchContext, page: ForumThreadPage?) throws -> String {
+        if let authorID = trimmedNonEmpty(context.authorID) {
+            return authorID
+        }
+        if let authorID = trimmedNonEmpty(page?.posts.first?.author.uid) {
+            return authorID
+        }
+        throw YamiboError.parsingFailed(context: "小说作者范围")
     }
 
     private static func firstFloorPreviewText(from post: ForumThreadPost?) -> String? {

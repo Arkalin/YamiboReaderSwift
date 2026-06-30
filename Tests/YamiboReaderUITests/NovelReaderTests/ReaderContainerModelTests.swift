@@ -1206,16 +1206,25 @@ final class ReaderContainerModelTests: XCTestCase {
             baseDirectory: FileManager.default.temporaryDirectory
                 .appendingPathComponent(UUID().uuidString, isDirectory: true)
         )
+        let forumCacheStore = ForumCacheStore(
+            baseDirectory: FileManager.default.temporaryDirectory
+                .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        )
         let initialSettings = ReaderAppearanceSettings(fontScale: 1.0, readingMode: .paged)
         let document = makeDocument(view: 1, maxView: 1, chapterTitles: ["第一章", "第二章"])
         try await settingsStore.save(AppSettings(reader: initialSettings))
-        try await cacheStore.save(document)
+        try await seedReaderSourceCaches(
+            documents: [document],
+            readerCacheStore: cacheStore,
+            forumCacheStore: forumCacheStore
+        )
 
         let appContext = YamiboAppContext(
             sessionStore: try SessionStore(testSuiteName: defaultsSuiteName, key: "session"),
             settingsStore: settingsStore,
             favoriteStore: try FavoriteStore(testSuiteName: defaultsSuiteName, key: "favorites"),
-            readerCacheStore: cacheStore
+            readerCacheStore: cacheStore,
+            forumCacheStore: forumCacheStore
         )
         let model = await MainActor.run {
             ReaderContainerModel(
@@ -1256,15 +1265,24 @@ final class ReaderContainerModelTests: XCTestCase {
             baseDirectory: FileManager.default.temporaryDirectory
                 .appendingPathComponent(UUID().uuidString, isDirectory: true)
         )
+        let forumCacheStore = ForumCacheStore(
+            baseDirectory: FileManager.default.temporaryDirectory
+                .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        )
         let initialSettings = ReaderAppearanceSettings(backgroundStyle: .system, readingMode: .paged)
         let document = makeDocument(view: 1, maxView: 1, chapterTitles: ["第一章", "第二章"])
         try await settingsStore.save(AppSettings(reader: initialSettings))
-        try await cacheStore.save(document)
+        try await seedReaderSourceCaches(
+            documents: [document],
+            readerCacheStore: cacheStore,
+            forumCacheStore: forumCacheStore
+        )
         let appContext = YamiboAppContext(
             sessionStore: try SessionStore(testSuiteName: defaultsSuiteName, key: "session"),
             settingsStore: settingsStore,
             favoriteStore: try FavoriteStore(testSuiteName: defaultsSuiteName, key: "favorites"),
-            readerCacheStore: cacheStore
+            readerCacheStore: cacheStore,
+            forumCacheStore: forumCacheStore
         )
         let model = await MainActor.run {
             ReaderContainerModel(
@@ -1302,6 +1320,10 @@ final class ReaderContainerModelTests: XCTestCase {
             baseDirectory: FileManager.default.temporaryDirectory
                 .appendingPathComponent(UUID().uuidString, isDirectory: true)
         )
+        let forumCacheStore = ForumCacheStore(
+            baseDirectory: FileManager.default.temporaryDirectory
+                .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        )
         let document = makeDocument(view: 1, maxView: 1, chapterTitles: ["第一章", "第二章"])
         let initialMangaSettings = MangaReaderSettings(
             readingMode: .paged,
@@ -1317,13 +1339,18 @@ final class ReaderContainerModelTests: XCTestCase {
                 manga: initialMangaSettings
             )
         )
-        try await cacheStore.save(document)
+        try await seedReaderSourceCaches(
+            documents: [document],
+            readerCacheStore: cacheStore,
+            forumCacheStore: forumCacheStore
+        )
 
         let appContext = YamiboAppContext(
             sessionStore: try SessionStore(testSuiteName: defaultsSuiteName, key: "session"),
             settingsStore: settingsStore,
             favoriteStore: try FavoriteStore(testSuiteName: defaultsSuiteName, key: "favorites"),
-            readerCacheStore: cacheStore
+            readerCacheStore: cacheStore,
+            forumCacheStore: forumCacheStore
         )
         let model = await MainActor.run {
             ReaderContainerModel(
@@ -1534,6 +1561,9 @@ final class ReaderContainerModelTests: XCTestCase {
         let cacheStore = ReaderCacheStore(
             baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         )
+        let forumCacheStore = ForumCacheStore(
+            baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        )
         let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9013&mobile=2")!
         let document = ReaderPageDocument(
             threadURL: threadURL,
@@ -1549,7 +1579,11 @@ final class ReaderContainerModelTests: XCTestCase {
         )
 
         try await settingsStore.save(AppSettings(reader: ReaderAppearanceSettings(readingMode: .vertical)))
-        try await cacheStore.save(document)
+        try await seedReaderSourceCaches(
+            documents: [document],
+            readerCacheStore: cacheStore,
+            forumCacheStore: forumCacheStore
+        )
         try await favoriteStore.saveFavorites([
             Favorite(title: "测试线程", url: threadURL, authorID: "author-1", type: .novel)
         ])
@@ -1563,7 +1597,8 @@ final class ReaderContainerModelTests: XCTestCase {
             settingsStore: settingsStore,
             favoriteStore: favoriteStore,
             readingProgressStore: readingProgressStore,
-            readerCacheStore: cacheStore
+            readerCacheStore: cacheStore,
+            forumCacheStore: forumCacheStore
         )
         let model = await MainActor.run {
             ReaderContainerModel(
@@ -1625,10 +1660,17 @@ final class ReaderContainerModelTests: XCTestCase {
         let cacheStore = ReaderCacheStore(
             baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         )
+        let forumCacheStore = ForumCacheStore(
+            baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        )
         let document = makeDocument(view: 1, maxView: 1, chapterTitles: ["第一章", "第二章", "第三章"])
 
         try await settingsStore.save(AppSettings(reader: ReaderAppearanceSettings(readingMode: .paged)))
-        try await cacheStore.save(document)
+        try await seedReaderSourceCaches(
+            documents: [document],
+            readerCacheStore: cacheStore,
+            forumCacheStore: forumCacheStore
+        )
         let readingProgressStore = try makeReadingProgressStore(
             defaultsSuiteName: defaultsSuiteName,
             favoriteStore: favoriteStore
@@ -1639,7 +1681,8 @@ final class ReaderContainerModelTests: XCTestCase {
             settingsStore: settingsStore,
             favoriteStore: favoriteStore,
             readingProgressStore: readingProgressStore,
-            readerCacheStore: cacheStore
+            readerCacheStore: cacheStore,
+            forumCacheStore: forumCacheStore
         )
         let model = await MainActor.run {
             ReaderContainerModel(
@@ -1674,10 +1717,17 @@ final class ReaderContainerModelTests: XCTestCase {
         let cacheStore = ReaderCacheStore(
             baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         )
+        let forumCacheStore = ForumCacheStore(
+            baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        )
         let document = makeDocument(view: 1, maxView: 1, chapterTitles: ["第一章", "第二章", "第三章"])
 
         try await settingsStore.save(AppSettings(reader: ReaderAppearanceSettings(readingMode: .paged)))
-        try await cacheStore.save(document)
+        try await seedReaderSourceCaches(
+            documents: [document],
+            readerCacheStore: cacheStore,
+            forumCacheStore: forumCacheStore
+        )
         let readingProgressStore = try makeReadingProgressStore(
             defaultsSuiteName: defaultsSuiteName,
             favoriteStore: favoriteStore
@@ -1689,7 +1739,8 @@ final class ReaderContainerModelTests: XCTestCase {
             readerResumeRouteStore: readerResumeRouteStore,
             favoriteStore: favoriteStore,
             readingProgressStore: readingProgressStore,
-            readerCacheStore: cacheStore
+            readerCacheStore: cacheStore,
+            forumCacheStore: forumCacheStore
         )
         let model = await MainActor.run {
             ReaderContainerModel(
@@ -1731,10 +1782,17 @@ final class ReaderContainerModelTests: XCTestCase {
         let cacheStore = ReaderCacheStore(
             baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         )
+        let forumCacheStore = ForumCacheStore(
+            baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        )
         let document = makeDocument(view: 1, maxView: 1, chapterTitles: ["第一章", "第二章", "第三章"])
 
         try await settingsStore.save(AppSettings(reader: ReaderAppearanceSettings(readingMode: .paged)))
-        try await cacheStore.save(document)
+        try await seedReaderSourceCaches(
+            documents: [document],
+            readerCacheStore: cacheStore,
+            forumCacheStore: forumCacheStore
+        )
         let readingProgressStore = try makeReadingProgressStore(
             defaultsSuiteName: defaultsSuiteName,
             favoriteStore: favoriteStore
@@ -1746,7 +1804,8 @@ final class ReaderContainerModelTests: XCTestCase {
             readerResumeRouteStore: readerResumeRouteStore,
             favoriteStore: favoriteStore,
             readingProgressStore: readingProgressStore,
-            readerCacheStore: cacheStore
+            readerCacheStore: cacheStore,
+            forumCacheStore: forumCacheStore
         )
         let appModel = await MainActor.run {
             YamiboAppModel(appContext: appContext)
@@ -1794,9 +1853,16 @@ final class ReaderContainerModelTests: XCTestCase {
         let cacheStore = ReaderCacheStore(
             baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         )
+        let forumCacheStore = ForumCacheStore(
+            baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        )
         let document = makeDocument(view: 1, maxView: 1, chapterTitles: ["第一章", "第二章", "第三章"])
         try await settingsStore.save(AppSettings(reader: ReaderAppearanceSettings(readingMode: .paged)))
-        try await cacheStore.save(document)
+        try await seedReaderSourceCaches(
+            documents: [document],
+            readerCacheStore: cacheStore,
+            forumCacheStore: forumCacheStore
+        )
         try await favoriteStore.saveFavorites([
             Favorite(title: "测试线程", url: document.threadURL, type: .novel)
         ])
@@ -1810,7 +1876,8 @@ final class ReaderContainerModelTests: XCTestCase {
             settingsStore: settingsStore,
             favoriteStore: favoriteStore,
             readingProgressStore: readingProgressStore,
-            readerCacheStore: cacheStore
+            readerCacheStore: cacheStore,
+            forumCacheStore: forumCacheStore
         )
         let model = await MainActor.run {
             ReaderContainerModel(
@@ -1845,6 +1912,9 @@ final class ReaderContainerModelTests: XCTestCase {
         let cacheStore = ReaderCacheStore(
             baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         )
+        let forumCacheStore = ForumCacheStore(
+            baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        )
         let document = ReaderPageDocument(
             threadURL: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=901&mobile=2")!,
             view: 1,
@@ -1856,7 +1926,11 @@ final class ReaderContainerModelTests: XCTestCase {
         )
 
         try await settingsStore.save(AppSettings(reader: ReaderAppearanceSettings(readingMode: .vertical)))
-        try await cacheStore.save(document)
+        try await seedReaderSourceCaches(
+            documents: [document],
+            readerCacheStore: cacheStore,
+            forumCacheStore: forumCacheStore
+        )
         try await favoriteStore.saveFavorites([
             Favorite(title: "测试线程", url: document.threadURL, type: .novel)
         ])
@@ -1870,7 +1944,8 @@ final class ReaderContainerModelTests: XCTestCase {
             settingsStore: settingsStore,
             favoriteStore: favoriteStore,
             readingProgressStore: readingProgressStore,
-            readerCacheStore: cacheStore
+            readerCacheStore: cacheStore,
+            forumCacheStore: forumCacheStore
         )
         let model = await MainActor.run {
             ReaderContainerModel(
@@ -1920,6 +1995,9 @@ final class ReaderContainerModelTests: XCTestCase {
         let cacheStore = ReaderCacheStore(
             baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         )
+        let forumCacheStore = ForumCacheStore(
+            baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        )
         let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=902&mobile=2")!
         let document = ReaderPageDocument(
             threadURL: threadURL,
@@ -1956,7 +2034,11 @@ final class ReaderContainerModelTests: XCTestCase {
         )
 
         try await settingsStore.save(AppSettings(reader: ReaderAppearanceSettings(readingMode: .vertical)))
-        try await cacheStore.save(document)
+        try await seedReaderSourceCaches(
+            documents: [document],
+            readerCacheStore: cacheStore,
+            forumCacheStore: forumCacheStore
+        )
         try await favoriteStore.saveFavorites([
             Favorite(
                 title: "测试线程",
@@ -1973,7 +2055,8 @@ final class ReaderContainerModelTests: XCTestCase {
             sessionStore: try SessionStore(testSuiteName: defaultsSuiteName, key: "session"),
             settingsStore: settingsStore,
             favoriteStore: favoriteStore,
-            readerCacheStore: cacheStore
+            readerCacheStore: cacheStore,
+            forumCacheStore: forumCacheStore
         )
         let model = await MainActor.run {
             ReaderContainerModel(
@@ -2005,6 +2088,9 @@ final class ReaderContainerModelTests: XCTestCase {
         let cacheStore = ReaderCacheStore(
             baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         )
+        let forumCacheStore = ForumCacheStore(
+            baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        )
         let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=905&mobile=2")!
         let document = ReaderPageDocument(
             threadURL: threadURL,
@@ -2017,7 +2103,11 @@ final class ReaderContainerModelTests: XCTestCase {
         )
 
         try await settingsStore.save(AppSettings(reader: ReaderAppearanceSettings(readingMode: .vertical)))
-        try await cacheStore.save(document)
+        try await seedReaderSourceCaches(
+            documents: [document],
+            readerCacheStore: cacheStore,
+            forumCacheStore: forumCacheStore
+        )
         try await favoriteStore.saveFavorites([
             Favorite(title: "测试线程", url: threadURL, type: .novel)
         ])
@@ -2026,7 +2116,8 @@ final class ReaderContainerModelTests: XCTestCase {
             sessionStore: try SessionStore(testSuiteName: defaultsSuiteName, key: "session"),
             settingsStore: settingsStore,
             favoriteStore: favoriteStore,
-            readerCacheStore: cacheStore
+            readerCacheStore: cacheStore,
+            forumCacheStore: forumCacheStore
         )
         let launchContext = ReaderLaunchContext(
             threadURL: threadURL,
@@ -2081,6 +2172,9 @@ final class ReaderContainerModelTests: XCTestCase {
         let cacheStore = ReaderCacheStore(
             baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         )
+        let forumCacheStore = ForumCacheStore(
+            baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        )
         let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=904&mobile=2")!
         let document = ReaderPageDocument(
             threadURL: threadURL,
@@ -2116,7 +2210,11 @@ final class ReaderContainerModelTests: XCTestCase {
         )
 
         try await settingsStore.save(AppSettings(reader: ReaderAppearanceSettings(readingMode: .vertical)))
-        try await cacheStore.save(document)
+        try await seedReaderSourceCaches(
+            documents: [document],
+            readerCacheStore: cacheStore,
+            forumCacheStore: forumCacheStore
+        )
         try await favoriteStore.saveFavorites([
             Favorite(
                 title: "测试线程",
@@ -2133,7 +2231,8 @@ final class ReaderContainerModelTests: XCTestCase {
             sessionStore: try SessionStore(testSuiteName: defaultsSuiteName, key: "session"),
             settingsStore: settingsStore,
             favoriteStore: favoriteStore,
-            readerCacheStore: cacheStore
+            readerCacheStore: cacheStore,
+            forumCacheStore: forumCacheStore
         )
         let model = await MainActor.run {
             ReaderContainerModel(
@@ -2163,6 +2262,9 @@ final class ReaderContainerModelTests: XCTestCase {
         let settingsStore = try SettingsStore(testSuiteName: defaultsSuiteName, key: "settings")
         let favoriteStore = try FavoriteStore(testSuiteName: defaultsSuiteName, key: "favorites")
         let cacheStore = ReaderCacheStore(
+            baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        )
+        let forumCacheStore = ForumCacheStore(
             baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         )
         let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=909&mobile=2")!
@@ -2196,7 +2298,11 @@ final class ReaderContainerModelTests: XCTestCase {
         )
 
         try await settingsStore.save(AppSettings(reader: ReaderAppearanceSettings(readingMode: .paged)))
-        try await cacheStore.save(document)
+        try await seedReaderSourceCaches(
+            documents: [document],
+            readerCacheStore: cacheStore,
+            forumCacheStore: forumCacheStore
+        )
         try await favoriteStore.saveFavorites([
             Favorite(
                 title: "测试线程",
@@ -2213,7 +2319,8 @@ final class ReaderContainerModelTests: XCTestCase {
             sessionStore: try SessionStore(testSuiteName: defaultsSuiteName, key: "session"),
             settingsStore: settingsStore,
             favoriteStore: favoriteStore,
-            readerCacheStore: cacheStore
+            readerCacheStore: cacheStore,
+            forumCacheStore: forumCacheStore
         )
         let model = await MainActor.run {
             ReaderContainerModel(
@@ -2301,15 +2408,23 @@ final class ReaderContainerModelTests: XCTestCase {
         let cacheStore = ReaderCacheStore(
             baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         )
+        let forumCacheStore = ForumCacheStore(
+            baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        )
 
         try await settingsStore.save(AppSettings(reader: ReaderAppearanceSettings(readingMode: .paged)))
-        try await cacheStore.save(document)
+        try await seedReaderSourceCaches(
+            documents: [document],
+            readerCacheStore: cacheStore,
+            forumCacheStore: forumCacheStore
+        )
 
         let appContext = YamiboAppContext(
             sessionStore: try SessionStore(testSuiteName: defaultsSuiteName, key: "session"),
             settingsStore: settingsStore,
             favoriteStore: favoriteStore,
-            readerCacheStore: cacheStore
+            readerCacheStore: cacheStore,
+            forumCacheStore: forumCacheStore
         )
         let model = await MainActor.run {
             ReaderContainerModel(
@@ -2552,15 +2667,20 @@ final class ReaderContainerModelTests: XCTestCase {
 
         let cacheDirectory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
-        let cacheStore = ReaderCacheStore(baseDirectory: cacheDirectory)
+        let cacheStore = ReaderCacheStore(baseDirectory: cacheDirectory.appendingPathComponent("reader", isDirectory: true))
+        let forumCacheStore = ForumCacheStore(baseDirectory: cacheDirectory.appendingPathComponent("forum", isDirectory: true))
         try await cacheStore.save(unfilteredDocument)
-        try await cacheStore.save(authorFilteredDocument)
+        try await seedReaderSourceCaches(
+            documents: [authorFilteredDocument],
+            readerCacheStore: cacheStore,
+            forumCacheStore: forumCacheStore
+        )
 
         ReaderTestURLProtocol.handler = { request in
             let absolute = request.url?.absoluteString ?? ""
             let body = absolute.contains("authorid=42")
-                ? "<html><body><div class=\"message\">只看楼主新缓存</div></body></html>"
-                : "<html><body><div class=\"message\">全部回复新缓存</div></body></html>"
+                ? #"<html><body><div class="plc cl" id="pid4201"><ul class="authi"><li class="mtit"><a href="home.php?mod=space&amp;uid=42&amp;mobile=2">楼主</a></li></ul><div class="message">只看楼主新缓存</div></div></body></html>"#
+                : #"<html><body><div class="plc cl" id="pid7701"><ul class="authi"><li class="mtit"><a href="home.php?mod=space&amp;uid=77&amp;mobile=2">读者</a></li></ul><div class="message">全部回复新缓存</div></div></body></html>"#
             return (
                 Data(body.utf8),
                 HTTPURLResponse(
@@ -2578,6 +2698,7 @@ final class ReaderContainerModelTests: XCTestCase {
             settingsStore: try SettingsStore(testSuiteName: defaultsSuiteName, key: "settings"),
             favoriteStore: try FavoriteStore(testSuiteName: defaultsSuiteName, key: "favorites"),
             readerCacheStore: cacheStore,
+            forumCacheStore: forumCacheStore,
             session: session
         )
         let model = await MainActor.run {
@@ -2859,7 +2980,7 @@ final class ReaderContainerModelTests: XCTestCase {
         ReaderTestURLProtocol.handler = { request in
             let absolute = request.url?.absoluteString ?? ""
             let page = absolute.contains("page=3") ? "3" : "2"
-            let body = "<html><body><div class=\"message\">缓存页\(page)</div></body></html>"
+            let body = #"<html><body><div class="plc cl" id="pid70\#(page)"><ul class="authi"><li class="mtit"><a href="home.php?mod=space&amp;uid=42&amp;mobile=2">楼主</a></li></ul><div class="message">缓存页\#(page)</div></div></body></html>"#
             return (
                 Data(body.utf8),
                 HTTPURLResponse(
@@ -2971,11 +3092,9 @@ final class ReaderContainerModelTests: XCTestCase {
             maxView: 2,
             chapterTitles: ["保留缓存"]
         )
-        try await cacheStore.save(original)
-        try await cacheStore.save(sibling)
 
         ReaderTestURLProtocol.handler = { request in
-            let body = "<html><body><div class=\"message\">新缓存</div></body></html>"
+            let body = #"<html><body><div class="plc cl" id="pid700301"><ul class="authi"><li class="mtit"><a href="home.php?mod=space&amp;uid=42&amp;mobile=2">楼主</a></li></ul><div class="message">新缓存</div></div></body></html>"#
             return (
                 Data(body.utf8),
                 HTTPURLResponse(
@@ -3002,12 +3121,12 @@ final class ReaderContainerModelTests: XCTestCase {
         }
 
         let updated = await cacheStore.loadDocument(
-            for: ReaderPageRequest(threadURL: threadURL, view: 1),
-            contentSource: .fallbackUnfilteredPage
+            for: ReaderPageRequest(threadURL: threadURL, view: 1, authorID: "42"),
+            contentSource: .authorFilteredPage
         )
         let preserved = await cacheStore.loadDocument(
-            for: ReaderPageRequest(threadURL: threadURL, view: 2),
-            contentSource: .fallbackUnfilteredPage
+            for: ReaderPageRequest(threadURL: threadURL, view: 2, authorID: "42"),
+            contentSource: .authorFilteredPage
         )
 
         let updatedText = updated?.segments.compactMap { segment -> String? in
@@ -3043,12 +3162,16 @@ private func makeModel(
     )
     let cacheDirectory = FileManager.default.temporaryDirectory
         .appendingPathComponent(UUID().uuidString, isDirectory: true)
-    let resolvedCacheStore = cacheStore ?? ReaderCacheStore(baseDirectory: cacheDirectory)
+    let resolvedCacheStore = cacheStore
+        ?? ReaderCacheStore(baseDirectory: cacheDirectory.appendingPathComponent("reader", isDirectory: true))
+    let forumCacheStore = ForumCacheStore(baseDirectory: cacheDirectory.appendingPathComponent("forum", isDirectory: true))
 
     try await settingsStore.save(AppSettings(reader: settings))
-    for document in documents {
-        try await resolvedCacheStore.save(document)
-    }
+    try await seedReaderSourceCaches(
+        documents: documents,
+        readerCacheStore: resolvedCacheStore,
+        forumCacheStore: forumCacheStore
+    )
 
     let appContext = YamiboAppContext(
         sessionStore: sessionStore,
@@ -3056,6 +3179,7 @@ private func makeModel(
         favoriteStore: favoriteStore,
         readingProgressStore: readingProgressStore,
         readerCacheStore: resolvedCacheStore,
+        forumCacheStore: forumCacheStore,
         session: session
     )
     let model = await MainActor.run {
@@ -3072,6 +3196,121 @@ private func makeModel(
 
     await model.prepare(layout: ReaderContainerLayout(width: 320, height: 568))
     return model
+}
+
+private func seedReaderSourceCaches(
+    documents: [ReaderPageDocument],
+    readerCacheStore: ReaderCacheStore,
+    forumCacheStore: ForumCacheStore
+) async throws {
+    var didSaveDiscoveryPage: Set<String> = []
+    for document in documents {
+        let thread = try makeThreadIdentity(from: document.threadURL)
+        let trimmedAuthorID = document.resolvedAuthorID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let authorID = trimmedAuthorID.isEmpty ? "42" : trimmedAuthorID
+        let sourcePage = makeThreadPageSource(from: document, thread: thread, authorID: authorID)
+        try await forumCacheStore.saveThreadPage(
+            sourcePage,
+            thread: thread,
+            pageNumber: document.view,
+            authorID: authorID
+        )
+        if didSaveDiscoveryPage.insert(thread.tid).inserted {
+            try await forumCacheStore.saveThreadPage(
+                sourcePage,
+                thread: thread,
+                pageNumber: 1,
+                authorID: nil
+            )
+        }
+
+        var projection = document
+        projection.threadURL = thread.canonicalURL
+        projection.resolvedAuthorID = authorID
+        projection.contentSource = .authorFilteredPage
+        projection.projectionSourceFingerprint = projectionFingerprint(
+            page: sourcePage,
+            threadURL: thread.canonicalURL,
+            view: document.view,
+            authorID: authorID
+        )
+        projection.projectionSchemaVersion = 1
+        try await readerCacheStore.save(projection)
+    }
+}
+
+private func makeThreadIdentity(from threadURL: URL) throws -> ThreadIdentity {
+    let canonicalURL = ReaderCacheIdentity.canonicalThreadURL(from: threadURL)
+    let tid = try XCTUnwrap(ReaderHTMLParser.extractThreadID(from: canonicalURL))
+    return ThreadIdentity(tid: tid, canonicalURL: canonicalURL)
+}
+
+private func makeThreadPageSource(
+    from document: ReaderPageDocument,
+    thread: ThreadIdentity,
+    authorID: String
+) -> ForumThreadPage {
+    let posts = document.segments.enumerated().map { index, segment in
+        ForumThreadPost(
+            postID: document.segmentSources.indices.contains(index)
+                ? document.segmentSources[index]?.ownerPostID ?? "\(document.view)\(index)"
+                : "\(document.view)\(index)",
+            author: BlogReaderUser(uid: authorID, name: "楼主"),
+            contentHTML: projectionSourceHTML(for: segment, index: index),
+            contentText: ""
+        )
+    }
+    return ForumThreadPage(
+        thread: thread,
+        title: "测试线程",
+        posts: posts,
+        pageNavigation: ForumPageNavigation(currentPage: document.view, totalPages: document.maxView)
+    )
+}
+
+private func projectionSourceHTML(for segment: ReaderSegment, index: Int) -> String {
+    switch segment {
+    case let .text(text, chapterTitle):
+        return "<strong>\(escapeHTML(chapterTitle ?? "第\(index + 1)章"))</strong><br>\(escapeHTML(text))"
+    case let .image(url, _):
+        return #"<img src="\#(escapeHTML(url.absoluteString))" />"#
+    }
+}
+
+private func projectionFingerprint(
+    page: ForumThreadPage,
+    threadURL: URL,
+    view: Int,
+    authorID: String
+) -> String {
+    let value = [
+        threadURL.absoluteString,
+        String(max(1, view)),
+        authorID,
+        page.posts.map { post in
+            [
+                post.postID,
+                post.author.uid ?? "",
+                post.contentHTML,
+                post.images.map(\.url).joined(separator: ",")
+            ].joined(separator: "\u{1E}")
+        }.joined(separator: "\u{1D}"),
+        String(page.pageNavigation?.totalPages ?? 0)
+    ].joined(separator: "\u{1F}")
+    var hash: UInt64 = 1469598103934665603
+    for byte in value.utf8 {
+        hash ^= UInt64(byte)
+        hash &*= 1099511628211
+    }
+    return String(hash, radix: 16)
+}
+
+private func escapeHTML(_ value: String) -> String {
+    value
+        .replacingOccurrences(of: "&", with: "&amp;")
+        .replacingOccurrences(of: "\"", with: "&quot;")
+        .replacingOccurrences(of: "<", with: "&lt;")
+        .replacingOccurrences(of: ">", with: "&gt;")
 }
 
 private func makeReadingProgressStore(

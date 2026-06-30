@@ -75,6 +75,33 @@ import Testing
     #expect(await store.loadThreadPage(thread: thread, page: 1, authorID: "42")?.title == "作者第一页")
 }
 
+@Test func forumCacheStoreReportsAndDeletesCachedThreadPageViewsByAuthor() async throws {
+    let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+    let store = ForumCacheStore(baseDirectory: directory)
+    let thread = try makeCacheTestThread(tid: "905")
+
+    try await store.saveThreadPage(
+        makeCacheTestThreadPage(thread: thread, title: "作者第一页"),
+        thread: thread,
+        pageNumber: 1,
+        authorID: "42"
+    )
+    try await store.saveThreadPage(
+        makeCacheTestThreadPage(thread: thread, title: "作者第三页"),
+        thread: thread,
+        pageNumber: 3,
+        authorID: "42"
+    )
+
+    #expect(await store.cachedThreadPageViews(thread: thread, authorID: "42") == [1, 3])
+
+    try await store.deleteThreadPages([1], thread: thread, authorID: "42")
+
+    #expect(await store.cachedThreadPageViews(thread: thread, authorID: "42") == [3])
+    #expect(await store.loadThreadPage(thread: thread, page: 1, authorID: "42", allowExpired: true) == nil)
+    #expect(await store.loadThreadPage(thread: thread, page: 3, authorID: "42", allowExpired: true)?.title == "作者第三页")
+}
+
 @Test func forumCacheStoreExpiresThreadPagesAfterTTL() async throws {
     let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
     nonisolated(unsafe) var now = Date(timeIntervalSince1970: 100)

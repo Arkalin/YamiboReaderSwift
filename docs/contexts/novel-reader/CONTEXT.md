@@ -14,6 +14,10 @@ _Avoid_: reader container state, reader model state, document buffer
 The shared native intermediate surface for a novel thread before entering novel reading. It follows the current KMP app behavior by presenting novel-thread metadata, chapter or post entry points, favorite state, and reading entry actions rather than reusing the novel reader page document as its data model.
 _Avoid_: direct novel reader, reader page document, novel web page
 
+**Novel Reader Projection**:
+The derived novel-reading document built from a forum **Thread Page** for native text layout, chapter identity, segment identity, image references, and reader cache management. It is a materialized reader input, not the authoritative cached source of novel-thread content.
+_Avoid_: source cache, thread page, web page snapshot
+
 **Novel Reading Position**:
 The reader's semantic position in a novel thread, identified by reader page document view, chapter identity, text segment identity, and Swift `Character` offset in displayed transformed text.
 _Avoid_: page index, progress, scroll position
@@ -61,7 +65,21 @@ _Avoid_: attributed string helper, UI text style factory, platform text builder,
 ## Relationships
 
 - **Novel Detail** uses its own detail model and repository while reusing lower-level Yamibo fetching, parsing utilities, favorite state, and reading progress stores where appropriate.
-- **Novel Detail** header metadata is driven by the structured forum **Thread Page**: parsed thread title, first-post author, post time, view/reply counts, forum label, and the first valid non-emoticon image cover candidate. The novel reader page document remains the source for readable chapter entry points, not for detail header identity.
+- **Novel Detail** header metadata is driven by the structured forum **Thread Page**: parsed thread title, first-post author, post time, view/reply counts, forum label, and the first valid non-emoticon image cover candidate. Unfiltered all-posts **Thread Page** data may supply only header-level metadata and author-scope discovery; novel preview text and readable chapter entry points require an author-scoped **Thread Page**.
+- A forum **Thread Page** is the authoritative cached source for novel-thread content that can be reused by native novel reading. A **Novel Reader Projection** may be cached for layout and offline management, but it is derived from the **Thread Page** rather than being a second source of truth.
+- Native novel reading must not use a cached **Novel Reader Projection** as an offline substitute when the corresponding authoritative **Thread Page** is unavailable for that reader view and author scope.
+- Legacy cached **Novel Reader Projection** data that cannot be validated against an author-scoped **Thread Page** is invalid for novel reading and cache-management state; it may be cleaned up lazily during view update or deletion.
+- Novel reader cache management reports, creates, updates, and deletes cached reader views according to the authoritative **Thread Page** cache. A cached **Novel Reader Projection** alone must not make a view appear cached or offline-ready.
+- Deleting a cached novel reader view removes both the authoritative author-scoped **Thread Page** and its persisted **Novel Reader Projection**.
+- Creating or updating a cached novel reader view succeeds when the authoritative author-scoped **Thread Page** is saved. Persisting the derived **Novel Reader Projection** is nonfatal prewarming and may be retried later.
+- Novel reader prefetch prioritizes fetching and saving the next author-scoped **Thread Page**. Prewarming the next **Novel Reader Projection** is a nonfatal optimization.
+- Normal online novel reading must refresh an expired **Thread Page** before deriving a **Novel Reader Projection**. Expired **Thread Page** reuse requires an explicit offline-reading entry semantics rather than being an implicit fallback after refresh failure.
+- Persisted **Novel Reader Projection** data is a performance cache and must be validated against the corresponding **Thread Page** identity, freshness, and projection schema before reuse.
+- Opening the current reader view requires a valid **Novel Reader Projection** before readable content is shown. Missing, stale, or invalid persisted projection data is synchronously rederived from the valid author-scoped **Thread Page**; derivation failure is a reader content error.
+- A **Novel Reader Projection** with no readable novel content is a reader content error rather than an empty readable page.
+- Deriving a **Novel Reader Projection** from a **Thread Page** must preserve reader semantics such as chapter identity, text segment identity, post provenance, author-reply metadata, inline images, and styled text ranges. Flattened post text is not a sufficient projection source.
+- Native novel reading must derive a **Novel Reader Projection** only from an author-scoped **Thread Page**. An unfiltered all-posts **Thread Page** may help discover author scope, but it must not produce reader content.
+- If native novel reading cannot determine the author scope for a novel thread, opening reader content fails with a retryable author-scope error instead of deriving content from an unfiltered all-posts **Thread Page**.
 - **Novel Detail** entry behavior follows the current KMP/Compose app: continue reading opens saved reading history when present and otherwise starts from the beginning, while selecting a chapter or post row opens that selected entry in the novel reader.
 - **Novel Detail** launch context carries the thread identity, display title, and optional author identity. When the caller already knows the author identity, it passes that hint; otherwise the detail repository may recover it from thread metadata.
 - Thread or find-post links classified as novel still open **Novel Detail**. A target post identity does not bypass **Novel Detail** and does not require the detail surface to focus or highlight that post.

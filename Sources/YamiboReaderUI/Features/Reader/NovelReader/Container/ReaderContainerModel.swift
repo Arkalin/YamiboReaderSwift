@@ -373,12 +373,7 @@ public final class ReaderContainerModel: ObservableObject {
     }
 
     public var cacheScopeTitle: String {
-        switch currentContentSource {
-        case .authorFilteredPage:
-            return L10n.string("reader.cache_scope.author")
-        case .fallbackUnfilteredPage, .allPostsPage:
-            return L10n.string("reader.cache_scope.all_posts")
-        }
+        L10n.string("reader.cache_scope.author")
     }
 
     public var cacheScopeDescription: String {
@@ -442,7 +437,7 @@ public final class ReaderContainerModel: ObservableObject {
     }
 
     public var sourceStatusText: String? {
-        currentContentSource == .fallbackUnfilteredPage ? L10n.string("reader.source.all_posts") : nil
+        nil
     }
 
     public var chapterSummaryText: String {
@@ -1480,8 +1475,7 @@ public final class ReaderContainerModel: ObservableObject {
     }
 
     private func inferredContentSource(for authorID: String?) -> ReaderContentSource {
-        let normalizedAuthorID = authorID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return normalizedAuthorID.isEmpty ? .fallbackUnfilteredPage : .authorFilteredPage
+        .authorFilteredPage
     }
 
     private var cacheOperationSnapshot: ReaderCacheOperationSnapshot {

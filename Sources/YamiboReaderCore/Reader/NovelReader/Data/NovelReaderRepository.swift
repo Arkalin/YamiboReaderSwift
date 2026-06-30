@@ -1,12 +1,20 @@
 import Foundation
 
 public actor NovelReaderRepository {
+    private static let projectionSchemaVersion = 1
+
     private let client: YamiboClient
     private let cacheStore: ReaderCacheStore
+    private let forumCacheStore: ForumCacheStore
 
-    public init(client: YamiboClient, cacheStore: ReaderCacheStore = ReaderCacheStore()) {
+    public init(
+        client: YamiboClient,
+        cacheStore: ReaderCacheStore = ReaderCacheStore(),
+        forumCacheStore: ForumCacheStore = ForumCacheStore()
+    ) {
         self.client = client
         self.cacheStore = cacheStore
+        self.forumCacheStore = forumCacheStore
     }
 
     public func loadPage(_ request: ReaderPageRequest) async throws -> ReaderPageDocument {
@@ -36,7 +44,11 @@ public actor NovelReaderRepository {
         authorID: String?,
         contentSource: ReaderContentSource?
     ) async -> Set<Int> {
-        await cacheStore.cachedViews(for: threadURL, authorID: authorID, contentSource: contentSource)
+        guard let authorID = normalizedAuthorID(authorID),
+              let thread = threadIdentity(from: threadURL) else {
+            return []
+        }
+        return await forumCacheStore.cachedThreadPageViews(thread: thread, authorID: authorID)
     }
 
     public func deleteCachedViews(
@@ -45,7 +57,12 @@ public actor NovelReaderRepository {
         authorID: String?,
         contentSource: ReaderContentSource?
     ) async throws {
-        try await cacheStore.deleteViews(views, for: threadURL, authorID: authorID, contentSource: contentSource)
+        guard let authorID = normalizedAuthorID(authorID),
+              let thread = threadIdentity(from: threadURL) else {
+            return
+        }
+        try await forumCacheStore.deleteThreadPages(views, thread: thread, authorID: authorID)
+        try await cacheStore.deleteViews(views, for: threadURL, authorID: authorID, contentSource: .authorFilteredPage)
     }
 
     public func refreshCachedViews(
@@ -55,9 +72,13 @@ public actor NovelReaderRepository {
         contentSource: ReaderContentSource?
     ) async throws {
         let targets = views.isEmpty
-            ? await cacheStore.cachedViews(for: threadURL, authorID: authorID, contentSource: contentSource)
+            ? await cachedViews(for: threadURL, authorID: authorID, contentSource: contentSource)
             : views
-        try await cacheStore.deleteViews(targets, for: threadURL, authorID: authorID, contentSource: contentSource)
+        try await cacheStore.deleteViews(targets, for: threadURL, authorID: authorID, contentSource: .authorFilteredPage)
+        if let authorID = normalizedAuthorID(authorID),
+           let thread = threadIdentity(from: threadURL) {
+            try await forumCacheStore.deleteThreadPages(targets, thread: thread, authorID: authorID)
+        }
         for view in targets.sorted() {
             let request = ReaderPageRequest(threadURL: threadURL, view: view, authorID: authorID)
             _ = try await loadPage(request, ignoresCache: true)
@@ -150,43 +171,38 @@ public actor NovelReaderRepository {
     }
 
     private func loadPage(_ request: ReaderPageRequest, ignoresCache: Bool) async throws -> ReaderPageDocument {
+        let thread = try requireThreadIdentity(from: request.threadURL)
+        let authorID = try await resolveAuthorID(for: request, thread: thread, ignoresCache: ignoresCache)
+        let sourcePage = try await loadAuthorScopedThreadPage(
+            thread: thread,
+            title: nil,
+            authorID: authorID,
+            view: request.view,
+            ignoresCache: ignoresCache
+        )
+        let fingerprint = Self.projectionFingerprint(
+            page: sourcePage,
+            threadURL: thread.canonicalURL,
+            view: request.view,
+            authorID: authorID
+        )
+        let projectedRequest = ReaderPageRequest(threadURL: request.threadURL, view: request.view, authorID: authorID)
+
         if !ignoresCache,
-           let cached = await cacheStore.loadDocument(
-               for: request,
-               contentSource: request.authorID == nil ? .fallbackUnfilteredPage : .authorFilteredPage
-           ),
-           !isLegacyCachedDocumentMissingChapterCommentSources(cached),
-           !isCachedDocumentMissingAuthorReplyMetadata(cached) {
+           let cached = await cacheStore.loadDocument(for: projectedRequest, contentSource: .authorFilteredPage),
+           isReusableProjection(cached, fingerprint: fingerprint) {
             return cached
         }
 
-        do {
-            let initialHTML = try await client.fetchHTML(
-                for: .thread(url: request.threadURL, page: request.view, authorID: request.authorID)
-            )
-            let document = try await parsePreferredDocument(from: initialHTML, request: request)
-            try await cacheStore.save(document)
-            return document
-        } catch let error as URLError {
-            if let cached = await cacheStore.loadDocument(
-                for: request,
-                contentSource: request.authorID == nil ? .fallbackUnfilteredPage : .authorFilteredPage
-            ) {
-                return cached
-            }
-            if error.code == .notConnectedToInternet || error.code == .networkConnectionLost {
-                throw YamiboError.offline
-            }
-            throw YamiboError.underlying(error.localizedDescription)
-        } catch {
-            if let cached = await cacheStore.loadDocument(
-                for: request,
-                contentSource: request.authorID == nil ? .fallbackUnfilteredPage : .authorFilteredPage
-            ) {
-                return cached
-            }
-            throw error
-        }
+        let document = try ReaderHTMLParser.parseDocument(
+            threadPage: sourcePage,
+            request: projectedRequest,
+            authorID: authorID,
+            projectionSourceFingerprint: fingerprint,
+            projectionSchemaVersion: Self.projectionSchemaVersion
+        )
+        try? await cacheStore.save(document)
+        return document
     }
 
     private func isLegacyCachedDocumentMissingChapterCommentSources(_ document: ReaderPageDocument) -> Bool {
@@ -202,32 +218,120 @@ public actor NovelReaderRepository {
         (document.decodedSchemaVersion ?? 0) < ReaderPageDocument.schemaVersion
     }
 
-    private func parsePreferredDocument(
-        from initialHTML: String,
-        request: ReaderPageRequest
-    ) async throws -> ReaderPageDocument {
-        if request.authorID == nil,
-           let onlyAuthorID = ReaderHTMLParser.extractOnlyAuthorID(from: initialHTML, request: request) {
-            let filteredRequest = ReaderPageRequest(
-                threadURL: request.threadURL,
-                view: request.view,
-                authorID: onlyAuthorID
-            )
-            let filteredHTML = try await client.fetchHTML(
-                for: .thread(url: filteredRequest.threadURL, page: filteredRequest.view, authorID: filteredRequest.authorID)
-            )
-            return try ReaderHTMLParser.parseDocument(
-                html: filteredHTML,
-                request: filteredRequest,
-                contentSource: .authorFilteredPage
-            )
+    private func isReusableProjection(_ document: ReaderPageDocument, fingerprint: String) -> Bool {
+        document.contentSource == .authorFilteredPage &&
+            document.projectionSchemaVersion == Self.projectionSchemaVersion &&
+            document.projectionSourceFingerprint == fingerprint &&
+            !isLegacyCachedDocumentMissingChapterCommentSources(document) &&
+            !isCachedDocumentMissingAuthorReplyMetadata(document)
+    }
+
+    private func resolveAuthorID(
+        for request: ReaderPageRequest,
+        thread: ThreadIdentity,
+        ignoresCache: Bool
+    ) async throws -> String {
+        if let authorID = normalizedAuthorID(request.authorID) {
+            return authorID
         }
 
-        let fallbackSource: ReaderContentSource = request.authorID == nil ? .fallbackUnfilteredPage : .authorFilteredPage
-        return try ReaderHTMLParser.parseDocument(
-            html: initialHTML,
-            request: request,
-            contentSource: fallbackSource
-        )
+        let discoveryPage: ForumThreadPage
+        if !ignoresCache,
+           let cached = await forumCacheStore.loadThreadPage(thread: thread, page: 1, authorID: nil) {
+            discoveryPage = cached
+        } else {
+            let html = try await fetchThreadHTML(threadURL: thread.canonicalURL, view: 1, authorID: nil)
+            discoveryPage = try ForumThreadPageHTMLParser.parsePage(
+                from: html,
+                thread: thread,
+                fallbackTitle: nil
+            )
+            try? await forumCacheStore.saveThreadPage(discoveryPage, thread: thread, pageNumber: 1, authorID: nil)
+            if let onlyAuthorID = ReaderHTMLParser.extractOnlyAuthorID(
+                from: html,
+                request: ReaderPageRequest(threadURL: thread.canonicalURL, view: 1)
+            ) {
+                return onlyAuthorID
+            }
+        }
+
+        if let authorID = discoveryPage.posts.first?.author.uid.flatMap(normalizedAuthorID) {
+            return authorID
+        }
+        throw YamiboError.parsingFailed(context: "小说作者范围")
+    }
+
+    private func loadAuthorScopedThreadPage(
+        thread: ThreadIdentity,
+        title: String?,
+        authorID: String,
+        view: Int,
+        ignoresCache: Bool
+    ) async throws -> ForumThreadPage {
+        if !ignoresCache,
+           let cached = await forumCacheStore.loadThreadPage(thread: thread, page: view, authorID: authorID) {
+            return cached
+        }
+        let html = try await fetchThreadHTML(threadURL: thread.canonicalURL, view: view, authorID: authorID)
+        let parsed = try ForumThreadPageHTMLParser.parsePage(from: html, thread: thread, fallbackTitle: title)
+        try? await forumCacheStore.saveThreadPage(parsed, thread: thread, pageNumber: view, authorID: authorID)
+        return parsed
+    }
+
+    private func fetchThreadHTML(threadURL: URL, view: Int, authorID: String?) async throws -> String {
+        do {
+            return try await client.fetchHTML(for: .thread(url: threadURL, page: view, authorID: authorID))
+        } catch let error as URLError {
+            if error.code == .notConnectedToInternet || error.code == .networkConnectionLost {
+                throw YamiboError.offline
+            }
+            throw YamiboError.underlying(error.localizedDescription)
+        }
+    }
+
+    private func requireThreadIdentity(from threadURL: URL) throws -> ThreadIdentity {
+        guard let thread = threadIdentity(from: threadURL) else {
+            throw YamiboError.parsingFailed(context: L10n.string("context.thread_page"))
+        }
+        return thread
+    }
+
+    private func threadIdentity(from threadURL: URL) -> ThreadIdentity? {
+        let canonicalURL = ReaderCacheIdentity.canonicalThreadURL(from: threadURL)
+        guard let tid = ReaderHTMLParser.extractThreadID(from: canonicalURL) else { return nil }
+        return ThreadIdentity(tid: tid, canonicalURL: canonicalURL)
+    }
+
+    private func normalizedAuthorID(_ authorID: String?) -> String? {
+        let value = authorID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return value.isEmpty ? nil : value
+    }
+
+    private static func projectionFingerprint(
+        page: ForumThreadPage,
+        threadURL: URL,
+        view: Int,
+        authorID: String
+    ) -> String {
+        let value = [
+            threadURL.absoluteString,
+            String(max(1, view)),
+            authorID,
+            page.posts.map { post in
+                [
+                    post.postID,
+                    post.author.uid ?? "",
+                    post.contentHTML,
+                    post.images.map(\.url).joined(separator: ",")
+                ].joined(separator: "\u{1E}")
+            }.joined(separator: "\u{1D}"),
+            String(page.pageNavigation?.totalPages ?? 0)
+        ].joined(separator: "\u{1F}")
+        var hash: UInt64 = 1469598103934665603
+        for byte in value.utf8 {
+            hash ^= UInt64(byte)
+            hash &*= 1099511628211
+        }
+        return String(hash, radix: 16)
     }
 }

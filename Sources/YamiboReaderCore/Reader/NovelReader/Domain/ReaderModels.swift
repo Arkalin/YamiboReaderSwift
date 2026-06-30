@@ -289,6 +289,8 @@ public struct ReaderPageDocument: Codable, Hashable, Sendable {
     public var segments: [ReaderSegment]
     public var segmentSources: [ReaderSegmentSource?]
     public var segmentSemantics: [ReaderSegmentSemantics?]
+    public var projectionSourceFingerprint: String?
+    public var projectionSchemaVersion: Int?
     public var fetchedAt: Date
     public var decodedSchemaVersion: Int?
 
@@ -303,6 +305,8 @@ public struct ReaderPageDocument: Codable, Hashable, Sendable {
         segments: [ReaderSegment],
         segmentSources: [ReaderSegmentSource?]? = nil,
         segmentSemantics: [ReaderSegmentSemantics?]? = nil,
+        projectionSourceFingerprint: String? = nil,
+        projectionSchemaVersion: Int? = nil,
         fetchedAt: Date = .now,
         decodedSchemaVersion: Int? = Self.schemaVersion
     ) {
@@ -322,6 +326,8 @@ public struct ReaderPageDocument: Codable, Hashable, Sendable {
             view: self.view,
             contentSource: self.contentSource
         )
+        self.projectionSourceFingerprint = projectionSourceFingerprint
+        self.projectionSchemaVersion = projectionSchemaVersion
         self.fetchedAt = fetchedAt
         self.decodedSchemaVersion = decodedSchemaVersion
     }
@@ -349,6 +355,8 @@ extension ReaderPageDocument {
         case segments
         case segmentSources
         case segmentSemantics
+        case projectionSourceFingerprint
+        case projectionSchemaVersion
         case fetchedAt
         case schemaVersion
     }
@@ -391,6 +399,8 @@ extension ReaderPageDocument {
             segments: segments,
             segmentSources: sourceValues,
             segmentSemantics: resolvedSemantics,
+            projectionSourceFingerprint: try container.decodeIfPresent(String.self, forKey: .projectionSourceFingerprint),
+            projectionSchemaVersion: try container.decodeIfPresent(Int.self, forKey: .projectionSchemaVersion),
             fetchedAt: try container.decodeIfPresent(Date.self, forKey: .fetchedAt) ?? .distantPast,
             decodedSchemaVersion: schemaVersion
         )
@@ -414,6 +424,8 @@ extension ReaderPageDocument {
         try container.encode(segments, forKey: .segments)
         try container.encode(segmentSources, forKey: .segmentSources)
         try container.encode(segmentSemantics, forKey: .segmentSemantics)
+        try container.encodeIfPresent(projectionSourceFingerprint, forKey: .projectionSourceFingerprint)
+        try container.encodeIfPresent(projectionSchemaVersion, forKey: .projectionSchemaVersion)
         try container.encode(fetchedAt, forKey: .fetchedAt)
     }
 }

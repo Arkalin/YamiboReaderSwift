@@ -9,6 +9,7 @@ public actor ForumCacheStore {
 
     private let fileManager: FileManager
     private let baseDirectory: URL
+    private let threadPageIndexURL: URL
     private let now: @Sendable () -> Date
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
@@ -24,6 +25,7 @@ public actor ForumCacheStore {
             .appendingPathComponent("YamiboReader", isDirectory: true)
             .appendingPathComponent("forum-cache", isDirectory: true)
             ?? URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("forum-cache", isDirectory: true)
+        self.threadPageIndexURL = self.baseDirectory.appendingPathComponent("thread_pages_index.json", isDirectory: false)
         self.now = now
         encoder.outputFormatting = [.sortedKeys]
         encoder.dateEncodingStrategy = .iso8601
@@ -84,16 +86,51 @@ public actor ForumCacheStore {
         return entry.value
     }
 
+    public func cachedThreadPageViews(
+        thread: ThreadIdentity,
+        authorID: String? = nil,
+        allowExpired: Bool = false
+    ) async -> Set<Int> {
+        let normalizedAuthorID = authorID?.nilIfBlank
+        return Set(loadThreadPageIndex().values.compactMap { entry -> Int? in
+            guard entry.threadURL == thread.canonicalURL,
+                  entry.authorID == normalizedAuthorID,
+                  allowExpired || !isExpired(entry.fetchedAt, ttl: Self.threadPageTTL),
+                  fileManager.fileExists(atPath: baseDirectory.appendingPathComponent(entry.fileName, isDirectory: false).path) else {
+                return nil
+            }
+            return entry.page
+        })
+    }
+
     public func saveThreadPage(
         _ page: ForumThreadPage,
         thread: ThreadIdentity,
         pageNumber: Int = 1,
         authorID: String? = nil
     ) async throws {
+        var page = page
+        if page.pageNavigation?.currentPage == nil {
+            page.pageNavigation = ForumPageNavigation(
+                currentPage: max(1, pageNumber),
+                totalPages: page.pageNavigation?.totalPages
+            )
+        }
+        let fetchedAt = now()
+        let fileName = threadPageFileName(thread: thread, page: pageNumber, authorID: authorID)
         try save(
-            ForumCacheEntry(value: page, fetchedAt: now()),
-            fileName: threadPageFileName(thread: thread, page: pageNumber, authorID: authorID)
+            ForumCacheEntry(value: page, fetchedAt: fetchedAt),
+            fileName: fileName
         )
+        var index = loadThreadPageIndex()
+        index[fileName] = ThreadPageIndexEntry(
+            fileName: fileName,
+            threadURL: thread.canonicalURL,
+            page: max(1, pageNumber),
+            authorID: authorID?.nilIfBlank,
+            fetchedAt: fetchedAt
+        )
+        try persistThreadPageIndex(index)
         try pruneThreadPageCache()
     }
 
@@ -102,6 +139,30 @@ public actor ForumCacheStore {
         for fileURL in threadPageFileURLs() where fileURL.lastPathComponent.hasPrefix(prefix) {
             try? fileManager.removeItem(at: fileURL)
         }
+        var index = loadThreadPageIndex()
+        index = index.filter { $0.value.threadURL != thread.canonicalURL }
+        try persistThreadPageIndex(index)
+    }
+
+    public func deleteThreadPages(
+        _ pages: Set<Int>,
+        thread: ThreadIdentity,
+        authorID: String?
+    ) async throws {
+        let normalizedAuthorID = authorID?.nilIfBlank
+        let normalizedPages = Set(pages.map { max(1, $0) })
+        guard !normalizedPages.isEmpty else { return }
+        var index = loadThreadPageIndex()
+        for entry in index.values {
+            guard entry.threadURL == thread.canonicalURL,
+                  entry.authorID == normalizedAuthorID,
+                  normalizedPages.contains(entry.page) else {
+                continue
+            }
+            try? fileManager.removeItem(at: baseDirectory.appendingPathComponent(entry.fileName, isDirectory: false))
+            index.removeValue(forKey: entry.fileName)
+        }
+        try persistThreadPageIndex(index)
     }
 
     public func clearAll() async throws {
@@ -187,6 +248,27 @@ public actor ForumCacheStore {
         for entry in retained.dropFirst(Self.threadPageMaxEntries) {
             try? fileManager.removeItem(at: entry.url)
         }
+        let existingFileNames = Set(threadPageFileURLs().map(\.lastPathComponent))
+        let index = loadThreadPageIndex().filter { existingFileNames.contains($0.key) }
+        try persistThreadPageIndex(index)
+    }
+
+    private func loadThreadPageIndex() -> [String: ThreadPageIndexEntry] {
+        guard fileManager.fileExists(atPath: threadPageIndexURL.path),
+              let data = try? Data(contentsOf: threadPageIndexURL),
+              let envelope = try? decoder.decode(ThreadPageIndexEnvelope.self, from: data),
+              envelope.version == Self.schemaVersion else {
+            return [:]
+        }
+        return envelope.pages
+    }
+
+    private func persistThreadPageIndex(_ pages: [String: ThreadPageIndexEntry]) throws {
+        if !fileManager.fileExists(atPath: baseDirectory.path) {
+            try fileManager.createDirectory(at: baseDirectory, withIntermediateDirectories: true)
+        }
+        let data = try encoder.encode(ThreadPageIndexEnvelope(version: Self.schemaVersion, pages: pages))
+        try data.write(to: threadPageIndexURL, options: [.atomic])
     }
 
     private func stableIdentifier(for value: String) -> String {
@@ -206,6 +288,19 @@ private struct ForumCacheEnvelope<Value: Codable>: Codable {
 
 private struct ForumCacheEntry<Value: Codable>: Codable {
     var value: Value
+    var fetchedAt: Date
+}
+
+private struct ThreadPageIndexEnvelope: Codable {
+    var version: Int
+    var pages: [String: ThreadPageIndexEntry]
+}
+
+private struct ThreadPageIndexEntry: Codable {
+    var fileName: String
+    var threadURL: URL
+    var page: Int
+    var authorID: String?
     var fetchedAt: Date
 }
 

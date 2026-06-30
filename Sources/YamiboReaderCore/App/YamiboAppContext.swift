@@ -98,7 +98,11 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
             cookie: sessionState.cookie,
             userAgent: sessionState.userAgent
         )
-        return NovelReaderRepository(client: client, cacheStore: readerCacheStore)
+        return NovelReaderRepository(
+            client: client,
+            cacheStore: readerCacheStore,
+            forumCacheStore: forumCacheStore
+        )
     }
 
     public func makeReaderChapterCommentsRepository() async -> ReaderChapterCommentsRepository {

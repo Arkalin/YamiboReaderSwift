@@ -40,6 +40,50 @@ public enum ReaderHTMLParser {
         )
     }
 
+    public static func parseDocument(
+        threadPage: ForumThreadPage,
+        request: ReaderPageRequest,
+        authorID: String,
+        projectionSourceFingerprint: String,
+        projectionSchemaVersion: Int
+    ) throws -> ReaderPageDocument {
+        let normalizedAuthorID = authorID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedAuthorID.isEmpty else {
+            throw YamiboError.parsingFailed(context: "小说作者范围")
+        }
+
+        let canonicalThreadURL = canonicalThreadURL(from: request.threadURL)
+        let html = syntheticReaderHTML(from: threadPage)
+        let context = try ReaderHTMLDOMParser.parse(html: html)
+        let parsed = parseSegments(
+            from: context,
+            threadURL: canonicalThreadURL,
+            view: request.view,
+            contentSource: .authorFilteredPage
+        )
+        guard !parsed.segments.isEmpty else {
+            throw YamiboError.parsingFailed(context: L10n.string("context.novel_body"))
+        }
+
+        return ReaderPageDocument(
+            threadURL: canonicalThreadURL,
+            view: request.view,
+            maxView: max(
+                request.view,
+                threadPage.pageNavigation?.totalPages ?? threadPage.pageNavigation?.currentPage ?? request.view
+            ),
+            resolvedAuthorID: normalizedAuthorID,
+            contentSource: .authorFilteredPage,
+            retainedChapterCount: parsed.retainedChapterCount,
+            filteredChapterCandidateCount: parsed.filteredChapterCandidateCount,
+            segments: parsed.segments,
+            segmentSources: parsed.segmentSources,
+            segmentSemantics: parsed.segmentSemantics,
+            projectionSourceFingerprint: projectionSourceFingerprint,
+            projectionSchemaVersion: projectionSchemaVersion
+        )
+    }
+
     public static func parseSegments(from html: String) -> ReaderParsedContent {
         guard let context = try? ReaderHTMLDOMParser.parse(html: html) else {
             return ReaderParsedContent()
@@ -180,6 +224,44 @@ public enum ReaderHTMLParser {
         return NovelChapterIdentity(
             rawValue: "document:\(threadURL.absoluteString)#view:\(max(1, view))#source:\(contentSource.rawValue)#chapter:\(sourceOccurrence)"
         )
+    }
+
+    private static func syntheticReaderHTML(from page: ForumThreadPage) -> String {
+        let posts = page.posts.map { post in
+            let postID = post.postID.trimmingCharacters(in: .whitespacesAndNewlines)
+            let safePostID = postID.isEmpty ? "0" : postID
+            let attachmentImages = attachmentImageHTML(for: post.images, excludingSourcesIn: post.contentHTML)
+            return """
+            <div class="plc cl" id="pid\(safePostID)">
+              <div class="message" id="postmessage_\(safePostID)">\(post.contentHTML)</div>
+              \(attachmentImages)
+            </div>
+            """
+        }.joined(separator: "\n")
+        return "<html><body>\(posts)</body></html>"
+    }
+
+    private static func attachmentImageHTML(
+        for images: [ForumThreadPostImage],
+        excludingSourcesIn html: String
+    ) -> String {
+        let missingImages = images.filter { image in
+            !image.url.isEmpty && !html.contains(image.url)
+        }
+        guard !missingImages.isEmpty else { return "" }
+        let items = missingImages.map { image in
+            let alt = image.altText.map(escapeHTMLAttribute) ?? ""
+            return #"<li><img src="\#(escapeHTMLAttribute(image.url))" alt="\#(alt)" /></li>"#
+        }.joined()
+        return #"<ul class="img_one">\#(items)</ul>"#
+    }
+
+    private static func escapeHTMLAttribute(_ value: String) -> String {
+        value
+            .replacingOccurrences(of: "&", with: "&amp;")
+            .replacingOccurrences(of: "\"", with: "&quot;")
+            .replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;")
     }
 
     private static func segmentSemantics(

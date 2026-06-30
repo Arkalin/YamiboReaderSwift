@@ -163,7 +163,7 @@ import Testing
     #expect(summary.forumName == "原创小说")
     #expect(summary.chapterCount == 2)
     #expect(summary.coverURL == coverURL)
-    #expect(summary.firstFloorPreviewText == "首楼简介\n正文")
+    #expect(summary.firstFloorPreviewText == nil)
 }
 
 @MainActor
@@ -301,7 +301,7 @@ import Testing
     #expect(cover?.resolvedURL == initialImage)
     #expect(model.headerSummary.coverURL == initialImage)
     #expect(threadPageLoader.threadFetchCalls().isEmpty)
-    #expect(threadPageLoader.novelFetchCalls() == [1])
+    #expect(threadPageLoader.novelFetchCalls() == [1, 1])
 }
 
 @MainActor
@@ -330,7 +330,7 @@ import Testing
 
     #expect(model.headerSummary.title == "缓存小说标题")
     #expect(model.chapters.map(\.title) == ["缓存首楼"])
-    #expect(threadPageLoader.cachedNovelCalls() == [1])
+    #expect(threadPageLoader.cachedNovelCalls() == [1, 1])
     #expect(threadPageLoader.novelFetchCalls().isEmpty)
 }
 
@@ -362,7 +362,7 @@ import Testing
     #expect(model.headerSummary.title == "缓存小说标题")
     #expect(model.headerSummary.firstFloorPreviewText == "缓存首楼\n正文")
     #expect(model.chapters.map(\.title) == ["缓存首楼"])
-    #expect(threadPageLoader.cachedNovelCalls() == [1])
+    #expect(threadPageLoader.cachedNovelCalls() == [1, 1])
     #expect(threadPageLoader.novelFetchCalls().isEmpty)
 }
 
@@ -412,7 +412,7 @@ import Testing
     await model.loadChapterSection(page: 2)
 
     #expect(model.chapterSections.flatMap(\.chapters).map(\.title).contains("第二章"))
-    #expect(threadPageLoader.cachedNovelCalls() == [1, 2])
+    #expect(threadPageLoader.cachedNovelCalls() == [1, 1, 2])
     #expect(threadPageLoader.novelFetchCalls().isEmpty)
 }
 
@@ -596,7 +596,7 @@ import Testing
     #expect(model.headerSummary.coverURL == historyCover)
     #expect(model.continueLaunchContext().threadCoverURL == historyCover)
     #expect(threadPageLoader.threadFetchCalls().isEmpty)
-    #expect(threadPageLoader.novelFetchCalls() == [1])
+    #expect(threadPageLoader.novelFetchCalls() == [1, 1])
 }
 
 @MainActor
@@ -684,7 +684,7 @@ import Testing
     #expect(cover == nil)
     #expect(model.headerSummary.coverURL == nil)
     #expect(threadPageLoader.threadFetchCalls().isEmpty)
-    #expect(threadPageLoader.novelFetchCalls() == [1])
+    #expect(threadPageLoader.novelFetchCalls() == [1, 1])
 }
 
 @MainActor
@@ -702,7 +702,7 @@ import Testing
 
     await model.reload()
 
-    #expect(loader.novelFetchCalls() == [1])
+    #expect(loader.novelFetchCalls() == [1, 1])
     #expect(model.expandedChapterPages == [1])
     #expect(model.chapterSections.map(\.page) == [1, 2])
     #expect(model.chapterSections[0].chapters.map(\.title) == ["第一章"])
@@ -710,7 +710,7 @@ import Testing
 
     await model.toggleChapterSection(page: 2)
 
-    #expect(loader.novelFetchCalls() == [1, 2])
+    #expect(loader.novelFetchCalls() == [1, 1, 2])
     #expect(model.expandedChapterPages == [1, 2])
     #expect(model.chapterSections[1].isLoaded)
     #expect(model.chapterSections[1].chapters.map(\.title) == ["第二章"])
@@ -719,19 +719,19 @@ import Testing
     await model.toggleChapterSection(page: 2)
     await model.loadChapterSection(page: 2)
 
-    #expect(loader.novelFetchCalls() == [1, 2])
+    #expect(loader.novelFetchCalls() == [1, 1, 2])
     #expect(model.expandedChapterPages == [1, 2])
     #expect(model.chapterSections[1].chapters.map(\.title) == ["第二章"])
 
     await model.reload()
 
-    #expect(loader.novelFetchCalls() == [1, 2, 1])
+    #expect(loader.novelFetchCalls() == [1, 1, 2, 1, 1])
     #expect(model.expandedChapterPages == [1])
     #expect(model.chapterSections[1].isLoaded == false)
 
     await model.toggleChapterSection(page: 2)
 
-    #expect(loader.novelFetchCalls() == [1, 2, 1, 2])
+    #expect(loader.novelFetchCalls() == [1, 1, 2, 1, 1, 2])
     #expect(model.expandedChapterPages == [1, 2])
     #expect(model.chapterSections[1].chapters.map(\.title) == ["第二章"])
 }
@@ -755,7 +755,7 @@ import Testing
     await model.reload()
     await model.toggleChapterSection(page: 2)
 
-    #expect(loader.novelFetchCalls() == [1, 2])
+    #expect(loader.novelFetchCalls() == [1, 1, 2])
     #expect(model.expandedChapterPages == [1, 2])
     #expect(model.chapterSections[1].isLoaded == false)
     #expect(model.chapterSections[1].errorMessage != nil)
@@ -763,7 +763,7 @@ import Testing
 
     await model.loadChapterSection(page: 2)
 
-    #expect(loader.novelFetchCalls() == [1, 2, 2])
+    #expect(loader.novelFetchCalls() == [1, 1, 2, 2])
     #expect(model.chapterSections[1].isLoaded)
     #expect(model.chapterSections[1].errorMessage == nil)
     #expect(model.chapterSections[1].chapters.map(\.title) == ["第二章"])
