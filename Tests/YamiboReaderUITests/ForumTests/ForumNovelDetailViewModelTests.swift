@@ -576,6 +576,88 @@ import Testing
 }
 
 @MainActor
+@Test func forumNovelDetailReusesLoadedChapterPagesUntilReload() async throws {
+    let firstPage = try makeNovelDetailThreadPage(page: 1, totalPages: 2, postID: "1001", chapterTitle: "第一章")
+    let secondPage = try makeNovelDetailThreadPage(page: 2, totalPages: 2, postID: "2001", chapterTitle: "第二章")
+    let loader = FakeForumNovelThreadPageLoader(pages: [
+        1: firstPage,
+        2: secondPage
+    ])
+    let model = try makeForumNovelDetailViewModel(
+        documentLoader: FakeForumNovelDocumentLoader(),
+        threadPageLoader: loader
+    )
+
+    await model.reload()
+
+    #expect(loader.novelFetchCalls() == [1])
+    #expect(model.expandedChapterPages == [1])
+    #expect(model.chapterSections.map(\.page) == [1, 2])
+    #expect(model.chapterSections[0].chapters.map(\.title) == ["第一章"])
+    #expect(model.chapterSections[1].isLoaded == false)
+
+    await model.toggleChapterSection(page: 2)
+
+    #expect(loader.novelFetchCalls() == [1, 2])
+    #expect(model.expandedChapterPages == [1, 2])
+    #expect(model.chapterSections[1].isLoaded)
+    #expect(model.chapterSections[1].chapters.map(\.title) == ["第二章"])
+
+    await model.toggleChapterSection(page: 2)
+    await model.toggleChapterSection(page: 2)
+    await model.loadChapterSection(page: 2)
+
+    #expect(loader.novelFetchCalls() == [1, 2])
+    #expect(model.expandedChapterPages == [1, 2])
+    #expect(model.chapterSections[1].chapters.map(\.title) == ["第二章"])
+
+    await model.reload()
+
+    #expect(loader.novelFetchCalls() == [1, 2, 1])
+    #expect(model.expandedChapterPages == [1])
+    #expect(model.chapterSections[1].isLoaded == false)
+
+    await model.toggleChapterSection(page: 2)
+
+    #expect(loader.novelFetchCalls() == [1, 2, 1, 2])
+    #expect(model.expandedChapterPages == [1, 2])
+    #expect(model.chapterSections[1].chapters.map(\.title) == ["第二章"])
+}
+
+@MainActor
+@Test func forumNovelDetailDoesNotCacheFailedChapterPageLoads() async throws {
+    let loader = FakeForumNovelThreadPageLoader(
+        pages: [
+            1: try makeNovelDetailThreadPage(page: 1, totalPages: 2, postID: "1001", chapterTitle: "第一章"),
+            2: try makeNovelDetailThreadPage(page: 2, totalPages: 2, postID: "2001", chapterTitle: "第二章")
+        ],
+        failuresByPage: [
+            2: [FakeForumNovelThreadPageLoaderError.plannedFailure(page: 2)]
+        ]
+    )
+    let model = try makeForumNovelDetailViewModel(
+        documentLoader: FakeForumNovelDocumentLoader(),
+        threadPageLoader: loader
+    )
+
+    await model.reload()
+    await model.toggleChapterSection(page: 2)
+
+    #expect(loader.novelFetchCalls() == [1, 2])
+    #expect(model.expandedChapterPages == [1, 2])
+    #expect(model.chapterSections[1].isLoaded == false)
+    #expect(model.chapterSections[1].errorMessage != nil)
+    #expect(model.chapterSections[1].chapters.isEmpty)
+
+    await model.loadChapterSection(page: 2)
+
+    #expect(loader.novelFetchCalls() == [1, 2, 2])
+    #expect(model.chapterSections[1].isLoaded)
+    #expect(model.chapterSections[1].errorMessage == nil)
+    #expect(model.chapterSections[1].chapters.map(\.title) == ["第二章"])
+}
+
+@MainActor
 @Test func forumNovelDetailGroupsChapterDirectoryByThreadPage() throws {
     let model = try makeForumNovelDetailViewModel()
     let firstPage = ForumThreadPage(
@@ -864,6 +946,29 @@ private func modelThreadURL() throws -> URL {
     try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=900&mobile=2"))
 }
 
+private func makeNovelDetailThreadPage(
+    page: Int,
+    totalPages: Int,
+    postID: String,
+    chapterTitle: String
+) throws -> ForumThreadPage {
+    ForumThreadPage(
+        thread: ThreadIdentity(tid: "900", canonicalURL: try modelThreadURL(), fid: "49"),
+        title: "小说标题",
+        posts: [
+            ForumThreadPost(
+                postID: postID,
+                floorText: page == 1 ? "楼主" : "\(page)#",
+                author: BlogReaderUser(uid: "42", name: "楼主名", avatarURL: nil),
+                contentHTML: "",
+                contentText: "\(chapterTitle)\n正文",
+                contentBlocks: []
+            )
+        ],
+        pageNavigation: ForumPageNavigation(currentPage: page, totalPages: totalPages)
+    )
+}
+
 private struct FakeForumNovelDocumentLoader: ForumNovelDocumentLoading {
     func loadPage(_ request: ReaderPageRequest) async throws -> ReaderPageDocument {
         ReaderPageDocument(
@@ -881,16 +986,29 @@ private struct FakeForumNovelDocumentLoader: ForumNovelDocumentLoading {
 
 private final class FakeForumNovelThreadPageLoader: ForumNovelThreadPageLoading, @unchecked Sendable {
     private let pages: [Int: ForumThreadPage]
+    private var failuresByPage: [Int: [Error]]
     private var recordedNovelFetches: [Int] = []
     private var recordedThreadFetches: [ForumNovelThreadPageFetch] = []
 
-    init(pages: [Int: ForumThreadPage]) {
+    init(
+        pages: [Int: ForumThreadPage],
+        failuresByPage: [Int: [Error]] = [:]
+    ) {
         self.pages = pages
+        self.failuresByPage = failuresByPage
     }
 
     func fetchNovelThreadPage(context _: NovelDetailLaunchContext, page: Int) async throws -> ForumThreadPage {
         recordedNovelFetches.append(page)
-        return try #require(pages[page])
+        if var failures = failuresByPage[page], !failures.isEmpty {
+            let failure = failures.removeFirst()
+            failuresByPage[page] = failures
+            throw failure
+        }
+        guard let pageDocument = pages[page] else {
+            throw FakeForumNovelThreadPageLoaderError.missingPage(page: page)
+        }
+        return pageDocument
     }
 
     func fetchThreadPage(
@@ -900,7 +1018,10 @@ private final class FakeForumNovelThreadPageLoader: ForumNovelThreadPageLoading,
         page: Int
     ) async throws -> ForumThreadPage {
         recordedThreadFetches.append(ForumNovelThreadPageFetch(authorID: authorID, page: page))
-        return try #require(pages[page])
+        guard let pageDocument = pages[page] else {
+            throw FakeForumNovelThreadPageLoaderError.missingPage(page: page)
+        }
+        return pageDocument
     }
 
     func threadFetchCalls() -> [ForumNovelThreadPageFetch] {
@@ -910,6 +1031,11 @@ private final class FakeForumNovelThreadPageLoader: ForumNovelThreadPageLoading,
     func novelFetchCalls() -> [Int] {
         recordedNovelFetches
     }
+}
+
+private enum FakeForumNovelThreadPageLoaderError: Error {
+    case missingPage(page: Int)
+    case plannedFailure(page: Int)
 }
 
 private struct ForumNovelThreadPageFetch: Equatable {

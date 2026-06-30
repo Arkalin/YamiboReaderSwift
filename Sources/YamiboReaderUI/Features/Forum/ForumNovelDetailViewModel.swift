@@ -70,6 +70,7 @@ final class ForumNovelDetailViewModel {
     let context: NovelDetailLaunchContext
 
     @ObservationIgnored private let appContext: YamiboAppContext
+    // Detail-scoped page cache mirroring Android's pagePostsCache; reload owns invalidation.
     @ObservationIgnored private var loadedThreadPages: [Int: ForumThreadPage] = [:]
     @ObservationIgnored private var loadingChapterPages: Set<Int> = []
     @ObservationIgnored private var chapterPageErrors: [Int: String] = [:]
