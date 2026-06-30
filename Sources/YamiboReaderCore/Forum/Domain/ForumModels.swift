@@ -122,6 +122,7 @@ public struct ForumThreadSummary: Codable, Equatable, Identifiable, Hashable, Se
     public var tid: String
     public var title: String
     public var url: URL
+    public var fid: String?
     public var authorName: String?
     public var authorID: String?
     public var authorAvatarURL: URL?
@@ -138,6 +139,7 @@ public struct ForumThreadSummary: Codable, Equatable, Identifiable, Hashable, Se
         tid: String,
         title: String,
         url: URL,
+        fid: String? = nil,
         authorName: String? = nil,
         authorID: String? = nil,
         authorAvatarURL: URL? = nil,
@@ -151,6 +153,7 @@ public struct ForumThreadSummary: Codable, Equatable, Identifiable, Hashable, Se
         self.tid = tid
         self.title = title
         self.url = url
+        self.fid = fid
         self.authorName = authorName
         self.authorID = authorID
         self.authorAvatarURL = authorAvatarURL

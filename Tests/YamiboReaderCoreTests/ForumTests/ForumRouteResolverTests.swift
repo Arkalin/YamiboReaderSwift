@@ -20,6 +20,18 @@ import Testing
     #expect(ForumRouteResolver.resolve(url: url) == .thread(url))
 }
 
+@Test func forumRouteResolverResolvesFindPostURLsAsThreadTargets() throws {
+    let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=redirect&goto=findpost&ptid=570956&pid=99&mobile=2"))
+
+    #expect(ForumRouteResolver.resolve(url: url) == .thread(url))
+}
+
+@Test func forumRouteResolverKeepsThreadReplyActionInWebFallback() throws {
+    let url = YamiboRoute.threadReply(tid: "570956", page: 2).url
+
+    #expect(ForumRouteResolver.resolve(url: url) == .web(url))
+}
+
 @Test func forumRouteResolverResolvesUserSpaceURLs() throws {
     let url = try #require(URL(string: "https://bbs.yamibo.com/home.php?mod=space&uid=705216&mobile=2"))
 
@@ -126,6 +138,33 @@ import Testing
     #expect(items.value(named: "mod") == "forum")
     #expect(items.value(named: "searchid") == "99")
     #expect(items.value(named: "page") == "3")
+}
+
+@Test func threadPostReplyRouteTargetsReplyAction() throws {
+    let url = YamiboRoute.threadPostReply(tid: "704", pid: "4001", page: 2).url
+    let items = try #require(URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems)
+
+    #expect(url.path == "/forum.php")
+    #expect(items.value(named: "mod") == "post")
+    #expect(items.value(named: "action") == "reply")
+    #expect(items.value(named: "tid") == "704")
+    #expect(items.value(named: "repquote") == "4001")
+    #expect(items.value(named: "extra") == "")
+    #expect(items.value(named: "page") == "2")
+    #expect(items.value(named: "mobile") == "2")
+}
+
+@Test func threadReplyRouteTargetsWholeThreadReplyAction() throws {
+    let url = YamiboRoute.threadReply(tid: "704", page: 3).url
+    let items = try #require(URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems)
+
+    #expect(url.path == "/forum.php")
+    #expect(items.value(named: "mod") == "post")
+    #expect(items.value(named: "action") == "reply")
+    #expect(items.value(named: "tid") == "704")
+    #expect(items.value(named: "reppost") == "0")
+    #expect(items.value(named: "page") == "3")
+    #expect(items.value(named: "mobile") == "2")
 }
 
 @Test func userSpaceRoutesIncludeUidDoAndPage() throws {

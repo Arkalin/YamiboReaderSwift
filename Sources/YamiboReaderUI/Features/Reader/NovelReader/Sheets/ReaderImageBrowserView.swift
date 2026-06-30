@@ -15,6 +15,9 @@ struct ReaderImageBrowserView: View {
     @StateObject private var loader: ReaderImageLoader
     @State private var swipeDismissProgress: CGFloat = 0
     @State private var isSwipeDismissCommitted = false
+    @State private var feedback: ReaderImageBrowserFeedback?
+    @State private var shareItem: ReaderImageBrowserShareItem?
+    @State private var isPreparingAction = false
 
     init(
         url: URL,
@@ -88,6 +91,40 @@ struct ReaderImageBrowserView: View {
 
                     Spacer(minLength: 12)
 
+                    Menu {
+                        Button {
+                            Task {
+                                await copyImage()
+                            }
+                        } label: {
+                            Label(L10n.string("image.copy"), systemImage: "doc.on.doc")
+                        }
+
+                        Button {
+                            Task {
+                                await prepareShare()
+                            }
+                        } label: {
+                            Label(L10n.string("common.share"), systemImage: "square.and.arrow.up")
+                        }
+
+                        Button {
+                            Task {
+                                await saveImage()
+                            }
+                        } label: {
+                            Label(L10n.string("image.save_to_photos"), systemImage: "square.and.arrow.down")
+                        }
+                    } label: {
+                        Image(systemName: isPreparingAction ? "hourglass" : "ellipsis")
+                            .font(.title3.weight(.semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 44, height: 44)
+                            .background(.black.opacity(0.58), in: Circle())
+                    }
+                    .disabled(isPreparingAction || loader.didFail)
+                    .accessibilityLabel(L10n.string("common.more"))
+
                     Button(action: onDismiss) {
                         Image(systemName: "checkmark")
                             .font(.title3.weight(.semibold))
@@ -118,7 +155,85 @@ struct ReaderImageBrowserView: View {
         .task {
             await loader.loadIfNeeded()
         }
+        .alert(item: $feedback) { feedback in
+            Alert(
+                title: Text(feedback.title),
+                message: Text(feedback.message),
+                dismissButton: .default(Text(L10n.string("common.done")))
+            )
+        }
+        .sheet(item: $shareItem) { item in
+            ReaderImageBrowserActivityView(activityItems: [item.fileURL]) {
+                try? FileManager.default.removeItem(at: item.fileURL)
+                shareItem = nil
+            }
+        }
         .accessibilityIdentifier("reader-image-browser")
+    }
+
+    private func copyImage() async {
+        await performImageAction {
+            let data = try await imageData()
+            guard let image = UIImage(data: data) else {
+                throw ReaderImageBrowserActionError.invalidImageData
+            }
+            UIPasteboard.general.image = image
+            feedback = .success(
+                title: L10n.string("image.copy_success_title"),
+                message: L10n.string("image.copy_success_message")
+            )
+        }
+    }
+
+    private func prepareShare() async {
+        await performImageAction {
+            let data = try await imageData()
+            guard UIImage(data: data) != nil else {
+                throw ReaderImageBrowserActionError.invalidImageData
+            }
+            let fileURL = FileManager.default.temporaryDirectory
+                .appendingPathComponent(UUID().uuidString)
+                .appendingPathExtension(preferredImageExtension)
+            try data.write(to: fileURL, options: .atomic)
+            shareItem = ReaderImageBrowserShareItem(fileURL: fileURL)
+        }
+    }
+
+    private func saveImage() async {
+        await performImageAction {
+            let data = try await imageData()
+            let saver = MangaImagePhotoSaver()
+            try await saver.saveImageData(data)
+            feedback = .success(
+                title: L10n.string("image.save_success_title"),
+                message: L10n.string("image.save_success_message")
+            )
+        }
+    }
+
+    private func performImageAction(_ action: @escaping () async throws -> Void) async {
+        guard !isPreparingAction else { return }
+        isPreparingAction = true
+        defer {
+            isPreparingAction = false
+        }
+        do {
+            try await action()
+        } catch MangaImagePhotoSaveError.authorizationDenied {
+            feedback = .failure(message: L10n.string("image.save_photo_permission_denied"))
+        } catch {
+            feedback = .failure(message: L10n.string("image.action_failed"))
+        }
+    }
+
+    private func imageData() async throws -> Data {
+        try await imageDataLoader.imageData(for: url, refererURL: refererURL)
+    }
+
+    private var preferredImageExtension: String {
+        let ext = url.pathExtension.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !ext.isEmpty, ext.count <= 8 else { return "jpg" }
+        return ext
     }
 
     private func beginSwipeDownDismissCommit() {
@@ -131,6 +246,46 @@ struct ReaderImageBrowserView: View {
         isSwipeDismissCommitted = true
         onDismiss()
     }
+}
+
+private enum ReaderImageBrowserActionError: Error {
+    case invalidImageData
+}
+
+private struct ReaderImageBrowserFeedback: Identifiable {
+    let id = UUID()
+    let title: String
+    let message: String
+
+    static func success(title: String, message: String) -> ReaderImageBrowserFeedback {
+        ReaderImageBrowserFeedback(title: title, message: message)
+    }
+
+    static func failure(message: String) -> ReaderImageBrowserFeedback {
+        ReaderImageBrowserFeedback(title: L10n.string("common.operation_failed"), message: message)
+    }
+}
+
+private struct ReaderImageBrowserShareItem: Identifiable {
+    let id = UUID()
+    let fileURL: URL
+}
+
+private struct ReaderImageBrowserActivityView: UIViewControllerRepresentable {
+    let activityItems: [Any]
+    let onComplete: () -> Void
+
+    func makeUIViewController(context _: Context) -> UIActivityViewController {
+        let controller = UIActivityViewController(activityItems: activityItems, applicationActivities: nil)
+        controller.completionWithItemsHandler = { _, _, _, _ in
+            DispatchQueue.main.async {
+                onComplete()
+            }
+        }
+        return controller
+    }
+
+    func updateUIViewController(_: UIActivityViewController, context _: Context) {}
 }
 
 private struct ReaderZoomableImageView: View {

@@ -98,7 +98,13 @@ public enum ForumRouteResolver {
             return HTMLTextExtractor.firstMatch(pattern: #"thread-\d+-\d+-\d+\.html"#, in: url.absoluteString) != nil
         }
         let items = components.queryItems ?? []
+        let mod = items.value(named: "mod")?.nilIfBlank
         if items.value(named: "tid")?.nilIfBlank != nil {
+            return mod == nil || mod == "viewthread"
+        }
+        if items.value(named: "ptid")?.nilIfBlank != nil,
+           items.value(named: "pid")?.nilIfBlank != nil,
+           (items.value(named: "goto") == "findpost" || items.value(named: "mod") == "redirect") {
             return true
         }
         return HTMLTextExtractor.firstMatch(pattern: #"thread-\d+-\d+-\d+\.html"#, in: url.absoluteString) != nil

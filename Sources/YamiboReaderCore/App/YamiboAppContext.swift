@@ -135,6 +135,26 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         return ThreadOpenResolver(client: client)
     }
 
+    public func makeForumThreadRouteResolver() async -> ForumThreadRouteResolver {
+        let sessionState = await sessionStore.load()
+        let client = YamiboClient(
+            session: session,
+            cookie: sessionState.cookie,
+            userAgent: sessionState.userAgent
+        )
+        return ForumThreadRouteResolver(client: client)
+    }
+
+    public func makeForumThreadReaderRepository() async -> ForumThreadReaderRepository {
+        let sessionState = await sessionStore.load()
+        let client = YamiboClient(
+            session: session,
+            cookie: sessionState.cookie,
+            userAgent: sessionState.userAgent
+        )
+        return ForumThreadReaderRepository(client: client)
+    }
+
     public func makeForumRepository() async -> ForumRepository {
         let sessionState = await sessionStore.load()
         let client = YamiboClient(

@@ -57,7 +57,7 @@ public enum ForumHTMLParser {
             board: board,
             subBoards: parseSubBoards(in: document),
             pinnedItems: parsePinnedItems(in: document),
-            threads: parseThreadSummaries(in: document),
+            threads: parseThreadSummaries(in: document, fid: fid),
             pageNavigation: parsePageNavigation(in: document),
             filters: parseFilterOptions(in: document),
             orders: parseOrderOptions(in: document),
@@ -261,10 +261,10 @@ public enum ForumHTMLParser {
         return items
     }
 
-    private static func parseThreadSummaries(in document: Document) -> [ForumThreadSummary] {
+    private static func parseThreadSummaries(in document: Document, fid: String? = nil) -> [ForumThreadSummary] {
         let rows = (try? document.select(".threadlist li.list")) ?? Elements()
         if !rows.isEmpty {
-            return parseThreadRows(rows)
+            return parseThreadRows(rows, fid: fid)
         }
 
         let links = (try? document.select("a[href*='viewthread'][href*='tid='], a[href*='thread-']")) ?? Elements()
@@ -279,13 +279,13 @@ public enum ForumHTMLParser {
                   seen.insert(tid).inserted else {
                 continue
             }
-            summaries.append(ForumThreadSummary(tid: tid, title: title, url: url))
+            summaries.append(ForumThreadSummary(tid: tid, title: title, url: url, fid: fid))
         }
 
         return summaries
     }
 
-    private static func parseThreadRows(_ rows: Elements) -> [ForumThreadSummary] {
+    private static func parseThreadRows(_ rows: Elements, fid: String?) -> [ForumThreadSummary] {
         var summaries: [ForumThreadSummary] = []
         var seen = Set<String>()
 
@@ -313,6 +313,7 @@ public enum ForumHTMLParser {
                     tid: tid,
                     title: title,
                     url: url,
+                    fid: fid,
                     authorName: ((try? authorLink?.text()) ?? "").nilIfBlank,
                     authorID: authorURL.flatMap(userID(from:)),
                     authorAvatarURL: HTMLTextExtractor.absoluteURL(from: (try? row.select(".mimg img[src]").first()?.attr("src")) ?? ""),

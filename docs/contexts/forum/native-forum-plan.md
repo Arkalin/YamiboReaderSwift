@@ -1,5 +1,7 @@
 # Native Forum Migration Plan
 
+Status: superseded as an implementation-phase plan. Use `CONTEXT.md` and ADRs for current target behavior; reduced-scope references below describe historical migration slices, not the current acceptance standard.
+
 This plan replaces the forum tab's WebView-first browser with a **Native Forum Surface** while keeping **Forum Web Fallback** only for flows that still require Yamibo web behavior.
 
 ## Confirmed Product Boundaries
@@ -7,8 +9,8 @@ This plan replaces the forum tab's WebView-first browser with a **Native Forum S
 - The forum tab opens **Forum Home** directly through native SwiftUI.
 - There is no user-facing setting or menu item to switch back to the old WebView browser.
 - **Forum Web Fallback** remains internal for posting, reader-origin forum links, unsupported URLs, login or verification flows, and parser failure recovery.
-- **Forum Home** should match the Android/Compose app's information architecture and behavior, but the Swift implementation should use iOS-native visual treatment.
-- `hasNewMessage` is out of scope for the first version.
+- **Forum Home** should match the current KMP/Compose app's information architecture and behavior, but the Swift implementation should use iOS-native visual treatment.
+- `hasNewMessage` was outside this historical migration slice.
 
 ## Native Surfaces
 
@@ -24,7 +26,7 @@ Forum Home should include:
 
 Forum Home parsing succeeds when it yields at least one category and at least one board. Carousel parsing is optional; missing or failed carousel data hides the carousel instead of failing the page.
 
-Category expansion follows the Android behavior:
+Category expansion follows the current KMP/Compose behavior:
 
 - The first three categories are expanded by default.
 - Later categories are collapsed by default.
@@ -35,7 +37,7 @@ Category expansion follows the Android behavior:
 Forum Home Carousel behavior:
 
 - Carousel item data is cached with Forum Home.
-- Images use async loading and normal URL caching only; do not add custom carousel image disk cache in the first version.
+- Images used async loading and normal URL caching only in this historical migration slice; custom carousel image disk cache was not part of that slice.
 - Image failure shows a placeholder and does not fail Forum Home.
 - Clicking an item opens a thread natively when a thread id can be parsed; otherwise it uses **Forum Web Fallback**.
 
@@ -155,11 +157,11 @@ Implement **Forum Board Favorite** as a native authenticated request.
 
 ### Posting
 
-Posting a new thread remains **Forum Web Fallback** or action WebView in the first version.
+Posting a new thread remained **Forum Web Fallback** or action WebView in this historical migration slice.
 
 ## Implementation Order
 
-1. Add domain models, URL route resolver, repository skeleton, and `ForumCacheStore`.
+1. Add domain models, URL route resolver, repository structure, and `ForumCacheStore`.
 2. Implement Forum Home parser and fixture tests.
 3. Implement native Forum Home UI and route into Forum Board.
 4. Implement Forum Board parser, repository fetch, cache, and fixture tests.
@@ -181,7 +183,7 @@ Recommended tests:
 - `ForumCacheStoreTests` for TTL, cache keys, cache hit, expiry, and refresh writes.
 - Forum view model tests with fake repositories for load, cache-first refresh, pull-to-refresh, search, sorting/filtering, native favorite success, and native favorite failure.
 
-UI snapshot tests are not required for the first version.
+UI snapshot tests were not required for this historical migration slice.
 
 ## Open Implementation Details
 

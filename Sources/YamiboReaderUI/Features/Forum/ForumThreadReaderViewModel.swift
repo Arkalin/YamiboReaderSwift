@@ -1,0 +1,239 @@
+import Foundation
+import Observation
+import YamiboReaderCore
+
+protocol ForumThreadPageLoading: Sendable {
+    func fetchThreadPage(context: ThreadReaderLaunchContext, page: Int) async throws -> ForumThreadPage
+    func fetchRatingResults(threadID: String, postID: String) async throws -> ForumThreadRatingResultsPage
+    func fetchRateOptions(threadID: String, postID: String) async throws -> ForumThreadRateOptionsPage
+    func fetchPollVoters(threadID: String, optionID: String?, page: Int) async throws -> ForumThreadPollVotersPage
+    func votePoll(forumID: String, threadID: String, optionIDs: [String], formHash: String) async throws -> String
+    func ratePost(
+        threadID: String,
+        postID: String,
+        score: Int,
+        reason: String,
+        formHash: String,
+        noticeAuthor: Bool
+    ) async throws -> String
+    func commentPost(threadID: String, postID: String, message: String, formHash: String, page: Int) async throws -> String
+}
+
+extension ForumThreadReaderRepository: ForumThreadPageLoading {}
+
+@MainActor
+@Observable
+final class ForumThreadReaderViewModel {
+    var page: ForumThreadPage?
+    var currentPage = 1
+    var isLoading = false
+    var errorMessage: String?
+    var isFavorited = false
+    var favoriteErrorMessage: String?
+    var inlineImageLoadingContext: NovelInlineImageLoadingContext?
+
+    let context: ThreadReaderLaunchContext
+
+    @ObservationIgnored private let repositoryProvider: @Sendable () async -> any ForumThreadPageLoading
+    @ObservationIgnored private let favoriteStoreProvider: @Sendable () async -> (any FavoriteStoring)?
+    @ObservationIgnored private let inlineImageLoadingContextProvider: @Sendable () async -> NovelInlineImageLoadingContext?
+
+    init(context: ThreadReaderLaunchContext, appContext: YamiboAppContext) {
+        self.context = context
+        repositoryProvider = {
+            await appContext.makeForumThreadReaderRepository()
+        }
+        favoriteStoreProvider = {
+            appContext.favoriteStore
+        }
+        inlineImageLoadingContextProvider = {
+            await appContext.makeNovelInlineImageLoadingContext()
+        }
+    }
+
+    init(
+        context: ThreadReaderLaunchContext,
+        repository: any ForumThreadPageLoading,
+        favoriteStore: (any FavoriteStoring)? = nil
+    ) {
+        self.context = context
+        repositoryProvider = {
+            repository
+        }
+        favoriteStoreProvider = {
+            favoriteStore
+        }
+        inlineImageLoadingContextProvider = {
+            nil
+        }
+    }
+
+    var navigationTitle: String {
+        page?.title ?? context.title
+    }
+
+    var pageNavigation: ForumPageNavigation? {
+        page?.pageNavigation
+    }
+
+    var targetPostID: String? {
+        context.targetPostID
+    }
+
+    func load() async {
+        guard page == nil else { return }
+        await refreshFavoriteState()
+        await loadPage(context.initialPage)
+    }
+
+    func refresh() async {
+        await loadPage(currentPage)
+    }
+
+    func retry() {
+        Task {
+            await refresh()
+        }
+    }
+
+    func goToPage(_ page: Int) async {
+        let nextPage = max(1, page)
+        guard nextPage != currentPage else { return }
+        await loadPage(nextPage)
+    }
+
+    func clearFavoriteError() {
+        favoriteErrorMessage = nil
+    }
+
+    func toggleFavorite() async {
+        guard let favoriteStore = await favoriteStoreProvider() else { return }
+        let url = context.thread.canonicalURL
+
+        do {
+            if let favorite = await favoriteStore.favorite(for: url) {
+                _ = try await favoriteStore.deleteFavorite(id: favorite.id)
+                isFavorited = false
+                return
+            }
+
+            let existingFavorites = await favoriteStore.loadFavorites()
+            var favorite = Favorite(
+                title: favoriteTitle,
+                url: url,
+                isHidden: false,
+                type: .other
+            )
+            favorite.parentCollectionID = nil
+            try await favoriteStore.saveFavorites(existingFavorites + [favorite])
+            isFavorited = true
+        } catch {
+            favoriteErrorMessage = error.localizedDescription
+            await refreshFavoriteState()
+        }
+    }
+
+    func loadRatingResults(threadID: String, postID: String) async throws -> ForumThreadRatingResultsPage {
+        let repository = await repositoryProvider()
+        return try await repository.fetchRatingResults(threadID: threadID, postID: postID)
+    }
+
+    func loadRateOptions(threadID: String, postID: String) async throws -> ForumThreadRateOptionsPage {
+        let repository = await repositoryProvider()
+        return try await repository.fetchRateOptions(threadID: threadID, postID: postID)
+    }
+
+    func loadPollVoters(threadID: String, optionID: String?, page: Int) async throws -> ForumThreadPollVotersPage {
+        let repository = await repositoryProvider()
+        return try await repository.fetchPollVoters(threadID: threadID, optionID: optionID, page: page)
+    }
+
+    func votePoll(forumID: String, threadID: String, optionIDs: [String], formHash: String) async throws -> String {
+        let repository = await repositoryProvider()
+        let message = try await repository.votePoll(
+            forumID: forumID,
+            threadID: threadID,
+            optionIDs: optionIDs,
+            formHash: formHash
+        )
+        await refresh()
+        return message
+    }
+
+    func ratePost(
+        threadID: String,
+        postID: String,
+        score: Int,
+        reason: String,
+        formHash: String,
+        noticeAuthor: Bool
+    ) async throws -> String {
+        let repository = await repositoryProvider()
+        let message = try await repository.ratePost(
+            threadID: threadID,
+            postID: postID,
+            score: score,
+            reason: reason,
+            formHash: formHash,
+            noticeAuthor: noticeAuthor
+        )
+        await refresh()
+        return message
+    }
+
+    func commentPost(
+        threadID: String,
+        postID: String,
+        message: String,
+        formHash: String,
+        page: Int
+    ) async throws -> String {
+        let repository = await repositoryProvider()
+        let result = try await repository.commentPost(
+            threadID: threadID,
+            postID: postID,
+            message: message,
+            formHash: formHash,
+            page: page
+        )
+        await refresh()
+        return result
+    }
+
+    private func loadPage(_ page: Int) async {
+        isLoading = true
+        errorMessage = nil
+        defer { isLoading = false }
+
+        do {
+            if inlineImageLoadingContext == nil {
+                inlineImageLoadingContext = await inlineImageLoadingContextProvider()
+            }
+            let repository = await repositoryProvider()
+            let loaded = try await repository.fetchThreadPage(context: context, page: page)
+            self.page = loaded
+            currentPage = loaded.pageNavigation?.currentPage ?? page
+        } catch {
+            self.page = nil
+            currentPage = page
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private var favoriteTitle: String {
+        let loadedTitle = page?.title.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !loadedTitle.isEmpty {
+            return loadedTitle
+        }
+        let contextTitle = context.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        return contextTitle.isEmpty ? context.thread.canonicalURL.absoluteString : contextTitle
+    }
+
+    private func refreshFavoriteState() async {
+        guard let favoriteStore = await favoriteStoreProvider() else {
+            isFavorited = false
+            return
+        }
+        isFavorited = await favoriteStore.favorite(for: context.thread.canonicalURL) != nil
+    }
+}

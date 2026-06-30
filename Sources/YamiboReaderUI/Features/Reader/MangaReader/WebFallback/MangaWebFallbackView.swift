@@ -13,9 +13,11 @@ public struct MangaWebFallbackView: View {
 
     public var body: some View {
         NavigationStack {
-            MangaWebFallbackSkeletonContent(
-                currentURL: context.currentURL,
-                originalThreadURL: context.originalThreadURL
+            ForumBrowserView(
+                url: context.currentURL,
+                appContext: appModel.appContext,
+                appModel: appModel,
+                listensToForumNavigationRequest: false
             )
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -42,62 +44,3 @@ public struct MangaWebFallbackView: View {
     }
 }
 #endif
-
-private struct MangaWebFallbackSkeletonContent: View {
-    let currentURL: URL
-    let originalThreadURL: URL
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                MangaWebFallbackHeader()
-                MangaWebFallbackStatus()
-                MangaWebFallbackRouteRow(title: L10n.string("manga.skeleton.current_url"), url: currentURL)
-                MangaWebFallbackRouteRow(title: L10n.string("manga.skeleton.original_thread"), url: originalThreadURL)
-            }
-            .frame(maxWidth: 680, alignment: .leading)
-            .padding(24)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.black)
-        .foregroundStyle(.white)
-    }
-}
-
-private struct MangaWebFallbackHeader: View {
-    var body: some View {
-        Label(L10n.string("manga_web.title"), systemImage: "safari")
-            .font(.title2)
-            .fontWeight(.semibold)
-    }
-}
-
-private struct MangaWebFallbackStatus: View {
-    var body: some View {
-        Text(L10n.string("manga_web.skeleton.message"))
-            .font(.body)
-            .foregroundStyle(.secondary)
-            .fixedSize(horizontal: false, vertical: true)
-            .padding(16)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.white.opacity(0.08))
-            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-    }
-}
-
-private struct MangaWebFallbackRouteRow: View {
-    let title: String
-    let url: URL
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Text(url.absoluteString)
-                .font(.footnote.monospaced())
-                .textSelection(.enabled)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-    }
-}

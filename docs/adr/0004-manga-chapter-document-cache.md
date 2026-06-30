@@ -18,11 +18,11 @@ The cache key is `MangaReaderDataSupport.normalizedChapterURL(url).absoluteStrin
 
 The store normalizes the persisted `chapterURL` to the cache URL when saving. On read, if the normalized URL contains a `tid`, the cached document's `tid` must match it; mismatches remove that entry and are treated as misses. Request deduplication is intentionally scoped to a single cached loader instance; the store does not own network in-flight coordination.
 
-Cache hits are authoritative for the first version: they return the cached **Manga Chapter Document** without fetching chapter HTML or refreshing in the background. There is no TTL. If upstream loading fails after a miss, the cached loader checks the store one final time and returns that document if one has appeared; otherwise it rethrows the original error.
+Cache hits are authoritative: they return the cached **Manga Chapter Document** without fetching chapter HTML or refreshing in the background. There is no TTL. If upstream loading fails after a miss, the cached loader checks the store one final time and returns that document if one has appeared; otherwise it rethrows the original error.
 
 The document cache does not change **Manga Directory** resolution. A fully offline current-chapter open still requires both a cached **Manga Chapter Document** and a locally available **Manga Directory** for the current context; this ADR does not change directory fallback behavior.
 
-The concrete store does not need an LRU or disk limit in its first version because parsed document JSON is small compared with image byte data. It exposes `clearAll()` and concrete-only diagnostics such as `totalDiskUsageBytes()`. Corrupt or incompatible indexes clear the whole document cache directory; missing, unreadable, undecodable, or invalid indexed documents remove that entry and are treated as misses. A loaded cached document is valid only if `tid`, `chapterTitle`, and `imageURLs` are non-empty.
+The concrete store does not need an LRU or disk limit because parsed document JSON is small compared with image byte data. It exposes `clearAll()` and concrete-only diagnostics such as `totalDiskUsageBytes()`. Corrupt or incompatible indexes clear the whole document cache directory; missing, unreadable, undecodable, or invalid indexed documents remove that entry and are treated as misses. A loaded cached document is valid only if `tid`, `chapterTitle`, and `imageURLs` are non-empty.
 
 ## Verification
 
@@ -34,4 +34,4 @@ Do not cache raw chapter HTML. Raw HTML parsing remains hidden behind Data adapt
 
 Do not fold chapter documents into `FileMangaDirectoryStore`. A **Manga Directory** is the ordered chapter list for a title, while a **Manga Chapter Document** is parsed image-page content for one chapter; they share lifecycle but not identity.
 
-Do not add automatic background refresh or TTL in the first version. Either would reintroduce chapter HTML requests even when the document is cached.
+Do not add automatic background refresh or TTL without a product requirement. Either would reintroduce chapter HTML requests even when the document is cached.

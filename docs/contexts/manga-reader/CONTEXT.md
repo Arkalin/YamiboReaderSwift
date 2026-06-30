@@ -12,6 +12,10 @@ _Avoid_: loaded documents, chapter buffer, chapter cache
 The known ordered chapter list for one manga title.
 _Avoid_: chapter list, table of contents
 
+**Manga Detail**:
+The shared native book-level entry surface for a manga thread opened from forum browsing or another caller such as the favorite library. It is centered on the manga title's **Manga Directory** and chapter entry points before the user enters continuous manga reading, and the caller hosts it in that caller's navigation stack.
+_Avoid_: single thread detail, manga reader sheet, direct image reader
+
 **Manga Chapter Document**:
 The parsed image-page content for one manga thread chapter.
 _Avoid_: loaded chapter, chapter HTML
@@ -79,6 +83,13 @@ _Avoid_: double page position, two-page progress, spread position
 ## Relationships
 
 - A **Manga Directory** contains zero or more **Manga Chapter Documents** by chapter identity.
+- **Manga Detail** resolves its **Manga Directory** from the tapped chapter thread by first checking local directories that already contain the chapter `tid`, then using directory-name hints or remote directory discovery. If directory discovery fails, **Manga Detail** may still present a single-chapter entry instead of falling back to web.
+- When **Manga Detail** discovers chapters for the same `cleanBookName` as an existing **Manga Directory**, it automatically updates that directory with the newly discovered chapters rather than creating a second directory for the same manga title. Fuzzy matches or title-cleaning changes that would alter the owning `cleanBookName` require a user confirmation or correction flow.
+- **Manga Detail** does not expose a separate "read tapped chapter" primary entry. When opened from a chapter thread, it focuses or highlights that chapter's row inside the **Manga Directory** so the user can enter it from the chapter list.
+- **Manga Detail** continue reading restores the latest **Manga Reading Position** for the manga title. If there is no saved position, continue reading opens the first chapter in the **Manga Directory** rather than the focused chapter.
+- **Manga Detail** chapter-row selection opens the selected chapter in manga reading from its first page. It does not introduce per-chapter page resume separate from the manga title's latest **Manga Reading Position**.
+- **Manga Detail** ignores target post identity from thread or find-post links. It uses the thread or chapter identity for **Manga Directory** resolution and chapter-row focus, not post-level positioning.
+- **Manga Detail** may provide a secondary native discussion action that opens the relevant chapter thread in **Native Thread Reader**. It does not need a separate proactive web-original action.
 - A **Manga Offline Cache** depends on one or more **Manga Chapter Documents** and their manga image bytes being available locally.
 - A **Manga Offline Cache** is managed at chapter granularity from the chapters in a **Manga Directory**.
 - A chapter belongs to the **Manga Offline Cache** only through explicit offline-cache membership; transparent document or image cache hits do not by themselves create that membership.
@@ -91,7 +102,7 @@ _Avoid_: double page position, two-page progress, spread position
 - When cached work has a chapter `tid`, the `tid` remains authoritative and a stale chapter URL may be rebuilt or normalized before treating the work as failed.
 - **Manga Offline Cache** image bytes are user-retained offline content and are not governed by the transparent image byte cache's reclaim policy.
 - A completed **Manga Offline Cache** preserves the cached **Manga Chapter Document** and image URL set as the offline-readable version; later remote chapter changes do not automatically invalidate that membership.
-- A **Manga Offline Cache State** is chapter-level; the first version does not expose a partial-cache state.
+- A **Manga Offline Cache State** is chapter-level and does not expose a partial-cache state.
 - A **Manga Offline Cache State** of caching means there is **Manga Offline Cache Work** for that chapter, including work recovered after an app restart.
 - A **Manga Offline Cache Queue** groups **Manga Offline Cache Work** by the owning **Manga Offline Cache Owner** when presented outside the manga reader.
 - A **Manga Offline Cache Queue** group uses the **Manga Offline Cache Owner** as its title; favorite titles or URLs may be kept as recovery metadata but do not define queue group identity.
@@ -102,14 +113,14 @@ _Avoid_: double page position, two-page progress, spread position
 - Adding a chapter to the **Manga Offline Cache Queue** is idempotent; existing cached or caching chapters are not duplicated or reordered.
 - Adding a chapter from the manga reader cache sheet does not retry failed work; failed work resumes only through continuing the **Manga Offline Cache Queue**.
 - **Manga Offline Cache Work** executes in the order it was added; queue groups are ordered by their earliest unfinished work, while chapters inside a group follow **Manga Directory** order.
-- The first-version **Manga Offline Cache Queue** does not support user-driven reordering.
+- **Manga Offline Cache Queue** does not support user-driven reordering.
 - Removing a **Favorite Library** entry does not remove **Manga Offline Cache** content owned by the same manga title.
 - Canceling **Manga Offline Cache Work** stops that chapter from becoming cached and removes locally stored image bytes for that chapter, while reusable **Manga Directory** and **Manga Chapter Document** data may remain available.
 - Canceling a **Manga Offline Cache Queue** group cancels that group's unfinished or failed work without deleting already completed cached chapters that have left the queue.
 - Deleting a cached chapter from the **Manga Offline Cache** removes its offline-cache membership and locally stored image bytes, while reusable **Manga Directory** and **Manga Chapter Document** data may remain available.
 - Deleting a chapter from the **Manga Offline Cache** also cancels any unfinished or failed work for that same chapter so the queue cannot recreate the deleted membership.
 - Deleting **Manga Offline Cache** membership preserves image bytes still required by remaining offline-cache memberships, including when multiple memberships are deleted together.
-- **Manga Offline Cache** storage has no first-version size limit, but its disk usage is visible to the user.
+- **Manga Offline Cache** storage has no configured size limit, but its disk usage is visible to the user.
 - A cached chapter can be read offline without a local **Manga Directory**, but adjacent reading, directory display, and reader cache management depend on the relevant **Manga Directory**.
 - **Manga Offline Cache Progress** counts cached images within a chapter; loading or reusing the **Manga Chapter Document** is preparation for that count rather than part of the percentage.
 - Failed **Manga Offline Cache Work** remains in the **Manga Offline Cache Queue** until the user continues it, cancels it, or deletes it; the manga reader cache sheet does not expose a separate failed state.

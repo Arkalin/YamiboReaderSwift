@@ -67,6 +67,14 @@ public enum YamiboRoute: Sendable {
     case privateMessageSend(privateMessageID: String, uid: String)
     case blog(blogID: String, uid: String?, page: Int)
     case blogComment(blogID: String, uid: String)
+    case threadRateOptions(tid: String, pid: String)
+    case threadRatingResults(tid: String, pid: String)
+    case threadRateSubmit
+    case threadPostComment(tid: String, pid: String, page: Int)
+    case threadPollVoters(tid: String, pollOptionID: String?, page: Int)
+    case threadPollVote(fid: String, tid: String)
+    case threadReply(tid: String, page: Int)
+    case threadPostReply(tid: String, pid: String, page: Int)
 
     public var url: URL {
         switch self {
@@ -348,6 +356,118 @@ public enum YamiboRoute: Sendable {
                 .init(name: "id", value: blogID),
                 .init(name: "idtype", value: "blogid"),
                 .init(name: "uid", value: uid),
+                .init(name: "mobile", value: "2")
+            ]
+            return components.url!
+        case let .threadRateOptions(tid, pid):
+            var components = URLComponents(url: Self.baseURL, resolvingAgainstBaseURL: false)!
+            components.path = "/forum.php"
+            components.queryItems = [
+                .init(name: "mod", value: "misc"),
+                .init(name: "action", value: "rate"),
+                .init(name: "tid", value: tid),
+                .init(name: "pid", value: pid),
+                .init(name: "mobile", value: "2"),
+                .init(name: "infloat", value: "yes"),
+                .init(name: "handlekey", value: "rate"),
+                .init(name: "inajax", value: "1")
+            ]
+            return components.url!
+        case let .threadRatingResults(tid, pid):
+            var components = URLComponents(url: Self.baseURL, resolvingAgainstBaseURL: false)!
+            components.path = "/forum.php"
+            components.queryItems = [
+                .init(name: "mod", value: "misc"),
+                .init(name: "action", value: "viewratings"),
+                .init(name: "tid", value: tid),
+                .init(name: "pid", value: pid),
+                .init(name: "mobile", value: "2"),
+                .init(name: "inajax", value: "1")
+            ]
+            return components.url!
+        case .threadRateSubmit:
+            var components = URLComponents(url: Self.baseURL, resolvingAgainstBaseURL: false)!
+            components.path = "/forum.php"
+            components.queryItems = [
+                .init(name: "mod", value: "misc"),
+                .init(name: "action", value: "rate"),
+                .init(name: "ratesubmit", value: "yes"),
+                .init(name: "infloat", value: "yes"),
+                .init(name: "inajax", value: "1"),
+                .init(name: "handlekey", value: "rateform"),
+                .init(name: "inajax", value: "1")
+            ]
+            return components.url!
+        case let .threadPostComment(tid, pid, page):
+            var components = URLComponents(url: Self.baseURL, resolvingAgainstBaseURL: false)!
+            components.path = "/forum.php"
+            components.queryItems = [
+                .init(name: "mod", value: "post"),
+                .init(name: "action", value: "reply"),
+                .init(name: "comment", value: "yes"),
+                .init(name: "tid", value: tid),
+                .init(name: "pid", value: pid),
+                .init(name: "extra", value: ""),
+                .init(name: "page", value: String(max(1, page))),
+                .init(name: "commentsubmit", value: "yes"),
+                .init(name: "infloat", value: "yes"),
+                .init(name: "inajax", value: "1"),
+                .init(name: "handlekey", value: "commentform"),
+                .init(name: "inajax", value: "1")
+            ]
+            return components.url!
+        case let .threadPollVoters(tid, pollOptionID, page):
+            var components = URLComponents(url: Self.baseURL, resolvingAgainstBaseURL: false)!
+            components.path = "/forum.php"
+            var items: [URLQueryItem] = [
+                .init(name: "mod", value: "misc"),
+                .init(name: "action", value: "viewvote"),
+                .init(name: "tid", value: tid),
+                .init(name: "mobile", value: "2"),
+                .init(name: "inajax", value: "1")
+            ]
+            if page != 1 {
+                items.append(.init(name: "page", value: String(max(1, page))))
+            }
+            if let pollOptionID = pollOptionID?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !pollOptionID.isEmpty {
+                items.append(.init(name: "polloptionid", value: pollOptionID))
+            }
+            components.queryItems = items
+            return components.url!
+        case let .threadPollVote(fid, tid):
+            var components = URLComponents(url: Self.baseURL, resolvingAgainstBaseURL: false)!
+            components.path = "/forum.php"
+            components.queryItems = [
+                .init(name: "mod", value: "misc"),
+                .init(name: "action", value: "votepoll"),
+                .init(name: "fid", value: fid),
+                .init(name: "tid", value: tid),
+                .init(name: "mobile", value: "2")
+            ]
+            return components.url!
+        case let .threadReply(tid, page):
+            var components = URLComponents(url: Self.baseURL, resolvingAgainstBaseURL: false)!
+            components.path = "/forum.php"
+            components.queryItems = [
+                .init(name: "mod", value: "post"),
+                .init(name: "action", value: "reply"),
+                .init(name: "tid", value: tid),
+                .init(name: "reppost", value: "0"),
+                .init(name: "page", value: String(max(1, page))),
+                .init(name: "mobile", value: "2")
+            ]
+            return components.url!
+        case let .threadPostReply(tid, pid, page):
+            var components = URLComponents(url: Self.baseURL, resolvingAgainstBaseURL: false)!
+            components.path = "/forum.php"
+            components.queryItems = [
+                .init(name: "mod", value: "post"),
+                .init(name: "action", value: "reply"),
+                .init(name: "tid", value: tid),
+                .init(name: "repquote", value: pid),
+                .init(name: "extra", value: ""),
+                .init(name: "page", value: String(max(1, page))),
                 .init(name: "mobile", value: "2")
             ]
             return components.url!

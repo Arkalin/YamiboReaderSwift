@@ -1,6 +1,6 @@
 # MangaReader Core Boundary
 
-This directory owns the phase 2 manga reader rewrite boundary.
+This directory owns the production manga reader core boundary.
 
 The legacy manga reader implementation has been moved to `docs/reference/manga-reader-legacy/` and is reference-only. New production code must not depend on legacy implementation classes or actors.
 
@@ -26,7 +26,7 @@ Application-level values and projections that do not depend on SwiftUI or WebKit
 - `MangaReaderPageProjection`
 - `MangaDirectoryWorkflow` for **Manga Directory** initialization, update, forced search, cooldown, rename, and merge rules
 
-Phase 2 intentionally does not implement directory workflows, continuous reading, progress writes, automatic WebKit fallback, prefetching, or image caching.
+The core implementation supports final reader behavior through directory workflow, chapter-window updates, reading-position progress, adjacent chapter navigation, prefetch contracts, and image/cache seams. Do not reintroduce reduced staged behavior as an acceptance boundary.
 
 ## Phase 8 Directory Workflow
 

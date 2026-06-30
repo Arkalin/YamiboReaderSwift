@@ -2,11 +2,17 @@
 
 Domain language for native novel reading, TextKit layout, runtime generations, and SwiftUI presentation.
 
+Novel detail parity uses the current KMP/Compose `yamibo-app` implementation as the behavioral reference. Do not use the old Android `YamiboReaderPro` app as an acceptance reference.
+
 ## Language
 
 **Novel Reading Session**:
 The pure-value state machine for native novel reading that consumes committed layout results and derives semantic reading position and Presentation revisions without owning prefetched documents or performing layout.
 _Avoid_: reader container state, reader model state, document buffer
+
+**Novel Detail**:
+The shared native intermediate surface for a novel thread before entering novel reading. It follows the current KMP app behavior by presenting novel-thread metadata, chapter or post entry points, favorite state, and reading entry actions rather than reusing the novel reader page document as its data model.
+_Avoid_: direct novel reader, reader page document, novel web page
 
 **Novel Reading Position**:
 The reader's semantic position in a novel thread, identified by reader page document view, chapter identity, text segment identity, and Swift `Character` offset in displayed transformed text.
@@ -54,6 +60,12 @@ _Avoid_: attributed string helper, UI text style factory, platform text builder,
 
 ## Relationships
 
+- **Novel Detail** uses its own detail model and repository while reusing lower-level Yamibo fetching, parsing utilities, favorite state, and reading progress stores where appropriate.
+- **Novel Detail** header metadata is driven by the structured forum **Thread Page**: parsed thread title, first-post author, post time, view/reply counts, forum label, and the first valid non-emoticon image cover candidate. The novel reader page document remains the source for readable chapter entry points, not for detail header identity.
+- **Novel Detail** entry behavior follows the current KMP/Compose app: continue reading opens saved reading history when present and otherwise starts from the beginning, while selecting a chapter or post row opens that selected entry in the novel reader.
+- **Novel Detail** launch context carries the thread identity, display title, and optional author identity. When the caller already knows the author identity, it passes that hint; otherwise the detail repository may recover it from thread metadata.
+- Thread or find-post links classified as novel still open **Novel Detail**. A target post identity does not bypass **Novel Detail** and does not require the detail surface to focus or highlight that post.
+- **Novel Detail** may provide a secondary native discussion action that opens the same thread in **Native Thread Reader**. It does not need a separate proactive web-original action.
 - A **Novel Reading Session** consumes the committed **Novel Text Layout** result for exactly one current reader page document; prefetched reader page documents remain pure-value inputs owned by the **Novel Reading Workflow** until atomic promotion.
 - A **Novel Reading Session** preserves the **Novel Reading Position** when layout or reading mode changes cause repagination.
 - The **Novel Reading Workflow** can atomically promote a prefetched reader page document to become the current reader page document when navigation crosses the web view page boundary; one runtime generation never merges multiple reader page documents.

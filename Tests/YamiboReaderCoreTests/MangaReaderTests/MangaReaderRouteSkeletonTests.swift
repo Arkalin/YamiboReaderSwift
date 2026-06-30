@@ -2,8 +2,8 @@ import Foundation
 import Testing
 @testable import YamiboReaderCore
 
-@Suite("MangaReaderTests: Route Skeleton")
-struct MangaReaderTestsRouteSkeleton {
+@Suite("MangaReaderTests: Route Contracts")
+struct MangaReaderTestsRouteContracts {
     @Test func threadOpenResolverStillCreatesMangaLaunchContext() async throws {
         let resolver = ThreadOpenResolver(
             client: YamiboClient(session: URLSession(configuration: .ephemeral), cookie: nil, userAgent: "Test-UA")

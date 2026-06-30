@@ -194,6 +194,7 @@ import Testing
     #expect(page.pinnedItems.map(\.kind) == [.announcement, .thread])
     #expect(page.pinnedItems[1].threadID == "533721")
     #expect(page.threads.first?.tid == "565409")
+    #expect(page.threads.first?.fid == "5")
     #expect(page.threads.first?.authorName == "张瑞泽")
     #expect(page.threads.first?.authorID == "705216")
     #expect(page.threads.first?.isPoll == true)

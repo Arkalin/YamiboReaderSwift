@@ -3,10 +3,10 @@ import Testing
 @testable import YamiboReaderCore
 @testable import YamiboReaderUI
 
-@Suite("MangaReaderTests: UI Route Skeleton")
-struct MangaReaderTestsUIRouteSkeleton {
+@Suite("MangaReaderTests: UI Route Contracts")
+struct MangaReaderTestsUIRouteContracts {
     @MainActor
-    @Test func openMangaRoutesDirectlyToNativeSkeleton() async throws {
+    @Test func openMangaRoutesDirectlyToNativeReader() async throws {
         let appModel = try makeAppModel()
         let context = try makeLaunchContext(tid: "700")
 
@@ -21,7 +21,7 @@ struct MangaReaderTestsUIRouteSkeleton {
     }
 
     @MainActor
-    @Test func mangaSkeletonViewsAreConstructible() throws {
+    @Test func mangaReaderAndWebFallbackViewsAreConstructible() throws {
         #if os(iOS)
         let appModel = try makeAppModel()
         let nativeContext = try makeLaunchContext(tid: "700")
@@ -45,7 +45,7 @@ private func makeAppModel() throws -> YamiboAppModel {
 }
 
 private func makeAppContext() throws -> YamiboAppContext {
-    let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "manga-route-skeleton")
+    let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "manga-route-contracts")
     return YamiboAppContext(
         sessionStore: try SessionStore(testSuiteName: defaultsSuiteName, key: "session"),
         settingsStore: try SettingsStore(testSuiteName: defaultsSuiteName, key: "settings"),

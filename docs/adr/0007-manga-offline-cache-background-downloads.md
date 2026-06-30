@@ -16,7 +16,7 @@ Use a background `URLSession` with `URLSessionDownloadTask` for manga image down
 
 The queue layer remains responsible for limiting work: it downloads one chapter at a time and submits at most three active image download tasks for that chapter, even when using a background `URLSession`. The system may delay or suspend those tasks, but the app does not enqueue an entire chapter's image list into the background session at once.
 
-Offline cache image bytes are user-retained content with visible disk usage and no first-version size limit. They are stored separately from the existing transparent image byte cache, whose bytes remain reclaimable. When an offline cache run needs an image URL already present in the transparent image byte cache, it copies those bytes into offline cache storage instead of downloading the URL again; the original transparent cache entry remains under the transparent cache's own LRU lifecycle.
+Offline cache image bytes are user-retained content with visible disk usage and no configured size limit. They are stored separately from the existing transparent image byte cache, whose bytes remain reclaimable. When an offline cache run needs an image URL already present in the transparent image byte cache, it copies those bytes into offline cache storage instead of downloading the URL again; the original transparent cache entry remains under the transparent cache's own LRU lifecycle.
 
 Do not promise continued downloading after user force-quit. If the system stops execution or the app restarts, the product promise is recoverable queue state, not uninterrupted transfer.
 

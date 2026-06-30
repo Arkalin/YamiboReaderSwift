@@ -33,8 +33,8 @@ public struct ForumNavigationHostView: View {
                             appContext: appContext
                         ),
                         onSubBoardTap: openBoard,
-                        onPinnedTap: openPinnedItem,
-                        onThreadTap: openThread,
+                        onPinnedTap: { openPinnedItem($0, containingFid: fid) },
+                        onThreadTap: { openThread($0, containingFid: fid) },
                         onAuthorTap: openUserSpace,
                         onSearchTap: {
                             path.append(.search(fid: fid))
@@ -47,7 +47,7 @@ public struct ForumNavigationHostView: View {
                 case let .search(fid):
                     ForumSearchView(
                         model: ForumSearchViewModel(forumID: fid, appContext: appContext),
-                        onThreadTap: openThread,
+                        onThreadTap: { openThread($0, containingFid: fid) },
                         onAuthorTap: openUserSpace,
                         onURLSubmit: {
                             route($0, source: .external)
@@ -63,7 +63,7 @@ public struct ForumNavigationHostView: View {
                             initialSubPage: subPage,
                             appContext: appContext
                         ),
-                        onThreadTap: openThread,
+                        onThreadTap: { openThread($0, title: $1, containingFid: nil) },
                         onUserTap: openUserSpace,
                         onSectionTap: openUserSpaceSection,
                         onBlogTap: openBlog,
@@ -102,6 +102,37 @@ public struct ForumNavigationHostView: View {
                         }
                     )
                     .forumNavigationBarStyle()
+                case let .novelDetail(context):
+                    ForumNovelDetailView(
+                        model: ForumNovelDetailViewModel(context: context, appContext: appContext),
+                        onChapterTap: { launchContext in
+                            appModel.presentReader(launchContext)
+                        },
+                        onViewThread: {
+                            path.append(.threadReader(ThreadReaderLaunchContext(thread: context.thread, title: context.title, authorID: context.authorID)))
+                        }
+                    )
+                    .forumNavigationBarStyle()
+                case let .mangaDetail(context):
+                    ForumMangaDetailView(
+                        model: ForumMangaDetailViewModel(context: context, appContext: appContext),
+                        onChapterTap: { launchContext in
+                            Task {
+                                await appModel.openManga(launchContext)
+                            }
+                        },
+                        onViewThread: {
+                            path.append(.threadReader(ThreadReaderLaunchContext(thread: context.thread, title: context.title)))
+                        }
+                    )
+                    .forumNavigationBarStyle()
+                case let .threadReader(context):
+                    ForumThreadReaderView(
+                        model: ForumThreadReaderViewModel(context: context, appContext: appContext),
+                        onUserTap: openUserSpace,
+                        onURLTap: { route($0, source: .external) }
+                    )
+                        .forumNavigationBarStyle()
                 case let .web(url):
                     ForumBrowserView(
                         url: url,
@@ -149,7 +180,7 @@ public struct ForumNavigationHostView: View {
         case let .board(fid, title, page):
             path.append(.board(fid: fid, title: title, page: page))
         case let .thread(threadURL):
-            openThread(threadURL, title: nil)
+            openThread(threadURL, title: nil, containingFid: nil)
         case let .userSpace(uid, name):
             path.append(.userSpace(uid: uid, name: name, section: .space, subPage: .profile))
         case let .messageCenter(tab):
@@ -169,31 +200,60 @@ public struct ForumNavigationHostView: View {
 
     private func openCarouselItem(_ item: ForumHomeCarouselItem) {
         if item.isThreadTarget {
-            openThread(item.targetURL, title: nil)
+            openThread(item.targetURL, title: nil, containingFid: nil)
         }
     }
 
-    private func openThread(_ url: URL, title: String?) {
+    private func openThread(_ url: URL, title: String?, containingFid: String?) {
         Task {
             do {
-                let resolver = await appContext.makeThreadOpenResolver()
-                let target = try await resolver.resolve(threadURL: url, title: title, favoriteType: .unknown)
-                switch target {
-                case let .novel(context):
-                    appModel.presentReader(context)
-                case let .manga(context):
-                    await appModel.openManga(context)
-                case let .web(url):
-                    path.append(.web(url))
-                }
+                let resolver = await appContext.makeForumThreadRouteResolver()
+                let target = try await resolver.resolve(
+                    ThreadRouteRequest(
+                        threadURL: url,
+                        title: title,
+                        tapContext: ForumThreadTapContext(containingFid: containingFid)
+                    )
+                )
+                openThreadRouteTarget(target)
             } catch {
                 actionErrorMessage = error.localizedDescription
             }
         }
     }
 
-    private func openThread(_ thread: ForumThreadSummary) {
-        openThread(thread.url, title: thread.title)
+    private func openThread(_ thread: ForumThreadSummary, containingFid: String?) {
+        Task {
+            do {
+                let resolver = await appContext.makeForumThreadRouteResolver()
+                let target = try await resolver.resolve(
+                    ThreadRouteRequest(
+                        threadURL: thread.url,
+                        threadID: thread.tid,
+                        title: thread.title,
+                        authorID: thread.authorID,
+                        threadFid: thread.fid,
+                        tapContext: ForumThreadTapContext(containingFid: containingFid)
+                    )
+                )
+                openThreadRouteTarget(target)
+            } catch {
+                actionErrorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    private func openThreadRouteTarget(_ target: ThreadRouteTarget) {
+        switch target {
+        case let .novelDetail(context):
+            path.append(.novelDetail(context))
+        case let .mangaDetail(context):
+            path.append(.mangaDetail(context))
+        case let .threadReader(context):
+            path.append(.threadReader(context))
+        case let .webFallback(url):
+            path.append(.web(url))
+        }
     }
 
     private func openUserSpace(uid: String, name: String?) {
@@ -216,9 +276,9 @@ public struct ForumNavigationHostView: View {
         path.append(.messageCenter(tab: tab))
     }
 
-    private func openPinnedItem(_ item: ForumPinnedItem) {
+    private func openPinnedItem(_ item: ForumPinnedItem, containingFid: String?) {
         if item.threadID != nil {
-            openThread(item.url, title: item.title)
+            openThread(item.url, title: item.title, containingFid: containingFid)
         } else {
             path.append(.web(item.url))
         }
@@ -247,5 +307,8 @@ private enum ForumDestination: Hashable {
     case messageCenter(tab: MessageCenterTab)
     case privateMessage(uid: String, name: String?)
     case blog(blogID: String, uid: String?, title: String?)
+    case novelDetail(NovelDetailLaunchContext)
+    case mangaDetail(MangaDetailLaunchContext)
+    case threadReader(ThreadReaderLaunchContext)
     case web(URL)
 }
