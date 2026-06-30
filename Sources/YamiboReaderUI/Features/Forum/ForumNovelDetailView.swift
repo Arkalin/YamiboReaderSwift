@@ -245,7 +245,7 @@ private struct ForumNovelChapterSectionView: View {
                 HStack(spacing: 10) {
                     Text(String(format: L10n.string("reader.page_number_spaced"), section.page))
                         .font(.subheadline.weight(section.page == 1 ? .semibold : .medium))
-                        .foregroundStyle(ForumColors.brownDeep)
+                        .foregroundStyle(ForumColors.brownEmphasis)
                     Spacer(minLength: 0)
                     Image(systemName: "chevron.down")
                         .font(.caption.weight(.semibold))
@@ -300,7 +300,7 @@ private struct ForumNovelChapterRow: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(chapter.title)
                         .font(.subheadline)
-                        .foregroundStyle(chapter.isCurrentRead ? ForumColors.brownDeep : ForumColors.textDark)
+                        .foregroundStyle(chapter.isCurrentRead ? ForumColors.brownEmphasis : ForumColors.textDark)
                         .lineLimit(1)
 
                     if let progressText = chapter.progressText {
@@ -332,7 +332,7 @@ private struct ForumNovelChapterLeadingBadge: View {
             if let floorText {
                 Text(floorText)
                     .font(.caption2.weight(.semibold))
-                    .foregroundStyle(isCurrentRead ? .white : ForumColors.brownDeep)
+                    .foregroundStyle(isCurrentRead ? .white : ForumColors.brownEmphasis)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 3)
                     .background(
@@ -526,7 +526,7 @@ private struct ForumNovelHeaderActions: View {
         Button(action: onFavoriteTap) {
             Image(systemName: isFavorited ? "star.fill" : "star")
                 .font(.subheadline.weight(.semibold))
-                .foregroundStyle(ForumColors.brownDeep)
+                .foregroundStyle(ForumColors.brownEmphasis)
                 .frame(width: 42, height: 38)
                 .background(ForumColors.brownPrimary.opacity(0.16), in: Capsule())
         }
@@ -538,7 +538,7 @@ private struct ForumNovelHeaderActions: View {
         ShareLink(item: threadURL) {
             Image(systemName: "square.and.arrow.up")
                 .font(.subheadline.weight(.semibold))
-                .foregroundStyle(ForumColors.brownDeep)
+                .foregroundStyle(ForumColors.brownEmphasis)
                 .frame(width: 42, height: 38)
                 .background(ForumColors.brownPrimary.opacity(0.16), in: Capsule())
         }
@@ -556,7 +556,7 @@ private struct ForumNovelHeaderActions: View {
             }
                 .font(.subheadline.weight(.semibold))
                 .lineLimit(1)
-                .foregroundStyle(ForumColors.brownDeep)
+                .foregroundStyle(ForumColors.brownEmphasis)
                 .padding(.horizontal, showsTitle ? 12 : 0)
                 .frame(width: showsTitle ? nil : 42, height: 38)
                 .background(ForumColors.brownPrimary.opacity(0.16), in: Capsule())

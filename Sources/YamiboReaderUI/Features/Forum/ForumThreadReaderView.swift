@@ -296,6 +296,7 @@ private struct ForumThreadReaderActionBar: View {
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
+            .tint(ForumColors.brownDeep)
 
             Button(action: onFavorite) {
                 Label(
@@ -303,9 +304,11 @@ private struct ForumThreadReaderActionBar: View {
                     systemImage: isFavorited ? "star.fill" : "star"
                 )
                 .labelStyle(.iconOnly)
+                .foregroundStyle(isFavorited ? ForumColors.orangeAccent : ForumColors.brownEmphasis)
                 .frame(width: 42, height: 34)
             }
             .buttonStyle(.bordered)
+            .tint(ForumColors.brownEmphasis)
             .accessibilityLabel(
                 isFavorited ? L10n.string("forum.thread.favorited") : L10n.string("forum.thread.favorite")
             )
@@ -313,9 +316,11 @@ private struct ForumThreadReaderActionBar: View {
             ShareLink(item: thread.canonicalURL) {
                 Label(L10n.string("forum.thread.share"), systemImage: "square.and.arrow.up")
                     .labelStyle(.iconOnly)
+                    .foregroundStyle(ForumColors.brownEmphasis)
                     .frame(width: 42, height: 34)
             }
             .buttonStyle(.bordered)
+            .tint(ForumColors.brownEmphasis)
             .accessibilityLabel(L10n.string("forum.thread.share"))
         }
         .font(.callout.weight(.semibold))
@@ -323,7 +328,6 @@ private struct ForumThreadReaderActionBar: View {
         .padding(.top, 10)
         .padding(.bottom, 8)
         .background(.regularMaterial)
-        .tint(ForumColors.brownDeep)
     }
 }
 
@@ -2328,6 +2332,7 @@ private struct ForumThreadReaderPageNavigationView: View {
             }
             .font(.subheadline)
             .buttonStyle(.bordered)
+            .tint(ForumColors.brownEmphasis)
         }
     }
 

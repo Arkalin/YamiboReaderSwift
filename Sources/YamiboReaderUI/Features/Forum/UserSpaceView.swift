@@ -445,6 +445,7 @@ private struct UserSpaceActionGridView: View {
                         .frame(maxWidth: .infinity, minHeight: 42)
                 }
                 .buttonStyle(.bordered)
+                .tint(ForumColors.brownEmphasis)
             }
         }
         .padding(13)
@@ -641,7 +642,7 @@ private struct UserSpaceViewAllBlogFilterView: View {
                         .frame(height: 30)
                 }
                 .buttonStyle(.bordered)
-                .tint(filter == selectedFilter ? ForumColors.brownDeep : ForumColors.brownLight)
+                .tint(filter == selectedFilter ? ForumColors.brownEmphasis : ForumColors.brownLight)
             }
         }
     }
@@ -847,6 +848,7 @@ private struct UserSpaceFriendRowView: View {
                         } label: {
                             Text(L10n.string("user_space.send_message"))
                         }
+                        .tint(ForumColors.brownEmphasis)
                     }
                     if let deleteURL = friend.deleteURL {
                         Button(role: .destructive) {
@@ -1069,7 +1071,7 @@ private struct UserSpacePageNavigationView: View {
             }
             .buttonStyle(.bordered)
             .controlSize(.small)
-            .tint(ForumColors.brownDeep)
+            .tint(ForumColors.brownEmphasis)
             .padding(.top, 4)
         }
     }

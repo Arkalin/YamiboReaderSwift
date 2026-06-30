@@ -150,6 +150,7 @@ private struct ForumMangaDetailHeader: View {
                     Label(L10n.string("forum.thread_route.view_discussion"), systemImage: "text.bubble")
                 }
                 .buttonStyle(.bordered)
+                .tint(ForumColors.brownEmphasis)
             }
         }
         .padding(14)
@@ -169,7 +170,7 @@ private struct ForumMangaChapterRow: View {
             HStack(spacing: 12) {
                 Text(MangaChapterDisplayFormatter.displayNumber(for: chapter))
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(isFocused ? ForumColors.brownDeep : ForumColors.secondaryText)
+                    .foregroundStyle(isFocused ? ForumColors.brownEmphasis : ForumColors.secondaryText)
                     .frame(width: 42, alignment: .center)
 
                 VStack(alignment: .leading, spacing: 4) {

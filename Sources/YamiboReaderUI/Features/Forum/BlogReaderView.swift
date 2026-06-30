@@ -273,7 +273,7 @@ private struct BlogReaderActionRow: View {
         }
         .buttonStyle(.bordered)
         .controlSize(.small)
-        .tint(ForumColors.brownDeep)
+        .tint(ForumColors.brownEmphasis)
     }
 
     @ViewBuilder
@@ -483,7 +483,7 @@ private struct BlogReaderPageNavigationView: View {
             }
             .buttonStyle(.bordered)
             .controlSize(.small)
-            .tint(ForumColors.brownDeep)
+            .tint(ForumColors.brownEmphasis)
         }
     }
 

@@ -180,7 +180,7 @@ private struct ForumCategorySectionView: View {
                 HStack(spacing: 10) {
                     Text(title)
                         .font(.headline)
-                        .foregroundStyle(ForumColors.brownDeep)
+                        .foregroundStyle(ForumColors.brownEmphasis)
                     Spacer()
                     Image(systemName: "chevron.down")
                         .font(.footnote.weight(.semibold))

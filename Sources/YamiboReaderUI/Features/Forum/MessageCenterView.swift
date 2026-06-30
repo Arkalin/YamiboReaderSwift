@@ -343,7 +343,7 @@ private struct MessageCenterPageNavigationView: View {
             }
             .buttonStyle(.bordered)
             .controlSize(.small)
-            .tint(ForumColors.brownDeep)
+            .tint(ForumColors.brownEmphasis)
             .padding(.top, 4)
         }
     }

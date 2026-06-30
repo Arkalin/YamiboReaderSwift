@@ -10,6 +10,7 @@ enum YamiboColors {
     enum Site {
         static let brownDeep = Color(light: 0x4E2A1B, dark: 0x24120C)
         static let brownPrimary = Color(light: 0x6D3A2B, dark: 0xD6A083)
+        static let brownEmphasis = Color(light: 0x4E2A1B, dark: 0xD6A083)
         static let brownLight = Color(light: 0xCCB8A8, dark: 0x8F6F5E)
         static let creamBackground = Color(light: 0xFFF3D6, dark: 0x17110D)
         static let creamSurface = Color(light: 0xFFF7E0, dark: 0x241B15)
