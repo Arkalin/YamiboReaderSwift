@@ -210,6 +210,33 @@ import Testing
     })
 }
 
+@Test func forumThreadPageParserKeepsLinkRangesAlignedAfterWhitespaceNormalization() throws {
+    let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=703&mobile=2"))
+    let sourceURL = "https://kakuyomu.jp/works/16817139558239041302"
+    let supportURL = "https://bbs.yamibo.com/thread-546219-1-1.html"
+    let page = try ForumThreadPageHTMLParser.parsePage(
+        from: #"""
+        <html>
+        <body>
+          <div id="post_3001">
+            <div class="message" id="postmessage_3001"><div>原文： 人間關係に疲れた女子高生が女子中学生に癒されてロリコンにされる話 </div>生肉網址： <a href="https://kakuyomu.jp/works/16817139558239041302">https://kakuyomu.jp/works/16817139558239041302</a><br>支援者翻外「痛痛飛走吧」： <a href="https://bbs.yamibo.com/thread-546219-1-1.html">https://bbs.yamibo.com/thread-546219-1-1.html</a></div>
+          </div>
+        </body>
+        </html>
+        """#,
+        thread: ThreadIdentity(tid: "703", canonicalURL: url),
+        fallbackTitle: "链接测试"
+    )
+
+    let post = try #require(page.posts.first)
+    let textBlock = try #require(post.contentBlocks.compactMap { block -> ForumThreadTextBlock? in
+        guard case let .text(textBlock) = block.kind else { return nil }
+        return textBlock
+    }.first)
+    #expect(textBlock.linkText(for: sourceURL) == sourceURL)
+    #expect(textBlock.linkText(for: supportURL) == supportURL)
+}
+
 @Test func forumThreadPageParserFlattensDiscuzQuoteBlockquoteWrapper() throws {
     let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=702&mobile=2"))
     let page = try ForumThreadPageHTMLParser.parsePage(
@@ -301,6 +328,13 @@ private extension ForumThreadTextBlock {
         return rubies.first { ruby in
             ruby.start == start && ruby.length == length
         }
+    }
+
+    func linkText(for urlString: String) -> String? {
+        guard let link = links.first(where: { $0.url.absoluteString == urlString }) else { return nil }
+        let startIndex = text.index(text.startIndex, offsetBy: link.start)
+        let endIndex = text.index(startIndex, offsetBy: link.length)
+        return String(text[startIndex ..< endIndex])
     }
 }
 
