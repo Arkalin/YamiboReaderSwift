@@ -317,6 +317,7 @@ public enum ForumThreadPageHTMLParser {
         let raw = [
             (try? container.select(".authi em[title]").first()?.attr("title")) ?? "",
             (try? container.select(".authi em").first()?.text()) ?? "",
+            (try? container.select(".mtit .y").first()?.text()) ?? "",
             (try? container.select(".floor, .xg1").first()?.text()) ?? ""
         ]
             .joined(separator: " ")

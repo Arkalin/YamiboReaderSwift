@@ -181,6 +181,9 @@ private extension ThreadCoverResolver {
 
     static func floorNumber(from value: String?) -> Int? {
         guard let value = trimmedNonEmpty(value) else { return nil }
+        if value == "楼主" || value == "樓主" {
+            return 1
+        }
         let digits = value.prefix { $0.isNumber }
         guard !digits.isEmpty else { return nil }
         return Int(digits)

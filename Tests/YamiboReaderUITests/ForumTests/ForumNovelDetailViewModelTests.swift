@@ -103,9 +103,10 @@ import Testing
 }
 
 @MainActor
-@Test func forumNovelDetailHeaderSummaryUsesThreadPageMetadataWithoutDirectCoverCandidate() throws {
+@Test func forumNovelDetailHeaderSummaryUsesThreadPageCoverCandidateWhenPersistedCoverMissing() throws {
     let model = try makeForumNovelDetailViewModel()
     let ignoredURL = try #require(URL(string: "https://bbs.yamibo.com/static/image/smiley/default/none.gif"))
+    let coverURL = try #require(URL(string: "https://bbs.yamibo.com/data/attachment/forum/cover.jpg"))
     model.chapters = [
         ForumNovelChapterSummary(id: "1|序章", title: "序章", view: 1),
         ForumNovelChapterSummary(id: "1|第一章", title: "第一章", view: 1)
@@ -120,7 +121,7 @@ import Testing
         posts: [
             ForumThreadPost(
                 postID: "1001",
-                floorText: "1#",
+                floorText: "楼主",
                 author: BlogReaderUser(uid: "42", name: "楼主名", avatarURL: nil),
                 postedAtText: "2026-6-1 10:00",
                 lastEditedText: "本帖最后由 楼主名 于 2026-6-2 12:00 编辑",
@@ -134,7 +135,7 @@ import Testing
                     ForumThreadContentBlock(
                         id: "cover",
                         kind: .image(ForumThreadImageBlock(
-                            url: try #require(URL(string: "https://bbs.yamibo.com/data/attachment/forum/cover.jpg"))
+                            url: coverURL
                         ))
                     )
                 ]
@@ -157,7 +158,7 @@ import Testing
     #expect(summary.totalReplies == 45)
     #expect(summary.forumName == "#原创小说")
     #expect(summary.chapterCount == 2)
-    #expect(summary.coverURL == nil)
+    #expect(summary.coverURL == coverURL)
     #expect(summary.firstFloorPreviewText == "首楼简介\n正文")
 }
 
@@ -243,6 +244,56 @@ import Testing
     )
 
     #expect(model.headerSummary.coverURL == persisted)
+}
+
+@MainActor
+@Test func forumNovelDetailReloadStoresInitialPageCoverWithoutRefetchingThreadPage() async throws {
+    let suiteName = YamiboTestDefaults.suiteName(prefix: "novel-detail-initial-cover")
+    _ = try YamiboTestDefaults.make(suiteName: suiteName)
+    let coverStore = ContentCoverStore(
+        defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+        key: "content-covers"
+    )
+    let appContext = YamiboAppContext(
+        favoriteStore: FavoriteStore(defaults: try YamiboTestDefaults.defaults(suiteName: suiteName), key: "favorites"),
+        contentCoverStore: coverStore
+    )
+    let initialImage = try #require(URL(string: "https://img.example.com/initial-owner.jpg"))
+    let threadPageLoader = FakeForumNovelThreadPageLoader(pages: [
+        1: ForumThreadPage(
+            thread: ThreadIdentity(tid: "900", canonicalURL: try modelThreadURL(), fid: "49"),
+            title: "小说标题",
+            posts: [
+                ForumThreadPost(
+                    postID: "1001",
+                    floorText: "楼主",
+                    author: BlogReaderUser(uid: "42", name: "楼主名", avatarURL: nil),
+                    contentHTML: "",
+                    contentText: "首楼封面",
+                    contentBlocks: [
+                        ForumThreadContentBlock(
+                            id: "initial-image",
+                            kind: .image(ForumThreadImageBlock(url: initialImage))
+                        )
+                    ]
+                )
+            ],
+            pageNavigation: ForumPageNavigation(currentPage: 1, totalPages: 1)
+        )
+    ])
+    let model = try makeForumNovelDetailViewModel(
+        appContext: appContext,
+        documentLoader: FakeForumNovelDocumentLoader(),
+        threadPageLoader: threadPageLoader
+    )
+
+    await model.reload()
+
+    let key = ContentCoverKey(targetType: .threadNovel, targetID: "900")
+    let cover = await coverStore.cover(for: key)
+    #expect(cover?.resolvedURL == initialImage)
+    #expect(model.headerSummary.coverURL == initialImage)
+    #expect(threadPageLoader.threadFetchCalls().isEmpty)
 }
 
 @MainActor
@@ -372,7 +423,7 @@ import Testing
             posts: [
                 ForumThreadPost(
                     postID: "1001",
-                    floorText: "1#",
+                    floorText: "楼主",
                     author: BlogReaderUser(uid: "42", name: "楼主名", avatarURL: nil),
                     contentHTML: "",
                     contentText: "首楼无图",
@@ -431,7 +482,10 @@ import Testing
     let cover = await coverStore.cover(for: key)
     #expect(cover?.resolvedURL?.absoluteString == "https://img.example.com/owner-later.jpg")
     #expect(model.headerSummary.coverURL?.absoluteString == "https://img.example.com/owner-later.jpg")
-    #expect(threadPageLoader.threadFetchCalls().first == ForumNovelThreadPageFetch(authorID: nil, page: 1))
+    #expect(threadPageLoader.threadFetchCalls() == [
+        ForumNovelThreadPageFetch(authorID: "42", page: 1),
+        ForumNovelThreadPageFetch(authorID: "42", page: 2)
+    ])
 }
 
 @MainActor
@@ -443,7 +497,7 @@ import Testing
         posts: [
             ForumThreadPost(
                 postID: "1001",
-                floorText: "1#",
+                    floorText: "楼主",
                 author: BlogReaderUser(uid: "42", name: "楼主名", avatarURL: nil),
                 contentHTML: "",
                 contentText: "序章\n正文",

@@ -66,6 +66,94 @@ import Testing
     #expect(page.formHash == "form123")
 }
 
+@Test func forumThreadPageParserExtractsMobileDiscuzFloorAndCoverCandidate() throws {
+    let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=544422&mobile=2"))
+    let page = try ForumThreadPageHTMLParser.parsePage(
+        from: #"""
+        <html>
+        <head><title>小说标题 - 百合会</title></head>
+        <body>
+          <div class="viewthread">
+            <div class="plc cl" id="pid40946503">
+              <div class="avatar">
+                <img src="https://bbs.yamibo.com/uc_server/data/avatar/000/39/76/33_avatar_small.jpg" />
+              </div>
+              <div class="display pi pione" href="#replybtn_40946503">
+                <ul class="authi">
+                  <li class="mtit">
+                    <span class="y">1<sup>#</sup></span>
+                    <span class="z">
+                      <a href="home.php?mod=space&amp;uid=397633&amp;mobile=2">106371928</a>
+                    </span>
+                  </li>
+                  <li class="mtime">2024-3-16 01:44</li>
+                </ul>
+                <div class="message">
+                  译名：人妻教师被班里的女高中生迷得神魂颠倒的故事
+                  <a href="data/attachment/forum/202405/12/194518v77x7wqd77x75hw9.png" class="orange" />
+                  <img
+                    id="aimg_1239120"
+                    src="data/attachment/forum/202405/12/194518v77x7wqd77x75hw9.png"
+                    alt="28CA3F415BD916D532FE0D1BF8C291F2.png"
+                    loading="lazy" />
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+        </body>
+        </html>
+        """#,
+        thread: ThreadIdentity(tid: "544422", canonicalURL: url),
+        fallbackTitle: nil
+    )
+
+    let post = try #require(page.posts.first)
+    #expect(post.floorText == "1#")
+    #expect(post.author.uid == "397633")
+    #expect(
+        ThreadCoverResolver.findThreadCoverCandidate(in: page)?.absoluteString ==
+        "https://bbs.yamibo.com/data/attachment/forum/202405/12/194518v77x7wqd77x75hw9.png"
+    )
+}
+
+@Test func forumThreadPageParserUsesDiscuzLazyImageFileBeforeNoneGifSource() throws {
+    let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=544422&mobile=2"))
+    let page = try ForumThreadPageHTMLParser.parsePage(
+        from: #"""
+        <html>
+        <head><title>小说标题 - 百合会</title></head>
+        <body>
+          <div id="post_40946503">
+            <div class="authi">
+              <a class="author" href="home.php?mod=space&amp;uid=397633&amp;mobile=2">106371928</a>
+              <em title="楼主">楼主</em>
+              <em>发表于 2024-3-16 01:44</em>
+            </div>
+            <div class="message" id="postmessage_40946503">
+              译名：人妻教师被班里的女高中生迷得神魂颠倒的故事
+              <img
+                id="aimg_1239120"
+                aid="1239120"
+                src="static/image/common/none.gif"
+                zoomfile="data/attachment/forum/202405/12/194518v77x7wqd77x75hw9.png"
+                file="data/attachment/forum/202405/12/194518v77x7wqd77x75hw9.png"
+                alt="cover.png" />
+            </div>
+          </div>
+        </body>
+        </html>
+        """#,
+        thread: ThreadIdentity(tid: "544422", canonicalURL: url),
+        fallbackTitle: nil
+    )
+
+    #expect(
+        ThreadCoverResolver.findThreadCoverCandidate(in: page)?.absoluteString ==
+        "https://bbs.yamibo.com/data/attachment/forum/202405/12/194518v77x7wqd77x75hw9.png"
+    )
+}
+
 @Test func forumThreadPageParserStripsDiscuzSiteTitleSuffix() throws {
     let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=701&mobile=2"))
     let page = try ForumThreadPageHTMLParser.parsePage(

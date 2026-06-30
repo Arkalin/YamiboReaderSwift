@@ -172,7 +172,7 @@ final class ForumNovelDetailViewModel {
             forumName: forumName,
             totalViews: threadPage?.totalViews,
             totalReplies: threadPage?.totalReplies,
-            coverURL: contentCover?.resolvedURL,
+            coverURL: resolvedHeaderCoverURL,
             chapterCount: chapters.count,
             firstFloorPreviewText: Self.firstFloorPreviewText(from: firstPost),
             readingProgressText: Self.readingProgressText(from: readingProgress, favorite: favorite),
@@ -183,6 +183,10 @@ final class ForumNovelDetailViewModel {
     func load() async {
         guard document == nil else { return }
         await reload()
+    }
+
+    private var resolvedHeaderCoverURL: URL? {
+        contentCover?.resolvedURL ?? threadPage.flatMap(ThreadCoverResolver.findThreadCoverCandidate(in:))
     }
 
     func reload() async {
@@ -405,7 +409,7 @@ final class ForumNovelDetailViewModel {
            let candidate = await ThreadCoverResolver().resolve(
                thread: context.thread,
                title: context.title,
-               initialPage: nil,
+               initialPage: page,
                repository: repository
            ) {
             do {
