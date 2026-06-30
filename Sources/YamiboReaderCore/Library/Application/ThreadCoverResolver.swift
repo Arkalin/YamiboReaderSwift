@@ -1,0 +1,190 @@
+import Foundation
+
+public protocol ThreadCoverPageResolving: Sendable {
+    func cachedThreadPage(
+        thread: ThreadIdentity,
+        title: String,
+        authorID: String?,
+        page: Int
+    ) async -> ForumThreadPage?
+
+    func fetchThreadPage(
+        thread: ThreadIdentity,
+        title: String,
+        authorID: String?,
+        page: Int
+    ) async throws -> ForumThreadPage
+}
+
+public struct ThreadCoverResolver: Sendable {
+    public init() {}
+
+    public func resolve(
+        thread: ThreadIdentity,
+        title: String,
+        initialPage: ForumThreadPage?,
+        repository: any ThreadCoverPageResolving
+    ) async -> URL? {
+        let firstPage: ForumThreadPage
+        if let initialPage {
+            firstPage = initialPage
+        } else {
+            guard let loaded = await loadPage(
+                thread: thread,
+                title: title,
+                authorID: nil,
+                page: 1,
+                repository: repository
+            ) else {
+                return nil
+            }
+            firstPage = loaded
+        }
+
+        guard let owner = Self.owner(in: firstPage) else {
+            return nil
+        }
+        if let candidate = Self.findThreadCoverCandidate(in: firstPage, owner: owner) {
+            return candidate
+        }
+
+        let totalPages = Self.totalPages(from: firstPage)
+        if totalPages > 1 {
+            for page in 2...totalPages {
+                guard let cached = await repository.cachedThreadPage(
+                    thread: thread,
+                    title: title,
+                    authorID: nil,
+                    page: page
+                ) else {
+                    continue
+                }
+                if let candidate = Self.findThreadCoverCandidate(in: cached, owner: owner) {
+                    return candidate
+                }
+            }
+        }
+
+        guard let authorID = Self.validOwnerID(owner.uid) else {
+            return nil
+        }
+        var page = 1
+        var scanTotal = totalPages
+        while page <= scanTotal {
+            let loaded = await loadPage(
+                thread: thread,
+                title: title,
+                authorID: authorID,
+                page: page,
+                repository: repository
+            )
+            guard let loaded else {
+                return nil
+            }
+            scanTotal = Self.totalPages(from: loaded, fallback: scanTotal)
+            if let candidate = Self.findThreadCoverCandidate(in: loaded, owner: owner) {
+                return candidate
+            }
+            page += 1
+        }
+        return nil
+    }
+
+    public static func findThreadCoverCandidate(in page: ForumThreadPage?) -> URL? {
+        guard let page,
+              let owner = owner(in: page) else {
+            return nil
+        }
+        return findThreadCoverCandidate(in: page, owner: owner)
+    }
+
+    private func loadPage(
+        thread: ThreadIdentity,
+        title: String,
+        authorID: String?,
+        page: Int,
+        repository: any ThreadCoverPageResolving
+    ) async -> ForumThreadPage? {
+        if let cached = await repository.cachedThreadPage(
+            thread: thread,
+            title: title,
+            authorID: authorID,
+            page: page
+        ) {
+            return cached
+        }
+        return try? await repository.fetchThreadPage(
+            thread: thread,
+            title: title,
+            authorID: authorID,
+            page: page
+        )
+    }
+}
+
+private extension ThreadCoverResolver {
+    static func owner(in page: ForumThreadPage) -> BlogReaderUser? {
+        page.posts.first { floorNumber(from: $0.floorText) == 1 }?.author
+    }
+
+    static func findThreadCoverCandidate(in page: ForumThreadPage, owner: BlogReaderUser) -> URL? {
+        let ownerID = validOwnerID(owner.uid)
+        let ownerName = trimmedNonEmpty(owner.name)
+        return page.posts
+            .enumerated()
+            .sorted { lhs, rhs in
+                let lhsFloor = floorNumber(from: lhs.element.floorText) ?? Int.max
+                let rhsFloor = floorNumber(from: rhs.element.floorText) ?? Int.max
+                if lhsFloor == rhsFloor {
+                    return lhs.offset < rhs.offset
+                }
+                return lhsFloor < rhsFloor
+            }
+            .map(\.element)
+            .filter { post in
+                if let ownerID {
+                    return validOwnerID(post.author.uid) == ownerID
+                }
+                guard let ownerName else { return false }
+                return trimmedNonEmpty(post.author.name) == ownerName
+            }
+            .lazy
+            .flatMap { post in
+                post.contentBlocks.compactMap(Self.coverCandidateURL(in:))
+            }
+            .first
+    }
+
+    static func coverCandidateURL(in block: ForumThreadContentBlock) -> URL? {
+        guard case let .image(image) = block.kind,
+              !image.isEmoticon else {
+            return nil
+        }
+        return ContentCoverStore.normalizedCoverURL(from: image.url.absoluteString)
+    }
+
+    static func totalPages(from page: ForumThreadPage, fallback: Int = 1) -> Int {
+        max(1, page.pageNavigation?.totalPages ?? fallback)
+    }
+
+    static func validOwnerID(_ value: String?) -> String? {
+        guard let trimmed = trimmedNonEmpty(value),
+              let intValue = Int(trimmed),
+              intValue > 0 else {
+            return nil
+        }
+        return trimmed
+    }
+
+    static func floorNumber(from value: String?) -> Int? {
+        guard let value = trimmedNonEmpty(value) else { return nil }
+        let digits = value.prefix { $0.isNumber }
+        guard !digits.isEmpty else { return nil }
+        return Int(digits)
+    }
+
+    static func trimmedNonEmpty(_ value: String?) -> String? {
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
+    }
+}

@@ -121,6 +121,7 @@ import Testing
         posts: [
             ForumThreadPost(
                 postID: "1001",
+                floorText: "1#",
                 author: BlogReaderUser(uid: "42", name: "楼主名", avatarURL: nil),
                 postedAtText: "2026-6-1 10:00",
                 lastEditedText: "本帖最后由 楼主名 于 2026-6-2 12:00 编辑",
@@ -300,13 +301,55 @@ import Testing
         ]
     )
 
-    #expect(ForumNovelDetailViewModel.coverCandidate(in: page) == ownerImage)
+    #expect(ThreadCoverResolver.findThreadCoverCandidate(in: page) == ownerImage)
 
     await model.refreshContentCover(from: page)
 
     let cover = try #require(await coverStore.cover(for: key))
     #expect(cover.automaticCoverURL == ownerImage)
     #expect(model.contentCover?.resolvedURL == ownerImage)
+}
+
+@MainActor
+@Test func forumNovelDetailRefreshContentCoverDoesNotStoreWithoutFirstFloorOwner() async throws {
+    let suiteName = YamiboTestDefaults.suiteName(prefix: "novel-detail-cover-no-owner")
+    _ = try YamiboTestDefaults.make(suiteName: suiteName)
+    let coverStore = ContentCoverStore(
+        defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+        key: "content-covers"
+    )
+    let appContext = YamiboAppContext(
+        favoriteStore: FavoriteStore(defaults: try YamiboTestDefaults.defaults(suiteName: suiteName), key: "favorites"),
+        contentCoverStore: coverStore
+    )
+    let model = try makeForumNovelDetailViewModel(appContext: appContext)
+    let key = ContentCoverKey(targetType: .threadNovel, targetID: "900")
+    let page = ForumThreadPage(
+        thread: model.context.thread,
+        title: "小说标题",
+        posts: [
+            ForumThreadPost(
+                postID: "1002",
+                floorText: "2#",
+                author: BlogReaderUser(uid: "42", name: "楼主名", avatarURL: nil),
+                contentHTML: "",
+                contentText: "非首楼图片",
+                contentBlocks: [
+                    ForumThreadContentBlock(
+                        id: "image",
+                        kind: .image(ForumThreadImageBlock(
+                            url: try #require(URL(string: "https://img.example.com/not-owner-seed.jpg"))
+                        ))
+                    )
+                ]
+            )
+        ]
+    )
+
+    await model.refreshContentCover(from: page)
+
+    #expect(await coverStore.cover(for: key) == nil)
+    #expect(model.contentCover == nil)
 }
 
 @MainActor

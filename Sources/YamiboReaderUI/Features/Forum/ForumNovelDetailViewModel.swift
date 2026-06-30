@@ -8,11 +8,67 @@ protocol ForumNovelDocumentLoading: Sendable {
 
 extension NovelReaderRepository: ForumNovelDocumentLoading {}
 
-protocol ForumNovelThreadPageLoading: Sendable {
+protocol ForumNovelThreadPageLoading: ThreadCoverPageResolving {
     func fetchNovelThreadPage(context: NovelDetailLaunchContext, page: Int) async throws -> ForumThreadPage
 }
 
 extension ForumThreadReaderRepository: ForumNovelThreadPageLoading {}
+
+extension ForumNovelThreadPageLoading {
+    func cachedThreadPage(
+        thread _: ThreadIdentity,
+        title _: String,
+        authorID _: String?,
+        page _: Int
+    ) async -> ForumThreadPage? {
+        nil
+    }
+
+    func fetchThreadPage(
+        thread: ThreadIdentity,
+        title: String,
+        authorID: String?,
+        page: Int
+    ) async throws -> ForumThreadPage {
+        try await fetchNovelThreadPage(
+            context: NovelDetailLaunchContext(
+                thread: thread,
+                title: title,
+                authorID: authorID
+            ),
+            page: page
+        )
+    }
+}
+
+private struct ForumNovelCoverPageResolver: ThreadCoverPageResolving {
+    var repository: any ForumNovelThreadPageLoading
+    var cachedPages: [Int: ForumThreadPage]
+
+    func cachedThreadPage(
+        thread _: ThreadIdentity,
+        title _: String,
+        authorID: String?,
+        page: Int
+    ) async -> ForumThreadPage? {
+        guard authorID == nil else { return nil }
+        return cachedPages[page]
+    }
+
+    func fetchThreadPage(
+        thread: ThreadIdentity,
+        title: String,
+        authorID: String?,
+        page: Int
+    ) async throws -> ForumThreadPage {
+        try await repository.fetchThreadPage(
+            thread: thread,
+            title: title,
+            authorID: authorID,
+            page: page
+        )
+    }
+}
 
 struct ForumNovelChapterSummary: Identifiable, Hashable, Sendable {
     var id: String
@@ -145,7 +201,7 @@ final class ForumNovelDetailViewModel {
             forumName: forumName,
             totalViews: threadPage?.totalViews,
             totalReplies: threadPage?.totalReplies,
-            coverURL: contentCover?.resolvedURL ?? Self.coverCandidate(in: threadPage),
+            coverURL: contentCover?.resolvedURL ?? ThreadCoverResolver.findThreadCoverCandidate(in: threadPage),
             chapterCount: chapters.count,
             firstFloorPreviewText: Self.firstFloorPreviewText(from: firstPost),
             readingProgressText: Self.readingProgressText(from: readingProgress, favorite: favorite),
@@ -374,7 +430,23 @@ final class ForumNovelDetailViewModel {
         using repository: (any ForumNovelThreadPageLoading)?
     ) async {
         guard let key = contentCoverKey else { return }
-        if let candidate = await resolveCoverCandidate(from: page, using: repository) {
+        if let repository,
+           let candidate = await ThreadCoverResolver().resolve(
+               thread: context.thread,
+               title: context.title,
+               initialPage: page,
+               repository: ForumNovelCoverPageResolver(
+                   repository: repository,
+                   cachedPages: loadedThreadPages
+               )
+           ) {
+            do {
+                _ = try await appContext.contentCoverStore.setAutomaticCover(candidate, for: key)
+            } catch {
+                return
+            }
+        } else if repository == nil,
+                  let candidate = ThreadCoverResolver.findThreadCoverCandidate(in: page) {
             do {
                 _ = try await appContext.contentCoverStore.setAutomaticCover(candidate, for: key)
             } catch {
@@ -382,47 +454,6 @@ final class ForumNovelDetailViewModel {
             }
         }
         contentCover = await appContext.contentCoverStore.cover(for: key)
-    }
-
-    private func resolveCoverCandidate(
-        from page: ForumThreadPage,
-        using repository: (any ForumNovelThreadPageLoading)?
-    ) async -> URL? {
-        if let candidate = Self.coverCandidate(in: page) {
-            return candidate
-        }
-        guard let owner = Self.coverOwner(in: page) else {
-            return nil
-        }
-        let currentPage = page.pageNavigation?.currentPage
-        for pageNumber in loadedThreadPages.keys.sorted() {
-            guard pageNumber != currentPage else { continue }
-            if let candidate = loadedThreadPages[pageNumber].flatMap({ Self.coverCandidate(in: $0, owner: owner) }) {
-                return candidate
-            }
-        }
-        guard let repository else {
-            return nil
-        }
-
-        let totalPages = Self.totalPages(from: page, fallback: 1)
-        guard totalPages > 1 else {
-            return nil
-        }
-        let ownerContext = NovelDetailLaunchContext(
-            thread: context.thread,
-            title: context.title,
-            authorID: Self.trimmedNonEmpty(owner.uid) ?? context.authorID
-        )
-        for pageNumber in 1...totalPages where loadedThreadPages[pageNumber] == nil {
-            guard let loaded = try? await repository.fetchNovelThreadPage(context: ownerContext, page: pageNumber) else {
-                continue
-            }
-            if let candidate = Self.coverCandidate(in: loaded, owner: owner) {
-                return candidate
-            }
-        }
-        return nil
     }
 
     private static func chapterSummaries(from page: ForumThreadPage, page pageNumber: Int) -> [ForumNovelChapterSummary] {
@@ -655,63 +686,6 @@ final class ForumNovelDetailViewModel {
     private func loadContentCover() async -> ContentCover? {
         guard let key = contentCoverKey else { return nil }
         return await appContext.contentCoverStore.cover(for: key)
-    }
-
-    static func coverCandidate(in page: ForumThreadPage?) -> URL? {
-        guard let page,
-              let owner = coverOwner(in: page) else {
-            return nil
-        }
-        return coverCandidate(in: page, owner: owner)
-    }
-
-    private static func coverOwner(in page: ForumThreadPage) -> BlogReaderUser? {
-        firstFloorPost(in: page.posts)?.author ?? page.posts.first?.author
-    }
-
-    private static func coverCandidate(in page: ForumThreadPage, owner: BlogReaderUser) -> URL? {
-        let ownerUID = trimmedNonEmpty(owner.uid)
-        let ownerName = trimmedNonEmpty(owner.name)
-        return page.posts
-            .filter { post in
-                if let ownerUID {
-                    return trimmedNonEmpty(post.author.uid) == ownerUID
-                }
-                guard let ownerName else { return false }
-                return trimmedNonEmpty(post.author.name) == ownerName
-            }
-            .flatMap(\.contentBlocks)
-            .lazy
-            .compactMap(Self.coverCandidateURL(in:))
-            .first
-    }
-
-    private static func firstFloorPost(in posts: [ForumThreadPost]) -> ForumThreadPost? {
-        posts.first { post in
-            let floorText = post.floorText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            return floorText == "1" || floorText.hasPrefix("1#")
-        }
-    }
-
-    private static func coverCandidateURL(in block: ForumThreadContentBlock) -> URL? {
-        switch block.kind {
-        case let .image(image):
-            return isCoverCandidate(image) ? ContentCoverStore.normalizedCoverURL(from: image.url.absoluteString) : nil
-        case let .quote(blocks), let .collapse(_, blocks), let .locked(_, blocks):
-            return blocks.lazy.compactMap(coverCandidateURL(in:)).first
-        case let .table(rows):
-            return rows.lazy
-                .flatMap { $0 }
-                .flatMap(\.blocks)
-                .compactMap(coverCandidateURL(in:))
-                .first
-        case .text, .attachment, .code, .horizontalRule:
-            return nil
-        }
-    }
-
-    private static func isCoverCandidate(_ image: ForumThreadImageBlock) -> Bool {
-        !image.isEmoticon && ContentCoverStore.normalizedCoverURL(from: image.url.absoluteString) != nil
     }
 
     private static func lastUpdatedText(editedText: String?, postedAtText: String?) -> String? {

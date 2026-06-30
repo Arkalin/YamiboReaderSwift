@@ -1,6 +1,6 @@
 import Foundation
 
-public actor ForumThreadReaderRepository {
+public actor ForumThreadReaderRepository: ThreadCoverPageResolving {
     private let client: YamiboClient
 
     public init(client: YamiboClient) {
@@ -28,6 +28,31 @@ public actor ForumThreadReaderRepository {
             from: html,
             thread: context.thread,
             fallbackTitle: context.title
+        )
+    }
+
+    public func cachedThreadPage(
+        thread _: ThreadIdentity,
+        title _: String,
+        authorID _: String?,
+        page _: Int
+    ) async -> ForumThreadPage? {
+        nil
+    }
+
+    public func fetchThreadPage(
+        thread: ThreadIdentity,
+        title: String,
+        authorID: String?,
+        page: Int
+    ) async throws -> ForumThreadPage {
+        try await fetchNovelThreadPage(
+            context: NovelDetailLaunchContext(
+                thread: thread,
+                title: title,
+                authorID: authorID
+            ),
+            page: page
         )
     }
 
