@@ -306,6 +306,12 @@ public final class ReaderContainerModel: ObservableObject {
         return currentChapterIndex
     }
 
+    public func isCurrentChapterDirectoryChapter(_ chapter: ReaderChapter) -> Bool {
+        guard visibleChapterDirectoryView == visibleView,
+              let currentChapterDirectoryIndex else { return false }
+        return chapter.ordinal == currentChapterDirectoryIndex
+    }
+
     public var pagedViewportSelectionIndex: Int {
         guard isTwoPageSpreadActive else { return selectedSurfaceIndex }
         return spreadIndex(forSurfaceIndex: selectedSurfaceIndex)

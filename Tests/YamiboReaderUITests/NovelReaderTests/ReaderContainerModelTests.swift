@@ -391,6 +391,23 @@ final class ReaderContainerModelTests: XCTestCase {
         }
     }
 
+    func testCurrentChapterDirectoryChapterUsesOccurrenceInsteadOfTitle() async throws {
+        let model = try await makeModel(
+            documents: [
+                makeDocument(view: 1, maxView: 1, chapterTitles: ["同名章", "同名章"]),
+            ]
+        )
+
+        await MainActor.run {
+            model.jumpToSurface(1)
+            let chapters = model.visibleChapterDirectoryChapters
+            XCTAssertEqual(chapters.map(\.title), ["同名章", "同名章"])
+            XCTAssertEqual(model.currentChapterDirectoryIndex, 1)
+            XCTAssertFalse(model.isCurrentChapterDirectoryChapter(chapters[0]))
+            XCTAssertTrue(model.isCurrentChapterDirectoryChapter(chapters[1]))
+        }
+    }
+
     func testClampsWebJumpAndReportsProgress() async throws {
         let model = try await makeModel(
             documents: [

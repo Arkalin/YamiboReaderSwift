@@ -50,7 +50,7 @@ struct ReaderChapterSheet: View {
                                     )
                                 }
 
-                                ForEach(model.visibleChapterDirectoryChapters, id: \.startIndex) { chapter in
+                                ForEach(model.visibleChapterDirectoryChapters, id: \.ordinal) { chapter in
                                     Button {
                                         onSelect(chapter)
                                         dismiss()
@@ -70,7 +70,7 @@ struct ReaderChapterSheet: View {
                                     }
                                     .buttonStyle(.plain)
                                     .listRowBackground(isCurrent(chapter) ? Color.accentColor.opacity(0.12) : Color.clear)
-                                    .id(chapter.startIndex)
+                                    .id(chapter.ordinal)
                                 }
 
                                 if let nextView = model.nextChapterDirectoryWebView {
@@ -144,8 +144,7 @@ struct ReaderChapterSheet: View {
     }
 
     private func isCurrent(_ chapter: ReaderChapter) -> Bool {
-        guard model.visibleChapterDirectoryView == model.visibleView else { return false }
-        return chapter.title == model.currentChapterTitle
+        model.isCurrentChapterDirectoryChapter(chapter)
     }
 
     private func chapterLocationText(for chapter: ReaderChapter) -> String {
@@ -163,7 +162,7 @@ struct ReaderChapterSheet: View {
         let targetIndex = max(currentChapterIndex - 3, 0)
         let targetChapter = model.visibleChapterDirectoryChapters[targetIndex]
         withAnimation(.easeInOut(duration: 0.2)) {
-            proxy.scrollTo(targetChapter.startIndex, anchor: .top)
+            proxy.scrollTo(targetChapter.ordinal, anchor: .top)
         }
     }
 }
