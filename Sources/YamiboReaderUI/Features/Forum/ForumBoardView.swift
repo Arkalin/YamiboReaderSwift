@@ -343,7 +343,7 @@ private struct ForumBoardContentView: View {
                 )
             }
             .zIndex(2)
-            .transition(.opacity.combined(with: .move(edge: .top)))
+            .transition(.opacity)
         }
     }
 
