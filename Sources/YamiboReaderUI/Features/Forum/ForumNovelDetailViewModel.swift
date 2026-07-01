@@ -11,6 +11,8 @@ extension NovelReaderRepository: ForumNovelDocumentLoading {}
 protocol ForumNovelThreadPageLoading: Sendable {
     func cachedNovelThreadPage(context: NovelDetailLaunchContext, page: Int) async -> ForumThreadPage?
     func fetchNovelThreadPage(context: NovelDetailLaunchContext, page: Int) async throws -> ForumThreadPage
+    func clearCachedThreadPages(thread: ThreadIdentity) async throws
+    func storeNovelThreadPage(_ page: ForumThreadPage, context: NovelDetailLaunchContext, pageNumber: Int) async throws
 }
 
 extension ForumThreadReaderRepository: ForumNovelThreadPageLoading {}
@@ -67,6 +69,7 @@ final class ForumNovelDetailViewModel {
     var isLoading = false
     var errorMessage: String?
     var favoriteErrorMessage: String?
+    var transientMessage: String?
 
     let context: NovelDetailLaunchContext
 
@@ -172,8 +175,21 @@ final class ForumNovelDetailViewModel {
     }
 
     func reload() async {
+        await loadDetail(preferCache: true, refreshesPersistentCache: false, preservesCurrentContentOnFailure: false)
+    }
+
+    func refresh() async {
+        await loadDetail(preferCache: false, refreshesPersistentCache: true, preservesCurrentContentOnFailure: threadPage != nil)
+    }
+
+    private func loadDetail(
+        preferCache: Bool,
+        refreshesPersistentCache: Bool,
+        preservesCurrentContentOnFailure: Bool
+    ) async {
         isLoading = true
         errorMessage = nil
+        transientMessage = nil
         documentPreloadTask?.cancel()
         document = nil
         defer { isLoading = false }
@@ -185,19 +201,19 @@ final class ForumNovelDetailViewModel {
             readerSettings = await appContext.settingsStore.load().reader
             favoriteErrorMessage = nil
             let threadRepository = await threadRepositoryProvider()
-            let headerPage = if let cached = await threadRepository.cachedNovelThreadPage(context: context, page: 1) {
-                cached
-            } else {
-                try await threadRepository.fetchNovelThreadPage(context: context, page: 1)
+            let initialPages = try await loadInitialPages(repository: threadRepository, preferCache: preferCache)
+            let headerPage = initialPages.headerPage
+            let contentPage = initialPages.contentPage
+            let authorID = initialPages.authorID
+            let contentContext = initialPages.contentContext
+            if refreshesPersistentCache {
+                try await threadRepository.clearCachedThreadPages(thread: context.thread)
+                try await threadRepository.storeNovelThreadPage(headerPage, context: context, pageNumber: 1)
+                if contentContext != context {
+                    try await threadRepository.storeNovelThreadPage(contentPage, context: contentContext, pageNumber: 1)
+                }
             }
-            let authorID = try Self.resolveAuthorID(context: context, page: headerPage)
             resolvedAuthorID = authorID
-            let contentContext = authorScopedContext(authorID: authorID)
-            let contentPage = if let cached = await threadRepository.cachedNovelThreadPage(context: contentContext, page: 1) {
-                cached
-            } else {
-                try await threadRepository.fetchNovelThreadPage(context: contentContext, page: 1)
-            }
             threadPage = headerPage
             loadedThreadPages = [1: contentPage]
             await refreshContentCover(from: headerPage)
@@ -208,18 +224,58 @@ final class ForumNovelDetailViewModel {
             rebuildChapterDirectory()
             preloadReaderDocument()
         } catch {
-            document = nil
-            threadPage = nil
-            chapters = []
-            chapterSections = []
             readingProgress = await appContext.readingProgressStore.load(for: context.thread.canonicalURL)
             contentCover = await loadContentCover()
-            loadedThreadPages = [:]
-            resolvedAuthorID = nil
-            chapterPageErrors = [:]
-            loadingChapterPages = []
-            errorMessage = error.localizedDescription
+            if preservesCurrentContentOnFailure {
+                document = nil
+                errorMessage = nil
+                transientMessage = L10n.string("forum.novel_detail.refresh_failed", error.localizedDescription)
+            } else {
+                document = nil
+                threadPage = nil
+                chapters = []
+                chapterSections = []
+                loadedThreadPages = [:]
+                resolvedAuthorID = nil
+                chapterPageErrors = [:]
+                loadingChapterPages = []
+                errorMessage = error.localizedDescription
+            }
         }
+    }
+
+    private func loadInitialPages(
+        repository: any ForumNovelThreadPageLoading,
+        preferCache: Bool
+    ) async throws -> (headerPage: ForumThreadPage, contentPage: ForumThreadPage, authorID: String, contentContext: NovelDetailLaunchContext) {
+        if let authorID = Self.trimmedNonEmpty(context.authorID) {
+            let scopedContext = authorScopedContext(authorID: authorID)
+            let page = try await loadNovelThreadPage(context: scopedContext, page: 1, preferCache: preferCache, repository: repository)
+            return (page, page, authorID, scopedContext)
+        }
+
+        let headerPage = try await loadNovelThreadPage(context: context, page: 1, preferCache: preferCache, repository: repository)
+        let authorID = try Self.resolveAuthorID(context: context, page: headerPage)
+        let contentContext = authorScopedContext(authorID: authorID)
+        let contentPage = try await loadNovelThreadPage(context: contentContext, page: 1, preferCache: preferCache, repository: repository)
+        return (headerPage, contentPage, authorID, contentContext)
+    }
+
+    private func loadNovelThreadPage(
+        context: NovelDetailLaunchContext,
+        page: Int,
+        preferCache: Bool,
+        repository: any ForumNovelThreadPageLoading
+    ) async throws -> ForumThreadPage {
+        if preferCache,
+           let cached = await repository.cachedNovelThreadPage(context: context, page: page) {
+            return cached
+        }
+        return try await repository.fetchNovelThreadPage(context: context, page: page)
+    }
+
+    func clearTransientMessage() {
+        transientMessage = nil
     }
 
     private func preloadReaderDocument() {

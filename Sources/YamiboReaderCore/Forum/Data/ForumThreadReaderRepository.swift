@@ -45,6 +45,14 @@ public actor ForumThreadReaderRepository: ThreadCoverPageResolving {
         await cacheStore.loadThreadPage(thread: context.thread, page: page, authorID: context.authorID)
     }
 
+    public func clearCachedThreadPages(thread: ThreadIdentity) async throws {
+        try await cacheStore.clearThreadPages(thread: thread)
+    }
+
+    public func storeNovelThreadPage(_ page: ForumThreadPage, context: NovelDetailLaunchContext, pageNumber: Int = 1) async throws {
+        try await cacheStore.saveThreadPage(page, thread: context.thread, pageNumber: pageNumber, authorID: context.authorID)
+    }
+
     public func cachedThreadPage(
         thread: ThreadIdentity,
         title _: String,

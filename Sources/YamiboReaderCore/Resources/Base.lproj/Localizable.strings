@@ -376,6 +376,7 @@
 "forum.home.empty" = "暂无论坛版块";
 "forum.home.empty_message" = "没有找到可显示的论坛版块。";
 "forum.home.refresh_failed" = "刷新失败：%@";
+"forum.novel_detail.refresh_failed" = "刷新失败：%@";
 "forum.home.search_placeholder" = "搜索论坛";
 "forum.home.today_count" = "今日 %d";
 "forum.history" = "浏览历史";

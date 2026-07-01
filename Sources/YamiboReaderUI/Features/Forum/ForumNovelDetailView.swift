@@ -33,7 +33,7 @@ struct ForumNovelDetailView: View {
             isLoading: model.isLoading,
             errorMessage: model.errorMessage,
             refresh: {
-                await model.reload()
+                await model.refresh()
             },
             onChapterTap: { chapter in
                 onChapterTap(model.launchContext(for: chapter))
@@ -100,6 +100,23 @@ struct ForumNovelDetailView: View {
         } message: {
             Text(copiedTextMessage ?? "")
         }
+        .overlay(alignment: .bottom) {
+            if let transientMessage = model.transientMessage {
+                ForumNovelDetailTransientMessageView(message: transientMessage)
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 24)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .animation(.snappy(duration: 0.2), value: model.transientMessage)
+        .task(id: model.transientMessage) {
+            guard model.transientMessage != nil else { return }
+            try? await Task.sleep(for: .seconds(3))
+            guard !Task.isCancelled else { return }
+            withAnimation(.snappy(duration: 0.2)) {
+                model.clearTransientMessage()
+            }
+        }
     }
 
     private func copyText(_ text: String) {
@@ -107,6 +124,22 @@ struct ForumNovelDetailView: View {
         UIPasteboard.general.string = text
         copiedTextMessage = text
         #endif
+    }
+}
+
+private struct ForumNovelDetailTransientMessageView: View {
+    let message: String
+
+    var body: some View {
+        Text(message)
+            .font(.subheadline.weight(.semibold))
+            .multilineTextAlignment(.center)
+            .foregroundStyle(.white)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 12)
+            .frame(maxWidth: 420)
+            .background(ForumColors.brownDeep, in: Capsule())
+            .shadow(color: ForumColors.brownDeep.opacity(0.22), radius: 12, x: 0, y: 6)
     }
 }
 

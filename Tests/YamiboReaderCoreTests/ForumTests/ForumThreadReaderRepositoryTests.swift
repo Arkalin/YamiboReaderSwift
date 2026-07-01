@@ -110,6 +110,38 @@ private struct ForumThreadReaderRepositoryTests {
     #expect(await repository.cachedThreadPage(thread: thread, title: "小说标题", authorID: nil, page: 1) == nil)
 }
 
+@Test func forumThreadReaderRepositoryCanReplaceThreadPageCacheAfterRefresh() async throws {
+    defer { ForumThreadReaderRepositoryTestURLProtocol.handler = nil }
+
+    let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+    let cacheStore = ForumCacheStore(baseDirectory: directory)
+    let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=708&mobile=2"))
+    let thread = ThreadIdentity(tid: "708", canonicalURL: threadURL)
+    let repository = ForumThreadReaderRepository(
+        client: YamiboClient(session: makeForumThreadReaderRepositoryTestSession(), cookie: "auth=token", userAgent: "Test-UA"),
+        cacheStore: cacheStore
+    )
+
+    ForumThreadReaderRepositoryTestURLProtocol.handler = { request in
+        forumThreadReaderRepositoryHTTPResponse(
+            url: request.url!,
+            body: forumThreadReaderRepositoryThreadHTML(title: "刷新前缓存页", postID: "8001")
+        )
+    }
+
+    let context = NovelDetailLaunchContext(thread: thread, title: "小说标题", authorID: "42")
+    let loaded = try await repository.fetchNovelThreadPage(context: context, page: 1)
+    #expect(await repository.cachedNovelThreadPage(context: context, page: 1)?.title == "刷新前缓存页")
+
+    try await repository.clearCachedThreadPages(thread: thread)
+    #expect(await repository.cachedNovelThreadPage(context: context, page: 1) == nil)
+
+    var refreshed = loaded
+    refreshed.title = "刷新后缓存页"
+    try await repository.storeNovelThreadPage(refreshed, context: context, pageNumber: 1)
+    #expect(await repository.cachedNovelThreadPage(context: context, page: 1)?.title == "刷新后缓存页")
+}
+
 @Test func forumThreadReaderRepositoryInteractionRequestsDoNotWriteThreadPageCache() async throws {
     defer { ForumThreadReaderRepositoryTestURLProtocol.handler = nil }
 
