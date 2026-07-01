@@ -29,6 +29,11 @@ public struct ForumThreadTapContext: Codable, Hashable, Sendable {
     }
 }
 
+public enum ThreadRouteIntent: String, Codable, Hashable, Sendable {
+    case contentRoute
+    case nativeThreadReader
+}
+
 public struct ThreadRouteRequest: Codable, Hashable, Sendable {
     public var threadURL: URL
     public var threadID: String?
@@ -37,6 +42,7 @@ public struct ThreadRouteRequest: Codable, Hashable, Sendable {
     public var threadFid: String?
     public var targetPostID: String?
     public var knownThreadKind: YamiboForumThreadKind?
+    public var intent: ThreadRouteIntent
     public var tapContext: ForumThreadTapContext
 
     public init(
@@ -47,6 +53,7 @@ public struct ThreadRouteRequest: Codable, Hashable, Sendable {
         threadFid: String? = nil,
         targetPostID: String? = nil,
         knownThreadKind: YamiboForumThreadKind? = nil,
+        intent: ThreadRouteIntent = .contentRoute,
         tapContext: ForumThreadTapContext = ForumThreadTapContext()
     ) {
         self.threadURL = threadURL
@@ -56,6 +63,7 @@ public struct ThreadRouteRequest: Codable, Hashable, Sendable {
         self.threadFid = threadFid?.threadRoutingTrimmedNonEmpty
         self.targetPostID = targetPostID?.threadRoutingTrimmedNonEmpty
         self.knownThreadKind = knownThreadKind
+        self.intent = intent
         self.tapContext = tapContext
     }
 }

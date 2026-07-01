@@ -70,10 +70,16 @@ import Testing
     #expect(ForumRouteResolver.resolve(url: url) == .blog(blogID: "88", uid: "705216", title: nil))
 }
 
-@Test func forumRouteResolverKeepsReaderOriginURLsInWebFallback() throws {
+@Test func forumRouteResolverResolvesReaderOriginThreadURLs() throws {
     let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=570956&page=2#pid99"))
 
-    #expect(ForumRouteResolver.resolve(url: url, source: .readerOrigin) == .web(url))
+    #expect(ForumRouteResolver.resolve(url: url, source: .readerOrigin) == .thread(url))
+}
+
+@Test func forumRouteResolverResolvesReaderOriginFindPostURLsAsThreadTargets() throws {
+    let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=redirect&goto=findpost&ptid=570956&pid=99&mobile=2"))
+
+    #expect(ForumRouteResolver.resolve(url: url, source: .readerOrigin) == .thread(url))
 }
 
 @Test func forumRouteResolverResolvesHomeURL() throws {

@@ -193,7 +193,12 @@ public struct ForumNavigationHostView: View {
         case let .board(fid, title, page):
             path.append(.board(fid: fid, title: title, page: page))
         case let .thread(threadURL):
-            openThread(threadURL, title: nil, containingFid: nil)
+            openThread(
+                threadURL,
+                title: nil,
+                containingFid: nil,
+                intent: source == .readerOrigin ? .nativeThreadReader : .contentRoute
+            )
         case let .userSpace(uid, name):
             path.append(.userSpace(uid: uid, name: name, section: .space, subPage: .profile))
         case let .messageCenter(tab):
@@ -221,7 +226,12 @@ public struct ForumNavigationHostView: View {
         }
     }
 
-    private func openThread(_ url: URL, title: String?, containingFid: String?) {
+    private func openThread(
+        _ url: URL,
+        title: String?,
+        containingFid: String?,
+        intent: ThreadRouteIntent = .contentRoute
+    ) {
         Task {
             do {
                 let resolver = await appContext.makeForumThreadRouteResolver()
@@ -229,6 +239,7 @@ public struct ForumNavigationHostView: View {
                     ThreadRouteRequest(
                         threadURL: url,
                         title: title,
+                        intent: intent,
                         tapContext: ForumThreadTapContext(containingFid: containingFid)
                     )
                 )

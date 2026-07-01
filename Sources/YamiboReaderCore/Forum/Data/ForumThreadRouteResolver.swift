@@ -11,6 +11,36 @@ public actor ForumThreadRouteResolver {
         let requestURL = URL(string: request.threadURL.absoluteString, relativeTo: YamiboRoute.baseURL)?.absoluteURL
             ?? request.threadURL.absoluteURL
         let canonicalURL = canonicalThreadURL(from: requestURL) ?? requestURL
+        let targetPostID = request.targetPostID ?? postID(from: requestURL)
+        let baseInitialPage = pageNumber(from: requestURL) ?? pageNumber(from: canonicalURL) ?? 1
+
+        if request.intent == .nativeThreadReader {
+            let tid = request.threadID
+                ?? threadID(from: canonicalURL)
+                ?? MangaTitleCleaner.extractTid(from: canonicalURL.absoluteString)
+                ?? ""
+            let thread = ThreadIdentity(
+                tid: tid,
+                canonicalURL: canonicalURL,
+                fid: request.tapContext.containingFid ?? request.threadFid
+            )
+            let initialPage = await resolvedNativeThreadReaderInitialPage(
+                requestURL: requestURL,
+                baseInitialPage: baseInitialPage,
+                thread: thread,
+                title: request.title
+            )
+            return .threadReader(
+                ThreadReaderLaunchContext(
+                    thread: thread,
+                    title: request.title ?? L10n.string("forum.default_title"),
+                    initialPage: initialPage,
+                    targetPostID: targetPostID,
+                    authorID: request.authorID
+                )
+            )
+        }
+
         let initialFid = request.tapContext.containingFid ?? request.threadFid
         let initialKind = kindForKnownInputs(
             fid: initialFid,
@@ -37,9 +67,7 @@ public actor ForumThreadRouteResolver {
         let fid = initialFid ?? metadata?.fid
         let title = request.title ?? metadata?.title
         let authorID = request.authorID ?? metadata?.authorID
-        let targetPostID = request.targetPostID ?? postID(from: requestURL)
         let thread = ThreadIdentity(tid: tid, canonicalURL: canonicalURL, fid: fid)
-        let baseInitialPage = pageNumber(from: requestURL) ?? pageNumber(from: canonicalURL) ?? 1
         let kind = metadata == nil
             ? initialKind
             : kindForKnownInputs(
@@ -164,11 +192,20 @@ public actor ForumThreadRouteResolver {
     }
 
     private func postID(from url: URL) -> String? {
-        URLComponents(url: url, resolvingAgainstBaseURL: false)?
+        if let queryPostID = URLComponents(url: url, resolvingAgainstBaseURL: false)?
             .queryItems?
             .first(where: { $0.name == "pid" })?
             .value?
-            .threadRoutingTrimmedNonEmpty
+            .threadRoutingTrimmedNonEmpty {
+            return queryPostID
+        }
+
+        guard let fragment = url.fragment?.threadRoutingTrimmedNonEmpty else { return nil }
+        if let match = HTMLTextExtractor.firstMatch(pattern: #"^pid(\d+)$"#, in: fragment),
+           match.count >= 2 {
+            return match[1].threadRoutingTrimmedNonEmpty
+        }
+        return nil
     }
 
     private func pageNumber(from url: URL) -> Int? {
@@ -204,6 +241,24 @@ public actor ForumThreadRouteResolver {
             fallbackTitle: title
         )
         return page.pageNavigation?.currentPage ?? baseInitialPage
+    }
+
+    private func resolvedNativeThreadReaderInitialPage(
+        requestURL: URL,
+        baseInitialPage: Int,
+        thread: ThreadIdentity,
+        title: String?
+    ) async -> Int {
+        do {
+            return try await resolvedThreadReaderInitialPage(
+                requestURL: requestURL,
+                baseInitialPage: baseInitialPage,
+                thread: thread,
+                title: title
+            )
+        } catch {
+            return baseInitialPage
+        }
     }
 }
 

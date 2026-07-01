@@ -38,6 +38,9 @@ private enum ForumThreadRouteResolverTestError: Error {
     case missingHandler
 }
 
+@Suite(.serialized)
+struct ForumThreadRouteResolverTests {
+
 @Test func forumThreadRouteResolverUsesContainingBoardForNovelThreadsWithoutFetching() async throws {
     let resolver = ForumThreadRouteResolver(client: forumThreadRouteTestClient())
     let request = ThreadRouteRequest(
@@ -99,6 +102,69 @@ private enum ForumThreadRouteResolverTestError: Error {
     #expect(context.thread.tid == "200")
     #expect(context.thread.fid == "999999")
     #expect(context.title == "漫画标题")
+}
+
+@Test func forumThreadRouteResolverNativeThreadIntentBypassesNovelClassification() async throws {
+    let resolver = ForumThreadRouteResolver(client: forumThreadRouteTestClient())
+    let request = ThreadRouteRequest(
+        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=201&page=4&mobile=2")),
+        title: "小说原帖",
+        authorID: "705216",
+        intent: .nativeThreadReader,
+        tapContext: ForumThreadTapContext(containingFid: "49")
+    )
+
+    let target = try await resolver.resolve(request)
+
+    guard case let .threadReader(context) = target else {
+        Issue.record("Expected native thread reader target, got \(target)")
+        return
+    }
+    #expect(context.thread.tid == "201")
+    #expect(context.thread.fid == "49")
+    #expect(context.title == "小说原帖")
+    #expect(context.initialPage == 4)
+    #expect(context.authorID == "705216")
+}
+
+@Test func forumThreadRouteResolverNativeThreadIntentBypassesMangaClassification() async throws {
+    let resolver = ForumThreadRouteResolver(client: forumThreadRouteTestClient())
+    let request = ThreadRouteRequest(
+        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=202&mobile=2")),
+        title: "漫画原帖",
+        threadFid: "999999",
+        knownThreadKind: .manga,
+        intent: .nativeThreadReader
+    )
+
+    let target = try await resolver.resolve(request)
+
+    guard case let .threadReader(context) = target else {
+        Issue.record("Expected native thread reader target, got \(target)")
+        return
+    }
+    #expect(context.thread.tid == "202")
+    #expect(context.thread.fid == "999999")
+    #expect(context.title == "漫画原帖")
+}
+
+@Test func forumThreadRouteResolverNativeThreadIntentExtractsTargetPostFromFragment() async throws {
+    let resolver = ForumThreadRouteResolver(client: forumThreadRouteTestClient())
+    let request = ThreadRouteRequest(
+        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=203&page=5&mobile=2#pid9901")),
+        title: "原帖",
+        intent: .nativeThreadReader
+    )
+
+    let target = try await resolver.resolve(request)
+
+    guard case let .threadReader(context) = target else {
+        Issue.record("Expected native thread reader target, got \(target)")
+        return
+    }
+    #expect(context.thread.tid == "203")
+    #expect(context.initialPage == 5)
+    #expect(context.targetPostID == "9901")
 }
 
 @Test func forumThreadRouteResolverDefaultsUnknownBoardToNativeThreadReader() async throws {
@@ -188,6 +254,30 @@ private enum ForumThreadRouteResolverTestError: Error {
     #expect(context.targetPostID == "9001")
 }
 
+@Test func forumThreadRouteResolverNativeThreadIntentKeepsFindPostTargetWhenPageResolutionFails() async throws {
+    defer { ForumThreadRouteResolverTestURLProtocol.handler = nil }
+
+    let resolver = ForumThreadRouteResolver(client: forumThreadRouteTestClientWithHandler())
+    let request = ThreadRouteRequest(
+        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=redirect&goto=findpost&ptid=303&pid=9002&mobile=2")),
+        title: "原帖",
+        intent: .nativeThreadReader
+    )
+    ForumThreadRouteResolverTestURLProtocol.handler = { request in
+        forumThreadRouteHTTPResponse(url: request.url!, body: "forbidden", statusCode: 403)
+    }
+
+    let target = try await resolver.resolve(request)
+
+    guard case let .threadReader(context) = target else {
+        Issue.record("Expected native thread reader target, got \(target)")
+        return
+    }
+    #expect(context.thread.tid == "303")
+    #expect(context.initialPage == 1)
+    #expect(context.targetPostID == "9002")
+}
+
 @Test func forumThreadRouteResolverFetchesThreadMetadataWhenBoardIsUnknown() async throws {
     defer { ForumThreadRouteResolverTestURLProtocol.handler = nil }
 
@@ -256,6 +346,8 @@ private enum ForumThreadRouteResolverTestError: Error {
     await #expect(throws: YamiboError.emptyHTML) {
         _ = try await resolver.resolve(ThreadRouteRequest(threadURL: url))
     }
+}
+
 }
 
 private func forumThreadRouteTestClient() -> YamiboClient {

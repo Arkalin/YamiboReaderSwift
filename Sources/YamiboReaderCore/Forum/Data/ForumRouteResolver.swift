@@ -19,9 +19,6 @@ public enum ForumResolvedRoute: Equatable, Hashable, Sendable {
 public enum ForumRouteResolver {
     public static func resolve(url: URL, source: ForumNavigationSource = .external) -> ForumResolvedRoute {
         let resolvedURL = URL(string: url.absoluteString, relativeTo: YamiboRoute.baseURL)?.absoluteURL ?? url.absoluteURL
-        guard source != .readerOrigin else {
-            return .web(resolvedURL)
-        }
 
         if let board = boardRoute(from: resolvedURL) {
             return .board(fid: board.fid, title: nil, page: board.page)
