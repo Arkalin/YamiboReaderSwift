@@ -170,16 +170,7 @@ public actor FavoriteRepository {
     }
 
     private static func threadID(from url: URL) -> String? {
-        let resolvedURL = URL(string: url.absoluteString, relativeTo: YamiboRoute.baseURL)?.absoluteURL ?? url.absoluteURL
-        if let value = URLComponents(url: resolvedURL, resolvingAgainstBaseURL: false)?
-            .queryItems?
-            .first(where: { $0.name == "tid" || $0.name == "ptid" })?
-            .value?
-            .trimmingCharacters(in: .whitespacesAndNewlines),
-           !value.isEmpty {
-            return value
-        }
-        return MangaTitleCleaner.extractTid(from: resolvedURL.absoluteString)
+        YamiboThreadURLCanonicalizer.threadID(from: url)
     }
 
     private static func sameThread(_ lhs: URL, _ rhs: URL) -> Bool {

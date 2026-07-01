@@ -55,25 +55,7 @@ public struct ReaderCacheIdentity: Hashable, Codable, Sendable {
     }
 
     public static func canonicalThreadURL(from url: URL) -> URL {
-        let resolvedURL = URL(string: url.absoluteString, relativeTo: YamiboRoute.baseURL)?.absoluteURL ?? url.absoluteURL
-        let threadID = extractThreadID(from: resolvedURL)
-
-        var components = URLComponents(url: resolvedURL, resolvingAgainstBaseURL: false)
-            ?? URLComponents(url: YamiboRoute.baseURL, resolvingAgainstBaseURL: false)!
-        components.scheme = components.scheme ?? YamiboRoute.baseURL.scheme
-        components.host = components.host ?? YamiboRoute.baseURL.host
-        components.path = "/forum.php"
-
-        let existingItems = Dictionary(uniqueKeysWithValues: (components.queryItems ?? []).map { ($0.name, $0.value) })
-        var retainedItems: [URLQueryItem] = [.init(name: "mod", value: "viewthread")]
-        if let threadID, !threadID.isEmpty {
-            retainedItems.append(.init(name: "tid", value: threadID))
-        }
-        if let extra = existingItems["extra"], let extra, !extra.isEmpty {
-            retainedItems.append(.init(name: "extra", value: extra))
-        }
-        components.queryItems = retainedItems.sorted { $0.name < $1.name }
-        return components.url ?? resolvedURL
+        YamiboThreadURLCanonicalizer.canonicalThreadURL(from: url)
     }
 
     private static func resolveVariant(authorID: String?, contentSource: ReaderContentSource?) -> ReaderCacheVariant {
@@ -88,19 +70,4 @@ public struct ReaderCacheIdentity: Hashable, Codable, Sendable {
         return trimmed.isEmpty ? nil : trimmed
     }
 
-    private static func extractThreadID(from url: URL) -> String? {
-        if let value = URLComponents(url: url, resolvingAgainstBaseURL: false)?
-            .queryItems?
-            .first(where: { $0.name == "tid" })?
-            .value,
-           !value.isEmpty {
-            return value
-        }
-
-        return url.absoluteString.range(of: #"thread-(\d+)-\d+-\d+\.html"#, options: .regularExpression)
-            .flatMap { range in
-                let substring = String(url.absoluteString[range])
-                return substring.split(separator: "-").dropFirst().first.map(String.init)
-            }
-    }
 }

@@ -61,7 +61,7 @@ private enum ForumThreadRouteResolverTestError: Error {
 @Test func forumThreadRouteResolverUsesLightNovelSubBoardForNovelDetail() async throws {
     let resolver = ForumThreadRouteResolver(client: forumThreadRouteTestClient())
     let request = ThreadRouteRequest(
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=101&mobile=2")),
+        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=101&extra=page%3D1&mobile=2&page=25&authorid=705217")),
         title: "轻小说标题",
         authorID: "705217",
         tapContext: ForumThreadTapContext(containingFid: "55")
@@ -75,6 +75,8 @@ private enum ForumThreadRouteResolverTestError: Error {
     }
     #expect(context.thread.tid == "101")
     #expect(context.thread.fid == "55")
+    #expect(context.thread.canonicalURL.absoluteString == "https://bbs.yamibo.com/forum.php?extra=page%3D1&mod=viewthread&tid=101")
+    #expect(context.thread.canonicalURL == ReaderCacheIdentity.canonicalThreadURL(from: request.threadURL))
     #expect(context.title == "轻小说标题")
     #expect(context.authorID == "705217")
 }
@@ -180,7 +182,8 @@ private enum ForumThreadRouteResolverTestError: Error {
         return
     }
     #expect(context.thread.tid == "302")
-    #expect(context.thread.canonicalURL.absoluteString == "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=302&mobile=2")
+    #expect(context.thread.canonicalURL.absoluteString == "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=302")
+    #expect(context.thread.canonicalURL == ReaderCacheIdentity.canonicalThreadURL(from: request.threadURL))
     #expect(context.initialPage == 3)
     #expect(context.targetPostID == "9001")
 }

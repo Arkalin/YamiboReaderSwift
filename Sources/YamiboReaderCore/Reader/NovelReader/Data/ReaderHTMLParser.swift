@@ -330,37 +330,11 @@ public enum ReaderHTMLParser {
     }
 
     private static func canonicalThreadURL(from url: URL) -> URL {
-        var components = URLComponents(url: url.absoluteURL, resolvingAgainstBaseURL: false)
-        if components?.host == nil {
-            components = URLComponents(url: URL(string: url.absoluteString, relativeTo: YamiboRoute.baseURL)?.absoluteURL ?? url, resolvingAgainstBaseURL: false)
-        }
-
-        guard var components else { return url }
-        let preservedNames = Set(["mod", "tid", "extra", "authorid"])
-        let retained = (components.queryItems ?? []).filter { preservedNames.contains($0.name) }
-        if !retained.contains(where: { $0.name == "mod" }) {
-            components.queryItems = retained + [.init(name: "mod", value: "viewthread")]
-        } else {
-            components.queryItems = retained
-        }
-        return components.url ?? url
+        YamiboThreadURLCanonicalizer.canonicalThreadURL(from: url)
     }
 
     static func extractThreadID(from url: URL) -> String? {
-        if let value = URLComponents(url: url.absoluteURL, resolvingAgainstBaseURL: false)?
-            .queryItems?
-            .first(where: { $0.name == "tid" })?
-            .value,
-           !value.isEmpty {
-            return value
-        }
-
-        return HTMLTextExtractor.firstMatch(
-            pattern: #"thread-(\d+)-\d+-\d+\.html"#,
-            in: url.absoluteString
-        )?
-        .dropFirst()
-        .first
+        YamiboThreadURLCanonicalizer.threadID(from: url)
     }
 }
 

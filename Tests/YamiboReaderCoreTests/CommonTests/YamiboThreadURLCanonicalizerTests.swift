@@ -1,0 +1,51 @@
+import Foundation
+import Testing
+@testable import YamiboReaderCore
+
+@Suite("YamiboThreadURLCanonicalizer")
+struct YamiboThreadURLCanonicalizerTests {
+    @Test func canonicalThreadURLRemovesRequestOnlyQueryItemsAndKeepsExtra() throws {
+        let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mobile=2&page=25&authorid=406769&tid=521519&mod=viewthread&extra=page%3D1"))
+
+        let canonical = YamiboThreadURLCanonicalizer.canonicalThreadURL(from: url)
+
+        #expect(canonical.absoluteString == "https://bbs.yamibo.com/forum.php?extra=page%3D1&mod=viewthread&tid=521519")
+    }
+
+    @Test func canonicalThreadURLIsStableForDifferentQueryOrder() throws {
+        let first = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=521519&extra=page%3D1&mobile=2"))
+        let second = try #require(URL(string: "https://bbs.yamibo.com/forum.php?authorid=406769&mobile=2&extra=page%3D1&tid=521519&page=25&mod=viewthread"))
+
+        #expect(YamiboThreadURLCanonicalizer.canonicalThreadURL(from: first) == YamiboThreadURLCanonicalizer.canonicalThreadURL(from: second))
+    }
+
+    @Test func canonicalThreadURLResolvesRelativeForumURLs() throws {
+        let url = try #require(URL(string: "forum.php?mod=viewthread&tid=123&page=3&mobile=2"))
+
+        let canonical = YamiboThreadURLCanonicalizer.canonicalThreadURL(from: url)
+
+        #expect(canonical.absoluteString == "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123")
+    }
+
+    @Test func canonicalThreadURLUsesPTIDForFindPostURLs() throws {
+        let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?goto=findpost&mobile=2&mod=redirect&pid=987&ptid=54321"))
+
+        let canonical = YamiboThreadURLCanonicalizer.canonicalThreadURL(from: url)
+
+        #expect(canonical.absoluteString == "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=54321")
+    }
+
+    @Test func canonicalThreadURLSupportsRewriteThreadURLs() throws {
+        let url = try #require(URL(string: "https://bbs.yamibo.com/thread-123-4-1.html"))
+
+        let canonical = YamiboThreadURLCanonicalizer.canonicalThreadURL(from: url)
+
+        #expect(canonical.absoluteString == "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123")
+    }
+
+    @Test func readerCacheIdentityUsesSharedCanonicalThreadURL() throws {
+        let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=521519&extra=page%3D1&mobile=2&page=25&authorid=406769"))
+
+        #expect(ReaderCacheIdentity.canonicalThreadURL(from: url) == YamiboThreadURLCanonicalizer.canonicalThreadURL(from: url))
+    }
+}

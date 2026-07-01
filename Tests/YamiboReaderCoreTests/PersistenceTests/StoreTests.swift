@@ -479,13 +479,14 @@ import Testing
     defaults.removePersistentDomain(forName: "favorite-canonical-lookup-tests")
     let store = FavoriteStore(defaults: defaults, key: "favorites")
     let listURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=302&extra=page%3D1&mobile=2"))
-    let detailURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=302&mobile=2"))
+    let detailURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mobile=2&page=25&extra=page%3D1&tid=302&mod=viewthread"))
     let favorite = Favorite(title: "列表收藏", url: listURL, type: .novel)
     try await store.saveFavorites([favorite])
 
     let loaded = await store.favorite(for: detailURL)
 
     #expect(loaded?.id == favorite.id)
+    #expect(ReaderCacheIdentity.canonicalThreadURL(from: listURL) == ReaderCacheIdentity.canonicalThreadURL(from: detailURL))
 }
 
 @Test func favoriteStoreUpdatesNovelReadingPositionByCanonicalThreadURL() async throws {
@@ -493,7 +494,7 @@ import Testing
     defaults.removePersistentDomain(forName: "favorite-canonical-progress-tests")
     let store = FavoriteStore(defaults: defaults, key: "favorites")
     let listURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=303&extra=page%3D1&mobile=2"))
-    let readerURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=303&mobile=2"))
+    let readerURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?page=4&mobile=2&extra=page%3D1&mod=viewthread&tid=303&authorid=77"))
     let favorite = Favorite(title: "列表收藏", url: listURL, type: .novel)
     try await store.saveFavorites([favorite])
 
@@ -507,6 +508,7 @@ import Testing
     #expect(favorites.first?.url == listURL)
     #expect(favorites.first?.lastView == 4)
     #expect(favorites.first?.lastChapter == "第四章")
+    #expect(ReaderCacheIdentity.canonicalThreadURL(from: listURL) == ReaderCacheIdentity.canonicalThreadURL(from: readerURL))
 }
 
 @Test func favoriteStoreRemoteRefreshTouchesOnlyRemoteFavoritesClock() async throws {

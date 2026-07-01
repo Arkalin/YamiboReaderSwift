@@ -15,8 +15,10 @@ public actor ThreadOpenResolver {
         favoriteChapterURL: URL? = nil,
         initialMangaPageIndex: Int = 0
     ) async throws -> ThreadOpenTarget {
-        let canonicalURL = ReaderModeDetector.canonicalThreadURL(from: threadURL) ?? threadURL
-        let authorID = Self.authorID(from: canonicalURL)
+        let requestURL = URL(string: threadURL.absoluteString, relativeTo: YamiboRoute.baseURL)?.absoluteURL
+            ?? threadURL.absoluteURL
+        let canonicalURL = ReaderModeDetector.canonicalThreadURL(from: requestURL) ?? requestURL
+        let authorID = Self.authorID(from: requestURL)
 
         switch favoriteType {
         case .novel:
@@ -31,20 +33,20 @@ public actor ThreadOpenResolver {
         case .manga:
             return .manga(
                 MangaLaunchContext(
-                    originalThreadURL: canonicalURL,
-                    chapterURL: favoriteChapterURL ?? canonicalURL,
+                    originalThreadURL: requestURL,
+                    chapterURL: favoriteChapterURL ?? requestURL,
                     displayTitle: title ?? L10n.string("manga.reader.title"),
                     source: .favorites,
                     initialPage: initialMangaPageIndex
                 )
             )
         case .other:
-            return .web(canonicalURL)
+            return .web(requestURL)
         case .unknown:
             break
         }
 
-        let snapshot = try await loadSnapshot(for: canonicalURL, knownTitle: title, htmlOverride: htmlOverride)
+        let snapshot = try await loadSnapshot(for: requestURL, knownTitle: title, htmlOverride: htmlOverride)
         if ReaderModeDetector.canOpenReader(url: canonicalURL, title: snapshot.title) {
             return .novel(
                 ReaderLaunchContext(
@@ -59,8 +61,8 @@ public actor ThreadOpenResolver {
         if MangaHTMLParser.isLikelyMangaThread(title: snapshot.title, html: snapshot.html) {
             return .manga(
                 MangaLaunchContext(
-                    originalThreadURL: canonicalURL,
-                    chapterURL: favoriteChapterURL ?? canonicalURL,
+                    originalThreadURL: requestURL,
+                    chapterURL: favoriteChapterURL ?? requestURL,
                     displayTitle: MangaTitleCleaner.cleanBookName(snapshot.title.isEmpty ? (title ?? L10n.string("manga.reader.title")) : snapshot.title),
                     source: .forum,
                     initialPage: initialMangaPageIndex
@@ -68,7 +70,7 @@ public actor ThreadOpenResolver {
             )
         }
 
-        return .web(canonicalURL)
+        return .web(requestURL)
     }
 
     private func loadSnapshot(for url: URL, knownTitle: String?, htmlOverride: String?) async throws -> (title: String, html: String) {

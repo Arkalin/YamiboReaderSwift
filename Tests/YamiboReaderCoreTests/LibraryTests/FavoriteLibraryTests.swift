@@ -109,3 +109,33 @@ import Testing
     #expect(restored.tagIDs == [tag.id])
     #expect(library.archivedMetadata.isEmpty)
 }
+
+@Test func favoriteLibraryCanonicalKeysUseReaderCacheIdentityCanonicalizer() throws {
+    let favoriteURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mobile=2&page=4&authorid=42&tid=936&mod=viewthread&extra=page%3D1"))
+    let archiveURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?extra=page%3D1&mod=viewthread&tid=936"))
+    let expectedKey = ReaderCacheIdentity.canonicalThreadURL(from: favoriteURL).absoluteString
+    let snapshot = FavoriteLibrarySnapshot(
+        favorites: [Favorite(title: "收藏", url: favoriteURL)],
+        collections: [],
+        archivedMetadata: [
+            FavoriteMetadataArchiveEntry(
+                canonicalThreadURL: archiveURL,
+                displayName: "归档",
+                mangaPageIndex: 0,
+                lastView: 1,
+                lastChapter: nil,
+                authorID: nil,
+                novelResumePoint: nil,
+                isHidden: false,
+                type: .novel,
+                lastMangaURL: nil,
+                parentCollectionID: nil,
+                manualOrder: 0,
+                lastReadAt: nil
+            )
+        ]
+    )
+
+    #expect(snapshot.favoriteCanonicalURLKeys == [expectedKey])
+    #expect(expectedKey == "https://bbs.yamibo.com/forum.php?extra=page%3D1&mod=viewthread&tid=936")
+}

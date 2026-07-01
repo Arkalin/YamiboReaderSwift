@@ -8,7 +8,9 @@ public actor ForumThreadRouteResolver {
     }
 
     public func resolve(_ request: ThreadRouteRequest) async throws -> ThreadRouteTarget {
-        let canonicalURL = canonicalThreadURL(from: request.threadURL) ?? request.threadURL
+        let requestURL = URL(string: request.threadURL.absoluteString, relativeTo: YamiboRoute.baseURL)?.absoluteURL
+            ?? request.threadURL.absoluteURL
+        let canonicalURL = canonicalThreadURL(from: requestURL) ?? requestURL
         let initialFid = request.tapContext.containingFid ?? request.threadFid
         let initialKind = kindForKnownInputs(
             fid: initialFid,
@@ -19,7 +21,7 @@ public actor ForumThreadRouteResolver {
         let metadata: ThreadMetadata?
         if shouldFetchMetadata(fid: initialFid, knownThreadKind: request.knownThreadKind) {
             do {
-                metadata = try await loadMetadata(for: canonicalURL)
+                metadata = try await loadMetadata(for: requestURL)
             } catch let fallback as ForumThreadRouteResolverWebFallback {
                 return .webFallback(fallback.url)
             }
@@ -35,9 +37,9 @@ public actor ForumThreadRouteResolver {
         let fid = initialFid ?? metadata?.fid
         let title = request.title ?? metadata?.title
         let authorID = request.authorID ?? metadata?.authorID
-        let targetPostID = request.targetPostID ?? postID(from: request.threadURL)
+        let targetPostID = request.targetPostID ?? postID(from: requestURL)
         let thread = ThreadIdentity(tid: tid, canonicalURL: canonicalURL, fid: fid)
-        let baseInitialPage = pageNumber(from: request.threadURL) ?? pageNumber(from: canonicalURL) ?? 1
+        let baseInitialPage = pageNumber(from: requestURL) ?? pageNumber(from: canonicalURL) ?? 1
         let kind = metadata == nil
             ? initialKind
             : kindForKnownInputs(
@@ -68,7 +70,7 @@ public actor ForumThreadRouteResolver {
             )
         case .regular, .unknown:
             let initialPage = try await resolvedThreadReaderInitialPage(
-                requestURL: request.threadURL,
+                requestURL: requestURL,
                 baseInitialPage: baseInitialPage,
                 thread: thread,
                 title: title
@@ -141,20 +143,10 @@ public actor ForumThreadRouteResolver {
 
     private func canonicalThreadURL(from url: URL) -> URL? {
         if url.host == nil {
-            return URL(string: url.absoluteString, relativeTo: YamiboRoute.baseURL)?.absoluteURL
+            return YamiboThreadURLCanonicalizer.canonicalThreadURL(from: url)
         }
         if url.host?.contains("yamibo.com") == true {
-            if let threadID = threadID(from: url), isFindPostURL(url) {
-                var components = URLComponents(url: YamiboRoute.baseURL, resolvingAgainstBaseURL: false)!
-                components.path = "/forum.php"
-                components.queryItems = [
-                    .init(name: "mod", value: "viewthread"),
-                    .init(name: "tid", value: threadID),
-                    .init(name: "mobile", value: "2")
-                ]
-                return components.url
-            }
-            return url.absoluteURL
+            return YamiboThreadURLCanonicalizer.canonicalThreadURL(from: url)
         }
         return nil
     }
@@ -168,18 +160,7 @@ public actor ForumThreadRouteResolver {
     }
 
     private func threadID(from url: URL) -> String? {
-        if let value = URLComponents(url: url, resolvingAgainstBaseURL: false)?
-            .queryItems?
-            .first(where: { $0.name == "tid" || $0.name == "ptid" })?
-            .value?
-            .threadRoutingTrimmedNonEmpty {
-            return value
-        }
-
-        return HTMLTextExtractor.firstMatch(pattern: #"thread-(\d+)-\d+-\d+\.html"#, in: url.absoluteString)?
-            .dropFirst()
-            .first?
-            .threadRoutingTrimmedNonEmpty
+        YamiboThreadURLCanonicalizer.threadID(from: url)
     }
 
     private func postID(from url: URL) -> String? {

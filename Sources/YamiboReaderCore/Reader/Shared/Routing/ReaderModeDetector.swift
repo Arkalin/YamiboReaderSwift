@@ -14,10 +14,10 @@ public enum ReaderModeDetector {
     public static func canonicalThreadURL(from fullURL: URL?) -> URL? {
         guard let fullURL else { return nil }
         if fullURL.host == nil {
-            return URL(string: fullURL.absoluteString, relativeTo: YamiboRoute.baseURL)?.absoluteURL
+            return YamiboThreadURLCanonicalizer.canonicalThreadURL(from: fullURL)
         }
         if fullURL.host?.contains("yamibo.com") == true {
-            return fullURL.absoluteURL
+            return YamiboThreadURLCanonicalizer.canonicalThreadURL(from: fullURL)
         }
         return nil
     }

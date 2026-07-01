@@ -77,18 +77,7 @@ public enum ThreadMetadataHTMLParser {
     }
 
     private static func threadID(from url: URL) -> String? {
-        if let value = URLComponents(url: url, resolvingAgainstBaseURL: false)?
-            .queryItems?
-            .first(where: { $0.name == "tid" || $0.name == "ptid" })?
-            .value?
-            .threadRoutingTrimmedNonEmpty {
-            return value
-        }
-
-        return HTMLTextExtractor.firstMatch(pattern: #"thread-(\d+)-\d+-\d+\.html"#, in: url.absoluteString)?
-            .dropFirst()
-            .first?
-            .threadRoutingTrimmedNonEmpty
+        YamiboThreadURLCanonicalizer.threadID(from: url)
     }
 
     private static func threadID(from text: String) -> String? {
