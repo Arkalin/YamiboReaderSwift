@@ -3173,6 +3173,93 @@ private final class StubURLProtocol: URLProtocol {
     #expect(await repository.cachedViews(for: threadURL, authorID: "42", contentSource: .authorFilteredPage) == [1])
 }
 
+@Test func readerRepositoryPersistsProjectionDerivedFromCachedAuthorScopedThreadPage() async throws {
+    let configuration = URLSessionConfiguration.ephemeral
+    configuration.protocolClasses = [StubURLProtocol.self]
+    let session = URLSession(configuration: configuration)
+    let directory = URL(fileURLWithPath: NSTemporaryDirectory())
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    let readerCacheDirectory = directory.appendingPathComponent("reader", isDirectory: true)
+    let readerCacheStore = ReaderCacheStore(baseDirectory: readerCacheDirectory)
+    let forumCacheStore = ForumCacheStore(baseDirectory: directory.appendingPathComponent("forum", isDirectory: true))
+    let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=3201&mobile=2"))
+    let thread = ThreadIdentity(tid: "3201", canonicalURL: ReaderCacheIdentity.canonicalThreadURL(from: threadURL))
+    try await forumCacheStore.saveThreadPage(
+        makeReaderRepositoryThreadPage(
+            thread: thread,
+            title: "缓存小说",
+            postID: "320101",
+            authorID: "42",
+            contentHTML: "<strong>第一章</strong><br>缓存正文"
+        ),
+        thread: thread,
+        pageNumber: 1,
+        authorID: "42"
+    )
+    let repository = NovelReaderRepository(
+        client: YamiboClient(session: session, cookie: "sid=reader", userAgent: "Test-UA"),
+        cacheStore: readerCacheStore,
+        forumCacheStore: forumCacheStore
+    )
+
+    let document = try await repository.loadPage(ReaderPageRequest(threadURL: threadURL, view: 1, authorID: "42"))
+    let persisted = await ReaderCacheStore(baseDirectory: readerCacheDirectory).loadDocument(
+        for: ReaderPageRequest(threadURL: threadURL, view: 1, authorID: "42"),
+        contentSource: .authorFilteredPage
+    )
+
+    #expect(persisted?.threadURL == document.threadURL)
+    #expect(persisted?.view == document.view)
+    #expect(persisted?.resolvedAuthorID == document.resolvedAuthorID)
+    #expect(persisted?.contentSource == document.contentSource)
+    #expect(persisted?.segments == document.segments)
+    #expect(persisted?.segmentSources == document.segmentSources)
+    #expect(persisted?.segmentSemantics == document.segmentSemantics)
+    #expect(persisted?.projectionSourceFingerprint == document.projectionSourceFingerprint)
+    #expect(persisted?.projectionSchemaVersion == document.projectionSchemaVersion)
+}
+
+@Test func readerRepositoryRepairsProjectionCacheDirectoryDeletedDuringRuntime() async throws {
+    let configuration = URLSessionConfiguration.ephemeral
+    configuration.protocolClasses = [StubURLProtocol.self]
+    let session = URLSession(configuration: configuration)
+    let directory = URL(fileURLWithPath: NSTemporaryDirectory())
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    let readerCacheDirectory = directory.appendingPathComponent("reader", isDirectory: true)
+    let readerCacheStore = ReaderCacheStore(baseDirectory: readerCacheDirectory)
+    let forumCacheStore = ForumCacheStore(baseDirectory: directory.appendingPathComponent("forum", isDirectory: true))
+    let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=3202&mobile=2"))
+    let thread = ThreadIdentity(tid: "3202", canonicalURL: ReaderCacheIdentity.canonicalThreadURL(from: threadURL))
+    try await forumCacheStore.saveThreadPage(
+        makeReaderRepositoryThreadPage(
+            thread: thread,
+            title: "运行中删缓存",
+            postID: "320201",
+            authorID: "42",
+            contentHTML: "<strong>第一章</strong><br>缓存正文"
+        ),
+        thread: thread,
+        pageNumber: 1,
+        authorID: "42"
+    )
+    let repository = NovelReaderRepository(
+        client: YamiboClient(session: session, cookie: "sid=reader", userAgent: "Test-UA"),
+        cacheStore: readerCacheStore,
+        forumCacheStore: forumCacheStore
+    )
+
+    _ = try await repository.loadPage(ReaderPageRequest(threadURL: threadURL, view: 1, authorID: "42"))
+    try FileManager.default.removeItem(at: readerCacheDirectory)
+    let document = try await repository.loadPage(ReaderPageRequest(threadURL: threadURL, view: 1, authorID: "42"))
+    let persisted = await ReaderCacheStore(baseDirectory: readerCacheDirectory).loadDocument(
+        for: ReaderPageRequest(threadURL: threadURL, view: 1, authorID: "42"),
+        contentSource: .authorFilteredPage
+    )
+
+    #expect(persisted?.segments == document.segments)
+    #expect(persisted?.projectionSourceFingerprint == document.projectionSourceFingerprint)
+}
+
 @Test func readerRepositoryDoesNotUseLegacyReaderProjectionWithoutThreadPage() async throws {
     let configuration = URLSessionConfiguration.ephemeral
     configuration.protocolClasses = [StubURLProtocol.self]

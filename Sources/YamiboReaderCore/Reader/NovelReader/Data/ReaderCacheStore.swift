@@ -35,14 +35,19 @@ public actor ReaderCacheStore {
     ) async -> ReaderPageDocument? {
         await ensureIndexLoaded()
         let identity = ReaderCacheIdentity(request: request, contentSource: contentSource)
+        guard let metadata = index[identity.threadKey]?
+            .variants[identity.variantKey]?
+            .pages["\(identity.view)"],
+              fileManager.fileExists(atPath: baseDirectory.appendingPathComponent(metadata.fileName, isDirectory: false).path) else {
+            memoryCache.removeObject(forKey: identity.cacheKey as NSString)
+            return nil
+        }
         if let cached = memoryCache.object(forKey: identity.cacheKey as NSString)?.document {
             return cached
         }
 
-        guard let metadata = index[identity.threadKey]?
-            .variants[identity.variantKey]?
-            .pages["\(identity.view)"],
-              let document = try? loadDocumentFromDisk(fileName: metadata.fileName) else {
+        guard let document = try? loadDocumentFromDisk(fileName: metadata.fileName) else {
+            memoryCache.removeObject(forKey: identity.cacheKey as NSString)
             return nil
         }
 
