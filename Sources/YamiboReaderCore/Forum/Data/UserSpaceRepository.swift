@@ -10,7 +10,8 @@ public actor UserSpaceRepository {
     public func fetchProfile(uid: String?, titleHint: String?) async throws -> UserSpaceProfile {
         let html = try await client.fetchHTML(
             for: .userSpaceProfile(uid: normalized(uid)),
-            cachePolicy: .reloadIgnoringLocalCacheData
+            cachePolicy: .reloadIgnoringLocalCacheData,
+            cancellationPolicy: .completeStartedRequest
         )
         return try UserSpaceHTMLParser.parseProfile(from: html, uidHint: uid, titleHint: titleHint)
     }
@@ -18,7 +19,8 @@ public actor UserSpaceRepository {
     public func fetchThreads(uid: String?, page: Int) async throws -> UserSpaceThreadPage {
         let html = try await client.fetchHTML(
             for: .userSpaceThreads(uid: normalized(uid), page: page),
-            cachePolicy: .reloadIgnoringLocalCacheData
+            cachePolicy: .reloadIgnoringLocalCacheData,
+            cancellationPolicy: .completeStartedRequest
         )
         return try UserSpaceHTMLParser.parseThreads(from: html)
     }
@@ -26,7 +28,8 @@ public actor UserSpaceRepository {
     public func fetchReplies(uid: String?, page: Int) async throws -> UserSpaceReplyPage {
         let html = try await client.fetchHTML(
             for: .userSpaceReplies(uid: normalized(uid), page: page),
-            cachePolicy: .reloadIgnoringLocalCacheData
+            cachePolicy: .reloadIgnoringLocalCacheData,
+            cancellationPolicy: .completeStartedRequest
         )
         return try UserSpaceHTMLParser.parseReplies(from: html)
     }
@@ -38,7 +41,8 @@ public actor UserSpaceRepository {
     public func fetchMyBlogs(uid: String?, page: Int) async throws -> UserSpaceBlogPage {
         let html = try await client.fetchHTML(
             for: .userSpaceMyBlogs(uid: normalized(uid), page: page),
-            cachePolicy: .reloadIgnoringLocalCacheData
+            cachePolicy: .reloadIgnoringLocalCacheData,
+            cancellationPolicy: .completeStartedRequest
         )
         return try UserSpaceHTMLParser.parseBlogs(from: html)
     }
@@ -46,7 +50,8 @@ public actor UserSpaceRepository {
     public func fetchFriendBlogs(page: Int) async throws -> UserSpaceBlogPage {
         let html = try await client.fetchHTML(
             for: .userSpaceFriendBlogs(page: page),
-            cachePolicy: .reloadIgnoringLocalCacheData
+            cachePolicy: .reloadIgnoringLocalCacheData,
+            cancellationPolicy: .completeStartedRequest
         )
         return try UserSpaceHTMLParser.parseBlogs(from: html)
     }
@@ -54,7 +59,8 @@ public actor UserSpaceRepository {
     public func fetchViewAllBlogs(filter: UserSpaceViewAllBlogFilter, page: Int) async throws -> UserSpaceBlogPage {
         let html = try await client.fetchHTML(
             for: .userSpaceViewAllBlogs(filter: filter, page: page),
-            cachePolicy: .reloadIgnoringLocalCacheData
+            cachePolicy: .reloadIgnoringLocalCacheData,
+            cancellationPolicy: .completeStartedRequest
         )
         return try UserSpaceHTMLParser.parseBlogs(from: html)
     }
@@ -62,7 +68,8 @@ public actor UserSpaceRepository {
     public func fetchFriends(uid: String?, page: Int) async throws -> UserSpaceFriendPage {
         let html = try await client.fetchHTML(
             for: .userSpaceFriends(uid: normalized(uid), page: page),
-            cachePolicy: .reloadIgnoringLocalCacheData
+            cachePolicy: .reloadIgnoringLocalCacheData,
+            cancellationPolicy: .completeStartedRequest
         )
         return try UserSpaceHTMLParser.parseFriends(from: html)
     }
@@ -70,7 +77,8 @@ public actor UserSpaceRepository {
     public func fetchFriendPage(type: UserSpaceFriendType, page: Int) async throws -> UserSpaceFriendPage {
         let html = try await client.fetchHTML(
             for: .userSpaceFriendPage(type: type, page: page),
-            cachePolicy: .reloadIgnoringLocalCacheData
+            cachePolicy: .reloadIgnoringLocalCacheData,
+            cancellationPolicy: .completeStartedRequest
         )
         return try UserSpaceHTMLParser.parseFriends(from: html)
     }
@@ -78,7 +86,8 @@ public actor UserSpaceRepository {
     public func fetchPrivateMessages(page: Int) async throws -> UserSpacePrivateMessagePage {
         let html = try await client.fetchHTML(
             for: .userSpacePrivateMessages(page: page),
-            cachePolicy: .reloadIgnoringLocalCacheData
+            cachePolicy: .reloadIgnoringLocalCacheData,
+            cancellationPolicy: .completeStartedRequest
         )
         return try UserSpaceHTMLParser.parsePrivateMessageList(from: html)
     }
@@ -86,7 +95,8 @@ public actor UserSpaceRepository {
     public func fetchNotices(page: Int) async throws -> UserSpaceNoticePage {
         let html = try await client.fetchHTML(
             for: .userSpaceNotices(page: page),
-            cachePolicy: .reloadIgnoringLocalCacheData
+            cachePolicy: .reloadIgnoringLocalCacheData,
+            cancellationPolicy: .completeStartedRequest
         )
         return try UserSpaceHTMLParser.parseNotices(from: html)
     }
@@ -129,7 +139,8 @@ public actor UserSpaceRepository {
         }
         let html = try await client.fetchHTML(
             for: .privateMessage(uid: normalizedUID, page: page),
-            cachePolicy: .reloadIgnoringLocalCacheData
+            cachePolicy: .reloadIgnoringLocalCacheData,
+            cancellationPolicy: .completeStartedRequest
         )
         return try UserSpaceHTMLParser.parsePrivateMessagePage(from: html, toUID: normalizedUID, titleHint: titleHint)
     }

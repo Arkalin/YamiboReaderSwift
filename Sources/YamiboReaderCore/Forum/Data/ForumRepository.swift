@@ -42,7 +42,11 @@ public actor ForumRepository {
             return cached
         }
 
-        let html = try await client.fetchHTML(for: .forumHome, cachePolicy: .reloadIgnoringLocalCacheData)
+        let html = try await client.fetchHTML(
+            for: .forumHome,
+            cachePolicy: .reloadIgnoringLocalCacheData,
+            cancellationPolicy: .completeStartedRequest
+        )
         let page = try ForumHTMLParser.parseHomePage(from: html, fetchedAt: now())
         try await cacheStore.saveHome(page)
         return page
@@ -64,7 +68,8 @@ public actor ForumRepository {
 
         let html = try await client.fetchHTML(
             for: .forumBoard(fid: fid, page: page, filterID: filterID, orderFilter: orderFilter, orderBy: orderBy),
-            cachePolicy: .reloadIgnoringLocalCacheData
+            cachePolicy: .reloadIgnoringLocalCacheData,
+            cancellationPolicy: .completeStartedRequest
         )
         let board = try ForumHTMLParser.parseBoardPage(from: html, fid: fid, title: title, fetchedAt: now())
         try await cacheStore.saveBoard(board, fid: fid, pageNumber: page, filterID: filterID, orderFilter: orderFilter, orderBy: orderBy)
@@ -96,7 +101,8 @@ public actor ForumRepository {
 
         let html = try await client.fetchHTML(
             for: .forumSearch(keyword: normalizedQuery, forumID: forumID, formHash: formHash),
-            cachePolicy: .reloadIgnoringLocalCacheData
+            cachePolicy: .reloadIgnoringLocalCacheData,
+            cancellationPolicy: .completeStartedRequest
         )
         return try ForumHTMLParser.parseSearchPage(from: html, query: normalizedQuery)
     }
@@ -110,7 +116,8 @@ public actor ForumRepository {
 
         let html = try await client.fetchHTML(
             for: .forumSearchPage(searchID: normalizedSearchID, page: page),
-            cachePolicy: .reloadIgnoringLocalCacheData
+            cachePolicy: .reloadIgnoringLocalCacheData,
+            cancellationPolicy: .completeStartedRequest
         )
         return try ForumHTMLParser.parseSearchPage(from: html, query: normalizedQuery)
     }

@@ -12,7 +12,8 @@ public actor ForumThreadReaderRepository: ThreadCoverPageResolving {
     public func fetchThreadPage(context: ThreadReaderLaunchContext, page: Int = 1) async throws -> ForumThreadPage {
         let html = try await client.fetchHTML(
             for: .thread(url: context.thread.canonicalURL, page: page, authorID: nil),
-            cachePolicy: .reloadIgnoringLocalCacheData
+            cachePolicy: .reloadIgnoringLocalCacheData,
+            cancellationPolicy: .completeStartedRequest
         )
         let parsed = try ForumThreadPageHTMLParser.parsePage(
             from: html,
@@ -26,7 +27,8 @@ public actor ForumThreadReaderRepository: ThreadCoverPageResolving {
     public func fetchNovelThreadPage(context: NovelDetailLaunchContext, page: Int = 1) async throws -> ForumThreadPage {
         let html = try await client.fetchHTML(
             for: .thread(url: context.thread.canonicalURL, page: page, authorID: context.authorID),
-            cachePolicy: .reloadIgnoringLocalCacheData
+            cachePolicy: .reloadIgnoringLocalCacheData,
+            cancellationPolicy: .completeStartedRequest
         )
         let parsed = try ForumThreadPageHTMLParser.parsePage(
             from: html,

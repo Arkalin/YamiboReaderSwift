@@ -56,6 +56,36 @@ final class ForumHomeViewModelTests: XCTestCase {
         XCTAssertNil(model.errorMessage)
         XCTAssertNil(model.transientMessage)
     }
+
+    func testManualRefreshCompletesWhenCallerTaskIsCancelled() async throws {
+        let started = DispatchSemaphore(value: 0)
+        ForumHomeCancellationTestURLProtocol.configure(
+            body: forumHomeCancellationTestHTML(boardName: "取消后完成版"),
+            responseDelay: 0.25,
+            started: started
+        )
+        defer { ForumHomeCancellationTestURLProtocol.reset() }
+
+        let repository = ForumRepository(
+            client: YamiboClient(session: makeForumHomeCancellationTestSession(), userAgent: "Test-UA"),
+            cacheStore: ForumCacheStore(
+                baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+            )
+        )
+        let model = ForumHomeViewModel(repository: repository)
+        let refreshTask = Task {
+            await model.refresh()
+        }
+
+        let didStartRefreshRequest = await waitForForumHomeCancellationTestSignal(started)
+        XCTAssertTrue(didStartRefreshRequest)
+        refreshTask.cancel()
+        await refreshTask.value
+
+        XCTAssertEqual(model.categories.first?.boards.first?.name, "取消后完成版")
+        XCTAssertNil(model.errorMessage)
+        XCTAssertNil(model.transientMessage)
+    }
 }
 
 private actor ForumHomeRepositoryStub: ForumHomePageLoading {
@@ -97,4 +127,99 @@ private func makeHome(categoryIDs: [String]) -> ForumHomePage {
             )
         }
     )
+}
+
+private final class ForumHomeCancellationTestURLProtocol: URLProtocol {
+    private struct Configuration {
+        var body: String
+        var responseDelay: TimeInterval
+        var started: DispatchSemaphore?
+    }
+
+    nonisolated(unsafe) private static var configuration: Configuration?
+
+    static func configure(
+        body: String,
+        responseDelay: TimeInterval,
+        started: DispatchSemaphore? = nil
+    ) {
+        configuration = Configuration(body: body, responseDelay: responseDelay, started: started)
+    }
+
+    static func reset() {
+        configuration = nil
+    }
+
+    override class func canInit(with request: URLRequest) -> Bool {
+        true
+    }
+
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest {
+        request
+    }
+
+    override func startLoading() {
+        guard let configuration = Self.configuration else {
+            client?.urlProtocol(self, didFailWithError: ForumHomeCancellationTestError.missingConfiguration)
+            return
+        }
+
+        configuration.started?.signal()
+        Thread.sleep(forTimeInterval: configuration.responseDelay)
+        let response = HTTPURLResponse(
+            url: request.url!,
+            statusCode: 200,
+            httpVersion: nil,
+            headerFields: ["Content-Type": "text/html; charset=utf-8"]
+        )!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: Data(configuration.body.utf8))
+        client?.urlProtocolDidFinishLoading(self)
+    }
+
+    override func stopLoading() {}
+}
+
+private enum ForumHomeCancellationTestError: Error {
+    case missingConfiguration
+}
+
+private func makeForumHomeCancellationTestSession() -> URLSession {
+    let configuration = URLSessionConfiguration.ephemeral
+    configuration.protocolClasses = [ForumHomeCancellationTestURLProtocol.self]
+    return URLSession(configuration: configuration)
+}
+
+private func forumHomeCancellationTestHTML(boardName: String) -> String {
+    #"""
+    <html>
+    <body id="forum" class="pg_index">
+      <div class="forumlist cl">
+        <div class="subforumshow cl" href="#sub-forum_14">
+          <h2><a href="javascript:;">测试分区</a></h2>
+        </div>
+        <div id="sub-forum_14" class="sub-forum mlist1 cl">
+          <ul>
+            <li>
+              <a href="forum.php?mod=forumdisplay&amp;fid=16&amp;mobile=2" class="murl">
+                <p class="mtit">\#(boardName)</p>
+                <p class="mtxt">测试说明</p>
+              </a>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </body>
+    </html>
+    """#
+}
+
+private func waitForForumHomeCancellationTestSignal(_ semaphore: DispatchSemaphore) async -> Bool {
+    await Task.detached {
+        blockingWaitForForumHomeCancellationTestSignal(semaphore)
+    }.value
+}
+
+private func blockingWaitForForumHomeCancellationTestSignal(_ semaphore: DispatchSemaphore) -> Bool {
+    semaphore.wait(timeout: .now() + 2) == .success
 }

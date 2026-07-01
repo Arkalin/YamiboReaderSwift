@@ -1,5 +1,10 @@
 import Foundation
 
+public enum YamiboRequestCancellationPolicy: Sendable {
+    case propagateCancellation
+    case completeStartedRequest
+}
+
 public struct YamiboClient: Sendable {
     public var session: URLSession
     public var cookie: String?
@@ -18,9 +23,15 @@ public struct YamiboClient: Sendable {
     public func fetchHTML(
         for route: YamiboRoute,
         userAgent: String? = nil,
-        cachePolicy: URLRequest.CachePolicy = .useProtocolCachePolicy
+        cachePolicy: URLRequest.CachePolicy = .useProtocolCachePolicy,
+        cancellationPolicy: YamiboRequestCancellationPolicy = .propagateCancellation
     ) async throws -> String {
-        try await fetchHTML(url: route.url, userAgent: userAgent, cachePolicy: cachePolicy)
+        try await fetchHTML(
+            url: route.url,
+            userAgent: userAgent,
+            cachePolicy: cachePolicy,
+            cancellationPolicy: cancellationPolicy
+        )
     }
 
     public func submitForm(
@@ -53,7 +64,8 @@ public struct YamiboClient: Sendable {
     public func fetchHTML(
         url: URL,
         userAgent: String? = nil,
-        cachePolicy: URLRequest.CachePolicy = .useProtocolCachePolicy
+        cachePolicy: URLRequest.CachePolicy = .useProtocolCachePolicy,
+        cancellationPolicy: YamiboRequestCancellationPolicy = .propagateCancellation
     ) async throws -> String {
         var request = YamiboNetworkConfiguration.makeRequest(url: url, cachePolicy: cachePolicy)
         request.setValue("text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8", forHTTPHeaderField: "Accept")
@@ -62,8 +74,23 @@ public struct YamiboClient: Sendable {
         }
         request.setValue(userAgent ?? self.userAgent, forHTTPHeaderField: "User-Agent")
 
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await data(for: request, cancellationPolicy: cancellationPolicy)
         return try decodeHTML(from: data, response: response)
+    }
+
+    private func data(
+        for request: URLRequest,
+        cancellationPolicy: YamiboRequestCancellationPolicy
+    ) async throws -> (Data, URLResponse) {
+        switch cancellationPolicy {
+        case .propagateCancellation:
+            return try await session.data(for: request)
+        case .completeStartedRequest:
+            let requestTask = Task {
+                try await session.data(for: request)
+            }
+            return try await requestTask.value
+        }
     }
 
     private func decodeHTML(from data: Data, response: URLResponse) throws -> String {

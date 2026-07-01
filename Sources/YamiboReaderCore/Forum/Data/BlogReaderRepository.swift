@@ -14,7 +14,8 @@ public actor BlogReaderRepository {
         }
         let html = try await client.fetchHTML(
             for: .blog(blogID: normalizedBlogID, uid: normalized(uid), page: page),
-            cachePolicy: .reloadIgnoringLocalCacheData
+            cachePolicy: .reloadIgnoringLocalCacheData,
+            cancellationPolicy: .completeStartedRequest
         )
         return try BlogReaderHTMLParser.parsePage(from: html, blogID: normalizedBlogID, uidHint: uid)
     }
