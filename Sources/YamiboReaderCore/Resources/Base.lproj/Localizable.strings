@@ -217,6 +217,7 @@
 "forum.board.pinned" = "置顶";
 "forum.board.pinned_badge" = "置顶";
 "forum.board.post_thread" = "发表帖子";
+"forum.board.refresh_failed" = "刷新失败：%@";
 "forum.board.previous_page" = "上一页";
 "forum.board.rank" = "排名";
 "forum.board.sub_boards" = "子版块";

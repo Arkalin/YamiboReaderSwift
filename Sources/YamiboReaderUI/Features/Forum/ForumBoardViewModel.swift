@@ -41,6 +41,7 @@ final class ForumBoardViewModel {
     var page: ForumBoardPage?
     var errorMessage: String?
     var favoriteMessage: String?
+    var transientMessage: String?
     var isLoading = false
     var isRefreshing = false
     var isFavoriting = false
@@ -139,16 +140,15 @@ final class ForumBoardViewModel {
             allowExpired: false
         ) {
             apply(cached)
-            await refresh(presentsErrors: false, requestGeneration: requestGeneration)
             return
         }
 
-        await fetchPage(currentPage, preferCache: false, presentsErrors: true, requestGeneration: requestGeneration)
+        await fetchPage(currentPage, preferCache: false, failurePresentation: .pageError, requestGeneration: requestGeneration)
     }
 
     func refresh() async {
         generation += 1
-        await refresh(presentsErrors: true, requestGeneration: generation)
+        await refresh(requestGeneration: generation)
     }
 
     func goToPage(_ page: Int) async {
@@ -157,10 +157,21 @@ final class ForumBoardViewModel {
         pushCurrentPageSnapshot()
         generation += 1
         let requestGeneration = generation
+        let requestOrderOption = selectedOrderOption
         currentPage = nextPage
+        self.page = nil
+        errorMessage = nil
+        transientMessage = nil
         isLoading = true
         defer { isLoading = false }
-        await fetchPage(nextPage, preferCache: true, presentsErrors: true, requestGeneration: requestGeneration)
+        await fetchPage(
+            nextPage,
+            preferCache: true,
+            orderFilter: requestOrderOption?.filter,
+            orderBy: requestOrderOption?.orderBy,
+            failurePresentation: .pageError,
+            requestGeneration: requestGeneration
+        )
     }
 
     func selectFilter(id: String?) async {
@@ -206,25 +217,42 @@ final class ForumBoardViewModel {
         }
     }
 
+    func clearTransientMessage() {
+        transientMessage = nil
+    }
+
     private func reloadForOptionChange() async {
         generation += 1
         let requestGeneration = generation
+        let requestOrderOption = selectedOrderOption
+        page = nil
+        errorMessage = nil
+        transientMessage = nil
         isLoading = true
         defer { isLoading = false }
-        await fetchPage(1, preferCache: true, presentsErrors: true, requestGeneration: requestGeneration)
+        await fetchPage(
+            1,
+            preferCache: true,
+            orderFilter: requestOrderOption?.filter,
+            orderBy: requestOrderOption?.orderBy,
+            failurePresentation: .pageError,
+            requestGeneration: requestGeneration
+        )
     }
 
-    private func refresh(presentsErrors: Bool, requestGeneration: Int) async {
+    private func refresh(requestGeneration: Int) async {
         guard !isRefreshing else { return }
         isRefreshing = true
         defer { isRefreshing = false }
-        await fetchPage(currentPage, preferCache: false, presentsErrors: presentsErrors, requestGeneration: requestGeneration)
+        await fetchPage(currentPage, preferCache: false, failurePresentation: .refreshToast, requestGeneration: requestGeneration)
     }
 
     private func fetchPage(
         _ pageNumber: Int,
         preferCache: Bool,
-        presentsErrors: Bool,
+        orderFilter: String? = nil,
+        orderBy: String? = nil,
+        failurePresentation: FailurePresentation,
         requestGeneration: Int
     ) async {
         do {
@@ -234,16 +262,20 @@ final class ForumBoardViewModel {
                 title: initialTitle,
                 page: pageNumber,
                 filterID: selectedFilterID,
-                orderFilter: selectedOrderOption?.filter,
-                orderBy: selectedOrderOption?.orderBy,
+                orderFilter: orderFilter ?? selectedOrderOption?.filter,
+                orderBy: orderBy ?? selectedOrderOption?.orderBy,
                 preferCache: preferCache
             )
             guard requestGeneration == generation else { return }
             apply(nextPage)
             errorMessage = nil
+            transientMessage = nil
         } catch {
             guard requestGeneration == generation else { return }
-            if presentsErrors || page == nil {
+            if failurePresentation == .refreshToast, page != nil {
+                errorMessage = nil
+                transientMessage = L10n.string("forum.board.refresh_failed", error.localizedDescription)
+            } else {
                 errorMessage = error.localizedDescription
             }
         }
@@ -264,5 +296,10 @@ final class ForumBoardViewModel {
                 selectedOrderOptionID: selectedOrderOptionID
             )
         )
+    }
+
+    private enum FailurePresentation {
+        case pageError
+        case refreshToast
     }
 }

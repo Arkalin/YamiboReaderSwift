@@ -4,7 +4,7 @@ import XCTest
 
 @MainActor
 final class ForumBoardViewModelTests: XCTestCase {
-    func testLoadShowsCachedBoardThenRefreshes() async throws {
+    func testLoadShowsCachedBoardWithoutRefreshing() async throws {
         let cached = makeBoardPage(fid: "5", title: "Cached", page: 1, threadIDs: ["cached"])
         let fetched = makeBoardPage(fid: "5", title: "Fetched", page: 1, threadIDs: ["fresh"])
         let repository = ForumBoardRepositoryStub(cached: cached, fetched: fetched)
@@ -12,10 +12,10 @@ final class ForumBoardViewModelTests: XCTestCase {
 
         await model.load()
 
-        XCTAssertEqual(model.title, "Fetched")
-        XCTAssertEqual(model.threads.map(\.tid), ["fresh"])
+        XCTAssertEqual(model.title, "Cached")
+        XCTAssertEqual(model.threads.map(\.tid), ["cached"])
         let requests = await repository.requests()
-        XCTAssertEqual(requests.count, 1)
+        XCTAssertEqual(requests.count, 0)
     }
 
     func testSelectingFilterReloadsFirstPageWithFilterID() async throws {
@@ -155,6 +155,41 @@ final class ForumBoardViewModelTests: XCTestCase {
         XCTAssertNil(model.page)
         XCTAssertNotNil(model.errorMessage)
     }
+
+    func testRefreshFailureKeepsCurrentPageAndPresentsTransientMessage() async throws {
+        let fetched = makeBoardPage(fid: "5", title: "動漫區", page: 1, threadIDs: ["fresh"])
+        let repository = ForumBoardRepositoryStub(cached: nil, fetched: fetched)
+        let model = ForumBoardViewModel(fid: "5", title: "動漫區", repository: repository)
+        let error = YamiboError.parsingFailed(context: "fixture")
+
+        await model.load()
+        await repository.setError(error)
+        await model.refresh()
+
+        XCTAssertNotNil(model.page)
+        XCTAssertEqual(model.threads.map(\.tid), ["fresh"])
+        XCTAssertNil(model.errorMessage)
+        XCTAssertEqual(model.transientMessage, L10n.string("forum.board.refresh_failed", error.localizedDescription))
+    }
+
+    func testPagingFailureClearsCurrentPageAndCanRestorePreviousSnapshot() async throws {
+        let first = makeBoardPage(fid: "5", title: "動漫區", page: 1, threadIDs: ["first"])
+        let repository = ForumBoardRepositoryStub(cached: nil, fetched: first)
+        let model = ForumBoardViewModel(fid: "5", title: "動漫區", repository: repository)
+
+        await model.load()
+        await repository.setError(YamiboError.parsingFailed(context: "fixture"))
+        await model.goToPage(2)
+
+        XCTAssertNil(model.page)
+        XCTAssertNotNil(model.errorMessage)
+        XCTAssertTrue(model.canRestorePreviousPage)
+
+        XCTAssertTrue(model.restorePreviousPage())
+        XCTAssertEqual(model.currentPage, 1)
+        XCTAssertEqual(model.threads.map(\.tid), ["first"])
+        XCTAssertNil(model.errorMessage)
+    }
 }
 
 private actor ForumBoardRepositoryStub: ForumBoardPageLoading {
@@ -172,7 +207,7 @@ private actor ForumBoardRepositoryStub: ForumBoardPageLoading {
     }
 
     let cached: ForumBoardPage?
-    let error: Error?
+    var error: Error?
     let favoriteMessage: String
     var fetchedPages: [ForumBoardPage]
     var fetchRequests: [FetchRequest] = []
@@ -237,6 +272,10 @@ private actor ForumBoardRepositoryStub: ForumBoardPageLoading {
 
     func requests() -> [FetchRequest] {
         fetchRequests
+    }
+
+    func setError(_ error: Error?) {
+        self.error = error
     }
 
     func favoriteRequests() -> [FavoriteRequest] {
