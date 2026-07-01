@@ -1,9 +1,8 @@
 import Foundation
-import SwiftSoup
 
 enum YamiboLoginFormParser {
     static func parse(_ html: String) throws -> YamiboLoginForm {
-        let document = try SwiftSoup.parse(html)
+        let document = try HTMLDocumentParser.parse(html)
         guard let form = try document.select("form#loginform").first() else {
             throw YamiboError.loginFormUnavailable
         }

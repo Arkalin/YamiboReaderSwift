@@ -1,5 +1,4 @@
 import Foundation
-import SwiftSoup
 
 public enum ForumThreadPageHTMLParser {
     public static func parsePage(
@@ -14,7 +13,7 @@ public enum ForumThreadPageHTMLParser {
             throw YamiboError.floodControl
         }
 
-        let document = try SwiftSoup.parse(html, YamiboRoute.baseURL.absoluteString)
+        let document = try HTMLDocumentParser.parse(html, baseURL: YamiboRoute.baseURL.absoluteString)
         let title = ForumThreadTitleSanitizer.sanitize(ReaderHTMLParser.extractPageTitle(from: html))
             ?? ForumThreadTitleSanitizer.sanitize(fallbackTitle)
             ?? L10n.string("forum.default_title")
@@ -46,7 +45,7 @@ public enum ForumThreadPageHTMLParser {
         }
 
         let body = extractCData(from: html) ?? html
-        let document = try SwiftSoup.parse(body, YamiboRoute.baseURL.absoluteString)
+        let document = try HTMLDocumentParser.parse(body, baseURL: YamiboRoute.baseURL.absoluteString)
         let ratings = try ratingRows(in: document)
         guard !ratings.isEmpty else {
             throw YamiboError.parsingFailed(context: L10n.string("forum.thread.ratings_all"))
@@ -68,7 +67,7 @@ public enum ForumThreadPageHTMLParser {
         }
 
         let body = extractCData(from: html) ?? html
-        let document = try SwiftSoup.parse(body, YamiboRoute.baseURL.absoluteString)
+        let document = try HTMLDocumentParser.parse(body, baseURL: YamiboRoute.baseURL.absoluteString)
         let scores = try document.select("select#rate1 option").array()
             .compactMap { option in
                 let value = try option.attr("value").threadRoutingTrimmedNonEmpty
@@ -100,7 +99,7 @@ public enum ForumThreadPageHTMLParser {
         }
 
         let body = extractCData(from: html) ?? html
-        let document = try SwiftSoup.parse(body, YamiboRoute.baseURL.absoluteString)
+        let document = try HTMLDocumentParser.parse(body, baseURL: YamiboRoute.baseURL.absoluteString)
         let requestedOptionID = requestedOptionID?.threadRoutingTrimmedNonEmpty
         let options = try pollVoterOptions(in: document, requestedOptionID: requestedOptionID)
         let selectedOptionID = pollSelectedOptionID(in: document) ?? requestedOptionID ?? options.first?.id
@@ -133,7 +132,7 @@ public enum ForumThreadPageHTMLParser {
         }
 
         let body = extractCData(from: html) ?? html
-        let document = try SwiftSoup.parse(body, YamiboRoute.baseURL.absoluteString)
+        let document = try HTMLDocumentParser.parse(body, baseURL: YamiboRoute.baseURL.absoluteString)
         let message = firstNonBlank([
             parseMessageText(from: html),
             try? document.select(".jump_c, .alert_info, .messagetext, .showmessage, #messagetext, .wp, body").first()?.text()
@@ -161,7 +160,7 @@ public enum ForumThreadPageHTMLParser {
 
     private static func parseMessageText(from html: String) -> String? {
         let body = extractCData(from: html) ?? html
-        guard let document = try? SwiftSoup.parse(body, YamiboRoute.baseURL.absoluteString) else { return nil }
+        guard let document = try? HTMLDocumentParser.parse(body, baseURL: YamiboRoute.baseURL.absoluteString) else { return nil }
         return firstNonBlank([
             try? document.select("#messagetext p").first()?.text(),
             try? document.select("#messagetext, .messagetext, .alert_info, .jump_c, .showmessage").first()?.text()
@@ -462,7 +461,7 @@ public enum ForumThreadPageHTMLParser {
     }
 
     private static func bodyWithoutFooterMetadata(from body: Element) throws -> Element {
-        let document = try SwiftSoup.parseBodyFragment(try body.html(), YamiboRoute.baseURL.absoluteString)
+        let document = try HTMLDocumentParser.parseBodyFragment(try body.html(), baseURL: YamiboRoute.baseURL.absoluteString)
         let copy = document.body() ?? document
         try copy.select(
             [
@@ -497,7 +496,7 @@ public enum ForumThreadPageHTMLParser {
             ].flatMap { $0 }
         )
         guard let pollElement = candidates.first(where: { element in
-            (((try? element.select("input[type=radio], input[type=checkbox]").isEmpty()) ?? true) == false)
+            (((try? element.select("input[type=radio], input[type=checkbox]").isEmpty) ?? true) == false)
                 || (((try? element.text().contains("%")) ?? false) == true)
         }) else {
             return nil
@@ -790,7 +789,7 @@ public enum ForumThreadPageHTMLParser {
             .compactMap { try $0.text().threadRoutingTrimmedNonEmpty }
             .joined(separator: " ")
             .threadRoutingTrimmedNonEmpty
-        let messageDocument = try SwiftSoup.parseBodyFragment(try messageElement.html(), YamiboRoute.baseURL.absoluteString)
+        let messageDocument = try HTMLDocumentParser.parseBodyFragment(try messageElement.html(), baseURL: YamiboRoute.baseURL.absoluteString)
         let messageBody = messageDocument.body() ?? messageDocument
         try messageBody.select(".xg1, .time, .date").remove()
         let message = normalizedInlineText(try messageBody.text())
@@ -1073,13 +1072,13 @@ enum ForumThreadHTMLBlockParser {
     }
 
     static func parseBlocks(in body: Element) throws -> [ForumThreadContentBlock] {
-        let copy = try SwiftSoup.parseBodyFragment(try body.html(), YamiboRoute.baseURL.absoluteString)
+        let copy = try HTMLDocumentParser.parseBodyFragment(try body.html(), baseURL: YamiboRoute.baseURL.absoluteString)
         try sanitize(copy.body() ?? copy)
         return normalizeBlocks(try BlockBuilder().parse(nodes: (copy.body() ?? copy).getChildNodes()))
     }
 
     static func parseBlocks(fromHTML html: String) throws -> [ForumThreadContentBlock] {
-        let document = try SwiftSoup.parseBodyFragment(html, YamiboRoute.baseURL.absoluteString)
+        let document = try HTMLDocumentParser.parseBodyFragment(html, baseURL: YamiboRoute.baseURL.absoluteString)
         try sanitize(document.body() ?? document)
         return normalizeBlocks(try BlockBuilder().parse(nodes: (document.body() ?? document).getChildNodes()))
     }

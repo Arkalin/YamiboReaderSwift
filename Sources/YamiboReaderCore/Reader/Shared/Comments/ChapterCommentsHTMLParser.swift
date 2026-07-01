@@ -1,5 +1,4 @@
 import Foundation
-import SwiftSoup
 
 public enum ChapterCommentsHTMLParser {
     private static let filteredRatingReasons: Set<String> = [
@@ -17,7 +16,7 @@ public enum ChapterCommentsHTMLParser {
         html: String,
         target: ReaderChapterCommentTarget
     ) throws -> ChapterCommentsPage {
-        let document = try SwiftSoup.parse(html)
+        let document = try HTMLDocumentParser.parse(html)
         var comments: [ChapterComment] = []
         comments.append(contentsOf: try postComments(in: document, target: target))
         comments.append(contentsOf: try ratingReasons(in: document, target: target))
@@ -36,7 +35,7 @@ public enum ChapterCommentsHTMLParser {
         target: ReaderChapterCommentTarget,
         view: Int
     ) throws -> ChapterCommentsPage {
-        let document = try SwiftSoup.parse(html)
+        let document = try HTMLDocumentParser.parse(html)
         let replies = try continuationReplies(in: document, target: target)
         return ChapterCommentsPage(
             target: target,
@@ -47,7 +46,7 @@ public enum ChapterCommentsHTMLParser {
     }
 
     public static func currentView(html: String, fallback: Int) throws -> Int {
-        let document = try SwiftSoup.parse(html)
+        let document = try HTMLDocumentParser.parse(html)
         let current = try document.select(".pg strong").first()?.text()
             .trimmingCharacters(in: .whitespacesAndNewlines)
         return current.flatMap(Int.init) ?? max(1, fallback)
@@ -57,7 +56,7 @@ public enum ChapterCommentsHTMLParser {
         html: String,
         target: ReaderChapterCommentTarget
     ) throws -> URL? {
-        let document = try SwiftSoup.parse(html)
+        let document = try HTMLDocumentParser.parse(html)
         guard let href = try document
             .select("[id=ratelog_\(target.ownerPostID)] a[href*=action=viewratings]")
             .first()?
@@ -73,7 +72,7 @@ public enum ChapterCommentsHTMLParser {
         html: String,
         target: ReaderChapterCommentTarget
     ) throws -> [ChapterComment] {
-        let document = try SwiftSoup.parse(html)
+        let document = try HTMLDocumentParser.parse(html)
         let rows = try document.select(".post_box li.flex-box").array()
         var comments: [ChapterComment] = []
         var pending: (author: String, metadata: String?)?
@@ -279,10 +278,10 @@ public enum ChapterCommentsHTMLParser {
         var uniqueNodes: [Element] = []
         for node in nodes {
             if !isPostMessageElement(node),
-               ((try? node.select("[id^=postmessage_]").isEmpty()) == false) {
+               ((try? node.select("[id^=postmessage_]").isEmpty) == false) {
                 continue
             }
-            if uniqueNodes.contains(where: { $0 === node }) {
+            if uniqueNodes.contains(where: { $0.isSameDOMNode(as: node) }) {
                 continue
             }
             uniqueNodes.append(node)
@@ -291,7 +290,7 @@ public enum ChapterCommentsHTMLParser {
     }
 
     private static func replyBody(from message: Element) throws -> String? {
-        let fragment = try SwiftSoup.parseBodyFragment(try message.html())
+        let fragment = try HTMLDocumentParser.parseBodyFragment(try message.html())
         guard let body = fragment.body() else { return nil }
         try body.select(".quote, blockquote, i, .pstatus").remove()
         let text = normalizeText(try body.text())
@@ -302,7 +301,7 @@ public enum ChapterCommentsHTMLParser {
         guard let container = postContainer(for: message) else {
             return false
         }
-        if ((try? container.select("[title=楼主]").isEmpty()) == false) {
+        if ((try? container.select("[title=楼主]").isEmpty) == false) {
             return true
         }
         if let authorID = target.authorID,
@@ -369,8 +368,8 @@ public enum ChapterCommentsHTMLParser {
                id.hasPrefix("post_") || id.hasPrefix("pid") {
                 return candidate
             }
-            if ((try? candidate.select(".authi").isEmpty()) == false),
-               ((try? candidate.select("[id^=postmessage_], .message").isEmpty()) == false) {
+            if ((try? candidate.select(".authi").isEmpty) == false),
+               ((try? candidate.select("[id^=postmessage_], .message").isEmpty) == false) {
                 return candidate
             }
             current = candidate.parent()

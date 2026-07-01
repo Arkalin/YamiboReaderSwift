@@ -69,7 +69,7 @@ Forum Search is in scope for the native migration.
 
 ## Data Access
 
-Use Yamibo mobile HTML parsed through the existing `YamiboClient` and SwiftSoup path.
+Use Yamibo mobile HTML parsed through the existing `YamiboClient` and Kanna path.
 
 Add a forum repository boundary, likely created from `YamiboAppContext`, with methods shaped around:
 

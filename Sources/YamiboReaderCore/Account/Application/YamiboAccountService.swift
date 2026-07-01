@@ -1,5 +1,4 @@
 import Foundation
-import SwiftSoup
 #if canImport(WebKit)
 import WebKit
 #endif
@@ -202,7 +201,7 @@ public struct YamiboAccountService: Sendable {
     }
 
     private func extractLoginFailureMessage(from html: String) -> String {
-        guard let document = try? SwiftSoup.parse(html) else {
+        guard let document = try? HTMLDocumentParser.parse(html) else {
             return L10n.string("error.login_failed")
         }
 

@@ -82,7 +82,7 @@
 
 依赖：
 
-- [`SwiftSoup`](https://github.com/scinfu/SwiftSoup)
+- [`Kanna`](https://github.com/tid-kijyun/Kanna)
 
 在仓库根目录执行测试：
 
@@ -122,7 +122,7 @@ iOS App 入口位于 [`YamiboReader/YamiboReaderApp.swift`](YamiboReader/YamiboR
 
 - [prprbell/YamiboReaderPro](https://github.com/prprbell/YamiboReaderPro)
 - [flben233/YamiboReader](https://github.com/flben233/YamiboReader)
-- [scinfu/SwiftSoup](https://github.com/scinfu/SwiftSoup)
+- [tid-kijyun/Kanna](https://github.com/tid-kijyun/Kanna)
 
 ## License
 

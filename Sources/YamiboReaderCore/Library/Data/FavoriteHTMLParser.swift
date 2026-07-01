@@ -1,5 +1,4 @@
 import Foundation
-import SwiftSoup
 
 public enum FavoriteHTMLParser {
     public struct FavoritePageResult: Sendable {
@@ -19,7 +18,7 @@ public enum FavoriteHTMLParser {
     }
 
     public static func parseFavoritePage(from html: String) -> FavoritePageResult {
-        guard let document = try? SwiftSoup.parse(html) else {
+        guard let document = try? HTMLDocumentParser.parse(html) else {
             return FavoritePageResult(favorites: [])
         }
         var favorites: [Favorite] = []

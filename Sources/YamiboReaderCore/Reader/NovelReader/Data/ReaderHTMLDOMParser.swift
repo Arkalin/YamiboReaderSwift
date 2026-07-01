@@ -1,5 +1,4 @@
 import Foundation
-import SwiftSoup
 
 enum ReaderHTMLDOMParser {
     struct Context {
@@ -29,7 +28,7 @@ enum ReaderHTMLDOMParser {
     }
 
     static func parse(html: String) throws -> Context {
-        Context(document: try SwiftSoup.parse(html))
+        Context(document: try HTMLDocumentParser.parse(html))
     }
 
     static func messageNodes(in context: Context) throws -> [Element] {
@@ -37,10 +36,10 @@ enum ReaderHTMLDOMParser {
         var uniqueNodes: [Element] = []
         for node in nodes {
             if !isPostMessageElement(node),
-               ((try? node.select("[id^=postmessage_]").isEmpty()) == false) {
+               ((try? node.select("[id^=postmessage_]").isEmpty) == false) {
                 continue
             }
-            if uniqueNodes.contains(where: { $0 === node }) {
+            if uniqueNodes.contains(where: { $0.isSameDOMNode(as: node) }) {
                 continue
             }
             uniqueNodes.append(node)
@@ -106,7 +105,7 @@ enum ReaderHTMLDOMParser {
 
     private static func parseMessage(_ element: Element) throws -> ParsedMessage {
         let fragmentHTML = try element.html()
-        let fragment = try SwiftSoup.parseBodyFragment(fragmentHTML)
+        let fragment = try HTMLDocumentParser.parseBodyFragment(fragmentHTML)
         guard let body = fragment.body() else {
             return ParsedMessage(
                 segments: [],
@@ -149,7 +148,7 @@ enum ReaderHTMLDOMParser {
             return false
         }
 
-        let remainingFragment = try SwiftSoup.parseBodyFragment(try body.html())
+        let remainingFragment = try HTMLDocumentParser.parseBodyFragment(try body.html())
         guard let remainingBody = remainingFragment.body() else { return false }
         try remainingBody.select(".quote").remove()
         for blockquote in try remainingBody.select("blockquote") where isDiscuzReplyQuote(blockquote) {
@@ -176,7 +175,7 @@ enum ReaderHTMLDOMParser {
         guard let container = postContainer(for: element) else {
             return false
         }
-        if ((try? container.select("[title=楼主]").isEmpty()) == false) {
+        if ((try? container.select("[title=楼主]").isEmpty) == false) {
             return true
         }
         let ownerLabels = [
@@ -202,8 +201,8 @@ enum ReaderHTMLDOMParser {
                id.hasPrefix("post_") || id.hasPrefix("pid") {
                 return candidate
             }
-            if ((try? candidate.select(".authi").isEmpty()) == false),
-               ((try? candidate.select("[id^=postmessage_], .message").isEmpty()) == false) {
+            if ((try? candidate.select(".authi").isEmpty) == false),
+               ((try? candidate.select("[id^=postmessage_], .message").isEmpty) == false) {
                 return candidate
             }
             current = candidate.parent()
@@ -305,6 +304,11 @@ enum ReaderHTMLDOMParser {
             }
         }
 
+        func appendInlineBoundarySpace(isBold: Bool, isQuote: Bool) {
+            guard let last = text.last, !last.character.isWhitespace else { return }
+            text.append(StyledCharacter(character: " ", isBold: isBold, isQuote: isQuote))
+        }
+
         func appendSegments(from node: Node, isBold: Bool, isQuote: Bool) throws {
             if let textNode = node as? TextNode {
                 appendText(
@@ -340,9 +344,16 @@ enum ReaderHTMLDOMParser {
                 if tagName == "li" {
                     appendText("• ", isBold: nextBold, isQuote: nextQuote)
                 }
+                let usesInlineBoundarySpacing = inlineBoundarySpacingTags.contains(tagName)
+                if usesInlineBoundarySpacing {
+                    appendInlineBoundarySpace(isBold: isBold, isQuote: isQuote)
+                }
 
                 for child in element.getChildNodes() {
                     try appendSegments(from: child, isBold: nextBold, isQuote: nextQuote)
+                }
+                if usesInlineBoundarySpacing {
+                    appendInlineBoundarySpace(isBold: isBold, isQuote: isQuote)
                 }
 
                 if blockBreakTags.contains(tagName) {
@@ -716,5 +727,12 @@ enum ReaderHTMLDOMParser {
         "tr",
         "dd",
         "blockquote"
+    ]
+
+    private static let inlineBoundarySpacingTags: Set<String> = [
+        "b",
+        "strong",
+        "span",
+        "font"
     ]
 }

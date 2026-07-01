@@ -1,5 +1,4 @@
 import Foundation
-import SwiftSoup
 
 public struct ThreadMetadata: Hashable, Sendable {
     public var tid: String?
@@ -32,7 +31,7 @@ public enum ThreadMetadataHTMLParser {
             throw YamiboError.floodControl
         }
 
-        let document = try SwiftSoup.parse(html, YamiboRoute.baseURL.absoluteString)
+        let document = try HTMLDocumentParser.parse(html, baseURL: YamiboRoute.baseURL.absoluteString)
         let title = ReaderHTMLParser.extractPageTitle(from: html)
         let sectionLink = try? document
             .select("a[href*='mod=forumdisplay'][href*='fid='], a[href*='forum-']")

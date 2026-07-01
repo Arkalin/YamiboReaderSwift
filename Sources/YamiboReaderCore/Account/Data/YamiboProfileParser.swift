@@ -1,9 +1,8 @@
 import Foundation
-import SwiftSoup
 
 enum YamiboProfileParser {
     static func parse(_ html: String, refreshedAt: Date = .now) throws -> YamiboProfile {
-        let document = try SwiftSoup.parse(html)
+        let document = try HTMLDocumentParser.parse(html)
         if isLoginPage(document) {
             throw YamiboError.notAuthenticated
         }
@@ -37,7 +36,7 @@ enum YamiboProfileParser {
     }
 
     static func isLoginPage(_ html: String) -> Bool {
-        guard let document = try? SwiftSoup.parse(html) else { return false }
+        guard let document = try? HTMLDocumentParser.parse(html) else { return false }
         return isLoginPage(document)
     }
 
