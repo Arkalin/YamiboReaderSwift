@@ -69,6 +69,9 @@ struct ForumThreadReaderView: View {
         .task {
             await model.load()
         }
+        .forumTransientMessage(model.transientMessage, bottomPadding: model.page == nil ? 24 : 82) {
+            model.clearTransientMessage()
+        }
     }
 
     private func refresh() async {

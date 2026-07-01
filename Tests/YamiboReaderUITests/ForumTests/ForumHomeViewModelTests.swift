@@ -30,6 +30,32 @@ final class ForumHomeViewModelTests: XCTestCase {
         XCTAssertNil(model.page)
         XCTAssertNotNil(model.errorMessage)
     }
+
+    func testManualRefreshFailureKeepsCachedHomeAndPresentsTransientMessage() async throws {
+        let cached = makeHome(categoryIDs: ["a", "b"])
+        let error = YamiboError.parsingFailed(context: "fixture")
+        let repository = ForumHomeRepositoryStub(cached: cached, error: error)
+        let model = ForumHomeViewModel(repository: repository)
+
+        await model.load()
+        await model.refresh()
+
+        XCTAssertEqual(model.categories.map(\.id), ["a", "b"])
+        XCTAssertNil(model.errorMessage)
+        XCTAssertEqual(model.transientMessage, L10n.string("forum.home.refresh_failed", error.localizedDescription))
+    }
+
+    func testCachedLoadBackgroundRefreshFailureDoesNotPresentTransientMessage() async throws {
+        let cached = makeHome(categoryIDs: ["a", "b"])
+        let repository = ForumHomeRepositoryStub(cached: cached, error: YamiboError.parsingFailed(context: "fixture"))
+        let model = ForumHomeViewModel(repository: repository)
+
+        await model.load()
+
+        XCTAssertEqual(model.categories.map(\.id), ["a", "b"])
+        XCTAssertNil(model.errorMessage)
+        XCTAssertNil(model.transientMessage)
+    }
 }
 
 private actor ForumHomeRepositoryStub: ForumHomePageLoading {

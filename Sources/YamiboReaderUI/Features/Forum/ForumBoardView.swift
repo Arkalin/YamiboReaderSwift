@@ -124,22 +124,8 @@ struct ForumBoardView: View {
         } message: {
             Text(model.favoriteMessage ?? "")
         }
-        .overlay(alignment: .bottom) {
-            if let transientMessage = model.transientMessage {
-                ForumBoardTransientMessageView(message: transientMessage)
-                    .padding(.horizontal, 24)
-                    .padding(.bottom, 24)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-            }
-        }
-        .animation(.snappy(duration: 0.2), value: model.transientMessage)
-        .task(id: model.transientMessage) {
-            guard model.transientMessage != nil else { return }
-            try? await Task.sleep(for: .seconds(3))
-            guard !Task.isCancelled else { return }
-            withAnimation(.snappy(duration: 0.2)) {
-                model.clearTransientMessage()
-            }
+        .forumTransientMessage(model.transientMessage) {
+            model.clearTransientMessage()
         }
         .task {
             await model.load()
@@ -822,22 +808,6 @@ private struct ForumBoardErrorView: View {
         .padding(32)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .forumPageBackground()
-    }
-}
-
-private struct ForumBoardTransientMessageView: View {
-    let message: String
-
-    var body: some View {
-        Text(message)
-            .font(.subheadline.weight(.semibold))
-            .multilineTextAlignment(.center)
-            .foregroundStyle(.white)
-            .padding(.horizontal, 18)
-            .padding(.vertical, 12)
-            .frame(maxWidth: 420)
-            .background(ForumColors.brownDeep, in: Capsule())
-            .shadow(color: ForumColors.brownDeep.opacity(0.22), radius: 12, x: 0, y: 6)
     }
 }
 

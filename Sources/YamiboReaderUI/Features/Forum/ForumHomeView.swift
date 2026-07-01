@@ -28,6 +28,9 @@ struct ForumHomeView: View {
             }
         }
         .forumPageBackground()
+        .forumTransientMessage(model.transientMessage) {
+            model.clearTransientMessage()
+        }
     }
 
     private func retry() {

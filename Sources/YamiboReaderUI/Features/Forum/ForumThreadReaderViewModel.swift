@@ -29,6 +29,7 @@ final class ForumThreadReaderViewModel {
     var currentPage = 1
     var isLoading = false
     var errorMessage: String?
+    var transientMessage: String?
     var isFavorited = false
     var favoriteErrorMessage: String?
     var inlineImageLoadingContext: NovelInlineImageLoadingContext?
@@ -104,7 +105,12 @@ final class ForumThreadReaderViewModel {
     }
 
     func refresh() async {
-        await loadPage(currentPage, preferCache: false)
+        await loadPage(
+            currentPage,
+            preferCache: false,
+            preservesCurrentContentOnFailure: true,
+            usesCachedFallbackOnFailure: true
+        )
     }
 
     func retry() {
@@ -121,6 +127,10 @@ final class ForumThreadReaderViewModel {
 
     func clearFavoriteError() {
         favoriteErrorMessage = nil
+    }
+
+    func clearTransientMessage() {
+        transientMessage = nil
     }
 
     func toggleFavorite() async {
@@ -222,9 +232,15 @@ final class ForumThreadReaderViewModel {
         return result
     }
 
-    private func loadPage(_ page: Int, preferCache: Bool = true) async {
+    private func loadPage(
+        _ page: Int,
+        preferCache: Bool = true,
+        preservesCurrentContentOnFailure: Bool = false,
+        usesCachedFallbackOnFailure: Bool = false
+    ) async {
         isLoading = true
         errorMessage = nil
+        transientMessage = nil
         defer { isLoading = false }
 
         do {
@@ -240,9 +256,24 @@ final class ForumThreadReaderViewModel {
             self.page = loaded
             currentPage = loaded.pageNavigation?.currentPage ?? page
         } catch {
-            self.page = nil
-            currentPage = page
-            errorMessage = error.localizedDescription
+            let repository = await repositoryProvider()
+            if usesCachedFallbackOnFailure,
+               let cached = await repository.cachedThreadPage(context: context, page: page) {
+                self.page = cached
+                currentPage = cached.pageNavigation?.currentPage ?? page
+                errorMessage = nil
+                transientMessage = L10n.string("forum.thread.refresh_failed", error.localizedDescription)
+                return
+            }
+
+            if preservesCurrentContentOnFailure, self.page != nil {
+                errorMessage = nil
+                transientMessage = L10n.string("forum.thread.refresh_failed", error.localizedDescription)
+            } else {
+                self.page = nil
+                currentPage = page
+                errorMessage = error.localizedDescription
+            }
         }
     }
 

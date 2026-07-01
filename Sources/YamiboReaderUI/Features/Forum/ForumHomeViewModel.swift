@@ -14,6 +14,7 @@ extension ForumRepository: ForumHomePageLoading {}
 final class ForumHomeViewModel {
     var page: ForumHomePage?
     var errorMessage: String?
+    var transientMessage: String?
     var isLoading = false
     var isRefreshing = false
     var expandedCategoryIDs: Set<String> = []
@@ -73,6 +74,10 @@ final class ForumHomeViewModel {
         }
     }
 
+    func clearTransientMessage() {
+        transientMessage = nil
+    }
+
     private func refresh(presentsErrors: Bool) async {
         guard !isRefreshing else { return }
         isRefreshing = true
@@ -82,8 +87,12 @@ final class ForumHomeViewModel {
             let repository = await repositoryProvider()
             apply(try await repository.fetchForumHome(preferCache: false))
             errorMessage = nil
+            transientMessage = nil
         } catch {
-            if presentsErrors || page == nil {
+            if presentsErrors, page != nil {
+                errorMessage = nil
+                transientMessage = L10n.string("forum.home.refresh_failed", error.localizedDescription)
+            } else if presentsErrors || page == nil {
                 errorMessage = error.localizedDescription
             }
         }

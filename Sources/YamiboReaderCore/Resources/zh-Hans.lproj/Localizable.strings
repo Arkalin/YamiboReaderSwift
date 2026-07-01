@@ -245,6 +245,7 @@
 "forum.thread.favorite" = "收藏";
 "forum.thread.favorite_failed" = "收藏失败";
 "forum.thread.favorited" = "已收藏";
+"forum.thread.refresh_failed" = "刷新失败：%@";
 "forum.thread.poll" = "投票";
 "forum.thread.poll_submit" = "提交投票";
 "forum.thread.poll_submitting" = "提交中…";
