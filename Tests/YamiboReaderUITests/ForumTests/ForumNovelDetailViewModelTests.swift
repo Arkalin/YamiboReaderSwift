@@ -825,7 +825,7 @@ import Testing
     #expect(sections[0].chapters.map(\.postID) == ["1001", "1002"])
     #expect(sections[0].chapters[0].resumePoint?.view == 1)
     #expect(sections[0].chapters[0].resumePoint?.chapterIdentity?.rawValue == "post:1001#chapter:0")
-    #expect(sections[0].chapters[0].resumePoint?.textSegmentIdentity == nil)
+    #expect(sections[0].chapters[0].resumePoint?.textSegmentIdentity?.rawValue == "post:1001#chapter:0#text:0")
     #expect(sections[1].chapters.map(\.title) == ["第二章"])
     #expect(sections[1].chapters.map(\.view) == [2])
     #expect(sections[1].chapters.map(\.floorText) == ["11#"])
@@ -863,7 +863,48 @@ import Testing
 }
 
 @MainActor
-@Test func forumNovelDetailChapterTitleSkipsQuotedText() throws {
+@Test func forumNovelDetailChapterDirectoryUsesReaderAuthorReplyVisibilitySetting() throws {
+    let model = try makeForumNovelDetailViewModel()
+    let page = ForumThreadPage(
+        thread: model.context.thread,
+        title: "小说标题",
+        posts: [
+            ForumThreadPost(
+                postID: "1001",
+                floorText: "1#",
+                author: BlogReaderUser(uid: "42", name: "楼主名", avatarURL: nil),
+                contentHTML: "第一章<br>正文",
+                contentText: "第一章\n正文"
+            ),
+            ForumThreadPost(
+                postID: "1002",
+                floorText: "2#",
+                author: BlogReaderUser(uid: "42", name: "楼主名", avatarURL: nil),
+                contentHTML: #"<div class="quote">发表于 1 小时前</div>作者回复<br>正文"#,
+                contentText: "发表于 1 小时前\n作者回复\n正文"
+            ),
+            ForumThreadPost(
+                postID: "1003",
+                floorText: "3#",
+                author: BlogReaderUser(uid: "42", name: "楼主名", avatarURL: nil),
+                contentHTML: "第二章<br>正文",
+                contentText: "第二章\n正文"
+            )
+        ]
+    )
+
+    let sections = ForumNovelDetailViewModel.chapterSections(
+        from: [1: page],
+        totalPages: 1,
+        readerSettings: ReaderAppearanceSettings(showsAuthorRepliesToOthers: false)
+    )
+
+    #expect(sections[0].chapters.map(\.title) == ["第一章", "第二章"])
+    #expect(sections[0].chapters.map(\.postID) == ["1001", "1003"])
+}
+
+@MainActor
+@Test func forumNovelDetailChapterTitleUsesReaderParserTitle() throws {
     let model = try makeForumNovelDetailViewModel()
     let page = ForumThreadPage(
         thread: model.context.thread,
@@ -896,7 +937,7 @@ import Testing
 
     let sections = ForumNovelDetailViewModel.chapterSections(from: [1: page], totalPages: 1)
 
-    #expect(sections[0].chapters.map(\.title) == ["真正章节"])
+    #expect(sections[0].chapters.map(\.title) == ["引用里的旧标题"])
 }
 
 @MainActor

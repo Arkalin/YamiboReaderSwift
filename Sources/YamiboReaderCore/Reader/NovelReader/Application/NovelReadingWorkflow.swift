@@ -38,15 +38,6 @@ public struct NovelReadingCacheContext: Equatable, Sendable {
     }
 }
 
-package struct NovelChapterAnchor: Hashable, Sendable {
-    fileprivate let resumePoint: ReaderResumePoint
-}
-
-package struct NovelChapterDirectoryEntry: Hashable, Sendable {
-    package let chapter: ReaderChapter
-    package let anchor: NovelChapterAnchor?
-}
-
 public struct NovelReadingWorkflowState: Equatable, Sendable {
     package var snapshot: NovelReadingSnapshot
     public var presentation: NovelReaderPresentation?
@@ -240,8 +231,8 @@ public final class NovelReadingWorkflow {
             view: view,
             authorID: cacheContext(forView: view).authorID
         )
-        return try await repository.loadPage(request)
-            .previewChapterDirectoryEntries(settings: settings)
+        let document = try await repository.loadPage(request)
+        return NovelChapterDirectoryExtractor.entries(from: document, settings: settings)
     }
 
     package func loadChapter(_ anchor: NovelChapterAnchor) async throws -> NovelReadingWorkflowState {
@@ -993,54 +984,5 @@ public final class NovelReadingWorkflow {
     private func inferredContentSource(for authorID: String?) -> ReaderContentSource {
         let normalizedAuthorID = authorID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return normalizedAuthorID.isEmpty ? .fallbackUnfilteredPage : .authorFilteredPage
-    }
-}
-
-private extension ReaderPageDocument {
-    func previewChapterDirectoryEntries(
-        settings: ReaderAppearanceSettings
-    ) -> [NovelChapterDirectoryEntry] {
-        var seenIdentities: Set<NovelChapterIdentity> = []
-        return segments.indices.compactMap { index in
-            let segment = segments[index]
-            let semantics = semantics(forSegmentIndex: index)
-            let source = source(forSegmentIndex: index)
-            if source?.isAuthorReplyToOther == true, !settings.showsAuthorRepliesToOthers {
-                return nil
-            }
-            guard let semantics,
-                  let chapterIdentity = semantics.chapterIdentity,
-                  seenIdentities.insert(chapterIdentity).inserted else {
-                return nil
-            }
-            let ordinal = seenIdentities.count - 1
-            let title: String = switch segment {
-            case let .text(_, chapterTitle), let .image(_, chapterTitle):
-                chapterTitle ?? ""
-            }
-            let anchor = semantics.textSegmentIdentity.map {
-                NovelChapterAnchor(
-                    resumePoint: ReaderResumePoint(
-                        view: view,
-                        chapterIdentity: chapterIdentity,
-                        textSegmentIdentity: $0,
-                        displayedTextOffset: 0,
-                        chapterOrdinal: ordinal,
-                        chapterTitle: title,
-                        segmentProgress: 0,
-                        authorID: resolvedAuthorID,
-                        readingModeHint: settings.readingMode
-                    )
-                )
-            }
-            return NovelChapterDirectoryEntry(
-                chapter: ReaderChapter(
-                    ordinal: ordinal,
-                    title: title,
-                    startIndex: ordinal
-                ),
-                anchor: anchor
-            )
-        }
     }
 }

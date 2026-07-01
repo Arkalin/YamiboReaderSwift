@@ -1093,6 +1093,90 @@ private final class StubURLProtocol: URLProtocol {
 }
 #endif
 
+@Test func novelChapterDirectoryExtractorMatchesReaderPreviewDirectoryRules() throws {
+    let document = ReaderPageDocument(
+        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=99&mobile=2")),
+        view: 2,
+        maxView: 3,
+        resolvedAuthorID: "42",
+        contentSource: .authorFilteredPage,
+        segments: [
+            .text("第一章\n开头", chapterTitle: "第一章"),
+            .text("第一章续文", chapterTitle: "第一章"),
+            .image(try #require(URL(string: "https://example.com/1.jpg")), chapterTitle: "第一章"),
+            .text("同名章\n正文", chapterTitle: "同名章"),
+            .text("同名章\n另一处正文", chapterTitle: "同名章")
+        ],
+        segmentSources: [
+            ReaderSegmentSource(ownerPostID: "1001"),
+            ReaderSegmentSource(ownerPostID: "1001"),
+            ReaderSegmentSource(ownerPostID: "1001"),
+            ReaderSegmentSource(ownerPostID: "1002"),
+            ReaderSegmentSource(ownerPostID: "1003")
+        ],
+        segmentSemantics: [
+            readerTextSemantics(chapterID: "post:1001#chapter:0", textID: "post:1001#chapter:0#text:0"),
+            readerTextSemantics(chapterID: "post:1001#chapter:0", textID: "post:1001#chapter:0#text:1"),
+            readerImageSemantics(chapterID: "post:1001#chapter:0"),
+            readerTextSemantics(chapterID: "post:1002#chapter:0", textID: "post:1002#chapter:0#text:0"),
+            readerTextSemantics(chapterID: "post:1003#chapter:0", textID: "post:1003#chapter:0#text:0")
+        ]
+    )
+
+    let entries = NovelChapterDirectoryExtractor.entries(
+        from: document,
+        settings: ReaderAppearanceSettings(readingMode: .vertical)
+    )
+
+    #expect(entries.map(\.chapter.title) == ["第一章", "同名章", "同名章"])
+    #expect(entries.map(\.chapter.ordinal) == [0, 1, 2])
+    #expect(entries.map(\.chapter.startIndex) == [0, 1, 2])
+    #expect(entries.map(\.ownerPostID) == ["1001", "1002", "1003"])
+    #expect(entries[0].anchor?.resumePoint.view == 2)
+    #expect(entries[0].anchor?.resumePoint.authorID == "42")
+    #expect(entries[0].anchor?.resumePoint.chapterIdentity?.rawValue == "post:1001#chapter:0")
+    #expect(entries[0].anchor?.resumePoint.textSegmentIdentity?.rawValue == "post:1001#chapter:0#text:0")
+    #expect(entries[0].anchor?.resumePoint.chapterTitle == "第一章")
+    #expect(entries[0].anchor?.resumePoint.readingModeHint == .vertical)
+}
+
+@Test func novelChapterDirectoryExtractorUsesReaderAuthorReplyVisibilitySetting() throws {
+    let document = ReaderPageDocument(
+        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100&mobile=2")),
+        view: 1,
+        maxView: 1,
+        resolvedAuthorID: "42",
+        contentSource: .authorFilteredPage,
+        segments: [
+            .text("第一章\n正文", chapterTitle: "第一章"),
+            .text("作者回复\n正文", chapterTitle: "作者回复"),
+            .text("第二章\n正文", chapterTitle: "第二章")
+        ],
+        segmentSources: [
+            ReaderSegmentSource(ownerPostID: "1001"),
+            ReaderSegmentSource(ownerPostID: "1002", isAuthorReplyToOther: true),
+            ReaderSegmentSource(ownerPostID: "1003")
+        ],
+        segmentSemantics: [
+            readerTextSemantics(chapterID: "post:1001#chapter:0", textID: "post:1001#chapter:0#text:0"),
+            readerTextSemantics(chapterID: "post:1002#chapter:0", textID: "post:1002#chapter:0#text:0"),
+            readerTextSemantics(chapterID: "post:1003#chapter:0", textID: "post:1003#chapter:0#text:0")
+        ]
+    )
+
+    let visible = NovelChapterDirectoryExtractor.entries(
+        from: document,
+        settings: ReaderAppearanceSettings(showsAuthorRepliesToOthers: true)
+    )
+    let hidden = NovelChapterDirectoryExtractor.entries(
+        from: document,
+        settings: ReaderAppearanceSettings(showsAuthorRepliesToOthers: false)
+    )
+
+    #expect(visible.map(\.chapter.title) == ["第一章", "作者回复", "第二章"])
+    #expect(hidden.map(\.chapter.title) == ["第一章", "第二章"])
+}
+
 @Test func readerContainerLayoutComputesReadableFrameFromSafeAreaAndChrome() async throws {
     let layout = ReaderContainerLayout(
         containerSize: CGSize(width: 390, height: 844),

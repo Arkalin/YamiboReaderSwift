@@ -77,6 +77,7 @@ final class ForumNovelDetailViewModel {
     @ObservationIgnored private var loadingChapterPages: Set<Int> = []
     @ObservationIgnored private var chapterPageErrors: [Int: String] = [:]
     @ObservationIgnored private var totalChapterPages = 1
+    @ObservationIgnored private var readerSettings = ReaderAppearanceSettings()
     @ObservationIgnored private var documentPreloadTask: Task<Void, Never>?
     @ObservationIgnored private var favoriteUpdatesTask: Task<Void, Never>?
     @ObservationIgnored private var readingProgressUpdatesTask: Task<Void, Never>?
@@ -181,6 +182,7 @@ final class ForumNovelDetailViewModel {
             favorite = await appContext.favoriteStore.favorite(for: context.thread.canonicalURL)
             readingProgress = await appContext.readingProgressStore.load(for: context.thread.canonicalURL)
             contentCover = await loadContentCover()
+            readerSettings = await appContext.settingsStore.load().reader
             favoriteErrorMessage = nil
             let threadRepository = await threadRepositoryProvider()
             let headerPage = if let cached = await threadRepository.cachedNovelThreadPage(context: context, page: 1) {
@@ -371,12 +373,21 @@ final class ForumNovelDetailViewModel {
         loadingPages: Set<Int> = [],
         pageErrors: [Int: String] = [:],
         readingProgress: ReadingProgressRecord? = nil,
-        favorite: Favorite? = nil
+        favorite: Favorite? = nil,
+        readerSettings: ReaderAppearanceSettings = .init(),
+        authorID: String? = nil
     ) -> [ForumNovelChapterSection] {
         let normalizedTotal = max(1, totalPages)
         return (1...normalizedTotal).map { page in
             let pageDocument = loadedPages[page]
-            let chapters = pageDocument.map { chapterSummaries(from: $0, page: page) } ?? []
+            let chapters = pageDocument.map {
+                chapterSummaries(
+                    from: $0,
+                    page: page,
+                    readerSettings: readerSettings,
+                    authorID: authorID
+                )
+            } ?? []
             return ForumNovelChapterSection(
                 page: page,
                 chapters: chapters.map { chapter in
@@ -407,7 +418,9 @@ final class ForumNovelDetailViewModel {
             loadingPages: loadingChapterPages,
             pageErrors: chapterPageErrors,
             readingProgress: readingProgress,
-            favorite: favorite
+            favorite: favorite,
+            readerSettings: readerSettings,
+            authorID: resolvedAuthorID ?? context.authorID
         )
         chapters = chapterSections.flatMap(\.chapters)
     }
@@ -431,81 +444,46 @@ final class ForumNovelDetailViewModel {
         contentCover = await appContext.contentCoverStore.cover(for: key)
     }
 
-    private static func chapterSummaries(from page: ForumThreadPage, page pageNumber: Int) -> [ForumNovelChapterSummary] {
-        page.posts.enumerated().map { offset, post in
-            let title = chapterTitle(from: post)
-            return ForumNovelChapterSummary(
-                id: "\(pageNumber)|\(post.postID)",
-                title: title,
-                view: pageNumber,
-                postID: post.postID,
-                floorText: post.floorText,
-                resumePoint: resumePoint(
-                    forPostID: post.postID,
-                    title: title,
-                    view: pageNumber,
-                    ordinal: offset
-                )
-            )
-        }
-    }
-
-    private static func resumePoint(
-        forPostID postID: String,
-        title: String,
-        view: Int,
-        ordinal: Int
-    ) -> ReaderResumePoint? {
-        let normalizedPostID = postID.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !normalizedPostID.isEmpty else { return nil }
-        let chapterIdentity = NovelChapterIdentity(rawValue: "post:\(normalizedPostID)#chapter:0")
-        return ReaderResumePoint(
-            view: view,
-            chapterIdentity: chapterIdentity,
-            textSegmentIdentity: nil,
-            displayedTextOffset: 0,
-            chapterOrdinal: ordinal,
-            chapterTitle: title,
-            segmentProgress: 0,
-            readingModeHint: .vertical
+    private static func chapterSummaries(
+        from page: ForumThreadPage,
+        page pageNumber: Int,
+        readerSettings: ReaderAppearanceSettings,
+        authorID: String?
+    ) -> [ForumNovelChapterSummary] {
+        let resolvedAuthorID = trimmedNonEmpty(authorID) ?? trimmedNonEmpty(page.posts.first?.author.uid)
+        guard let resolvedAuthorID else { return [] }
+        let request = ReaderPageRequest(
+            threadURL: page.thread.canonicalURL,
+            view: pageNumber,
+            authorID: resolvedAuthorID
         )
-    }
-
-    private static func chapterTitle(from post: ForumThreadPost) -> String {
-        let sourceText = chapterTitleCandidate(in: post.contentBlocks) ?? post.contentText
-        let firstLine = sourceText
-            .split(whereSeparator: \.isNewline)
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .first(where: { isChapterTitleCandidate($0) })
-            .map { String($0.prefix(30)) }
-        return ReaderChapterTitleNormalizer.normalize(firstLine)
-            ?? post.floorText
-            ?? L10n.string("reader.title")
-    }
-
-    private static func chapterTitleCandidate(in blocks: [ForumThreadContentBlock]) -> String? {
-        blocks.lazy.compactMap { block -> String? in
-            switch block.kind {
-            case let .text(text):
-                return text.text
-                    .split(whereSeparator: \.isNewline)
-                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                    .first(where: isChapterTitleCandidate)
-            case .image, .attachment, .quote, .code, .horizontalRule, .collapse, .locked, .table:
-                return nil
+        guard let document = try? ReaderHTMLParser.parseDocument(
+            threadPage: page,
+            request: request,
+            authorID: resolvedAuthorID
+        ) else {
+            return []
+        }
+        let floorTextByPostID = page.posts.reduce(into: [String: String]()) { partial, post in
+            guard let postID = trimmedNonEmpty(post.postID),
+                  let floorText = post.floorText else {
+                return
             }
-        }.first
-    }
-
-    private static func isChapterTitleCandidate(_ value: String) -> Bool {
-        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return false }
-        let lowered = trimmed.lowercased()
-        return !lowered.hasPrefix("本帖最后由")
-            && !lowered.hasPrefix("posted by")
-            && !lowered.hasPrefix("引用")
-            && !lowered.hasPrefix("quote")
-            && !lowered.hasPrefix("查看完整版本")
+            partial[postID] = floorText
+        }
+        return NovelChapterDirectoryExtractor
+            .entries(from: document, settings: readerSettings)
+            .map { entry in
+                let postID = entry.ownerPostID
+                return ForumNovelChapterSummary(
+                    id: "\(pageNumber)|\(postID ?? String(entry.chapter.ordinal))",
+                    title: entry.chapter.title,
+                    view: pageNumber,
+                    postID: postID,
+                    floorText: postID.flatMap { floorTextByPostID[$0] },
+                    resumePoint: entry.anchor?.resumePoint
+                )
+            }
     }
 
     private static func totalPages(from page: ForumThreadPage, fallback: Int) -> Int {

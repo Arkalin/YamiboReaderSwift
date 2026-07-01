@@ -43,6 +43,20 @@ public enum ReaderHTMLParser {
     public static func parseDocument(
         threadPage: ForumThreadPage,
         request: ReaderPageRequest,
+        authorID: String
+    ) throws -> ReaderPageDocument {
+        try parseDocument(
+            threadPage: threadPage,
+            request: request,
+            authorID: authorID,
+            projectionSourceFingerprint: "",
+            projectionSchemaVersion: 0
+        )
+    }
+
+    public static func parseDocument(
+        threadPage: ForumThreadPage,
+        request: ReaderPageRequest,
         authorID: String,
         projectionSourceFingerprint: String,
         projectionSchemaVersion: Int
@@ -230,15 +244,32 @@ public enum ReaderHTMLParser {
         let posts = page.posts.map { post in
             let postID = post.postID.trimmingCharacters(in: .whitespacesAndNewlines)
             let safePostID = postID.isEmpty ? "0" : postID
+            let contentHTML = post.contentHTML.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                ? escapedReaderHTMLText(from: post.contentText)
+                : post.contentHTML
             let attachmentImages = attachmentImageHTML(for: post.images, excludingSourcesIn: post.contentHTML)
             return """
             <div class="plc cl" id="pid\(safePostID)">
-              <div class="message" id="postmessage_\(safePostID)">\(post.contentHTML)</div>
+              <div class="message" id="postmessage_\(safePostID)">\(contentHTML)</div>
               \(attachmentImages)
             </div>
             """
         }.joined(separator: "\n")
         return "<html><body>\(posts)</body></html>"
+    }
+
+    private static func escapedReaderHTMLText(from text: String) -> String {
+        escapeHTMLText(text)
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+            .replacingOccurrences(of: "\n", with: "<br>")
+    }
+
+    private static func escapeHTMLText(_ value: String) -> String {
+        value
+            .replacingOccurrences(of: "&", with: "&amp;")
+            .replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;")
     }
 
     private static func attachmentImageHTML(
