@@ -22,13 +22,13 @@ import Testing
 
     let entries = FavoriteLibraryProjection.entries(
         in: snapshot,
-        query: FavoriteLibraryQuery(scope: .root, showsHidden: false)
+        query: FavoriteLibraryQuery(scope: .root)
     )
 
     #expect(entries.map(\.id) == ["collection:collection-1", "favorite:\(rootFavorite.id)"])
 }
 
-@Test func favoriteLibraryProjectionAppliesTagFilterWithAndSemantics() throws {
+@Test func favoriteLibraryProjectionAppliesTagSearchWithoutLegacyTypeOrHiddenFilters() throws {
     let first = Favorite(
         title: "百合短篇",
         url: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=856&mobile=2")),
@@ -59,8 +59,6 @@ import Testing
     let hiddenOff = FavoriteLibraryProjection.favorites(
         in: snapshot,
         query: FavoriteLibraryQuery(
-            showsHidden: false,
-            filter: .novel,
             searchText: "短篇",
             selectedTagIDs: ["love", "short"]
         )
@@ -68,15 +66,13 @@ import Testing
     let hiddenOn = FavoriteLibraryProjection.favorites(
         in: snapshot,
         query: FavoriteLibraryQuery(
-            showsHidden: true,
-            filter: .novel,
             searchText: "短篇",
             selectedTagIDs: ["love", "short"]
         )
     )
 
-    #expect(hiddenOff.map(\.id) == [first.id])
-    #expect(hiddenOn.map(\.id) == [first.id, hiddenMatch.id])
+    #expect(hiddenOff.map(\.id) == [first.id, hiddenMatch.id, mangaMatch.id])
+    #expect(hiddenOn.map(\.id) == hiddenOff.map(\.id))
 }
 
 @Test func favoriteLibraryProjectionRootSearchMatchesCollectionFavoriteTitlesAndTaggedCollectionNameRequiresTaggedChild() throws {
@@ -107,13 +103,12 @@ import Testing
 
     let titleSearchEntries = FavoriteLibraryProjection.entries(
         in: snapshot,
-        query: FavoriteLibraryQuery(scope: .root, showsHidden: false, searchText: "搜索命中")
+        query: FavoriteLibraryQuery(scope: .root, searchText: "搜索命中")
     )
     let taggedEntries = FavoriteLibraryProjection.entries(
         in: snapshot,
         query: FavoriteLibraryQuery(
             scope: .root,
-            showsHidden: false,
             searchText: "标签合集",
             selectedTagIDs: ["love"]
         )
@@ -123,7 +118,6 @@ import Testing
         in: snapshot,
         query: FavoriteLibraryQuery(
             scope: .root,
-            showsHidden: false,
             searchText: "标签合集",
             selectedTagIDs: ["love"]
         )
@@ -164,7 +158,7 @@ import Testing
 
     let entries = FavoriteLibraryProjection.entries(
         in: snapshot,
-        query: FavoriteLibraryQuery(scope: .root, showsHidden: false, sortOrder: .recentRead)
+        query: FavoriteLibraryQuery(scope: .root, sortOrder: .recentRead)
     )
 
     #expect(entries.map(\.id) == ["collection:collection-8", "favorite:\(rootFavorite.id)", "collection:collection-9"])

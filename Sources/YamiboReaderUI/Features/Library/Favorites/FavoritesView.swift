@@ -6,7 +6,6 @@ public struct FavoritesView: View {
     @StateObject private var viewModel: FavoritesViewModel
     @AppStorage("yamibo.favorite.filter") private var filterRawValue = FavoriteFilter.all.rawValue
     @AppStorage("yamibo.favorite.sort") private var sortRawValue = FavoriteSortOrder.manual.rawValue
-    @AppStorage("yamibo.favorite.showHidden") private var showsHidden = false
     @State private var searchText = ""
     @State private var selectedFavorite: Favorite?
     @State private var displayNameDraft: FavoriteDisplayNameDraft?
@@ -93,7 +92,6 @@ public struct FavoritesView: View {
                 FavoriteToolbarModifier(
                     filterRawValue: $filterRawValue,
                     sortRawValue: $sortRawValue,
-                    showsHidden: $showsHidden,
                     isSelecting: $isSelecting,
                     favoriteAppearance: viewModel.favoriteAppearance,
                     showsSettingsMenu: isRootScope,
@@ -522,7 +520,6 @@ public struct FavoritesView: View {
             scope: scope,
             favorites: viewModel.favorites,
             collections: viewModel.collections,
-            showsHidden: showsHidden,
             filter: currentFilter,
             sortOrder: currentSortOrder,
             searchText: searchText,
@@ -930,18 +927,6 @@ public struct FavoritesView: View {
                     .tint(.red)
 
                     Button {
-                        Task {
-                            await viewModel.setCollectionHidden(!collection.isHidden, for: collection)
-                        }
-                    } label: {
-                        swipeActionLabel(
-                            title: collection.isHidden ? L10n.string("common.unhide") : L10n.string("common.hide"),
-                            systemImage: collection.isHidden ? "eye" : "eye.slash"
-                        )
-                    }
-                    .tint(.orange)
-
-                    Button {
                         collectionNameDraft = FavoriteCollectionNameDraft(collection: collection)
                     } label: {
                         swipeActionLabel(title: L10n.string("common.edit"), systemImage: "pencil")
@@ -996,19 +981,6 @@ public struct FavoritesView: View {
                         .disabled(viewModel.deletingFavoriteID != nil)
 
                         Button {
-                            Task {
-                                await viewModel.setHidden(!favorite.isHidden, for: favorite)
-                            }
-                        } label: {
-                            swipeActionLabel(
-                                title: favorite.isHidden ? L10n.string("common.unhide") : L10n.string("common.hide"),
-                                systemImage: favorite.isHidden ? "eye" : "eye.slash"
-                            )
-                        }
-                        .tint(.orange)
-                        .disabled(viewModel.deletingFavoriteID != nil)
-
-                        Button {
                             pendingEditFavorite = favorite
                         } label: {
                             swipeActionLabel(title: L10n.string("common.edit"), systemImage: "pencil")
@@ -1028,14 +1000,6 @@ public struct FavoritesView: View {
                 pendingEditFavorite = favorite
             } label: {
                 Label(L10n.string("common.edit"), systemImage: "pencil")
-            }
-
-            Button {
-                Task {
-                    await viewModel.setHidden(!favorite.isHidden, for: favorite)
-                }
-            } label: {
-                Label(favorite.isHidden ? L10n.string("common.unhide") : L10n.string("common.hide"), systemImage: favorite.isHidden ? "eye" : "eye.slash")
             }
 
             Button(role: .destructive) {
@@ -1099,14 +1063,6 @@ public struct FavoritesView: View {
                 collectionNameDraft = FavoriteCollectionNameDraft(collection: collection)
             } label: {
                 Label(L10n.string("common.edit"), systemImage: "pencil")
-            }
-
-            Button {
-                Task {
-                    await viewModel.setCollectionHidden(!collection.isHidden, for: collection)
-                }
-            } label: {
-                Label(collection.isHidden ? L10n.string("common.unhide") : L10n.string("common.hide"), systemImage: collection.isHidden ? "eye" : "eye.slash")
             }
 
             Button(role: .destructive) {
@@ -1360,7 +1316,6 @@ public struct FavoritesView: View {
             for: collection,
             favorites: viewModel.favorites,
             scope: scope,
-            showsHidden: showsHidden,
             filter: currentFilter,
             searchText: searchText,
             selectedTagIDs: selectedFilterTagIDs

@@ -131,7 +131,7 @@ struct WebDAVDomainMerger: Sendable {
                 fallback: fallbackRecord.metadata
             )
             favorite.displayName = metadata.displayName
-            favorite.isHidden = metadata.isHidden
+            favorite.isHidden = false
             favorite.type = metadata.type
 
             let organization = chooseFavoriteDomain(
@@ -149,72 +149,11 @@ struct WebDAVDomainMerger: Sendable {
             mergedFavorites.append(favorite)
         }
 
-        let archivedMetadata = allFavoriteKeys
-            .subtracting(visibleKeys)
-            .compactMap { key -> FavoriteMetadataArchiveEntry? in
-                guard let canonicalURL = URL(string: key) else { return nil }
-                let localRecord = localRecords[key]
-                let remoteRecord = remoteRecords[key]
-                guard localRecord != nil || remoteRecord != nil else { return nil }
-                let fallbackRecord = localRecord ?? remoteRecord ?? FavoriteMergeRecord(canonicalThreadURL: canonicalURL)
-
-                let readingPosition = chooseFavoriteDomain(
-                    local: localRecord?.readingPosition,
-                    remote: remoteRecord?.readingPosition,
-                    localDate: localMetadata.readingPositionUpdatedAtByCanonicalURL[key],
-                    remoteDate: remoteMetadata.readingPositionUpdatedAtByCanonicalURL[key],
-                    fallback: fallbackRecord.readingPosition
-                )
-                let lastReadAt = chooseFavoriteDomain(
-                    local: localRecord?.lastReadAt,
-                    remote: remoteRecord?.lastReadAt,
-                    localDate: localMetadata.lastReadAtUpdatedAtByCanonicalURL[key],
-                    remoteDate: remoteMetadata.lastReadAtUpdatedAtByCanonicalURL[key],
-                    fallback: fallbackRecord.lastReadAt
-                )
-                let metadata = chooseFavoriteDomain(
-                    local: localRecord?.metadata,
-                    remote: remoteRecord?.metadata,
-                    localDate: localMetadata.favoriteMetadataUpdatedAtByCanonicalURL[key],
-                    remoteDate: remoteMetadata.favoriteMetadataUpdatedAtByCanonicalURL[key],
-                    fallback: fallbackRecord.metadata
-                )
-                let organization = chooseFavoriteDomain(
-                    local: localRecord?.organization,
-                    remote: remoteRecord?.organization,
-                    localDate: localMetadata.favoriteOrganizationUpdatedAtByCanonicalURL[key],
-                    remoteDate: remoteMetadata.favoriteOrganizationUpdatedAtByCanonicalURL[key],
-                    fallback: fallbackRecord.organization
-                )
-
-                return FavoriteMetadataArchiveEntry(
-                    canonicalThreadURL: canonicalURL,
-                    displayName: metadata.displayName,
-                    mangaPageIndex: readingPosition.mangaPageIndex,
-                    lastView: readingPosition.lastView,
-                    lastChapter: readingPosition.lastChapter,
-                    authorID: readingPosition.authorID,
-                    novelResumePoint: readingPosition.novelResumePoint,
-                    novelMaxView: readingPosition.novelMaxView,
-                    novelDocumentSurfaceProgressPercent: readingPosition.novelDocumentSurfaceProgressPercent,
-                    isHidden: metadata.isHidden,
-                    type: metadata.type,
-                    lastMangaURL: readingPosition.lastMangaURL,
-                    parentCollectionID: organization.parentCollectionID.flatMap { id in
-                        validCollectionIDs.contains(id) ? id : nil
-                    },
-                    manualOrder: organization.manualOrder,
-                    lastReadAt: lastReadAt,
-                    tagIDs: sanitizedTagIDs(organization.tagIDs, validTagIDs: validTagIDs)
-                )
-            }
-            .sorted { $0.canonicalThreadURL.absoluteString < $1.canonicalThreadURL.absoluteString }
-
         return FavoriteLibrarySnapshot(
             favorites: mergedFavorites,
             collections: mergedCollections,
             tags: mergedTags,
-            archivedMetadata: archivedMetadata,
+            archivedMetadata: [],
             syncMetadata: mergedMetadata
         )
     }
@@ -341,9 +280,6 @@ struct WebDAVDomainMerger: Sendable {
         for favorite in snapshot.favorites {
             records[canonicalURLKey(for: favorite.url)] = FavoriteMergeRecord(favorite: favorite)
         }
-        for archive in snapshot.archivedMetadata {
-            records[canonicalURLKey(for: archive.canonicalThreadURL)] = FavoriteMergeRecord(archive: archive)
-        }
         return records
     }
 
@@ -456,37 +392,12 @@ private struct FavoriteMergeRecord: Equatable, Sendable {
         lastReadAt = favorite.lastReadAt
         metadata = FavoriteMergeMetadata(
             displayName: favorite.displayName,
-            isHidden: favorite.isHidden,
             type: favorite.type
         )
         organization = FavoriteMergeOrganization(
             parentCollectionID: favorite.parentCollectionID,
             manualOrder: favorite.manualOrder,
             tagIDs: favorite.tagIDs
-        )
-    }
-
-    init(archive: FavoriteMetadataArchiveEntry) {
-        readingPosition = FavoriteMergeReadingPosition(
-            mangaPageIndex: archive.mangaPageIndex,
-            lastView: archive.lastView,
-            lastChapter: archive.lastChapter,
-            authorID: archive.authorID,
-            novelResumePoint: archive.novelResumePoint,
-            novelMaxView: archive.novelMaxView,
-            novelDocumentSurfaceProgressPercent: archive.novelDocumentSurfaceProgressPercent,
-            lastMangaURL: archive.lastMangaURL
-        )
-        lastReadAt = archive.lastReadAt
-        metadata = FavoriteMergeMetadata(
-            displayName: archive.displayName,
-            isHidden: archive.isHidden,
-            type: archive.type
-        )
-        organization = FavoriteMergeOrganization(
-            parentCollectionID: archive.parentCollectionID,
-            manualOrder: archive.manualOrder,
-            tagIDs: archive.tagIDs
         )
     }
 
@@ -502,7 +413,7 @@ private struct FavoriteMergeRecord: Equatable, Sendable {
             lastMangaURL: nil
         )
         lastReadAt = nil
-        metadata = FavoriteMergeMetadata(displayName: nil, isHidden: false, type: .unknown)
+        metadata = FavoriteMergeMetadata(displayName: nil, type: .unknown)
         organization = FavoriteMergeOrganization(parentCollectionID: nil, manualOrder: 0, tagIDs: [])
     }
 }
@@ -520,7 +431,6 @@ private struct FavoriteMergeReadingPosition: Equatable, Sendable {
 
 private struct FavoriteMergeMetadata: Equatable, Sendable {
     var displayName: String?
-    var isHidden: Bool
     var type: FavoriteType
 }
 

@@ -37,7 +37,7 @@ import Testing
     #expect(cleared.resolvedDisplayTitle == "原标题")
 }
 
-@Test func favoriteLibraryArchivesRemovedRemoteMetadataWithOnlyValidTags() throws {
+@Test func favoriteLibraryRemoteRefreshPreservesLocalItemsWithoutArchive() throws {
     let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=934&mobile=2"))
     let tag = FavoriteTag(id: "tag-valid", name: "有效标签", color: .blue)
     let favorite = Favorite(
@@ -55,14 +55,14 @@ import Testing
 
     library.reconcileRemoteFavorites([])
 
-    #expect(library.favorites.isEmpty)
-    let archive = try #require(library.archivedMetadata.first)
-    #expect(archive.canonicalThreadURL == ReaderCacheIdentity.canonicalThreadURL(from: url))
-    #expect(archive.isHidden)
-    #expect(archive.tagIDs == [tag.id])
+    let preserved = try #require(library.favorites.first)
+    #expect(preserved.url == url)
+    #expect(preserved.remoteFavoriteID == nil)
+    #expect(preserved.tagIDs == [tag.id, "missing-tag"])
+    #expect(library.archivedMetadata.isEmpty)
 }
 
-@Test func favoriteLibraryRestoresArchivedMetadataByCanonicalURLUsingRemoteFavoriteFields() throws {
+@Test func favoriteLibraryReturningRemoteFavoriteDoesNotRestoreArchivedMetadata() throws {
     let archivedURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=935&mobile=2&page=4"))
     let returningURL = try #require(URL(string: "https://bbs.yamibo.com/thread-935-1-1.html"))
     let tag = FavoriteTag(id: "tag-valid", name: "有效标签", color: .green)
@@ -97,16 +97,16 @@ import Testing
     #expect(restored.title == "远端新标题")
     #expect(restored.url == returningURL)
     #expect(restored.remoteFavoriteID == "remote-new")
-    #expect(restored.displayName == "恢复名")
-    #expect(restored.isHidden)
+    #expect(restored.displayName == nil)
+    #expect(!restored.isHidden)
     #expect(restored.parentCollectionID == nil)
-    #expect(restored.type == .novel)
-    #expect(restored.mangaPageIndex == 6)
-    #expect(restored.lastView == 2)
-    #expect(restored.lastChapter == "第二章")
-    #expect(restored.authorID == "author-935")
-    #expect(restored.lastReadAt == Date(timeIntervalSince1970: 1_800_000_001))
-    #expect(restored.tagIDs == [tag.id])
+    #expect(restored.type == .unknown)
+    #expect(restored.mangaPageIndex == 0)
+    #expect(restored.lastView == 1)
+    #expect(restored.lastChapter == nil)
+    #expect(restored.authorID == nil)
+    #expect(restored.lastReadAt == nil)
+    #expect(restored.tagIDs == [])
     #expect(library.archivedMetadata.isEmpty)
 }
 

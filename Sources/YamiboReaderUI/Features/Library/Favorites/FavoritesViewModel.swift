@@ -364,15 +364,6 @@ public final class FavoritesViewModel: ObservableObject {
         }
     }
 
-    public func setHidden(_ isHidden: Bool, for favorite: Favorite) async {
-        do {
-            favorites = try await favoriteStore.setHidden(isHidden, for: favorite.id)
-            errorMessage = nil
-        } catch {
-            errorMessage = error.localizedDescription
-        }
-    }
-
     public func setTagIDs(_ tagIDs: [String], forFavoriteID favoriteID: String) async -> Bool {
         await setTagIDs(tagIDs, forFavoriteIDs: [favoriteID])
     }
@@ -458,15 +449,6 @@ public final class FavoritesViewModel: ObservableObject {
         } catch {
             errorMessage = error.localizedDescription
             return false
-        }
-    }
-
-    public func setCollectionHidden(_ isHidden: Bool, for collection: FavoriteCollection) async {
-        do {
-            applySnapshot(try await favoriteStore.setCollectionHidden(isHidden, for: collection.id))
-            errorMessage = nil
-        } catch {
-            errorMessage = error.localizedDescription
         }
     }
 

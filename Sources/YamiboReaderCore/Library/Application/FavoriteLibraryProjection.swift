@@ -2,9 +2,8 @@ import Foundation
 
 public enum FavoriteLibraryFilter: String, CaseIterable, Identifiable, Sendable {
     case all
-    case novel
-    case manga
-    case other
+
+    public static let allCases: [FavoriteLibraryFilter] = [.all]
 
     public var id: String { rawValue }
 
@@ -12,12 +11,6 @@ public enum FavoriteLibraryFilter: String, CaseIterable, Identifiable, Sendable 
         switch self {
         case .all:
             true
-        case .novel:
-            favorite.type == .novel
-        case .manga:
-            favorite.type == .manga
-        case .other:
-            favorite.type == .other || favorite.type == .unknown
         }
     }
 }
@@ -25,8 +18,9 @@ public enum FavoriteLibraryFilter: String, CaseIterable, Identifiable, Sendable 
 public enum FavoriteLibrarySortOrder: String, CaseIterable, Identifiable, Sendable {
     case manual
     case title
-    case progress
     case recentRead
+
+    public static let allCases: [FavoriteLibrarySortOrder] = [.manual, .title, .recentRead]
 
     public var id: String { rawValue }
 }
@@ -57,7 +51,6 @@ public enum FavoriteLibraryScope: Hashable, Sendable {
 
 public struct FavoriteLibraryQuery: Equatable, Sendable {
     public var scope: FavoriteLibraryScope
-    public var showsHidden: Bool
     public var filter: FavoriteLibraryFilter
     public var sortOrder: FavoriteLibrarySortOrder
     public var searchText: String
@@ -65,14 +58,12 @@ public struct FavoriteLibraryQuery: Equatable, Sendable {
 
     public init(
         scope: FavoriteLibraryScope = .root,
-        showsHidden: Bool,
         filter: FavoriteLibraryFilter = .all,
         sortOrder: FavoriteLibrarySortOrder = .manual,
         searchText: String = "",
         selectedTagIDs: Set<String> = []
     ) {
         self.scope = scope
-        self.showsHidden = showsHidden
         self.filter = filter
         self.sortOrder = sortOrder
         self.searchText = searchText
@@ -162,7 +153,7 @@ public enum FavoriteLibraryProjection {
                 return entries.sorted { lhs, rhs in
                     compareRecentReadEntries(lhs, rhs, snapshot: snapshot, query: query)
                 }
-            case .title, .progress:
+            case .title:
                 return visibleCollections.map(FavoriteLibraryEntry.collection) + rootFavorites.map(FavoriteLibraryEntry.favorite)
             }
         case .collection:
@@ -178,7 +169,6 @@ public enum FavoriteLibraryProjection {
         let parentCollectionID = query.scope.collection?.id
         let filtered = snapshot.favorites
             .filter { $0.parentCollectionID == parentCollectionID }
-            .filter { query.showsHidden || !$0.isHidden }
             .filter { query.filter.matches($0) }
             .filter { favorite in
                 query.selectedTagIDs.isEmpty || query.selectedTagIDs.isSubset(of: Set(favorite.tagIDs))
@@ -200,10 +190,6 @@ public enum FavoriteLibraryProjection {
             return filtered.sorted { lhs, rhs in
                 lhs.resolvedDisplayTitle.localizedCompare(rhs.resolvedDisplayTitle) == .orderedAscending
             }
-        case .progress:
-            return filtered.sorted { lhs, rhs in
-                progressScore(for: lhs) > progressScore(for: rhs)
-            }
         case .recentRead:
             return filtered.sorted(by: compareRecentReadFavorites)
         }
@@ -219,7 +205,7 @@ public enum FavoriteLibraryProjection {
         guard case .root = query.scope else {
             return FavoriteLibraryCollectionSummary(
                 itemCount: allItems.count,
-                hiddenCount: allItems.filter(\.isHidden).count
+                hiddenCount: 0
             )
         }
 
@@ -229,19 +215,18 @@ public enum FavoriteLibraryProjection {
            trimmedSearchText.isEmpty || collection.name.localizedCaseInsensitiveContains(trimmedSearchText) {
             return FavoriteLibraryCollectionSummary(
                 itemCount: allItems.count,
-                hiddenCount: allItems.filter(\.isHidden).count
+                hiddenCount: 0
             )
         }
 
         var containedQuery = query
         containedQuery.scope = .collection(collection)
-        containedQuery.showsHidden = true
         containedQuery.sortOrder = .manual
         containedQuery.searchText = favoriteSearchTextForCollectionMatch(collection, query: query)
         let matchingItems = favorites(in: snapshot, query: containedQuery)
         return FavoriteLibraryCollectionSummary(
             itemCount: matchingItems.count,
-            hiddenCount: matchingItems.filter(\.isHidden).count
+            hiddenCount: 0
         )
     }
 
@@ -410,10 +395,6 @@ public enum FavoriteLibraryProjection {
         snapshot: FavoriteLibrarySnapshot,
         query: FavoriteLibraryQuery
     ) -> Bool {
-        guard query.showsHidden || !collection.isHidden else {
-            return false
-        }
-
         let trimmedSearchText = query.searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         var containedQuery = query
         containedQuery.scope = .collection(collection)
@@ -444,10 +425,6 @@ public enum FavoriteLibraryProjection {
             return query.searchText
         }
         return ""
-    }
-
-    private static func progressScore(for favorite: Favorite) -> Int {
-        favorite.lastView * 1000 + favorite.mangaPageIndex
     }
 
     private static func compareRecentReadFavorites(_ lhs: Favorite, _ rhs: Favorite) -> Bool {

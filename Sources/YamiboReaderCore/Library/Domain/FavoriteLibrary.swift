@@ -123,10 +123,7 @@ public struct FavoriteLibrarySnapshot: Codable, Equatable, Sendable {
     }
 
     public var favoriteCanonicalURLKeys: Set<String> {
-        Set(
-            favorites.map { FavoriteLibraryURLIdentity.canonicalThreadURLKey(for: $0.url) } +
-                archivedMetadata.map { FavoriteLibraryURLIdentity.canonicalThreadURLKey(for: $0.canonicalThreadURL) }
-        )
+        Set(favorites.map { FavoriteLibraryURLIdentity.canonicalThreadURLKey(for: $0.url) })
     }
 }
 
@@ -258,7 +255,7 @@ public struct FavoriteLibrary: Equatable, Sendable {
         favorites = snapshot.favorites
         collections = snapshot.collections
         tags = snapshot.tags
-        archivedMetadata = snapshot.archivedMetadata
+        archivedMetadata = []
     }
 
     public var snapshot: FavoriteLibrarySnapshot {
@@ -266,7 +263,7 @@ public struct FavoriteLibrary: Equatable, Sendable {
             favorites: favorites,
             collections: collections,
             tags: tags,
-            archivedMetadata: archivedMetadata
+            archivedMetadata: []
         )
     }
 
@@ -282,18 +279,11 @@ public struct FavoriteLibrary: Equatable, Sendable {
     }
 
     public mutating func reconcileRemoteFavorites(_ remoteFavorites: [Favorite]) {
-        let validCollectionIDs = Set(collections.map(\.id))
-        let validTagIDs = Set(tags.map(\.id))
         let localCanonicalURLs = Set(favorites.map { Self.canonicalThreadURL(for: $0) })
         let minRootOrder = min(
             favorites.filter { $0.parentCollectionID == nil }.map(\.manualOrder).min() ?? 0,
             collections.map(\.manualOrder).min() ?? 0
         )
-        var archiveByURL: [URL: FavoriteMetadataArchiveEntry] = [:]
-        for archive in archivedMetadata {
-            archiveByURL[Self.canonicalThreadURL(from: archive.canonicalThreadURL)] = archive
-        }
-        var restoredArchiveURLs = Set<URL>()
 
         let unsortedRemoteNewFavorites = remoteFavorites
             .compactMap { remoteFavorite -> Favorite? in
@@ -302,14 +292,6 @@ public struct FavoriteLibrary: Equatable, Sendable {
 
                 var remoteFavorite = remoteFavorite
                 remoteFavorite.parentCollectionID = nil
-                if let archive = archiveByURL[canonicalURL] {
-                    remoteFavorite.applyArchivedMetadata(
-                        archive,
-                        validCollectionIDs: validCollectionIDs,
-                        validTagIDs: validTagIDs
-                    )
-                    restoredArchiveURLs.insert(canonicalURL)
-                }
                 return remoteFavorite
             }
         let remoteNewFavorites = unsortedRemoteNewFavorites
@@ -325,18 +307,9 @@ public struct FavoriteLibrary: Equatable, Sendable {
         for remoteFavorite in remoteFavorites {
             remoteByCanonicalURL[Self.canonicalThreadURL(for: remoteFavorite)] = remoteFavorite
         }
-        let remoteCanonicalURLs = Set(remoteByCanonicalURL.keys)
-        let removedFavorites = favorites.filter { localFavorite in
-            !remoteCanonicalURLs.contains(Self.canonicalThreadURL(for: localFavorite))
-        }
-        archivedMetadata = Self.upsertingArchiveEntries(
-            from: removedFavorites,
-            into: archivedMetadata,
-            validTagIDs: validTagIDs
-        )
-            .filter { !restoredArchiveURLs.contains(Self.canonicalThreadURL(from: $0.canonicalThreadURL)) }
+        archivedMetadata = []
 
-        favorites = remoteNewFavorites + favorites.compactMap { localFavorite in
+        favorites = remoteNewFavorites + favorites.map { localFavorite in
             if let remoteFavorite = remoteByCanonicalURL[Self.canonicalThreadURL(for: localFavorite)] {
                 var updated = localFavorite
                 updated.title = remoteFavorite.title
@@ -348,7 +321,9 @@ public struct FavoriteLibrary: Equatable, Sendable {
                 return updated
             }
 
-            return nil
+            var localOnly = localFavorite
+            localOnly.remoteFavoriteID = nil
+            return localOnly
         }
     }
 
@@ -360,46 +335,4 @@ public struct FavoriteLibrary: Equatable, Sendable {
         FavoriteLibraryURLIdentity.canonicalThreadURL(from: url)
     }
 
-    private static func upsertingArchiveEntries(
-        from favorites: [Favorite],
-        into archivedMetadata: [FavoriteMetadataArchiveEntry],
-        validTagIDs: Set<String>
-    ) -> [FavoriteMetadataArchiveEntry] {
-        var entriesByURL: [URL: FavoriteMetadataArchiveEntry] = [:]
-        for archive in archivedMetadata {
-            entriesByURL[canonicalThreadURL(from: archive.canonicalThreadURL)] = archive
-        }
-        for favorite in favorites {
-            var entry = FavoriteMetadataArchiveEntry(favorite: favorite)
-            entry.tagIDs = entry.tagIDs.filter { validTagIDs.contains($0) }
-            entriesByURL[canonicalThreadURL(from: entry.canonicalThreadURL)] = entry
-        }
-        return entriesByURL.values.sorted { lhs, rhs in
-            lhs.canonicalThreadURL.absoluteString < rhs.canonicalThreadURL.absoluteString
-        }
-    }
-}
-
-private extension Favorite {
-    mutating func applyArchivedMetadata(
-        _ archive: FavoriteMetadataArchiveEntry,
-        validCollectionIDs: Set<String>,
-        validTagIDs: Set<String>
-    ) {
-        displayName = archive.displayName
-        mangaPageIndex = archive.mangaPageIndex
-        lastView = archive.lastView
-        lastChapter = archive.lastChapter
-        authorID = archive.authorID
-        novelResumePoint = archive.novelResumePoint
-        novelMaxView = archive.novelMaxView
-        novelDocumentSurfaceProgressPercent = archive.novelDocumentSurfaceProgressPercent
-        isHidden = archive.isHidden
-        type = archive.type
-        lastMangaURL = archive.lastMangaURL
-        parentCollectionID = archive.parentCollectionID.flatMap { validCollectionIDs.contains($0) ? $0 : nil }
-        manualOrder = archive.manualOrder
-        lastReadAt = archive.lastReadAt
-        tagIDs = archive.tagIDs.filter { validTagIDs.contains($0) }
-    }
 }

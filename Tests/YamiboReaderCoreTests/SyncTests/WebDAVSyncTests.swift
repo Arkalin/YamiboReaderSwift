@@ -224,8 +224,12 @@ private enum WebDAVTestError: Error {
     _ = try await service.download()
 
     let loadedLibrary = await favoriteStore.loadLibrarySnapshot()
-    #expect(loadedLibrary.favorites == [favorite])
-    #expect(loadedLibrary.collections == [collection])
+    var expectedFavorite = favorite
+    expectedFavorite.isHidden = false
+    var expectedCollection = collection
+    expectedCollection.isHidden = false
+    #expect(loadedLibrary.favorites == [expectedFavorite])
+    #expect(loadedLibrary.collections == [expectedCollection])
     #expect(await sessionStore.load() == localSession)
     #expect(await checkInStore.lastCheckedInDate(session: localSession) != nil)
     #expect(await appSettingsStore.load().reader.readingMode == .vertical)
@@ -419,7 +423,6 @@ private enum WebDAVTestError: Error {
         syncMetadata: localMetadata
     ))
 
-    _ = try await favoriteStore.setHidden(false, for: localFavorite.id)
     _ = try await favoriteStore.setType(.unknown, for: localFavorite.id)
     _ = try await favoriteStore.setDisplayName("  本地旧名  ", for: localFavorite.id)
 
@@ -464,7 +467,7 @@ private enum WebDAVTestError: Error {
     let mergedSnapshot = await favoriteStore.loadLibrarySnapshot()
     let mergedLocalFavorite = try #require(mergedSnapshot.favorites.first)
     #expect(mergedLocalFavorite.displayName == "远端新名")
-    #expect(mergedLocalFavorite.isHidden)
+    #expect(!mergedLocalFavorite.isHidden)
     #expect(mergedLocalFavorite.type == .manga)
     #expect(mergedSnapshot.syncMetadata.favoriteMetadataUpdatedAtByCanonicalURL[canonicalKey] == remoteMetadataClock)
 }
@@ -548,7 +551,7 @@ private enum WebDAVTestError: Error {
     #expect(uploadedPayload?.library.syncMetadata.remoteFavoritesUpdatedAt == localDeleteClock)
 }
 
-@Test func webDAVAutomaticSyncDownloadsArchivedFavoriteMetadata() async throws {
+@Test func webDAVAutomaticSyncDiscardsArchivedFavoriteMetadata() async throws {
     let suiteName = makeWebDAVDefaultsSuiteName(prefix: "webdav-auto-archive")
     UserDefaults(suiteName: suiteName)?.removePersistentDomain(forName: suiteName)
     let settingsStore = WebDAVSyncSettingsStore(defaults: try makeWebDAVDefaults(suiteName: suiteName), key: "webdav")
@@ -589,11 +592,20 @@ private enum WebDAVTestError: Error {
     let encodedPayload = try JSONEncoder().encode(payload)
 
     WebDAVTestURLProtocol.setHandler(for: host) { request in
-        #expect(request.httpMethod == "GET")
-        return (
-            encodedPayload,
-            HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
-        )
+        switch request.httpMethod {
+        case "GET":
+            return (
+                encodedPayload,
+                HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
+            )
+        case "MKCOL":
+            return (Data(), HTTPURLResponse(url: request.url!, statusCode: 201, httpVersion: nil, headerFields: nil)!)
+        case "PUT":
+            return (Data(), HTTPURLResponse(url: request.url!, statusCode: 201, httpVersion: nil, headerFields: nil)!)
+        default:
+            Issue.record("Unexpected method \(request.httpMethod ?? "nil")")
+            return (Data(), HTTPURLResponse(url: request.url!, statusCode: 500, httpVersion: nil, headerFields: nil)!)
+        }
     }
     defer { WebDAVTestURLProtocol.removeHandler(for: host) }
 
@@ -606,7 +618,7 @@ private enum WebDAVTestError: Error {
 
     try await service.synchronizeAutomatically()
 
-    #expect((await favoriteStore.loadLibrarySnapshot()).archivedMetadata == [archive])
+    #expect((await favoriteStore.loadLibrarySnapshot()).archivedMetadata.isEmpty)
 }
 
 @Test func webDAVServiceUploadWritesCurrentAccountUID() async throws {
@@ -779,7 +791,7 @@ private enum WebDAVTestError: Error {
     #expect(loadedSettings.collapsesFavoriteSections == true)
 }
 
-@Test func webDAVServiceUploadIncludesArchivedFavoriteMetadata() async throws {
+@Test func webDAVServiceUploadDiscardsArchivedFavoriteMetadata() async throws {
     let suiteName = makeWebDAVDefaultsSuiteName(prefix: "webdav-upload-archive")
     UserDefaults(suiteName: suiteName)?.removePersistentDomain(forName: suiteName)
     let settingsStore = WebDAVSyncSettingsStore(defaults: try makeWebDAVDefaults(suiteName: suiteName), key: "webdav")
@@ -837,7 +849,7 @@ private enum WebDAVTestError: Error {
 
     _ = try await service.upload(using: settings)
 
-    #expect(uploadedPayload?.library.archivedMetadata == [archive])
+    #expect(uploadedPayload?.library.archivedMetadata == [])
 }
 
 @Test func webDAVServiceUploadDoesNotSerializeMangaOfflineCacheState() async throws {
@@ -1004,28 +1016,10 @@ private enum WebDAVTestError: Error {
         mangaPageIndex: 5,
         tagIDs: [shortTag.id, loveTag.id]
     )
-    let archiveURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=951&mobile=2"))
-    let archive = FavoriteMetadataArchiveEntry(
-        canonicalThreadURL: ReaderCacheIdentity.canonicalThreadURL(from: archiveURL),
-        displayName: "归档标签",
-        mangaPageIndex: 2,
-        lastView: 1,
-        lastChapter: nil,
-        authorID: nil,
-        novelResumePoint: nil,
-        isHidden: false,
-        type: .novel,
-        lastMangaURL: nil,
-        parentCollectionID: nil,
-        manualOrder: 0,
-        lastReadAt: Date(timeIntervalSince1970: 1_900_000_000),
-        tagIDs: [loveTag.id]
-    )
     let expectedLibrary = FavoriteLibrarySnapshot(
         favorites: [favorite],
         collections: [],
-        tags: [loveTag, shortTag],
-        archivedMetadata: [archive]
+        tags: [loveTag, shortTag]
     )
     try await uploadSessionStore.save(SessionState(cookie: "sid=upload", isLoggedIn: true, accountUID: "123"))
     try await downloadSessionStore.save(SessionState(cookie: "sid=download", isLoggedIn: true, accountUID: "123"))
@@ -1146,7 +1140,7 @@ private enum WebDAVTestError: Error {
     let loadedLibrary = await favoriteStore.loadLibrarySnapshot()
     #expect(loadedLibrary.tags.isEmpty)
     #expect(loadedLibrary.favorites.first?.tagIDs == [])
-    #expect(loadedLibrary.archivedMetadata.first?.tagIDs == [])
+    #expect(loadedLibrary.archivedMetadata.isEmpty)
     #expect(!loadedLibrary.syncMetadata.isEmpty)
 }
 

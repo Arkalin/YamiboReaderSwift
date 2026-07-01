@@ -19,8 +19,6 @@ public protocol FavoriteStoring: Sendable {
     func moveFavorites(ids: [String], toCollectionID: String?) async throws -> FavoriteLibrarySnapshot
     func dissolveCollections(ids: [String]) async throws -> FavoriteLibrarySnapshot
     func setCollectionName(_ name: String, for collectionID: String) async throws -> FavoriteLibrarySnapshot
-    func setCollectionHidden(_ isHidden: Bool, for collectionID: String) async throws -> FavoriteLibrarySnapshot
-    func setHidden(_ isHidden: Bool, for favoriteID: String) async throws -> [Favorite]
     func setDisplayName(_ displayName: String?, for favoriteID: String) async throws -> [Favorite]
     func setType(_ type: FavoriteType, for favoriteID: String) async throws -> [Favorite]
     func setTagIDs(_ tagIDs: [String], for favoriteID: String) async throws -> [Favorite]
@@ -109,10 +107,7 @@ public actor FavoriteStore: FavoriteStoring {
             favorites: favorites,
             collections: collections,
             tags: tags,
-            archivedMetadata: sanitizeArchivedMetadata(
-                loadArchivedMetadata(),
-                validTagIDs: validTagIDs
-            ),
+            archivedMetadata: [],
             syncMetadata: loadSyncMetadata()
         )
     }
@@ -131,7 +126,7 @@ public actor FavoriteStore: FavoriteStoring {
             favorites: snapshot.favorites,
             collections: snapshot.collections,
             tags: snapshot.tags,
-            archivedMetadata: snapshot.archivedMetadata,
+            archivedMetadata: [],
             syncMetadata: snapshot.syncMetadata
         )
     }
@@ -532,36 +527,6 @@ public actor FavoriteStore: FavoriteStoring {
         )
     }
 
-    public func setCollectionHidden(_ isHidden: Bool, for collectionID: String) async throws -> FavoriteLibrarySnapshot {
-        let snapshot = await loadLibrarySnapshot()
-        let updatedCollections = snapshot.collections.map { collection in
-            guard collection.id == collectionID else { return collection }
-            var collection = collection
-            collection.isHidden = isHidden
-            return collection
-        }
-        return try persistLibrary(
-            favorites: snapshot.favorites,
-            collections: updatedCollections,
-            metadataUpdate: Self.touchUserOwnedChanges(date: .now)
-        )
-    }
-
-    public func setHidden(_ isHidden: Bool, for favoriteID: String) async throws -> [Favorite] {
-        let snapshot = await loadLibrarySnapshot()
-        let updated = snapshot.favorites.map { favorite in
-            guard favorite.id == favoriteID else { return favorite }
-            var favorite = favorite
-            favorite.isHidden = isHidden
-            return favorite
-        }
-        return try persistLibrary(
-            favorites: updated,
-            collections: snapshot.collections,
-            metadataUpdate: Self.touchFavoriteMetadata(favoriteIDs: Set([favoriteID]), date: .now)
-        ).favorites
-    }
-
     public func setDisplayName(_ displayName: String?, for favoriteID: String) async throws -> [Favorite] {
         var library = FavoriteLibrary(snapshot: await loadLibrarySnapshot())
         library.setDisplayName(displayName, for: favoriteID)
@@ -819,10 +784,7 @@ public actor FavoriteStore: FavoriteStoring {
             validCollectionIDs: validCollectionIDs,
             validTagIDs: validTagIDs
         )
-        let resolvedArchivedMetadata = sanitizeArchivedMetadata(
-            archivedMetadata ?? loadArchivedMetadata(),
-            validTagIDs: validTagIDs
-        )
+        let resolvedArchivedMetadata: [FavoriteMetadataArchiveEntry] = []
         var resolvedSyncMetadata = syncMetadata ?? loadSyncMetadata()
         let nextSnapshotWithoutMetadata = FavoriteLibrarySnapshot(
             favorites: sanitizedFavorites,
@@ -985,14 +947,7 @@ public actor FavoriteStore: FavoriteStoring {
         for favorite in snapshot.favorites {
             records[canonicalURLKey(for: favorite.url)] = FavoriteClockRecord(favorite: favorite)
         }
-        for archive in snapshot.archivedMetadata {
-            records[canonicalURLKey(for: archive.canonicalThreadURL)] = FavoriteClockRecord(archive: archive)
-        }
         return records
-    }
-
-    private func loadArchivedMetadata() -> [FavoriteMetadataArchiveEntry] {
-        decodedValue([FavoriteMetadataArchiveEntry].self, forKey: archivedMetadataKey) ?? []
     }
 
     private func loadSyncMetadata() -> FavoriteLibrarySyncMetadata {
@@ -1016,6 +971,7 @@ public actor FavoriteStore: FavoriteStoring {
             if let parentCollectionID = favorite.parentCollectionID, !validCollectionIDs.contains(parentCollectionID) {
                 favorite.parentCollectionID = nil
             }
+            favorite.isHidden = false
             favorite.tagIDs = sanitizedTagIDs(favorite.tagIDs, validTagIDs: validTagIDs)
             return favorite
         }
@@ -1039,14 +995,19 @@ public actor FavoriteStore: FavoriteStoring {
     }
 
     private func sanitizeLoadedCollections(_ collections: [FavoriteCollection]) -> [FavoriteCollection] {
-        if collections.count > 1 && Set(collections.map(\.manualOrder)).count <= 1 {
-            return collections.enumerated().map { index, collection in
+        let visibleCollections = collections.map { collection in
+            var collection = collection
+            collection.isHidden = false
+            return collection
+        }
+        if visibleCollections.count > 1 && Set(visibleCollections.map(\.manualOrder)).count <= 1 {
+            return visibleCollections.enumerated().map { index, collection in
                 var collection = collection
                 collection.manualOrder = index
                 return collection
             }
         }
-        return collections
+        return visibleCollections
     }
 
     private func sanitizeFavoritesForPersistence(
@@ -1061,6 +1022,7 @@ public actor FavoriteStore: FavoriteStoring {
             .map { favorite -> Favorite in
                 var favorite = favorite
                 favorite.parentCollectionID = nil
+                favorite.isHidden = false
                 favorite.tagIDs = sanitizedTagIDs(favorite.tagIDs, validTagIDs: validTagIDs)
                 return favorite
             }
@@ -1085,6 +1047,7 @@ public actor FavoriteStore: FavoriteStoring {
                 .map { index, favorite in
                     var favorite = favorite
                     favorite.parentCollectionID = collectionID
+                    favorite.isHidden = false
                     favorite.tagIDs = sanitizedTagIDs(favorite.tagIDs, validTagIDs: validTagIDs)
                     favorite.manualOrder = index
                     return favorite
@@ -1100,18 +1063,6 @@ public actor FavoriteStore: FavoriteStoring {
                 return lhs.manualOrder < rhs.manualOrder
             }
             return lhs.id < rhs.id
-        }
-    }
-
-    private func sanitizeArchivedMetadata(
-        _ archivedMetadata: [FavoriteMetadataArchiveEntry],
-        validTagIDs: Set<String>
-    ) -> [FavoriteMetadataArchiveEntry] {
-        archivedMetadata.map { entry in
-            var entry = entry
-            entry.canonicalThreadURL = Self.canonicalThreadURL(for: entry.canonicalThreadURL)
-            entry.tagIDs = sanitizedTagIDs(entry.tagIDs, validTagIDs: validTagIDs)
-            return entry
         }
     }
 
@@ -1339,7 +1290,6 @@ private struct FavoriteClockRecord: Equatable {
         lastReadAt = favorite.lastReadAt
         favoriteMetadata = FavoriteMetadataClockFields(
             displayName: favorite.displayName,
-            isHidden: favorite.isHidden,
             type: favorite.type
         )
         organization = FavoriteOrganizationClockFields(
@@ -1349,29 +1299,6 @@ private struct FavoriteClockRecord: Equatable {
         )
     }
 
-    init(archive: FavoriteMetadataArchiveEntry) {
-        readingPosition = FavoriteReadingPositionClockFields(
-            mangaPageIndex: archive.mangaPageIndex,
-            lastView: archive.lastView,
-            lastChapter: archive.lastChapter,
-            authorID: archive.authorID,
-            novelResumePoint: archive.novelResumePoint,
-            novelMaxView: archive.novelMaxView,
-            novelDocumentSurfaceProgressPercent: archive.novelDocumentSurfaceProgressPercent,
-            lastMangaURL: archive.lastMangaURL
-        )
-        lastReadAt = archive.lastReadAt
-        favoriteMetadata = FavoriteMetadataClockFields(
-            displayName: archive.displayName,
-            isHidden: archive.isHidden,
-            type: archive.type
-        )
-        organization = FavoriteOrganizationClockFields(
-            parentCollectionID: archive.parentCollectionID,
-            manualOrder: archive.manualOrder,
-            tagIDs: archive.tagIDs
-        )
-    }
 }
 
 private struct FavoriteReadingPositionClockFields: Equatable {
@@ -1387,7 +1314,6 @@ private struct FavoriteReadingPositionClockFields: Equatable {
 
 private struct FavoriteMetadataClockFields: Equatable {
     var displayName: String?
-    var isHidden: Bool
     var type: FavoriteType
 }
 

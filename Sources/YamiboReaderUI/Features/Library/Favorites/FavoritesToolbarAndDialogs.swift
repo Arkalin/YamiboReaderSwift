@@ -139,7 +139,6 @@ private struct FavoriteSelectionToggleButton: View {
 
 private struct FavoriteToolbarMenuButton: View {
     @Binding var filterRawValue: String
-    @Binding var showsHidden: Bool
     let favoriteAppearance: FavoriteAppearanceSettings
     let selectedTagCount: Int
     let allTitle: String
@@ -167,12 +166,6 @@ private struct FavoriteToolbarMenuButton: View {
                 Button(action: onClearTagFilter) {
                     Label(L10n.string("favorites.filter.clear_tags"), systemImage: "xmark.circle")
                 }
-            }
-
-            Divider()
-
-            Toggle(isOn: $showsHidden) {
-                Label(L10n.string("favorites.show_hidden"), systemImage: "eye.slash")
             }
         } label: {
             HStack(spacing: 6) {
@@ -209,12 +202,6 @@ private extension FavoriteFilter {
         switch self {
         case .all:
             "square.grid.2x2.fill"
-        case .novel:
-            "book.closed.fill"
-        case .manga:
-            "photo.on.rectangle.angled"
-        case .other:
-            "ellipsis.circle.fill"
         }
     }
 
@@ -238,12 +225,6 @@ private extension FavoriteFilter {
         switch self {
         case .all:
             .black
-        case .novel:
-            favoriteAccentColor(for: .novel, appearance: appearance)
-        case .manga:
-            favoriteAccentColor(for: .manga, appearance: appearance)
-        case .other:
-            favoriteAccentColor(for: .other, appearance: appearance)
         }
     }
 
@@ -252,12 +233,6 @@ private extension FavoriteFilter {
         switch self {
         case .all:
             .black
-        case .novel:
-            appearance.novel.uiColor
-        case .manga:
-            appearance.manga.uiColor
-        case .other:
-            appearance.other.uiColor
         }
     }
     #endif
@@ -266,7 +241,6 @@ private extension FavoriteFilter {
 struct FavoriteToolbarModifier: ViewModifier {
     @Binding var filterRawValue: String
     @Binding var sortRawValue: String
-    @Binding var showsHidden: Bool
     @Binding var isSelecting: Bool
     let favoriteAppearance: FavoriteAppearanceSettings
     let showsSettingsMenu: Bool
@@ -306,7 +280,6 @@ struct FavoriteToolbarModifier: ViewModifier {
             ToolbarItem(placement: .principal) {
                 FavoriteToolbarMenuButton(
                     filterRawValue: $filterRawValue,
-                    showsHidden: $showsHidden,
                     favoriteAppearance: favoriteAppearance,
                     selectedTagCount: selectedTagCount,
                     allTitle: allTitle,

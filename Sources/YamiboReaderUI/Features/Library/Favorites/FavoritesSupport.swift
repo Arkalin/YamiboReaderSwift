@@ -6,20 +6,16 @@ import YamiboReaderCore
 import UIKit
 #endif
 
-public enum FavoriteFilter: String, CaseIterable, Identifiable {
+public enum FavoriteFilter: String, CaseIterable, Identifiable, Sendable {
     case all
-    case novel
-    case manga
-    case other
+
+    public static let allCases: [FavoriteFilter] = [.all]
 
     public var id: String { rawValue }
 
     public var title: String {
         switch self {
         case .all: L10n.string("favorites.filter.all")
-        case .novel: L10n.string("favorite_type.novel")
-        case .manga: L10n.string("favorite_type.manga")
-        case .other: L10n.string("favorite_type.other")
         }
     }
 
@@ -27,30 +23,22 @@ public enum FavoriteFilter: String, CaseIterable, Identifiable {
         switch self {
         case .all:
             true
-        case .novel:
-            favorite.type == .novel
-        case .manga:
-            favorite.type == .manga
-        case .other:
-            favorite.type == .other || favorite.type == .unknown
         }
     }
 
     var libraryFilter: FavoriteLibraryFilter {
         switch self {
         case .all: .all
-        case .novel: .novel
-        case .manga: .manga
-        case .other: .other
         }
     }
 }
 
-public enum FavoriteSortOrder: String, CaseIterable, Identifiable {
+public enum FavoriteSortOrder: String, CaseIterable, Identifiable, Sendable {
     case manual
     case title
-    case progress
     case recentRead
+
+    public static let allCases: [FavoriteSortOrder] = [.manual, .title, .recentRead]
 
     public var id: String { rawValue }
 
@@ -58,7 +46,6 @@ public enum FavoriteSortOrder: String, CaseIterable, Identifiable {
         switch self {
         case .manual: L10n.string("favorites.sort.manual")
         case .title: L10n.string("favorites.sort.title")
-        case .progress: L10n.string("favorites.sort.progress")
         case .recentRead: L10n.string("favorites.sort.recent_read")
         }
     }
@@ -67,7 +54,6 @@ public enum FavoriteSortOrder: String, CaseIterable, Identifiable {
         switch self {
         case .manual: .manual
         case .title: .title
-        case .progress: .progress
         case .recentRead: .recentRead
         }
     }

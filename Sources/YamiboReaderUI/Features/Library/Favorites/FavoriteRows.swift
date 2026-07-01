@@ -84,12 +84,6 @@ struct FavoriteRow: View {
                         FavoriteDetailLineView(line: line)
                     }
 
-                    if favorite.isHidden {
-                        Label(L10n.string("common.hidden"), systemImage: "eye.slash")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-
                     if !tagChipSummary.chips.isEmpty {
                         FavoriteTagChipRow(summary: tagChipSummary)
                     }
@@ -257,11 +251,6 @@ struct FavoriteCollectionRow: View {
                             .font(.caption.weight(.medium))
                             .foregroundStyle(accentColor)
 
-                        if collection.isHidden {
-                            Label(L10n.string("common.hidden"), systemImage: "eye.slash")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
                     }
                 }
             }
@@ -290,9 +279,6 @@ struct FavoriteCollectionRow: View {
     }
 
     private var summaryText: String {
-        if summary.hiddenCount > 0 {
-            return L10n.string("favorites.collection_summary_hidden", summary.itemCount, summary.hiddenCount)
-        }
         return L10n.string("favorites.collection_summary", summary.itemCount)
     }
 }
@@ -482,7 +468,6 @@ func progressScore(for favorite: Favorite) -> Int {
 func makeFilteredFavorites(
     from favorites: [Favorite],
     scope: FavoriteScope = .root,
-    showsHidden: Bool,
     filter: FavoriteFilter,
     sortOrder: FavoriteSortOrder,
     searchText: String,
@@ -493,7 +478,6 @@ func makeFilteredFavorites(
         in: snapshot,
         query: FavoriteLibraryQuery(
             scope: scope.libraryScope,
-            showsHidden: showsHidden,
             filter: filter.libraryFilter,
             sortOrder: sortOrder.librarySortOrder,
             searchText: searchText,
@@ -506,7 +490,6 @@ func makeFavoriteListEntries(
     scope: FavoriteScope,
     favorites: [Favorite],
     collections: [FavoriteCollection],
-    showsHidden: Bool,
     filter: FavoriteFilter,
     sortOrder: FavoriteSortOrder,
     searchText: String,
@@ -517,7 +500,6 @@ func makeFavoriteListEntries(
         in: snapshot,
         query: FavoriteLibraryQuery(
             scope: scope.libraryScope,
-            showsHidden: showsHidden,
             filter: filter.libraryFilter,
             sortOrder: sortOrder.librarySortOrder,
             searchText: searchText,
@@ -530,7 +512,6 @@ func makeFavoriteListEntries(
 func rootCollectionMatches(
     _ collection: FavoriteCollection,
     favorites: [Favorite],
-    showsHidden: Bool,
     filter: FavoriteFilter,
     searchText: String,
     selectedTagIDs: Set<String> = []
@@ -539,7 +520,6 @@ func rootCollectionMatches(
         scope: .root,
         favorites: favorites,
         collections: [collection],
-        showsHidden: showsHidden,
         filter: filter,
         sortOrder: .manual,
         searchText: searchText,
@@ -552,7 +532,6 @@ func makeFavoriteCollectionSummary(
     for collection: FavoriteCollection,
     favorites: [Favorite],
     scope: FavoriteScope,
-    showsHidden: Bool,
     filter: FavoriteFilter,
     searchText: String,
     selectedTagIDs: Set<String> = []
@@ -563,7 +542,6 @@ func makeFavoriteCollectionSummary(
         in: snapshot,
         query: FavoriteLibraryQuery(
             scope: scope.libraryScope,
-            showsHidden: showsHidden,
             filter: filter.libraryFilter,
             sortOrder: .manual,
             searchText: searchText,
@@ -797,7 +775,6 @@ private func compareRecentReadEntries(
     _ lhs: FavoriteListEntry,
     _ rhs: FavoriteListEntry,
     favorites: [Favorite],
-    showsHidden: Bool,
     filter: FavoriteFilter,
     searchText: String,
     selectedTagIDs: Set<String> = []
@@ -806,7 +783,6 @@ private func compareRecentReadEntries(
         entryLastReadAt(
             lhs,
             favorites: favorites,
-            showsHidden: showsHidden,
             filter: filter,
             searchText: searchText,
             selectedTagIDs: selectedTagIDs
@@ -814,7 +790,6 @@ private func compareRecentReadEntries(
         entryLastReadAt(
             rhs,
             favorites: favorites,
-            showsHidden: showsHidden,
             filter: filter,
             searchText: searchText,
             selectedTagIDs: selectedTagIDs
@@ -837,7 +812,6 @@ private func compareRecentReadEntries(
 private func entryLastReadAt(
     _ entry: FavoriteListEntry,
     favorites: [Favorite],
-    showsHidden: Bool,
     filter: FavoriteFilter,
     searchText: String,
     selectedTagIDs: Set<String> = []
@@ -855,7 +829,6 @@ private func entryLastReadAt(
         return makeFilteredFavorites(
             from: favorites,
             scope: .collection(collection),
-            showsHidden: showsHidden,
             filter: filter,
             sortOrder: .recentRead,
             searchText: containedFavoriteSearchText,
