@@ -4,12 +4,12 @@ import Testing
 
 @Suite("YamiboThreadURLCanonicalizer")
 struct YamiboThreadURLCanonicalizerTests {
-    @Test func canonicalThreadURLRemovesRequestOnlyQueryItemsAndKeepsExtra() throws {
+    @Test func canonicalThreadURLRemovesRequestOnlyQueryItemsAndExtra() throws {
         let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mobile=2&page=25&authorid=406769&tid=521519&mod=viewthread&extra=page%3D1"))
 
         let canonical = YamiboThreadURLCanonicalizer.canonicalThreadURL(from: url)
 
-        #expect(canonical.absoluteString == "https://bbs.yamibo.com/forum.php?extra=page%3D1&mod=viewthread&tid=521519")
+        #expect(canonical.absoluteString == "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=521519")
     }
 
     @Test func canonicalThreadURLIsStableForDifferentQueryOrder() throws {
@@ -17,6 +17,14 @@ struct YamiboThreadURLCanonicalizerTests {
         let second = try #require(URL(string: "https://bbs.yamibo.com/forum.php?authorid=406769&mobile=2&extra=page%3D1&tid=521519&page=25&mod=viewthread"))
 
         #expect(YamiboThreadURLCanonicalizer.canonicalThreadURL(from: first) == YamiboThreadURLCanonicalizer.canonicalThreadURL(from: second))
+    }
+
+    @Test func canonicalThreadURLMatchesURLsWithAndWithoutExtra() throws {
+        let forumListURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?extra=page%3D1&mod=viewthread&tid=521519"))
+        let readerURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=521519"))
+
+        #expect(YamiboThreadURLCanonicalizer.canonicalThreadURL(from: forumListURL) == YamiboThreadURLCanonicalizer.canonicalThreadURL(from: readerURL))
+        #expect(YamiboThreadURLCanonicalizer.canonicalThreadURL(from: forumListURL).absoluteString == "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=521519")
     }
 
     @Test func canonicalThreadURLResolvesRelativeForumURLs() throws {

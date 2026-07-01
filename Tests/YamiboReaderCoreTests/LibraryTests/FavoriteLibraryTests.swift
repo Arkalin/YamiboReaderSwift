@@ -112,7 +112,7 @@ import Testing
 
 @Test func favoriteLibraryCanonicalKeysUseReaderCacheIdentityCanonicalizer() throws {
     let favoriteURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mobile=2&page=4&authorid=42&tid=936&mod=viewthread&extra=page%3D1"))
-    let archiveURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?extra=page%3D1&mod=viewthread&tid=936"))
+    let archiveURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=936"))
     let expectedKey = ReaderCacheIdentity.canonicalThreadURL(from: favoriteURL).absoluteString
     let snapshot = FavoriteLibrarySnapshot(
         favorites: [Favorite(title: "收藏", url: favoriteURL)],
@@ -137,5 +137,5 @@ import Testing
     )
 
     #expect(snapshot.favoriteCanonicalURLKeys == [expectedKey])
-    #expect(expectedKey == "https://bbs.yamibo.com/forum.php?extra=page%3D1&mod=viewthread&tid=936")
+    #expect(expectedKey == "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=936")
 }

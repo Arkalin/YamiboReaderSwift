@@ -75,7 +75,7 @@ private enum ForumThreadRouteResolverTestError: Error {
     }
     #expect(context.thread.tid == "101")
     #expect(context.thread.fid == "55")
-    #expect(context.thread.canonicalURL.absoluteString == "https://bbs.yamibo.com/forum.php?extra=page%3D1&mod=viewthread&tid=101")
+    #expect(context.thread.canonicalURL.absoluteString == "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=101")
     #expect(context.thread.canonicalURL == ReaderCacheIdentity.canonicalThreadURL(from: request.threadURL))
     #expect(context.title == "轻小说标题")
     #expect(context.authorID == "705217")

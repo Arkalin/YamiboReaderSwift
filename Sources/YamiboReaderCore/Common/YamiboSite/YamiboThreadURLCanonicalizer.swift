@@ -11,17 +11,9 @@ public enum YamiboThreadURLCanonicalizer {
         components.host = components.host ?? YamiboRoute.baseURL.host
         components.path = "/forum.php"
 
-        var existingItems: [String: String] = [:]
-        for item in components.queryItems ?? [] {
-            guard let value = item.value, !value.isEmpty else { continue }
-            existingItems[item.name] = value
-        }
         var retainedItems: [URLQueryItem] = [.init(name: "mod", value: "viewthread")]
         if let threadID, !threadID.isEmpty {
             retainedItems.append(.init(name: "tid", value: threadID))
-        }
-        if let extra = existingItems["extra"], !extra.isEmpty {
-            retainedItems.append(.init(name: "extra", value: extra))
         }
         components.queryItems = retainedItems.sorted { $0.name < $1.name }
         return components.url ?? resolvedURL

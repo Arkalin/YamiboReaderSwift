@@ -479,7 +479,7 @@ import Testing
     defaults.removePersistentDomain(forName: "favorite-canonical-lookup-tests")
     let store = FavoriteStore(defaults: defaults, key: "favorites")
     let listURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=302&extra=page%3D1&mobile=2"))
-    let detailURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mobile=2&page=25&extra=page%3D1&tid=302&mod=viewthread"))
+    let detailURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mobile=2&page=25&tid=302&mod=viewthread"))
     let favorite = Favorite(title: "列表收藏", url: listURL, type: .novel)
     try await store.saveFavorites([favorite])
 
@@ -494,7 +494,7 @@ import Testing
     defaults.removePersistentDomain(forName: "favorite-canonical-progress-tests")
     let store = FavoriteStore(defaults: defaults, key: "favorites")
     let listURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=303&extra=page%3D1&mobile=2"))
-    let readerURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?page=4&mobile=2&extra=page%3D1&mod=viewthread&tid=303&authorid=77"))
+    let readerURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?page=4&mobile=2&mod=viewthread&tid=303&authorid=77"))
     let favorite = Favorite(title: "列表收藏", url: listURL, type: .novel)
     try await store.saveFavorites([favorite])
 
@@ -1741,6 +1741,25 @@ import Testing
     #expect(manga?.manga?.lastMangaURL == chapterURL)
     #expect(manga?.manga?.lastChapter == "第 12 话")
     #expect(manga?.manga?.mangaPageIndex == 6)
+}
+
+@Test func readingProgressStoreMatchesNovelProgressWithAndWithoutExtraQuery() async throws {
+    let defaults = try makeIsolatedDefaults(prefix: "reading-progress-extra-tests")
+    let store = ReadingProgressStore(
+        defaults: defaults,
+        key: "reading-progress",
+        migratedFromFavoritesKey: "reading-progress.migrated"
+    )
+    let listURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?extra=page%3D1&mod=viewthread&tid=521519&mobile=2&page=25&authorid=406769"))
+    let readerURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=521519"))
+
+    try await store.saveNovel(NovelReadingPosition(threadURL: listURL, view: 25, chapterTitle: "第二十五章"))
+
+    let progress = await store.load(for: readerURL)
+    #expect(progress?.threadURL.absoluteString == "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=521519")
+    #expect(progress?.kind == .novel)
+    #expect(progress?.novel?.lastView == 25)
+    #expect(progress?.novel?.lastChapter == "第二十五章")
 }
 
 @Test func readingProgressStoreMigratesFavoritesAndArchivesWithVisibleFavoritePriority() async throws {
