@@ -8,12 +8,10 @@ CONFIGURATION="${CONFIGURATION:-Release}"
 DERIVED_DATA_PATH="${ROOT_DIR}/build/UnsignedIPA"
 EXPORT_DIR="${ROOT_DIR}/build/UnsignedIPAExport"
 STAGING_DIR="${EXPORT_DIR}/staging"
-SWIFT_OPTIMIZATION_LEVEL="${SWIFT_OPTIMIZATION_LEVEL:--Onone}"
 
 cd "${ROOT_DIR}"
 
 echo "Building ${SCHEME} (${CONFIGURATION}) for iphoneos without code signing..."
-echo "Swift optimization level: ${SWIFT_OPTIMIZATION_LEVEL}"
 xcodebuild \
   -project "${PROJECT_PATH}" \
   -scheme "${SCHEME}" \
@@ -23,7 +21,6 @@ xcodebuild \
   CODE_SIGNING_ALLOWED=NO \
   CODE_SIGNING_REQUIRED=NO \
   CODE_SIGN_IDENTITY= \
-  SWIFT_OPTIMIZATION_LEVEL="${SWIFT_OPTIMIZATION_LEVEL}" \
   build
 
 APP_PATH="${DERIVED_DATA_PATH}/Build/Products/${CONFIGURATION}-iphoneos/${SCHEME}.app"
