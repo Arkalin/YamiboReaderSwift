@@ -5,11 +5,55 @@ Domain language for favorites, reading metadata, Yamibo accounts, profiles, and 
 ## Language
 
 **Favorite Library**:
-The local projection of Yamibo remote favorites plus user-owned reading metadata, display names, hidden state, and collections.
-_Avoid_: favorite store, favorites snapshot, favorites list
+The user's local-first collection of saved Yamibo content plus user-owned reading metadata, display names, and organization.
+_Avoid_: remote favorites projection, favorite store, favorites snapshot, favorites list
+
+**Favorite Item**:
+One saved Yamibo content target in the **Favorite Library**, independent of where it appears in the user's organization.
+_Avoid_: favorite row, favorite card, remote favorite
+
+**Favorite Content Target**:
+The stable Yamibo content identity of a **Favorite Item**, such as a normal thread, novel thread, or manga title.
+_Avoid_: URL string, remote favorite ID, row ID
+
+**Favorite Location**:
+One organizational placement of a **Favorite Item** inside the **Favorite Library**, such as a category or collection.
+_Avoid_: tag, folder membership, favorite path
+
+**Favorite Category**:
+A top-level organizational area in the **Favorite Library** used to switch between groups of favorite content.
+_Avoid_: tab, root folder, tag
+
+**Default Favorite Category**:
+The required fallback **Favorite Category** for newly created or imported **Favorite Items** when no other category is chosen.
+_Avoid_: uncategorized, inbox, root folder
+
+**Favorite Collection**:
+A named and color-coded grouping inside a **Favorite Category** that can contain **Favorite Items**.
+_Avoid_: category, folder, tag group
+
+**Dissolve Favorite Collection**:
+Removing a **Favorite Collection** while preserving its contained **Favorite Items** by placing them directly in the parent **Favorite Category**.
+_Avoid_: delete collection, clear collection
+
+**Favorite Tag**:
+A user-owned label on a **Favorite Item** used for filtering and annotation, independent of where the item appears.
+_Avoid_: category, collection, folder
+
+**Favorite Display Name**:
+A user-owned title override for a **Favorite Item** used for local presentation and search.
+_Avoid_: thread title, remote title, collection name
+
+**Favorite Source Group**:
+A temporary filtering group for **Favorite Items** based on their Yamibo source, such as a forum board, manga title, or unknown source.
+_Avoid_: favorite type, category, tag
+
+**Favorite Cover URL**:
+The synchronized image URL candidate used to present a **Favorite Item** in the **Favorite Library**.
+_Avoid_: image cache, cover bytes, background image
 
 **Reading Progress Store**:
-The device-local source of truth for per-thread novel and manga reading position, independent from whether the thread is currently visible in the **Favorite Library**.
+The separately synchronized source of truth for per-thread novel and manga reading position, independent from whether the thread is currently visible in the **Favorite Library**.
 _Avoid_: favorite progress, archive progress, recent route
 
 **Yamibo Account**:
@@ -54,16 +98,56 @@ _Avoid_: app sync, startup restore, lifecycle handler
 
 ## Relationships
 
-- A **Favorite Library** is remote-favorite-first: Yamibo remote favorites decide which remote-backed favorite entries exist, while local metadata preserves user-owned reading and organization state for those entries.
+- A **Favorite Library** is local-first: user-owned **Favorite Items** decide what saved content exists, while Yamibo remote favorites are a sync target for supported items.
+- A **Favorite Item** is identified by its **Favorite Content Target**, not by a Yamibo remote favorite ID or raw URL string.
+- **Favorite Content Target** kind replaces favorite type as the domain distinction between normal threads, novel threads, and manga titles.
+- Normal thread and novel thread **Favorite Content Targets** are distinct because they carry different reading entry and progress semantics.
+- Manga title **Favorite Content Targets** use the owning **Manga Directory** `cleanBookName`, while chapter URLs are opening and recovery metadata.
+- Manga chapter imports resolve the owning manga title by checking whether the chapter `tid` already belongs to a local **Manga Directory** before falling back to newly probed directory title metadata.
+- Fuzzy manga title matches do not automatically merge manga title **Favorite Items**; they require later user correction or explicit directory identity changes.
+- Renaming a **Manga Directory** changes the manga title identity and must migrate matching manga title **Favorite Items** and manga reading positions.
+- When a **Favorite Item** is reclassified from one **Favorite Content Target** kind to another, the existing item is retargeted instead of creating a duplicate item.
+- If probing discovers duplicate normal-thread and novel-thread **Favorite Items** for the same thread, the **Favorite Library** keeps the probed target kind and merges user-owned metadata and locations into that item.
+- Remote favorite import probes newly discovered remote thread favorites before creating **Favorite Items** so normal thread and novel thread targets can be classified immediately.
+- If probing a remote thread favorite fails during import, the **Favorite Library** skips creating the **Favorite Item** and reports the sync failure instead of creating a placeholder item.
+- When remote favorite import probes a manga chapter thread, it creates or updates the owning manga title **Favorite Item** and stores the chapter as opening or import-source metadata rather than treating the remote favorite as the whole manga title's remote mapping.
+- A **Favorite Item** may have multiple **Favorite Locations**. Removing one **Favorite Location** does not remove the **Favorite Item** if other locations remain.
+- A persisted **Favorite Item** must have at least one **Favorite Location**.
+- A **Favorite Location** places a **Favorite Item** either directly in a **Favorite Category** or inside a **Favorite Collection** within a **Favorite Category**.
+- A **Favorite Item** may appear in multiple **Favorite Locations** within the same **Favorite Category**, including both directly in the category and inside one or more of its collections.
+- Every **Favorite Library** has a **Default Favorite Category**, and newly created or imported **Favorite Items** use it when no other **Favorite Category** is selected.
+- Non-default **Favorite Categories** are user-owned organization and may be created, renamed, reordered, and deleted.
+- Deleting a non-default **Favorite Category** removes that category's **Favorite Collections** and moves its contained **Favorite Items** to the **Default Favorite Category** rather than deleting the items.
+- **Dissolve Favorite Collection** is the default collection removal behavior and does not delete the contained **Favorite Items**.
+- A **Favorite Tag** labels a **Favorite Item** but is not a **Favorite Location** and does not decide where the item appears.
+- **Favorite Tags** synchronize through WebDAV as user-owned metadata and are not uploaded to or imported from Yamibo remote favorites.
+- A **Favorite Display Name** does not change the Yamibo content title and is never uploaded as a Yamibo remote favorite title.
+- A **Favorite Source Group** is a temporary filter and is not user-owned organization.
+- A **Favorite Cover URL** is **Favorite Item** metadata, while downloaded cover image bytes are device-local cache data and are not part of the **Favorite Library**.
+- Favorite list sorting uses organization/default order, content update time, Yamibo remote favorite order, display title, **Favorite Source Group**, or last read time; reading progress is not a **Favorite Library** sort dimension.
+- Favorite search matches **Favorite Display Name** or content title, **Favorite Source Group** label, and **Favorite Collection** name; raw URLs and Yamibo remote favorite IDs are not search fields.
+- Favorite page counts and search badges use the currently displayed entry count, not the globally distinct **Favorite Item** count.
+- Deleting a **Favorite Location** is an organization change only and never deletes the matching Yamibo remote favorite.
+- Deleting a **Favorite Item** may delete the matching Yamibo remote favorite when the item supports remote sync and the user chooses that sync behavior.
+- Deleting a manga title **Favorite Item** does not delete Yamibo remote chapter favorites imported as opening or import-source metadata.
+- When a Yamibo remote favorite disappears during sync, the **Favorite Library** preserves the matching **Favorite Item** and its user-owned organization, while clearing or marking the remote sync mapping.
+- Archived favorite metadata is not part of the local-first **Favorite Library** model and is not preserved when adopting the model.
+- WebDAV sync carries the user-owned **Favorite Library**, including **Favorite Items**, **Favorite Locations**, **Favorite Categories**, **Favorite Collections**, **Favorite Tags**, and display metadata.
+- WebDAV sync may carry a **Favorite Item**'s Yamibo remote favorite mapping as sync metadata, but that mapping never decides whether the item exists or where it appears.
+- WebDAV sync does not carry Yamibo authentication state, remote sync task progress, sync logs, or platform background task state.
+- WebDAV merges **Favorite Locations** by preserving locations added on different devices; explicit location removal requires removal metadata so deleted locations are not recreated by stale devices.
+- WebDAV merges **Favorite Tag** associations by preserving tags added on different devices; explicit tag association removal requires removal metadata so deleted associations are not recreated by stale devices.
+- WebDAV merges single-value **Favorite Item** metadata with field-domain clocks so changing one domain, such as cover metadata, does not overwrite another domain, such as display name.
+- Yamibo remote favorite sync operates on one **Favorite Category** at a time: remote thread favorites are imported into that category, and local thread **Favorite Items** in that category may be uploaded to Yamibo remote favorites.
+- Manga title **Favorite Items** are local-only for Yamibo remote favorite sync.
 - The **Reading Progress Store** owns current local reading position for novels and manga. Removing a visible favorite does not remove the matching **Reading Progress Store** record.
+- The **Reading Progress Store** identifies synchronized reading positions by stable content target identity rather than raw URL strings.
+- Manga reading positions in the **Reading Progress Store** are owned by manga title identity and store the current chapter identity and page index.
 - Visible **Favorite Library** entries may mirror the **Reading Progress Store** reading position for favorite-list display and existing WebDAV favorite payload compatibility, but reader resume should prefer the **Reading Progress Store**.
-- The **Reading Progress Store** is device-local in the current schema and is not part of the WebDAV sync payload.
+- Favorite cards may display recent reading, chapter, page, or percent progress, but those progress values are projections from the **Reading Progress Store** rather than **Favorite Item** authority.
+- The **Reading Progress Store** syncs separately from the **Favorite Library** so reading position can move across devices without making favorites own reader state.
 - A **Favorite Library** persists a novel's **Novel Reading Position** through its semantic resume point and reader page document view; it never stores a novel runtime surface ordinal or displayed page number.
 - Manga page persistence uses the manga-specific `mangaPageIndex` Interface. The historical JSON key `lastPage` may remain as a schema compatibility key, but it is not a Swift Interface and is never written from novel reading.
-- When a Yamibo remote favorite disappears, the **Favorite Library** removes it from the visible library and archives its local metadata so a later remote re-add can restore reading position, display name, hidden state, and collection membership.
-- Archived **Favorite Library** metadata is synchronized through WebDAV with the visible library because reading position and organization state are user-owned data.
-- Archived **Favorite Library** metadata is matched by canonical thread URL, not Yamibo remote favorite ID, because a remote favorite ID can change when the same thread is removed and re-added.
-- When archived **Favorite Library** metadata restores a favorite whose collection no longer exists, the favorite is restored at the root while preserving display name, hidden state, and reading positions.
 - **Mine Home** presents the current **Yamibo Account** through its **Yamibo Profile**.
 - **Mine Home** may expose manga offline cache progress, grouped by **Favorite Library** entry, while the offline cache work remains owned by the Manga Reader context.
 - **Mine Home** represents pending manga offline cache activity by unfinished chapter work count, not by completed cached chapters or favorite group count.

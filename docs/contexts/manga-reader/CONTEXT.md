@@ -98,6 +98,7 @@ _Avoid_: double page position, two-page progress, spread position
 - The **Manga Offline Cache Owner** comes from the current **Manga Directory** `cleanBookName`; favorite titles, display titles, and chapter titles are not authoritative owner sources.
 - Two manga sources with the same **Manga Offline Cache Owner** are treated as the same offline-cache owner; accidental collisions are resolved by renaming the relevant **Manga Directory**.
 - Renaming a **Manga Directory** also renames the matching **Manga Offline Cache Owner** so existing offline-cache membership, unfinished work, and visible storage usage remain attached to the corrected manga title.
+- Renaming a **Manga Directory** also migrates matching Favorite Library manga title targets and Reading Progress Store manga title keys.
 - Deleting a **Manga Directory** does not delete **Manga Offline Cache** content owned by the same manga title.
 - When cached work has a chapter `tid`, the `tid` remains authoritative and a stale chapter URL may be rebuilt or normalized before treating the work as failed.
 - **Manga Offline Cache** image bytes are user-retained offline content and are not governed by the transparent image byte cache's reclaim policy.
