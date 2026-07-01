@@ -623,7 +623,6 @@
 "settings.section.storage" = "存储管理";
 "settings.section.support" = "支持";
 "settings.shortcuts_open_failed" = "无法打开快捷指令，请手动打开“快捷指令 > 自动化”创建百合会签到自动化。";
-"settings.show_web_title_url" = "显示网页标题和网址";
 "settings.title" = "设置";
 "settings.webdav_sync" = "WebDAV 同步";
 "sort.ascending" = "正序";

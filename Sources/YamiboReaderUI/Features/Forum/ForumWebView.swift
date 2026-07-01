@@ -111,9 +111,6 @@ public struct IOSForumWebView: UIViewRepresentable {
 
         public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             model.sync(with: webView)
-            if let url = webView.url {
-                model.recordVisit(url: url, title: webView.title)
-            }
             Task {
                 try? await persistCookies(from: webView)
             }

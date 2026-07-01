@@ -94,15 +94,6 @@ public struct SystemSettingsView: View {
                             activeCategory: $activeAppearanceCategory
                         )
                     }
-
-                    Toggle(
-                        L10n.string("settings.show_web_title_url"),
-                        isOn: Binding(
-                            get: { viewModel.showsNavigationBar },
-                            set: { viewModel.updateShowsNavigationBar($0) }
-                        )
-                    )
-                    .disabled(viewModel.isBusy)
                 }
 
                 Section(L10n.string("settings.section.storage")) {

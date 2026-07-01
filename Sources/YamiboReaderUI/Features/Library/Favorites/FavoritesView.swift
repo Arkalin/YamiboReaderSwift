@@ -261,8 +261,9 @@ public struct FavoritesView: View {
                 Text(bulkDeleteMessage)
             }
             .sheet(item: $selectedFavorite) { favorite in
-                ForumBrowserView(url: favorite.url, appContext: appContext, appModel: appModel)
-                    .ignoresSafeArea()
+                NavigationStack {
+                    ForumBrowserView(url: favorite.url, appContext: appContext, appModel: appModel)
+                }
             }
             .sheet(item: $tagPickerContext) { context in
                 FavoriteTagPickerView(

@@ -4,7 +4,6 @@ import YamiboReaderCore
 @MainActor
 final class SystemSettingsViewModel: ObservableObject {
     @Published var homePage: AppHomePage = .forum
-    @Published var showsNavigationBar = true
     @Published var favoriteAppearance = FavoriteAppearanceSettings()
     @Published var favoriteBackground = FavoriteBackgroundSettings()
     @Published var applePencilPageTurn = ApplePencilPageTurnSettings()
@@ -67,7 +66,6 @@ final class SystemSettingsViewModel: ObservableObject {
 
         let settings = await appContext.settingsStore.load()
         homePage = settings.homePage
-        showsNavigationBar = settings.webBrowser.showsNavigationBar
         favoriteAppearance = settings.favoriteAppearance
         favoriteBackground = settings.favoriteBackground
         applePencilPageTurn = settings.applePencilPageTurn
@@ -87,25 +85,6 @@ final class SystemSettingsViewModel: ObservableObject {
             } catch {
                 await MainActor.run {
                     homePage = previous
-                    errorMessage = error.localizedDescription
-                }
-            }
-        }
-    }
-
-    func updateShowsNavigationBar(_ value: Bool) {
-        let previous = showsNavigationBar
-        showsNavigationBar = value
-
-        Task {
-            var settings = await appContext.settingsStore.load()
-            settings.webBrowser.showsNavigationBar = value
-
-            do {
-                try await appContext.settingsStore.save(settings)
-            } catch {
-                await MainActor.run {
-                    showsNavigationBar = previous
                     errorMessage = error.localizedDescription
                 }
             }
@@ -252,7 +231,6 @@ final class SystemSettingsViewModel: ObservableObject {
         do {
             try await appContext.resetApplicationData()
             homePage = .forum
-            showsNavigationBar = true
             favoriteAppearance = .init()
             favoriteBackground = .init()
             applePencilPageTurn = .init()
