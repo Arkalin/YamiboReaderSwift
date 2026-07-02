@@ -74,10 +74,14 @@ import Testing
     #expect(counts["reading_progress"] == 1)
     #expect(counts["manga_directories"] == 1)
     #expect(counts["manga_chapter_documents"] == 1)
-    #expect(counts["reader_cache_entries"] == 1)
+    #expect(counts["reader_cache_entries"] == 0)
     #expect(counts["image_data_cache_entries"] == 1)
     #expect(counts["manga_offline_cache_memberships"] == 1)
-    #expect(counts["cache_entries"] == 1)
+    #expect(counts["cache_entries"] == 2)
+    let cacheNamespaces = try await database.read { db in
+        try String.fetchAll(db, sql: "SELECT namespace FROM cache_entries ORDER BY namespace")
+    }
+    #expect(cacheNamespaces == ["forum_thread_pages", "novel_reader_projections"])
     #expect(!FileManager.default.fileExists(atPath: rootDirectory.appendingPathComponent("reader-cache/index.json", isDirectory: false).path))
     #expect(!FileManager.default.fileExists(atPath: rootDirectory.appendingPathComponent("image-data/index.json", isDirectory: false).path))
 }
@@ -131,7 +135,11 @@ import Testing
         ),
         thread: ThreadIdentity(tid: "8002")
     )
-    #expect(FileManager.default.fileExists(atPath: rootDirectory.appendingPathComponent("reader-cache", isDirectory: true).path))
+    #expect(FileManager.default.fileExists(
+        atPath: YamiboDatabase.cacheDirectoryURL(rootDirectory: rootDirectory)
+            .appendingPathComponent("novel_reader_projections", isDirectory: true)
+            .path
+    ))
     #expect(FileManager.default.fileExists(atPath: rootDirectory.appendingPathComponent("image-data", isDirectory: true).path))
     #expect(FileManager.default.fileExists(atPath: rootDirectory.appendingPathComponent("manga-reader/offline-cache/images", isDirectory: true).path))
     #expect(FileManager.default.fileExists(atPath: YamiboDatabase.cacheDirectoryURL(rootDirectory: rootDirectory).path))
@@ -174,7 +182,11 @@ import Testing
     #expect(counts["manga_offline_cache_memberships"] == 0)
     #expect(counts["manga_offline_cache_images"] == 0)
     #expect(counts["cache_entries"] == 0)
-    #expect(!FileManager.default.fileExists(atPath: rootDirectory.appendingPathComponent("reader-cache", isDirectory: true).path))
+    #expect(!FileManager.default.fileExists(
+        atPath: YamiboDatabase.cacheDirectoryURL(rootDirectory: rootDirectory)
+            .appendingPathComponent("novel_reader_projections", isDirectory: true)
+            .path
+    ))
     #expect(!FileManager.default.fileExists(atPath: rootDirectory.appendingPathComponent("image-data", isDirectory: true).path))
     #expect(!FileManager.default.fileExists(atPath: rootDirectory.appendingPathComponent("manga-reader/offline-cache", isDirectory: true).path))
     #expect(!FileManager.default.fileExists(

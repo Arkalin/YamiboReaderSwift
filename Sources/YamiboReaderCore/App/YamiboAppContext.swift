@@ -90,8 +90,7 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         self.readingProgressStore = readingProgressStore ?? ReadingProgressStore(databasePool: resolvedGRDBDatabasePool)
         self.contentCoverStore = contentCoverStore
         self.readerCacheStore = readerCacheStore ?? ReaderCacheStore(
-            databasePool: resolvedGRDBDatabasePool,
-            baseDirectory: Self.readerCacheDirectory(rootDirectory: resolvedGRDBRootDirectory)
+            jsonCacheStore: transparentJSONCacheStore
         )
         self.favoriteBackgroundImageStore = favoriteBackgroundImageStore ?? FavoriteBackgroundImageStore(
             baseDirectory: Self.favoriteBackgroundDirectory(rootDirectory: resolvedGRDBRootDirectory)

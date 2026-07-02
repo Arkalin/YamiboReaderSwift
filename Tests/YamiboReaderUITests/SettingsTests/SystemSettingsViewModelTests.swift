@@ -191,6 +191,54 @@ final class SystemSettingsViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.mangaOfflineCacheLabel, cacheLabel(for: viewModel.mangaOfflineCacheBytes))
     }
 
+    func testClearNovelCacheClearsReaderProjectionCacheOnly() async throws {
+        let fixture = try makeFixture()
+        try await seedNovelCache(fixture)
+        try await seedMangaIndexCache(fixture)
+        let imageRequests = try await seedImageCache(fixture)
+        try await seedMangaOfflineCache(fixture)
+
+        let viewModel = SystemSettingsViewModel(appContext: fixture.appContext)
+        await viewModel.load()
+        let novelBytesBeforeClear = await fixture.readerCacheStore.totalDiskUsageBytes()
+        let directoryBytesBeforeClear = await fixture.mangaDirectoryStore.totalDiskUsageBytes()
+        let chapterDocumentBytesBeforeClear = await fixture.mangaChapterDocumentStore.totalDiskUsageBytes()
+        let indexBytesBeforeClear = directoryBytesBeforeClear + chapterDocumentBytesBeforeClear
+        let imageBytesBeforeClear = await fixture.imageDataCacheStore.totalDiskUsageBytes()
+        let offlineBytesBeforeClear = await fixture.mangaOfflineCacheStore.totalDiskUsageBytes()
+
+        let didClear = await viewModel.clearNovelCache()
+        let novelBytesAfterClear = await fixture.readerCacheStore.totalDiskUsageBytes()
+        let directoryBytesAfterClear = await fixture.mangaDirectoryStore.totalDiskUsageBytes()
+        let chapterDocumentBytesAfterClear = await fixture.mangaChapterDocumentStore.totalDiskUsageBytes()
+        let imageBytesAfterClear = await fixture.imageDataCacheStore.totalDiskUsageBytes()
+        let offlineBytesAfterClear = await fixture.mangaOfflineCacheStore.totalDiskUsageBytes()
+        let offlineMembershipAfterClear = await fixture.mangaOfflineCacheStore.membership(
+            ownerName: "favorite-seed",
+            tid: "902"
+        )
+
+        XCTAssertTrue(didClear)
+        XCTAssertGreaterThan(novelBytesBeforeClear, 0)
+        XCTAssertGreaterThan(indexBytesBeforeClear, 0)
+        XCTAssertGreaterThan(imageBytesBeforeClear, 0)
+        XCTAssertGreaterThan(offlineBytesBeforeClear, 0)
+        XCTAssertEqual(novelBytesAfterClear, 0)
+        XCTAssertEqual(directoryBytesAfterClear, directoryBytesBeforeClear)
+        XCTAssertEqual(chapterDocumentBytesAfterClear, chapterDocumentBytesBeforeClear)
+        XCTAssertEqual(imageBytesAfterClear, imageBytesBeforeClear)
+        XCTAssertEqual(offlineBytesAfterClear, offlineBytesBeforeClear)
+        for request in imageRequests {
+            let cachedDataAfterClear = await fixture.imageDataCacheStore.data(for: request)
+            XCTAssertNotNil(cachedDataAfterClear)
+        }
+        XCTAssertNotNil(offlineMembershipAfterClear)
+        XCTAssertEqual(viewModel.novelCacheBytes, 0)
+        XCTAssertEqual(viewModel.mangaIndexCacheBytes, indexBytesBeforeClear)
+        XCTAssertEqual(viewModel.imageCacheBytes, imageBytesBeforeClear)
+        XCTAssertEqual(viewModel.mangaOfflineCacheBytes, offlineBytesBeforeClear)
+    }
+
     func testClearMangaIndexCacheClearsDirectoriesAndChapterDocumentsOnly() async throws {
         let fixture = try makeFixture()
         try await seedMangaIndexCache(fixture)

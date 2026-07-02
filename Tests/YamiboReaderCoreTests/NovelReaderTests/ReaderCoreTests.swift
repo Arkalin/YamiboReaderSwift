@@ -2760,7 +2760,9 @@ private final class StubURLProtocol: URLProtocol {
         view: 3,
         maxView: 5,
         resolvedAuthorID: "12",
-        segments: [.text("正文", chapterTitle: "测试章")]
+        contentSource: .authorFilteredPage,
+        segments: [.text("正文", chapterTitle: "测试章")],
+        fetchedAt: Date(timeIntervalSince1970: 100)
     )
 
     try await store.save(document)
@@ -2784,21 +2786,22 @@ private final class StubURLProtocol: URLProtocol {
         view: 4,
         maxView: 5,
         resolvedAuthorID: "12",
+        contentSource: .authorFilteredPage,
         segments: [.text("正文", chapterTitle: "测试章")]
     )
 
     try await store.save(document)
 
-    let identity = ReaderCacheIdentity(document: document)
-    let metadata = try #require(try await readerCacheMetadata(for: identity, in: database))
+    let rows = try await readerProjectionCacheRows(in: database)
+    let metadata = try #require(rows.first)
 
-    #expect(metadata.threadKey == "tid:18610")
-    #expect(metadata.threadID == "18610")
-    #expect(metadata.variantKey == "author:12")
-    #expect(metadata.view == 4)
-    #expect(metadata.fileName.hasPrefix("reader_"))
-    #expect(metadata.fileName.hasSuffix("_4.json"))
-    #expect(metadata.byteCount > 0)
+    #expect(rows.count == 1)
+    #expect(metadata.namespace == "novel_reader_projections")
+    #expect(metadata.key == "tid_18610_source_authorFilteredPage_author_12_view_4")
+    #expect(!metadata.key.contains("https://"))
+    #expect(FileManager.default.fileExists(
+        atPath: readerProjectionCacheFile(rootDirectory: directory, key: metadata.key).path
+    ))
     #expect(!FileManager.default.fileExists(atPath: directory.appendingPathComponent("index.json", isDirectory: false).path))
 }
 
@@ -2861,11 +2864,7 @@ private final class StubURLProtocol: URLProtocol {
 
     try await store.save(document)
 
-    let cacheFile = try #require(
-        FileManager.default.enumerator(at: directory, includingPropertiesForKeys: nil)?
-            .compactMap { $0 as? URL }
-            .first { $0.lastPathComponent.hasPrefix("reader_") && $0.pathExtension == "json" }
-    )
+    let cacheFile = try #require(readerProjectionCacheFiles(rootDirectory: directory).first)
     let object = try #require(
         JSONSerialization.jsonObject(with: try Data(contentsOf: cacheFile)) as? [String: Any]
     )
@@ -2991,7 +2990,6 @@ private final class StubURLProtocol: URLProtocol {
     let database = try YamiboDatabase.openPool(rootDirectory: directory.appendingPathComponent("grdb", isDirectory: true))
     let store = ReaderCacheStore(databasePool: database, baseDirectory: directory)
     let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=18604&mobile=2"))
-    let identity = ReaderCacheIdentity(threadURL: threadURL, view: 1, authorID: nil, contentSource: .fallbackUnfilteredPage)
     let document = #"""
     {
       "schemaVersion": 3,
@@ -3024,8 +3022,8 @@ private final class StubURLProtocol: URLProtocol {
             segments: [.text("短文", chapterTitle: "短文")]
         )
     )
-    let metadata = try #require(try await readerCacheMetadata(for: identity, in: database))
-    let fileURL = directory.appendingPathComponent(metadata.fileName, isDirectory: false)
+    let metadata = try #require(try await readerProjectionCacheRows(in: database).first)
+    let fileURL = readerProjectionCacheFile(rootDirectory: directory, key: metadata.key)
     try Data(document.utf8).write(to: fileURL, options: [.atomic])
 
     let verifyingStore = ReaderCacheStore(databasePool: database, baseDirectory: directory)
@@ -3035,7 +3033,7 @@ private final class StubURLProtocol: URLProtocol {
     )
 
     #expect(loaded == nil)
-    #expect(try await readerCacheMetadata(for: identity, in: database) == nil)
+    #expect(try await readerProjectionCacheRows(in: database).isEmpty)
     #expect(!FileManager.default.fileExists(atPath: fileURL.path))
 }
 
@@ -3045,7 +3043,6 @@ private final class StubURLProtocol: URLProtocol {
     let database = try YamiboDatabase.openPool(rootDirectory: directory.appendingPathComponent("grdb", isDirectory: true))
     let store = ReaderCacheStore(databasePool: database, baseDirectory: directory)
     let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=18606&mobile=2"))
-    let identity = ReaderCacheIdentity(threadURL: threadURL, view: 1, authorID: nil, contentSource: .fallbackUnfilteredPage)
     let document = #"""
     {
       "schemaVersion": 3,
@@ -3081,8 +3078,8 @@ private final class StubURLProtocol: URLProtocol {
             segments: [.text("短文", chapterTitle: "短文")]
         )
     )
-    let metadata = try #require(try await readerCacheMetadata(for: identity, in: database))
-    let fileURL = directory.appendingPathComponent(metadata.fileName, isDirectory: false)
+    let metadata = try #require(try await readerProjectionCacheRows(in: database).first)
+    let fileURL = readerProjectionCacheFile(rootDirectory: directory, key: metadata.key)
     try Data(document.utf8).write(to: fileURL, options: [.atomic])
 
     let verifyingStore = ReaderCacheStore(databasePool: database, baseDirectory: directory)
@@ -3092,7 +3089,7 @@ private final class StubURLProtocol: URLProtocol {
     )
 
     #expect(loaded == nil)
-    #expect(try await readerCacheMetadata(for: identity, in: database) == nil)
+    #expect(try await readerProjectionCacheRows(in: database).isEmpty)
     #expect(!FileManager.default.fileExists(atPath: fileURL.path))
 }
 
@@ -3295,7 +3292,10 @@ private final class StubURLProtocol: URLProtocol {
     )
 
     _ = try await repository.loadPage(ReaderPageRequest(threadURL: threadURL, view: 1, authorID: "42"))
-    try FileManager.default.removeItem(at: readerCacheDirectory)
+    try FileManager.default.removeItem(
+        at: YamiboDatabase.cacheDirectoryURL(rootDirectory: readerCacheDirectory)
+            .appendingPathComponent(ReaderCacheStore.projectionNamespace, isDirectory: true)
+    )
     let document = try await repository.loadPage(ReaderPageRequest(threadURL: threadURL, view: 1, authorID: "42"))
     let persisted = await ReaderCacheStore(baseDirectory: readerCacheDirectory).loadDocument(
         for: ReaderPageRequest(threadURL: threadURL, view: 1, authorID: "42"),
@@ -3889,12 +3889,7 @@ private func readerImageSemantics(chapterID: String) -> ReaderSegmentSemantics {
 }
 
 private func rewriteCachedReaderDocumentSchemaVersion(in directory: URL, to version: Int) throws {
-    let fileManager = FileManager.default
-    let fileURL = try #require(
-        fileManager
-            .contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
-            .first { $0.lastPathComponent.hasPrefix("reader_") && $0.pathExtension == "json" }
-    )
+    let fileURL = try #require(readerProjectionCacheFiles(rootDirectory: directory).first)
     let data = try Data(contentsOf: fileURL)
     guard var object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
         throw CocoaError(.fileReadCorruptFile)
@@ -3904,40 +3899,47 @@ private func rewriteCachedReaderDocumentSchemaVersion(in directory: URL, to vers
     try output.write(to: fileURL, options: [.atomic])
 }
 
-private struct ReaderCacheMetadataRow: Sendable, Equatable {
-    var threadKey: String
-    var threadID: String
-    var variantKey: String
-    var view: Int
-    var fileName: String
-    var byteCount: Int
+private struct ReaderProjectionCacheRow: Sendable, Equatable {
+    var namespace: String
+    var key: String
 }
 
-private func readerCacheMetadata(
-    for identity: ReaderCacheIdentity,
-    in database: DatabasePool
-) async throws -> ReaderCacheMetadataRow? {
+private func readerProjectionCacheRows(in database: DatabasePool) async throws -> [ReaderProjectionCacheRow] {
     try await database.read { db in
-        guard let row = try Row.fetchOne(
+        try Row.fetchAll(
             db,
             sql: """
-            SELECT thread_key, thread_id, variant_key, view, file_name, byte_count
-            FROM reader_cache_entries
-            WHERE thread_key = ? AND variant_key = ? AND view = ?
+            SELECT namespace, cache_key
+            FROM cache_entries
+            WHERE namespace = ?
+            ORDER BY cache_key
             """,
-            arguments: [identity.threadKey, identity.variantKey, identity.view]
-        ) else {
-            return nil
+            arguments: [ReaderCacheStore.projectionNamespace]
+        ).map { row in
+            ReaderProjectionCacheRow(
+                namespace: row["namespace"],
+                key: row["cache_key"]
+            )
         }
-        return ReaderCacheMetadataRow(
-            threadKey: row["thread_key"],
-            threadID: row["thread_id"],
-            variantKey: row["variant_key"],
-            view: row["view"],
-            fileName: row["file_name"],
-            byteCount: row["byte_count"]
-        )
     }
+}
+
+private func readerProjectionCacheFile(rootDirectory: URL, key: String) -> URL {
+    YamiboDatabase.cacheDirectoryURL(rootDirectory: rootDirectory)
+        .appendingPathComponent(ReaderCacheStore.projectionNamespace, isDirectory: true)
+        .appendingPathComponent("\(key).json", isDirectory: false)
+}
+
+private func readerProjectionCacheFiles(rootDirectory: URL) throws -> [URL] {
+    let directory = YamiboDatabase.cacheDirectoryURL(rootDirectory: rootDirectory)
+        .appendingPathComponent(ReaderCacheStore.projectionNamespace, isDirectory: true)
+    guard FileManager.default.fileExists(atPath: directory.path) else {
+        return []
+    }
+    return try FileManager.default
+        .contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
+        .filter { $0.pathExtension == "json" }
+        .sorted { $0.lastPathComponent < $1.lastPathComponent }
 }
 
 private final class LockedCounter: @unchecked Sendable {
