@@ -481,11 +481,14 @@ private func makeFixture() throws -> SystemSettingsFixture {
     let root = FileManager.default.temporaryDirectory
         .appendingPathComponent("system-settings-view-model-\(UUID().uuidString)", isDirectory: true)
     let settingsStore = SettingsStore(defaults: try makeDefaults(suiteName: suiteName), key: "settings")
-    let readerCacheStore = ReaderCacheStore(baseDirectory: root.appendingPathComponent("reader-cache", isDirectory: true))
+    let database = try YamiboDatabase.openPool(rootDirectory: root.appendingPathComponent("grdb", isDirectory: true))
+    let readerCacheStore = ReaderCacheStore(
+        databasePool: database,
+        baseDirectory: root.appendingPathComponent("reader-cache", isDirectory: true)
+    )
     let favoriteBackgroundImageStore = FavoriteBackgroundImageStore(
         baseDirectory: root.appendingPathComponent("favorite-background", isDirectory: true)
     )
-    let database = try YamiboDatabase.openPool(rootDirectory: root.appendingPathComponent("grdb", isDirectory: true))
     let mangaDirectoryStore = GRDBMangaDirectoryStore(databasePool: database)
     let mangaChapterDocumentStore = GRDBMangaChapterDocumentStore(databasePool: database)
     let mangaImageDataCacheStore = FileMangaImageDataCacheStore(

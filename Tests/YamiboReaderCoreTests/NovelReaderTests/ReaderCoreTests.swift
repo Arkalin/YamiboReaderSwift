@@ -1,4 +1,5 @@
 import Foundation
+@preconcurrency import GRDB
 import Testing
 import XCTest
 @_spi(NovelTextAttributedDocument) @testable import YamiboReaderCore
@@ -2775,7 +2776,8 @@ private final class StubURLProtocol: URLProtocol {
 @Test func readerCacheStoreIndexUsesTidFirstIdentityWithoutThreadURL() async throws {
     let directory = URL(fileURLWithPath: NSTemporaryDirectory())
         .appendingPathComponent(UUID().uuidString, isDirectory: true)
-    let store = ReaderCacheStore(baseDirectory: directory)
+    let database = try YamiboDatabase.openPool(rootDirectory: directory.appendingPathComponent("grdb", isDirectory: true))
+    let store = ReaderCacheStore(databasePool: database, baseDirectory: directory)
     let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=18610&mobile=2&page=4&authorid=12"))
     let document = ReaderPageDocument(
         threadURL: threadURL,
@@ -2787,15 +2789,49 @@ private final class StubURLProtocol: URLProtocol {
 
     try await store.save(document)
 
-    let indexData = try Data(contentsOf: directory.appendingPathComponent("index.json", isDirectory: false))
-    let object = try #require(JSONSerialization.jsonObject(with: indexData) as? [String: Any])
-    let threads = try #require(object["threads"] as? [String: Any])
-    let threadEntry = try #require(threads["tid:18610"] as? [String: Any])
+    let identity = ReaderCacheIdentity(document: document)
+    let metadata = try #require(try await readerCacheMetadata(for: identity, in: database))
 
-    #expect(object["version"] as? Int == 3)
-    #expect(threadEntry["threadID"] as? String == "18610")
-    #expect(threadEntry["threadURL"] == nil)
-    #expect(!String(data: indexData, encoding: .utf8)!.contains("https://"))
+    #expect(metadata.threadKey == "tid:18610")
+    #expect(metadata.threadID == "18610")
+    #expect(metadata.variantKey == "author:12")
+    #expect(metadata.view == 4)
+    #expect(metadata.fileName.hasPrefix("reader_"))
+    #expect(metadata.fileName.hasSuffix("_4.json"))
+    #expect(metadata.byteCount > 0)
+    #expect(!FileManager.default.fileExists(atPath: directory.appendingPathComponent("index.json", isDirectory: false).path))
+}
+
+@Test func readerCacheStoreLegacyIndexAndFilesAreIgnoredAndPreserved() async throws {
+    let directory = URL(fileURLWithPath: NSTemporaryDirectory())
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    let database = try YamiboDatabase.openPool(rootDirectory: directory.appendingPathComponent("grdb", isDirectory: true))
+    let legacyIndexURL = directory.appendingPathComponent("index.json", isDirectory: false)
+    let legacyFileURL = directory.appendingPathComponent("legacy-reader-document.json", isDirectory: false)
+    let legacyIndexData = Data(#"{"version":3,"threads":{"tid:18611":{"threadID":"18611","variants":{"source:fallbackUnfilteredPage":{"pages":{"1":{"fileName":"legacy-reader-document.json","fetchedAt":"2026-01-01T00:00:00Z"}}}}}}}"#.utf8)
+    try legacyIndexData.write(to: legacyIndexURL, options: [.atomic])
+    try Data(#"{"legacy":true}"#.utf8).write(to: legacyFileURL, options: [.atomic])
+
+    let store = ReaderCacheStore(databasePool: database, baseDirectory: directory)
+    let legacyThreadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=18611&mobile=2"))
+    let newThreadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=18612&mobile=2"))
+    let legacyLoaded = await store.loadDocument(
+        for: ReaderPageRequest(threadURL: legacyThreadURL, view: 1),
+        contentSource: .fallbackUnfilteredPage
+    )
+    try await store.save(
+        ReaderPageDocument(
+            threadURL: newThreadURL,
+            view: 1,
+            maxView: 1,
+            segments: [.text("新缓存正文", chapterTitle: "新章")]
+        )
+    )
+
+    #expect(legacyLoaded == nil)
+    #expect(try Data(contentsOf: legacyIndexURL) == legacyIndexData)
+    #expect(FileManager.default.fileExists(atPath: legacyFileURL.path))
 }
 
 @Test func readerCacheStoreWritesDocumentSchemaVersionAndSemanticIdentities() async throws {
@@ -2952,30 +2988,10 @@ private final class StubURLProtocol: URLProtocol {
 @Test func readerCacheStoreInvalidatesDocumentWithCorruptExplicitTitleRange() async throws {
     let directory = URL(fileURLWithPath: NSTemporaryDirectory())
         .appendingPathComponent(UUID().uuidString, isDirectory: true)
-    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    let database = try YamiboDatabase.openPool(rootDirectory: directory.appendingPathComponent("grdb", isDirectory: true))
+    let store = ReaderCacheStore(databasePool: database, baseDirectory: directory)
     let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=18604&mobile=2"))
     let identity = ReaderCacheIdentity(threadURL: threadURL, view: 1, authorID: nil, contentSource: .fallbackUnfilteredPage)
-    let documentFileName = "bad-reader-document.json"
-    let index = """
-    {
-      "version": 2,
-      "threads": {
-        "\(identity.threadKey)": {
-          "threadURL": "\(identity.threadURL.absoluteString)",
-          "variants": {
-            "\(identity.variantKey)": {
-              "pages": {
-                "1": {
-                  "fileName": "\(documentFileName)",
-                  "fetchedAt": "2026-06-05T00:00:00Z"
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-    """
     let document = #"""
     {
       "schemaVersion": 3,
@@ -2999,45 +3015,37 @@ private final class StubURLProtocol: URLProtocol {
       "fetchedAt": "2026-06-05T00:00:00Z"
     }
     """#
-    try Data(index.utf8).write(to: directory.appendingPathComponent("index.json"))
-    try Data(document.utf8).write(to: directory.appendingPathComponent(documentFileName))
+    try await store.save(
+        ReaderPageDocument(
+            threadURL: threadURL,
+            view: 1,
+            maxView: 1,
+            contentSource: .fallbackUnfilteredPage,
+            segments: [.text("短文", chapterTitle: "短文")]
+        )
+    )
+    let metadata = try #require(try await readerCacheMetadata(for: identity, in: database))
+    let fileURL = directory.appendingPathComponent(metadata.fileName, isDirectory: false)
+    try Data(document.utf8).write(to: fileURL, options: [.atomic])
 
-    let store = ReaderCacheStore(baseDirectory: directory)
-    let loaded = await store.loadDocument(
+    let verifyingStore = ReaderCacheStore(databasePool: database, baseDirectory: directory)
+    let loaded = await verifyingStore.loadDocument(
         for: ReaderPageRequest(threadURL: threadURL, view: 1),
         contentSource: .fallbackUnfilteredPage
     )
 
     #expect(loaded == nil)
+    #expect(try await readerCacheMetadata(for: identity, in: database) == nil)
+    #expect(!FileManager.default.fileExists(atPath: fileURL.path))
 }
 
 @Test func readerCacheStoreInvalidatesDocumentWithCorruptInlineTextStyleRange() async throws {
     let directory = URL(fileURLWithPath: NSTemporaryDirectory())
         .appendingPathComponent(UUID().uuidString, isDirectory: true)
-    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    let database = try YamiboDatabase.openPool(rootDirectory: directory.appendingPathComponent("grdb", isDirectory: true))
+    let store = ReaderCacheStore(databasePool: database, baseDirectory: directory)
     let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=18606&mobile=2"))
     let identity = ReaderCacheIdentity(threadURL: threadURL, view: 1, authorID: nil, contentSource: .fallbackUnfilteredPage)
-    let documentFileName = "bad-inline-reader-document.json"
-    let index = """
-    {
-      "version": 2,
-      "threads": {
-        "\(identity.threadKey)": {
-          "threadURL": "\(identity.threadURL.absoluteString)",
-          "variants": {
-            "\(identity.variantKey)": {
-              "pages": {
-                "1": {
-                  "fileName": "\(documentFileName)",
-                  "fetchedAt": "2026-06-05T00:00:00Z"
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-    """
     let document = #"""
     {
       "schemaVersion": 3,
@@ -3064,16 +3072,28 @@ private final class StubURLProtocol: URLProtocol {
       "fetchedAt": "2026-06-05T00:00:00Z"
     }
     """#
-    try Data(index.utf8).write(to: directory.appendingPathComponent("index.json"))
-    try Data(document.utf8).write(to: directory.appendingPathComponent(documentFileName))
+    try await store.save(
+        ReaderPageDocument(
+            threadURL: threadURL,
+            view: 1,
+            maxView: 1,
+            contentSource: .fallbackUnfilteredPage,
+            segments: [.text("短文", chapterTitle: "短文")]
+        )
+    )
+    let metadata = try #require(try await readerCacheMetadata(for: identity, in: database))
+    let fileURL = directory.appendingPathComponent(metadata.fileName, isDirectory: false)
+    try Data(document.utf8).write(to: fileURL, options: [.atomic])
 
-    let store = ReaderCacheStore(baseDirectory: directory)
-    let loaded = await store.loadDocument(
+    let verifyingStore = ReaderCacheStore(databasePool: database, baseDirectory: directory)
+    let loaded = await verifyingStore.loadDocument(
         for: ReaderPageRequest(threadURL: threadURL, view: 1),
         contentSource: .fallbackUnfilteredPage
     )
 
     #expect(loaded == nil)
+    #expect(try await readerCacheMetadata(for: identity, in: database) == nil)
+    #expect(!FileManager.default.fileExists(atPath: fileURL.path))
 }
 
 @Test func readerCacheStoreSeparatesAuthorFilteredAndUnfilteredVariants() async throws {
@@ -3882,6 +3902,42 @@ private func rewriteCachedReaderDocumentSchemaVersion(in directory: URL, to vers
     object["schemaVersion"] = version
     let output = try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
     try output.write(to: fileURL, options: [.atomic])
+}
+
+private struct ReaderCacheMetadataRow: Sendable, Equatable {
+    var threadKey: String
+    var threadID: String
+    var variantKey: String
+    var view: Int
+    var fileName: String
+    var byteCount: Int
+}
+
+private func readerCacheMetadata(
+    for identity: ReaderCacheIdentity,
+    in database: DatabasePool
+) async throws -> ReaderCacheMetadataRow? {
+    try await database.read { db in
+        guard let row = try Row.fetchOne(
+            db,
+            sql: """
+            SELECT thread_key, thread_id, variant_key, view, file_name, byte_count
+            FROM reader_cache_entries
+            WHERE thread_key = ? AND variant_key = ? AND view = ?
+            """,
+            arguments: [identity.threadKey, identity.variantKey, identity.view]
+        ) else {
+            return nil
+        }
+        return ReaderCacheMetadataRow(
+            threadKey: row["thread_key"],
+            threadID: row["thread_id"],
+            variantKey: row["variant_key"],
+            view: row["view"],
+            fileName: row["file_name"],
+            byteCount: row["byte_count"]
+        )
+    }
 }
 
 private final class LockedCounter: @unchecked Sendable {

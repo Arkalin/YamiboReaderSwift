@@ -366,7 +366,11 @@ public final class ReaderCacheOperationModule {
         summary: @MainActor (ReaderCacheOperationMode, ReaderCacheBatchResult) -> String
     ) async {
         operationTask = nil
-        let refreshedViews = await repository.cachedViews(for: snapshot.context)
+        let refreshedViews = if result.wasCancelled {
+            cachedViews.union(result.completedViews)
+        } else {
+            await repository.cachedViews(for: snapshot.context)
+        }
         syncCachedViews(refreshedViews)
 
         state.cachedViews = cachedViews

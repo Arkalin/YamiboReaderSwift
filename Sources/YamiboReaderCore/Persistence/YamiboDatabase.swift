@@ -66,6 +66,7 @@ public enum YamiboDatabase {
         fileManager: FileManager = .default
     ) throws {
         try writer.write { db in
+            try db.execute(sql: "DELETE FROM reader_cache_entries")
             try db.execute(sql: "DELETE FROM manga_image_data_cache_entries")
             try db.execute(sql: "DELETE FROM manga_offline_cache_completed_images")
             try db.execute(sql: "DELETE FROM manga_offline_cache_work_images")
@@ -106,6 +107,24 @@ public enum YamiboDatabase {
             }
             try db.create(index: "cache_entries_namespace_last_accessed_idx", on: "cache_entries", columns: ["namespace", "last_accessed_at"])
             try db.create(index: "cache_entries_namespace_cache_key_idx", on: "cache_entries", columns: ["namespace", "cache_key"])
+        }
+
+        migrator.registerMigration("create_reader_cache_entries") { db in
+            try db.create(table: "reader_cache_entries") { table in
+                table.column("thread_key", .text).notNull()
+                table.column("thread_id", .text).notNull()
+                table.column("variant_key", .text).notNull()
+                table.column("view", .integer).notNull()
+                table.column("file_name", .text).notNull()
+                table.column("fetched_at", .double).notNull()
+                table.column("byte_count", .integer).notNull()
+                table.primaryKey(["thread_key", "variant_key", "view"], onConflict: .replace)
+            }
+            try db.create(
+                index: "reader_cache_entries_lookup_idx",
+                on: "reader_cache_entries",
+                columns: ["thread_key", "variant_key", "view"]
+            )
         }
 
         migrator.registerMigration("create_favorite_category_seed") { db in

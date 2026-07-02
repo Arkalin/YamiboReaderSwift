@@ -2982,12 +2982,30 @@ final class ReaderContainerModelTests: XCTestCase {
             )
         }
 
+        let cacheDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let cacheStore = ReaderCacheStore(baseDirectory: cacheDirectory.appendingPathComponent("reader", isDirectory: true))
+        let forumCacheStore = ForumCacheStore(baseDirectory: cacheDirectory.appendingPathComponent("forum", isDirectory: true))
         let model = try await makeModel(
             documents: [
                 makeDocument(threadURL: threadURL, view: 1, maxView: 4, chapterTitles: ["当前页"]),
             ],
-            session: session
+            session: session,
+            cacheStore: cacheStore,
+            forumCacheStore: forumCacheStore
         )
+        let thread = try makeThreadIdentity(from: threadURL)
+        let seededProjectionViews = await cacheStore.cachedViews(
+            for: threadURL,
+            authorID: "42",
+            contentSource: .authorFilteredPage
+        )
+        let seededSourceViews = await forumCacheStore.cachedThreadPageViews(thread: thread, authorID: "42")
+        XCTAssertEqual(seededProjectionViews, [1])
+        XCTAssertEqual(seededSourceViews, [1])
+        await MainActor.run {
+            XCTAssertEqual(model.cachedViews, [1])
+        }
 
         await MainActor.run {
             model.startCaching(views: [2, 3, 4])
@@ -3002,10 +3020,19 @@ final class ReaderContainerModelTests: XCTestCase {
             await MainActor.run { model.cacheOperationState.isFinished }
         }
 
+        let finalProjectionViews = await cacheStore.cachedViews(
+            for: threadURL,
+            authorID: "42",
+            contentSource: .authorFilteredPage
+        )
+        let finalSourceViews = await forumCacheStore.cachedThreadPageViews(thread: thread, authorID: "42")
         await MainActor.run {
             XCTAssertEqual(model.cacheOperationState.status, .cancelled)
             XCTAssertLessThan(model.cacheOperationState.completedViews.count, 3)
-            XCTAssertTrue(model.cachedViews.isSuperset(of: [1]))
+            XCTAssertTrue(
+                model.cachedViews.isSuperset(of: [1]),
+                "cachedViews=\(model.cachedViews), projections=\(finalProjectionViews), sources=\(finalSourceViews)"
+            )
         }
     }
 
@@ -3086,6 +3113,7 @@ private func makeModel(
     launchContext: ReaderLaunchContext? = nil,
     session: URLSession = .shared,
     cacheStore: ReaderCacheStore? = nil,
+    forumCacheStore: ForumCacheStore? = nil,
     pagination: @escaping NovelTextLayoutFixture = readerModelSegmentPagination
 ) async throws -> ReaderContainerModel {
     let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "reader-container-model")
@@ -3099,13 +3127,14 @@ private func makeModel(
         .appendingPathComponent(UUID().uuidString, isDirectory: true)
     let resolvedCacheStore = cacheStore
         ?? ReaderCacheStore(baseDirectory: cacheDirectory.appendingPathComponent("reader", isDirectory: true))
-    let forumCacheStore = ForumCacheStore(baseDirectory: cacheDirectory.appendingPathComponent("forum", isDirectory: true))
+    let resolvedForumCacheStore = forumCacheStore
+        ?? ForumCacheStore(baseDirectory: cacheDirectory.appendingPathComponent("forum", isDirectory: true))
 
     try await settingsStore.save(AppSettings(reader: settings))
     try await seedReaderSourceCaches(
         documents: documents,
         readerCacheStore: resolvedCacheStore,
-        forumCacheStore: forumCacheStore
+        forumCacheStore: resolvedForumCacheStore
     )
 
     let appContext = YamiboAppContext(
@@ -3113,7 +3142,7 @@ private func makeModel(
         settingsStore: settingsStore,
         readingProgressStore: readingProgressStore,
         readerCacheStore: resolvedCacheStore,
-        forumCacheStore: forumCacheStore,
+        forumCacheStore: resolvedForumCacheStore,
         session: session
     )
     let model = await MainActor.run {
