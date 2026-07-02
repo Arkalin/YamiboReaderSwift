@@ -1,4 +1,5 @@
 import Foundation
+@preconcurrency import GRDB
 import Testing
 @testable import YamiboReaderCore
 
@@ -177,6 +178,50 @@ import Testing
     #expect(await store.loadThreadPage(thread: secondThread, page: 1, authorID: nil, allowExpired: true)?.title == "其他线程")
     #expect(await store.loadHome(allowExpired: true) != nil)
     #expect(await store.loadBoard(fid: "49", allowExpired: true)?.board.fid == "49")
+}
+
+@Test func forumThreadPageCacheCanUseGRDBMetadataAndTidFirstKeys() async throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+    let pool = try YamiboDatabase.openPool(rootDirectory: root)
+    let diskCache = GRDBJSONCacheStore(writer: pool, rootDirectory: root)
+    let store = ForumCacheStore(
+        baseDirectory: root.appendingPathComponent("legacy-forum-cache", isDirectory: true),
+        threadPageDiskCache: diskCache
+    )
+    let thread = ThreadIdentity(tid: "990")
+
+    try await store.saveThreadPage(
+        makeCacheTestThreadPage(thread: thread, title: "GRDB线程页"),
+        thread: thread,
+        pageNumber: 4,
+        authorID: "42"
+    )
+
+    #expect(await store.loadThreadPage(thread: thread, page: 4, authorID: "42")?.title == "GRDB线程页")
+    #expect(await store.cachedThreadPageViews(thread: thread, authorID: "42") == [4])
+
+    let rows = try await pool.read { db in
+        try Row.fetchAll(
+            db,
+            sql: "SELECT namespace, cache_key FROM cache_entries ORDER BY cache_key"
+        ).map { row in
+            let namespace: String = row["namespace"]
+            let key: String = row["cache_key"]
+            return (namespace: namespace, key: key)
+        }
+    }
+    #expect(rows.count == 1)
+    #expect(rows.first?.namespace == "forum_thread_pages")
+    #expect(rows.first?.key == "tid_990_page_4_author_42")
+    #expect(rows.first?.key.contains("https://") == false)
+
+    let cacheFile = YamiboDatabase.cacheDirectoryURL(rootDirectory: root)
+        .appendingPathComponent("forum_thread_pages", isDirectory: true)
+        .appendingPathComponent("tid_990_page_4_author_42.json", isDirectory: false)
+    #expect(FileManager.default.fileExists(atPath: cacheFile.path))
+
+    try await store.deleteThreadPages([4], thread: thread, authorID: "42")
+    #expect(await store.loadThreadPage(thread: thread, page: 4, authorID: "42", allowExpired: true) == nil)
 }
 
 private func makeCacheTestThread(tid: String) throws -> ThreadIdentity {

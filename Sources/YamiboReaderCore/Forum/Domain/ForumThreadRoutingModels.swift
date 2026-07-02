@@ -17,6 +17,17 @@ public struct ThreadIdentity: Codable, Hashable, Sendable {
         self.canonicalURL = canonicalURL
         self.fid = fid?.threadRoutingTrimmedNonEmpty
     }
+
+    public init(tid: String, fid: String? = nil) {
+        let normalizedTID = tid.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.init(
+            tid: normalizedTID,
+            canonicalURL: YamiboThreadURLCanonicalizer.canonicalThreadURL(
+                from: YamiboRoute.threadByID(tid: normalizedTID, page: 1, authorID: nil, reverse: false).url
+            ),
+            fid: fid
+        )
+    }
 }
 
 public struct ForumThreadTapContext: Codable, Hashable, Sendable {

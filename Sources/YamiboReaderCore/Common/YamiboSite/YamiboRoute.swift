@@ -46,6 +46,7 @@ public enum YamiboRoute: Sendable {
     case forumSearch(keyword: String, forumID: String?, formHash: String)
     case forumSearchPage(searchID: String, page: Int)
     case thread(url: URL, page: Int, authorID: String?)
+    case threadByID(tid: String, page: Int, authorID: String?, reverse: Bool)
     case forumHome
     case forumBoard(fid: String, page: Int, filterID: String?, orderFilter: String?, orderBy: String?)
     case forumBoardFavorite(fid: String, formHash: String)
@@ -244,6 +245,23 @@ public enum YamiboRoute: Sendable {
             components.queryItems = items
                 .map { URLQueryItem(name: $0.key, value: $0.value) }
                 .sorted { $0.name < $1.name }
+            return components.url!
+        case let .threadByID(tid, page, authorID, reverse):
+            var components = URLComponents(url: Self.baseURL, resolvingAgainstBaseURL: false)!
+            components.path = "/forum.php"
+            var items: [URLQueryItem] = [
+                .init(name: "mobile", value: "2"),
+                .init(name: "mod", value: "viewthread"),
+                .init(name: "page", value: String(max(1, page))),
+                .init(name: "tid", value: tid.trimmingCharacters(in: .whitespacesAndNewlines))
+            ]
+            if let authorID = authorID?.trimmingCharacters(in: .whitespacesAndNewlines), !authorID.isEmpty {
+                items.append(.init(name: "authorid", value: authorID))
+            }
+            if reverse {
+                items.append(.init(name: "ordertype", value: "1"))
+            }
+            components.queryItems = items.sorted { $0.name < $1.name }
             return components.url!
         case .forumHome:
             var components = URLComponents(url: Self.baseURL, resolvingAgainstBaseURL: false)!

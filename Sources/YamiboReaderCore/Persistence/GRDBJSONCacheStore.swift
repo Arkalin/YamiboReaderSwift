@@ -38,7 +38,7 @@ public actor GRDBJSONCacheStore {
         decoder.dateDecodingStrategy = .iso8601
     }
 
-    public func set<Value: Encodable>(_ value: Value, namespace: String, key: String) async throws {
+    public func set<Value: Encodable & Sendable>(_ value: Value, namespace: String, key: String) async throws {
         let resolvedNamespace = try validatedComponent(namespace, label: "namespace")
         let resolvedKey = try validatedComponent(key, label: "cache key")
         let namespaceDirectory = cacheDirectory(for: resolvedNamespace)
@@ -64,7 +64,7 @@ public actor GRDBJSONCacheStore {
         }
     }
 
-    public func get<Value: Decodable>(
+    public func get<Value: Decodable & Sendable>(
         _ type: Value.Type = Value.self,
         namespace: String,
         key: String,

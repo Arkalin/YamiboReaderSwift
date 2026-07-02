@@ -2772,6 +2772,32 @@ private final class StubURLProtocol: URLProtocol {
     #expect(deleted == nil)
 }
 
+@Test func readerCacheStoreIndexUsesTidFirstIdentityWithoutThreadURL() async throws {
+    let directory = URL(fileURLWithPath: NSTemporaryDirectory())
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    let store = ReaderCacheStore(baseDirectory: directory)
+    let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=18610&mobile=2&page=4&authorid=12"))
+    let document = ReaderPageDocument(
+        threadURL: threadURL,
+        view: 4,
+        maxView: 5,
+        resolvedAuthorID: "12",
+        segments: [.text("正文", chapterTitle: "测试章")]
+    )
+
+    try await store.save(document)
+
+    let indexData = try Data(contentsOf: directory.appendingPathComponent("index.json", isDirectory: false))
+    let object = try #require(JSONSerialization.jsonObject(with: indexData) as? [String: Any])
+    let threads = try #require(object["threads"] as? [String: Any])
+    let threadEntry = try #require(threads["tid:18610"] as? [String: Any])
+
+    #expect(object["version"] as? Int == 3)
+    #expect(threadEntry["threadID"] as? String == "18610")
+    #expect(threadEntry["threadURL"] == nil)
+    #expect(!String(data: indexData, encoding: .utf8)!.contains("https://"))
+}
+
 @Test func readerCacheStoreWritesDocumentSchemaVersionAndSemanticIdentities() async throws {
     let directory = URL(fileURLWithPath: NSTemporaryDirectory())
         .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -3871,4 +3897,69 @@ private final class LockedCounter: @unchecked Sendable {
             count += 1
         }
     }
+}
+
+@Suite("NovelReaderRepository by-id APIs", .serialized)
+private struct NovelReaderRepositoryByIDTests {
+    @Test func fetchThreadDisplayTitleUsesThreadIDRequest() async throws {
+        defer { NovelReaderRepositoryByIDURLProtocol.handler = nil }
+
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [NovelReaderRepositoryByIDURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        let repository = NovelReaderRepository(
+            client: YamiboClient(session: session, cookie: "sid=reader", userAgent: "Test-UA")
+        )
+
+        NovelReaderRepositoryByIDURLProtocol.handler = { request in
+            let components = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)
+            let items = components?.queryItems ?? []
+            let values = Dictionary(uniqueKeysWithValues: items.compactMap { item in
+                item.value.map { (item.name, $0) }
+            })
+            #expect(values["tid"] == "3210")
+            #expect(values["page"] == "1")
+            #expect(values["authorid"] == "42")
+            #expect(request.url?.absoluteString.contains("thread-") == false)
+            return (
+                Data("<html><head><title>By ID Title</title></head><body></body></html>".utf8),
+                HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            )
+        }
+
+        let title = try await repository.fetchThreadDisplayTitle(threadID: "3210", authorID: "42")
+
+        #expect(title == "By ID Title")
+    }
+}
+
+private final class NovelReaderRepositoryByIDURLProtocol: URLProtocol {
+    typealias Handler = (URLRequest) throws -> (Data, HTTPURLResponse)
+
+    nonisolated(unsafe) static var handler: Handler?
+
+    override class func canInit(with request: URLRequest) -> Bool {
+        true
+    }
+
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest {
+        request
+    }
+
+    override func startLoading() {
+        guard let handler = Self.handler else {
+            client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
+            return
+        }
+        do {
+            let (data, response) = try handler(request)
+            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocol(self, didLoad: data)
+            client?.urlProtocolDidFinishLoading(self)
+        } catch {
+            client?.urlProtocol(self, didFailWithError: error)
+        }
+    }
+
+    override func stopLoading() {}
 }

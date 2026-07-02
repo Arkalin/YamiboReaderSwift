@@ -51,9 +51,13 @@ struct YamiboThreadURLCanonicalizerTests {
         #expect(canonical.absoluteString == "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123")
     }
 
-    @Test func readerCacheIdentityUsesSharedCanonicalThreadURL() throws {
+    @Test func readerCacheIdentityUsesThreadIDAsCacheKey() throws {
         let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=521519&extra=page%3D1&mobile=2&page=25&authorid=406769"))
+        let identity = ReaderCacheIdentity(threadURL: url, view: 25, authorID: "406769", contentSource: .authorFilteredPage)
 
         #expect(ReaderCacheIdentity.canonicalThreadURL(from: url) == YamiboThreadURLCanonicalizer.canonicalThreadURL(from: url))
+        #expect(identity.threadID == "521519")
+        #expect(identity.threadKey == "tid:521519")
+        #expect(!identity.cacheKey.contains("https://"))
     }
 }

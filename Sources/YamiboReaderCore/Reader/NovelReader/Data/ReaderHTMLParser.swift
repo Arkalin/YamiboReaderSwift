@@ -241,20 +241,26 @@ public enum ReaderHTMLParser {
     }
 
     private static func syntheticReaderHTML(from page: ForumThreadPage) -> String {
-        let posts = page.posts.map { post in
+        let postFragments: [String] = page.posts.map { post in
             let postID = post.postID.trimmingCharacters(in: .whitespacesAndNewlines)
             let safePostID = postID.isEmpty ? "0" : postID
             let contentHTML = post.contentHTML.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 ? escapedReaderHTMLText(from: post.contentText)
                 : post.contentHTML
             let attachmentImages = attachmentImageHTML(for: post.images, excludingSourcesIn: post.contentHTML)
+            let authorID = post.author.uid?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let authorLink = authorID.isEmpty
+                ? "楼主"
+                : #"<a href="home.php?mod=space&amp;uid=\#(escapeHTMLAttribute(authorID))&amp;mobile=2">楼主</a>"#
             return """
             <div class="plc cl" id="pid\(safePostID)">
+              <ul class="authi"><li class="mtit">\(authorLink)</li></ul>
               <div class="message" id="postmessage_\(safePostID)">\(contentHTML)</div>
               \(attachmentImages)
             </div>
             """
-        }.joined(separator: "\n")
+        }
+        let posts = postFragments.joined(separator: "\n")
         return "<html><body>\(posts)</body></html>"
     }
 

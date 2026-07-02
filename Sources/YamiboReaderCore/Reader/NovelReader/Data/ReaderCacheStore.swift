@@ -1,7 +1,7 @@
 import Foundation
 
 public actor ReaderCacheStore {
-    private static let schemaVersion = 2
+    private static let schemaVersion = 3
 
     private let fileManager: FileManager
     private let baseDirectory: URL
@@ -65,7 +65,7 @@ public actor ReaderCacheStore {
         let data = try encoder.encode(document)
         try data.write(to: fileURL, options: [.atomic])
 
-        var entry = index[identity.threadKey] ?? CacheThreadIndex(threadURL: identity.threadURL)
+        var entry = index[identity.threadKey] ?? CacheThreadIndex(threadID: identity.threadID)
         var variantEntry = entry.variants[identity.variantKey] ?? CacheVariantIndex()
         variantEntry.pages["\(identity.view)"] = CachePageMetadata(
             fileName: fileName,
@@ -231,7 +231,7 @@ private struct CacheIndexEnvelope: Codable {
 }
 
 private struct CacheThreadIndex: Codable {
-    var threadURL: URL
+    var threadID: String
     var variants: [String: CacheVariantIndex] = [:]
 }
 

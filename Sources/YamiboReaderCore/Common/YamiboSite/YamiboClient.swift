@@ -34,6 +34,23 @@ public struct YamiboClient: Sendable {
         )
     }
 
+    public func fetchThreadById(
+        tid: String,
+        authorID: String? = nil,
+        reverse: Bool = false,
+        page: Int = 1,
+        userAgent: String? = nil,
+        cachePolicy: URLRequest.CachePolicy = .useProtocolCachePolicy,
+        cancellationPolicy: YamiboRequestCancellationPolicy = .propagateCancellation
+    ) async throws -> String {
+        try await fetchHTML(
+            for: .threadByID(tid: tid, page: page, authorID: authorID, reverse: reverse),
+            userAgent: userAgent,
+            cachePolicy: cachePolicy,
+            cancellationPolicy: cancellationPolicy
+        )
+    }
+
     public func submitForm(
         for route: YamiboRoute,
         fields: [(String, String)],

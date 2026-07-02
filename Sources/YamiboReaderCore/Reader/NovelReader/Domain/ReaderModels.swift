@@ -47,6 +47,14 @@ public struct ReaderPageRequest: Codable, Hashable, Sendable {
         self.view = max(1, view)
         self.authorID = authorID
     }
+
+    public init(threadID: String, view: Int, authorID: String? = nil) {
+        self.init(
+            threadURL: YamiboRoute.threadByID(tid: threadID, page: max(1, view), authorID: authorID, reverse: false).url,
+            view: view,
+            authorID: authorID
+        )
+    }
 }
 
 public enum ReaderContentSource: String, Codable, Hashable, Sendable {

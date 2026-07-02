@@ -15,6 +15,7 @@ public enum ReaderCacheVariant: Hashable, Codable, Sendable {
 }
 
 public struct ReaderCacheIdentity: Hashable, Codable, Sendable {
+    public let threadID: String
     public let threadURL: URL
     public let threadKey: String
     public let variant: ReaderCacheVariant
@@ -30,8 +31,10 @@ public struct ReaderCacheIdentity: Hashable, Codable, Sendable {
 
     public init(threadURL: URL, view: Int, authorID: String?, contentSource: ReaderContentSource?) {
         let canonicalThreadURL = Self.canonicalThreadURL(from: threadURL)
+        let threadID = Self.threadID(from: canonicalThreadURL) ?? canonicalThreadURL.absoluteString
+        self.threadID = threadID
         self.threadURL = canonicalThreadURL
-        self.threadKey = canonicalThreadURL.absoluteString
+        self.threadKey = "tid:\(threadID)"
         self.variant = Self.resolveVariant(authorID: authorID, contentSource: contentSource)
         self.view = max(1, view)
     }
@@ -56,6 +59,10 @@ public struct ReaderCacheIdentity: Hashable, Codable, Sendable {
 
     public static func canonicalThreadURL(from url: URL) -> URL {
         YamiboThreadURLCanonicalizer.canonicalThreadURL(from: url)
+    }
+
+    public static func threadID(from url: URL) -> String? {
+        YamiboThreadURLCanonicalizer.threadID(from: canonicalThreadURL(from: url))
     }
 
     private static func resolveVariant(authorID: String?, contentSource: ReaderContentSource?) -> ReaderCacheVariant {

@@ -6,10 +6,12 @@ public actor ForumCacheStore {
     public static let boardTTL: TimeInterval = 2 * 60 * 60
     public static let threadPageTTL: TimeInterval = 24 * 60 * 60
     private static let threadPageMaxEntries = 50
+    private static let threadPageNamespace = "forum_thread_pages"
 
     private let fileManager: FileManager
     private let baseDirectory: URL
     private let threadPageIndexURL: URL
+    private let threadPageDiskCache: GRDBJSONCacheStore?
     private let now: @Sendable () -> Date
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
@@ -17,6 +19,7 @@ public actor ForumCacheStore {
     public init(
         fileManager: FileManager = .default,
         baseDirectory: URL? = nil,
+        threadPageDiskCache: GRDBJSONCacheStore? = nil,
         now: @escaping @Sendable () -> Date = { Date() }
     ) {
         self.fileManager = fileManager
@@ -26,6 +29,7 @@ public actor ForumCacheStore {
             .appendingPathComponent("forum-cache", isDirectory: true)
             ?? URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("forum-cache", isDirectory: true)
         self.threadPageIndexURL = self.baseDirectory.appendingPathComponent("thread_pages_index.json", isDirectory: false)
+        self.threadPageDiskCache = threadPageDiskCache
         self.now = now
         encoder.outputFormatting = [.sortedKeys]
         encoder.dateEncodingStrategy = .iso8601
@@ -77,6 +81,19 @@ public actor ForumCacheStore {
         authorID: String? = nil,
         allowExpired: Bool = false
     ) async -> ForumThreadPage? {
+        if let threadPageDiskCache {
+            let key = threadPageCacheKey(thread: thread, page: page, authorID: authorID)
+            let ttl = allowExpired ? nil : Self.threadPageTTL
+            guard let entry: ForumCacheEntry<ForumThreadPage> = try? await threadPageDiskCache.get(
+                namespace: Self.threadPageNamespace,
+                key: key,
+                ttl: ttl
+            ) else {
+                return nil
+            }
+            return entry.value
+        }
+
         guard let entry: ForumCacheEntry<ForumThreadPage> = load(
             fileName: threadPageFileName(thread: thread, page: page, authorID: authorID)
         ) else {
@@ -91,9 +108,23 @@ public actor ForumCacheStore {
         authorID: String? = nil,
         allowExpired: Bool = false
     ) async -> Set<Int> {
+        if let threadPageDiskCache {
+            let prefix = threadPageCacheKeyPrefix(thread: thread)
+            let normalizedAuthorID = authorID?.nilIfBlank
+            let entries = (try? await threadPageDiskCache.entries(namespace: Self.threadPageNamespace)) ?? []
+            return Set(entries.compactMap { entry -> Int? in
+                guard entry.key.hasPrefix(prefix),
+                      threadPageCacheAuthorID(from: entry.key) == normalizedAuthorID,
+                      allowExpired || !isExpired(entry.createdAt, ttl: Self.threadPageTTL) else {
+                    return nil
+                }
+                return threadPageCachePage(from: entry.key)
+            })
+        }
+
         let normalizedAuthorID = authorID?.nilIfBlank
         return Set(loadThreadPageIndex().values.compactMap { entry -> Int? in
-            guard entry.threadURL == thread.canonicalURL,
+            guard entry.threadID == thread.tid,
                   entry.authorID == normalizedAuthorID,
                   allowExpired || !isExpired(entry.fetchedAt, ttl: Self.threadPageTTL),
                   fileManager.fileExists(atPath: baseDirectory.appendingPathComponent(entry.fileName, isDirectory: false).path) else {
@@ -117,6 +148,16 @@ public actor ForumCacheStore {
             )
         }
         let fetchedAt = now()
+        if let threadPageDiskCache {
+            try await threadPageDiskCache.set(
+                ForumCacheEntry(value: page, fetchedAt: fetchedAt),
+                namespace: Self.threadPageNamespace,
+                key: threadPageCacheKey(thread: thread, page: pageNumber, authorID: authorID)
+            )
+            try await threadPageDiskCache.trimNamespace(Self.threadPageNamespace, maximumEntryCount: Self.threadPageMaxEntries)
+            return
+        }
+
         let fileName = threadPageFileName(thread: thread, page: pageNumber, authorID: authorID)
         try save(
             ForumCacheEntry(value: page, fetchedAt: fetchedAt),
@@ -125,7 +166,7 @@ public actor ForumCacheStore {
         var index = loadThreadPageIndex()
         index[fileName] = ThreadPageIndexEntry(
             fileName: fileName,
-            threadURL: thread.canonicalURL,
+            threadID: thread.tid,
             page: max(1, pageNumber),
             authorID: authorID?.nilIfBlank,
             fetchedAt: fetchedAt
@@ -135,12 +176,20 @@ public actor ForumCacheStore {
     }
 
     public func clearThreadPages(thread: ThreadIdentity) async throws {
+        if let threadPageDiskCache {
+            try await threadPageDiskCache.deleteKeys(
+                namespace: Self.threadPageNamespace,
+                matchingPrefix: threadPageCacheKeyPrefix(thread: thread)
+            )
+            return
+        }
+
         let prefix = threadPageFilePrefix(thread: thread)
         for fileURL in threadPageFileURLs() where fileURL.lastPathComponent.hasPrefix(prefix) {
             try? fileManager.removeItem(at: fileURL)
         }
         var index = loadThreadPageIndex()
-        index = index.filter { $0.value.threadURL != thread.canonicalURL }
+        index = index.filter { $0.value.threadID != thread.tid }
         try persistThreadPageIndex(index)
     }
 
@@ -152,9 +201,19 @@ public actor ForumCacheStore {
         let normalizedAuthorID = authorID?.nilIfBlank
         let normalizedPages = Set(pages.map { max(1, $0) })
         guard !normalizedPages.isEmpty else { return }
+        if let threadPageDiskCache {
+            for page in normalizedPages {
+                try await threadPageDiskCache.remove(
+                    namespace: Self.threadPageNamespace,
+                    key: threadPageCacheKey(thread: thread, page: page, authorID: normalizedAuthorID)
+                )
+            }
+            return
+        }
+
         var index = loadThreadPageIndex()
         for entry in index.values {
-            guard entry.threadURL == thread.canonicalURL,
+            guard entry.threadID == thread.tid,
                   entry.authorID == normalizedAuthorID,
                   normalizedPages.contains(entry.page) else {
                 continue
@@ -206,7 +265,7 @@ public actor ForumCacheStore {
 
     private func threadPageFileName(thread: ThreadIdentity, page: Int, authorID: String?) -> String {
         let key = [
-            thread.canonicalURL.absoluteString,
+            thread.tid,
             String(max(1, page)),
             authorID?.nilIfBlank ?? "all"
         ].joined(separator: "_")
@@ -214,7 +273,34 @@ public actor ForumCacheStore {
     }
 
     private func threadPageFilePrefix(thread: ThreadIdentity) -> String {
-        "thread_\(stableIdentifier(for: thread.canonicalURL.absoluteString))_"
+        "thread_\(stableIdentifier(for: thread.tid))_"
+    }
+
+    private func threadPageCacheKey(thread: ThreadIdentity, page: Int, authorID: String?) -> String {
+        "\(threadPageCacheKeyPrefix(thread: thread))page_\(max(1, page))_author_\(authorID?.nilIfBlank ?? "all")"
+    }
+
+    private func threadPageCacheKeyPrefix(thread: ThreadIdentity) -> String {
+        "tid_\(thread.tid)_"
+    }
+
+    private func threadPageCachePage(from key: String) -> Int? {
+        key.components(separatedBy: "_").enumerated().first { $0.element == "page" }
+            .flatMap { index, parts -> Int? in
+                let components = key.components(separatedBy: "_")
+                guard components.indices.contains(index + 1) else { return nil }
+                return Int(components[index + 1])
+            }
+    }
+
+    private func threadPageCacheAuthorID(from key: String) -> String? {
+        let components = key.components(separatedBy: "_")
+        guard let index = components.firstIndex(of: "author"),
+              components.indices.contains(index + 1) else {
+            return nil
+        }
+        let value = components[index + 1]
+        return value == "all" ? nil : value
     }
 
     private func threadPageFileURLs() -> [URL] {
@@ -281,12 +367,12 @@ public actor ForumCacheStore {
     }
 }
 
-private struct ForumCacheEnvelope<Value: Codable>: Codable {
+private struct ForumCacheEnvelope<Value: Codable & Sendable>: Codable, Sendable {
     var version: Int
     var entry: ForumCacheEntry<Value>
 }
 
-private struct ForumCacheEntry<Value: Codable>: Codable {
+private struct ForumCacheEntry<Value: Codable & Sendable>: Codable, Sendable {
     var value: Value
     var fetchedAt: Date
 }
@@ -298,7 +384,7 @@ private struct ThreadPageIndexEnvelope: Codable {
 
 private struct ThreadPageIndexEntry: Codable {
     var fileName: String
-    var threadURL: URL
+    var threadID: String
     var page: Int
     var authorID: String?
     var fetchedAt: Date

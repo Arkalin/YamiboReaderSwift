@@ -21,6 +21,10 @@ public actor NovelReaderRepository {
         try await loadPage(request, ignoresCache: false)
     }
 
+    public func loadPage(threadID: String, view: Int, authorID: String? = nil) async throws -> ReaderPageDocument {
+        try await loadPage(ReaderPageRequest(threadID: threadID, view: view, authorID: authorID))
+    }
+
     public func prefetchNextPage(from request: ReaderPageRequest) async {
         let current: ReaderPageDocument
         do {
@@ -44,11 +48,14 @@ public actor NovelReaderRepository {
         authorID: String?,
         contentSource: ReaderContentSource?
     ) async -> Set<Int> {
-        guard let authorID = normalizedAuthorID(authorID),
+        let projectionViews = await cacheStore.cachedViews(for: threadURL, authorID: authorID, contentSource: contentSource)
+        guard (contentSource ?? (normalizedAuthorID(authorID) == nil ? .fallbackUnfilteredPage : .authorFilteredPage)) == .authorFilteredPage,
+              let normalizedAuthorID = normalizedAuthorID(authorID),
               let thread = threadIdentity(from: threadURL) else {
-            return []
+            return projectionViews
         }
-        return await forumCacheStore.cachedThreadPageViews(thread: thread, authorID: authorID)
+        let sourceViews = await forumCacheStore.cachedThreadPageViews(thread: thread, authorID: normalizedAuthorID)
+        return projectionViews.intersection(sourceViews)
     }
 
     public func deleteCachedViews(
@@ -57,12 +64,13 @@ public actor NovelReaderRepository {
         authorID: String?,
         contentSource: ReaderContentSource?
     ) async throws {
-        guard let authorID = normalizedAuthorID(authorID),
-              let thread = threadIdentity(from: threadURL) else {
-            return
+        let source = contentSource ?? (normalizedAuthorID(authorID) == nil ? .fallbackUnfilteredPage : .authorFilteredPage)
+        try await cacheStore.deleteViews(views, for: threadURL, authorID: authorID, contentSource: source)
+        if source == .authorFilteredPage,
+           let normalizedAuthorID = normalizedAuthorID(authorID),
+           let thread = threadIdentity(from: threadURL) {
+            try await forumCacheStore.deleteThreadPages(views, thread: thread, authorID: normalizedAuthorID)
         }
-        try await forumCacheStore.deleteThreadPages(views, thread: thread, authorID: authorID)
-        try await cacheStore.deleteViews(views, for: threadURL, authorID: authorID, contentSource: .authorFilteredPage)
     }
 
     public func refreshCachedViews(
@@ -162,8 +170,17 @@ public actor NovelReaderRepository {
         try await loadPage(request, ignoresCache: true)
     }
 
+    public func loadPageIgnoringCache(threadID: String, view: Int, authorID: String? = nil) async throws -> ReaderPageDocument {
+        try await loadPageIgnoringCache(ReaderPageRequest(threadID: threadID, view: view, authorID: authorID))
+    }
+
     public func fetchThreadDisplayTitle(for threadURL: URL, authorID: String? = nil) async throws -> String {
-        let html = try await client.fetchHTML(for: .thread(url: threadURL, page: 1, authorID: authorID))
+        let thread = try requireThreadIdentity(from: threadURL)
+        return try await fetchThreadDisplayTitle(threadID: thread.tid, authorID: authorID)
+    }
+
+    public func fetchThreadDisplayTitle(threadID: String, authorID: String? = nil) async throws -> String {
+        let html = try await client.fetchThreadById(tid: threadID, authorID: authorID, page: 1)
         guard let title = ReaderHTMLParser.extractPageTitle(from: html) else {
             throw YamiboError.parsingFailed(context: L10n.string("context.thread_title"))
         }
@@ -240,7 +257,7 @@ public actor NovelReaderRepository {
            let cached = await forumCacheStore.loadThreadPage(thread: thread, page: 1, authorID: nil) {
             discoveryPage = cached
         } else {
-            let html = try await fetchThreadHTML(threadURL: thread.canonicalURL, view: 1, authorID: nil)
+            let html = try await fetchThreadHTML(threadID: thread.tid, view: 1, authorID: nil)
             discoveryPage = try ForumThreadPageHTMLParser.parsePage(
                 from: html,
                 thread: thread,
@@ -272,15 +289,15 @@ public actor NovelReaderRepository {
            let cached = await forumCacheStore.loadThreadPage(thread: thread, page: view, authorID: authorID) {
             return cached
         }
-        let html = try await fetchThreadHTML(threadURL: thread.canonicalURL, view: view, authorID: authorID)
+        let html = try await fetchThreadHTML(threadID: thread.tid, view: view, authorID: authorID)
         let parsed = try ForumThreadPageHTMLParser.parsePage(from: html, thread: thread, fallbackTitle: title)
         try? await forumCacheStore.saveThreadPage(parsed, thread: thread, pageNumber: view, authorID: authorID)
         return parsed
     }
 
-    private func fetchThreadHTML(threadURL: URL, view: Int, authorID: String?) async throws -> String {
+    private func fetchThreadHTML(threadID: String, view: Int, authorID: String?) async throws -> String {
         do {
-            return try await client.fetchHTML(for: .thread(url: threadURL, page: view, authorID: authorID))
+            return try await client.fetchThreadById(tid: threadID, authorID: authorID, page: view)
         } catch let error as URLError {
             if error.code == .notConnectedToInternet || error.code == .networkConnectionLost {
                 throw YamiboError.offline

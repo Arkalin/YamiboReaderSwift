@@ -49,4 +49,22 @@ struct YamiboRouteTests {
         #expect(items["mobile"] == "2")
         #expect(items["mod"] == "viewthread")
     }
+
+    @Test func threadByIDRouteBuildsRequestURLWithoutSourceThreadURL() throws {
+        let routed = YamiboRoute.threadByID(tid: " 521519 ", page: 25, authorID: "406769", reverse: true).url
+        let components = try #require(URLComponents(url: routed, resolvingAgainstBaseURL: false))
+        let items = Dictionary(uniqueKeysWithValues: (components.queryItems ?? []).compactMap { item in
+            item.value.map { (item.name, $0) }
+        })
+
+        #expect(components.scheme == "https")
+        #expect(components.host == "bbs.yamibo.com")
+        #expect(components.path == "/forum.php")
+        #expect(items["tid"] == "521519")
+        #expect(items["page"] == "25")
+        #expect(items["authorid"] == "406769")
+        #expect(items["ordertype"] == "1")
+        #expect(items["mobile"] == "2")
+        #expect(items["mod"] == "viewthread")
+    }
 }

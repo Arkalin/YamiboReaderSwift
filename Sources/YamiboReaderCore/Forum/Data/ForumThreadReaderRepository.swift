@@ -10,8 +10,9 @@ public actor ForumThreadReaderRepository: ThreadCoverPageResolving {
     }
 
     public func fetchThreadPage(context: ThreadReaderLaunchContext, page: Int = 1) async throws -> ForumThreadPage {
-        let html = try await client.fetchHTML(
-            for: .thread(url: context.thread.canonicalURL, page: page, authorID: nil),
+        let html = try await client.fetchThreadById(
+            tid: context.thread.tid,
+            page: page,
             cachePolicy: .reloadIgnoringLocalCacheData,
             cancellationPolicy: .completeStartedRequest
         )
@@ -25,8 +26,10 @@ public actor ForumThreadReaderRepository: ThreadCoverPageResolving {
     }
 
     public func fetchNovelThreadPage(context: NovelDetailLaunchContext, page: Int = 1) async throws -> ForumThreadPage {
-        let html = try await client.fetchHTML(
-            for: .thread(url: context.thread.canonicalURL, page: page, authorID: context.authorID),
+        let html = try await client.fetchThreadById(
+            tid: context.thread.tid,
+            authorID: context.authorID,
+            page: page,
             cachePolicy: .reloadIgnoringLocalCacheData,
             cancellationPolicy: .completeStartedRequest
         )
