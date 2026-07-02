@@ -91,67 +91,17 @@ public struct YamiboImageLoadingContext: Sendable {
 
 public actor YamiboImageDataLoader: YamiboImageDataLoading {
     private let client: YamiboClient
-    private var inFlightTasks: [YamiboImageRequest: Task<Data, Error>] = [:]
+    private let pipeline: YamiboNukeImageDataPipeline
 
-    public init(client: YamiboClient) {
+    public init(
+        client: YamiboClient,
+        pipeline: YamiboNukeImageDataPipeline = .shared
+    ) {
         self.client = client
+        self.pipeline = pipeline
     }
 
     public func imageData(for request: YamiboImageRequest) async throws -> Data {
-        if let task = inFlightTasks[request] {
-            return try await task.value
-        }
-
-        let client = client
-        let task = Task<Data, Error> {
-            try await Self.fetchImageData(request: request, client: client)
-        }
-        inFlightTasks[request] = task
-        defer { inFlightTasks.removeValue(forKey: request) }
-        return try await task.value
-    }
-
-    private static func fetchImageData(
-        request imageRequest: YamiboImageRequest,
-        client: YamiboClient
-    ) async throws -> Data {
-        var request = YamiboNetworkConfiguration.makeRequest(url: imageRequest.url)
-        request.setValue("image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8", forHTTPHeaderField: "Accept")
-        request.setValue(client.userAgent, forHTTPHeaderField: "User-Agent")
-        if let cookie = client.cookie?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !cookie.isEmpty {
-            request.setValue(cookie, forHTTPHeaderField: "Cookie")
-        }
-        if let refererURL = imageRequest.refererURL {
-            request.setValue(refererURL.absoluteString, forHTTPHeaderField: "Referer")
-        }
-
-        do {
-            let (data, response) = try await client.session.data(for: request)
-            guard let httpResponse = response as? HTTPURLResponse else {
-                throw YamiboError.invalidResponse(statusCode: nil)
-            }
-            guard 200 ..< 300 ~= httpResponse.statusCode else {
-                if httpResponse.statusCode == 401 || httpResponse.statusCode == 403 {
-                    throw YamiboError.notAuthenticated
-                }
-                throw YamiboError.invalidResponse(statusCode: httpResponse.statusCode)
-            }
-            guard !data.isEmpty else {
-                throw YamiboError.unreadableBody
-            }
-            return data
-        } catch let error as YamiboError {
-            throw error
-        } catch let error as URLError {
-            switch error.code {
-            case .notConnectedToInternet, .networkConnectionLost:
-                throw YamiboError.offline
-            default:
-                throw YamiboError.underlying(error.localizedDescription)
-            }
-        } catch {
-            throw YamiboError.underlying(error.localizedDescription)
-        }
+        try await pipeline.imageData(for: request, client: client)
     }
 }

@@ -37,6 +37,7 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
     public let mangaOfflineCacheBackgroundDownloadTransport: MangaOfflineCacheBackgroundDownloadTransport
     public let mangaOfflineCacheContinuedProcessingCoordinator: MangaOfflineCacheContinuedProcessingCoordinator
     let session: URLSession
+    let imageSession: URLSession
     private let mangaOfflineCacheQueueExecutorBox = MangaOfflineCacheQueueExecutorBox()
     private nonisolated(unsafe) let uiDefaults: UserDefaults
     private let clearsWebDataOnReset: Bool
@@ -65,6 +66,7 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         grdbRootDirectory: URL? = nil,
         uiDefaults: UserDefaults = .standard,
         clearsWebDataOnReset: Bool = true,
+        imageSession: URLSession = YamiboNetworkConfiguration.makeImageSession(),
         session: URLSession = YamiboNetworkConfiguration.makeSession()
     ) {
         let resolvedGRDBRootDirectory = grdbRootDirectory ?? YamiboDatabase.defaultRootDirectory()
@@ -109,6 +111,7 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         self.mangaOfflineCacheBackgroundDownloadTransport = mangaOfflineCacheBackgroundDownloadTransport
         self.mangaOfflineCacheContinuedProcessingCoordinator = mangaOfflineCacheContinuedProcessingCoordinator
         self.session = session
+        self.imageSession = imageSession
     }
 
     public func makeFavoriteRepository() async -> FavoriteRepository {
@@ -148,7 +151,7 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
     public func makeNovelInlineImageLoadingContext() async -> NovelInlineImageLoadingContext {
         let sessionState = await sessionStore.load()
         let client = YamiboClient(
-            session: session,
+            session: imageSession,
             cookie: sessionState.cookie,
             userAgent: sessionState.userAgent
         )
@@ -158,11 +161,7 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         )
         return NovelInlineImageLoadingContext(
             loader: YamiboNovelInlineImageDataLoader(
-                imageDataLoader: CachedYamiboImageDataLoader(
-                    cache: imageDataCacheStore,
-                    upstream: YamiboImageDataLoader(client: client),
-                    retentionPolicy: .evictable
-                ),
+                imageDataLoader: YamiboImageDataLoader(client: client),
                 cacheNamespace: cacheNamespace
             ),
             cacheNamespace: NovelInlineImageCacheNamespace.namespace(
@@ -175,16 +174,12 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
     public func makeImagePipelineContext() async -> YamiboImageLoadingContext {
         let sessionState = await sessionStore.load()
         let client = YamiboClient(
-            session: session,
+            session: imageSession,
             cookie: sessionState.cookie,
             userAgent: sessionState.userAgent
         )
         return YamiboImageLoadingContext(
-            dataLoader: CachedYamiboImageDataLoader(
-                cache: imageDataCacheStore,
-                upstream: YamiboImageDataLoader(client: client),
-                retentionPolicy: .evictable
-            ),
+            dataLoader: YamiboImageDataLoader(client: client),
             cacheNamespace: YamiboImageCacheNamespace.ordinarySessionNamespace(
                 cookie: sessionState.cookie,
                 userAgent: sessionState.userAgent
@@ -194,11 +189,11 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
 
     public func makeProfileAvatarLoader() -> any YamiboProfileAvatarLoading {
         YamiboProfileAvatarLoader(
-            session: session,
+            session: imageSession,
             sessionStore: sessionStore,
-            imageDataLoaderFactory: { [imageDataCacheStore, session] sessionState in
+            imageDataLoaderFactory: { [imageDataCacheStore, imageSession] sessionState in
                 let client = YamiboClient(
-                    session: session,
+                    session: imageSession,
                     cookie: sessionState.cookie,
                     userAgent: sessionState.userAgent
                 )
@@ -304,7 +299,7 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
     public func makeMangaImageDataLoader() async -> any MangaImageDataLoading {
         let sessionState = await sessionStore.load()
         let client = YamiboClient(
-            session: session,
+            session: imageSession,
             cookie: sessionState.cookie,
             userAgent: sessionState.userAgent
         )
@@ -313,11 +308,7 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
             userAgent: sessionState.userAgent
         )
         return CachedMangaImageDataLoader(
-            imageDataLoader: CachedYamiboImageDataLoader(
-                cache: imageDataCacheStore,
-                upstream: YamiboImageDataLoader(client: client),
-                retentionPolicy: .evictable
-            ),
+            imageDataLoader: YamiboImageDataLoader(client: client),
             cacheNamespace: cacheNamespace,
             offlineCacheStore: mangaOfflineCacheStore
         )
@@ -334,7 +325,7 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
 
         let sessionState = await sessionStore.load()
         let client = YamiboClient(
-            session: session,
+            session: imageSession,
             cookie: sessionState.cookie,
             userAgent: sessionState.userAgent
         )

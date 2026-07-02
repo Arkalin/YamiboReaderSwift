@@ -4,7 +4,7 @@ Date: 2026-07-02
 
 ## Status
 
-Accepted. This supersedes ADR 0003's manga-only persistent image byte cache scope while preserving ADR 0003's transparent-cache semantics.
+Superseded by ADR 0043. This originally superseded ADR 0003's manga-only persistent image byte cache scope while preserving ADR 0003's transparent-cache semantics.
 
 ## Context
 

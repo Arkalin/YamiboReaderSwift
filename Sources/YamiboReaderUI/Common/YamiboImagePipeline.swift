@@ -1,6 +1,7 @@
 import SwiftUI
 import YamiboReaderCore
 import UIKit
+import Nuke
 
 typealias YamiboPlatformImage = UIImage
 
@@ -13,16 +14,19 @@ final class YamiboImagePipeline {
     static let shared = YamiboImagePipeline()
     static let defaultMemoryLimitBytes = 80 * 1024 * 1024
 
-    private let cache = NSCache<NSString, YamiboPlatformImage>()
-    private var inFlightContinuations: [String: [CheckedContinuation<YamiboPlatformImage, Error>]] = [:]
+    private let pipeline: ImagePipeline
     private var prefetchingKeys = Set<String>()
 
     init(memoryLimitBytes: Int = YamiboImagePipeline.defaultMemoryLimitBytes) {
-        cache.totalCostLimit = memoryLimitBytes
+        self.pipeline = ImagePipeline {
+            $0.imageCache = ImageCache(costLimit: memoryLimitBytes)
+            $0.dataCache = nil
+            $0.isResumableDataEnabled = false
+        }
     }
 
     func cachedImage(for request: YamiboImageRequest) -> YamiboPlatformImage? {
-        cache.object(forKey: request.cacheKey as NSString)
+        pipeline.cache.cachedImage(for: nukeRequest(for: request))?.image
     }
 
     func image(
@@ -38,21 +42,14 @@ final class YamiboImagePipeline {
         for request: YamiboImageRequest,
         loadData: @escaping @Sendable () async throws -> Data
     ) async throws -> YamiboPlatformImage {
-        let key = request.cacheKey
-        if let cachedImage = cache.object(forKey: key as NSString) {
-            return cachedImage
+        if let cached = cachedImage(for: request) {
+            return cached
         }
 
-        return try await withCheckedThrowingContinuation { continuation in
-            if inFlightContinuations[key] != nil {
-                inFlightContinuations[key, default: []].append(continuation)
-                return
-            }
-
-            inFlightContinuations[key] = [continuation]
-            Task { @MainActor in
-                await self.loadImage(for: request, key: key, loadData: loadData)
-            }
+        do {
+            return try await pipeline.image(for: nukeRequest(for: request, loadData: loadData))
+        } catch {
+            throw Self.mapImagePipelineError(error)
         }
     }
 
@@ -79,8 +76,7 @@ final class YamiboImagePipeline {
         loadData: @escaping @Sendable () async throws -> Data
     ) {
         let key = request.cacheKey
-        guard cache.object(forKey: key as NSString) == nil,
-              inFlightContinuations[key] == nil,
+        guard cachedImage(for: request) == nil,
               prefetchingKeys.insert(key).inserted else {
             return
         }
@@ -93,36 +89,34 @@ final class YamiboImagePipeline {
         }
     }
 
-    private func loadImage(
+    private func nukeRequest(for request: YamiboImageRequest) -> ImageRequest {
+        nukeRequest(for: request) {
+            Data()
+        }
+    }
+
+    private func nukeRequest(
         for request: YamiboImageRequest,
-        key: String,
         loadData: @escaping @Sendable () async throws -> Data
-    ) async {
-        do {
-            let data = try await loadData()
-            guard let image = YamiboPlatformImage(data: data) else {
-                throw YamiboImagePipelineError.invalidImageData
-            }
-            cache.setObject(image, forKey: key as NSString, cost: Self.cost(for: image, data: data))
-            finishLoad(for: key, result: .success(image))
-        } catch {
-            finishLoad(for: key, result: .failure(error))
-        }
+    ) -> ImageRequest {
+        var imageRequest = ImageRequest(
+            id: request.cacheKey,
+            data: loadData,
+            options: [.disableDiskCache]
+        )
+        imageRequest.scale = Float(UIScreen.main.scale)
+        return imageRequest
     }
 
-    private func finishLoad(for key: String, result: Result<YamiboPlatformImage, Error>) {
-        let continuations = inFlightContinuations.removeValue(forKey: key) ?? []
-        continuations.forEach { continuation in
-            continuation.resume(with: result)
+    private static func mapImagePipelineError(_ error: ImagePipeline.Error) -> Error {
+        switch error {
+        case .dataLoadingFailed(let underlying):
+            return underlying
+        case .dataIsEmpty, .decoderNotRegistered, .decodingFailed:
+            return YamiboImagePipelineError.invalidImageData
+        default:
+            return error
         }
-    }
-
-    private static func cost(for image: YamiboPlatformImage, data: Data) -> Int {
-        if let cgImage = image.cgImage {
-            return cgImage.bytesPerRow * cgImage.height
-        }
-        let scale = max(image.scale, 1)
-        return Int(image.size.width * scale * image.size.height * scale * 4)
     }
 }
 

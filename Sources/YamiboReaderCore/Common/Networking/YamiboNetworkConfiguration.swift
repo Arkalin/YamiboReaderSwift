@@ -8,10 +8,21 @@ public enum YamiboNetworkConfiguration {
         URLSession(configuration: makeSessionConfiguration())
     }
 
+    public static func makeImageSession() -> URLSession {
+        URLSession(configuration: makeImageSessionConfiguration())
+    }
+
     public static func makeSessionConfiguration() -> URLSessionConfiguration {
         let configuration = URLSessionConfiguration.default
         configuration.timeoutIntervalForRequest = requestTimeout
         configuration.timeoutIntervalForResource = resourceTimeout
+        return configuration
+    }
+
+    public static func makeImageSessionConfiguration() -> URLSessionConfiguration {
+        let configuration = makeSessionConfiguration()
+        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        configuration.urlCache = nil
         return configuration
     }
 

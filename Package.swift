@@ -1,4 +1,4 @@
-// swift-tools-version: 6.0
+// swift-tools-version: 6.2
 import PackageDescription
 
 let package = Package(
@@ -13,7 +13,8 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/groue/GRDB.swift.git", exact: "7.11.1"),
-        .package(url: "https://github.com/tid-kijyun/Kanna.git", exact: "6.1.0")
+        .package(url: "https://github.com/tid-kijyun/Kanna.git", exact: "6.1.0"),
+        .package(url: "https://github.com/kean/Nuke", exact: "13.0.6")
     ],
     targets: [
         .target(
@@ -21,6 +22,7 @@ let package = Package(
             dependencies: [
                 .product(name: "GRDB", package: "GRDB.swift"),
                 "Kanna",
+                .product(name: "Nuke", package: "Nuke"),
             ],
             resources: [
                 .process("Resources")
@@ -28,7 +30,10 @@ let package = Package(
         ),
         .target(
             name: "YamiboReaderUI",
-            dependencies: ["YamiboReaderCore"]
+            dependencies: [
+                "YamiboReaderCore",
+                .product(name: "NukeUI", package: "Nuke"),
+            ]
         ),
         .testTarget(
             name: "YamiboReaderCoreTests",
