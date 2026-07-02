@@ -477,8 +477,8 @@ private struct SystemSettingsFixture {
     let readerCacheStore: ReaderCacheStore
     let favoriteStore: FavoriteStore
     let favoriteBackgroundImageStore: FavoriteBackgroundImageStore
-    let mangaDirectoryStore: FileMangaDirectoryStore
-    let mangaChapterDocumentStore: FileMangaChapterDocumentStore
+    let mangaDirectoryStore: GRDBMangaDirectoryStore
+    let mangaChapterDocumentStore: GRDBMangaChapterDocumentStore
     let mangaImageDataCacheStore: FileMangaImageDataCacheStore
     let mangaOfflineCacheStore: any MangaOfflineCacheStoring
 }
@@ -495,17 +495,14 @@ private func makeFixture() throws -> SystemSettingsFixture {
     let favoriteBackgroundImageStore = FavoriteBackgroundImageStore(
         baseDirectory: root.appendingPathComponent("favorite-background", isDirectory: true)
     )
-    let mangaDirectoryStore = FileMangaDirectoryStore(
-        baseDirectory: root.appendingPathComponent("manga-directories", isDirectory: true)
-    )
-    let mangaChapterDocumentStore = FileMangaChapterDocumentStore(
-        baseDirectory: root.appendingPathComponent("manga-chapter-documents", isDirectory: true)
-    )
+    let database = try YamiboDatabase.openPool(rootDirectory: root.appendingPathComponent("grdb", isDirectory: true))
+    let mangaDirectoryStore = GRDBMangaDirectoryStore(databasePool: database)
+    let mangaChapterDocumentStore = GRDBMangaChapterDocumentStore(databasePool: database)
     let mangaImageDataCacheStore = FileMangaImageDataCacheStore(
         baseDirectory: root.appendingPathComponent("manga-image-data", isDirectory: true)
     )
     let mangaOfflineCacheStore = GRDBMangaOfflineCacheStore(
-        databasePool: try YamiboDatabase.openPool(rootDirectory: root.appendingPathComponent("grdb", isDirectory: true)),
+        databasePool: database,
         baseDirectory: root.appendingPathComponent("manga-offline-cache", isDirectory: true)
     )
     let appContext = YamiboAppContext(

@@ -78,7 +78,40 @@ public actor GRDBMangaDirectoryStore: MangaDirectoryPersisting, MangaDirectorySt
     }
 
     public func totalDiskUsageBytes() async -> Int {
-        0
+        do {
+            return try await database.read { db in
+                let directoryBytes = try Int.fetchOne(
+                    db,
+                    sql: """
+                    SELECT COALESCE(SUM(
+                        length(CAST(clean_book_name AS BLOB)) +
+                        length(CAST(strategy AS BLOB)) +
+                        length(CAST(source_key AS BLOB)) +
+                        COALESCE(length(CAST(search_keyword AS BLOB)), 0) +
+                        16
+                    ), 0)
+                    FROM manga_directories
+                    """
+                ) ?? 0
+                let chapterBytes = try Int.fetchOne(
+                    db,
+                    sql: """
+                    SELECT COALESCE(SUM(
+                        length(CAST(directory_name AS BLOB)) +
+                        length(CAST(tid AS BLOB)) +
+                        length(CAST(raw_title AS BLOB)) +
+                        COALESCE(length(CAST(author_uid AS BLOB)), 0) +
+                        COALESCE(length(CAST(author_name AS BLOB)), 0) +
+                        32
+                    ), 0)
+                    FROM manga_directory_chapters
+                    """
+                ) ?? 0
+                return directoryBytes + chapterBytes
+            }
+        } catch {
+            return 0
+        }
     }
 
     static func save(_ directory: MangaDirectory, in db: Database) throws {
@@ -340,7 +373,35 @@ public actor GRDBMangaChapterDocumentStore: MangaChapterDocumentPersisting, Mang
     }
 
     public func totalDiskUsageBytes() async -> Int {
-        0
+        do {
+            return try await database.read { db in
+                let documentBytes = try Int.fetchOne(
+                    db,
+                    sql: """
+                    SELECT COALESCE(SUM(
+                        length(CAST(tid AS BLOB)) +
+                        length(CAST(owner_post_id AS BLOB)) +
+                        length(CAST(chapter_title AS BLOB))
+                    ), 0)
+                    FROM manga_chapter_documents
+                    """
+                ) ?? 0
+                let imageBytes = try Int.fetchOne(
+                    db,
+                    sql: """
+                    SELECT COALESCE(SUM(
+                        length(CAST(tid AS BLOB)) +
+                        length(CAST(image_url AS BLOB)) +
+                        8
+                    ), 0)
+                    FROM manga_chapter_document_images
+                    """
+                ) ?? 0
+                return documentBytes + imageBytes
+            }
+        } catch {
+            return 0
+        }
     }
 
     static func save(_ document: MangaChapterDocument, in db: Database) throws {

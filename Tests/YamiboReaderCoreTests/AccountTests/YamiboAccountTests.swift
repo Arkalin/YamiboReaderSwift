@@ -153,9 +153,7 @@ private enum YamiboAccountTestError: Error {
     let sessionStore = SessionStore(defaults: try #require(UserDefaults(suiteName: suiteName)), key: "session")
     let profileStore = YamiboProfileStore(defaults: try #require(UserDefaults(suiteName: suiteName)), key: "profile")
     let favoriteStore = FavoriteStore(defaults: try #require(UserDefaults(suiteName: suiteName)), key: "favorites")
-    let offlineStore = FileMangaOfflineCacheStore(
-        baseDirectory: rootDirectory.appendingPathComponent("offline", isDirectory: true)
-    )
+    let offlineStore = try makeTestGRDBMangaOfflineCacheStore(rootDirectory: rootDirectory)
     let service = YamiboAccountService(
         session: makeAccountTestSession(),
         sessionStore: sessionStore,

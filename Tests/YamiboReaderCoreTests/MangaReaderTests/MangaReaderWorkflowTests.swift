@@ -458,7 +458,7 @@ struct MangaReaderTestsWorkflow {
 
     @Test func offlineCachedCurrentChapterLoadsFromDirectoryOwnerWithoutLocalDirectory() async throws {
         let document = try makeWorkflowDocument(tid: "700", pageCount: 2)
-        let offlineStore = FileMangaOfflineCacheStore(baseDirectory: try makeTemporaryWorkflowOfflineCacheDirectory())
+        let offlineStore = try makeTestGRDBMangaOfflineCacheStore(rootDirectory: try makeTemporaryWorkflowOfflineCacheDirectory())
         for imageURL in document.imageURLs {
             try await offlineStore.saveOfflineImageData(Data([7]), for: imageURL)
         }

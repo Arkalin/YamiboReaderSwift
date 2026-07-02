@@ -4,7 +4,7 @@ Date: 2026-06-18
 
 ## Status
 
-Accepted for the post-image-byte-cache manga reader pipeline.
+Accepted for the post-image-byte-cache manga reader pipeline. The original file-backed chapter document store was later superseded by the GRDB store migration.
 
 ## Context
 
@@ -32,6 +32,6 @@ Tests should split responsibilities: store tests cover normalized URL keys, SHA-
 
 Do not cache raw chapter HTML. Raw HTML parsing remains hidden behind Data adapters, and **Manga Chapter Document** is the boundary value.
 
-Do not fold chapter documents into `FileMangaDirectoryStore`. A **Manga Directory** is the ordered chapter list for a title, while a **Manga Chapter Document** is parsed image-page content for one chapter; they share lifecycle but not identity.
+Do not fold chapter documents into the manga directory store. A **Manga Directory** is the ordered chapter list for a title, while a **Manga Chapter Document** is parsed image-page content for one chapter; they share lifecycle but not identity.
 
 Do not add automatic background refresh or TTL without a product requirement. Either would reintroduce chapter HTML requests even when the document is cached.

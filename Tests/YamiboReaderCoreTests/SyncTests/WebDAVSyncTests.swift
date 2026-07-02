@@ -1110,7 +1110,7 @@ private enum WebDAVTestError: Error {
     let suiteName = makeWebDAVDefaultsSuiteName(prefix: "webdav-upload-offline-boundary")
     UserDefaults(suiteName: suiteName)?.removePersistentDomain(forName: suiteName)
     let rootDirectory = makeWebDAVTemporaryDirectory(prefix: "webdav-upload-offline-boundary")
-    let offlineStore = FileMangaOfflineCacheStore(baseDirectory: rootDirectory.appendingPathComponent("offline", isDirectory: true))
+    let offlineStore = try makeTestGRDBMangaOfflineCacheStore(rootDirectory: rootDirectory)
     let settingsStore = WebDAVSyncSettingsStore(defaults: try makeWebDAVDefaults(suiteName: suiteName), key: "webdav")
     let favoriteStore = FavoriteStore(
         defaults: try makeWebDAVDefaults(suiteName: suiteName),
@@ -1183,7 +1183,7 @@ private enum WebDAVTestError: Error {
     let suiteName = makeWebDAVDefaultsSuiteName(prefix: "webdav-download-offline-cleanup")
     UserDefaults(suiteName: suiteName)?.removePersistentDomain(forName: suiteName)
     let rootDirectory = makeWebDAVTemporaryDirectory(prefix: "webdav-download-offline-cleanup")
-    let offlineStore = FileMangaOfflineCacheStore(baseDirectory: rootDirectory.appendingPathComponent("offline", isDirectory: true))
+    let offlineStore = try makeTestGRDBMangaOfflineCacheStore(rootDirectory: rootDirectory)
     let settingsStore = WebDAVSyncSettingsStore(defaults: try makeWebDAVDefaults(suiteName: suiteName), key: "webdav")
     let favoriteStore = FavoriteStore(
         defaults: try makeWebDAVDefaults(suiteName: suiteName),

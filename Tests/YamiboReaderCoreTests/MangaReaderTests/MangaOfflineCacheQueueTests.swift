@@ -6,7 +6,7 @@ import Testing
 struct MangaReaderTestsMangaOfflineCacheQueue {
     @Test func enqueuePersistsQueueWorkWithOwnerMetadataAndInsertionOrder() async throws {
         let directory = try makeTemporaryOfflineCacheQueueDirectory()
-        let firstStore = FileMangaOfflineCacheStore(baseDirectory: directory)
+        let firstStore = try makeTestGRDBMangaOfflineCacheStore(rootDirectory: directory)
 
         let result = try await firstStore.enqueueOfflineCacheWork(
             makeOfflineCacheWorkRequest(
@@ -26,14 +26,14 @@ struct MangaReaderTestsMangaOfflineCacheQueue {
         #expect(enqueued.insertionIndex == 1)
         #expect(enqueued.state == .paused)
 
-        let secondStore = FileMangaOfflineCacheStore(baseDirectory: directory)
+        let secondStore = try makeTestGRDBMangaOfflineCacheStore(rootDirectory: directory)
         let persisted = await secondStore.allOfflineCacheWorks()
 
         #expect(persisted == [enqueued])
     }
 
     @Test func enqueueIsIdempotentForExistingQueueWorkAndCachedMembership() async throws {
-        let store = FileMangaOfflineCacheStore(baseDirectory: try makeTemporaryOfflineCacheQueueDirectory())
+        let store = try makeTestGRDBMangaOfflineCacheStore(rootDirectory: try makeTemporaryOfflineCacheQueueDirectory())
         let firstRequest = try makeOfflineCacheWorkRequest(ownerName: "favorite-a", tid: "100")
         let secondRequest = try makeOfflineCacheWorkRequest(
             ownerName: "favorite-a",
@@ -54,13 +54,20 @@ struct MangaReaderTestsMangaOfflineCacheQueue {
 
         let cachedResult = try await store.enqueueOfflineCacheWork(secondRequest)
 
-        #expect(cachedResult == .alreadyCached(cachedMembership))
+        guard case let .alreadyCached(loadedMembership) = cachedResult else {
+            Issue.record("Expected existing cached membership")
+            return
+        }
+        #expect(loadedMembership.id == cachedMembership.id)
+        #expect(loadedMembership.chapterTitle == cachedMembership.chapterTitle)
+        #expect(loadedMembership.chapterURL == cachedMembership.chapterURL)
+        #expect(loadedMembership.imageURLs == cachedMembership.imageURLs)
         #expect(await store.allOfflineCacheWorks() == [firstWork])
     }
 
     @Test func failedQueueWorkPersistsUntilCanceledAndProjectsAsCaching() async throws {
         let directory = try makeTemporaryOfflineCacheQueueDirectory()
-        let writingStore = FileMangaOfflineCacheStore(baseDirectory: directory)
+        let writingStore = try makeTestGRDBMangaOfflineCacheStore(rootDirectory: directory)
         let request = try makeOfflineCacheWorkRequest(ownerName: "favorite-a", tid: "100")
 
         _ = try await writingStore.enqueueOfflineCacheWork(request)
@@ -70,7 +77,7 @@ struct MangaReaderTestsMangaOfflineCacheQueue {
             message: "Network unavailable"
         )
 
-        let readingStore = FileMangaOfflineCacheStore(baseDirectory: directory)
+        let readingStore = try makeTestGRDBMangaOfflineCacheStore(rootDirectory: directory)
         let failedWork = try #require(await readingStore.offlineCacheWork(ownerName: "favorite-a", tid: "100"))
 
         #expect(failedWork.state == .failed)
@@ -85,7 +92,7 @@ struct MangaReaderTestsMangaOfflineCacheQueue {
 
     @Test func progressSnapshotsPersistAcrossStoreInstances() async throws {
         let directory = try makeTemporaryOfflineCacheQueueDirectory()
-        let writingStore = FileMangaOfflineCacheStore(baseDirectory: directory)
+        let writingStore = try makeTestGRDBMangaOfflineCacheStore(rootDirectory: directory)
         let firstImage = try #require(URL(string: "https://img.example.com/100-1.jpg"))
         let secondImage = try #require(URL(string: "https://img.example.com/100-2.jpg"))
         let thirdImage = try #require(URL(string: "https://img.example.com/100-3.jpg"))
@@ -105,7 +112,7 @@ struct MangaReaderTestsMangaOfflineCacheQueue {
             currentBytesPerSecond: nil
         )
 
-        let readingStore = FileMangaOfflineCacheStore(baseDirectory: directory)
+        let readingStore = try makeTestGRDBMangaOfflineCacheStore(rootDirectory: directory)
         let work = try #require(await readingStore.offlineCacheWork(ownerName: "favorite-a", tid: "100"))
 
         #expect(work.targetImageURLs == [firstImage, secondImage, thirdImage])
@@ -114,7 +121,7 @@ struct MangaReaderTestsMangaOfflineCacheQueue {
     }
 
     @Test func membershipDeletionCancelsQueueWorkEvenWithoutCachedImages() async throws {
-        let store = FileMangaOfflineCacheStore(baseDirectory: try makeTemporaryOfflineCacheQueueDirectory())
+        let store = try makeTestGRDBMangaOfflineCacheStore(rootDirectory: try makeTemporaryOfflineCacheQueueDirectory())
         let imageURL = try #require(URL(string: "https://img.example.com/100-1.jpg"))
 
         _ = try await store.enqueueOfflineCacheWork(
@@ -131,7 +138,7 @@ struct MangaReaderTestsMangaOfflineCacheQueue {
     }
 
     @Test func membershipDeletionRemovesPartialOfflineBytesForCanceledQueueWork() async throws {
-        let store = FileMangaOfflineCacheStore(baseDirectory: try makeTemporaryOfflineCacheQueueDirectory())
+        let store = try makeTestGRDBMangaOfflineCacheStore(rootDirectory: try makeTemporaryOfflineCacheQueueDirectory())
         let imageURL = try #require(URL(string: "https://img.example.com/100-1.jpg"))
 
         _ = try await store.enqueueOfflineCacheWork(
@@ -153,7 +160,7 @@ struct MangaReaderTestsMangaOfflineCacheQueue {
     }
 
     @Test func completedMembershipLeavesQueueWhenAllOfflineImagesArePresent() async throws {
-        let store = FileMangaOfflineCacheStore(baseDirectory: try makeTemporaryOfflineCacheQueueDirectory())
+        let store = try makeTestGRDBMangaOfflineCacheStore(rootDirectory: try makeTemporaryOfflineCacheQueueDirectory())
         let firstImage = try #require(URL(string: "https://img.example.com/100-1.jpg"))
         let secondImage = try #require(URL(string: "https://img.example.com/100-2.jpg"))
 
@@ -182,7 +189,7 @@ struct MangaReaderTestsMangaOfflineCacheQueue {
     }
 
     @Test func queueProjectionGroupsByOwnerAndOrdersChaptersByDirectoryWhenAvailable() async throws {
-        let store = FileMangaOfflineCacheStore(baseDirectory: try makeTemporaryOfflineCacheQueueDirectory())
+        let store = try makeTestGRDBMangaOfflineCacheStore(rootDirectory: try makeTemporaryOfflineCacheQueueDirectory())
         _ = try await store.enqueueOfflineCacheWork(try makeOfflineCacheWorkRequest(ownerName: "作品B", tid: "300"))
         _ = try await store.enqueueOfflineCacheWork(try makeOfflineCacheWorkRequest(ownerName: "作品A", tid: "200"))
         _ = try await store.enqueueOfflineCacheWork(try makeOfflineCacheWorkRequest(ownerName: "作品A", tid: "100"))
@@ -210,14 +217,14 @@ struct MangaReaderTestsMangaOfflineCacheQueue {
 
     @Test func restartRecoveryPausesRunningQueueWithoutDroppingFailedWork() async throws {
         let directory = try makeTemporaryOfflineCacheQueueDirectory()
-        let writingStore = FileMangaOfflineCacheStore(baseDirectory: directory)
+        let writingStore = try makeTestGRDBMangaOfflineCacheStore(rootDirectory: directory)
 
         _ = try await writingStore.enqueueOfflineCacheWork(try makeOfflineCacheWorkRequest(ownerName: "favorite-a", tid: "100"))
         _ = try await writingStore.enqueueOfflineCacheWork(try makeOfflineCacheWorkRequest(ownerName: "favorite-a", tid: "200"))
         try await writingStore.markOfflineCacheWorkFailed(ownerName: "favorite-a", tid: "200", message: "Timeout")
         try await writingStore.setOfflineCacheQueueRunState(.running)
 
-        let readingStore = FileMangaOfflineCacheStore(baseDirectory: directory)
+        let readingStore = try makeTestGRDBMangaOfflineCacheStore(rootDirectory: directory)
 
         #expect(await readingStore.offlineCacheQueueRunState() == .paused)
         #expect(await readingStore.offlineCacheWork(ownerName: "favorite-a", tid: "100")?.state == .paused)
@@ -225,7 +232,7 @@ struct MangaReaderTestsMangaOfflineCacheQueue {
     }
 
     @Test func readerFacingCacheStateRequiresMembershipAndAllOfflineImages() async throws {
-        let store = FileMangaOfflineCacheStore(baseDirectory: try makeTemporaryOfflineCacheQueueDirectory())
+        let store = try makeTestGRDBMangaOfflineCacheStore(rootDirectory: try makeTemporaryOfflineCacheQueueDirectory())
         let firstImage = try #require(URL(string: "https://img.example.com/100-1.jpg"))
         let secondImage = try #require(URL(string: "https://img.example.com/100-2.jpg"))
 

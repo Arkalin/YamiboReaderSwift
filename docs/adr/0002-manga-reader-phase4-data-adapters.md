@@ -4,7 +4,7 @@ Date: 2026-06-18
 
 ## Status
 
-Accepted for the phase 4 implementation plan.
+Accepted for the phase 4 implementation plan. The file-backed manga metadata stores described here were later superseded by the GRDB store migration; references to them are historical.
 
 ## Context
 
@@ -28,13 +28,13 @@ Chapter URL normalization for Phase 4 is: use `YamiboRoute.thread(url: page: 1, 
 
 Remote pagination has no artificial maximum page cap in Phase 4. Requests are sequential and should check cancellation between pages. Login, flood-control, and non-2xx responses fail the operation instead of returning partial results; 2xx follow-up pages that parse to no chapters are skipped.
 
-`FileMangaDirectoryStore` is persistence-only. The `MangaDirectoryPersisting` protocol supports load by clean book name, load by contained chapter `tid`, save, and delete by name. The concrete store is an actor with a lazy index, uses a new manga-reader-specific directory under Application Support instead of the legacy `manga-directory` path, saves a trimmed copy of `cleanBookName`, treats missing deletes as successful no-ops, degrades safely on corrupt or missing index data, and self-heals missing or corrupt indexed directory files when possible. The concrete store may expose `clearAll()` outside the protocol so `YamiboAppContext.resetApplicationData()` can clear the new local manga reader data.
+The phase-4 file-backed manga directory store is persistence-only. The `MangaDirectoryPersisting` protocol supports load by clean book name, load by contained chapter `tid`, save, and delete by name. The concrete store is an actor with a lazy index, uses a new manga-reader-specific directory under Application Support instead of the legacy `manga-directory` path, saves a trimmed copy of `cleanBookName`, treats missing deletes as successful no-ops, degrades safely on corrupt or missing index data, and self-heals missing or corrupt indexed directory files when possible. The concrete store may expose `clearAll()` outside the protocol so `YamiboAppContext.resetApplicationData()` can clear the new local manga reader data.
 
 The chapter `tid` lookup is a runtime scan over directories reachable from the existing `cleanBookName -> fileName` index. It intentionally does not add a `tid -> fileName` disk index or change the directory index schema. The lookup exists so a cached **Manga Directory** can be recovered when launch context lacks a directory name but the current cached **Manga Chapter Document** has a known `tid`.
 
 `YamiboMangaImageDataLoader` is an actor that sends user agent, cookie, optional referer, and image accept headers. It maps 401/403 to `YamiboError.notAuthenticated`, non-2xx responses to `YamiboError.invalidResponse`, empty data to `YamiboError.unreadableBody`, and offline transport errors to `YamiboError.offline`. It deduplicates in-flight requests by image URL only. Phase 4 does not implement image disk or memory caching.
 
-`YamiboAppContext` should add narrow factories only after the concrete adapters exist. The context holds one long-lived `FileMangaDirectoryStore`, while network adapters are created from the current `SessionStore` snapshot each time, matching the existing repository factory pattern.
+`YamiboAppContext` should add narrow factories only after the concrete adapters exist. The context holds one long-lived manga directory store, while network adapters are created from the current `SessionStore` snapshot each time, matching the existing repository factory pattern.
 
 ## Rejected Alternatives
 

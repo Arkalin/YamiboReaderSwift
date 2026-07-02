@@ -583,7 +583,7 @@ import Testing
 @Test func favoriteStoreDeletingFavoritePreservesOwnedMangaOfflineCache() async throws {
     let defaults = try #require(UserDefaults(suiteName: makeIsolatedDefaultsSuiteName(prefix: "favorite-delete-offline-cache")))
     let root = makeTemporaryDirectory(prefix: "favorite-delete-offline-cache")
-    let offlineStore = FileMangaOfflineCacheStore(baseDirectory: root.appendingPathComponent("offline", isDirectory: true))
+    let offlineStore = try makeTestGRDBMangaOfflineCacheStore(rootDirectory: root.appendingPathComponent("offline", isDirectory: true))
     let store = FavoriteStore(defaults: defaults, key: "favorites", mangaOfflineCacheStore: offlineStore)
     let removedFavoriteURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=335&mobile=2"))
     let remainingFavoriteURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=336&mobile=2"))
@@ -633,7 +633,7 @@ import Testing
 @Test func favoriteStoreRemoteReconcilePreservesMangaOfflineCacheForDisappearingFavorite() async throws {
     let defaults = try #require(UserDefaults(suiteName: makeIsolatedDefaultsSuiteName(prefix: "favorite-reconcile-offline-cache")))
     let root = makeTemporaryDirectory(prefix: "favorite-reconcile-offline-cache")
-    let offlineStore = FileMangaOfflineCacheStore(baseDirectory: root.appendingPathComponent("offline", isDirectory: true))
+    let offlineStore = try makeTestGRDBMangaOfflineCacheStore(rootDirectory: root.appendingPathComponent("offline", isDirectory: true))
     let store = FavoriteStore(defaults: defaults, key: "favorites", mangaOfflineCacheStore: offlineStore)
     let favoriteURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=338&mobile=2"))
     let favorite = Favorite(id: "favorite-reconciled-away", title: "远端删除漫画", url: favoriteURL, remoteFavoriteID: "remote-338", type: .manga)
@@ -1779,18 +1779,12 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
     let favoriteBackgroundImageStore = FavoriteBackgroundImageStore(
         baseDirectory: rootDirectory.appendingPathComponent("favorite-background", isDirectory: true)
     )
-    let mangaDirectoryStore = FileMangaDirectoryStore(
-        baseDirectory: rootDirectory.appendingPathComponent("manga-directories", isDirectory: true)
-    )
-    let mangaChapterDocumentStore = FileMangaChapterDocumentStore(
-        baseDirectory: rootDirectory.appendingPathComponent("manga-chapter-documents", isDirectory: true)
-    )
+    let mangaDirectoryStore = try makeTestGRDBMangaDirectoryStore(rootDirectory: rootDirectory)
+    let mangaChapterDocumentStore = try makeTestGRDBMangaChapterDocumentStore(rootDirectory: rootDirectory)
     let mangaImageDataCacheStore = FileMangaImageDataCacheStore(
         baseDirectory: rootDirectory.appendingPathComponent("manga-image-data", isDirectory: true)
     )
-    let mangaOfflineCacheStore = FileMangaOfflineCacheStore(
-        baseDirectory: rootDirectory.appendingPathComponent("manga-offline-cache", isDirectory: true)
-    )
+    let mangaOfflineCacheStore = try makeTestGRDBMangaOfflineCacheStore(rootDirectory: rootDirectory)
     let appContext = YamiboAppContext(
         sessionStore: sessionStore,
         settingsStore: settingsStore,

@@ -19,7 +19,7 @@ struct MangaReaderTestsCachedImageDataLoader {
 
     @Test func matchingOfflineMembershipReadsRetainedBytesBeforeTransparentCacheAndNetwork() async throws {
         let imageURL = try #require(URL(string: "https://img.example.com/offline.jpg"))
-        let offlineStore = FileMangaOfflineCacheStore(baseDirectory: try makeTemporaryCachedImageLoaderDirectory())
+        let offlineStore = try makeTestGRDBMangaOfflineCacheStore(rootDirectory: try makeTemporaryCachedImageLoaderDirectory())
         try await offlineStore.saveOfflineImageData(Data([7]), for: imageURL)
         try await offlineStore.saveMembership(makeCachedImageLoaderMembership(imageURLs: [imageURL]))
         let cache = RecordingMangaImageDataCache(initialData: [imageURL.absoluteString: Data([1])])
@@ -43,7 +43,7 @@ struct MangaReaderTestsCachedImageDataLoader {
 
     @Test func missingOfflineBytesForMatchingMembershipFallsBackToTransparentCache() async throws {
         let imageURL = try #require(URL(string: "https://img.example.com/fallback-cache.jpg"))
-        let offlineStore = FileMangaOfflineCacheStore(baseDirectory: try makeTemporaryCachedImageLoaderDirectory())
+        let offlineStore = try makeTestGRDBMangaOfflineCacheStore(rootDirectory: try makeTemporaryCachedImageLoaderDirectory())
         try await offlineStore.saveMembership(makeCachedImageLoaderMembership(imageURLs: [imageURL]))
         let cache = RecordingMangaImageDataCache(initialData: [imageURL.absoluteString: Data([2])])
         let upstream = RecordingMangaImageDataLoader(results: [.success(Data([9]))])
@@ -66,7 +66,7 @@ struct MangaReaderTestsCachedImageDataLoader {
     @Test func nonMemberImageKeepsTransparentCacheThenNetworkBehaviorWithoutCreatingMembership() async throws {
         let memberImageURL = try #require(URL(string: "https://img.example.com/member.jpg"))
         let requestedImageURL = try #require(URL(string: "https://img.example.com/non-member.jpg"))
-        let offlineStore = FileMangaOfflineCacheStore(baseDirectory: try makeTemporaryCachedImageLoaderDirectory())
+        let offlineStore = try makeTestGRDBMangaOfflineCacheStore(rootDirectory: try makeTemporaryCachedImageLoaderDirectory())
         try await offlineStore.saveOfflineImageData(Data([7]), for: requestedImageURL)
         try await offlineStore.saveMembership(makeCachedImageLoaderMembership(imageURLs: [memberImageURL]))
         let cache = RecordingMangaImageDataCache(initialData: [requestedImageURL.absoluteString: Data([3])])
@@ -90,7 +90,7 @@ struct MangaReaderTestsCachedImageDataLoader {
 
     @Test func matchingMembershipFallsBackToNetworkWhenOfflineAndTransparentBytesAreMissing() async throws {
         let imageURL = try #require(URL(string: "https://img.example.com/fallback-network.jpg"))
-        let offlineStore = FileMangaOfflineCacheStore(baseDirectory: try makeTemporaryCachedImageLoaderDirectory())
+        let offlineStore = try makeTestGRDBMangaOfflineCacheStore(rootDirectory: try makeTemporaryCachedImageLoaderDirectory())
         try await offlineStore.saveMembership(makeCachedImageLoaderMembership(imageURLs: [imageURL]))
         let cache = RecordingMangaImageDataCache()
         let upstream = RecordingMangaImageDataLoader(results: [.success(Data([4]))])
