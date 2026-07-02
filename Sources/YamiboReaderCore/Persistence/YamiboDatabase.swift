@@ -67,6 +67,7 @@ public enum YamiboDatabase {
     ) throws {
         try writer.write { db in
             try db.execute(sql: "DELETE FROM reader_cache_entries")
+            try db.execute(sql: "DELETE FROM image_data_cache_entries")
             try db.execute(sql: "DELETE FROM manga_image_data_cache_entries")
             try db.execute(sql: "DELETE FROM manga_offline_cache_completed_images")
             try db.execute(sql: "DELETE FROM manga_offline_cache_work_images")
@@ -350,6 +351,23 @@ public enum YamiboDatabase {
                 index: "manga_image_data_cache_entries_lru_idx",
                 on: "manga_image_data_cache_entries",
                 columns: ["last_accessed_at", "image_url"]
+            )
+        }
+
+        migrator.registerMigration("create_image_data_cache_entries") { db in
+            try db.create(table: "image_data_cache_entries") { table in
+                table.column("namespace", .text).notNull()
+                table.column("image_url", .text).notNull()
+                table.column("file_name", .text).notNull()
+                table.column("byte_count", .integer).notNull()
+                table.column("last_accessed_at", .double).notNull()
+                table.column("retention_policy", .text).notNull()
+                table.primaryKey(["namespace", "image_url"], onConflict: .replace)
+            }
+            try db.create(
+                index: "image_data_cache_entries_lru_idx",
+                on: "image_data_cache_entries",
+                columns: ["retention_policy", "last_accessed_at", "namespace", "image_url"]
             )
         }
     }

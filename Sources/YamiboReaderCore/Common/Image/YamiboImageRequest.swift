@@ -39,10 +39,32 @@ public struct YamiboImageRequest: Hashable, Sendable {
             cacheNamespace.value
         ].joined(separator: "\u{1F}")
     }
+
+    public var persistentCacheKey: String {
+        [
+            cacheNamespace.value,
+            url.absoluteString
+        ].joined(separator: "\u{1F}")
+    }
 }
 
 public protocol YamiboImageDataLoading: Sendable {
     func imageData(for request: YamiboImageRequest) async throws -> Data
+}
+
+public enum YamiboImageDataCacheRetentionPolicy: String, CaseIterable, Sendable {
+    case evictable
+    case protected
+}
+
+public protocol YamiboImageDataCaching: Sendable {
+    func data(for request: YamiboImageRequest) async -> Data?
+    func save(
+        _ data: Data,
+        for request: YamiboImageRequest,
+        retentionPolicy: YamiboImageDataCacheRetentionPolicy
+    ) async throws
+    func clearAll() async throws
 }
 
 public struct YamiboImageLoadingContext: Sendable {
