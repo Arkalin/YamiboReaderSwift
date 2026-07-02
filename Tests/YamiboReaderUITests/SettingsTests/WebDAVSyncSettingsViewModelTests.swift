@@ -18,14 +18,10 @@ final class WebDAVSyncSettingsViewModelTests: XCTestCase {
             defaults: try XCTUnwrap(UserDefaults(suiteName: suiteName)),
             key: "session"
         )
-        let favoriteStore = FavoriteStore(
-            defaults: try XCTUnwrap(UserDefaults(suiteName: suiteName)),
-            key: "favorites"
-        )
         let appContext = YamiboAppContext(
             sessionStore: sessionStore,
             webDAVSyncSettingsStore: settingsStore,
-            favoriteStore: favoriteStore,
+            grdbRootDirectory: makeWebDAVSettingsTemporaryDirectory(prefix: "download-mismatch"),
             session: makeWebDAVSettingsTestSession()
         )
 
@@ -99,14 +95,10 @@ final class WebDAVSyncSettingsViewModelTests: XCTestCase {
             defaults: try XCTUnwrap(UserDefaults(suiteName: suiteName)),
             key: "session"
         )
-        let favoriteStore = FavoriteStore(
-            defaults: try XCTUnwrap(UserDefaults(suiteName: suiteName)),
-            key: "favorites"
-        )
         let appContext = YamiboAppContext(
             sessionStore: sessionStore,
             webDAVSyncSettingsStore: settingsStore,
-            favoriteStore: favoriteStore,
+            grdbRootDirectory: makeWebDAVSettingsTemporaryDirectory(prefix: "upload-mismatch"),
             session: makeWebDAVSettingsTestSession()
         )
 
@@ -210,4 +202,11 @@ private func makeWebDAVSettingsTestSession() -> URLSession {
     let configuration = URLSessionConfiguration.ephemeral
     configuration.protocolClasses = [WebDAVSettingsTestURLProtocol.self]
     return URLSession(configuration: configuration)
+}
+
+private func makeWebDAVSettingsTemporaryDirectory(prefix: String) -> URL {
+    let directory = FileManager.default.temporaryDirectory
+        .appendingPathComponent("\(prefix)-\(UUID().uuidString)", isDirectory: true)
+    try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    return directory
 }

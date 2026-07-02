@@ -255,12 +255,10 @@ private func makeAdjacentPrefetchFixture(
     let settingsStore = try SettingsStore(testSuiteName: defaultsSuiteName, key: "settings")
     try await settingsStore.save(AppSettings())
     let resumeRouteStore = try ReaderResumeRouteStore(testSuiteName: defaultsSuiteName, key: "resume")
-    let favoriteStore = try FavoriteStore(testSuiteName: defaultsSuiteName, key: "favorites")
     let appContext = YamiboAppContext(
         sessionStore: try SessionStore(testSuiteName: defaultsSuiteName, key: "session"),
         settingsStore: settingsStore,
         readerResumeRouteStore: resumeRouteStore,
-        favoriteStore: favoriteStore
     )
     let resolvedLoader = loader ?? AdjacentPrefetchDocumentLoader(documents: [document] + extraDocuments)
     let resolvedProgressSync = progressSync ?? ProgressSyncModule(

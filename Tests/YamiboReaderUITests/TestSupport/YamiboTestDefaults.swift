@@ -34,12 +34,6 @@ enum YamiboTestDefaults {
     }
 }
 
-extension FavoriteStore {
-    init(testSuiteName suiteName: String, key: String) throws {
-        self.init(defaults: try YamiboTestDefaults.defaults(suiteName: suiteName), key: key)
-    }
-}
-
 extension ReadingProgressStore {
     init(testSuiteName suiteName: String, key: String) throws {
         self.init(

@@ -123,7 +123,6 @@ final class MangaPresentationRouteTests: XCTestCase {
             settingsStore: fixture.settingsStore,
             webDAVSyncSettingsStore: fixture.webDAVSettingsStore,
             readerResumeRouteStore: fixture.resumeRouteStore,
-            favoriteStore: fixture.favoriteStore,
             session: fixture.session
         )
         let appModel = YamiboAppModel(appContext: appContext)
@@ -209,7 +208,6 @@ final class MangaPresentationRouteTests: XCTestCase {
             settingsStore: fixture.settingsStore,
             webDAVSyncSettingsStore: fixture.webDAVSettingsStore,
             readerResumeRouteStore: fixture.resumeRouteStore,
-            favoriteStore: fixture.favoriteStore,
             session: fixture.session
         )
         let appModel = YamiboAppModel(appContext: appContext)
@@ -249,22 +247,13 @@ final class MangaPresentationRouteTests: XCTestCase {
             initialView: 6,
             initialResumePoint: localResumePoint
         )
-        let staleFavorite = Favorite(
-            title: "旧收藏进度",
-            url: threadURL,
-            lastView: 2,
-            lastChapter: "第二章",
-            type: .novel
-        )
         try await fixture.resumeRouteStore.save(.novel(localContext))
-        try await fixture.favoriteStore.saveFavorites([staleFavorite])
 
         let appContext = YamiboAppContext(
             sessionStore: fixture.sessionStore,
             settingsStore: fixture.settingsStore,
             webDAVSyncSettingsStore: fixture.webDAVSettingsStore,
             readerResumeRouteStore: fixture.resumeRouteStore,
-            favoriteStore: fixture.favoriteStore,
             session: fixture.session
         )
         let appModel = YamiboAppModel(appContext: appContext)
@@ -746,7 +735,6 @@ private func makeAppModelWithReaderResumeRouteStore() async throws -> (YamiboApp
         sessionStore: try SessionStore(testSuiteName: defaultsSuiteName, key: "session"),
         settingsStore: try SettingsStore(testSuiteName: defaultsSuiteName, key: "settings"),
         readerResumeRouteStore: store,
-        favoriteStore: try FavoriteStore(testSuiteName: defaultsSuiteName, key: "favorites")
     )
     let appModel = await MainActor.run {
         YamiboAppModel(appContext: context)
@@ -761,7 +749,6 @@ private func makeIsolatedAppModel(initialTab: AppTab = .forum) -> YamiboAppModel
         sessionStore: try! SessionStore(testSuiteName: defaultsSuiteName, key: "session"),
         settingsStore: try! SettingsStore(testSuiteName: defaultsSuiteName, key: "settings"),
         readerResumeRouteStore: try! ReaderResumeRouteStore(testSuiteName: defaultsSuiteName, key: "reader-route"),
-        favoriteStore: try! FavoriteStore(testSuiteName: defaultsSuiteName, key: "favorites")
     )
     return YamiboAppModel(appContext: context, initialTab: initialTab)
 }
@@ -799,7 +786,6 @@ private struct AppModelWebDAVFixture: Sendable {
     let settingsStore: SettingsStore
     let webDAVSettingsStore: WebDAVSyncSettingsStore
     let resumeRouteStore: ReaderResumeRouteStore
-    let favoriteStore: FavoriteStore
     let session: URLSession
 }
 
@@ -810,7 +796,6 @@ private func makeAppModelWebDAVFixture(suiteName: String) throws -> AppModelWebD
         settingsStore: try SettingsStore(testSuiteName: defaultsSuiteName, key: "settings"),
         webDAVSettingsStore: try WebDAVSyncSettingsStore(testSuiteName: defaultsSuiteName, key: "webdav"),
         resumeRouteStore: try ReaderResumeRouteStore(testSuiteName: defaultsSuiteName, key: "reader-route"),
-        favoriteStore: try FavoriteStore(testSuiteName: defaultsSuiteName, key: "favorites"),
         session: makeAppModelWebDAVTestSession()
     )
 }

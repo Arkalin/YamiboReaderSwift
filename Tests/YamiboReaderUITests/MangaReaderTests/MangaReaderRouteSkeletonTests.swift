@@ -50,7 +50,6 @@ private func makeAppContext() throws -> YamiboAppContext {
         sessionStore: try SessionStore(testSuiteName: defaultsSuiteName, key: "session"),
         settingsStore: try SettingsStore(testSuiteName: defaultsSuiteName, key: "settings"),
         readerResumeRouteStore: try ReaderResumeRouteStore(testSuiteName: defaultsSuiteName, key: "reader-route"),
-        favoriteStore: try FavoriteStore(testSuiteName: defaultsSuiteName, key: "favorites")
     )
 }
 

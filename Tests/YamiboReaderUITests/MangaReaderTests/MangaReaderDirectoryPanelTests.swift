@@ -226,7 +226,6 @@ private func makeDirectoryPanelFixture(
         sessionStore: try SessionStore(testSuiteName: defaultsSuiteName, key: "session"),
         settingsStore: settingsStore,
         readerResumeRouteStore: try ReaderResumeRouteStore(testSuiteName: defaultsSuiteName, key: "resume"),
-        favoriteStore: try FavoriteStore(testSuiteName: defaultsSuiteName, key: "favorites")
     )
     #if os(iOS)
     let dependencies = MangaReaderModelDependencies(

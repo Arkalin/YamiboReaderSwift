@@ -81,20 +81,20 @@ struct MangaReaderTestsMangaOfflineCacheQueueExecutor {
         let suiteName = "manga-offline-cache-no-progress-side-effects-\(UUID().uuidString)"
         try #require(UserDefaults(suiteName: suiteName)).removePersistentDomain(forName: suiteName)
         let store = try makeTestGRDBMangaOfflineCacheStore(rootDirectory: try makeTemporaryExecutorDirectory())
-        let favoriteStore = FavoriteStore(defaults: try #require(UserDefaults(suiteName: suiteName)), key: "favorites")
+        let localFavoriteLibraryStore = LocalFirstFavoriteLibraryStore(
+            defaults: try #require(UserDefaults(suiteName: suiteName)),
+            key: "local-favorites"
+        )
         let resumeRouteStore = ReaderResumeRouteStore(defaults: try #require(UserDefaults(suiteName: suiteName)), key: "resume-route")
         let ownerURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=350&mobile=2"))
         let chapterURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=350&page=2&mobile=2"))
-        let favorite = Favorite(
-            id: "favorite-progress",
+        var favoriteLibrary = FavoriteLibraryDocument()
+        let favorite = try FavoriteItem(
+            target: FavoriteContentTarget(kind: .normalThread, threadURL: ownerURL),
             title: "阅读进度漫画",
-            url: ownerURL,
-            mangaPageIndex: 5,
-            lastChapter: "既有章节",
-            type: .manga,
-            lastMangaURL: chapterURL,
-            lastReadAt: Date(timeIntervalSince1970: 1_700_000_000)
+            locations: [.category(favoriteLibrary.defaultCategory.id)]
         )
+        favoriteLibrary.addItem(favorite)
         let resumeRoute = ReaderResumeRoute.manga(.native(MangaLaunchContext(
             originalThreadURL: ownerURL,
             chapterURL: chapterURL,
@@ -103,7 +103,7 @@ struct MangaReaderTestsMangaOfflineCacheQueueExecutor {
             initialPage: 5
         )))
         let imageURLs = try makeImageURLs(tid: "350", count: 2)
-        try await favoriteStore.saveFavorites([favorite])
+        try await localFavoriteLibraryStore.save(favoriteLibrary)
         try await resumeRouteStore.save(resumeRoute)
         _ = try await store.enqueueOfflineCacheWork(
             try makeExecutorWorkRequest(ownerName: favorite.id, tid: "350", targetImageURLs: imageURLs)
@@ -120,7 +120,7 @@ struct MangaReaderTestsMangaOfflineCacheQueueExecutor {
         await executor.waitForIdle()
 
         #expect(await store.offlineCacheState(ownerName: favorite.id, tid: "350") == .cached)
-        #expect(await favoriteStore.favorite(id: favorite.id) == favorite)
+        #expect(await localFavoriteLibraryStore.load() == favoriteLibrary)
         #expect(await resumeRouteStore.load() == .manga(.native(MangaLaunchContext(
             originalThreadURL: try #require(YamiboRoute.chapterURL(forTID: "350")),
             chapterURL: try #require(YamiboRoute.chapterURL(forTID: "350")),

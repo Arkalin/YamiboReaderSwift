@@ -1,3 +1,4 @@
+import Foundation
 import YamiboReaderCore
 
 enum FavoriteLaunchMode: Sendable {
@@ -36,17 +37,6 @@ enum FavoriteTagSortOrder: String, CaseIterable, Identifiable {
         }
     }
 
-    var libraryTagSortOrder: FavoriteLibraryTagSortOrder {
-        switch self {
-        case .manual: .manual
-        case .name: .name
-        case .nameDescending: .nameDescending
-        case .updatedAt: .updatedAt
-        case .updatedAtDescending: .updatedAtDescending
-        case .associationCount: .associationCount
-        case .associationCountDescending: .associationCountDescending
-        }
-    }
 }
 
 let favoriteTagSelectionLimit = 20
@@ -110,11 +100,16 @@ struct FavoriteTagEditorDraft: Identifiable {
 }
 
 func filteredFavoriteTags(_ tags: [FavoriteTag], searchText: String) -> [FavoriteTag] {
-    FavoriteLibraryProjection.filteredTags(tags, searchText: searchText)
+    let trimmedSearchText = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmedSearchText.isEmpty else { return tags }
+
+    return tags.filter { tag in
+        tag.name.localizedCaseInsensitiveContains(trimmedSearchText)
+    }
 }
 
 func canReorderFavoriteTags(sortOrder: FavoriteTagSortOrder, searchText: String) -> Bool {
-    FavoriteLibraryProjection.canReorderTags(sortOrder: sortOrder.libraryTagSortOrder, searchText: searchText)
+    sortOrder == .manual && searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
 }
 
 func sortedFavoriteTags(
@@ -122,5 +117,56 @@ func sortedFavoriteTags(
     favorites: [Favorite],
     sortOrder: FavoriteTagSortOrder
 ) -> [FavoriteTag] {
-    FavoriteLibraryProjection.sortedTags(tags, favorites: favorites, sortOrder: sortOrder.libraryTagSortOrder)
+    let associationCounts = tagAssociationCounts(from: favorites)
+    return tags.sorted { lhs, rhs in
+        switch sortOrder {
+        case .manual:
+            break
+        case .name:
+            let result = lhs.name.localizedCaseInsensitiveCompare(rhs.name)
+            if result != .orderedSame {
+                return result == .orderedAscending
+            }
+        case .nameDescending:
+            let result = lhs.name.localizedCaseInsensitiveCompare(rhs.name)
+            if result != .orderedSame {
+                return result == .orderedDescending
+            }
+        case .updatedAt:
+            if lhs.updatedAt != rhs.updatedAt {
+                return lhs.updatedAt < rhs.updatedAt
+            }
+        case .updatedAtDescending:
+            if lhs.updatedAt != rhs.updatedAt {
+                return lhs.updatedAt > rhs.updatedAt
+            }
+        case .associationCount:
+            let lhsCount = associationCounts[lhs.id, default: 0]
+            let rhsCount = associationCounts[rhs.id, default: 0]
+            if lhsCount != rhsCount {
+                return lhsCount < rhsCount
+            }
+        case .associationCountDescending:
+            let lhsCount = associationCounts[lhs.id, default: 0]
+            let rhsCount = associationCounts[rhs.id, default: 0]
+            if lhsCount != rhsCount {
+                return lhsCount > rhsCount
+            }
+        }
+
+        if lhs.manualOrder != rhs.manualOrder {
+            return lhs.manualOrder < rhs.manualOrder
+        }
+        return lhs.id < rhs.id
+    }
+}
+
+private func tagAssociationCounts(from favorites: [Favorite]) -> [String: Int] {
+    var counts: [String: Int] = [:]
+    for favorite in favorites {
+        for tagID in Set(favorite.tagIDs) {
+            counts[tagID, default: 0] += 1
+        }
+    }
+    return counts
 }

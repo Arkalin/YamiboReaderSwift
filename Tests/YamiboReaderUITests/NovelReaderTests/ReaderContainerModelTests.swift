@@ -1222,7 +1222,6 @@ final class ReaderContainerModelTests: XCTestCase {
         let appContext = YamiboAppContext(
             sessionStore: try SessionStore(testSuiteName: defaultsSuiteName, key: "session"),
             settingsStore: settingsStore,
-            favoriteStore: try FavoriteStore(testSuiteName: defaultsSuiteName, key: "favorites"),
             readerCacheStore: cacheStore,
             forumCacheStore: forumCacheStore
         )
@@ -1280,7 +1279,6 @@ final class ReaderContainerModelTests: XCTestCase {
         let appContext = YamiboAppContext(
             sessionStore: try SessionStore(testSuiteName: defaultsSuiteName, key: "session"),
             settingsStore: settingsStore,
-            favoriteStore: try FavoriteStore(testSuiteName: defaultsSuiteName, key: "favorites"),
             readerCacheStore: cacheStore,
             forumCacheStore: forumCacheStore
         )
@@ -1348,7 +1346,6 @@ final class ReaderContainerModelTests: XCTestCase {
         let appContext = YamiboAppContext(
             sessionStore: try SessionStore(testSuiteName: defaultsSuiteName, key: "session"),
             settingsStore: settingsStore,
-            favoriteStore: try FavoriteStore(testSuiteName: defaultsSuiteName, key: "favorites"),
             readerCacheStore: cacheStore,
             forumCacheStore: forumCacheStore
         )
@@ -1557,7 +1554,6 @@ final class ReaderContainerModelTests: XCTestCase {
     func testWorkflowBackedPreviewAndProgressStayAlignedAfterVerticalViewportMovement() async throws {
         let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "reader-container-model")
         let settingsStore = try SettingsStore(testSuiteName: defaultsSuiteName, key: "settings")
-        let favoriteStore = try FavoriteStore(testSuiteName: defaultsSuiteName, key: "favorites")
         let cacheStore = ReaderCacheStore(
             baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         )
@@ -1584,15 +1580,11 @@ final class ReaderContainerModelTests: XCTestCase {
             readerCacheStore: cacheStore,
             forumCacheStore: forumCacheStore
         )
-        try await favoriteStore.saveFavorites([
-            Favorite(title: "测试线程", url: threadURL, authorID: "author-1", type: .novel)
-        ])
         let readingProgressStore = try makeReadingProgressStore(defaultsSuiteName: defaultsSuiteName)
 
         let appContext = YamiboAppContext(
             sessionStore: try SessionStore(testSuiteName: defaultsSuiteName, key: "session"),
             settingsStore: settingsStore,
-            favoriteStore: favoriteStore,
             readingProgressStore: readingProgressStore,
             readerCacheStore: cacheStore,
             forumCacheStore: forumCacheStore
@@ -1651,7 +1643,6 @@ final class ReaderContainerModelTests: XCTestCase {
     func testForumNovelProgressDoesNotCreateFavorite() async throws {
         let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "reader-container-model")
         let settingsStore = try SettingsStore(testSuiteName: defaultsSuiteName, key: "settings")
-        let favoriteStore = try FavoriteStore(testSuiteName: defaultsSuiteName, key: "favorites")
         let cacheStore = ReaderCacheStore(
             baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         )
@@ -1671,7 +1662,6 @@ final class ReaderContainerModelTests: XCTestCase {
         let appContext = YamiboAppContext(
             sessionStore: try SessionStore(testSuiteName: defaultsSuiteName, key: "session"),
             settingsStore: settingsStore,
-            favoriteStore: favoriteStore,
             readingProgressStore: readingProgressStore,
             readerCacheStore: cacheStore,
             forumCacheStore: forumCacheStore
@@ -1695,7 +1685,7 @@ final class ReaderContainerModelTests: XCTestCase {
         }
         await model.saveProgress()
 
-        let favorites = await favoriteStore.loadFavorites()
+        let favorites = await appContext.localFavoriteLibraryStore.load().items
         let readingProgress = await readingProgressStore.load(for: document.threadURL)
         XCTAssertTrue(favorites.isEmpty)
         XCTAssertNotNil(readingProgress?.novel)
@@ -1704,7 +1694,6 @@ final class ReaderContainerModelTests: XCTestCase {
     func testNovelProgressPersistsReaderResumeRoute() async throws {
         let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "reader-container-model")
         let settingsStore = try SettingsStore(testSuiteName: defaultsSuiteName, key: "settings")
-        let favoriteStore = try FavoriteStore(testSuiteName: defaultsSuiteName, key: "favorites")
         let readerResumeRouteStore = try ReaderResumeRouteStore(testSuiteName: defaultsSuiteName, key: "readerRoute")
         let cacheStore = ReaderCacheStore(
             baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -1726,7 +1715,6 @@ final class ReaderContainerModelTests: XCTestCase {
             sessionStore: try SessionStore(testSuiteName: defaultsSuiteName, key: "session"),
             settingsStore: settingsStore,
             readerResumeRouteStore: readerResumeRouteStore,
-            favoriteStore: favoriteStore,
             readingProgressStore: readingProgressStore,
             readerCacheStore: cacheStore,
             forumCacheStore: forumCacheStore
@@ -1766,7 +1754,6 @@ final class ReaderContainerModelTests: XCTestCase {
     func testLateNovelSaveAfterDismissDoesNotRecreateReaderResumeRoute() async throws {
         let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "reader-container-model")
         let settingsStore = try SettingsStore(testSuiteName: defaultsSuiteName, key: "settings")
-        let favoriteStore = try FavoriteStore(testSuiteName: defaultsSuiteName, key: "favorites")
         let readerResumeRouteStore = try ReaderResumeRouteStore(testSuiteName: defaultsSuiteName, key: "readerRoute")
         let cacheStore = ReaderCacheStore(
             baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -1788,7 +1775,6 @@ final class ReaderContainerModelTests: XCTestCase {
             sessionStore: try SessionStore(testSuiteName: defaultsSuiteName, key: "session"),
             settingsStore: settingsStore,
             readerResumeRouteStore: readerResumeRouteStore,
-            favoriteStore: favoriteStore,
             readingProgressStore: readingProgressStore,
             readerCacheStore: cacheStore,
             forumCacheStore: forumCacheStore
@@ -1835,7 +1821,6 @@ final class ReaderContainerModelTests: XCTestCase {
     func testForumNovelProgressUpdatesExistingFavorite() async throws {
         let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "reader-container-model")
         let settingsStore = try SettingsStore(testSuiteName: defaultsSuiteName, key: "settings")
-        let favoriteStore = try FavoriteStore(testSuiteName: defaultsSuiteName, key: "favorites")
         let cacheStore = ReaderCacheStore(
             baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         )
@@ -1849,15 +1834,11 @@ final class ReaderContainerModelTests: XCTestCase {
             readerCacheStore: cacheStore,
             forumCacheStore: forumCacheStore
         )
-        try await favoriteStore.saveFavorites([
-            Favorite(title: "测试线程", url: document.threadURL, type: .novel)
-        ])
         let readingProgressStore = try makeReadingProgressStore(defaultsSuiteName: defaultsSuiteName)
 
         let appContext = YamiboAppContext(
             sessionStore: try SessionStore(testSuiteName: defaultsSuiteName, key: "session"),
             settingsStore: settingsStore,
-            favoriteStore: favoriteStore,
             readingProgressStore: readingProgressStore,
             readerCacheStore: cacheStore,
             forumCacheStore: forumCacheStore
@@ -1887,7 +1868,6 @@ final class ReaderContainerModelTests: XCTestCase {
     func testVerticalModePersistsSemanticResumePoint() async throws {
         let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "reader-container-model")
         let settingsStore = try SettingsStore(testSuiteName: defaultsSuiteName, key: "settings")
-        let favoriteStore = try FavoriteStore(testSuiteName: defaultsSuiteName, key: "favorites")
         let cacheStore = ReaderCacheStore(
             baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         )
@@ -1910,15 +1890,11 @@ final class ReaderContainerModelTests: XCTestCase {
             readerCacheStore: cacheStore,
             forumCacheStore: forumCacheStore
         )
-        try await favoriteStore.saveFavorites([
-            Favorite(title: "测试线程", url: document.threadURL, type: .novel)
-        ])
         let readingProgressStore = try makeReadingProgressStore(defaultsSuiteName: defaultsSuiteName)
 
         let appContext = YamiboAppContext(
             sessionStore: try SessionStore(testSuiteName: defaultsSuiteName, key: "session"),
             settingsStore: settingsStore,
-            favoriteStore: favoriteStore,
             readingProgressStore: readingProgressStore,
             readerCacheStore: cacheStore,
             forumCacheStore: forumCacheStore
@@ -1964,7 +1940,6 @@ final class ReaderContainerModelTests: XCTestCase {
     func testVerticalModeRestoresStoredResumePointWithinChapter() async throws {
         let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "reader-container-model")
         let settingsStore = try SettingsStore(testSuiteName: defaultsSuiteName, key: "settings")
-        let favoriteStore = try FavoriteStore(testSuiteName: defaultsSuiteName, key: "favorites")
         let cacheStore = ReaderCacheStore(
             baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         )
@@ -2012,13 +1987,6 @@ final class ReaderContainerModelTests: XCTestCase {
             readerCacheStore: cacheStore,
             forumCacheStore: forumCacheStore
         )
-        try await favoriteStore.saveFavorites([
-            Favorite(
-                title: "测试线程",
-                url: threadURL,
-                type: .novel
-            )
-        ])
         let readingProgressStore = try ReadingProgressStore(testSuiteName: defaultsSuiteName, key: "reading-progress")
         try await readingProgressStore.saveNovel(
             NovelReadingPosition(
@@ -2033,7 +2001,6 @@ final class ReaderContainerModelTests: XCTestCase {
         let appContext = YamiboAppContext(
             sessionStore: try SessionStore(testSuiteName: defaultsSuiteName, key: "session"),
             settingsStore: settingsStore,
-            favoriteStore: favoriteStore,
             readingProgressStore: readingProgressStore,
             readerCacheStore: cacheStore,
             forumCacheStore: forumCacheStore
@@ -2064,7 +2031,6 @@ final class ReaderContainerModelTests: XCTestCase {
     func testVerticalModePersistsSmallIntraPageScrollAndRestoresIt() async throws {
         let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "reader-container-model")
         let settingsStore = try SettingsStore(testSuiteName: defaultsSuiteName, key: "settings")
-        let favoriteStore = try FavoriteStore(testSuiteName: defaultsSuiteName, key: "favorites")
         let cacheStore = ReaderCacheStore(
             baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         )
@@ -2088,15 +2054,11 @@ final class ReaderContainerModelTests: XCTestCase {
             readerCacheStore: cacheStore,
             forumCacheStore: forumCacheStore
         )
-        try await favoriteStore.saveFavorites([
-            Favorite(title: "测试线程", url: threadURL, type: .novel)
-        ])
         let readingProgressStore = try ReadingProgressStore(testSuiteName: defaultsSuiteName, key: "reading-progress")
 
         let appContext = YamiboAppContext(
             sessionStore: try SessionStore(testSuiteName: defaultsSuiteName, key: "session"),
             settingsStore: settingsStore,
-            favoriteStore: favoriteStore,
             readingProgressStore: readingProgressStore,
             readerCacheStore: cacheStore,
             forumCacheStore: forumCacheStore
@@ -2150,7 +2112,6 @@ final class ReaderContainerModelTests: XCTestCase {
     func testStoredResumePointDeterminesPositionWhenPreparingReader() async throws {
         let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "reader-container-model")
         let settingsStore = try SettingsStore(testSuiteName: defaultsSuiteName, key: "settings")
-        let favoriteStore = try FavoriteStore(testSuiteName: defaultsSuiteName, key: "favorites")
         let cacheStore = ReaderCacheStore(
             baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         )
@@ -2197,13 +2158,6 @@ final class ReaderContainerModelTests: XCTestCase {
             readerCacheStore: cacheStore,
             forumCacheStore: forumCacheStore
         )
-        try await favoriteStore.saveFavorites([
-            Favorite(
-                title: "测试线程",
-                url: threadURL,
-                type: .novel
-            )
-        ])
         let readingProgressStore = try ReadingProgressStore(testSuiteName: defaultsSuiteName, key: "reading-progress")
         try await readingProgressStore.saveNovel(
             NovelReadingPosition(
@@ -2218,7 +2172,6 @@ final class ReaderContainerModelTests: XCTestCase {
         let appContext = YamiboAppContext(
             sessionStore: try SessionStore(testSuiteName: defaultsSuiteName, key: "session"),
             settingsStore: settingsStore,
-            favoriteStore: favoriteStore,
             readingProgressStore: readingProgressStore,
             readerCacheStore: cacheStore,
             forumCacheStore: forumCacheStore
@@ -2249,7 +2202,6 @@ final class ReaderContainerModelTests: XCTestCase {
     func testPagedFavoriteLaunchKeepsSelectionOnSavedResumePoint() async throws {
         let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "reader-container-model")
         let settingsStore = try SettingsStore(testSuiteName: defaultsSuiteName, key: "settings")
-        let favoriteStore = try FavoriteStore(testSuiteName: defaultsSuiteName, key: "favorites")
         let cacheStore = ReaderCacheStore(
             baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         )
@@ -2292,13 +2244,6 @@ final class ReaderContainerModelTests: XCTestCase {
             readerCacheStore: cacheStore,
             forumCacheStore: forumCacheStore
         )
-        try await favoriteStore.saveFavorites([
-            Favorite(
-                title: "测试线程",
-                url: threadURL,
-                type: .novel
-            )
-        ])
         let readingProgressStore = try ReadingProgressStore(testSuiteName: defaultsSuiteName, key: "reading-progress")
         try await readingProgressStore.saveNovel(
             NovelReadingPosition(
@@ -2313,7 +2258,6 @@ final class ReaderContainerModelTests: XCTestCase {
         let appContext = YamiboAppContext(
             sessionStore: try SessionStore(testSuiteName: defaultsSuiteName, key: "session"),
             settingsStore: settingsStore,
-            favoriteStore: favoriteStore,
             readingProgressStore: readingProgressStore,
             readerCacheStore: cacheStore,
             forumCacheStore: forumCacheStore
@@ -2400,7 +2344,6 @@ final class ReaderContainerModelTests: XCTestCase {
         )
         let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "reader-container-model")
         let settingsStore = try SettingsStore(testSuiteName: defaultsSuiteName, key: "settings")
-        let favoriteStore = try FavoriteStore(testSuiteName: defaultsSuiteName, key: "favorites")
         let cacheStore = ReaderCacheStore(
             baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         )
@@ -2418,7 +2361,6 @@ final class ReaderContainerModelTests: XCTestCase {
         let appContext = YamiboAppContext(
             sessionStore: try SessionStore(testSuiteName: defaultsSuiteName, key: "session"),
             settingsStore: settingsStore,
-            favoriteStore: favoriteStore,
             readerCacheStore: cacheStore,
             forumCacheStore: forumCacheStore
         )
@@ -2692,7 +2634,6 @@ final class ReaderContainerModelTests: XCTestCase {
         let appContext = YamiboAppContext(
             sessionStore: try SessionStore(testSuiteName: defaultsSuiteName, key: "session"),
             settingsStore: try SettingsStore(testSuiteName: defaultsSuiteName, key: "settings"),
-            favoriteStore: try FavoriteStore(testSuiteName: defaultsSuiteName, key: "favorites"),
             readerCacheStore: cacheStore,
             forumCacheStore: forumCacheStore,
             session: session
@@ -3150,7 +3091,6 @@ private func makeModel(
     let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "reader-container-model")
     let sessionStore = try SessionStore(testSuiteName: defaultsSuiteName, key: "session")
     let settingsStore = try SettingsStore(testSuiteName: defaultsSuiteName, key: "settings")
-    let favoriteStore = try FavoriteStore(testSuiteName: defaultsSuiteName, key: "favorites")
     let readingProgressStore = try ReadingProgressStore(
         testSuiteName: defaultsSuiteName,
         key: "reading-progress"
@@ -3171,7 +3111,6 @@ private func makeModel(
     let appContext = YamiboAppContext(
         sessionStore: sessionStore,
         settingsStore: settingsStore,
-        favoriteStore: favoriteStore,
         readingProgressStore: readingProgressStore,
         readerCacheStore: resolvedCacheStore,
         forumCacheStore: forumCacheStore,

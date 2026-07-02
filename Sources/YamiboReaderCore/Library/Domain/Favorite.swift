@@ -128,31 +128,6 @@ public enum FavoriteType: Int, Codable, CaseIterable, Sendable {
     }
 }
 
-public struct FavoriteCollection: Codable, Hashable, Identifiable, Sendable {
-    public let id: String
-    public var name: String
-    public var manualOrder: Int
-
-    private enum CodingKeys: String, CodingKey {
-        case id
-        case name
-        case manualOrder
-    }
-
-    public init(id: String = UUID().uuidString, name: String, manualOrder: Int = 0) {
-        self.id = id
-        self.name = name
-        self.manualOrder = manualOrder
-    }
-
-    public init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        id = try container.decode(String.self, forKey: .id)
-        name = try container.decode(String.self, forKey: .name)
-        manualOrder = try container.decodeIfPresent(Int.self, forKey: .manualOrder) ?? 0
-    }
-}
-
 public enum FavoriteTagColor: String, Codable, CaseIterable, Sendable {
     case red
     case orange

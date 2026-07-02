@@ -64,7 +64,6 @@ final class ForumThreadReaderViewModel {
     init(
         context: ThreadReaderLaunchContext,
         repository: any ForumThreadPageLoading,
-        favoriteStore: (any FavoriteStoring)? = nil,
         localFavoriteLibraryStore: LocalFirstFavoriteLibraryStore? = nil,
         readingProgressStore: ReadingProgressStore? = nil,
         favoriteRepository: (any ForumThreadFavoriteRemoteOperating)? = nil
@@ -138,10 +137,13 @@ final class ForumThreadReaderViewModel {
         let url = context.thread.canonicalURL
 
         do {
+            guard let localFavoriteLibraryStore = await localFavoriteLibraryStoreProvider() else {
+                throw YamiboError.persistenceFailed("Local favorite library store is unavailable")
+            }
             if let favoriteItem = await localFavoriteItem(for: url) {
                 try await ForumThreadFavoriteSync.removeFavorite(
                     favoriteItem.favorite(threadURL: url, type: .other),
-                    localFavoriteLibraryStore: await localFavoriteLibraryStoreProvider(),
+                    localFavoriteLibraryStore: localFavoriteLibraryStore,
                     readingProgressStore: await readingProgressStoreProvider(),
                     remoteRepository: await favoriteRepositoryProvider()
                 )
@@ -159,7 +161,7 @@ final class ForumThreadReaderViewModel {
                 coverURL: ThreadCoverResolver.findThreadCoverCandidate(in: page),
                 contentUpdatedAt: Self.contentUpdatedAt(from: page),
                 formHash: page?.formHash,
-                localFavoriteLibraryStore: await localFavoriteLibraryStoreProvider(),
+                localFavoriteLibraryStore: localFavoriteLibraryStore,
                 remoteRepository: await favoriteRepositoryProvider()
             )
             isFavorited = true

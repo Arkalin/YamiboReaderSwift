@@ -229,7 +229,6 @@ import Testing
     let pageCandidate = try #require(URL(string: "https://img.example.com/page.jpg"))
     try await coverStore.setAutomaticCover(persisted, for: key)
     let appContext = YamiboAppContext(
-        favoriteStore: FavoriteStore(defaults: try YamiboTestDefaults.defaults(suiteName: suiteName), key: "favorites"),
         contentCoverStore: coverStore
     )
     let model = try makeForumNovelDetailViewModel(appContext: appContext)
@@ -266,7 +265,6 @@ import Testing
         key: "content-covers"
     )
     let appContext = YamiboAppContext(
-        favoriteStore: FavoriteStore(defaults: try YamiboTestDefaults.defaults(suiteName: suiteName), key: "favorites"),
         contentCoverStore: coverStore
     )
     let initialImage = try #require(URL(string: "https://img.example.com/initial-owner.jpg"))
@@ -432,7 +430,6 @@ import Testing
         key: "content-covers"
     )
     let appContext = YamiboAppContext(
-        favoriteStore: FavoriteStore(defaults: try YamiboTestDefaults.defaults(suiteName: suiteName), key: "favorites"),
         contentCoverStore: coverStore
     )
     let model = try makeForumNovelDetailViewModel(appContext: appContext)
@@ -504,7 +501,6 @@ import Testing
         key: "content-covers"
     )
     let appContext = YamiboAppContext(
-        favoriteStore: FavoriteStore(defaults: try YamiboTestDefaults.defaults(suiteName: suiteName), key: "favorites"),
         contentCoverStore: coverStore
     )
     let model = try makeForumNovelDetailViewModel(appContext: appContext)
@@ -544,10 +540,6 @@ import Testing
 @Test func forumNovelDetailReloadBackfillsCoverFromReadingProgress() async throws {
     let suiteName = YamiboTestDefaults.suiteName(prefix: "novel-detail-history-cover")
     _ = try YamiboTestDefaults.make(suiteName: suiteName)
-    let favoriteStore = FavoriteStore(
-        defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
-        key: "favorites"
-    )
     let readingProgressStore = ReadingProgressStore(
         defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
         key: "reading-progress"
@@ -557,7 +549,6 @@ import Testing
         key: "content-covers"
     )
     let appContext = YamiboAppContext(
-        favoriteStore: favoriteStore,
         readingProgressStore: readingProgressStore,
         contentCoverStore: coverStore
     )
@@ -613,7 +604,6 @@ import Testing
         key: "content-covers"
     )
     let appContext = YamiboAppContext(
-        favoriteStore: FavoriteStore(defaults: try YamiboTestDefaults.defaults(suiteName: suiteName), key: "favorites"),
         contentCoverStore: coverStore
     )
     let threadPageLoader = FakeForumNovelThreadPageLoader(pages: [
@@ -1216,7 +1206,6 @@ private func makeForumNovelDetailViewModel(
         let suiteName = YamiboTestDefaults.suiteName(prefix: "novel-detail")
         _ = try YamiboTestDefaults.make(suiteName: suiteName)
         resolvedAppContext = YamiboAppContext(
-            favoriteStore: FavoriteStore(defaults: try YamiboTestDefaults.defaults(suiteName: suiteName), key: "favorites"),
             contentCoverStore: ContentCoverStore(
                 defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
                 key: "content-covers"

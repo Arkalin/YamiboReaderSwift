@@ -52,7 +52,6 @@ final class MangaReaderModelSettingsProgressTests: XCTestCase {
         let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "manga-retry-initial-load")
         let settingsStore = try SettingsStore(testSuiteName: defaultsSuiteName, key: "settings")
         let resumeRouteStore = try ReaderResumeRouteStore(testSuiteName: defaultsSuiteName, key: "resume")
-        let favoriteStore = try FavoriteStore(testSuiteName: defaultsSuiteName, key: "favorites")
         try await settingsStore.save(AppSettings())
 
         let originalURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=700&mobile=2"))
@@ -96,7 +95,6 @@ final class MangaReaderModelSettingsProgressTests: XCTestCase {
             sessionStore: try SessionStore(testSuiteName: defaultsSuiteName, key: "session"),
             settingsStore: settingsStore,
             readerResumeRouteStore: resumeRouteStore,
-            favoriteStore: favoriteStore
         )
         #if os(iOS)
         let dependencies = MangaReaderModelDependencies(
@@ -335,12 +333,10 @@ final class MangaReaderModelSettingsProgressTests: XCTestCase {
         XCTAssertFalse(fixture.model.canNavigateForward)
     }
 
-    func testSaveProgressFlushesLatestPageIntoExistingFavoriteAndResumeRoute() async throws {
+    func testSaveProgressFlushesLatestPageIntoReadingProgressAndResumeRoute() async throws {
         let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "manga-save-progress-existing")
-        let favoriteStore = try FavoriteStore(testSuiteName: defaultsSuiteName, key: "favorites")
         let readingProgressStore = try ReadingProgressStore(testSuiteName: defaultsSuiteName, key: "reading-progress")
         let fixture = try await makeFixture(
-            favoriteStore: favoriteStore,
             progressSync: ProgressSyncModule(
                 adapter: FavoriteLibraryProgressSyncAdapter(
                     readingProgressStore: readingProgressStore
@@ -348,9 +344,6 @@ final class MangaReaderModelSettingsProgressTests: XCTestCase {
                 debounceNanoseconds: 100_000_000
             )
         )
-        try await favoriteStore.saveFavorites([
-            Favorite(title: "收藏漫画", url: fixture.originalURL, type: .manga)
-        ])
 
         await fixture.model.prepare()
         fixture.model.updateCurrentPage(globalIndex: 2)
@@ -373,10 +366,8 @@ final class MangaReaderModelSettingsProgressTests: XCTestCase {
 
     func testSaveProgressDoesNotCreateMissingFavorite() async throws {
         let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "manga-save-progress-missing")
-        let favoriteStore = try FavoriteStore(testSuiteName: defaultsSuiteName, key: "favorites")
         let readingProgressStore = try ReadingProgressStore(testSuiteName: defaultsSuiteName, key: "reading-progress")
         let fixture = try await makeFixture(
-            favoriteStore: favoriteStore,
             progressSync: ProgressSyncModule(
                 adapter: FavoriteLibraryProgressSyncAdapter(
                     readingProgressStore: readingProgressStore
@@ -389,7 +380,7 @@ final class MangaReaderModelSettingsProgressTests: XCTestCase {
         fixture.model.updateCurrentPage(globalIndex: 2)
         _ = await fixture.model.saveProgress()
 
-        let favorites = await favoriteStore.loadFavorites()
+        let favorites = await fixture.localFavoriteLibraryStore.load().items
         XCTAssertTrue(favorites.isEmpty)
         let progress = await readingProgressStore.load(for: fixture.originalURL)
         XCTAssertEqual(progress?.manga?.lastMangaURL.absoluteString, "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=701")
@@ -537,7 +528,6 @@ final class MangaReaderModelSettingsProgressTests: XCTestCase {
                 sessionStore: try SessionStore(testSuiteName: defaultsSuiteName, key: "session"),
                 settingsStore: try SettingsStore(testSuiteName: defaultsSuiteName, key: "settings"),
                 readerResumeRouteStore: try ReaderResumeRouteStore(testSuiteName: defaultsSuiteName, key: "resume"),
-                favoriteStore: try FavoriteStore(testSuiteName: defaultsSuiteName, key: "favorites")
             )
         )
         let originalURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=700&mobile=2"))
@@ -585,6 +575,7 @@ private struct MangaReaderModelSettingsProgressFixture {
     let chapterURL: URL
     let settingsStore: SettingsStore
     let resumeRouteStore: ReaderResumeRouteStore
+    let localFavoriteLibraryStore: LocalFirstFavoriteLibraryStore
 }
 
 @MainActor
@@ -592,18 +583,11 @@ private func makeFixture(
     initialPage: Int = 0,
     imageCount: Int = 3,
     appSettings: AppSettings = AppSettings(),
-    favoriteStore: FavoriteStore? = nil,
     progressSync: ProgressSyncModule? = nil
 ) async throws -> MangaReaderModelSettingsProgressFixture {
     let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "manga-settings-progress-fixture")
     let settingsStore = try SettingsStore(testSuiteName: defaultsSuiteName, key: "settings")
     let resumeRouteStore = try ReaderResumeRouteStore(testSuiteName: defaultsSuiteName, key: "resume")
-    let resolvedFavoriteStore: FavoriteStore
-    if let favoriteStore {
-        resolvedFavoriteStore = favoriteStore
-    } else {
-        resolvedFavoriteStore = try FavoriteStore(testSuiteName: defaultsSuiteName, key: "favorites")
-    }
     try await settingsStore.save(appSettings)
 
     let originalURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=700&mobile=2"))
@@ -642,7 +626,6 @@ private func makeFixture(
         sessionStore: try SessionStore(testSuiteName: defaultsSuiteName, key: "session"),
         settingsStore: settingsStore,
         readerResumeRouteStore: resumeRouteStore,
-        favoriteStore: resolvedFavoriteStore
     )
     let resolvedProgressSync = progressSync ?? ProgressSyncModule(
         adapter: FavoriteLibraryProgressSyncAdapter(
@@ -681,7 +664,8 @@ private func makeFixture(
         originalURL: originalURL,
         chapterURL: chapterURL,
         settingsStore: settingsStore,
-        resumeRouteStore: resumeRouteStore
+        resumeRouteStore: resumeRouteStore,
+        localFavoriteLibraryStore: appContext.localFavoriteLibraryStore
     )
 }
 

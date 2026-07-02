@@ -239,14 +239,6 @@ final class SystemSettingsViewModelTests: XCTestCase {
 
     func testMangaOfflineCacheCleanupFiltersOwnersWithMembershipOrWorkAndShowsUsage() async throws {
         let fixture = try makeFixture()
-        let favoriteAURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=310&mobile=2"))
-        let favoriteBURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=320&mobile=2"))
-        let emptyFavoriteURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=330&mobile=2"))
-        try await fixture.favoriteStore.saveFavorites([
-            Favorite(id: "favorite-a", title: "远端标题A", displayName: "本地名A", url: favoriteAURL, type: .manga),
-            Favorite(id: "favorite-b", title: "远端标题B", url: favoriteBURL, type: .manga),
-            Favorite(id: "favorite-empty", title: "空收藏", url: emptyFavoriteURL, type: .manga)
-        ])
         let membershipImage = try XCTUnwrap(URL(string: "https://img.example.com/offline-a.jpg"))
         let workImage = try XCTUnwrap(URL(string: "https://img.example.com/offline-b.jpg"))
         try await fixture.mangaOfflineCacheStore.saveOfflineImageData(Data(repeating: 1, count: 4), for: membershipImage)
@@ -475,7 +467,6 @@ private struct SystemSettingsFixture {
     let appContext: YamiboAppContext
     let settingsStore: SettingsStore
     let readerCacheStore: ReaderCacheStore
-    let favoriteStore: FavoriteStore
     let favoriteBackgroundImageStore: FavoriteBackgroundImageStore
     let mangaDirectoryStore: GRDBMangaDirectoryStore
     let mangaChapterDocumentStore: GRDBMangaChapterDocumentStore
@@ -490,7 +481,6 @@ private func makeFixture() throws -> SystemSettingsFixture {
     let root = FileManager.default.temporaryDirectory
         .appendingPathComponent("system-settings-view-model-\(UUID().uuidString)", isDirectory: true)
     let settingsStore = SettingsStore(defaults: try makeDefaults(suiteName: suiteName), key: "settings")
-    let favoriteStore = FavoriteStore(defaults: try makeDefaults(suiteName: suiteName), key: "favorites")
     let readerCacheStore = ReaderCacheStore(baseDirectory: root.appendingPathComponent("reader-cache", isDirectory: true))
     let favoriteBackgroundImageStore = FavoriteBackgroundImageStore(
         baseDirectory: root.appendingPathComponent("favorite-background", isDirectory: true)
@@ -511,7 +501,6 @@ private func makeFixture() throws -> SystemSettingsFixture {
         settingsStore: settingsStore,
         webDAVSyncSettingsStore: WebDAVSyncSettingsStore(defaults: try makeDefaults(suiteName: suiteName), key: "webdav"),
         readerResumeRouteStore: ReaderResumeRouteStore(defaults: try makeDefaults(suiteName: suiteName), key: "reader-resume-route"),
-        favoriteStore: favoriteStore,
         readerCacheStore: readerCacheStore,
         favoriteBackgroundImageStore: favoriteBackgroundImageStore,
         mangaDirectoryStore: mangaDirectoryStore,
@@ -524,7 +513,6 @@ private func makeFixture() throws -> SystemSettingsFixture {
         appContext: appContext,
         settingsStore: settingsStore,
         readerCacheStore: readerCacheStore,
-        favoriteStore: favoriteStore,
         favoriteBackgroundImageStore: favoriteBackgroundImageStore,
         mangaDirectoryStore: mangaDirectoryStore,
         mangaChapterDocumentStore: mangaChapterDocumentStore,

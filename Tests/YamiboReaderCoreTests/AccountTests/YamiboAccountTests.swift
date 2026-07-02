@@ -152,7 +152,10 @@ private enum YamiboAccountTestError: Error {
     defaults.removePersistentDomain(forName: suiteName)
     let sessionStore = SessionStore(defaults: try #require(UserDefaults(suiteName: suiteName)), key: "session")
     let profileStore = YamiboProfileStore(defaults: try #require(UserDefaults(suiteName: suiteName)), key: "profile")
-    let favoriteStore = FavoriteStore(defaults: try #require(UserDefaults(suiteName: suiteName)), key: "favorites")
+    let localFavoriteLibraryStore = LocalFirstFavoriteLibraryStore(
+        defaults: try #require(UserDefaults(suiteName: suiteName)),
+        key: "local-favorites"
+    )
     let offlineStore = try makeTestGRDBMangaOfflineCacheStore(rootDirectory: rootDirectory)
     let service = YamiboAccountService(
         session: makeAccountTestSession(),
@@ -160,7 +163,13 @@ private enum YamiboAccountTestError: Error {
         profileStore: profileStore
     )
     let favoriteURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=970&mobile=2"))
-    let favorite = Favorite(id: "favorite-signout", title: "退出保留漫画", url: favoriteURL, type: .manga)
+    var favoriteLibrary = FavoriteLibraryDocument()
+    let favoriteItem = try FavoriteItem(
+        target: FavoriteContentTarget(kind: .normalThread, threadURL: favoriteURL),
+        title: "退出保留漫画",
+        locations: [.category(favoriteLibrary.defaultCategory.id)]
+    )
+    favoriteLibrary.addItem(favoriteItem)
     let imageURL = try #require(URL(string: "https://img.example.com/signout-offline.jpg"))
 
     try await sessionStore.save(SessionState(cookie: "sid=1; EeqY_2132_auth=token", isLoggedIn: true, accountUID: "535977"))
@@ -172,17 +181,17 @@ private enum YamiboAccountTestError: Error {
         partner: 377,
         totalPoints: 155
     ))
-    try await favoriteStore.saveFavorites([favorite])
+    try await localFavoriteLibraryStore.save(favoriteLibrary)
     try await offlineStore.saveOfflineImageData(Data([7]), for: imageURL)
     try await offlineStore.saveMembership(MangaOfflineCacheMembership(
-        ownerName: favorite.title,
+        ownerName: favoriteItem.title,
         tid: "970",
         chapterTitle: "第970话",
         chapterURL: favoriteURL,
         imageURLs: [imageURL]
     ))
     _ = try await offlineStore.enqueueOfflineCacheWork(MangaOfflineCacheWorkRequest(
-        ownerName: favorite.title,
+        ownerName: favoriteItem.title,
         tid: "971",
         chapterTitle: "第971话",
         chapterURL: favoriteURL,
@@ -193,9 +202,9 @@ private enum YamiboAccountTestError: Error {
 
     #expect(await sessionStore.load() == SessionState())
     #expect(await profileStore.load() == nil)
-    #expect(await favoriteStore.loadFavorites() == [favorite])
-    #expect(await offlineStore.membership(ownerName: favorite.title, tid: "970") != nil)
-    #expect(await offlineStore.offlineCacheWork(ownerName: favorite.title, tid: "971") != nil)
+    #expect(await localFavoriteLibraryStore.load() == favoriteLibrary)
+    #expect(await offlineStore.membership(ownerName: favoriteItem.title, tid: "970") != nil)
+    #expect(await offlineStore.offlineCacheWork(ownerName: favoriteItem.title, tid: "971") != nil)
     #expect(await offlineStore.offlineImageData(for: imageURL) == Data([7]))
 }
 

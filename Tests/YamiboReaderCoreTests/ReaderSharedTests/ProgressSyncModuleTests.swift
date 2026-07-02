@@ -47,7 +47,10 @@ import Testing
 
 @Test func favoriteLibraryProgressSyncDoesNotCreateMissingFavorite() async throws {
     let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "progress-sync-missing-favorite")
-    let favoriteStore = try FavoriteStore(testSuiteName: defaultsSuiteName, key: "favorites")
+    let localFavoriteLibraryStore = LocalFirstFavoriteLibraryStore(
+        defaults: try YamiboTestDefaults.defaults(suiteName: defaultsSuiteName),
+        key: "local-favorites"
+    )
     let readingProgressStore = try ReadingProgressStore(testSuiteName: defaultsSuiteName, key: "reading-progress")
     let adapter = FavoriteLibraryProgressSyncAdapter(
         readingProgressStore: readingProgressStore
@@ -57,15 +60,17 @@ import Testing
 
     try await sync.flush(.novel(NovelReadingPosition(threadURL: threadURL, view: 6)))
 
-    let favorites = await favoriteStore.loadFavorites()
-    #expect(favorites.isEmpty)
+    #expect(await localFavoriteLibraryStore.load().items.isEmpty)
     let progress = await readingProgressStore.load(for: threadURL)
     #expect(progress?.novel?.lastView == 6)
 }
 
 @Test func favoriteLibraryProgressSyncWritesIndependentProgressWithoutMutatingFavorites() async throws {
     let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "progress-sync-existing-favorite")
-    let favoriteStore = try FavoriteStore(testSuiteName: defaultsSuiteName, key: "favorites")
+    let localFavoriteLibraryStore = LocalFirstFavoriteLibraryStore(
+        defaults: try YamiboTestDefaults.defaults(suiteName: defaultsSuiteName),
+        key: "local-favorites"
+    )
     let readingProgressStore = try ReadingProgressStore(testSuiteName: defaultsSuiteName, key: "reading-progress")
     let adapter = FavoriteLibraryProgressSyncAdapter(
         readingProgressStore: readingProgressStore
@@ -74,10 +79,18 @@ import Testing
     let novelURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=7&mobile=2")!
     let mangaURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=8&mobile=2")!
     let chapterURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9&mobile=2")!
-    try await favoriteStore.saveFavorites([
-        Favorite(title: "小说", url: novelURL, type: .novel),
-        Favorite(title: "漫画", url: mangaURL, type: .manga)
-    ])
+    var favoriteLibrary = FavoriteLibraryDocument()
+    favoriteLibrary.addItem(try FavoriteItem(
+        target: FavoriteContentTarget(kind: .novelThread, threadURL: novelURL),
+        title: "小说",
+        locations: [.category(favoriteLibrary.defaultCategory.id)]
+    ))
+    favoriteLibrary.addItem(try FavoriteItem(
+        target: FavoriteContentTarget(kind: .normalThread, threadURL: mangaURL),
+        title: "漫画",
+        locations: [.category(favoriteLibrary.defaultCategory.id)]
+    ))
+    try await localFavoriteLibraryStore.save(favoriteLibrary)
 
     try await sync.flush(.novel(NovelReadingPosition(
         threadURL: novelURL,
@@ -103,19 +116,10 @@ import Testing
         pageCount: 9
     )))
 
-    let novel = await favoriteStore.favorite(for: novelURL)
-    let manga = await favoriteStore.favorite(for: mangaURL)
+    let storedFavoriteLibrary = await localFavoriteLibraryStore.load()
     let novelProgress = await readingProgressStore.load(for: novelURL)
     let mangaProgress = await readingProgressStore.load(for: mangaURL)
-    #expect(novel?.lastView == 1)
-    #expect(novel?.novelMaxView == nil)
-    #expect(novel?.mangaPageIndex == 0)
-    #expect(novel?.lastChapter == nil)
-    #expect(novel?.authorID == nil)
-    #expect(novel?.novelResumePoint == nil)
-    #expect(manga?.lastMangaURL == nil)
-    #expect(manga?.lastChapter == nil)
-    #expect(manga?.mangaPageIndex == 0)
+    #expect(storedFavoriteLibrary == favoriteLibrary)
     #expect(novelProgress?.novel?.novelResumePoint?.displayedTextOffset == 120)
     #expect(mangaProgress?.manga?.lastMangaURL.absoluteString == "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9")
     #expect(mangaProgress?.manga?.chapterThreadID == "9")
