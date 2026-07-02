@@ -150,6 +150,7 @@ final class MangaPresentationRouteTests: XCTestCase {
         let originalURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=731&mobile=2"))
         let staleChapterURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=732&mobile=2"))
         let remoteChapterURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=733&mobile=2"))
+        let expectedRemoteChapterURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=733"))
         let staleContext = MangaLaunchContext(
             originalThreadURL: originalURL,
             chapterURL: staleChapterURL,
@@ -217,7 +218,7 @@ final class MangaPresentationRouteTests: XCTestCase {
 
         let expectedContext = MangaLaunchContext(
             originalThreadURL: originalURL,
-            chapterURL: remoteChapterURL,
+            chapterURL: expectedRemoteChapterURL,
             displayTitle: "本地漫画",
             source: .resume,
             initialPage: 7,

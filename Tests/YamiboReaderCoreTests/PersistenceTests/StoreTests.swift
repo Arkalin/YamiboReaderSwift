@@ -1,6 +1,7 @@
 import CoreGraphics
 import Foundation
 import Testing
+@preconcurrency import GRDB
 @testable import YamiboReaderCore
 
 @Test func sessionStorePersistsCookieAndLoginState() async throws {
@@ -1492,10 +1493,19 @@ import Testing
 }
 
 @Test func readingProgressStoreSavesNovelAndMangaProgressByCanonicalThreadURL() async throws {
-    let defaults = try makeIsolatedDefaults(prefix: "reading-progress-store-tests")
+    let suiteName = makeIsolatedDefaultsSuiteName(prefix: "reading-progress-store-tests")
+    let defaults = try #require(UserDefaults(suiteName: suiteName))
+    defaults.removePersistentDomain(forName: suiteName)
+    let legacyData = Data(#"{"legacy":true}"#.utf8)
+    defaults.set(legacyData, forKey: "reading-progress")
+    let database = try YamiboDatabase.openPool(
+        rootDirectory: FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    )
     let store = ReadingProgressStore(
         defaults: defaults,
-        key: "reading-progress"
+        key: "reading-progress",
+        databasePool: database
     )
     let threadURL = try #require(URL(string: "https://bbs.yamibo.com/thread-12345-1-1.html"))
     let canonicalURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=12345"))
@@ -1525,6 +1535,7 @@ import Testing
     let novel = await store.load(for: canonicalURL)
     #expect(novel?.kind == .novel)
     #expect(novel?.threadURL.absoluteString == "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=12345")
+    #expect(novel?.threadID == "12345")
     #expect(novel?.novel?.lastView == 3)
     #expect(novel?.novel?.lastChapter == "第三章")
     #expect(novel?.novel?.authorID == "42")
@@ -1544,10 +1555,45 @@ import Testing
     let manga = await store.load(for: threadURL)
     #expect(manga?.kind == .manga)
     #expect(manga?.novel == nil)
-    #expect(manga?.manga?.lastMangaURL == chapterURL)
+    #expect(manga?.threadID == "12345")
+    #expect(manga?.manga?.lastMangaURL.absoluteString == "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=12346")
+    #expect(manga?.manga?.chapterThreadID == "12346")
     #expect(manga?.manga?.lastChapter == "第 12 话")
     #expect(manga?.manga?.mangaPageIndex == 6)
     #expect(manga?.manga?.mangaPageCount == 12)
+    let legacyDefaultsAfterSave = try #require(UserDefaults(suiteName: suiteName))
+    #expect(legacyDefaultsAfterSave.data(forKey: "reading-progress") == legacyData)
+
+    let databaseState = try await database.read { db in
+        let columns = try String.fetchAll(db, sql: "SELECT name FROM pragma_table_info('reading_progress')")
+        let rows = try Row.fetchAll(
+            db,
+            sql: """
+            SELECT id, kind, target_kind, thread_id, manga_chapter_thread_id, novel_last_view, manga_page_index
+            FROM reading_progress
+            ORDER BY kind
+            """
+        )
+        return (
+            columns: columns,
+            rows: rows.map { row in
+                (
+                    id: row["id"] as String,
+                    kind: row["kind"] as String,
+                    targetKind: row["target_kind"] as String,
+                    threadID: row["thread_id"] as String?,
+                    mangaChapterThreadID: row["manga_chapter_thread_id"] as String?,
+                    novelLastView: row["novel_last_view"] as Int?,
+                    mangaPageIndex: row["manga_page_index"] as Int?
+                )
+            }
+        )
+    }
+    #expect(!databaseState.columns.contains("thread_url"))
+    #expect(!databaseState.columns.contains("last_manga_url"))
+    #expect(databaseState.rows.count == 2)
+    #expect(databaseState.rows.contains { $0.id == "thread:novel:12345" && $0.threadID == "12345" && $0.novelLastView == 3 })
+    #expect(databaseState.rows.contains { $0.kind == ReadingProgressKind.manga.rawValue && $0.threadID == "12345" && $0.mangaChapterThreadID == "12346" && $0.mangaPageIndex == 6 })
 }
 
 @Test func readingProgressStoreMatchesNovelProgressWithAndWithoutExtraQuery() async throws {

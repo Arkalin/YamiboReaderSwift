@@ -132,3 +132,86 @@ import Testing
     #expect(record.manga?.mangaPageIndex == 7)
     #expect(record.manga?.mangaPageCount == 10)
 }
+
+@Test func readingProgressWebDAVPayloadWritesTidFirstSchemaWithoutURLFields() throws {
+    let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=1201&mobile=2"))
+    let chapterURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=1202&mobile=2"))
+    let payload = ReadingProgressWebDAVPayload(
+        updatedAt: Date(timeIntervalSince1970: 40),
+        records: [
+            ReadingProgressRecord(
+                contentTarget: FavoriteContentTarget(kind: .novelThread, threadURL: threadURL),
+                threadURL: threadURL,
+                kind: .novel,
+                updatedAt: Date(timeIntervalSince1970: 41),
+                novel: NovelReadingProgressRecord(lastView: 4, lastChapter: "第四章")
+            ),
+            ReadingProgressRecord(
+                contentTarget: FavoriteContentTarget(mangaID: "manga-1", mangaCleanBookName: "漫画"),
+                threadURL: threadURL,
+                kind: .manga,
+                updatedAt: Date(timeIntervalSince1970: 42),
+                manga: MangaReadingProgressRecord(
+                    lastMangaURL: chapterURL,
+                    lastChapter: "第二话",
+                    mangaPageIndex: 3,
+                    mangaPageCount: 8
+                )
+            ),
+        ]
+    )
+
+    let data = try JSONEncoder().encode(payload)
+    let object = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+    let records = try #require(object["records"] as? [[String: Any]])
+    let novelRecord = try #require(records.first { ($0["kind"] as? String) == ReadingProgressKind.novel.rawValue })
+    let mangaRecord = try #require(records.first { ($0["kind"] as? String) == ReadingProgressKind.manga.rawValue })
+    let novelTarget = try #require(novelRecord["contentTarget"] as? [String: Any])
+    let manga = try #require(mangaRecord["manga"] as? [String: Any])
+
+    #expect(object["version"] as? Int == ReadingProgressWebDAVPayload.currentVersion)
+    #expect(novelRecord["threadURL"] == nil)
+    #expect(mangaRecord["threadURL"] == nil)
+    #expect(manga["lastMangaURL"] == nil)
+    #expect(novelTarget["threadID"] as? String == "1201")
+    #expect(novelTarget["canonicalURL"] == nil)
+    #expect(manga["chapterThreadID"] as? String == "1202")
+
+    let decoded = try JSONDecoder().decode(ReadingProgressWebDAVPayload.self, from: data)
+    #expect(decoded.records.count == 2)
+    #expect(decoded.records.first { $0.kind == .novel }?.threadID == "1201")
+    #expect(decoded.records.first { $0.kind == .manga }?.manga?.chapterThreadID == "1202")
+}
+
+@Test func localFirstWebDAVPayloadsRejectLegacyOrMissingVersions() throws {
+    let legacyProgress = Data(
+        """
+        {
+          "version": 1,
+          "updatedAt": 0,
+          "records": [
+            {
+              "threadURL": "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=1301",
+              "kind": "novel",
+              "updatedAt": 0
+            }
+          ]
+        }
+        """.utf8
+    )
+    let missingVersionLibrary = Data(
+        """
+        {
+          "updatedAt": 0,
+          "library": {}
+        }
+        """.utf8
+    )
+
+    #expect(throws: WebDAVSyncError.unsupportedPayloadVersion(1)) {
+        _ = try JSONDecoder().decode(ReadingProgressWebDAVPayload.self, from: legacyProgress)
+    }
+    #expect(throws: WebDAVSyncError.unsupportedPayloadVersion(0)) {
+        _ = try JSONDecoder().decode(FavoriteLibraryWebDAVPayload.self, from: missingVersionLibrary)
+    }
+}

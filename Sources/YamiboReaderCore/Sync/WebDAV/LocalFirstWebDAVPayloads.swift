@@ -1,7 +1,7 @@
 import Foundation
 
 public struct FavoriteLibraryWebDAVPayload: Codable, Equatable, Sendable {
-    public static let currentVersion = 1
+    public static let currentVersion = 2
 
     public var version: Int
     public var updatedAt: Date
@@ -24,6 +24,31 @@ public struct FavoriteLibraryWebDAVPayload: Codable, Equatable, Sendable {
         self.library = library
         self.tombstones = tombstones
         self.clocks = clocks
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case version
+        case updatedAt
+        case accountUID
+        case library
+        case tombstones
+        case clocks
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        guard let version = try container.decodeIfPresent(Int.self, forKey: .version) else {
+            throw WebDAVSyncError.unsupportedPayloadVersion(0)
+        }
+        guard version == Self.currentVersion else {
+            throw WebDAVSyncError.unsupportedPayloadVersion(version)
+        }
+        self.version = version
+        self.updatedAt = try container.decode(Date.self, forKey: .updatedAt)
+        self.accountUID = try container.decodeIfPresent(String.self, forKey: .accountUID)
+        self.library = try container.decode(FavoriteLibraryDocument.self, forKey: .library)
+        self.tombstones = try container.decodeIfPresent(FavoriteLibraryWebDAVTombstones.self, forKey: .tombstones) ?? FavoriteLibraryWebDAVTombstones()
+        self.clocks = try container.decodeIfPresent(FavoriteLibraryWebDAVClocks.self, forKey: .clocks) ?? FavoriteLibraryWebDAVClocks()
     }
 }
 
@@ -190,7 +215,7 @@ public struct FavoriteLibraryWebDAVMerger: Sendable {
 }
 
 public struct ReadingProgressWebDAVPayload: Codable, Equatable, Sendable {
-    public static let currentVersion = 1
+    public static let currentVersion = 2
 
     public var version: Int
     public var updatedAt: Date
@@ -200,6 +225,33 @@ public struct ReadingProgressWebDAVPayload: Codable, Equatable, Sendable {
         self.version = version
         self.updatedAt = updatedAt
         self.records = records
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case version
+        case updatedAt
+        case records
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        guard let version = try container.decodeIfPresent(Int.self, forKey: .version) else {
+            throw WebDAVSyncError.unsupportedPayloadVersion(0)
+        }
+        guard version == Self.currentVersion else {
+            throw WebDAVSyncError.unsupportedPayloadVersion(version)
+        }
+        self.version = version
+        self.updatedAt = try container.decode(Date.self, forKey: .updatedAt)
+        self.records = try container.decode([ReadingProgressWebDAVRecord].self, forKey: .records)
+            .map { $0.record }
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(version, forKey: .version)
+        try container.encode(updatedAt, forKey: .updatedAt)
+        try container.encode(records.map(ReadingProgressWebDAVRecord.init(record:)), forKey: .records)
     }
 }
 
@@ -281,6 +333,88 @@ private func keyedByID<Value: Identifiable>(_ values: [Value]) -> [Value] where 
         byID[value.id] = value
     }
     return Array(byID.values)
+}
+
+private struct ReadingProgressWebDAVRecord: Codable, Equatable, Sendable {
+    var contentTarget: FavoriteContentTarget
+    var kind: ReadingProgressKind
+    var updatedAt: Date
+    var lastReadAt: Date?
+    var threadID: String?
+    var novel: NovelReadingProgressRecord?
+    var manga: MangaReadingProgressWebDAVRecord?
+
+    init(record: ReadingProgressRecord) {
+        self.contentTarget = record.contentTarget ?? Self.fallbackTarget(for: record)
+        self.kind = record.kind
+        self.updatedAt = record.updatedAt
+        self.lastReadAt = record.lastReadAt
+        self.threadID = record.threadID
+        self.novel = record.novel
+        if let manga = record.manga {
+            self.manga = MangaReadingProgressWebDAVRecord(
+                chapterThreadID: manga.chapterThreadID ?? YamiboThreadURLCanonicalizer.threadID(from: manga.lastMangaURL),
+                lastChapter: manga.lastChapter,
+                mangaPageIndex: manga.mangaPageIndex,
+                mangaPageCount: manga.mangaPageCount
+            )
+        } else {
+            self.manga = nil
+        }
+    }
+
+    var record: ReadingProgressRecord {
+        let threadURL = contentTarget.canonicalURL
+            ?? Self.threadURL(for: threadID)
+            ?? Self.threadURL(for: manga?.chapterThreadID)
+            ?? URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=0")!
+        return ReadingProgressRecord(
+            contentTarget: contentTarget,
+            threadURL: threadURL,
+            kind: kind,
+            updatedAt: updatedAt,
+            lastReadAt: lastReadAt,
+            novel: novel,
+            manga: manga.map { payload in
+                MangaReadingProgressRecord(
+                    lastMangaURL: Self.threadURL(for: payload.chapterThreadID) ?? threadURL,
+                    chapterThreadID: payload.chapterThreadID,
+                    lastChapter: payload.lastChapter,
+                    mangaPageIndex: payload.mangaPageIndex,
+                    mangaPageCount: payload.mangaPageCount
+                )
+            }
+        )
+    }
+
+    private static func fallbackTarget(for record: ReadingProgressRecord) -> FavoriteContentTarget {
+        if record.kind == .novel {
+            return FavoriteContentTarget(kind: .novelThread, threadURL: record.threadURL)
+        }
+        let threadID = record.threadID
+            ?? record.manga?.chapterThreadID
+            ?? record.manga.flatMap { YamiboThreadURLCanonicalizer.threadID(from: $0.lastMangaURL) }
+            ?? record.threadURL.absoluteString
+        return FavoriteContentTarget(
+            mangaID: "thread:\(threadID)",
+            mangaCleanBookName: record.manga?.lastChapter ?? threadID
+        )
+    }
+
+    private static func threadURL(for threadID: String?) -> URL? {
+        let trimmed = threadID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !trimmed.isEmpty else { return nil }
+        return FavoriteLibraryURLIdentity.canonicalThreadURL(
+            from: YamiboRoute.threadByID(tid: trimmed, page: 1, authorID: nil, reverse: false).url
+        )
+    }
+}
+
+private struct MangaReadingProgressWebDAVRecord: Codable, Equatable, Sendable {
+    var chapterThreadID: String?
+    var lastChapter: String
+    var mangaPageIndex: Int
+    var mangaPageCount: Int?
 }
 
 private func choose<Value>(

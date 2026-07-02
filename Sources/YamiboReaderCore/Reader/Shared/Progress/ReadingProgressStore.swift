@@ -1,4 +1,5 @@
 import Foundation
+@preconcurrency import GRDB
 
 public enum ReadingProgressKind: String, Codable, Hashable, Sendable {
     case novel
@@ -36,15 +37,29 @@ public struct NovelReadingProgressRecord: Codable, Hashable, Sendable {
 
 public struct MangaReadingProgressRecord: Codable, Hashable, Sendable {
     public var lastMangaURL: URL
+    public var chapterThreadID: String?
     public var lastChapter: String
     public var mangaPageIndex: Int
     public var mangaPageCount: Int?
 
-    public init(lastMangaURL: URL, lastChapter: String, mangaPageIndex: Int, mangaPageCount: Int? = nil) {
+    public init(
+        lastMangaURL: URL,
+        chapterThreadID: String? = nil,
+        lastChapter: String,
+        mangaPageIndex: Int,
+        mangaPageCount: Int? = nil
+    ) {
         self.lastMangaURL = lastMangaURL
+        self.chapterThreadID = Self.normalizedChapterThreadID(chapterThreadID)
+            ?? YamiboThreadURLCanonicalizer.threadID(from: lastMangaURL)
         self.lastChapter = lastChapter
         self.mangaPageIndex = max(0, mangaPageIndex)
         self.mangaPageCount = mangaPageCount.map { max(1, $0) }
+    }
+
+    private static func normalizedChapterThreadID(_ value: String?) -> String? {
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
     }
 }
 
@@ -58,6 +73,9 @@ public struct ReadingProgressRecord: Codable, Hashable, Identifiable, Sendable {
     public var manga: MangaReadingProgressRecord?
 
     public var id: String { contentTarget?.id ?? threadURL.absoluteString }
+    public var threadID: String? {
+        contentTarget?.threadID ?? YamiboThreadURLCanonicalizer.threadID(from: threadURL)
+    }
 
     public init(
         contentTarget: FavoriteContentTarget? = nil,
@@ -81,13 +99,14 @@ public struct ReadingProgressRecord: Codable, Hashable, Identifiable, Sendable {
 public actor ReadingProgressStore {
     public static let didChangeNotification = Notification.Name("yamibo.readingProgressStore.didChange")
     public static let changeIDUserInfoKey = "changeID"
+    nonisolated(unsafe) private static var databasePoolCache: [String: DatabasePool] = [:]
+    private static let databasePoolCacheLock = NSLock()
 
     public nonisolated let changeID = UUID().uuidString
 
     private let defaults: UserDefaults
     private let key: String
-    private let encoder = JSONEncoder()
-    private let decoder = JSONDecoder()
+    private let database: DatabasePool
 
     public init(
         defaults: UserDefaults = .standard,
@@ -95,30 +114,124 @@ public actor ReadingProgressStore {
     ) {
         self.defaults = defaults
         self.key = key
+        self.database = Self.openDatabase(defaults: defaults, key: key)
+    }
+
+    init(
+        defaults: UserDefaults = .standard,
+        key: String = "yamibo.readingProgress.records",
+        databasePool: DatabasePool
+    ) {
+        self.defaults = defaults
+        self.key = key
+        self.database = databasePool
     }
 
     public func load(for url: URL) async -> ReadingProgressRecord? {
-        let canonicalURL = Self.canonicalThreadURL(for: url)
-        let key = Self.canonicalURLKey(for: canonicalURL)
-        let novelTarget = FavoriteContentTarget(kind: .novelThread, threadURL: canonicalURL)
-        let records = recordsByKey()
-        return records[key] ?? records[novelTarget.id] ?? records.values.first { Self.canonicalURLKey(for: $0.threadURL) == key }
+        guard let threadID = YamiboThreadURLCanonicalizer.threadID(from: Self.canonicalThreadURL(for: url)) else {
+            return nil
+        }
+        return try? await database.read { db in
+            try Self.fetchRecord(
+                in: db,
+                sql: """
+                SELECT * FROM reading_progress
+                WHERE thread_id = ? OR manga_chapter_thread_id = ?
+                ORDER BY updated_at DESC, id ASC
+                LIMIT 1
+                """,
+                arguments: [threadID, threadID]
+            )
+        }
     }
 
     public func loadAll() async -> [ReadingProgressRecord] {
-        return recordsByKey()
-            .values
-            .sorted { lhs, rhs in
-                if lhs.updatedAt != rhs.updatedAt {
-                    return lhs.updatedAt > rhs.updatedAt
+        (try? await database.read { db in
+            try Row.fetchAll(
+                db,
+                sql: """
+                SELECT * FROM reading_progress
+                ORDER BY updated_at DESC, id ASC
+                """
+            ).compactMap(Self.record(from:))
+        }) ?? []
+    }
+
+    public func load(for target: FavoriteContentTarget) async -> ReadingProgressRecord? {
+        try? await database.read { db in
+            try Self.fetchRecord(
+                in: db,
+                sql: "SELECT * FROM reading_progress WHERE id = ? LIMIT 1",
+                arguments: [target.id]
+            )
+        }
+    }
+
+    public func migrateMangaTitleKey(from oldCleanBookName: String, to newCleanBookName: String) async throws {
+        var recordsByKey = Dictionary(uniqueKeysWithValues: await loadAll().map { ($0.id, $0) })
+        let oldTarget = FavoriteContentTarget(mangaCleanBookName: oldCleanBookName)
+        let newTarget = FavoriteContentTarget(mangaCleanBookName: newCleanBookName)
+        if var record = recordsByKey.removeValue(forKey: oldTarget.id) {
+            record.contentTarget = newTarget
+            recordsByKey[newTarget.id] = record
+            try await replaceAll(Array(recordsByKey.values))
+            return
+        }
+        guard let existing = recordsByKey.first(where: { _, record in
+            record.contentTarget?.mangaCleanBookName == oldCleanBookName
+        }) else { return }
+        var record = existing.value
+        recordsByKey.removeValue(forKey: existing.key)
+        let renamedTarget = record.contentTarget?.renamedMangaTitle(to: newCleanBookName) ?? newTarget
+        record.contentTarget = renamedTarget
+        recordsByKey[renamedTarget.id] = record
+        try await replaceAll(Array(recordsByKey.values))
+    }
+
+    public func delete(for url: URL) async throws {
+        guard let threadID = YamiboThreadURLCanonicalizer.threadID(from: Self.canonicalThreadURL(for: url)) else {
+            return
+        }
+        try await database.write { db in
+            try db.execute(
+                sql: "DELETE FROM reading_progress WHERE thread_id = ? OR manga_chapter_thread_id = ?",
+                arguments: [threadID, threadID]
+            )
+        }
+        postChangeNotification()
+    }
+
+    public func replaceAll(_ records: [ReadingProgressRecord]) async throws {
+        do {
+            try await database.write { db in
+                try db.execute(sql: "DELETE FROM reading_progress")
+                var recordsByKey: [String: ReadingProgressRecord] = [:]
+                for record in records {
+                    let normalized = Self.normalizedRecord(record)
+                    if let existing = recordsByKey[normalized.id], existing.updatedAt >= normalized.updatedAt {
+                        continue
+                    }
+                    recordsByKey[normalized.id] = normalized
                 }
-                return lhs.threadURL.absoluteString < rhs.threadURL.absoluteString
+                for record in recordsByKey.values {
+                    try Self.upsert(record, in: db)
+                }
             }
+            postChangeNotification()
+        } catch {
+            throw YamiboError.persistenceFailed(error.localizedDescription)
+        }
+    }
+
+    public func clearAll() async throws {
+        try await database.write { db in
+            try db.execute(sql: "DELETE FROM reading_progress")
+        }
+        postChangeNotification()
     }
 
     @discardableResult
     public func saveNovel(_ position: NovelReadingPosition, date: Date = .now) async throws -> ReadingProgressRecord {
-        var records = recordsByKey()
         let canonicalURL = Self.canonicalThreadURL(for: position.threadURL)
         let target = FavoriteContentTarget(kind: .novelThread, threadURL: canonicalURL)
         let record = ReadingProgressRecord(
@@ -138,8 +251,7 @@ public actor ReadingProgressStore {
             ),
             manga: nil
         )
-        records[target.id] = record
-        try persist(records)
+        try await save(record)
         return record
     }
 
@@ -157,24 +269,30 @@ public actor ReadingProgressStore {
                 date: date
             )
         }
-        var records = recordsByKey()
+
         let canonicalURL = Self.canonicalThreadURL(for: position.threadURL)
-        let key = Self.canonicalURLKey(for: canonicalURL)
+        let threadID = YamiboThreadURLCanonicalizer.threadID(from: canonicalURL)
+            ?? YamiboThreadURLCanonicalizer.threadID(from: position.chapterURL)
+            ?? canonicalURL.absoluteString
+        let target = FavoriteContentTarget(
+            mangaID: "thread:\(threadID)",
+            mangaCleanBookName: position.chapterTitle
+        )
         let record = ReadingProgressRecord(
+            contentTarget: target,
             threadURL: canonicalURL,
             kind: .manga,
             updatedAt: date,
             lastReadAt: date,
             novel: nil,
             manga: MangaReadingProgressRecord(
-                lastMangaURL: position.chapterURL,
+                lastMangaURL: Self.threadURL(for: YamiboThreadURLCanonicalizer.threadID(from: position.chapterURL)) ?? position.chapterURL,
                 lastChapter: position.chapterTitle,
                 mangaPageIndex: position.pageIndex,
                 mangaPageCount: position.pageCount
             )
         )
-        records[key] = record
-        try persist(records)
+        try await save(record)
         return record
     }
 
@@ -189,107 +307,263 @@ public actor ReadingProgressStore {
         mangaID: String? = nil,
         date: Date = .now
     ) async throws -> ReadingProgressRecord {
-        var records = recordsByKey()
         let target = FavoriteContentTarget(mangaID: mangaID ?? cleanBookName, mangaCleanBookName: cleanBookName)
+        let canonicalThreadURL = threadURL.map(Self.canonicalThreadURL(for:))
+            ?? Self.threadURL(for: YamiboThreadURLCanonicalizer.threadID(from: chapterURL))
+            ?? chapterURL
         let chapterTID = YamiboThreadURLCanonicalizer.threadID(from: chapterURL)
         let record = ReadingProgressRecord(
             contentTarget: target,
-            threadURL: threadURL ?? chapterURL,
+            threadURL: canonicalThreadURL,
             kind: .manga,
             updatedAt: date,
             lastReadAt: date,
             novel: nil,
             manga: MangaReadingProgressRecord(
-                lastMangaURL: chapterURL,
+                lastMangaURL: Self.threadURL(for: chapterTID) ?? chapterURL,
+                chapterThreadID: chapterTID,
                 lastChapter: chapterTitle,
                 mangaPageIndex: pageIndex,
                 mangaPageCount: pageCount
             )
         )
-        for candidateID in Self.mangaProgressRetargetCandidateIDs(
-            target: target,
-            cleanBookName: cleanBookName,
-            chapterTID: chapterTID
-        ) {
-            records.removeValue(forKey: candidateID)
+        try await database.write { db in
+            for candidateID in Self.mangaProgressRetargetCandidateIDs(
+                target: target,
+                cleanBookName: cleanBookName,
+                chapterTID: chapterTID
+            ) {
+                try db.execute(sql: "DELETE FROM reading_progress WHERE id = ?", arguments: [candidateID])
+            }
+            try Self.upsert(Self.normalizedRecord(record), in: db)
         }
-        records[target.id] = record
-        try persist(records)
+        postChangeNotification()
         return record
     }
 
-    public func load(for target: FavoriteContentTarget) async -> ReadingProgressRecord? {
-        return recordsByKey()[target.id]
-    }
-
-    public func migrateMangaTitleKey(from oldCleanBookName: String, to newCleanBookName: String) async throws {
-        var records = recordsByKey()
-        let oldTarget = FavoriteContentTarget(mangaCleanBookName: oldCleanBookName)
-        let newTarget = FavoriteContentTarget(mangaCleanBookName: newCleanBookName)
-        if var record = records.removeValue(forKey: oldTarget.id) {
-            record.contentTarget = newTarget
-            records[newTarget.id] = record
-            try persist(records)
-            return
-        }
-        guard let existing = records.first(where: { _, record in
-            record.contentTarget?.mangaCleanBookName == oldCleanBookName
-        }) else { return }
-        var record = existing.value
-        records.removeValue(forKey: existing.key)
-        let renamedTarget = record.contentTarget?.renamedMangaTitle(to: newCleanBookName) ?? newTarget
-        record.contentTarget = renamedTarget
-        records[renamedTarget.id] = record
-        try persist(records)
-    }
-
-    public func delete(for url: URL) async throws {
-        var records = recordsByKey()
-        records.removeValue(forKey: Self.canonicalURLKey(for: url))
-        try persist(records)
-    }
-
-    public func replaceAll(_ records: [ReadingProgressRecord]) async throws {
-        var recordsByKey: [String: ReadingProgressRecord] = [:]
-        for record in records {
-            let normalized = Self.normalizedRecord(record)
-            recordsByKey[Self.key(for: normalized)] = normalized
-        }
-        try persist(recordsByKey)
-    }
-
-    public func clearAll() async throws {
-        try persist([:])
-    }
-
-    private func recordsByKey() -> [String: ReadingProgressRecord] {
-        guard let data = defaults.data(forKey: key),
-              let decoded = try? decoder.decode([ReadingProgressRecord].self, from: data) else {
-            return [:]
-        }
-        var records: [String: ReadingProgressRecord] = [:]
-        for record in decoded {
-            let normalized = Self.normalizedRecord(record)
-            let key = Self.key(for: normalized)
-            if let existing = records[key], existing.updatedAt >= normalized.updatedAt {
-                continue
-            }
-            records[key] = normalized
-        }
-        return records
-    }
-
-    private func persist(_ records: [String: ReadingProgressRecord]) throws {
+    private func save(_ record: ReadingProgressRecord) async throws {
         do {
-            let normalized = records
-                .values
-                .map(Self.normalizedRecord)
-                .sorted { $0.id < $1.id }
-            defaults.set(try encoder.encode(normalized), forKey: key)
+            try await database.write { db in
+                try Self.upsert(Self.normalizedRecord(record), in: db)
+            }
             postChangeNotification()
         } catch {
             throw YamiboError.persistenceFailed(error.localizedDescription)
         }
+    }
+
+    private static func openDatabase(defaults: UserDefaults, key: String) -> DatabasePool {
+        do {
+            if defaults === UserDefaults.standard {
+                return try cachedDatabasePool(rootDirectory: YamiboDatabase.defaultRootDirectory())
+            }
+            let idKey = "\(key).grdbDatabaseID"
+            let databaseID: String
+            if let existing = defaults.string(forKey: idKey), !existing.isEmpty {
+                databaseID = existing
+            } else {
+                databaseID = UUID().uuidString
+                defaults.set(databaseID, forKey: idKey)
+            }
+            let root = FileManager.default.temporaryDirectory
+                .appendingPathComponent("YamiboReaderReadingProgress", isDirectory: true)
+                .appendingPathComponent(databaseID, isDirectory: true)
+            return try cachedDatabasePool(rootDirectory: root)
+        } catch {
+            fatalError("Failed to open ReadingProgressStore database: \(error)")
+        }
+    }
+
+    private static func cachedDatabasePool(rootDirectory: URL) throws -> DatabasePool {
+        let key = rootDirectory.standardizedFileURL.path
+        databasePoolCacheLock.lock()
+        defer { databasePoolCacheLock.unlock() }
+        if let pool = databasePoolCache[key] {
+            return pool
+        }
+
+        let pool = try YamiboDatabase.openPool(rootDirectory: rootDirectory)
+        databasePoolCache[key] = pool
+        return pool
+    }
+
+    private static func fetchRecord(in db: Database, sql: String, arguments: StatementArguments) throws -> ReadingProgressRecord? {
+        guard let row = try Row.fetchOne(db, sql: sql, arguments: arguments) else { return nil }
+        return try record(from: row)
+    }
+
+    private static func record(from row: Row) throws -> ReadingProgressRecord? {
+        guard let kind = ReadingProgressKind(rawValue: row["kind"] as String),
+              let targetKind = FavoriteContentTargetKind(rawValue: row["target_kind"] as String) else {
+            return nil
+        }
+        let target = contentTarget(
+            kind: targetKind,
+            threadID: row["thread_id"] as String?,
+            mangaID: row["manga_id"] as String?,
+            cleanBookName: row["clean_book_name"] as String?
+        )
+        let threadURL = target?.canonicalURL
+            ?? threadURL(for: row["thread_id"] as String?)
+            ?? threadURL(for: row["manga_chapter_thread_id"] as String?)
+            ?? URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=0")!
+        let novel = try novelRecord(from: row)
+        let manga = mangaRecord(from: row)
+        return ReadingProgressRecord(
+            contentTarget: target,
+            threadURL: threadURL,
+            kind: kind,
+            updatedAt: date(from: row["updated_at"]),
+            lastReadAt: optionalDate(from: row["last_read_at"] as Double?),
+            novel: novel,
+            manga: manga
+        )
+    }
+
+    private static func contentTarget(
+        kind: FavoriteContentTargetKind,
+        threadID: String?,
+        mangaID: String?,
+        cleanBookName: String?
+    ) -> FavoriteContentTarget? {
+        switch kind {
+        case .normalThread:
+            guard let threadID = trimmedNonEmpty(threadID) else { return nil }
+            return .normalThread(threadID: threadID)
+        case .novelThread:
+            guard let threadID = trimmedNonEmpty(threadID) else { return nil }
+            return .novelThread(threadID: threadID)
+        case .mangaTitle:
+            guard let cleanBookName = trimmedNonEmpty(cleanBookName) else { return nil }
+            return FavoriteContentTarget(mangaID: mangaID ?? cleanBookName, mangaCleanBookName: cleanBookName)
+        }
+    }
+
+    private static func novelRecord(from row: Row) throws -> NovelReadingProgressRecord? {
+        guard (row["novel_last_view"] as Int?) != nil else { return nil }
+        let resumePoint: ReaderResumePoint?
+        if let resumeJSON = row["novel_resume_point_json"] as String?,
+           let data = resumeJSON.data(using: .utf8) {
+            resumePoint = try? JSONDecoder().decode(ReaderResumePoint.self, from: data)
+        } else {
+            resumePoint = nil
+        }
+        let coverURL = (row["novel_thread_cover_url"] as String?).flatMap(URL.init(string:))
+        return NovelReadingProgressRecord(
+            lastView: row["novel_last_view"],
+            lastChapter: row["novel_last_chapter"] as String?,
+            authorID: row["novel_author_id"] as String?,
+            novelResumePoint: resumePoint,
+            novelMaxView: row["novel_max_view"] as Int?,
+            novelDocumentSurfaceProgressPercent: row["novel_document_surface_progress_percent"] as Int?,
+            threadCoverURL: coverURL
+        )
+    }
+
+    private static func mangaRecord(from row: Row) -> MangaReadingProgressRecord? {
+        guard let lastChapter = row["manga_last_chapter"] as String?,
+              let pageIndex = row["manga_page_index"] as Int? else {
+            return nil
+        }
+        let chapterThreadID = row["manga_chapter_thread_id"] as String?
+        let chapterURL = threadURL(for: chapterThreadID)
+            ?? threadURL(for: row["thread_id"] as String?)
+            ?? URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=0")!
+        return MangaReadingProgressRecord(
+            lastMangaURL: chapterURL,
+            chapterThreadID: chapterThreadID,
+            lastChapter: lastChapter,
+            mangaPageIndex: pageIndex,
+            mangaPageCount: row["manga_page_count"] as Int?
+        )
+    }
+
+    private static func upsert(_ record: ReadingProgressRecord, in db: Database) throws {
+        let columns = targetColumns(for: record.contentTarget)
+        let novelResumePointJSON: String?
+        if let resumePoint = record.novel?.novelResumePoint,
+           let data = try? JSONEncoder().encode(resumePoint) {
+            novelResumePointJSON = String(data: data, encoding: .utf8)
+        } else {
+            novelResumePointJSON = nil
+        }
+        try db.execute(
+            sql: """
+            INSERT INTO reading_progress
+            (
+                id, target_kind, thread_id, manga_id, clean_book_name, kind, updated_at, last_read_at,
+                novel_last_view, novel_last_chapter, novel_author_id, novel_resume_point_json,
+                novel_max_view, novel_document_surface_progress_percent, novel_thread_cover_url,
+                manga_chapter_thread_id, manga_last_chapter, manga_page_index, manga_page_count
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            arguments: [
+                record.id,
+                columns.kind.rawValue,
+                columns.threadID ?? record.threadID,
+                columns.mangaID,
+                columns.cleanBookName,
+                record.kind.rawValue,
+                timeInterval(from: record.updatedAt),
+                record.lastReadAt.map(timeInterval(from:)),
+                record.novel?.lastView,
+                record.novel?.lastChapter,
+                record.novel?.authorID,
+                novelResumePointJSON,
+                record.novel?.novelMaxView,
+                record.novel?.novelDocumentSurfaceProgressPercent,
+                record.novel?.threadCoverURL?.absoluteString,
+                record.manga?.chapterThreadID,
+                record.manga?.lastChapter,
+                record.manga?.mangaPageIndex,
+                record.manga?.mangaPageCount,
+            ]
+        )
+    }
+
+    private static func targetColumns(
+        for target: FavoriteContentTarget?
+    ) -> (kind: FavoriteContentTargetKind, threadID: String?, mangaID: String?, cleanBookName: String?) {
+        switch target {
+        case let .normalThread(threadID):
+            return (.normalThread, threadID, nil, nil)
+        case let .novelThread(threadID):
+            return (.novelThread, threadID, nil, nil)
+        case let .mangaTitle(mangaID, cleanBookName):
+            return (.mangaTitle, nil, mangaID, cleanBookName)
+        case nil:
+            return (.mangaTitle, nil, nil, nil)
+        }
+    }
+
+    private static func normalizedRecord(_ record: ReadingProgressRecord) -> ReadingProgressRecord {
+        let canonicalURL = canonicalThreadURL(for: record.threadURL)
+        let contentTarget: FavoriteContentTarget?
+        if record.kind == .novel {
+            contentTarget = record.contentTarget ?? FavoriteContentTarget(kind: .novelThread, threadURL: canonicalURL)
+        } else {
+            contentTarget = record.contentTarget ?? fallbackMangaTarget(for: record, canonicalURL: canonicalURL)
+        }
+        return ReadingProgressRecord(
+            contentTarget: contentTarget,
+            threadURL: contentTarget?.canonicalURL ?? canonicalURL,
+            kind: record.kind,
+            updatedAt: record.updatedAt,
+            lastReadAt: record.lastReadAt,
+            novel: record.novel,
+            manga: record.manga
+        )
+    }
+
+    private static func fallbackMangaTarget(for record: ReadingProgressRecord, canonicalURL: URL) -> FavoriteContentTarget? {
+        guard record.kind == .manga else { return nil }
+        let threadID = YamiboThreadURLCanonicalizer.threadID(from: canonicalURL)
+            ?? record.manga?.chapterThreadID
+            ?? record.manga.flatMap { YamiboThreadURLCanonicalizer.threadID(from: $0.lastMangaURL) }
+        guard let threadID else { return nil }
+        let name = trimmedNonEmpty(record.manga?.lastChapter) ?? threadID
+        return FavoriteContentTarget(mangaID: "thread:\(threadID)", mangaCleanBookName: name)
     }
 
     private nonisolated func postChangeNotification() {
@@ -300,35 +574,27 @@ public actor ReadingProgressStore {
         )
     }
 
-    private static func normalizedRecord(_ record: ReadingProgressRecord) -> ReadingProgressRecord {
-        let canonicalURL = canonicalThreadURL(for: record.threadURL)
-        let contentTarget: FavoriteContentTarget?
-        if record.kind == .novel {
-            contentTarget = record.contentTarget ?? FavoriteContentTarget(kind: .novelThread, threadURL: canonicalURL)
-        } else {
-            contentTarget = record.contentTarget
-        }
-        return ReadingProgressRecord(
-            contentTarget: contentTarget,
-            threadURL: canonicalURL,
-            kind: record.kind,
-            updatedAt: record.updatedAt,
-            lastReadAt: record.lastReadAt,
-            novel: record.novel,
-            manga: record.manga
-        )
-    }
-
     private static func canonicalThreadURL(for url: URL) -> URL {
         FavoriteLibraryURLIdentity.canonicalThreadURL(from: url)
     }
 
-    private static func canonicalURLKey(for url: URL) -> String {
-        FavoriteLibraryURLIdentity.canonicalThreadURLKey(for: url)
+    private static func threadURL(for threadID: String?) -> URL? {
+        guard let threadID = trimmedNonEmpty(threadID) else { return nil }
+        return FavoriteLibraryURLIdentity.canonicalThreadURL(
+            from: YamiboRoute.threadByID(tid: threadID, page: 1, authorID: nil, reverse: false).url
+        )
     }
 
-    private static func key(for record: ReadingProgressRecord) -> String {
-        record.contentTarget?.id ?? canonicalURLKey(for: record.threadURL)
+    private static func timeInterval(from date: Date) -> Double {
+        date.timeIntervalSince1970
+    }
+
+    private static func date(from value: Double) -> Date {
+        Date(timeIntervalSince1970: value)
+    }
+
+    private static func optionalDate(from value: Double?) -> Date? {
+        value.map(Date.init(timeIntervalSince1970:))
     }
 
     private static func mangaProgressRetargetCandidateIDs(

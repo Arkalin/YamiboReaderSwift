@@ -357,7 +357,7 @@ final class MangaReaderModelSettingsProgressTests: XCTestCase {
         let route = await fixture.model.saveProgress()
 
         let progress = await readingProgressStore.load(for: fixture.originalURL)
-        XCTAssertEqual(progress?.manga?.lastMangaURL, fixture.chapterURL)
+        XCTAssertEqual(progress?.manga?.lastMangaURL.absoluteString, "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=701")
         XCTAssertEqual(progress?.manga?.mangaPageIndex, 2)
 
         guard case let .native(savedContext) = route else {
@@ -392,7 +392,7 @@ final class MangaReaderModelSettingsProgressTests: XCTestCase {
         let favorites = await favoriteStore.loadFavorites()
         XCTAssertTrue(favorites.isEmpty)
         let progress = await readingProgressStore.load(for: fixture.originalURL)
-        XCTAssertEqual(progress?.manga?.lastMangaURL, fixture.chapterURL)
+        XCTAssertEqual(progress?.manga?.lastMangaURL.absoluteString, "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=701")
         XCTAssertEqual(progress?.manga?.mangaPageIndex, 2)
     }
 

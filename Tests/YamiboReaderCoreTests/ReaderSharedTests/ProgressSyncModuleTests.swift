@@ -117,7 +117,8 @@ import Testing
     #expect(manga?.lastChapter == nil)
     #expect(manga?.mangaPageIndex == 0)
     #expect(novelProgress?.novel?.novelResumePoint?.displayedTextOffset == 120)
-    #expect(mangaProgress?.manga?.lastMangaURL == chapterURL)
+    #expect(mangaProgress?.manga?.lastMangaURL.absoluteString == "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9")
+    #expect(mangaProgress?.manga?.chapterThreadID == "9")
     #expect(mangaProgress?.manga?.mangaPageIndex == 4)
     #expect(mangaProgress?.manga?.mangaPageCount == 9)
 }

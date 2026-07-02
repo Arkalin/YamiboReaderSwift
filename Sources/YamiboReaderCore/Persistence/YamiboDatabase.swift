@@ -47,6 +47,7 @@ public enum YamiboDatabase {
         fileManager: FileManager = .default
     ) throws {
         try writer.write { db in
+            try db.execute(sql: "DELETE FROM reading_progress")
             try db.execute(sql: "DELETE FROM favorite_remote_mappings")
             try db.execute(sql: "DELETE FROM favorite_item_tags")
             try db.execute(sql: "DELETE FROM favorite_locations")
@@ -152,6 +153,34 @@ public enum YamiboDatabase {
                 table.column("value", .text)
                 table.column("updated_at", .double)
             }
+        }
+
+        migrator.registerMigration("create_reading_progress") { db in
+            try db.create(table: "reading_progress") { table in
+                table.column("id", .text).primaryKey(onConflict: .replace)
+                table.column("target_kind", .text).notNull()
+                table.column("thread_id", .text)
+                table.column("manga_id", .text)
+                table.column("clean_book_name", .text)
+                table.column("kind", .text).notNull()
+                table.column("updated_at", .double).notNull()
+                table.column("last_read_at", .double)
+                table.column("novel_last_view", .integer)
+                table.column("novel_last_chapter", .text)
+                table.column("novel_author_id", .text)
+                table.column("novel_resume_point_json", .text)
+                table.column("novel_max_view", .integer)
+                table.column("novel_document_surface_progress_percent", .integer)
+                table.column("novel_thread_cover_url", .text)
+                table.column("manga_chapter_thread_id", .text)
+                table.column("manga_last_chapter", .text)
+                table.column("manga_page_index", .integer)
+                table.column("manga_page_count", .integer)
+            }
+            try db.create(index: "reading_progress_kind_updated_idx", on: "reading_progress", columns: ["kind", "updated_at"])
+            try db.create(index: "reading_progress_thread_idx", on: "reading_progress", columns: ["thread_id"])
+            try db.create(index: "reading_progress_manga_title_idx", on: "reading_progress", columns: ["manga_id", "clean_book_name"])
+            try db.create(index: "reading_progress_manga_chapter_idx", on: "reading_progress", columns: ["manga_chapter_thread_id"])
         }
     }
 
