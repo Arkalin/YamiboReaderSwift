@@ -87,11 +87,9 @@ public enum FavoriteLibraryEntry: Identifiable, Hashable, Sendable {
 
 public struct FavoriteLibraryCollectionSummary: Equatable, Sendable {
     public let itemCount: Int
-    public let hiddenCount: Int
 
-    public init(itemCount: Int, hiddenCount: Int) {
+    public init(itemCount: Int) {
         self.itemCount = itemCount
-        self.hiddenCount = hiddenCount
     }
 }
 
@@ -204,8 +202,7 @@ public enum FavoriteLibraryProjection {
 
         guard case .root = query.scope else {
             return FavoriteLibraryCollectionSummary(
-                itemCount: allItems.count,
-                hiddenCount: 0
+                itemCount: allItems.count
             )
         }
 
@@ -214,8 +211,7 @@ public enum FavoriteLibraryProjection {
            query.filter == .all,
            trimmedSearchText.isEmpty || collection.name.localizedCaseInsensitiveContains(trimmedSearchText) {
             return FavoriteLibraryCollectionSummary(
-                itemCount: allItems.count,
-                hiddenCount: 0
+                itemCount: allItems.count
             )
         }
 
@@ -225,8 +221,7 @@ public enum FavoriteLibraryProjection {
         containedQuery.searchText = favoriteSearchTextForCollectionMatch(collection, query: query)
         let matchingItems = favorites(in: snapshot, query: containedQuery)
         return FavoriteLibraryCollectionSummary(
-            itemCount: matchingItems.count,
-            hiddenCount: 0
+            itemCount: matchingItems.count
         )
     }
 

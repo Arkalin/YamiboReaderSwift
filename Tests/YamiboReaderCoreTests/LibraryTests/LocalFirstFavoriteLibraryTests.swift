@@ -8,7 +8,25 @@ import Testing
     #expect(document.categories.count == 1)
     #expect(document.defaultCategory.isDefault)
     #expect(document.defaultCategory.id == FavoriteCategory.defaultID)
+    #expect(document.defaultCategory.name == FavoriteCategory.defaultStorageName)
+    #expect(document.defaultCategory.displayName == L10n.string("favorites.default_category"))
     #expect(document.items.isEmpty)
+}
+
+@Test func localFirstFavoriteLibraryNormalizesLegacyLocalizedDefaultCategoryName() {
+    let legacyDefault = FavoriteCategory(
+        id: FavoriteCategory.defaultID,
+        name: "默认",
+        manualOrder: 99,
+        isDefault: true
+    )
+    let document = FavoriteLibraryDocument(categories: [legacyDefault])
+
+    #expect(document.categories.count == 1)
+    #expect(document.defaultCategory.id == FavoriteCategory.defaultID)
+    #expect(document.defaultCategory.isDefault)
+    #expect(document.defaultCategory.name == FavoriteCategory.defaultStorageName)
+    #expect(document.defaultCategory.displayName == L10n.string("favorites.default_category"))
 }
 
 @Test func favoriteItemIdentityComesFromStableContentTarget() throws {
@@ -18,10 +36,26 @@ import Testing
     let sameNormal = FavoriteContentTarget(kind: .normalThread, threadURL: secondURL)
     let novel = FavoriteContentTarget(kind: .novelThread, threadURL: secondURL)
     let manga = FavoriteContentTarget(mangaCleanBookName: "Clean Manga")
+    let stableManga = FavoriteContentTarget(mangaID: "links:9001", mangaCleanBookName: "Clean Manga")
 
     #expect(normal.id == sameNormal.id)
     #expect(normal.id != novel.id)
     #expect(manga.id == "manga-title:Clean Manga")
+    #expect(stableManga.id == "manga-title:links:9001")
+    #expect(stableManga.mangaCleanBookName == "Clean Manga")
+}
+
+@Test func favoriteItemIdentityDecodesLegacyMangaTitlePayloads() throws {
+    let decoder = JSONDecoder()
+    let targetData = Data(#"{"kind":"mangaTitle","cleanBookName":"Legacy Manga"}"#.utf8)
+    let sourceGroupData = Data(#"{"mangaTitle":{"cleanBookName":"Legacy Manga"}}"#.utf8)
+
+    let target = try decoder.decode(FavoriteContentTarget.self, from: targetData)
+    let sourceGroup = try decoder.decode(FavoriteSourceGroup.self, from: sourceGroupData)
+
+    #expect(target == FavoriteContentTarget(mangaCleanBookName: "Legacy Manga"))
+    #expect(target.mangaCleanBookName == "Legacy Manga")
+    #expect(sourceGroup == .mangaTitle(cleanBookName: "Legacy Manga"))
 }
 
 @Test func favoriteItemRequiresAtLeastOneFavoriteLocation() throws {
@@ -66,59 +100,6 @@ import Testing
     #expect(loadedItem.remoteMapping?.yamiboFavoriteID == "remote-321")
     #expect(loadedItem.locations == [.category(category.id)])
     #expect(loadedItem.tagIDs == [tag.id])
-}
-
-@Test func localFirstFavoriteLibraryRebuildsFromLegacyWithoutHiddenArchiveSemantics() async throws {
-    let suite = try #require(UserDefaults(suiteName: "LocalFirstFavoriteLibraryTests.\(UUID().uuidString)"))
-    let store = LocalFirstFavoriteLibraryStore(defaults: suite, key: "library")
-    let favoriteURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=322"))
-    let archivedURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=323"))
-    let legacyTag = FavoriteTag(id: "tag", name: "旧标签", color: .green)
-    let snapshot = FavoriteLibrarySnapshot(
-        favorites: [
-            Favorite(
-                title: "旧收藏",
-                displayName: "旧本地名",
-                url: favoriteURL,
-                remoteFavoriteID: "remote-322",
-                isHidden: true,
-                type: .novel,
-                tagIDs: [legacyTag.id]
-            )
-        ],
-        collections: [FavoriteCollection(id: "legacy-collection", name: "旧合集", isHidden: true)],
-        tags: [legacyTag],
-        archivedMetadata: [
-            FavoriteMetadataArchiveEntry(
-                canonicalThreadURL: archivedURL,
-                displayName: "归档名",
-                mangaPageIndex: 2,
-                lastView: 3,
-                lastChapter: "归档章",
-                authorID: nil,
-                novelResumePoint: nil,
-                isHidden: true,
-                type: .novel,
-                lastMangaURL: nil,
-                parentCollectionID: "legacy-collection",
-                manualOrder: 0,
-                lastReadAt: nil,
-                tagIDs: [legacyTag.id]
-            )
-        ]
-    )
-
-    let document = try await store.rebuildFromLegacy(snapshot, date: Date(timeIntervalSince1970: 100))
-
-    #expect(document.categories.map(\.id) == [FavoriteCategory.defaultID])
-    #expect(document.collections.isEmpty)
-    #expect(document.items.count == 1)
-    let item = try #require(document.items.first)
-    #expect(item.target.kind == .novelThread)
-    #expect(item.locations == [.category(FavoriteCategory.defaultID)])
-    #expect(item.remoteMapping?.yamiboFavoriteID == "remote-322")
-    #expect(item.tagIDs == [legacyTag.id])
-    #expect(document.tags == [legacyTag])
 }
 
 @Test func remoteFavoriteMappingDoesNotDecideLocalItemExistence() throws {

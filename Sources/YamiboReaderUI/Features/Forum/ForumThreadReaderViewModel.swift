@@ -37,7 +37,7 @@ final class ForumThreadReaderViewModel {
     let context: ThreadReaderLaunchContext
 
     @ObservationIgnored private let repositoryProvider: @Sendable () async -> any ForumThreadPageLoading
-    @ObservationIgnored private let favoriteStoreProvider: @Sendable () async -> (any FavoriteStoring)?
+    @ObservationIgnored private let localFavoriteLibraryStoreProvider: @Sendable () async -> LocalFirstFavoriteLibraryStore?
     @ObservationIgnored private let readingProgressStoreProvider: @Sendable () async -> ReadingProgressStore?
     @ObservationIgnored private let favoriteRepositoryProvider: @Sendable () async -> (any ForumThreadFavoriteRemoteOperating)?
     @ObservationIgnored private let inlineImageLoadingContextProvider: @Sendable () async -> NovelInlineImageLoadingContext?
@@ -47,8 +47,8 @@ final class ForumThreadReaderViewModel {
         repositoryProvider = {
             await appContext.makeForumThreadReaderRepository()
         }
-        favoriteStoreProvider = {
-            appContext.favoriteStore
+        localFavoriteLibraryStoreProvider = {
+            appContext.localFavoriteLibraryStore
         }
         readingProgressStoreProvider = {
             appContext.readingProgressStore
@@ -65,6 +65,7 @@ final class ForumThreadReaderViewModel {
         context: ThreadReaderLaunchContext,
         repository: any ForumThreadPageLoading,
         favoriteStore: (any FavoriteStoring)? = nil,
+        localFavoriteLibraryStore: LocalFirstFavoriteLibraryStore? = nil,
         readingProgressStore: ReadingProgressStore? = nil,
         favoriteRepository: (any ForumThreadFavoriteRemoteOperating)? = nil
     ) {
@@ -72,8 +73,8 @@ final class ForumThreadReaderViewModel {
         repositoryProvider = {
             repository
         }
-        favoriteStoreProvider = {
-            favoriteStore
+        localFavoriteLibraryStoreProvider = {
+            localFavoriteLibraryStore
         }
         readingProgressStoreProvider = {
             readingProgressStore
@@ -134,14 +135,13 @@ final class ForumThreadReaderViewModel {
     }
 
     func toggleFavorite() async {
-        guard let favoriteStore = await favoriteStoreProvider() else { return }
         let url = context.thread.canonicalURL
 
         do {
-            if let favorite = await favoriteStore.favorite(for: url) {
+            if let favoriteItem = await localFavoriteItem(for: url) {
                 try await ForumThreadFavoriteSync.removeFavorite(
-                    favorite,
-                    favoriteStore: favoriteStore,
+                    favoriteItem.favorite(threadURL: url, type: .other),
+                    localFavoriteLibraryStore: await localFavoriteLibraryStoreProvider(),
                     readingProgressStore: await readingProgressStoreProvider(),
                     remoteRepository: await favoriteRepositoryProvider()
                 )
@@ -154,8 +154,12 @@ final class ForumThreadReaderViewModel {
                 title: favoriteTitle,
                 type: .other,
                 authorID: nil,
+                forumID: page?.forumID ?? page?.thread.fid ?? context.thread.fid,
+                forumName: page?.forumName,
+                coverURL: ThreadCoverResolver.findThreadCoverCandidate(in: page),
+                contentUpdatedAt: Self.contentUpdatedAt(from: page),
                 formHash: page?.formHash,
-                favoriteStore: favoriteStore,
+                localFavoriteLibraryStore: await localFavoriteLibraryStoreProvider(),
                 remoteRepository: await favoriteRepositoryProvider()
             )
             isFavorited = true
@@ -286,11 +290,38 @@ final class ForumThreadReaderViewModel {
         return contextTitle.isEmpty ? context.thread.canonicalURL.absoluteString : contextTitle
     }
 
+    private static func contentUpdatedAt(from page: ForumThreadPage?) -> Date? {
+        guard let firstPost = page?.posts.first else { return nil }
+        return FavoriteContentUpdateDateResolver.date(
+            lastEditedText: firstPost.lastEditedText,
+            postedAtText: firstPost.postedAtText
+        )
+    }
+
     private func refreshFavoriteState() async {
-        guard let favoriteStore = await favoriteStoreProvider() else {
-            isFavorited = false
-            return
+        isFavorited = await localFavoriteItem(for: context.thread.canonicalURL) != nil
+    }
+
+    private func localFavoriteItem(for url: URL) async -> FavoriteItem? {
+        guard let localFavoriteLibraryStore = await localFavoriteLibraryStoreProvider() else { return nil }
+        let target = FavoriteContentTarget(kind: .normalThread, threadURL: url)
+        let threadID = target.threadID
+        return await localFavoriteLibraryStore.load().items.first { item in
+            item.target.id == target.id || item.target.threadID == threadID
         }
-        isFavorited = await favoriteStore.favorite(for: context.thread.canonicalURL) != nil
+    }
+}
+
+private extension FavoriteItem {
+    func favorite(threadURL: URL, type: FavoriteType) -> Favorite {
+        Favorite(
+            id: id,
+            title: title,
+            displayName: displayName,
+            url: target.canonicalURL ?? threadURL,
+            remoteFavoriteID: remoteMapping?.yamiboFavoriteID,
+            type: type,
+            tagIDs: tagIDs
+        )
     }
 }

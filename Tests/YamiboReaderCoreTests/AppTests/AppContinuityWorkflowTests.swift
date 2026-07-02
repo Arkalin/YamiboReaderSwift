@@ -3,9 +3,13 @@ import Testing
 @testable import YamiboReaderCore
 
 @MainActor
-@Test func appContinuityRestoreReconcilesNovelRouteWithFavoriteLibraryProgress() async throws {
+@Test func appContinuityRestoreReconcilesNovelRouteWithReadingProgress() async throws {
     let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "app-continuity-restore-novel")
-    let favoriteStore = try FavoriteStore(testSuiteName: defaultsSuiteName, key: "favorites")
+    let readingProgressStore = try ReadingProgressStore(testSuiteName: defaultsSuiteName, key: "reading-progress")
+    let localFavoriteLibraryStore = LocalFirstFavoriteLibraryStore(
+        defaults: try YamiboTestDefaults.defaults(suiteName: defaultsSuiteName),
+        key: "favorite-library"
+    )
     let resumeRouteStore = try ReaderResumeRouteStore(testSuiteName: defaultsSuiteName, key: "resume")
     let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=901&mobile=2"))
     let staleRoute = ReaderResumeRoute.novel(
@@ -26,26 +30,33 @@ import Testing
         readingModeHint: .paged
     )
     try await resumeRouteStore.save(staleRoute)
-    try await favoriteStore.saveFavorites([
-        Favorite(
-            title: "远端小说",
-            url: threadURL,
-            lastView: 5,
+    try await readingProgressStore.saveNovel(
+        NovelReadingPosition(
+            threadURL: threadURL,
+            view: 5,
             authorID: "42",
-            novelResumePoint: resumePoint,
-            type: .novel
+            resumePoint: resumePoint
         )
-    ])
+    )
+    var document = FavoriteLibraryDocument()
+    try document.importThreadFavorite(
+        probeResult: FavoriteThreadProbeResult(
+            target: FavoriteContentTarget(kind: .novelThread, threadURL: threadURL),
+            title: "远端小说"
+        )
+    )
+    try await localFavoriteLibraryStore.save(document)
     let workflow = AppContinuityWorkflow(
         appContext: YamiboAppContext(
             readerResumeRouteStore: resumeRouteStore,
-            favoriteStore: favoriteStore
+            localFavoriteLibraryStore: localFavoriteLibraryStore,
+            readingProgressStore: readingProgressStore
         )
     )
 
     let restoredRoute = await workflow.restoreExplicitly(
         canRestoreReaderRoute: true,
-        reconcilesWithFavoriteProgress: true
+        reconcilesWithReadingProgress: true
     )
 
     let expectedContext = ReaderLaunchContext(
@@ -61,9 +72,8 @@ import Testing
 }
 
 @MainActor
-@Test func appContinuityDoesNotRestoreOrphanMangaRouteWithoutFavoriteProgress() async throws {
+@Test func appContinuityDoesNotRestoreOrphanMangaRouteWithoutReadingProgress() async throws {
     let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "app-continuity-orphan-manga")
-    let favoriteStore = try FavoriteStore(testSuiteName: defaultsSuiteName, key: "favorites")
     let resumeRouteStore = try ReaderResumeRouteStore(testSuiteName: defaultsSuiteName, key: "resume")
     let originalURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=700&mobile=2"))
     let route = MangaPresentationRoute.native(
@@ -78,14 +88,13 @@ import Testing
     try await resumeRouteStore.save(.manga(route))
     let workflow = AppContinuityWorkflow(
         appContext: YamiboAppContext(
-            readerResumeRouteStore: resumeRouteStore,
-            favoriteStore: favoriteStore
+            readerResumeRouteStore: resumeRouteStore
         )
     )
 
     let restoredRoute = await workflow.restoreExplicitly(
         canRestoreReaderRoute: true,
-        reconcilesWithFavoriteProgress: true
+        reconcilesWithReadingProgress: true
     )
 
     #expect(restoredRoute == nil)

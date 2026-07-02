@@ -106,7 +106,6 @@ final class MangaReaderModelSettingsProgressTests: XCTestCase {
             makeImageDataLoader: { StubMangaImageDataLoader() },
             progressSync: ProgressSyncModule(
                 adapter: FavoriteLibraryProgressSyncAdapter(
-                    favoriteStore: favoriteStore,
                     readingProgressStore: appContext.readingProgressStore
                 ),
                 debounceNanoseconds: 0
@@ -119,7 +118,6 @@ final class MangaReaderModelSettingsProgressTests: XCTestCase {
             makeDirectoryStore: { store },
             progressSync: ProgressSyncModule(
                 adapter: FavoriteLibraryProgressSyncAdapter(
-                    favoriteStore: favoriteStore,
                     readingProgressStore: appContext.readingProgressStore
                 ),
                 debounceNanoseconds: 0
@@ -218,6 +216,8 @@ final class MangaReaderModelSettingsProgressTests: XCTestCase {
         XCTAssertEqual(savedPosition.chapterURL, fixture.chapterURL)
         XCTAssertEqual(savedPosition.chapterTitle, "第1话")
         XCTAssertEqual(savedPosition.pageIndex, 1)
+        XCTAssertEqual(savedPosition.pageCount, 3)
+        XCTAssertEqual(savedPosition.mangaID, "chapter:701")
 
         guard case let .manga(.native(savedContext))? = await fixture.resumeRouteStore.load() else {
             XCTFail("Expected saved manga resume route")
@@ -343,7 +343,6 @@ final class MangaReaderModelSettingsProgressTests: XCTestCase {
             favoriteStore: favoriteStore,
             progressSync: ProgressSyncModule(
                 adapter: FavoriteLibraryProgressSyncAdapter(
-                    favoriteStore: favoriteStore,
                     readingProgressStore: readingProgressStore
                 ),
                 debounceNanoseconds: 100_000_000
@@ -357,10 +356,6 @@ final class MangaReaderModelSettingsProgressTests: XCTestCase {
         fixture.model.updateCurrentPage(globalIndex: 2)
         let route = await fixture.model.saveProgress()
 
-        let favorite = await favoriteStore.favorite(for: fixture.originalURL)
-        XCTAssertEqual(favorite?.lastMangaURL, fixture.chapterURL)
-        XCTAssertEqual(favorite?.lastChapter, "第1话")
-        XCTAssertEqual(favorite?.mangaPageIndex, 2)
         let progress = await readingProgressStore.load(for: fixture.originalURL)
         XCTAssertEqual(progress?.manga?.lastMangaURL, fixture.chapterURL)
         XCTAssertEqual(progress?.manga?.mangaPageIndex, 2)
@@ -384,7 +379,6 @@ final class MangaReaderModelSettingsProgressTests: XCTestCase {
             favoriteStore: favoriteStore,
             progressSync: ProgressSyncModule(
                 adapter: FavoriteLibraryProgressSyncAdapter(
-                    favoriteStore: favoriteStore,
                     readingProgressStore: readingProgressStore
                 ),
                 debounceNanoseconds: 0
@@ -646,8 +640,7 @@ private func makeFixture(
     )
     let resolvedProgressSync = progressSync ?? ProgressSyncModule(
         adapter: FavoriteLibraryProgressSyncAdapter(
-            favoriteStore: resolvedFavoriteStore,
-            readingProgressStore: appContext.readingProgressStore
+                    readingProgressStore: appContext.readingProgressStore
         ),
         debounceNanoseconds: 0
     )

@@ -50,7 +50,6 @@ import Testing
     let favoriteStore = try FavoriteStore(testSuiteName: defaultsSuiteName, key: "favorites")
     let readingProgressStore = try ReadingProgressStore(testSuiteName: defaultsSuiteName, key: "reading-progress")
     let adapter = FavoriteLibraryProgressSyncAdapter(
-        favoriteStore: favoriteStore,
         readingProgressStore: readingProgressStore
     )
     let sync = ProgressSyncModule(adapter: adapter, debounceNanoseconds: 0)
@@ -64,12 +63,11 @@ import Testing
     #expect(progress?.novel?.lastView == 6)
 }
 
-@Test func favoriteLibraryProgressSyncMapsReadingPositionsToExistingFavoriteFields() async throws {
+@Test func favoriteLibraryProgressSyncWritesIndependentProgressWithoutMutatingFavorites() async throws {
     let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "progress-sync-existing-favorite")
     let favoriteStore = try FavoriteStore(testSuiteName: defaultsSuiteName, key: "favorites")
     let readingProgressStore = try ReadingProgressStore(testSuiteName: defaultsSuiteName, key: "reading-progress")
     let adapter = FavoriteLibraryProgressSyncAdapter(
-        favoriteStore: favoriteStore,
         readingProgressStore: readingProgressStore
     )
     let sync = ProgressSyncModule(adapter: adapter, debounceNanoseconds: 0)
@@ -101,25 +99,27 @@ import Testing
         threadURL: mangaURL,
         chapterURL: chapterURL,
         chapterTitle: "第9话",
-        pageIndex: 4
+        pageIndex: 4,
+        pageCount: 9
     )))
 
     let novel = await favoriteStore.favorite(for: novelURL)
     let manga = await favoriteStore.favorite(for: mangaURL)
     let novelProgress = await readingProgressStore.load(for: novelURL)
     let mangaProgress = await readingProgressStore.load(for: mangaURL)
-    #expect(novel?.lastView == 2)
-    #expect(novel?.novelMaxView == 7)
+    #expect(novel?.lastView == 1)
+    #expect(novel?.novelMaxView == nil)
     #expect(novel?.mangaPageIndex == 0)
-    #expect(novel?.lastChapter == "第二章")
-    #expect(novel?.authorID == "42")
-    #expect(novel?.novelResumePoint?.displayedTextOffset == 120)
-    #expect(manga?.lastMangaURL == chapterURL)
-    #expect(manga?.lastChapter == "第9话")
-    #expect(manga?.mangaPageIndex == 4)
+    #expect(novel?.lastChapter == nil)
+    #expect(novel?.authorID == nil)
+    #expect(novel?.novelResumePoint == nil)
+    #expect(manga?.lastMangaURL == nil)
+    #expect(manga?.lastChapter == nil)
+    #expect(manga?.mangaPageIndex == 0)
     #expect(novelProgress?.novel?.novelResumePoint?.displayedTextOffset == 120)
     #expect(mangaProgress?.manga?.lastMangaURL == chapterURL)
     #expect(mangaProgress?.manga?.mangaPageIndex == 4)
+    #expect(mangaProgress?.manga?.mangaPageCount == 9)
 }
 
 private actor RecordingProgressSyncAdapter: ProgressSyncAdapter {

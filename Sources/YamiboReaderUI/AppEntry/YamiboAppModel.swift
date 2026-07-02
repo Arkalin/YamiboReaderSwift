@@ -6,10 +6,12 @@ public struct ForumNavigationRequest: Identifiable, Hashable, Sendable {
     public let id = UUID()
     public let url: URL
     public let source: ForumNavigationSource
+    public let title: String?
 
-    public init(url: URL, source: ForumNavigationSource = .external) {
+    public init(url: URL, source: ForumNavigationSource = .external, title: String? = nil) {
         self.url = url
         self.source = source
+        self.title = title
     }
 }
 
@@ -80,6 +82,10 @@ public final class YamiboAppModel {
 
     public func scheduleWebDAVUploadForLocalChange(touchesAppSettings: Bool = false) {
         appContinuity.localDataChanged(touchesAppSettings: touchesAppSettings)
+    }
+
+    public func scheduleWebDAVUploadForReadingProgressChange() {
+        appContinuity.localDataChanged()
     }
 
     public func flushWebDAVSyncBeforeBackground() {
@@ -211,6 +217,11 @@ public final class YamiboAppModel {
 
         selectedTab = .forum
         forumNavigationRequest = ForumNavigationRequest(url: url)
+    }
+
+    public func openNativeForumThread(url: URL, title: String?) {
+        selectedTab = .forum
+        forumNavigationRequest = ForumNavigationRequest(url: url, source: .readerOrigin, title: title)
     }
 
     public func presentClipboardForumLinkPrompt(url: URL) {

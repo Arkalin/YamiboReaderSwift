@@ -385,6 +385,41 @@ public struct FavoriteBackgroundSettings: Codable, Hashable, Sendable {
     }
 }
 
+public enum FavoriteLibraryLayoutMode: String, Codable, Hashable, CaseIterable, Identifiable, Sendable {
+    case fixedGrid
+    case staggered
+    case rowCard
+    case rowCardText
+
+    public var id: String { rawValue }
+
+    public var title: String {
+        switch self {
+        case .fixedGrid:
+            L10n.string("favorites.layout.fixed_grid")
+        case .staggered:
+            L10n.string("favorites.layout.staggered")
+        case .rowCard:
+            L10n.string("favorites.layout.row_card")
+        case .rowCardText:
+            L10n.string("favorites.layout.row_card_text")
+        }
+    }
+
+    public var systemImageName: String {
+        switch self {
+        case .fixedGrid:
+            "square.grid.2x2"
+        case .staggered:
+            "rectangle.grid.2x2"
+        case .rowCard:
+            "list.bullet.rectangle"
+        case .rowCardText:
+            "list.bullet"
+        }
+    }
+}
+
 public enum ApplePencilPageTurnGesture: Hashable, Sendable {
     case doubleTap
     case squeeze
@@ -452,12 +487,89 @@ public struct ApplePencilPageTurnSettings: Codable, Hashable, Sendable {
     }
 }
 
+public enum FavoriteRemoteSyncTaskStatus: String, Codable, Hashable, Sendable {
+    case running
+    case completed
+    case failed
+    case interrupted
+}
+
+public struct FavoriteRemoteSyncSnapshot: Codable, Hashable, Identifiable, Sendable {
+    public var runID: String
+    public var status: FavoriteRemoteSyncTaskStatus
+    public var targetCategoryID: String
+    public var targetCategoryName: String
+    public var phase: String
+    public var startedAt: Date
+    public var updatedAt: Date
+    public var finishedAt: Date?
+    public var totalRemoteCount: Int?
+    public var scannedCount: Int
+    public var importedCount: Int
+    public var failedCount: Int
+    public var markedMissingCount: Int
+    public var uploadTargetCount: Int
+    public var logMessages: [String]
+    public var warningMessages: [String]
+    public var errorMessages: [String]
+    public var isHiddenFromFavoritePage: Bool
+
+    public var id: String { runID }
+
+    public init(
+        runID: String = UUID().uuidString,
+        status: FavoriteRemoteSyncTaskStatus = .running,
+        targetCategoryID: String,
+        targetCategoryName: String,
+        phase: String,
+        startedAt: Date = .now,
+        updatedAt: Date = .now,
+        finishedAt: Date? = nil,
+        totalRemoteCount: Int? = nil,
+        scannedCount: Int = 0,
+        importedCount: Int = 0,
+        failedCount: Int = 0,
+        markedMissingCount: Int = 0,
+        uploadTargetCount: Int = 0,
+        logMessages: [String] = [],
+        warningMessages: [String] = [],
+        errorMessages: [String] = [],
+        isHiddenFromFavoritePage: Bool = false
+    ) {
+        self.runID = runID
+        self.status = status
+        self.targetCategoryID = targetCategoryID
+        self.targetCategoryName = targetCategoryName
+        self.phase = phase
+        self.startedAt = startedAt
+        self.updatedAt = updatedAt
+        self.finishedAt = finishedAt
+        self.totalRemoteCount = totalRemoteCount
+        self.scannedCount = scannedCount
+        self.importedCount = importedCount
+        self.failedCount = failedCount
+        self.markedMissingCount = markedMissingCount
+        self.uploadTargetCount = uploadTargetCount
+        self.logMessages = logMessages
+        self.warningMessages = warningMessages
+        self.errorMessages = errorMessages
+        self.isHiddenFromFavoritePage = isHiddenFromFavoritePage
+    }
+}
+
 public struct AppSettings: Codable, Hashable, Sendable {
     public var reader: ReaderAppearanceSettings
     public var manga: MangaReaderSettings
     public var webBrowser: WebBrowserSettings
     public var favoriteAppearance: FavoriteAppearanceSettings
     public var favoriteBackground: FavoriteBackgroundSettings
+    public var favoriteLayoutMode: FavoriteLibraryLayoutMode
+    public var favoriteSortOrder: LocalFavoriteLibrarySortOrder
+    public var favoriteSortDescending: Bool
+    public var favoriteSelectedCategoryID: String?
+    public var favoriteSelectedCollectionID: String?
+    public var favoriteShowsCategoryCounts: Bool
+    public var favoriteRemoteSyncSnapshot: FavoriteRemoteSyncSnapshot?
     public var applePencilPageTurn: ApplePencilPageTurnSettings
     public var homePage: AppHomePage
     public var usesDataSaverMode: Bool
@@ -469,6 +581,13 @@ public struct AppSettings: Codable, Hashable, Sendable {
         webBrowser: WebBrowserSettings = .init(),
         favoriteAppearance: FavoriteAppearanceSettings = .init(),
         favoriteBackground: FavoriteBackgroundSettings = .init(),
+        favoriteLayoutMode: FavoriteLibraryLayoutMode = .rowCard,
+        favoriteSortOrder: LocalFavoriteLibrarySortOrder = .organization,
+        favoriteSortDescending: Bool = false,
+        favoriteSelectedCategoryID: String? = nil,
+        favoriteSelectedCollectionID: String? = nil,
+        favoriteShowsCategoryCounts: Bool = true,
+        favoriteRemoteSyncSnapshot: FavoriteRemoteSyncSnapshot? = nil,
         applePencilPageTurn: ApplePencilPageTurnSettings = .init(),
         homePage: AppHomePage = .forum,
         usesDataSaverMode: Bool = false,
@@ -479,6 +598,13 @@ public struct AppSettings: Codable, Hashable, Sendable {
         self.webBrowser = webBrowser
         self.favoriteAppearance = favoriteAppearance
         self.favoriteBackground = favoriteBackground
+        self.favoriteLayoutMode = favoriteLayoutMode
+        self.favoriteSortOrder = favoriteSortOrder
+        self.favoriteSortDescending = favoriteSortDescending
+        self.favoriteSelectedCategoryID = favoriteSelectedCategoryID?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        self.favoriteSelectedCollectionID = favoriteSelectedCollectionID?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        self.favoriteShowsCategoryCounts = favoriteShowsCategoryCounts
+        self.favoriteRemoteSyncSnapshot = favoriteRemoteSyncSnapshot
         self.applePencilPageTurn = applePencilPageTurn
         self.homePage = homePage
         self.usesDataSaverMode = usesDataSaverMode
@@ -491,6 +617,13 @@ public struct AppSettings: Codable, Hashable, Sendable {
         case webBrowser
         case favoriteAppearance
         case favoriteBackground
+        case favoriteLayoutMode
+        case favoriteSortOrder
+        case favoriteSortDescending
+        case favoriteSelectedCategoryID
+        case favoriteSelectedCollectionID
+        case favoriteShowsCategoryCounts
+        case favoriteRemoteSyncSnapshot
         case applePencilPageTurn
         case homePage
         case usesDataSaverMode
@@ -504,6 +637,13 @@ public struct AppSettings: Codable, Hashable, Sendable {
         webBrowser = try container.decodeIfPresent(WebBrowserSettings.self, forKey: .webBrowser) ?? .init()
         favoriteAppearance = try container.decodeIfPresent(FavoriteAppearanceSettings.self, forKey: .favoriteAppearance) ?? .init()
         favoriteBackground = try container.decodeIfPresent(FavoriteBackgroundSettings.self, forKey: .favoriteBackground) ?? .init()
+        favoriteLayoutMode = try container.decodeIfPresent(FavoriteLibraryLayoutMode.self, forKey: .favoriteLayoutMode) ?? .rowCard
+        favoriteSortOrder = try container.decodeIfPresent(LocalFavoriteLibrarySortOrder.self, forKey: .favoriteSortOrder) ?? .organization
+        favoriteSortDescending = try container.decodeIfPresent(Bool.self, forKey: .favoriteSortDescending) ?? false
+        favoriteSelectedCategoryID = try container.decodeIfPresent(String.self, forKey: .favoriteSelectedCategoryID)?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        favoriteSelectedCollectionID = try container.decodeIfPresent(String.self, forKey: .favoriteSelectedCollectionID)?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        favoriteShowsCategoryCounts = try container.decodeIfPresent(Bool.self, forKey: .favoriteShowsCategoryCounts) ?? true
+        favoriteRemoteSyncSnapshot = try container.decodeIfPresent(FavoriteRemoteSyncSnapshot.self, forKey: .favoriteRemoteSyncSnapshot)
         applePencilPageTurn = try container.decodeIfPresent(ApplePencilPageTurnSettings.self, forKey: .applePencilPageTurn) ?? .init()
         homePage = try container.decodeIfPresent(AppHomePage.self, forKey: .homePage) ?? .forum
         usesDataSaverMode = try container.decodeIfPresent(Bool.self, forKey: .usesDataSaverMode) ?? false
@@ -517,9 +657,22 @@ public struct AppSettings: Codable, Hashable, Sendable {
         try container.encode(webBrowser, forKey: .webBrowser)
         try container.encode(favoriteAppearance, forKey: .favoriteAppearance)
         try container.encode(favoriteBackground, forKey: .favoriteBackground)
+        try container.encode(favoriteLayoutMode, forKey: .favoriteLayoutMode)
+        try container.encode(favoriteSortOrder, forKey: .favoriteSortOrder)
+        try container.encode(favoriteSortDescending, forKey: .favoriteSortDescending)
+        try container.encodeIfPresent(favoriteSelectedCategoryID, forKey: .favoriteSelectedCategoryID)
+        try container.encodeIfPresent(favoriteSelectedCollectionID, forKey: .favoriteSelectedCollectionID)
+        try container.encode(favoriteShowsCategoryCounts, forKey: .favoriteShowsCategoryCounts)
+        try container.encodeIfPresent(favoriteRemoteSyncSnapshot, forKey: .favoriteRemoteSyncSnapshot)
         try container.encode(applePencilPageTurn, forKey: .applePencilPageTurn)
         try container.encode(homePage, forKey: .homePage)
         try container.encode(usesDataSaverMode, forKey: .usesDataSaverMode)
         try container.encode(collapsesFavoriteSections, forKey: .collapsesFavoriteSections)
+    }
+}
+
+private extension String {
+    var nilIfEmpty: String? {
+        isEmpty ? nil : self
     }
 }

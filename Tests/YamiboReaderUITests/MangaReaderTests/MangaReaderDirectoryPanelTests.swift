@@ -238,8 +238,7 @@ private func makeDirectoryPanelFixture(
         makeImageDataLoader: { DirectoryPanelImageDataLoader() },
         progressSync: ProgressSyncModule(
             adapter: FavoriteLibraryProgressSyncAdapter(
-                favoriteStore: appContext.favoriteStore,
-                readingProgressStore: appContext.readingProgressStore
+                    readingProgressStore: appContext.readingProgressStore
             ),
             debounceNanoseconds: 0
         )
@@ -253,8 +252,7 @@ private func makeDirectoryPanelFixture(
         directoryWorkflowConfiguration: configuration,
         progressSync: ProgressSyncModule(
             adapter: FavoriteLibraryProgressSyncAdapter(
-                favoriteStore: appContext.favoriteStore,
-                readingProgressStore: appContext.readingProgressStore
+                    readingProgressStore: appContext.readingProgressStore
             ),
             debounceNanoseconds: 0
         )

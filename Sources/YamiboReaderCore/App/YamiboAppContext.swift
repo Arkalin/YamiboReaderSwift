@@ -22,6 +22,8 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
     public let webDAVSyncSettingsStore: WebDAVSyncSettingsStore
     public let readerResumeRouteStore: ReaderResumeRouteStore
     public let favoriteStore: FavoriteStore
+    public let localFavoriteLibraryStore: LocalFirstFavoriteLibraryStore
+    public let favoriteUpdateStore: FavoriteUpdateStore
     public let readingProgressStore: ReadingProgressStore
     public let contentCoverStore: ContentCoverStore
     public let readerCacheStore: ReaderCacheStore
@@ -45,6 +47,8 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         webDAVSyncSettingsStore: WebDAVSyncSettingsStore = WebDAVSyncSettingsStore(),
         readerResumeRouteStore: ReaderResumeRouteStore = ReaderResumeRouteStore(),
         favoriteStore: FavoriteStore? = nil,
+        localFavoriteLibraryStore: LocalFirstFavoriteLibraryStore? = nil,
+        favoriteUpdateStore: FavoriteUpdateStore = FavoriteUpdateStore(),
         readingProgressStore: ReadingProgressStore? = nil,
         contentCoverStore: ContentCoverStore = ContentCoverStore(),
         readerCacheStore: ReaderCacheStore = ReaderCacheStore(),
@@ -66,7 +70,9 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         self.webDAVSyncSettingsStore = webDAVSyncSettingsStore
         self.readerResumeRouteStore = readerResumeRouteStore
         self.favoriteStore = favoriteStore ?? FavoriteStore(mangaOfflineCacheStore: mangaOfflineCacheStore)
-        self.readingProgressStore = readingProgressStore ?? ReadingProgressStore(favoriteStore: self.favoriteStore)
+        self.localFavoriteLibraryStore = localFavoriteLibraryStore ?? LocalFirstFavoriteLibraryStore()
+        self.favoriteUpdateStore = favoriteUpdateStore
+        self.readingProgressStore = readingProgressStore ?? ReadingProgressStore()
         self.contentCoverStore = contentCoverStore
         self.readerCacheStore = readerCacheStore
         self.favoriteBackgroundImageStore = favoriteBackgroundImageStore
@@ -307,6 +313,8 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         WebDAVSyncService(
             settingsStore: webDAVSyncSettingsStore,
             favoriteStore: favoriteStore,
+            localFavoriteLibraryStore: localFavoriteLibraryStore,
+            readingProgressStore: readingProgressStore,
             sessionStore: sessionStore,
             appSettingsStore: settingsStore,
             client: WebDAVClient(session: session)
@@ -314,12 +322,11 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
     }
 
     public func bootstrap() async -> YamiboBootstrapState {
-        await readingProgressStore.migrateFromFavoritesIfNeeded()
         return YamiboBootstrapState(
             session: await sessionStore.load(),
             profile: await profileStore.load(),
             settings: await settingsStore.load(),
-            favorites: await favoriteStore.loadFavorites()
+            localFavoriteLibrary: await localFavoriteLibraryStore.load()
         )
     }
 
@@ -330,6 +337,7 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         try await webDAVSyncSettingsStore.reset()
         await readerResumeRouteStore.clear()
         try await favoriteStore.clearAll()
+        try await localFavoriteLibraryStore.clearAll()
         try await readingProgressStore.clearAll()
         try await contentCoverStore.clearAll()
         try await readerCacheStore.clearAll()
@@ -385,12 +393,17 @@ public struct YamiboBootstrapState: Sendable {
     public let session: SessionState
     public let profile: YamiboProfile?
     public let settings: AppSettings
-    public let favorites: [Favorite]
+    public let localFavoriteLibrary: FavoriteLibraryDocument
 
-    public init(session: SessionState, profile: YamiboProfile?, settings: AppSettings, favorites: [Favorite]) {
+    public init(
+        session: SessionState,
+        profile: YamiboProfile?,
+        settings: AppSettings,
+        localFavoriteLibrary: FavoriteLibraryDocument = FavoriteLibraryDocument()
+    ) {
         self.session = session
         self.profile = profile
         self.settings = settings
-        self.favorites = favorites
+        self.localFavoriteLibrary = localFavoriteLibrary
     }
 }

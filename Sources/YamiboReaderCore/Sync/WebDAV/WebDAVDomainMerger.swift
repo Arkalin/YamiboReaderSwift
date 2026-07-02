@@ -131,7 +131,6 @@ struct WebDAVDomainMerger: Sendable {
                 fallback: fallbackRecord.metadata
             )
             favorite.displayName = metadata.displayName
-            favorite.isHidden = false
             favorite.type = metadata.type
 
             let organization = chooseFavoriteDomain(
@@ -153,7 +152,6 @@ struct WebDAVDomainMerger: Sendable {
             favorites: mergedFavorites,
             collections: mergedCollections,
             tags: mergedTags,
-            archivedMetadata: [],
             syncMetadata: mergedMetadata
         )
     }

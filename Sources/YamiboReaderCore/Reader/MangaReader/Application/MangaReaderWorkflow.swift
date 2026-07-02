@@ -397,6 +397,10 @@ public final class MangaReaderWorkflow {
         await directoryWorkflow.cooldownExpiresAt()
     }
 
+    public func currentDirectoryFavoriteIdentity() -> String? {
+        window?.directory.favoriteIdentity
+    }
+
     private func loadedPresentation(
         from window: MangaChapterWindow,
         placementPageIndex: Int? = nil,

@@ -41,12 +41,10 @@ extension FavoriteStore {
 }
 
 extension ReadingProgressStore {
-    init(testSuiteName suiteName: String, key: String, favoriteStore: (any FavoriteStoring)? = nil) throws {
+    init(testSuiteName suiteName: String, key: String) throws {
         self.init(
             defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
-            key: key,
-            migratedFromFavoritesKey: "\(key).migratedFromFavorites",
-            favoriteStore: favoriteStore
+            key: key
         )
     }
 }

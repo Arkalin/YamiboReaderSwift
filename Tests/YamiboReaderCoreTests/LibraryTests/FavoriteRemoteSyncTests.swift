@@ -41,6 +41,45 @@ import Testing
     #expect(document.items.isEmpty)
 }
 
+@Test func yamiboRemoteSyncImportsMangaIntoSelectedCategoryWithRemoteMapping() async throws {
+    var document = FavoriteLibraryDocument()
+    let category = document.createCategory(name: "漫画同步")
+    let chapterURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=905"))
+
+    let report = await document.syncYamiboRemoteFavorites(
+        into: category.id,
+        remoteEntries: [YamiboRemoteFavoriteEntry(remoteFavoriteID: "r-905", threadURL: chapterURL, title: "第5话", remoteOrder: 7)],
+        date: Date(timeIntervalSince1970: 20)
+    ) { _ in
+        FavoriteThreadProbeResult(
+            target: FavoriteContentTarget(mangaCleanBookName: "漫画书名"),
+            title: "第5话",
+            sourceGroup: .mangaTitle(cleanBookName: "漫画书名")
+        )
+    }
+
+    let item = try #require(document.items.first)
+    #expect(report.importedTargetIDs == [item.target.id])
+    #expect(item.target == FavoriteContentTarget(mangaID: "chapter:905", mangaCleanBookName: "漫画书名"))
+    #expect(item.locations == [.category(category.id)])
+    #expect(item.remoteMapping?.yamiboFavoriteID == "r-905")
+    #expect(item.remoteMapping?.yamiboRemoteOrder == 7)
+    #expect(item.remoteMapping?.isMarkedRemoteMissing == false)
+    #expect(item.mangaChapterMetadata?.chapterURL == chapterURL)
+
+    let secondReport = await document.syncYamiboRemoteFavorites(
+        into: category.id,
+        remoteEntries: [],
+        date: Date(timeIntervalSince1970: 30)
+    ) { _ in
+        throw FavoriteThreadImportFailure.probeFailed("unused")
+    }
+
+    let updatedItem = try #require(document.items.first)
+    #expect(secondReport.markedMissingTargetIDs == [item.target.id])
+    #expect(updatedItem.remoteMapping?.isMarkedRemoteMissing == true)
+}
+
 @Test func yamiboRemoteSyncMarksDisappearedRemoteMappingMissingWithoutDeletingItem() async throws {
     var document = FavoriteLibraryDocument()
     let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=903"))

@@ -16,7 +16,7 @@ import Testing
 }
 
 @MainActor
-@Test func forumNovelDetailContinueUsesFavoriteResumePointWhenAvailable() throws {
+@Test func forumNovelDetailContinueUsesReadingProgressResumePointWhenAvailable() throws {
     let model = try makeForumNovelDetailViewModel()
     let resumePoint = ReaderResumePoint(
         view: 5,
@@ -30,11 +30,17 @@ import Testing
     model.favorite = Favorite(
         title: "收藏标题",
         url: model.context.thread.canonicalURL,
-        lastView: 3,
-        lastChapter: "旧章",
-        authorID: "88",
-        novelResumePoint: resumePoint,
         type: .novel
+    )
+    model.readingProgress = ReadingProgressRecord(
+        threadURL: model.context.thread.canonicalURL,
+        kind: .novel,
+        novel: NovelReadingProgressRecord(
+            lastView: 5,
+            lastChapter: "第五章",
+            authorID: "99",
+            novelResumePoint: resumePoint
+        )
     )
 
     let context = model.continueLaunchContext()
@@ -84,14 +90,15 @@ import Testing
 }
 
 @MainActor
-@Test func forumNovelDetailContinueTreatsFavoriteChapterAsReadingProgress() throws {
+@Test func forumNovelDetailContinueUsesStoredChapterReadingProgress() throws {
     let model = try makeForumNovelDetailViewModel()
-    model.favorite = Favorite(
-        title: "收藏标题",
-        url: model.context.thread.canonicalURL,
-        lastView: 1,
-        lastChapter: "第一章",
-        type: .novel
+    model.readingProgress = ReadingProgressRecord(
+        threadURL: model.context.thread.canonicalURL,
+        kind: .novel,
+        novel: NovelReadingProgressRecord(
+            lastView: 1,
+            lastChapter: "第一章"
+        )
     )
 
     let context = model.continueLaunchContext()
@@ -543,9 +550,7 @@ import Testing
     )
     let readingProgressStore = ReadingProgressStore(
         defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
-        key: "reading-progress",
-        migratedFromFavoritesKey: "reading-progress-migrated",
-        favoriteStore: favoriteStore
+        key: "reading-progress"
     )
     let coverStore = ContentCoverStore(
         defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
@@ -1082,24 +1087,25 @@ import Testing
 }
 
 @MainActor
-@Test func forumNovelDetailMarksCurrentReadChapterFromFavoriteResumePoint() throws {
+@Test func forumNovelDetailMarksCurrentReadChapterFromReadingProgressResumePoint() throws {
     let model = try makeForumNovelDetailViewModel()
-    model.favorite = Favorite(
-        title: "小说标题",
-        url: model.context.thread.canonicalURL,
-        lastView: 1,
-        lastChapter: "第一章",
-        novelResumePoint: ReaderResumePoint(
-            view: 1,
-            chapterIdentity: NovelChapterIdentity(rawValue: "post:1002#chapter:0"),
-            displayedTextOffset: 20,
-            chapterOrdinal: 1,
-            chapterTitle: "第一章",
-            segmentProgress: 0.2,
-            readingModeHint: .vertical
-        ),
-        novelDocumentSurfaceProgressPercent: 20,
-        type: .novel
+    model.readingProgress = ReadingProgressRecord(
+        threadURL: model.context.thread.canonicalURL,
+        kind: .novel,
+        novel: NovelReadingProgressRecord(
+            lastView: 1,
+            lastChapter: "第一章",
+            novelResumePoint: ReaderResumePoint(
+                view: 1,
+                chapterIdentity: NovelChapterIdentity(rawValue: "post:1002#chapter:0"),
+                displayedTextOffset: 20,
+                chapterOrdinal: 1,
+                chapterTitle: "第一章",
+                segmentProgress: 0.2,
+                readingModeHint: .vertical
+            ),
+            novelDocumentSurfaceProgressPercent: 20
+        )
     )
     let firstPage = ForumThreadPage(
         thread: model.context.thread,
@@ -1127,6 +1133,7 @@ import Testing
     let sections = ForumNovelDetailViewModel.chapterSections(
         from: [1: firstPage],
         totalPages: 1,
+        readingProgress: model.readingProgress,
         favorite: model.favorite
     )
 
@@ -1136,15 +1143,15 @@ import Testing
 }
 
 @MainActor
-@Test func forumNovelDetailRefreshesReadingProgressWhenFavoriteStoreChanges() async throws {
+@Test func forumNovelDetailRefreshesReadingProgressWhenReadingProgressStoreChanges() async throws {
     let suiteName = YamiboTestDefaults.suiteName(prefix: "novel-detail-progress-refresh")
     _ = try YamiboTestDefaults.make(suiteName: suiteName)
-    let favoriteStore = FavoriteStore(
+    let readingProgressStore = ReadingProgressStore(
         defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
-        key: "favorites"
+        key: "reading-progress"
     )
     let appContext = YamiboAppContext(
-        favoriteStore: favoriteStore,
+        readingProgressStore: readingProgressStore,
         contentCoverStore: ContentCoverStore(
             defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
             key: "content-covers"
@@ -1153,21 +1160,19 @@ import Testing
     let model = try makeForumNovelDetailViewModel(appContext: appContext)
     let url = model.context.thread.canonicalURL
 
-    try await favoriteStore.saveFavorites([
-        Favorite(
-            title: "小说标题",
-            url: url,
-            lastView: 1,
-            lastChapter: "第一章",
-            novelDocumentSurfaceProgressPercent: 10,
-            type: .novel
+    try await readingProgressStore.saveNovel(
+        NovelReadingPosition(
+            threadURL: url,
+            view: 1,
+            chapterTitle: "第一章",
+            documentSurfaceProgressPercent: 10
         )
-    ])
-    model.favorite = await favoriteStore.favorite(for: url)
+    )
+    model.readingProgress = await readingProgressStore.load(for: url)
     #expect(model.headerSummary.readingProgressText == "第一章")
     await Task.yield()
 
-    _ = try await favoriteStore.updateNovelReadingPosition(
+    try await readingProgressStore.saveNovel(
         NovelReadingPosition(
             threadURL: url,
             view: 2,
@@ -1183,17 +1188,16 @@ import Testing
                 segmentProgress: 0.8,
                 authorID: "42",
                 readingModeHint: .vertical
-            ),
-            documentSurfaceProgressPercent: 80
+            )
         )
     )
 
-    for _ in 0..<20 where model.favorite?.lastView != 2 {
+    for _ in 0..<20 where model.readingProgress?.novel?.lastView != 2 {
         try await Task.sleep(nanoseconds: 10_000_000)
     }
 
-    #expect(model.favorite?.lastView == 2)
-    #expect(model.favorite?.novelResumePoint?.chapterTitle == "第二章")
+    #expect(model.readingProgress?.novel?.lastView == 2)
+    #expect(model.readingProgress?.novel?.novelResumePoint?.chapterTitle == "第二章")
     #expect(model.headerSummary.readingProgressText == "第二章")
 }
 

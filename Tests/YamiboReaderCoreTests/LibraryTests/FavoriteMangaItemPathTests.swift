@@ -15,6 +15,7 @@ import Testing
 
 @Test func mangaChapterFavoriteImportResolvesOwningTitleByDirectoryTID() throws {
     let chapterURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=521"))
+    let contentUpdatedAt = Date(timeIntervalSince1970: 521)
     let directory = MangaDirectory(
         cleanBookName: "Directory Title",
         strategy: .links,
@@ -22,7 +23,8 @@ import Testing
         chapters: [
             MangaChapter(tid: "520", rawTitle: "第1话", chapterNumber: 1, url: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=520"))),
             MangaChapter(tid: "521", rawTitle: "第2话", chapterNumber: 2, url: chapterURL)
-        ]
+        ],
+        lastUpdatedAt: contentUpdatedAt
     )
     var document = FavoriteLibraryDocument()
 
@@ -34,10 +36,12 @@ import Testing
         fallbackCleanBookName: "Fallback Title"
     )
 
-    #expect(item.target == FavoriteContentTarget(mangaCleanBookName: "Directory Title"))
+    #expect(item.target == FavoriteContentTarget(mangaID: "links:source", mangaCleanBookName: "Directory Title"))
+    #expect(item.sourceGroup == .mangaTitle(mangaID: "links:source", cleanBookName: "Directory Title"))
     #expect(item.mangaChapterMetadata?.chapterTID == "521")
     #expect(item.mangaChapterMetadata?.chapterURL == chapterURL)
     #expect(item.mangaChapterMetadata?.chapterTitle == "第2话")
+    #expect(item.contentUpdatedAt == contentUpdatedAt)
 }
 
 @Test func mangaChapterFavoriteImportFallsBackToProbedTitleMetadata() throws {
@@ -51,7 +55,7 @@ import Testing
         fallbackCleanBookName: "Probed Title"
     )
 
-    #expect(item.target == FavoriteContentTarget(mangaCleanBookName: "Probed Title"))
+    #expect(item.target == FavoriteContentTarget(mangaID: "chapter:522", mangaCleanBookName: "Probed Title"))
     #expect(item.mangaChapterMetadata?.chapterTID == "522")
 }
 
@@ -67,9 +71,42 @@ import Testing
         fallbackCleanBookName: "Manga Title Extra"
     )
 
-    #expect(imported.target == FavoriteContentTarget(mangaCleanBookName: "Manga Title Extra"))
+    #expect(imported.target == FavoriteContentTarget(mangaID: "chapter:523", mangaCleanBookName: "Manga Title Extra"))
     #expect(document.items.map(\.target).contains(FavoriteContentTarget(mangaCleanBookName: "Manga Title")))
     #expect(document.items.count == 2)
+}
+
+@Test func mangaChapterFavoriteImportRetargetsChapterFallbackWhenDirectoryAppears() throws {
+    let chapterURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=526"))
+    let directory = MangaDirectory(
+        cleanBookName: "Stable Title",
+        strategy: .links,
+        sourceKey: "first-post-9001",
+        chapters: [
+            MangaChapter(tid: "526", rawTitle: "第6话", chapterNumber: 6, url: chapterURL)
+        ]
+    )
+    var document = FavoriteLibraryDocument()
+    let remoteMapping = FavoriteRemoteMapping(yamiboFavoriteID: "remote-526", yamiboRemoteOrder: 2)
+
+    let fallback = try document.importMangaChapterFavorite(
+        chapterTID: "526",
+        chapterURL: chapterURL,
+        directories: [],
+        fallbackCleanBookName: "Stable Title",
+        remoteMapping: remoteMapping
+    )
+    let stable = try document.importMangaChapterFavorite(
+        chapterTID: "526",
+        chapterURL: chapterURL,
+        directories: [directory],
+        fallbackCleanBookName: "Stable Title"
+    )
+
+    #expect(fallback.target == FavoriteContentTarget(mangaID: "chapter:526", mangaCleanBookName: "Stable Title"))
+    #expect(stable.target == FavoriteContentTarget(mangaID: "links:first-post-9001", mangaCleanBookName: "Stable Title"))
+    #expect(document.items.count == 1)
+    #expect(document.items.first?.remoteMapping?.yamiboFavoriteID == "remote-526")
 }
 
 @Test func deletingMangaTitleItemDoesNotDeleteImportedRemoteChapterFavoriteMetadataElsewhere() throws {
@@ -90,24 +127,23 @@ import Testing
     #expect(metadata.chapterURL == chapterURL)
 }
 
-@Test func mangaDirectoryRenameRetargetsMangaTitleFavoriteItem() throws {
+@Test func mangaDirectoryRenameUpdatesMangaTitleDisplayNameWithoutChangingStableIdentity() throws {
     var document = FavoriteLibraryDocument()
     let oldTarget = FavoriteContentTarget(mangaCleanBookName: "Old Title")
-    let newTarget = FavoriteContentTarget(mangaCleanBookName: "New Title")
     _ = try document.addMangaTitleFavorite(cleanBookName: "Old Title")
 
     document.renameMangaTitle(from: "Old Title", to: "New Title")
 
-    #expect(!document.items.map(\.target).contains(oldTarget))
     let item = try #require(document.items.first)
-    #expect(item.target == newTarget)
+    #expect(item.target.id == oldTarget.id)
+    #expect(item.target.mangaCleanBookName == "New Title")
     #expect(item.title == "New Title")
-    #expect(item.sourceGroup == .mangaTitle(cleanBookName: "New Title"))
+    #expect(item.sourceGroup == .mangaTitle(mangaID: "Old Title", cleanBookName: "New Title"))
 }
 
 @Test func mangaDirectoryRenameMigratesReadingProgressMangaTitleKey() async throws {
     let suite = try #require(UserDefaults(suiteName: "FavoriteMangaItemPathTests.\(UUID().uuidString)"))
-    let store = ReadingProgressStore(defaults: suite, key: "progress", migratedFromFavoritesKey: "migrated")
+    let store = ReadingProgressStore(defaults: suite, key: "progress")
     let chapterURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=525"))
 
     _ = try await store.saveMangaTitle(
@@ -123,4 +159,53 @@ import Testing
     #expect(oldRecord == nil)
     #expect(newRecord?.manga?.lastMangaURL == chapterURL)
     #expect(newRecord?.manga?.mangaPageIndex == 4)
+}
+
+@Test func mangaDirectoryRenameUpdatesStableReadingProgressDisplayNameInPlace() async throws {
+    let suite = try #require(UserDefaults(suiteName: "FavoriteMangaStableProgressTests.\(UUID().uuidString)"))
+    let store = ReadingProgressStore(defaults: suite, key: "progress")
+    let chapterURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=526"))
+    let target = FavoriteContentTarget(mangaID: "links:source", mangaCleanBookName: "Old Title")
+
+    _ = try await store.saveMangaTitle(
+        cleanBookName: "Old Title",
+        chapterURL: chapterURL,
+        chapterTitle: "第6话",
+        pageIndex: 5,
+        mangaID: "links:source"
+    )
+    try await store.migrateMangaTitleKey(from: "Old Title", to: "New Title")
+
+    let oldDisplayTargetRecord = await store.load(for: target)
+    let renamedTarget = FavoriteContentTarget(mangaID: "links:source", mangaCleanBookName: "New Title")
+    let renamedRecord = await store.load(for: renamedTarget)
+    #expect(oldDisplayTargetRecord?.contentTarget?.mangaCleanBookName == "New Title")
+    #expect(renamedRecord?.manga?.lastMangaURL == chapterURL)
+    #expect(renamedRecord?.manga?.mangaPageIndex == 5)
+}
+
+@Test func mangaReadingProgressRetargetsChapterFallbackWhenDirectoryIdentityAppears() async throws {
+    let suite = try #require(UserDefaults(suiteName: "FavoriteMangaProgressRetargetTests.\(UUID().uuidString)"))
+    let store = ReadingProgressStore(defaults: suite, key: "progress")
+    let chapterURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=527"))
+
+    _ = try await store.saveMangaTitle(
+        cleanBookName: "Stable Title",
+        chapterURL: chapterURL,
+        chapterTitle: "第7话",
+        pageIndex: 1,
+        mangaID: "chapter:527"
+    )
+    _ = try await store.saveMangaTitle(
+        cleanBookName: "Stable Title",
+        chapterURL: chapterURL,
+        chapterTitle: "第7话",
+        pageIndex: 2,
+        mangaID: "links:first-post-9001"
+    )
+
+    let chapterRecord = await store.load(for: FavoriteContentTarget(mangaID: "chapter:527", mangaCleanBookName: "Stable Title"))
+    let stableRecord = await store.load(for: FavoriteContentTarget(mangaID: "links:first-post-9001", mangaCleanBookName: "Stable Title"))
+    #expect(chapterRecord == nil)
+    #expect(stableRecord?.manga?.mangaPageIndex == 2)
 }

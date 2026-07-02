@@ -13,7 +13,6 @@ public struct Favorite: Codable, Hashable, Identifiable, Sendable {
     public var novelResumePoint: ReaderResumePoint?
     public var novelMaxView: Int?
     public var novelDocumentSurfaceProgressPercent: Int?
-    public var isHidden: Bool
     public var type: FavoriteType
     public var lastMangaURL: URL?
     public var parentCollectionID: String?
@@ -34,7 +33,6 @@ public struct Favorite: Codable, Hashable, Identifiable, Sendable {
         case novelResumePoint
         case novelMaxView
         case novelDocumentSurfaceProgressPercent
-        case isHidden
         case type
         case lastMangaURL
         case parentCollectionID
@@ -56,7 +54,6 @@ public struct Favorite: Codable, Hashable, Identifiable, Sendable {
         novelResumePoint: ReaderResumePoint? = nil,
         novelMaxView: Int? = nil,
         novelDocumentSurfaceProgressPercent: Int? = nil,
-        isHidden: Bool = false,
         type: FavoriteType = .unknown,
         lastMangaURL: URL? = nil,
         parentCollectionID: String? = nil,
@@ -76,7 +73,6 @@ public struct Favorite: Codable, Hashable, Identifiable, Sendable {
         self.novelResumePoint = novelResumePoint
         self.novelMaxView = novelMaxView.map { max(1, $0) }
         self.novelDocumentSurfaceProgressPercent = novelDocumentSurfaceProgressPercent.map { min(max($0, 0), 100) }
-        self.isHidden = isHidden
         self.type = type
         self.lastMangaURL = lastMangaURL
         self.parentCollectionID = parentCollectionID
@@ -107,7 +103,6 @@ public struct Favorite: Codable, Hashable, Identifiable, Sendable {
             Int.self,
             forKey: .novelDocumentSurfaceProgressPercent
         ).map { min(max($0, 0), 100) }
-        isHidden = try container.decodeIfPresent(Bool.self, forKey: .isHidden) ?? false
         type = try container.decodeIfPresent(FavoriteType.self, forKey: .type) ?? .unknown
         lastMangaURL = try container.decodeIfPresent(URL.self, forKey: .lastMangaURL)
         parentCollectionID = try container.decodeIfPresent(String.self, forKey: .parentCollectionID)
@@ -137,20 +132,17 @@ public struct FavoriteCollection: Codable, Hashable, Identifiable, Sendable {
     public let id: String
     public var name: String
     public var manualOrder: Int
-    public var isHidden: Bool
 
     private enum CodingKeys: String, CodingKey {
         case id
         case name
         case manualOrder
-        case isHidden
     }
 
-    public init(id: String = UUID().uuidString, name: String, manualOrder: Int = 0, isHidden: Bool = false) {
+    public init(id: String = UUID().uuidString, name: String, manualOrder: Int = 0) {
         self.id = id
         self.name = name
         self.manualOrder = manualOrder
-        self.isHidden = isHidden
     }
 
     public init(from decoder: Decoder) throws {
@@ -158,7 +150,6 @@ public struct FavoriteCollection: Codable, Hashable, Identifiable, Sendable {
         id = try container.decode(String.self, forKey: .id)
         name = try container.decode(String.self, forKey: .name)
         manualOrder = try container.decodeIfPresent(Int.self, forKey: .manualOrder) ?? 0
-        isHidden = try container.decodeIfPresent(Bool.self, forKey: .isHidden) ?? false
     }
 }
 

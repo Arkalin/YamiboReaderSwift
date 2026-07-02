@@ -18,9 +18,64 @@ import Testing
         query: LocalFavoriteLibraryQuery(sourceGroupFilter: .group(.unknown))
     )
 
-    #expect(forumCards.map(\.id) == [items.normal.id, items.novel.id])
+    #expect(Set(forumCards.map(\.id)) == [items.normal.id, items.novel.id])
     #expect(mangaCards.map(\.id) == [items.manga.id])
     #expect(unknownCards.map(\.id) == [items.unknown.id])
+}
+
+@Test func localFavoriteProjectionSortsForumGroupsByExplicitForumName() throws {
+    var document = FavoriteLibraryDocument()
+    let categoryID = document.defaultCategory.id
+    let first = try FavoriteItem(
+        target: FavoriteContentTarget(kind: .normalThread, threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=711"))),
+        title: "第一条",
+        sourceGroup: .forumBoard(id: "10", label: "旧标签Z"),
+        forumName: "版块A",
+        locations: [.category(categoryID)]
+    )
+    let second = try FavoriteItem(
+        target: FavoriteContentTarget(kind: .normalThread, threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=712"))),
+        title: "第二条",
+        sourceGroup: .forumBoard(id: "20", label: "旧标签A"),
+        forumName: "版块B",
+        locations: [.category(categoryID)]
+    )
+    document.addItem(second)
+    document.addItem(first)
+
+    let cards = LocalFavoriteLibraryProjection.cards(
+        in: document,
+        query: LocalFavoriteLibraryQuery(sortOrder: .sourceGroup)
+    )
+
+    #expect(cards.map(\.id) == [first.id, second.id])
+    #expect(cards.map(\.item.forumName) == ["版块A", "版块B"])
+}
+
+@Test func localFavoriteProjectionMatchesForumSourceFilterByForumID() throws {
+    var document = FavoriteLibraryDocument()
+    let categoryID = document.defaultCategory.id
+    let current = try FavoriteItem(
+        target: FavoriteContentTarget(kind: .normalThread, threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=713"))),
+        title: "当前版名",
+        sourceGroup: .forumBoard(id: "30", label: "新版名"),
+        locations: [.category(categoryID)]
+    )
+    let legacy = try FavoriteItem(
+        target: FavoriteContentTarget(kind: .normalThread, threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=714"))),
+        title: "旧版名",
+        sourceGroup: .forumBoard(id: "30", label: "旧版名"),
+        locations: [.category(categoryID)]
+    )
+    document.addItem(current)
+    document.addItem(legacy)
+
+    let cards = LocalFavoriteLibraryProjection.cards(
+        in: document,
+        query: LocalFavoriteLibraryQuery(sourceGroupFilter: .group(.forumBoard(id: "30", label: "新版名")))
+    )
+
+    #expect(Set(cards.map(\.id)) == [current.id, legacy.id])
 }
 
 @Test func localFavoriteProjectionSearchesAllowedFieldsOnly() throws {
@@ -35,8 +90,8 @@ import Testing
 
     #expect(displayName.map(\.id) == [items.normal.id])
     #expect(title.map(\.id) == [items.novel.id])
-    #expect(sourceGroup.map(\.id) == [items.normal.id, items.novel.id])
-    #expect(collection.map(\.id) == [items.normal.id])
+    #expect(Set(sourceGroup.map(\.id)) == [items.normal.id, items.novel.id])
+    #expect(collection.isEmpty)
     #expect(rawURL.isEmpty)
     #expect(remoteID.isEmpty)
 }
@@ -63,8 +118,12 @@ import Testing
     ]
 
     #expect(LocalFavoriteLibraryProjection.supportedSortOrders == [.organization, .contentUpdatedAt, .yamiboRemoteOrder, .displayTitle, .sourceGroup, .lastReadAt])
+    #expect(LocalFavoriteLibraryProjection.cards(in: document, query: LocalFavoriteLibraryQuery(sortOrder: .organization)).map(\.id).prefix(2) == [items.novel.id, items.normal.id])
+    #expect(LocalFavoriteLibraryProjection.cards(in: document, query: LocalFavoriteLibraryQuery(sortOrder: .contentUpdatedAt)).map(\.id).prefix(3) == [items.manga.id, items.novel.id, items.normal.id])
     #expect(LocalFavoriteLibraryProjection.cards(in: document, query: LocalFavoriteLibraryQuery(sortOrder: .yamiboRemoteOrder)).map(\.id).prefix(2) == [items.novel.id, items.normal.id])
+    #expect(LocalFavoriteLibraryProjection.cards(in: document, query: LocalFavoriteLibraryQuery(sortOrder: .displayTitle, sortsDescending: true)).map(\.id).first == items.novel.id)
     #expect(LocalFavoriteLibraryProjection.cards(in: document, query: LocalFavoriteLibraryQuery(sortOrder: .lastReadAt), readingProgress: progress).map(\.id).prefix(2) == [items.normal.id, items.novel.id])
+    #expect(LocalFavoriteLibraryProjection.cards(in: document, query: LocalFavoriteLibraryQuery(sortOrder: .lastReadAt, sortsDescending: true), readingProgress: progress).map(\.id).suffix(2) == [items.novel.id, items.normal.id])
 }
 
 @Test func localFavoriteProjectionBuildsCardMetadataFromReadingProgressWithoutMutatingItems() throws {
@@ -78,7 +137,8 @@ import Testing
         manga: MangaReadingProgressRecord(
             lastMangaURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=703")),
             lastChapter: "第3话",
-            mangaPageIndex: 4
+            mangaPageIndex: 4,
+            mangaPageCount: 10
         )
     )
 
@@ -86,6 +146,9 @@ import Testing
     let mangaCard = try #require(cards.first { $0.id == items.manga.id })
 
     #expect(mangaCard.recentReadingAt == Date(timeIntervalSince1970: 60))
+    #expect(mangaCard.lastUpdatedAt == Date(timeIntervalSince1970: 300))
+    #expect(mangaCard.progressPercent == 50)
+    #expect(mangaCard.chapterPageProgress == L10n.string("favorites.progress.manga_page_total", "第3话", 5, 10))
     #expect(mangaCard.chapterPageProgress != nil)
     #expect(mangaCard.coverURL == items.manga.coverURL)
     #expect(document.items.first { $0.id == items.manga.id }?.mangaChapterMetadata == items.manga.mangaChapterMetadata)
@@ -101,6 +164,7 @@ private func makeProjectionDocument() throws -> (FavoriteLibraryDocument, Projec
         title: "普通主题",
         displayName: "本地名",
         sourceGroup: .forumBoard(id: "fid-1", label: "版块A"),
+        contentUpdatedAt: Date(timeIntervalSince1970: 100),
         remoteMapping: FavoriteRemoteMapping(yamiboFavoriteID: "remote-701", yamiboRemoteOrder: 2),
         locations: [.category(categoryID), .collection(categoryID: categoryID, collectionID: collection.id)],
         updatedAt: Date(timeIntervalSince1970: 10)
@@ -109,6 +173,7 @@ private func makeProjectionDocument() throws -> (FavoriteLibraryDocument, Projec
         target: FavoriteContentTarget(kind: .novelThread, threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=702"))),
         title: "小说主题",
         sourceGroup: .forumBoard(id: "fid-1", label: "版块A"),
+        contentUpdatedAt: Date(timeIntervalSince1970: 200),
         remoteMapping: FavoriteRemoteMapping(yamiboFavoriteID: "remote-702", yamiboRemoteOrder: 1),
         locations: [.category(categoryID)],
         updatedAt: Date(timeIntervalSince1970: 20)
@@ -118,6 +183,7 @@ private func makeProjectionDocument() throws -> (FavoriteLibraryDocument, Projec
         title: "漫画A",
         sourceGroup: .mangaTitle(cleanBookName: "漫画A"),
         coverURL: coverURL,
+        contentUpdatedAt: Date(timeIntervalSince1970: 300),
         mangaChapterMetadata: FavoriteMangaChapterMetadata(
             chapterTID: "703",
             chapterURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=703"))

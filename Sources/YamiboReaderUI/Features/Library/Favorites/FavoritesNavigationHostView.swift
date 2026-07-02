@@ -5,28 +5,12 @@ struct FavoritesNavigationHostView: View {
     @State private var navigationPath: [FavoriteCollection] = []
     @State private var isSelecting = false
 
-    let favoriteStore: FavoriteStore
     let appContext: YamiboAppContext
     let appModel: YamiboAppModel
 
     var body: some View {
         NavigationStack(path: $navigationPath) {
-            FavoritesView(
-                favoriteStore: favoriteStore,
-                appContext: appContext,
-                appModel: appModel,
-                scope: .root,
-                isSelecting: rootSelectionBinding
-            )
-            .navigationDestination(for: FavoriteCollection.self) { collection in
-                FavoritesView(
-                    favoriteStore: favoriteStore,
-                    appContext: appContext,
-                    appModel: appModel,
-                    scope: .collection(collection),
-                    isSelecting: collectionSelectionBinding(for: collection)
-                )
-            }
+            LocalFavoritesRootView(appContext: appContext, appModel: appModel)
         }
         #if os(iOS)
         .toolbar(isSelecting ? .hidden : .visible, for: .tabBar)

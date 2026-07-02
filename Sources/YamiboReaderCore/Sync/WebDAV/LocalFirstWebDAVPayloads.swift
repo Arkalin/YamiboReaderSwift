@@ -133,6 +133,9 @@ public struct FavoriteLibraryWebDAVMerger: Sendable {
                     localDate: local.clocks.coverUpdatedAtByTargetID[targetID],
                     remoteDate: remote.clocks.coverUpdatedAtByTargetID[targetID]
                 )
+                item.contentUpdatedAt = maxDate(localItem.contentUpdatedAt, remoteItem.contentUpdatedAt)
+                item.forumID = localItem.forumID ?? remoteItem.forumID
+                item.forumName = localItem.forumName ?? remoteItem.forumName
                 item.remoteMapping = choose(
                     local: localItem.remoteMapping,
                     remote: remoteItem.remoteMapping,
@@ -144,6 +147,19 @@ public struct FavoriteLibraryWebDAVMerger: Sendable {
             return item.locations.isEmpty ? nil : item
         }
         .sorted { $0.id < $1.id }
+    }
+
+    private func maxDate(_ lhs: Date?, _ rhs: Date?) -> Date? {
+        switch (lhs, rhs) {
+        case let (lhs?, rhs?):
+            return max(lhs, rhs)
+        case let (lhs?, nil):
+            return lhs
+        case let (nil, rhs?):
+            return rhs
+        case (nil, nil):
+            return nil
+        }
     }
 
     private func mergeCategories(_ local: [FavoriteCategory], _ remote: [FavoriteCategory]) -> [FavoriteCategory] {
@@ -213,6 +229,27 @@ public struct ReadingProgressWebDAVMerger: Sendable {
                 return $0.id < $1.id
             }
         )
+    }
+}
+
+public struct AppSettingsWebDAVPayload: Codable, Equatable, Sendable {
+    public static let currentVersion = 1
+
+    public var version: Int
+    public var updatedAt: Date
+    public var accountUID: String?
+    public var appSettings: WebDAVSyncedAppSettings
+
+    public init(
+        version: Int = Self.currentVersion,
+        updatedAt: Date,
+        accountUID: String? = nil,
+        appSettings: WebDAVSyncedAppSettings
+    ) {
+        self.version = version
+        self.updatedAt = updatedAt
+        self.accountUID = accountUID
+        self.appSettings = appSettings
     }
 }
 

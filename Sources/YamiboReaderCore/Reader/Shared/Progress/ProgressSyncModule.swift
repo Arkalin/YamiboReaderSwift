@@ -36,12 +36,26 @@ public struct MangaProgressReadingPosition: Hashable, Sendable {
     public var chapterURL: URL
     public var chapterTitle: String
     public var pageIndex: Int
+    public var pageCount: Int?
+    public var mangaID: String?
+    public var directoryName: String?
 
-    public init(threadURL: URL, chapterURL: URL, chapterTitle: String, pageIndex: Int) {
+    public init(
+        threadURL: URL,
+        chapterURL: URL,
+        chapterTitle: String,
+        pageIndex: Int,
+        pageCount: Int? = nil,
+        mangaID: String? = nil,
+        directoryName: String? = nil
+    ) {
         self.threadURL = threadURL
         self.chapterURL = chapterURL
         self.chapterTitle = chapterTitle
         self.pageIndex = max(0, pageIndex)
+        self.pageCount = pageCount.map { max(1, $0) }
+        self.mangaID = mangaID?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        self.directoryName = directoryName?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
     }
 }
 
@@ -126,30 +140,23 @@ public actor ProgressSyncModule {
 }
 
 public struct FavoriteLibraryProgressSyncAdapter: ProgressSyncAdapter {
-    private let favoriteStore: FavoriteStore
     private let readingProgressStore: ReadingProgressStore
 
-    public init(favoriteStore: FavoriteStore, readingProgressStore: ReadingProgressStore) {
-        self.favoriteStore = favoriteStore
+    public init(readingProgressStore: ReadingProgressStore) {
         self.readingProgressStore = readingProgressStore
     }
 
     public func saveNovelReadingPosition(_ position: NovelReadingPosition) async throws {
         _ = try await readingProgressStore.saveNovel(position)
-        _ = try await favoriteStore.updateNovelReadingPosition(
-            position,
-            createIfMissing: false
-        )
     }
 
     public func saveMangaReadingPosition(_ position: MangaProgressReadingPosition) async throws {
         _ = try await readingProgressStore.saveManga(position)
-        _ = try await favoriteStore.updateMangaProgress(
-            for: position.threadURL,
-            chapterURL: position.chapterURL,
-            chapterTitle: position.chapterTitle,
-            pageIndex: position.pageIndex,
-            createIfMissing: false
-        )
+    }
+}
+
+private extension String {
+    var nilIfEmpty: String? {
+        isEmpty ? nil : self
     }
 }

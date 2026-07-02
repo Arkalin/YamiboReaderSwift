@@ -77,7 +77,6 @@ struct MangaReaderModelDependencies {
             },
             progressSync: ProgressSyncModule(
                 adapter: FavoriteLibraryProgressSyncAdapter(
-                    favoriteStore: appContext.favoriteStore,
                     readingProgressStore: appContext.readingProgressStore
                 )
             )
@@ -91,7 +90,6 @@ struct MangaReaderModelDependencies {
             makeDirectorySearchCooldownState: { appContext.mangaDirectorySearchCooldownState },
             progressSync: ProgressSyncModule(
                 adapter: FavoriteLibraryProgressSyncAdapter(
-                    favoriteStore: appContext.favoriteStore,
                     readingProgressStore: appContext.readingProgressStore
                 )
             )
@@ -987,13 +985,16 @@ public final class MangaReaderModel: ObservableObject {
             return nil
         }
 
+        let directoryName = normalizedDirectoryName(loaded.directoryTitle) ?? normalizedDirectoryName(context.directoryName)
         let progress = MangaProgressReadingPosition(
             threadURL: context.originalThreadURL,
             chapterURL: currentPage.refererURL,
             chapterTitle: currentPage.chapterTitle,
-            pageIndex: currentPage.localIndex
+            pageIndex: currentPage.localIndex,
+            pageCount: currentPage.chapterPageCount,
+            mangaID: workflow?.currentDirectoryFavoriteIdentity(),
+            directoryName: directoryName
         )
-        let directoryName = normalizedDirectoryName(loaded.directoryTitle) ?? normalizedDirectoryName(context.directoryName)
         let resumeContext = MangaLaunchContext(
             originalThreadURL: context.originalThreadURL,
             chapterURL: currentPage.refererURL,

@@ -57,13 +57,19 @@ import Testing
         target: target,
         title: "主题",
         displayName: "本地名",
+        forumID: "10",
+        forumName: "本地版块",
         coverURL: URL(string: "https://example.com/local.jpg"),
+        contentUpdatedAt: Date(timeIntervalSince1970: 100),
         remoteMapping: FavoriteRemoteMapping(yamiboFavoriteID: "local"),
         locations: [.category(FavoriteCategory.defaultID)]
     )
     var remoteItem = localItem
     remoteItem.displayName = "远端名"
+    remoteItem.forumID = "10"
+    remoteItem.forumName = "远端版块"
     remoteItem.coverURL = URL(string: "https://example.com/remote.jpg")
+    remoteItem.contentUpdatedAt = Date(timeIntervalSince1970: 200)
     remoteItem.remoteMapping = FavoriteRemoteMapping(yamiboFavoriteID: "remote")
 
     let merged = FavoriteLibraryWebDAVMerger().merge(
@@ -90,7 +96,10 @@ import Testing
 
     let item = try #require(merged.library.items.first)
     #expect(item.displayName == "本地名")
+    #expect(item.forumID == "10")
+    #expect(item.forumName == "本地版块")
     #expect(item.coverURL?.absoluteString == "https://example.com/remote.jpg")
+    #expect(item.contentUpdatedAt == Date(timeIntervalSince1970: 200))
     #expect(item.remoteMapping?.yamiboFavoriteID == "remote")
 }
 
@@ -104,12 +113,13 @@ import Testing
         manga: MangaReadingProgressRecord(
             lastMangaURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=1101")),
             lastChapter: "第一话",
-            mangaPageIndex: 1
+            mangaPageIndex: 1,
+            mangaPageCount: 8
         )
     )
     var newer = older
     newer.updatedAt = Date(timeIntervalSince1970: 20)
-    newer.manga = MangaReadingProgressRecord(lastMangaURL: older.threadURL, lastChapter: "第一话", mangaPageIndex: 7)
+    newer.manga = MangaReadingProgressRecord(lastMangaURL: older.threadURL, lastChapter: "第一话", mangaPageIndex: 7, mangaPageCount: 10)
 
     let merged = ReadingProgressWebDAVMerger().merge(
         local: ReadingProgressWebDAVPayload(updatedAt: older.updatedAt, records: [older]),
@@ -120,4 +130,5 @@ import Testing
     let record = try #require(merged.records.first)
     #expect(record.id == target.id)
     #expect(record.manga?.mangaPageIndex == 7)
+    #expect(record.manga?.mangaPageCount == 10)
 }

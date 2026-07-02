@@ -192,7 +192,10 @@ private func makeCacheFixture(
     offlineCacheQueueControllerProvider: (@Sendable () async -> any MangaOfflineCacheQueueControlling)? = nil
 ) async throws -> MangaReaderCacheFixture {
     let suiteName = YamiboTestDefaults.suiteName(prefix: "manga-reader-cache")
-    let favoriteStore = try FavoriteStore(testSuiteName: suiteName, key: "favorites")
+    let localFavoriteLibraryStore = LocalFirstFavoriteLibraryStore(
+        defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+        key: "favorite-library"
+    )
     let offlineStore = FileMangaOfflineCacheStore(
         baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
     )
@@ -204,7 +207,9 @@ private func makeCacheFixture(
         type: .manga
     )
     if saveFavorite {
-        try await favoriteStore.saveFavorites([favorite])
+        var document = FavoriteLibraryDocument()
+        try document.addMangaTitleFavorite(cleanBookName: "测试漫画", title: "测试漫画")
+        try await localFavoriteLibraryStore.save(document)
     }
 
     let panel = MangaDirectoryPanelPresentation(
@@ -223,7 +228,7 @@ private func makeCacheFixture(
         model: MangaReaderCacheViewModel(
             context: context,
             panel: panel,
-            favoriteStore: favoriteStore,
+            localFavoriteLibraryStore: localFavoriteLibraryStore,
             offlineCacheStore: offlineStore,
             offlineCacheQueueControllerProvider: offlineCacheQueueControllerProvider
         ),

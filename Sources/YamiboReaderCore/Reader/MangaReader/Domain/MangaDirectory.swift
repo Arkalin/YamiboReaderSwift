@@ -17,6 +17,17 @@ public struct MangaDirectory: Codable, Hashable, Sendable, Identifiable {
 
     public var id: String { cleanBookName }
 
+    public var favoriteIdentity: String {
+        let normalizedSourceKey = sourceKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !normalizedSourceKey.isEmpty, normalizedSourceKey != cleanBookName {
+            return "\(strategy.rawValue):\(normalizedSourceKey)"
+        }
+        if let firstTID = chapters.first?.tid.trimmingCharacters(in: .whitespacesAndNewlines), !firstTID.isEmpty {
+            return "chapter:\(firstTID)"
+        }
+        return cleanBookName
+    }
+
     public init(
         cleanBookName: String,
         strategy: MangaDirectoryStrategy,

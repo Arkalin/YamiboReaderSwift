@@ -159,6 +159,279 @@ private enum WebDAVTestError: Error {
     }
 }
 
+@Test func webDAVServiceUploadWritesLocalFirstFavoriteLibraryAndReadingProgressPayloads() async throws {
+    let suiteName = makeWebDAVDefaultsSuiteName(prefix: "webdav-local-first-upload")
+    UserDefaults(suiteName: suiteName)?.removePersistentDomain(forName: suiteName)
+    let settingsStore = WebDAVSyncSettingsStore(defaults: try makeWebDAVDefaults(suiteName: suiteName), key: "webdav")
+    let favoriteStore = FavoriteStore(defaults: try makeWebDAVDefaults(suiteName: suiteName), key: "favorites")
+    let localFavoriteLibraryStore = LocalFirstFavoriteLibraryStore(
+        defaults: try makeWebDAVDefaults(suiteName: suiteName),
+        key: "local-favorites"
+    )
+    let readingProgressStore = ReadingProgressStore(
+        defaults: try makeWebDAVDefaults(suiteName: suiteName),
+        key: "reading-progress"
+    )
+    let sessionStore = SessionStore(defaults: try makeWebDAVDefaults(suiteName: suiteName), key: "session")
+    let host = "local-first-upload.example.com"
+    let settings = WebDAVSyncSettings(
+        baseURLString: "https://\(host)",
+        username: "admin",
+        password: "secret"
+    )
+    try await sessionStore.save(SessionState(cookie: "sid=local", isLoggedIn: true, accountUID: "100"))
+
+    let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=940&mobile=2"))
+    var document = FavoriteLibraryDocument()
+    let target = FavoriteContentTarget(kind: .novelThread, threadURL: threadURL)
+    try document.addItem(
+        FavoriteItem(
+            target: target,
+            title: "本地优先收藏",
+            locations: [.category(document.defaultCategory.id)]
+        )
+    )
+    try await localFavoriteLibraryStore.save(document)
+    _ = try await readingProgressStore.saveNovel(
+        NovelReadingPosition(threadURL: threadURL, view: 4, chapterTitle: "第四章")
+    )
+
+    var putPaths: [String] = []
+    WebDAVTestURLProtocol.setHandler(for: host) { request in
+        if request.httpMethod == "GET" {
+            return (
+                Data(),
+                HTTPURLResponse(url: request.url!, statusCode: 404, httpVersion: nil, headerFields: nil)!
+            )
+        }
+        let response = HTTPURLResponse(url: request.url!, statusCode: 201, httpVersion: nil, headerFields: nil)!
+        guard request.httpMethod == "PUT" else {
+            return (Data(), response)
+        }
+        let path = try #require(request.url?.path)
+        putPaths.append(path)
+        let body = try #require(request.webDAVBodyData())
+        if path.hasSuffix("yamibo-favorite-library-v1.json") {
+            let payload = try JSONDecoder().decode(FavoriteLibraryWebDAVPayload.self, from: body)
+            #expect(payload.accountUID == "100")
+            #expect(payload.library.items.map(\.id) == [target.id])
+        } else if path.hasSuffix("yamibo-reading-progress-v1.json") {
+            let payload = try JSONDecoder().decode(ReadingProgressWebDAVPayload.self, from: body)
+            #expect(payload.records.map(\.id) == [target.id])
+        }
+        return (Data(), response)
+    }
+    defer { WebDAVTestURLProtocol.removeHandler(for: host) }
+
+    let service = WebDAVSyncService(
+        settingsStore: settingsStore,
+        favoriteStore: favoriteStore,
+        localFavoriteLibraryStore: localFavoriteLibraryStore,
+        readingProgressStore: readingProgressStore,
+        sessionStore: sessionStore,
+        client: WebDAVClient(session: makeWebDAVTestSession())
+    )
+
+    _ = try await service.upload(using: settings, allowingAccountMismatch: true)
+
+    #expect(!putPaths.contains { $0.hasSuffix("yamibo-sync-v1.json") })
+    #expect(putPaths.contains { $0.hasSuffix("yamibo-favorite-library-v1.json") })
+    #expect(putPaths.contains { $0.hasSuffix("yamibo-reading-progress-v1.json") })
+}
+
+@Test func webDAVServiceLocalFirstUploadWritesAppSettingsPayloadWithoutLegacyPayload() async throws {
+    let suiteName = makeWebDAVDefaultsSuiteName(prefix: "webdav-local-first-app-settings-upload")
+    UserDefaults(suiteName: suiteName)?.removePersistentDomain(forName: suiteName)
+    let settingsStore = WebDAVSyncSettingsStore(defaults: try makeWebDAVDefaults(suiteName: suiteName), key: "webdav")
+    let favoriteStore = FavoriteStore(defaults: try makeWebDAVDefaults(suiteName: suiteName), key: "favorites")
+    let localFavoriteLibraryStore = LocalFirstFavoriteLibraryStore(
+        defaults: try makeWebDAVDefaults(suiteName: suiteName),
+        key: "local-favorites"
+    )
+    let sessionStore = SessionStore(defaults: try makeWebDAVDefaults(suiteName: suiteName), key: "session")
+    let appSettingsStore = SettingsStore(defaults: try makeWebDAVDefaults(suiteName: suiteName), key: "settings")
+    let host = "local-first-app-settings-upload.example.com"
+    let settings = WebDAVSyncSettings(baseURLString: "https://\(host)", username: "admin", password: "secret")
+    let appSettings = AppSettings(
+        webBrowser: WebBrowserSettings(showsNavigationBar: false),
+        favoriteAppearance: FavoriteAppearanceSettings(collection: .purple, novel: .red, manga: .green, other: .gray),
+        homePage: .favorites
+    )
+    try await sessionStore.save(SessionState(cookie: "sid=local", isLoggedIn: true, accountUID: "123"))
+    try await appSettingsStore.save(appSettings)
+
+    var putPaths: [String] = []
+    var uploadedAppSettings: AppSettingsWebDAVPayload?
+    WebDAVTestURLProtocol.setHandler(for: host) { request in
+        switch request.httpMethod {
+        case "GET":
+            return (Data(), HTTPURLResponse(url: request.url!, statusCode: 404, httpVersion: nil, headerFields: nil)!)
+        case "MKCOL":
+            return (Data(), HTTPURLResponse(url: request.url!, statusCode: 201, httpVersion: nil, headerFields: nil)!)
+        case "PUT":
+            let path = try #require(request.url?.path)
+            putPaths.append(path)
+            if path.hasSuffix("yamibo-app-settings-v1.json") {
+                uploadedAppSettings = try JSONDecoder().decode(AppSettingsWebDAVPayload.self, from: try #require(request.webDAVBodyData()))
+            }
+            return (Data(), HTTPURLResponse(url: request.url!, statusCode: 201, httpVersion: nil, headerFields: nil)!)
+        default:
+            Issue.record("Unexpected method \(request.httpMethod ?? "nil")")
+            return (Data(), HTTPURLResponse(url: request.url!, statusCode: 500, httpVersion: nil, headerFields: nil)!)
+        }
+    }
+    defer { WebDAVTestURLProtocol.removeHandler(for: host) }
+
+    let service = WebDAVSyncService(
+        settingsStore: settingsStore,
+        favoriteStore: favoriteStore,
+        localFavoriteLibraryStore: localFavoriteLibraryStore,
+        sessionStore: sessionStore,
+        appSettingsStore: appSettingsStore,
+        client: WebDAVClient(session: makeWebDAVTestSession())
+    )
+
+    let returnedPayload = try await service.upload(using: settings)
+
+    #expect(!putPaths.contains { $0.hasSuffix("yamibo-sync-v1.json") })
+    #expect(putPaths.contains { $0.hasSuffix("yamibo-favorite-library-v1.json") })
+    #expect(putPaths.contains { $0.hasSuffix("yamibo-app-settings-v1.json") })
+    #expect(uploadedAppSettings?.accountUID == "123")
+    #expect(uploadedAppSettings?.appSettings == WebDAVSyncedAppSettings(settings: appSettings))
+    #expect(returnedPayload.library.favorites.isEmpty)
+}
+
+@Test func webDAVServiceLocalFirstDownloadAppliesAppSettingsPayloadWithoutLegacyPayload() async throws {
+    let suiteName = makeWebDAVDefaultsSuiteName(prefix: "webdav-local-first-app-settings-download")
+    UserDefaults(suiteName: suiteName)?.removePersistentDomain(forName: suiteName)
+    let settingsStore = WebDAVSyncSettingsStore(defaults: try makeWebDAVDefaults(suiteName: suiteName), key: "webdav")
+    let favoriteStore = FavoriteStore(defaults: try makeWebDAVDefaults(suiteName: suiteName), key: "favorites")
+    let localFavoriteLibraryStore = LocalFirstFavoriteLibraryStore(
+        defaults: try makeWebDAVDefaults(suiteName: suiteName),
+        key: "local-favorites"
+    )
+    let sessionStore = SessionStore(defaults: try makeWebDAVDefaults(suiteName: suiteName), key: "session")
+    let appSettingsStore = SettingsStore(defaults: try makeWebDAVDefaults(suiteName: suiteName), key: "settings")
+    let host = "local-first-app-settings-download.example.com"
+    let settings = WebDAVSyncSettings(baseURLString: "https://\(host)", username: "admin", password: "secret")
+    let localSettings = AppSettings(
+        webBrowser: WebBrowserSettings(showsNavigationBar: true),
+        homePage: .forum
+    )
+    let remoteSettings = WebDAVSyncedAppSettings(
+        homePage: .favorites,
+        webBrowser: WebBrowserSettings(showsNavigationBar: false),
+        favoriteAppearance: FavoriteAppearanceSettings(collection: .purple, novel: .red, manga: .green, other: .gray)
+    )
+    let remotePayload = AppSettingsWebDAVPayload(
+        updatedAt: Date(timeIntervalSince1970: 2_000),
+        accountUID: "123",
+        appSettings: remoteSettings
+    )
+    try await sessionStore.save(SessionState(cookie: "sid=local", isLoggedIn: true, accountUID: "123"))
+    try await appSettingsStore.save(localSettings)
+
+    var getPaths: [String] = []
+    WebDAVTestURLProtocol.setHandler(for: host) { request in
+        #expect(request.httpMethod == "GET")
+        let path = try #require(request.url?.path)
+        getPaths.append(path)
+        if path.hasSuffix("yamibo-app-settings-v1.json") {
+            return (
+                try JSONEncoder().encode(remotePayload),
+                HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
+            )
+        }
+        return (Data(), HTTPURLResponse(url: request.url!, statusCode: 404, httpVersion: nil, headerFields: nil)!)
+    }
+    defer { WebDAVTestURLProtocol.removeHandler(for: host) }
+
+    let service = WebDAVSyncService(
+        settingsStore: settingsStore,
+        favoriteStore: favoriteStore,
+        localFavoriteLibraryStore: localFavoriteLibraryStore,
+        sessionStore: sessionStore,
+        appSettingsStore: appSettingsStore,
+        client: WebDAVClient(session: makeWebDAVTestSession())
+    )
+
+    _ = try await service.download(using: settings)
+
+    #expect(!getPaths.contains { $0.hasSuffix("yamibo-sync-v1.json") })
+    let loadedSettings = await appSettingsStore.load()
+    #expect(loadedSettings.homePage == .favorites)
+    #expect(loadedSettings.webBrowser.showsNavigationBar == false)
+    #expect(loadedSettings.favoriteAppearance == remoteSettings.favoriteAppearance)
+}
+
+@Test func webDAVAutomaticLocalFirstSyncUploadsWithoutLegacyPayload() async throws {
+    let suiteName = makeWebDAVDefaultsSuiteName(prefix: "webdav-local-first-auto-no-legacy")
+    UserDefaults(suiteName: suiteName)?.removePersistentDomain(forName: suiteName)
+    let settingsStore = WebDAVSyncSettingsStore(defaults: try makeWebDAVDefaults(suiteName: suiteName), key: "webdav")
+    let favoriteStore = FavoriteStore(defaults: try makeWebDAVDefaults(suiteName: suiteName), key: "favorites")
+    let localFavoriteLibraryStore = LocalFirstFavoriteLibraryStore(
+        defaults: try makeWebDAVDefaults(suiteName: suiteName),
+        key: "local-favorites"
+    )
+    let sessionStore = SessionStore(defaults: try makeWebDAVDefaults(suiteName: suiteName), key: "session")
+    let host = "local-first-auto-no-legacy.example.com"
+    let localClock = Date(timeIntervalSince1970: 3_000)
+    try await settingsStore.save(WebDAVSyncSettings(
+        baseURLString: "https://\(host)",
+        username: "admin",
+        password: "secret",
+        isAutoSyncEnabled: true,
+        lastRemoteUpdatedAt: Date(timeIntervalSince1970: 1_000),
+        localUpdatedAt: localClock
+    ))
+    try await sessionStore.save(SessionState(cookie: "sid=local", isLoggedIn: true, accountUID: "123"))
+
+    let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=965&mobile=2"))
+    var document = FavoriteLibraryDocument()
+    let target = FavoriteContentTarget(kind: .normalThread, threadURL: threadURL)
+    try document.addItem(FavoriteItem(
+        target: target,
+        title: "自动同步收藏",
+        locations: [.category(document.defaultCategory.id)]
+    ))
+    try await localFavoriteLibraryStore.save(document)
+
+    var putPaths: [String] = []
+    WebDAVTestURLProtocol.setHandler(for: host) { request in
+        switch request.httpMethod {
+        case "GET":
+            return (Data(), HTTPURLResponse(url: request.url!, statusCode: 404, httpVersion: nil, headerFields: nil)!)
+        case "MKCOL":
+            return (Data(), HTTPURLResponse(url: request.url!, statusCode: 201, httpVersion: nil, headerFields: nil)!)
+        case "PUT":
+            let path = try #require(request.url?.path)
+            putPaths.append(path)
+            if path.hasSuffix("yamibo-favorite-library-v1.json") {
+                let payload = try JSONDecoder().decode(FavoriteLibraryWebDAVPayload.self, from: try #require(request.webDAVBodyData()))
+                #expect(payload.library.items.map(\.target) == [target])
+            }
+            return (Data(), HTTPURLResponse(url: request.url!, statusCode: 201, httpVersion: nil, headerFields: nil)!)
+        default:
+            Issue.record("Unexpected method \(request.httpMethod ?? "nil")")
+            return (Data(), HTTPURLResponse(url: request.url!, statusCode: 500, httpVersion: nil, headerFields: nil)!)
+        }
+    }
+    defer { WebDAVTestURLProtocol.removeHandler(for: host) }
+
+    let service = WebDAVSyncService(
+        settingsStore: settingsStore,
+        favoriteStore: favoriteStore,
+        localFavoriteLibraryStore: localFavoriteLibraryStore,
+        sessionStore: sessionStore,
+        client: WebDAVClient(session: makeWebDAVTestSession())
+    )
+
+    try await service.synchronizeAutomatically()
+
+    #expect(!putPaths.contains { $0.hasSuffix("yamibo-sync-v1.json") })
+    #expect(putPaths.contains { $0.hasSuffix("yamibo-favorite-library-v1.json") })
+}
+
 @Test func webDAVSyncDownloadRestoresLibraryWithoutTouchingSessionSignInSettingsOrCaches() async throws {
     let suiteName = makeWebDAVDefaultsSuiteName(prefix: "webdav-download")
     UserDefaults(suiteName: suiteName)?.removePersistentDomain(forName: suiteName)
@@ -188,14 +461,13 @@ private enum WebDAVTestError: Error {
     )
 
     let remoteURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=902&mobile=2"))
-    let collection = FavoriteCollection(id: "collection-a", name: "远端合集", manualOrder: 0, isHidden: true)
+    let collection = FavoriteCollection(id: "collection-a", name: "远端合集", manualOrder: 0)
     let favorite = Favorite(
         title: "远端收藏",
         url: remoteURL,
         mangaPageIndex: 7,
         lastView: 2,
         lastChapter: "第二章",
-        isHidden: true,
         parentCollectionID: collection.id,
         manualOrder: 0
     )
@@ -224,12 +496,8 @@ private enum WebDAVTestError: Error {
     _ = try await service.download()
 
     let loadedLibrary = await favoriteStore.loadLibrarySnapshot()
-    var expectedFavorite = favorite
-    expectedFavorite.isHidden = false
-    var expectedCollection = collection
-    expectedCollection.isHidden = false
-    #expect(loadedLibrary.favorites == [expectedFavorite])
-    #expect(loadedLibrary.collections == [expectedCollection])
+    #expect(loadedLibrary.favorites == [favorite])
+    #expect(loadedLibrary.collections == [collection])
     #expect(await sessionStore.load() == localSession)
     #expect(await checkInStore.lastCheckedInDate(session: localSession) != nil)
     #expect(await appSettingsStore.load().reader.readingMode == .vertical)
@@ -393,14 +661,12 @@ private enum WebDAVTestError: Error {
         title: "同一收藏",
         displayName: "本地旧名",
         url: url,
-        isHidden: false,
         type: .unknown
     )
     let remoteFavorite = Favorite(
         title: "同一收藏",
         displayName: "远端新名",
         url: url,
-        isHidden: true,
         type: .manga
     )
     var localMetadata = FavoriteLibrarySyncMetadata(remoteFavoritesUpdatedAt: baseClock)
@@ -467,7 +733,6 @@ private enum WebDAVTestError: Error {
     let mergedSnapshot = await favoriteStore.loadLibrarySnapshot()
     let mergedLocalFavorite = try #require(mergedSnapshot.favorites.first)
     #expect(mergedLocalFavorite.displayName == "远端新名")
-    #expect(!mergedLocalFavorite.isHidden)
     #expect(mergedLocalFavorite.type == .manga)
     #expect(mergedSnapshot.syncMetadata.favoriteMetadataUpdatedAtByCanonicalURL[canonicalKey] == remoteMetadataClock)
 }
@@ -558,22 +823,6 @@ private enum WebDAVTestError: Error {
     let favoriteStore = FavoriteStore(defaults: try makeWebDAVDefaults(suiteName: suiteName), key: "favorites")
     let sessionStore = SessionStore(defaults: try makeWebDAVDefaults(suiteName: suiteName), key: "session")
     let host = "auto-archive.example.com"
-    let archivedURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=941&mobile=2"))
-    let archive = FavoriteMetadataArchiveEntry(
-        canonicalThreadURL: ReaderCacheIdentity.canonicalThreadURL(from: archivedURL),
-        displayName: "下载归档",
-        mangaPageIndex: 4,
-        lastView: 1,
-        lastChapter: nil,
-        authorID: nil,
-        novelResumePoint: nil,
-        isHidden: false,
-        type: .manga,
-        lastMangaURL: archivedURL,
-        parentCollectionID: nil,
-        manualOrder: 0,
-        lastReadAt: nil
-    )
     try await settingsStore.save(WebDAVSyncSettings(
         baseURLString: "https://\(host)",
         username: "admin",
@@ -584,12 +833,31 @@ private enum WebDAVTestError: Error {
     ))
     try await sessionStore.save(SessionState(cookie: "sid=local", isLoggedIn: true, accountUID: "100"))
 
-    let payload = WebDAVSyncPayload(
-        updatedAt: Date(timeIntervalSince1970: 2_000),
-        accountUID: "100",
-        library: FavoriteLibrarySnapshot(favorites: [], collections: [], archivedMetadata: [archive])
+    let encodedPayload = Data(
+        """
+        {
+          "version": 1,
+          "updatedAt": 2000,
+          "accountUID": "100",
+          "library": {
+            "favorites": [],
+            "collections": [],
+            "archivedMetadata": [
+              {
+                "canonicalThreadURL": "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=941&mobile=2",
+                "displayName": "下载归档",
+                "lastPage": 4,
+                "lastView": 1,
+                "isHidden": false,
+                "type": 2,
+                "lastMangaURL": "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=941&mobile=2",
+                "manualOrder": 0
+              }
+            ]
+          }
+        }
+        """.utf8
     )
-    let encodedPayload = try JSONEncoder().encode(payload)
 
     WebDAVTestURLProtocol.setHandler(for: host) { request in
         switch request.httpMethod {
@@ -618,7 +886,7 @@ private enum WebDAVTestError: Error {
 
     try await service.synchronizeAutomatically()
 
-    #expect((await favoriteStore.loadLibrarySnapshot()).archivedMetadata.isEmpty)
+    #expect((await favoriteStore.loadLibrarySnapshot()).favorites.isEmpty)
 }
 
 @Test func webDAVServiceUploadWritesCurrentAccountUID() async throws {
@@ -799,30 +1067,14 @@ private enum WebDAVTestError: Error {
     let sessionStore = SessionStore(defaults: try makeWebDAVDefaults(suiteName: suiteName), key: "session")
     let host = "upload-archive.example.com"
     let settings = WebDAVSyncSettings(baseURLString: "https://\(host)", username: "admin", password: "secret")
-    let archivedURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=940&mobile=2"))
-    let archive = FavoriteMetadataArchiveEntry(
-        canonicalThreadURL: ReaderCacheIdentity.canonicalThreadURL(from: archivedURL),
-        displayName: "同步归档",
-        mangaPageIndex: 9,
-        lastView: 2,
-        lastChapter: "归档章节",
-        authorID: "77",
-        novelResumePoint: nil,
-        isHidden: true,
-        type: .novel,
-        lastMangaURL: nil,
-        parentCollectionID: "collection-a",
-        manualOrder: 3,
-        lastReadAt: Date(timeIntervalSince1970: 1_900_000_000)
-    )
     try await sessionStore.save(SessionState(cookie: "sid=local", isLoggedIn: true, accountUID: "123"))
     try await favoriteStore.saveLibrarySnapshot(FavoriteLibrarySnapshot(
         favorites: [],
-        collections: [],
-        archivedMetadata: [archive]
+        collections: []
     ))
 
     var uploadedPayload: WebDAVSyncPayload?
+    var uploadedBody: Data?
     WebDAVTestURLProtocol.setHandler(for: host) { request in
         switch request.httpMethod {
         case "GET":
@@ -831,6 +1083,7 @@ private enum WebDAVTestError: Error {
             return (Data(), HTTPURLResponse(url: request.url!, statusCode: 201, httpVersion: nil, headerFields: nil)!)
         case "PUT":
             let body = try #require(request.webDAVBodyData())
+            uploadedBody = body
             uploadedPayload = try JSONDecoder().decode(WebDAVSyncPayload.self, from: body)
             return (Data(), HTTPURLResponse(url: request.url!, statusCode: 201, httpVersion: nil, headerFields: nil)!)
         default:
@@ -849,7 +1102,8 @@ private enum WebDAVTestError: Error {
 
     _ = try await service.upload(using: settings)
 
-    #expect(uploadedPayload?.library.archivedMetadata == [])
+    #expect(uploadedPayload?.library.favorites == [])
+    #expect(String(data: try #require(uploadedBody), encoding: .utf8)?.contains("archivedMetadata") == false)
 }
 
 @Test func webDAVServiceUploadDoesNotSerializeMangaOfflineCacheState() async throws {
@@ -1140,7 +1394,6 @@ private enum WebDAVTestError: Error {
     let loadedLibrary = await favoriteStore.loadLibrarySnapshot()
     #expect(loadedLibrary.tags.isEmpty)
     #expect(loadedLibrary.favorites.first?.tagIDs == [])
-    #expect(loadedLibrary.archivedMetadata.isEmpty)
     #expect(!loadedLibrary.syncMetadata.isEmpty)
 }
 

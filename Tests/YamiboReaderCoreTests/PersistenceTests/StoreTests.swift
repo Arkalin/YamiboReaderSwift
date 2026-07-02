@@ -516,7 +516,7 @@ import Testing
     defaults.removePersistentDomain(forName: "favorite-remote-clock-tests")
     let store = FavoriteStore(defaults: defaults, key: "favorites")
     let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=330&mobile=2"))
-    let favorite = Favorite(title: "旧标题", displayName: "本地名", url: url, lastView: 3, isHidden: true)
+    let favorite = Favorite(title: "旧标题", displayName: "本地名", url: url, lastView: 3)
 
     try await store.saveLibrarySnapshot(FavoriteLibrarySnapshot(favorites: [favorite], collections: []))
 
@@ -690,7 +690,7 @@ import Testing
     #expect(listClock == readingClock)
 }
 
-@Test func favoriteLibrarySnapshotPersistsTagsAndRestoresArchivedTagMetadata() async throws {
+@Test func favoriteLibrarySnapshotPersistsTagsAcrossRemoteRefresh() async throws {
     let defaults = try #require(UserDefaults(suiteName: "favorite-tag-model-tests"))
     defaults.removePersistentDomain(forName: "favorite-tag-model-tests")
     let store = FavoriteStore(defaults: defaults, key: "favorites")
@@ -723,7 +723,6 @@ import Testing
 
     _ = try await store.mergeRemoteFavorites([])
     let archived = await store.loadLibrarySnapshot()
-    #expect(archived.archivedMetadata.isEmpty)
     #expect(archived.favorites.first?.tagIDs == [tag.id])
 
     _ = try await store.mergeRemoteFavorites([
@@ -761,7 +760,6 @@ import Testing
     let decoded = try JSONDecoder().decode(FavoriteLibrarySnapshot.self, from: Data(legacySnapshot.utf8))
 
     #expect(decoded.tags.isEmpty)
-    #expect(decoded.archivedMetadata.first?.tagIDs.isEmpty == true)
 
     let defaults = try #require(UserDefaults(suiteName: "favorite-tag-sanitize-tests"))
     defaults.removePersistentDomain(forName: "favorite-tag-sanitize-tests")
@@ -800,25 +798,7 @@ import Testing
                 Favorite(title: "标签管理", url: url, tagIDs: [existing.id])
             ],
             collections: [],
-            tags: [existing],
-            archivedMetadata: [
-                FavoriteMetadataArchiveEntry(
-                    canonicalThreadURL: url,
-                    displayName: nil,
-                    mangaPageIndex: 0,
-                    lastView: 1,
-                    lastChapter: nil,
-                    authorID: nil,
-                    novelResumePoint: nil,
-                    isHidden: false,
-                    type: .novel,
-                    lastMangaURL: nil,
-                    parentCollectionID: nil,
-                    manualOrder: 0,
-                    lastReadAt: nil,
-                    tagIDs: [existing.id]
-                )
-            ]
+            tags: [existing]
         )
     )
 
@@ -856,7 +836,6 @@ import Testing
     let deleted = try await store.deleteTag(id: existing.id)
     #expect(deleted.tags.map(\.id) == [newTagID])
     #expect(deleted.favorites.first?.tagIDs == [])
-    #expect(deleted.archivedMetadata.isEmpty)
 }
 
 @Test func favoriteStoreCanOverwriteTagsForMultipleFavoritesWithoutMovingThem() async throws {
@@ -999,8 +978,7 @@ import Testing
 
     let localOnly = Favorite(
         title: "旧收藏",
-        url: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=1&mobile=2")!,
-        isHidden: true
+        url: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=1&mobile=2")!
     )
     try await store.saveFavorites([localOnly])
 
@@ -1017,7 +995,7 @@ import Testing
     #expect(merged.count == 2)
     #expect(merged.contains(where: { $0.id == localOnly.id }))
     #expect(merged.contains(where: { $0.title == "新收藏" }))
-    #expect(snapshot.archivedMetadata.isEmpty)
+    #expect(snapshot.favorites.contains(where: { $0.id == localOnly.id }))
 }
 
 @Test func favoriteStoreCanUpdateFavoriteType() async throws {
@@ -1066,7 +1044,6 @@ import Testing
         title: "原标题",
         displayName: "自定义名称",
         url: url,
-        isHidden: true,
         type: .novel
     )
     var syncMetadata = FavoriteLibrarySyncMetadata()
@@ -1152,7 +1129,7 @@ import Testing
     let store = FavoriteStore(defaults: defaults, key: "favorites")
 
     let firstVisible = Favorite(title: "可见1", url: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=611&mobile=2")), type: .novel)
-    let hidden = Favorite(title: "隐藏项", url: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=612&mobile=2")), isHidden: true, type: .novel)
+    let hidden = Favorite(title: "中间项", url: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=612&mobile=2")), type: .novel)
     let secondVisible = Favorite(title: "可见2", url: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=613&mobile=2")), type: .novel)
     let otherType = Favorite(title: "其他分类", url: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=614&mobile=2")), type: .manga)
     let thirdVisible = Favorite(title: "可见3", url: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=615&mobile=2")), type: .novel)
@@ -1173,7 +1150,7 @@ import Testing
 
     let localFirst = Favorite(title: "本地1", url: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=621&mobile=2")), remoteFavoriteID: "1")
     let localSecond = Favorite(title: "本地2", url: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=622&mobile=2")), remoteFavoriteID: "2")
-    let hiddenLocalOnly = Favorite(title: "本地隐藏", url: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=623&mobile=2")), isHidden: true)
+    let hiddenLocalOnly = Favorite(title: "本地保留", url: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=623&mobile=2")))
     let removedRemote = Favorite(title: "将被移除", url: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=624&mobile=2")))
     try await store.saveFavorites([localFirst, localSecond, hiddenLocalOnly, removedRemote])
 
@@ -1188,7 +1165,6 @@ import Testing
     #expect(merged[2].title == "远端更新2")
     #expect(merged[2].remoteFavoriteID == "22")
     let snapshot = await store.loadLibrarySnapshot()
-    #expect(snapshot.archivedMetadata.isEmpty)
     #expect(snapshot.favorites.first(where: { $0.id == hiddenLocalOnly.id })?.remoteFavoriteID == nil)
     #expect(snapshot.favorites.first(where: { $0.id == removedRemote.id })?.remoteFavoriteID == nil)
 }
@@ -1360,7 +1336,6 @@ import Testing
         novelResumePoint: resumePoint,
         novelMaxView: 6,
         novelDocumentSurfaceProgressPercent: 43,
-        isHidden: true,
         type: .novel,
         parentCollectionID: collection.id,
         manualOrder: 0,
@@ -1377,143 +1352,6 @@ import Testing
     #expect(preserved.parentCollectionID == collection.id)
     #expect(preserved.novelResumePoint == resumePoint)
     #expect(snapshot.favorites == [preserved])
-    #expect(snapshot.archivedMetadata.isEmpty)
-}
-
-@Test func favoriteStoreDiscardsArchivedMetadataWhenRemoteFavoriteReturns() async throws {
-    let defaults = try makeIsolatedDefaults(prefix: "favorite-restore-archive-tests")
-    let store = FavoriteStore(defaults: defaults, key: "favorites")
-    let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=931&mobile=2"))
-    let collection = FavoriteCollection(id: "collection-a", name: "合集A")
-    let resumePoint = ReaderResumePoint(
-        view: 4,
-        displayedTextOffset: 240,
-        chapterOrdinal: 3,
-        chapterTitle: "第三章",
-        segmentProgress: 0.8,
-        authorID: "88",
-        readingModeHint: .paged
-    )
-    let archive = FavoriteMetadataArchiveEntry(
-        canonicalThreadURL: ReaderCacheIdentity.canonicalThreadURL(from: url),
-        displayName: "恢复名",
-        mangaPageIndex: 11,
-        lastView: 4,
-        lastChapter: "第三章",
-        authorID: "88",
-        novelResumePoint: resumePoint,
-        novelMaxView: 8,
-        novelDocumentSurfaceProgressPercent: 57,
-        isHidden: true,
-        type: .novel,
-        lastMangaURL: nil,
-        parentCollectionID: collection.id,
-        manualOrder: 2,
-        lastReadAt: Date(timeIntervalSince1970: 1_800_000_000)
-    )
-    try await store.saveLibrarySnapshot(FavoriteLibrarySnapshot(
-        favorites: [],
-        collections: [collection],
-        archivedMetadata: [archive]
-    ))
-
-    let merged = try await store.mergeRemoteFavorites([
-        Favorite(title: "远端新标题", url: url, remoteFavoriteID: "remote-new")
-    ])
-    let restored = try #require(merged.first)
-    let snapshot = await store.loadLibrarySnapshot()
-
-    #expect(restored.title == "远端新标题")
-    #expect(restored.remoteFavoriteID == "remote-new")
-    #expect(restored.displayName == nil)
-    #expect(!restored.isHidden)
-    #expect(restored.parentCollectionID == nil)
-    #expect(restored.type == .unknown)
-    #expect(restored.mangaPageIndex == 0)
-    #expect(restored.lastView == 1)
-    #expect(restored.novelMaxView == nil)
-    #expect(restored.lastChapter == nil)
-    #expect(restored.authorID == nil)
-    #expect(restored.novelResumePoint == nil)
-    #expect(restored.novelDocumentSurfaceProgressPercent == nil)
-    #expect(restored.lastReadAt == nil)
-    #expect(snapshot.archivedMetadata.isEmpty)
-}
-
-@Test func favoriteStoreRestoresArchivedMetadataAtRootWhenCollectionIsMissing() async throws {
-    let defaults = try makeIsolatedDefaults(prefix: "favorite-restore-missing-collection-tests")
-    let store = FavoriteStore(defaults: defaults, key: "favorites")
-    let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=932&mobile=2"))
-    let archive = FavoriteMetadataArchiveEntry(
-        canonicalThreadURL: ReaderCacheIdentity.canonicalThreadURL(from: url),
-        displayName: "无合集恢复",
-        mangaPageIndex: 2,
-        lastView: 1,
-        lastChapter: nil,
-        authorID: nil,
-        novelResumePoint: nil,
-        isHidden: true,
-        type: .manga,
-        lastMangaURL: url,
-        parentCollectionID: "missing-collection",
-        manualOrder: 7,
-        lastReadAt: nil
-    )
-    try await store.saveLibrarySnapshot(FavoriteLibrarySnapshot(
-        favorites: [],
-        collections: [],
-        archivedMetadata: [archive]
-    ))
-
-    let merged = try await store.mergeRemoteFavorites([
-        Favorite(title: "远端恢复", url: url, remoteFavoriteID: "remote-932")
-    ])
-    let restored = try #require(merged.first)
-
-    #expect(restored.displayName == nil)
-    #expect(!restored.isHidden)
-    #expect(restored.type == .unknown)
-    #expect(restored.lastMangaURL == nil)
-    #expect(restored.parentCollectionID == nil)
-}
-
-@Test func favoriteStoreDiscardsArchivedMetadataByCanonicalThreadURL() async throws {
-    let defaults = try makeIsolatedDefaults(prefix: "favorite-restore-canonical-url-tests")
-    let store = FavoriteStore(defaults: defaults, key: "favorites")
-    let archivedURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=933&mobile=2&page=4"))
-    let returningURL = try #require(URL(string: "https://bbs.yamibo.com/thread-933-1-1.html"))
-    let archive = FavoriteMetadataArchiveEntry(
-        canonicalThreadURL: ReaderCacheIdentity.canonicalThreadURL(from: archivedURL),
-        displayName: "规范 URL 恢复",
-        mangaPageIndex: 5,
-        lastView: 2,
-        lastChapter: "恢复章节",
-        authorID: nil,
-        novelResumePoint: nil,
-        isHidden: false,
-        type: .novel,
-        lastMangaURL: nil,
-        parentCollectionID: nil,
-        manualOrder: 0,
-        lastReadAt: nil
-    )
-    try await store.saveLibrarySnapshot(FavoriteLibrarySnapshot(
-        favorites: [],
-        collections: [],
-        archivedMetadata: [archive]
-    ))
-
-    let merged = try await store.mergeRemoteFavorites([
-        Favorite(title: "远端标题", url: returningURL, remoteFavoriteID: "remote-933")
-    ])
-    let restored = try #require(merged.first)
-
-    #expect(restored.url == returningURL)
-    #expect(restored.displayName == nil)
-    #expect(restored.mangaPageIndex == 0)
-    #expect(restored.lastView == 1)
-    #expect(restored.lastChapter == nil)
-    #expect((await store.loadLibrarySnapshot()).archivedMetadata.isEmpty)
 }
 
 @Test func settingsStoreResetRestoresDefaults() async throws {
@@ -1657,8 +1495,7 @@ import Testing
     let defaults = try makeIsolatedDefaults(prefix: "reading-progress-store-tests")
     let store = ReadingProgressStore(
         defaults: defaults,
-        key: "reading-progress",
-        migratedFromFavoritesKey: "reading-progress.migrated"
+        key: "reading-progress"
     )
     let threadURL = try #require(URL(string: "https://bbs.yamibo.com/thread-12345-1-1.html"))
     let canonicalURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=12345"))
@@ -1700,7 +1537,8 @@ import Testing
         threadURL: canonicalURL,
         chapterURL: chapterURL,
         chapterTitle: "第 12 话",
-        pageIndex: 6
+        pageIndex: 6,
+        pageCount: 12
     ))
 
     let manga = await store.load(for: threadURL)
@@ -1709,14 +1547,14 @@ import Testing
     #expect(manga?.manga?.lastMangaURL == chapterURL)
     #expect(manga?.manga?.lastChapter == "第 12 话")
     #expect(manga?.manga?.mangaPageIndex == 6)
+    #expect(manga?.manga?.mangaPageCount == 12)
 }
 
 @Test func readingProgressStoreMatchesNovelProgressWithAndWithoutExtraQuery() async throws {
     let defaults = try makeIsolatedDefaults(prefix: "reading-progress-extra-tests")
     let store = ReadingProgressStore(
         defaults: defaults,
-        key: "reading-progress",
-        migratedFromFavoritesKey: "reading-progress.migrated"
+        key: "reading-progress"
     )
     let listURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?extra=page%3D1&mod=viewthread&tid=521519&mobile=2&page=25&authorid=406769"))
     let readerURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=521519"))
@@ -1730,123 +1568,13 @@ import Testing
     #expect(progress?.novel?.lastChapter == "第二十五章")
 }
 
-@Test func readingProgressStoreMigratesFavoritesAndArchivesWithVisibleFavoritePriority() async throws {
-    let suiteName = makeIsolatedDefaultsSuiteName(prefix: "reading-progress-migration-tests")
-    _ = try YamiboTestDefaults.make(suiteName: suiteName)
-    let favoriteStore = try FavoriteStore(testSuiteName: suiteName, key: "favorites")
-    let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=310"))
-    let archivedResumePoint = ReaderResumePoint(
-        view: 4,
-        displayedTextOffset: 20,
-        chapterOrdinal: 3,
-        chapterTitle: "归档章",
-        segmentProgress: 0.2,
-        readingModeHint: .vertical
-    )
-    let visibleResumePoint = ReaderResumePoint(
-        view: 6,
-        displayedTextOffset: 40,
-        chapterOrdinal: 5,
-        chapterTitle: "可见章",
-        segmentProgress: 0.5,
-        readingModeHint: .vertical
-    )
-    let archived = FavoriteMetadataArchiveEntry(
-        canonicalThreadURL: threadURL,
-        displayName: nil,
-        mangaPageIndex: 0,
-        lastView: 4,
-        lastChapter: "归档章",
-        authorID: nil,
-        novelResumePoint: archivedResumePoint,
-        novelMaxView: 9,
-        novelDocumentSurfaceProgressPercent: 20,
-        isHidden: false,
-        type: .novel,
-        lastMangaURL: nil,
-        parentCollectionID: nil,
-        manualOrder: 0,
-        lastReadAt: Date(timeIntervalSince1970: 10)
-    )
-    try await favoriteStore.saveLibrarySnapshot(FavoriteLibrarySnapshot(
-        favorites: [
-            Favorite(
-                title: "小说",
-                url: threadURL,
-                lastView: 6,
-                lastChapter: "可见章",
-                novelResumePoint: visibleResumePoint,
-                novelMaxView: 12,
-                novelDocumentSurfaceProgressPercent: 50,
-                type: .novel,
-                lastReadAt: Date(timeIntervalSince1970: 20)
-            )
-        ],
-        collections: [],
-        archivedMetadata: [archived]
-    ))
-    let progressStore = try ReadingProgressStore(
-        testSuiteName: suiteName,
-        key: "reading-progress",
-        favoriteStore: favoriteStore
-    )
-
-    let migrated = await progressStore.load(for: threadURL)
-    #expect(migrated?.novel?.novelResumePoint == visibleResumePoint)
-    #expect(migrated?.novel?.novelMaxView == 12)
-    #expect(migrated?.novel?.novelDocumentSurfaceProgressPercent == 50)
-
-    try await progressStore.saveNovel(NovelReadingPosition(threadURL: threadURL, view: 8, chapterTitle: "独立章"))
-    let reloaded = await progressStore.load(for: threadURL)
-    #expect(reloaded?.novel?.lastView == 8)
-    #expect(reloaded?.novel?.lastChapter == "独立章")
-}
-
-@Test func readingProgressStoreMigratesArchivedMangaProgress() async throws {
-    let suiteName = makeIsolatedDefaultsSuiteName(prefix: "reading-progress-archive-manga-tests")
-    _ = try YamiboTestDefaults.make(suiteName: suiteName)
-    let favoriteStore = try FavoriteStore(testSuiteName: suiteName, key: "favorites")
-    let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=410"))
-    let chapterURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=411"))
-    try await favoriteStore.saveLibrarySnapshot(FavoriteLibrarySnapshot(
-        favorites: [],
-        collections: [],
-        archivedMetadata: [
-            FavoriteMetadataArchiveEntry(
-                canonicalThreadURL: threadURL,
-                displayName: nil,
-                mangaPageIndex: 5,
-                lastView: 1,
-                lastChapter: "第 6 页",
-                authorID: nil,
-                novelResumePoint: nil,
-                isHidden: false,
-                type: .manga,
-                lastMangaURL: chapterURL,
-                parentCollectionID: nil,
-                manualOrder: 0,
-                lastReadAt: nil
-            )
-        ]
-    ))
-    let progressStore = try ReadingProgressStore(
-        testSuiteName: suiteName,
-        key: "reading-progress",
-        favoriteStore: favoriteStore
-    )
-
-    let migrated = await progressStore.load(for: threadURL)
-    #expect(migrated == nil)
-}
-
 @Test func deletingFavoriteDoesNotDeleteIndependentReadingProgress() async throws {
     let suiteName = makeIsolatedDefaultsSuiteName(prefix: "reading-progress-delete-favorite-tests")
     _ = try YamiboTestDefaults.make(suiteName: suiteName)
     let favoriteStore = try FavoriteStore(testSuiteName: suiteName, key: "favorites")
     let progressStore = try ReadingProgressStore(
         testSuiteName: suiteName,
-        key: "reading-progress",
-        favoriteStore: favoriteStore
+        key: "reading-progress"
     )
     let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=510"))
     let favorite = Favorite(title: "小说", url: threadURL, type: .novel)
@@ -1859,34 +1587,6 @@ import Testing
     let progress = await progressStore.load(for: threadURL)
     #expect(progress?.novel?.lastView == 3)
     #expect(progress?.novel?.lastChapter == "第三章")
-}
-
-@Test func favoriteLegacyProgressDoesNotOverwriteIndependentReadingProgress() async throws {
-    let suiteName = makeIsolatedDefaultsSuiteName(prefix: "reading-progress-legacy-preserve-tests")
-    _ = try YamiboTestDefaults.make(suiteName: suiteName)
-    let favoriteStore = try FavoriteStore(testSuiteName: suiteName, key: "favorites")
-    let progressStore = try ReadingProgressStore(
-        testSuiteName: suiteName,
-        key: "reading-progress",
-        favoriteStore: favoriteStore
-    )
-    let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=520"))
-    let favorite = Favorite(
-        title: "小说",
-        url: threadURL,
-        lastView: 2,
-        lastChapter: "旧章",
-        type: .novel
-    )
-    try await progressStore.saveNovel(NovelReadingPosition(threadURL: threadURL, view: 5, chapterTitle: "新章"))
-
-    let preserved = try await progressStore.saveFavoriteLegacyProgress(favorite)
-
-    #expect(preserved?.novel?.lastView == 5)
-    #expect(preserved?.novel?.lastChapter == "新章")
-    let progress = await progressStore.load(for: threadURL)
-    #expect(progress?.novel?.lastView == 5)
-    #expect(progress?.novel?.lastChapter == "新章")
 }
 
 @Test func favoriteStoreClearAllRemovesAllFavorites() async throws {
@@ -2015,6 +1715,10 @@ import Testing
     let settingsStore = SettingsStore(defaults: try #require(UserDefaults(suiteName: suiteName)), key: "settings")
     let readerResumeRouteStore = ReaderResumeRouteStore(defaults: try #require(UserDefaults(suiteName: suiteName)), key: "reader-route")
     let favoriteStore = FavoriteStore(defaults: try #require(UserDefaults(suiteName: suiteName)), key: "favorites")
+    let localFavoriteLibraryStore = LocalFirstFavoriteLibraryStore(
+        defaults: try #require(UserDefaults(suiteName: suiteName)),
+        key: "local-favorites"
+    )
     let contentCoverStore = ContentCoverStore(
         defaults: try #require(UserDefaults(suiteName: suiteName)),
         key: "content-covers"
@@ -2040,6 +1744,7 @@ import Testing
         settingsStore: settingsStore,
         readerResumeRouteStore: readerResumeRouteStore,
         favoriteStore: favoriteStore,
+        localFavoriteLibraryStore: localFavoriteLibraryStore,
         contentCoverStore: contentCoverStore,
         readerCacheStore: readerCacheStore,
         favoriteBackgroundImageStore: favoriteBackgroundImageStore,
@@ -2063,6 +1768,16 @@ import Testing
         )
     )
     try await favoriteStore.saveFavorites([Favorite(title: "测试收藏", url: threadURL)])
+    var localLibrary = FavoriteLibraryDocument()
+    let localTarget = FavoriteContentTarget(kind: .normalThread, threadURL: threadURL)
+    try localLibrary.addItem(
+        FavoriteItem(
+            target: localTarget,
+            title: "本地优先收藏",
+            locations: [.category(localLibrary.defaultCategory.id)]
+        )
+    )
+    try await localFavoriteLibraryStore.save(localLibrary)
     try await readerCacheStore.save(
         ReaderPageDocument(
             threadURL: threadURL,
@@ -2136,6 +1851,7 @@ import Testing
     let settings = await settingsStore.load()
     let readerResumeRoute = await readerResumeRouteStore.load()
     let favorites = await favoriteStore.loadFavorites()
+    let localFavoriteLibrary = await localFavoriteLibraryStore.load()
     let contentCover = await contentCoverStore.cover(for: coverKey)
     let readerCacheBytes = await readerCacheStore.totalDiskUsageBytes()
     let backgroundData = await favoriteBackgroundImageStore.loadData(imageID: "background")
@@ -2151,6 +1867,8 @@ import Testing
     #expect(settings == AppSettings())
     #expect(readerResumeRoute == nil)
     #expect(favorites.isEmpty)
+    #expect(localFavoriteLibrary.items.isEmpty)
+    #expect(await !localFavoriteLibraryStore.hasStoredDocument())
     #expect(contentCover == nil)
     #expect(readerCacheBytes == 0)
     #expect(backgroundData == nil)
@@ -2161,6 +1879,42 @@ import Testing
     #expect(mangaOfflineMemberships.isEmpty)
     #expect(mangaOfflineWorks.isEmpty)
     #expect(mangaOfflineQueueState == .paused)
+}
+
+@Test func appContextBootstrapDoesNotMigrateLegacyFavoritesIntoLocalFirstLibrary() async throws {
+    let suiteName = makeIsolatedDefaultsSuiteName(prefix: "app-bootstrap-local-first-favorites")
+    UserDefaults(suiteName: suiteName)?.removePersistentDomain(forName: suiteName)
+    let favoriteStore = FavoriteStore(defaults: try #require(UserDefaults(suiteName: suiteName)), key: "favorites")
+    let localFavoriteLibraryStore = LocalFirstFavoriteLibraryStore(
+        defaults: try #require(UserDefaults(suiteName: suiteName)),
+        key: "local-favorites"
+    )
+    let appContext = YamiboAppContext(
+        favoriteStore: favoriteStore,
+        localFavoriteLibraryStore: localFavoriteLibraryStore,
+        readingProgressStore: ReadingProgressStore(
+            defaults: try #require(UserDefaults(suiteName: suiteName)),
+            key: "reading-progress"
+        )
+    )
+    let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=731&mobile=2"))
+    try await favoriteStore.saveFavorites([
+        Favorite(
+            title: "旧收藏",
+            displayName: "本地名",
+            url: threadURL,
+            remoteFavoriteID: "remote-731",
+            type: .novel
+        )
+    ])
+
+    let state = await appContext.bootstrap()
+
+    let document = await localFavoriteLibraryStore.load()
+    #expect(state.localFavoriteLibrary.items.isEmpty)
+    #expect(document.items.isEmpty)
+    #expect(document.tags.isEmpty)
+    #expect(document.collections.isEmpty)
 }
 
 @Test func contentCoverStoreNormalizesAndFiltersAutomaticCoverURLs() async throws {

@@ -29,10 +29,13 @@ public struct RootTabView: View {
             await appModel.bootstrapIfNeeded()
         }
         .task {
-            await observeFavoriteStoreChanges()
+            await observeFavoriteLibraryChanges()
         }
         .task {
             await observeSettingsStoreChanges()
+        }
+        .task {
+            await observeReadingProgressChanges()
         }
         .onChange(of: scenePhase) { _, newPhase in
             switch newPhase {
@@ -51,16 +54,14 @@ public struct RootTabView: View {
     }
 
     private var content: some View {
-        let favoriteStore = appModel.appContext.favoriteStore
-
-        return TabView(selection: selectedTabBinding) {
+        TabView(selection: selectedTabBinding) {
             ForumNavigationHostView(appContext: appModel.appContext, appModel: appModel)
                 .tag(AppTab.forum)
                 .tabItem {
                     Label(L10n.string("tab.forum"), systemImage: "text.bubble")
                 }
 
-            FavoritesNavigationHostView(favoriteStore: favoriteStore, appContext: appModel.appContext, appModel: appModel)
+            FavoritesNavigationHostView(appContext: appModel.appContext, appModel: appModel)
                 .tag(AppTab.favorites)
                 .tabItem {
                     Label(L10n.string("tab.favorites"), systemImage: "heart.text.square")
@@ -82,11 +83,11 @@ public struct RootTabView: View {
         )
     }
 
-    private func observeFavoriteStoreChanges() async {
-        for await notification in NotificationCenter.default.notifications(named: FavoriteStore.didChangeNotification) {
+    private func observeFavoriteLibraryChanges() async {
+        for await notification in NotificationCenter.default.notifications(named: LocalFirstFavoriteLibraryStore.didChangeNotification) {
             guard !Task.isCancelled else { return }
-            guard let changeID = notification.userInfo?[FavoriteStore.changeIDUserInfoKey] as? String,
-                  changeID == appModel.appContext.favoriteStore.changeID else {
+            guard let changeID = notification.userInfo?[LocalFirstFavoriteLibraryStore.changeIDUserInfoKey] as? String,
+                  changeID == appModel.appContext.localFavoriteLibraryStore.changeID else {
                 continue
             }
             appModel.scheduleWebDAVUploadForLocalChange()
@@ -101,6 +102,26 @@ public struct RootTabView: View {
                 continue
             }
             appModel.scheduleWebDAVUploadForLocalChange(touchesAppSettings: true)
+        }
+    }
+
+    private func observeReadingProgressChanges() async {
+        await Self.observeReadingProgressChanges(appContext: appModel.appContext) {
+            appModel.scheduleWebDAVUploadForReadingProgressChange()
+        }
+    }
+
+    static func observeReadingProgressChanges(
+        appContext: YamiboAppContext,
+        onChange: @escaping @MainActor () -> Void
+    ) async {
+        for await notification in NotificationCenter.default.notifications(named: ReadingProgressStore.didChangeNotification) {
+            guard !Task.isCancelled else { return }
+            guard let changeID = notification.userInfo?[ReadingProgressStore.changeIDUserInfoKey] as? String,
+                  changeID == appContext.readingProgressStore.changeID else {
+                continue
+            }
+            await MainActor.run(body: onChange)
         }
     }
 

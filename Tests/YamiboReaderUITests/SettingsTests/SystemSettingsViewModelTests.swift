@@ -36,6 +36,41 @@ final class SystemSettingsViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.favoriteBackground, savedSettings)
     }
 
+    func testFavoriteLibraryDisplaySettingsLoadAndPersist() async throws {
+        let fixture = try makeFixture()
+        try await fixture.settingsStore.save(AppSettings(
+            favoriteLayoutMode: .staggered,
+            favoriteSortOrder: .displayTitle,
+            favoriteSortDescending: true,
+            favoriteShowsCategoryCounts: false
+        ))
+
+        let viewModel = SystemSettingsViewModel(appContext: fixture.appContext)
+        await viewModel.load()
+
+        XCTAssertEqual(viewModel.favoriteLayoutMode, .staggered)
+        XCTAssertEqual(viewModel.favoriteSortOrder, .displayTitle)
+        XCTAssertTrue(viewModel.favoriteSortDescending)
+        XCTAssertFalse(viewModel.favoriteShowsCategoryCounts)
+
+        viewModel.updateFavoriteLayoutMode(.fixedGrid)
+        viewModel.updateFavoriteSortOrder(.lastReadAt)
+        viewModel.updateFavoriteSortDescending(false)
+        viewModel.updateFavoriteShowsCategoryCounts(true)
+
+        try await waitFor {
+            let loaded = await fixture.settingsStore.load()
+            return loaded.favoriteLayoutMode == .fixedGrid
+                && loaded.favoriteSortOrder == .lastReadAt
+                && !loaded.favoriteSortDescending
+                && loaded.favoriteShowsCategoryCounts
+        }
+        XCTAssertEqual(viewModel.favoriteLayoutMode, .fixedGrid)
+        XCTAssertEqual(viewModel.favoriteSortOrder, .lastReadAt)
+        XCTAssertFalse(viewModel.favoriteSortDescending)
+        XCTAssertTrue(viewModel.favoriteShowsCategoryCounts)
+    }
+
     func testApplyFavoriteBackgroundPersistsImageAndSettings() async throws {
         let fixture = try makeFixture()
         let viewModel = SystemSettingsViewModel(appContext: fixture.appContext)

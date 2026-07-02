@@ -9,12 +9,13 @@ public enum FavoriteContentTargetKind: String, Codable, CaseIterable, Sendable {
 public enum FavoriteContentTarget: Codable, Hashable, Identifiable, Sendable {
     case normalThread(threadID: String, canonicalURL: URL)
     case novelThread(threadID: String, canonicalURL: URL)
-    case mangaTitle(cleanBookName: String)
+    case mangaTitle(mangaID: String, cleanBookName: String)
 
     private enum CodingKeys: String, CodingKey {
         case kind
         case threadID
         case canonicalURL
+        case mangaID
         case cleanBookName
     }
 
@@ -24,8 +25,8 @@ public enum FavoriteContentTarget: Codable, Hashable, Identifiable, Sendable {
             "thread:normal:\(threadID)"
         case let .novelThread(threadID, _):
             "thread:novel:\(threadID)"
-        case let .mangaTitle(cleanBookName):
-            "manga-title:\(cleanBookName)"
+        case let .mangaTitle(mangaID, _):
+            "manga-title:\(mangaID)"
         }
     }
 
@@ -49,6 +50,16 @@ public enum FavoriteContentTarget: Codable, Hashable, Identifiable, Sendable {
         }
     }
 
+    public var mangaID: String? {
+        guard case let .mangaTitle(mangaID, _) = self else { return nil }
+        return mangaID
+    }
+
+    public var mangaCleanBookName: String? {
+        guard case let .mangaTitle(_, cleanBookName) = self else { return nil }
+        return cleanBookName
+    }
+
     public var threadID: String? {
         switch self {
         case let .normalThread(threadID, _), let .novelThread(threadID, _):
@@ -67,12 +78,22 @@ public enum FavoriteContentTarget: Codable, Hashable, Identifiable, Sendable {
         case .novelThread:
             self = .novelThread(threadID: threadID, canonicalURL: canonicalURL)
         case .mangaTitle:
-            self = .mangaTitle(cleanBookName: threadID)
+            self = .mangaTitle(mangaID: threadID, cleanBookName: threadID)
         }
     }
 
     public init(mangaCleanBookName: String) {
-        self = .mangaTitle(cleanBookName: mangaCleanBookName.trimmingCharacters(in: .whitespacesAndNewlines))
+        let normalizedName = mangaCleanBookName.trimmingCharacters(in: .whitespacesAndNewlines)
+        self = .mangaTitle(mangaID: normalizedName, cleanBookName: normalizedName)
+    }
+
+    public init(mangaID: String, mangaCleanBookName: String) {
+        let normalizedName = mangaCleanBookName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedID = mangaID.trimmingCharacters(in: .whitespacesAndNewlines)
+        self = .mangaTitle(
+            mangaID: normalizedID.isEmpty ? normalizedName : normalizedID,
+            cleanBookName: normalizedName
+        )
     }
 
     public init(from decoder: any Decoder) throws {
@@ -90,7 +111,11 @@ public enum FavoriteContentTarget: Codable, Hashable, Identifiable, Sendable {
                 canonicalURL: try container.decode(URL.self, forKey: .canonicalURL)
             )
         case .mangaTitle:
-            self = .mangaTitle(cleanBookName: try container.decode(String.self, forKey: .cleanBookName))
+            let cleanBookName = try container.decode(String.self, forKey: .cleanBookName)
+            self = .mangaTitle(
+                mangaID: try container.decodeIfPresent(String.self, forKey: .mangaID) ?? cleanBookName,
+                cleanBookName: cleanBookName
+            )
         }
     }
 
@@ -101,16 +126,144 @@ public enum FavoriteContentTarget: Codable, Hashable, Identifiable, Sendable {
         case let .normalThread(threadID, canonicalURL), let .novelThread(threadID, canonicalURL):
             try container.encode(threadID, forKey: .threadID)
             try container.encode(canonicalURL, forKey: .canonicalURL)
-        case let .mangaTitle(cleanBookName):
+        case let .mangaTitle(mangaID, cleanBookName):
+            try container.encode(mangaID, forKey: .mangaID)
             try container.encode(cleanBookName, forKey: .cleanBookName)
         }
+    }
+
+    public func renamedMangaTitle(to cleanBookName: String) -> FavoriteContentTarget {
+        guard case let .mangaTitle(mangaID, _) = self else { return self }
+        return FavoriteContentTarget(mangaID: mangaID, mangaCleanBookName: cleanBookName)
     }
 }
 
 public enum FavoriteSourceGroup: Codable, Hashable, Sendable {
     case forumBoard(id: String, label: String)
-    case mangaTitle(cleanBookName: String)
+    case mangaTitle(mangaID: String, cleanBookName: String)
     case unknown
+
+    private enum CodingKeys: String, CodingKey {
+        case forumBoard
+        case mangaTitle
+        case unknown
+    }
+
+    private enum ForumBoardCodingKeys: String, CodingKey {
+        case id
+        case label
+    }
+
+    private enum MangaTitleCodingKeys: String, CodingKey {
+        case mangaID
+        case cleanBookName
+    }
+
+    public static func == (lhs: FavoriteSourceGroup, rhs: FavoriteSourceGroup) -> Bool {
+        switch (lhs, rhs) {
+        case let (.forumBoard(lhsID, _), .forumBoard(rhsID, _)):
+            lhsID == rhsID
+        case let (.mangaTitle(lhsID, _), .mangaTitle(rhsID, _)):
+            lhsID == rhsID
+        case (.unknown, .unknown):
+            true
+        default:
+            false
+        }
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        switch self {
+        case let .forumBoard(id, _):
+            hasher.combine("forumBoard")
+            hasher.combine(id)
+        case let .mangaTitle(mangaID, _):
+            hasher.combine("mangaTitle")
+            hasher.combine(mangaID)
+        case .unknown:
+            hasher.combine("unknown")
+        }
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        if container.contains(.unknown) {
+            self = .unknown
+            return
+        }
+        if container.contains(.forumBoard) {
+            let values = try container.nestedContainer(keyedBy: ForumBoardCodingKeys.self, forKey: .forumBoard)
+            self = .forumBoard(
+                id: try values.decode(String.self, forKey: .id),
+                label: try values.decode(String.self, forKey: .label)
+            )
+            return
+        }
+        let values = try container.nestedContainer(keyedBy: MangaTitleCodingKeys.self, forKey: .mangaTitle)
+        let cleanBookName = try values.decode(String.self, forKey: .cleanBookName)
+        self = FavoriteSourceGroup.mangaTitle(
+            mangaID: try values.decodeIfPresent(String.self, forKey: .mangaID) ?? cleanBookName,
+            cleanBookName: cleanBookName
+        )
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        switch self {
+        case let .forumBoard(id, label):
+            var values = container.nestedContainer(keyedBy: ForumBoardCodingKeys.self, forKey: .forumBoard)
+            try values.encode(id, forKey: .id)
+            try values.encode(label, forKey: .label)
+        case let .mangaTitle(mangaID, cleanBookName):
+            var values = container.nestedContainer(keyedBy: MangaTitleCodingKeys.self, forKey: .mangaTitle)
+            try values.encode(mangaID, forKey: .mangaID)
+            try values.encode(cleanBookName, forKey: .cleanBookName)
+        case .unknown:
+            _ = container.nestedContainer(keyedBy: MangaTitleCodingKeys.self, forKey: .unknown)
+        }
+    }
+
+    public var forumID: String? {
+        guard case let .forumBoard(id, _) = self else { return nil }
+        return id.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+    }
+
+    public var forumName: String? {
+        guard case let .forumBoard(_, label) = self else { return nil }
+        return label.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+    }
+
+    static func normalizedForumMetadata(
+        sourceGroup: FavoriteSourceGroup,
+        forumID: String?,
+        forumName: String?
+    ) -> (sourceGroup: FavoriteSourceGroup, forumID: String?, forumName: String?) {
+        let trimmedForumID = forumID?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        let trimmedForumName = forumName?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        switch sourceGroup {
+        case let .forumBoard(id, label):
+            let resolvedID = trimmedForumID ?? id.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+            let resolvedName = trimmedForumName ?? label.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+            guard let resolvedID else {
+                return (.unknown, nil, nil)
+            }
+            return (.forumBoard(id: resolvedID, label: resolvedName ?? resolvedID), resolvedID, resolvedName)
+        case let .mangaTitle(mangaID, cleanBookName):
+            return (.mangaTitle(mangaID: mangaID, cleanBookName: cleanBookName), nil, nil)
+        case .unknown:
+            guard let trimmedForumID else {
+                return (.unknown, nil, nil)
+            }
+            return (.forumBoard(id: trimmedForumID, label: trimmedForumName ?? trimmedForumID), trimmedForumID, trimmedForumName)
+        }
+    }
+}
+
+public extension FavoriteSourceGroup {
+    static func mangaTitle(cleanBookName: String) -> FavoriteSourceGroup {
+        let normalizedName = cleanBookName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return .mangaTitle(mangaID: normalizedName, cleanBookName: normalizedName)
+    }
 }
 
 public enum FavoriteLocation: Codable, Hashable, Identifiable, Sendable {
@@ -143,6 +296,7 @@ public enum FavoriteLocation: Codable, Hashable, Identifiable, Sendable {
 
 public struct FavoriteCategory: Codable, Hashable, Identifiable, Sendable {
     public static let defaultID = "default"
+    public static let defaultStorageName = "default"
 
     public let id: String
     public var name: String
@@ -157,7 +311,11 @@ public struct FavoriteCategory: Codable, Hashable, Identifiable, Sendable {
     }
 
     public static var defaultCategory: FavoriteCategory {
-        FavoriteCategory(id: defaultID, name: L10n.string("favorites.default_category"), manualOrder: 0, isDefault: true)
+        FavoriteCategory(id: defaultID, name: defaultStorageName, manualOrder: 0, isDefault: true)
+    }
+
+    public var displayName: String {
+        isDefault ? L10n.string("favorites.default_category") : name
     }
 }
 
@@ -227,24 +385,105 @@ public struct FavoriteMangaChapterMetadata: Codable, Hashable, Sendable {
     }
 }
 
+public enum FavoriteContentUpdateDateResolver {
+    public static func date(lastEditedText: String?, postedAtText: String?) -> Date? {
+        date(from: extractedEditTime(from: lastEditedText)) ?? date(from: postedAtText)
+    }
+
+    public static func date(from text: String?) -> Date? {
+        guard let text = text?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else {
+            return nil
+        }
+        let normalized = text.replacingOccurrences(of: "/", with: "-")
+        let datePatterns = [
+            #"(\d{4}-\d{1,2}-\d{1,2}\s+\d{1,2}:\d{2}(?::\d{2})?)"#,
+            #"(\d{4}-\d{1,2}-\d{1,2})"#
+        ]
+        for pattern in datePatterns {
+            guard let regex = try? NSRegularExpression(pattern: pattern) else { continue }
+            let range = NSRange(normalized.startIndex ..< normalized.endIndex, in: normalized)
+            guard let match = regex.firstMatch(in: normalized, range: range),
+                  let matchRange = Range(match.range(at: 1), in: normalized) else {
+                continue
+            }
+            let value = String(normalized[matchRange])
+            for format in formats(for: value) {
+                let formatter = DateFormatter()
+                formatter.locale = Locale(identifier: "zh_CN")
+                formatter.calendar = Calendar(identifier: .gregorian)
+                formatter.timeZone = TimeZone(identifier: "Asia/Shanghai")
+                formatter.dateFormat = format
+                if let date = formatter.date(from: value) {
+                    return date
+                }
+            }
+        }
+        return nil
+    }
+
+    private static func extractedEditTime(from text: String?) -> String? {
+        guard let text = text?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else {
+            return nil
+        }
+        let patterns = [
+            #"(?:本帖最后由|本帖最後由)\s+.+?\s+(?:于|於)\s+(.+?)\s+(?:编辑|編輯)"#,
+            #"(?:最后编辑于|最後編輯於)\s*(.+)"#
+        ]
+        for pattern in patterns {
+            guard let regex = try? NSRegularExpression(pattern: pattern) else { continue }
+            let range = NSRange(text.startIndex ..< text.endIndex, in: text)
+            guard let match = regex.firstMatch(in: text, range: range),
+                  match.numberOfRanges > 1,
+                  let matchRange = Range(match.range(at: 1), in: text) else {
+                continue
+            }
+            return String(text[matchRange]).trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        }
+        return text
+    }
+
+    private static func formats(for value: String) -> [String] {
+        if value.contains(":") {
+            return value.split(separator: ":").count == 3
+                ? ["yyyy-M-d H:mm:ss", "yyyy-MM-dd HH:mm:ss"]
+                : ["yyyy-M-d H:mm", "yyyy-MM-dd HH:mm"]
+        }
+        return ["yyyy-M-d", "yyyy-MM-dd"]
+    }
+}
+
 public struct FavoriteThreadProbeResult: Hashable, Sendable {
     public var target: FavoriteContentTarget
     public var title: String
     public var sourceGroup: FavoriteSourceGroup
+    public var forumID: String?
+    public var forumName: String?
     public var coverURL: URL?
+    public var contentUpdatedAt: Date?
     public var authorID: String?
 
     public init(
         target: FavoriteContentTarget,
         title: String,
         sourceGroup: FavoriteSourceGroup = .unknown,
+        forumID: String? = nil,
+        forumName: String? = nil,
         coverURL: URL? = nil,
+        contentUpdatedAt: Date? = nil,
         authorID: String? = nil
     ) {
         self.target = target
         self.title = title
-        self.sourceGroup = sourceGroup
+        let forumMetadata = FavoriteSourceGroup.normalizedForumMetadata(
+            sourceGroup: sourceGroup,
+            forumID: forumID,
+            forumName: forumName
+        )
+        self.sourceGroup = forumMetadata.sourceGroup
+        self.forumID = forumMetadata.forumID
+        self.forumName = forumMetadata.forumName
         self.coverURL = coverURL
+        self.contentUpdatedAt = contentUpdatedAt
         self.authorID = authorID
     }
 }
@@ -266,7 +505,10 @@ public struct FavoriteItem: Codable, Hashable, Identifiable, Sendable {
     public var title: String
     public var displayName: String?
     public var sourceGroup: FavoriteSourceGroup
+    public var forumID: String?
+    public var forumName: String?
     public var coverURL: URL?
+    public var contentUpdatedAt: Date?
     public var remoteMapping: FavoriteRemoteMapping?
     public var mangaChapterMetadata: FavoriteMangaChapterMetadata?
     public var locations: [FavoriteLocation]
@@ -281,7 +523,10 @@ public struct FavoriteItem: Codable, Hashable, Identifiable, Sendable {
         title: String,
         displayName: String? = nil,
         sourceGroup: FavoriteSourceGroup = .unknown,
+        forumID: String? = nil,
+        forumName: String? = nil,
         coverURL: URL? = nil,
+        contentUpdatedAt: Date? = nil,
         remoteMapping: FavoriteRemoteMapping? = nil,
         mangaChapterMetadata: FavoriteMangaChapterMetadata? = nil,
         locations: [FavoriteLocation],
@@ -296,8 +541,12 @@ public struct FavoriteItem: Codable, Hashable, Identifiable, Sendable {
         self.target = target
         self.title = title
         self.displayName = displayName?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
-        self.sourceGroup = sourceGroup
+        let forumMetadata = FavoriteSourceGroup.normalizedForumMetadata(sourceGroup: sourceGroup, forumID: forumID, forumName: forumName)
+        self.sourceGroup = forumMetadata.sourceGroup
+        self.forumID = forumMetadata.forumID
+        self.forumName = forumMetadata.forumName
         self.coverURL = coverURL
+        self.contentUpdatedAt = contentUpdatedAt
         self.remoteMapping = remoteMapping
         self.mangaChapterMetadata = mangaChapterMetadata
         self.locations = normalizedLocations
@@ -319,6 +568,7 @@ public struct FavoriteItem: Codable, Hashable, Identifiable, Sendable {
         var seen: Set<String> = []
         return ids.filter { seen.insert($0).inserted }
     }
+
 }
 
 public struct FavoriteLibraryDocument: Codable, Equatable, Sendable {
@@ -394,8 +644,13 @@ public struct FavoriteLibraryDocument: Codable, Equatable, Sendable {
 
         if let index = items.firstIndex(where: { $0.target.id == probeResult.target.id }) {
             items[index].title = probeResult.title
-            items[index].sourceGroup = probeResult.sourceGroup
+            if probeResult.sourceGroup != .unknown || probeResult.forumID != nil {
+                items[index].sourceGroup = probeResult.sourceGroup
+                items[index].forumID = probeResult.forumID
+                items[index].forumName = probeResult.forumName
+            }
             items[index].coverURL = probeResult.coverURL ?? items[index].coverURL
+            items[index].contentUpdatedAt = probeResult.contentUpdatedAt ?? items[index].contentUpdatedAt
             items[index].remoteMapping = remoteMapping ?? items[index].remoteMapping
             items[index].displayName = displayName?.nilIfEmpty ?? items[index].displayName
             items[index].locations = FavoriteItem.normalizedLocations(items[index].locations + [resolvedLocation])
@@ -409,7 +664,10 @@ public struct FavoriteLibraryDocument: Codable, Equatable, Sendable {
             title: probeResult.title,
             displayName: displayName,
             sourceGroup: probeResult.sourceGroup,
+            forumID: probeResult.forumID,
+            forumName: probeResult.forumName,
             coverURL: probeResult.coverURL,
+            contentUpdatedAt: probeResult.contentUpdatedAt,
             remoteMapping: remoteMapping,
             locations: [resolvedLocation],
             createdAt: date,
@@ -425,7 +683,7 @@ public struct FavoriteLibraryDocument: Codable, Equatable, Sendable {
             .nativeThread(canonicalURL)
         case let .novelThread(_, canonicalURL):
             .novelDetail(canonicalURL)
-        case let .mangaTitle(cleanBookName):
+        case let .mangaTitle(_, cleanBookName):
             .mangaTitle(cleanBookName: cleanBookName)
         }
     }
@@ -433,18 +691,32 @@ public struct FavoriteLibraryDocument: Codable, Equatable, Sendable {
     @discardableResult
     public mutating func addMangaTitleFavorite(
         cleanBookName: String,
+        mangaID: String? = nil,
         title: String? = nil,
         location: FavoriteLocation? = nil,
+        remoteMapping: FavoriteRemoteMapping? = nil,
+        contentUpdatedAt: Date? = nil,
         chapterMetadata: FavoriteMangaChapterMetadata? = nil,
         date: Date = .now
     ) throws -> FavoriteItem {
         let normalizedName = cleanBookName.trimmingCharacters(in: .whitespacesAndNewlines)
-        let target = FavoriteContentTarget(mangaCleanBookName: normalizedName)
+        let target = FavoriteContentTarget(mangaID: mangaID ?? normalizedName, mangaCleanBookName: normalizedName)
+        let normalizedMangaID = target.mangaID ?? normalizedName
         let resolvedLocation = location ?? .category(defaultCategory.id)
+        if let retargetIndex = mangaRetargetCandidateIndex(
+            target: target,
+            cleanBookName: normalizedName,
+            chapterTID: chapterMetadata?.chapterTID
+        ) {
+            retargetItem(from: items[retargetIndex].target, to: target)
+        }
         if let index = items.firstIndex(where: { $0.target.id == target.id }) {
             items[index].title = title?.nilIfEmpty ?? items[index].title
-            items[index].sourceGroup = .mangaTitle(cleanBookName: normalizedName)
+            items[index].target = target
+            items[index].sourceGroup = .mangaTitle(mangaID: normalizedMangaID, cleanBookName: normalizedName)
             items[index].mangaChapterMetadata = chapterMetadata ?? items[index].mangaChapterMetadata
+            items[index].remoteMapping = remoteMapping ?? items[index].remoteMapping
+            items[index].contentUpdatedAt = contentUpdatedAt ?? items[index].contentUpdatedAt
             items[index].locations = FavoriteItem.normalizedLocations(items[index].locations + [resolvedLocation])
             items[index].updatedAt = date
             items[index] = Self.normalizedItem(items[index], categories: categories, collections: collections)
@@ -454,7 +726,9 @@ public struct FavoriteLibraryDocument: Codable, Equatable, Sendable {
         let item = try FavoriteItem(
             target: target,
             title: title?.nilIfEmpty ?? normalizedName,
-            sourceGroup: .mangaTitle(cleanBookName: normalizedName),
+            sourceGroup: .mangaTitle(mangaID: normalizedMangaID, cleanBookName: normalizedName),
+            contentUpdatedAt: contentUpdatedAt,
+            remoteMapping: remoteMapping,
             mangaChapterMetadata: chapterMetadata,
             locations: [resolvedLocation],
             createdAt: date,
@@ -464,6 +738,25 @@ public struct FavoriteLibraryDocument: Codable, Equatable, Sendable {
         return item
     }
 
+    private func mangaRetargetCandidateIndex(
+        target: FavoriteContentTarget,
+        cleanBookName: String,
+        chapterTID: String?
+    ) -> Int? {
+        guard case .mangaTitle = target else { return nil }
+        var candidateIDs = Set<String>()
+        candidateIDs.insert(FavoriteContentTarget(mangaCleanBookName: cleanBookName).id)
+        if let chapterTID = chapterTID?.trimmingCharacters(in: .whitespacesAndNewlines), !chapterTID.isEmpty {
+            candidateIDs.insert(FavoriteContentTarget(mangaID: "chapter:\(chapterTID)", mangaCleanBookName: cleanBookName).id)
+            candidateIDs.insert(FavoriteContentTarget(mangaID: "thread:\(chapterTID)", mangaCleanBookName: cleanBookName).id)
+        }
+        candidateIDs.remove(target.id)
+        return items.firstIndex { item in
+            candidateIDs.contains(item.target.id) ||
+                (chapterTID != nil && item.mangaChapterMetadata?.chapterTID == chapterTID && item.target.kind == .mangaTitle)
+        }
+    }
+
     @discardableResult
     public mutating func importMangaChapterFavorite(
         chapterTID: String,
@@ -471,11 +764,15 @@ public struct FavoriteLibraryDocument: Codable, Equatable, Sendable {
         chapterTitle: String? = nil,
         directories: [MangaDirectory],
         fallbackCleanBookName: String? = nil,
+        location: FavoriteLocation? = nil,
+        remoteMapping: FavoriteRemoteMapping? = nil,
         date: Date = .now
     ) throws -> FavoriteItem {
-        let cleanBookName = directories.first { directory in
+        let matchedDirectory = directories.first { directory in
             directory.chapters.contains { $0.tid == chapterTID }
-        }?.cleanBookName ?? fallbackCleanBookName?.nilIfEmpty
+        }
+        let cleanBookName = matchedDirectory?.cleanBookName ?? fallbackCleanBookName?.nilIfEmpty
+        let mangaID = matchedDirectory?.favoriteIdentity ?? "chapter:\(chapterTID)"
 
         guard let cleanBookName else {
             throw YamiboError.persistenceFailed(L10n.string("favorite_library.manga_title_resolution_failed"))
@@ -483,7 +780,11 @@ public struct FavoriteLibraryDocument: Codable, Equatable, Sendable {
 
         return try addMangaTitleFavorite(
             cleanBookName: cleanBookName,
+            mangaID: mangaID,
             title: cleanBookName,
+            location: location,
+            remoteMapping: remoteMapping,
+            contentUpdatedAt: matchedDirectory?.lastUpdatedAt,
             chapterMetadata: FavoriteMangaChapterMetadata(
                 chapterTID: chapterTID,
                 chapterURL: chapterURL,
@@ -495,11 +796,13 @@ public struct FavoriteLibraryDocument: Codable, Equatable, Sendable {
     }
 
     public mutating func renameMangaTitle(from oldCleanBookName: String, to newCleanBookName: String) {
-        let oldTarget = FavoriteContentTarget(mangaCleanBookName: oldCleanBookName)
-        let newTarget = FavoriteContentTarget(mangaCleanBookName: newCleanBookName)
+        let oldTarget = items.first { item in
+            item.target.mangaCleanBookName == oldCleanBookName
+        }?.target ?? FavoriteContentTarget(mangaCleanBookName: oldCleanBookName)
+        let newTarget = oldTarget.renamedMangaTitle(to: newCleanBookName)
         retargetItem(from: oldTarget, to: newTarget)
         if let index = items.firstIndex(where: { $0.target.id == newTarget.id }) {
-            items[index].sourceGroup = .mangaTitle(cleanBookName: newCleanBookName)
+            items[index].sourceGroup = .mangaTitle(mangaID: newTarget.mangaID ?? newCleanBookName, cleanBookName: newCleanBookName)
             if items[index].title == oldCleanBookName {
                 items[index].title = newCleanBookName
             }
@@ -523,6 +826,11 @@ public struct FavoriteLibraryDocument: Codable, Equatable, Sendable {
         guard let index = items.firstIndex(where: { $0.target.id == oldTarget.id }) else { return }
         var replacement = items[index]
         replacement.target = newTarget
+        if oldTarget.id == newTarget.id {
+            items[index] = replacement
+            sortItems()
+            return
+        }
         if let duplicateIndex = items.firstIndex(where: { $0.target.id == newTarget.id }) {
             replacement.locations = FavoriteItem.normalizedLocations(items[duplicateIndex].locations + replacement.locations)
             replacement.tagIDs = FavoriteItem.normalizedIDs(items[duplicateIndex].tagIDs + replacement.tagIDs)
@@ -616,6 +924,27 @@ public struct FavoriteLibraryDocument: Codable, Equatable, Sendable {
         collections[index].color = color
     }
 
+    public mutating func moveCollection(id collectionID: String, toCategoryID categoryID: String) {
+        guard categories.contains(where: { $0.id == categoryID }),
+              let index = collections.firstIndex(where: { $0.id == collectionID }) else {
+            return
+        }
+        let previousCategoryID = collections[index].categoryID
+        guard previousCategoryID != categoryID else { return }
+        collections[index].categoryID = categoryID
+        collections[index].manualOrder = ((collections.filter { $0.categoryID == categoryID }.map(\.manualOrder).max() ?? -1) + 1)
+        items = items.map { item in
+            var item = item
+            item.locations = item.locations.map { location in
+                location == .collection(categoryID: previousCategoryID, collectionID: collectionID)
+                    ? .collection(categoryID: categoryID, collectionID: collectionID)
+                    : location
+            }
+            item.locations = FavoriteItem.normalizedLocations(item.locations)
+            return item
+        }
+    }
+
     public mutating func reorderCollections(categoryID: String, orderedIDs: [String]) {
         let orderByID = Dictionary(uniqueKeysWithValues: orderedIDs.enumerated().map { ($0.element, $0.offset) })
         collections = collections.map { collection in
@@ -658,6 +987,12 @@ public struct FavoriteLibraryDocument: Codable, Equatable, Sendable {
         tags[index].updatedAt = date
     }
 
+    public mutating func recolorTag(id tagID: String, color: FavoriteTagColor, date: Date = .now) {
+        guard let index = tags.firstIndex(where: { $0.id == tagID }) else { return }
+        tags[index].color = color
+        tags[index].updatedAt = date
+    }
+
     public mutating func deleteTag(id tagID: String) {
         tags.removeAll { $0.id == tagID }
         items = items.map { item in
@@ -676,29 +1011,6 @@ public struct FavoriteLibraryDocument: Codable, Equatable, Sendable {
     public mutating func unassignTag(id tagID: String, from target: FavoriteContentTarget) {
         guard let index = items.firstIndex(where: { $0.target.id == target.id }) else { return }
         items[index].tagIDs.removeAll { $0 == tagID }
-    }
-
-    public static func rebuildFromLegacy(snapshot: FavoriteLibrarySnapshot, date: Date = .now) -> FavoriteLibraryDocument {
-        var document = FavoriteLibraryDocument()
-        for favorite in snapshot.favorites {
-            let kind: FavoriteContentTargetKind = favorite.type == .novel ? .novelThread : .normalThread
-            let target = FavoriteContentTarget(kind: kind, threadURL: favorite.url)
-            guard let item = try? FavoriteItem(
-                target: target,
-                title: favorite.title,
-                displayName: favorite.displayName,
-                remoteMapping: favorite.remoteFavoriteID.map { FavoriteRemoteMapping(yamiboFavoriteID: $0, lastSeenAt: date) },
-                locations: [.category(document.defaultCategory.id)],
-                tagIDs: favorite.tagIDs,
-                createdAt: date,
-                updatedAt: date
-            ) else {
-                continue
-            }
-            document.addItem(item)
-        }
-        document.tags = snapshot.tags
-        return document
     }
 
     private mutating func sortItems() {
@@ -720,6 +1032,13 @@ public struct FavoriteLibraryDocument: Codable, Equatable, Sendable {
                 }
                 return category
             }
+        }
+        result = result.map { category in
+            var category = category
+            if category.isDefault {
+                category.name = FavoriteCategory.defaultStorageName
+            }
+            return category
         }
         return result.sorted { lhs, rhs in
             if lhs.isDefault != rhs.isDefault {
@@ -747,6 +1066,14 @@ public struct FavoriteLibraryDocument: Codable, Equatable, Sendable {
         collections: [LocalFavoriteCollection]
     ) -> FavoriteItem {
         var item = item
+        let forumMetadata = FavoriteSourceGroup.normalizedForumMetadata(
+            sourceGroup: item.sourceGroup,
+            forumID: item.forumID,
+            forumName: item.forumName
+        )
+        item.sourceGroup = forumMetadata.sourceGroup
+        item.forumID = forumMetadata.forumID
+        item.forumName = forumMetadata.forumName
         let validCategoryIDs = Set(categories.map(\.id))
         let validCollectionIDsByCategory = Dictionary(grouping: collections, by: \.categoryID)
             .mapValues { Set($0.map(\.id)) }
@@ -762,6 +1089,11 @@ public struct FavoriteLibraryDocument: Codable, Equatable, Sendable {
 }
 
 public actor LocalFirstFavoriteLibraryStore {
+    public static let didChangeNotification = Notification.Name("yamibo.localFirstFavoriteLibraryStore.didChange")
+    public static let changeIDUserInfoKey = "changeID"
+
+    public nonisolated let changeID = UUID().uuidString
+
     private let defaults: UserDefaults
     private let key: String
     private let encoder = JSONEncoder()
@@ -785,18 +1117,30 @@ public actor LocalFirstFavoriteLibraryStore {
         )
     }
 
+    public func hasStoredDocument() async -> Bool {
+        defaults.data(forKey: key) != nil
+    }
+
     public func save(_ document: FavoriteLibraryDocument) async throws {
         do {
             try defaults.set(encoder.encode(document), forKey: key)
+            postChangeNotification()
         } catch {
             throw YamiboError.persistenceFailed(error.localizedDescription)
         }
     }
 
-    public func rebuildFromLegacy(_ snapshot: FavoriteLibrarySnapshot, date: Date = .now) async throws -> FavoriteLibraryDocument {
-        let document = FavoriteLibraryDocument.rebuildFromLegacy(snapshot: snapshot, date: date)
-        try await save(document)
-        return document
+    public func clearAll() async throws {
+        defaults.removeObject(forKey: key)
+        postChangeNotification()
+    }
+
+    private nonisolated func postChangeNotification() {
+        NotificationCenter.default.post(
+            name: Self.didChangeNotification,
+            object: nil,
+            userInfo: [Self.changeIDUserInfoKey: changeID]
+        )
     }
 }
 

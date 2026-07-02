@@ -44,7 +44,6 @@ import Testing
         title: "远端消失收藏",
         url: url,
         remoteFavoriteID: "remote-934",
-        isHidden: true,
         tagIDs: [tag.id, "missing-tag"]
     )
     var library = FavoriteLibrary(snapshot: FavoriteLibrarySnapshot(
@@ -59,34 +58,15 @@ import Testing
     #expect(preserved.url == url)
     #expect(preserved.remoteFavoriteID == nil)
     #expect(preserved.tagIDs == [tag.id, "missing-tag"])
-    #expect(library.archivedMetadata.isEmpty)
 }
 
-@Test func favoriteLibraryReturningRemoteFavoriteDoesNotRestoreArchivedMetadata() throws {
-    let archivedURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=935&mobile=2&page=4"))
+@Test func favoriteLibraryReturningRemoteFavoriteCreatesFreshItemWithoutArchiveMetadata() throws {
     let returningURL = try #require(URL(string: "https://bbs.yamibo.com/thread-935-1-1.html"))
     let tag = FavoriteTag(id: "tag-valid", name: "有效标签", color: .green)
-    let archive = FavoriteMetadataArchiveEntry(
-        canonicalThreadURL: ReaderCacheIdentity.canonicalThreadURL(from: archivedURL),
-        displayName: "恢复名",
-        mangaPageIndex: 6,
-        lastView: 2,
-        lastChapter: "第二章",
-        authorID: "author-935",
-        novelResumePoint: nil,
-        isHidden: true,
-        type: .novel,
-        lastMangaURL: nil,
-        parentCollectionID: "missing-collection",
-        manualOrder: 9,
-        lastReadAt: Date(timeIntervalSince1970: 1_800_000_001),
-        tagIDs: [tag.id, "missing-tag"]
-    )
     var library = FavoriteLibrary(snapshot: FavoriteLibrarySnapshot(
         favorites: [],
         collections: [],
-        tags: [tag],
-        archivedMetadata: [archive]
+        tags: [tag]
     ))
 
     library.reconcileRemoteFavorites([
@@ -98,7 +78,6 @@ import Testing
     #expect(restored.url == returningURL)
     #expect(restored.remoteFavoriteID == "remote-new")
     #expect(restored.displayName == nil)
-    #expect(!restored.isHidden)
     #expect(restored.parentCollectionID == nil)
     #expect(restored.type == .unknown)
     #expect(restored.mangaPageIndex == 0)
@@ -107,33 +86,14 @@ import Testing
     #expect(restored.authorID == nil)
     #expect(restored.lastReadAt == nil)
     #expect(restored.tagIDs == [])
-    #expect(library.archivedMetadata.isEmpty)
 }
 
 @Test func favoriteLibraryCanonicalKeysUseReaderCacheIdentityCanonicalizer() throws {
     let favoriteURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mobile=2&page=4&authorid=42&tid=936&mod=viewthread&extra=page%3D1"))
-    let archiveURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=936"))
     let expectedKey = ReaderCacheIdentity.canonicalThreadURL(from: favoriteURL).absoluteString
     let snapshot = FavoriteLibrarySnapshot(
         favorites: [Favorite(title: "收藏", url: favoriteURL)],
-        collections: [],
-        archivedMetadata: [
-            FavoriteMetadataArchiveEntry(
-                canonicalThreadURL: archiveURL,
-                displayName: "归档",
-                mangaPageIndex: 0,
-                lastView: 1,
-                lastChapter: nil,
-                authorID: nil,
-                novelResumePoint: nil,
-                isHidden: false,
-                type: .novel,
-                lastMangaURL: nil,
-                parentCollectionID: nil,
-                manualOrder: 0,
-                lastReadAt: nil
-            )
-        ]
+        collections: []
     )
 
     #expect(snapshot.favoriteCanonicalURLKeys == [expectedKey])

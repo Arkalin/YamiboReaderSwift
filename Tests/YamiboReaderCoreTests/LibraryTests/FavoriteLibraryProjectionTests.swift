@@ -44,7 +44,6 @@ import Testing
     let hiddenMatch = Favorite(
         title: "隐藏短篇",
         url: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=858&mobile=2")),
-        isHidden: true,
         type: .novel,
         tagIDs: ["love", "short"]
     )
@@ -125,7 +124,7 @@ import Testing
 
     #expect(titleSearchEntries.map(\.id) == ["collection:collection-title"])
     #expect(taggedEntries.map(\.id) == ["collection:collection-tagged"])
-    #expect(summary == FavoriteLibraryCollectionSummary(itemCount: 1, hiddenCount: 0))
+    #expect(summary == FavoriteLibraryCollectionSummary(itemCount: 1))
 }
 
 @Test func favoriteLibraryProjectionRecentReadSortUsesCollectionMatchingChildren() throws {
@@ -173,7 +172,7 @@ import Testing
     let tags = [popular, sameCountLater, sameCountEarlier, old]
     let favorites = [
         Favorite(title: "A", url: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=850&mobile=2")), tagIDs: [popular.id]),
-        Favorite(title: "B", url: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=851&mobile=2")), isHidden: true, tagIDs: [popular.id]),
+        Favorite(title: "B", url: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=851&mobile=2")), tagIDs: [popular.id]),
         Favorite(title: "C", url: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=852&mobile=2")), tagIDs: [sameCountLater.id]),
         Favorite(title: "D", url: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=853&mobile=2")), tagIDs: [sameCountEarlier.id])
     ]

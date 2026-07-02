@@ -6,6 +6,10 @@ final class SystemSettingsViewModel: ObservableObject {
     @Published var homePage: AppHomePage = .forum
     @Published var favoriteAppearance = FavoriteAppearanceSettings()
     @Published var favoriteBackground = FavoriteBackgroundSettings()
+    @Published var favoriteLayoutMode: FavoriteLibraryLayoutMode = .rowCard
+    @Published var favoriteSortOrder: LocalFavoriteLibrarySortOrder = .organization
+    @Published var favoriteSortDescending = false
+    @Published var favoriteShowsCategoryCounts = true
     @Published var applePencilPageTurn = ApplePencilPageTurnSettings()
     @Published private(set) var novelCacheBytes = 0
     @Published private(set) var mangaIndexCacheBytes = 0
@@ -68,6 +72,10 @@ final class SystemSettingsViewModel: ObservableObject {
         homePage = settings.homePage
         favoriteAppearance = settings.favoriteAppearance
         favoriteBackground = settings.favoriteBackground
+        favoriteLayoutMode = settings.favoriteLayoutMode
+        favoriteSortOrder = settings.favoriteSortOrder
+        favoriteSortDescending = settings.favoriteSortDescending
+        favoriteShowsCategoryCounts = settings.favoriteShowsCategoryCounts
         applePencilPageTurn = settings.applePencilPageTurn
         await refreshStorageUsage()
     }
@@ -167,6 +175,97 @@ final class SystemSettingsViewModel: ObservableObject {
             errorMessage = error.localizedDescription
             return false
         }
+    }
+
+    func updateFavoriteLayoutMode(_ value: FavoriteLibraryLayoutMode) {
+        let previous = favoriteLayoutMode
+        favoriteLayoutMode = value
+
+        Task {
+            var settings = await appContext.settingsStore.load()
+            applyFavoriteLibraryDisplaySettings(to: &settings)
+
+            do {
+                try await appContext.settingsStore.save(settings)
+            } catch {
+                await MainActor.run {
+                    if favoriteLayoutMode == value {
+                        favoriteLayoutMode = previous
+                    }
+                    errorMessage = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    func updateFavoriteSortOrder(_ value: LocalFavoriteLibrarySortOrder) {
+        let previous = favoriteSortOrder
+        favoriteSortOrder = value
+
+        Task {
+            var settings = await appContext.settingsStore.load()
+            applyFavoriteLibraryDisplaySettings(to: &settings)
+
+            do {
+                try await appContext.settingsStore.save(settings)
+            } catch {
+                await MainActor.run {
+                    if favoriteSortOrder == value {
+                        favoriteSortOrder = previous
+                    }
+                    errorMessage = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    func updateFavoriteSortDescending(_ value: Bool) {
+        let previous = favoriteSortDescending
+        favoriteSortDescending = value
+
+        Task {
+            var settings = await appContext.settingsStore.load()
+            applyFavoriteLibraryDisplaySettings(to: &settings)
+
+            do {
+                try await appContext.settingsStore.save(settings)
+            } catch {
+                await MainActor.run {
+                    if favoriteSortDescending == value {
+                        favoriteSortDescending = previous
+                    }
+                    errorMessage = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    func updateFavoriteShowsCategoryCounts(_ value: Bool) {
+        let previous = favoriteShowsCategoryCounts
+        favoriteShowsCategoryCounts = value
+
+        Task {
+            var settings = await appContext.settingsStore.load()
+            applyFavoriteLibraryDisplaySettings(to: &settings)
+
+            do {
+                try await appContext.settingsStore.save(settings)
+            } catch {
+                await MainActor.run {
+                    if favoriteShowsCategoryCounts == value {
+                        favoriteShowsCategoryCounts = previous
+                    }
+                    errorMessage = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    private func applyFavoriteLibraryDisplaySettings(to settings: inout AppSettings) {
+        settings.favoriteLayoutMode = favoriteLayoutMode
+        settings.favoriteSortOrder = favoriteSortOrder
+        settings.favoriteSortDescending = favoriteSortDescending
+        settings.favoriteShowsCategoryCounts = favoriteShowsCategoryCounts
     }
 
     func updateApplePencilPageTurnEnabled(_ isEnabled: Bool) {

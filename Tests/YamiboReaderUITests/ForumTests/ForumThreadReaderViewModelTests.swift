@@ -6,9 +6,13 @@ import Testing
 @MainActor
 @Test func forumThreadReaderLoadsExistingLocalFavoriteState() async throws {
     let fixture = try ForumThreadReaderViewModelFixture()
-    try await fixture.favoriteStore.saveFavorites([
-        Favorite(title: "已收藏标题", url: fixture.threadURL, type: .other)
-    ])
+    var document = FavoriteLibraryDocument()
+    document.addItem(try FavoriteItem(
+        target: FavoriteContentTarget(kind: .normalThread, threadURL: fixture.threadURL),
+        title: "已收藏标题",
+        locations: [.category(document.defaultCategory.id)]
+    ))
+    try await fixture.localFavoriteLibraryStore.save(document)
     let model = fixture.makeModel()
 
     await model.load()
@@ -26,18 +30,37 @@ import Testing
 
     await model.toggleFavorite()
 
-    let added = try #require(await fixture.favoriteStore.favorite(for: fixture.threadURL))
+    let added = try #require(await fixture.localFavoriteItem())
     #expect(model.isFavorited)
     #expect(added.title == "解析标题")
-    #expect(added.type == .other)
-    #expect(added.remoteFavoriteID == "8801")
+    #expect(added.remoteMapping?.yamiboFavoriteID == "8801")
+    #expect(added.forumID == "40")
+    #expect(added.forumName == "综合讨论")
+    #expect(added.sourceGroup == .forumBoard(id: "40", label: "综合讨论"))
+    #expect(added.contentUpdatedAt == FavoriteContentUpdateDateResolver.date(
+        lastEditedText: "本帖最后由 楼主 于 2026-6-2 12:00 编辑",
+        postedAtText: "2026-6-1 10:00"
+    ))
     #expect(await fixture.favoriteRepository.addedThreadURLs == [fixture.threadURL])
 
     await model.toggleFavorite()
 
     #expect(!model.isFavorited)
-    #expect(await fixture.favoriteStore.favorite(for: fixture.threadURL) == nil)
+    #expect(await fixture.localFavoriteItem() == nil)
     #expect(await fixture.favoriteRepository.deletedRemoteFavoriteIDs == ["8801"])
+}
+
+@MainActor
+@Test func forumThreadReaderToggleBeforePageLoadUsesContextForumID() async throws {
+    let fixture = try ForumThreadReaderViewModelFixture()
+    let model = fixture.makeModel()
+
+    await model.toggleFavorite()
+
+    let added = try #require(await fixture.localFavoriteItem())
+    #expect(added.title == "上下文标题")
+    #expect(added.forumID == "40")
+    #expect(added.sourceGroup == .forumBoard(id: "40", label: "40"))
 }
 
 @MainActor
@@ -159,11 +182,15 @@ private func makeThreadPage(
             ForumThreadPost(
                 postID: postID,
                 author: BlogReaderUser(uid: "42", name: "楼主"),
+                postedAtText: "2026-6-1 10:00",
+                lastEditedText: "本帖最后由 楼主 于 2026-6-2 12:00 编辑",
                 contentHTML: "",
                 contentText: contentText
             )
         ],
-        pageNavigation: ForumPageNavigation(currentPage: page, totalPages: 4)
+        pageNavigation: ForumPageNavigation(currentPage: page, totalPages: 4),
+        forumID: "40",
+        forumName: "综合讨论"
     )
 }
 
@@ -171,6 +198,7 @@ private struct ForumThreadReaderViewModelFixture {
     let suiteName: String
     let threadURL: URL
     let favoriteStore: FavoriteStore
+    let localFavoriteLibraryStore: LocalFirstFavoriteLibraryStore
     let repository: FakeForumThreadPageLoader
     let favoriteRepository: FakeThreadFavoriteRepository
 
@@ -179,20 +207,35 @@ private struct ForumThreadReaderViewModelFixture {
         let defaults = try #require(UserDefaults(suiteName: suiteName))
         defaults.removePersistentDomain(forName: suiteName)
         threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=704&mobile=2"))
-        favoriteStore = FavoriteStore(defaults: defaults, key: "favorites")
+        favoriteStore = FavoriteStore(
+            defaults: try #require(UserDefaults(suiteName: suiteName)),
+            key: "favorites"
+        )
+        localFavoriteLibraryStore = LocalFirstFavoriteLibraryStore(
+            defaults: try #require(UserDefaults(suiteName: suiteName)),
+            key: "local-favorites"
+        )
         repository = FakeForumThreadPageLoader(threadURL: threadURL, cachedPages: cachedPages, fetchError: fetchError)
         favoriteRepository = FakeThreadFavoriteRepository(threadURL: threadURL)
+    }
+
+    func localFavoriteItem() async -> FavoriteItem? {
+        let target = FavoriteContentTarget(kind: .normalThread, threadURL: threadURL)
+        return await localFavoriteLibraryStore.load().items.first { item in
+            item.target.id == target.id
+        }
     }
 
     @MainActor
     func makeModel() -> ForumThreadReaderViewModel {
         ForumThreadReaderViewModel(
             context: ThreadReaderLaunchContext(
-                thread: ThreadIdentity(tid: "704", canonicalURL: threadURL),
+                thread: ThreadIdentity(tid: "704", canonicalURL: threadURL, fid: "40"),
                 title: "上下文标题"
             ),
             repository: repository,
             favoriteStore: favoriteStore,
+            localFavoriteLibraryStore: localFavoriteLibraryStore,
             favoriteRepository: favoriteRepository
         )
     }

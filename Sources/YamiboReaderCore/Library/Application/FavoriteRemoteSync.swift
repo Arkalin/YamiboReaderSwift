@@ -39,9 +39,9 @@ public extension FavoriteLibraryDocument {
         into categoryID: String,
         remoteEntries: [YamiboRemoteFavoriteEntry],
         directories: [MangaDirectory] = [],
-        fallbackMangaCleanBookName: (YamiboRemoteFavoriteEntry) -> String? = { _ in nil },
+        fallbackMangaCleanBookName: @Sendable (YamiboRemoteFavoriteEntry) -> String? = { _ in nil },
         date: Date = .now,
-        probe: (URL) async throws -> FavoriteThreadProbeResult
+        probe: @Sendable (URL) async throws -> FavoriteThreadProbeResult
     ) async -> YamiboFavoriteSyncReport {
         let location = FavoriteLocation.category(categoryID)
         var importedTargetIDs: [String] = []
@@ -59,13 +59,15 @@ public extension FavoriteLibraryDocument {
                     isMarkedRemoteMissing: false
                 )
                 let item: FavoriteItem
-                if case let .mangaTitle(cleanBookName) = probeResult.target {
+                if case let .mangaTitle(_, cleanBookName) = probeResult.target {
                     item = try importMangaChapterFavorite(
                         chapterTID: YamiboThreadURLCanonicalizer.threadID(from: remoteEntry.threadURL) ?? remoteEntry.remoteFavoriteID,
                         chapterURL: remoteEntry.threadURL,
                         chapterTitle: remoteEntry.title ?? probeResult.title,
                         directories: directories,
                         fallbackCleanBookName: cleanBookName.nilIfEmpty ?? fallbackMangaCleanBookName(remoteEntry),
+                        location: location,
+                        remoteMapping: remoteMapping,
                         date: date
                     )
                 } else {

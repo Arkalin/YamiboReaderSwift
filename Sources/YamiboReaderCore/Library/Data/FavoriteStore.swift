@@ -43,7 +43,6 @@ public actor FavoriteStore: FavoriteStoring {
     private let key: String
     private let collectionsKey: String
     private let tagsKey: String
-    private let archivedMetadataKey: String
     private let syncMetadataKey: String
     private let mangaOfflineCacheStore: (any MangaOfflineCacheStoring)?
     private let encoder = JSONEncoder()
@@ -62,7 +61,6 @@ public actor FavoriteStore: FavoriteStoring {
         self.key = key
         collectionsKey = "\(key).collections"
         tagsKey = "\(key).tags"
-        archivedMetadataKey = "\(key).archivedMetadata"
         syncMetadataKey = "\(key).syncMetadata"
         self.mangaOfflineCacheStore = mangaOfflineCacheStore
     }
@@ -107,7 +105,6 @@ public actor FavoriteStore: FavoriteStoring {
             favorites: favorites,
             collections: collections,
             tags: tags,
-            archivedMetadata: [],
             syncMetadata: loadSyncMetadata()
         )
     }
@@ -126,7 +123,6 @@ public actor FavoriteStore: FavoriteStoring {
             favorites: snapshot.favorites,
             collections: snapshot.collections,
             tags: snapshot.tags,
-            archivedMetadata: [],
             syncMetadata: snapshot.syncMetadata
         )
     }
@@ -154,7 +150,6 @@ public actor FavoriteStore: FavoriteStoring {
             favorites: snapshot.favorites,
             collections: snapshot.collections,
             tags: [tag] + shiftedTags,
-            archivedMetadata: snapshot.archivedMetadata,
             metadataUpdate: Self.touchUserOwnedChanges(date: date)
         )
     }
@@ -184,7 +179,6 @@ public actor FavoriteStore: FavoriteStoring {
             favorites: snapshot.favorites,
             collections: snapshot.collections,
             tags: updatedTags,
-            archivedMetadata: snapshot.archivedMetadata,
             metadataUpdate: Self.touchUserOwnedChanges(date: date)
         )
     }
@@ -198,16 +192,10 @@ public actor FavoriteStore: FavoriteStoring {
             favorite.tagIDs.removeAll { $0 == tagID }
             return favorite
         }
-        let updatedArchivedMetadata = snapshot.archivedMetadata.map { entry in
-            var entry = entry
-            entry.tagIDs.removeAll { $0 == tagID }
-            return entry
-        }
         return try persistLibrary(
             favorites: updatedFavorites,
             collections: snapshot.collections,
             tags: updatedTags,
-            archivedMetadata: updatedArchivedMetadata,
             metadataUpdate: Self.touchUserOwnedChanges(date: .now)
         )
     }
@@ -219,7 +207,6 @@ public actor FavoriteStore: FavoriteStoring {
             favorites: library.snapshot.favorites,
             collections: library.snapshot.collections,
             tags: library.snapshot.tags,
-            archivedMetadata: library.snapshot.archivedMetadata,
             metadataUpdate: Self.touchRemoteFavorites(date: .now)
         )
         return snapshot.favorites
@@ -379,7 +366,6 @@ public actor FavoriteStore: FavoriteStoring {
             favorites: snapshot.favorites,
             collections: snapshot.collections,
             tags: reorderedTags,
-            archivedMetadata: snapshot.archivedMetadata,
             metadataUpdate: Self.touchUserOwnedChanges(date: date)
         )
     }
@@ -534,7 +520,6 @@ public actor FavoriteStore: FavoriteStoring {
             favorites: library.snapshot.favorites,
             collections: library.snapshot.collections,
             tags: library.snapshot.tags,
-            archivedMetadata: library.snapshot.archivedMetadata,
             metadataUpdate: Self.touchFavoriteMetadata(favoriteIDs: Set([favoriteID]), date: .now)
         ).favorites
     }
@@ -683,7 +668,6 @@ public actor FavoriteStore: FavoriteStoring {
             novelResumePoint: resumePoint,
             novelMaxView: novelMaxView,
             novelDocumentSurfaceProgressPercent: position.documentSurfaceProgressPercent,
-            isHidden: false,
             type: .novel
         )
         favorite.parentCollectionID = nil
@@ -740,7 +724,6 @@ public actor FavoriteStore: FavoriteStoring {
             authorID: nil,
             novelResumePoint: nil,
             novelMaxView: nil,
-            isHidden: false,
             type: .manga,
             lastMangaURL: chapterURL
         )
@@ -761,7 +744,6 @@ public actor FavoriteStore: FavoriteStoring {
             favorites: [],
             collections: [],
             tags: [],
-            archivedMetadata: [],
             metadataUpdate: Self.touchUserOwnedChanges(date: .now)
         )
     }
@@ -770,7 +752,6 @@ public actor FavoriteStore: FavoriteStoring {
         favorites: [Favorite],
         collections: [FavoriteCollection],
         tags: [FavoriteTag]? = nil,
-        archivedMetadata: [FavoriteMetadataArchiveEntry]? = nil,
         syncMetadata: FavoriteLibrarySyncMetadata? = nil,
         metadataUpdate: ((inout FavoriteLibrarySyncMetadata, FavoriteLibrarySnapshot, FavoriteLibrarySnapshot) -> Void)? = nil
     ) throws -> FavoriteLibrarySnapshot {
@@ -784,13 +765,11 @@ public actor FavoriteStore: FavoriteStoring {
             validCollectionIDs: validCollectionIDs,
             validTagIDs: validTagIDs
         )
-        let resolvedArchivedMetadata: [FavoriteMetadataArchiveEntry] = []
         var resolvedSyncMetadata = syncMetadata ?? loadSyncMetadata()
         let nextSnapshotWithoutMetadata = FavoriteLibrarySnapshot(
             favorites: sanitizedFavorites,
             collections: sanitizedCollections,
-            tags: sanitizedTags,
-            archivedMetadata: resolvedArchivedMetadata
+            tags: sanitizedTags
         )
         metadataUpdate?(&resolvedSyncMetadata, previousSnapshot, nextSnapshotWithoutMetadata)
 
@@ -798,19 +777,16 @@ public actor FavoriteStore: FavoriteStoring {
             let favoritesData = try encoder.encode(sanitizedFavorites)
             let collectionsData = try encoder.encode(sanitizedCollections)
             let tagsData = try encoder.encode(sanitizedTags)
-            let archivedMetadataData = try encoder.encode(resolvedArchivedMetadata)
             let syncMetadataData = try encoder.encode(resolvedSyncMetadata)
             defaults.set(favoritesData, forKey: key)
             defaults.set(collectionsData, forKey: collectionsKey)
             defaults.set(tagsData, forKey: tagsKey)
-            defaults.set(archivedMetadataData, forKey: archivedMetadataKey)
             defaults.set(syncMetadataData, forKey: syncMetadataKey)
             postChangeNotification()
             return FavoriteLibrarySnapshot(
                 favorites: sanitizedFavorites,
                 collections: sanitizedCollections,
                 tags: sanitizedTags,
-                archivedMetadata: resolvedArchivedMetadata,
                 syncMetadata: resolvedSyncMetadata
             )
         } catch {
@@ -971,7 +947,6 @@ public actor FavoriteStore: FavoriteStoring {
             if let parentCollectionID = favorite.parentCollectionID, !validCollectionIDs.contains(parentCollectionID) {
                 favorite.parentCollectionID = nil
             }
-            favorite.isHidden = false
             favorite.tagIDs = sanitizedTagIDs(favorite.tagIDs, validTagIDs: validTagIDs)
             return favorite
         }
@@ -995,19 +970,14 @@ public actor FavoriteStore: FavoriteStoring {
     }
 
     private func sanitizeLoadedCollections(_ collections: [FavoriteCollection]) -> [FavoriteCollection] {
-        let visibleCollections = collections.map { collection in
-            var collection = collection
-            collection.isHidden = false
-            return collection
-        }
-        if visibleCollections.count > 1 && Set(visibleCollections.map(\.manualOrder)).count <= 1 {
-            return visibleCollections.enumerated().map { index, collection in
+        if collections.count > 1 && Set(collections.map(\.manualOrder)).count <= 1 {
+            return collections.enumerated().map { index, collection in
                 var collection = collection
                 collection.manualOrder = index
                 return collection
             }
         }
-        return visibleCollections
+        return collections
     }
 
     private func sanitizeFavoritesForPersistence(
@@ -1022,7 +992,6 @@ public actor FavoriteStore: FavoriteStoring {
             .map { favorite -> Favorite in
                 var favorite = favorite
                 favorite.parentCollectionID = nil
-                favorite.isHidden = false
                 favorite.tagIDs = sanitizedTagIDs(favorite.tagIDs, validTagIDs: validTagIDs)
                 return favorite
             }
@@ -1047,7 +1016,6 @@ public actor FavoriteStore: FavoriteStoring {
                 .map { index, favorite in
                     var favorite = favorite
                     favorite.parentCollectionID = collectionID
-                    favorite.isHidden = false
                     favorite.tagIDs = sanitizedTagIDs(favorite.tagIDs, validTagIDs: validTagIDs)
                     favorite.manualOrder = index
                     return favorite

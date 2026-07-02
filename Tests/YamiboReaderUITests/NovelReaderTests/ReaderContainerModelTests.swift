@@ -1587,10 +1587,7 @@ final class ReaderContainerModelTests: XCTestCase {
         try await favoriteStore.saveFavorites([
             Favorite(title: "测试线程", url: threadURL, authorID: "author-1", type: .novel)
         ])
-        let readingProgressStore = try makeReadingProgressStore(
-            defaultsSuiteName: defaultsSuiteName,
-            favoriteStore: favoriteStore
-        )
+        let readingProgressStore = try makeReadingProgressStore(defaultsSuiteName: defaultsSuiteName)
 
         let appContext = YamiboAppContext(
             sessionStore: try SessionStore(testSuiteName: defaultsSuiteName, key: "session"),
@@ -1643,14 +1640,12 @@ final class ReaderContainerModelTests: XCTestCase {
 
         let resumeContext = await model.saveProgress()
 
-        let favorite = await favoriteStore.favorite(for: threadURL)
         let readingProgress = await readingProgressStore.load(for: threadURL)
-        XCTAssertEqual(favorite?.novelResumePoint?.textSegmentIdentity, try XCTUnwrap(document.semantics(forSegmentIndex: 2)?.textSegmentIdentity))
-        XCTAssertEqual(favorite?.novelResumePoint?.displayedTextOffset, targetOffset)
-        XCTAssertEqual(favorite?.mangaPageIndex, 0)
-        XCTAssertEqual(readingProgress?.novel?.novelResumePoint?.displayedTextOffset, targetOffset)
-        XCTAssertEqual(resumeContext.initialResumePoint, favorite?.novelResumePoint)
-        XCTAssertEqual(resumeContext.initialView, favorite?.novelResumePoint?.view)
+        let savedResumePoint = try XCTUnwrap(readingProgress?.novel?.novelResumePoint)
+        XCTAssertEqual(savedResumePoint.textSegmentIdentity, try XCTUnwrap(document.semantics(forSegmentIndex: 2)?.textSegmentIdentity))
+        XCTAssertEqual(savedResumePoint.displayedTextOffset, targetOffset)
+        XCTAssertEqual(resumeContext.initialResumePoint, savedResumePoint)
+        XCTAssertEqual(resumeContext.initialView, savedResumePoint.view)
     }
 
     func testForumNovelProgressDoesNotCreateFavorite() async throws {
@@ -1671,10 +1666,7 @@ final class ReaderContainerModelTests: XCTestCase {
             readerCacheStore: cacheStore,
             forumCacheStore: forumCacheStore
         )
-        let readingProgressStore = try makeReadingProgressStore(
-            defaultsSuiteName: defaultsSuiteName,
-            favoriteStore: favoriteStore
-        )
+        let readingProgressStore = try makeReadingProgressStore(defaultsSuiteName: defaultsSuiteName)
 
         let appContext = YamiboAppContext(
             sessionStore: try SessionStore(testSuiteName: defaultsSuiteName, key: "session"),
@@ -1728,10 +1720,7 @@ final class ReaderContainerModelTests: XCTestCase {
             readerCacheStore: cacheStore,
             forumCacheStore: forumCacheStore
         )
-        let readingProgressStore = try makeReadingProgressStore(
-            defaultsSuiteName: defaultsSuiteName,
-            favoriteStore: favoriteStore
-        )
+        let readingProgressStore = try makeReadingProgressStore(defaultsSuiteName: defaultsSuiteName)
 
         let appContext = YamiboAppContext(
             sessionStore: try SessionStore(testSuiteName: defaultsSuiteName, key: "session"),
@@ -1793,10 +1782,7 @@ final class ReaderContainerModelTests: XCTestCase {
             readerCacheStore: cacheStore,
             forumCacheStore: forumCacheStore
         )
-        let readingProgressStore = try makeReadingProgressStore(
-            defaultsSuiteName: defaultsSuiteName,
-            favoriteStore: favoriteStore
-        )
+        let readingProgressStore = try makeReadingProgressStore(defaultsSuiteName: defaultsSuiteName)
 
         let appContext = YamiboAppContext(
             sessionStore: try SessionStore(testSuiteName: defaultsSuiteName, key: "session"),
@@ -1866,10 +1852,7 @@ final class ReaderContainerModelTests: XCTestCase {
         try await favoriteStore.saveFavorites([
             Favorite(title: "测试线程", url: document.threadURL, type: .novel)
         ])
-        let readingProgressStore = try makeReadingProgressStore(
-            defaultsSuiteName: defaultsSuiteName,
-            favoriteStore: favoriteStore
-        )
+        let readingProgressStore = try makeReadingProgressStore(defaultsSuiteName: defaultsSuiteName)
 
         let appContext = YamiboAppContext(
             sessionStore: try SessionStore(testSuiteName: defaultsSuiteName, key: "session"),
@@ -1897,11 +1880,7 @@ final class ReaderContainerModelTests: XCTestCase {
         }
         await model.saveProgress()
 
-        let favorite = await favoriteStore.favorite(for: document.threadURL)
         let readingProgress = await readingProgressStore.load(for: document.threadURL)
-        XCTAssertEqual(favorite?.lastView, 1)
-        XCTAssertEqual(favorite?.mangaPageIndex, 0)
-        XCTAssertNotNil(favorite?.novelResumePoint)
         XCTAssertNotNil(readingProgress?.novel?.novelResumePoint)
     }
 
@@ -1934,10 +1913,7 @@ final class ReaderContainerModelTests: XCTestCase {
         try await favoriteStore.saveFavorites([
             Favorite(title: "测试线程", url: document.threadURL, type: .novel)
         ])
-        let readingProgressStore = try makeReadingProgressStore(
-            defaultsSuiteName: defaultsSuiteName,
-            favoriteStore: favoriteStore
-        )
+        let readingProgressStore = try makeReadingProgressStore(defaultsSuiteName: defaultsSuiteName)
 
         let appContext = YamiboAppContext(
             sessionStore: try SessionStore(testSuiteName: defaultsSuiteName, key: "session"),
@@ -1971,21 +1947,18 @@ final class ReaderContainerModelTests: XCTestCase {
         }
 
         try await waitFor {
-            let favorite = await favoriteStore.favorite(for: document.threadURL)
-            return favorite?.novelResumePoint != nil
+            let readingProgress = await readingProgressStore.load(for: document.threadURL)
+            return readingProgress?.novel?.novelResumePoint != nil
         }
 
-        let favorite = await favoriteStore.favorite(for: document.threadURL)
         let readingProgress = await readingProgressStore.load(for: document.threadURL)
-        XCTAssertEqual(favorite?.lastView, 1)
-        XCTAssertEqual(favorite?.lastChapter, "第一章")
-        XCTAssertEqual(favorite?.novelResumePoint?.view, 1)
-        XCTAssertEqual(favorite?.novelResumePoint?.textSegmentIdentity, try XCTUnwrap(document.semantics(forSegmentIndex: targetRange.segmentIndex)?.textSegmentIdentity))
-        XCTAssertTrue((favorite?.novelResumePoint?.displayedTextOffset ?? 0) > targetRange.startOffset)
-        XCTAssertEqual(favorite?.novelResumePoint?.chapterTitle, "第一章")
+        let savedResumePoint = try XCTUnwrap(readingProgress?.novel?.novelResumePoint)
         XCTAssertEqual(readingProgress?.novel?.lastView, 1)
         XCTAssertEqual(readingProgress?.novel?.lastChapter, "第一章")
-        XCTAssertEqual(readingProgress?.novel?.novelResumePoint?.view, 1)
+        XCTAssertEqual(savedResumePoint.view, 1)
+        XCTAssertEqual(savedResumePoint.textSegmentIdentity, try XCTUnwrap(document.semantics(forSegmentIndex: targetRange.segmentIndex)?.textSegmentIdentity))
+        XCTAssertTrue(savedResumePoint.displayedTextOffset > targetRange.startOffset)
+        XCTAssertEqual(savedResumePoint.chapterTitle, "第一章")
     }
 
     func testVerticalModeRestoresStoredResumePointWithinChapter() async throws {
@@ -2043,18 +2016,25 @@ final class ReaderContainerModelTests: XCTestCase {
             Favorite(
                 title: "测试线程",
                 url: threadURL,
-                mangaPageIndex: savedViewportSurface.surfaceOrdinal,
-                lastView: 2,
-                lastChapter: "第三章",
-                novelResumePoint: savedResumePoint,
                 type: .novel
             )
         ])
+        let readingProgressStore = try ReadingProgressStore(testSuiteName: defaultsSuiteName, key: "reading-progress")
+        try await readingProgressStore.saveNovel(
+            NovelReadingPosition(
+                threadURL: threadURL,
+                view: 2,
+                maxView: 2,
+                chapterTitle: "第三章",
+                resumePoint: savedResumePoint
+            )
+        )
 
         let appContext = YamiboAppContext(
             sessionStore: try SessionStore(testSuiteName: defaultsSuiteName, key: "session"),
             settingsStore: settingsStore,
             favoriteStore: favoriteStore,
+            readingProgressStore: readingProgressStore,
             readerCacheStore: cacheStore,
             forumCacheStore: forumCacheStore
         )
@@ -2111,11 +2091,13 @@ final class ReaderContainerModelTests: XCTestCase {
         try await favoriteStore.saveFavorites([
             Favorite(title: "测试线程", url: threadURL, type: .novel)
         ])
+        let readingProgressStore = try ReadingProgressStore(testSuiteName: defaultsSuiteName, key: "reading-progress")
 
         let appContext = YamiboAppContext(
             sessionStore: try SessionStore(testSuiteName: defaultsSuiteName, key: "session"),
             settingsStore: settingsStore,
             favoriteStore: favoriteStore,
+            readingProgressStore: readingProgressStore,
             readerCacheStore: cacheStore,
             forumCacheStore: forumCacheStore
         )
@@ -2145,9 +2127,9 @@ final class ReaderContainerModelTests: XCTestCase {
             model.updateVerticalViewportPosition(surfaceIndex: targetPage.surfaceOrdinal, intraSurfaceProgress: 0.59)
         }
         await model.saveProgress()
-        let savedFavorite = await favoriteStore.favorite(for: threadURL)
+        let savedReadingProgress = await readingProgressStore.load(for: threadURL)
         let savedProgressPercent = await MainActor.run { model.currentProgressPercent }
-        XCTAssertEqual(savedFavorite?.novelDocumentSurfaceProgressPercent, savedProgressPercent)
+        XCTAssertEqual(savedReadingProgress?.novel?.novelDocumentSurfaceProgressPercent, savedProgressPercent)
 
         let restoredModel = await MainActor.run {
             ReaderContainerModel(context: launchContext, appContext: appContext, pagination: readerModelSegmentPagination)
@@ -2219,18 +2201,25 @@ final class ReaderContainerModelTests: XCTestCase {
             Favorite(
                 title: "测试线程",
                 url: threadURL,
-                mangaPageIndex: 99,
-                lastView: 2,
-                lastChapter: "第二章",
-                novelResumePoint: savedResumePoint,
                 type: .novel
             )
         ])
+        let readingProgressStore = try ReadingProgressStore(testSuiteName: defaultsSuiteName, key: "reading-progress")
+        try await readingProgressStore.saveNovel(
+            NovelReadingPosition(
+                threadURL: threadURL,
+                view: 2,
+                maxView: 2,
+                chapterTitle: "第二章",
+                resumePoint: savedResumePoint
+            )
+        )
 
         let appContext = YamiboAppContext(
             sessionStore: try SessionStore(testSuiteName: defaultsSuiteName, key: "session"),
             settingsStore: settingsStore,
             favoriteStore: favoriteStore,
+            readingProgressStore: readingProgressStore,
             readerCacheStore: cacheStore,
             forumCacheStore: forumCacheStore
         )
@@ -2307,18 +2296,25 @@ final class ReaderContainerModelTests: XCTestCase {
             Favorite(
                 title: "测试线程",
                 url: threadURL,
-                mangaPageIndex: savedViewportSurface.surfaceOrdinal,
-                lastView: 1,
-                lastChapter: "第一章",
-                novelResumePoint: savedResumePoint,
                 type: .novel
             )
         ])
+        let readingProgressStore = try ReadingProgressStore(testSuiteName: defaultsSuiteName, key: "reading-progress")
+        try await readingProgressStore.saveNovel(
+            NovelReadingPosition(
+                threadURL: threadURL,
+                view: 1,
+                maxView: 1,
+                chapterTitle: "第一章",
+                resumePoint: savedResumePoint
+            )
+        )
 
         let appContext = YamiboAppContext(
             sessionStore: try SessionStore(testSuiteName: defaultsSuiteName, key: "session"),
             settingsStore: settingsStore,
             favoriteStore: favoriteStore,
+            readingProgressStore: readingProgressStore,
             readerCacheStore: cacheStore,
             forumCacheStore: forumCacheStore
         )
@@ -3157,8 +3153,7 @@ private func makeModel(
     let favoriteStore = try FavoriteStore(testSuiteName: defaultsSuiteName, key: "favorites")
     let readingProgressStore = try ReadingProgressStore(
         testSuiteName: defaultsSuiteName,
-        key: "reading-progress",
-        favoriteStore: favoriteStore
+        key: "reading-progress"
     )
     let cacheDirectory = FileManager.default.temporaryDirectory
         .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -3314,13 +3309,11 @@ private func escapeHTML(_ value: String) -> String {
 }
 
 private func makeReadingProgressStore(
-    defaultsSuiteName: String,
-    favoriteStore: FavoriteStore
+    defaultsSuiteName: String
 ) throws -> ReadingProgressStore {
     try ReadingProgressStore(
         testSuiteName: defaultsSuiteName,
-        key: "reading-progress",
-        favoriteStore: favoriteStore
+        key: "reading-progress"
     )
 }
 

@@ -175,7 +175,7 @@ public struct ForumNavigationHostView: View {
         }
         .onChange(of: appModel.forumNavigationRequest?.id) { _, _ in
             guard let request = appModel.forumNavigationRequest else { return }
-            route(request.url, source: request.source)
+            route(request.url, source: request.source, title: request.title)
         }
         .alert(L10n.string("forum.open_native_failed"), isPresented: .constant(actionErrorMessage != nil), actions: {
             Button(L10n.string("common.ok")) {
@@ -186,7 +186,7 @@ public struct ForumNavigationHostView: View {
         })
     }
 
-    private func route(_ url: URL, source: ForumNavigationSource) {
+    private func route(_ url: URL, source: ForumNavigationSource, title: String? = nil) {
         switch ForumRouteResolver.resolve(url: url, source: source) {
         case .home:
             path = []
@@ -195,7 +195,7 @@ public struct ForumNavigationHostView: View {
         case let .thread(threadURL):
             openThread(
                 threadURL,
-                title: nil,
+                title: title,
                 containingFid: nil,
                 intent: source == .readerOrigin ? .nativeThreadReader : .contentRoute
             )

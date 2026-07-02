@@ -60,7 +60,7 @@ public final class MangaReaderCacheViewModel: ObservableObject {
 
     private let context: MangaLaunchContext
     private let panel: MangaDirectoryPanelPresentation
-    private let favoriteStore: any FavoriteStoring
+    private let localFavoriteLibraryStore: LocalFirstFavoriteLibraryStore
     private let offlineCacheStore: any MangaOfflineCacheStoring
     private let offlineCacheQueueControllerProvider: (@Sendable () async -> any MangaOfflineCacheQueueControlling)?
     private var offlineCacheQueueController: (any MangaOfflineCacheQueueControlling)?
@@ -69,13 +69,13 @@ public final class MangaReaderCacheViewModel: ObservableObject {
     public init(
         context: MangaLaunchContext,
         panel: MangaDirectoryPanelPresentation,
-        favoriteStore: any FavoriteStoring,
+        localFavoriteLibraryStore: LocalFirstFavoriteLibraryStore,
         offlineCacheStore: any MangaOfflineCacheStoring,
         offlineCacheQueueControllerProvider: (@Sendable () async -> any MangaOfflineCacheQueueControlling)? = nil
     ) {
         self.context = context
         self.panel = panel
-        self.favoriteStore = favoriteStore
+        self.localFavoriteLibraryStore = localFavoriteLibraryStore
         self.offlineCacheStore = offlineCacheStore
         self.offlineCacheQueueControllerProvider = offlineCacheQueueControllerProvider
     }
@@ -90,7 +90,7 @@ public final class MangaReaderCacheViewModel: ObservableObject {
 
     public func load() async {
         startObservingOfflineCacheUpdates()
-        favorite = await favoriteStore.favorite(for: context.originalThreadURL)
+        favorite = await localFavoriteItem()?.favorite(threadURL: context.originalThreadURL, type: .manga)
         await refreshRows()
     }
 
@@ -235,5 +235,34 @@ public final class MangaReaderCacheViewModel: ObservableObject {
     private var offlineCacheOwnerName: String? {
         let ownerName = panel.directoryTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         return ownerName.isEmpty ? nil : ownerName
+    }
+
+    private func localFavoriteItem() async -> FavoriteItem? {
+        let document = await localFavoriteLibraryStore.load()
+        let directoryName = panel.directoryTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !directoryName.isEmpty {
+            let target = FavoriteContentTarget(mangaCleanBookName: directoryName)
+            if let item = document.items.first(where: { $0.target.id == target.id }) {
+                return item
+            }
+        }
+        let threadID = YamiboThreadURLCanonicalizer.threadID(from: context.originalThreadURL)
+        return document.items.first { item in
+            item.target.threadID == threadID || item.mangaChapterMetadata?.chapterURL == context.chapterURL
+        }
+    }
+}
+
+private extension FavoriteItem {
+    func favorite(threadURL: URL, type: FavoriteType) -> Favorite {
+        Favorite(
+            id: id,
+            title: title,
+            displayName: displayName,
+            url: target.canonicalURL ?? threadURL,
+            remoteFavoriteID: remoteMapping?.yamiboFavoriteID,
+            type: type,
+            tagIDs: tagIDs
+        )
     }
 }

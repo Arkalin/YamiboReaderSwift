@@ -71,22 +71,26 @@ final class MangaPresentationRouteTests: XCTestCase {
             authorID: "42",
             readingModeHint: .vertical
         )
-        let remoteFavorite = Favorite(
-            title: "远端小说",
-            url: threadURL,
-            lastView: 5,
-            lastChapter: "第五章",
-            authorID: "42",
-            novelResumePoint: remoteResumePoint,
-            novelMaxView: 9,
-            type: .novel
-        )
-        let payload = WebDAVSyncPayload(
+        let progressPayload = ReadingProgressWebDAVPayload(
             updatedAt: Date(timeIntervalSince1970: 2_000),
-            accountUID: "100",
-            library: FavoriteLibrarySnapshot(favorites: [remoteFavorite], collections: [])
+            records: [
+                ReadingProgressRecord(
+                    contentTarget: FavoriteContentTarget(kind: .novelThread, threadURL: threadURL),
+                    threadURL: threadURL,
+                    kind: .novel,
+                    updatedAt: Date(timeIntervalSince1970: 2_000),
+                    lastReadAt: Date(timeIntervalSince1970: 2_000),
+                    novel: NovelReadingProgressRecord(
+                        lastView: 5,
+                        lastChapter: "第五章",
+                        authorID: "42",
+                        novelResumePoint: remoteResumePoint,
+                        novelMaxView: 9
+                    )
+                )
+            ]
         )
-        let encodedPayload = try JSONEncoder().encode(payload)
+        let encodedProgressPayload = try JSONEncoder().encode(progressPayload)
 
         try await fixture.resumeRouteStore.save(.novel(staleContext))
         try await fixture.sessionStore.save(SessionState(cookie: "sid=local", isLoggedIn: true, accountUID: "100"))
@@ -101,8 +105,14 @@ final class MangaPresentationRouteTests: XCTestCase {
 
         AppModelWebDAVTestURLProtocol.setHandler(for: host) { request in
             XCTAssertEqual(request.httpMethod, "GET")
+            guard request.url?.lastPathComponent == "yamibo-reading-progress-v1.json" else {
+                return (
+                    Data(),
+                    HTTPURLResponse(url: request.url!, statusCode: 404, httpVersion: nil, headerFields: nil)!
+                )
+            }
             return (
-                encodedPayload,
+                encodedProgressPayload,
                 HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
             )
         }
@@ -122,7 +132,7 @@ final class MangaPresentationRouteTests: XCTestCase {
 
         let expectedContext = ReaderLaunchContext(
             threadURL: threadURL,
-            threadTitle: "远端小说",
+            threadTitle: "本地小说",
             source: .resume,
             initialView: 5,
             authorID: "42",
@@ -148,20 +158,24 @@ final class MangaPresentationRouteTests: XCTestCase {
             initialPage: 0,
             directoryName: "本地目录"
         )
-        let remoteFavorite = Favorite(
-            title: "远端漫画",
-            url: originalURL,
-            mangaPageIndex: 7,
-            lastChapter: "第七页",
-            type: .manga,
-            lastMangaURL: remoteChapterURL
-        )
-        let payload = WebDAVSyncPayload(
+        let progressPayload = ReadingProgressWebDAVPayload(
             updatedAt: Date(timeIntervalSince1970: 2_000),
-            accountUID: "100",
-            library: FavoriteLibrarySnapshot(favorites: [remoteFavorite], collections: [])
+            records: [
+                ReadingProgressRecord(
+                    contentTarget: FavoriteContentTarget(mangaCleanBookName: "本地目录"),
+                    threadURL: originalURL,
+                    kind: .manga,
+                    updatedAt: Date(timeIntervalSince1970: 2_000),
+                    lastReadAt: Date(timeIntervalSince1970: 2_000),
+                    manga: MangaReadingProgressRecord(
+                        lastMangaURL: remoteChapterURL,
+                        lastChapter: "第七页",
+                        mangaPageIndex: 7
+                    )
+                )
+            ]
         )
-        let encodedPayload = try JSONEncoder().encode(payload)
+        let encodedProgressPayload = try JSONEncoder().encode(progressPayload)
 
         try await fixture.resumeRouteStore.save(.manga(.native(staleContext)))
         try await fixture.sessionStore.save(SessionState(cookie: "sid=local", isLoggedIn: true, accountUID: "100"))
@@ -176,8 +190,14 @@ final class MangaPresentationRouteTests: XCTestCase {
 
         AppModelWebDAVTestURLProtocol.setHandler(for: host) { request in
             XCTAssertEqual(request.httpMethod, "GET")
+            guard request.url?.lastPathComponent == "yamibo-reading-progress-v1.json" else {
+                return (
+                    Data(),
+                    HTTPURLResponse(url: request.url!, statusCode: 404, httpVersion: nil, headerFields: nil)!
+                )
+            }
             return (
-                encodedPayload,
+                encodedProgressPayload,
                 HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
             )
         }
@@ -198,11 +218,11 @@ final class MangaPresentationRouteTests: XCTestCase {
         let expectedContext = MangaLaunchContext(
             originalThreadURL: originalURL,
             chapterURL: remoteChapterURL,
-            displayTitle: "远端漫画",
+            displayTitle: "本地漫画",
             source: .resume,
             initialPage: 7,
             directoryName: "本地目录",
-            offlineCacheFavoriteID: remoteFavorite.id
+            offlineCacheFavoriteID: nil
         )
         XCTAssertEqual(appModel.activeMangaRoute, .native(expectedContext))
         let restoredRoute = await fixture.resumeRouteStore.load()

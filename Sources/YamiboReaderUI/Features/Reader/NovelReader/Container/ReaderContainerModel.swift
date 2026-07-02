@@ -106,7 +106,6 @@ public final class ReaderContainerModel: ObservableObject {
         runtimeAdapter = nil
         progressSync = ProgressSyncModule(
             adapter: FavoriteLibraryProgressSyncAdapter(
-                favoriteStore: appContext.favoriteStore,
                 readingProgressStore: appContext.readingProgressStore
             )
         )
@@ -132,7 +131,6 @@ public final class ReaderContainerModel: ObservableObject {
         self.runtimeAdapter = runtimeAdapter
         progressSync = ProgressSyncModule(
             adapter: FavoriteLibraryProgressSyncAdapter(
-                favoriteStore: appContext.favoriteStore,
                 readingProgressStore: appContext.readingProgressStore
             )
         )
@@ -469,12 +467,11 @@ public final class ReaderContainerModel: ObservableObject {
             }
         }
         if readerSurfaces.isEmpty {
-            let favorite = await appContext.favoriteStore.favorite(for: context.threadURL)
             let progress = await appContext.readingProgressStore.load(for: context.threadURL)
             let novelProgress = progress?.novel
             await startReadingWorkflow(
-                resumePoint: context.initialResumePoint ?? novelProgress?.novelResumePoint ?? favorite?.novelResumePoint,
-                favoriteAuthorID: novelProgress?.authorID ?? favorite?.authorID
+                resumePoint: context.initialResumePoint ?? novelProgress?.novelResumePoint,
+                favoriteAuthorID: novelProgress?.authorID
             )
         } else {
             if let state = try? await requestRuntimeUpdate(

@@ -101,15 +101,15 @@ final class ForumNovelDetailViewModel {
         self.threadRepositoryProvider = threadRepositoryProvider ?? {
             await appContext.makeForumThreadReaderRepository()
         }
-        favoriteUpdatesTask = Task { @MainActor [weak self, favoriteStore = appContext.favoriteStore] in
-            for await notification in NotificationCenter.default.notifications(named: FavoriteStore.didChangeNotification) {
+        favoriteUpdatesTask = Task { @MainActor [weak self, localFavoriteLibraryStore = appContext.localFavoriteLibraryStore] in
+            for await notification in NotificationCenter.default.notifications(named: LocalFirstFavoriteLibraryStore.didChangeNotification) {
                 guard !Task.isCancelled else { return }
                 guard let self else { return }
-                guard let changeID = notification.userInfo?[FavoriteStore.changeIDUserInfoKey] as? String,
-                      changeID == favoriteStore.changeID else {
+                guard let changeID = notification.userInfo?[LocalFirstFavoriteLibraryStore.changeIDUserInfoKey] as? String,
+                      changeID == localFavoriteLibraryStore.changeID else {
                     continue
                 }
-                await self.refreshFavorite(from: favoriteStore)
+                await self.refreshFavorite(from: localFavoriteLibraryStore)
             }
         }
         readingProgressUpdatesTask = Task { @MainActor [weak self, readingProgressStore = appContext.readingProgressStore] in
@@ -195,7 +195,10 @@ final class ForumNovelDetailViewModel {
         defer { isLoading = false }
 
         do {
-            favorite = await appContext.favoriteStore.favorite(for: context.thread.canonicalURL)
+            favorite = await localFavoriteItem()?.favorite(
+                threadURL: context.thread.canonicalURL,
+                type: .novel
+            )
             readingProgress = await appContext.readingProgressStore.load(for: context.thread.canonicalURL)
             contentCover = await loadContentCover()
             readerSettings = await appContext.settingsStore.load().reader
@@ -313,14 +316,14 @@ final class ForumNovelDetailViewModel {
 
     func continueLaunchContext() -> ReaderLaunchContext {
         let novelProgress = readingProgress?.novel
-        let resumePoint = novelProgress?.novelResumePoint ?? favorite?.novelResumePoint
+        let resumePoint = novelProgress?.novelResumePoint
         let hasProgress = Self.hasReadingProgress(readingProgress, favorite: favorite)
         return ReaderLaunchContext(
             threadURL: context.thread.canonicalURL,
             threadTitle: favorite?.resolvedDisplayTitle ?? context.title,
             source: hasProgress ? .resume : .forum,
-            initialView: resumePoint?.view ?? novelProgress?.lastView ?? favorite?.lastView ?? 1,
-            authorID: resumePoint?.authorID ?? novelProgress?.authorID ?? favorite?.authorID ?? resolvedAuthorID ?? context.authorID,
+            initialView: resumePoint?.view ?? novelProgress?.lastView ?? 1,
+            authorID: resumePoint?.authorID ?? novelProgress?.authorID ?? resolvedAuthorID ?? context.authorID,
             initialResumePoint: resumePoint,
             threadCoverURL: resolvedHeaderCoverURL
         )
@@ -374,7 +377,6 @@ final class ForumNovelDetailViewModel {
     }
 
     func toggleFavorite() async {
-        let favoriteStore = appContext.favoriteStore
         let url = context.thread.canonicalURL
         favoriteErrorMessage = nil
 
@@ -382,7 +384,7 @@ final class ForumNovelDetailViewModel {
             if let favorite {
                 try await ForumThreadFavoriteSync.removeFavorite(
                     favorite,
-                    favoriteStore: favoriteStore,
+                    localFavoriteLibraryStore: appContext.localFavoriteLibraryStore,
                     readingProgressStore: appContext.readingProgressStore,
                     remoteRepository: await appContext.makeFavoriteRepository()
                 )
@@ -396,15 +398,19 @@ final class ForumNovelDetailViewModel {
                 title: favoriteTitle,
                 type: .novel,
                 authorID: resolvedAuthorID ?? context.authorID,
+                forumID: threadPage?.forumID ?? threadPage?.thread.fid ?? context.thread.fid,
+                forumName: threadPage?.forumName ?? forumName,
+                coverURL: resolvedHeaderCoverURL,
+                contentUpdatedAt: Self.contentUpdatedAt(from: threadPage),
                 formHash: threadPage?.formHash,
-                favoriteStore: favoriteStore,
+                localFavoriteLibraryStore: appContext.localFavoriteLibraryStore,
                 remoteRepository: await appContext.makeFavoriteRepository()
             )
             self.favorite = favorite
             rebuildChapterDirectory()
         } catch {
             favoriteErrorMessage = error.localizedDescription
-            favorite = await favoriteStore.favorite(for: url)
+            favorite = await localFavoriteItem()?.favorite(threadURL: url, type: .novel)
             rebuildChapterDirectory()
         }
     }
@@ -413,8 +419,11 @@ final class ForumNovelDetailViewModel {
         favoriteErrorMessage = nil
     }
 
-    private func refreshFavorite(from favoriteStore: FavoriteStore) async {
-        favorite = await favoriteStore.favorite(for: context.thread.canonicalURL)
+    private func refreshFavorite(from localFavoriteLibraryStore: LocalFirstFavoriteLibraryStore) async {
+        favorite = await localFavoriteItem(from: localFavoriteLibraryStore)?.favorite(
+            threadURL: context.thread.canonicalURL,
+            type: .novel
+        )
         rebuildChapterDirectory()
     }
 
@@ -561,6 +570,14 @@ final class ForumNovelDetailViewModel {
         displayTitle(threadPage?.title ?? context.title)
     }
 
+    private static func contentUpdatedAt(from page: ForumThreadPage?) -> Date? {
+        guard let firstPost = page?.posts.first else { return nil }
+        return FavoriteContentUpdateDateResolver.date(
+            lastEditedText: firstPost.lastEditedText,
+            postedAtText: firstPost.postedAtText
+        )
+    }
+
     private func authorScopedContext(authorID: String) -> NovelDetailLaunchContext {
         NovelDetailLaunchContext(
             thread: context.thread,
@@ -599,33 +616,7 @@ final class ForumNovelDetailViewModel {
            hasReadingProgress(readingProgress, favorite: nil) {
             return readingProgressText(from: novel)
         }
-        guard let favorite,
-              hasReadingProgress(nil, favorite: favorite) else {
-            return nil
-        }
-        if let chapterTitle = trimmedNonEmpty(favorite.novelResumePoint?.chapterTitle)
-            ?? trimmedNonEmpty(favorite.lastChapter) {
-            return chapterTitle
-        }
-        if let percent = favorite.novelDocumentSurfaceProgressPercent {
-            if let maxView = favorite.novelMaxView, maxView > 1 {
-                return L10n.string(
-                    "favorites.progress.novel_page_web",
-                    percent,
-                    min(max(favorite.lastView, 1), maxView),
-                    maxView
-                )
-            }
-            return L10n.string("favorites.progress.novel_percent", percent)
-        }
-        if let maxView = favorite.novelMaxView, maxView > 1 {
-            return L10n.string(
-                "favorites.progress.novel_web",
-                min(max(favorite.lastView, 1), maxView),
-                maxView
-            )
-        }
-        return L10n.string("favorites.progress.page", favorite.lastView)
+        return nil
     }
 
     private static func readingProgressText(from novel: NovelReadingProgressRecord) -> String {
@@ -671,7 +662,7 @@ final class ForumNovelDetailViewModel {
         favorite: Favorite?
     ) -> Bool {
         let novel = readingProgress?.novel
-        let resumePoint = novel?.novelResumePoint ?? favorite?.novelResumePoint
+        let resumePoint = novel?.novelResumePoint
         if let resumeIdentity = resumePoint?.chapterIdentity,
            resumeIdentity == chapter.resumePoint?.chapterIdentity {
             return true
@@ -680,8 +671,8 @@ final class ForumNovelDetailViewModel {
            resumePoint?.chapterIdentity?.rawValue.hasPrefix("post:\(postID)#") == true {
             return true
         }
-        let lastView = novel?.lastView ?? favorite?.lastView
-        let lastChapter = novel?.lastChapter ?? favorite?.lastChapter
+        let lastView = novel?.lastView
+        let lastChapter = novel?.lastChapter
         return lastView == chapter.view
             && trimmedNonEmpty(lastChapter) == trimmedNonEmpty(chapter.title)
     }
@@ -695,13 +686,19 @@ final class ForumNovelDetailViewModel {
                 || novel.novelMaxView != nil
                 || novel.novelDocumentSurfaceProgressPercent != nil
         }
-        guard let favorite else { return false }
-        return favorite.novelResumePoint != nil
-            || favorite.lastView > 1
-            || trimmedNonEmpty(favorite.lastChapter) != nil
-            || trimmedNonEmpty(favorite.authorID) != nil
-            || favorite.novelMaxView != nil
-            || favorite.novelDocumentSurfaceProgressPercent != nil
+        return false
+    }
+
+    private func localFavoriteItem() async -> FavoriteItem? {
+        await localFavoriteItem(from: appContext.localFavoriteLibraryStore)
+    }
+
+    private func localFavoriteItem(from store: LocalFirstFavoriteLibraryStore) async -> FavoriteItem? {
+        let target = FavoriteContentTarget(kind: .novelThread, threadURL: context.thread.canonicalURL)
+        let threadID = target.threadID
+        return await store.load().items.first { item in
+            item.target.id == target.id || item.target.threadID == threadID
+        }
     }
 
     private var contentCoverKey: ContentCoverKey? {
@@ -744,5 +741,19 @@ final class ForumNovelDetailViewModel {
     private static func trimmedNonEmpty(_ value: String?) -> String? {
         let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return trimmed.isEmpty ? nil : trimmed
+    }
+}
+
+private extension FavoriteItem {
+    func favorite(threadURL: URL, type: FavoriteType) -> Favorite {
+        Favorite(
+            id: id,
+            title: title,
+            displayName: displayName,
+            url: target.canonicalURL ?? threadURL,
+            remoteFavoriteID: remoteMapping?.yamiboFavoriteID,
+            type: type,
+            tagIDs: tagIDs
+        )
     }
 }

@@ -38,11 +38,13 @@ public struct MangaReadingProgressRecord: Codable, Hashable, Sendable {
     public var lastMangaURL: URL
     public var lastChapter: String
     public var mangaPageIndex: Int
+    public var mangaPageCount: Int?
 
-    public init(lastMangaURL: URL, lastChapter: String, mangaPageIndex: Int) {
+    public init(lastMangaURL: URL, lastChapter: String, mangaPageIndex: Int, mangaPageCount: Int? = nil) {
         self.lastMangaURL = lastMangaURL
         self.lastChapter = lastChapter
         self.mangaPageIndex = max(0, mangaPageIndex)
+        self.mangaPageCount = mangaPageCount.map { max(1, $0) }
     }
 }
 
@@ -84,34 +86,26 @@ public actor ReadingProgressStore {
 
     private let defaults: UserDefaults
     private let key: String
-    private let migratedFromFavoritesKey: String
-    private let favoriteStore: (any FavoriteStoring)?
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
 
     public init(
         defaults: UserDefaults = .standard,
-        key: String = "yamibo.readingProgress.records",
-        migratedFromFavoritesKey: String = "yamibo.readingProgress.migratedFromFavorites",
-        favoriteStore: (any FavoriteStoring)? = nil
+        key: String = "yamibo.readingProgress.records"
     ) {
         self.defaults = defaults
         self.key = key
-        self.migratedFromFavoritesKey = migratedFromFavoritesKey
-        self.favoriteStore = favoriteStore
-    }
-
-    public func migrateFromFavoritesIfNeeded() async {
-        await ensureMigrated()
     }
 
     public func load(for url: URL) async -> ReadingProgressRecord? {
-        await ensureMigrated()
-        return recordsByKey()[Self.canonicalURLKey(for: url)]
+        let canonicalURL = Self.canonicalThreadURL(for: url)
+        let key = Self.canonicalURLKey(for: canonicalURL)
+        let novelTarget = FavoriteContentTarget(kind: .novelThread, threadURL: canonicalURL)
+        let records = recordsByKey()
+        return records[key] ?? records[novelTarget.id] ?? records.values.first { Self.canonicalURLKey(for: $0.threadURL) == key }
     }
 
     public func loadAll() async -> [ReadingProgressRecord] {
-        await ensureMigrated()
         return recordsByKey()
             .values
             .sorted { lhs, rhs in
@@ -124,11 +118,11 @@ public actor ReadingProgressStore {
 
     @discardableResult
     public func saveNovel(_ position: NovelReadingPosition, date: Date = .now) async throws -> ReadingProgressRecord {
-        await ensureMigrated()
         var records = recordsByKey()
         let canonicalURL = Self.canonicalThreadURL(for: position.threadURL)
-        let key = Self.canonicalURLKey(for: canonicalURL)
+        let target = FavoriteContentTarget(kind: .novelThread, threadURL: canonicalURL)
         let record = ReadingProgressRecord(
+            contentTarget: target,
             threadURL: canonicalURL,
             kind: .novel,
             updatedAt: date,
@@ -144,14 +138,25 @@ public actor ReadingProgressStore {
             ),
             manga: nil
         )
-        records[key] = record
+        records[target.id] = record
         try persist(records)
         return record
     }
 
     @discardableResult
     public func saveManga(_ position: MangaProgressReadingPosition, date: Date = .now) async throws -> ReadingProgressRecord {
-        await ensureMigrated()
+        if let directoryName = position.directoryName {
+            return try await saveMangaTitle(
+                cleanBookName: directoryName,
+                threadURL: position.threadURL,
+                chapterURL: position.chapterURL,
+                chapterTitle: position.chapterTitle,
+                pageIndex: position.pageIndex,
+                pageCount: position.pageCount,
+                mangaID: position.mangaID,
+                date: date
+            )
+        }
         var records = recordsByKey()
         let canonicalURL = Self.canonicalThreadURL(for: position.threadURL)
         let key = Self.canonicalURLKey(for: canonicalURL)
@@ -164,7 +169,8 @@ public actor ReadingProgressStore {
             manga: MangaReadingProgressRecord(
                 lastMangaURL: position.chapterURL,
                 lastChapter: position.chapterTitle,
-                mangaPageIndex: position.pageIndex
+                mangaPageIndex: position.pageIndex,
+                mangaPageCount: position.pageCount
             )
         )
         records[key] = record
@@ -175,17 +181,20 @@ public actor ReadingProgressStore {
     @discardableResult
     public func saveMangaTitle(
         cleanBookName: String,
+        threadURL: URL? = nil,
         chapterURL: URL,
         chapterTitle: String,
         pageIndex: Int,
+        pageCount: Int? = nil,
+        mangaID: String? = nil,
         date: Date = .now
     ) async throws -> ReadingProgressRecord {
-        await ensureMigrated()
         var records = recordsByKey()
-        let target = FavoriteContentTarget(mangaCleanBookName: cleanBookName)
+        let target = FavoriteContentTarget(mangaID: mangaID ?? cleanBookName, mangaCleanBookName: cleanBookName)
+        let chapterTID = YamiboThreadURLCanonicalizer.threadID(from: chapterURL)
         let record = ReadingProgressRecord(
             contentTarget: target,
-            threadURL: chapterURL,
+            threadURL: threadURL ?? chapterURL,
             kind: .manga,
             updatedAt: date,
             lastReadAt: date,
@@ -193,75 +202,64 @@ public actor ReadingProgressStore {
             manga: MangaReadingProgressRecord(
                 lastMangaURL: chapterURL,
                 lastChapter: chapterTitle,
-                mangaPageIndex: pageIndex
+                mangaPageIndex: pageIndex,
+                mangaPageCount: pageCount
             )
         )
+        for candidateID in Self.mangaProgressRetargetCandidateIDs(
+            target: target,
+            cleanBookName: cleanBookName,
+            chapterTID: chapterTID
+        ) {
+            records.removeValue(forKey: candidateID)
+        }
         records[target.id] = record
         try persist(records)
         return record
     }
 
     public func load(for target: FavoriteContentTarget) async -> ReadingProgressRecord? {
-        await ensureMigrated()
         return recordsByKey()[target.id]
     }
 
     public func migrateMangaTitleKey(from oldCleanBookName: String, to newCleanBookName: String) async throws {
-        await ensureMigrated()
         var records = recordsByKey()
         let oldTarget = FavoriteContentTarget(mangaCleanBookName: oldCleanBookName)
         let newTarget = FavoriteContentTarget(mangaCleanBookName: newCleanBookName)
-        guard var record = records.removeValue(forKey: oldTarget.id) else { return }
-        record.contentTarget = newTarget
-        records[newTarget.id] = record
-        try persist(records)
-    }
-
-    @discardableResult
-    public func saveFavoriteLegacyProgress(_ favorite: Favorite, date: Date = .now) async throws -> ReadingProgressRecord? {
-        await ensureMigrated()
-        guard let record = Self.record(from: favorite, date: date) else { return nil }
-        var records = recordsByKey()
-        let key = Self.canonicalURLKey(for: record.threadURL)
-        if let existing = records[key] {
-            return existing
+        if var record = records.removeValue(forKey: oldTarget.id) {
+            record.contentTarget = newTarget
+            records[newTarget.id] = record
+            try persist(records)
+            return
         }
-        records[key] = record
+        guard let existing = records.first(where: { _, record in
+            record.contentTarget?.mangaCleanBookName == oldCleanBookName
+        }) else { return }
+        var record = existing.value
+        records.removeValue(forKey: existing.key)
+        let renamedTarget = record.contentTarget?.renamedMangaTitle(to: newCleanBookName) ?? newTarget
+        record.contentTarget = renamedTarget
+        records[renamedTarget.id] = record
         try persist(records)
-        return record
     }
 
     public func delete(for url: URL) async throws {
-        await ensureMigrated()
         var records = recordsByKey()
         records.removeValue(forKey: Self.canonicalURLKey(for: url))
         try persist(records)
     }
 
-    public func clearAll() async throws {
-        try persist([:])
-        defaults.removeObject(forKey: migratedFromFavoritesKey)
+    public func replaceAll(_ records: [ReadingProgressRecord]) async throws {
+        var recordsByKey: [String: ReadingProgressRecord] = [:]
+        for record in records {
+            let normalized = Self.normalizedRecord(record)
+            recordsByKey[Self.key(for: normalized)] = normalized
+        }
+        try persist(recordsByKey)
     }
 
-    private func ensureMigrated() async {
-        guard !defaults.bool(forKey: migratedFromFavoritesKey) else { return }
-        defer { defaults.set(true, forKey: migratedFromFavoritesKey) }
-        guard let favoriteStore else { return }
-
-        let snapshot = await favoriteStore.loadLibrarySnapshot()
-        var records = recordsByKey()
-        for archive in snapshot.archivedMetadata {
-            guard let record = Self.record(from: archive) else { continue }
-            let key = Self.canonicalURLKey(for: record.threadURL)
-            if records[key] == nil {
-                records[key] = record
-            }
-        }
-        for favorite in snapshot.favorites {
-            guard let record = Self.record(from: favorite) else { continue }
-            records[Self.canonicalURLKey(for: record.threadURL)] = record
-        }
-        try? persist(records)
+    public func clearAll() async throws {
+        try persist([:])
     }
 
     private func recordsByKey() -> [String: ReadingProgressRecord] {
@@ -272,7 +270,11 @@ public actor ReadingProgressStore {
         var records: [String: ReadingProgressRecord] = [:]
         for record in decoded {
             let normalized = Self.normalizedRecord(record)
-            records[Self.key(for: normalized)] = normalized
+            let key = Self.key(for: normalized)
+            if let existing = records[key], existing.updatedAt >= normalized.updatedAt {
+                continue
+            }
+            records[key] = normalized
         }
         return records
     }
@@ -299,104 +301,21 @@ public actor ReadingProgressStore {
     }
 
     private static func normalizedRecord(_ record: ReadingProgressRecord) -> ReadingProgressRecord {
-        ReadingProgressRecord(
-            contentTarget: record.contentTarget,
-            threadURL: record.threadURL,
+        let canonicalURL = canonicalThreadURL(for: record.threadURL)
+        let contentTarget: FavoriteContentTarget?
+        if record.kind == .novel {
+            contentTarget = record.contentTarget ?? FavoriteContentTarget(kind: .novelThread, threadURL: canonicalURL)
+        } else {
+            contentTarget = record.contentTarget
+        }
+        return ReadingProgressRecord(
+            contentTarget: contentTarget,
+            threadURL: canonicalURL,
             kind: record.kind,
             updatedAt: record.updatedAt,
             lastReadAt: record.lastReadAt,
             novel: record.novel,
             manga: record.manga
-        )
-    }
-
-    private static func record(from favorite: Favorite, date: Date = .now) -> ReadingProgressRecord? {
-        record(
-            threadURL: favorite.url,
-            type: favorite.type,
-            mangaPageIndex: favorite.mangaPageIndex,
-            lastView: favorite.lastView,
-            lastChapter: favorite.lastChapter,
-            authorID: favorite.authorID,
-            novelResumePoint: favorite.novelResumePoint,
-            novelMaxView: favorite.novelMaxView,
-            novelDocumentSurfaceProgressPercent: favorite.novelDocumentSurfaceProgressPercent,
-            lastMangaURL: favorite.lastMangaURL,
-            lastReadAt: favorite.lastReadAt,
-            date: date
-        )
-    }
-
-    private static func record(from archive: FavoriteMetadataArchiveEntry, date: Date = .now) -> ReadingProgressRecord? {
-        record(
-            threadURL: archive.canonicalThreadURL,
-            type: archive.type,
-            mangaPageIndex: archive.mangaPageIndex,
-            lastView: archive.lastView,
-            lastChapter: archive.lastChapter,
-            authorID: archive.authorID,
-            novelResumePoint: archive.novelResumePoint,
-            novelMaxView: archive.novelMaxView,
-            novelDocumentSurfaceProgressPercent: archive.novelDocumentSurfaceProgressPercent,
-            lastMangaURL: archive.lastMangaURL,
-            lastReadAt: archive.lastReadAt,
-            date: date
-        )
-    }
-
-    private static func record(
-        threadURL: URL,
-        type: FavoriteType,
-        mangaPageIndex: Int,
-        lastView: Int,
-        lastChapter: String?,
-        authorID: String?,
-        novelResumePoint: ReaderResumePoint?,
-        novelMaxView: Int?,
-        novelDocumentSurfaceProgressPercent: Int?,
-        lastMangaURL: URL?,
-        lastReadAt: Date?,
-        date: Date
-    ) -> ReadingProgressRecord? {
-        let hasNovelProgress = novelResumePoint != nil ||
-            lastView > 1 ||
-            trimmedNonEmpty(lastChapter) != nil ||
-            trimmedNonEmpty(authorID) != nil ||
-            novelMaxView != nil ||
-            novelDocumentSurfaceProgressPercent != nil
-        let hasMangaProgress = lastMangaURL != nil || mangaPageIndex > 0
-
-        if type == .manga || (!hasNovelProgress && hasMangaProgress) {
-            guard let lastMangaURL else { return nil }
-            return ReadingProgressRecord(
-                threadURL: threadURL,
-                kind: .manga,
-                updatedAt: lastReadAt ?? date,
-                lastReadAt: lastReadAt,
-                novel: nil,
-                manga: MangaReadingProgressRecord(
-                    lastMangaURL: lastMangaURL,
-                    lastChapter: lastChapter ?? "",
-                    mangaPageIndex: mangaPageIndex
-                )
-            )
-        }
-
-        guard hasNovelProgress else { return nil }
-        return ReadingProgressRecord(
-            threadURL: threadURL,
-            kind: .novel,
-            updatedAt: lastReadAt ?? date,
-            lastReadAt: lastReadAt,
-            novel: NovelReadingProgressRecord(
-                lastView: lastView,
-                lastChapter: lastChapter,
-                authorID: authorID,
-                novelResumePoint: novelResumePoint,
-                novelMaxView: novelMaxView,
-                novelDocumentSurfaceProgressPercent: novelDocumentSurfaceProgressPercent
-            ),
-            manga: nil
         )
     }
 
@@ -410,6 +329,22 @@ public actor ReadingProgressStore {
 
     private static func key(for record: ReadingProgressRecord) -> String {
         record.contentTarget?.id ?? canonicalURLKey(for: record.threadURL)
+    }
+
+    private static func mangaProgressRetargetCandidateIDs(
+        target: FavoriteContentTarget,
+        cleanBookName: String,
+        chapterTID: String?
+    ) -> Set<String> {
+        guard target.kind == .mangaTitle else { return [] }
+        var candidateIDs = Set<String>()
+        candidateIDs.insert(FavoriteContentTarget(mangaCleanBookName: cleanBookName).id)
+        if let chapterTID = chapterTID?.trimmingCharacters(in: .whitespacesAndNewlines), !chapterTID.isEmpty {
+            candidateIDs.insert(FavoriteContentTarget(mangaID: "chapter:\(chapterTID)", mangaCleanBookName: cleanBookName).id)
+            candidateIDs.insert(FavoriteContentTarget(mangaID: "thread:\(chapterTID)", mangaCleanBookName: cleanBookName).id)
+        }
+        candidateIDs.remove(target.id)
+        return candidateIDs
     }
 
     private static func trimmedNonEmpty(_ value: String?) -> String? {
