@@ -10,6 +10,10 @@ The current contexts are:
 
 ## Language
 
+**Transparent Image Data Cache**:
+The app-wide, regenerable local store of remote image bytes reused by reader, forum, account, and library surfaces. It is separate from decoded in-memory image caching and from user-retained offline content such as **Manga Offline Cache**, and entries may have different retention policies such as normal evictable bytes or protected avatar bytes.
+_Avoid_: manga image cache, image offline cache, decoded image cache
+
 **Reader Chrome**:
 The floating reader control layer around reading content, including close, directory, source-thread, progress, settings, and related reader actions. It does not include the novel text viewport or manga image viewport.
 _Avoid_: reader viewport, reader content, floating controls
