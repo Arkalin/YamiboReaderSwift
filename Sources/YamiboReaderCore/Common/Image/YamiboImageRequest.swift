@@ -9,11 +9,20 @@ public struct YamiboImageCacheNamespace: Hashable, Sendable {
     }
 
     public static func namespace(cookie: String, userAgent: String) -> YamiboImageCacheNamespace {
+        ordinarySessionNamespace(cookie: cookie, userAgent: userAgent)
+    }
+
+    public static func ordinarySessionNamespace(cookie: String, userAgent: String) -> YamiboImageCacheNamespace {
         let rawValue = "\(userAgent)\u{1F}\(cookie)"
         let digest = SHA256.hash(data: Data(rawValue.utf8))
         return YamiboImageCacheNamespace(
             value: digest.map { String(format: "%02x", $0) }.joined()
         )
+    }
+
+    public static func avatarSessionNamespace(cookie: String, userAgent: String) -> YamiboImageCacheNamespace {
+        let ordinary = ordinarySessionNamespace(cookie: cookie, userAgent: userAgent)
+        return YamiboImageCacheNamespace(value: "avatar:\(ordinary.value)")
     }
 }
 
