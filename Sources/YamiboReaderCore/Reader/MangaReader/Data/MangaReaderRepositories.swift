@@ -16,7 +16,7 @@ public protocol MangaChapterDocumentStorageReporting: Sendable {
 
 public extension MangaChapterDocumentPersisting {
     func document(forTID tid: String) async -> MangaChapterDocument? {
-        guard let url = MangaReaderDataSupport.chapterURL(forTID: tid) else { return nil }
+        guard let url = YamiboRoute.chapterURL(forTID: tid) else { return nil }
         return await document(for: url)
     }
 

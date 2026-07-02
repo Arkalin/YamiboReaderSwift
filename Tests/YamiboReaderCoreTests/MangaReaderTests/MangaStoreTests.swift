@@ -251,8 +251,8 @@ struct MangaReaderTestsGRDBMangaStores {
         #expect(payload.contains(#""originalThreadID":"930""#))
         let loaded = try #require(await store.load())
         #expect(loaded == .manga(.native(MangaLaunchContext(
-            originalThreadURL: try #require(MangaReaderDataSupport.chapterURL(forTID: "930")),
-            chapterURL: try #require(MangaReaderDataSupport.chapterURL(forTID: "931")),
+            originalThreadURL: try #require(YamiboRoute.chapterURL(forTID: "930")),
+            chapterURL: try #require(YamiboRoute.chapterURL(forTID: "931")),
             displayTitle: "测试漫画",
             source: .resume,
             initialPage: 4,

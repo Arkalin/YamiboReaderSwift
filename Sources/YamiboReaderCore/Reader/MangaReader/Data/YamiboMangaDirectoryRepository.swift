@@ -8,7 +8,7 @@ public struct YamiboMangaDirectoryRepository: MangaDirectoryRepository {
     }
 
     public func loadDirectorySeed(for chapterURL: URL) async throws -> MangaDirectorySeed {
-        let normalizedURL = MangaReaderDataSupport.normalizedChapterURL(chapterURL)
+        let normalizedURL = YamiboRoute.normalizedChapterURL(chapterURL)
 
         return try await MangaReaderDataSupport.mapNetworkErrors {
             guard let tid = MangaTitleCleaner.extractTid(from: normalizedURL.absoluteString)?.mangaReaderTrimmedNonEmpty else {
@@ -28,7 +28,7 @@ public struct YamiboMangaDirectoryRepository: MangaDirectoryRepository {
                 tid: tid,
                 rawTitle: cleanedThreadTitle,
                 chapterNumber: MangaTitleCleaner.extractChapterNumber(rawTitle),
-                url: MangaReaderDataSupport.chapterURL(forTID: tid) ?? normalizedURL
+                url: YamiboRoute.chapterURL(forTID: tid) ?? normalizedURL
             )
             let mobileTagIDs = MangaHTMLParser.findTagIDsMobile(in: html)
             let tagIDs = mobileTagIDs.isEmpty ? MangaHTMLParser.findTagIDs(in: html) : mobileTagIDs

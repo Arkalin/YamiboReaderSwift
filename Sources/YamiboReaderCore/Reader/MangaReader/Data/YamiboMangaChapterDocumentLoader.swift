@@ -8,7 +8,7 @@ public struct YamiboMangaChapterDocumentLoader: MangaChapterDocumentLoading {
     }
 
     public func loadChapterDocument(at url: URL) async throws -> MangaChapterDocument {
-        let chapterURL = MangaReaderDataSupport.normalizedChapterURL(url)
+        let chapterURL = YamiboRoute.normalizedChapterURL(url)
 
         return try await MangaReaderDataSupport.mapNetworkErrors {
             guard let tid = MangaTitleCleaner.extractTid(from: chapterURL.absoluteString)?.mangaReaderTrimmedNonEmpty else {
@@ -30,7 +30,7 @@ public struct YamiboMangaChapterDocumentLoader: MangaChapterDocumentLoading {
                 tid: tid,
                 ownerPostID: MangaHTMLParser.extractFirstPostID(from: html),
                 chapterTitle: chapterTitle,
-                chapterURL: MangaReaderDataSupport.chapterURL(forTID: tid) ?? chapterURL,
+                chapterURL: YamiboRoute.chapterURL(forTID: tid) ?? chapterURL,
                 imageURLs: imageURLs
             )
         }

@@ -238,5 +238,5 @@ private func makeLoaderDocument(tid: String) throws -> MangaChapterDocument {
 }
 
 private func normalizedChapterDocumentKey(_ chapterURL: URL) -> String {
-    MangaReaderDataSupport.normalizedChapterURL(chapterURL).absoluteString
+    YamiboRoute.normalizedChapterURL(chapterURL).absoluteString
 }

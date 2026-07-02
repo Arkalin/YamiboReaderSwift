@@ -33,7 +33,7 @@ public struct MangaOfflineCacheMembership: Codable, Hashable, Identifiable, Send
         self.ownerName = ownerName.trimmingCharacters(in: .whitespacesAndNewlines)
         self.tid = tid.trimmingCharacters(in: .whitespacesAndNewlines)
         self.chapterTitle = chapterTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        self.chapterURL = MangaReaderDataSupport.normalizedChapterURL(chapterURL, tid: self.tid)
+        self.chapterURL = YamiboRoute.normalizedChapterURL(chapterURL, tid: self.tid)
         self.imageURLs = imageURLs
         self.createdAt = createdAt
     }
@@ -82,7 +82,7 @@ public struct MangaOfflineCacheWorkRequest: Hashable, Sendable {
         self.ownerName = ownerName.trimmingCharacters(in: .whitespacesAndNewlines)
         self.tid = tid.trimmingCharacters(in: .whitespacesAndNewlines)
         self.chapterTitle = chapterTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        self.chapterURL = MangaReaderDataSupport.normalizedChapterURL(chapterURL, tid: self.tid)
+        self.chapterURL = YamiboRoute.normalizedChapterURL(chapterURL, tid: self.tid)
         self.targetImageURLs = Self.uniqueURLs(targetImageURLs)
     }
 
@@ -153,7 +153,7 @@ public struct MangaOfflineCacheWork: Codable, Hashable, Identifiable, Sendable {
         self.ownerName = ownerName.trimmingCharacters(in: .whitespacesAndNewlines)
         self.tid = tid.trimmingCharacters(in: .whitespacesAndNewlines)
         self.chapterTitle = chapterTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        self.chapterURL = MangaReaderDataSupport.normalizedChapterURL(chapterURL, tid: self.tid)
+        self.chapterURL = YamiboRoute.normalizedChapterURL(chapterURL, tid: self.tid)
         self.targetImageURLs = Self.uniqueURLs(targetImageURLs)
         self.completedImageURLs = Self.uniqueURLs(completedImageURLs)
         self.state = state

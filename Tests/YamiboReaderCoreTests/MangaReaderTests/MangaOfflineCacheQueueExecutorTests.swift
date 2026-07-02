@@ -122,8 +122,8 @@ struct MangaReaderTestsMangaOfflineCacheQueueExecutor {
         #expect(await store.offlineCacheState(ownerName: favorite.id, tid: "350") == .cached)
         #expect(await favoriteStore.favorite(id: favorite.id) == favorite)
         #expect(await resumeRouteStore.load() == .manga(.native(MangaLaunchContext(
-            originalThreadURL: try #require(MangaReaderDataSupport.chapterURL(forTID: "350")),
-            chapterURL: try #require(MangaReaderDataSupport.chapterURL(forTID: "350")),
+            originalThreadURL: try #require(YamiboRoute.chapterURL(forTID: "350")),
+            chapterURL: try #require(YamiboRoute.chapterURL(forTID: "350")),
             displayTitle: "阅读进度漫画",
             source: .resume,
             initialPage: 5

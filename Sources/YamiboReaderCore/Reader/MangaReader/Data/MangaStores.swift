@@ -189,7 +189,7 @@ public actor GRDBMangaDirectoryStore: MangaDirectoryPersisting, MangaDirectorySt
                 tid: tid,
                 rawTitle: row["raw_title"],
                 chapterNumber: row["chapter_number"],
-                url: MangaReaderDataSupport.chapterURL(forTID: tid) ?? URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=0")!,
+                url: YamiboRoute.chapterURL(forTID: tid) ?? URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=0")!,
                 authorUID: row["author_uid"] as String?,
                 authorName: row["author_name"] as String?,
                 groupIndex: row["group_index"],
@@ -351,7 +351,7 @@ public actor GRDBMangaChapterDocumentStore: MangaChapterDocumentPersisting, Mang
             throw YamiboError.persistenceFailed("Manga chapter document tid is empty")
         }
         normalized.tid = tid
-        normalized.chapterURL = MangaReaderDataSupport.chapterURL(forTID: tid) ?? MangaReaderDataSupport.normalizedChapterURL(chapterURL)
+        normalized.chapterURL = YamiboRoute.chapterURL(forTID: tid) ?? YamiboRoute.normalizedChapterURL(chapterURL)
         try await save(normalized)
     }
 
@@ -453,7 +453,7 @@ public actor GRDBMangaChapterDocumentStore: MangaChapterDocumentPersisting, Mang
             tid: tid,
             ownerPostID: row["owner_post_id"],
             chapterTitle: row["chapter_title"],
-            chapterURL: MangaReaderDataSupport.chapterURL(forTID: tid) ?? URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=0")!,
+            chapterURL: YamiboRoute.chapterURL(forTID: tid) ?? URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=0")!,
             imageURLs: imageURLs
         )
     }

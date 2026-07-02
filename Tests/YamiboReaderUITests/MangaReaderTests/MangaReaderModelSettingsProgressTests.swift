@@ -224,7 +224,7 @@ final class MangaReaderModelSettingsProgressTests: XCTestCase {
             return
         }
         XCTAssertEqual(savedContext.source, .resume)
-        XCTAssertEqual(savedContext.chapterURL, MangaReaderDataSupport.chapterURL(forTID: "701"))
+        XCTAssertEqual(savedContext.chapterURL, YamiboRoute.chapterURL(forTID: "701"))
         XCTAssertEqual(savedContext.initialPage, 1)
         XCTAssertEqual(savedContext.directoryName, "Resolved Directory")
     }

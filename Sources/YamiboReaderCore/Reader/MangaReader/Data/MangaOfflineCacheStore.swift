@@ -865,7 +865,7 @@ public actor GRDBMangaOfflineCacheStore: MangaOfflineCacheStoring {
     }
 
     private static func chapterURL(tid: String) -> URL {
-        MangaReaderDataSupport.chapterURL(forTID: tid) ?? URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=0")!
+        YamiboRoute.chapterURL(forTID: tid) ?? URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=0")!
     }
 
     private static func openDatabase() -> DatabasePool {

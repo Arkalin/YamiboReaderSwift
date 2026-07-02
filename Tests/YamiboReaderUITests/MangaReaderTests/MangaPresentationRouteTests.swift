@@ -217,7 +217,7 @@ final class MangaPresentationRouteTests: XCTestCase {
         await appModel.bootstrapIfNeeded()
 
         let expectedContext = MangaLaunchContext(
-            originalThreadURL: try XCTUnwrap(MangaReaderDataSupport.chapterURL(forTID: "731")),
+            originalThreadURL: try XCTUnwrap(YamiboRoute.chapterURL(forTID: "731")),
             chapterURL: expectedRemoteChapterURL,
             displayTitle: "本地漫画",
             source: .resume,

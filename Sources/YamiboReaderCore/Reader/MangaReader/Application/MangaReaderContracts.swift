@@ -100,12 +100,12 @@ extension MangaLaunchContext: Codable {
 
     private static func threadURL(threadID: String?, legacyURL: URL?) throws -> URL {
         if let threadID = threadID?.mangaReaderTrimmedNonEmpty,
-           let url = MangaReaderDataSupport.chapterURL(forTID: threadID) {
+           let url = YamiboRoute.chapterURL(forTID: threadID) {
             return url
         }
         if let legacyURL,
            let threadID = Self.threadID(from: legacyURL),
-           let url = MangaReaderDataSupport.chapterURL(forTID: threadID) {
+           let url = YamiboRoute.chapterURL(forTID: threadID) {
             return url
         }
         if let legacyURL {

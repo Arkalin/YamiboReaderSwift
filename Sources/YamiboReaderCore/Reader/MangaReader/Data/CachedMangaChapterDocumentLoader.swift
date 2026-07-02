@@ -14,7 +14,7 @@ public actor CachedMangaChapterDocumentLoader: MangaChapterDocumentLoading {
     }
 
     public func loadChapterDocument(at url: URL) async throws -> MangaChapterDocument {
-        let normalizedURL = MangaReaderDataSupport.normalizedChapterURL(url)
+        let normalizedURL = YamiboRoute.normalizedChapterURL(url)
         let tid = MangaTitleCleaner.extractTid(from: normalizedURL.absoluteString)?.mangaReaderTrimmedNonEmpty
         if let tid, let cached = await store.document(forTID: tid) {
             return cached

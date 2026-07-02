@@ -40,10 +40,10 @@ final class WebDAVSyncSettingsViewModelTests: XCTestCase {
         ))
         try await sessionStore.save(SessionState(cookie: "sid=local", isLoggedIn: true, accountUID: "local-uid"))
 
-        let remotePayload = WebDAVSyncPayload(
+        let remotePayload = FavoriteLibraryWebDAVPayload(
             updatedAt: Date(timeIntervalSince1970: 4_000),
             accountUID: "remote-uid",
-            library: FavoriteLibrarySnapshot(favorites: [], collections: [])
+            library: FavoriteLibraryDocument()
         )
         let encodedRemotePayload = try JSONEncoder().encode(remotePayload)
         WebDAVSettingsTestURLProtocol.setHandler(for: host) { request in
@@ -118,10 +118,10 @@ final class WebDAVSyncSettingsViewModelTests: XCTestCase {
         ))
         try await sessionStore.save(SessionState(cookie: "sid=local", isLoggedIn: true, accountUID: "local-uid"))
 
-        let remotePayload = WebDAVSyncPayload(
+        let remotePayload = FavoriteLibraryWebDAVPayload(
             updatedAt: Date(timeIntervalSince1970: 4_000),
             accountUID: "remote-uid",
-            library: FavoriteLibrarySnapshot(favorites: [], collections: [])
+            library: FavoriteLibraryDocument()
         )
         let encodedRemotePayload = try JSONEncoder().encode(remotePayload)
         WebDAVSettingsTestURLProtocol.setHandler(for: host) { request in
