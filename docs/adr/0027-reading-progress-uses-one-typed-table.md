@@ -1,0 +1,3 @@
+# Reading progress uses one typed table
+
+The GRDB Reading Progress Store will use one `reading_progress` table with shared identity, content target, thread `tid`, kind, and timestamp columns plus typed novel and manga progress columns, rather than storing whole records as JSON blobs or splitting novel and manga progress into unrelated tables. It will not persist thread URLs or manga chapter URLs; novel progress uses thread `tid`, and manga progress uses manga title identity plus current chapter `tid`. This keeps reader resume, sorting, WebDAV payload generation, and migration deduplication queryable while preserving **Reading Progress Store** as a separate source of truth from the Favorite Library.

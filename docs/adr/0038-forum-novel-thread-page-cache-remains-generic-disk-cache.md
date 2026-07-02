@@ -1,0 +1,3 @@
+# Forum and novel thread page cache remains generic disk cache
+
+Forum and novel parsed Thread Page cache contents will remain JSON files managed by the generic DiskCache and `cache_entries` index, with cache keys changed to use thread `tid` plus qualifiers such as page, author id, and content source. The tid-first identity migration does not require relational tables for thread posts, blocks, or comments; Manga Chapter Document is the structured-storage exception because its parsed metadata and ordered manga image URLs are small, chapter-scoped, and directly shared with Manga Directory and Manga Offline Cache behavior.

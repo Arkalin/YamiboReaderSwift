@@ -17,3 +17,5 @@ DerivedData/
 *.xcodeproj/xcuserdata/
 *.xcuserdatad/
 *.xcuserstate
+
+docs/issues/

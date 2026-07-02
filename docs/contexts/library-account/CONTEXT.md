@@ -100,6 +100,7 @@ _Avoid_: app sync, startup restore, lifecycle handler
 
 - A **Favorite Library** is local-first: user-owned **Favorite Items** decide what saved content exists, while Yamibo remote favorites are a sync target for supported items.
 - A **Favorite Item** is identified by its **Favorite Content Target**, not by a Yamibo remote favorite ID or raw URL string.
+- Thread-based **Favorite Content Targets** use Yamibo thread `tid` as their persistent identity; thread URLs are external input and network construction details rather than stored favorite identity.
 - **Favorite Content Target** kind replaces favorite type as the domain distinction between normal threads, novel threads, and manga titles.
 - Normal thread and novel thread **Favorite Content Targets** are distinct because they carry different reading entry and progress semantics.
 - Manga title **Favorite Content Targets** use the owning **Manga Directory** `cleanBookName`, while chapter URLs are opening and recovery metadata.
@@ -141,7 +142,7 @@ _Avoid_: app sync, startup restore, lifecycle handler
 - Yamibo remote favorite sync operates on one **Favorite Category** at a time: remote thread favorites are imported into that category, and local thread **Favorite Items** in that category may be uploaded to Yamibo remote favorites.
 - Manga title **Favorite Items** are local-only for Yamibo remote favorite sync.
 - The **Reading Progress Store** owns current local reading position for novels and manga. Removing a visible favorite does not remove the matching **Reading Progress Store** record.
-- The **Reading Progress Store** identifies synchronized reading positions by stable content target identity rather than raw URL strings.
+- The **Reading Progress Store** identifies synchronized reading positions by stable content target identity, using Yamibo thread `tid` for thread-based content rather than raw or canonical URL strings.
 - Manga reading positions in the **Reading Progress Store** are owned by manga title identity and store the current chapter identity and page index.
 - Visible **Favorite Library** entries may mirror the **Reading Progress Store** reading position for favorite-list display and existing WebDAV favorite payload compatibility, but reader resume should prefer the **Reading Progress Store**.
 - Favorite cards may display recent reading, chapter, page, or percent progress, but those progress values are projections from the **Reading Progress Store** rather than **Favorite Item** authority.

@@ -1,0 +1,3 @@
+# WebDAV payloads use tid-first schema without legacy compatibility
+
+New WebDAV Favorite Library and Reading Progress payloads will use tid-first identities and will not write or read legacy thread-URL-based payload fields. This intentionally breaks compatibility with earlier payload shapes so synchronized user data matches the GRDB domain model directly, with thread targets stored as `kind + threadID`, manga progress stored with manga title identity plus chapter `tid`, and no canonical thread URLs or manga chapter URLs in the sync format. When the app reads an old or missing-version payload, it reports an incompatible schema error and leaves both local GRDB data and the remote file untouched until the user chooses to upload a new payload.
