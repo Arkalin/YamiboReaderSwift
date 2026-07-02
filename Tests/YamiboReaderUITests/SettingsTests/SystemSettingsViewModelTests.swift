@@ -176,7 +176,7 @@ final class SystemSettingsViewModelTests: XCTestCase {
         let fixture = try makeFixture()
         try await seedNovelCache(fixture)
         try await seedMangaIndexCache(fixture)
-        try await seedMangaImageCache(fixture)
+        try await seedImageCache(fixture)
         try await seedMangaOfflineCache(fixture)
 
         let viewModel = SystemSettingsViewModel(appContext: fixture.appContext)
@@ -184,17 +184,17 @@ final class SystemSettingsViewModelTests: XCTestCase {
 
         XCTAssertGreaterThan(viewModel.novelCacheBytes, 0)
         XCTAssertGreaterThan(viewModel.mangaIndexCacheBytes, 0)
-        XCTAssertGreaterThan(viewModel.mangaImageCacheBytes, 0)
+        XCTAssertGreaterThan(viewModel.imageCacheBytes, 0)
         XCTAssertGreaterThan(viewModel.mangaOfflineCacheBytes, 0)
         XCTAssertEqual(viewModel.mangaIndexCacheLabel, cacheLabel(for: viewModel.mangaIndexCacheBytes))
-        XCTAssertEqual(viewModel.mangaImageCacheLabel, cacheLabel(for: viewModel.mangaImageCacheBytes))
+        XCTAssertEqual(viewModel.imageCacheLabel, cacheLabel(for: viewModel.imageCacheBytes))
         XCTAssertEqual(viewModel.mangaOfflineCacheLabel, cacheLabel(for: viewModel.mangaOfflineCacheBytes))
     }
 
     func testClearMangaIndexCacheClearsDirectoriesAndChapterDocumentsOnly() async throws {
         let fixture = try makeFixture()
         try await seedMangaIndexCache(fixture)
-        try await seedMangaImageCache(fixture)
+        try await seedImageCache(fixture)
 
         let viewModel = SystemSettingsViewModel(appContext: fixture.appContext)
         await viewModel.load()
@@ -210,31 +210,84 @@ final class SystemSettingsViewModelTests: XCTestCase {
         XCTAssertEqual(chapterDocumentBytesAfterClear, 0)
         XCTAssertEqual(imageBytesAfterClear, imageBytesBeforeClear)
         XCTAssertEqual(viewModel.mangaIndexCacheBytes, 0)
-        XCTAssertEqual(viewModel.mangaImageCacheBytes, imageBytesBeforeClear)
+        XCTAssertEqual(viewModel.imageCacheBytes, imageBytesBeforeClear)
     }
 
-    func testClearMangaImageCacheClearsImageDataOnly() async throws {
+    func testClearImageCacheClearsTransparentImageDataOnly() async throws {
         let fixture = try makeFixture()
+        try await seedNovelCache(fixture)
         try await seedMangaIndexCache(fixture)
-        try await seedMangaImageCache(fixture)
+        let imageRequests = try await seedImageCache(fixture)
+        let offlineImageURL = try XCTUnwrap(URL(string: "https://img.example.com/offline-settings.jpg"))
+        try await fixture.mangaOfflineCacheStore.saveOfflineImageData(Data(repeating: 4, count: 1024), for: offlineImageURL)
+        try await fixture.mangaOfflineCacheStore.saveMembership(
+            try makeMangaOfflineMembership(ownerName: "作品A", tid: "903", imageURLs: [offlineImageURL])
+        )
+        _ = try await fixture.mangaOfflineCacheStore.enqueueOfflineCacheWork(
+            try makeMangaOfflineWorkRequest(
+                ownerName: "作品B",
+                tid: "904",
+                targetImageURLs: [try XCTUnwrap(URL(string: "https://img.example.com/offline-work.jpg"))]
+            )
+        )
+        let favoriteBackgroundID = "settings-background"
+        try await fixture.favoriteBackgroundImageStore.save(
+            Data(repeating: 5, count: 128),
+            imageID: favoriteBackgroundID
+        )
+        try await fixture.settingsStore.save(AppSettings(
+            favoriteBackground: FavoriteBackgroundSettings(isEnabled: true, imageID: favoriteBackgroundID),
+            homePage: .favorites
+        ))
+        var favoriteLibrary = FavoriteLibraryDocument()
+        let favoriteThreadURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=905"))
+        favoriteLibrary.addItem(try FavoriteItem(
+            target: FavoriteContentTarget(kind: .normalThread, threadURL: favoriteThreadURL),
+            title: "收藏条目",
+            locations: [.category(favoriteLibrary.defaultCategory.id)]
+        ))
+        try await fixture.appContext.localFavoriteLibraryStore.save(favoriteLibrary)
 
         let viewModel = SystemSettingsViewModel(appContext: fixture.appContext)
         await viewModel.load()
+        let novelBytesBeforeClear = await fixture.readerCacheStore.totalDiskUsageBytes()
         let directoryBytesBeforeClear = await fixture.mangaDirectoryStore.totalDiskUsageBytes()
         let chapterDocumentBytesBeforeClear = await fixture.mangaChapterDocumentStore.totalDiskUsageBytes()
         let indexBytesBeforeClear = directoryBytesBeforeClear + chapterDocumentBytesBeforeClear
+        let offlineBytesBeforeClear = await fixture.mangaOfflineCacheStore.totalDiskUsageBytes()
 
-        let didClear = await viewModel.clearMangaImageCache()
+        let didClear = await viewModel.clearImageCache()
         let imageBytesAfterClear = await fixture.imageDataCacheStore.totalDiskUsageBytes()
+        let novelBytesAfterClear = await fixture.readerCacheStore.totalDiskUsageBytes()
         let directoryBytesAfterClear = await fixture.mangaDirectoryStore.totalDiskUsageBytes()
         let chapterDocumentBytesAfterClear = await fixture.mangaChapterDocumentStore.totalDiskUsageBytes()
+        let offlineBytesAfterClear = await fixture.mangaOfflineCacheStore.totalDiskUsageBytes()
+        let offlineMembershipAfterClear = await fixture.mangaOfflineCacheStore.membership(ownerName: "作品A", tid: "903")
+        let offlineWorkAfterClear = await fixture.mangaOfflineCacheStore.offlineCacheWork(ownerName: "作品B", tid: "904")
+        let favoriteBackgroundDataAfterClear = await fixture.favoriteBackgroundImageStore.loadData(imageID: favoriteBackgroundID)
+        let settingsAfterClear = await fixture.settingsStore.load()
+        let favoriteLibraryAfterClear = await fixture.appContext.localFavoriteLibraryStore.load()
 
         XCTAssertTrue(didClear)
         XCTAssertEqual(imageBytesAfterClear, 0)
+        for request in imageRequests {
+            let cachedDataAfterClear = await fixture.imageDataCacheStore.data(for: request)
+            XCTAssertNil(cachedDataAfterClear)
+        }
+        XCTAssertEqual(novelBytesAfterClear, novelBytesBeforeClear)
         XCTAssertEqual(directoryBytesAfterClear, directoryBytesBeforeClear)
         XCTAssertEqual(chapterDocumentBytesAfterClear, chapterDocumentBytesBeforeClear)
-        XCTAssertEqual(viewModel.mangaImageCacheBytes, 0)
+        XCTAssertEqual(offlineBytesAfterClear, offlineBytesBeforeClear)
+        XCTAssertNotNil(offlineMembershipAfterClear)
+        XCTAssertNotNil(offlineWorkAfterClear)
+        XCTAssertEqual(favoriteBackgroundDataAfterClear, Data(repeating: 5, count: 128))
+        XCTAssertEqual(settingsAfterClear.homePage, .favorites)
+        XCTAssertEqual(settingsAfterClear.favoriteBackground.imageID, favoriteBackgroundID)
+        XCTAssertEqual(favoriteLibraryAfterClear, favoriteLibrary)
+        XCTAssertEqual(viewModel.imageCacheBytes, 0)
+        XCTAssertEqual(viewModel.novelCacheBytes, novelBytesBeforeClear)
         XCTAssertEqual(viewModel.mangaIndexCacheBytes, indexBytesBeforeClear)
+        XCTAssertEqual(viewModel.mangaOfflineCacheBytes, offlineBytesBeforeClear)
     }
 
     func testMangaOfflineCacheCleanupFiltersOwnersWithMembershipOrWorkAndShowsUsage() async throws {
@@ -417,7 +470,7 @@ final class SystemSettingsViewModelTests: XCTestCase {
     func testMangaOfflineCacheCleanupPreservesTransparentMangaCaches() async throws {
         let fixture = try makeFixture()
         try await seedMangaIndexCache(fixture)
-        try await seedMangaImageCache(fixture)
+        try await seedImageCache(fixture)
         let imageURL = try XCTUnwrap(URL(string: "https://img.example.com/901-1.jpg"))
         try await fixture.mangaOfflineCacheStore.saveOfflineImageData(Data([1]), for: imageURL)
         try await fixture.mangaOfflineCacheStore.saveMembership(
@@ -446,20 +499,20 @@ final class SystemSettingsViewModelTests: XCTestCase {
         let fixture = try makeFixture()
         try await seedNovelCache(fixture)
         try await seedMangaIndexCache(fixture)
-        try await seedMangaImageCache(fixture)
+        try await seedImageCache(fixture)
 
         let viewModel = SystemSettingsViewModel(appContext: fixture.appContext)
         await viewModel.load()
         XCTAssertGreaterThan(viewModel.novelCacheBytes, 0)
         XCTAssertGreaterThan(viewModel.mangaIndexCacheBytes, 0)
-        XCTAssertGreaterThan(viewModel.mangaImageCacheBytes, 0)
+        XCTAssertGreaterThan(viewModel.imageCacheBytes, 0)
 
         let didReset = await viewModel.resetApplication()
 
         XCTAssertTrue(didReset)
         XCTAssertEqual(viewModel.novelCacheBytes, 0)
         XCTAssertEqual(viewModel.mangaIndexCacheBytes, 0)
-        XCTAssertEqual(viewModel.mangaImageCacheBytes, 0)
+        XCTAssertEqual(viewModel.imageCacheBytes, 0)
     }
 }
 
@@ -574,15 +627,28 @@ private func seedMangaIndexCache(_ fixture: SystemSettingsFixture) async throws 
     )
 }
 
-private func seedMangaImageCache(_ fixture: SystemSettingsFixture) async throws {
+@discardableResult
+private func seedImageCache(_ fixture: SystemSettingsFixture) async throws -> [YamiboImageRequest] {
+    let evictableRequest = YamiboImageRequest(
+        url: try XCTUnwrap(URL(string: "https://img.example.com/901-1.jpg")),
+        cacheNamespace: YamiboImageCacheNamespace(value: "settings-test")
+    )
+    let protectedRequest = YamiboImageRequest(
+        url: try XCTUnwrap(URL(string: "https://avatar.example.com/user.jpg")),
+        cacheNamespace: YamiboImageCacheNamespace(value: "settings-avatar-test")
+    )
+
     try await fixture.imageDataCacheStore.save(
         Data(repeating: 8, count: 4096),
-        for: YamiboImageRequest(
-            url: try XCTUnwrap(URL(string: "https://img.example.com/901-1.jpg")),
-            cacheNamespace: YamiboImageCacheNamespace(value: "settings-test")
-        ),
+        for: evictableRequest,
         retentionPolicy: .evictable
     )
+    try await fixture.imageDataCacheStore.save(
+        Data(repeating: 7, count: 2048),
+        for: protectedRequest,
+        retentionPolicy: .protected
+    )
+    return [evictableRequest, protectedRequest]
 }
 
 private func seedMangaOfflineCache(_ fixture: SystemSettingsFixture) async throws {

@@ -13,7 +13,7 @@ final class SystemSettingsViewModel: ObservableObject {
     @Published var applePencilPageTurn = ApplePencilPageTurnSettings()
     @Published private(set) var novelCacheBytes = 0
     @Published private(set) var mangaIndexCacheBytes = 0
-    @Published private(set) var mangaImageCacheBytes = 0
+    @Published private(set) var imageCacheBytes = 0
     @Published private(set) var mangaOfflineCacheBytes = 0
     @Published private(set) var mangaOfflineCacheCleanupRows: [MangaOfflineCacheCleanupRow] = []
     @Published private(set) var selectedMangaOfflineCacheOwnerNames: Set<String> = []
@@ -40,8 +40,8 @@ final class SystemSettingsViewModel: ObservableObject {
         cacheLabel(for: mangaIndexCacheBytes)
     }
 
-    var mangaImageCacheLabel: String {
-        cacheLabel(for: mangaImageCacheBytes)
+    var imageCacheLabel: String {
+        cacheLabel(for: imageCacheBytes)
     }
 
     var mangaOfflineCacheLabel: String {
@@ -309,8 +309,8 @@ final class SystemSettingsViewModel: ObservableObject {
         }
     }
 
-    func clearMangaImageCache() async -> Bool {
-        activeAction = .clearingMangaImageCache
+    func clearImageCache() async -> Bool {
+        activeAction = .clearingImageCache
         defer { activeAction = nil }
 
         do {
@@ -335,7 +335,7 @@ final class SystemSettingsViewModel: ObservableObject {
             applePencilPageTurn = .init()
             novelCacheBytes = 0
             mangaIndexCacheBytes = 0
-            mangaImageCacheBytes = 0
+            imageCacheBytes = 0
             mangaOfflineCacheBytes = 0
             mangaOfflineCacheCleanupRows = []
             selectedMangaOfflineCacheOwnerNames = []
@@ -353,7 +353,7 @@ final class SystemSettingsViewModel: ObservableObject {
         let directoryBytes = await appContext.mangaDirectoryStore.totalDiskUsageBytes()
         let chapterDocumentBytes = await appContext.mangaChapterDocumentStore.totalDiskUsageBytes()
         mangaIndexCacheBytes = directoryBytes + chapterDocumentBytes
-        mangaImageCacheBytes = await appContext.imageDataCacheStore.totalDiskUsageBytes()
+        imageCacheBytes = await appContext.imageDataCacheStore.totalDiskUsageBytes()
         mangaOfflineCacheBytes = await appContext.mangaOfflineCacheStore.totalDiskUsageBytes()
     }
 
