@@ -145,5 +145,6 @@ public protocol MangaOfflineCacheStoring: Sendable {
     func offlineCacheQueueRunState() async -> MangaOfflineCacheQueueRunState
     func setOfflineCacheQueueRunState(_ state: MangaOfflineCacheQueueRunState) async throws
     func offlineCacheState(ownerName: String, tid: String) async -> MangaOfflineCacheState
+    func totalDiskUsageBytes() async -> Int
     func clearAll() async throws
 }

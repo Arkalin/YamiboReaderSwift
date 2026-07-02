@@ -182,7 +182,7 @@ final class MangaReaderCacheViewModelTests: XCTestCase {
 private struct MangaReaderCacheFixture {
     let model: MangaReaderCacheViewModel
     let favorite: Favorite
-    let store: FileMangaOfflineCacheStore
+    let store: any MangaOfflineCacheStoring
 }
 
 @MainActor
@@ -196,8 +196,11 @@ private func makeCacheFixture(
         defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
         key: "favorite-library"
     )
-    let offlineStore = FileMangaOfflineCacheStore(
-        baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+    let offlineRoot = FileManager.default.temporaryDirectory
+        .appendingPathComponent("manga-reader-cache-grdb-\(UUID().uuidString)", isDirectory: true)
+    let offlineStore = GRDBMangaOfflineCacheStore(
+        databasePool: try YamiboDatabase.openPool(rootDirectory: offlineRoot),
+        baseDirectory: offlineRoot.appendingPathComponent("offline-images", isDirectory: true)
     )
     let threadURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/thread-900-1-1.html"))
     let favorite = Favorite(

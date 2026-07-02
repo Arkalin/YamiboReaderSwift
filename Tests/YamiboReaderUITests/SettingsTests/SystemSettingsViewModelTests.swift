@@ -480,7 +480,7 @@ private struct SystemSettingsFixture {
     let mangaDirectoryStore: FileMangaDirectoryStore
     let mangaChapterDocumentStore: FileMangaChapterDocumentStore
     let mangaImageDataCacheStore: FileMangaImageDataCacheStore
-    let mangaOfflineCacheStore: FileMangaOfflineCacheStore
+    let mangaOfflineCacheStore: any MangaOfflineCacheStoring
 }
 
 private func makeFixture() throws -> SystemSettingsFixture {
@@ -504,7 +504,8 @@ private func makeFixture() throws -> SystemSettingsFixture {
     let mangaImageDataCacheStore = FileMangaImageDataCacheStore(
         baseDirectory: root.appendingPathComponent("manga-image-data", isDirectory: true)
     )
-    let mangaOfflineCacheStore = FileMangaOfflineCacheStore(
+    let mangaOfflineCacheStore = GRDBMangaOfflineCacheStore(
+        databasePool: try YamiboDatabase.openPool(rootDirectory: root.appendingPathComponent("grdb", isDirectory: true)),
         baseDirectory: root.appendingPathComponent("manga-offline-cache", isDirectory: true)
     )
     let appContext = YamiboAppContext(

@@ -506,7 +506,7 @@ final class MineHomeViewModelTests: XCTestCase {
 private struct MineHomeViewModelFixture {
     let appContext: YamiboAppContext
     let checkInStore: YamiboCheckInStore
-    let offlineCacheStore: FileMangaOfflineCacheStore
+    let offlineCacheStore: any MangaOfflineCacheStoring
     let directoryStore: FileMangaDirectoryStore
 }
 
@@ -521,7 +521,11 @@ private func makeMineHomeFixture(
         defaults: try YamiboTestDefaults.defaults(suiteName: defaultsSuiteName),
         keyPrefix: "check-in"
     )
-    let offlineCacheStore = FileMangaOfflineCacheStore(baseDirectory: makeMineTemporaryDirectory())
+    let offlineCacheRoot = makeMineTemporaryDirectory()
+    let offlineCacheStore = GRDBMangaOfflineCacheStore(
+        databasePool: try YamiboDatabase.openPool(rootDirectory: offlineCacheRoot),
+        baseDirectory: offlineCacheRoot.appendingPathComponent("offline-images", isDirectory: true)
+    )
     let directoryStore = FileMangaDirectoryStore(baseDirectory: makeMineTemporaryDirectory())
     try await sessionStore.save(
         SessionState(
@@ -665,14 +669,14 @@ private func profileHTML(uid: String) -> String {
 }
 
 private actor RecordingOfflineCacheQueueController: MangaOfflineCacheQueueControlling {
-    private let store: FileMangaOfflineCacheStore
+    private let store: any MangaOfflineCacheStoring
     private var recordedEvents: [String] = []
 
     func snapshotEvents() -> [String] {
         recordedEvents
     }
 
-    init(store: FileMangaOfflineCacheStore) {
+    init(store: any MangaOfflineCacheStoring) {
         self.store = store
     }
 

@@ -282,7 +282,7 @@ public actor GRDBMangaDirectoryStore: MangaDirectoryPersisting, MangaDirectorySt
 
     private static func openDatabase() -> DatabasePool {
         do {
-            return try YamiboDatabase.openPool()
+            return try YamiboDatabase.openSharedPool()
         } catch {
             fatalError("Failed to open GRDBMangaDirectoryStore database: \(error)")
         }
@@ -399,7 +399,7 @@ public actor GRDBMangaChapterDocumentStore: MangaChapterDocumentPersisting, Mang
 
     private static func openDatabase() -> DatabasePool {
         do {
-            return try YamiboDatabase.openPool()
+            return try YamiboDatabase.openSharedPool()
         } catch {
             fatalError("Failed to open GRDBMangaChapterDocumentStore database: \(error)")
         }

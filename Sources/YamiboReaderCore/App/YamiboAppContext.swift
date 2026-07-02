@@ -32,7 +32,7 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
     public let mangaDirectorySearchCooldownState: MangaDirectorySearchCooldownState
     public let mangaChapterDocumentStore: any MangaChapterDocumentPersisting & MangaChapterDocumentStorageReporting
     public let mangaImageDataCacheStore: FileMangaImageDataCacheStore
-    public let mangaOfflineCacheStore: FileMangaOfflineCacheStore
+    public let mangaOfflineCacheStore: any MangaOfflineCacheStoring
     public let forumCacheStore: ForumCacheStore
     public let mangaOfflineCacheBackgroundDownloadTransport: MangaOfflineCacheBackgroundDownloadTransport
     public let mangaOfflineCacheContinuedProcessingCoordinator: MangaOfflineCacheContinuedProcessingCoordinator
@@ -57,7 +57,7 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         mangaDirectorySearchCooldownState: MangaDirectorySearchCooldownState = MangaDirectorySearchCooldownState(),
         mangaChapterDocumentStore: (any MangaChapterDocumentPersisting & MangaChapterDocumentStorageReporting)? = nil,
         mangaImageDataCacheStore: FileMangaImageDataCacheStore = FileMangaImageDataCacheStore(),
-        mangaOfflineCacheStore: FileMangaOfflineCacheStore = FileMangaOfflineCacheStore(),
+        mangaOfflineCacheStore: (any MangaOfflineCacheStoring)? = nil,
         forumCacheStore: ForumCacheStore = ForumCacheStore(),
         mangaOfflineCacheBackgroundDownloadTransport: MangaOfflineCacheBackgroundDownloadTransport = MangaOfflineCacheBackgroundDownloadTransport(),
         mangaOfflineCacheContinuedProcessingCoordinator: MangaOfflineCacheContinuedProcessingCoordinator = MangaOfflineCacheContinuedProcessingCoordinator(),
@@ -69,7 +69,8 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         self.settingsStore = settingsStore
         self.webDAVSyncSettingsStore = webDAVSyncSettingsStore
         self.readerResumeRouteStore = readerResumeRouteStore
-        self.favoriteStore = favoriteStore ?? FavoriteStore(mangaOfflineCacheStore: mangaOfflineCacheStore)
+        let resolvedMangaOfflineCacheStore = mangaOfflineCacheStore ?? GRDBMangaOfflineCacheStore()
+        self.favoriteStore = favoriteStore ?? FavoriteStore(mangaOfflineCacheStore: resolvedMangaOfflineCacheStore)
         self.localFavoriteLibraryStore = localFavoriteLibraryStore ?? LocalFirstFavoriteLibraryStore()
         self.favoriteUpdateStore = favoriteUpdateStore
         self.readingProgressStore = readingProgressStore ?? ReadingProgressStore()
@@ -80,7 +81,7 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         self.mangaDirectorySearchCooldownState = mangaDirectorySearchCooldownState
         self.mangaChapterDocumentStore = mangaChapterDocumentStore ?? GRDBMangaChapterDocumentStore()
         self.mangaImageDataCacheStore = mangaImageDataCacheStore
-        self.mangaOfflineCacheStore = mangaOfflineCacheStore
+        self.mangaOfflineCacheStore = resolvedMangaOfflineCacheStore
         self.forumCacheStore = forumCacheStore
         self.mangaOfflineCacheBackgroundDownloadTransport = mangaOfflineCacheBackgroundDownloadTransport
         self.mangaOfflineCacheContinuedProcessingCoordinator = mangaOfflineCacheContinuedProcessingCoordinator
