@@ -1,10 +1,6 @@
 import SwiftUI
 import YamiboReaderCore
-#if os(iOS)
 import UIKit
-#elseif os(macOS)
-import AppKit
-#endif
 
 enum YamiboColors {
     enum Site {
@@ -29,9 +25,7 @@ enum YamiboColors {
         static let mutedFill = brownPrimary.opacity(0.10)
         static let accentFill = orangeAccent.opacity(0.15)
 
-        #if canImport(UIKit)
         static let creamBackgroundUIColor = UIColor(hex: 0xFFF3D6)
-        #endif
 
         static func navigationBarBackground(for colorScheme: ColorScheme) -> Color {
             switch colorScheme {
@@ -47,41 +41,19 @@ enum YamiboColors {
 
     enum SystemSurface {
         static var background: Color {
-            #if os(iOS)
             Color(uiColor: .systemBackground)
-            #elseif os(macOS)
-            Color(nsColor: .windowBackgroundColor)
-            #else
-            Color.clear
-            #endif
         }
 
         static var groupedBackground: Color {
-            #if os(iOS)
             Color(uiColor: .systemGroupedBackground)
-            #elseif os(macOS)
-            Color(nsColor: .windowBackgroundColor)
-            #else
-            Color.clear
-            #endif
         }
 
         static var secondaryGroupedBackground: Color {
-            #if os(iOS)
             Color(uiColor: .secondarySystemGroupedBackground)
-            #elseif os(macOS)
-            Color(nsColor: .controlBackgroundColor)
-            #else
-            Color.clear
-            #endif
         }
 
         static var selectionBarBackground: Color {
-            #if os(iOS)
             Color(uiColor: .systemGray6)
-            #else
-            Color.gray.opacity(0.12)
-            #endif
         }
     }
 }
@@ -113,14 +85,10 @@ private struct ForumNavigationBarStyleModifier: ViewModifier {
     @Environment(\.colorScheme) private var colorScheme
 
     func body(content: Content) -> some View {
-        #if os(iOS)
         content
             .toolbarBackground(ForumColors.navigationBarBackground(for: colorScheme), for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbarColorScheme(.dark, for: .navigationBar)
-        #else
-        content
-        #endif
     }
 }
 
@@ -140,7 +108,6 @@ extension FavoriteAppearanceColor {
         }
     }
 
-    #if canImport(UIKit)
     var uiColor: UIColor {
         switch self {
         case .red: .systemRed
@@ -155,7 +122,6 @@ extension FavoriteAppearanceColor {
         case .gray: .systemGray
         }
     }
-    #endif
 }
 
 extension FavoriteTagColor {
@@ -194,18 +160,9 @@ extension FavoriteTagColor {
 
 extension Color {
     init(light lightHex: UInt32, dark darkHex: UInt32) {
-        #if os(iOS)
         self.init(uiColor: UIColor { traitCollection in
             UIColor(hex: traitCollection.userInterfaceStyle == .dark ? darkHex : lightHex)
         })
-        #elseif os(macOS)
-        self.init(nsColor: NSColor(name: nil) { appearance in
-            let isDark = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-            return NSColor(hex: isDark ? darkHex : lightHex)
-        })
-        #else
-        self.init(hex: lightHex)
-        #endif
     }
 
     init(hex: UInt32) {
@@ -216,7 +173,6 @@ extension Color {
     }
 }
 
-#if os(iOS)
 extension UIColor {
     convenience init(hex: UInt32) {
         let red = CGFloat((hex >> 16) & 0xFF) / 255
@@ -225,13 +181,3 @@ extension UIColor {
         self.init(red: red, green: green, blue: blue, alpha: 1)
     }
 }
-#elseif os(macOS)
-extension NSColor {
-    convenience init(hex: UInt32) {
-        let red = CGFloat((hex >> 16) & 0xFF) / 255
-        let green = CGFloat((hex >> 8) & 0xFF) / 255
-        let blue = CGFloat(hex & 0xFF) / 255
-        self.init(calibratedRed: red, green: green, blue: blue, alpha: 1)
-    }
-}
-#endif

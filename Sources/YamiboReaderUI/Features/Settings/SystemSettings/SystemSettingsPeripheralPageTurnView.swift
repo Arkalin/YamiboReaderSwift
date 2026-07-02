@@ -1,20 +1,13 @@
 import SwiftUI
 import YamiboReaderCore
-
-#if os(iOS)
 import UIKit
-#endif
 
 struct SystemSettingsPeripheralPageTurnView: View {
     @ObservedObject var viewModel: SystemSettingsViewModel
     @State private var showsApplePencilHelp = false
 
     private var showsApplePencilSection: Bool {
-#if os(iOS)
         UIDevice.current.userInterfaceIdiom == .pad
-#else
-        false
-#endif
     }
 
     var body: some View {

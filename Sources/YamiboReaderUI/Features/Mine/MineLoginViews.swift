@@ -10,11 +10,7 @@ struct MineLoginSheet: View {
             List {
                 MineLoginSection(viewModel: viewModel, onLoginSuccess: close)
             }
-            #if os(iOS)
             .listStyle(.insetGrouped)
-            #else
-            .listStyle(.inset)
-            #endif
             .navigationTitle(L10n.string("mine.login"))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

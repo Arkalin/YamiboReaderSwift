@@ -1,17 +1,12 @@
 import SwiftUI
 import YamiboReaderCore
-
-#if os(iOS)
 import UIKit
-#endif
 
 public struct RootTabView: View {
     private let appModel: YamiboAppModel
 
     @Environment(\.scenePhase) private var scenePhase
-    #if os(iOS)
     @State private var clipboardForumLinkPasteboardReader = ClipboardForumLinkPasteboardReader()
-    #endif
 
     public init(appModel: YamiboAppModel, initialTab: AppTab = .forum) {
         self.appModel = appModel
@@ -126,12 +121,10 @@ public struct RootTabView: View {
     }
 
     private func presentClipboardForumLinkPromptIfNeeded() {
-        #if os(iOS)
         Task { @MainActor in
             guard let url = await clipboardForumLinkPasteboardReader.promptURL(from: UIPasteboard.general) else { return }
             appModel.presentClipboardForumLinkPrompt(url: url)
         }
-        #endif
     }
 }
 
@@ -171,7 +164,6 @@ private struct ReaderPresentationModifier: ViewModifier {
     let appModel: YamiboAppModel
 
     func body(content: Content) -> some View {
-        #if os(iOS)
         content
             .fullScreenCover(item: binding(for: \.activeReaderContext)) { context in
                 ReaderContainerView(context: context, appModel: appModel)
@@ -192,12 +184,6 @@ private struct ReaderPresentationModifier: ViewModifier {
                     .ignoresSafeArea()
                     .modifier(ClipboardForumLinkPromptAlert(appModel: appModel, isActive: true))
             }
-        #else
-        content
-            .sheet(item: binding(for: \.activeReaderContext)) { context in
-                ReaderContainerView(context: context, appModel: appModel)
-            }
-        #endif
     }
 
     private func binding<Value>(for keyPath: ReferenceWritableKeyPath<YamiboAppModel, Value>) -> Binding<Value> {
@@ -208,7 +194,6 @@ private struct ReaderPresentationModifier: ViewModifier {
     }
 }
 
-#if os(iOS)
 private struct MangaPresentationHostView: View {
     let appModel: YamiboAppModel
 
@@ -229,4 +214,3 @@ private struct MangaPresentationHostView: View {
         }
     }
 }
-#endif

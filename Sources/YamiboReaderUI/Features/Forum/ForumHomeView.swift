@@ -97,7 +97,6 @@ private struct ForumHomeCarouselView: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            #if os(iOS)
             TabView(selection: $selection) {
                 ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
                     ForumCarouselImageButton(item: item, onTap: onTap)
@@ -107,16 +106,6 @@ private struct ForumHomeCarouselView: View {
             .tabViewStyle(.page(indexDisplayMode: items.count > 1 ? .automatic : .never))
             .frame(maxWidth: .infinity)
             .aspectRatio(2.63, contentMode: .fit)
-            #else
-            ScrollView(.horizontal) {
-                HStack(spacing: 10) {
-                    ForEach(items) { item in
-                        ForumCarouselImageButton(item: item, onTap: onTap)
-                            .frame(width: 320)
-                    }
-                }
-            }
-            #endif
         }
         .task(id: items.map(\.id)) {
             guard items.count > 1 else { return }

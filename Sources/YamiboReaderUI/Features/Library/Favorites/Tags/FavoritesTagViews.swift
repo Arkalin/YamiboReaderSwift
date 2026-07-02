@@ -392,17 +392,12 @@ private struct FavoriteTagPickerRow: View {
 private extension View {
     @ViewBuilder
     func favoriteTagPickerSearch(text: Binding<String>) -> some View {
-        #if os(iOS)
         self
             .searchable(
                 text: text,
                 placement: .navigationBarDrawer(displayMode: .always),
                 prompt: L10n.string("favorites.search_tags")
             )
-        #else
-        self
-            .searchable(text: text, prompt: L10n.string("favorites.search_tags"))
-        #endif
     }
 }
 

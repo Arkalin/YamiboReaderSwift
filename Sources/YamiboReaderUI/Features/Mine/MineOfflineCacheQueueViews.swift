@@ -1,12 +1,6 @@
 import SwiftUI
 import YamiboReaderCore
 
-#if os(iOS)
-import UIKit
-#elseif os(macOS)
-import AppKit
-#endif
-
 struct MineOfflineCacheQueueSheet: View {
     let viewModel: MineHomeViewModel
     @Environment(\.dismiss) private var dismiss
@@ -88,13 +82,11 @@ struct MineOfflineCacheQueueSheet: View {
                     }
                 }
 
-                #if os(iOS)
                 if viewModel.isOfflineCacheQueueSelectionMode && usesSystemSelectionBottomToolbar {
                     ToolbarItem(placement: .bottomBar) {
                         MineOfflineCacheQueueSelectionToolbar(viewModel: viewModel)
                     }
                 }
-                #endif
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 if viewModel.isOfflineCacheQueueSelectionMode && !usesSystemSelectionBottomToolbar {
@@ -111,11 +103,9 @@ struct MineOfflineCacheQueueSheet: View {
     }
 
     private var usesSystemSelectionBottomToolbar: Bool {
-        #if os(iOS)
         if #available(iOS 26, *) {
             return true
         }
-        #endif
         return false
     }
 
@@ -458,13 +448,11 @@ private struct MineOfflineCacheQueueOwnerSheet: View {
                     }
                 }
 
-                #if os(iOS)
                 if viewModel.isOfflineCacheQueueSelectionMode && usesSystemSelectionBottomToolbar {
                     ToolbarItem(placement: .bottomBar) {
                         MineOfflineCacheQueueSelectionToolbar(viewModel: viewModel)
                     }
                 }
-                #endif
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 if viewModel.isOfflineCacheQueueSelectionMode && !usesSystemSelectionBottomToolbar {
@@ -481,11 +469,9 @@ private struct MineOfflineCacheQueueOwnerSheet: View {
     }
 
     private var usesSystemSelectionBottomToolbar: Bool {
-        #if os(iOS)
         if #available(iOS 26, *) {
             return true
         }
-        #endif
         return false
     }
 

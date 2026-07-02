@@ -1,15 +1,9 @@
 import SwiftUI
 import YamiboReaderCore
-
-#if canImport(UIKit)
 import UIKit
-typealias YamiboPlatformImage = UIImage
-#elseif canImport(AppKit)
-import AppKit
-typealias YamiboPlatformImage = NSImage
-#endif
 
-#if canImport(UIKit) || canImport(AppKit)
+typealias YamiboPlatformImage = UIImage
+
 enum YamiboImagePipelineError: Error, Equatable {
     case invalidImageData
 }
@@ -124,18 +118,11 @@ final class YamiboImagePipeline {
     }
 
     private static func cost(for image: YamiboPlatformImage, data: Data) -> Int {
-        #if canImport(UIKit)
         if let cgImage = image.cgImage {
             return cgImage.bytesPerRow * cgImage.height
         }
         let scale = max(image.scale, 1)
         return Int(image.size.width * scale * image.size.height * scale * 4)
-        #elseif canImport(AppKit)
-        if let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) {
-            return cgImage.bytesPerRow * cgImage.height
-        }
-        return data.count
-        #endif
     }
 }
 
@@ -251,11 +238,6 @@ struct YamiboRemoteImage<Content: View, Placeholder: View, Failure: View>: View 
 
 private extension Image {
     init(yamiboPlatformImage image: YamiboPlatformImage) {
-        #if canImport(UIKit)
         self.init(uiImage: image)
-        #elseif canImport(AppKit)
-        self.init(nsImage: image)
-        #endif
     }
 }
-#endif

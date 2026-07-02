@@ -1,7 +1,5 @@
 import Foundation
-#if canImport(UIKit)
 import UIKit
-#endif
 import YamiboReaderCore
 
 enum LocalFavoriteOpenTarget: Sendable {
@@ -1422,7 +1420,6 @@ final class LocalFavoritesViewModel: ObservableObject {
     }
 
     private func beginRemoteSyncBackgroundTask(runID: String) {
-#if canImport(UIKit)
         guard remoteSyncBackgroundTaskID == .invalid else { return }
         remoteSyncBackgroundTaskID = UIApplication.shared.beginBackgroundTask(withName: "FavoriteRemoteSync") { [weak self] in
             Task { @MainActor in
@@ -1445,21 +1442,12 @@ final class LocalFavoritesViewModel: ObservableObject {
                 }
             }
         }
-#else
-        Task { @MainActor in
-            await updateRemoteSyncSnapshot(runID: runID) { snapshot in
-                snapshot.warningMessages.append(L10n.string("favorites.sync.warning.background_unavailable"))
-            }
-        }
-#endif
     }
 
     private func endRemoteSyncBackgroundTask() {
-#if canImport(UIKit)
         guard remoteSyncBackgroundTaskID != .invalid else { return }
         UIApplication.shared.endBackgroundTask(remoteSyncBackgroundTaskID)
         remoteSyncBackgroundTaskID = .invalid
-#endif
     }
 
     func deleteItem(_ item: FavoriteItem, scope: LocalFavoriteDeleteScope = .everywhere) async {

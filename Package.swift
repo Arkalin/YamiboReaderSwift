@@ -5,8 +5,7 @@ let package = Package(
     name: "YamiboReader",
     defaultLocalization: "zh-Hans",
     platforms: [
-        .iOS(.v17),
-        .macOS(.v14)
+        .iOS(.v17)
     ],
     products: [
         .library(name: "YamiboReaderCore", targets: ["YamiboReaderCore"]),

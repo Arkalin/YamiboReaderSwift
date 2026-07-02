@@ -8,13 +8,10 @@ struct MangaReaderModelDependencies {
     var makeOfflineCacheStore: @Sendable () -> (any MangaOfflineCacheStoring)?
     var makeDirectorySearchCooldownState: @Sendable () -> MangaDirectorySearchCooldownState
     var directoryWorkflowConfiguration: MangaDirectoryWorkflowConfiguration
-    #if os(iOS)
     var makeImageDataLoader: @Sendable () async -> any MangaImageDataLoading
     var makeImageCacheNamespace: @Sendable () async -> YamiboImageCacheNamespace
-    #endif
     var progressSync: ProgressSyncModule
 
-    #if os(iOS)
     init(
         makeDocumentLoader: @escaping @Sendable () async -> any MangaChapterDocumentLoading,
         makeDirectoryRepository: @escaping @Sendable () async -> any MangaDirectoryRepository,
@@ -40,30 +37,8 @@ struct MangaReaderModelDependencies {
         self.makeImageCacheNamespace = makeImageCacheNamespace
         self.progressSync = progressSync
     }
-    #else
-    init(
-        makeDocumentLoader: @escaping @Sendable () async -> any MangaChapterDocumentLoading,
-        makeDirectoryRepository: @escaping @Sendable () async -> any MangaDirectoryRepository,
-        makeDirectoryStore: @escaping @Sendable () -> any MangaDirectoryPersisting,
-        makeOfflineCacheStore: @escaping @Sendable () -> (any MangaOfflineCacheStoring)? = { nil },
-        makeDirectorySearchCooldownState: @escaping @Sendable () -> MangaDirectorySearchCooldownState = {
-            MangaDirectorySearchCooldownState()
-        },
-        directoryWorkflowConfiguration: MangaDirectoryWorkflowConfiguration = MangaDirectoryWorkflowConfiguration(),
-        progressSync: ProgressSyncModule
-    ) {
-        self.makeDocumentLoader = makeDocumentLoader
-        self.makeDirectoryRepository = makeDirectoryRepository
-        self.makeDirectoryStore = makeDirectoryStore
-        self.makeOfflineCacheStore = makeOfflineCacheStore
-        self.makeDirectorySearchCooldownState = makeDirectorySearchCooldownState
-        self.directoryWorkflowConfiguration = directoryWorkflowConfiguration
-        self.progressSync = progressSync
-    }
-    #endif
 
     init(appContext: YamiboAppContext) {
-        #if os(iOS)
         self.init(
             makeDocumentLoader: { await appContext.makeMangaChapterDocumentLoader() },
             makeDirectoryRepository: { await appContext.makeMangaDirectoryRepository() },
@@ -81,20 +56,6 @@ struct MangaReaderModelDependencies {
                 )
             )
         )
-        #else
-        self.init(
-            makeDocumentLoader: { await appContext.makeMangaChapterDocumentLoader() },
-            makeDirectoryRepository: { await appContext.makeMangaDirectoryRepository() },
-            makeDirectoryStore: { appContext.makeMangaDirectoryStore() },
-            makeOfflineCacheStore: { appContext.makeMangaOfflineCacheStore() },
-            makeDirectorySearchCooldownState: { appContext.mangaDirectorySearchCooldownState },
-            progressSync: ProgressSyncModule(
-                adapter: FavoriteLibraryProgressSyncAdapter(
-                    readingProgressStore: appContext.readingProgressStore
-                )
-            )
-        )
-        #endif
     }
 }
 
@@ -110,9 +71,7 @@ public final class MangaReaderModel: ObservableObject {
     private var linearReadingHistoryExpiration = ReaderNavigationLinearReadingExpiration<MangaReadingPosition>()
 
     public let context: MangaLaunchContext
-    #if os(iOS)
     private(set) var imagePipeline: MangaImagePipeline?
-    #endif
 
     private let appContext: YamiboAppContext
     private let dependencies: MangaReaderModelDependencies
@@ -174,9 +133,7 @@ public final class MangaReaderModel: ObservableObject {
         self.appContext = appContext
         self.dependencies = MangaReaderModelDependencies(appContext: appContext)
         self.onReaderResumeRouteChange = onReaderResumeRouteChange
-        #if os(iOS)
         self.imagePipeline = nil
-        #endif
         self.presentation = MangaReaderPresentation(
             state: .loading(MangaReaderLoadingPresentation(title: Self.presentationTitle(for: context)))
         )
@@ -192,9 +149,7 @@ public final class MangaReaderModel: ObservableObject {
         self.appContext = appContext
         self.dependencies = dependencies
         self.onReaderResumeRouteChange = onReaderResumeRouteChange
-        #if os(iOS)
         self.imagePipeline = nil
-        #endif
         self.presentation = MangaReaderPresentation(
             state: .loading(MangaReaderLoadingPresentation(title: Self.presentationTitle(for: context)))
         )
@@ -210,7 +165,6 @@ public final class MangaReaderModel: ObservableObject {
         committedSettings = Self.normalizedSettings(appSettings.manga)
         applePencilPageTurnSettings = appSettings.applePencilPageTurn
         presentation = presentationWithCommittedSettings(presentation)
-        #if os(iOS)
         let imagePipeline = MangaImagePipeline(
             dataLoader: await dependencies.makeImageDataLoader(),
             offlineCacheContext: { [weak self] page in
@@ -218,7 +172,6 @@ public final class MangaReaderModel: ObservableObject {
             },
             cacheNamespace: await dependencies.makeImageCacheNamespace()
         )
-        #endif
         let workflow = MangaReaderWorkflow(
             context: context,
             documentLoader: await dependencies.makeDocumentLoader(),
@@ -230,9 +183,7 @@ public final class MangaReaderModel: ObservableObject {
             directorySearchCooldownState: dependencies.makeDirectorySearchCooldownState()
         )
         self.workflow = workflow
-        #if os(iOS)
         self.imagePipeline = imagePipeline
-        #endif
         presentation = workflow.presentation
         presentation = await workflow.prepare()
         currentStableReadingPosition = stableReadingPosition(from: presentation)
@@ -246,9 +197,7 @@ public final class MangaReaderModel: ObservableObject {
     public func retryInitialLoad() async {
         cancelReaderTasks()
         workflow = nil
-        #if os(iOS)
         imagePipeline = nil
-        #endif
         hasPrepared = false
         offlineCacheOwnerName = nil
         resetNavigationHistory()

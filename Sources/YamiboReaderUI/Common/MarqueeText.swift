@@ -1,6 +1,4 @@
 import SwiftUI
-
-#if os(iOS)
 import UIKit
 
 struct MarqueeText: UIViewRepresentable {
@@ -135,16 +133,3 @@ final class MarqueeLabelView: UIView {
         contentView.layer.add(animation, forKey: "marquee")
     }
 }
-
-#else
-
-struct MarqueeText: View {
-    let text: String
-
-    var body: some View {
-        Text(text)
-            .lineLimit(1)
-    }
-}
-
-#endif

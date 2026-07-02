@@ -1,9 +1,6 @@
 import SwiftUI
 import YamiboReaderCore
-
-#if canImport(UIKit)
 import UIKit
-#endif
 
 struct FavoriteBackgroundEditorDraft: Identifiable {
     let id = UUID()
@@ -142,7 +139,6 @@ struct FavoriteBackgroundEditorView: View {
     }
 
     private var windowSafeAreaInsets: EdgeInsets {
-        #if os(iOS)
         guard let insets = UIApplication.shared.connectedScenes
             .compactMap({ $0 as? UIWindowScene })
             .flatMap(\.windows)
@@ -152,18 +148,11 @@ struct FavoriteBackgroundEditorView: View {
             return EdgeInsets()
         }
         return EdgeInsets(top: insets.top, leading: insets.left, bottom: insets.bottom, trailing: insets.right)
-        #else
-        return EdgeInsets()
-        #endif
     }
 
     private var editorBackground: some View {
         ZStack {
-            #if canImport(UIKit)
             YamiboColors.SystemSurface.background
-            #else
-            Color(.sRGB, white: colorScheme == .dark ? 0.08 : 1, opacity: 1)
-            #endif
 
             if draft.imageData == nil {
                 Color.secondary.opacity(colorScheme == .dark ? 0.16 : 0.08)
@@ -307,15 +296,11 @@ private struct FavoriteBackgroundImage: View {
     let data: Data
 
     var body: some View {
-        #if canImport(UIKit)
         if let image = UIImage(data: data) {
             Image(uiImage: image)
                 .resizable()
                 .scaledToFill()
         }
-        #else
-        EmptyView()
-        #endif
     }
 }
 
@@ -327,7 +312,6 @@ private struct FavoriteBackgroundEditorTopBar: View {
     let onApply: () -> Void
 
     var body: some View {
-        #if os(iOS)
         if #available(iOS 26.0, *) {
             GlassEffectContainer(spacing: 12) {
                 glassContent
@@ -335,9 +319,6 @@ private struct FavoriteBackgroundEditorTopBar: View {
         } else {
             fallbackContent
         }
-        #else
-        fallbackContent
-        #endif
     }
 
     @ViewBuilder
@@ -466,7 +447,6 @@ private struct FavoriteBackgroundChangeImageButton: View {
     let action: () -> Void
 
     var body: some View {
-        #if os(iOS)
         if #available(iOS 26.0, *) {
             Button(action: action, label: label)
                 .font(.subheadline.weight(.semibold))
@@ -475,9 +455,6 @@ private struct FavoriteBackgroundChangeImageButton: View {
         } else {
             fallbackButton
         }
-        #else
-        fallbackButton
-        #endif
     }
 
     private var fallbackButton: some View {
@@ -510,15 +487,11 @@ private struct ApplyButtonLabel: View {
 private extension View {
     @ViewBuilder
     var surface: some View {
-        #if os(iOS)
         if #available(iOS 26.0, *) {
             glassEffect(.regular, in: .rect(cornerRadius: 18))
         } else {
             materialSurface
         }
-        #else
-        materialSurface
-        #endif
     }
 
     private var materialSurface: some View {
@@ -531,11 +504,7 @@ private extension View {
 }
 
 private func favoriteBackgroundImageSize(from data: Data) -> CGSize? {
-    #if canImport(UIKit)
     UIImage(data: data)?.size
-    #else
-    nil
-    #endif
 }
 
 private func + (lhs: CGSize, rhs: CGSize) -> CGSize {

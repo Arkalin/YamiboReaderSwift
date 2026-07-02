@@ -1,5 +1,6 @@
 import SwiftUI
 import YamiboReaderCore
+import UIKit
 
 struct ForumThreadReaderView: View {
     @State private var model: ForumThreadReaderViewModel
@@ -131,7 +132,6 @@ private struct ForumThreadReaderBodyView: View {
     let onURLTap: (URL) -> Void
 
     var body: some View {
-        #if os(iOS)
         contentWithSheets
             .fullScreenCover(item: $imageBrowserRequest) { request in
                 if let inlineImageLoadingContext {
@@ -147,9 +147,6 @@ private struct ForumThreadReaderBodyView: View {
                     )
                 }
             }
-        #else
-        contentWithSheets
-        #endif
     }
 
     private var contentWithSheets: some View {
@@ -1916,7 +1913,6 @@ private struct ForumThreadImageFailureView: View {
     }
 }
 
-#if os(iOS)
 private struct ForumThreadAuthenticatedImage: View {
     @StateObject private var loader: ReaderImageLoader
 
@@ -1953,34 +1949,6 @@ private struct ForumThreadAuthenticatedImage: View {
         }
     }
 }
-#else
-private struct ForumThreadAuthenticatedImage: View {
-    let url: URL
-    let refererURL: URL
-
-    init(
-        url: URL,
-        refererURL: URL,
-        imageDataLoader _: any NovelInlineImageDataLoading,
-        imageCacheNamespace _: NovelInlineImageCacheNamespace
-    ) {
-        self.url = url
-        self.refererURL = refererURL
-    }
-
-    var body: some View {
-        YamiboRemoteImage(url: url, refererURL: refererURL) { image in
-            image
-                .resizable()
-                .scaledToFit()
-        } placeholder: {
-            ForumThreadImagePlaceholderView()
-        } failure: {
-            ForumThreadImageFailureView()
-        }
-    }
-}
-#endif
 
 private struct ForumThreadAttachmentBlockView: View {
     let block: ForumThreadAttachmentBlock

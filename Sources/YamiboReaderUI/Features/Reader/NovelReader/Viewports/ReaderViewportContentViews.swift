@@ -228,7 +228,6 @@ private struct ReaderViewportBlockView: View {
                 Color.clear.frame(height: 1)
             }
         case let .image(url):
-#if os(iOS)
             ReaderInlineViewportImage(
                 url: url,
                 refererURL: refererURL,
@@ -237,14 +236,6 @@ private struct ReaderViewportBlockView: View {
                 title: title,
                 onTap: onImageTap
             )
-#else
-            AuthenticatedReaderImage(
-                url: url,
-                refererURL: refererURL,
-                imageDataLoader: imageDataLoader,
-                imageCacheNamespace: imageCacheNamespace
-            )
-#endif
         case let .footer(text):
             Text(text)
                 .font(.caption)

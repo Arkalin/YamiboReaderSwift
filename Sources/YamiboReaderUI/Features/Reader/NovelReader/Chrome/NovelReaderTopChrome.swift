@@ -1,7 +1,5 @@
 import SwiftUI
 import YamiboReaderCore
-
-#if os(iOS)
 import UIKit
 
 struct NovelReaderTopChrome: View {
@@ -99,11 +97,6 @@ struct NovelReaderTopChrome: View {
     }
 
     private var shouldLiftPagedChapterTitle: Bool {
-#if os(iOS)
         UIDevice.current.userInterfaceIdiom == .pad && model.settings.readingMode == .paged
-#else
-        false
-#endif
     }
 }
-#endif

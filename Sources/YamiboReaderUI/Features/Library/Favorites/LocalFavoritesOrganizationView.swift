@@ -2266,11 +2266,7 @@ private struct LocalFavoriteCollectionGridSection: View {
 
 private struct LocalFavoriteListStyleModifier: ViewModifier {
     func body(content: Content) -> some View {
-        #if os(iOS)
         content.listStyle(.insetGrouped)
-        #else
-        content.listStyle(.automatic)
-        #endif
     }
 }
 
@@ -2796,11 +2792,7 @@ private struct LocalFavoriteTagEditorSheet: View {
 
 private enum LocalFavoriteToolbarPlacement {
     static var trailing: ToolbarItemPlacement {
-        #if os(iOS)
         .topBarTrailing
-        #else
-        .automatic
-        #endif
     }
 }
 

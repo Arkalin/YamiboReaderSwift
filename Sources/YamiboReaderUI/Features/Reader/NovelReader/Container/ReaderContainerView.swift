@@ -1,7 +1,5 @@
 import SwiftUI
 import YamiboReaderCore
-
-#if os(iOS)
 import UIKit
 
 public struct ReaderContainerView: View {
@@ -52,11 +50,7 @@ public struct ReaderContainerView: View {
     }
 
     private var isPadDevice: Bool {
-#if os(iOS)
         UIDevice.current.userInterfaceIdiom == .pad
-#else
-        false
-#endif
     }
 
     public var body: some View {
@@ -1259,18 +1253,3 @@ public struct ReaderContainerView: View {
             .safeAreaInsets ?? .zero
     }
 }
-#else
-public struct ReaderContainerView: View {
-    public let context: ReaderLaunchContext
-    public let appModel: YamiboAppModel
-
-    public init(context: ReaderLaunchContext, appModel: YamiboAppModel) {
-        self.context = context
-        self.appModel = appModel
-    }
-
-    public var body: some View {
-        Text(L10n.string("reader.ios_only"))
-    }
-}
-#endif

@@ -59,7 +59,6 @@ struct ForumBoardView: View {
         .navigationBarBackButtonHidden(model.canRestorePreviousPage)
         .toolbar {
             if model.canRestorePreviousPage {
-                #if os(iOS)
                 ToolbarItem(placement: .topBarLeading) {
                     Button {
                         _ = model.restorePreviousPage()
@@ -68,16 +67,6 @@ struct ForumBoardView: View {
                     }
                     .accessibilityLabel(L10n.string("common.back"))
                 }
-                #else
-                ToolbarItem(placement: .automatic) {
-                    Button {
-                        _ = model.restorePreviousPage()
-                    } label: {
-                        Image(systemName: "chevron.left")
-                    }
-                    .accessibilityLabel(L10n.string("common.back"))
-                }
-                #endif
             }
 
             ToolbarItemGroup(placement: .primaryAction) {

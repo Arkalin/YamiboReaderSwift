@@ -1,7 +1,5 @@
 import SwiftUI
 import YamiboReaderCore
-
-#if os(iOS)
 import WebKit
 
 @MainActor
@@ -107,28 +105,3 @@ struct ForumBrowserNavigationTitle: View {
             : title
     }
 }
-
-#else
-
-public struct ForumBrowserView: View {
-    private let url: URL
-    private let appContext: YamiboAppContext
-    private let appModel: YamiboAppModel
-
-    public init(
-        url: URL,
-        appContext: YamiboAppContext,
-        appModel: YamiboAppModel,
-        listensToForumNavigationRequest: Bool = true
-    ) {
-        self.url = url
-        self.appContext = appContext
-        self.appModel = appModel
-    }
-
-    public var body: some View {
-        EmptyView()
-    }
-}
-
-#endif

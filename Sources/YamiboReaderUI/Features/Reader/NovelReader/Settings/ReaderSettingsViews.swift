@@ -1,7 +1,5 @@
 import SwiftUI
 import YamiboReaderCore
-
-#if os(iOS)
 import UIKit
 
 struct ReaderSettingsPanel: View {
@@ -14,11 +12,7 @@ struct ReaderSettingsPanel: View {
     private static let previewCharacterCount = 200
 
     private var showsTwoPageToggle: Bool {
-#if os(iOS)
         UIDevice.current.userInterfaceIdiom == .pad && draftSettings.readingMode == .paged
-#else
-        false
-#endif
     }
 
     var body: some View {
@@ -162,5 +156,3 @@ struct ReaderSettingsPanel: View {
     private func setImageLoading(_ value: Bool) { draftSettings.loadsInlineImages = value }
     private func setAuthorReplyVisibility(_ value: Bool) { draftSettings.showsAuthorRepliesToOthers = value }
 }
-
-#endif

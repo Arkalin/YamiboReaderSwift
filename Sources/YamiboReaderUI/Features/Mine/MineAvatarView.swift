@@ -1,10 +1,7 @@
 import Foundation
 import SwiftUI
 import YamiboReaderCore
-
-#if canImport(UIKit)
 import UIKit
-#endif
 
 struct MineAvatarView: View {
     let profile: YamiboProfile
@@ -46,12 +43,8 @@ struct MineAvatarView: View {
     }
 
     private func platformImage(from data: Data) -> Image? {
-        #if canImport(UIKit)
         guard let image = UIImage(data: data) else { return nil }
         return Image(uiImage: image)
-        #else
-        return nil
-        #endif
     }
 }
 

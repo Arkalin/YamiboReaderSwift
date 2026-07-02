@@ -64,12 +64,8 @@ public struct MineHomeView: View {
                     }
                 )
             }
-            #if os(iOS)
             .listStyle(.insetGrouped)
             .scrollContentBackground(.hidden)
-            #else
-            .listStyle(.inset)
-            #endif
             .background(ForumColors.creamBackground.ignoresSafeArea())
             .navigationTitle(L10n.string("tab.mine"))
             .yamiboInlineNavigationTitleDisplayMode()
