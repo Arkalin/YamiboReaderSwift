@@ -1,7 +1,11 @@
 import Foundation
 import Nuke
 
-public final class YamiboNukeImageDataPipeline: @unchecked Sendable {
+public protocol YamiboOrdinaryImageCacheClearing: Sendable {
+    func removeAllCachedData()
+}
+
+public final class YamiboNukeImageDataPipeline: YamiboOrdinaryImageCacheClearing, @unchecked Sendable {
     public static let shared = YamiboNukeImageDataPipeline()
     public static let defaultDataCacheLimitBytes = 512 * 1024 * 1024
     public static let defaultDataCacheName = "com.arkalin.YamiboReader.OrdinaryImageDataCache"

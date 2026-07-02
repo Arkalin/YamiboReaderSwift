@@ -103,7 +103,7 @@ _Avoid_: double page position, two-page progress, spread position
 - Renaming a **Manga Directory** also migrates matching Favorite Library manga title targets and Reading Progress Store manga title keys.
 - Deleting a **Manga Directory** does not delete **Manga Offline Cache** content owned by the same manga title.
 - **Manga Offline Cache Work** uses chapter `tid` as the chapter identity and should not persist a chapter thread URL as recovery metadata.
-- **Manga Offline Cache** image bytes are user-retained offline content and are not governed by the transparent image byte cache's reclaim policy.
+- **Manga Offline Cache** image bytes are user-retained offline content and are not governed by the ordinary image cache's reclaim policy.
 - A completed **Manga Offline Cache** preserves the cached **Manga Chapter Document** and image URL set as the offline-readable version; later remote chapter changes do not automatically invalidate that membership.
 - A **Manga Offline Cache State** is chapter-level and does not expose a partial-cache state.
 - A **Manga Offline Cache State** of caching means there is **Manga Offline Cache Work** for that chapter, including work recovered after an app restart.

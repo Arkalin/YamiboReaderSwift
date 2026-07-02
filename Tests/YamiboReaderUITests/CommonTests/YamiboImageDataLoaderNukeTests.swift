@@ -56,6 +56,28 @@ struct YamiboImageDataLoaderNukeTests {
         #expect(counter.value == 1)
     }
 
+    @Test func explicitClearRemovesNukeCachedDataForURLBasedRequest() async throws {
+        let harness = NukeImageDataTestHarness()
+        defer { harness.reset() }
+        let pipeline = try makeIsolatedImageDataPipeline()
+        let request = imageRequest(url: "https://img.example.com/nuke-clear-\(UUID().uuidString).jpg")
+        harness.setHandler { _ in
+            NukeImageDataTestResponse(data: Data([7, 4]))
+        }
+        let loader = YamiboImageDataLoader(
+            client: YamiboClient(session: harness.session, cookie: "auth=1", userAgent: "UnitAgent"),
+            pipeline: pipeline
+        )
+
+        let data = try await loader.imageData(for: request)
+        try await waitForCachedData(in: pipeline, request: request)
+        pipeline.removeAllCachedData()
+        try await waitForNoCachedData(in: pipeline, request: request)
+
+        #expect(data == Data([7, 4]))
+        #expect(pipeline.cachedData(for: request) == nil)
+    }
+
     @Test func loaderMapsAuthAndEmptyDataFailures() async throws {
         let authHarness = NukeImageDataTestHarness()
         defer { authHarness.reset() }
@@ -249,4 +271,17 @@ private func waitForCachedData(
         try await Task.sleep(nanoseconds: 50_000_000)
     }
     #expect(pipeline.cachedData(for: request) != nil)
+}
+
+private func waitForNoCachedData(
+    in pipeline: YamiboNukeImageDataPipeline,
+    request: YamiboImageRequest
+) async throws {
+    for _ in 0 ..< 20 {
+        if pipeline.cachedData(for: request) == nil {
+            return
+        }
+        try await Task.sleep(nanoseconds: 50_000_000)
+    }
+    #expect(pipeline.cachedData(for: request) == nil)
 }

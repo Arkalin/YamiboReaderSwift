@@ -13,7 +13,6 @@ final class SystemSettingsViewModel: ObservableObject {
     @Published var applePencilPageTurn = ApplePencilPageTurnSettings()
     @Published private(set) var novelCacheBytes = 0
     @Published private(set) var mangaIndexCacheBytes = 0
-    @Published private(set) var imageCacheBytes = 0
     @Published private(set) var mangaOfflineCacheBytes = 0
     @Published private(set) var mangaOfflineCacheCleanupRows: [MangaOfflineCacheCleanupRow] = []
     @Published private(set) var selectedMangaOfflineCacheOwnerNames: Set<String> = []
@@ -38,10 +37,6 @@ final class SystemSettingsViewModel: ObservableObject {
 
     var mangaIndexCacheLabel: String {
         cacheLabel(for: mangaIndexCacheBytes)
-    }
-
-    var imageCacheLabel: String {
-        cacheLabel(for: imageCacheBytes)
     }
 
     var mangaOfflineCacheLabel: String {
@@ -313,7 +308,7 @@ final class SystemSettingsViewModel: ObservableObject {
         activeAction = .clearingImageCache
         defer { activeAction = nil }
 
-        YamiboNukeImageDataPipeline.shared.removeAllCachedData()
+        appContext.clearOrdinaryImageCache()
         await refreshStorageUsage()
         return true
     }
@@ -330,7 +325,6 @@ final class SystemSettingsViewModel: ObservableObject {
             applePencilPageTurn = .init()
             novelCacheBytes = 0
             mangaIndexCacheBytes = 0
-            imageCacheBytes = 0
             mangaOfflineCacheBytes = 0
             mangaOfflineCacheCleanupRows = []
             selectedMangaOfflineCacheOwnerNames = []
@@ -348,7 +342,6 @@ final class SystemSettingsViewModel: ObservableObject {
         let directoryBytes = await appContext.mangaDirectoryStore.totalDiskUsageBytes()
         let chapterDocumentBytes = await appContext.mangaChapterDocumentStore.totalDiskUsageBytes()
         mangaIndexCacheBytes = directoryBytes + chapterDocumentBytes
-        imageCacheBytes = 0
         mangaOfflineCacheBytes = await appContext.mangaOfflineCacheStore.totalDiskUsageBytes()
     }
 

@@ -33,6 +33,7 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
     public let mangaChapterDocumentStore: any MangaChapterDocumentPersisting & MangaChapterDocumentStorageReporting
     public let mangaOfflineCacheStore: any MangaOfflineCacheStoring
     public let forumCacheStore: ForumCacheStore
+    public let ordinaryImageCache: any YamiboOrdinaryImageCacheClearing
     public let mangaOfflineCacheBackgroundDownloadTransport: MangaOfflineCacheBackgroundDownloadTransport
     public let mangaOfflineCacheContinuedProcessingCoordinator: MangaOfflineCacheContinuedProcessingCoordinator
     let session: URLSession
@@ -59,6 +60,7 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         mangaChapterDocumentStore: (any MangaChapterDocumentPersisting & MangaChapterDocumentStorageReporting)? = nil,
         mangaOfflineCacheStore: (any MangaOfflineCacheStoring)? = nil,
         forumCacheStore: ForumCacheStore? = nil,
+        ordinaryImageCache: any YamiboOrdinaryImageCacheClearing = YamiboNukeImageDataPipeline.shared,
         mangaOfflineCacheBackgroundDownloadTransport: MangaOfflineCacheBackgroundDownloadTransport = MangaOfflineCacheBackgroundDownloadTransport(),
         mangaOfflineCacheContinuedProcessingCoordinator: MangaOfflineCacheContinuedProcessingCoordinator = MangaOfflineCacheContinuedProcessingCoordinator(),
         grdbRootDirectory: URL? = nil,
@@ -102,6 +104,7 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         self.forumCacheStore = forumCacheStore ?? ForumCacheStore(
             jsonCacheStore: transparentJSONCacheStore
         )
+        self.ordinaryImageCache = ordinaryImageCache
         self.mangaOfflineCacheBackgroundDownloadTransport = mangaOfflineCacheBackgroundDownloadTransport
         self.mangaOfflineCacheContinuedProcessingCoordinator = mangaOfflineCacheContinuedProcessingCoordinator
         self.session = session
@@ -337,6 +340,10 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         )
     }
 
+    public func clearOrdinaryImageCache() {
+        ordinaryImageCache.removeAllCachedData()
+    }
+
     public func bootstrap() async -> YamiboBootstrapState {
         return YamiboBootstrapState(
             session: await sessionStore.load(),
@@ -362,6 +369,7 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         try await mangaOfflineCacheStore.clearAll()
         try await forumCacheStore.clearAll()
         try await favoriteBackgroundImageStore.deleteAll()
+        clearOrdinaryImageCache()
         clearLocalUIState()
         if clearsWebDataOnReset {
             await clearWebData()

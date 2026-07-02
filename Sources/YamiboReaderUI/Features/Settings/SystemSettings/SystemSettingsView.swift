@@ -172,8 +172,7 @@ public struct SystemSettingsView: View {
                         pendingConfirmation = .clearImageCache
                     } label: {
                         SystemSettingsRow(
-                            title: L10n.string("settings.clear_image_cache"),
-                            value: viewModel.imageCacheLabel
+                            title: L10n.string("settings.clear_image_cache")
                         )
                     }
                     .disabled(viewModel.isBusy)

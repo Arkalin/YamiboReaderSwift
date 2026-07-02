@@ -183,10 +183,8 @@ final class SystemSettingsViewModelTests: XCTestCase {
 
         XCTAssertGreaterThan(viewModel.novelCacheBytes, 0)
         XCTAssertGreaterThan(viewModel.mangaIndexCacheBytes, 0)
-        XCTAssertEqual(viewModel.imageCacheBytes, 0)
         XCTAssertGreaterThan(viewModel.mangaOfflineCacheBytes, 0)
         XCTAssertEqual(viewModel.mangaIndexCacheLabel, cacheLabel(for: viewModel.mangaIndexCacheBytes))
-        XCTAssertEqual(viewModel.imageCacheLabel, cacheLabel(for: viewModel.imageCacheBytes))
         XCTAssertEqual(viewModel.mangaOfflineCacheLabel, cacheLabel(for: viewModel.mangaOfflineCacheBytes))
     }
 
@@ -225,7 +223,6 @@ final class SystemSettingsViewModelTests: XCTestCase {
         XCTAssertNotNil(offlineMembershipAfterClear)
         XCTAssertEqual(viewModel.novelCacheBytes, 0)
         XCTAssertEqual(viewModel.mangaIndexCacheBytes, indexBytesBeforeClear)
-        XCTAssertEqual(viewModel.imageCacheBytes, 0)
         XCTAssertEqual(viewModel.mangaOfflineCacheBytes, offlineBytesBeforeClear)
     }
 
@@ -244,7 +241,6 @@ final class SystemSettingsViewModelTests: XCTestCase {
         XCTAssertEqual(directoryBytesAfterClear, 0)
         XCTAssertEqual(chapterDocumentBytesAfterClear, 0)
         XCTAssertEqual(viewModel.mangaIndexCacheBytes, 0)
-        XCTAssertEqual(viewModel.imageCacheBytes, 0)
     }
 
     func testClearImageCachePreservesReaderAndUserOwnedCaches() async throws {
@@ -301,6 +297,7 @@ final class SystemSettingsViewModelTests: XCTestCase {
         let favoriteLibraryAfterClear = await fixture.appContext.localFavoriteLibraryStore.load()
 
         XCTAssertTrue(didClear)
+        XCTAssertEqual(fixture.ordinaryImageCache.removeAllCallCount, 1)
         XCTAssertEqual(novelBytesAfterClear, novelBytesBeforeClear)
         XCTAssertEqual(directoryBytesAfterClear, directoryBytesBeforeClear)
         XCTAssertEqual(chapterDocumentBytesAfterClear, chapterDocumentBytesBeforeClear)
@@ -311,7 +308,6 @@ final class SystemSettingsViewModelTests: XCTestCase {
         XCTAssertEqual(settingsAfterClear.homePage, .favorites)
         XCTAssertEqual(settingsAfterClear.favoriteBackground.imageID, favoriteBackgroundID)
         XCTAssertEqual(favoriteLibraryAfterClear, favoriteLibrary)
-        XCTAssertEqual(viewModel.imageCacheBytes, 0)
         XCTAssertEqual(viewModel.novelCacheBytes, novelBytesBeforeClear)
         XCTAssertEqual(viewModel.mangaIndexCacheBytes, indexBytesBeforeClear)
         XCTAssertEqual(viewModel.mangaOfflineCacheBytes, offlineBytesBeforeClear)
@@ -522,19 +518,28 @@ final class SystemSettingsViewModelTests: XCTestCase {
         let fixture = try makeFixture()
         try await seedNovelCache(fixture)
         try await seedMangaIndexCache(fixture)
+        try await seedMangaOfflineCache(fixture)
 
         let viewModel = SystemSettingsViewModel(appContext: fixture.appContext)
         await viewModel.load()
         XCTAssertGreaterThan(viewModel.novelCacheBytes, 0)
         XCTAssertGreaterThan(viewModel.mangaIndexCacheBytes, 0)
-        XCTAssertEqual(viewModel.imageCacheBytes, 0)
+        XCTAssertGreaterThan(viewModel.mangaOfflineCacheBytes, 0)
 
         let didReset = await viewModel.resetApplication()
+        let offlineBytesAfterReset = await fixture.mangaOfflineCacheStore.totalDiskUsageBytes()
+        let offlineMembershipAfterReset = await fixture.mangaOfflineCacheStore.membership(
+            ownerName: "favorite-seed",
+            tid: "902"
+        )
 
         XCTAssertTrue(didReset)
+        XCTAssertEqual(fixture.ordinaryImageCache.removeAllCallCount, 1)
         XCTAssertEqual(viewModel.novelCacheBytes, 0)
         XCTAssertEqual(viewModel.mangaIndexCacheBytes, 0)
-        XCTAssertEqual(viewModel.imageCacheBytes, 0)
+        XCTAssertEqual(viewModel.mangaOfflineCacheBytes, 0)
+        XCTAssertEqual(offlineBytesAfterReset, 0)
+        XCTAssertNil(offlineMembershipAfterReset)
     }
 }
 
@@ -546,6 +551,7 @@ private struct SystemSettingsFixture {
     let mangaDirectoryStore: MangaDirectoryStore
     let mangaChapterDocumentStore: MangaChapterDocumentStore
     let mangaOfflineCacheStore: any MangaOfflineCacheStoring
+    let ordinaryImageCache: RecordingOrdinaryImageCache
 }
 
 private func makeFixture() throws -> SystemSettingsFixture {
@@ -569,6 +575,7 @@ private func makeFixture() throws -> SystemSettingsFixture {
         databasePool: database,
         baseDirectory: root.appendingPathComponent("manga-offline-cache", isDirectory: true)
     )
+    let ordinaryImageCache = RecordingOrdinaryImageCache()
     let appContext = YamiboAppContext(
         sessionStore: SessionStore(defaults: try makeDefaults(suiteName: suiteName), key: "session"),
         checkInStore: YamiboCheckInStore(defaults: try makeDefaults(suiteName: suiteName), keyPrefix: "check-in"),
@@ -579,7 +586,8 @@ private func makeFixture() throws -> SystemSettingsFixture {
         favoriteBackgroundImageStore: favoriteBackgroundImageStore,
         mangaDirectoryStore: mangaDirectoryStore,
         mangaChapterDocumentStore: mangaChapterDocumentStore,
-        mangaOfflineCacheStore: mangaOfflineCacheStore
+        mangaOfflineCacheStore: mangaOfflineCacheStore,
+        ordinaryImageCache: ordinaryImageCache
     )
 
     return SystemSettingsFixture(
@@ -589,8 +597,26 @@ private func makeFixture() throws -> SystemSettingsFixture {
         favoriteBackgroundImageStore: favoriteBackgroundImageStore,
         mangaDirectoryStore: mangaDirectoryStore,
         mangaChapterDocumentStore: mangaChapterDocumentStore,
-        mangaOfflineCacheStore: mangaOfflineCacheStore
+        mangaOfflineCacheStore: mangaOfflineCacheStore,
+        ordinaryImageCache: ordinaryImageCache
     )
+}
+
+private final class RecordingOrdinaryImageCache: YamiboOrdinaryImageCacheClearing, @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+
+    var removeAllCallCount: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return count
+    }
+
+    func removeAllCachedData() {
+        lock.lock()
+        count += 1
+        lock.unlock()
+    }
 }
 
 private func makeDefaults(suiteName: String) throws -> UserDefaults {
