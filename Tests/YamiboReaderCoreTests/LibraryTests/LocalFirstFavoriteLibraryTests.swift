@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+@preconcurrency import GRDB
 @testable import YamiboReaderCore
 
 @Test func localFirstFavoriteLibraryInitializesWithDefaultFavoriteCategory() {
@@ -120,4 +121,102 @@ import Testing
     #expect(remaining.id == target.id)
     #expect(remaining.remoteMapping?.yamiboFavoriteID == "remote-324")
     #expect(remaining.remoteMapping?.isMarkedRemoteMissing == true)
+}
+
+@Test func grdbFavoriteLibraryPersistsStructuredTidFirstLibraryAndIgnoresLegacyJSON() async throws {
+    let rootDirectory = FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    let database = try YamiboDatabase.openPool(rootDirectory: rootDirectory)
+    let suiteName = "GRDBFavoriteLibraryTests.\(UUID().uuidString)"
+    let defaults = try #require(UserDefaults(suiteName: suiteName))
+    let legacyData = Data(#"{"items":[{"id":"legacy"}]}"#.utf8)
+    defaults.set(legacyData, forKey: "library")
+    let store = LocalFirstFavoriteLibraryStore(defaults: defaults, key: "library", databasePool: database)
+
+    let fresh = await store.load()
+    #expect(fresh.defaultCategory.id == FavoriteCategory.defaultID)
+    #expect(fresh.items.isEmpty)
+    #expect(await store.hasStoredDocument() == false)
+    let legacyDefaultsAfterLoad = try #require(UserDefaults(suiteName: suiteName))
+    #expect(legacyDefaultsAfterLoad.data(forKey: "library") == legacyData)
+
+    var document = FavoriteLibraryDocument()
+    let category = document.createCategory(name: "阅读")
+    let collection = document.createCollection(categoryID: category.id, name: "合集", color: .blue)
+    let tag = document.createTag(name: "标签", color: .green, date: Date(timeIntervalSince1970: 10))
+    let target = FavoriteContentTarget(
+        kind: .novelThread,
+        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=321&page=4&mobile=2"))
+    )
+    let item = try FavoriteItem(
+        target: target,
+        title: "小说",
+        displayName: "本地小说",
+        sourceGroup: .forumBoard(id: "fid-1", label: "版块"),
+        remoteMapping: FavoriteRemoteMapping(
+            yamiboFavoriteID: "remote-321",
+            yamiboRemoteOrder: 3,
+            lastSeenAt: Date(timeIntervalSince1970: 20)
+        ),
+        locations: [
+            .category(category.id),
+            .collection(categoryID: category.id, collectionID: collection.id),
+        ],
+        tagIDs: [tag.id]
+    )
+    document.addItem(item)
+
+    try await store.save(document)
+
+    let loaded = await store.load()
+    let loadedItem = try #require(loaded.items.first)
+    #expect(loadedItem.id == "thread:novel:321")
+    #expect(loadedItem.target.threadID == "321")
+    #expect(loadedItem.target.canonicalURL?.absoluteString == "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=321")
+    #expect(loadedItem.locations == [.category(category.id), .collection(categoryID: category.id, collectionID: collection.id)])
+    #expect(loadedItem.tagIDs == [tag.id])
+    #expect(loadedItem.remoteMapping?.yamiboFavoriteID == "remote-321")
+    #expect(await store.hasStoredDocument())
+
+    let databaseRows = try await database.read { db in
+        let itemRow = try Row.fetchOne(
+            db,
+            sql: "SELECT id, target_kind, thread_id, item_json FROM favorite_items WHERE id = ?",
+            arguments: [loadedItem.id]
+        )
+        let locationRows = try Row.fetchAll(
+            db,
+            sql: "SELECT category_id, collection_id FROM favorite_locations WHERE item_id = ? ORDER BY manual_order",
+            arguments: [loadedItem.id]
+        )
+        let remoteID = try String.fetchOne(
+            db,
+            sql: "SELECT yamibo_favorite_id FROM favorite_remote_mappings WHERE item_id = ?",
+            arguments: [loadedItem.id]
+        )
+        let tagID = try String.fetchOne(
+            db,
+            sql: "SELECT tag_id FROM favorite_item_tags WHERE item_id = ?",
+            arguments: [loadedItem.id]
+        )
+        return (
+            itemID: itemRow?["id"] as String?,
+            targetKind: itemRow?["target_kind"] as String?,
+            threadID: itemRow?["thread_id"] as String?,
+            itemJSON: itemRow?["item_json"] as String?,
+            locationCategoryIDs: locationRows.map { $0["category_id"] as String },
+            locationCollectionIDs: locationRows.map { $0["collection_id"] as String? },
+            remoteID: remoteID,
+            tagID: tagID
+        )
+    }
+
+    #expect(databaseRows.itemID == "thread:novel:321")
+    #expect(databaseRows.targetKind == FavoriteContentTargetKind.novelThread.rawValue)
+    #expect(databaseRows.threadID == "321")
+    #expect(databaseRows.itemJSON?.contains("canonicalURL") == false)
+    #expect(databaseRows.locationCategoryIDs == [category.id, category.id])
+    #expect(databaseRows.locationCollectionIDs == [nil, collection.id])
+    #expect(databaseRows.remoteID == "remote-321")
+    #expect(databaseRows.tagID == tag.id)
 }

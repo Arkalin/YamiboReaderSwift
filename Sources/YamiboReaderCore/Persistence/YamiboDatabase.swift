@@ -47,6 +47,12 @@ public enum YamiboDatabase {
         fileManager: FileManager = .default
     ) throws {
         try writer.write { db in
+            try db.execute(sql: "DELETE FROM favorite_remote_mappings")
+            try db.execute(sql: "DELETE FROM favorite_item_tags")
+            try db.execute(sql: "DELETE FROM favorite_locations")
+            try db.execute(sql: "DELETE FROM favorite_items")
+            try db.execute(sql: "DELETE FROM favorite_tags")
+            try db.execute(sql: "DELETE FROM favorite_collections")
             try db.execute(sql: "DELETE FROM cache_entries")
             try db.execute(sql: "DELETE FROM favorite_categories WHERE id <> ?", arguments: [FavoriteCategory.defaultID])
         }
@@ -78,6 +84,74 @@ public enum YamiboDatabase {
                 table.column("is_default", .boolean).notNull()
             }
             try insertDefaultFavoriteCategory(in: db)
+        }
+
+        migrator.registerMigration("create_favorite_library") { db in
+            try db.create(table: "favorite_collections") { table in
+                table.column("id", .text).primaryKey(onConflict: .replace)
+                table.column("category_id", .text).notNull().references("favorite_categories", onDelete: .cascade)
+                table.column("name", .text).notNull()
+                table.column("color", .text).notNull()
+                table.column("manual_order", .integer).notNull()
+            }
+            try db.create(index: "favorite_collections_category_order_idx", on: "favorite_collections", columns: ["category_id", "manual_order"])
+
+            try db.create(table: "favorite_tags") { table in
+                table.column("id", .text).primaryKey(onConflict: .replace)
+                table.column("name", .text).notNull()
+                table.column("color", .text).notNull()
+                table.column("manual_order", .integer).notNull()
+                table.column("created_at", .double).notNull()
+                table.column("updated_at", .double).notNull()
+            }
+            try db.create(index: "favorite_tags_manual_order_idx", on: "favorite_tags", columns: ["manual_order"])
+
+            try db.create(table: "favorite_items") { table in
+                table.column("id", .text).primaryKey(onConflict: .replace)
+                table.column("target_kind", .text).notNull()
+                table.column("thread_id", .text)
+                table.column("manga_id", .text)
+                table.column("clean_book_name", .text)
+                table.column("title", .text).notNull()
+                table.column("item_json", .text).notNull()
+                table.column("created_at", .double).notNull()
+                table.column("updated_at", .double).notNull()
+            }
+            try db.create(index: "favorite_items_target_kind_idx", on: "favorite_items", columns: ["target_kind"])
+            try db.create(index: "favorite_items_thread_id_idx", on: "favorite_items", columns: ["thread_id"])
+
+            try db.create(table: "favorite_locations") { table in
+                table.column("item_id", .text).notNull().references("favorite_items", onDelete: .cascade)
+                table.column("location_id", .text).notNull()
+                table.column("category_id", .text).notNull().references("favorite_categories", onDelete: .cascade)
+                table.column("collection_id", .text).references("favorite_collections", onDelete: .cascade)
+                table.column("manual_order", .integer).notNull()
+                table.primaryKey(["item_id", "location_id"], onConflict: .replace)
+            }
+            try db.create(index: "favorite_locations_category_idx", on: "favorite_locations", columns: ["category_id"])
+            try db.create(index: "favorite_locations_collection_idx", on: "favorite_locations", columns: ["collection_id"])
+
+            try db.create(table: "favorite_item_tags") { table in
+                table.column("item_id", .text).notNull().references("favorite_items", onDelete: .cascade)
+                table.column("tag_id", .text).notNull().references("favorite_tags", onDelete: .cascade)
+                table.column("manual_order", .integer).notNull()
+                table.primaryKey(["item_id", "tag_id"], onConflict: .replace)
+            }
+            try db.create(index: "favorite_item_tags_tag_idx", on: "favorite_item_tags", columns: ["tag_id"])
+
+            try db.create(table: "favorite_remote_mappings") { table in
+                table.column("item_id", .text).primaryKey(onConflict: .replace).references("favorite_items", onDelete: .cascade)
+                table.column("yamibo_favorite_id", .text)
+                table.column("yamibo_remote_order", .integer)
+                table.column("last_seen_at", .double)
+                table.column("is_marked_remote_missing", .boolean).notNull()
+            }
+
+            try db.create(table: "favorite_remote_sync_metadata") { table in
+                table.column("key", .text).primaryKey(onConflict: .replace)
+                table.column("value", .text)
+                table.column("updated_at", .double)
+            }
         }
     }
 

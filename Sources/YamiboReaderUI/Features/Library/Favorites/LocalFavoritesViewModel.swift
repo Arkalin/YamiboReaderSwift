@@ -1495,7 +1495,8 @@ final class LocalFavoritesViewModel: ObservableObject {
 
         let progress = await progressRecord(for: latestItem)
         switch latestItem.target {
-        case let .novelThread(_, canonicalURL):
+        case .novelThread:
+            guard let canonicalURL = latestItem.target.canonicalURL else { return nil }
             let novel = progress?.novel
             let resumePoint = mode == .start ? nil : novel?.novelResumePoint
             return .reader(
@@ -1508,7 +1509,8 @@ final class LocalFavoritesViewModel: ObservableObject {
                     initialResumePoint: resumePoint
                 )
             )
-        case let .normalThread(_, canonicalURL):
+        case .normalThread:
+            guard let canonicalURL = latestItem.target.canonicalURL else { return nil }
             return .nativeThread(url: canonicalURL, title: latestItem.resolvedDisplayTitle)
         case let .mangaTitle(_, cleanBookName):
             guard let chapterURL = mode == .start
