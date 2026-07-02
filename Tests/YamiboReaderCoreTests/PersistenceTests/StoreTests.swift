@@ -749,9 +749,9 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
     )
     let mangaDirectoryStore = try makeTestGRDBMangaDirectoryStore(rootDirectory: rootDirectory)
     let mangaChapterDocumentStore = try makeTestGRDBMangaChapterDocumentStore(rootDirectory: rootDirectory)
-    let mangaImageDataCacheStore = try makeTestFileMangaImageDataCacheStore(
+    let imageDataCacheStore = try makeTestFileImageDataCacheStore(
         rootDirectory: rootDirectory,
-        baseDirectory: rootDirectory.appendingPathComponent("manga-image-data", isDirectory: true)
+        baseDirectory: rootDirectory.appendingPathComponent("image-data", isDirectory: true)
     )
     let mangaOfflineCacheStore = try makeTestGRDBMangaOfflineCacheStore(rootDirectory: rootDirectory)
     let appContext = YamiboAppContext(
@@ -764,7 +764,7 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
         favoriteBackgroundImageStore: favoriteBackgroundImageStore,
         mangaDirectoryStore: mangaDirectoryStore,
         mangaChapterDocumentStore: mangaChapterDocumentStore,
-        mangaImageDataCacheStore: mangaImageDataCacheStore,
+        imageDataCacheStore: imageDataCacheStore,
         mangaOfflineCacheStore: mangaOfflineCacheStore
     )
 
@@ -824,9 +824,10 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
         ),
         for: threadURL
     )
-    try await mangaImageDataCacheStore.save(
+    try await imageDataCacheStore.save(
         Data(repeating: 6, count: 128),
-        for: try #require(URL(string: "https://img.example.com/reset.jpg"))
+        for: makeTestImageRequest(url: try #require(URL(string: "https://img.example.com/reset.jpg"))),
+        retentionPolicy: .evictable
     )
     let offlineImageURL = try #require(URL(string: "https://img.example.com/offline-reset.jpg"))
     try await mangaOfflineCacheStore.saveOfflineImageData(
@@ -869,7 +870,7 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
     let backgroundData = await favoriteBackgroundImageStore.loadData(imageID: "background")
     let mangaDirectoryBytes = await mangaDirectoryStore.totalDiskUsageBytes()
     let mangaChapterDocumentBytes = await mangaChapterDocumentStore.totalDiskUsageBytes()
-    let mangaImageDataCacheBytes = await mangaImageDataCacheStore.totalDiskUsageBytes()
+    let imageDataCacheBytes = await imageDataCacheStore.totalDiskUsageBytes()
     let mangaOfflineCacheBytes = await mangaOfflineCacheStore.totalDiskUsageBytes()
     let mangaOfflineMemberships = await mangaOfflineCacheStore.allMemberships()
     let mangaOfflineWorks = await mangaOfflineCacheStore.allOfflineCacheWorks()
@@ -885,7 +886,7 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
     #expect(backgroundData == nil)
     #expect(mangaDirectoryBytes == 0)
     #expect(mangaChapterDocumentBytes == 0)
-    #expect(mangaImageDataCacheBytes == 0)
+    #expect(imageDataCacheBytes == 0)
     #expect(mangaOfflineCacheBytes == 0)
     #expect(mangaOfflineMemberships.isEmpty)
     #expect(mangaOfflineWorks.isEmpty)

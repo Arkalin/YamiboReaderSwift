@@ -1,18 +1,17 @@
 import Foundation
 
 public actor CachedMangaImageDataLoader: MangaImageDataLoading {
-    private let cache: any MangaImageDataCaching
-    private let upstream: any MangaImageDataLoading
+    private let imageDataLoader: any YamiboImageDataLoading
+    private let cacheNamespace: YamiboImageCacheNamespace
     private let offlineCacheStore: (any MangaOfflineCacheStoring)?
-    private var inFlightTasks: [String: Task<Data, Error>] = [:]
 
     public init(
-        cache: any MangaImageDataCaching,
-        upstream: any MangaImageDataLoading,
+        imageDataLoader: any YamiboImageDataLoading,
+        cacheNamespace: YamiboImageCacheNamespace,
         offlineCacheStore: (any MangaOfflineCacheStoring)? = nil
     ) {
-        self.cache = cache
-        self.upstream = upstream
+        self.imageDataLoader = imageDataLoader
+        self.cacheNamespace = cacheNamespace
         self.offlineCacheStore = offlineCacheStore
     }
 
@@ -29,30 +28,13 @@ public actor CachedMangaImageDataLoader: MangaImageDataLoading {
             return offline
         }
 
-        if let cached = await cache.data(for: url) {
-            return cached
-        }
-
-        let key = url.absoluteString
-        if let task = inFlightTasks[key] {
-            return try await task.value
-        }
-
-        let cache = cache
-        let upstream = upstream
-        let task = Task<Data, Error> {
-            if let cached = await cache.data(for: url) {
-                return cached
-            }
-
-            let data = try await upstream.imageData(for: url, refererURL: refererURL)
-            try? await cache.save(data, for: url)
-            return data
-        }
-
-        inFlightTasks[key] = task
-        defer { inFlightTasks.removeValue(forKey: key) }
-        return try await task.value
+        return try await imageDataLoader.imageData(
+            for: YamiboImageRequest(
+                url: url,
+                refererURL: refererURL,
+                cacheNamespace: cacheNamespace
+            )
+        )
     }
 
     private func offlineImageData(for url: URL, context: MangaImageOfflineCacheContext?) async -> Data? {

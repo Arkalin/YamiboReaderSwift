@@ -247,9 +247,14 @@ struct MangaReaderTestsMangaOfflineCacheQueueExecutor {
     @Test func transparentCacheHitsAreCopiedToOfflineStorageAndNetworkMissesAreFetched() async throws {
         let root = try makeTemporaryExecutorDirectory()
         let store = try makeTestGRDBMangaOfflineCacheStore(rootDirectory: root)
-        let transparentCache = try makeTestFileMangaImageDataCacheStore(rootDirectory: root)
+        let transparentCache = try makeTestFileImageDataCacheStore(rootDirectory: root)
+        let cacheNamespace = YamiboImageCacheNamespace(value: "queue-test")
         let imageURLs = try makeImageURLs(tid: "700", count: 2)
-        try await transparentCache.save(Data([7]), for: imageURLs[0])
+        try await transparentCache.save(
+            Data([7]),
+            for: makeTestImageRequest(url: imageURLs[0], namespace: cacheNamespace),
+            retentionPolicy: .evictable
+        )
         _ = try await store.enqueueOfflineCacheWork(
             try makeExecutorWorkRequest(ownerName: "favorite-a", tid: "700", targetImageURLs: imageURLs)
         )
@@ -259,6 +264,7 @@ struct MangaReaderTestsMangaOfflineCacheQueueExecutor {
             chapterDocumentLoader: RecordingChapterDocumentLoader(),
             imageAcquirer: MangaOfflineCacheImageAcquirer(
                 transparentCache: transparentCache,
+                cacheNamespace: cacheNamespace,
                 networkLoader: networkLoader
             )
         )
@@ -268,18 +274,25 @@ struct MangaReaderTestsMangaOfflineCacheQueueExecutor {
 
         #expect(await store.offlineImageData(for: imageURLs[0]) == Data([7]))
         #expect(await store.offlineImageData(for: imageURLs[1]) == Data([8]))
-        #expect(await transparentCache.data(for: imageURLs[0]) == Data([7]))
+        #expect(await transparentCache.data(for: makeTestImageRequest(url: imageURLs[0], namespace: cacheNamespace)) == Data([7]))
+        #expect(await transparentCache.data(for: makeTestImageRequest(url: imageURLs[1], namespace: cacheNamespace)) == Data([8]))
         #expect(await networkLoader.requestedURLs == [imageURLs[1]])
     }
 
     @Test func transparentCacheMissesUseBackgroundTransport() async throws {
-        let transparentCache = try makeTestFileMangaImageDataCacheStore(rootDirectory: try makeTemporaryExecutorDirectory())
+        let transparentCache = try makeTestFileImageDataCacheStore(rootDirectory: try makeTemporaryExecutorDirectory())
+        let cacheNamespace = YamiboImageCacheNamespace(value: "queue-test")
         let imageURLs = try makeImageURLs(tid: "710", count: 2)
-        try await transparentCache.save(Data([7]), for: imageURLs[0])
+        try await transparentCache.save(
+            Data([7]),
+            for: makeTestImageRequest(url: imageURLs[0], namespace: cacheNamespace),
+            retentionPolicy: .evictable
+        )
         let transport = RecordingImageTransport(dataByURL: [imageURLs[1]: Data([8])])
         let networkLoader = RecordingNetworkImageLoader(dataByURL: [:])
         let acquirer = MangaOfflineCacheImageAcquirer(
             transparentCache: transparentCache,
+            cacheNamespace: cacheNamespace,
             networkLoader: networkLoader,
             backgroundTransport: transport
         )
@@ -292,6 +305,7 @@ struct MangaReaderTestsMangaOfflineCacheQueueExecutor {
         #expect(miss == MangaOfflineCacheImageAcquisition(data: Data([8]), source: .network))
         #expect(await transport.requests == [ImageTransportRequest(imageURL: imageURLs[1], refererURL: refererURL)])
         #expect(await networkLoader.requestedURLs.isEmpty)
+        #expect(await transparentCache.data(for: makeTestImageRequest(url: imageURLs[1], namespace: cacheNamespace)) == Data([8]))
     }
 
     @Test func observerReceivesSubmissionProgressAndSuccessfulFinish() async throws {
@@ -570,17 +584,21 @@ private actor EmptyImageThenFailingAcquirer: MangaOfflineCacheImageAcquiring {
     }
 }
 
-private actor RecordingNetworkImageLoader: MangaImageDataLoading {
-    private(set) var requestedURLs: [URL] = []
+private actor RecordingNetworkImageLoader: YamiboImageDataLoading {
+    private(set) var requestedRequests: [YamiboImageRequest] = []
     private let dataByURL: [URL: Data]
 
     init(dataByURL: [URL: Data]) {
         self.dataByURL = dataByURL
     }
 
-    func imageData(for url: URL, refererURL: URL?) async throws -> Data {
-        requestedURLs.append(url)
-        guard let data = dataByURL[url] else {
+    var requestedURLs: [URL] {
+        requestedRequests.map(\.url)
+    }
+
+    func imageData(for request: YamiboImageRequest) async throws -> Data {
+        requestedRequests.append(request)
+        guard let data = dataByURL[request.url] else {
             throw YamiboError.invalidResponse(statusCode: 404)
         }
         return data

@@ -6,9 +6,9 @@ import Testing
 struct MangaReaderTestsCachedImageDataLoader {
     @Test func cacheHitDoesNotCallUpstream() async throws {
         let imageURL = try #require(URL(string: "https://img.example.com/hit.jpg"))
-        let cache = RecordingMangaImageDataCache(initialData: [imageURL.absoluteString: Data([1])])
-        let upstream = RecordingMangaImageDataLoader(results: [.success(Data([9]))])
-        let loader = CachedMangaImageDataLoader(cache: cache, upstream: upstream)
+        let cache = RecordingYamiboImageDataCache(initialData: initialCacheData([imageURL: Data([1])]))
+        let upstream = RecordingYamiboImageDataLoader(results: [.success(Data([9]))])
+        let loader = makeMangaImageLoader(cache: cache, upstream: upstream)
 
         let data = try await loader.imageData(for: imageURL, refererURL: nil)
 
@@ -22,13 +22,9 @@ struct MangaReaderTestsCachedImageDataLoader {
         let offlineStore = try makeTestGRDBMangaOfflineCacheStore(rootDirectory: try makeTemporaryCachedImageLoaderDirectory())
         try await offlineStore.saveOfflineImageData(Data([7]), for: imageURL)
         try await offlineStore.saveMembership(makeCachedImageLoaderMembership(imageURLs: [imageURL]))
-        let cache = RecordingMangaImageDataCache(initialData: [imageURL.absoluteString: Data([1])])
-        let upstream = RecordingMangaImageDataLoader(results: [.success(Data([9]))])
-        let loader = CachedMangaImageDataLoader(
-            cache: cache,
-            upstream: upstream,
-            offlineCacheStore: offlineStore
-        )
+        let cache = RecordingYamiboImageDataCache(initialData: initialCacheData([imageURL: Data([1])]))
+        let upstream = RecordingYamiboImageDataLoader(results: [.success(Data([9]))])
+        let loader = makeMangaImageLoader(cache: cache, upstream: upstream, offlineCacheStore: offlineStore)
 
         let data = try await loader.imageData(
             for: imageURL,
@@ -45,13 +41,9 @@ struct MangaReaderTestsCachedImageDataLoader {
         let imageURL = try #require(URL(string: "https://img.example.com/fallback-cache.jpg"))
         let offlineStore = try makeTestGRDBMangaOfflineCacheStore(rootDirectory: try makeTemporaryCachedImageLoaderDirectory())
         try await offlineStore.saveMembership(makeCachedImageLoaderMembership(imageURLs: [imageURL]))
-        let cache = RecordingMangaImageDataCache(initialData: [imageURL.absoluteString: Data([2])])
-        let upstream = RecordingMangaImageDataLoader(results: [.success(Data([9]))])
-        let loader = CachedMangaImageDataLoader(
-            cache: cache,
-            upstream: upstream,
-            offlineCacheStore: offlineStore
-        )
+        let cache = RecordingYamiboImageDataCache(initialData: initialCacheData([imageURL: Data([2])]))
+        let upstream = RecordingYamiboImageDataLoader(results: [.success(Data([9]))])
+        let loader = makeMangaImageLoader(cache: cache, upstream: upstream, offlineCacheStore: offlineStore)
 
         let data = try await loader.imageData(
             for: imageURL,
@@ -69,13 +61,9 @@ struct MangaReaderTestsCachedImageDataLoader {
         let offlineStore = try makeTestGRDBMangaOfflineCacheStore(rootDirectory: try makeTemporaryCachedImageLoaderDirectory())
         try await offlineStore.saveOfflineImageData(Data([7]), for: requestedImageURL)
         try await offlineStore.saveMembership(makeCachedImageLoaderMembership(imageURLs: [memberImageURL]))
-        let cache = RecordingMangaImageDataCache(initialData: [requestedImageURL.absoluteString: Data([3])])
-        let upstream = RecordingMangaImageDataLoader(results: [.success(Data([9]))])
-        let loader = CachedMangaImageDataLoader(
-            cache: cache,
-            upstream: upstream,
-            offlineCacheStore: offlineStore
-        )
+        let cache = RecordingYamiboImageDataCache(initialData: initialCacheData([requestedImageURL: Data([3])]))
+        let upstream = RecordingYamiboImageDataLoader(results: [.success(Data([9]))])
+        let loader = makeMangaImageLoader(cache: cache, upstream: upstream, offlineCacheStore: offlineStore)
 
         let data = try await loader.imageData(
             for: requestedImageURL,
@@ -92,13 +80,9 @@ struct MangaReaderTestsCachedImageDataLoader {
         let imageURL = try #require(URL(string: "https://img.example.com/fallback-network.jpg"))
         let offlineStore = try makeTestGRDBMangaOfflineCacheStore(rootDirectory: try makeTemporaryCachedImageLoaderDirectory())
         try await offlineStore.saveMembership(makeCachedImageLoaderMembership(imageURLs: [imageURL]))
-        let cache = RecordingMangaImageDataCache()
-        let upstream = RecordingMangaImageDataLoader(results: [.success(Data([4]))])
-        let loader = CachedMangaImageDataLoader(
-            cache: cache,
-            upstream: upstream,
-            offlineCacheStore: offlineStore
-        )
+        let cache = RecordingYamiboImageDataCache()
+        let upstream = RecordingYamiboImageDataLoader(results: [.success(Data([4]))])
+        let loader = makeMangaImageLoader(cache: cache, upstream: upstream, offlineCacheStore: offlineStore)
 
         let data = try await loader.imageData(
             for: imageURL,
@@ -108,14 +92,14 @@ struct MangaReaderTestsCachedImageDataLoader {
 
         #expect(data == Data([4]))
         #expect(await upstream.callCount == 1)
-        #expect(await cache.data(for: imageURL) == Data([4]))
+        #expect(await cache.data(for: makeMangaImageRequest(for: imageURL)) == Data([4]))
     }
 
     @Test func missFetchesSavesAndThenHitsCache() async throws {
         let imageURL = try #require(URL(string: "https://img.example.com/miss.jpg"))
-        let cache = RecordingMangaImageDataCache()
-        let upstream = RecordingMangaImageDataLoader(results: [.success(Data([2, 3]))])
-        let loader = CachedMangaImageDataLoader(cache: cache, upstream: upstream)
+        let cache = RecordingYamiboImageDataCache()
+        let upstream = RecordingYamiboImageDataLoader(results: [.success(Data([2, 3]))])
+        let loader = makeMangaImageLoader(cache: cache, upstream: upstream)
 
         let first = try await loader.imageData(for: imageURL, refererURL: nil)
         let second = try await loader.imageData(for: imageURL, refererURL: nil)
@@ -128,12 +112,12 @@ struct MangaReaderTestsCachedImageDataLoader {
 
     @Test func concurrentMissesForSameURLShareOneUpstreamRequest() async throws {
         let imageURL = try #require(URL(string: "https://img.example.com/shared.jpg"))
-        let cache = RecordingMangaImageDataCache()
-        let upstream = RecordingMangaImageDataLoader(
+        let cache = RecordingYamiboImageDataCache()
+        let upstream = RecordingYamiboImageDataLoader(
             results: [.success(Data([4]))],
             delayNanoseconds: 50_000_000
         )
-        let loader = CachedMangaImageDataLoader(cache: cache, upstream: upstream)
+        let loader = makeMangaImageLoader(cache: cache, upstream: upstream)
 
         async let first = loader.imageData(for: imageURL, refererURL: URL(string: "https://bbs.yamibo.com/forum.php?tid=1"))
         async let second = loader.imageData(for: imageURL, refererURL: URL(string: "https://bbs.yamibo.com/forum.php?tid=2"))
@@ -147,12 +131,12 @@ struct MangaReaderTestsCachedImageDataLoader {
 
     @Test func upstreamFailureIsNotCached() async throws {
         let imageURL = try #require(URL(string: "https://img.example.com/fail.jpg"))
-        let cache = RecordingMangaImageDataCache()
-        let upstream = RecordingMangaImageDataLoader(results: [
+        let cache = RecordingYamiboImageDataCache()
+        let upstream = RecordingYamiboImageDataLoader(results: [
             .failure(YamiboError.offline),
             .failure(YamiboError.offline),
         ])
-        let loader = CachedMangaImageDataLoader(cache: cache, upstream: upstream)
+        let loader = makeMangaImageLoader(cache: cache, upstream: upstream)
 
         await #expect(throws: YamiboError.offline) {
             _ = try await loader.imageData(for: imageURL, refererURL: nil)
@@ -163,28 +147,28 @@ struct MangaReaderTestsCachedImageDataLoader {
 
         #expect(await upstream.callCount == 2)
         #expect(await cache.saveCallCount == 0)
-        #expect(await cache.data(for: imageURL) == nil)
+        #expect(await cache.data(for: makeMangaImageRequest(for: imageURL)) == nil)
     }
 
     @Test func saveFailureDoesNotPreventReturningNetworkData() async throws {
         let imageURL = try #require(URL(string: "https://img.example.com/save-fail.jpg"))
-        let cache = RecordingMangaImageDataCache(failsSave: true)
-        let upstream = RecordingMangaImageDataLoader(results: [.success(Data([5]))])
-        let loader = CachedMangaImageDataLoader(cache: cache, upstream: upstream)
+        let cache = RecordingYamiboImageDataCache(failsSave: true)
+        let upstream = RecordingYamiboImageDataLoader(results: [.success(Data([5]))])
+        let loader = makeMangaImageLoader(cache: cache, upstream: upstream)
 
         let data = try await loader.imageData(for: imageURL, refererURL: nil)
 
         #expect(data == Data([5]))
         #expect(await upstream.callCount == 1)
         #expect(await cache.saveCallCount == 1)
-        #expect(await cache.data(for: imageURL) == nil)
+        #expect(await cache.data(for: makeMangaImageRequest(for: imageURL)) == nil)
     }
 
     @Test func missTaskRechecksCacheBeforeCallingUpstream() async throws {
         let imageURL = try #require(URL(string: "https://img.example.com/recheck.jpg"))
-        let cache = SecondReadHitMangaImageDataCache(imageURL: imageURL, data: Data([6]))
-        let upstream = RecordingMangaImageDataLoader(results: [.success(Data([9]))])
-        let loader = CachedMangaImageDataLoader(cache: cache, upstream: upstream)
+        let cache = SecondReadHitYamiboImageDataCache(request: makeMangaImageRequest(for: imageURL), data: Data([6]))
+        let upstream = RecordingYamiboImageDataLoader(results: [.success(Data([9]))])
+        let loader = makeMangaImageLoader(cache: cache, upstream: upstream)
 
         let data = try await loader.imageData(for: imageURL, refererURL: nil)
 
@@ -194,7 +178,31 @@ struct MangaReaderTestsCachedImageDataLoader {
     }
 }
 
-private actor RecordingMangaImageDataCache: MangaImageDataCaching {
+private let mangaImageCacheNamespace = YamiboImageCacheNamespace(value: "manga-test")
+
+private func makeMangaImageRequest(for imageURL: URL, refererURL: URL? = nil) -> YamiboImageRequest {
+    YamiboImageRequest(url: imageURL, refererURL: refererURL, cacheNamespace: mangaImageCacheNamespace)
+}
+
+private func initialCacheData(_ dataByURL: [URL: Data]) -> [String: Data] {
+    Dictionary(uniqueKeysWithValues: dataByURL.map { url, data in
+        (makeMangaImageRequest(for: url).persistentCacheKey, data)
+    })
+}
+
+private func makeMangaImageLoader(
+    cache: any YamiboImageDataCaching,
+    upstream: RecordingYamiboImageDataLoader,
+    offlineCacheStore: (any MangaOfflineCacheStoring)? = nil
+) -> CachedMangaImageDataLoader {
+    CachedMangaImageDataLoader(
+        imageDataLoader: CachedYamiboImageDataLoader(cache: cache, upstream: upstream),
+        cacheNamespace: mangaImageCacheNamespace,
+        offlineCacheStore: offlineCacheStore
+    )
+}
+
+private actor RecordingYamiboImageDataCache: YamiboImageDataCaching {
     private var storage: [String: Data]
     private let failsSave: Bool
     private(set) var dataCallCount = 0
@@ -205,17 +213,21 @@ private actor RecordingMangaImageDataCache: MangaImageDataCaching {
         self.failsSave = failsSave
     }
 
-    func data(for imageURL: URL) async -> Data? {
+    func data(for request: YamiboImageRequest) async -> Data? {
         dataCallCount += 1
-        return storage[imageURL.absoluteString]
+        return storage[request.persistentCacheKey]
     }
 
-    func save(_ data: Data, for imageURL: URL) async throws {
+    func save(
+        _ data: Data,
+        for request: YamiboImageRequest,
+        retentionPolicy: YamiboImageDataCacheRetentionPolicy
+    ) async throws {
         saveCallCount += 1
         if failsSave {
             throw YamiboError.persistenceFailed("save failed")
         }
-        storage[imageURL.absoluteString] = data
+        storage[request.persistentCacheKey] = data
     }
 
     func clearAll() async throws {
@@ -223,31 +235,35 @@ private actor RecordingMangaImageDataCache: MangaImageDataCaching {
     }
 }
 
-private actor SecondReadHitMangaImageDataCache: MangaImageDataCaching {
+private actor SecondReadHitYamiboImageDataCache: YamiboImageDataCaching {
     private let key: String
     private let output: Data
     private var dataCallCount = 0
     private(set) var saveCallCount = 0
 
-    init(imageURL: URL, data: Data) {
-        self.key = imageURL.absoluteString
+    init(request: YamiboImageRequest, data: Data) {
+        self.key = request.persistentCacheKey
         self.output = data
     }
 
-    func data(for imageURL: URL) async -> Data? {
+    func data(for request: YamiboImageRequest) async -> Data? {
         dataCallCount += 1
-        guard imageURL.absoluteString == key, dataCallCount >= 2 else { return nil }
+        guard request.persistentCacheKey == key, dataCallCount >= 2 else { return nil }
         return output
     }
 
-    func save(_ data: Data, for imageURL: URL) async throws {
+    func save(
+        _ data: Data,
+        for request: YamiboImageRequest,
+        retentionPolicy: YamiboImageDataCacheRetentionPolicy
+    ) async throws {
         saveCallCount += 1
     }
 
     func clearAll() async throws {}
 }
 
-private actor RecordingMangaImageDataLoader: MangaImageDataLoading {
+private actor RecordingYamiboImageDataLoader: YamiboImageDataLoading {
     private var results: [Result<Data, Error>]
     private let delayNanoseconds: UInt64
     private(set) var callCount = 0
@@ -257,7 +273,7 @@ private actor RecordingMangaImageDataLoader: MangaImageDataLoading {
         self.delayNanoseconds = delayNanoseconds
     }
 
-    func imageData(for url: URL, refererURL: URL?) async throws -> Data {
+    func imageData(for request: YamiboImageRequest) async throws -> Data {
         callCount += 1
         if delayNanoseconds > 0 {
             try await Task.sleep(nanoseconds: delayNanoseconds)

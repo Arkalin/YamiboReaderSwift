@@ -314,7 +314,7 @@ final class SystemSettingsViewModel: ObservableObject {
         defer { activeAction = nil }
 
         do {
-            try await appContext.mangaImageDataCacheStore.clearAll()
+            try await appContext.imageDataCacheStore.clearAll()
             await refreshStorageUsage()
             return true
         } catch {
@@ -353,7 +353,7 @@ final class SystemSettingsViewModel: ObservableObject {
         let directoryBytes = await appContext.mangaDirectoryStore.totalDiskUsageBytes()
         let chapterDocumentBytes = await appContext.mangaChapterDocumentStore.totalDiskUsageBytes()
         mangaIndexCacheBytes = directoryBytes + chapterDocumentBytes
-        mangaImageCacheBytes = await appContext.mangaImageDataCacheStore.totalDiskUsageBytes()
+        mangaImageCacheBytes = await appContext.imageDataCacheStore.totalDiskUsageBytes()
         mangaOfflineCacheBytes = await appContext.mangaOfflineCacheStore.totalDiskUsageBytes()
     }
 

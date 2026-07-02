@@ -198,12 +198,12 @@ final class SystemSettingsViewModelTests: XCTestCase {
 
         let viewModel = SystemSettingsViewModel(appContext: fixture.appContext)
         await viewModel.load()
-        let imageBytesBeforeClear = await fixture.mangaImageDataCacheStore.totalDiskUsageBytes()
+        let imageBytesBeforeClear = await fixture.imageDataCacheStore.totalDiskUsageBytes()
 
         let didClear = await viewModel.clearMangaIndexCache()
         let directoryBytesAfterClear = await fixture.mangaDirectoryStore.totalDiskUsageBytes()
         let chapterDocumentBytesAfterClear = await fixture.mangaChapterDocumentStore.totalDiskUsageBytes()
-        let imageBytesAfterClear = await fixture.mangaImageDataCacheStore.totalDiskUsageBytes()
+        let imageBytesAfterClear = await fixture.imageDataCacheStore.totalDiskUsageBytes()
 
         XCTAssertTrue(didClear)
         XCTAssertEqual(directoryBytesAfterClear, 0)
@@ -225,7 +225,7 @@ final class SystemSettingsViewModelTests: XCTestCase {
         let indexBytesBeforeClear = directoryBytesBeforeClear + chapterDocumentBytesBeforeClear
 
         let didClear = await viewModel.clearMangaImageCache()
-        let imageBytesAfterClear = await fixture.mangaImageDataCacheStore.totalDiskUsageBytes()
+        let imageBytesAfterClear = await fixture.imageDataCacheStore.totalDiskUsageBytes()
         let directoryBytesAfterClear = await fixture.mangaDirectoryStore.totalDiskUsageBytes()
         let chapterDocumentBytesAfterClear = await fixture.mangaChapterDocumentStore.totalDiskUsageBytes()
 
@@ -425,7 +425,7 @@ final class SystemSettingsViewModelTests: XCTestCase {
         )
         let directoryBytesBeforeClear = await fixture.mangaDirectoryStore.totalDiskUsageBytes()
         let chapterDocumentBytesBeforeClear = await fixture.mangaChapterDocumentStore.totalDiskUsageBytes()
-        let imageBytesBeforeClear = await fixture.mangaImageDataCacheStore.totalDiskUsageBytes()
+        let imageBytesBeforeClear = await fixture.imageDataCacheStore.totalDiskUsageBytes()
         let viewModel = SystemSettingsViewModel(appContext: fixture.appContext)
         await viewModel.refreshMangaOfflineCacheCleanup()
 
@@ -434,7 +434,7 @@ final class SystemSettingsViewModelTests: XCTestCase {
 
         let directoryBytesAfterClear = await fixture.mangaDirectoryStore.totalDiskUsageBytes()
         let chapterDocumentBytesAfterClear = await fixture.mangaChapterDocumentStore.totalDiskUsageBytes()
-        let imageBytesAfterClear = await fixture.mangaImageDataCacheStore.totalDiskUsageBytes()
+        let imageBytesAfterClear = await fixture.imageDataCacheStore.totalDiskUsageBytes()
 
         XCTAssertTrue(didDelete)
         XCTAssertEqual(directoryBytesAfterClear, directoryBytesBeforeClear)
@@ -470,7 +470,7 @@ private struct SystemSettingsFixture {
     let favoriteBackgroundImageStore: FavoriteBackgroundImageStore
     let mangaDirectoryStore: GRDBMangaDirectoryStore
     let mangaChapterDocumentStore: GRDBMangaChapterDocumentStore
-    let mangaImageDataCacheStore: FileMangaImageDataCacheStore
+    let imageDataCacheStore: FileImageDataCacheStore
     let mangaOfflineCacheStore: any MangaOfflineCacheStoring
 }
 
@@ -491,9 +491,9 @@ private func makeFixture() throws -> SystemSettingsFixture {
     )
     let mangaDirectoryStore = GRDBMangaDirectoryStore(databasePool: database)
     let mangaChapterDocumentStore = GRDBMangaChapterDocumentStore(databasePool: database)
-    let mangaImageDataCacheStore = FileMangaImageDataCacheStore(
+    let imageDataCacheStore = FileImageDataCacheStore(
         databasePool: database,
-        baseDirectory: root.appendingPathComponent("manga-image-data", isDirectory: true)
+        baseDirectory: root.appendingPathComponent("image-data", isDirectory: true)
     )
     let mangaOfflineCacheStore = GRDBMangaOfflineCacheStore(
         databasePool: database,
@@ -509,7 +509,7 @@ private func makeFixture() throws -> SystemSettingsFixture {
         favoriteBackgroundImageStore: favoriteBackgroundImageStore,
         mangaDirectoryStore: mangaDirectoryStore,
         mangaChapterDocumentStore: mangaChapterDocumentStore,
-        mangaImageDataCacheStore: mangaImageDataCacheStore,
+        imageDataCacheStore: imageDataCacheStore,
         mangaOfflineCacheStore: mangaOfflineCacheStore
     )
 
@@ -520,7 +520,7 @@ private func makeFixture() throws -> SystemSettingsFixture {
         favoriteBackgroundImageStore: favoriteBackgroundImageStore,
         mangaDirectoryStore: mangaDirectoryStore,
         mangaChapterDocumentStore: mangaChapterDocumentStore,
-        mangaImageDataCacheStore: mangaImageDataCacheStore,
+        imageDataCacheStore: imageDataCacheStore,
         mangaOfflineCacheStore: mangaOfflineCacheStore
     )
 }
@@ -575,9 +575,13 @@ private func seedMangaIndexCache(_ fixture: SystemSettingsFixture) async throws 
 }
 
 private func seedMangaImageCache(_ fixture: SystemSettingsFixture) async throws {
-    try await fixture.mangaImageDataCacheStore.save(
+    try await fixture.imageDataCacheStore.save(
         Data(repeating: 8, count: 4096),
-        for: try XCTUnwrap(URL(string: "https://img.example.com/901-1.jpg"))
+        for: YamiboImageRequest(
+            url: try XCTUnwrap(URL(string: "https://img.example.com/901-1.jpg")),
+            cacheNamespace: YamiboImageCacheNamespace(value: "settings-test")
+        ),
+        retentionPolicy: .evictable
     )
 }
 

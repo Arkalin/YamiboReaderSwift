@@ -142,9 +142,10 @@ struct MangaReaderTestsMangaOfflineCacheStore {
         let offlineStore = try makeTestGRDBMangaOfflineCacheStore(rootDirectory: root)
         let directoryStore = try makeTestGRDBMangaDirectoryStore(rootDirectory: root)
         let documentStore = try makeTestGRDBMangaChapterDocumentStore(rootDirectory: root)
-        let imageCacheStore = try makeTestFileMangaImageDataCacheStore(rootDirectory: root)
+        let imageCacheStore = try makeTestFileImageDataCacheStore(rootDirectory: root)
         let chapterURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100"))
         let imageURL = try #require(URL(string: "https://img.example.com/transparent.jpg"))
+        let imageRequest = makeTestImageRequest(url: imageURL)
 
         try await directoryStore.saveDirectory(
             MangaDirectory(
@@ -170,7 +171,7 @@ struct MangaReaderTestsMangaOfflineCacheStore {
             ),
             for: chapterURL
         )
-        try await imageCacheStore.save(Data([9, 9]), for: imageURL)
+        try await imageCacheStore.save(Data([9, 9]), for: imageRequest, retentionPolicy: .evictable)
         try await offlineStore.saveOfflineImageData(Data([1]), for: imageURL)
         try await offlineStore.saveMembership(makeOfflineMembership(ownerName: "透明目录", tid: "100", imageURLs: [imageURL]))
 
@@ -178,7 +179,7 @@ struct MangaReaderTestsMangaOfflineCacheStore {
 
         #expect(try await directoryStore.directory(named: "透明目录")?.chapters.map(\.tid) == ["100"])
         #expect(await documentStore.document(for: chapterURL)?.tid == "100")
-        #expect(await imageCacheStore.data(for: imageURL) == Data([9, 9]))
+        #expect(await imageCacheStore.data(for: imageRequest) == Data([9, 9]))
         #expect(await offlineStore.offlineImageData(for: imageURL) == nil)
     }
 

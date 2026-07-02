@@ -13,7 +13,7 @@ public struct NovelInlineImageCacheNamespace: Hashable, Sendable {
 
     public static func namespace(cookie: String, userAgent: String) -> NovelInlineImageCacheNamespace {
         NovelInlineImageCacheNamespace(
-            value: YamiboImageCacheNamespace.namespace(cookie: cookie, userAgent: userAgent).value
+            value: YamiboImageCacheNamespace.ordinarySessionNamespace(cookie: cookie, userAgent: userAgent).value
         )
     }
 

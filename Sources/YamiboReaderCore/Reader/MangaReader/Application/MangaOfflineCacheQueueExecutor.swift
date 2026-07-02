@@ -31,22 +31,30 @@ public protocol MangaOfflineCacheQueueRunObserving: Sendable {
 }
 
 public actor MangaOfflineCacheImageAcquirer: MangaOfflineCacheImageAcquiring {
-    private let transparentCache: any MangaImageDataCaching
-    private let networkLoader: any MangaImageDataLoading
+    private let transparentCache: any YamiboImageDataCaching
+    private let cacheNamespace: YamiboImageCacheNamespace
+    private let networkLoader: any YamiboImageDataLoading
     private let backgroundTransport: (any MangaOfflineCacheImageTransporting)?
 
     public init(
-        transparentCache: any MangaImageDataCaching,
-        networkLoader: any MangaImageDataLoading,
+        transparentCache: any YamiboImageDataCaching,
+        cacheNamespace: YamiboImageCacheNamespace,
+        networkLoader: any YamiboImageDataLoading,
         backgroundTransport: (any MangaOfflineCacheImageTransporting)? = nil
     ) {
         self.transparentCache = transparentCache
+        self.cacheNamespace = cacheNamespace
         self.networkLoader = networkLoader
         self.backgroundTransport = backgroundTransport
     }
 
     public func acquireImageData(for imageURL: URL, refererURL: URL?) async throws -> MangaOfflineCacheImageAcquisition {
-        if let cached = await transparentCache.data(for: imageURL) {
+        let request = YamiboImageRequest(
+            url: imageURL,
+            refererURL: refererURL,
+            cacheNamespace: cacheNamespace
+        )
+        if let cached = await transparentCache.data(for: request) {
             return MangaOfflineCacheImageAcquisition(data: cached, source: .transparentCache)
         }
 
@@ -54,7 +62,10 @@ public actor MangaOfflineCacheImageAcquirer: MangaOfflineCacheImageAcquiring {
         if let backgroundTransport {
             data = try await backgroundTransport.downloadImageData(for: imageURL, refererURL: refererURL)
         } else {
-            data = try await networkLoader.imageData(for: imageURL, refererURL: refererURL)
+            data = try await networkLoader.imageData(for: request)
+        }
+        if !data.isEmpty {
+            try? await transparentCache.save(data, for: request, retentionPolicy: .evictable)
         }
         return MangaOfflineCacheImageAcquisition(data: data, source: .network)
     }
