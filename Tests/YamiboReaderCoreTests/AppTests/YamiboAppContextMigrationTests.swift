@@ -34,6 +34,7 @@ import Testing
     let imageURL = try #require(URL(string: "https://img.example.test/7001-1.jpg"))
 
     try await saveMigratedAppState(appContext: appContext, chapterURL: chapterURL, imageURL: imageURL)
+    try await appContext.mangaImageDataCacheStore.save(Data("transparent".utf8), for: imageURL)
     try await appContext.forumCacheStore.saveThreadPage(
         ForumThreadPage(
             thread: ThreadIdentity(tid: "8001"),
@@ -50,6 +51,7 @@ import Testing
             "reading_progress": try tableCount("reading_progress", in: db),
             "manga_directories": try tableCount("manga_directories", in: db),
             "manga_chapter_documents": try tableCount("manga_chapter_documents", in: db),
+            "manga_image_data_cache_entries": try tableCount("manga_image_data_cache_entries", in: db),
             "manga_offline_cache_memberships": try tableCount("manga_offline_cache_memberships", in: db),
             "cache_entries": try tableCount("cache_entries", in: db),
         ]
@@ -59,8 +61,10 @@ import Testing
     #expect(counts["reading_progress"] == 1)
     #expect(counts["manga_directories"] == 1)
     #expect(counts["manga_chapter_documents"] == 1)
+    #expect(counts["manga_image_data_cache_entries"] == 1)
     #expect(counts["manga_offline_cache_memberships"] == 1)
     #expect(counts["cache_entries"] == 1)
+    #expect(!FileManager.default.fileExists(atPath: rootDirectory.appendingPathComponent("manga-reader/image-data/index.json", isDirectory: false).path))
 }
 
 @MainActor
@@ -100,6 +104,7 @@ import Testing
             "reading_progress": try tableCount("reading_progress", in: db),
             "manga_directories": try tableCount("manga_directories", in: db),
             "manga_chapter_documents": try tableCount("manga_chapter_documents", in: db),
+            "manga_image_data_cache_entries": try tableCount("manga_image_data_cache_entries", in: db),
             "manga_offline_cache_memberships": try tableCount("manga_offline_cache_memberships", in: db),
             "manga_offline_cache_images": try tableCount("manga_offline_cache_images", in: db),
             "cache_entries": try tableCount("cache_entries", in: db),
@@ -111,6 +116,7 @@ import Testing
     #expect(counts["reading_progress"] == 0)
     #expect(counts["manga_directories"] == 0)
     #expect(counts["manga_chapter_documents"] == 0)
+    #expect(counts["manga_image_data_cache_entries"] == 0)
     #expect(counts["manga_offline_cache_memberships"] == 0)
     #expect(counts["manga_offline_cache_images"] == 0)
     #expect(counts["cache_entries"] == 0)

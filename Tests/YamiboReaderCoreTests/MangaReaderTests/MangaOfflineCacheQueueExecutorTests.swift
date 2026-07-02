@@ -245,8 +245,9 @@ struct MangaReaderTestsMangaOfflineCacheQueueExecutor {
     }
 
     @Test func transparentCacheHitsAreCopiedToOfflineStorageAndNetworkMissesAreFetched() async throws {
-        let store = try makeTestGRDBMangaOfflineCacheStore(rootDirectory: try makeTemporaryExecutorDirectory())
-        let transparentCache = FileMangaImageDataCacheStore(baseDirectory: try makeTemporaryExecutorDirectory())
+        let root = try makeTemporaryExecutorDirectory()
+        let store = try makeTestGRDBMangaOfflineCacheStore(rootDirectory: root)
+        let transparentCache = try makeTestFileMangaImageDataCacheStore(rootDirectory: root)
         let imageURLs = try makeImageURLs(tid: "700", count: 2)
         try await transparentCache.save(Data([7]), for: imageURLs[0])
         _ = try await store.enqueueOfflineCacheWork(
@@ -272,7 +273,7 @@ struct MangaReaderTestsMangaOfflineCacheQueueExecutor {
     }
 
     @Test func transparentCacheMissesUseBackgroundTransport() async throws {
-        let transparentCache = FileMangaImageDataCacheStore(baseDirectory: try makeTemporaryExecutorDirectory())
+        let transparentCache = try makeTestFileMangaImageDataCacheStore(rootDirectory: try makeTemporaryExecutorDirectory())
         let imageURLs = try makeImageURLs(tid: "710", count: 2)
         try await transparentCache.save(Data([7]), for: imageURLs[0])
         let transport = RecordingImageTransport(dataByURL: [imageURLs[1]: Data([8])])

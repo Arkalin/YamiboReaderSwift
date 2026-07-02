@@ -749,7 +749,8 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
     )
     let mangaDirectoryStore = try makeTestGRDBMangaDirectoryStore(rootDirectory: rootDirectory)
     let mangaChapterDocumentStore = try makeTestGRDBMangaChapterDocumentStore(rootDirectory: rootDirectory)
-    let mangaImageDataCacheStore = FileMangaImageDataCacheStore(
+    let mangaImageDataCacheStore = try makeTestFileMangaImageDataCacheStore(
+        rootDirectory: rootDirectory,
         baseDirectory: rootDirectory.appendingPathComponent("manga-image-data", isDirectory: true)
     )
     let mangaOfflineCacheStore = try makeTestGRDBMangaOfflineCacheStore(rootDirectory: rootDirectory)

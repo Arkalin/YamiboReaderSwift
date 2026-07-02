@@ -142,7 +142,7 @@ struct MangaReaderTestsMangaOfflineCacheStore {
         let offlineStore = try makeTestGRDBMangaOfflineCacheStore(rootDirectory: root)
         let directoryStore = try makeTestGRDBMangaDirectoryStore(rootDirectory: root)
         let documentStore = try makeTestGRDBMangaChapterDocumentStore(rootDirectory: root)
-        let imageCacheStore = FileMangaImageDataCacheStore(baseDirectory: root.appendingPathComponent("transparent-images", isDirectory: true))
+        let imageCacheStore = try makeTestFileMangaImageDataCacheStore(rootDirectory: root)
         let chapterURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100"))
         let imageURL = try #require(URL(string: "https://img.example.com/transparent.jpg"))
 

@@ -95,6 +95,7 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         self.mangaDirectorySearchCooldownState = mangaDirectorySearchCooldownState
         self.mangaChapterDocumentStore = mangaChapterDocumentStore ?? GRDBMangaChapterDocumentStore(databasePool: resolvedGRDBDatabasePool)
         self.mangaImageDataCacheStore = mangaImageDataCacheStore ?? FileMangaImageDataCacheStore(
+            databasePool: resolvedGRDBDatabasePool,
             baseDirectory: Self.mangaImageDataDirectory(rootDirectory: resolvedGRDBRootDirectory)
         )
         self.mangaOfflineCacheStore = resolvedMangaOfflineCacheStore

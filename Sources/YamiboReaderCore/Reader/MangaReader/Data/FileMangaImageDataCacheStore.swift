@@ -1,26 +1,22 @@
 import CryptoKit
 import Foundation
+@preconcurrency import GRDB
 
 public actor FileMangaImageDataCacheStore: MangaImageDataCaching {
     public static let defaultDiskLimitBytes = 512 * 1024 * 1024
 
-    private static let schemaVersion = 1
-
-    private let fileManager: FileManager
+    private let database: DatabasePool
+    private nonisolated(unsafe) let fileManager: FileManager
     private let baseDirectory: URL
-    private let indexURL: URL
     private let diskLimitBytes: Int
-    private let encoder = JSONEncoder()
-    private let decoder = JSONDecoder()
-    private var index: [String: MangaImageDataCacheMetadata] = [:]
-    private var didLoadIndex = false
-    private var isIndexDirty = false
 
     public init(
+        databasePool: DatabasePool? = nil,
         fileManager: FileManager = .default,
         baseDirectory: URL? = nil,
         diskLimitBytes: Int = FileMangaImageDataCacheStore.defaultDiskLimitBytes
     ) {
+        self.database = databasePool ?? Self.openDatabase()
         self.fileManager = fileManager
         let root = baseDirectory
             ?? fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
@@ -32,38 +28,59 @@ public actor FileMangaImageDataCacheStore: MangaImageDataCaching {
                 .appendingPathComponent("manga-reader", isDirectory: true)
                 .appendingPathComponent("image-data", isDirectory: true)
         self.baseDirectory = root
-        self.indexURL = root.appendingPathComponent("index.json", isDirectory: false)
         self.diskLimitBytes = max(0, diskLimitBytes)
-        encoder.outputFormatting = [.sortedKeys]
-        encoder.dateEncodingStrategy = .iso8601
-        decoder.dateDecodingStrategy = .iso8601
     }
 
     public func data(for imageURL: URL) async -> Data? {
-        await ensureIndexLoaded()
-        let key = cacheKey(for: imageURL)
-        guard var metadata = index[key] else { return nil }
-
-        let fileURL = baseDirectory.appendingPathComponent(metadata.fileName, isDirectory: false)
-        guard let data = try? Data(contentsOf: fileURL), !data.isEmpty else {
-            removeEntry(forKey: key)
-            try? persistIndexIfDirty()
+        let imageURLString = cacheKey(for: imageURL)
+        guard let fileName = try? await database.read({ db in
+            try String.fetchOne(
+                db,
+                sql: "SELECT file_name FROM manga_image_data_cache_entries WHERE image_url = ?",
+                arguments: [imageURLString]
+            )
+        }) else {
             return nil
         }
 
-        metadata.lastAccessedAt = .now
-        index[key] = metadata
-        isIndexDirty = true
+        let fileURL = baseDirectory.appendingPathComponent(fileName, isDirectory: false)
+        guard let data = try? Data(contentsOf: fileURL), !data.isEmpty else {
+            try? await database.write { db in
+                try Self.deleteEntry(
+                    imageURLString: imageURLString,
+                    fileManager: fileManager,
+                    baseDirectory: baseDirectory,
+                    in: db
+                )
+            }
+            return nil
+        }
+
+        try? await database.write { db in
+            try db.execute(
+                sql: "UPDATE manga_image_data_cache_entries SET last_accessed_at = ? WHERE image_url = ?",
+                arguments: [Date().timeIntervalSince1970, imageURLString]
+            )
+        }
         return data
     }
 
     public func save(_ data: Data, for imageURL: URL) async throws {
-        await ensureIndexLoaded()
-        let key = cacheKey(for: imageURL)
+        let imageURLString = cacheKey(for: imageURL)
 
         guard !data.isEmpty, diskLimitBytes > 0, data.count <= diskLimitBytes else {
-            removeEntry(forKey: key)
-            try persistIndexIfDirty()
+            do {
+                try await database.write { db in
+                    try Self.deleteEntry(
+                        imageURLString: imageURLString,
+                        fileManager: fileManager,
+                        baseDirectory: baseDirectory,
+                        in: db
+                    )
+                }
+            } catch {
+                throw persistenceError(from: error)
+            }
             return
         }
 
@@ -73,111 +90,63 @@ public actor FileMangaImageDataCacheStore: MangaImageDataCaching {
             let fileURL = baseDirectory.appendingPathComponent(fileName, isDirectory: false)
             try data.write(to: fileURL, options: [.atomic])
 
-            if let oldFileName = index[key]?.fileName, oldFileName != fileName {
-                try? fileManager.removeItem(at: baseDirectory.appendingPathComponent(oldFileName, isDirectory: false))
-            }
+            try await database.write { db in
+                if let oldFileName = try String.fetchOne(
+                    db,
+                    sql: "SELECT file_name FROM manga_image_data_cache_entries WHERE image_url = ?",
+                    arguments: [imageURLString]
+                ), oldFileName != fileName {
+                    try? fileManager.removeItem(at: baseDirectory.appendingPathComponent(oldFileName, isDirectory: false))
+                }
 
-            index[key] = MangaImageDataCacheMetadata(
-                fileName: fileName,
-                byteCount: data.count,
-                lastAccessedAt: .now
-            )
-            isIndexDirty = true
-            try trimDiskIfNeeded()
-            try persistIndexIfDirty()
+                try db.execute(
+                    sql: """
+                    INSERT INTO manga_image_data_cache_entries (image_url, file_name, byte_count, last_accessed_at)
+                    VALUES (?, ?, ?, ?)
+                    ON CONFLICT(image_url) DO UPDATE SET
+                        file_name = excluded.file_name,
+                        byte_count = excluded.byte_count,
+                        last_accessed_at = excluded.last_accessed_at
+                    """,
+                    arguments: [imageURLString, fileName, data.count, Date().timeIntervalSince1970]
+                )
+                try Self.trimDiskIfNeeded(
+                    diskLimitBytes: diskLimitBytes,
+                    fileManager: fileManager,
+                    baseDirectory: baseDirectory,
+                    in: db
+                )
+            }
         } catch {
             throw persistenceError(from: error)
         }
     }
 
     public func clearAll() async throws {
-        await ensureIndexLoaded()
         do {
+            try await database.write { db in
+                try db.execute(sql: "DELETE FROM manga_image_data_cache_entries")
+            }
             if fileManager.fileExists(atPath: baseDirectory.path) {
                 try fileManager.removeItem(at: baseDirectory)
             }
-            index = [:]
-            isIndexDirty = false
         } catch {
             throw persistenceError(from: error)
         }
     }
 
     public func totalDiskUsageBytes() async -> Int {
-        await ensureIndexLoaded()
-        return index.values.reduce(0) { $0 + $1.byteCount }
-    }
-
-    private func ensureIndexLoaded() async {
-        guard !didLoadIndex else { return }
-        didLoadIndex = true
-
-        guard fileManager.fileExists(atPath: indexURL.path),
-              let data = try? Data(contentsOf: indexURL) else {
-            index = [:]
-            isIndexDirty = false
-            return
-        }
-
-        guard
-            let envelope = try? decoder.decode(MangaImageDataCacheIndexEnvelope.self, from: data),
-            envelope.version == Self.schemaVersion
-        else {
-            clearCacheDirectory()
-            index = [:]
-            isIndexDirty = false
-            return
-        }
-
-        index = envelope.images
-        isIndexDirty = false
-    }
-
-    private func removeEntry(forKey key: String) {
-        guard let metadata = index.removeValue(forKey: key) else { return }
-        try? fileManager.removeItem(at: baseDirectory.appendingPathComponent(metadata.fileName, isDirectory: false))
-        isIndexDirty = true
-    }
-
-    private func trimDiskIfNeeded() throws {
-        var totalBytes = index.values.reduce(0) { $0 + $1.byteCount }
-        guard totalBytes > diskLimitBytes else { return }
-
-        let sortedKeys = index
-            .sorted { lhs, rhs in
-                if lhs.value.lastAccessedAt == rhs.value.lastAccessedAt {
-                    lhs.key < rhs.key
-                } else {
-                    lhs.value.lastAccessedAt < rhs.value.lastAccessedAt
-                }
-            }
-            .map(\.key)
-
-        for key in sortedKeys where totalBytes > diskLimitBytes {
-            guard let metadata = index.removeValue(forKey: key) else { continue }
-            try? fileManager.removeItem(at: baseDirectory.appendingPathComponent(metadata.fileName, isDirectory: false))
-            totalBytes -= metadata.byteCount
-            isIndexDirty = true
-        }
-    }
-
-    private func persistIndexIfDirty() throws {
-        guard isIndexDirty else { return }
-        try ensureDirectoryExists()
-        let data = try encoder.encode(MangaImageDataCacheIndexEnvelope(version: Self.schemaVersion, images: index))
-        try data.write(to: indexURL, options: [.atomic])
-        isIndexDirty = false
+        (try? await database.read { db in
+            try Int.fetchOne(
+                db,
+                sql: "SELECT COALESCE(SUM(byte_count), 0) FROM manga_image_data_cache_entries"
+            ) ?? 0
+        }) ?? 0
     }
 
     private func ensureDirectoryExists() throws {
         if !fileManager.fileExists(atPath: baseDirectory.path) {
             try fileManager.createDirectory(at: baseDirectory, withIntermediateDirectories: true)
-        }
-    }
-
-    private func clearCacheDirectory() {
-        if fileManager.fileExists(atPath: baseDirectory.path) {
-            try? fileManager.removeItem(at: baseDirectory)
         }
     }
 
@@ -207,15 +176,64 @@ public actor FileMangaImageDataCacheStore: MangaImageDataCaching {
         }
         return YamiboError.persistenceFailed(error.localizedDescription)
     }
-}
 
-private struct MangaImageDataCacheIndexEnvelope: Codable {
-    var version: Int
-    var images: [String: MangaImageDataCacheMetadata]
-}
+    private static func deleteEntry(
+        imageURLString: String,
+        fileManager: FileManager,
+        baseDirectory: URL,
+        in db: Database
+    ) throws {
+        if let fileName = try String.fetchOne(
+            db,
+            sql: "SELECT file_name FROM manga_image_data_cache_entries WHERE image_url = ?",
+            arguments: [imageURLString]
+        ) {
+            try? fileManager.removeItem(at: baseDirectory.appendingPathComponent(fileName, isDirectory: false))
+        }
+        try db.execute(
+            sql: "DELETE FROM manga_image_data_cache_entries WHERE image_url = ?",
+            arguments: [imageURLString]
+        )
+    }
 
-private struct MangaImageDataCacheMetadata: Codable {
-    var fileName: String
-    var byteCount: Int
-    var lastAccessedAt: Date
+    private static func trimDiskIfNeeded(
+        diskLimitBytes: Int,
+        fileManager: FileManager,
+        baseDirectory: URL,
+        in db: Database
+    ) throws {
+        var totalBytes = try Int.fetchOne(
+            db,
+            sql: "SELECT COALESCE(SUM(byte_count), 0) FROM manga_image_data_cache_entries"
+        ) ?? 0
+        guard totalBytes > diskLimitBytes else { return }
+
+        let rows = try Row.fetchAll(
+            db,
+            sql: """
+            SELECT image_url, file_name, byte_count
+            FROM manga_image_data_cache_entries
+            ORDER BY last_accessed_at ASC, image_url ASC
+            """
+        )
+        for row in rows where totalBytes > diskLimitBytes {
+            let imageURLString = row["image_url"] as String
+            let fileName = row["file_name"] as String
+            let byteCount = row["byte_count"] as Int
+            try? fileManager.removeItem(at: baseDirectory.appendingPathComponent(fileName, isDirectory: false))
+            try db.execute(
+                sql: "DELETE FROM manga_image_data_cache_entries WHERE image_url = ?",
+                arguments: [imageURLString]
+            )
+            totalBytes -= byteCount
+        }
+    }
+
+    private static func openDatabase() -> DatabasePool {
+        do {
+            return try YamiboDatabase.openSharedPool()
+        } catch {
+            fatalError("Failed to open FileMangaImageDataCacheStore database: \(error)")
+        }
+    }
 }

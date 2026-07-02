@@ -489,6 +489,7 @@ private func makeFixture() throws -> SystemSettingsFixture {
     let mangaDirectoryStore = GRDBMangaDirectoryStore(databasePool: database)
     let mangaChapterDocumentStore = GRDBMangaChapterDocumentStore(databasePool: database)
     let mangaImageDataCacheStore = FileMangaImageDataCacheStore(
+        databasePool: database,
         baseDirectory: root.appendingPathComponent("manga-image-data", isDirectory: true)
     )
     let mangaOfflineCacheStore = GRDBMangaOfflineCacheStore(

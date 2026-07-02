@@ -1,32 +1,37 @@
 import CryptoKit
 import Foundation
+@preconcurrency import GRDB
 import Testing
 @testable import YamiboReaderCore
 
 @Suite("MangaReaderTests: Image Data Cache Store")
 struct MangaReaderTestsImageDataCacheStore {
     @Test func savesAndLoadsDataAcrossStoreInstances() async throws {
-        let directory = try makeTemporaryImageCacheDirectory()
+        let fixture = try makeTemporaryImageCacheFixture()
         let imageURL = try #require(URL(string: "https://img.example.com/a.jpg"))
         let expected = Data([1, 2, 3])
 
-        let writingStore = FileMangaImageDataCacheStore(baseDirectory: directory)
+        let writingStore = FileMangaImageDataCacheStore(databasePool: fixture.database, baseDirectory: fixture.directory)
         try await writingStore.save(expected, for: imageURL)
 
-        let readingStore = FileMangaImageDataCacheStore(baseDirectory: directory)
+        let row = try await metadataRow(for: imageURL, in: fixture.database)
+        let readingStore = FileMangaImageDataCacheStore(databasePool: fixture.database, baseDirectory: fixture.directory)
         let loaded = await readingStore.data(for: imageURL)
 
+        #expect(row?.fileName == "manga_image_\(sha256Hex(imageURL.absoluteString)).jpg")
+        #expect(row?.byteCount == expected.count)
         #expect(loaded == expected)
+        #expect(!FileManager.default.fileExists(atPath: fixture.directory.appendingPathComponent("index.json").path))
     }
 
     @Test func fileNameUsesSHA256AndDoesNotExposeRawURL() async throws {
-        let directory = try makeTemporaryImageCacheDirectory()
+        let fixture = try makeTemporaryImageCacheFixture()
         let imageURL = try #require(URL(string: "https://img.example.com/path/a secret.jpg?token=private"))
-        let store = FileMangaImageDataCacheStore(baseDirectory: directory)
+        let store = FileMangaImageDataCacheStore(databasePool: fixture.database, baseDirectory: fixture.directory)
 
         try await store.save(Data([1]), for: imageURL)
 
-        let cachedFiles = try cachedImageFiles(in: directory)
+        let cachedFiles = try cachedImageFiles(in: fixture.directory)
         let fileName = try #require(cachedFiles.first?.lastPathComponent)
         #expect(cachedFiles.count == 1)
         #expect(fileName == "manga_image_\(sha256Hex(imageURL.absoluteString)).jpg")
@@ -34,12 +39,12 @@ struct MangaReaderTestsImageDataCacheStore {
         #expect(!fileName.contains("token"))
     }
 
-    @Test func cacheHitUpdatesLRUForLaterTrimWithoutImmediateIndexWrite() async throws {
-        let directory = try makeTemporaryImageCacheDirectory()
+    @Test func cacheHitUpdatesLRUForLaterTrim() async throws {
+        let fixture = try makeTemporaryImageCacheFixture()
         let firstURL = try #require(URL(string: "https://img.example.com/first.jpg"))
         let secondURL = try #require(URL(string: "https://img.example.com/second.jpg"))
         let thirdURL = try #require(URL(string: "https://img.example.com/third.jpg"))
-        let store = FileMangaImageDataCacheStore(baseDirectory: directory, diskLimitBytes: 8)
+        let store = FileMangaImageDataCacheStore(databasePool: fixture.database, baseDirectory: fixture.directory, diskLimitBytes: 8)
 
         try await store.save(Data([1, 1, 1, 1]), for: firstURL)
         try await Task.sleep(nanoseconds: 1_000_000)
@@ -55,10 +60,10 @@ struct MangaReaderTestsImageDataCacheStore {
     }
 
     @Test func evictsLeastRecentlyUsedImagesWhenOverDiskLimit() async throws {
-        let directory = try makeTemporaryImageCacheDirectory()
+        let fixture = try makeTemporaryImageCacheFixture()
         let oldURL = try #require(URL(string: "https://img.example.com/old.jpg"))
         let newURL = try #require(URL(string: "https://img.example.com/new.jpg"))
-        let store = FileMangaImageDataCacheStore(baseDirectory: directory, diskLimitBytes: 6)
+        let store = FileMangaImageDataCacheStore(databasePool: fixture.database, baseDirectory: fixture.directory, diskLimitBytes: 6)
 
         try await store.save(Data([1, 2, 3, 4]), for: oldURL)
         try await Task.sleep(nanoseconds: 1_000_000)
@@ -70,21 +75,21 @@ struct MangaReaderTestsImageDataCacheStore {
     }
 
     @Test func oversizedImageIsNotStored() async throws {
-        let directory = try makeTemporaryImageCacheDirectory()
+        let fixture = try makeTemporaryImageCacheFixture()
         let imageURL = try #require(URL(string: "https://img.example.com/large.jpg"))
-        let store = FileMangaImageDataCacheStore(baseDirectory: directory, diskLimitBytes: 4)
+        let store = FileMangaImageDataCacheStore(databasePool: fixture.database, baseDirectory: fixture.directory, diskLimitBytes: 4)
 
         try await store.save(Data([1, 2, 3, 4, 5]), for: imageURL)
 
         #expect(await store.data(for: imageURL) == nil)
         #expect(await store.totalDiskUsageBytes() == 0)
-        #expect(try cachedImageFiles(in: directory).isEmpty)
+        #expect(try cachedImageFiles(in: fixture.directory).isEmpty)
     }
 
     @Test func emptyDataSaveDeletesExistingEntry() async throws {
-        let directory = try makeTemporaryImageCacheDirectory()
+        let fixture = try makeTemporaryImageCacheFixture()
         let imageURL = try #require(URL(string: "https://img.example.com/delete.jpg"))
-        let store = FileMangaImageDataCacheStore(baseDirectory: directory)
+        let store = FileMangaImageDataCacheStore(databasePool: fixture.database, baseDirectory: fixture.directory)
         try await store.save(Data([9]), for: imageURL)
 
         try await store.save(Data(), for: imageURL)
@@ -93,27 +98,31 @@ struct MangaReaderTestsImageDataCacheStore {
         #expect(await store.totalDiskUsageBytes() == 0)
     }
 
-    @Test func corruptIndexClearsCacheDirectory() async throws {
-        let directory = try makeTemporaryImageCacheDirectory()
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let orphanURL = directory.appendingPathComponent("orphan.bin", isDirectory: false)
-        try Data("not-json".utf8).write(to: directory.appendingPathComponent("index.json"), options: [.atomic])
-        try Data([1]).write(to: orphanURL, options: [.atomic])
+    @Test func legacyIndexAndFilesAreIgnoredAndPreserved() async throws {
+        let fixture = try makeTemporaryImageCacheFixture()
+        try FileManager.default.createDirectory(at: fixture.directory, withIntermediateDirectories: true)
+        let legacyIndexURL = fixture.directory.appendingPathComponent("index.json", isDirectory: false)
+        let legacyImageURL = fixture.directory.appendingPathComponent("legacy-image.bin", isDirectory: false)
+        let legacyIndexData = Data(#"{"version":1,"images":{"https://img.example.com/legacy.jpg":{"fileName":"legacy-image.bin","byteCount":1,"lastAccessedAt":"2026-01-01T00:00:00Z"}}}"#.utf8)
+        try legacyIndexData.write(to: legacyIndexURL, options: [.atomic])
+        try Data([1]).write(to: legacyImageURL, options: [.atomic])
 
-        let store = FileMangaImageDataCacheStore(baseDirectory: directory)
-        let loaded = await store.data(for: try #require(URL(string: "https://img.example.com/missing.jpg")))
+        let store = FileMangaImageDataCacheStore(databasePool: fixture.database, baseDirectory: fixture.directory)
+        let legacyLoaded = await store.data(for: try #require(URL(string: "https://img.example.com/legacy.jpg")))
+        try await store.save(Data([2]), for: try #require(URL(string: "https://img.example.com/new.jpg")))
 
-        #expect(loaded == nil)
-        #expect(!FileManager.default.fileExists(atPath: orphanURL.path))
+        #expect(legacyLoaded == nil)
+        #expect(try Data(contentsOf: legacyIndexURL) == legacyIndexData)
+        #expect(FileManager.default.fileExists(atPath: legacyImageURL.path))
     }
 
     @Test func missingIndexedFileSelfHealsToMiss() async throws {
-        let directory = try makeTemporaryImageCacheDirectory()
+        let fixture = try makeTemporaryImageCacheFixture()
         let imageURL = try #require(URL(string: "https://img.example.com/missing-file.jpg"))
-        let store = FileMangaImageDataCacheStore(baseDirectory: directory)
+        let store = FileMangaImageDataCacheStore(databasePool: fixture.database, baseDirectory: fixture.directory)
         try await store.save(Data([7]), for: imageURL)
 
-        for url in try cachedImageFiles(in: directory) {
+        for url in try cachedImageFiles(in: fixture.directory) {
             try FileManager.default.removeItem(at: url)
         }
 
@@ -122,12 +131,12 @@ struct MangaReaderTestsImageDataCacheStore {
     }
 
     @Test func emptyIndexedFileSelfHealsToMiss() async throws {
-        let directory = try makeTemporaryImageCacheDirectory()
+        let fixture = try makeTemporaryImageCacheFixture()
         let imageURL = try #require(URL(string: "https://img.example.com/empty-file.jpg"))
-        let store = FileMangaImageDataCacheStore(baseDirectory: directory)
+        let store = FileMangaImageDataCacheStore(databasePool: fixture.database, baseDirectory: fixture.directory)
         try await store.save(Data([8]), for: imageURL)
 
-        let fileURL = try #require(try cachedImageFiles(in: directory).first)
+        let fileURL = try #require(try cachedImageFiles(in: fixture.directory).first)
         try Data().write(to: fileURL, options: [.atomic])
 
         #expect(await store.data(for: imageURL) == nil)
@@ -136,20 +145,29 @@ struct MangaReaderTestsImageDataCacheStore {
     }
 
     @Test func clearAllDeletesCacheDirectory() async throws {
-        let directory = try makeTemporaryImageCacheDirectory()
+        let fixture = try makeTemporaryImageCacheFixture()
         let imageURL = try #require(URL(string: "https://img.example.com/clear.jpg"))
-        let store = FileMangaImageDataCacheStore(baseDirectory: directory)
+        let store = FileMangaImageDataCacheStore(databasePool: fixture.database, baseDirectory: fixture.directory)
         try await store.save(Data([1, 2]), for: imageURL)
 
         try await store.clearAll()
 
-        #expect(!FileManager.default.fileExists(atPath: directory.path))
+        #expect(!FileManager.default.fileExists(atPath: fixture.directory.path))
         #expect(await store.totalDiskUsageBytes() == 0)
     }
 }
 
-private func makeTemporaryImageCacheDirectory() throws -> URL {
-    FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+private struct MangaImageCacheFixture {
+    var database: DatabasePool
+    var directory: URL
+}
+
+private func makeTemporaryImageCacheFixture() throws -> MangaImageCacheFixture {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+    return MangaImageCacheFixture(
+        database: try YamiboDatabase.openPool(rootDirectory: root.appendingPathComponent("grdb", isDirectory: true)),
+        directory: root.appendingPathComponent("image-data", isDirectory: true)
+    )
 }
 
 private func cachedImageFiles(in directory: URL) throws -> [URL] {
@@ -162,4 +180,22 @@ private func cachedImageFiles(in directory: URL) throws -> [URL] {
 private func sha256Hex(_ value: String) -> String {
     let digest = SHA256.hash(data: Data(value.utf8))
     return digest.map { String(format: "%02x", $0) }.joined()
+}
+
+private struct MangaImageCacheMetadata: Sendable {
+    var fileName: String
+    var byteCount: Int
+}
+
+private func metadataRow(for imageURL: URL, in database: DatabasePool) async throws -> MangaImageCacheMetadata? {
+    try await database.read { db in
+        guard let row = try Row.fetchOne(
+            db,
+            sql: "SELECT file_name, byte_count FROM manga_image_data_cache_entries WHERE image_url = ?",
+            arguments: [imageURL.absoluteString]
+        ) else {
+            return nil
+        }
+        return MangaImageCacheMetadata(fileName: row["file_name"], byteCount: row["byte_count"])
+    }
 }

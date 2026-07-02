@@ -26,7 +26,11 @@ struct MangaReaderTestsImageDataCacheAppContext {
             )
         )
 
-        let cacheStore = FileMangaImageDataCacheStore(baseDirectory: try makeTemporaryAppContextImageCacheDirectory())
+        let cacheRoot = try makeTemporaryAppContextImageCacheDirectory()
+        let cacheStore = FileMangaImageDataCacheStore(
+            databasePool: try YamiboDatabase.openPool(rootDirectory: cacheRoot.appendingPathComponent("grdb", isDirectory: true)),
+            baseDirectory: cacheRoot.appendingPathComponent("image-data", isDirectory: true)
+        )
         let appContext = YamiboAppContext(
             sessionStore: sessionStore,
             mangaImageDataCacheStore: cacheStore,
