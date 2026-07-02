@@ -109,12 +109,6 @@ public extension MangaImageDataLoading {
     }
 }
 
-public protocol MangaImageDataCaching: Sendable {
-    func data(for imageURL: URL) async -> Data?
-    func save(_ data: Data, for imageURL: URL) async throws
-    func clearAll() async throws
-}
-
 public protocol MangaOfflineCacheStoring: Sendable {
     func offlineCacheUpdates() -> AsyncStream<Void>
     func membership(ownerName: String, tid: String) async -> MangaOfflineCacheMembership?

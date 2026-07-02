@@ -174,6 +174,12 @@ struct CommonTestsImageDataCacheStore {
         let fixture = try makeTemporaryImageDataCacheFixture()
         let request = try imageCacheRequest(url: "https://img.example.com/legacy.jpg")
         try await fixture.database.write { db in
+            try db.create(table: "manga_image_data_cache_entries") { table in
+                table.column("image_url", .text).primaryKey(onConflict: .replace)
+                table.column("file_name", .text).notNull()
+                table.column("byte_count", .integer).notNull()
+                table.column("last_accessed_at", .double).notNull()
+            }
             try db.execute(
                 sql: """
                 INSERT INTO manga_image_data_cache_entries (image_url, file_name, byte_count, last_accessed_at)
