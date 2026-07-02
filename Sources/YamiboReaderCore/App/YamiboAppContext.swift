@@ -1,4 +1,5 @@
-import Foundation
+@preconcurrency import Foundation
+@preconcurrency import GRDB
 #if canImport(WebKit)
 import WebKit
 #endif
@@ -38,6 +39,8 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
     public let mangaOfflineCacheContinuedProcessingCoordinator: MangaOfflineCacheContinuedProcessingCoordinator
     let session: URLSession
     private let mangaOfflineCacheQueueExecutorBox = MangaOfflineCacheQueueExecutorBox()
+    private nonisolated(unsafe) let uiDefaults: UserDefaults
+    private let clearsWebDataOnReset: Bool
 
     public init(
         sessionStore: SessionStore = SessionStore(),
@@ -51,38 +54,60 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         favoriteUpdateStore: FavoriteUpdateStore = FavoriteUpdateStore(),
         readingProgressStore: ReadingProgressStore? = nil,
         contentCoverStore: ContentCoverStore = ContentCoverStore(),
-        readerCacheStore: ReaderCacheStore = ReaderCacheStore(),
-        favoriteBackgroundImageStore: FavoriteBackgroundImageStore = FavoriteBackgroundImageStore(),
+        readerCacheStore: ReaderCacheStore? = nil,
+        favoriteBackgroundImageStore: FavoriteBackgroundImageStore? = nil,
         mangaDirectoryStore: (any MangaDirectoryPersisting & MangaDirectoryStorageReporting & MangaDirectoryClearing)? = nil,
         mangaDirectorySearchCooldownState: MangaDirectorySearchCooldownState = MangaDirectorySearchCooldownState(),
         mangaChapterDocumentStore: (any MangaChapterDocumentPersisting & MangaChapterDocumentStorageReporting)? = nil,
-        mangaImageDataCacheStore: FileMangaImageDataCacheStore = FileMangaImageDataCacheStore(),
+        mangaImageDataCacheStore: FileMangaImageDataCacheStore? = nil,
         mangaOfflineCacheStore: (any MangaOfflineCacheStoring)? = nil,
-        forumCacheStore: ForumCacheStore = ForumCacheStore(),
+        forumCacheStore: ForumCacheStore? = nil,
         mangaOfflineCacheBackgroundDownloadTransport: MangaOfflineCacheBackgroundDownloadTransport = MangaOfflineCacheBackgroundDownloadTransport(),
         mangaOfflineCacheContinuedProcessingCoordinator: MangaOfflineCacheContinuedProcessingCoordinator = MangaOfflineCacheContinuedProcessingCoordinator(),
+        grdbRootDirectory: URL? = nil,
+        uiDefaults: UserDefaults = .standard,
+        clearsWebDataOnReset: Bool = true,
         session: URLSession = YamiboNetworkConfiguration.makeSession()
     ) {
+        let resolvedGRDBRootDirectory = grdbRootDirectory ?? YamiboDatabase.defaultRootDirectory()
+        let resolvedGRDBDatabasePool = Self.openGRDBDatabase(rootDirectory: resolvedGRDBRootDirectory)
+        self.uiDefaults = uiDefaults
+        self.clearsWebDataOnReset = clearsWebDataOnReset
         self.sessionStore = sessionStore
         self.profileStore = profileStore
         self.checkInStore = checkInStore
         self.settingsStore = settingsStore
         self.webDAVSyncSettingsStore = webDAVSyncSettingsStore
         self.readerResumeRouteStore = readerResumeRouteStore
-        let resolvedMangaOfflineCacheStore = mangaOfflineCacheStore ?? GRDBMangaOfflineCacheStore()
+        let resolvedMangaOfflineCacheStore = mangaOfflineCacheStore ?? GRDBMangaOfflineCacheStore(
+            databasePool: resolvedGRDBDatabasePool,
+            baseDirectory: Self.mangaOfflineCacheDirectory(rootDirectory: resolvedGRDBRootDirectory)
+        )
         self.favoriteStore = favoriteStore ?? FavoriteStore(mangaOfflineCacheStore: resolvedMangaOfflineCacheStore)
-        self.localFavoriteLibraryStore = localFavoriteLibraryStore ?? LocalFirstFavoriteLibraryStore()
+        self.localFavoriteLibraryStore = localFavoriteLibraryStore ?? LocalFirstFavoriteLibraryStore(databasePool: resolvedGRDBDatabasePool)
         self.favoriteUpdateStore = favoriteUpdateStore
-        self.readingProgressStore = readingProgressStore ?? ReadingProgressStore()
+        self.readingProgressStore = readingProgressStore ?? ReadingProgressStore(databasePool: resolvedGRDBDatabasePool)
         self.contentCoverStore = contentCoverStore
-        self.readerCacheStore = readerCacheStore
-        self.favoriteBackgroundImageStore = favoriteBackgroundImageStore
-        self.mangaDirectoryStore = mangaDirectoryStore ?? GRDBMangaDirectoryStore()
+        self.readerCacheStore = readerCacheStore ?? ReaderCacheStore(
+            baseDirectory: Self.readerCacheDirectory(rootDirectory: resolvedGRDBRootDirectory)
+        )
+        self.favoriteBackgroundImageStore = favoriteBackgroundImageStore ?? FavoriteBackgroundImageStore(
+            baseDirectory: Self.favoriteBackgroundDirectory(rootDirectory: resolvedGRDBRootDirectory)
+        )
+        self.mangaDirectoryStore = mangaDirectoryStore ?? GRDBMangaDirectoryStore(databasePool: resolvedGRDBDatabasePool)
         self.mangaDirectorySearchCooldownState = mangaDirectorySearchCooldownState
-        self.mangaChapterDocumentStore = mangaChapterDocumentStore ?? GRDBMangaChapterDocumentStore()
-        self.mangaImageDataCacheStore = mangaImageDataCacheStore
+        self.mangaChapterDocumentStore = mangaChapterDocumentStore ?? GRDBMangaChapterDocumentStore(databasePool: resolvedGRDBDatabasePool)
+        self.mangaImageDataCacheStore = mangaImageDataCacheStore ?? FileMangaImageDataCacheStore(
+            baseDirectory: Self.mangaImageDataDirectory(rootDirectory: resolvedGRDBRootDirectory)
+        )
         self.mangaOfflineCacheStore = resolvedMangaOfflineCacheStore
-        self.forumCacheStore = forumCacheStore
+        self.forumCacheStore = forumCacheStore ?? ForumCacheStore(
+            baseDirectory: Self.forumCacheDirectory(rootDirectory: resolvedGRDBRootDirectory),
+            threadPageDiskCache: GRDBJSONCacheStore(
+                writer: resolvedGRDBDatabasePool,
+                rootDirectory: resolvedGRDBRootDirectory
+            )
+        )
         self.mangaOfflineCacheBackgroundDownloadTransport = mangaOfflineCacheBackgroundDownloadTransport
         self.mangaOfflineCacheContinuedProcessingCoordinator = mangaOfflineCacheContinuedProcessingCoordinator
         self.session = session
@@ -350,12 +375,45 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         try await forumCacheStore.clearAll()
         try await favoriteBackgroundImageStore.deleteAll()
         clearLocalUIState()
-        await clearWebData()
+        if clearsWebDataOnReset {
+            await clearWebData()
+        }
     }
 
     private func clearLocalUIState() {
-        let defaults = UserDefaults.standard
-        Self.resettableUserDefaultsKeys.forEach { defaults.removeObject(forKey: $0) }
+        Self.resettableUserDefaultsKeys.forEach { uiDefaults.removeObject(forKey: $0) }
+    }
+
+    private static func openGRDBDatabase(rootDirectory: URL) -> DatabasePool {
+        do {
+            return try YamiboDatabase.openSharedPool(rootDirectory: rootDirectory)
+        } catch {
+            fatalError("Failed to open Yamibo app database: \(error)")
+        }
+    }
+
+    private static func forumCacheDirectory(rootDirectory: URL) -> URL {
+        rootDirectory.appendingPathComponent("forum-cache", isDirectory: true)
+    }
+
+    private static func readerCacheDirectory(rootDirectory: URL) -> URL {
+        rootDirectory.appendingPathComponent("reader-cache", isDirectory: true)
+    }
+
+    private static func favoriteBackgroundDirectory(rootDirectory: URL) -> URL {
+        rootDirectory.appendingPathComponent("favorite-background", isDirectory: true)
+    }
+
+    private static func mangaImageDataDirectory(rootDirectory: URL) -> URL {
+        rootDirectory
+            .appendingPathComponent("manga-reader", isDirectory: true)
+            .appendingPathComponent("image-data", isDirectory: true)
+    }
+
+    private static func mangaOfflineCacheDirectory(rootDirectory: URL) -> URL {
+        rootDirectory
+            .appendingPathComponent("manga-reader", isDirectory: true)
+            .appendingPathComponent("offline-cache", isDirectory: true)
     }
 
     @MainActor

@@ -225,8 +225,12 @@ public actor ForumCacheStore {
     }
 
     public func clearAll() async throws {
-        guard fileManager.fileExists(atPath: baseDirectory.path) else { return }
-        try fileManager.removeItem(at: baseDirectory)
+        if let threadPageDiskCache {
+            try await threadPageDiskCache.clearNamespace(Self.threadPageNamespace)
+        }
+        if fileManager.fileExists(atPath: baseDirectory.path) {
+            try fileManager.removeItem(at: baseDirectory)
+        }
     }
 
     private func load<Value: Codable>(fileName: String) -> ForumCacheEntry<Value>? {
