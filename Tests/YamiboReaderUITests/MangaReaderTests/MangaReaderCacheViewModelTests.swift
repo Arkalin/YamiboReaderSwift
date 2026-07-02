@@ -192,13 +192,13 @@ private func makeCacheFixture(
     offlineCacheQueueControllerProvider: (@Sendable () async -> any MangaOfflineCacheQueueControlling)? = nil
 ) async throws -> MangaReaderCacheFixture {
     let suiteName = YamiboTestDefaults.suiteName(prefix: "manga-reader-cache")
-    let localFavoriteLibraryStore = LocalFirstFavoriteLibraryStore(
+    let localFavoriteLibraryStore = FavoriteLibraryStore(
         defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
         key: "favorite-library"
     )
     let offlineRoot = FileManager.default.temporaryDirectory
         .appendingPathComponent("manga-reader-cache-grdb-\(UUID().uuidString)", isDirectory: true)
-    let offlineStore = GRDBMangaOfflineCacheStore(
+    let offlineStore = MangaOfflineCacheStore(
         databasePool: try YamiboDatabase.openPool(rootDirectory: offlineRoot),
         baseDirectory: offlineRoot.appendingPathComponent("offline-images", isDirectory: true)
     )

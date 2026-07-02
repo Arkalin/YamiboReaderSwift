@@ -9,7 +9,7 @@ struct MangaReaderTestsMangaOfflineCacheStore {
         let chapterURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=900&page=3"))
         let imageURL = try #require(URL(string: "https://img.example.com/page-1.jpg"))
 
-        let writingStore = try makeTestGRDBMangaOfflineCacheStore(rootDirectory: directory)
+        let writingStore = try makeTestMangaOfflineCacheStore(rootDirectory: directory)
         try await writingStore.saveMembership(
             MangaOfflineCacheMembership(
                 ownerName: "作品",
@@ -20,7 +20,7 @@ struct MangaReaderTestsMangaOfflineCacheStore {
             )
         )
 
-        let readingStore = try makeTestGRDBMangaOfflineCacheStore(rootDirectory: directory)
+        let readingStore = try makeTestMangaOfflineCacheStore(rootDirectory: directory)
         let loaded = await readingStore.membership(ownerName: "作品", tid: "900")
 
         #expect(loaded?.id == MangaOfflineCacheMembershipID(ownerName: "作品", tid: "900"))
@@ -31,7 +31,7 @@ struct MangaReaderTestsMangaOfflineCacheStore {
 
     @Test func usageReportsStoredOfflineImagesByOwner() async throws {
         let directory = try makeTemporaryOfflineCacheDirectory()
-        let store = try makeTestGRDBMangaOfflineCacheStore(rootDirectory: directory)
+        let store = try makeTestMangaOfflineCacheStore(rootDirectory: directory)
         let firstImage = try #require(URL(string: "https://img.example.com/shared.jpg"))
         let secondImage = try #require(URL(string: "https://img.example.com/second.jpg"))
 
@@ -49,7 +49,7 @@ struct MangaReaderTestsMangaOfflineCacheStore {
     }
 
     @Test func usageIncludesMembershipOwnerWhenReferencedImagesAreMissing() async throws {
-        let store = try makeTestGRDBMangaOfflineCacheStore(rootDirectory: try makeTemporaryOfflineCacheDirectory())
+        let store = try makeTestMangaOfflineCacheStore(rootDirectory: try makeTemporaryOfflineCacheDirectory())
         let missingImage = try #require(URL(string: "https://img.example.com/missing.jpg"))
 
         try await store.saveMembership(makeOfflineMembership(ownerName: "作品A", tid: "1", imageURLs: [missingImage]))
@@ -60,7 +60,7 @@ struct MangaReaderTestsMangaOfflineCacheStore {
     }
 
     @Test func usageIncludesUnfinishedWorkOwnerAndStoredWorkImages() async throws {
-        let store = try makeTestGRDBMangaOfflineCacheStore(rootDirectory: try makeTemporaryOfflineCacheDirectory())
+        let store = try makeTestMangaOfflineCacheStore(rootDirectory: try makeTemporaryOfflineCacheDirectory())
         let completedImage = try #require(URL(string: "https://img.example.com/work-complete.jpg"))
         let missingImage = try #require(URL(string: "https://img.example.com/work-missing.jpg"))
 
@@ -87,7 +87,7 @@ struct MangaReaderTestsMangaOfflineCacheStore {
 
     @Test func renameOwnerMovesMembershipsAndQueueWorksWithoutDroppingImages() async throws {
         let directory = try makeTemporaryOfflineCacheDirectory()
-        let store = try makeTestGRDBMangaOfflineCacheStore(rootDirectory: directory)
+        let store = try makeTestMangaOfflineCacheStore(rootDirectory: directory)
         let cachedImage = try #require(URL(string: "https://img.example.com/rename-cached.jpg"))
         let workImage = try #require(URL(string: "https://img.example.com/rename-work.jpg"))
 
@@ -118,7 +118,7 @@ struct MangaReaderTestsMangaOfflineCacheStore {
 
     @Test func deletingMembershipPreservesImagesReferencedByRemainingMemberships() async throws {
         let directory = try makeTemporaryOfflineCacheDirectory()
-        let store = try makeTestGRDBMangaOfflineCacheStore(rootDirectory: directory)
+        let store = try makeTestMangaOfflineCacheStore(rootDirectory: directory)
         let sharedImage = try #require(URL(string: "https://img.example.com/shared.jpg"))
         let firstOnlyImage = try #require(URL(string: "https://img.example.com/first-only.jpg"))
 
@@ -139,9 +139,9 @@ struct MangaReaderTestsMangaOfflineCacheStore {
 
     @Test func deletingOfflineMembershipDoesNotClearTransparentMangaCaches() async throws {
         let root = try makeTemporaryOfflineCacheDirectory()
-        let offlineStore = try makeTestGRDBMangaOfflineCacheStore(rootDirectory: root)
-        let directoryStore = try makeTestGRDBMangaDirectoryStore(rootDirectory: root)
-        let documentStore = try makeTestGRDBMangaChapterDocumentStore(rootDirectory: root)
+        let offlineStore = try makeTestMangaOfflineCacheStore(rootDirectory: root)
+        let directoryStore = try makeTestMangaDirectoryStore(rootDirectory: root)
+        let documentStore = try makeTestMangaChapterDocumentStore(rootDirectory: root)
         let imageCacheStore = try makeTestFileImageDataCacheStore(rootDirectory: root)
         let chapterURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100"))
         let imageURL = try #require(URL(string: "https://img.example.com/transparent.jpg"))
@@ -185,7 +185,7 @@ struct MangaReaderTestsMangaOfflineCacheStore {
 
     @Test func clearAllRemovesMembershipAndRetainedOfflineImages() async throws {
         let directory = try makeTemporaryOfflineCacheDirectory()
-        let store = try makeTestGRDBMangaOfflineCacheStore(rootDirectory: directory)
+        let store = try makeTestMangaOfflineCacheStore(rootDirectory: directory)
         let imageURL = try #require(URL(string: "https://img.example.com/clear.jpg"))
 
         try await store.saveOfflineImageData(Data([7]), for: imageURL)

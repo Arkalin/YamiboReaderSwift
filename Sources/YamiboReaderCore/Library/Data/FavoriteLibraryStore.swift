@@ -1,8 +1,8 @@
 import Foundation
 @preconcurrency import GRDB
 
-public actor LocalFirstFavoriteLibraryStore {
-    public static let didChangeNotification = Notification.Name("yamibo.localFirstFavoriteLibraryStore.didChange")
+public actor FavoriteLibraryStore {
+    public static let didChangeNotification = Notification.Name("yamibo.favoriteLibraryStore.didChange")
     public static let changeIDUserInfoKey = "changeID"
     nonisolated(unsafe) private static var databasePoolCache: [String: DatabasePool] = [:]
     private static let databasePoolCacheLock = NSLock()
@@ -101,7 +101,7 @@ public actor LocalFirstFavoriteLibraryStore {
                 .appendingPathComponent(databaseID, isDirectory: true)
             return try cachedDatabasePool(rootDirectory: root)
         } catch {
-            fatalError("Failed to open LocalFirstFavoriteLibraryStore database: \(error)")
+            fatalError("Failed to open FavoriteLibraryStore database: \(error)")
         }
     }
 

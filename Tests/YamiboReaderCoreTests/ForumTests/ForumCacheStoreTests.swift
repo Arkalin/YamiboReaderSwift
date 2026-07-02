@@ -183,7 +183,7 @@ import Testing
 @Test func forumThreadPageCacheCanUseGRDBMetadataAndTidFirstKeys() async throws {
     let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
     let pool = try YamiboDatabase.openPool(rootDirectory: root)
-    let diskCache = GRDBJSONCacheStore(writer: pool, rootDirectory: root)
+    let diskCache = JSONCacheStore(writer: pool, rootDirectory: root)
     let store = ForumCacheStore(
         baseDirectory: root.appendingPathComponent("legacy-forum-cache", isDirectory: true),
         threadPageDiskCache: diskCache

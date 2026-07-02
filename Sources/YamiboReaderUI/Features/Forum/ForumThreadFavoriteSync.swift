@@ -20,7 +20,7 @@ enum ForumThreadFavoriteSync {
         coverURL: URL? = nil,
         contentUpdatedAt: Date? = nil,
         formHash: String?,
-        localFavoriteLibraryStore: LocalFirstFavoriteLibraryStore,
+        localFavoriteLibraryStore: FavoriteLibraryStore,
         remoteRepository: (any ForumThreadFavoriteRemoteOperating)?
     ) async throws -> Favorite {
         let remoteFavorite = try await remoteRepository?.addThreadFavorite(threadURL: threadURL, formHash: formHash)
@@ -44,7 +44,7 @@ enum ForumThreadFavoriteSync {
 
     static func removeFavorite(
         _ favorite: Favorite,
-        localFavoriteLibraryStore: LocalFirstFavoriteLibraryStore,
+        localFavoriteLibraryStore: FavoriteLibraryStore,
         readingProgressStore: ReadingProgressStore?,
         remoteRepository: (any ForumThreadFavoriteRemoteOperating)?
     ) async throws {
@@ -80,7 +80,7 @@ enum ForumThreadFavoriteSync {
         forumName: String?,
         coverURL: URL?,
         contentUpdatedAt: Date?,
-        localFavoriteLibraryStore: LocalFirstFavoriteLibraryStore?
+        localFavoriteLibraryStore: FavoriteLibraryStore?
     ) async throws -> FavoriteItem {
         guard let localFavoriteLibraryStore else {
             throw YamiboError.persistenceFailed(L10n.string("favorite_library.item_requires_location"))

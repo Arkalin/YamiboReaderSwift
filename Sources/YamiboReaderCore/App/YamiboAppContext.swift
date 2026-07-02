@@ -22,7 +22,7 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
     public let settingsStore: SettingsStore
     public let webDAVSyncSettingsStore: WebDAVSyncSettingsStore
     public let readerResumeRouteStore: ReaderResumeRouteStore
-    public let localFavoriteLibraryStore: LocalFirstFavoriteLibraryStore
+    public let localFavoriteLibraryStore: FavoriteLibraryStore
     public let favoriteUpdateStore: FavoriteUpdateStore
     public let readingProgressStore: ReadingProgressStore
     public let contentCoverStore: ContentCoverStore
@@ -48,7 +48,7 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         settingsStore: SettingsStore = SettingsStore(),
         webDAVSyncSettingsStore: WebDAVSyncSettingsStore = WebDAVSyncSettingsStore(),
         readerResumeRouteStore: ReaderResumeRouteStore = ReaderResumeRouteStore(),
-        localFavoriteLibraryStore: LocalFirstFavoriteLibraryStore? = nil,
+        localFavoriteLibraryStore: FavoriteLibraryStore? = nil,
         favoriteUpdateStore: FavoriteUpdateStore = FavoriteUpdateStore(),
         readingProgressStore: ReadingProgressStore? = nil,
         contentCoverStore: ContentCoverStore = ContentCoverStore(),
@@ -77,11 +77,11 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         self.settingsStore = settingsStore
         self.webDAVSyncSettingsStore = webDAVSyncSettingsStore
         self.readerResumeRouteStore = readerResumeRouteStore
-        let resolvedMangaOfflineCacheStore = mangaOfflineCacheStore ?? GRDBMangaOfflineCacheStore(
+        let resolvedMangaOfflineCacheStore = mangaOfflineCacheStore ?? MangaOfflineCacheStore(
             databasePool: resolvedGRDBDatabasePool,
             baseDirectory: Self.mangaOfflineCacheDirectory(rootDirectory: resolvedGRDBRootDirectory)
         )
-        self.localFavoriteLibraryStore = localFavoriteLibraryStore ?? LocalFirstFavoriteLibraryStore(databasePool: resolvedGRDBDatabasePool)
+        self.localFavoriteLibraryStore = localFavoriteLibraryStore ?? FavoriteLibraryStore(databasePool: resolvedGRDBDatabasePool)
         self.favoriteUpdateStore = favoriteUpdateStore
         self.readingProgressStore = readingProgressStore ?? ReadingProgressStore(databasePool: resolvedGRDBDatabasePool)
         self.contentCoverStore = contentCoverStore
@@ -92,9 +92,9 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         self.favoriteBackgroundImageStore = favoriteBackgroundImageStore ?? FavoriteBackgroundImageStore(
             baseDirectory: Self.favoriteBackgroundDirectory(rootDirectory: resolvedGRDBRootDirectory)
         )
-        self.mangaDirectoryStore = mangaDirectoryStore ?? GRDBMangaDirectoryStore(databasePool: resolvedGRDBDatabasePool)
+        self.mangaDirectoryStore = mangaDirectoryStore ?? MangaDirectoryStore(databasePool: resolvedGRDBDatabasePool)
         self.mangaDirectorySearchCooldownState = mangaDirectorySearchCooldownState
-        self.mangaChapterDocumentStore = mangaChapterDocumentStore ?? GRDBMangaChapterDocumentStore(databasePool: resolvedGRDBDatabasePool)
+        self.mangaChapterDocumentStore = mangaChapterDocumentStore ?? MangaChapterDocumentStore(databasePool: resolvedGRDBDatabasePool)
         self.imageDataCacheStore = imageDataCacheStore ?? FileImageDataCacheStore(
             databasePool: resolvedGRDBDatabasePool,
             baseDirectory: Self.imageDataDirectory(rootDirectory: resolvedGRDBRootDirectory)
@@ -102,7 +102,7 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         self.mangaOfflineCacheStore = resolvedMangaOfflineCacheStore
         self.forumCacheStore = forumCacheStore ?? ForumCacheStore(
             baseDirectory: Self.forumCacheDirectory(rootDirectory: resolvedGRDBRootDirectory),
-            threadPageDiskCache: GRDBJSONCacheStore(
+            threadPageDiskCache: JSONCacheStore(
                 writer: resolvedGRDBDatabasePool,
                 rootDirectory: resolvedGRDBRootDirectory
             )

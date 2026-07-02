@@ -47,7 +47,7 @@ import Testing
 
 @Test func favoriteLibraryProgressSyncDoesNotCreateMissingFavorite() async throws {
     let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "progress-sync-missing-favorite")
-    let localFavoriteLibraryStore = LocalFirstFavoriteLibraryStore(
+    let localFavoriteLibraryStore = FavoriteLibraryStore(
         defaults: try YamiboTestDefaults.defaults(suiteName: defaultsSuiteName),
         key: "local-favorites"
     )
@@ -67,7 +67,7 @@ import Testing
 
 @Test func favoriteLibraryProgressSyncWritesIndependentProgressWithoutMutatingFavorites() async throws {
     let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "progress-sync-existing-favorite")
-    let localFavoriteLibraryStore = LocalFirstFavoriteLibraryStore(
+    let localFavoriteLibraryStore = FavoriteLibraryStore(
         defaults: try YamiboTestDefaults.defaults(suiteName: defaultsSuiteName),
         key: "local-favorites"
     )

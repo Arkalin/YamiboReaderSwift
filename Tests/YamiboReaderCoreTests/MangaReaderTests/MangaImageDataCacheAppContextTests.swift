@@ -206,7 +206,7 @@ private func makeAppContextImageCacheFixture() async throws -> AppContextImageCa
     let appContext = YamiboAppContext(
         sessionStore: sessionStore,
         imageDataCacheStore: imageDataCacheStore,
-        mangaOfflineCacheStore: GRDBMangaOfflineCacheStore(
+        mangaOfflineCacheStore: MangaOfflineCacheStore(
             databasePool: database,
             baseDirectory: cacheRoot.appendingPathComponent("offline-cache", isDirectory: true)
         ),

@@ -735,7 +735,7 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
     let sessionStore = SessionStore(defaults: try #require(UserDefaults(suiteName: suiteName)), key: "session")
     let settingsStore = SettingsStore(defaults: try #require(UserDefaults(suiteName: suiteName)), key: "settings")
     let readerResumeRouteStore = ReaderResumeRouteStore(defaults: try #require(UserDefaults(suiteName: suiteName)), key: "reader-route")
-    let localFavoriteLibraryStore = LocalFirstFavoriteLibraryStore(
+    let localFavoriteLibraryStore = FavoriteLibraryStore(
         defaults: try #require(UserDefaults(suiteName: suiteName)),
         key: "local-favorites"
     )
@@ -747,13 +747,13 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
     let favoriteBackgroundImageStore = FavoriteBackgroundImageStore(
         baseDirectory: rootDirectory.appendingPathComponent("favorite-background", isDirectory: true)
     )
-    let mangaDirectoryStore = try makeTestGRDBMangaDirectoryStore(rootDirectory: rootDirectory)
-    let mangaChapterDocumentStore = try makeTestGRDBMangaChapterDocumentStore(rootDirectory: rootDirectory)
+    let mangaDirectoryStore = try makeTestMangaDirectoryStore(rootDirectory: rootDirectory)
+    let mangaChapterDocumentStore = try makeTestMangaChapterDocumentStore(rootDirectory: rootDirectory)
     let imageDataCacheStore = try makeTestFileImageDataCacheStore(
         rootDirectory: rootDirectory,
         baseDirectory: rootDirectory.appendingPathComponent("image-data", isDirectory: true)
     )
-    let mangaOfflineCacheStore = try makeTestGRDBMangaOfflineCacheStore(rootDirectory: rootDirectory)
+    let mangaOfflineCacheStore = try makeTestMangaOfflineCacheStore(rootDirectory: rootDirectory)
     let appContext = YamiboAppContext(
         sessionStore: sessionStore,
         settingsStore: settingsStore,

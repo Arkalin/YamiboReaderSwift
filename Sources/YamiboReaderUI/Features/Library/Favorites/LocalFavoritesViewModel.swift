@@ -103,10 +103,10 @@ final class LocalFavoritesViewModel: ObservableObject {
         self.favoriteUpdatePageFetcher = favoriteUpdatePageFetcher
         self.remoteFavoriteDeleteHandler = remoteFavoriteDeleteHandler
         libraryUpdatesTask = Task { @MainActor [weak self, store = appContext.localFavoriteLibraryStore] in
-            for await notification in NotificationCenter.default.notifications(named: LocalFirstFavoriteLibraryStore.didChangeNotification) {
+            for await notification in NotificationCenter.default.notifications(named: FavoriteLibraryStore.didChangeNotification) {
                 guard !Task.isCancelled else { return }
                 guard let self else { return }
-                guard let changeID = notification.userInfo?[LocalFirstFavoriteLibraryStore.changeIDUserInfoKey] as? String,
+                guard let changeID = notification.userInfo?[FavoriteLibraryStore.changeIDUserInfoKey] as? String,
                       changeID == store.changeID else {
                     continue
                 }

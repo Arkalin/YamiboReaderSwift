@@ -37,7 +37,7 @@ struct MangaReaderTestsChapterDocumentCacheAppContext {
             )
         )
 
-        let documentStore = try makeTestGRDBMangaChapterDocumentStore(rootDirectory: try makeTemporaryAppContextChapterDocumentDirectory())
+        let documentStore = try makeTestMangaChapterDocumentStore(rootDirectory: try makeTemporaryAppContextChapterDocumentDirectory())
         let appContext = YamiboAppContext(
             sessionStore: sessionStore,
             mangaChapterDocumentStore: documentStore,

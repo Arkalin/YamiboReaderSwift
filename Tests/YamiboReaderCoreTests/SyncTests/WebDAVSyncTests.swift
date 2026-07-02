@@ -304,7 +304,7 @@ private struct WebDAVSyncFixture {
     let suiteName: String
     let host: String
     let settingsStore: WebDAVSyncSettingsStore
-    let localFavoriteLibraryStore: LocalFirstFavoriteLibraryStore
+    let localFavoriteLibraryStore: FavoriteLibraryStore
     let readingProgressStore: ReadingProgressStore
     let sessionStore: SessionStore
     let appSettingsStore: SettingsStore
@@ -315,7 +315,7 @@ private struct WebDAVSyncFixture {
         host = "\(prefix).example.com"
         UserDefaults(suiteName: suiteName)?.removePersistentDomain(forName: suiteName)
         settingsStore = WebDAVSyncSettingsStore(defaults: try makeWebDAVDefaults(suiteName: suiteName), key: "webdav")
-        localFavoriteLibraryStore = LocalFirstFavoriteLibraryStore(
+        localFavoriteLibraryStore = FavoriteLibraryStore(
             defaults: try makeWebDAVDefaults(suiteName: suiteName),
             key: "local-favorites"
         )

@@ -71,7 +71,7 @@ import Testing
 @Test func localFirstFavoriteLibraryPersistsItemMetadataLocationsTagsAndRemoteMapping() async throws {
     let suiteName = "LocalFirstFavoriteLibraryTests.\(UUID().uuidString)"
     let suite = try #require(UserDefaults(suiteName: suiteName))
-    let store = LocalFirstFavoriteLibraryStore(defaults: suite, key: "library")
+    let store = FavoriteLibraryStore(defaults: suite, key: "library")
     let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=321"))
     let target = FavoriteContentTarget(kind: .normalThread, threadURL: url)
     let coverURL = try #require(URL(string: "https://img.example.test/cover.jpg"))
@@ -131,7 +131,7 @@ import Testing
     let defaults = try #require(UserDefaults(suiteName: suiteName))
     let legacyData = Data(#"{"items":[{"id":"legacy"}]}"#.utf8)
     defaults.set(legacyData, forKey: "library")
-    let store = LocalFirstFavoriteLibraryStore(defaults: defaults, key: "library", databasePool: database)
+    let store = FavoriteLibraryStore(defaults: defaults, key: "library", databasePool: database)
 
     let fresh = await store.load()
     #expect(fresh.defaultCategory.id == FavoriteCategory.defaultID)

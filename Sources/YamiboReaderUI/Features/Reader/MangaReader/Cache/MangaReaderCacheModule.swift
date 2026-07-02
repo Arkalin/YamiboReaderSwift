@@ -60,7 +60,7 @@ public final class MangaReaderCacheViewModel: ObservableObject {
 
     private let context: MangaLaunchContext
     private let panel: MangaDirectoryPanelPresentation
-    private let localFavoriteLibraryStore: LocalFirstFavoriteLibraryStore
+    private let localFavoriteLibraryStore: FavoriteLibraryStore
     private let offlineCacheStore: any MangaOfflineCacheStoring
     private let offlineCacheQueueControllerProvider: (@Sendable () async -> any MangaOfflineCacheQueueControlling)?
     private var offlineCacheQueueController: (any MangaOfflineCacheQueueControlling)?
@@ -69,7 +69,7 @@ public final class MangaReaderCacheViewModel: ObservableObject {
     public init(
         context: MangaLaunchContext,
         panel: MangaDirectoryPanelPresentation,
-        localFavoriteLibraryStore: LocalFirstFavoriteLibraryStore,
+        localFavoriteLibraryStore: FavoriteLibraryStore,
         offlineCacheStore: any MangaOfflineCacheStoring,
         offlineCacheQueueControllerProvider: (@Sendable () async -> any MangaOfflineCacheQueueControlling)? = nil
     ) {

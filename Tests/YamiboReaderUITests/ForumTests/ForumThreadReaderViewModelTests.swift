@@ -197,7 +197,7 @@ private func makeThreadPage(
 private struct ForumThreadReaderViewModelFixture {
     let suiteName: String
     let threadURL: URL
-    let localFavoriteLibraryStore: LocalFirstFavoriteLibraryStore
+    let localFavoriteLibraryStore: FavoriteLibraryStore
     let repository: FakeForumThreadPageLoader
     let favoriteRepository: FakeThreadFavoriteRepository
 
@@ -206,7 +206,7 @@ private struct ForumThreadReaderViewModelFixture {
         let defaults = try #require(UserDefaults(suiteName: suiteName))
         defaults.removePersistentDomain(forName: suiteName)
         threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=704&mobile=2"))
-        localFavoriteLibraryStore = LocalFirstFavoriteLibraryStore(
+        localFavoriteLibraryStore = FavoriteLibraryStore(
             defaults: try #require(UserDefaults(suiteName: suiteName)),
             key: "local-favorites"
         )

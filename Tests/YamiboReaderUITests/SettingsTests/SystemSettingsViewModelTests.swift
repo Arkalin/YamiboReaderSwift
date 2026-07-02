@@ -521,8 +521,8 @@ private struct SystemSettingsFixture {
     let settingsStore: SettingsStore
     let readerCacheStore: ReaderCacheStore
     let favoriteBackgroundImageStore: FavoriteBackgroundImageStore
-    let mangaDirectoryStore: GRDBMangaDirectoryStore
-    let mangaChapterDocumentStore: GRDBMangaChapterDocumentStore
+    let mangaDirectoryStore: MangaDirectoryStore
+    let mangaChapterDocumentStore: MangaChapterDocumentStore
     let imageDataCacheStore: FileImageDataCacheStore
     let mangaOfflineCacheStore: any MangaOfflineCacheStoring
 }
@@ -542,13 +542,13 @@ private func makeFixture() throws -> SystemSettingsFixture {
     let favoriteBackgroundImageStore = FavoriteBackgroundImageStore(
         baseDirectory: root.appendingPathComponent("favorite-background", isDirectory: true)
     )
-    let mangaDirectoryStore = GRDBMangaDirectoryStore(databasePool: database)
-    let mangaChapterDocumentStore = GRDBMangaChapterDocumentStore(databasePool: database)
+    let mangaDirectoryStore = MangaDirectoryStore(databasePool: database)
+    let mangaChapterDocumentStore = MangaChapterDocumentStore(databasePool: database)
     let imageDataCacheStore = FileImageDataCacheStore(
         databasePool: database,
         baseDirectory: root.appendingPathComponent("image-data", isDirectory: true)
     )
-    let mangaOfflineCacheStore = GRDBMangaOfflineCacheStore(
+    let mangaOfflineCacheStore = MangaOfflineCacheStore(
         databasePool: database,
         baseDirectory: root.appendingPathComponent("manga-offline-cache", isDirectory: true)
     )

@@ -3,11 +3,11 @@ import Foundation
 import Testing
 @testable import YamiboReaderCore
 
-@Suite("MangaReaderTests: GRDB Manga Stores")
-struct MangaReaderTestsGRDBMangaStores {
+@Suite("MangaReaderTests: Manga Stores")
+struct MangaReaderTestsMangaStores {
     @Test func directorySaveLoadAndContainingTidUseStructuredRows() async throws {
-        let database = try YamiboDatabase.openPool(rootDirectory: makeGRDBMangaStoreRoot())
-        let store = GRDBMangaDirectoryStore(databasePool: database)
+        let database = try YamiboDatabase.openPool(rootDirectory: makeMangaStoreRoot())
+        let store = MangaDirectoryStore(databasePool: database)
         let firstUpdate = Date(timeIntervalSince1970: 1_800)
         let secondUpdate = Date(timeIntervalSince1970: 2_400)
 
@@ -81,8 +81,8 @@ struct MangaReaderTestsGRDBMangaStores {
     }
 
     @Test func directoryRenameReplacesIdentityInOneStoreOperation() async throws {
-        let database = try YamiboDatabase.openPool(rootDirectory: makeGRDBMangaStoreRoot())
-        let store = GRDBMangaDirectoryStore(databasePool: database)
+        let database = try YamiboDatabase.openPool(rootDirectory: makeMangaStoreRoot())
+        let store = MangaDirectoryStore(databasePool: database)
 
         try await store.saveDirectory(MangaDirectory(
             cleanBookName: "旧书名",
@@ -111,11 +111,11 @@ struct MangaReaderTestsGRDBMangaStores {
     }
 
     @Test func directoryRenameUpdatesRelatedStructuredMetadataTransactionally() async throws {
-        let database = try YamiboDatabase.openPool(rootDirectory: makeGRDBMangaStoreRoot())
-        let directoryStore = GRDBMangaDirectoryStore(databasePool: database)
+        let database = try YamiboDatabase.openPool(rootDirectory: makeMangaStoreRoot())
+        let directoryStore = MangaDirectoryStore(databasePool: database)
         let favoriteDefaults = try #require(UserDefaults(suiteName: "GRDBMangaStoreFavorites.\(UUID().uuidString)"))
         let progressDefaults = try #require(UserDefaults(suiteName: "GRDBMangaStoreProgress.\(UUID().uuidString)"))
-        let favoriteStore = LocalFirstFavoriteLibraryStore(defaults: favoriteDefaults, key: "favorites", databasePool: database)
+        let favoriteStore = FavoriteLibraryStore(defaults: favoriteDefaults, key: "favorites", databasePool: database)
         let progressStore = ReadingProgressStore(defaults: progressDefaults, key: "progress", databasePool: database)
         let chapterURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=912&page=4&mobile=2"))
 
@@ -156,8 +156,8 @@ struct MangaReaderTestsGRDBMangaStores {
     }
 
     @Test func chapterDocumentSaveLoadPreservesOrderedImageURLsByTid() async throws {
-        let database = try YamiboDatabase.openPool(rootDirectory: makeGRDBMangaStoreRoot())
-        let store = GRDBMangaChapterDocumentStore(databasePool: database)
+        let database = try YamiboDatabase.openPool(rootDirectory: makeMangaStoreRoot())
+        let store = MangaChapterDocumentStore(databasePool: database)
         let boundaryURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=920&page=5&authorid=42"))
         let variantURL = try #require(URL(string: "https://bbs.yamibo.com/thread-920-2-1.html"))
         let firstImages = try [
@@ -216,11 +216,11 @@ struct MangaReaderTestsGRDBMangaStores {
         #expect(databaseState.imageRows == updatedImages.map(\.absoluteString))
     }
 
-    @Test func appContextDefaultsUseGRDBMangaDirectoryAndDocumentStores() {
+    @Test func appContextDefaultsUseMangaDirectoryAndDocumentStores() {
         let appContext = YamiboAppContext()
 
-        #expect(appContext.mangaDirectoryStore is GRDBMangaDirectoryStore)
-        #expect(appContext.mangaChapterDocumentStore is GRDBMangaChapterDocumentStore)
+        #expect(appContext.mangaDirectoryStore is MangaDirectoryStore)
+        #expect(appContext.mangaChapterDocumentStore is MangaChapterDocumentStore)
     }
 
     @Test func readerResumeRoutePersistsMangaNativeContextByTidWithoutThreadURLs() async throws {
@@ -298,7 +298,7 @@ struct MangaReaderTestsGRDBMangaStores {
     }
 }
 
-private func makeGRDBMangaStoreRoot() -> URL {
+private func makeMangaStoreRoot() -> URL {
     FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
 }
 

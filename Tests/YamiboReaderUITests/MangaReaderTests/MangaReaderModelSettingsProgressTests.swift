@@ -575,7 +575,7 @@ private struct MangaReaderModelSettingsProgressFixture {
     let chapterURL: URL
     let settingsStore: SettingsStore
     let resumeRouteStore: ReaderResumeRouteStore
-    let localFavoriteLibraryStore: LocalFirstFavoriteLibraryStore
+    let localFavoriteLibraryStore: FavoriteLibraryStore
 }
 
 @MainActor

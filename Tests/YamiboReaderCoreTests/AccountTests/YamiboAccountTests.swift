@@ -152,11 +152,11 @@ private enum YamiboAccountTestError: Error {
     defaults.removePersistentDomain(forName: suiteName)
     let sessionStore = SessionStore(defaults: try #require(UserDefaults(suiteName: suiteName)), key: "session")
     let profileStore = YamiboProfileStore(defaults: try #require(UserDefaults(suiteName: suiteName)), key: "profile")
-    let localFavoriteLibraryStore = LocalFirstFavoriteLibraryStore(
+    let localFavoriteLibraryStore = FavoriteLibraryStore(
         defaults: try #require(UserDefaults(suiteName: suiteName)),
         key: "local-favorites"
     )
-    let offlineStore = try makeTestGRDBMangaOfflineCacheStore(rootDirectory: rootDirectory)
+    let offlineStore = try makeTestMangaOfflineCacheStore(rootDirectory: rootDirectory)
     let service = YamiboAccountService(
         session: makeAccountTestSession(),
         sessionStore: sessionStore,

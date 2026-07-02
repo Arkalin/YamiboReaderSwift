@@ -102,10 +102,10 @@ final class ForumNovelDetailViewModel {
             await appContext.makeForumThreadReaderRepository()
         }
         favoriteUpdatesTask = Task { @MainActor [weak self, localFavoriteLibraryStore = appContext.localFavoriteLibraryStore] in
-            for await notification in NotificationCenter.default.notifications(named: LocalFirstFavoriteLibraryStore.didChangeNotification) {
+            for await notification in NotificationCenter.default.notifications(named: FavoriteLibraryStore.didChangeNotification) {
                 guard !Task.isCancelled else { return }
                 guard let self else { return }
-                guard let changeID = notification.userInfo?[LocalFirstFavoriteLibraryStore.changeIDUserInfoKey] as? String,
+                guard let changeID = notification.userInfo?[FavoriteLibraryStore.changeIDUserInfoKey] as? String,
                       changeID == localFavoriteLibraryStore.changeID else {
                     continue
                 }
@@ -419,7 +419,7 @@ final class ForumNovelDetailViewModel {
         favoriteErrorMessage = nil
     }
 
-    private func refreshFavorite(from localFavoriteLibraryStore: LocalFirstFavoriteLibraryStore) async {
+    private func refreshFavorite(from localFavoriteLibraryStore: FavoriteLibraryStore) async {
         favorite = await localFavoriteItem(from: localFavoriteLibraryStore)?.favorite(
             threadURL: context.thread.canonicalURL,
             type: .novel
@@ -693,7 +693,7 @@ final class ForumNovelDetailViewModel {
         await localFavoriteItem(from: appContext.localFavoriteLibraryStore)
     }
 
-    private func localFavoriteItem(from store: LocalFirstFavoriteLibraryStore) async -> FavoriteItem? {
+    private func localFavoriteItem(from store: FavoriteLibraryStore) async -> FavoriteItem? {
         let target = FavoriteContentTarget(kind: .novelThread, threadURL: context.thread.canonicalURL)
         let threadID = target.threadID
         return await store.load().items.first { item in

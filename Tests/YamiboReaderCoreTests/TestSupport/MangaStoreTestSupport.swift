@@ -2,38 +2,38 @@ import Foundation
 @preconcurrency import GRDB
 @testable import YamiboReaderCore
 
-func makeTestGRDBMangaRoot(prefix: String) -> URL {
+func makeTestMangaStoreRoot(prefix: String) -> URL {
     FileManager.default.temporaryDirectory
         .appendingPathComponent("\(prefix)-\(UUID().uuidString)", isDirectory: true)
 }
 
-func makeTestGRDBMangaDirectoryStore(
+func makeTestMangaDirectoryStore(
     rootDirectory: URL? = nil,
     prefix: String = "grdb-manga-directory"
-) throws -> GRDBMangaDirectoryStore {
-    let rootDirectory = rootDirectory ?? makeTestGRDBMangaRoot(prefix: prefix)
-    return GRDBMangaDirectoryStore(
+) throws -> MangaDirectoryStore {
+    let rootDirectory = rootDirectory ?? makeTestMangaStoreRoot(prefix: prefix)
+    return MangaDirectoryStore(
         databasePool: try YamiboDatabase.openSharedPool(rootDirectory: rootDirectory.appendingPathComponent("grdb", isDirectory: true))
     )
 }
 
-func makeTestGRDBMangaChapterDocumentStore(
+func makeTestMangaChapterDocumentStore(
     rootDirectory: URL? = nil,
     prefix: String = "grdb-manga-chapter-document"
-) throws -> GRDBMangaChapterDocumentStore {
-    let rootDirectory = rootDirectory ?? makeTestGRDBMangaRoot(prefix: prefix)
-    return GRDBMangaChapterDocumentStore(
+) throws -> MangaChapterDocumentStore {
+    let rootDirectory = rootDirectory ?? makeTestMangaStoreRoot(prefix: prefix)
+    return MangaChapterDocumentStore(
         databasePool: try YamiboDatabase.openSharedPool(rootDirectory: rootDirectory.appendingPathComponent("grdb", isDirectory: true))
     )
 }
 
-func makeTestGRDBMangaOfflineCacheStore(
+func makeTestMangaOfflineCacheStore(
     rootDirectory: URL? = nil,
     baseDirectory: URL? = nil,
     prefix: String = "grdb-manga-offline-cache"
-) throws -> GRDBMangaOfflineCacheStore {
-    let rootDirectory = rootDirectory ?? makeTestGRDBMangaRoot(prefix: prefix)
-    return GRDBMangaOfflineCacheStore(
+) throws -> MangaOfflineCacheStore {
+    let rootDirectory = rootDirectory ?? makeTestMangaStoreRoot(prefix: prefix)
+    return MangaOfflineCacheStore(
         databasePool: try YamiboDatabase.openSharedPool(rootDirectory: rootDirectory.appendingPathComponent("grdb", isDirectory: true)),
         baseDirectory: baseDirectory ?? rootDirectory.appendingPathComponent("offline-images", isDirectory: true)
     )
@@ -45,7 +45,7 @@ func makeTestFileMangaImageDataCacheStore(
     prefix: String = "grdb-manga-image-data-cache",
     diskLimitBytes: Int = FileMangaImageDataCacheStore.defaultDiskLimitBytes
 ) throws -> FileMangaImageDataCacheStore {
-    let rootDirectory = rootDirectory ?? makeTestGRDBMangaRoot(prefix: prefix)
+    let rootDirectory = rootDirectory ?? makeTestMangaStoreRoot(prefix: prefix)
     return FileMangaImageDataCacheStore(
         databasePool: try YamiboDatabase.openSharedPool(rootDirectory: rootDirectory.appendingPathComponent("grdb", isDirectory: true)),
         baseDirectory: baseDirectory ?? rootDirectory.appendingPathComponent("transparent-images", isDirectory: true),
@@ -59,7 +59,7 @@ func makeTestFileImageDataCacheStore(
     prefix: String = "grdb-image-data-cache",
     diskLimitBytes: Int = FileImageDataCacheStore.defaultDiskLimitBytes
 ) throws -> FileImageDataCacheStore {
-    let rootDirectory = rootDirectory ?? makeTestGRDBMangaRoot(prefix: prefix)
+    let rootDirectory = rootDirectory ?? makeTestMangaStoreRoot(prefix: prefix)
     return FileImageDataCacheStore(
         databasePool: try YamiboDatabase.openSharedPool(rootDirectory: rootDirectory.appendingPathComponent("grdb", isDirectory: true)),
         baseDirectory: baseDirectory ?? rootDirectory.appendingPathComponent("image-data", isDirectory: true),

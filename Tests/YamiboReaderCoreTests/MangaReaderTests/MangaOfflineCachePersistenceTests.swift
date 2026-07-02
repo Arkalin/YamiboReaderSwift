@@ -3,27 +3,27 @@ import Foundation
 import Testing
 @testable import YamiboReaderCore
 
-@Suite("MangaReaderTests: GRDB Manga Offline Cache Store")
-struct MangaReaderTestsGRDBMangaOfflineCacheStore {
-    @Test func appContextDefaultsUseGRDBOfflineCacheStore() {
+@Suite("MangaReaderTests: Manga Offline Cache Persistence")
+struct MangaReaderTestsMangaOfflineCachePersistence {
+    @Test func appContextDefaultsUseMangaOfflineCacheStore() {
         let appContext = YamiboAppContext()
 
-        #expect(appContext.mangaOfflineCacheStore is GRDBMangaOfflineCacheStore)
+        #expect(appContext.mangaOfflineCacheStore is MangaOfflineCacheStore)
     }
 
     @Test func membershipWorkAndProgressSurviveRestartWithoutChapterURLColumns() async throws {
-        let fixture = try makeGRDBOfflineCacheFixture()
-        let firstStore = GRDBMangaOfflineCacheStore(
+        let fixture = try makeOfflineCacheFixture()
+        let firstStore = MangaOfflineCacheStore(
             databasePool: fixture.database,
             baseDirectory: fixture.offlineDirectory
         )
-        let imageURLs = try makeGRDBOfflineImageURLs(tid: "100", count: 2)
+        let imageURLs = try makeOfflineImageURLs(tid: "100", count: 2)
 
         try await firstStore.saveMembership(
-            try makeGRDBOfflineMembership(ownerName: "作品A", tid: "100", imageURLs: imageURLs)
+            try makeOfflineMembership(ownerName: "作品A", tid: "100", imageURLs: imageURLs)
         )
         _ = try await firstStore.enqueueOfflineCacheWork(
-            try makeGRDBOfflineWorkRequest(ownerName: "作品A", tid: "101", targetImageURLs: imageURLs)
+            try makeOfflineWorkRequest(ownerName: "作品A", tid: "101", targetImageURLs: imageURLs)
         )
         try await firstStore.updateOfflineCacheWorkProgress(
             ownerName: "作品A",
@@ -33,7 +33,7 @@ struct MangaReaderTestsGRDBMangaOfflineCacheStore {
             currentBytesPerSecond: 256
         )
 
-        let secondStore = GRDBMangaOfflineCacheStore(
+        let secondStore = MangaOfflineCacheStore(
             databasePool: fixture.database,
             baseDirectory: fixture.offlineDirectory
         )
@@ -48,8 +48,8 @@ struct MangaReaderTestsGRDBMangaOfflineCacheStore {
 
         let databaseState = try await fixture.database.read { db in
             (
-                membershipColumns: try grdbOfflineColumnNames(table: "manga_offline_cache_memberships", in: db),
-                workColumns: try grdbOfflineColumnNames(table: "manga_offline_cache_works", in: db),
+                membershipColumns: try offlineCacheColumnNames(table: "manga_offline_cache_memberships", in: db),
+                workColumns: try offlineCacheColumnNames(table: "manga_offline_cache_works", in: db),
                 persistedMetadataText: try String.fetchAll(
                     db,
                     sql: """
@@ -71,8 +71,8 @@ struct MangaReaderTestsGRDBMangaOfflineCacheStore {
     }
 
     @Test func offlineImageBytesStayInFilesWhileMetadataLivesInGRDB() async throws {
-        let fixture = try makeGRDBOfflineCacheFixture()
-        let store = GRDBMangaOfflineCacheStore(
+        let fixture = try makeOfflineCacheFixture()
+        let store = MangaOfflineCacheStore(
             databasePool: fixture.database,
             baseDirectory: fixture.offlineDirectory
         )
@@ -106,15 +106,15 @@ struct MangaReaderTestsGRDBMangaOfflineCacheStore {
     }
 
     @Test func restartRecoveryPausesRunningQueueAndKeepsFailedWork() async throws {
-        let fixture = try makeGRDBOfflineCacheFixture()
-        let writingStore = GRDBMangaOfflineCacheStore(
+        let fixture = try makeOfflineCacheFixture()
+        let writingStore = MangaOfflineCacheStore(
             databasePool: fixture.database,
             baseDirectory: fixture.offlineDirectory
         )
         let imageURL = try #require(URL(string: "https://img.example.com/restart.jpg"))
 
         _ = try await writingStore.enqueueOfflineCacheWork(
-            try makeGRDBOfflineWorkRequest(ownerName: "作品A", tid: "200", targetImageURLs: [imageURL])
+            try makeOfflineWorkRequest(ownerName: "作品A", tid: "200", targetImageURLs: [imageURL])
         )
         try await writingStore.updateOfflineCacheWorkProgress(
             ownerName: "作品A",
@@ -126,7 +126,7 @@ struct MangaReaderTestsGRDBMangaOfflineCacheStore {
         try await writingStore.markOfflineCacheWorkFailed(ownerName: "作品A", tid: "200", message: "Timeout")
         try await writingStore.setOfflineCacheQueueRunState(.running)
 
-        let recoveredStore = GRDBMangaOfflineCacheStore(
+        let recoveredStore = MangaOfflineCacheStore(
             databasePool: fixture.database,
             baseDirectory: fixture.offlineDirectory
         )
@@ -139,8 +139,8 @@ struct MangaReaderTestsGRDBMangaOfflineCacheStore {
     }
 
     @Test func cancelDeleteAndUsageDeriveFromGRDBMetadataPlusFileAvailability() async throws {
-        let fixture = try makeGRDBOfflineCacheFixture()
-        let store = GRDBMangaOfflineCacheStore(
+        let fixture = try makeOfflineCacheFixture()
+        let store = MangaOfflineCacheStore(
             databasePool: fixture.database,
             baseDirectory: fixture.offlineDirectory
         )
@@ -150,10 +150,10 @@ struct MangaReaderTestsGRDBMangaOfflineCacheStore {
         try await store.saveOfflineImageData(Data([1, 2, 3]), for: sharedImage)
         try await store.saveOfflineImageData(Data([4, 5]), for: removedImage)
         try await store.saveMembership(
-            try makeGRDBOfflineMembership(ownerName: "作品A", tid: "300", imageURLs: [sharedImage, removedImage])
+            try makeOfflineMembership(ownerName: "作品A", tid: "300", imageURLs: [sharedImage, removedImage])
         )
         try await store.saveMembership(
-            try makeGRDBOfflineMembership(ownerName: "作品A", tid: "301", imageURLs: [sharedImage])
+            try makeOfflineMembership(ownerName: "作品A", tid: "301", imageURLs: [sharedImage])
         )
 
         #expect(await store.offlineCacheState(ownerName: "作品A", tid: "300") == .cached)
@@ -169,20 +169,20 @@ struct MangaReaderTestsGRDBMangaOfflineCacheStore {
     }
 
     @Test func queueExecutorProcessesGRDBBackedWorkAndRemovesCompletedQueueRows() async throws {
-        let fixture = try makeGRDBOfflineCacheFixture()
-        let store = GRDBMangaOfflineCacheStore(
+        let fixture = try makeOfflineCacheFixture()
+        let store = MangaOfflineCacheStore(
             databasePool: fixture.database,
             baseDirectory: fixture.offlineDirectory
         )
-        let imageURLs = try makeGRDBOfflineImageURLs(tid: "400", count: 2)
+        let imageURLs = try makeOfflineImageURLs(tid: "400", count: 2)
         _ = try await store.enqueueOfflineCacheWork(
-            try makeGRDBOfflineWorkRequest(ownerName: "作品A", tid: "400", targetImageURLs: imageURLs)
+            try makeOfflineWorkRequest(ownerName: "作品A", tid: "400", targetImageURLs: imageURLs)
         )
-        let acquirer = GRDBRecordingOfflineImageAcquirer()
+        let acquirer = RecordingOfflineImageAcquirer()
         await acquirer.setData(for: imageURLs)
         let executor = MangaOfflineCacheQueueExecutor(
             store: store,
-            chapterDocumentLoader: GRDBRecordingChapterDocumentLoader(),
+            chapterDocumentLoader: RecordingChapterDocumentLoader(),
             imageAcquirer: acquirer,
             maxConcurrentImageTransfers: 1
         )
@@ -197,21 +197,21 @@ struct MangaReaderTestsGRDBMangaOfflineCacheStore {
     }
 }
 
-private struct GRDBOfflineCacheFixture {
+private struct OfflineCacheFixture {
     let database: DatabasePool
     let offlineDirectory: URL
 }
 
-private func makeGRDBOfflineCacheFixture() throws -> GRDBOfflineCacheFixture {
+private func makeOfflineCacheFixture() throws -> OfflineCacheFixture {
     let root = FileManager.default.temporaryDirectory
         .appendingPathComponent("grdb-offline-cache-\(UUID().uuidString)", isDirectory: true)
-    return GRDBOfflineCacheFixture(
+    return OfflineCacheFixture(
         database: try YamiboDatabase.openPool(rootDirectory: root),
         offlineDirectory: root.appendingPathComponent("offline-images", isDirectory: true)
     )
 }
 
-private func makeGRDBOfflineMembership(
+private func makeOfflineMembership(
     ownerName: String,
     tid: String,
     imageURLs: [URL]
@@ -225,7 +225,7 @@ private func makeGRDBOfflineMembership(
     )
 }
 
-private func makeGRDBOfflineWorkRequest(
+private func makeOfflineWorkRequest(
     ownerName: String,
     tid: String,
     targetImageURLs: [URL]
@@ -239,17 +239,17 @@ private func makeGRDBOfflineWorkRequest(
     )
 }
 
-private func makeGRDBOfflineImageURLs(tid: String, count: Int) throws -> [URL] {
+private func makeOfflineImageURLs(tid: String, count: Int) throws -> [URL] {
     try (1...count).map { index in
         try #require(URL(string: "https://img.example.com/\(tid)-\(index).jpg"))
     }
 }
 
-private func grdbOfflineColumnNames(table: String, in db: Database) throws -> [String] {
+private func offlineCacheColumnNames(table: String, in db: Database) throws -> [String] {
     try Row.fetchAll(db, sql: "PRAGMA table_info(\(table))").map { $0["name"] as String }
 }
 
-private actor GRDBRecordingOfflineImageAcquirer: MangaOfflineCacheImageAcquiring {
+private actor RecordingOfflineImageAcquirer: MangaOfflineCacheImageAcquiring {
     private(set) var requestedURLs: [URL] = []
     private var dataByURL: [URL: Data] = [:]
 
@@ -268,8 +268,8 @@ private actor GRDBRecordingOfflineImageAcquirer: MangaOfflineCacheImageAcquiring
     }
 }
 
-private actor GRDBRecordingChapterDocumentLoader: MangaChapterDocumentLoading {
+private actor RecordingChapterDocumentLoader: MangaChapterDocumentLoading {
     func loadChapterDocument(at url: URL) async throws -> MangaChapterDocument {
-        throw YamiboError.parsingFailed(context: "Unexpected document load in GRDB offline-cache test")
+        throw YamiboError.parsingFailed(context: "Unexpected document load in offline-cache test")
     }
 }

@@ -6,7 +6,7 @@ import Testing
 @Test func appContinuityRestoreReconcilesNovelRouteWithReadingProgress() async throws {
     let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "app-continuity-restore-novel")
     let readingProgressStore = try ReadingProgressStore(testSuiteName: defaultsSuiteName, key: "reading-progress")
-    let localFavoriteLibraryStore = LocalFirstFavoriteLibraryStore(
+    let localFavoriteLibraryStore = FavoriteLibraryStore(
         defaults: try YamiboTestDefaults.defaults(suiteName: defaultsSuiteName),
         key: "favorite-library"
     )

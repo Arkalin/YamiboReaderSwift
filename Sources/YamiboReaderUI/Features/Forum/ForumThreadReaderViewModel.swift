@@ -37,7 +37,7 @@ final class ForumThreadReaderViewModel {
     let context: ThreadReaderLaunchContext
 
     @ObservationIgnored private let repositoryProvider: @Sendable () async -> any ForumThreadPageLoading
-    @ObservationIgnored private let localFavoriteLibraryStoreProvider: @Sendable () async -> LocalFirstFavoriteLibraryStore?
+    @ObservationIgnored private let localFavoriteLibraryStoreProvider: @Sendable () async -> FavoriteLibraryStore?
     @ObservationIgnored private let readingProgressStoreProvider: @Sendable () async -> ReadingProgressStore?
     @ObservationIgnored private let favoriteRepositoryProvider: @Sendable () async -> (any ForumThreadFavoriteRemoteOperating)?
     @ObservationIgnored private let inlineImageLoadingContextProvider: @Sendable () async -> NovelInlineImageLoadingContext?
@@ -64,7 +64,7 @@ final class ForumThreadReaderViewModel {
     init(
         context: ThreadReaderLaunchContext,
         repository: any ForumThreadPageLoading,
-        localFavoriteLibraryStore: LocalFirstFavoriteLibraryStore? = nil,
+        localFavoriteLibraryStore: FavoriteLibraryStore? = nil,
         readingProgressStore: ReadingProgressStore? = nil,
         favoriteRepository: (any ForumThreadFavoriteRemoteOperating)? = nil
     ) {

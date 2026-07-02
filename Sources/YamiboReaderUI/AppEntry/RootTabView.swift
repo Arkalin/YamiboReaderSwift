@@ -84,9 +84,9 @@ public struct RootTabView: View {
     }
 
     private func observeFavoriteLibraryChanges() async {
-        for await notification in NotificationCenter.default.notifications(named: LocalFirstFavoriteLibraryStore.didChangeNotification) {
+        for await notification in NotificationCenter.default.notifications(named: FavoriteLibraryStore.didChangeNotification) {
             guard !Task.isCancelled else { return }
-            guard let changeID = notification.userInfo?[LocalFirstFavoriteLibraryStore.changeIDUserInfoKey] as? String,
+            guard let changeID = notification.userInfo?[FavoriteLibraryStore.changeIDUserInfoKey] as? String,
                   changeID == appModel.appContext.localFavoriteLibraryStore.changeID else {
                 continue
             }

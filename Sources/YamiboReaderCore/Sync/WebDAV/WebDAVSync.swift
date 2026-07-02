@@ -342,7 +342,7 @@ public struct WebDAVClient: Sendable {
 
 public actor WebDAVSyncService {
     private let settingsStore: WebDAVSyncSettingsStore
-    private let localFavoriteLibraryStore: LocalFirstFavoriteLibraryStore
+    private let localFavoriteLibraryStore: FavoriteLibraryStore
     private let readingProgressStore: ReadingProgressStore
     private let sessionStore: SessionStore
     private let appSettingsStore: (any SettingsStoring)?
@@ -351,7 +351,7 @@ public actor WebDAVSyncService {
 
     public init(
         settingsStore: WebDAVSyncSettingsStore,
-        localFavoriteLibraryStore: LocalFirstFavoriteLibraryStore,
+        localFavoriteLibraryStore: FavoriteLibraryStore,
         readingProgressStore: ReadingProgressStore,
         sessionStore: SessionStore,
         appSettingsStore: (any SettingsStoring)? = nil,

@@ -11,7 +11,7 @@ public actor ForumCacheStore {
     private let fileManager: FileManager
     private let baseDirectory: URL
     private let threadPageIndexURL: URL
-    private let threadPageDiskCache: GRDBJSONCacheStore?
+    private let threadPageDiskCache: JSONCacheStore?
     private let now: @Sendable () -> Date
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
@@ -19,7 +19,7 @@ public actor ForumCacheStore {
     public init(
         fileManager: FileManager = .default,
         baseDirectory: URL? = nil,
-        threadPageDiskCache: GRDBJSONCacheStore? = nil,
+        threadPageDiskCache: JSONCacheStore? = nil,
         now: @escaping @Sendable () -> Date = { Date() }
     ) {
         self.fileManager = fileManager

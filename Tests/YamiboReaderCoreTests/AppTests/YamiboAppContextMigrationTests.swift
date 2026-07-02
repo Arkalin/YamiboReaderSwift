@@ -176,7 +176,7 @@ private func makeIsolatedAppContext(suiteName: String, rootDirectory: URL) throw
         settingsStore: SettingsStore(defaults: try YamiboTestDefaults.defaults(suiteName: suiteName), key: "settings"),
         webDAVSyncSettingsStore: WebDAVSyncSettingsStore(defaults: try YamiboTestDefaults.defaults(suiteName: suiteName), key: "webdav"),
         readerResumeRouteStore: ReaderResumeRouteStore(defaults: try YamiboTestDefaults.defaults(suiteName: suiteName), key: "resume-route"),
-        localFavoriteLibraryStore: LocalFirstFavoriteLibraryStore(defaults: try YamiboTestDefaults.defaults(suiteName: suiteName), databasePool: database),
+        localFavoriteLibraryStore: FavoriteLibraryStore(defaults: try YamiboTestDefaults.defaults(suiteName: suiteName), databasePool: database),
         favoriteUpdateStore: FavoriteUpdateStore(defaults: try YamiboTestDefaults.defaults(suiteName: suiteName), key: "favorite-updates"),
         readingProgressStore: ReadingProgressStore(defaults: try YamiboTestDefaults.defaults(suiteName: suiteName), databasePool: database),
         contentCoverStore: ContentCoverStore(defaults: try YamiboTestDefaults.defaults(suiteName: suiteName), key: "content-covers"),

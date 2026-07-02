@@ -7,7 +7,7 @@ final class LocalFavoritesViewModelTests: XCTestCase {
     func testSourceGroupFilterCountsRespectSearchAndTags() async throws {
         let suiteName = YamiboTestDefaults.suiteName(prefix: "local-favorites-source-filter")
         _ = try YamiboTestDefaults.make(suiteName: suiteName)
-        let localFavoriteLibraryStore = LocalFirstFavoriteLibraryStore(
+        let localFavoriteLibraryStore = FavoriteLibraryStore(
             defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
             key: "local-favorites"
         )
@@ -79,7 +79,7 @@ final class LocalFavoritesViewModelTests: XCTestCase {
     func testLocalFirstTagsFilterDisplayAndBatchAssignment() async throws {
         let suiteName = YamiboTestDefaults.suiteName(prefix: "local-favorites-tags")
         _ = try YamiboTestDefaults.make(suiteName: suiteName)
-        let localFavoriteLibraryStore = LocalFirstFavoriteLibraryStore(
+        let localFavoriteLibraryStore = FavoriteLibraryStore(
             defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
             key: "local-favorites"
         )
@@ -136,7 +136,7 @@ final class LocalFavoritesViewModelTests: XCTestCase {
     func testBatchSelectionCreatesMovesDissolvesAndDeletesEntries() async throws {
         let suiteName = YamiboTestDefaults.suiteName(prefix: "local-favorites-batch-selection")
         _ = try YamiboTestDefaults.make(suiteName: suiteName)
-        let localFavoriteLibraryStore = LocalFirstFavoriteLibraryStore(
+        let localFavoriteLibraryStore = FavoriteLibraryStore(
             defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
             key: "local-favorites"
         )
@@ -203,7 +203,7 @@ final class LocalFavoritesViewModelTests: XCTestCase {
     func testSelectionCanAddAndRemoveIndividualFavoriteLocations() async throws {
         let suiteName = YamiboTestDefaults.suiteName(prefix: "local-favorites-multi-location")
         _ = try YamiboTestDefaults.make(suiteName: suiteName)
-        let localFavoriteLibraryStore = LocalFirstFavoriteLibraryStore(
+        let localFavoriteLibraryStore = FavoriteLibraryStore(
             defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
             key: "local-favorites"
         )
@@ -262,7 +262,7 @@ final class LocalFavoritesViewModelTests: XCTestCase {
     func testDeleteSelectionCurrentLocationKeepsOtherLocationsAndSkipsRemoteDelete() async throws {
         let suiteName = YamiboTestDefaults.suiteName(prefix: "local-favorites-delete-location")
         _ = try YamiboTestDefaults.make(suiteName: suiteName)
-        let localFavoriteLibraryStore = LocalFirstFavoriteLibraryStore(
+        let localFavoriteLibraryStore = FavoriteLibraryStore(
             defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
             key: "local-favorites"
         )
@@ -307,7 +307,7 @@ final class LocalFavoritesViewModelTests: XCTestCase {
     func testDeleteSelectionCurrentLocationDoesNotDissolveSelectedCollections() async throws {
         let suiteName = YamiboTestDefaults.suiteName(prefix: "local-favorites-delete-mixed-location")
         _ = try YamiboTestDefaults.make(suiteName: suiteName)
-        let localFavoriteLibraryStore = LocalFirstFavoriteLibraryStore(
+        let localFavoriteLibraryStore = FavoriteLibraryStore(
             defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
             key: "local-favorites"
         )
@@ -349,7 +349,7 @@ final class LocalFavoritesViewModelTests: XCTestCase {
     func testDeleteSelectionRemoteFailureRollsBackLocalDelete() async throws {
         let suiteName = YamiboTestDefaults.suiteName(prefix: "local-favorites-delete-rollback")
         _ = try YamiboTestDefaults.make(suiteName: suiteName)
-        let localFavoriteLibraryStore = LocalFirstFavoriteLibraryStore(
+        let localFavoriteLibraryStore = FavoriteLibraryStore(
             defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
             key: "local-favorites"
         )
@@ -390,7 +390,7 @@ final class LocalFavoritesViewModelTests: XCTestCase {
         _ = try YamiboTestDefaults.make(suiteName: suiteName)
         LocalFavoriteDeleteTestURLProtocol.reset()
         defer { LocalFavoriteDeleteTestURLProtocol.reset() }
-        let localFavoriteLibraryStore = LocalFirstFavoriteLibraryStore(
+        let localFavoriteLibraryStore = FavoriteLibraryStore(
             defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
             key: "local-favorites"
         )
@@ -425,7 +425,7 @@ final class LocalFavoritesViewModelTests: XCTestCase {
     func testLocalOnlyEverywhereDeleteDoesNotRequireRemoteLookup() async throws {
         let suiteName = YamiboTestDefaults.suiteName(prefix: "local-favorites-delete-local-only")
         _ = try YamiboTestDefaults.make(suiteName: suiteName)
-        let localFavoriteLibraryStore = LocalFirstFavoriteLibraryStore(
+        let localFavoriteLibraryStore = FavoriteLibraryStore(
             defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
             key: "local-favorites"
         )
@@ -455,7 +455,7 @@ final class LocalFavoritesViewModelTests: XCTestCase {
     func testCollectionManagementFiltersMovesAndDissolvesFavorites() async throws {
         let suiteName = YamiboTestDefaults.suiteName(prefix: "local-favorites-collections")
         _ = try YamiboTestDefaults.make(suiteName: suiteName)
-        let localFavoriteLibraryStore = LocalFirstFavoriteLibraryStore(
+        let localFavoriteLibraryStore = FavoriteLibraryStore(
             defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
             key: "local-favorites"
         )
@@ -529,7 +529,7 @@ final class LocalFavoritesViewModelTests: XCTestCase {
             defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
             key: "settings"
         )
-        let localFavoriteLibraryStore = LocalFirstFavoriteLibraryStore(
+        let localFavoriteLibraryStore = FavoriteLibraryStore(
             defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
             key: "local-favorites"
         )
@@ -580,7 +580,7 @@ final class LocalFavoritesViewModelTests: XCTestCase {
             defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
             key: "settings"
         )
-        let localFavoriteLibraryStore = LocalFirstFavoriteLibraryStore(
+        let localFavoriteLibraryStore = FavoriteLibraryStore(
             defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
             key: "local-favorites"
         )
@@ -623,7 +623,7 @@ final class LocalFavoritesViewModelTests: XCTestCase {
             defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
             key: "settings"
         )
-        let localFavoriteLibraryStore = LocalFirstFavoriteLibraryStore(
+        let localFavoriteLibraryStore = FavoriteLibraryStore(
             defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
             key: "local-favorites"
         )
@@ -665,7 +665,7 @@ final class LocalFavoritesViewModelTests: XCTestCase {
             defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
             key: "settings"
         )
-        let localFavoriteLibraryStore = LocalFirstFavoriteLibraryStore(
+        let localFavoriteLibraryStore = FavoriteLibraryStore(
             defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
             key: "local-favorites"
         )
@@ -707,7 +707,7 @@ final class LocalFavoritesViewModelTests: XCTestCase {
             defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
             key: "settings"
         )
-        let localFavoriteLibraryStore = LocalFirstFavoriteLibraryStore(
+        let localFavoriteLibraryStore = FavoriteLibraryStore(
             defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
             key: "local-favorites"
         )
@@ -778,7 +778,7 @@ final class LocalFavoritesViewModelTests: XCTestCase {
     func testFavoriteUpdateCheckBuildsBaselineDetectsEventsAndHonorsFidFilter() async throws {
         let suiteName = YamiboTestDefaults.suiteName(prefix: "local-favorites-updates")
         _ = try YamiboTestDefaults.make(suiteName: suiteName)
-        let localFavoriteLibraryStore = LocalFirstFavoriteLibraryStore(
+        let localFavoriteLibraryStore = FavoriteLibraryStore(
             defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
             key: "local-favorites"
         )
@@ -868,7 +868,7 @@ final class LocalFavoritesViewModelTests: XCTestCase {
     func testAddFavoritePersistsCoverURLInLocalFirstLibrary() async throws {
         let suiteName = YamiboTestDefaults.suiteName(prefix: "local-favorites-add-cover")
         _ = try YamiboTestDefaults.make(suiteName: suiteName)
-        let localFavoriteLibraryStore = LocalFirstFavoriteLibraryStore(
+        let localFavoriteLibraryStore = FavoriteLibraryStore(
             defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
             key: "local-favorites"
         )
@@ -901,7 +901,7 @@ final class LocalFavoritesViewModelTests: XCTestCase {
     func testAddNovelFavoritePersistsForumMetadataInLocalFirstLibrary() async throws {
         let suiteName = YamiboTestDefaults.suiteName(prefix: "local-favorites-add-novel-forum")
         _ = try YamiboTestDefaults.make(suiteName: suiteName)
-        let localFavoriteLibraryStore = LocalFirstFavoriteLibraryStore(
+        let localFavoriteLibraryStore = FavoriteLibraryStore(
             defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
             key: "local-favorites"
         )
@@ -932,7 +932,7 @@ final class LocalFavoritesViewModelTests: XCTestCase {
     func testLoadProjectsContentCoverStoreURLWhenFavoriteHasNoCoverURL() async throws {
         let suiteName = YamiboTestDefaults.suiteName(prefix: "local-favorites-content-cover")
         _ = try YamiboTestDefaults.make(suiteName: suiteName)
-        let localFavoriteLibraryStore = LocalFirstFavoriteLibraryStore(
+        let localFavoriteLibraryStore = FavoriteLibraryStore(
             defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
             key: "local-favorites"
         )
@@ -974,7 +974,7 @@ final class LocalFavoritesViewModelTests: XCTestCase {
     func testLoadPrefersContentCoverStoreURLOverPersistedNormalThreadCoverURL() async throws {
         let suiteName = YamiboTestDefaults.suiteName(prefix: "local-favorites-content-cover-normal-priority")
         _ = try YamiboTestDefaults.make(suiteName: suiteName)
-        let localFavoriteLibraryStore = LocalFirstFavoriteLibraryStore(
+        let localFavoriteLibraryStore = FavoriteLibraryStore(
             defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
             key: "local-favorites"
         )
@@ -1019,7 +1019,7 @@ final class LocalFavoritesViewModelTests: XCTestCase {
     func testLoadPrefersContentCoverStoreURLOverPersistedNovelThreadCoverURL() async throws {
         let suiteName = YamiboTestDefaults.suiteName(prefix: "local-favorites-content-cover-novel-priority")
         _ = try YamiboTestDefaults.make(suiteName: suiteName)
-        let localFavoriteLibraryStore = LocalFirstFavoriteLibraryStore(
+        let localFavoriteLibraryStore = FavoriteLibraryStore(
             defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
             key: "local-favorites"
         )
@@ -1064,7 +1064,7 @@ final class LocalFavoritesViewModelTests: XCTestCase {
     func testNormalThreadOpenTargetUsesNativeReaderWithoutMutatingFavoriteUpdatedAt() async throws {
         let suiteName = YamiboTestDefaults.suiteName(prefix: "local-favorites-view-model")
         _ = try YamiboTestDefaults.make(suiteName: suiteName)
-        let localFavoriteLibraryStore = LocalFirstFavoriteLibraryStore(
+        let localFavoriteLibraryStore = FavoriteLibraryStore(
             defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
             key: "local-favorites"
         )
@@ -1104,7 +1104,7 @@ final class LocalFavoritesViewModelTests: XCTestCase {
     func testSearchModeSubmitsCountsAndExitClearsSelection() async throws {
         let suiteName = YamiboTestDefaults.suiteName(prefix: "local-favorites-search-mode")
         _ = try YamiboTestDefaults.make(suiteName: suiteName)
-        let localFavoriteLibraryStore = LocalFirstFavoriteLibraryStore(
+        let localFavoriteLibraryStore = FavoriteLibraryStore(
             defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
             key: "local-favorites"
         )

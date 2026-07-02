@@ -2,12 +2,12 @@ import CryptoKit
 import Foundation
 @preconcurrency import GRDB
 
-public actor GRDBMangaOfflineCacheStore: MangaOfflineCacheStoring {
+public actor MangaOfflineCacheStore: MangaOfflineCacheStoring {
     private let database: DatabasePool
     private nonisolated(unsafe) let fileManager: FileManager
     private let baseDirectory: URL
     private let imagesDirectory: URL
-    private let updateNotifier = GRDBMangaOfflineCacheUpdateNotifier()
+    private let updateNotifier = MangaOfflineCacheUpdateNotifier()
     private var didRecoverQueueState = false
 
     public init(
@@ -872,7 +872,7 @@ public actor GRDBMangaOfflineCacheStore: MangaOfflineCacheStoring {
         do {
             return try YamiboDatabase.openSharedPool()
         } catch {
-            fatalError("Failed to open GRDBMangaOfflineCacheStore database: \(error)")
+            fatalError("Failed to open MangaOfflineCacheStore database: \(error)")
         }
     }
 }
@@ -892,7 +892,7 @@ private func offlineCachePersistenceError(from error: Error) -> YamiboError {
     return YamiboError.persistenceFailed(error.localizedDescription)
 }
 
-private final class GRDBMangaOfflineCacheUpdateNotifier: @unchecked Sendable {
+private final class MangaOfflineCacheUpdateNotifier: @unchecked Sendable {
     private let lock = NSLock()
     private var continuations: [UUID: AsyncStream<Void>.Continuation] = [:]
 

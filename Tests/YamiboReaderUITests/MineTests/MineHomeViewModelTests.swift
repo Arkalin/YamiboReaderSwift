@@ -507,7 +507,7 @@ private struct MineHomeViewModelFixture {
     let appContext: YamiboAppContext
     let checkInStore: YamiboCheckInStore
     let offlineCacheStore: any MangaOfflineCacheStoring
-    let directoryStore: GRDBMangaDirectoryStore
+    let directoryStore: MangaDirectoryStore
 }
 
 private func makeMineHomeFixture(
@@ -523,11 +523,11 @@ private func makeMineHomeFixture(
     )
     let offlineCacheRoot = makeMineTemporaryDirectory()
     let database = try YamiboDatabase.openPool(rootDirectory: offlineCacheRoot)
-    let offlineCacheStore = GRDBMangaOfflineCacheStore(
+    let offlineCacheStore = MangaOfflineCacheStore(
         databasePool: database,
         baseDirectory: offlineCacheRoot.appendingPathComponent("offline-images", isDirectory: true)
     )
-    let directoryStore = GRDBMangaDirectoryStore(databasePool: database)
+    let directoryStore = MangaDirectoryStore(databasePool: database)
     try await sessionStore.save(
         SessionState(
             cookie: "EeqY_2132_auth=token",

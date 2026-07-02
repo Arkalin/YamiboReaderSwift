@@ -1,7 +1,7 @@
 import Foundation
 @preconcurrency import GRDB
 
-public actor GRDBJSONCacheStore {
+public actor JSONCacheStore {
     public struct CacheEntry: Sendable {
         public var namespace: String
         public var key: String
