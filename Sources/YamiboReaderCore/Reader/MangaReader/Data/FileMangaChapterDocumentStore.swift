@@ -1,7 +1,7 @@
 import CryptoKit
 import Foundation
 
-public actor FileMangaChapterDocumentStore: MangaChapterDocumentPersisting {
+public actor FileMangaChapterDocumentStore: MangaChapterDocumentPersisting, MangaChapterDocumentStorageReporting {
     private static let schemaVersion = 1
 
     private let fileManager: FileManager

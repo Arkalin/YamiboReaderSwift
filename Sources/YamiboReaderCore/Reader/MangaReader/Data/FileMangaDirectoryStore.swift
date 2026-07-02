@@ -1,6 +1,6 @@
 import Foundation
 
-public actor FileMangaDirectoryStore: MangaDirectoryPersisting {
+public actor FileMangaDirectoryStore: MangaDirectoryPersisting, MangaDirectoryStorageReporting, MangaDirectoryClearing {
     private static let schemaVersion = 1
 
     private let fileManager: FileManager

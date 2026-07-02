@@ -6,7 +6,7 @@ public enum MangaLaunchSource: String, Codable, Hashable, Sendable {
     case resume
 }
 
-public struct MangaLaunchContext: Codable, Hashable, Identifiable, Sendable {
+public struct MangaLaunchContext: Hashable, Identifiable, Sendable {
     public var originalThreadURL: URL
     public var chapterURL: URL
     public var displayTitle: String
@@ -38,7 +38,89 @@ public struct MangaLaunchContext: Codable, Hashable, Identifiable, Sendable {
     }
 }
 
-public struct MangaWebContext: Codable, Hashable, Identifiable, Sendable {
+extension MangaLaunchContext: Codable {
+    private enum CodingKeys: String, CodingKey {
+        case originalThreadID
+        case chapterTID
+        case displayTitle
+        case source
+        case initialPage
+        case directoryName
+        case offlineCacheFavoriteID
+        case originalThreadURL
+        case chapterURL
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        guard let originalThreadID = Self.threadID(from: originalThreadURL),
+              let chapterTID = Self.threadID(from: chapterURL) else {
+            throw EncodingError.invalidValue(
+                self,
+                EncodingError.Context(
+                    codingPath: encoder.codingPath,
+                    debugDescription: "Manga launch context requires thread IDs for persistence"
+                )
+            )
+        }
+
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(originalThreadID, forKey: .originalThreadID)
+        try container.encode(chapterTID, forKey: .chapterTID)
+        try container.encode(displayTitle, forKey: .displayTitle)
+        try container.encode(source, forKey: .source)
+        try container.encode(initialPage, forKey: .initialPage)
+        try container.encodeIfPresent(directoryName, forKey: .directoryName)
+        try container.encodeIfPresent(offlineCacheFavoriteID, forKey: .offlineCacheFavoriteID)
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let originalThreadURL = try Self.threadURL(
+            threadID: container.decodeIfPresent(String.self, forKey: .originalThreadID),
+            legacyURL: container.decodeIfPresent(URL.self, forKey: .originalThreadURL)
+        )
+        let chapterURL = try Self.threadURL(
+            threadID: container.decodeIfPresent(String.self, forKey: .chapterTID),
+            legacyURL: container.decodeIfPresent(URL.self, forKey: .chapterURL)
+        )
+        self.init(
+            originalThreadURL: originalThreadURL,
+            chapterURL: chapterURL,
+            displayTitle: try container.decode(String.self, forKey: .displayTitle),
+            source: try container.decode(MangaLaunchSource.self, forKey: .source),
+            initialPage: try container.decodeIfPresent(Int.self, forKey: .initialPage) ?? 0,
+            directoryName: try container.decodeIfPresent(String.self, forKey: .directoryName),
+            offlineCacheFavoriteID: try container.decodeIfPresent(String.self, forKey: .offlineCacheFavoriteID)
+        )
+    }
+
+    private static func threadID(from url: URL) -> String? {
+        MangaTitleCleaner.extractTid(from: url.absoluteString)?.mangaReaderTrimmedNonEmpty
+    }
+
+    private static func threadURL(threadID: String?, legacyURL: URL?) throws -> URL {
+        if let threadID = threadID?.mangaReaderTrimmedNonEmpty,
+           let url = MangaReaderDataSupport.chapterURL(forTID: threadID) {
+            return url
+        }
+        if let legacyURL,
+           let threadID = Self.threadID(from: legacyURL),
+           let url = MangaReaderDataSupport.chapterURL(forTID: threadID) {
+            return url
+        }
+        if let legacyURL {
+            return legacyURL
+        }
+        throw DecodingError.dataCorrupted(
+            DecodingError.Context(
+                codingPath: [],
+                debugDescription: "Manga launch context is missing thread identity"
+            )
+        )
+    }
+}
+
+public struct MangaWebContext: Hashable, Identifiable, Sendable {
     public var currentURL: URL
     public var originalThreadURL: URL
     public var source: MangaLaunchSource
@@ -79,6 +161,94 @@ public struct MangaWebContext: Codable, Hashable, Identifiable, Sendable {
             initialPage: initialPage ?? self.initialPage,
             autoOpenNative: autoOpenNative ?? self.autoOpenNative,
             waitingForNativeReturn: waitingForNativeReturn ?? self.waitingForNativeReturn
+        )
+    }
+}
+
+extension MangaWebContext: Codable {
+    private enum CodingKeys: String, CodingKey {
+        case currentTID
+        case currentPage
+        case originalThreadID
+        case source
+        case initialPage
+        case autoOpenNative
+        case waitingForNativeReturn
+        case currentURL
+        case originalThreadURL
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        guard let currentTID = Self.threadID(from: currentURL),
+              let originalThreadID = Self.threadID(from: originalThreadURL) else {
+            throw EncodingError.invalidValue(
+                self,
+                EncodingError.Context(
+                    codingPath: encoder.codingPath,
+                    debugDescription: "Manga web context requires thread IDs for persistence"
+                )
+            )
+        }
+
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(currentTID, forKey: .currentTID)
+        try container.encode(Self.page(from: currentURL), forKey: .currentPage)
+        try container.encode(originalThreadID, forKey: .originalThreadID)
+        try container.encode(source, forKey: .source)
+        try container.encode(initialPage, forKey: .initialPage)
+        try container.encode(autoOpenNative, forKey: .autoOpenNative)
+        try container.encode(waitingForNativeReturn, forKey: .waitingForNativeReturn)
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let currentURL = try Self.threadURL(
+            threadID: container.decodeIfPresent(String.self, forKey: .currentTID),
+            page: container.decodeIfPresent(Int.self, forKey: .currentPage) ?? 1,
+            legacyURL: container.decodeIfPresent(URL.self, forKey: .currentURL)
+        )
+        let originalThreadURL = try Self.threadURL(
+            threadID: container.decodeIfPresent(String.self, forKey: .originalThreadID),
+            page: 1,
+            legacyURL: container.decodeIfPresent(URL.self, forKey: .originalThreadURL)
+        )
+        self.init(
+            currentURL: currentURL,
+            originalThreadURL: originalThreadURL,
+            source: try container.decode(MangaLaunchSource.self, forKey: .source),
+            initialPage: try container.decodeIfPresent(Int.self, forKey: .initialPage) ?? 0,
+            autoOpenNative: try container.decodeIfPresent(Bool.self, forKey: .autoOpenNative) ?? false,
+            waitingForNativeReturn: try container.decodeIfPresent(Bool.self, forKey: .waitingForNativeReturn) ?? false
+        )
+    }
+
+    private static func threadID(from url: URL) -> String? {
+        MangaTitleCleaner.extractTid(from: url.absoluteString)?.mangaReaderTrimmedNonEmpty
+    }
+
+    private static func page(from url: URL) -> Int {
+        let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        let page = components?.queryItems?.first(where: { $0.name == "page" })?.value
+            .flatMap(Int.init) ?? 1
+        return max(1, page)
+    }
+
+    private static func threadURL(threadID: String?, page: Int, legacyURL: URL?) throws -> URL {
+        if let threadID = threadID?.mangaReaderTrimmedNonEmpty {
+            return YamiboRoute.threadByID(tid: threadID, page: page, authorID: nil, reverse: false).url
+        }
+        if let legacyURL,
+           let threadID = Self.threadID(from: legacyURL) {
+            return YamiboRoute.threadByID(tid: threadID, page: Self.page(from: legacyURL), authorID: nil, reverse: false).url
+        }
+        if let legacyURL {
+            return legacyURL
+        }
+        throw DecodingError.dataCorrupted(
+            DecodingError.Context(
+                codingPath: [],
+                debugDescription: "Manga web context is missing thread identity"
+            )
         )
     }
 }

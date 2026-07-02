@@ -207,7 +207,7 @@ final class MangaReaderAdjacentPrefetchTests: XCTestCase {
             XCTFail("Expected saved manga resume route")
             return
         }
-        XCTAssertEqual(savedContext.chapterURL, document701.chapterURL)
+        XCTAssertEqual(savedContext.chapterURL, MangaReaderDataSupport.chapterURL(forTID: "701"))
         XCTAssertEqual(savedContext.initialPage, 0)
     }
 

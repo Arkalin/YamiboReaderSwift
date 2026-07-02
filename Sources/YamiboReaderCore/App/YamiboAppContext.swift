@@ -28,9 +28,9 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
     public let contentCoverStore: ContentCoverStore
     public let readerCacheStore: ReaderCacheStore
     public let favoriteBackgroundImageStore: FavoriteBackgroundImageStore
-    public let mangaDirectoryStore: FileMangaDirectoryStore
+    public let mangaDirectoryStore: any MangaDirectoryPersisting & MangaDirectoryStorageReporting & MangaDirectoryClearing
     public let mangaDirectorySearchCooldownState: MangaDirectorySearchCooldownState
-    public let mangaChapterDocumentStore: FileMangaChapterDocumentStore
+    public let mangaChapterDocumentStore: any MangaChapterDocumentPersisting & MangaChapterDocumentStorageReporting
     public let mangaImageDataCacheStore: FileMangaImageDataCacheStore
     public let mangaOfflineCacheStore: FileMangaOfflineCacheStore
     public let forumCacheStore: ForumCacheStore
@@ -53,9 +53,9 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         contentCoverStore: ContentCoverStore = ContentCoverStore(),
         readerCacheStore: ReaderCacheStore = ReaderCacheStore(),
         favoriteBackgroundImageStore: FavoriteBackgroundImageStore = FavoriteBackgroundImageStore(),
-        mangaDirectoryStore: FileMangaDirectoryStore = FileMangaDirectoryStore(),
+        mangaDirectoryStore: (any MangaDirectoryPersisting & MangaDirectoryStorageReporting & MangaDirectoryClearing)? = nil,
         mangaDirectorySearchCooldownState: MangaDirectorySearchCooldownState = MangaDirectorySearchCooldownState(),
-        mangaChapterDocumentStore: FileMangaChapterDocumentStore = FileMangaChapterDocumentStore(),
+        mangaChapterDocumentStore: (any MangaChapterDocumentPersisting & MangaChapterDocumentStorageReporting)? = nil,
         mangaImageDataCacheStore: FileMangaImageDataCacheStore = FileMangaImageDataCacheStore(),
         mangaOfflineCacheStore: FileMangaOfflineCacheStore = FileMangaOfflineCacheStore(),
         forumCacheStore: ForumCacheStore = ForumCacheStore(),
@@ -76,9 +76,9 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         self.contentCoverStore = contentCoverStore
         self.readerCacheStore = readerCacheStore
         self.favoriteBackgroundImageStore = favoriteBackgroundImageStore
-        self.mangaDirectoryStore = mangaDirectoryStore
+        self.mangaDirectoryStore = mangaDirectoryStore ?? GRDBMangaDirectoryStore()
         self.mangaDirectorySearchCooldownState = mangaDirectorySearchCooldownState
-        self.mangaChapterDocumentStore = mangaChapterDocumentStore
+        self.mangaChapterDocumentStore = mangaChapterDocumentStore ?? GRDBMangaChapterDocumentStore()
         self.mangaImageDataCacheStore = mangaImageDataCacheStore
         self.mangaOfflineCacheStore = mangaOfflineCacheStore
         self.forumCacheStore = forumCacheStore

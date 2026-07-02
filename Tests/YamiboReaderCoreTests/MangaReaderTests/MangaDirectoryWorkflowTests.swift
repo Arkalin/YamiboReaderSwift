@@ -184,6 +184,28 @@ struct MangaDirectoryWorkflowTests {
         #expect(await store.deletedNames == ["旧标题"])
     }
 
+    @Test func renameUsesTransactionalStoreCapabilityWhenAvailable() async throws {
+        let current = makeDirectory(name: "旧标题", strategy: .searched, sourceKey: "旧标题", tids: ["700"])
+        let store = RecordingRenamingDirectoryStore(directories: [current])
+        let workflow = MangaDirectoryWorkflow(
+            repository: RecordingDirectoryRepository(seed: makeSeed(tid: "700")),
+            store: store
+        )
+
+        let renamed = try await workflow.renameDirectory(
+            current,
+            cleanBookName: "新标题",
+            searchKeyword: ""
+        )
+
+        #expect(renamed.cleanBookName == "新标题")
+        #expect(await store.renameRequests.map(\.oldName) == ["旧标题"])
+        #expect(await store.savedDirectories.isEmpty)
+        #expect(await store.deletedNames.isEmpty)
+        #expect(try await store.directory(named: "旧标题") == nil)
+        #expect(try await store.directory(named: "新标题")?.chapters.map(\.tid) == ["700"])
+    }
+
     @Test func editDraftPreservesNameAndSplitsExistingKeyword() {
         let directory = makeDirectory(
             name: "作品",
@@ -293,6 +315,45 @@ private actor RecordingDirectoryStore: MangaDirectoryPersisting {
         let normalized = name.trimmingCharacters(in: .whitespacesAndNewlines)
         deletedNames.append(normalized)
         directories.removeValue(forKey: normalized)
+    }
+}
+
+private actor RecordingRenamingDirectoryStore: MangaDirectoryPersisting, MangaDirectoryRenaming {
+    private var directories: [String: MangaDirectory]
+    private(set) var savedDirectories: [MangaDirectory] = []
+    private(set) var deletedNames: [String] = []
+    private(set) var renameRequests: [(oldName: String, newName: String)] = []
+
+    init(directories: [MangaDirectory] = []) {
+        self.directories = Dictionary(uniqueKeysWithValues: directories.map { ($0.cleanBookName, $0) })
+    }
+
+    func directory(named name: String) async throws -> MangaDirectory? {
+        directories[name.trimmingCharacters(in: .whitespacesAndNewlines)]
+    }
+
+    func directory(containingTID tid: String) async throws -> MangaDirectory? {
+        directories.values.first { directory in
+            directory.chapters.contains { $0.tid == tid.trimmingCharacters(in: .whitespacesAndNewlines) }
+        }
+    }
+
+    func saveDirectory(_ directory: MangaDirectory) async throws {
+        savedDirectories.append(directory)
+        directories[directory.cleanBookName] = directory
+    }
+
+    func deleteDirectory(named name: String) async throws {
+        let normalized = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        deletedNames.append(normalized)
+        directories.removeValue(forKey: normalized)
+    }
+
+    func renameDirectory(from oldName: String, to newDirectory: MangaDirectory) async throws {
+        let normalized = oldName.trimmingCharacters(in: .whitespacesAndNewlines)
+        renameRequests.append((oldName: normalized, newName: newDirectory.cleanBookName))
+        directories.removeValue(forKey: normalized)
+        directories[newDirectory.cleanBookName] = newDirectory
     }
 }
 

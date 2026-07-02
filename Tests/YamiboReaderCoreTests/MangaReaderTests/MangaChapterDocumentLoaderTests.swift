@@ -11,7 +11,6 @@ struct MangaReaderTestsChapterDocumentLoader {
         harness.setHandler { request in
             #expect(request.value(forHTTPHeaderField: "Cookie") == "auth=1")
             #expect(request.value(forHTTPHeaderField: "User-Agent") == "TestAgent/1")
-            #expect(request.url?.absoluteString.contains("authorid=42") == true)
             #expect(request.url?.absoluteString.contains("page=1") == true)
             return MangaReaderDataTestResponse(html: """
             <html>
@@ -37,12 +36,15 @@ struct MangaReaderTestsChapterDocumentLoader {
         let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=700&page=5&authorid=42"))
 
         let document = try await loader.loadChapterDocument(at: url)
+        let requestURL = try #require(harness.requests.first?.url?.absoluteString)
 
         #expect(document.tid == "700")
         #expect(document.ownerPostID == "9001")
         #expect(document.chapterTitle == "【作者】作品 第12话")
-        #expect(document.chapterURL.absoluteString.contains("authorid=42") == true)
-        #expect(document.chapterURL.absoluteString.contains("page=1") == true)
+        #expect(requestURL.contains("tid=700"))
+        #expect(requestURL.contains("page=1"))
+        #expect(requestURL.contains("authorid=42") == false)
+        #expect(document.chapterURL.absoluteString == "https://bbs.yamibo.com/forum.php?mobile=2&mod=viewthread&page=1&tid=700")
         #expect(document.imageURLs.map(\.absoluteString) == [
             "https://bbs.yamibo.com/images/700-1.jpg",
             "https://img.example.com/700-2.png"

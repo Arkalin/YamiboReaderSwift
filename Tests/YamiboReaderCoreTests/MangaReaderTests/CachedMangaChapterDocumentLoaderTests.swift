@@ -76,7 +76,7 @@ struct MangaReaderTestsCachedChapterDocumentLoader {
     @Test func upstreamFailureFallsBackToDocumentThatAppearsInStore() async throws {
         let chapterURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?tid=803"))
         let document = try makeLoaderDocument(tid: "803")
-        let store = ThirdReadHitMangaChapterDocumentStore(chapterURL: chapterURL, document: document)
+        let store = FallbackReadHitMangaChapterDocumentStore(chapterURL: chapterURL, document: document)
         let upstream = RecordingCachedMangaChapterDocumentUpstream(results: [.failure(YamiboError.offline)])
         let loader = CachedMangaChapterDocumentLoader(store: store, upstream: upstream)
 
@@ -180,7 +180,7 @@ private actor SecondReadHitMangaChapterDocumentStore: MangaChapterDocumentPersis
     func clearAll() async throws {}
 }
 
-private actor ThirdReadHitMangaChapterDocumentStore: MangaChapterDocumentPersisting {
+private actor FallbackReadHitMangaChapterDocumentStore: MangaChapterDocumentPersisting {
     private let key: String
     private let output: MangaChapterDocument
     private var documentCallCount = 0
@@ -192,7 +192,7 @@ private actor ThirdReadHitMangaChapterDocumentStore: MangaChapterDocumentPersist
 
     func document(for chapterURL: URL) async -> MangaChapterDocument? {
         documentCallCount += 1
-        guard normalizedChapterDocumentKey(chapterURL) == key, documentCallCount >= 3 else { return nil }
+        guard normalizedChapterDocumentKey(chapterURL) == key, documentCallCount >= 5 else { return nil }
         return output
     }
 

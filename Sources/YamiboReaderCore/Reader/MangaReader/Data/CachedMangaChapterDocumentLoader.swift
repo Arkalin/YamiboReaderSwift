@@ -14,11 +14,16 @@ public actor CachedMangaChapterDocumentLoader: MangaChapterDocumentLoading {
     }
 
     public func loadChapterDocument(at url: URL) async throws -> MangaChapterDocument {
-        if let cached = await store.document(for: url) {
+        let normalizedURL = MangaReaderDataSupport.normalizedChapterURL(url)
+        let tid = MangaTitleCleaner.extractTid(from: normalizedURL.absoluteString)?.mangaReaderTrimmedNonEmpty
+        if let tid, let cached = await store.document(forTID: tid) {
+            return cached
+        }
+        if let cached = await store.document(for: normalizedURL) {
             return cached
         }
 
-        let key = MangaReaderDataSupport.normalizedChapterURL(url).absoluteString
+        let key = tid ?? normalizedURL.absoluteString
         if let task = inFlightTasks[key] {
             return try await task.value
         }
@@ -26,16 +31,22 @@ public actor CachedMangaChapterDocumentLoader: MangaChapterDocumentLoading {
         let store = store
         let upstream = upstream
         let task = Task<MangaChapterDocument, Error> {
-            if let cached = await store.document(for: url) {
+            if let tid, let cached = await store.document(forTID: tid) {
+                return cached
+            }
+            if let cached = await store.document(for: normalizedURL) {
                 return cached
             }
 
             do {
-                let document = try await upstream.loadChapterDocument(at: url)
-                try? await store.save(document, for: url)
+                let document = try await upstream.loadChapterDocument(at: normalizedURL)
+                try? await store.save(document)
                 return document
             } catch {
-                if let cached = await store.document(for: url) {
+                if let tid, let cached = await store.document(forTID: tid) {
+                    return cached
+                }
+                if let cached = await store.document(for: normalizedURL) {
                     return cached
                 }
                 throw error

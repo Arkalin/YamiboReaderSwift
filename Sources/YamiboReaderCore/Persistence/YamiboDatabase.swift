@@ -47,6 +47,10 @@ public enum YamiboDatabase {
         fileManager: FileManager = .default
     ) throws {
         try writer.write { db in
+            try db.execute(sql: "DELETE FROM manga_chapter_document_images")
+            try db.execute(sql: "DELETE FROM manga_chapter_documents")
+            try db.execute(sql: "DELETE FROM manga_directory_chapters")
+            try db.execute(sql: "DELETE FROM manga_directories")
             try db.execute(sql: "DELETE FROM reading_progress")
             try db.execute(sql: "DELETE FROM favorite_remote_mappings")
             try db.execute(sql: "DELETE FROM favorite_item_tags")
@@ -181,6 +185,45 @@ public enum YamiboDatabase {
             try db.create(index: "reading_progress_thread_idx", on: "reading_progress", columns: ["thread_id"])
             try db.create(index: "reading_progress_manga_title_idx", on: "reading_progress", columns: ["manga_id", "clean_book_name"])
             try db.create(index: "reading_progress_manga_chapter_idx", on: "reading_progress", columns: ["manga_chapter_thread_id"])
+        }
+
+        migrator.registerMigration("create_manga_directory_and_documents") { db in
+            try db.create(table: "manga_directories") { table in
+                table.column("clean_book_name", .text).primaryKey(onConflict: .replace)
+                table.column("strategy", .text).notNull()
+                table.column("source_key", .text).notNull()
+                table.column("last_updated_at", .double)
+                table.column("search_keyword", .text)
+            }
+
+            try db.create(table: "manga_directory_chapters") { table in
+                table.column("directory_name", .text).notNull().references("manga_directories", onDelete: .cascade)
+                table.column("tid", .text).notNull()
+                table.column("raw_title", .text).notNull()
+                table.column("chapter_number", .double).notNull()
+                table.column("author_uid", .text)
+                table.column("author_name", .text)
+                table.column("group_index", .integer).notNull()
+                table.column("publish_time", .double)
+                table.column("manual_order", .integer).notNull()
+                table.primaryKey(["directory_name", "tid"], onConflict: .replace)
+            }
+            try db.create(index: "manga_directory_chapters_tid_idx", on: "manga_directory_chapters", columns: ["tid"])
+            try db.create(index: "manga_directory_chapters_directory_order_idx", on: "manga_directory_chapters", columns: ["directory_name", "manual_order"])
+
+            try db.create(table: "manga_chapter_documents") { table in
+                table.column("tid", .text).primaryKey(onConflict: .replace)
+                table.column("owner_post_id", .text).notNull()
+                table.column("chapter_title", .text).notNull()
+            }
+
+            try db.create(table: "manga_chapter_document_images") { table in
+                table.column("tid", .text).notNull().references("manga_chapter_documents", onDelete: .cascade)
+                table.column("manual_order", .integer).notNull()
+                table.column("image_url", .text).notNull()
+                table.primaryKey(["tid", "manual_order"], onConflict: .replace)
+            }
+            try db.create(index: "manga_chapter_document_images_tid_idx", on: "manga_chapter_document_images", columns: ["tid"])
         }
     }
 

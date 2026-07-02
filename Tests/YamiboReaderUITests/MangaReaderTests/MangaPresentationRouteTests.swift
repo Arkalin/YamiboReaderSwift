@@ -39,7 +39,7 @@ final class MangaPresentationRouteTests: XCTestCase {
         await appModel.bootstrap()
 
         XCTAssertNil(appModel.activeReaderContext)
-        XCTAssertEqual(appModel.activeMangaRoute, route)
+        XCTAssertEqual(appModel.activeMangaRoute, try persistedMangaRoute(route))
     }
 
     func testBootstrapIfNeededRestoresNovelRouteFromDownloadedWebDAVProgress() async throws {
@@ -217,7 +217,7 @@ final class MangaPresentationRouteTests: XCTestCase {
         await appModel.bootstrapIfNeeded()
 
         let expectedContext = MangaLaunchContext(
-            originalThreadURL: originalURL,
+            originalThreadURL: try XCTUnwrap(MangaReaderDataSupport.chapterURL(forTID: "731")),
             chapterURL: expectedRemoteChapterURL,
             displayTitle: "本地漫画",
             source: .resume,
@@ -227,7 +227,7 @@ final class MangaPresentationRouteTests: XCTestCase {
         )
         XCTAssertEqual(appModel.activeMangaRoute, .native(expectedContext))
         let restoredRoute = await fixture.resumeRouteStore.load()
-        XCTAssertEqual(restoredRoute, .manga(.native(expectedContext)))
+        XCTAssertEqual(restoredRoute, try persistedResumeRoute(.manga(.native(expectedContext))))
     }
 
     func testBootstrapIfNeededKeepsLocalResumeRouteWhenWebDAVDoesNotDownloadProgress() async throws {
@@ -772,14 +772,26 @@ private func waitForReaderResumeRoute(
     file: StaticString = #filePath,
     line: UInt = #line
 ) async throws {
+    let persistedExpected = try persistedResumeRoute(expected)
     for _ in 0..<20 {
-        if await store.load() == expected {
+        if await store.load() == persistedExpected {
             return
         }
         try await Task.sleep(nanoseconds: 25_000_000)
     }
     let loaded = await store.load()
-    XCTAssertEqual(loaded, expected, file: file, line: line)
+    XCTAssertEqual(loaded, persistedExpected, file: file, line: line)
+}
+
+private func persistedResumeRoute(_ route: ReaderResumeRoute?) throws -> ReaderResumeRoute? {
+    guard let route else { return nil }
+    let data = try JSONEncoder().encode(route)
+    return try JSONDecoder().decode(ReaderResumeRoute.self, from: data)
+}
+
+private func persistedMangaRoute(_ route: MangaPresentationRoute) throws -> MangaPresentationRoute {
+    let data = try JSONEncoder().encode(route)
+    return try JSONDecoder().decode(MangaPresentationRoute.self, from: data)
 }
 
 private struct AppModelWebDAVFixture: Sendable {

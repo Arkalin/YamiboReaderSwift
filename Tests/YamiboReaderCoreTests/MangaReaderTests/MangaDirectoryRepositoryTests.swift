@@ -11,7 +11,6 @@ struct MangaReaderTestsDirectoryRepository {
         harness.setHandler { request in
             #expect(request.value(forHTTPHeaderField: "Cookie") == "auth=1")
             #expect(request.value(forHTTPHeaderField: "User-Agent") == "TestAgent/1")
-            #expect(request.url?.absoluteString.contains("authorid=42") == true)
             #expect(request.url?.absoluteString.contains("page=1") == true)
             return MangaReaderDataTestResponse(html: """
             <html>
@@ -35,11 +34,15 @@ struct MangaReaderTestsDirectoryRepository {
         let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?tid=700&page=5&authorid=42"))
 
         let seed = try await repository.loadDirectorySeed(for: url)
+        let requestURL = try #require(harness.requests.first?.url?.absoluteString)
 
         #expect(seed.currentChapter.tid == "700")
         #expect(seed.currentChapter.rawTitle == "【作者】作品 第12话")
         #expect(seed.currentChapter.chapterNumber == 12)
-        #expect(seed.currentChapter.url.absoluteString.contains("authorid=42") == true)
+        #expect(requestURL.contains("tid=700"))
+        #expect(requestURL.contains("page=1"))
+        #expect(requestURL.contains("authorid=42") == false)
+        #expect(seed.currentChapter.url.absoluteString == "https://bbs.yamibo.com/forum.php?mobile=2&mod=viewthread&page=1&tid=700")
         #expect(seed.cleanBookName == "作品")
         #expect(seed.tagIDs == ["12", "34"])
         #expect(seed.firstPostID == "9001")

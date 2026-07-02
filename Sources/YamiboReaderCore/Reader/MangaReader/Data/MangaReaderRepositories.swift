@@ -10,6 +10,21 @@ public protocol MangaChapterDocumentPersisting: Sendable {
     func clearAll() async throws
 }
 
+public protocol MangaChapterDocumentStorageReporting: Sendable {
+    func totalDiskUsageBytes() async -> Int
+}
+
+public extension MangaChapterDocumentPersisting {
+    func document(forTID tid: String) async -> MangaChapterDocument? {
+        guard let url = MangaReaderDataSupport.chapterURL(forTID: tid) else { return nil }
+        return await document(for: url)
+    }
+
+    func save(_ document: MangaChapterDocument) async throws {
+        try await save(document, for: document.chapterURL)
+    }
+}
+
 public struct MangaDirectorySeed: Hashable, Sendable {
     public var currentChapter: MangaChapter
     public var tagIDs: [String]
@@ -44,6 +59,21 @@ public protocol MangaDirectoryPersisting: Sendable {
     func directory(containingTID tid: String) async throws -> MangaDirectory?
     func saveDirectory(_ directory: MangaDirectory) async throws
     func deleteDirectory(named name: String) async throws
+}
+
+public protocol MangaDirectoryStorageReporting: Sendable {
+    func totalDiskUsageBytes() async -> Int
+}
+
+public protocol MangaDirectoryClearing: Sendable {
+    func clearAll() async throws
+}
+
+public protocol MangaDirectoryRenaming: Sendable {
+    func renameDirectory(
+        from oldName: String,
+        to newDirectory: MangaDirectory
+    ) async throws
 }
 
 public protocol MangaImageDataLoading: Sendable {

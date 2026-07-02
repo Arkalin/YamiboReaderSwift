@@ -224,7 +224,7 @@ final class MangaReaderModelSettingsProgressTests: XCTestCase {
             return
         }
         XCTAssertEqual(savedContext.source, .resume)
-        XCTAssertEqual(savedContext.chapterURL, fixture.chapterURL)
+        XCTAssertEqual(savedContext.chapterURL, MangaReaderDataSupport.chapterURL(forTID: "701"))
         XCTAssertEqual(savedContext.initialPage, 1)
         XCTAssertEqual(savedContext.directoryName, "Resolved Directory")
     }
@@ -368,7 +368,7 @@ final class MangaReaderModelSettingsProgressTests: XCTestCase {
         XCTAssertEqual(savedContext.initialPage, 2)
         XCTAssertEqual(savedContext.directoryName, "Resolved Directory")
         let storedResumeRoute = await fixture.resumeRouteStore.load()
-        XCTAssertEqual(storedResumeRoute, .manga(route))
+        XCTAssertEqual(storedResumeRoute, try persistedResumeRoute(.manga(route)))
     }
 
     func testSaveProgressDoesNotCreateMissingFavorite() async throws {
@@ -526,7 +526,7 @@ final class MangaReaderModelSettingsProgressTests: XCTestCase {
         XCTAssertEqual(route, .native(fixture.context))
         let storedResumeRoute = await fixture.resumeRouteStore.load()
         let savedPositions = await progressAdapter.savedPositions
-        XCTAssertEqual(storedResumeRoute, existingRoute)
+        XCTAssertEqual(storedResumeRoute, try persistedResumeRoute(existingRoute))
         XCTAssertTrue(savedPositions.isEmpty)
     }
 
@@ -570,6 +570,12 @@ final class MangaReaderModelSettingsProgressTests: XCTestCase {
         XCTAssertEqual(appModel.selectedTab, .forum)
     }
 
+}
+
+private func persistedResumeRoute(_ route: ReaderResumeRoute?) throws -> ReaderResumeRoute? {
+    guard let route else { return nil }
+    let data = try JSONEncoder().encode(route)
+    return try JSONDecoder().decode(ReaderResumeRoute.self, from: data)
 }
 
 private struct MangaReaderModelSettingsProgressFixture {

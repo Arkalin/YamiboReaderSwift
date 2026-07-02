@@ -1452,13 +1452,19 @@ import Testing
 
     try await store.save(.manga(route))
 
-    #expect(await store.load() == .manga(route))
+    let persistedRoute = try persistedResumeRoute(.manga(route))
+    #expect(await store.load() == persistedRoute)
 
     let invalidDefaults = try makeIsolatedDefaults(prefix: "reader-resume-invalid-tests")
     invalidDefaults.set(Data("legacy".utf8), forKey: "reader-route")
     let invalidStore = ReaderResumeRouteStore(defaults: invalidDefaults, key: "reader-route")
 
     #expect(await invalidStore.load() == nil)
+}
+
+private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderResumeRoute {
+    let data = try JSONEncoder().encode(route)
+    return try JSONDecoder().decode(ReaderResumeRoute.self, from: data)
 }
 
 @Test func readerResumeRouteStoreSuppressesLatePositionSaveAfterClearUntilNextPresentation() async throws {

@@ -33,6 +33,11 @@ enum MangaReaderDataSupport {
         return components.url ?? normalizedChapterURL(url)
     }
 
+    static func chapterURL(forTID tid: String) -> URL? {
+        guard let tid = tid.mangaReaderTrimmedNonEmpty else { return nil }
+        return YamiboRoute.threadByID(tid: tid, page: 1, authorID: nil, reverse: false).url
+    }
+
     static func validateReadableMangaHTML(_ html: String) throws {
         if MangaHTMLParser.isLoginPage(html) {
             throw YamiboError.notAuthenticated
