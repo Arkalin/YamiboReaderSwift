@@ -18,7 +18,6 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
     let settings: ReaderAppearanceSettings
     let refererURL: URL
     let imageDataLoader: any NovelInlineImageDataLoading
-    let imageCacheNamespace: NovelInlineImageCacheNamespace
     let topInset: CGFloat
     let bottomInset: CGFloat
     let scrollRequest: ReaderVerticalScrollRequest?
@@ -194,7 +193,6 @@ struct ReaderVerticalViewportScrollView: UIViewRepresentable {
                 settings: parent.settings,
                 refererURL: parent.refererURL,
                 imageDataLoader: parent.imageDataLoader,
-                imageCacheNamespace: parent.imageCacheNamespace,
                 contentWidth: max(verticalItemWidth(in: collectionView) - parent.settings.horizontalPadding * 2, 1),
                 topPadding: displaySurface.surfaceIndex == 0 ? 16 : 0,
                 onImageTap: parent.onImageTap
@@ -634,7 +632,6 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
     private var currentSettings = ReaderAppearanceSettings()
     private var currentRefererURL: URL?
     private var currentImageDataLoader: (any NovelInlineImageDataLoading)?
-    private var currentImageCacheNamespace = NovelInlineImageCacheNamespace(value: "unavailable")
     private var currentContentWidth: CGFloat = 0
     private var currentTopPadding: CGFloat = 0
     private var currentDisplayReference: NovelTextViewportDisplayReference?
@@ -700,7 +697,6 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
             settings: currentSettings,
             refererURL: currentRefererURL,
             imageDataLoader: currentImageDataLoader,
-            imageCacheNamespace: currentImageCacheNamespace,
             contentWidth: currentContentWidth,
             topPadding: currentTopPadding,
             onImageTap: currentOnImageTap
@@ -715,7 +711,6 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
         settings: ReaderAppearanceSettings,
         refererURL: URL,
         imageDataLoader: any NovelInlineImageDataLoading,
-        imageCacheNamespace: NovelInlineImageCacheNamespace,
         contentWidth: CGFloat,
         topPadding: CGFloat,
         onImageTap: @escaping (URL, String?) -> Void
@@ -727,7 +722,6 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
         currentSettings = settings
         currentRefererURL = refererURL
         currentImageDataLoader = imageDataLoader
-        currentImageCacheNamespace = imageCacheNamespace
         currentContentWidth = contentWidth
         currentTopPadding = topPadding
         currentOnImageTap = onImageTap
@@ -742,7 +736,6 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
                 contentWidth: contentWidth,
                 refererURL: refererURL,
                 imageDataLoader: imageDataLoader,
-                imageCacheNamespace: imageCacheNamespace,
                 displayReference: displayReference,
                 selectionController: selectionController,
                 textHeight: textHeight,
@@ -826,7 +819,6 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
         contentWidth: CGFloat,
         refererURL: URL,
         imageDataLoader: any NovelInlineImageDataLoading,
-        imageCacheNamespace: NovelInlineImageCacheNamespace,
         displayReference: NovelTextViewportDisplayReference?,
         selectionController: NovelTextSelectionController?,
         textHeight: CGFloat?,
@@ -845,7 +837,6 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
                 url: url,
                 refererURL: refererURL,
                 imageDataLoader: imageDataLoader,
-                imageCacheNamespace: imageCacheNamespace,
                 preferredHeight: textHeight,
                 title: page.chapterTitle,
                 onImageTap: onImageTap
@@ -875,7 +866,6 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
         url: URL,
         refererURL: URL,
         imageDataLoader: any NovelInlineImageDataLoading,
-        imageCacheNamespace: NovelInlineImageCacheNamespace,
         preferredHeight: CGFloat?,
         title: String?,
         onImageTap: @escaping (URL, String?) -> Void
@@ -886,7 +876,6 @@ private final class ReaderVerticalViewportCell: UICollectionViewCell {
             url: url,
             refererURL: refererURL,
             imageDataLoader: imageDataLoader,
-            imageCacheNamespace: imageCacheNamespace,
             title: title,
             onTap: onImageTap
         )
@@ -1009,14 +998,12 @@ final class ReaderVerticalViewportImageView: UIView {
         url: URL,
         refererURL: URL,
         imageDataLoader: any NovelInlineImageDataLoading,
-        imageCacheNamespace: NovelInlineImageCacheNamespace,
         title: String?,
         onTap: @escaping (URL, String?) -> Void
     ) {
         let nextRequestIdentity = YamiboImageRequest(
             url: url,
-            refererURL: refererURL,
-            cacheNamespace: imageCacheNamespace.yamiboImageCacheNamespace
+            refererURL: refererURL
         )
         self.url = url
         self.title = title
@@ -1095,7 +1082,6 @@ struct ReaderInlineViewportImage: UIViewRepresentable {
     let url: URL
     let refererURL: URL
     let imageDataLoader: any NovelInlineImageDataLoading
-    let imageCacheNamespace: NovelInlineImageCacheNamespace
     let title: String?
     let onTap: (URL, String?) -> Void
 
@@ -1108,7 +1094,6 @@ struct ReaderInlineViewportImage: UIViewRepresentable {
             url: url,
             refererURL: refererURL,
             imageDataLoader: imageDataLoader,
-            imageCacheNamespace: imageCacheNamespace,
             title: title,
             onTap: onTap
         )

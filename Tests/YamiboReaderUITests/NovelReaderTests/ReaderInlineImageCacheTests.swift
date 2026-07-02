@@ -6,39 +6,37 @@ import YamiboReaderCore
 
 final class ReaderInlineImageCacheTests: XCTestCase {
     @MainActor
-    func testMemoryCacheScopesDecodedImagesByNamespace() async throws {
+    func testMemoryCacheUsesURLIdentityAcrossReferers() async throws {
         let imageURL = URL(string: "https://img.example.com/shared.jpg")!
-        let refererURL = URL(string: "https://bbs.yamibo.com/forum.php?tid=42")!
         let firstRequest = YamiboImageRequest(
             url: imageURL,
-            refererURL: refererURL,
-            cacheNamespace: YamiboImageCacheNamespace(value: "first-\(UUID().uuidString)")
+            refererURL: URL(string: "https://bbs.yamibo.com/forum.php?tid=42")
         )
         let secondRequest = YamiboImageRequest(
             url: imageURL,
-            refererURL: refererURL,
-            cacheNamespace: YamiboImageCacheNamespace(value: "second-\(UUID().uuidString)")
+            refererURL: URL(string: "https://bbs.yamibo.com/forum.php?tid=43")
         )
         let pipeline = YamiboImagePipeline()
-        let loader = NamespaceImageDataLoader(outputs: [
-            firstRequest.cacheNamespace.value: testImageData(color: .red),
-            secondRequest.cacheNamespace.value: testImageData(color: .blue)
+        let loader = SequencedImageDataLoader(outputs: [
+            .success(testImageData(color: .red)),
+            .success(testImageData(color: .blue))
         ])
 
         let firstImage = try await pipeline.image(for: firstRequest, dataLoader: loader)
         let secondImage = try await pipeline.image(for: secondRequest, dataLoader: loader)
 
         XCTAssertTrue(pipeline.cachedImage(for: firstRequest) === firstImage)
-        XCTAssertTrue(pipeline.cachedImage(for: secondRequest) === secondImage)
-        XCTAssertFalse(firstImage === secondImage)
+        XCTAssertTrue(pipeline.cachedImage(for: secondRequest) === firstImage)
+        XCTAssertTrue(firstImage === secondImage)
+        let callCount = await loader.loadCallCount()
+        XCTAssertEqual(callCount, 1)
     }
 
     @MainActor
     func testImagePipelineDeduplicatesConcurrentLoads() async throws {
         let request = YamiboImageRequest(
             url: URL(string: "https://img.example.com/dedupe.jpg")!,
-            refererURL: URL(string: "https://bbs.yamibo.com/forum.php?tid=42")!,
-            cacheNamespace: YamiboImageCacheNamespace(value: "dedupe-\(UUID().uuidString)")
+            refererURL: URL(string: "https://bbs.yamibo.com/forum.php?tid=42")!
         )
         let pipeline = YamiboImagePipeline()
         let loader = SequencedImageDataLoader(outputs: [.success(testImageData(color: .red))], delayNanoseconds: 50_000_000)
@@ -55,8 +53,7 @@ final class ReaderInlineImageCacheTests: XCTestCase {
     func testImagePipelineDoesNotCacheDecodeFailures() async throws {
         let request = YamiboImageRequest(
             url: URL(string: "https://img.example.com/retry.jpg")!,
-            refererURL: nil,
-            cacheNamespace: YamiboImageCacheNamespace(value: "retry-\(UUID().uuidString)")
+            refererURL: nil
         )
         let pipeline = YamiboImagePipeline()
         let loader = SequencedImageDataLoader(outputs: [
@@ -78,18 +75,6 @@ final class ReaderInlineImageCacheTests: XCTestCase {
         XCTAssertNotNil(pipeline.cachedImage(for: request))
         let callCount = await loader.loadCallCount()
         XCTAssertEqual(callCount, 2)
-    }
-}
-
-private actor NamespaceImageDataLoader: YamiboImageDataLoading {
-    private let outputs: [String: Data]
-
-    init(outputs: [String: Data]) {
-        self.outputs = outputs
-    }
-
-    func imageData(for request: YamiboImageRequest) async throws -> Data {
-        try XCTUnwrap(outputs[request.cacheNamespace.value])
     }
 }
 

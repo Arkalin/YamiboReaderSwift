@@ -135,7 +135,6 @@ struct ReaderPagedPageCurlViewport: UIViewControllerRepresentable {
     let settings: ReaderAppearanceSettings
     let refererURL: URL
     let imageDataLoader: any NovelInlineImageDataLoading
-    let imageCacheNamespace: NovelInlineImageCacheNamespace
     let topInset: CGFloat
     let bottomInset: CGFloat
     let selectionIndex: Int
@@ -175,7 +174,6 @@ struct ReaderPagedPageCurlViewport: UIViewControllerRepresentable {
                 surfaces: surfaces,
                 settings: settings,
                 refererURL: refererURL,
-                imageCacheNamespace: imageCacheNamespace,
                 topInset: topInset,
                 bottomInset: bottomInset
             )
@@ -479,7 +477,6 @@ struct ReaderPagedPageCurlViewport: UIViewControllerRepresentable {
                     settings: parent.settings,
                     refererURL: parent.refererURL,
                     imageDataLoader: parent.imageDataLoader,
-                    imageCacheNamespace: parent.imageCacheNamespace,
                     topInset: parent.topInset,
                     bottomInset: parent.bottomInset,
                     displayReferenceProvider: parent.displayReferenceProvider,
@@ -663,7 +660,6 @@ private struct ReaderPagedPageCurlLeafView: View {
     let settings: ReaderAppearanceSettings
     let refererURL: URL
     let imageDataLoader: any NovelInlineImageDataLoading
-    let imageCacheNamespace: NovelInlineImageCacheNamespace
     let topInset: CGFloat
     let bottomInset: CGFloat
     let displayReferenceProvider: @MainActor (NovelReaderSurfaceIdentity) -> NovelTextViewportDisplayReference?
@@ -683,7 +679,6 @@ private struct ReaderPagedPageCurlLeafView: View {
                     settings: settings,
                     refererURL: refererURL,
                     imageDataLoader: imageDataLoader,
-                    imageCacheNamespace: imageCacheNamespace,
                     onImageTap: onImageTap
                 )
                 .padding(.horizontal, settings.horizontalPadding)

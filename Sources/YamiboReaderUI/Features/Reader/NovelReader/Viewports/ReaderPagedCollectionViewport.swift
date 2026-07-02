@@ -9,7 +9,6 @@ struct ReaderPagedCollectionViewport: UIViewRepresentable {
     let settings: ReaderAppearanceSettings
     let refererURL: URL
     let imageDataLoader: any NovelInlineImageDataLoading
-    let imageCacheNamespace: NovelInlineImageCacheNamespace
     let topInset: CGFloat
     let bottomInset: CGFloat
     let selectionIndex: Int
@@ -31,7 +30,6 @@ struct ReaderPagedCollectionViewport: UIViewRepresentable {
             surfaces: surfaces,
             settings: settings,
             refererURL: refererURL,
-            imageCacheNamespace: imageCacheNamespace,
             topInset: topInset,
             bottomInset: bottomInset
         )
@@ -171,7 +169,6 @@ struct ReaderPagedCollectionViewport: UIViewRepresentable {
                         settings: parent.settings,
                         refererURL: parent.refererURL,
                         imageDataLoader: parent.imageDataLoader,
-                        imageCacheNamespace: parent.imageCacheNamespace,
                         onImageTap: parent.onImageTap
                     )
                     .padding(.horizontal, parent.settings.horizontalPadding)

@@ -15,19 +15,16 @@ final class MangaImagePipeline {
     private let dataLoader: any MangaImageDataLoading
     private let offlineCacheContext: (MangaReaderPageProjection) -> MangaImageOfflineCacheContext?
     private let imagePipeline: YamiboImagePipeline
-    private let cacheNamespace: YamiboImageCacheNamespace
 
     init(
         dataLoader: any MangaImageDataLoading,
         offlineCacheContext: @escaping (MangaReaderPageProjection) -> MangaImageOfflineCacheContext? = { _ in nil },
         imagePipeline: YamiboImagePipeline = .shared,
-        cacheNamespace: YamiboImageCacheNamespace = YamiboImageCacheNamespace(value: "manga"),
         memoryLimitBytes: Int = defaultMemoryLimitBytes
     ) {
         self.dataLoader = dataLoader
         self.offlineCacheContext = offlineCacheContext
         self.imagePipeline = imagePipeline
-        self.cacheNamespace = cacheNamespace
         _ = memoryLimitBytes
     }
 
@@ -78,8 +75,7 @@ final class MangaImagePipeline {
     private func imageRequest(for page: MangaReaderPageProjection) -> YamiboImageRequest {
         YamiboImageRequest(
             url: page.imageURL,
-            refererURL: page.refererURL,
-            cacheNamespace: cacheNamespace
+            refererURL: page.refererURL
         )
     }
 }

@@ -68,7 +68,7 @@ import Testing
     #expect(counter.value == 1)
 }
 
-@Test func yamiboImageDataLoaderDoesNotDeduplicateDifferentRequestNamespaces() async throws {
+@Test func yamiboImageDataLoaderDeduplicatesConcurrentSameURLAcrossReferers() async throws {
     let harness = MangaReaderDataTestHarness()
     defer { harness.reset() }
     let pipeline = try makeIsolatedImageDataPipeline()
@@ -82,14 +82,15 @@ import Testing
         client: YamiboClient(session: harness.session, cookie: "auth=1", userAgent: "UnitAgent"),
         pipeline: pipeline
     )
-    let first = imageRequest(namespace: "first", refererURL: URL(string: "https://bbs.yamibo.com/thread-1.html")!)
-    let second = imageRequest(namespace: "second", refererURL: URL(string: "https://bbs.yamibo.com/thread-1.html")!)
+    let first = imageRequest(refererURL: URL(string: "https://bbs.yamibo.com/thread-1.html")!)
+    let second = imageRequest(refererURL: URL(string: "https://bbs.yamibo.com/thread-2.html")!)
 
     async let firstData = loader.imageData(for: first)
     async let secondData = loader.imageData(for: second)
-    _ = try await [firstData, secondData]
+    let values = try await [firstData, secondData]
 
-    #expect(counter.value == 2)
+    #expect(values == [Data([9]), Data([9])])
+    #expect(counter.value == 1)
 }
 
 @Test func yamiboImageDataLoaderMapsAuthAndEmptyDataFailures() async throws {
@@ -158,14 +159,12 @@ import Testing
 }
 
 private func imageRequest(
-    namespace: String = "test",
     refererURL: URL? = nil,
     url: String = "https://img.example.com/a.jpg"
 ) -> YamiboImageRequest {
     YamiboImageRequest(
         url: URL(string: url)!,
-        refererURL: refererURL,
-        cacheNamespace: YamiboImageCacheNamespace(value: namespace)
+        refererURL: refererURL
     )
 }
 

@@ -9,7 +9,6 @@ struct MangaReaderModelDependencies {
     var makeDirectorySearchCooldownState: @Sendable () -> MangaDirectorySearchCooldownState
     var directoryWorkflowConfiguration: MangaDirectoryWorkflowConfiguration
     var makeImageDataLoader: @Sendable () async -> any MangaImageDataLoading
-    var makeImageCacheNamespace: @Sendable () async -> YamiboImageCacheNamespace
     var progressSync: ProgressSyncModule
 
     init(
@@ -22,9 +21,6 @@ struct MangaReaderModelDependencies {
         },
         directoryWorkflowConfiguration: MangaDirectoryWorkflowConfiguration = MangaDirectoryWorkflowConfiguration(),
         makeImageDataLoader: @escaping @Sendable () async -> any MangaImageDataLoading,
-        makeImageCacheNamespace: @escaping @Sendable () async -> YamiboImageCacheNamespace = {
-            YamiboImageCacheNamespace(value: "manga")
-        },
         progressSync: ProgressSyncModule
     ) {
         self.makeDocumentLoader = makeDocumentLoader
@@ -34,7 +30,6 @@ struct MangaReaderModelDependencies {
         self.makeDirectorySearchCooldownState = makeDirectorySearchCooldownState
         self.directoryWorkflowConfiguration = directoryWorkflowConfiguration
         self.makeImageDataLoader = makeImageDataLoader
-        self.makeImageCacheNamespace = makeImageCacheNamespace
         self.progressSync = progressSync
     }
 
@@ -46,10 +41,6 @@ struct MangaReaderModelDependencies {
             makeOfflineCacheStore: { appContext.makeMangaOfflineCacheStore() },
             makeDirectorySearchCooldownState: { appContext.mangaDirectorySearchCooldownState },
             makeImageDataLoader: { await appContext.makeMangaImageDataLoader() },
-            makeImageCacheNamespace: {
-                let context = await appContext.makeImagePipelineContext()
-                return context.cacheNamespace
-            },
             progressSync: ProgressSyncModule(
                 adapter: FavoriteLibraryProgressSyncAdapter(
                     readingProgressStore: appContext.readingProgressStore
@@ -169,8 +160,7 @@ public final class MangaReaderModel: ObservableObject {
             dataLoader: await dependencies.makeImageDataLoader(),
             offlineCacheContext: { [weak self] page in
                 MangaImageOfflineCacheContext(ownerName: self?.offlineCacheOwnerName, tid: page.tid)
-            },
-            cacheNamespace: await dependencies.makeImageCacheNamespace()
+            }
         )
         let workflow = MangaReaderWorkflow(
             context: context,

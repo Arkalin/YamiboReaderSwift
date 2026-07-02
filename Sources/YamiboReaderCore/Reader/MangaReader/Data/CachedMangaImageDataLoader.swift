@@ -2,16 +2,13 @@ import Foundation
 
 public actor CachedMangaImageDataLoader: MangaImageDataLoading {
     private let imageDataLoader: any YamiboImageDataLoading
-    private let cacheNamespace: YamiboImageCacheNamespace
     private let offlineCacheStore: (any MangaOfflineCacheStoring)?
 
     public init(
         imageDataLoader: any YamiboImageDataLoading,
-        cacheNamespace: YamiboImageCacheNamespace,
         offlineCacheStore: (any MangaOfflineCacheStoring)? = nil
     ) {
         self.imageDataLoader = imageDataLoader
-        self.cacheNamespace = cacheNamespace
         self.offlineCacheStore = offlineCacheStore
     }
 
@@ -31,8 +28,7 @@ public actor CachedMangaImageDataLoader: MangaImageDataLoading {
         return try await imageDataLoader.imageData(
             for: YamiboImageRequest(
                 url: url,
-                refererURL: refererURL,
-                cacheNamespace: cacheNamespace
+                refererURL: refererURL
             )
         )
     }

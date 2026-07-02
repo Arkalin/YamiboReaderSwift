@@ -244,27 +244,20 @@ struct MangaReaderTestsMangaOfflineCacheQueueExecutor {
         #expect(await store.offlineCacheState(ownerName: "favorite-a", tid: "600") == .cached)
     }
 
-    @Test func transparentCacheHitsAreCopiedToOfflineStorageAndNetworkMissesAreFetched() async throws {
-        let root = try makeTemporaryExecutorDirectory()
-        let store = try makeTestMangaOfflineCacheStore(rootDirectory: root)
-        let transparentCache = try makeTestFileImageDataCacheStore(rootDirectory: root)
-        let cacheNamespace = YamiboImageCacheNamespace(value: "queue-test")
+    @Test func queueWritesNetworkAcquiredBytesToOfflineStorage() async throws {
+        let store = try makeTestMangaOfflineCacheStore(rootDirectory: try makeTemporaryExecutorDirectory())
         let imageURLs = try makeImageURLs(tid: "700", count: 2)
-        try await transparentCache.save(
-            Data([7]),
-            for: makeTestImageRequest(url: imageURLs[0], namespace: cacheNamespace),
-            retentionPolicy: .evictable
-        )
         _ = try await store.enqueueOfflineCacheWork(
             try makeExecutorWorkRequest(ownerName: "favorite-a", tid: "700", targetImageURLs: imageURLs)
         )
-        let networkLoader = RecordingNetworkImageLoader(dataByURL: [imageURLs[1]: Data([8])])
+        let networkLoader = RecordingNetworkImageLoader(dataByURL: [
+            imageURLs[0]: Data([7]),
+            imageURLs[1]: Data([8])
+        ])
         let executor = MangaOfflineCacheQueueExecutor(
             store: store,
             chapterDocumentLoader: RecordingChapterDocumentLoader(),
             imageAcquirer: MangaOfflineCacheImageAcquirer(
-                transparentCache: transparentCache,
-                cacheNamespace: cacheNamespace,
                 networkLoader: networkLoader
             )
         )
@@ -274,38 +267,24 @@ struct MangaReaderTestsMangaOfflineCacheQueueExecutor {
 
         #expect(await store.offlineImageData(for: imageURLs[0]) == Data([7]))
         #expect(await store.offlineImageData(for: imageURLs[1]) == Data([8]))
-        #expect(await transparentCache.data(for: makeTestImageRequest(url: imageURLs[0], namespace: cacheNamespace)) == Data([7]))
-        #expect(await transparentCache.data(for: makeTestImageRequest(url: imageURLs[1], namespace: cacheNamespace)) == Data([8]))
-        #expect(await networkLoader.requestedURLs == [imageURLs[1]])
+        #expect(await networkLoader.requestedURLs == imageURLs)
     }
 
-    @Test func transparentCacheMissesUseBackgroundTransport() async throws {
-        let transparentCache = try makeTestFileImageDataCacheStore(rootDirectory: try makeTemporaryExecutorDirectory())
-        let cacheNamespace = YamiboImageCacheNamespace(value: "queue-test")
-        let imageURLs = try makeImageURLs(tid: "710", count: 2)
-        try await transparentCache.save(
-            Data([7]),
-            for: makeTestImageRequest(url: imageURLs[0], namespace: cacheNamespace),
-            retentionPolicy: .evictable
-        )
-        let transport = RecordingImageTransport(dataByURL: [imageURLs[1]: Data([8])])
+    @Test func imageAcquirerUsesBackgroundTransportInsteadOfNetworkLoader() async throws {
+        let imageURL = try #require(URL(string: "https://img.example.com/710-1.jpg"))
+        let transport = RecordingImageTransport(dataByURL: [imageURL: Data([8])])
         let networkLoader = RecordingNetworkImageLoader(dataByURL: [:])
         let acquirer = MangaOfflineCacheImageAcquirer(
-            transparentCache: transparentCache,
-            cacheNamespace: cacheNamespace,
             networkLoader: networkLoader,
             backgroundTransport: transport
         )
         let refererURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?tid=710"))
 
-        let cacheHit = try await acquirer.acquireImageData(for: imageURLs[0], refererURL: refererURL)
-        let miss = try await acquirer.acquireImageData(for: imageURLs[1], refererURL: refererURL)
+        let acquisition = try await acquirer.acquireImageData(for: imageURL, refererURL: refererURL)
 
-        #expect(cacheHit == MangaOfflineCacheImageAcquisition(data: Data([7]), source: .transparentCache))
-        #expect(miss == MangaOfflineCacheImageAcquisition(data: Data([8]), source: .network))
-        #expect(await transport.requests == [ImageTransportRequest(imageURL: imageURLs[1], refererURL: refererURL)])
+        #expect(acquisition == MangaOfflineCacheImageAcquisition(data: Data([8]), source: .network))
+        #expect(await transport.requests == [ImageTransportRequest(imageURL: imageURL, refererURL: refererURL)])
         #expect(await networkLoader.requestedURLs.isEmpty)
-        #expect(await transparentCache.data(for: makeTestImageRequest(url: imageURLs[1], namespace: cacheNamespace)) == Data([8]))
     }
 
     @Test func observerReceivesSubmissionProgressAndSuccessfulFinish() async throws {

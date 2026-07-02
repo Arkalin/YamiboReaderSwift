@@ -222,14 +222,12 @@ private final class LockedCounter: @unchecked Sendable {
 }
 
 private func imageRequest(
-    namespace: String = "test",
     refererURL: URL? = nil,
     url: String = "https://img.example.com/a-\(UUID().uuidString).jpg"
 ) -> YamiboImageRequest {
     YamiboImageRequest(
         url: URL(string: url)!,
-        refererURL: refererURL,
-        cacheNamespace: YamiboImageCacheNamespace(value: namespace)
+        refererURL: refererURL
     )
 }
 

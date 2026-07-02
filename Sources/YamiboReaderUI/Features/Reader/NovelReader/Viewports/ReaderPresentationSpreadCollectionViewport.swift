@@ -10,7 +10,6 @@ struct ReaderPresentationSpreadCollectionViewport: UIViewRepresentable {
     let settings: ReaderAppearanceSettings
     let refererURL: URL
     let imageDataLoader: any NovelInlineImageDataLoading
-    let imageCacheNamespace: NovelInlineImageCacheNamespace
     let topInset: CGFloat
     let bottomInset: CGFloat
     let selectionIndex: Int
@@ -34,7 +33,6 @@ struct ReaderPresentationSpreadCollectionViewport: UIViewRepresentable {
                 surfaces: surfaces,
                 settings: settings,
                 refererURL: refererURL,
-                imageCacheNamespace: imageCacheNamespace,
                 topInset: topInset,
                 bottomInset: bottomInset
             )
@@ -169,7 +167,6 @@ struct ReaderPresentationSpreadCollectionViewport: UIViewRepresentable {
                         settings: parent.settings,
                         refererURL: parent.refererURL,
                         imageDataLoader: parent.imageDataLoader,
-                        imageCacheNamespace: parent.imageCacheNamespace,
                         topInset: parent.topInset,
                         bottomInset: parent.bottomInset,
                         displayReferenceProvider: parent.displayReferenceProvider,

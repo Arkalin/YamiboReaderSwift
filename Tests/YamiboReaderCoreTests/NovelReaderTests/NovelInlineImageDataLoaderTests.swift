@@ -25,7 +25,7 @@ struct NovelInlineImageDataLoaderTests {
         #expect(data == Data([1, 2, 3]))
     }
 
-    @Test func deduplicatesConcurrentRequestsByImageURLAndRefererURL() async throws {
+    @Test func deduplicatesConcurrentRequestsByImageURL() async throws {
         let harness = MangaReaderDataTestHarness()
         defer { harness.reset() }
 
@@ -54,7 +54,7 @@ struct NovelInlineImageDataLoaderTests {
         #expect(counter.value == 1)
     }
 
-    @Test func doesNotDeduplicateDifferentRefererURLs() async throws {
+    @Test func deduplicatesConcurrentRequestsWithDifferentRefererURLs() async throws {
         let harness = MangaReaderDataTestHarness()
         defer { harness.reset() }
 
@@ -76,9 +76,10 @@ struct NovelInlineImageDataLoaderTests {
             refererURL: URL(string: "https://bbs.yamibo.com/forum.php?tid=2")!
         )
 
-        _ = try await [first, second]
+        let values = try await [first, second]
 
-        #expect(counter.value == 2)
+        #expect(values == [Data([9]), Data([9])])
+        #expect(counter.value == 1)
     }
 
     @Test func mapsHTTPAndBodyErrors() async throws {
@@ -105,7 +106,7 @@ struct NovelInlineImageDataLoaderTests {
         }
     }
 
-    @Test func appContextCacheNamespaceDoesNotExposeRawSessionValues() async throws {
+    @Test func appContextInlineImageContextProvidesProjectLoader() async throws {
         let suiteName = "NovelInlineImageDataLoaderTests.\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suiteName))
         defaults.removePersistentDomain(forName: suiteName)
@@ -120,9 +121,7 @@ struct NovelInlineImageDataLoaderTests {
 
         let loadingContext = await context.makeNovelInlineImageLoadingContext()
 
-        #expect(!loadingContext.cacheNamespace.value.contains("secret-cookie"))
-        #expect(!loadingContext.cacheNamespace.value.contains("NovelImageAgent"))
-        #expect(!loadingContext.cacheNamespace.value.isEmpty)
+        _ = loadingContext.loader
     }
 
     private func imageClient(session: URLSession) -> YamiboClient {

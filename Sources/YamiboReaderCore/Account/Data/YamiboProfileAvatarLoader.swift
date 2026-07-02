@@ -7,17 +7,13 @@ public protocol YamiboProfileAvatarLoading: Sendable {
 public actor YamiboProfileAvatarLoader: YamiboProfileAvatarLoading {
     private let sessionStore: any SessionStoring
     private let imageDataLoaderFactory: @Sendable (SessionState) -> any YamiboImageDataLoading
-    private let cacheNamespaceProvider: @Sendable (SessionState) -> YamiboImageCacheNamespace
     private var cachedData: [RequestKey: Data] = [:]
     private var inFlightTasks: [RequestKey: Task<Data, Error>] = [:]
 
     public init(
         session: URLSession = YamiboNetworkConfiguration.makeSession(),
         sessionStore: any SessionStoring,
-        imageDataLoaderFactory: (@Sendable (SessionState) -> any YamiboImageDataLoading)? = nil,
-        cacheNamespaceProvider: @escaping @Sendable (SessionState) -> YamiboImageCacheNamespace = {
-            YamiboImageCacheNamespace.avatarSessionNamespace(cookie: $0.cookie, userAgent: $0.userAgent)
-        }
+        imageDataLoaderFactory: (@Sendable (SessionState) -> any YamiboImageDataLoading)? = nil
     ) {
         self.sessionStore = sessionStore
         self.imageDataLoaderFactory = imageDataLoaderFactory ?? { sessionState in
@@ -29,7 +25,6 @@ public actor YamiboProfileAvatarLoader: YamiboProfileAvatarLoading {
                 )
             )
         }
-        self.cacheNamespaceProvider = cacheNamespaceProvider
     }
 
     public func avatarData(for profile: YamiboProfile) async throws -> Data? {
@@ -51,13 +46,9 @@ public actor YamiboProfileAvatarLoader: YamiboProfileAvatarLoading {
         }
 
         let imageDataLoader = imageDataLoaderFactory(sessionState)
-        let cacheNamespace = cacheNamespaceProvider(sessionState)
         let task = Task<Data, Error> {
             try await imageDataLoader.imageData(
-                for: YamiboImageRequest(
-                    url: avatarURL,
-                    cacheNamespace: cacheNamespace
-                )
+                for: YamiboImageRequest(url: avatarURL)
             )
         }
         inFlightTasks[key] = task

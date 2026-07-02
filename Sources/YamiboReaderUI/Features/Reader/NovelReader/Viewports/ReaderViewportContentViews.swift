@@ -33,7 +33,6 @@ struct ReaderPresentationSpreadContent: View {
     let settings: ReaderAppearanceSettings
     let refererURL: URL
     let imageDataLoader: any NovelInlineImageDataLoading
-    let imageCacheNamespace: NovelInlineImageCacheNamespace
     let topInset: CGFloat
     let bottomInset: CGFloat
     let displayReferenceProvider: @MainActor (NovelReaderSurfaceIdentity) -> NovelTextViewportDisplayReference?
@@ -64,7 +63,6 @@ struct ReaderPresentationSpreadContent: View {
                     settings: settings,
                     refererURL: refererURL,
                     imageDataLoader: imageDataLoader,
-                    imageCacheNamespace: imageCacheNamespace,
                     onImageTap: onImageTap
                 )
                 .padding(.horizontal, settings.horizontalPadding)
@@ -89,7 +87,6 @@ struct ReaderViewportSurfaceContent: View {
     let settings: ReaderAppearanceSettings
     let refererURL: URL
     let imageDataLoader: any NovelInlineImageDataLoading
-    let imageCacheNamespace: NovelInlineImageCacheNamespace
     let onImageTap: (URL, String?) -> Void
 
     init(
@@ -101,7 +98,6 @@ struct ReaderViewportSurfaceContent: View {
         settings: ReaderAppearanceSettings,
         refererURL: URL,
         imageDataLoader: any NovelInlineImageDataLoading,
-        imageCacheNamespace: NovelInlineImageCacheNamespace,
         onImageTap: @escaping (URL, String?) -> Void = { _, _ in }
     ) {
         self.surface = surface
@@ -112,7 +108,6 @@ struct ReaderViewportSurfaceContent: View {
         self.settings = settings
         self.refererURL = refererURL
         self.imageDataLoader = imageDataLoader
-        self.imageCacheNamespace = imageCacheNamespace
         self.onImageTap = onImageTap
     }
 
@@ -138,7 +133,6 @@ struct ReaderViewportSurfaceContent: View {
                     selectionController: selectionController,
                     refererURL: refererURL,
                     imageDataLoader: imageDataLoader,
-                    imageCacheNamespace: imageCacheNamespace,
                     title: surface?.chapterTitle,
                     onImageTap: onImageTap
                 )
@@ -158,7 +152,6 @@ struct ReaderViewportSurfaceContent: View {
                     selectionController: selectionController,
                     refererURL: refererURL,
                     imageDataLoader: imageDataLoader,
-                    imageCacheNamespace: imageCacheNamespace,
                     title: surface?.chapterTitle,
                     onImageTap: onImageTap
                 )
@@ -211,7 +204,6 @@ private struct ReaderViewportBlockView: View {
     let selectionController: NovelTextSelectionController?
     let refererURL: URL
     let imageDataLoader: any NovelInlineImageDataLoading
-    let imageCacheNamespace: NovelInlineImageCacheNamespace
     let title: String?
     let onImageTap: (URL, String?) -> Void
 
@@ -232,7 +224,6 @@ private struct ReaderViewportBlockView: View {
                 url: url,
                 refererURL: refererURL,
                 imageDataLoader: imageDataLoader,
-                imageCacheNamespace: imageCacheNamespace,
                 title: title,
                 onTap: onImageTap
             )
@@ -256,18 +247,15 @@ final class ReaderImageLoader: ObservableObject {
     private let url: URL
     private let refererURL: URL
     private let imageDataLoader: any NovelInlineImageDataLoading
-    private let imageCacheNamespace: NovelInlineImageCacheNamespace
 
     init(
         url: URL,
         refererURL: URL,
-        imageDataLoader: any NovelInlineImageDataLoading,
-        imageCacheNamespace: NovelInlineImageCacheNamespace
+        imageDataLoader: any NovelInlineImageDataLoading
     ) {
         self.url = url
         self.refererURL = refererURL
         self.imageDataLoader = imageDataLoader
-        self.imageCacheNamespace = imageCacheNamespace
     }
 
     func loadIfNeeded() async {
@@ -276,8 +264,7 @@ final class ReaderImageLoader: ObservableObject {
         let imageDataLoader = self.imageDataLoader
         let request = YamiboImageRequest(
             url: url,
-            refererURL: refererURL,
-            cacheNamespace: imageCacheNamespace.yamiboImageCacheNamespace
+            refererURL: refererURL
         )
         if let cachedImage = YamiboImagePipeline.shared.cachedImage(for: request) {
             image = cachedImage
@@ -311,15 +298,13 @@ private struct AuthenticatedReaderImage: View {
     init(
         url: URL,
         refererURL: URL,
-        imageDataLoader: any NovelInlineImageDataLoading,
-        imageCacheNamespace: NovelInlineImageCacheNamespace
+        imageDataLoader: any NovelInlineImageDataLoading
     ) {
         _loader = StateObject(
             wrappedValue: ReaderImageLoader(
                 url: url,
                 refererURL: refererURL,
-                imageDataLoader: imageDataLoader,
-                imageCacheNamespace: imageCacheNamespace
+                imageDataLoader: imageDataLoader
             )
         )
     }

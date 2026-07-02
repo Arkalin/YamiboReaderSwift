@@ -184,13 +184,12 @@ struct YamiboRemoteImage<Content: View, Placeholder: View, Failure: View>: View 
 
     private var request: YamiboImageRequest? {
         guard let url,
-              let activeContext else {
+              activeContext != nil else {
             return nil
         }
         return YamiboImageRequest(
             url: url,
-            refererURL: refererURL,
-            cacheNamespace: activeContext.cacheNamespace
+            refererURL: refererURL
         )
     }
 

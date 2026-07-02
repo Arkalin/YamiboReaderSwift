@@ -140,7 +140,6 @@ private struct ForumThreadReaderBodyView: View {
                         title: request.title,
                         refererURL: request.refererURL,
                         imageDataLoader: inlineImageLoadingContext.loader,
-                        imageCacheNamespace: inlineImageLoadingContext.cacheNamespace,
                         onDismiss: {
                             imageBrowserRequest = nil
                         }
@@ -1869,8 +1868,7 @@ private struct ForumThreadImageBlockView: View {
             ForumThreadAuthenticatedImage(
                 url: block.url,
                 refererURL: refererURL,
-                imageDataLoader: inlineImageLoadingContext.loader,
-                imageCacheNamespace: inlineImageLoadingContext.cacheNamespace
+                imageDataLoader: inlineImageLoadingContext.loader
             )
         } else {
             YamiboRemoteImage(
@@ -1919,15 +1917,13 @@ private struct ForumThreadAuthenticatedImage: View {
     init(
         url: URL,
         refererURL: URL,
-        imageDataLoader: any NovelInlineImageDataLoading,
-        imageCacheNamespace: NovelInlineImageCacheNamespace
+        imageDataLoader: any NovelInlineImageDataLoading
     ) {
         _loader = StateObject(
             wrappedValue: ReaderImageLoader(
                 url: url,
                 refererURL: refererURL,
-                imageDataLoader: imageDataLoader,
-                imageCacheNamespace: imageCacheNamespace
+                imageDataLoader: imageDataLoader
             )
         )
     }

@@ -38,24 +38,3 @@ func makeTestMangaOfflineCacheStore(
         baseDirectory: baseDirectory ?? rootDirectory.appendingPathComponent("offline-images", isDirectory: true)
     )
 }
-
-func makeTestFileImageDataCacheStore(
-    rootDirectory: URL? = nil,
-    baseDirectory: URL? = nil,
-    prefix: String = "grdb-image-data-cache",
-    diskLimitBytes: Int = FileImageDataCacheStore.defaultDiskLimitBytes
-) throws -> FileImageDataCacheStore {
-    let rootDirectory = rootDirectory ?? makeTestMangaStoreRoot(prefix: prefix)
-    return FileImageDataCacheStore(
-        databasePool: try YamiboDatabase.openSharedPool(rootDirectory: rootDirectory.appendingPathComponent("grdb", isDirectory: true)),
-        baseDirectory: baseDirectory ?? rootDirectory.appendingPathComponent("image-data", isDirectory: true),
-        diskLimitBytes: diskLimitBytes
-    )
-}
-
-func makeTestImageRequest(
-    url: URL,
-    namespace: YamiboImageCacheNamespace = YamiboImageCacheNamespace(value: "test")
-) -> YamiboImageRequest {
-    YamiboImageRequest(url: url, cacheNamespace: namespace)
-}

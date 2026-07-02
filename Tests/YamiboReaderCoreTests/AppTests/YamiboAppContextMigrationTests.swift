@@ -42,11 +42,6 @@ import Testing
             segments: [.text("Reader GRDB cache", chapterTitle: nil)]
         )
     )
-    try await appContext.imageDataCacheStore.save(
-        Data("transparent".utf8),
-        for: makeTestImageRequest(url: imageURL),
-        retentionPolicy: .evictable
-    )
     try await appContext.forumCacheStore.saveThreadPage(
         ForumThreadPage(
             thread: ThreadIdentity(tid: "8001"),
@@ -63,7 +58,6 @@ import Testing
             "reading_progress": try tableCount("reading_progress", in: db),
             "manga_directories": try tableCount("manga_directories", in: db),
             "manga_chapter_documents": try tableCount("manga_chapter_documents", in: db),
-            "image_data_cache_entries": try tableCount("image_data_cache_entries", in: db),
             "manga_offline_cache_memberships": try tableCount("manga_offline_cache_memberships", in: db),
             "cache_entries": try tableCount("cache_entries", in: db),
         ]
@@ -73,17 +67,20 @@ import Testing
     #expect(counts["reading_progress"] == 1)
     #expect(counts["manga_directories"] == 1)
     #expect(counts["manga_chapter_documents"] == 1)
-    #expect(counts["image_data_cache_entries"] == 1)
     #expect(counts["manga_offline_cache_memberships"] == 1)
     #expect(counts["cache_entries"] == 2)
     let readerCacheEntriesTableExists = try await database.read { db in
         try db.tableExists("reader_cache_entries")
     }
     #expect(!readerCacheEntriesTableExists)
-    let cacheNamespaces = try await database.read { db in
+    let imageDataCacheEntriesTableExists = try await database.read { db in
+        try db.tableExists("image_data_cache_entries")
+    }
+    #expect(!imageDataCacheEntriesTableExists)
+    let jsonCacheNamespaces = try await database.read { db in
         try String.fetchAll(db, sql: "SELECT namespace FROM cache_entries ORDER BY namespace")
     }
-    #expect(cacheNamespaces == ["forum_thread_pages", "novel_reader_projections"])
+    #expect(jsonCacheNamespaces == ["forum_thread_pages", "novel_reader_projections"])
     #expect(!FileManager.default.fileExists(atPath: rootDirectory.appendingPathComponent("reader-cache/index.json", isDirectory: false).path))
     #expect(!FileManager.default.fileExists(atPath: rootDirectory.appendingPathComponent("image-data/index.json", isDirectory: false).path))
 }
@@ -109,11 +106,6 @@ import Testing
             maxView: 1,
             segments: [.text("Reader reset cache", chapterTitle: nil)]
         )
-    )
-    try await appContext.imageDataCacheStore.save(
-        Data("transparent".utf8),
-        for: makeTestImageRequest(url: imageURL),
-        retentionPolicy: .evictable
     )
     try await appContext.forumCacheStore.saveHome(
         ForumHomePage(categories: [], fetchedAt: Date(timeIntervalSince1970: 100))
@@ -142,7 +134,6 @@ import Testing
             .appendingPathComponent("novel_reader_projections", isDirectory: true)
             .path
     ))
-    #expect(FileManager.default.fileExists(atPath: rootDirectory.appendingPathComponent("image-data", isDirectory: true).path))
     #expect(FileManager.default.fileExists(atPath: rootDirectory.appendingPathComponent("manga-reader/offline-cache/images", isDirectory: true).path))
     #expect(FileManager.default.fileExists(atPath: YamiboDatabase.cacheDirectoryURL(rootDirectory: rootDirectory).path))
     #expect(FileManager.default.fileExists(
@@ -166,7 +157,6 @@ import Testing
             "reading_progress": try tableCount("reading_progress", in: db),
             "manga_directories": try tableCount("manga_directories", in: db),
             "manga_chapter_documents": try tableCount("manga_chapter_documents", in: db),
-            "image_data_cache_entries": try tableCount("image_data_cache_entries", in: db),
             "manga_offline_cache_memberships": try tableCount("manga_offline_cache_memberships", in: db),
             "manga_offline_cache_images": try tableCount("manga_offline_cache_images", in: db),
             "cache_entries": try tableCount("cache_entries", in: db),
@@ -178,7 +168,6 @@ import Testing
     #expect(counts["reading_progress"] == 0)
     #expect(counts["manga_directories"] == 0)
     #expect(counts["manga_chapter_documents"] == 0)
-    #expect(counts["image_data_cache_entries"] == 0)
     #expect(counts["manga_offline_cache_memberships"] == 0)
     #expect(counts["manga_offline_cache_images"] == 0)
     #expect(counts["cache_entries"] == 0)
@@ -186,12 +175,15 @@ import Testing
         try db.tableExists("reader_cache_entries")
     }
     #expect(!readerCacheEntriesTableExists)
+    let imageDataCacheEntriesTableExists = try await database.read { db in
+        try db.tableExists("image_data_cache_entries")
+    }
+    #expect(!imageDataCacheEntriesTableExists)
     #expect(!FileManager.default.fileExists(
         atPath: YamiboDatabase.cacheDirectoryURL(rootDirectory: rootDirectory)
             .appendingPathComponent("novel_reader_projections", isDirectory: true)
             .path
     ))
-    #expect(!FileManager.default.fileExists(atPath: rootDirectory.appendingPathComponent("image-data", isDirectory: true).path))
     #expect(!FileManager.default.fileExists(atPath: rootDirectory.appendingPathComponent("manga-reader/offline-cache", isDirectory: true).path))
     #expect(!FileManager.default.fileExists(
         atPath: YamiboDatabase.cacheDirectoryURL(rootDirectory: rootDirectory)

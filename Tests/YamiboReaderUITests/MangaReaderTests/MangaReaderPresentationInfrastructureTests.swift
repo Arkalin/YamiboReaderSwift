@@ -250,8 +250,7 @@ private actor RecordingMangaPipelineDataLoader: MangaImageDataLoading {
 private func makeMangaImagePipeline(dataLoader: any MangaImageDataLoading) -> MangaImagePipeline {
     MangaImagePipeline(
         dataLoader: dataLoader,
-        imagePipeline: YamiboImagePipeline(),
-        cacheNamespace: YamiboImageCacheNamespace(value: "manga-test-\(UUID().uuidString)")
+        imagePipeline: YamiboImagePipeline()
     )
 }
 

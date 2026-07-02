@@ -313,14 +313,9 @@ final class SystemSettingsViewModel: ObservableObject {
         activeAction = .clearingImageCache
         defer { activeAction = nil }
 
-        do {
-            try await appContext.imageDataCacheStore.clearAll()
-            await refreshStorageUsage()
-            return true
-        } catch {
-            errorMessage = error.localizedDescription
-            return false
-        }
+        YamiboNukeImageDataPipeline.shared.removeAllCachedData()
+        await refreshStorageUsage()
+        return true
     }
 
     func resetApplication() async -> Bool {
@@ -353,7 +348,7 @@ final class SystemSettingsViewModel: ObservableObject {
         let directoryBytes = await appContext.mangaDirectoryStore.totalDiskUsageBytes()
         let chapterDocumentBytes = await appContext.mangaChapterDocumentStore.totalDiskUsageBytes()
         mangaIndexCacheBytes = directoryBytes + chapterDocumentBytes
-        imageCacheBytes = await appContext.imageDataCacheStore.totalDiskUsageBytes()
+        imageCacheBytes = 0
         mangaOfflineCacheBytes = await appContext.mangaOfflineCacheStore.totalDiskUsageBytes()
     }
 

@@ -31,7 +31,6 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
     public let mangaDirectoryStore: any MangaDirectoryPersisting & MangaDirectoryStorageReporting & MangaDirectoryClearing
     public let mangaDirectorySearchCooldownState: MangaDirectorySearchCooldownState
     public let mangaChapterDocumentStore: any MangaChapterDocumentPersisting & MangaChapterDocumentStorageReporting
-    public let imageDataCacheStore: FileImageDataCacheStore
     public let mangaOfflineCacheStore: any MangaOfflineCacheStoring
     public let forumCacheStore: ForumCacheStore
     public let mangaOfflineCacheBackgroundDownloadTransport: MangaOfflineCacheBackgroundDownloadTransport
@@ -58,7 +57,6 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         mangaDirectoryStore: (any MangaDirectoryPersisting & MangaDirectoryStorageReporting & MangaDirectoryClearing)? = nil,
         mangaDirectorySearchCooldownState: MangaDirectorySearchCooldownState = MangaDirectorySearchCooldownState(),
         mangaChapterDocumentStore: (any MangaChapterDocumentPersisting & MangaChapterDocumentStorageReporting)? = nil,
-        imageDataCacheStore: FileImageDataCacheStore? = nil,
         mangaOfflineCacheStore: (any MangaOfflineCacheStoring)? = nil,
         forumCacheStore: ForumCacheStore? = nil,
         mangaOfflineCacheBackgroundDownloadTransport: MangaOfflineCacheBackgroundDownloadTransport = MangaOfflineCacheBackgroundDownloadTransport(),
@@ -100,10 +98,6 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         self.mangaDirectoryStore = mangaDirectoryStore ?? MangaDirectoryStore(databasePool: resolvedGRDBDatabasePool)
         self.mangaDirectorySearchCooldownState = mangaDirectorySearchCooldownState
         self.mangaChapterDocumentStore = mangaChapterDocumentStore ?? MangaChapterDocumentStore(databasePool: resolvedGRDBDatabasePool)
-        self.imageDataCacheStore = imageDataCacheStore ?? FileImageDataCacheStore(
-            databasePool: resolvedGRDBDatabasePool,
-            baseDirectory: Self.imageDataDirectory(rootDirectory: resolvedGRDBRootDirectory)
-        )
         self.mangaOfflineCacheStore = resolvedMangaOfflineCacheStore
         self.forumCacheStore = forumCacheStore ?? ForumCacheStore(
             jsonCacheStore: transparentJSONCacheStore
@@ -155,18 +149,9 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
             cookie: sessionState.cookie,
             userAgent: sessionState.userAgent
         )
-        let cacheNamespace = YamiboImageCacheNamespace.ordinarySessionNamespace(
-            cookie: sessionState.cookie,
-            userAgent: sessionState.userAgent
-        )
         return NovelInlineImageLoadingContext(
             loader: YamiboNovelInlineImageDataLoader(
-                imageDataLoader: YamiboImageDataLoader(client: client),
-                cacheNamespace: cacheNamespace
-            ),
-            cacheNamespace: NovelInlineImageCacheNamespace.namespace(
-                cookie: sessionState.cookie,
-                userAgent: sessionState.userAgent
+                imageDataLoader: YamiboImageDataLoader(client: client)
             )
         )
     }
@@ -179,11 +164,7 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
             userAgent: sessionState.userAgent
         )
         return YamiboImageLoadingContext(
-            dataLoader: YamiboImageDataLoader(client: client),
-            cacheNamespace: YamiboImageCacheNamespace.ordinarySessionNamespace(
-                cookie: sessionState.cookie,
-                userAgent: sessionState.userAgent
-            )
+            dataLoader: YamiboImageDataLoader(client: client)
         )
     }
 
@@ -191,20 +172,13 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         YamiboProfileAvatarLoader(
             session: imageSession,
             sessionStore: sessionStore,
-            imageDataLoaderFactory: { [imageDataCacheStore, imageSession] sessionState in
+            imageDataLoaderFactory: { [imageSession] sessionState in
                 let client = YamiboClient(
                     session: imageSession,
                     cookie: sessionState.cookie,
                     userAgent: sessionState.userAgent
                 )
-                return CachedYamiboImageDataLoader(
-                    cache: imageDataCacheStore,
-                    upstream: YamiboImageDataLoader(client: client),
-                    retentionPolicy: .protected
-                )
-            },
-            cacheNamespaceProvider: {
-                YamiboImageCacheNamespace.avatarSessionNamespace(cookie: $0.cookie, userAgent: $0.userAgent)
+                return YamiboImageDataLoader(client: client)
             }
         )
     }
@@ -303,13 +277,8 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
             cookie: sessionState.cookie,
             userAgent: sessionState.userAgent
         )
-        let cacheNamespace = YamiboImageCacheNamespace.ordinarySessionNamespace(
-            cookie: sessionState.cookie,
-            userAgent: sessionState.userAgent
-        )
         return CachedMangaImageDataLoader(
             imageDataLoader: YamiboImageDataLoader(client: client),
-            cacheNamespace: cacheNamespace,
             offlineCacheStore: mangaOfflineCacheStore
         )
     }
@@ -333,11 +302,6 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
             store: mangaOfflineCacheStore,
             chapterDocumentLoader: await makeMangaChapterDocumentLoader(),
             imageAcquirer: MangaOfflineCacheImageAcquirer(
-                transparentCache: imageDataCacheStore,
-                cacheNamespace: YamiboImageCacheNamespace.ordinarySessionNamespace(
-                    cookie: sessionState.cookie,
-                    userAgent: sessionState.userAgent
-                ),
                 networkLoader: YamiboImageDataLoader(client: client),
                 backgroundTransport: mangaOfflineCacheBackgroundDownloadTransport
             ),
@@ -395,7 +359,6 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         try await mangaDirectoryStore.clearAll()
         await mangaDirectorySearchCooldownState.clear()
         try await mangaChapterDocumentStore.clearAll()
-        try await imageDataCacheStore.clearAll()
         try await mangaOfflineCacheStore.clearAll()
         try await forumCacheStore.clearAll()
         try await favoriteBackgroundImageStore.deleteAll()
@@ -427,10 +390,6 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
 
     private static func favoriteBackgroundDirectory(rootDirectory: URL) -> URL {
         rootDirectory.appendingPathComponent("favorite-background", isDirectory: true)
-    }
-
-    private static func imageDataDirectory(rootDirectory: URL) -> URL {
-        rootDirectory.appendingPathComponent("image-data", isDirectory: true)
     }
 
     private static func mangaOfflineCacheDirectory(rootDirectory: URL) -> URL {

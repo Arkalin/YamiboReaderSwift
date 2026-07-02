@@ -99,7 +99,7 @@ public final class YamiboNukeImageDataPipeline: @unchecked Sendable {
         }
 
         var imageRequest = ImageRequest(urlRequest: urlRequest, userInfo: userInfo)
-        imageRequest.imageID = request.persistentCacheKey
+        imageRequest.imageID = request.cacheKey
         return imageRequest
     }
 

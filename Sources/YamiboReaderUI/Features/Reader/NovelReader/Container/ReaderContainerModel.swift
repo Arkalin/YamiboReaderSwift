@@ -40,8 +40,7 @@ public final class ReaderContainerModel: ObservableObject {
     @Published private var navigationHistory = ReaderNavigationHistory<ReaderResumePoint>()
     private var linearReadingHistoryExpiration = ReaderNavigationLinearReadingExpiration<NovelReaderLinearReadingPageKey>()
     @Published public private(set) var inlineImageLoadingContext = NovelInlineImageLoadingContext(
-        loader: ReaderInlineImageUnavailableDataLoader(),
-        cacheNamespace: NovelInlineImageCacheNamespace(value: "unavailable")
+        loader: ReaderInlineImageUnavailableDataLoader()
     )
     public private(set) var chromeProgressSnapshot = ReaderChromeProgressSnapshot.empty
 

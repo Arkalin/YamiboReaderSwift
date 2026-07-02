@@ -20,7 +20,6 @@ struct ReaderPagedViewportContentIdentity: Equatable {
     var surfaces: [NovelReaderSurface]
     var settings: ReaderAppearanceSettings
     var refererURL: URL
-    var imageCacheNamespace: NovelInlineImageCacheNamespace
     var topInset: CGFloat
     var bottomInset: CGFloat
 
@@ -28,14 +27,12 @@ struct ReaderPagedViewportContentIdentity: Equatable {
         surfaces: [NovelReaderSurface],
         settings: ReaderAppearanceSettings,
         refererURL: URL,
-        imageCacheNamespace: NovelInlineImageCacheNamespace,
         topInset: CGFloat,
         bottomInset: CGFloat
     ) {
         self.surfaces = surfaces
         self.settings = settings
         self.refererURL = refererURL
-        self.imageCacheNamespace = imageCacheNamespace
         self.topInset = topInset
         self.bottomInset = bottomInset
     }
