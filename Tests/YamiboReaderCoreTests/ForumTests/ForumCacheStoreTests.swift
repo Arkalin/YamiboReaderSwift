@@ -29,6 +29,12 @@ import Testing
 
     let loaded = await ForumCacheStore(baseDirectory: directory, now: { now }).loadHome()
     #expect(loaded?.categories.first?.boards.first?.fid == "5")
+    #expect(FileManager.default.fileExists(
+        atPath: YamiboDatabase.cacheDirectoryURL(rootDirectory: directory)
+            .appendingPathComponent("forum_home", isDirectory: true)
+            .appendingPathComponent("home.json", isDirectory: false)
+            .path
+    ))
 }
 
 @Test func forumCacheStoreExpiresHomeAfterTTL() async throws {
@@ -40,8 +46,68 @@ import Testing
     try await store.saveHome(home)
     now = Date(timeIntervalSince1970: 100 + ForumCacheStore.homeTTL + 1)
 
-    #expect(await store.loadHome() == nil)
     #expect(await store.loadHome(allowExpired: true) != nil)
+    #expect(await store.loadHome() == nil)
+}
+
+@Test func forumCacheStoreWritesBoardPagesIntoTransparentJSONCacheNamespace() async throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+    let pool = try YamiboDatabase.openPool(rootDirectory: root)
+    let diskCache = JSONCacheStore(writer: pool, rootDirectory: root)
+    let store = ForumCacheStore(jsonCacheStore: diskCache)
+    let board = ForumBoardPage(
+        board: ForumBoardSummary(
+            fid: "49",
+            name: "百合小说",
+            url: ForumRouteResolver.boardURL(fid: "49")
+        ),
+        threads: [
+            ForumThreadSummary(
+                tid: "991",
+                title: "缓存帖子",
+                url: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=991&mobile=2"))
+            )
+        ],
+        fetchedAt: Date(timeIntervalSince1970: 100)
+    )
+
+    try await store.saveBoard(
+        board,
+        fid: "49",
+        pageNumber: 2,
+        filterID: "type-1",
+        orderFilter: "dateline",
+        orderBy: "desc"
+    )
+
+    #expect(await store.loadBoard(
+        fid: "49",
+        page: 2,
+        filterID: "type-1",
+        orderFilter: "dateline",
+        orderBy: "desc"
+    )?.threads.first?.title == "缓存帖子")
+
+    let rows = try await pool.read { db in
+        try Row.fetchAll(
+            db,
+            sql: "SELECT namespace, cache_key FROM cache_entries ORDER BY cache_key"
+        ).map { row in
+            let namespace: String = row["namespace"]
+            let key: String = row["cache_key"]
+            return (namespace: namespace, key: key)
+        }
+    }
+    let row = try #require(rows.first)
+    #expect(rows.count == 1)
+    #expect(row.namespace == "forum_boards")
+    #expect(row.key.hasPrefix("board_"))
+    #expect(FileManager.default.fileExists(
+        atPath: YamiboDatabase.cacheDirectoryURL(rootDirectory: root)
+            .appendingPathComponent("forum_boards", isDirectory: true)
+            .appendingPathComponent("\(row.key).json", isDirectory: false)
+            .path
+    ))
 }
 
 @Test func forumCacheStoreCachesThreadPagesByThreadPageAndAuthor() async throws {
@@ -117,8 +183,8 @@ import Testing
     )
     now = Date(timeIntervalSince1970: 100 + ForumCacheStore.threadPageTTL + 1)
 
-    #expect(await store.loadThreadPage(thread: thread, page: 1, authorID: nil) == nil)
     #expect(await store.loadThreadPage(thread: thread, page: 1, authorID: nil, allowExpired: true)?.title == "缓存页")
+    #expect(await store.loadThreadPage(thread: thread, page: 1, authorID: nil) == nil)
 }
 
 @Test func forumCacheStorePrunesThreadPagesToMostRecentFiftyEntries() async throws {
@@ -180,15 +246,13 @@ import Testing
     #expect(await store.loadBoard(fid: "49", allowExpired: true)?.board.fid == "49")
 }
 
-@Test func forumThreadPageCacheCanUseGRDBMetadataAndTidFirstKeys() async throws {
+@Test func forumCacheStoreUsesTransparentJSONCacheNamespacesAndTidFirstKeys() async throws {
     let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
     let pool = try YamiboDatabase.openPool(rootDirectory: root)
     let diskCache = JSONCacheStore(writer: pool, rootDirectory: root)
-    let store = ForumCacheStore(
-        baseDirectory: root.appendingPathComponent("legacy-forum-cache", isDirectory: true),
-        threadPageDiskCache: diskCache
-    )
+    let store = ForumCacheStore(jsonCacheStore: diskCache)
     let thread = ThreadIdentity(tid: "990")
+    try await store.saveHome(ForumHomePage(categories: [], fetchedAt: Date(timeIntervalSince1970: 100)))
 
     try await store.saveThreadPage(
         makeCacheTestThreadPage(thread: thread, title: "GRDB线程页"),
@@ -210,15 +274,19 @@ import Testing
             return (namespace: namespace, key: key)
         }
     }
-    #expect(rows.count == 1)
-    #expect(rows.first?.namespace == "forum_thread_pages")
-    #expect(rows.first?.key == "tid_990_page_4_author_42")
-    #expect(rows.first?.key.contains("https://") == false)
+    #expect(rows.count == 2)
+    #expect(rows.map(\.namespace) == ["forum_home", "forum_thread_pages"])
+    #expect(rows.first(where: { $0.namespace == "forum_home" })?.key == "home")
+    #expect(rows.first(where: { $0.namespace == "forum_thread_pages" })?.key == "tid_990_page_4_author_42")
+    #expect(rows.first(where: { $0.namespace == "forum_thread_pages" })?.key.contains("https://") == false)
 
     let cacheFile = YamiboDatabase.cacheDirectoryURL(rootDirectory: root)
         .appendingPathComponent("forum_thread_pages", isDirectory: true)
         .appendingPathComponent("tid_990_page_4_author_42.json", isDirectory: false)
     #expect(FileManager.default.fileExists(atPath: cacheFile.path))
+    #expect(!FileManager.default.fileExists(
+        atPath: root.appendingPathComponent("legacy-forum-cache", isDirectory: true).path
+    ))
 
     try await store.deleteThreadPages([4], thread: thread, authorID: "42")
     #expect(await store.loadThreadPage(thread: thread, page: 4, authorID: "42", allowExpired: true) == nil)

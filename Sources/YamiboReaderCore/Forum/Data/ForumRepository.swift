@@ -48,7 +48,7 @@ public actor ForumRepository {
             cancellationPolicy: .completeStartedRequest
         )
         let page = try ForumHTMLParser.parseHomePage(from: html, fetchedAt: now())
-        try await cacheStore.saveHome(page)
+        try await saveHomeCompletingStartedWork(page)
         return page
     }
 
@@ -72,7 +72,14 @@ public actor ForumRepository {
             cancellationPolicy: .completeStartedRequest
         )
         let board = try ForumHTMLParser.parseBoardPage(from: html, fid: fid, title: title, fetchedAt: now())
-        try await cacheStore.saveBoard(board, fid: fid, pageNumber: page, filterID: filterID, orderFilter: orderFilter, orderBy: orderBy)
+        try await saveBoardCompletingStartedWork(
+            board,
+            fid: fid,
+            pageNumber: page,
+            filterID: filterID,
+            orderFilter: orderFilter,
+            orderBy: orderBy
+        )
         return board
     }
 
@@ -120,5 +127,35 @@ public actor ForumRepository {
             cancellationPolicy: .completeStartedRequest
         )
         return try ForumHTMLParser.parseSearchPage(from: html, query: normalizedQuery)
+    }
+
+    private func saveHomeCompletingStartedWork(_ page: ForumHomePage) async throws {
+        let cacheStore = cacheStore
+        let saveTask = Task {
+            try await cacheStore.saveHome(page)
+        }
+        try await saveTask.value
+    }
+
+    private func saveBoardCompletingStartedWork(
+        _ page: ForumBoardPage,
+        fid: String,
+        pageNumber: Int,
+        filterID: String?,
+        orderFilter: String?,
+        orderBy: String?
+    ) async throws {
+        let cacheStore = cacheStore
+        let saveTask = Task {
+            try await cacheStore.saveBoard(
+                page,
+                fid: fid,
+                pageNumber: pageNumber,
+                filterID: filterID,
+                orderFilter: orderFilter,
+                orderBy: orderBy
+            )
+        }
+        try await saveTask.value
     }
 }

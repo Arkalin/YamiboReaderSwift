@@ -109,6 +109,20 @@ import Testing
         for: makeTestImageRequest(url: imageURL),
         retentionPolicy: .evictable
     )
+    try await appContext.forumCacheStore.saveHome(
+        ForumHomePage(categories: [], fetchedAt: Date(timeIntervalSince1970: 100))
+    )
+    try await appContext.forumCacheStore.saveBoard(
+        ForumBoardPage(
+            board: ForumBoardSummary(
+                fid: "49",
+                name: "百合小说",
+                url: ForumRouteResolver.boardURL(fid: "49")
+            ),
+            fetchedAt: Date(timeIntervalSince1970: 100)
+        ),
+        fid: "49"
+    )
     try await appContext.forumCacheStore.saveThreadPage(
         ForumThreadPage(
             thread: ThreadIdentity(tid: "8002"),
@@ -121,6 +135,16 @@ import Testing
     #expect(FileManager.default.fileExists(atPath: rootDirectory.appendingPathComponent("image-data", isDirectory: true).path))
     #expect(FileManager.default.fileExists(atPath: rootDirectory.appendingPathComponent("manga-reader/offline-cache/images", isDirectory: true).path))
     #expect(FileManager.default.fileExists(atPath: YamiboDatabase.cacheDirectoryURL(rootDirectory: rootDirectory).path))
+    #expect(FileManager.default.fileExists(
+        atPath: YamiboDatabase.cacheDirectoryURL(rootDirectory: rootDirectory)
+            .appendingPathComponent("forum_home", isDirectory: true)
+            .path
+    ))
+    #expect(FileManager.default.fileExists(
+        atPath: YamiboDatabase.cacheDirectoryURL(rootDirectory: rootDirectory)
+            .appendingPathComponent("forum_boards", isDirectory: true)
+            .path
+    ))
 
     try await appContext.resetApplicationData()
 
@@ -153,6 +177,16 @@ import Testing
     #expect(!FileManager.default.fileExists(atPath: rootDirectory.appendingPathComponent("reader-cache", isDirectory: true).path))
     #expect(!FileManager.default.fileExists(atPath: rootDirectory.appendingPathComponent("image-data", isDirectory: true).path))
     #expect(!FileManager.default.fileExists(atPath: rootDirectory.appendingPathComponent("manga-reader/offline-cache", isDirectory: true).path))
+    #expect(!FileManager.default.fileExists(
+        atPath: YamiboDatabase.cacheDirectoryURL(rootDirectory: rootDirectory)
+            .appendingPathComponent("forum_home", isDirectory: true)
+            .path
+    ))
+    #expect(!FileManager.default.fileExists(
+        atPath: YamiboDatabase.cacheDirectoryURL(rootDirectory: rootDirectory)
+            .appendingPathComponent("forum_boards", isDirectory: true)
+            .path
+    ))
     #expect(!FileManager.default.fileExists(
         atPath: YamiboDatabase.cacheDirectoryURL(rootDirectory: rootDirectory)
             .appendingPathComponent("forum_thread_pages", isDirectory: true)

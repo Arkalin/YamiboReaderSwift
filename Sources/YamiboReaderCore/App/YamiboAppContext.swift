@@ -69,6 +69,10 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
     ) {
         let resolvedGRDBRootDirectory = grdbRootDirectory ?? YamiboDatabase.defaultRootDirectory()
         let resolvedGRDBDatabasePool = Self.openGRDBDatabase(rootDirectory: resolvedGRDBRootDirectory)
+        let transparentJSONCacheStore = JSONCacheStore(
+            writer: resolvedGRDBDatabasePool,
+            rootDirectory: resolvedGRDBRootDirectory
+        )
         self.uiDefaults = uiDefaults
         self.clearsWebDataOnReset = clearsWebDataOnReset
         self.sessionStore = sessionStore
@@ -101,11 +105,7 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         )
         self.mangaOfflineCacheStore = resolvedMangaOfflineCacheStore
         self.forumCacheStore = forumCacheStore ?? ForumCacheStore(
-            baseDirectory: Self.forumCacheDirectory(rootDirectory: resolvedGRDBRootDirectory),
-            threadPageDiskCache: JSONCacheStore(
-                writer: resolvedGRDBDatabasePool,
-                rootDirectory: resolvedGRDBRootDirectory
-            )
+            jsonCacheStore: transparentJSONCacheStore
         )
         self.mangaOfflineCacheBackgroundDownloadTransport = mangaOfflineCacheBackgroundDownloadTransport
         self.mangaOfflineCacheContinuedProcessingCoordinator = mangaOfflineCacheContinuedProcessingCoordinator
