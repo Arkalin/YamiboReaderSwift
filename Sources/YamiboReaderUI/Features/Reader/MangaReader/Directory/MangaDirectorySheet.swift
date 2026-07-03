@@ -26,31 +26,66 @@ struct MangaDirectorySheet: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    MangaDirectoryMetadataSection(
-                        panel: panel,
-                        isSelecting: isSelecting,
-                        onUpdateDirectory: onUpdateDirectory,
-                        onEditDirectory: {
-                            seedDraft(from: panel)
-                            isCorrectionPresented = true
-                        }
-                    )
+            List {
+                MangaDirectoryMetadataSection(
+                    panel: panel,
+                    isSelecting: isSelecting,
+                    onUpdateDirectory: onUpdateDirectory,
+                    onEditDirectory: {
+                        seedDraft(from: panel)
+                        isCorrectionPresented = true
+                    }
+                )
+                .mangaDirectoryListRow(top: 16, bottom: 10)
 
-                    MangaDirectoryChapterSection(
-                        chapters: panel.displayChapters,
-                        currentChapterTID: panel.currentChapterTID,
-                        sortOrder: panel.sortOrder,
-                        isSelecting: $isSelecting,
-                        selectedChapterTIDs: $selectedChapterTIDs,
-                        onSortOrderChange: onSortOrderChange,
-                        onSelectChapter: onSelectChapter,
-                        onDeleteChapter: deleteChapter
-                    )
+                MangaDirectoryChapterControlsRow(
+                    isSelecting: isSelecting,
+                    hasChapters: !panel.displayChapters.isEmpty,
+                    visibleSelectionIsComplete: visibleSelectionIsComplete,
+                    sortOrder: panel.sortOrder,
+                    onSortOrderChange: onSortOrderChange,
+                    onToggleVisibleSelection: toggleVisibleSelection,
+                    onToggleSelectionMode: {
+                        if isSelecting {
+                            exitSelectionMode()
+                        } else {
+                            isSelecting = true
+                        }
+                    }
+                )
+                .mangaDirectoryListRow(top: 10, bottom: 7)
+
+                if panel.displayChapters.isEmpty {
+                    ContentUnavailableView(L10n.string("manga.no_chapters"), systemImage: "books.vertical")
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .mangaDirectoryListRow(top: 5, bottom: 16)
+                } else {
+                    ForEach(panel.displayChapters) { chapter in
+                        MangaDirectoryChapterRow(
+                            chapter: chapter,
+                            isCurrent: chapter.tid == panel.currentChapterTID,
+                            isSelecting: isSelecting,
+                            isSelected: selectedChapterTIDs.contains(chapter.tid),
+                            onSelectChapter: onSelectChapter,
+                            onToggleSelection: toggleSelection,
+                            onBeginSelection: beginSelection
+                        )
+                        .mangaDirectoryListRow(top: 5, bottom: 5)
+                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                            if canDeleteChapterFromSwipe(chapter) {
+                                Button(role: .destructive) {
+                                    deleteChapter(chapter)
+                                } label: {
+                                    Label(L10n.string("common.delete"), systemImage: "trash")
+                                }
+                            }
+                        }
+                    }
                 }
-                .padding(16)
             }
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
             .background(YamiboColors.SystemSurface.groupedBackground)
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 if isSelecting && !usesSystemSelectionBottomToolbar {
@@ -144,9 +179,51 @@ struct MangaDirectorySheet: View {
         onDeleteChapters([chapter.tid])
     }
 
+    private var visibleChapterTIDs: Set<String> {
+        Set(panel.displayChapters.map(\.tid))
+    }
+
+    private var visibleSelectionIsComplete: Bool {
+        !panel.displayChapters.isEmpty && visibleChapterTIDs.isSubset(of: selectedChapterTIDs)
+    }
+
+    private func toggleVisibleSelection() {
+        if visibleSelectionIsComplete {
+            selectedChapterTIDs.subtract(visibleChapterTIDs)
+        } else {
+            selectedChapterTIDs.formUnion(visibleChapterTIDs)
+        }
+    }
+
+    private func toggleSelection(_ chapter: MangaChapter) {
+        if selectedChapterTIDs.contains(chapter.tid) {
+            selectedChapterTIDs.remove(chapter.tid)
+        } else {
+            selectedChapterTIDs.insert(chapter.tid)
+        }
+    }
+
+    private func beginSelection(_ chapter: MangaChapter) {
+        guard !isSelecting else { return }
+        isSelecting = true
+        selectedChapterTIDs.insert(chapter.tid)
+    }
+
+    private func canDeleteChapterFromSwipe(_ chapter: MangaChapter) -> Bool {
+        !isSelecting && chapter.tid != panel.currentChapterTID
+    }
+
     private func exitSelectionMode() {
         isSelecting = false
         selectedChapterTIDs.removeAll()
+    }
+}
+
+private extension View {
+    func mangaDirectoryListRow(top: CGFloat, bottom: CGFloat) -> some View {
+        listRowInsets(EdgeInsets(top: top, leading: 16, bottom: bottom, trailing: 16))
+            .listRowSeparator(.hidden)
+            .listRowBackground(Color.clear)
     }
 }
 
@@ -271,100 +348,38 @@ private struct MangaDirectoryMetadataSection: View {
     }
 }
 
-private struct MangaDirectoryChapterSection: View {
-    let chapters: [MangaChapter]
-    let currentChapterTID: String?
+private struct MangaDirectoryChapterControlsRow: View {
+    let isSelecting: Bool
+    let hasChapters: Bool
+    let visibleSelectionIsComplete: Bool
     let sortOrder: MangaDirectorySortOrder
-    @Binding var isSelecting: Bool
-    @Binding var selectedChapterTIDs: Set<String>
     let onSortOrderChange: (MangaDirectorySortOrder) -> Void
-    let onSelectChapter: (MangaChapter) -> Void
-    let onDeleteChapter: (MangaChapter) -> Void
+    let onToggleVisibleSelection: () -> Void
+    let onToggleSelectionMode: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                if isSelecting {
-                    Button(visibleSelectionIsComplete ? L10n.string("common.invert_selection") : L10n.string("common.select_all")) {
-                        toggleVisibleSelection()
-                    }
-                    .font(.subheadline.weight(.semibold))
-                    .disabled(chapters.isEmpty)
-                } else {
-                    MangaDirectorySortToggleButton(
-                        sortOrder: sortOrder,
-                        onSortOrderChange: onSortOrderChange
-                    )
+        HStack {
+            if isSelecting {
+                Button(visibleSelectionIsComplete ? L10n.string("common.invert_selection") : L10n.string("common.select_all")) {
+                    onToggleVisibleSelection()
                 }
-
-                Spacer(minLength: 0)
-
-                MangaDirectorySelectionToggleButton(isSelecting: isSelecting) {
-                    if isSelecting {
-                        exitSelectionMode()
-                    } else {
-                        isSelecting = true
-                    }
-                }
-            }
-            .frame(height: 38, alignment: .center)
-
-            if chapters.isEmpty {
-                ContentUnavailableView(L10n.string("manga.no_chapters"), systemImage: "books.vertical")
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
+                .font(.subheadline.weight(.semibold))
+                .buttonStyle(.plain)
+                .disabled(!hasChapters)
             } else {
-                LazyVStack(spacing: 10) {
-                    ForEach(chapters) { chapter in
-                        MangaDirectoryChapterRow(
-                            chapter: chapter,
-                            isCurrent: chapter.tid == currentChapterTID,
-                            isSelecting: isSelecting,
-                            isSelected: selectedChapterTIDs.contains(chapter.tid),
-                            onSelectChapter: onSelectChapter,
-                            onToggleSelection: toggleSelection,
-                            onBeginSelection: beginSelection,
-                            onDeleteChapter: onDeleteChapter
-                        )
-                    }
-                }
+                MangaDirectorySortToggleButton(
+                    sortOrder: sortOrder,
+                    onSortOrderChange: onSortOrderChange
+                )
+            }
+
+            Spacer(minLength: 0)
+
+            MangaDirectorySelectionToggleButton(isSelecting: isSelecting) {
+                onToggleSelectionMode()
             }
         }
-    }
-
-    private var visibleChapterTIDs: Set<String> {
-        Set(chapters.map(\.tid))
-    }
-
-    private var visibleSelectionIsComplete: Bool {
-        !chapters.isEmpty && visibleChapterTIDs.isSubset(of: selectedChapterTIDs)
-    }
-
-    private func toggleVisibleSelection() {
-        if visibleSelectionIsComplete {
-            selectedChapterTIDs.subtract(visibleChapterTIDs)
-        } else {
-            selectedChapterTIDs.formUnion(visibleChapterTIDs)
-        }
-    }
-
-    private func toggleSelection(_ chapter: MangaChapter) {
-        if selectedChapterTIDs.contains(chapter.tid) {
-            selectedChapterTIDs.remove(chapter.tid)
-        } else {
-            selectedChapterTIDs.insert(chapter.tid)
-        }
-    }
-
-    private func beginSelection(_ chapter: MangaChapter) {
-        guard !isSelecting else { return }
-        isSelecting = true
-        selectedChapterTIDs.insert(chapter.tid)
-    }
-
-    private func exitSelectionMode() {
-        isSelecting = false
-        selectedChapterTIDs.removeAll()
+        .frame(height: 38, alignment: .center)
     }
 }
 
@@ -432,92 +447,66 @@ private struct MangaDirectoryChapterRow: View {
     let onSelectChapter: (MangaChapter) -> Void
     let onToggleSelection: (MangaChapter) -> Void
     let onBeginSelection: (MangaChapter) -> Void
-    let onDeleteChapter: (MangaChapter) -> Void
 
     @State private var isExpanded = false
     @State private var isTruncated = false
-    @State private var isDeleteRevealed = false
-    @State private var swipeOffset: CGFloat = 0
-    @State private var isSwipeActive = false
 
     var body: some View {
-        ZStack(alignment: .trailing) {
-            swipeDeleteButton
-                .opacity(isDeleteActionVisible ? 1 : 0)
-                .mask(alignment: .trailing) {
-                    Rectangle()
-                        .frame(width: deleteActionRevealWidth)
-                }
-                .allowsHitTesting(isDeleteActionVisible)
+        HStack(alignment: .top, spacing: 12) {
+            Text(MangaChapterDisplayFormatter.displayNumber(for: chapter))
+                .font(.caption.weight(.bold))
+                .foregroundStyle(numberColor)
+                .frame(width: 34, alignment: .leading)
 
-            HStack(alignment: .top, spacing: 12) {
-                Text(MangaChapterDisplayFormatter.displayNumber(for: chapter))
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(numberColor)
-                    .frame(width: 34, alignment: .leading)
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                TruncationAwareText(
+                    chapter.rawTitle,
+                    font: UIFont.preferredFont(forTextStyle: .subheadline),
+                    lineLimit: isExpanded ? nil : 1,
+                    isTruncated: $isTruncated
+                )
+                .font(.subheadline)
+                .foregroundStyle(titleColor)
+                .layoutPriority(1)
 
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    TruncationAwareText(
-                        chapter.rawTitle,
-                        font: UIFont.preferredFont(forTextStyle: .subheadline),
-                        lineLimit: isExpanded ? nil : 1,
-                        isTruncated: $isTruncated
-                    )
-                    .font(.subheadline)
-                    .foregroundStyle(titleColor)
-                    .layoutPriority(1)
-
-                    if isTruncated {
-                        Button(isExpanded ? L10n.string("common.collapse") : L10n.string("common.expand")) {
-                            isExpanded.toggle()
-                        }
-                        .font(.caption.weight(.semibold))
-                        .buttonStyle(.plain)
-                        .foregroundStyle(accentColor)
-                        .lineLimit(1)
-                        .fixedSize()
+                if isTruncated {
+                    Button(isExpanded ? L10n.string("common.collapse") : L10n.string("common.expand")) {
+                        isExpanded.toggle()
                     }
+                    .font(.caption.weight(.semibold))
+                    .buttonStyle(.plain)
+                    .foregroundStyle(accentColor)
+                    .lineLimit(1)
+                    .fixedSize()
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                UnevenRoundedRectangle(cornerRadii: rowCornerRadii, style: .continuous)
-                    .fill(backgroundColor)
-            )
-            .overlay(
-                UnevenRoundedRectangle(cornerRadii: rowCornerRadii, style: .continuous)
-                    .strokeBorder(isSelecting && isSelected ? Color.orange : Color.clear, lineWidth: 2)
-            )
-            .contentShape(Rectangle())
-            .offset(x: rowOffset)
-            .animation(.spring(response: 0.24, dampingFraction: 0.72), value: isSelected)
-            .onTapGesture {
-                if isDeleteRevealed {
-                    closeDeleteAction()
-                    return
-                }
-                if isSelecting {
-                    onToggleSelection(chapter)
-                } else {
-                    guard !isCurrent else { return }
-                    onSelectChapter(chapter)
-                }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(backgroundColor)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(isSelecting && isSelected ? Color.orange : Color.clear, lineWidth: 2)
+        )
+        .contentShape(Rectangle())
+        .animation(.spring(response: 0.24, dampingFraction: 0.72), value: isSelected)
+        .onTapGesture {
+            if isSelecting {
+                onToggleSelection(chapter)
+            } else {
+                guard !isCurrent else { return }
+                onSelectChapter(chapter)
             }
-            .onLongPressGesture {
-                closeDeleteAction()
-                onBeginSelection(chapter)
-            }
+        }
+        .onLongPressGesture {
+            onBeginSelection(chapter)
         }
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .simultaneousGesture(swipeGesture)
-        .onChange(of: isSelecting) { _, isSelecting in
-            if isSelecting {
-                closeDeleteAction()
-            }
-        }
     }
 
     private var titleColor: Color {
@@ -543,113 +532,6 @@ private struct MangaDirectoryChapterRow: View {
             return Color.orange.opacity(isSelecting && !isSelected ? 0.06 : 0.12)
         }
         return YamiboColors.SystemSurface.secondaryGroupedBackground
-    }
-
-    private var swipeActionWidth: CGFloat {
-        76
-    }
-
-    private var rowCornerRadii: RectangleCornerRadii {
-        RectangleCornerRadii(
-            topLeading: 12,
-            bottomLeading: 12,
-            bottomTrailing: rowTrailingCornerRadius,
-            topTrailing: rowTrailingCornerRadius
-        )
-    }
-
-    private var rowTrailingCornerRadius: CGFloat {
-        isDeleteActionVisible ? 0 : 12
-    }
-
-    private var rowOffset: CGFloat {
-        isSelecting ? 0 : swipeOffset
-    }
-
-    private var deleteActionRevealWidth: CGFloat {
-        min(swipeActionWidth, max(0, -rowOffset))
-    }
-
-    private var swipeGesture: some Gesture {
-        DragGesture(minimumDistance: 12, coordinateSpace: .local)
-            .onChanged { value in
-                if !isSwipeActive {
-                    guard shouldStartSwipe(value.translation) else { return }
-                    isSwipeActive = true
-                }
-
-                var transaction = Transaction()
-                transaction.disablesAnimations = true
-                withTransaction(transaction) {
-                    swipeOffset = clampedSwipeOffset(for: value.translation)
-                }
-            }
-            .onEnded { value in
-                defer {
-                    isSwipeActive = false
-                }
-
-                guard isSwipeActive else { return }
-                let proposedOffset = clampedSwipeOffset(for: value.translation)
-                withAnimation(.spring(response: 0.24, dampingFraction: 0.82)) {
-                    let shouldReveal = proposedOffset < -swipeActionWidth * 0.5
-                    isDeleteRevealed = shouldReveal
-                    swipeOffset = shouldReveal ? -swipeActionWidth : 0
-                }
-            }
-    }
-
-    private var swipeDeleteButton: some View {
-        Button(role: .destructive) {
-            closeDeleteAction()
-            onDeleteChapter(chapter)
-        } label: {
-            VStack(spacing: 4) {
-                Image(systemName: "trash")
-                    .font(.caption.weight(.semibold))
-
-                Text(L10n.string("common.delete"))
-                    .font(.caption2.weight(.semibold))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.78)
-            }
-            .frame(width: swipeActionWidth)
-            .frame(maxHeight: .infinity)
-            .foregroundStyle(canDeleteFromSwipe ? Color.white : Color.secondary)
-            .background(canDeleteFromSwipe ? Color.red : Color(uiColor: .tertiarySystemFill))
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .disabled(!canDeleteFromSwipe || !isDeleteActionVisible)
-        .accessibilityLabel(L10n.string("common.delete"))
-    }
-
-    private var canDeleteFromSwipe: Bool {
-        !isCurrent && !isSelecting
-    }
-
-    private var isDeleteActionVisible: Bool {
-        !isSelecting && (isDeleteRevealed || swipeOffset < -1)
-    }
-
-    private func shouldStartSwipe(_ translation: CGSize) -> Bool {
-        guard !isSelecting else { return false }
-        guard abs(translation.width) > abs(translation.height) * 1.25 else { return false }
-        return translation.width < 0 || isDeleteRevealed
-    }
-
-    private func clampedSwipeOffset(for translation: CGSize) -> CGFloat {
-        let baseOffset = isDeleteRevealed ? -swipeActionWidth : 0
-        let proposedOffset = baseOffset + translation.width
-        return min(0, max(-swipeActionWidth, proposedOffset))
-    }
-
-    private func closeDeleteAction() {
-        guard isDeleteRevealed || swipeOffset != 0 else { return }
-        withAnimation(.spring(response: 0.24, dampingFraction: 0.82)) {
-            isDeleteRevealed = false
-            swipeOffset = 0
-        }
     }
 }
 
