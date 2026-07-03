@@ -268,7 +268,14 @@ public final class MangaReaderModel: ObservableObject {
                 plan.globalIndex(forPageAt: currentPageIndex + delta)
             }
         }
-        guard let targetGlobalIndex else { return }
+        guard let targetGlobalIndex else {
+            await jumpToAdjacentChapterBoundary(
+                delta: delta,
+                sourcePosition: stableReadingPosition(from: loaded),
+                workflow: workflow
+            )
+            return
+        }
 
         adjacentPrefetchTask?.cancel()
         readerContentGeneration += 1
@@ -277,6 +284,40 @@ public final class MangaReaderModel: ObservableObject {
         publishPresentation(nextPresentation, previousProgressSnapshot: previousProgressSnapshot)
         recordLinearReadingForNavigationHistory()
         scheduleAdjacentPrefetch(around: currentPageIndex(in: nextPresentation) ?? targetGlobalIndex)
+    }
+
+    public func canJumpRelativePage(_ delta: Int, usesTwoPageSpread: Bool) -> Bool {
+        guard delta != 0,
+              let workflow,
+              presentation.settings.readingMode == .paged,
+              case let .loaded(loaded) = presentation.state,
+              !loaded.pages.isEmpty else {
+            return false
+        }
+
+        let plan = MangaPagedReadingPlan(
+            pages: loaded.pages,
+            currentPageIndex: loaded.currentPageIndex,
+            pageTurnDirection: presentation.settings.pageTurnDirection,
+            usesTwoPageSpread: usesTwoPageSpread
+        )
+        let targetGlobalIndex: Int?
+        if usesTwoPageSpread {
+            targetGlobalIndex = plan.currentSpreadIndex.flatMap { currentSpreadIndex in
+                plan.globalIndex(forSpreadAt: currentSpreadIndex + delta)
+            }
+        } else {
+            targetGlobalIndex = plan.currentPageIndex.flatMap { currentPageIndex in
+                plan.globalIndex(forPageAt: currentPageIndex + delta)
+            }
+        }
+        if targetGlobalIndex != nil {
+            return true
+        }
+        return workflow.canJumpToAdjacentChapter(
+            from: stableReadingPosition(from: loaded),
+            delta: delta
+        )
     }
 
     public var currentChapterCommentTarget: ReaderChapterCommentTarget? {
@@ -667,6 +708,36 @@ public final class MangaReaderModel: ObservableObject {
         publishPresentation(nextPresentation, previousProgressSnapshot: previousProgressSnapshot)
     }
 
+    private func jumpToAdjacentChapterBoundary(
+        delta: Int,
+        sourcePosition: MangaReadingPosition?,
+        workflow: MangaReaderWorkflow
+    ) async {
+        guard workflow.canJumpToAdjacentChapter(from: sourcePosition, delta: delta) else {
+            return
+        }
+
+        adjacentPrefetchTask?.cancel()
+        readerContentGeneration += 1
+        let generation = readerContentGeneration
+        let previousProgressSnapshot = progressSnapshot(from: presentation)
+        do {
+            let nextPresentation = try await workflow.jumpToAdjacentChapter(
+                from: sourcePosition,
+                delta: delta,
+                animated: true
+            )
+            guard !Task.isCancelled, readerContentGeneration == generation else { return }
+            publishPresentation(nextPresentation, previousProgressSnapshot: previousProgressSnapshot)
+            recordLinearReadingForNavigationHistory()
+            scheduleAdjacentPrefetch(around: currentPageIndex(in: nextPresentation) ?? 0)
+        } catch is CancellationError {
+            return
+        } catch {
+            return
+        }
+    }
+
     private func invalidateReaderContent() {
         adjacentPrefetchTask?.cancel()
         adjacentPrefetchTask = nil
@@ -738,6 +809,10 @@ public final class MangaReaderModel: ObservableObject {
 
     private func stableReadingPosition(from presentation: MangaReaderPresentation) -> MangaReadingPosition? {
         guard case let .loaded(loaded) = presentation.state else { return nil }
+        return stableReadingPosition(from: loaded)
+    }
+
+    private func stableReadingPosition(from loaded: MangaReaderLoadedPresentation) -> MangaReadingPosition? {
         if let readingPosition = loaded.readingPosition {
             return readingPosition
         }

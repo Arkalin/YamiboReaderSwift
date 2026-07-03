@@ -481,6 +481,122 @@ final class MangaReaderModelSettingsProgressTests: XCTestCase {
         XCTAssertEqual(fixture.model.presentation, initialPresentation)
     }
 
+    func testJumpRelativePageAtPreviousBoundaryLoadsPreviousChapterLastPage() async throws {
+        let progressAdapter = RecordingMangaProgressAdapter()
+        let previous = try makeFixtureDocument(tid: "700", pageCount: 4)
+        let current = try makeFixtureDocument(tid: "701", pageCount: 4)
+        let fixture = try await makeFixture(
+            document: current,
+            appSettings: AppSettings(manga: MangaReaderSettings(readingMode: .paged)),
+            progressSync: ProgressSyncModule(adapter: progressAdapter, debounceNanoseconds: 0),
+            documents: [previous, current],
+            directory: makeFixtureDirectory(tids: ["700", "701"])
+        )
+
+        await fixture.model.prepare()
+        await fixture.model.jumpRelativePage(-1, usesTwoPageSpread: false)
+
+        guard case let .loaded(loaded) = fixture.model.presentation.state else {
+            XCTFail("Expected loaded presentation")
+            return
+        }
+        XCTAssertEqual(loaded.pages.map(\.id), [
+            "700#0", "700#1", "700#2", "700#3",
+            "701#0", "701#1", "701#2", "701#3"
+        ])
+        XCTAssertEqual(loaded.currentPage?.id, "700#3")
+        XCTAssertEqual(loaded.readingPosition, MangaReadingPosition(tid: "700", localIndex: 3))
+        XCTAssertEqual(loaded.viewportPlacement?.targetPageIndex, 3)
+        XCTAssertTrue(loaded.viewportPlacement?.animated == true)
+
+        try await waitFor {
+            await progressAdapter.savedPositions.contains { position in
+                position.chapterURL == previous.chapterURL &&
+                    position.pageIndex == 3
+            }
+        }
+    }
+
+    func testJumpRelativePageAtNextBoundaryLoadsNextChapterFirstPage() async throws {
+        let current = try makeFixtureDocument(tid: "701", pageCount: 4)
+        let next = try makeFixtureDocument(tid: "702", pageCount: 3)
+        let fixture = try await makeFixture(
+            initialPage: 3,
+            document: current,
+            appSettings: AppSettings(manga: MangaReaderSettings(readingMode: .paged)),
+            documents: [current, next],
+            directory: makeFixtureDirectory(tids: ["701", "702"])
+        )
+
+        await fixture.model.prepare()
+        await fixture.model.jumpRelativePage(1, usesTwoPageSpread: false)
+
+        guard case let .loaded(loaded) = fixture.model.presentation.state else {
+            XCTFail("Expected loaded presentation")
+            return
+        }
+        XCTAssertEqual(loaded.pages.map(\.id), [
+            "701#0", "701#1", "701#2", "701#3",
+            "702#0", "702#1", "702#2"
+        ])
+        XCTAssertEqual(loaded.currentPage?.id, "702#0")
+        XCTAssertEqual(loaded.readingPosition, MangaReadingPosition(tid: "702", localIndex: 0))
+        XCTAssertEqual(loaded.viewportPlacement?.targetPageIndex, 4)
+        XCTAssertTrue(loaded.viewportPlacement?.animated == true)
+    }
+
+    func testJumpRelativePageAtTwoPageBoundaryLoadsAdjacentChapterByChapterSemantics() async throws {
+        let previous = try makeFixtureDocument(tid: "700", pageCount: 3)
+        let current = try makeFixtureDocument(tid: "701", pageCount: 4)
+        let fixture = try await makeFixture(
+            document: current,
+            appSettings: AppSettings(manga: MangaReaderSettings(readingMode: .paged)),
+            documents: [previous, current],
+            directory: makeFixtureDirectory(tids: ["700", "701"])
+        )
+
+        await fixture.model.prepare()
+        await fixture.model.jumpRelativePage(-1, usesTwoPageSpread: true)
+
+        guard case let .loaded(loaded) = fixture.model.presentation.state else {
+            XCTFail("Expected loaded presentation")
+            return
+        }
+        XCTAssertEqual(loaded.currentPage?.id, "700#2")
+        XCTAssertEqual(loaded.readingPosition, MangaReadingPosition(tid: "700", localIndex: 2))
+        XCTAssertEqual(loaded.viewportPlacement?.targetPageIndex, 2)
+    }
+
+    func testJumpRelativePageBoundaryFailureLeavesPresentationAndProgressUnchanged() async throws {
+        let progressAdapter = RecordingMangaProgressAdapter()
+        let current = try makeFixtureDocument(tid: "701", pageCount: 4)
+        let missingPrevious = makeFixtureChapter(tid: "700")
+        let directory = MangaDirectory(
+            cleanBookName: "Resolved Directory",
+            strategy: .links,
+            sourceKey: "Resolved Directory",
+            chapters: [missingPrevious, makeFixtureChapter(tid: "701")]
+        )
+        let fixture = try await makeFixture(
+            document: current,
+            appSettings: AppSettings(manga: MangaReaderSettings(readingMode: .paged)),
+            progressSync: ProgressSyncModule(adapter: progressAdapter, debounceNanoseconds: 0),
+            documents: [current],
+            directory: directory
+        )
+
+        await fixture.model.prepare()
+        let before = fixture.model.presentation
+        await fixture.model.jumpRelativePage(-1, usesTwoPageSpread: false)
+        try await Task.sleep(nanoseconds: 80_000_000)
+
+        XCTAssertEqual(fixture.model.presentation, before)
+        let savedPositions = await progressAdapter.savedPositions
+        let storedResumeRoute = await fixture.resumeRouteStore.load()
+        XCTAssertTrue(savedPositions.isEmpty)
+        XCTAssertNil(storedResumeRoute)
+    }
+
     func testJumpRelativePageIgnoresVerticalReadingMode() async throws {
         let fixture = try await makeFixture(
             appSettings: AppSettings(manga: MangaReaderSettings(readingMode: .vertical))
@@ -582,8 +698,11 @@ private struct MangaReaderModelSettingsProgressFixture {
 private func makeFixture(
     initialPage: Int = 0,
     imageCount: Int = 3,
+    document suppliedDocument: MangaChapterDocument? = nil,
     appSettings: AppSettings = AppSettings(),
-    progressSync: ProgressSyncModule? = nil
+    progressSync: ProgressSyncModule? = nil,
+    documents suppliedDocuments: [MangaChapterDocument]? = nil,
+    directory suppliedDirectory: MangaDirectory? = nil
 ) async throws -> MangaReaderModelSettingsProgressFixture {
     let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "manga-settings-progress-fixture")
     let settingsStore = try SettingsStore(testSuiteName: defaultsSuiteName, key: "settings")
@@ -591,7 +710,12 @@ private func makeFixture(
     try await settingsStore.save(appSettings)
 
     let originalURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=700&mobile=2"))
-    let chapterURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=701&mobile=2"))
+    let chapterURL: URL
+    if let suppliedDocument {
+        chapterURL = suppliedDocument.chapterURL
+    } else {
+        chapterURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=701&mobile=2"))
+    }
     let context = MangaLaunchContext(
         originalThreadURL: originalURL,
         chapterURL: chapterURL,
@@ -600,28 +724,20 @@ private func makeFixture(
         initialPage: initialPage,
         directoryName: nil
     )
-    let document = MangaChapterDocument(
-        tid: "701",
-        ownerPostID: "9001",
-        chapterTitle: "第1话",
-        chapterURL: chapterURL,
-        imageURLs: try (0..<max(imageCount, 1)).map { index in
-            try XCTUnwrap(URL(string: "https://img.example.com/701-\(index).jpg"))
-        }
-    )
+    let document = try suppliedDocument ?? makeFixtureDocument(tid: "701", pageCount: max(imageCount, 1))
     let repository = StubMangaDirectoryRepository(
         seed: MangaDirectorySeed(
             currentChapter: MangaChapter(
-                tid: "701",
-                rawTitle: "第1话",
-                chapterNumber: 1,
-                url: chapterURL
+                tid: document.tid,
+                rawTitle: document.chapterTitle,
+                chapterNumber: MangaTitleCleaner.extractChapterNumber(document.chapterTitle),
+                url: document.chapterURL
             ),
             cleanBookName: "Resolved Directory",
-            firstPostID: "9001"
+            firstPostID: document.ownerPostID
         )
     )
-    let store = StubMangaDirectoryStore()
+    let store = StubMangaDirectoryStore(directories: suppliedDirectory.map { [$0] } ?? [])
     let appContext = YamiboAppContext(
         sessionStore: try SessionStore(testSuiteName: defaultsSuiteName, key: "session"),
         settingsStore: settingsStore,
@@ -635,7 +751,7 @@ private func makeFixture(
     )
     #if os(iOS)
     let dependencies = MangaReaderModelDependencies(
-        makeDocumentLoader: { StubMangaChapterDocumentLoader(document: document) },
+        makeDocumentLoader: { StubMangaChapterDocumentLoader(documents: suppliedDocuments ?? [document]) },
         makeDirectoryRepository: { repository },
         makeDirectoryStore: { store },
         makeImageDataLoader: { StubMangaImageDataLoader() },
@@ -643,7 +759,7 @@ private func makeFixture(
     )
     #else
     let dependencies = MangaReaderModelDependencies(
-        makeDocumentLoader: { StubMangaChapterDocumentLoader(document: document) },
+        makeDocumentLoader: { StubMangaChapterDocumentLoader(documents: suppliedDocuments ?? [document]) },
         makeDirectoryRepository: { repository },
         makeDirectoryStore: { store },
         progressSync: resolvedProgressSync
@@ -670,14 +786,17 @@ private func makeFixture(
 }
 
 private actor StubMangaChapterDocumentLoader: MangaChapterDocumentLoading {
-    let document: MangaChapterDocument
+    let documents: [URL: MangaChapterDocument]
 
-    init(document: MangaChapterDocument) {
-        self.document = document
+    init(documents: [MangaChapterDocument]) {
+        self.documents = Dictionary(uniqueKeysWithValues: documents.map { ($0.chapterURL, $0) })
     }
 
     func loadChapterDocument(at url: URL) async throws -> MangaChapterDocument {
-        document
+        guard let document = documents[url] else {
+            throw YamiboError.unreadableBody
+        }
+        return document
     }
 }
 
@@ -734,7 +853,11 @@ private actor StubMangaDirectoryRepository: MangaDirectoryRepository {
 }
 
 private actor StubMangaDirectoryStore: MangaDirectoryPersisting {
-    private var directories: [String: MangaDirectory] = [:]
+    private var directories: [String: MangaDirectory]
+
+    init(directories: [MangaDirectory] = []) {
+        self.directories = Dictionary(uniqueKeysWithValues: directories.map { ($0.cleanBookName, $0) })
+    }
 
     func directory(named name: String) async throws -> MangaDirectory? {
         directories[name]
@@ -753,6 +876,40 @@ private actor StubMangaDirectoryStore: MangaDirectoryPersisting {
     func deleteDirectory(named name: String) async throws {
         directories.removeValue(forKey: name)
     }
+}
+
+private func makeFixtureDocument(tid: String, pageCount: Int) throws -> MangaChapterDocument {
+    MangaChapterDocument(
+        tid: tid,
+        ownerPostID: "post-\(tid)",
+        chapterTitle: "第\(tid)话",
+        chapterURL: makeFixtureURL(tid: tid),
+        imageURLs: try (0..<max(pageCount, 0)).map { index in
+            try XCTUnwrap(URL(string: "https://img.example.com/\(tid)-\(index).jpg"))
+        }
+    )
+}
+
+private func makeFixtureDirectory(tids: [String]) -> MangaDirectory {
+    MangaDirectory(
+        cleanBookName: "Resolved Directory",
+        strategy: .links,
+        sourceKey: "Resolved Directory",
+        chapters: tids.map(makeFixtureChapter)
+    )
+}
+
+private func makeFixtureChapter(tid: String) -> MangaChapter {
+    MangaChapter(
+        tid: tid,
+        rawTitle: "第\(tid)话",
+        chapterNumber: Double(tid) ?? 0,
+        url: makeFixtureURL(tid: tid)
+    )
+}
+
+private func makeFixtureURL(tid: String) -> URL {
+    URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(tid)&mobile=2")!
 }
 
 #if os(iOS)

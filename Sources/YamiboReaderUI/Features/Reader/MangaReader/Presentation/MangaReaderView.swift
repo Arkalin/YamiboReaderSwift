@@ -51,6 +51,12 @@ public struct MangaReaderView: View {
                 onCurrentPageChange: { globalIndex in
                     model.updateCurrentPage(globalIndex: globalIndex)
                 },
+                canBoundaryPageTurn: { delta, usesTwoPageSpread in
+                    model.canJumpRelativePage(delta, usesTwoPageSpread: usesTwoPageSpread)
+                },
+                onBoundaryPageTurn: { delta, usesTwoPageSpread in
+                    Task { await model.jumpRelativePage(delta, usesTwoPageSpread: usesTwoPageSpread) }
+                },
                 onPageLongPress: { page in
                     guard !isSavingImage else { return }
                     imageSavePresentation.presentActions(for: page)
@@ -957,6 +963,8 @@ private struct MangaReaderPresentationContent: View {
     let isChromeVisible: Bool
     let onRetryInitialLoad: () -> Void
     let onCurrentPageChange: (Int) -> Void
+    let canBoundaryPageTurn: (Int, Bool) -> Bool
+    let onBoundaryPageTurn: (Int, Bool) -> Void
     let onPageLongPress: (MangaReaderPageProjection) -> Void
     let onTap: () -> Void
 
@@ -974,6 +982,8 @@ private struct MangaReaderPresentationContent: View {
                     imagePipeline: imagePipeline,
                     isChromeVisible: isChromeVisible,
                     onCurrentPageChange: onCurrentPageChange,
+                    canBoundaryPageTurn: canBoundaryPageTurn,
+                    onBoundaryPageTurn: onBoundaryPageTurn,
                     onPageLongPress: onPageLongPress,
                     onTap: onTap
                 )
@@ -1012,6 +1022,8 @@ private struct MangaReaderLoadedContent: View {
     let imagePipeline: MangaImagePipeline?
     let isChromeVisible: Bool
     let onCurrentPageChange: (Int) -> Void
+    let canBoundaryPageTurn: (Int, Bool) -> Bool
+    let onBoundaryPageTurn: (Int, Bool) -> Void
     let onPageLongPress: (MangaReaderPageProjection) -> Void
     let onTap: () -> Void
 
@@ -1055,6 +1067,12 @@ private struct MangaReaderLoadedContent: View {
                             isChromeVisible: isChromeVisible,
                             zoomEnabled: settings.zoomEnabled,
                             onCurrentPageChange: onCurrentPageChange,
+                            canBoundaryPageTurn: { delta in
+                                canBoundaryPageTurn(delta, usesTwoPageSpread)
+                            },
+                            onBoundaryPageTurn: { delta in
+                                onBoundaryPageTurn(delta, usesTwoPageSpread)
+                            },
                             onPageLongPress: onPageLongPress,
                             onTap: onTap
                         )
@@ -1069,6 +1087,12 @@ private struct MangaReaderLoadedContent: View {
                             isChromeVisible: isChromeVisible,
                             zoomEnabled: settings.zoomEnabled,
                             onCurrentPageChange: onCurrentPageChange,
+                            canBoundaryPageTurn: { delta in
+                                canBoundaryPageTurn(delta, usesTwoPageSpread)
+                            },
+                            onBoundaryPageTurn: { delta in
+                                onBoundaryPageTurn(delta, usesTwoPageSpread)
+                            },
                             onPageLongPress: onPageLongPress,
                             onTap: onTap
                         )

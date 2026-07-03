@@ -393,6 +393,78 @@ public final class MangaReaderWorkflow {
         return presentation
     }
 
+    public func canJumpToAdjacentChapter(
+        from position: MangaReadingPosition?,
+        delta: Int
+    ) -> Bool {
+        guard abs(delta) == 1,
+              let window,
+              let position = window.clampedPosition(position) else {
+            return false
+        }
+        return window.adjacentChapter(from: position, delta: delta) != nil
+    }
+
+    @discardableResult
+    public func jumpToAdjacentChapter(
+        from position: MangaReadingPosition?,
+        delta: Int,
+        animated: Bool = false
+    ) async throws -> MangaReaderPresentation {
+        try Task.checkCancellation()
+
+        guard abs(delta) == 1,
+              let initialWindow = window,
+              let sourcePosition = initialWindow.clampedPosition(position),
+              let chapter = initialWindow.adjacentChapter(from: sourcePosition, delta: delta) else {
+            throw YamiboError.underlying("Manga reader adjacent chapter is unavailable.")
+        }
+
+        if let presentation = jumpToLoadedAdjacentChapter(
+            chapterTID: chapter.tid,
+            delta: delta,
+            animated: animated,
+            in: initialWindow
+        ) {
+            return presentation
+        }
+
+        let document = try await documentLoader.loadChapterDocument(at: chapter.url)
+        try Task.checkCancellation()
+        guard !document.imageURLs.isEmpty else {
+            throw YamiboError.unreadableBody
+        }
+
+        guard var currentWindow = window,
+              currentWindow.resolvedPosition == sourcePosition else {
+            throw CancellationError()
+        }
+
+        if let presentation = jumpToLoadedAdjacentChapter(
+            chapterTID: chapter.tid,
+            delta: delta,
+            animated: animated,
+            in: currentWindow
+        ) {
+            return presentation
+        }
+
+        let targetPosition = Self.adjacentChapterTargetPosition(document: document, delta: delta)
+        let result = currentWindow.insertAdjacentDocument(document, preserving: targetPosition)
+        guard case .changed = result,
+              let targetIndex = MangaReaderPageProjection.resolvedPageIndex(for: currentWindow) else {
+            throw YamiboError.underlying("Manga reader adjacent chapter could not be inserted.")
+        }
+
+        self.window = currentWindow
+        presentation = loadedPresentation(
+            from: currentWindow,
+            placementPageIndex: targetIndex,
+            placementAnimated: animated
+        )
+        return presentation
+    }
+
     public func currentDirectorySearchCooldownExpiresAt() async -> Date? {
         await directoryWorkflow.cooldownExpiresAt()
     }
@@ -429,6 +501,46 @@ public final class MangaReaderWorkflow {
                 )
             ),
             settings: settings
+        )
+    }
+
+    private func jumpToLoadedAdjacentChapter(
+        chapterTID: String,
+        delta: Int,
+        animated: Bool,
+        in window: MangaChapterWindow
+    ) -> MangaReaderPresentation? {
+        let pages = MangaReaderPageProjection.projections(from: window)
+        let loadedIndex: Int?
+        if delta < 0 {
+            loadedIndex = pages.lastIndex(where: { page in
+                page.tid == chapterTID
+            })
+        } else {
+            loadedIndex = pages.firstIndex(where: { page in
+                page.tid == chapterTID
+            })
+        }
+        guard let loadedIndex else { return nil }
+
+        var updatedWindow = window
+        _ = updatedWindow.moveToLoadedPage(at: loadedIndex)
+        self.window = updatedWindow
+        presentation = loadedPresentation(
+            from: updatedWindow,
+            placementPageIndex: loadedIndex,
+            placementAnimated: animated
+        )
+        return presentation
+    }
+
+    private static func adjacentChapterTargetPosition(
+        document: MangaChapterDocument,
+        delta: Int
+    ) -> MangaReadingPosition {
+        MangaReadingPosition(
+            tid: document.tid,
+            localIndex: delta < 0 ? document.imageURLs.count - 1 : 0
         )
     }
 

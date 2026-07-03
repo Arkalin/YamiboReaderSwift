@@ -621,6 +621,248 @@ struct MangaReaderTestsWorkflow {
         #expect(loaded.viewportPlacement?.targetPageIndex == 1)
     }
 
+    @Test func workflowBoundaryJumpLoadsPreviousAdjacentChapterAtLastPage() async throws {
+        let document699 = try makeWorkflowDocument(tid: "699", pageCount: 3)
+        let document700 = try makeWorkflowDocument(tid: "700", pageCount: 4)
+        let directory = makeWorkflowDirectory(
+            name: "测试漫画",
+            strategy: .links,
+            sourceKey: "测试漫画",
+            tids: ["699", "700"]
+        )
+        let workflow = MangaReaderWorkflow(
+            context: try makeWorkflowContext(tid: "700", directoryName: "测试漫画"),
+            documentLoader: RecordingMangaChapterDocumentLoader(documents: [
+                document699.chapterURL: document699,
+                document700.chapterURL: document700
+            ]),
+            directoryRepository: RecordingMangaDirectoryRepository(output: .failure(.offline)),
+            directoryStore: RecordingMangaDirectoryStore(directories: [directory])
+        )
+
+        _ = await workflow.prepare()
+        let presentation = try await workflow.jumpToAdjacentChapter(
+            from: MangaReadingPosition(tid: "700", localIndex: 0),
+            delta: -1,
+            animated: true
+        )
+
+        let loaded = try #require(loadedPresentation(in: presentation))
+        #expect(loaded.pages.map(\.id) == [
+            "699#0", "699#1", "699#2",
+            "700#0", "700#1", "700#2", "700#3"
+        ])
+        #expect(loaded.currentPage?.id == "699#2")
+        #expect(loaded.readingPosition == MangaReadingPosition(tid: "699", localIndex: 2))
+        #expect(loaded.viewportPlacement?.targetPageIndex == 2)
+        #expect(loaded.viewportPlacement?.animated == true)
+    }
+
+    @Test func workflowBoundaryJumpLoadsNextAdjacentChapterAtFirstPage() async throws {
+        let document700 = try makeWorkflowDocument(tid: "700", pageCount: 4)
+        let document701 = try makeWorkflowDocument(tid: "701", pageCount: 3)
+        let directory = makeWorkflowDirectory(
+            name: "测试漫画",
+            strategy: .links,
+            sourceKey: "测试漫画",
+            tids: ["700", "701"]
+        )
+        let workflow = MangaReaderWorkflow(
+            context: try makeWorkflowContext(tid: "700", initialPage: 3, directoryName: "测试漫画"),
+            documentLoader: RecordingMangaChapterDocumentLoader(documents: [
+                document700.chapterURL: document700,
+                document701.chapterURL: document701
+            ]),
+            directoryRepository: RecordingMangaDirectoryRepository(output: .failure(.offline)),
+            directoryStore: RecordingMangaDirectoryStore(directories: [directory])
+        )
+
+        _ = await workflow.prepare()
+        let presentation = try await workflow.jumpToAdjacentChapter(
+            from: MangaReadingPosition(tid: "700", localIndex: 3),
+            delta: 1,
+            animated: true
+        )
+
+        let loaded = try #require(loadedPresentation(in: presentation))
+        #expect(loaded.pages.map(\.id) == [
+            "700#0", "700#1", "700#2", "700#3",
+            "701#0", "701#1", "701#2"
+        ])
+        #expect(loaded.currentPage?.id == "701#0")
+        #expect(loaded.readingPosition == MangaReadingPosition(tid: "701", localIndex: 0))
+        #expect(loaded.viewportPlacement?.targetPageIndex == 4)
+        #expect(loaded.viewportPlacement?.animated == true)
+    }
+
+    @Test func workflowBoundaryJumpUsesLoadedAdjacentChapterWithoutReloading() async throws {
+        let documents = try ["699", "700", "701"].map { try makeWorkflowDocument(tid: $0, pageCount: 1) }
+        let documentsByURL = Dictionary(uniqueKeysWithValues: documents.map { ($0.chapterURL, $0) })
+        let directory = makeWorkflowDirectory(
+            name: "测试漫画",
+            strategy: .links,
+            sourceKey: "测试漫画",
+            tids: ["699", "700", "701"]
+        )
+        let loader = RecordingMangaChapterDocumentLoader(documents: documentsByURL)
+        let workflow = MangaReaderWorkflow(
+            context: try makeWorkflowContext(tid: "700", directoryName: "测试漫画"),
+            documentLoader: loader,
+            directoryRepository: RecordingMangaDirectoryRepository(output: .failure(.offline)),
+            directoryStore: RecordingMangaDirectoryStore(directories: [directory])
+        )
+
+        _ = await workflow.prepare()
+        _ = await workflow.prefetchAdjacentChaptersIfNeeded(around: 0)
+        let loadedURLsBeforeJump = await loader.loadedURLs
+        let presentation = try await workflow.jumpToAdjacentChapter(
+            from: MangaReadingPosition(tid: "700", localIndex: 0),
+            delta: -1,
+            animated: true
+        )
+
+        let loaded = try #require(loadedPresentation(in: presentation))
+        #expect(loaded.currentPage?.id == "699#0")
+        #expect(await loader.loadedURLs == loadedURLsBeforeJump)
+    }
+
+    @Test func workflowBoundaryJumpWithoutAdjacentChapterKeepsPresentationUnchanged() async throws {
+        let document700 = try makeWorkflowDocument(tid: "700", pageCount: 1)
+        let directory = makeWorkflowDirectory(
+            name: "测试漫画",
+            strategy: .links,
+            sourceKey: "测试漫画",
+            tids: ["700"]
+        )
+        let workflow = MangaReaderWorkflow(
+            context: try makeWorkflowContext(tid: "700", directoryName: "测试漫画"),
+            documentLoader: RecordingMangaChapterDocumentLoader(documents: [
+                document700.chapterURL: document700
+            ]),
+            directoryRepository: RecordingMangaDirectoryRepository(output: .failure(.offline)),
+            directoryStore: RecordingMangaDirectoryStore(directories: [directory])
+        )
+
+        _ = await workflow.prepare()
+        let before = workflow.presentation
+
+        #expect(!workflow.canJumpToAdjacentChapter(
+            from: MangaReadingPosition(tid: "700", localIndex: 0),
+            delta: -1
+        ))
+        await #expect(throws: YamiboError.self) {
+            _ = try await workflow.jumpToAdjacentChapter(
+                from: MangaReadingPosition(tid: "700", localIndex: 0),
+                delta: -1
+            )
+        }
+        #expect(workflow.presentation == before)
+    }
+
+    @Test func workflowBoundaryJumpLoadFailureKeepsPresentationUnchanged() async throws {
+        let document700 = try makeWorkflowDocument(tid: "700", pageCount: 1)
+        let directory = makeWorkflowDirectory(
+            name: "测试漫画",
+            strategy: .links,
+            sourceKey: "测试漫画",
+            tids: ["700", "701"]
+        )
+        let workflow = MangaReaderWorkflow(
+            context: try makeWorkflowContext(tid: "700", directoryName: "测试漫画"),
+            documentLoader: RecordingMangaChapterDocumentLoader(documents: [
+                document700.chapterURL: document700
+            ]),
+            directoryRepository: RecordingMangaDirectoryRepository(output: .failure(.offline)),
+            directoryStore: RecordingMangaDirectoryStore(directories: [directory])
+        )
+
+        _ = await workflow.prepare()
+        let before = workflow.presentation
+
+        await #expect(throws: YamiboError.self) {
+            _ = try await workflow.jumpToAdjacentChapter(
+                from: MangaReadingPosition(tid: "700", localIndex: 0),
+                delta: 1
+            )
+        }
+        #expect(workflow.presentation == before)
+    }
+
+    @Test func workflowBoundaryJumpEmptyAdjacentChapterKeepsPresentationUnchanged() async throws {
+        let document700 = try makeWorkflowDocument(tid: "700", pageCount: 1)
+        let document701 = try makeWorkflowDocument(tid: "701", pageCount: 0)
+        let directory = makeWorkflowDirectory(
+            name: "测试漫画",
+            strategy: .links,
+            sourceKey: "测试漫画",
+            tids: ["700", "701"]
+        )
+        let workflow = MangaReaderWorkflow(
+            context: try makeWorkflowContext(tid: "700", directoryName: "测试漫画"),
+            documentLoader: RecordingMangaChapterDocumentLoader(documents: [
+                document700.chapterURL: document700,
+                document701.chapterURL: document701
+            ]),
+            directoryRepository: RecordingMangaDirectoryRepository(output: .failure(.offline)),
+            directoryStore: RecordingMangaDirectoryStore(directories: [directory])
+        )
+
+        _ = await workflow.prepare()
+        let before = workflow.presentation
+
+        await #expect(throws: YamiboError.self) {
+            _ = try await workflow.jumpToAdjacentChapter(
+                from: MangaReadingPosition(tid: "700", localIndex: 0),
+                delta: 1
+            )
+        }
+        #expect(workflow.presentation == before)
+    }
+
+    @Test func workflowBoundaryJumpDropsStaleAdjacentLoadWhenSourcePositionChanges() async throws {
+        let document700 = try makeWorkflowDocument(tid: "700", pageCount: 2)
+        let document701 = try makeWorkflowDocument(tid: "701", pageCount: 1)
+        let directory = makeWorkflowDirectory(
+            name: "测试漫画",
+            strategy: .links,
+            sourceKey: "测试漫画",
+            tids: ["700", "701"]
+        )
+        let loader = BlockingMangaChapterDocumentLoader(
+            documents: [
+                document700.chapterURL: document700,
+                document701.chapterURL: document701
+            ],
+            delayedURLs: [document701.chapterURL]
+        )
+        let workflow = MangaReaderWorkflow(
+            context: try makeWorkflowContext(tid: "700", initialPage: 1, directoryName: "测试漫画"),
+            documentLoader: loader,
+            directoryRepository: RecordingMangaDirectoryRepository(output: .failure(.offline)),
+            directoryStore: RecordingMangaDirectoryStore(directories: [directory])
+        )
+
+        _ = await workflow.prepare()
+        let staleJump = Task {
+            try await workflow.jumpToAdjacentChapter(
+                from: MangaReadingPosition(tid: "700", localIndex: 1),
+                delta: 1
+            )
+        }
+        await loader.waitForDelayedLoad()
+        let movedPresentation = workflow.moveToLoadedPage(at: 0)
+        await loader.resumeDelayedLoads()
+
+        do {
+            _ = try await staleJump.value
+            Issue.record("Expected stale boundary jump to be cancelled.")
+        } catch is CancellationError {
+            #expect(workflow.presentation == movedPresentation)
+        } catch {
+            Issue.record("Expected CancellationError, got \(error).")
+        }
+    }
+
     @Test func workflowJumpsToDistantChapterByResettingWindow() async throws {
         let document700 = try makeWorkflowDocument(tid: "700", pageCount: 1)
         let document703 = try makeWorkflowDocument(tid: "703", pageCount: 1)
@@ -915,6 +1157,50 @@ private actor RecordingMangaChapterDocumentLoader: MangaChapterDocumentLoading {
         case let .failure(error):
             throw error
         }
+    }
+}
+
+private actor BlockingMangaChapterDocumentLoader: MangaChapterDocumentLoading {
+    private let documents: [URL: MangaChapterDocument]
+    private let delayedURLs: Set<URL>
+    private var delayedLoadContinuations: [CheckedContinuation<Void, Never>] = []
+    private var delayedLoadWaiters: [CheckedContinuation<Void, Never>] = []
+    private(set) var loadedURLs: [URL] = []
+
+    init(
+        documents: [URL: MangaChapterDocument],
+        delayedURLs: Set<URL>
+    ) {
+        self.documents = documents
+        self.delayedURLs = delayedURLs
+    }
+
+    func loadChapterDocument(at url: URL) async throws -> MangaChapterDocument {
+        loadedURLs.append(url)
+        if delayedURLs.contains(url) {
+            delayedLoadWaiters.forEach { $0.resume() }
+            delayedLoadWaiters.removeAll()
+            await withCheckedContinuation { continuation in
+                delayedLoadContinuations.append(continuation)
+            }
+        }
+        guard let document = documents[url] else {
+            throw YamiboError.unreadableBody
+        }
+        return document
+    }
+
+    func waitForDelayedLoad() async {
+        guard delayedLoadContinuations.isEmpty else { return }
+        await withCheckedContinuation { continuation in
+            delayedLoadWaiters.append(continuation)
+        }
+    }
+
+    func resumeDelayedLoads() {
+        let continuations = delayedLoadContinuations
+        delayedLoadContinuations.removeAll()
+        continuations.forEach { $0.resume() }
     }
 }
 

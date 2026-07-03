@@ -13,6 +13,8 @@ struct MangaPagedReaderViewport: UIViewRepresentable {
     let isChromeVisible: Bool
     let zoomEnabled: Bool
     let onCurrentPageChange: (Int) -> Void
+    let canBoundaryPageTurn: (Int) -> Bool
+    let onBoundaryPageTurn: (Int) -> Void
     let onPageLongPress: (MangaReaderPageProjection) -> Void
     let onTap: () -> Void
 
@@ -130,11 +132,11 @@ struct MangaPagedReaderViewport: UIViewRepresentable {
                     layout: .zero
                 ),
                 scrollAnimationRequest: nil,
-                canBoundaryPageTurn: { _ in false },
+                canBoundaryPageTurn: parent.canBoundaryPageTurn,
                 onSelectionChange: { [weak self] spreadIndex in
                     self?.publishCurrentPageIfNeeded(spreadIndex: spreadIndex)
                 },
-                onBoundaryPageTurn: { _ in },
+                onBoundaryPageTurn: parent.onBoundaryPageTurn,
                 onScrollAnimationRequestConsumed: { _ in },
                 pageTurnRestingBackgroundColor: { [parent] _ in parent.pageEdgeFillColor },
                 pageTurnBackgroundColor: { [parent] _, overlayAlpha in
@@ -830,6 +832,8 @@ struct MangaPagedPageCurlReaderViewport: UIViewControllerRepresentable {
     let isChromeVisible: Bool
     let zoomEnabled: Bool
     let onCurrentPageChange: (Int) -> Void
+    let canBoundaryPageTurn: (Int) -> Bool
+    let onBoundaryPageTurn: (Int) -> Void
     let onPageLongPress: (MangaReaderPageProjection) -> Void
     let onTap: () -> Void
 
@@ -935,6 +939,10 @@ struct MangaPagedPageCurlReaderViewport: UIViewControllerRepresentable {
             recognizer.numberOfTapsRequired = 2
             return recognizer
         }()
+        lazy var boundaryPageTurnPanGesture = UIPanGestureRecognizer(
+            target: self,
+            action: #selector(handleBoundaryPageTurnPan(_:))
+        )
         lazy var spreadPinchGesture = UIPinchGestureRecognizer(target: self, action: #selector(handleSpreadPinch(_:)))
         lazy var spreadPanGesture = UIPanGestureRecognizer(target: self, action: #selector(handleSpreadPan(_:)))
 
@@ -1187,6 +1195,30 @@ struct MangaPagedPageCurlReaderViewport: UIViewControllerRepresentable {
             }
         }
 
+        @objc
+        func handleBoundaryPageTurnPan(_ recognizer: UIPanGestureRecognizer) {
+            guard recognizer.state == .ended,
+                  !parent.isChromeVisible,
+                  let view = recognizer.view else {
+                return
+            }
+            guard let delta = ReaderPagedBoundaryPageTurn.boundaryDelta(
+                selectionIndex: parent.selectionIndex,
+                itemCount: parent.sequence.pageCount,
+                translation: recognizer.translation(in: view),
+                velocity: recognizer.velocity(in: view),
+                viewportWidth: view.bounds.width,
+                horizontalNavigationDirection: parent.settings.pageTurnDirection.horizontalNavigationDirection,
+                canBoundaryPageTurn: parent.canBoundaryPageTurn
+            ) else {
+                return
+            }
+            let onBoundaryPageTurn = parent.onBoundaryPageTurn
+            callbackScheduler.publish {
+                onBoundaryPageTurn(delta)
+            }
+        }
+
         func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
             guard touch.view?.isDescendant(ofType: UIControl.self) != true else {
                 return false
@@ -1222,8 +1254,28 @@ struct MangaPagedPageCurlReaderViewport: UIViewControllerRepresentable {
                 }
                 return isPageCurlSpreadPanEnabled(in: containerViewController)
             }
+            if gestureRecognizer === boundaryPageTurnPanGesture {
+                guard let panRecognizer = gestureRecognizer as? UIPanGestureRecognizer,
+                      !parent.isChromeVisible,
+                      let view = panRecognizer.view else {
+                    return false
+                }
+                let velocity = panRecognizer.velocity(in: view)
+                guard abs(velocity.x) > abs(velocity.y) else { return false }
+                let physicalDelta = velocity.x < 0 ? 1 : -1
+                let delta = ReaderPagedBoundaryPageTurn.directionalDelta(
+                    physicalDelta,
+                    direction: parent.settings.pageTurnDirection.horizontalNavigationDirection
+                )
+                let targetSelectionIndex = parent.selectionIndex + delta
+                guard targetSelectionIndex < 0 || targetSelectionIndex >= parent.sequence.pageCount else {
+                    return false
+                }
+                return parent.canBoundaryPageTurn(delta)
+            }
             guard let panRecognizer = gestureRecognizer as? UIPanGestureRecognizer,
                   gestureRecognizer !== spreadPanGesture,
+                  gestureRecognizer !== boundaryPageTurnPanGesture,
                   let pageViewController = activePageViewController,
                   pageViewController.gestureRecognizers.contains(where: { $0 === gestureRecognizer }) else {
                 return true
@@ -1283,6 +1335,10 @@ struct MangaPagedPageCurlReaderViewport: UIViewControllerRepresentable {
 
         func configureGestures(in pageViewController: UIPageViewController) {
             activePageViewController = pageViewController
+            if boundaryPageTurnPanGesture.view !== pageViewController.view {
+                boundaryPageTurnPanGesture.delegate = self
+                pageViewController.view.addGestureRecognizer(boundaryPageTurnPanGesture)
+            }
             for recognizer in pageViewController.gestureRecognizers {
                 if recognizer is UITapGestureRecognizer {
                     recognizer.isEnabled = false
