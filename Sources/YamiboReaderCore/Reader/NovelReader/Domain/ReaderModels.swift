@@ -57,6 +57,31 @@ public struct ReaderPageRequest: Codable, Hashable, Sendable {
     }
 }
 
+public enum NovelReaderPageLoadSource: Hashable, Sendable {
+    case online
+    case offlineFallback(updatedAt: Date?)
+
+    public var isOfflineFallback: Bool {
+        if case .offlineFallback = self {
+            return true
+        }
+        return false
+    }
+}
+
+public struct NovelReaderPageLoad: Hashable, Sendable {
+    public var document: ReaderPageDocument
+    public var source: NovelReaderPageLoadSource
+
+    public init(
+        document: ReaderPageDocument,
+        source: NovelReaderPageLoadSource = .online
+    ) {
+        self.document = document
+        self.source = source
+    }
+}
+
 public enum ReaderContentSource: String, Codable, Hashable, Sendable {
     case allPostsPage
     case authorFilteredPage
@@ -1926,6 +1951,7 @@ public struct NovelReaderPresentation: Hashable, Sendable {
     public var committedSettings: ReaderAppearanceSettings
     public var readingState: NovelReaderReadingState
     public var currentContentSource: ReaderContentSource
+    public var pageLoadSource: NovelReaderPageLoadSource
     public var retainedChapterCount: Int
     public var filteredChapterCandidateCount: Int
     public var progressProjection: NovelReaderProgressProjection
@@ -1940,6 +1966,7 @@ public struct NovelReaderPresentation: Hashable, Sendable {
         committedSettings: ReaderAppearanceSettings,
         readingState: NovelReaderReadingState,
         currentContentSource: ReaderContentSource,
+        pageLoadSource: NovelReaderPageLoadSource = .online,
         retainedChapterCount: Int,
         filteredChapterCandidateCount: Int,
         selectedSurfaceIndex: Int? = nil,
@@ -1961,6 +1988,7 @@ public struct NovelReaderPresentation: Hashable, Sendable {
         self.committedSettings = committedSettings
         self.readingState = readingState
         self.currentContentSource = currentContentSource
+        self.pageLoadSource = pageLoadSource
         self.retainedChapterCount = max(0, retainedChapterCount)
         self.filteredChapterCandidateCount = max(0, filteredChapterCandidateCount)
         self.progressProjection = progressProjection ?? NovelReaderProgressProjection(

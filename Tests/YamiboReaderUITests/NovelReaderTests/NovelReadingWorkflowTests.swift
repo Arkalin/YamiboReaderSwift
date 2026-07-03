@@ -128,6 +128,39 @@ final class NovelReadingWorkflowTests: XCTestCase {
         )
     }
 
+    func testOfflineFallbackLoadSourcePropagatesToPresentationAndProgressPosition() async throws {
+        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9180&mobile=2")!
+        let updatedAt = Date(timeIntervalSince1970: 91_800)
+        let repository = RecordingNovelReadingRepository(
+            documents: [
+                1: makeNovelDocument(threadURL: threadURL, view: 1, maxView: 1, authorID: "42")
+            ],
+            loadSources: [
+                1: .offlineFallback(updatedAt: updatedAt)
+            ]
+        )
+        let workflow = NovelReadingWorkflow(
+            context: ReaderLaunchContext(
+                threadURL: threadURL,
+                threadTitle: "Thread",
+                source: .forum,
+                initialView: 1,
+                authorID: "42"
+            ),
+            settings: ReaderAppearanceSettings(readingMode: .paged),
+            layout: ReaderContainerLayout(width: 320, height: 568),
+            repository: repository
+        )
+
+        let state = try await workflow.start(initial: NovelReadingInitialPosition())
+        let progress = workflow.currentProgressPosition()
+
+        XCTAssertEqual(state.presentation?.pageLoadSource, .offlineFallback(updatedAt: updatedAt))
+        XCTAssertEqual(progress.view, 1)
+        XCTAssertEqual(progress.authorID, "42")
+        XCTAssertEqual(progress.resumePoint?.view, 1)
+    }
+
     func testVerticalDisplayReferenceBecomesStaleAfterRuntimeGenerationChanges() async throws {
         let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9179&mobile=2")!
         let repository = RecordingNovelReadingRepository(documents: [
@@ -2547,13 +2580,19 @@ private final class RecordingNovelReadingRepository: NovelReadingPageRepository,
     }
 
     private let documents: [Int: ReaderPageDocument]
+    private let loadSources: [Int: NovelReaderPageLoadSource]
     private let failingViews: Set<Int>
     private(set) var loadRequests: [ReaderPageRequest] = []
     private(set) var ignoringCacheRequests: [ReaderPageRequest] = []
     private(set) var deletedViews: [DeletedViews] = []
 
-    init(documents: [Int: ReaderPageDocument], failingViews: Set<Int> = []) {
+    init(
+        documents: [Int: ReaderPageDocument],
+        loadSources: [Int: NovelReaderPageLoadSource] = [:],
+        failingViews: Set<Int> = []
+    ) {
         self.documents = documents
+        self.loadSources = loadSources
         self.failingViews = failingViews
     }
 
@@ -2565,6 +2604,16 @@ private final class RecordingNovelReadingRepository: NovelReadingPageRepository,
     func loadPageIgnoringCache(_ request: ReaderPageRequest) async throws -> ReaderPageDocument {
         ignoringCacheRequests.append(request)
         return try document(for: request)
+    }
+
+    func loadPageResult(_ request: ReaderPageRequest) async throws -> NovelReaderPageLoad {
+        loadRequests.append(request)
+        return try load(for: request)
+    }
+
+    func loadPageIgnoringCacheResult(_ request: ReaderPageRequest) async throws -> NovelReaderPageLoad {
+        ignoringCacheRequests.append(request)
+        return try load(for: request)
     }
 
     func cachedViews(
@@ -2590,13 +2639,20 @@ private final class RecordingNovelReadingRepository: NovelReadingPageRepository,
     }
 
     private func document(for request: ReaderPageRequest) throws -> ReaderPageDocument {
+        try load(for: request).document
+    }
+
+    private func load(for request: ReaderPageRequest) throws -> NovelReaderPageLoad {
         if failingViews.contains(request.view) {
             throw URLError(.cannotLoadFromNetwork)
         }
         guard let document = documents[request.view] else {
             throw URLError(.badServerResponse)
         }
-        return document
+        return NovelReaderPageLoad(
+            document: document,
+            source: loadSources[request.view] ?? .online
+        )
     }
 }
 

@@ -3,6 +3,8 @@ import Foundation
 public protocol NovelReadingPageRepository: Sendable {
     func loadPage(_ request: ReaderPageRequest) async throws -> ReaderPageDocument
     func loadPageIgnoringCache(_ request: ReaderPageRequest) async throws -> ReaderPageDocument
+    func loadPageResult(_ request: ReaderPageRequest) async throws -> NovelReaderPageLoad
+    func loadPageIgnoringCacheResult(_ request: ReaderPageRequest) async throws -> NovelReaderPageLoad
     func cachedViews(
         for threadURL: URL,
         authorID: String?,
@@ -14,6 +16,16 @@ public protocol NovelReadingPageRepository: Sendable {
         authorID: String?,
         contentSource: ReaderContentSource?
     ) async throws
+}
+
+public extension NovelReadingPageRepository {
+    func loadPageResult(_ request: ReaderPageRequest) async throws -> NovelReaderPageLoad {
+        NovelReaderPageLoad(document: try await loadPage(request), source: .online)
+    }
+
+    func loadPageIgnoringCacheResult(_ request: ReaderPageRequest) async throws -> NovelReaderPageLoad {
+        NovelReaderPageLoad(document: try await loadPageIgnoringCache(request), source: .online)
+    }
 }
 
 extension NovelReaderRepository: NovelReadingPageRepository {}
@@ -91,6 +103,8 @@ private struct NovelReadingPreparedTransaction {
     let usesPadPresentation: Bool
     let currentDocument: ReaderPageDocument
     let prefetchedDocument: ReaderPageDocument?
+    let currentLoadSource: NovelReaderPageLoadSource
+    let prefetchedLoadSource: NovelReaderPageLoadSource?
     let currentAuthorID: String?
     let currentDocumentSurfaceCount: Int
 }
@@ -107,6 +121,8 @@ public final class NovelReadingWorkflow {
     private var session: NovelReadingSession?
     private var currentDocument: ReaderPageDocument?
     private var prefetchedDocument: ReaderPageDocument?
+    private var currentLoadSource: NovelReaderPageLoadSource = .online
+    private var prefetchedLoadSource: NovelReaderPageLoadSource?
     private var currentAuthorID: String?
     private var currentDocumentSurfaceCount = 0
     private var usesPadPresentation: Bool
@@ -266,7 +282,8 @@ public final class NovelReadingWorkflow {
                     settings: settings,
                     layout: layout,
                     usesPadPresentation: usesPadPresentation
-                )
+                ),
+                pageLoadSource: currentLoadSource
             ),
             cachedViews: state.cachedViews
         )
@@ -386,6 +403,8 @@ public final class NovelReadingWorkflow {
             usesPadPresentation: usesPadPresentation,
             currentDocument: currentDocument,
             prefetchedDocument: prefetchedDocument,
+            currentLoadSource: currentLoadSource,
+            prefetchedLoadSource: prefetchedLoadSource,
             currentAuthorID: candidateSession.snapshot.currentAuthorID ?? currentAuthorID,
             cachedViews: state?.cachedViews ?? []
         )
@@ -400,6 +419,8 @@ public final class NovelReadingWorkflow {
         usesPadPresentation: Bool,
         currentDocument: ReaderPageDocument,
         prefetchedDocument: ReaderPageDocument?,
+        currentLoadSource: NovelReaderPageLoadSource,
+        prefetchedLoadSource: NovelReaderPageLoadSource?,
         currentAuthorID: String?,
         cachedViews: Set<Int>
     ) throws -> NovelReadingPreparedTransaction {
@@ -420,7 +441,8 @@ public final class NovelReadingWorkflow {
                     settings: settings,
                     layout: layout,
                     usesPadPresentation: usesPadPresentation
-                )
+                ),
+                pageLoadSource: currentLoadSource
             ),
             cachedViews: cachedViews
         )
@@ -433,6 +455,8 @@ public final class NovelReadingWorkflow {
             usesPadPresentation: usesPadPresentation,
             currentDocument: currentDocument,
             prefetchedDocument: prefetchedDocument,
+            currentLoadSource: currentLoadSource,
+            prefetchedLoadSource: prefetchedLoadSource,
             currentAuthorID: currentAuthorID,
             currentDocumentSurfaceCount: session.surfaceCount(in: snapshot.currentView)
         )
@@ -448,6 +472,8 @@ public final class NovelReadingWorkflow {
         session = transaction.session
         currentDocument = transaction.currentDocument
         prefetchedDocument = transaction.prefetchedDocument
+        currentLoadSource = transaction.currentLoadSource
+        prefetchedLoadSource = transaction.prefetchedLoadSource
         currentAuthorID = transaction.currentAuthorID
         currentDocumentSurfaceCount = transaction.currentDocumentSurfaceCount
         state = transaction.state
@@ -591,6 +617,8 @@ public final class NovelReadingWorkflow {
         session = nil
         currentDocument = nil
         prefetchedDocument = nil
+        currentLoadSource = .online
+        prefetchedLoadSource = nil
         currentAuthorID = nil
         currentDocumentSurfaceCount = 0
         state = nil
@@ -652,9 +680,11 @@ public final class NovelReadingWorkflow {
             view: currentDocument.view + 1,
             authorID: currentAuthorID ?? currentDocument.resolvedAuthorID ?? context.authorID
         )
-        guard let nextDocument = try? await repository.loadPage(nextRequest) else { return nil }
+        guard let nextLoad = try? await repository.loadPageResult(nextRequest) else { return nil }
 
+        let nextDocument = nextLoad.document
         prefetchedDocument = nextDocument
+        prefetchedLoadSource = nextLoad.source
         if nextDocument.maxView > (session?.snapshot.maxView ?? 0) {
             session?.updateMaximumView(nextDocument.maxView)
         }
@@ -698,6 +728,8 @@ public final class NovelReadingWorkflow {
             usesPadPresentation: usesPadPresentation,
             currentDocument: nextDocument,
             prefetchedDocument: nil,
+            currentLoadSource: prefetchedLoadSource ?? .online,
+            prefetchedLoadSource: nil,
             currentAuthorID: candidateSession.snapshot.currentAuthorID ?? nextAuthorID,
             cachedViews: state?.cachedViews ?? [],
         )
@@ -726,9 +758,10 @@ public final class NovelReadingWorkflow {
             view: view,
             authorID: currentAuthorID ?? context.authorID
         )
-        let document = forceRefresh
-            ? try await repository.loadPageIgnoringCache(request)
-            : try await repository.loadPage(request)
+        let pageLoad = forceRefresh
+            ? try await repository.loadPageIgnoringCacheResult(request)
+            : try await repository.loadPageResult(request)
+        let document = pageLoad.document
         let preservedResumePoint = preferredResumePoint ?? captureNovelReadingPosition()
         let nextAuthorID = document.resolvedAuthorID ?? currentAuthorID ?? context.authorID
         let transaction = try prepareRuntimeTransaction(
@@ -764,6 +797,8 @@ public final class NovelReadingWorkflow {
             usesPadPresentation: usesPadPresentation,
             currentDocument: document,
             prefetchedDocument: nil,
+            currentLoadSource: pageLoad.source,
+            prefetchedLoadSource: nil,
             currentAuthorID: candidateSession.snapshot.currentAuthorID ?? nextAuthorID,
             cachedViews: cachedViews,
         )
@@ -818,7 +853,8 @@ public final class NovelReadingWorkflow {
                     settings: settings,
                     layout: layout,
                     usesPadPresentation: usesPadPresentation
-                )
+                ),
+                pageLoadSource: currentLoadSource
             ),
             cachedViews: cachedViews
         )
@@ -832,7 +868,8 @@ public final class NovelReadingWorkflow {
         generation: UInt64,
         revision: UInt64,
         settings: ReaderAppearanceSettings,
-        usesTwoPageSpread: Bool
+        usesTwoPageSpread: Bool,
+        pageLoadSource: NovelReaderPageLoadSource
     ) -> NovelReaderPresentation {
         let readableSize = layoutResult?.viewportContext.identity.layout.readableFrame.size ?? layout.readableFrame.size
         let indexSurfaces = (layoutResult?.viewportIndex.surfaces ?? []).sorted { lhs, rhs in
@@ -913,6 +950,7 @@ public final class NovelReadingWorkflow {
             committedSettings: settings,
             readingState: readingState,
             currentContentSource: snapshot.currentContentSource,
+            pageLoadSource: pageLoadSource,
             retainedChapterCount: snapshot.retainedChapterCount,
             filteredChapterCandidateCount: snapshot.filteredChapterCandidateCount,
             selectedSurfaceIndex: selectedSurfaceIndex,

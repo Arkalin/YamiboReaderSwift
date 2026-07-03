@@ -143,6 +143,12 @@ public protocol OfflineCacheStoring: Sendable {
         authorID: String?,
         contentSource: ReaderContentSource?
     ) async -> ForumThreadPage?
+    func novelOfflineSourcePageSnapshot(
+        threadURL: URL,
+        view: Int,
+        authorID: String?,
+        contentSource: ReaderContentSource?
+    ) async -> NovelOfflineSourcePageSnapshot?
     func saveNovelOfflineProjectionPrewarm(_ document: ReaderPageDocument, ownerTitle: String) async throws
     func novelOfflineProjectionPrewarm(
         ownerTitle: String,

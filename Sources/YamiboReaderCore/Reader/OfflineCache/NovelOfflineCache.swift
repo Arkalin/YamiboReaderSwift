@@ -212,3 +212,19 @@ public struct NovelOfflineCacheViewsSnapshot: Codable, Hashable, Sendable {
         return NovelOfflineCacheViewState(view: normalizedView, status: .uncached)
     }
 }
+
+public struct NovelOfflineSourcePageSnapshot: Sendable {
+    public var ownerTitle: String
+    public var sourcePage: ForumThreadPage
+    public var updatedAt: Date?
+
+    public init(
+        ownerTitle: String,
+        sourcePage: ForumThreadPage,
+        updatedAt: Date?
+    ) {
+        self.ownerTitle = ownerTitle
+        self.sourcePage = sourcePage
+        self.updatedAt = updatedAt
+    }
+}

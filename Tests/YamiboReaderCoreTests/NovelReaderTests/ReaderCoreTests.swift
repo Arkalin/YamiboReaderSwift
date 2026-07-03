@@ -209,6 +209,44 @@ private final class StubURLProtocol: URLProtocol {
             )
         }
 
+        if absolute.contains("tid=34") {
+            return .error(URLError(.notConnectedToInternet))
+        }
+
+        if absolute.contains("tid=35") {
+            return .response(
+                StubURLProtocolResponse(
+                    statusCode: 200,
+                    body: """
+                    <html><body>
+                      <div class="plc cl" id="pid3501">
+                        <ul class="authi"><li class="mtit"><a href="home.php?mod=space&amp;uid=42&amp;mobile=2">楼主</a></li></ul>
+                        <div class="message"></div>
+                      </div>
+                    </body></html>
+                    """
+                )
+            )
+        }
+
+        if absolute.contains("tid=36") {
+            return .response(
+                StubURLProtocolResponse(
+                    statusCode: 200,
+                    body: threadPageHTML(postID: "3601", body: "在线章节<br>在线新正文")
+                )
+            )
+        }
+
+        if absolute.contains("tid=37") {
+            return .response(
+                StubURLProtocolResponse(
+                    statusCode: 200,
+                    body: threadPageHTML(postID: "3701", body: "未缓存章节<br>未缓存在线正文")
+                )
+            )
+        }
+
         if absolute.contains("action=viewratings"),
            absolute.contains("tid=26"),
            absolute.contains("pid=2601") {
@@ -3490,6 +3528,189 @@ private func makeReaderRepositoryThreadPage(
     await #expect(throws: YamiboError.offline) {
         _ = try await repository.loadPage(ReaderPageRequest(threadURL: threadURL, view: 1, authorID: "42"))
     }
+}
+
+@Test func readerRepositoryFallsBackToDurableNovelOfflineSourcePageWhenOnlineAcquisitionFails() async throws {
+    let configuration = URLSessionConfiguration.ephemeral
+    configuration.protocolClasses = [StubURLProtocol.self]
+    let session = URLSession(configuration: configuration)
+    let directory = URL(fileURLWithPath: NSTemporaryDirectory())
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    let offlineStore = try makeTestOfflineCacheStore(rootDirectory: directory)
+    let readerCacheStore = ReaderCacheStore(baseDirectory: directory.appendingPathComponent("reader", isDirectory: true))
+    let forumCacheStore = ForumCacheStore(baseDirectory: directory.appendingPathComponent("forum", isDirectory: true))
+    let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=34&mobile=2"))
+    let thread = ThreadIdentity(tid: "34", canonicalURL: ReaderCacheIdentity.canonicalThreadURL(from: threadURL))
+    let sourcePage = makeReaderRepositoryThreadPage(
+        thread: thread,
+        title: "离线小说",
+        postID: "3401",
+        authorID: "42",
+        contentHTML: "<strong>离线章节</strong><br>离线正文"
+    )
+    let updatedAt = Date(timeIntervalSince1970: 34_000)
+    try await offlineStore.saveNovelOfflineSourcePage(
+        sourcePage,
+        request: NovelOfflineCacheWorkRequest(
+            ownerTitle: "离线小说",
+            title: "第一页",
+            threadURL: threadURL,
+            view: 1,
+            authorID: "42",
+            contentSource: .authorFilteredPage
+        ),
+        projectionPrewarm: nil,
+        updatedAt: updatedAt
+    )
+    let repository = NovelReaderRepository(
+        client: YamiboClient(session: session, cookie: "sid=reader", userAgent: "Test-UA"),
+        cacheStore: readerCacheStore,
+        forumCacheStore: forumCacheStore,
+        offlineCacheStore: offlineStore
+    )
+
+    let load = try await repository.loadPageResult(ReaderPageRequest(threadURL: threadURL, view: 1, authorID: "42"))
+    let prewarm = await offlineStore.novelOfflineProjectionPrewarm(
+        ownerTitle: "离线小说",
+        threadURL: threadURL,
+        view: 1,
+        authorID: "42",
+        contentSource: .authorFilteredPage
+    )
+
+    #expect(load.source == .offlineFallback(updatedAt: updatedAt))
+    #expect(load.document.segments.contains(.text("离线章节\n离线正文", chapterTitle: "离线章节")))
+    #expect(load.document.projectionSourceFingerprint != nil)
+    #expect(load.document.projectionSchemaVersion == 1)
+    #expect(prewarm?.segments == load.document.segments)
+}
+
+@Test func readerRepositoryDoesNotUseOfflineFallbackForParserFailures() async throws {
+    let configuration = URLSessionConfiguration.ephemeral
+    configuration.protocolClasses = [StubURLProtocol.self]
+    let session = URLSession(configuration: configuration)
+    let directory = URL(fileURLWithPath: NSTemporaryDirectory())
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    let offlineStore = try makeTestOfflineCacheStore(rootDirectory: directory)
+    let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=35&mobile=2"))
+    let thread = ThreadIdentity(tid: "35", canonicalURL: ReaderCacheIdentity.canonicalThreadURL(from: threadURL))
+    let sourcePage = makeReaderRepositoryThreadPage(
+        thread: thread,
+        title: "离线小说",
+        postID: "3501",
+        authorID: "42",
+        contentHTML: "<strong>离线章节</strong><br>离线正文"
+    )
+    try await offlineStore.saveNovelOfflineSourcePage(
+        sourcePage,
+        request: NovelOfflineCacheWorkRequest(
+            ownerTitle: "离线小说",
+            title: "第一页",
+            threadURL: threadURL,
+            view: 1,
+            authorID: "42",
+            contentSource: .authorFilteredPage
+        ),
+        projectionPrewarm: nil,
+        updatedAt: Date(timeIntervalSince1970: 35_000)
+    )
+    let repository = NovelReaderRepository(
+        client: YamiboClient(session: session, cookie: "sid=reader", userAgent: "Test-UA"),
+        cacheStore: ReaderCacheStore(baseDirectory: directory.appendingPathComponent("reader", isDirectory: true)),
+        forumCacheStore: ForumCacheStore(baseDirectory: directory.appendingPathComponent("forum", isDirectory: true)),
+        offlineCacheStore: offlineStore
+    )
+
+    await #expect(throws: (any Error).self) {
+        _ = try await repository.loadPageResult(ReaderPageRequest(threadURL: threadURL, view: 1, authorID: "42"))
+    }
+}
+
+@Test func readerRepositoryAutoRefreshesExistingNovelOfflineSourceAfterOnlineRead() async throws {
+    let configuration = URLSessionConfiguration.ephemeral
+    configuration.protocolClasses = [StubURLProtocol.self]
+    let session = URLSession(configuration: configuration)
+    let directory = URL(fileURLWithPath: NSTemporaryDirectory())
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    let offlineStore = try makeTestOfflineCacheStore(rootDirectory: directory)
+    let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=36&mobile=2"))
+    let thread = ThreadIdentity(tid: "36", canonicalURL: ReaderCacheIdentity.canonicalThreadURL(from: threadURL))
+    let oldSource = makeReaderRepositoryThreadPage(
+        thread: thread,
+        title: "自动刷新小说",
+        postID: "3600",
+        authorID: "42",
+        contentHTML: "<strong>旧章节</strong><br>旧正文"
+    )
+    let oldUpdatedAt = Date(timeIntervalSince1970: 36_000)
+    try await offlineStore.saveNovelOfflineSourcePage(
+        oldSource,
+        request: NovelOfflineCacheWorkRequest(
+            ownerTitle: "自动刷新小说",
+            title: "第一页",
+            threadURL: threadURL,
+            view: 1,
+            authorID: "42",
+            contentSource: .authorFilteredPage
+        ),
+        projectionPrewarm: nil,
+        updatedAt: oldUpdatedAt
+    )
+    let repository = NovelReaderRepository(
+        client: YamiboClient(session: session, cookie: "sid=reader", userAgent: "Test-UA"),
+        cacheStore: ReaderCacheStore(baseDirectory: directory.appendingPathComponent("reader", isDirectory: true)),
+        forumCacheStore: ForumCacheStore(baseDirectory: directory.appendingPathComponent("forum", isDirectory: true)),
+        offlineCacheStore: offlineStore,
+        novelOfflineAutoRefreshEnabled: { true }
+    )
+
+    let load = try await repository.loadPageResult(ReaderPageRequest(threadURL: threadURL, view: 1, authorID: "42"))
+    let refreshedSource = await offlineStore.novelOfflineSourcePage(
+        ownerTitle: "自动刷新小说",
+        threadURL: threadURL,
+        view: 1,
+        authorID: "42",
+        contentSource: .authorFilteredPage
+    )
+    let snapshot = await offlineStore.novelOfflineCacheViewsSnapshot(
+        ownerTitle: "自动刷新小说",
+        threadURL: threadURL,
+        authorID: "42",
+        contentSource: .authorFilteredPage
+    )
+
+    #expect(load.source == .online)
+    #expect(load.document.segments.contains(.text("在线章节\n在线新正文", chapterTitle: "在线章节")))
+    #expect(refreshedSource?.posts.first?.contentHTML.contains("在线新正文") == true)
+    #expect((snapshot.updateTimesByView[1] ?? oldUpdatedAt) > oldUpdatedAt)
+}
+
+@Test func readerRepositoryDoesNotCreateNovelOfflineEntryForUncachedOnlineRead() async throws {
+    let configuration = URLSessionConfiguration.ephemeral
+    configuration.protocolClasses = [StubURLProtocol.self]
+    let session = URLSession(configuration: configuration)
+    let directory = URL(fileURLWithPath: NSTemporaryDirectory())
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    let offlineStore = try makeTestOfflineCacheStore(rootDirectory: directory)
+    let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=37&mobile=2"))
+    let repository = NovelReaderRepository(
+        client: YamiboClient(session: session, cookie: "sid=reader", userAgent: "Test-UA"),
+        cacheStore: ReaderCacheStore(baseDirectory: directory.appendingPathComponent("reader", isDirectory: true)),
+        forumCacheStore: ForumCacheStore(baseDirectory: directory.appendingPathComponent("forum", isDirectory: true)),
+        offlineCacheStore: offlineStore,
+        novelOfflineAutoRefreshEnabled: { true }
+    )
+
+    _ = try await repository.loadPageResult(ReaderPageRequest(threadURL: threadURL, view: 1, authorID: "42"))
+    let snapshot = await offlineStore.novelOfflineCacheViewsSnapshot(
+        ownerTitle: "未缓存小说",
+        threadURL: threadURL,
+        authorID: "42",
+        contentSource: .authorFilteredPage
+    )
+
+    #expect(snapshot.cachedViews.isEmpty)
+    #expect(await offlineStore.allNovelOfflineCacheEntries().isEmpty)
 }
 
 @Test func readerRepositoryCachesViewsSequentiallyAndSkipsFailures() async throws {

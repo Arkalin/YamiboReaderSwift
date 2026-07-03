@@ -447,7 +447,17 @@ public final class ReaderContainerModel: ObservableObject {
     }
 
     public var sourceStatusText: String? {
-        nil
+        guard let pageLoadSource = readerPresentation?.pageLoadSource,
+              case let .offlineFallback(updatedAt) = pageLoadSource else {
+            return nil
+        }
+        guard let updatedAt else {
+            return L10n.string("reader.offline_stale_notice")
+        }
+        return L10n.string(
+            "reader.offline_stale_notice_with_time",
+            updatedAt.formatted(date: .abbreviated, time: .shortened)
+        )
     }
 
     public var chapterSummaryText: String {

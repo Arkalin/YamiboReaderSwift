@@ -92,6 +92,22 @@ public struct ReaderContainerView: View {
                 }
                 .opacity(loadingOverlayPresentation.isPresented ? 0 : 1)
 
+                if let sourceStatusText = model.sourceStatusText,
+                   !model.readerSurfaces.isEmpty {
+                    VStack(spacing: 0) {
+                        ReaderOfflineFallbackBanner(
+                            message: sourceStatusText,
+                            retry: refreshReader
+                        )
+                        .padding(.top, topInset + (chromeState.showsChrome ? topChromeHeight + 6 : 12))
+                        .padding(.horizontal, 12)
+
+                        Spacer(minLength: 0)
+                    }
+                    .transition(.opacity)
+                    .zIndex(2.5)
+                }
+
                 ApplePencilPageTurnInteractionOverlay(
                     settings: model.applePencilPageTurnSettings,
                     canTurnPage: canReceiveApplePencilPageTurn
@@ -1247,5 +1263,35 @@ public struct ReaderContainerView: View {
             .flatMap(\.windows)
             .first(where: \.isKeyWindow)?
             .safeAreaInsets ?? .zero
+    }
+}
+
+private struct ReaderOfflineFallbackBanner: View {
+    let message: String
+    let retry: () -> Void
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "clock.arrow.circlepath")
+                .font(.callout.weight(.semibold))
+                .foregroundStyle(.orange)
+
+            Text(message)
+                .font(.footnote.weight(.medium))
+                .foregroundStyle(.primary)
+                .lineLimit(2)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            Button(action: retry) {
+                Label(L10n.string("common.retry"), systemImage: "arrow.clockwise")
+                    .labelStyle(.iconOnly)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .accessibilityLabel(L10n.string("common.retry"))
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 }

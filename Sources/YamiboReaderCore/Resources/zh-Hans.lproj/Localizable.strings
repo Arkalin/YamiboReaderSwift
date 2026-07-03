@@ -638,6 +638,8 @@
 "reader.cache_updated_at" = "更新于 %@";
 "reader.cached" = "已缓存";
 "reader.caching" = "缓存中";
+"reader.offline_stale_notice" = "正在阅读离线缓存内容，可重试在线加载。";
+"reader.offline_stale_notice_with_time" = "正在阅读 %@ 更新的离线缓存，可重试在线加载。";
 "reader.chapter_summary" = "目录项 %d · 过滤 %d";
 "reader.chapters" = "目录";
 "reader.chapter_comments" = "章节评论";

@@ -2590,6 +2590,68 @@ final class ReaderContainerModelTests: XCTestCase {
         }
     }
 
+    func testOfflineFallbackShowsStaleNoticeAndRetryKeepsOnlinePathAvailable() async throws {
+        defer { ReaderTestURLProtocol.handler = nil }
+
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [ReaderTestURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        ReaderTestURLProtocol.handler = { request in
+            (
+                Data("temporarily unavailable".utf8),
+                HTTPURLResponse(
+                    url: request.url!,
+                    statusCode: 503,
+                    httpVersion: nil,
+                    headerFields: nil
+                )!
+            )
+        }
+
+        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=559900&mobile=2")!
+        let document = makeDocument(
+            threadURL: threadURL,
+            view: 1,
+            maxView: 1,
+            chapterTitles: ["离线章节"],
+            authorID: "42",
+            contentSource: .authorFilteredPage
+        )
+        let offlineStore = try makeReaderModelOfflineCacheStore()
+        try await seedNovelOfflineCache(
+            offlineStore,
+            document: document,
+            updatedAt: Date(timeIntervalSince1970: 55_990)
+        )
+
+        let model = try await makeModel(
+            documents: [document],
+            launchContext: ReaderLaunchContext(
+                threadURL: threadURL,
+                threadTitle: "测试线程",
+                source: .forum,
+                authorID: "42"
+            ),
+            session: session,
+            offlineCacheStore: offlineStore,
+            seedSourceCaches: false
+        )
+
+        await MainActor.run {
+            XCTAssertNil(model.errorMessage)
+            XCTAssertFalse(model.readerSurfaces.isEmpty)
+            XCTAssertNotNil(model.sourceStatusText)
+        }
+
+        await model.loadCurrent(forceRefresh: true)
+
+        await MainActor.run {
+            XCTAssertNil(model.errorMessage)
+            XCTAssertFalse(model.readerSurfaces.isEmpty)
+            XCTAssertNotNil(model.sourceStatusText)
+        }
+    }
+
     func testRefreshingCurrentVariantDoesNotDeleteSiblingVariantCache() async throws {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [ReaderTestURLProtocol.self]
@@ -3012,6 +3074,7 @@ private func makeModel(
     cacheStore: ReaderCacheStore? = nil,
     forumCacheStore: ForumCacheStore? = nil,
     offlineCacheStore: (any OfflineCacheStoring)? = nil,
+    seedSourceCaches: Bool = true,
     pagination: @escaping NovelTextLayoutFixture = readerModelSegmentPagination
 ) async throws -> ReaderContainerModel {
     let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "reader-container-model")
@@ -3039,11 +3102,13 @@ private func makeModel(
     }
 
     try await settingsStore.save(AppSettings(reader: settings))
-    try await seedReaderSourceCaches(
-        documents: documents,
-        readerCacheStore: resolvedCacheStore,
-        forumCacheStore: resolvedForumCacheStore
-    )
+    if seedSourceCaches {
+        try await seedReaderSourceCaches(
+            documents: documents,
+            readerCacheStore: resolvedCacheStore,
+            forumCacheStore: resolvedForumCacheStore
+        )
+    }
 
     let appContext = YamiboAppContext(
         sessionStore: sessionStore,

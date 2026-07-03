@@ -217,6 +217,19 @@ public struct ReaderAppearanceSettings: Codable, Hashable, Sendable {
     }
 }
 
+public struct NovelOfflineCacheSettings: Codable, Hashable, Sendable {
+    public var retainsInlineImages: Bool
+    public var isAutoRefreshEnabled: Bool
+
+    public init(
+        retainsInlineImages: Bool = false,
+        isAutoRefreshEnabled: Bool = true
+    ) {
+        self.retainsInlineImages = retainsInlineImages
+        self.isAutoRefreshEnabled = isAutoRefreshEnabled
+    }
+}
+
 public struct WebBrowserSettings: Codable, Hashable, Sendable {
     public var showsNavigationBar: Bool
 
@@ -560,6 +573,7 @@ public struct FavoriteRemoteSyncSnapshot: Codable, Hashable, Identifiable, Senda
 public struct AppSettings: Codable, Hashable, Sendable {
     public var reader: ReaderAppearanceSettings
     public var manga: MangaReaderSettings
+    public var novelOfflineCache: NovelOfflineCacheSettings
     public var webBrowser: WebBrowserSettings
     public var favoriteAppearance: FavoriteAppearanceSettings
     public var favoriteBackground: FavoriteBackgroundSettings
@@ -578,6 +592,7 @@ public struct AppSettings: Codable, Hashable, Sendable {
     public init(
         reader: ReaderAppearanceSettings = .init(),
         manga: MangaReaderSettings = .init(),
+        novelOfflineCache: NovelOfflineCacheSettings = .init(),
         webBrowser: WebBrowserSettings = .init(),
         favoriteAppearance: FavoriteAppearanceSettings = .init(),
         favoriteBackground: FavoriteBackgroundSettings = .init(),
@@ -595,6 +610,7 @@ public struct AppSettings: Codable, Hashable, Sendable {
     ) {
         self.reader = reader
         self.manga = manga
+        self.novelOfflineCache = novelOfflineCache
         self.webBrowser = webBrowser
         self.favoriteAppearance = favoriteAppearance
         self.favoriteBackground = favoriteBackground
@@ -614,6 +630,7 @@ public struct AppSettings: Codable, Hashable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case reader
         case manga
+        case novelOfflineCache
         case webBrowser
         case favoriteAppearance
         case favoriteBackground
@@ -634,6 +651,10 @@ public struct AppSettings: Codable, Hashable, Sendable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         reader = try container.decodeIfPresent(ReaderAppearanceSettings.self, forKey: .reader) ?? .init()
         manga = try container.decodeIfPresent(MangaReaderSettings.self, forKey: .manga) ?? .init()
+        novelOfflineCache = try container.decodeIfPresent(
+            NovelOfflineCacheSettings.self,
+            forKey: .novelOfflineCache
+        ) ?? .init()
         webBrowser = try container.decodeIfPresent(WebBrowserSettings.self, forKey: .webBrowser) ?? .init()
         favoriteAppearance = try container.decodeIfPresent(FavoriteAppearanceSettings.self, forKey: .favoriteAppearance) ?? .init()
         favoriteBackground = try container.decodeIfPresent(FavoriteBackgroundSettings.self, forKey: .favoriteBackground) ?? .init()
@@ -654,6 +675,7 @@ public struct AppSettings: Codable, Hashable, Sendable {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(reader, forKey: .reader)
         try container.encode(manga, forKey: .manga)
+        try container.encode(novelOfflineCache, forKey: .novelOfflineCache)
         try container.encode(webBrowser, forKey: .webBrowser)
         try container.encode(favoriteAppearance, forKey: .favoriteAppearance)
         try container.encode(favoriteBackground, forKey: .favoriteBackground)

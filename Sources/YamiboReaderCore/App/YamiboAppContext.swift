@@ -131,7 +131,11 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         return NovelReaderRepository(
             client: client,
             cacheStore: readerCacheStore,
-            forumCacheStore: forumCacheStore
+            forumCacheStore: forumCacheStore,
+            offlineCacheStore: offlineCacheStore,
+            novelOfflineAutoRefreshEnabled: { [settingsStore] in
+                await settingsStore.load().novelOfflineCache.isAutoRefreshEnabled
+            }
         )
     }
 

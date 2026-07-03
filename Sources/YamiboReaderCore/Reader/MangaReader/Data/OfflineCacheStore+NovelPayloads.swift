@@ -91,6 +91,60 @@ extension OfflineCacheStore {
         )
     }
 
+    public func novelOfflineSourcePageSnapshot(
+        threadURL: URL,
+        view: Int,
+        authorID: String?,
+        contentSource: ReaderContentSource?
+    ) async -> NovelOfflineSourcePageSnapshot? {
+        try? await recoverQueueStateAfterRestart()
+        let canonicalThreadURL = ReaderCacheIdentity.canonicalThreadURL(from: threadURL)
+        let normalizedAuthorID = authorID?.mangaReaderTrimmedNonEmpty
+        let source = normalizedAuthorID == nil ? (contentSource ?? .fallbackUnfilteredPage) : .authorFilteredPage
+        let entryKey = NovelOfflineCacheEntry.entryKey(
+            threadURL: canonicalThreadURL,
+            view: view,
+            authorID: normalizedAuthorID,
+            contentSource: source
+        )
+        let row = try? await database.read { db -> NovelOfflineSourcePageSnapshotRow? in
+            guard let row = try Row.fetchOne(
+                db,
+                sql: """
+                SELECT owner_name, source_page_file_name, updated_at
+                FROM offline_cache_novel_entries
+                WHERE entry_key = ? AND source_page_file_name IS NOT NULL
+                ORDER BY updated_at DESC
+                LIMIT 1
+                """,
+                arguments: [entryKey]
+            ),
+                let ownerTitle = row["owner_name"] as String?,
+                let fileName = row["source_page_file_name"] as String? else {
+                return nil
+            }
+            return NovelOfflineSourcePageSnapshotRow(
+                ownerTitle: ownerTitle,
+                fileName: fileName,
+                updatedAt: novelPayloadOptionalDate(from: row["updated_at"] as Double?)
+            )
+        }
+        guard let row,
+              let sourcePage = Self.decodeFile(
+                fileName: row.fileName,
+                directory: novelSourcePagesDirectory,
+                fileManager: fileManager,
+                as: ForumThreadPage.self
+              ) else {
+            return nil
+        }
+        return NovelOfflineSourcePageSnapshot(
+            ownerTitle: row.ownerTitle,
+            sourcePage: sourcePage,
+            updatedAt: row.updatedAt
+        )
+    }
+
     public func saveNovelOfflineProjectionPrewarm(_ document: ReaderPageDocument, ownerTitle: String) async throws {
         try await recoverQueueStateAfterRestart()
         let normalizedOwnerTitle = ownerTitle.mangaReaderTrimmedNonEmpty ?? ownerTitle
@@ -378,6 +432,12 @@ struct NovelPayloadFileNames {
     var projectionFileNames: Set<String> = []
 }
 
+private struct NovelOfflineSourcePageSnapshotRow: Sendable {
+    var ownerTitle: String
+    var fileName: String
+    var updatedAt: Date?
+}
+
 private extension String {
     var novelOfflineEscapedHTML: String {
         replacingOccurrences(of: "&", with: "&amp;")
@@ -393,4 +453,8 @@ private func novelPayloadPersistenceError(from error: Error) -> YamiboError {
         return error
     }
     return YamiboError.persistenceFailed(error.localizedDescription)
+}
+
+private func novelPayloadOptionalDate(from value: Double?) -> Date? {
+    value.map(Date.init(timeIntervalSince1970:))
 }
