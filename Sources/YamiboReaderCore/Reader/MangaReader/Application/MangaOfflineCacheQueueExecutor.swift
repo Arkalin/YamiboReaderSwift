@@ -60,6 +60,7 @@ public actor MangaOfflineCacheImageAcquirer: MangaOfflineCacheImageAcquiring {
 public actor MangaOfflineCacheQueueExecutor {
     private let store: any OfflineCacheStoring
     private let readerProjectionLoader: any MangaReaderProjectionLoading
+    private let novelSourcePageLoader: (any NovelOfflineCacheSourcePageLoading)?
     private let imageAcquirer: any MangaOfflineCacheImageAcquiring
     private let runObserver: (any MangaOfflineCacheQueueRunObserving)?
     private let maxConcurrentImageTransfers: Int
@@ -69,12 +70,14 @@ public actor MangaOfflineCacheQueueExecutor {
     public init(
         store: any OfflineCacheStoring,
         readerProjectionLoader: any MangaReaderProjectionLoading,
+        novelSourcePageLoader: (any NovelOfflineCacheSourcePageLoading)? = nil,
         imageAcquirer: any MangaOfflineCacheImageAcquiring,
         runObserver: (any MangaOfflineCacheQueueRunObserving)? = nil,
         maxConcurrentImageTransfers: Int = 3
     ) {
         self.store = store
         self.readerProjectionLoader = readerProjectionLoader
+        self.novelSourcePageLoader = novelSourcePageLoader
         self.imageAcquirer = imageAcquirer
         self.runObserver = runObserver
         self.maxConcurrentImageTransfers = max(1, maxConcurrentImageTransfers)
@@ -170,7 +173,7 @@ public actor MangaOfflineCacheQueueExecutor {
                 return
             }
 
-            guard let work = await store.allOfflineCacheWorks().first else {
+            guard let work = await store.nextOfflineCacheProcessingWork() else {
                 await runObserver?.queueRunDidFinish(success: true)
                 await finishRun(generation: generation, pauseQueue: true)
                 return
@@ -183,8 +186,7 @@ public actor MangaOfflineCacheQueueExecutor {
                 return
             } catch {
                 try? await store.markOfflineCacheWorkFailed(
-                    ownerName: work.ownerName,
-                    tid: work.tid,
+                    id: work.id,
                     message: Self.failureMessage(from: error)
                 )
                 await runObserver?.queueRunDidFinish(success: false)
@@ -205,9 +207,38 @@ public actor MangaOfflineCacheQueueExecutor {
         runTask = nil
     }
 
+    private func process(_ work: OfflineCacheProcessingWork) async throws {
+        switch work.id.readerKind {
+        case .manga:
+            try await processManga(work)
+        case .novel:
+            try await processNovel(work)
+        }
+    }
+
+    private func processManga(_ work: OfflineCacheProcessingWork) async throws {
+        let mangaWork = MangaOfflineCacheWork(
+            workID: work.id.rawValue,
+            ownerName: work.entryID.ownerKey,
+            tid: work.entryID.entryKey,
+            chapterTitle: work.title,
+            chapterURL: Self.rebuiltChapterURL(tid: work.entryID.entryKey),
+            targetImageURLs: work.targetImageURLs,
+            completedImageURLs: work.completedImageURLs,
+            state: MangaOfflineCacheWorkState(rawValue: work.state.rawValue) ?? .paused,
+            failureMessage: work.failureMessage,
+            currentBytesPerSecond: work.currentBytesPerSecond,
+            insertionIndex: work.insertionIndex,
+            createdAt: work.createdAt,
+            updatedAt: work.updatedAt
+        )
+        try await process(mangaWork)
+    }
+
     private func process(_ work: MangaOfflineCacheWork) async throws {
         try Task.checkCancellation()
-        guard await store.offlineCacheWork(ownerName: work.ownerName, tid: work.tid) != nil else {
+        let workID = OfflineCacheWorkID(readerKind: .manga, rawValue: work.workID)
+        guard await store.offlineCacheProcessingWork(id: workID) != nil else {
             throw CancellationError()
         }
 
@@ -220,8 +251,7 @@ public actor MangaOfflineCacheQueueExecutor {
 
         var completedImageURLs = await reconciledCompletedImageURLs(targetImageURLs)
         try await store.prepareOfflineCacheWorkForRun(
-            ownerName: projectionBackedWork.ownerName,
-            tid: projectionBackedWork.tid,
+            id: workID,
             targetImageURLs: targetImageURLs,
             completedImageURLs: completedImageURLs
         )
@@ -232,7 +262,8 @@ public actor MangaOfflineCacheQueueExecutor {
 
         if completedImageURLs.count < targetImageURLs.count {
             completedImageURLs = try await transferMissingImages(
-                for: projectionBackedWork,
+                workID: workID,
+                refererURL: projectionBackedWork.chapterURL,
                 targetImageURLs: targetImageURLs,
                 completedImageURLs: completedImageURLs
             )
@@ -249,6 +280,60 @@ public actor MangaOfflineCacheQueueExecutor {
                 sourcePage: projectionBacked.sourcePage
             )
         )
+    }
+
+    private func processNovel(_ work: OfflineCacheProcessingWork) async throws {
+        try Task.checkCancellation()
+        guard await store.offlineCacheProcessingWork(id: work.id) != nil else {
+            throw CancellationError()
+        }
+        guard let novelSourcePageLoader else {
+            throw YamiboError.parsingFailed(context: "Novel Offline Cache")
+        }
+
+        let request = try novelWorkRequest(from: work)
+        let prepared = try await novelSourcePageLoader.loadNovelOfflineCacheSourcePage(request)
+        let targetImageURLs = work.retainsInlineImages
+            ? Self.inlineImageURLs(in: prepared.document)
+            : work.targetImageURLs
+        var sourcePageRequest = request
+        sourcePageRequest.targetImageURLs = targetImageURLs
+        try await store.saveNovelOfflineSourcePage(
+            prepared.sourcePage,
+            request: sourcePageRequest,
+            projectionPrewarm: prepared.document,
+            updatedAt: .now,
+            completesMatchingWork: targetImageURLs.isEmpty,
+            preservesExistingImageReferencesWhenEmpty: targetImageURLs.isEmpty && !work.retainsInlineImages
+        )
+
+        guard !targetImageURLs.isEmpty else { return }
+
+        var completedImageURLs = await reconciledCompletedImageURLs(targetImageURLs)
+        try await store.prepareOfflineCacheWorkForRun(
+            id: work.id,
+            targetImageURLs: targetImageURLs,
+            completedImageURLs: completedImageURLs
+        )
+        await runObserver?.queueRunDidUpdateProgress(
+            completedImageCount: completedImageURLs.count,
+            targetImageCount: targetImageURLs.count
+        )
+
+        if completedImageURLs.count < targetImageURLs.count {
+            completedImageURLs = try await transferMissingImages(
+                workID: work.id,
+                refererURL: request.threadURL,
+                targetImageURLs: targetImageURLs,
+                completedImageURLs: completedImageURLs
+            )
+        }
+
+        try Task.checkCancellation()
+        guard await store.offlineCacheProcessingWork(id: work.id) != nil else {
+            throw CancellationError()
+        }
+        try await store.finishOfflineCacheWork(id: work.id)
     }
 
     private func workWithReaderProjection(_ work: MangaOfflineCacheWork) async throws -> MangaOfflineCacheProjectionBackedWork {
@@ -288,7 +373,8 @@ public actor MangaOfflineCacheQueueExecutor {
     }
 
     private func transferMissingImages(
-        for work: MangaOfflineCacheWork,
+        workID: OfflineCacheWorkID,
+        refererURL: URL,
         targetImageURLs: [URL],
         completedImageURLs: [URL]
     ) async throws -> [URL] {
@@ -307,16 +393,16 @@ public actor MangaOfflineCacheQueueExecutor {
                 activeCount += 1
                 group.addTask { [store, imageAcquirer] in
                     try Task.checkCancellation()
-                    guard await store.offlineCacheWork(ownerName: work.ownerName, tid: work.tid) != nil else {
+                    guard await store.offlineCacheProcessingWork(id: workID) != nil else {
                         throw CancellationError()
                     }
                     let startedAt = Date()
-                    let acquisition = try await imageAcquirer.acquireImageData(for: imageURL, refererURL: work.chapterURL)
+                    let acquisition = try await imageAcquirer.acquireImageData(for: imageURL, refererURL: refererURL)
                     guard !acquisition.data.isEmpty else {
                         throw YamiboError.invalidResponse(statusCode: nil)
                     }
                     try Task.checkCancellation()
-                    guard await store.offlineCacheWork(ownerName: work.ownerName, tid: work.tid) != nil else {
+                    guard await store.offlineCacheProcessingWork(id: workID) != nil else {
                         throw CancellationError()
                     }
                     try await store.saveOfflineImageData(acquisition.data, for: imageURL)
@@ -336,8 +422,7 @@ public actor MangaOfflineCacheQueueExecutor {
                 completedKeys.insert(result.imageURL.absoluteString)
                 completed = targetImageURLs.filter { completedKeys.contains($0.absoluteString) }
                 try await store.updateOfflineCacheWorkProgress(
-                    ownerName: work.ownerName,
-                    tid: work.tid,
+                    id: workID,
                     targetImageURLs: targetImageURLs,
                     completedImageURLs: completed,
                     currentBytesPerSecond: result.bytesPerSecond
@@ -351,6 +436,35 @@ public actor MangaOfflineCacheQueueExecutor {
         }
 
         return completed
+    }
+
+    private func novelWorkRequest(from work: OfflineCacheProcessingWork) throws -> NovelOfflineCacheWorkRequest {
+        guard work.entryID.readerKind == .novel,
+              let components = OfflineCacheStore.novelEntryKeyComponents(from: work.entryID.entryKey) else {
+            throw YamiboError.parsingFailed(context: "Novel Offline Cache")
+        }
+        return NovelOfflineCacheWorkRequest(
+            ownerTitle: work.entryID.ownerKey,
+            title: work.title,
+            threadURL: Self.rebuiltChapterURL(tid: components.threadID),
+            view: components.view,
+            authorID: components.authorID,
+            contentSource: components.contentSource,
+            targetImageURLs: work.targetImageURLs,
+            retainsInlineImages: work.retainsInlineImages
+        )
+    }
+
+    private static func inlineImageURLs(in document: ReaderPageDocument) -> [URL] {
+        var seen: Set<String> = []
+        var urls: [URL] = []
+        for segment in document.segments {
+            guard case let .image(url, _) = segment else { continue }
+            if seen.insert(url.absoluteString).inserted {
+                urls.append(url)
+            }
+        }
+        return urls
     }
 
     private static func rebuiltChapterURL(tid: String) -> URL {

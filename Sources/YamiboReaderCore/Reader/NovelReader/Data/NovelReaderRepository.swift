@@ -8,19 +8,22 @@ public actor NovelReaderRepository {
     private let forumCacheStore: ForumCacheStore
     private let offlineCacheStore: (any OfflineCacheStoring)?
     private let novelOfflineAutoRefreshEnabled: @Sendable () async -> Bool
+    private let novelOfflineRetainsInlineImages: @Sendable () async -> Bool
 
     public init(
         client: YamiboClient,
         cacheStore: ReaderCacheStore = ReaderCacheStore(),
         forumCacheStore: ForumCacheStore = ForumCacheStore(),
         offlineCacheStore: (any OfflineCacheStoring)? = nil,
-        novelOfflineAutoRefreshEnabled: @escaping @Sendable () async -> Bool = { true }
+        novelOfflineAutoRefreshEnabled: @escaping @Sendable () async -> Bool = { true },
+        novelOfflineRetainsInlineImages: @escaping @Sendable () async -> Bool = { false }
     ) {
         self.client = client
         self.cacheStore = cacheStore
         self.forumCacheStore = forumCacheStore
         self.offlineCacheStore = offlineCacheStore
         self.novelOfflineAutoRefreshEnabled = novelOfflineAutoRefreshEnabled
+        self.novelOfflineRetainsInlineImages = novelOfflineRetainsInlineImages
     }
 
     public func loadPage(_ request: ReaderPageRequest) async throws -> ReaderPageDocument {
@@ -186,6 +189,22 @@ public actor NovelReaderRepository {
 
     public func loadPageIgnoringCache(threadID: String, view: Int, authorID: String? = nil) async throws -> ReaderPageDocument {
         try await loadPageIgnoringCache(ReaderPageRequest(threadID: threadID, view: view, authorID: authorID))
+    }
+
+    public func loadNovelOfflineCacheSourcePage(
+        _ request: NovelOfflineCacheWorkRequest
+    ) async throws -> NovelOfflineCachePreparedSourcePage {
+        let readerRequest = ReaderPageRequest(
+            threadURL: request.threadURL,
+            view: request.view,
+            authorID: request.authorID
+        )
+        let thread = try requireThreadIdentity(from: request.threadURL)
+        let onlinePage = try await loadOnlinePage(readerRequest, thread: thread, ignoresCache: true)
+        return NovelOfflineCachePreparedSourcePage(
+            sourcePage: onlinePage.sourcePage,
+            document: onlinePage.document
+        )
     }
 
     public func fetchThreadDisplayTitle(for threadURL: URL, authorID: String? = nil) async throws -> String {
@@ -432,6 +451,8 @@ public actor NovelReaderRepository {
         ) else {
             return
         }
+        let retainsInlineImages = await novelOfflineRetainsInlineImages()
+        let targetImageURLs = retainsInlineImages ? Self.inlineImageURLs(in: onlinePage.document) : []
         let request = NovelOfflineCacheWorkRequest(
             ownerTitle: existing.ownerTitle,
             title: NovelOfflineCacheEntry.defaultTitle(document: onlinePage.document),
@@ -439,14 +460,19 @@ public actor NovelReaderRepository {
             view: onlinePage.document.view,
             authorID: onlinePage.authorID,
             contentSource: .authorFilteredPage,
-            targetImageURLs: Self.inlineImageURLs(in: onlinePage.document)
+            targetImageURLs: targetImageURLs,
+            retainsInlineImages: retainsInlineImages
         )
         try? await offlineCacheStore.saveNovelOfflineSourcePage(
             onlinePage.sourcePage,
             request: request,
             projectionPrewarm: onlinePage.document,
-            updatedAt: .now
+            updatedAt: .now,
+            completesMatchingWork: targetImageURLs.isEmpty,
+            preservesExistingImageReferencesWhenEmpty: !retainsInlineImages
         )
+        guard retainsInlineImages, !targetImageURLs.isEmpty else { return }
+        _ = try? await offlineCacheStore.enqueueNovelOfflineCacheUpdateWork(request)
     }
 
     private func isEligibleOfflineFallbackTrigger(_ error: Error) -> Bool {
@@ -542,6 +568,8 @@ public actor NovelReaderRepository {
         return String(hash, radix: 16)
     }
 }
+
+extension NovelReaderRepository: NovelOfflineCacheSourcePageLoading {}
 
 private struct ThreadPageLoad: Sendable {
     var page: ForumThreadPage

@@ -734,6 +734,8 @@
 "settings.offline_cache.state.queued" = "排队中";
 "settings.offline_cache.state.running" = "下载中";
 "settings.offline_cache.title" = "离线缓存";
+"settings.novel_offline_cache.auto_refresh" = "自动刷新已离线小说页面";
+"settings.novel_offline_cache.retain_inline_images" = "离线保存小说内嵌图片";
 "settings.manga_offline_cache.cleanup" = "漫画离线缓存";
 "settings.manga_offline_cache.confirm_batch_message" = "将删除已选 %d 个收藏条目的漫画离线缓存、未完成任务和失败任务。";
 "settings.manga_offline_cache.confirm_batch_title" = "确认删除漫画离线缓存";
@@ -761,6 +763,7 @@
 "settings.about_app_with_version" = "关于Yamibo Reader(%@)";
 "settings.section.appearance" = "外观";
 "settings.section.general" = "通用";
+"settings.section.novel_offline_cache" = "小说离线缓存";
 "settings.section.storage" = "存储管理";
 "settings.section.support" = "支持";
 "settings.shortcuts_open_failed" = "无法打开快捷指令，请手动打开“快捷指令 > 自动化”创建百合会签到自动化。";

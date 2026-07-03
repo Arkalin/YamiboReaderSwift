@@ -34,7 +34,8 @@ extension OfflineCacheStore {
             view: entry.document.view,
             authorID: entry.document.resolvedAuthorID,
             contentSource: entry.document.contentSource,
-            targetImageURLs: entry.imageURLs
+            targetImageURLs: entry.imageURLs,
+            retainsInlineImages: !entry.imageURLs.isEmpty
         )
         try await saveNovelOfflineSourcePage(
             Self.syntheticSourcePage(from: entry.document),
@@ -237,7 +238,8 @@ extension OfflineCacheStore {
             view: request.view,
             authorID: request.authorID,
             contentSource: request.contentSource,
-            targetImageURLs: request.targetImageURLs
+            targetImageURLs: request.targetImageURLs,
+            retainsInlineImages: request.retainsInlineImages
         )
     }
 
@@ -404,6 +406,18 @@ extension OfflineCacheStore {
                 arguments: [request.ownerTitle, request.entryKey, index, imageURL.absoluteString]
             )
         }
+    }
+
+    static func imageURLsForNovelSourcePageMetadata(
+        request: NovelOfflineCacheWorkRequest,
+        imageURLs: [URL],
+        preservesExistingImageReferencesWhenEmpty: Bool,
+        in db: Database
+    ) throws -> [URL] {
+        guard preservesExistingImageReferencesWhenEmpty, imageURLs.isEmpty else {
+            return imageURLs
+        }
+        return try novelImageURLs(ownerName: request.ownerTitle, entryKey: request.entryKey, in: db)
     }
 
     private static func novelEntry(from row: Row, in db: Database) throws -> NovelOfflineCacheEntry {

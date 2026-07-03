@@ -10,6 +10,7 @@ final class SystemSettingsViewModel: ObservableObject {
     @Published var favoriteSortOrder: LocalFavoriteLibrarySortOrder = .organization
     @Published var favoriteSortDescending = false
     @Published var favoriteShowsCategoryCounts = true
+    @Published var novelOfflineCache = NovelOfflineCacheSettings()
     @Published var applePencilPageTurn = ApplePencilPageTurnSettings()
     @Published private(set) var novelCacheBytes = 0
     @Published private(set) var mangaIndexCacheBytes = 0
@@ -71,6 +72,7 @@ final class SystemSettingsViewModel: ObservableObject {
         favoriteSortOrder = settings.favoriteSortOrder
         favoriteSortDescending = settings.favoriteSortDescending
         favoriteShowsCategoryCounts = settings.favoriteShowsCategoryCounts
+        novelOfflineCache = settings.novelOfflineCache
         applePencilPageTurn = settings.applePencilPageTurn
         await refreshStorageUsage()
     }
@@ -275,6 +277,18 @@ final class SystemSettingsViewModel: ObservableObject {
         updateApplePencilPageTurn(updated)
     }
 
+    func updateNovelOfflineCacheRetainsInlineImages(_ retainsInlineImages: Bool) {
+        var updated = novelOfflineCache
+        updated.retainsInlineImages = retainsInlineImages
+        updateNovelOfflineCache(updated)
+    }
+
+    func updateNovelOfflineCacheAutoRefreshEnabled(_ isAutoRefreshEnabled: Bool) {
+        var updated = novelOfflineCache
+        updated.isAutoRefreshEnabled = isAutoRefreshEnabled
+        updateNovelOfflineCache(updated)
+    }
+
     func clearNovelCache() async -> Bool {
         activeAction = .clearingNovelCache
         defer { activeAction = nil }
@@ -322,6 +336,7 @@ final class SystemSettingsViewModel: ObservableObject {
             homePage = .forum
             favoriteAppearance = .init()
             favoriteBackground = .init()
+            novelOfflineCache = .init()
             applePencilPageTurn = .init()
             novelCacheBytes = 0
             mangaIndexCacheBytes = 0
@@ -527,6 +542,27 @@ final class SystemSettingsViewModel: ObservableObject {
                 await MainActor.run {
                     if applePencilPageTurn == updated {
                         applePencilPageTurn = previous
+                    }
+                    errorMessage = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    private func updateNovelOfflineCache(_ updated: NovelOfflineCacheSettings) {
+        let previous = novelOfflineCache
+        novelOfflineCache = updated
+
+        Task {
+            var settings = await appContext.settingsStore.load()
+            settings.novelOfflineCache = updated
+
+            do {
+                try await appContext.settingsStore.save(settings)
+            } catch {
+                await MainActor.run {
+                    if novelOfflineCache == updated {
+                        novelOfflineCache = previous
                     }
                     errorMessage = error.localizedDescription
                 }

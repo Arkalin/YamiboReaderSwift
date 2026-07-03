@@ -180,6 +180,10 @@ import Testing
             showsTwoPagesInLandscapeOnPad: true,
             directorySortOrder: .descending
         ),
+        novelOfflineCache: NovelOfflineCacheSettings(
+            retainsInlineImages: true,
+            isAutoRefreshEnabled: false
+        ),
         webBrowser: WebBrowserSettings(showsNavigationBar: false),
         favoriteAppearance: FavoriteAppearanceSettings(
             collection: .purple,
@@ -222,6 +226,7 @@ import Testing
     #expect(decoded.homePage == .forum)
     #expect(decoded.favoriteAppearance == FavoriteAppearanceSettings())
     #expect(decoded.favoriteBackground == FavoriteBackgroundSettings())
+    #expect(decoded.novelOfflineCache == NovelOfflineCacheSettings())
     #expect(decoded.applePencilPageTurn == ApplePencilPageTurnSettings())
     #expect(decoded.collapsesFavoriteSections == true)
 }

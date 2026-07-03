@@ -9,6 +9,21 @@ extension OfflineCacheStore {
         }) ?? []
     }
 
+    public func nextOfflineCacheProcessingWork() async -> OfflineCacheProcessingWork? {
+        try? await recoverQueueStateAfterRestart()
+        return try? await database.read { db in
+            try Self.allRawWorks(in: db).first.map(Self.processingWork(from:))
+        }
+    }
+
+    public func offlineCacheProcessingWork(id: OfflineCacheWorkID) async -> OfflineCacheProcessingWork? {
+        try? await recoverQueueStateAfterRestart()
+        return try? await database.read { db in
+            try Self.rawWork(workID: id.rawValue, readerKind: id.readerKind, in: db)
+                .map(Self.processingWork(from:))
+        }
+    }
+
     public func enqueueNovelOfflineCacheWork(_ request: NovelOfflineCacheWorkRequest) async throws -> NovelOfflineCacheEnqueueResult {
         try await enqueueNovelOfflineCacheWork(request, skipsExistingCachedEntry: true)
     }
@@ -52,6 +67,7 @@ extension OfflineCacheStore {
                         : normalizedRequest.title,
                     targetImageURLs: normalizedRequest.targetImageURLs,
                     completedImageURLs: [],
+                    retainsInlineImages: normalizedRequest.retainsInlineImages,
                     state: .queued,
                     failureMessage: nil,
                     currentBytesPerSecond: 0,
@@ -86,6 +102,53 @@ extension OfflineCacheStore {
                         offlineCacheTimeInterval(from: Date()),
                         OfflineCacheWorkState.failed.rawValue
                     ]
+                )
+            }
+            notifyOfflineCacheDidChange()
+        } catch {
+            throw offlineCachePersistenceError(from: error)
+        }
+    }
+
+    public func updateOfflineCacheWorkProgress(
+        id: OfflineCacheWorkID,
+        targetImageURLs: [URL]?,
+        completedImageURLs: [URL],
+        currentBytesPerSecond: Int?
+    ) async throws {
+        try await recoverQueueStateAfterRestart()
+        try await updateRawWork(id: id) { work in
+            work.updatingProgress(
+                targetImageURLs: targetImageURLs,
+                completedImageURLs: completedImageURLs,
+                currentBytesPerSecond: currentBytesPerSecond
+            )
+        }
+    }
+
+    public func prepareOfflineCacheWorkForRun(
+        id: OfflineCacheWorkID,
+        targetImageURLs: [URL]?,
+        completedImageURLs: [URL]
+    ) async throws {
+        try await recoverQueueStateAfterRestart()
+        try await updateRawWork(id: id) { work in
+            work.preparingForRun(targetImageURLs: targetImageURLs, completedImageURLs: completedImageURLs)
+        }
+    }
+
+    public func finishOfflineCacheWork(id: OfflineCacheWorkID) async throws {
+        try await recoverQueueStateAfterRestart()
+        do {
+            try await database.write { db in
+                guard let work = try Self.rawWork(workID: id.rawValue, readerKind: id.readerKind, in: db) else {
+                    return
+                }
+                try Self.deleteWork(
+                    readerKind: work.readerKind.rawValue,
+                    ownerName: work.ownerKey,
+                    tid: work.entryKey,
+                    in: db
                 )
             }
             notifyOfflineCacheDidChange()
@@ -178,8 +241,8 @@ extension OfflineCacheStore {
         try db.execute(
             sql: """
             INSERT OR REPLACE INTO offline_cache_works
-            (reader_kind, work_id, owner_name, tid, chapter_title, state, failure_message, current_bytes_per_second, insertion_index, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (reader_kind, work_id, owner_name, tid, chapter_title, retains_inline_images, state, failure_message, current_bytes_per_second, insertion_index, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             arguments: [
                 work.readerKind.rawValue,
@@ -187,6 +250,7 @@ extension OfflineCacheStore {
                 work.ownerKey,
                 work.entryKey,
                 work.title,
+                work.retainsInlineImages,
                 work.state.rawValue,
                 work.failureMessage,
                 work.currentBytesPerSecond,
@@ -222,7 +286,7 @@ extension OfflineCacheStore {
               let row = try Row.fetchOne(
                 db,
                 sql: """
-                SELECT reader_kind, work_id, owner_name, tid, chapter_title, state, failure_message, current_bytes_per_second, insertion_index, created_at, updated_at
+                SELECT reader_kind, work_id, owner_name, tid, chapter_title, retains_inline_images, state, failure_message, current_bytes_per_second, insertion_index, created_at, updated_at
                 FROM offline_cache_works
                 WHERE reader_kind = ? AND work_id = ?
                 """,
@@ -244,7 +308,7 @@ extension OfflineCacheStore {
               let row = try Row.fetchOne(
                 db,
                 sql: """
-                SELECT reader_kind, work_id, owner_name, tid, chapter_title, state, failure_message, current_bytes_per_second, insertion_index, created_at, updated_at
+                SELECT reader_kind, work_id, owner_name, tid, chapter_title, retains_inline_images, state, failure_message, current_bytes_per_second, insertion_index, created_at, updated_at
                 FROM offline_cache_works
                 WHERE reader_kind = ? AND owner_name = ? AND tid = ?
                 """,
@@ -263,7 +327,7 @@ extension OfflineCacheStore {
         try Row.fetchAll(
             db,
             sql: """
-            SELECT reader_kind, work_id, owner_name, tid, chapter_title, state, failure_message, current_bytes_per_second, insertion_index, created_at, updated_at
+            SELECT reader_kind, work_id, owner_name, tid, chapter_title, retains_inline_images, state, failure_message, current_bytes_per_second, insertion_index, created_at, updated_at
             FROM offline_cache_works
             WHERE reader_kind = ? AND owner_name = ?
             ORDER BY insertion_index ASC, owner_name ASC, tid ASC
@@ -276,7 +340,7 @@ extension OfflineCacheStore {
         try Row.fetchAll(
             db,
             sql: """
-            SELECT reader_kind, work_id, owner_name, tid, chapter_title, state, failure_message, current_bytes_per_second, insertion_index, created_at, updated_at
+            SELECT reader_kind, work_id, owner_name, tid, chapter_title, retains_inline_images, state, failure_message, current_bytes_per_second, insertion_index, created_at, updated_at
             FROM offline_cache_works
             ORDER BY insertion_index ASC, reader_kind ASC, owner_name ASC, tid ASC
             """
@@ -303,8 +367,43 @@ extension OfflineCacheStore {
         )
     }
 
+    static func processingWork(from work: OfflineCacheRawWork) -> OfflineCacheProcessingWork {
+        OfflineCacheProcessingWork(
+            id: OfflineCacheWorkID(readerKind: work.readerKind, rawValue: work.workID),
+            entryID: OfflineCacheEntryID(readerKind: work.readerKind, ownerKey: work.ownerKey, entryKey: work.entryKey),
+            ownerTitle: work.ownerKey,
+            title: offlineCacheEntryTitle(chapterTitle: work.title, entryKey: work.entryKey),
+            targetImageURLs: work.targetImageURLs,
+            completedImageURLs: work.completedImageURLs,
+            retainsInlineImages: work.retainsInlineImages,
+            state: work.state,
+            failureMessage: work.failureMessage,
+            currentBytesPerSecond: work.currentBytesPerSecond,
+            insertionIndex: work.insertionIndex,
+            createdAt: work.createdAt,
+            updatedAt: work.updatedAt
+        )
+    }
+
     static func offlineCacheEntryTitle(chapterTitle: String, entryKey: String) -> String {
         chapterTitle.mangaReaderTrimmedNonEmpty ?? entryKey
+    }
+
+    private func updateRawWork(
+        id: OfflineCacheWorkID,
+        transform: @Sendable (OfflineCacheRawWork) -> OfflineCacheRawWork
+    ) async throws {
+        do {
+            try await database.write { db in
+                guard let work = try Self.rawWork(workID: id.rawValue, readerKind: id.readerKind, in: db) else {
+                    return
+                }
+                try Self.save(transform(work), in: db)
+            }
+            notifyOfflineCacheDidChange()
+        } catch {
+            throw offlineCachePersistenceError(from: error)
+        }
     }
 
     private static func rawWork(from row: Row, in db: Database) throws -> OfflineCacheRawWork? {
@@ -333,6 +432,7 @@ extension OfflineCacheStore {
                 tid: entryKey,
                 in: db
             ),
+            retainsInlineImages: (row["retains_inline_images"] as Bool?) ?? false,
             state: OfflineCacheWorkState(rawValue: row["state"] as String) ?? .paused,
             failureMessage: row["failure_message"] as String?,
             currentBytesPerSecond: row["current_bytes_per_second"] as Int,
@@ -343,7 +443,7 @@ extension OfflineCacheStore {
     }
 }
 
-struct OfflineCacheRawWork {
+struct OfflineCacheRawWork: Sendable {
     var readerKind: OfflineCacheReaderKind
     var workID: String
     var ownerKey: String
@@ -351,12 +451,71 @@ struct OfflineCacheRawWork {
     var title: String
     var targetImageURLs: [URL]
     var completedImageURLs: [URL]
+    var retainsInlineImages: Bool
     var state: OfflineCacheWorkState
     var failureMessage: String?
     var currentBytesPerSecond: Int
     var insertionIndex: Int
     var createdAt: Date
     var updatedAt: Date
+}
+
+private extension OfflineCacheRawWork {
+    func updatingProgress(
+        targetImageURLs: [URL]? = nil,
+        completedImageURLs: [URL],
+        currentBytesPerSecond: Int? = nil,
+        at date: Date = .now
+    ) -> OfflineCacheRawWork {
+        OfflineCacheRawWork(
+            readerKind: readerKind,
+            workID: workID,
+            ownerKey: ownerKey,
+            entryKey: entryKey,
+            title: title,
+            targetImageURLs: targetImageURLs.map(Self.uniqueURLs) ?? self.targetImageURLs,
+            completedImageURLs: Self.uniqueURLs(completedImageURLs),
+            retainsInlineImages: retainsInlineImages,
+            state: state,
+            failureMessage: failureMessage,
+            currentBytesPerSecond: currentBytesPerSecond ?? self.currentBytesPerSecond,
+            insertionIndex: insertionIndex,
+            createdAt: createdAt,
+            updatedAt: date
+        )
+    }
+
+    func preparingForRun(
+        targetImageURLs: [URL]? = nil,
+        completedImageURLs: [URL],
+        at date: Date = .now
+    ) -> OfflineCacheRawWork {
+        OfflineCacheRawWork(
+            readerKind: readerKind,
+            workID: workID,
+            ownerKey: ownerKey,
+            entryKey: entryKey,
+            title: title,
+            targetImageURLs: targetImageURLs.map(Self.uniqueURLs) ?? self.targetImageURLs,
+            completedImageURLs: Self.uniqueURLs(completedImageURLs),
+            retainsInlineImages: retainsInlineImages,
+            state: .running,
+            failureMessage: nil,
+            currentBytesPerSecond: 0,
+            insertionIndex: insertionIndex,
+            createdAt: createdAt,
+            updatedAt: date
+        )
+    }
+
+    private static func uniqueURLs(_ urls: [URL]) -> [URL] {
+        var seen: Set<String> = []
+        var output: [URL] = []
+        for url in urls where seen.insert(url.absoluteString).inserted {
+            output.append(url)
+        }
+        return output
+    }
 }
 
 private func offlineCacheTimeInterval(from date: Date) -> Double {

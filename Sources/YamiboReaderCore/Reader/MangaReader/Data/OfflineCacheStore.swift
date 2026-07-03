@@ -431,7 +431,7 @@ public actor OfflineCacheStore: OfflineCacheStoring {
             try await database.write { db in
                 try Self.setQueueRunState(state, in: db)
                 if state == .paused {
-                    try Self.pauseRunningMangaWorks(in: db)
+                    try Self.pauseRunningOfflineCacheWorks(in: db)
                 }
             }
             notifyOfflineCacheDidChange()
@@ -523,7 +523,7 @@ public actor OfflineCacheStore: OfflineCacheStoring {
         try await database.write { db in
             if try Self.queueRunState(in: db) == .running {
                 try Self.setQueueRunState(.paused, in: db)
-                try Self.pauseRunningMangaWorks(in: db)
+                try Self.pauseRunningOfflineCacheWorks(in: db)
             }
         }
     }
@@ -634,8 +634,8 @@ public actor OfflineCacheStore: OfflineCacheStoring {
         try db.execute(
             sql: """
             INSERT OR REPLACE INTO offline_cache_works
-            (reader_kind, work_id, owner_name, tid, chapter_title, state, failure_message, current_bytes_per_second, insertion_index, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (reader_kind, work_id, owner_name, tid, chapter_title, retains_inline_images, state, failure_message, current_bytes_per_second, insertion_index, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             arguments: [
                 mangaReaderKind,
@@ -643,6 +643,7 @@ public actor OfflineCacheStore: OfflineCacheStoring {
                 work.ownerName,
                 work.tid,
                 work.chapterTitle,
+                false,
                 work.state.rawValue,
                 work.failureMessage,
                 work.currentBytesPerSecond,
@@ -978,16 +979,15 @@ public actor OfflineCacheStore: OfflineCacheStoring {
         ) ?? 0) + 1
     }
 
-    private static func pauseRunningMangaWorks(in db: Database) throws {
+    private static func pauseRunningOfflineCacheWorks(in db: Database) throws {
         try db.execute(
             sql: """
             UPDATE offline_cache_works
             SET state = ?, current_bytes_per_second = 0
-            WHERE reader_kind = ? AND state = ?
+            WHERE state = ?
             """,
             arguments: [
                 MangaOfflineCacheWorkState.paused.rawValue,
-                mangaReaderKind,
                 MangaOfflineCacheWorkState.running.rawValue
             ]
         )

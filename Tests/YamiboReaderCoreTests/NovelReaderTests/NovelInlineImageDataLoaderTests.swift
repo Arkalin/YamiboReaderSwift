@@ -106,6 +106,87 @@ struct NovelInlineImageDataLoaderTests {
         }
     }
 
+    @Test func cachedLoaderReadsRetainedOfflineImageBeforeUpstream() async throws {
+        let imageURL = try #require(URL(string: "https://img.example.com/novel-offline.jpg"))
+        let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=900&page=1"))
+        let offlineStore = try makeTestOfflineCacheStore(rootDirectory: makeTemporaryNovelInlineImageLoaderDirectory())
+        try await offlineStore.saveNovelOfflineCacheEntry(
+            makeNovelInlineImageOfflineEntry(threadURL: threadURL, imageURLs: [imageURL])
+        )
+        try await offlineStore.saveOfflineImageData(Data([7, 8]), for: imageURL)
+        let upstream = RecordingNovelInlineImageDataLoader(results: [.success(Data([9]))])
+        let loader = CachedNovelInlineImageDataLoader(
+            imageDataLoader: upstream,
+            offlineCacheStore: offlineStore
+        )
+
+        let data = try await loader.imageData(for: imageURL, refererURL: threadURL)
+
+        #expect(data == Data([7, 8]))
+        #expect(await upstream.callCount == 0)
+    }
+
+    @Test func cachedLoaderDelegatesWhenRetainedOfflineImageBytesAreMissing() async throws {
+        let imageURL = try #require(URL(string: "https://img.example.com/novel-missing.jpg"))
+        let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=901&page=1"))
+        let offlineStore = try makeTestOfflineCacheStore(rootDirectory: makeTemporaryNovelInlineImageLoaderDirectory())
+        try await offlineStore.saveNovelOfflineCacheEntry(
+            makeNovelInlineImageOfflineEntry(threadURL: threadURL, imageURLs: [imageURL])
+        )
+        let upstream = RecordingNovelInlineImageDataLoader(results: [.success(Data([3]))])
+        let loader = CachedNovelInlineImageDataLoader(
+            imageDataLoader: upstream,
+            offlineCacheStore: offlineStore
+        )
+
+        let data = try await loader.imageData(for: imageURL, refererURL: threadURL)
+
+        #expect(data == Data([3]))
+        #expect(await upstream.callCount == 1)
+        #expect(await upstream.requestedRequests == [YamiboImageRequest(url: imageURL, refererURL: threadURL)])
+    }
+
+    @Test func cachedLoaderDoesNotUseRetainedOfflineImageForDifferentThread() async throws {
+        let imageURL = try #require(URL(string: "https://img.example.com/novel-other-thread.jpg"))
+        let cachedThreadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=902&page=1"))
+        let requestedThreadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=903&page=1"))
+        let offlineStore = try makeTestOfflineCacheStore(rootDirectory: makeTemporaryNovelInlineImageLoaderDirectory())
+        try await offlineStore.saveNovelOfflineCacheEntry(
+            makeNovelInlineImageOfflineEntry(threadURL: cachedThreadURL, imageURLs: [imageURL])
+        )
+        try await offlineStore.saveOfflineImageData(Data([7]), for: imageURL)
+        let upstream = RecordingNovelInlineImageDataLoader(results: [.success(Data([4]))])
+        let loader = CachedNovelInlineImageDataLoader(
+            imageDataLoader: upstream,
+            offlineCacheStore: offlineStore
+        )
+
+        let data = try await loader.imageData(for: imageURL, refererURL: requestedThreadURL)
+
+        #expect(data == Data([4]))
+        #expect(await upstream.callCount == 1)
+    }
+
+    @Test func cachedLoaderSurfacesUpstreamFailureWhenRetainedOfflineImageBytesAreMissing() async throws {
+        let imageURL = try #require(URL(string: "https://img.example.com/novel-queued.jpg"))
+        let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=904&page=1"))
+        let offlineStore = try makeTestOfflineCacheStore(rootDirectory: makeTemporaryNovelInlineImageLoaderDirectory())
+        try await offlineStore.saveNovelOfflineCacheEntry(
+            makeNovelInlineImageOfflineEntry(threadURL: threadURL, imageURLs: [imageURL])
+        )
+        let upstream = RecordingNovelInlineImageDataLoader(results: [.failure(YamiboError.offline)])
+        let loader = CachedNovelInlineImageDataLoader(
+            imageDataLoader: upstream,
+            offlineCacheStore: offlineStore
+        )
+
+        await #expect(throws: YamiboError.offline) {
+            _ = try await loader.imageData(for: imageURL, refererURL: threadURL)
+        }
+
+        #expect(await upstream.callCount == 1)
+    }
+
     @Test func appContextInlineImageContextProvidesProjectLoader() async throws {
         let suiteName = "NovelInlineImageDataLoaderTests.\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suiteName))
@@ -149,6 +230,23 @@ struct NovelInlineImageDataLoaderTests {
     }
 }
 
+private actor RecordingNovelInlineImageDataLoader: NovelInlineImageDataLoading {
+    private var results: [Result<Data, Error>]
+    private(set) var requestedRequests: [YamiboImageRequest] = []
+    private(set) var callCount = 0
+
+    init(results: [Result<Data, Error>]) {
+        self.results = results
+    }
+
+    func imageData(for imageURL: URL, refererURL: URL) async throws -> Data {
+        callCount += 1
+        requestedRequests.append(YamiboImageRequest(url: imageURL, refererURL: refererURL))
+        let result = results.isEmpty ? Result<Data, Error>.failure(YamiboError.unreadableBody) : results.removeFirst()
+        return try result.get()
+    }
+}
+
 private final class NovelInlineImageRequestCounter: @unchecked Sendable {
     private let lock = NSLock()
     private var count = 0
@@ -164,4 +262,23 @@ private final class NovelInlineImageRequestCounter: @unchecked Sendable {
         count += 1
         lock.unlock()
     }
+}
+
+private func makeNovelInlineImageOfflineEntry(threadURL: URL, imageURLs: [URL]) -> NovelOfflineCacheEntry {
+    NovelOfflineCacheEntry(
+        ownerTitle: "测试小说",
+        document: ReaderPageDocument(
+            threadURL: threadURL,
+            view: 1,
+            maxView: 1,
+            resolvedAuthorID: "author-900",
+            contentSource: .authorFilteredPage,
+            segments: imageURLs.map { .image($0, chapterTitle: nil) }
+        ),
+        imageURLs: imageURLs
+    )
+}
+
+private func makeTemporaryNovelInlineImageLoaderDirectory() -> URL {
+    FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
 }

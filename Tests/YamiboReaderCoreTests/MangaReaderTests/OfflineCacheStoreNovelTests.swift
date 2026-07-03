@@ -143,6 +143,54 @@ struct MangaReaderTestsNovelOfflineCacheStore {
         #expect(retainedProjection?.view == projection.view)
         #expect(retainedProjection?.segments == projection.segments)
     }
+
+    @Test func sourcePageUpdateWithImageRetentionDisabledPreservesExistingImageAssets() async throws {
+        let store = try makeTestOfflineCacheStore(rootDirectory: try makeTemporaryNovelOfflineCacheDirectory())
+        let imageURL = try #require(URL(string: "https://img.example.com/7005-inline.jpg"))
+        let sourcePage = try makeNovelSourcePage(tid: "7005", view: 1, totalPages: 1)
+        let initialRequest = NovelOfflineCacheWorkRequest(
+            ownerTitle: "小说7005",
+            title: "第1页",
+            threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=7005&mobile=2")),
+            view: 1,
+            authorID: "42",
+            contentSource: .authorFilteredPage,
+            targetImageURLs: [imageURL],
+            retainsInlineImages: true
+        )
+        let disabledRequest = NovelOfflineCacheWorkRequest(
+            ownerTitle: initialRequest.ownerTitle,
+            title: initialRequest.title,
+            threadURL: initialRequest.threadURL,
+            view: initialRequest.view,
+            authorID: initialRequest.authorID,
+            contentSource: initialRequest.contentSource,
+            retainsInlineImages: false
+        )
+
+        try await store.saveOfflineImageData(Data([7, 5]), for: imageURL)
+        try await store.saveNovelOfflineSourcePage(
+            sourcePage,
+            request: initialRequest,
+            projectionPrewarm: nil,
+            updatedAt: Date(timeIntervalSince1970: 10)
+        )
+        try await store.saveNovelOfflineSourcePage(
+            sourcePage,
+            request: disabledRequest,
+            projectionPrewarm: nil,
+            updatedAt: Date(timeIntervalSince1970: 11),
+            preservesExistingImageReferencesWhenEmpty: true
+        )
+
+        let entry = await store.novelOfflineCacheEntry(id: OfflineCacheEntryID(
+            readerKind: .novel,
+            ownerKey: initialRequest.ownerTitle,
+            entryKey: initialRequest.entryKey
+        ))
+        #expect(entry?.imageURLs == [imageURL])
+        #expect(await store.offlineImageData(for: imageURL) == Data([7, 5]))
+    }
 }
 
 private func makeNovelWorkRequest(tid: String, view: Int) throws -> NovelOfflineCacheWorkRequest {

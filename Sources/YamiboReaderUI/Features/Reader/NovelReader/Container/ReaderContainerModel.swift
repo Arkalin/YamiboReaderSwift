@@ -1531,7 +1531,12 @@ public final class ReaderContainerModel: ObservableObject {
     }
 
     private var cacheOperationRepository: ReaderCacheOperationRepository? {
-        OfflineStoreReaderCacheOperationAdapter(store: appContext.makeOfflineCacheStore())
+        OfflineStoreReaderCacheOperationAdapter(
+            store: appContext.makeOfflineCacheStore(),
+            novelOfflineCacheSettings: { [settingsStore = appContext.settingsStore] in
+                await settingsStore.load().novelOfflineCache
+            }
+        )
     }
 
     private func cacheOperationSummary(

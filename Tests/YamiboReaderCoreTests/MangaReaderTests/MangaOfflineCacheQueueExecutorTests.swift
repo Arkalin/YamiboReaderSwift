@@ -452,6 +452,115 @@ struct MangaReaderTestsMangaOfflineCacheQueueExecutor {
         #expect(await store.offlineImageData(for: canceledImages[0]) == nil)
         #expect(await store.offlineImageData(for: retainedImages[0]) == Data([1]))
     }
+
+    @Test func continueProcessesNovelWorkWithoutImagesWhenRetentionFlagDisabled() async throws {
+        let store = try makeTestOfflineCacheStore(rootDirectory: try makeTemporaryExecutorDirectory())
+        let imageURLs = try makeImageURLs(tid: "1100", count: 2)
+        let request = try makeNovelExecutorWorkRequest(tid: "1100", view: 1, retainsInlineImages: false)
+        _ = try await store.enqueueNovelOfflineCacheWork(request)
+        let sourceLoader = RecordingNovelOfflineSourcePageLoader()
+        await sourceLoader.setPreparedPage(
+            try makeNovelExecutorPreparedSourcePage(tid: "1100", view: 1, imageURLs: imageURLs),
+            for: request
+        )
+        let acquirer = RecordingOfflineImageAcquirer()
+        await acquirer.setData(for: imageURLs)
+        let executor = MangaOfflineCacheQueueExecutor(
+            store: store,
+            readerProjectionLoader: RecordingReaderProjectionLoader(),
+            novelSourcePageLoader: sourceLoader,
+            imageAcquirer: acquirer
+        )
+
+        try await executor.continueQueue()
+        await executor.waitForIdle()
+
+        #expect(await store.offlineCacheQueueWorks().isEmpty)
+        #expect(await acquirer.requestedURLs.isEmpty)
+        #expect(await store.offlineImageData(for: imageURLs[0]) == nil)
+        let entry = await store.novelOfflineCacheEntry(id: OfflineCacheEntryID(
+            readerKind: .novel,
+            ownerKey: request.ownerTitle,
+            entryKey: request.entryKey
+        ))
+        #expect(entry?.imageURLs.isEmpty == true)
+        #expect(entry?.document.segments.contains(.image(imageURLs[0], chapterTitle: nil)) == true)
+    }
+
+    @Test func continueProcessesNovelInlineImagesWhenRetentionFlagEnabled() async throws {
+        let store = try makeTestOfflineCacheStore(rootDirectory: try makeTemporaryExecutorDirectory())
+        let imageURLs = try makeImageURLs(tid: "1110", count: 2)
+        let request = try makeNovelExecutorWorkRequest(tid: "1110", view: 1, retainsInlineImages: true)
+        _ = try await store.enqueueNovelOfflineCacheWork(request)
+        let sourceLoader = RecordingNovelOfflineSourcePageLoader()
+        await sourceLoader.setPreparedPage(
+            try makeNovelExecutorPreparedSourcePage(tid: "1110", view: 1, imageURLs: imageURLs),
+            for: request
+        )
+        let acquirer = RecordingOfflineImageAcquirer()
+        await acquirer.setData(for: imageURLs)
+        let executor = MangaOfflineCacheQueueExecutor(
+            store: store,
+            readerProjectionLoader: RecordingReaderProjectionLoader(),
+            novelSourcePageLoader: sourceLoader,
+            imageAcquirer: acquirer,
+            maxConcurrentImageTransfers: 1
+        )
+
+        try await executor.continueQueue()
+        await executor.waitForIdle()
+
+        #expect(await store.offlineCacheQueueWorks().isEmpty)
+        #expect(await acquirer.requestedURLs == imageURLs)
+        #expect(await store.offlineImageData(for: imageURLs[0]) == Data([1]))
+        #expect(await store.offlineImageData(for: imageURLs[1]) == Data([2]))
+        let entry = await store.novelOfflineCacheEntry(id: OfflineCacheEntryID(
+            readerKind: .novel,
+            ownerKey: request.ownerTitle,
+            entryKey: request.entryKey
+        ))
+        #expect(entry?.imageURLs == imageURLs)
+    }
+
+    @Test func failedNovelImageAcquisitionPreservesRefreshedSourcePageAndFailedWork() async throws {
+        let store = try makeTestOfflineCacheStore(rootDirectory: try makeTemporaryExecutorDirectory())
+        let imageURLs = try makeImageURLs(tid: "1120", count: 2)
+        let request = try makeNovelExecutorWorkRequest(tid: "1120", view: 2, retainsInlineImages: true)
+        _ = try await store.enqueueNovelOfflineCacheWork(request)
+        let sourceLoader = RecordingNovelOfflineSourcePageLoader()
+        let preparedPage = try makeNovelExecutorPreparedSourcePage(tid: "1120", view: 2, imageURLs: imageURLs)
+        await sourceLoader.setPreparedPage(preparedPage, for: request)
+        let acquirer = RetryOfflineImageAcquirer(failingImageURL: imageURLs[1])
+        let executor = MangaOfflineCacheQueueExecutor(
+            store: store,
+            readerProjectionLoader: RecordingReaderProjectionLoader(),
+            novelSourcePageLoader: sourceLoader,
+            imageAcquirer: acquirer,
+            maxConcurrentImageTransfers: 1
+        )
+
+        try await executor.continueQueue()
+        await executor.waitForIdle()
+
+        let failedWork = try #require(await store.offlineCacheQueueWorks().first)
+        #expect(failedWork.state == .failed)
+        #expect(failedWork.progress == OfflineCacheProgress(completedUnitCount: 1, targetUnitCount: 2))
+        #expect(await store.offlineImageData(for: imageURLs[0]) == Data([1]))
+        #expect(await store.offlineImageData(for: imageURLs[1]) == nil)
+        let sourceSnapshot = await store.novelOfflineSourcePageSnapshot(
+            threadURL: request.threadURL,
+            view: request.view,
+            authorID: request.authorID,
+            contentSource: request.contentSource
+        )
+        #expect(sourceSnapshot?.sourcePage == preparedPage.sourcePage)
+        let entry = await store.novelOfflineCacheEntry(id: OfflineCacheEntryID(
+            readerKind: .novel,
+            ownerKey: request.ownerTitle,
+            entryKey: request.entryKey
+        ))
+        #expect(entry?.imageURLs == imageURLs)
+    }
 }
 
 private actor RecordingReaderProjectionLoader: MangaReaderProjectionSnapshotLoading {
@@ -658,6 +767,28 @@ private actor RecordingQueueRunObserver: MangaOfflineCacheQueueRunObserving {
     }
 }
 
+private actor RecordingNovelOfflineSourcePageLoader: NovelOfflineCacheSourcePageLoading {
+    private(set) var requests: [NovelOfflineCacheWorkRequest] = []
+    private var preparedPagesByEntryKey: [String: NovelOfflineCachePreparedSourcePage] = [:]
+
+    func setPreparedPage(
+        _ preparedPage: NovelOfflineCachePreparedSourcePage,
+        for request: NovelOfflineCacheWorkRequest
+    ) {
+        preparedPagesByEntryKey[request.entryKey] = preparedPage
+    }
+
+    func loadNovelOfflineCacheSourcePage(
+        _ request: NovelOfflineCacheWorkRequest
+    ) async throws -> NovelOfflineCachePreparedSourcePage {
+        requests.append(request)
+        guard let preparedPage = preparedPagesByEntryKey[request.entryKey] else {
+            throw YamiboError.parsingFailed(context: "Missing test novel offline source page")
+        }
+        return preparedPage
+    }
+}
+
 private func makeExecutorWorkRequest(
     ownerName: String,
     tid: String,
@@ -670,6 +801,58 @@ private func makeExecutorWorkRequest(
         chapterURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(tid)&page=5")),
         targetImageURLs: targetImageURLs
     )
+}
+
+private func makeNovelExecutorWorkRequest(
+    tid: String,
+    view: Int,
+    retainsInlineImages: Bool
+) throws -> NovelOfflineCacheWorkRequest {
+    NovelOfflineCacheWorkRequest(
+        ownerTitle: "小说\(tid)",
+        title: "第\(view)页",
+        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(tid)&mobile=2")),
+        view: view,
+        authorID: "42",
+        contentSource: .authorFilteredPage,
+        retainsInlineImages: retainsInlineImages
+    )
+}
+
+private func makeNovelExecutorPreparedSourcePage(
+    tid: String,
+    view: Int,
+    imageURLs: [URL]
+) throws -> NovelOfflineCachePreparedSourcePage {
+    let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(tid)&mobile=2"))
+    let canonicalURL = ReaderCacheIdentity.canonicalThreadURL(from: threadURL)
+    let segments = [.text("正文\(view)", chapterTitle: "第\(view)章")]
+        + imageURLs.map { ReaderSegment.image($0, chapterTitle: nil) }
+    let sourcePage = ForumThreadPage(
+        thread: ThreadIdentity(tid: tid, canonicalURL: canonicalURL),
+        title: "小说\(tid)",
+        posts: [
+            ForumThreadPost(
+                postID: "\(tid)-\(view)",
+                author: BlogReaderUser(uid: "42", name: "楼主"),
+                contentHTML: "<strong>第\(view)章</strong><br>正文\(view)",
+                contentText: "正文\(view)",
+                images: imageURLs.map { ForumThreadPostImage(url: $0.absoluteString) }
+            )
+        ],
+        pageNavigation: ForumPageNavigation(currentPage: view, totalPages: max(2, view))
+    )
+    let document = ReaderPageDocument(
+        threadURL: canonicalURL,
+        view: view,
+        maxView: max(2, view),
+        resolvedAuthorID: "42",
+        contentSource: .authorFilteredPage,
+        segments: segments,
+        projectionSourceFingerprint: "novel-\(tid)-\(view)",
+        projectionSchemaVersion: 1
+    )
+    return NovelOfflineCachePreparedSourcePage(sourcePage: sourcePage, document: document)
 }
 
 private func makeDocument(tid: String, imageURLs: [URL]) throws -> MangaReaderProjection {

@@ -173,6 +173,34 @@ final class ReaderCacheOperationModuleTests: XCTestCase {
         XCTAssertTrue(contexts.allSatisfy { $0 == context })
     }
 
+    func testOfflineStoreAdapterRecordsRetainInlineImagesSettingWhenEnqueuing() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("reader-cache-operation-adapter-\(UUID().uuidString)", isDirectory: true)
+        let database = try YamiboDatabase.openPool(rootDirectory: root.appendingPathComponent("grdb", isDirectory: true))
+        let store = OfflineCacheStore(
+            databasePool: database,
+            baseDirectory: root.appendingPathComponent("offline-cache", isDirectory: true)
+        )
+        let adapter = OfflineStoreReaderCacheOperationAdapter(
+            store: store,
+            novelOfflineCacheSettings: {
+                NovelOfflineCacheSettings(retainsInlineImages: true)
+            }
+        )
+        let context = ReaderCacheOperationContext(
+            ownerTitle: "小说A",
+            threadURL: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=8848&mobile=2")!,
+            authorID: "42",
+            contentSource: .authorFilteredPage
+        )
+
+        let result = await adapter.cacheViews([1], for: context, progress: nil)
+        let work = await store.nextOfflineCacheProcessingWork()
+
+        XCTAssertEqual(result.completedViews, [1])
+        XCTAssertTrue(work?.retainsInlineImages == true)
+    }
+
     private func makeSnapshot(
         cacheableViews: Set<Int>,
         cachedViews: Set<Int>

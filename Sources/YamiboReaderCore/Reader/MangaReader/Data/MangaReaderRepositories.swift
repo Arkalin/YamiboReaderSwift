@@ -134,7 +134,9 @@ public protocol OfflineCacheStoring: Sendable {
         _ sourcePage: ForumThreadPage,
         request: NovelOfflineCacheWorkRequest,
         projectionPrewarm: ReaderPageDocument?,
-        updatedAt: Date
+        updatedAt: Date,
+        completesMatchingWork: Bool,
+        preservesExistingImageReferencesWhenEmpty: Bool
     ) async throws
     func novelOfflineSourcePage(
         ownerTitle: String,
@@ -173,10 +175,18 @@ public protocol OfflineCacheStoring: Sendable {
     func offlineCacheWork(ownerName: String, tid: String) async -> MangaOfflineCacheWork?
     func allOfflineCacheWorks() async -> [MangaOfflineCacheWork]
     func offlineCacheQueueWorks() async -> [OfflineCacheQueueWorkProjection]
+    func nextOfflineCacheProcessingWork() async -> OfflineCacheProcessingWork?
+    func offlineCacheProcessingWork(id: OfflineCacheWorkID) async -> OfflineCacheProcessingWork?
     func enqueueNovelOfflineCacheWork(_ request: NovelOfflineCacheWorkRequest) async throws -> NovelOfflineCacheEnqueueResult
     func enqueueNovelOfflineCacheUpdateWork(_ request: NovelOfflineCacheWorkRequest) async throws -> NovelOfflineCacheEnqueueResult
     func retryFailedOfflineCacheWorks() async throws
     func enqueueOfflineCacheWork(_ request: MangaOfflineCacheWorkRequest) async throws -> MangaOfflineCacheEnqueueResult
+    func updateOfflineCacheWorkProgress(
+        id: OfflineCacheWorkID,
+        targetImageURLs: [URL]?,
+        completedImageURLs: [URL],
+        currentBytesPerSecond: Int?
+    ) async throws
     func updateOfflineCacheWorkProgress(
         ownerName: String,
         tid: String,
@@ -184,7 +194,13 @@ public protocol OfflineCacheStoring: Sendable {
         completedImageURLs: [URL],
         currentBytesPerSecond: Int?
     ) async throws
+    func prepareOfflineCacheWorkForRun(
+        id: OfflineCacheWorkID,
+        targetImageURLs: [URL]?,
+        completedImageURLs: [URL]
+    ) async throws
     func prepareOfflineCacheWorkForRun(ownerName: String, tid: String, targetImageURLs: [URL]?, completedImageURLs: [URL]) async throws
+    func finishOfflineCacheWork(id: OfflineCacheWorkID) async throws
     func markOfflineCacheWorkFailed(ownerName: String, tid: String, message: String?) async throws
     func markOfflineCacheWorkFailed(id: OfflineCacheWorkID, message: String?) async throws
     func cancelOfflineCacheWork(ownerName: String, tid: String) async throws

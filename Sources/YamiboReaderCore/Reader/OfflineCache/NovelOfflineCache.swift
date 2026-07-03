@@ -106,6 +106,7 @@ public struct NovelOfflineCacheWorkRequest: Hashable, Sendable {
     public var authorID: String?
     public var contentSource: ReaderContentSource
     public var targetImageURLs: [URL]
+    public var retainsInlineImages: Bool
 
     public var entryKey: String {
         NovelOfflineCacheEntry.entryKey(
@@ -123,7 +124,8 @@ public struct NovelOfflineCacheWorkRequest: Hashable, Sendable {
         view: Int,
         authorID: String? = nil,
         contentSource: ReaderContentSource = .fallbackUnfilteredPage,
-        targetImageURLs: [URL] = []
+        targetImageURLs: [URL] = [],
+        retainsInlineImages: Bool = false
     ) {
         self.ownerTitle = ownerTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         self.title = title.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -135,6 +137,7 @@ public struct NovelOfflineCacheWorkRequest: Hashable, Sendable {
         }
         self.contentSource = self.authorID == nil ? contentSource : .authorFilteredPage
         self.targetImageURLs = Self.uniqueURLs(targetImageURLs)
+        self.retainsInlineImages = retainsInlineImages
     }
 
     private static func uniqueURLs(_ urls: [URL]) -> [URL] {
@@ -211,6 +214,20 @@ public struct NovelOfflineCacheViewsSnapshot: Codable, Hashable, Sendable {
         }
         return NovelOfflineCacheViewState(view: normalizedView, status: .uncached)
     }
+}
+
+public struct NovelOfflineCachePreparedSourcePage: Sendable {
+    public var sourcePage: ForumThreadPage
+    public var document: ReaderPageDocument
+
+    public init(sourcePage: ForumThreadPage, document: ReaderPageDocument) {
+        self.sourcePage = sourcePage
+        self.document = document
+    }
+}
+
+public protocol NovelOfflineCacheSourcePageLoading: Sendable {
+    func loadNovelOfflineCacheSourcePage(_ request: NovelOfflineCacheWorkRequest) async throws -> NovelOfflineCachePreparedSourcePage
 }
 
 public struct NovelOfflineSourcePageSnapshot: Sendable {

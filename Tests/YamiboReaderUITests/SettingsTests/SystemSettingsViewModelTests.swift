@@ -18,6 +18,20 @@ final class SystemSettingsViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.applePencilPageTurn, savedSettings)
     }
 
+    func testLoadReadsNovelOfflineCacheSettings() async throws {
+        let fixture = try makeFixture()
+        let savedSettings = NovelOfflineCacheSettings(
+            retainsInlineImages: true,
+            isAutoRefreshEnabled: false
+        )
+        try await fixture.settingsStore.save(AppSettings(novelOfflineCache: savedSettings))
+
+        let viewModel = SystemSettingsViewModel(appContext: fixture.appContext)
+        await viewModel.load()
+
+        XCTAssertEqual(viewModel.novelOfflineCache, savedSettings)
+    }
+
     func testLoadReadsFavoriteBackgroundSettings() async throws {
         let fixture = try makeFixture()
         let savedSettings = FavoriteBackgroundSettings(
@@ -152,9 +166,41 @@ final class SystemSettingsViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.applePencilPageTurn.behavior, .doubleTapNextSqueezePrevious)
     }
 
+    func testUpdateNovelOfflineCacheSettingsPersistsSettings() async throws {
+        let fixture = try makeFixture()
+        try await fixture.settingsStore.save(AppSettings())
+
+        let viewModel = SystemSettingsViewModel(appContext: fixture.appContext)
+        await viewModel.load()
+        XCTAssertFalse(viewModel.novelOfflineCache.retainsInlineImages)
+        XCTAssertTrue(viewModel.novelOfflineCache.isAutoRefreshEnabled)
+
+        viewModel.updateNovelOfflineCacheRetainsInlineImages(true)
+        try await waitFor {
+            await fixture.settingsStore.load().novelOfflineCache.retainsInlineImages
+        }
+        viewModel.updateNovelOfflineCacheAutoRefreshEnabled(false)
+
+        try await waitFor {
+            let loaded = await fixture.settingsStore.load()
+            return loaded.novelOfflineCache == NovelOfflineCacheSettings(
+                retainsInlineImages: true,
+                isAutoRefreshEnabled: false
+            )
+        }
+        XCTAssertEqual(viewModel.novelOfflineCache, NovelOfflineCacheSettings(
+            retainsInlineImages: true,
+            isAutoRefreshEnabled: false
+        ))
+    }
+
     func testResetApplicationRestoresDefaultApplePencilSettings() async throws {
         let fixture = try makeFixture()
         try await fixture.settingsStore.save(AppSettings(
+            novelOfflineCache: NovelOfflineCacheSettings(
+                retainsInlineImages: true,
+                isAutoRefreshEnabled: false
+            ),
             applePencilPageTurn: ApplePencilPageTurnSettings(
                 isEnabled: true,
                 behavior: .doubleTapNextSqueezePrevious
@@ -166,8 +212,10 @@ final class SystemSettingsViewModelTests: XCTestCase {
         let didReset = await viewModel.resetApplication()
 
         XCTAssertTrue(didReset)
+        XCTAssertEqual(viewModel.novelOfflineCache, NovelOfflineCacheSettings())
         XCTAssertEqual(viewModel.applePencilPageTurn, ApplePencilPageTurnSettings())
         let loaded = await fixture.settingsStore.load()
+        XCTAssertEqual(loaded.novelOfflineCache, NovelOfflineCacheSettings())
         XCTAssertEqual(loaded.applePencilPageTurn, ApplePencilPageTurnSettings())
         XCTAssertEqual(viewModel.favoriteBackground, FavoriteBackgroundSettings())
     }

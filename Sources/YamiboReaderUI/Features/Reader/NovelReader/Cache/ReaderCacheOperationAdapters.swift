@@ -62,9 +62,14 @@ public struct ReaderRepositoryCacheOperationAdapter: ReaderCacheOperationReposit
 
 public struct OfflineStoreReaderCacheOperationAdapter: ReaderCacheOperationRepository {
     private let store: any OfflineCacheStoring
+    private let novelOfflineCacheSettings: @Sendable () async -> NovelOfflineCacheSettings
 
-    public init(store: any OfflineCacheStoring) {
+    public init(
+        store: any OfflineCacheStoring,
+        novelOfflineCacheSettings: @escaping @Sendable () async -> NovelOfflineCacheSettings = { .init() }
+    ) {
         self.store = store
+        self.novelOfflineCacheSettings = novelOfflineCacheSettings
     }
 
     public func cacheState(for context: ReaderCacheOperationContext) async -> NovelOfflineCacheViewsSnapshot {
@@ -116,6 +121,7 @@ public struct OfflineStoreReaderCacheOperationAdapter: ReaderCacheOperationRepos
     ) async -> ReaderCacheBatchResult {
         var submittedViews: [Int] = []
         var failedViews: [Int] = []
+        let settings = await novelOfflineCacheSettings()
         for view in views.sorted() {
             do {
                 let request = NovelOfflineCacheWorkRequest(
@@ -124,7 +130,8 @@ public struct OfflineStoreReaderCacheOperationAdapter: ReaderCacheOperationRepos
                     threadURL: context.threadURL,
                     view: view,
                     authorID: context.authorID,
-                    contentSource: context.contentSource ?? .fallbackUnfilteredPage
+                    contentSource: context.contentSource ?? .fallbackUnfilteredPage,
+                    retainsInlineImages: settings.retainsInlineImages
                 )
                 let result = try await (isUpdate
                     ? store.enqueueNovelOfflineCacheUpdateWork(request)

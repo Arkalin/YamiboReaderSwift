@@ -135,6 +135,9 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
             offlineCacheStore: offlineCacheStore,
             novelOfflineAutoRefreshEnabled: { [settingsStore] in
                 await settingsStore.load().novelOfflineCache.isAutoRefreshEnabled
+            },
+            novelOfflineRetainsInlineImages: { [settingsStore] in
+                await settingsStore.load().novelOfflineCache.retainsInlineImages
             }
         )
     }
@@ -156,9 +159,13 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
             cookie: sessionState.cookie,
             userAgent: sessionState.userAgent
         )
+        let remoteLoader = YamiboNovelInlineImageDataLoader(
+            imageDataLoader: YamiboImageDataLoader(client: client)
+        )
         return NovelInlineImageLoadingContext(
-            loader: YamiboNovelInlineImageDataLoader(
-                imageDataLoader: YamiboImageDataLoader(client: client)
+            loader: CachedNovelInlineImageDataLoader(
+                imageDataLoader: remoteLoader,
+                offlineCacheStore: offlineCacheStore
             )
         )
     }
@@ -309,6 +316,7 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         let executor = MangaOfflineCacheQueueExecutor(
             store: offlineCacheStore,
             readerProjectionLoader: await makeMangaReaderProjectionLoader(),
+            novelSourcePageLoader: await makeNovelReaderRepository(),
             imageAcquirer: MangaOfflineCacheImageAcquirer(
                 networkLoader: YamiboImageDataLoader(client: client),
                 backgroundTransport: mangaOfflineCacheBackgroundDownloadTransport

@@ -6,7 +6,9 @@ extension OfflineCacheStore {
         _ sourcePage: ForumThreadPage,
         request: NovelOfflineCacheWorkRequest,
         projectionPrewarm: ReaderPageDocument?,
-        updatedAt: Date = .now
+        updatedAt: Date = .now,
+        completesMatchingWork: Bool = true,
+        preservesExistingImageReferencesWhenEmpty: Bool = false
     ) async throws {
         try await recoverQueueStateAfterRestart()
         do {
@@ -28,22 +30,30 @@ extension OfflineCacheStore {
             let sourceFingerprint = sha256Hex(String(decoding: sourceData, as: UTF8.self))
 
             try await database.write { db in
+                let imageURLs = try Self.imageURLsForNovelSourcePageMetadata(
+                    request: normalized,
+                    imageURLs: normalized.targetImageURLs,
+                    preservesExistingImageReferencesWhenEmpty: preservesExistingImageReferencesWhenEmpty,
+                    in: db
+                )
                 try Self.saveNovelSourcePageMetadata(
                     request: normalized,
                     documentJSON: documentJSON,
                     sourceFileName: sourceFileName,
                     sourceFingerprint: sourceFingerprint,
                     sourceByteCount: sourceData.count,
-                    imageURLs: normalized.targetImageURLs,
+                    imageURLs: imageURLs,
                     updatedAt: updatedAt,
                     in: db
                 )
-                try Self.deleteWork(
-                    readerKind: OfflineCacheReaderKind.novel.rawValue,
-                    ownerName: normalized.ownerTitle,
-                    tid: normalized.entryKey,
-                    in: db
-                )
+                if completesMatchingWork {
+                    try Self.deleteWork(
+                        readerKind: OfflineCacheReaderKind.novel.rawValue,
+                        ownerName: normalized.ownerTitle,
+                        tid: normalized.entryKey,
+                        in: db
+                    )
+                }
             }
             notifyOfflineCacheDidChange()
             if projectionPrewarm != nil {

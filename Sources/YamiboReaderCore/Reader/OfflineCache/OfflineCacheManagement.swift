@@ -217,6 +217,64 @@ public struct OfflineCacheQueueWorkProjection: Codable, Hashable, Identifiable, 
     }
 }
 
+public struct OfflineCacheProcessingWork: Hashable, Identifiable, Sendable {
+    public var id: OfflineCacheWorkID
+    public var entryID: OfflineCacheEntryID
+    public var ownerTitle: String
+    public var title: String
+    public var targetImageURLs: [URL]
+    public var completedImageURLs: [URL]
+    public var retainsInlineImages: Bool
+    public var state: OfflineCacheWorkState
+    public var failureMessage: String?
+    public var currentBytesPerSecond: Int
+    public var insertionIndex: Int
+    public var createdAt: Date
+    public var updatedAt: Date
+
+    public init(
+        id: OfflineCacheWorkID,
+        entryID: OfflineCacheEntryID,
+        ownerTitle: String,
+        title: String,
+        targetImageURLs: [URL],
+        completedImageURLs: [URL],
+        retainsInlineImages: Bool,
+        state: OfflineCacheWorkState,
+        failureMessage: String?,
+        currentBytesPerSecond: Int,
+        insertionIndex: Int,
+        createdAt: Date,
+        updatedAt: Date
+    ) {
+        self.id = id
+        self.entryID = entryID
+        self.ownerTitle = ownerTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.title = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.targetImageURLs = Self.uniqueURLs(targetImageURLs)
+        self.completedImageURLs = Self.uniqueURLs(completedImageURLs)
+        self.retainsInlineImages = retainsInlineImages
+        self.state = state
+        self.failureMessage = failureMessage?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if self.failureMessage?.isEmpty == true {
+            self.failureMessage = nil
+        }
+        self.currentBytesPerSecond = max(0, currentBytesPerSecond)
+        self.insertionIndex = max(1, insertionIndex)
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
+
+    private static func uniqueURLs(_ urls: [URL]) -> [URL] {
+        var seen: Set<String> = []
+        var output: [URL] = []
+        for url in urls where seen.insert(url.absoluteString).inserted {
+            output.append(url)
+        }
+        return output
+    }
+}
+
 public struct OfflineCacheQueueGroup: Codable, Hashable, Identifiable, Sendable {
     public var id: OfflineCacheGroupID
     public var title: String

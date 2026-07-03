@@ -285,6 +285,7 @@ public enum YamiboDatabase {
                 table.column("owner_name", .text).notNull()
                 table.column("tid", .text).notNull()
                 table.column("chapter_title", .text).notNull()
+                table.column("retains_inline_images", .boolean).notNull().defaults(to: false)
                 table.column("state", .text).notNull()
                 table.column("failure_message", .text)
                 table.column("current_bytes_per_second", .integer).notNull()
@@ -533,6 +534,14 @@ public enum YamiboDatabase {
             }
             if !columns.contains("projection_schema_version") {
                 try db.execute(sql: "ALTER TABLE offline_cache_novel_entries ADD COLUMN projection_schema_version INTEGER")
+            }
+        }
+
+        migrator.registerMigration("add_offline_cache_work_retain_inline_images") { db in
+            guard try db.tableExists("offline_cache_works") else { return }
+            let columns = Set(try db.columns(in: "offline_cache_works").map(\.name))
+            if !columns.contains("retains_inline_images") {
+                try db.execute(sql: "ALTER TABLE offline_cache_works ADD COLUMN retains_inline_images BOOLEAN NOT NULL DEFAULT 0")
             }
         }
     }

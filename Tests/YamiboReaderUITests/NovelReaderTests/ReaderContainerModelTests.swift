@@ -3204,7 +3204,9 @@ private func seedNovelOfflineCache(
         sourcePage,
         request: request,
         projectionPrewarm: projection,
-        updatedAt: updatedAt
+        updatedAt: updatedAt,
+        completesMatchingWork: true,
+        preservesExistingImageReferencesWhenEmpty: false
     )
 }
 

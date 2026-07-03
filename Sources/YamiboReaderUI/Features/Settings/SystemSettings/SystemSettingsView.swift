@@ -147,6 +147,20 @@ public struct SystemSettingsView: View {
                     }
                 }
 
+                Section(L10n.string("settings.section.novel_offline_cache")) {
+                    Toggle(
+                        L10n.string("settings.novel_offline_cache.retain_inline_images"),
+                        isOn: novelOfflineCacheRetainsInlineImagesBinding
+                    )
+                    .disabled(viewModel.isBusy)
+
+                    Toggle(
+                        L10n.string("settings.novel_offline_cache.auto_refresh"),
+                        isOn: novelOfflineCacheAutoRefreshBinding
+                    )
+                    .disabled(viewModel.isBusy)
+                }
+
                 Section(L10n.string("settings.section.storage")) {
                     Button {
                         pendingConfirmation = .clearNovelCache
@@ -383,6 +397,20 @@ public struct SystemSettingsView: View {
         Binding(
             get: { viewModel.favoriteShowsCategoryCounts },
             set: { viewModel.updateFavoriteShowsCategoryCounts($0) }
+        )
+    }
+
+    private var novelOfflineCacheRetainsInlineImagesBinding: Binding<Bool> {
+        Binding(
+            get: { viewModel.novelOfflineCache.retainsInlineImages },
+            set: { viewModel.updateNovelOfflineCacheRetainsInlineImages($0) }
+        )
+    }
+
+    private var novelOfflineCacheAutoRefreshBinding: Binding<Bool> {
+        Binding(
+            get: { viewModel.novelOfflineCache.isAutoRefreshEnabled },
+            set: { viewModel.updateNovelOfflineCacheAutoRefreshEnabled($0) }
         )
     }
 
