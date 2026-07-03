@@ -80,6 +80,14 @@ _Avoid_: points bar, score progress, user level progress
 The app's account home surface for the current **Yamibo Account**.
 _Avoid_: profile web view, my page, user center
 
+**Download Queue**:
+The Mine Home-accessible queue surface that presents unfinished user-requested offline-cache work across supported reader contexts.
+_Avoid_: manga-only queue, novel-only queue, transient progress sheet
+
+**Offline Cache Management**:
+The app-level surface for finding, inspecting, and deleting completed or pending user-retained offline-cache content across supported reader contexts.
+_Avoid_: favorite management, transparent cache cleanup, download history
+
 **Security Question**:
 The optional Yamibo login challenge configured on a **Yamibo Account**, composed of a selected question and answer.
 _Avoid_: captcha, verification code, password hint
@@ -150,8 +158,11 @@ _Avoid_: app sync, startup restore, lifecycle handler
 - A **Favorite Library** persists a novel's **Novel Reading Position** through its semantic resume point and reader page document view; it never stores a novel runtime surface ordinal or displayed page number.
 - Manga page persistence uses the manga-specific `mangaPageIndex` Interface. The historical JSON key `lastPage` may remain as a schema compatibility key, but it is not a Swift Interface and is never written from novel reading.
 - **Mine Home** presents the current **Yamibo Account** through its **Yamibo Profile**.
-- **Mine Home** may expose manga offline cache progress, grouped by **Favorite Library** entry, while the offline cache work remains owned by the Manga Reader context.
-- **Mine Home** represents pending manga offline cache activity by unfinished chapter work count, not by completed cached chapters or favorite group count.
+- **Mine Home** exposes the **Download Queue** while each offline-cache work item remains owned by its reader context.
+- **Download Queue** may contain manga and novel offline-cache work together, with row type and grouping making the reader context explicit.
+- **Mine Home** represents pending **Download Queue** activity by unfinished work item count, not by completed cached content or owner group count.
+- Failed work remains in the **Download Queue** until the user continues the queue, cancels the work, or deletes the matching offline-cache content. Continuing the queue retries failed work as well as queued or paused work.
+- **Offline Cache Management** groups offline-cache content by reader context and owner, supports deleting an owner group, and supports deleting individual cached chapter or view entries.
 - Manga offline cache records and image bytes are device-local content availability data and are not synchronized as **Favorite Library** metadata through WebDAV.
 - Manga offline cache completion does not update **Favorite Library** reading progress, resume routes, or recent-reading timestamps.
 - A **Yamibo Profile Avatar** belongs to a **Yamibo Profile**, not to a generic app image-loading model.

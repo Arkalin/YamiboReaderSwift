@@ -18,6 +18,38 @@ _Avoid_: direct novel reader, reader page document, novel web page
 The derived novel-reading document built from a forum **Thread Page** for native text layout, chapter identity, segment identity, image references, and reader cache management. It is a materialized reader input, not the authoritative cached source of novel-thread content.
 _Avoid_: source cache, thread page, web page snapshot
 
+**Novel Offline Cache**:
+User-retained novel-thread content saved so native novel reading can continue when online refresh cannot provide current content.
+_Avoid_: web page cache, transparent cache, projection cache, expired thread page cache
+
+**Novel Offline Fallback**:
+The reader behavior that automatically opens a matching **Novel Offline Cache** entry after the online load path cannot provide readable content.
+_Avoid_: explicit offline mode, manual offline entry, projection fallback
+
+**Novel Offline Cache Entry**:
+One saved reader view in **Novel Offline Cache**, identified by Yamibo thread `tid`, author identity, content source, and reader view.
+_Avoid_: whole novel cache, thread cache, projection entry
+
+**Novel Offline Source Page**:
+The author-scoped forum **Thread Page** snapshot persisted as the authoritative readable content for one **Novel Offline Cache Entry**.
+_Avoid_: reader projection, flattened text, transparent thread page cache
+
+**Novel Offline Image Asset**:
+User-retained image bytes saved for an inline image referenced by a **Novel Offline Source Page** when novel offline image caching is enabled.
+_Avoid_: transparent image cache, manga offline image, projection image
+
+**Novel Offline Cache Queue**:
+The persistent queue of user-requested **Novel Offline Cache Entry** saves and refreshes, including source-page acquisition, optional image asset acquisition, progress, failure, and retry state.
+_Avoid_: cache progress sheet, transparent cache fill, immediate cache operation
+
+**Novel Offline Auto Refresh**:
+The setting-controlled behavior that refreshes existing **Novel Offline Cache Entry** records without a per-entry user command.
+_Avoid_: ordinary online read, transparent cache refresh, silent new cache creation
+
+**Novel Offline Update Time**:
+The last time a **Novel Offline Cache Entry** successfully persisted a **Novel Offline Source Page**.
+_Avoid_: enqueue time, failure time, projection prewarm time
+
 **Novel Reading Position**:
 The reader's semantic position in a novel thread, identified by reader page document view, chapter identity, text segment identity, and Swift `Character` offset in displayed transformed text.
 _Avoid_: page index, progress, scroll position
@@ -66,14 +98,43 @@ _Avoid_: attributed string helper, UI text style factory, platform text builder,
 
 - **Novel Detail** uses its own detail model and repository while reusing lower-level Yamibo fetching, parsing utilities, favorite state, and reading progress stores where appropriate.
 - **Novel Detail** header metadata is driven by the structured forum **Thread Page**: parsed thread title, first-post author, post time, view/reply counts, forum label, and the first valid non-emoticon image cover candidate. Unfiltered all-posts **Thread Page** data may supply only header-level metadata and author-scope discovery; novel preview text and readable chapter entry points require an author-scoped **Thread Page**.
-- A forum **Thread Page** is the authoritative cached source for novel-thread content that can be reused by native novel reading. A **Novel Reader Projection** may be cached for layout and offline management, but it is derived from the **Thread Page** rather than being a second source of truth.
+- A forum **Thread Page** is the authoritative source model for novel-thread content that can be reused by native novel reading. A **Novel Reader Projection** may be cached for layout and offline prewarming, but it is derived from a **Thread Page** rather than being a second source of truth.
 - Native novel reading must not use a cached **Novel Reader Projection** as an offline substitute when the corresponding authoritative **Thread Page** is unavailable for that reader view and author scope.
 - Legacy cached **Novel Reader Projection** data that cannot be validated against an author-scoped **Thread Page** is invalid for novel reading and cache-management state; it may be cleaned up lazily during view update or deletion.
-- Novel reader cache management reports, creates, updates, and deletes cached reader views according to the authoritative **Thread Page** cache. A cached **Novel Reader Projection** alone must not make a view appear cached or offline-ready.
-- Deleting a cached novel reader view removes both the authoritative author-scoped **Thread Page** and its persisted **Novel Reader Projection**.
-- Creating or updating a cached novel reader view succeeds when the authoritative author-scoped **Thread Page** is saved. Persisting the derived **Novel Reader Projection** is nonfatal prewarming and may be retried later.
+- Novel reader cache management reports, creates, updates, and deletes cached reader views according to **Novel Offline Cache Entry** records. A cached transparent **Thread Page** or **Novel Reader Projection** alone must not make a view appear cached or offline-ready.
+- Novel reader cache management should use offline-cache and download-queue language rather than "web page cache" language, because reader cache actions create user-retained **Novel Offline Cache** entries.
+- Novel reader cache sheet row state remains coarse: cached, uncached, or caching. Failed, queued, paused, and running details belong in the shared **Download Queue** sheet rather than in each reader cache row.
+- In the novel reader cache sheet, unfinished **Novel Offline Cache Queue** work makes the matching row appear caching even when an older **Novel Offline Cache Entry** is already offline-readable. The row's displayed update time still comes from the last successful **Novel Offline Update Time**.
+- Deleting a cached novel reader view removes its **Novel Offline Cache Entry** without clearing transparent **Thread Page** or **Novel Reader Projection** caches.
+- Creating or updating a cached novel reader view enqueues **Novel Offline Cache Queue** work rather than running only as an in-reader transient progress operation.
+- **Novel Offline Cache Queue** work appears in the shared **Download Queue** alongside manga offline-cache work, with queue rows preserving their reader context.
+- **Novel Offline Cache Queue** work executes one reader view at a time. When novel offline image caching is enabled, image acquisition within the active work may use bounded concurrency.
+- Adding a **Novel Offline Cache Entry** to the queue is idempotent. Existing unfinished work is not duplicated, already cached entries are not queued by a plain cache action, and explicit update or retry commands target existing failed or paused work before creating new refresh work.
 - Novel reader prefetch prioritizes fetching and saving the next author-scoped **Thread Page**. Prewarming the next **Novel Reader Projection** is a nonfatal optimization.
-- Normal online novel reading must refresh an expired **Thread Page** before deriving a **Novel Reader Projection**. Expired **Thread Page** reuse requires an explicit offline-reading entry semantics rather than being an implicit fallback after refresh failure.
+- **Novel Offline Cache** saves reader views as **Novel Offline Cache Entry** records. A whole-novel cache action is a batch operation over entries rather than a separate authoritative cache unit.
+- A **Novel Offline Cache Entry** is created or refreshed only by user cache intent. Successful ordinary online reading may update transparent caches and projection prewarming, but it must not silently create user-retained offline content.
+- Creating **Novel Offline Cache Queue** work does not require the novel thread to exist in the **Favorite Library**. Favorite metadata may help presentation, but it does not own **Novel Offline Cache** identity, state, or deletion.
+- A **Novel Offline Cache Entry** owns a **Novel Offline Source Page** as its authoritative offline content, its **Novel Offline Update Time**, and any user-retained **Novel Offline Image Asset** records acquired for that entry. Any persisted **Novel Reader Projection** for that entry is optional prewarming and may be regenerated from the **Novel Offline Source Page**.
+- A **Novel Offline Cache Entry** is offline-readable only when its **Novel Offline Source Page** is durable. Batch cache actions may partially succeed across entries, and successful entries remain offline-readable even when neighboring entries fail.
+- Novel offline image caching is controlled by system settings. When enabled, **Novel Offline Cache Queue** work should acquire **Novel Offline Image Asset** records for cached source pages; when disabled, text and structure remain the offline success boundary and inline images may rely on ordinary image caching or network availability.
+- For manual cache update, durable **Novel Offline Source Page** replacement updates the entry and its **Novel Offline Update Time** even if optional **Novel Offline Image Asset** acquisition later fails and leaves queue work failed for retry.
+- Enabling novel offline image caching is not retroactive by itself. Existing entries acquire missing **Novel Offline Image Asset** records only through later update, retry, or **Novel Offline Auto Refresh** work.
+- Disabling novel offline image caching does not delete existing **Novel Offline Image Asset** records. It only stops later work from acquiring additional offline image assets unless the setting is enabled again.
+- **Novel Offline Auto Refresh** refreshes existing **Novel Offline Cache Entry** records without creating new offline entries for ordinary online reading. When enabled, an ordinary online read that successfully loads current content for an already cached view replaces that entry's **Novel Offline Source Page** and updates its last successful source-page update time.
+- **Novel Offline Auto Refresh** must not block readable online content on **Novel Offline Image Asset** acquisition. When novel offline image caching is enabled, image acquisition may continue through **Novel Offline Cache Queue** after the refreshed source page is durable.
+- **Novel Offline Auto Refresh** source-page replacement is not itself visible **Download Queue** work when the online read already has the source page. Optional image-asset acquisition after that replacement may enter the queue.
+- **Novel Offline Auto Refresh** replaces an offline source page only with readable current content. Parser, author-scope, projection-schema, or empty-content errors preserve the previous offline-readable source page.
+- Saving a **Novel Offline Cache Entry** may promote a valid author-scoped transparent **Thread Page** into a **Novel Offline Source Page**, but it must copy the content into **Novel Offline Cache** instead of depending on transparent cache lifetime.
+- Refreshing a **Novel Offline Cache Entry** atomically replaces its **Novel Offline Source Page** only after the new source page is durable. Refresh failure preserves the previous offline-readable content, and projection prewarming remains nonfatal.
+- Deleting a **Novel Offline Cache Entry** removes user-retained offline membership, source page, and any offline projection prewarm for that entry without clearing transparent **Thread Page** or **Novel Reader Projection** caches.
+- Deleting a **Novel Offline Cache Entry** also cancels unfinished or failed **Novel Offline Cache Queue** work for the same identity so the queue cannot recreate deleted offline content.
+- Normal online novel reading must attempt the online load path before using **Novel Offline Fallback**. A matching **Novel Offline Cache** entry may provide readable content when the online path cannot.
+- **Novel Offline Fallback** applies only when the online path cannot acquire current content, such as no network, timeout, server failure, or an expired transparent **Thread Page** refresh failure. Parser failures, projection schema incompatibility, missing author scope, and empty readable content remain reader content errors rather than fallback triggers.
+- **Novel Offline Fallback** must be visible to the reader as stale offline content rather than silently masquerading as current online content, and the reader must retain a way to retry the online load path.
+- **Novel Offline Fallback** does not wait for **Novel Offline Image Asset** acquisition. Available offline image assets may render, while missing image assets produce image placeholders or failures without blocking readable text.
+- **Novel Offline Fallback** resolves **Novel Reading Position** against the offline-derived reader document with the same restoration fallback chain as ordinary reader opening, without fabricating chapter or segment identity for content that is missing from the offline source page.
+- Reading through **Novel Offline Fallback** may update reading recency and progress, but any persisted **Novel Reading Position** must be resolved from the offline-derived reader document currently shown to the user.
+- When **Novel Offline Fallback** finds a missing or stale offline **Novel Reader Projection**, it derives one from the **Novel Offline Source Page** and may write the refreshed projection back as nonfatal prewarming.
 - Persisted **Novel Reader Projection** data is a performance cache and must be validated against the corresponding **Thread Page** identity, freshness, and projection schema before reuse.
 - Opening the current reader view requires a valid **Novel Reader Projection** before readable content is shown. Missing, stale, or invalid persisted projection data is synchronously rederived from the valid author-scoped **Thread Page**; derivation failure is a reader content error.
 - A **Novel Reader Projection** with no readable novel content is a reader content error rather than an empty readable page.
