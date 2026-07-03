@@ -2,7 +2,10 @@ import Foundation
 import YamiboReaderCore
 
 struct MineOfflineCacheQueueOwnerGroup: Hashable, Identifiable {
+    var id: OfflineCacheGroupID
+    var readerKind: OfflineCacheReaderKind
     var ownerName: String
+    var title: String
     var chapterCount: Int
     var progressFraction: Double
     var progressText: String
@@ -11,14 +14,15 @@ struct MineOfflineCacheQueueOwnerGroup: Hashable, Identifiable {
     var failureStatusText: String?
     var chapters: [MineOfflineCacheQueueChapterRow]
 
-    var id: String { ownerName }
-
-    init(group: MangaOfflineCacheQueueGroup) {
+    init(group: OfflineCacheQueueGroup) {
         let rows = group.works.map(MineOfflineCacheQueueChapterRow.init(work:))
-        let completedImageCount = group.works.reduce(0) { $0 + $1.progress.completedImageCount }
-        let targetImageCount = group.works.reduce(0) { $0 + $1.progress.targetImageCount }
+        let completedImageCount = group.works.reduce(0) { $0 + $1.progress.completedUnitCount }
+        let targetImageCount = group.works.reduce(0) { $0 + $1.progress.targetUnitCount }
         let currentBytesPerSecond = group.works.reduce(0) { $0 + $1.currentBytesPerSecond }
-        ownerName = group.ownerName
+        id = group.id
+        readerKind = group.id.readerKind
+        ownerName = group.id.ownerKey
+        title = group.title
         chapterCount = rows.count
         progressFraction = targetImageCount > 0
             ? min(max(Double(completedImageCount) / Double(targetImageCount), 0), 1)
@@ -43,7 +47,10 @@ struct MineOfflineCacheQueueOwnerGroup: Hashable, Identifiable {
 }
 
 struct MineOfflineCacheQueueChapterRow: Hashable, Identifiable {
-    var id: String
+    var id: OfflineCacheWorkID
+    var groupID: OfflineCacheGroupID
+    var entryID: OfflineCacheEntryID
+    var readerKind: OfflineCacheReaderKind
     var ownerName: String
     var tid: String
     var title: String
@@ -55,13 +62,16 @@ struct MineOfflineCacheQueueChapterRow: Hashable, Identifiable {
     var failureStatusText: String?
     var speedText: String?
 
-    init(work: MangaOfflineCacheWork) {
-        id = work.workID
-        ownerName = work.ownerName
-        tid = work.tid
-        title = work.chapterTitle.isEmpty ? work.tid : work.chapterTitle
-        completedImageCount = work.progress.completedImageCount
-        targetImageCount = work.progress.targetImageCount
+    init(work: OfflineCacheQueueWorkProjection) {
+        id = work.id
+        groupID = work.groupID
+        entryID = work.entryID
+        readerKind = work.id.readerKind
+        ownerName = work.groupID.ownerKey
+        tid = work.entryID.entryKey
+        title = work.title.isEmpty ? work.entryID.entryKey : work.title
+        completedImageCount = work.progress.completedUnitCount
+        targetImageCount = work.progress.targetUnitCount
         progressFraction = work.progress.fractionCompleted
         if targetImageCount > 0 {
             progressText = L10n.string(

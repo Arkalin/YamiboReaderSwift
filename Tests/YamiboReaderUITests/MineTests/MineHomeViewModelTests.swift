@@ -313,6 +313,96 @@ final class MineHomeViewModelTests: XCTestCase {
         XCTAssertEqual(failedRow.failureStatusText, "Timeout")
     }
 
+    func testOfflineCacheQueueExcludesCompletedMembershipsFromEntryCount() async throws {
+        let fixture = try await makeMineHomeFixture()
+        let cachedImage = try XCTUnwrap(URL(string: "https://img.example.com/completed-100.jpg"))
+        try await fixture.offlineCacheStore.saveOfflineImageData(Data([1]), for: cachedImage)
+        try await fixture.offlineCacheStore.saveMembership(
+            try makeMineOfflineCacheMembership(
+                ownerName: "作品A",
+                tid: "100",
+                imageURLs: [cachedImage]
+            )
+        )
+        _ = try await fixture.offlineCacheStore.enqueueOfflineCacheWork(
+            try makeMineOfflineCacheWorkRequest(ownerName: "作品A", tid: "200")
+        )
+
+        let viewModel = MineHomeViewModel(appContext: fixture.appContext)
+        await viewModel.refreshOfflineCacheQueue()
+
+        XCTAssertEqual(viewModel.offlineCacheQueueEntryCount, 1)
+        XCTAssertEqual(viewModel.offlineCacheQueueGroups.first?.chapters.map(\.tid), ["200"])
+    }
+
+    func testOfflineCacheQueueModelsKeepMixedReaderOwnersSeparate() throws {
+        let mangaGroupID = OfflineCacheGroupID(readerKind: .manga, ownerKey: "同名作品")
+        let novelGroupID = OfflineCacheGroupID(readerKind: .novel, ownerKey: "同名作品")
+        let projection = OfflineCacheQueueProjection.project(works: [
+            makeMineOfflineQueueWork(
+                readerKind: .manga,
+                ownerKey: "同名作品",
+                entryKey: "100",
+                title: "漫画章节",
+                insertionIndex: 1
+            ),
+            makeMineOfflineQueueWork(
+                readerKind: .novel,
+                ownerKey: "同名作品",
+                entryKey: "novel-1",
+                title: "小说章节",
+                insertionIndex: 2
+            )
+        ])
+        let groups = projection.groups.map(MineOfflineCacheQueueOwnerGroup.init(group:))
+
+        XCTAssertEqual(groups.map(\.id), [mangaGroupID, novelGroupID])
+        XCTAssertEqual(groups.map(\.ownerName), ["同名作品", "同名作品"])
+        XCTAssertEqual(groups.flatMap(\.chapters).map(\.readerKind), [.manga, .novel])
+    }
+
+    func testOfflineCacheQueueLoadsNovelWorkRowsFromStore() async throws {
+        let fixture = try await makeMineHomeFixture()
+        _ = try await fixture.offlineCacheStore.enqueueOfflineCacheWork(
+            try makeMineOfflineCacheWorkRequest(ownerName: "漫画A", tid: "100")
+        )
+        _ = try await fixture.offlineCacheStore.enqueueNovelOfflineCacheWork(
+            try makeMineNovelOfflineCacheWorkRequest(ownerTitle: "小说A", tid: "200", view: 1)
+        )
+
+        let viewModel = MineHomeViewModel(appContext: fixture.appContext)
+        await viewModel.refreshOfflineCacheQueue()
+
+        XCTAssertEqual(viewModel.offlineCacheQueueEntryCount, 2)
+        XCTAssertEqual(Set(viewModel.offlineCacheQueueGroups.map(\.readerKind)), [.manga, .novel])
+        XCTAssertEqual(Set(viewModel.offlineCacheQueueGroups.map(\.ownerName)), ["漫画A", "小说A"])
+        XCTAssertEqual(Set(viewModel.offlineCacheQueueGroups.flatMap(\.chapters).map(\.readerKind)), [.manga, .novel])
+    }
+
+    func testContinueOfflineCacheQueueRetriesFailedNovelWork() async throws {
+        let fixture = try await makeMineHomeFixture()
+        let enqueueResult = try await fixture.offlineCacheStore.enqueueNovelOfflineCacheWork(
+            try makeMineNovelOfflineCacheWorkRequest(ownerTitle: "小说A", tid: "200", view: 1)
+        )
+        let workID = try XCTUnwrap(enqueueResult.enqueuedWork?.id)
+        try await fixture.offlineCacheStore.markOfflineCacheWorkFailed(id: workID, message: "Timeout")
+        let controller = RecordingOfflineCacheQueueController(store: fixture.offlineCacheStore)
+        let viewModel = MineHomeViewModel(
+            appContext: fixture.appContext,
+            offlineCacheQueueController: controller
+        )
+
+        await viewModel.refreshOfflineCacheQueue()
+        XCTAssertEqual(viewModel.offlineCacheQueueGroups.first?.chapters.first?.failureStatusText, "Timeout")
+
+        await viewModel.continueOfflineCacheQueue()
+
+        let refreshedWork = await fixture.offlineCacheStore.offlineCacheQueueWorks().first { $0.id == workID }
+        XCTAssertEqual(refreshedWork?.state, .queued)
+        XCTAssertNil(refreshedWork?.failureMessage)
+        XCTAssertNil(viewModel.offlineCacheQueueGroups.first?.chapters.first?.failureStatusText)
+    }
+
     func testOfflineCacheQueueAutomaticallyRefreshesWhenStoreProgressChanges() async throws {
         let fixture = try await makeMineHomeFixture()
         let firstImage = try XCTUnwrap(URL(string: "https://img.example.com/100-1.jpg"))
@@ -435,7 +525,7 @@ final class MineHomeViewModelTests: XCTestCase {
             offlineCacheQueueController: controller
         )
 
-        await viewModel.cancelOfflineCacheOwnerGroup(ownerName: "作品A")
+        await viewModel.cancelOfflineCacheOwnerGroup(id: mineMangaOfflineGroupID("作品A"))
 
         let canceledWork = await fixture.offlineCacheStore.offlineCacheWork(ownerName: "作品A", tid: "200")
         let completedMembership = await fixture.offlineCacheStore.membership(ownerName: "作品A", tid: "100")
@@ -496,15 +586,15 @@ final class MineHomeViewModelTests: XCTestCase {
                 .map(\.id) ?? []
         )
 
-        viewModel.toggleOfflineCacheOwnerSelection(ownerName: "作品A")
+        viewModel.toggleOfflineCacheOwnerSelection(id: mineMangaOfflineGroupID("作品A"))
 
-        XCTAssertTrue(viewModel.isOfflineCacheOwnerSelected(ownerName: "作品A"))
-        XCTAssertFalse(viewModel.isOfflineCacheOwnerSelected(ownerName: "作品B"))
+        XCTAssertTrue(viewModel.isOfflineCacheOwnerSelected(id: mineMangaOfflineGroupID("作品A")))
+        XCTAssertFalse(viewModel.isOfflineCacheOwnerSelected(id: mineMangaOfflineGroupID("作品B")))
         XCTAssertEqual(viewModel.selectedOfflineCacheWorkIDs, ownerAWorkIDs)
 
-        viewModel.toggleOfflineCacheOwnerSelection(ownerName: "作品A")
+        viewModel.toggleOfflineCacheOwnerSelection(id: mineMangaOfflineGroupID("作品A"))
 
-        XCTAssertFalse(viewModel.isOfflineCacheOwnerSelected(ownerName: "作品A"))
+        XCTAssertFalse(viewModel.isOfflineCacheOwnerSelected(id: mineMangaOfflineGroupID("作品A")))
         XCTAssertTrue(viewModel.selectedOfflineCacheWorkIDs.isEmpty)
     }
 }
@@ -689,6 +779,7 @@ private actor RecordingOfflineCacheQueueController: MangaOfflineCacheQueueContro
 
     func continueQueue() async throws {
         recordedEvents.append("continue")
+        try await store.retryFailedOfflineCacheWorks()
         try await store.setOfflineCacheQueueRunState(.running)
     }
 
@@ -697,15 +788,60 @@ private actor RecordingOfflineCacheQueueController: MangaOfflineCacheQueueContro
         try await store.setOfflineCacheQueueRunState(.paused)
     }
 
-    func cancelChapter(ownerName: String, tid: String) async throws {
-        recordedEvents.append("cancel:\(ownerName):\(tid)")
-        try await store.cancelOfflineCacheWork(ownerName: ownerName, tid: tid)
+    func cancelWork(id: OfflineCacheWorkID) async throws {
+        if let work = await store.allOfflineCacheWorks().first(where: { $0.workID == id.rawValue }) {
+            recordedEvents.append("cancel:\(work.ownerName):\(work.tid)")
+        } else {
+            recordedEvents.append("cancel:\(id.readerKind.rawValue):\(id.rawValue)")
+        }
+        try await store.cancelOfflineCacheWork(id: id)
     }
 
-    func cancelOwnerGroup(ownerName: String) async throws {
-        recordedEvents.append("cancel-group:\(ownerName)")
-        try await store.cancelOfflineCacheWorks(forOwnerName: ownerName)
+    func cancelGroup(id: OfflineCacheGroupID) async throws {
+        recordedEvents.append("cancel-group:\(id.ownerKey)")
+        try await store.cancelOfflineCacheGroup(id)
     }
+}
+
+private func mineMangaOfflineGroupID(_ ownerName: String) -> OfflineCacheGroupID {
+    OfflineCacheGroupID(readerKind: .manga, ownerKey: ownerName)
+}
+
+private func makeMineOfflineQueueWork(
+    readerKind: OfflineCacheReaderKind,
+    ownerKey: String,
+    entryKey: String,
+    title: String,
+    insertionIndex: Int
+) -> OfflineCacheQueueWorkProjection {
+    let groupID = OfflineCacheGroupID(readerKind: readerKind, ownerKey: ownerKey)
+    let entryID = OfflineCacheEntryID(readerKind: readerKind, ownerKey: ownerKey, entryKey: entryKey)
+    return OfflineCacheQueueWorkProjection(
+        id: OfflineCacheWorkID(readerKind: readerKind, rawValue: "\(readerKind.rawValue)-\(entryKey)"),
+        groupID: groupID,
+        entryID: entryID,
+        ownerTitle: ownerKey,
+        title: title,
+        progress: OfflineCacheProgress(completedUnitCount: 0, targetUnitCount: 1),
+        state: .queued,
+        failureMessage: nil,
+        currentBytesPerSecond: 0,
+        insertionIndex: insertionIndex
+    )
+}
+
+private func makeMineNovelOfflineCacheWorkRequest(
+    ownerTitle: String,
+    tid: String,
+    view: Int
+) throws -> NovelOfflineCacheWorkRequest {
+    NovelOfflineCacheWorkRequest(
+        ownerTitle: ownerTitle,
+        title: "第\(view)页",
+        threadURL: try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(tid)&page=\(view)")),
+        view: view,
+        targetImageURLs: []
+    )
 }
 
 private func makeMineOfflineCacheWorkRequest(

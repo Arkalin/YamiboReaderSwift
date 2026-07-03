@@ -6,16 +6,30 @@ enum SystemSettingsAction: Equatable {
     case clearingNovelCache
     case clearingMangaIndexCache
     case clearingImageCache
-    case clearingMangaOfflineCache
+    case clearingOfflineCache
     case resettingApplication
 }
 
-struct MangaOfflineCacheCleanupRow: Hashable, Identifiable {
-    var ownerName: String
+struct OfflineCacheManagementRow: Hashable, Identifiable {
+    var id: OfflineCacheGroupID
+    var readerKind: OfflineCacheReaderKind
     var title: String
     var byteCount: Int
+    var cachedCount: Int
+    var pendingCount: Int
+    var failedCount: Int
+    var entries: [OfflineCacheManagementEntry]
 
-    var id: String { ownerName }
+    init(group: OfflineCacheManagementGroup) {
+        id = group.id
+        readerKind = group.id.readerKind
+        title = group.title
+        byteCount = group.byteCount
+        cachedCount = group.cachedCount
+        pendingCount = group.pendingCount
+        failedCount = group.failedCount
+        entries = group.entries
+    }
 
     var byteCountLabel: String {
         let formatter = ByteCountFormatter()
@@ -23,36 +37,71 @@ struct MangaOfflineCacheCleanupRow: Hashable, Identifiable {
         formatter.allowedUnits = [.useBytes, .useKB, .useMB, .useGB]
         return formatter.string(fromByteCount: Int64(max(0, byteCount)))
     }
+
+    var summaryText: String {
+        var pieces = [
+            L10n.string("settings.offline_cache.entry_count_format", entries.count),
+            byteCountLabel
+        ]
+        if pendingCount > 0 {
+            pieces.append(L10n.string("settings.offline_cache.pending_count_format", pendingCount))
+        }
+        if failedCount > 0 {
+            pieces.append(L10n.string("settings.offline_cache.failed_count_format", failedCount))
+        }
+        return pieces.joined(separator: " · ")
+    }
 }
 
-struct MangaOfflineCacheCleanupSelectionActionState: Equatable {
-    let selectedOwnerCount: Int
+struct OfflineCacheManagementSelectionActionState: Equatable {
+    let selectedGroupCount: Int
     let canDelete: Bool
 }
 
-struct MangaOfflineCacheCleanupConfirmation: Identifiable, Equatable {
-    var ownerNames: [String]
-    var ownerTitles: [String]
+struct OfflineCacheManagementConfirmation: Identifiable, Equatable {
+    var groupIDs: [OfflineCacheGroupID]
+    var entryIDs: [OfflineCacheEntryID]
+    var titles: [String]
 
-    var id: String { ownerNames.joined(separator: "|") }
+    var id: String {
+        let groupPart = groupIDs.map { "\($0.readerKind.rawValue):\($0.ownerKey)" }.joined(separator: "|")
+        let entryPart = entryIDs.map {
+            "\($0.readerKind.rawValue):\($0.ownerKey):\($0.entryKey)"
+        }.joined(separator: "|")
+        return [groupPart, entryPart].filter { !$0.isEmpty }.joined(separator: "#")
+    }
 
-    init(ownerNames: [String], ownerTitles: [String]) {
-        self.ownerNames = ownerNames
-        self.ownerTitles = ownerTitles
+    init(groupIDs: [OfflineCacheGroupID] = [], entryIDs: [OfflineCacheEntryID] = [], titles: [String]) {
+        self.groupIDs = groupIDs
+        self.entryIDs = entryIDs
+        self.titles = titles
     }
 
     var title: String {
-        if ownerNames.count == 1 {
-            return L10n.string("settings.manga_offline_cache.confirm_single_title")
+        if isEntryDeletion {
+            return L10n.string("settings.offline_cache.confirm_entry_title")
         }
-        return L10n.string("settings.manga_offline_cache.confirm_batch_title")
+        if groupIDs.count == 1 {
+            return L10n.string("settings.offline_cache.confirm_single_title")
+        }
+        return L10n.string("settings.offline_cache.confirm_batch_title")
     }
 
     var message: String {
-        if let firstTitle = ownerTitles.first, ownerNames.count == 1 {
-            return L10n.string("settings.manga_offline_cache.confirm_single_message", firstTitle)
+        if isEntryDeletion {
+            if let firstTitle = titles.first, entryIDs.count == 1 {
+                return L10n.string("settings.offline_cache.confirm_entry_message", firstTitle)
+            }
+            return L10n.string("settings.offline_cache.confirm_entry_batch_message", entryIDs.count)
         }
-        return L10n.string("settings.manga_offline_cache.confirm_batch_message", ownerNames.count)
+        if let firstTitle = titles.first, groupIDs.count == 1 {
+            return L10n.string("settings.offline_cache.confirm_single_message", firstTitle)
+        }
+        return L10n.string("settings.offline_cache.confirm_batch_message", groupIDs.count)
+    }
+
+    private var isEntryDeletion: Bool {
+        !entryIDs.isEmpty
     }
 }
 

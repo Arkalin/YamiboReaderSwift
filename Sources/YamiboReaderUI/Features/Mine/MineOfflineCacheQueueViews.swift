@@ -4,7 +4,7 @@ import YamiboReaderCore
 struct MineOfflineCacheQueueSheet: View {
     let viewModel: MineHomeViewModel
     @Environment(\.dismiss) private var dismiss
-    @State private var selectedOwnerName: String?
+    @State private var selectedGroupID: OfflineCacheGroupID?
 
     var body: some View {
         NavigationStack {
@@ -22,17 +22,17 @@ struct MineOfflineCacheQueueSheet: View {
                                 MineOfflineCacheQueueOwnerRow(
                                     group: group,
                                     isSelecting: viewModel.isOfflineCacheQueueSelectionMode,
-                                    isSelected: viewModel.isOfflineCacheOwnerSelected(ownerName: group.ownerName),
+                                    isSelected: viewModel.isOfflineCacheOwnerSelected(id: group.id),
                                     open: {
                                         viewModel.setOfflineCacheQueueSelectionMode(false)
-                                        selectedOwnerName = group.ownerName
+                                        selectedGroupID = group.id
                                     },
                                     toggleSelection: {
-                                        viewModel.toggleOfflineCacheOwnerSelection(ownerName: group.ownerName)
+                                        viewModel.toggleOfflineCacheOwnerSelection(id: group.id)
                                     },
                                     cancel: {
                                         Task {
-                                            await viewModel.cancelOfflineCacheOwnerGroup(ownerName: group.ownerName)
+                                            await viewModel.cancelOfflineCacheOwnerGroup(id: group.id)
                                         }
                                     }
                                 )
@@ -51,10 +51,10 @@ struct MineOfflineCacheQueueSheet: View {
                 await viewModel.refreshOfflineCacheQueue()
             }
             .sheet(isPresented: selectedOwnerIsPresented) {
-                if let ownerName = selectedOwnerName {
+                if let selectedGroupID {
                     MineOfflineCacheQueueOwnerSheet(
                         viewModel: viewModel,
-                        ownerName: ownerName
+                        groupID: selectedGroupID
                     )
                 }
             }
@@ -111,10 +111,10 @@ struct MineOfflineCacheQueueSheet: View {
 
     private var selectedOwnerIsPresented: Binding<Bool> {
         Binding(
-            get: { selectedOwnerName != nil },
+            get: { selectedGroupID != nil },
             set: { isPresented in
                 if !isPresented {
-                    selectedOwnerName = nil
+                    selectedGroupID = nil
                     viewModel.setOfflineCacheQueueSelectionMode(false)
                 }
             }
@@ -124,18 +124,18 @@ struct MineOfflineCacheQueueSheet: View {
 
 private struct MineOfflineCacheQueueSelectAllButton: View {
     let viewModel: MineHomeViewModel
-    var ownerName: String? = nil
+    var groupID: OfflineCacheGroupID? = nil
 
     var body: some View {
         Button(title) {
-            viewModel.toggleAllOfflineCacheWorks(ownerName: ownerName)
+            viewModel.toggleAllOfflineCacheWorks(groupID: groupID)
         }
         .disabled(viewModel.offlineCacheQueueIsEmpty)
         .accessibilityLabel(title)
     }
 
     private var title: String {
-        viewModel.isOfflineCacheWorkSelectionComplete(ownerName: ownerName)
+        viewModel.isOfflineCacheWorkSelectionComplete(groupID: groupID)
             ? L10n.string("common.invert_selection")
             : L10n.string("common.select_all")
     }
@@ -193,7 +193,7 @@ private struct MineOfflineCacheQueueSelectionToolbar: View {
 
 private struct MineOfflineCacheQueueSelectionActionBar: View {
     let viewModel: MineHomeViewModel
-    var ownerName: String? = nil
+    var groupID: OfflineCacheGroupID? = nil
 
     var body: some View {
         VStack(spacing: 0) {
@@ -364,11 +364,11 @@ private struct MineOfflineCacheQueueOwnerRow: View {
 
 private struct MineOfflineCacheQueueOwnerSheet: View {
     let viewModel: MineHomeViewModel
-    let ownerName: String
+    let groupID: OfflineCacheGroupID
     @Environment(\.dismiss) private var dismiss
 
     private var group: MineOfflineCacheQueueOwnerGroup? {
-        viewModel.offlineCacheQueueGroups.first { $0.ownerName == ownerName }
+        viewModel.offlineCacheQueueGroups.first { $0.id == groupID }
     }
 
     var body: some View {
@@ -405,7 +405,7 @@ private struct MineOfflineCacheQueueOwnerSheet: View {
                 .padding(16)
             }
             .background(YamiboColors.SystemSurface.groupedBackground)
-            .navigationTitle(group?.ownerName ?? L10n.string("mine.download_queue"))
+            .navigationTitle(group?.title ?? L10n.string("mine.download_queue"))
             .task {
                 viewModel.setOfflineCacheQueueSelectionMode(false)
                 await viewModel.refreshOfflineCacheQueue()
@@ -426,7 +426,7 @@ private struct MineOfflineCacheQueueOwnerSheet: View {
                     if viewModel.isOfflineCacheQueueSelectionMode {
                         MineOfflineCacheQueueSelectAllButton(
                             viewModel: viewModel,
-                            ownerName: ownerName
+                            groupID: groupID
                         )
                     } else {
                         Button(L10n.string("common.close")) {
@@ -456,7 +456,7 @@ private struct MineOfflineCacheQueueOwnerSheet: View {
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 if viewModel.isOfflineCacheQueueSelectionMode && !usesSystemSelectionBottomToolbar {
-                    MineOfflineCacheQueueSelectionActionBar(viewModel: viewModel, ownerName: ownerName)
+                    MineOfflineCacheQueueSelectionActionBar(viewModel: viewModel, groupID: groupID)
                 }
             }
             .overlay {

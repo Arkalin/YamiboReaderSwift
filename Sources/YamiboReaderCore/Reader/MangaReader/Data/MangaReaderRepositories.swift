@@ -124,8 +124,17 @@ public protocol OfflineCacheStoring: Sendable {
     func offlineImageData(for imageURL: URL) async -> Data?
     func saveOfflineImageData(_ data: Data, for imageURL: URL) async throws
     func diskUsageByOwner() async -> [MangaOfflineCacheOwnerUsage]
+    func offlineCacheManagementSnapshot() async -> OfflineCacheManagementSnapshot
+    func removeOfflineCacheGroup(_ id: OfflineCacheGroupID) async throws
+    func removeOfflineCacheEntry(_ id: OfflineCacheEntryID) async throws
+    func saveNovelOfflineCacheEntry(_ entry: NovelOfflineCacheEntry) async throws
+    func novelOfflineCacheEntry(id: OfflineCacheEntryID) async -> NovelOfflineCacheEntry?
+    func allNovelOfflineCacheEntries() async -> [NovelOfflineCacheEntry]
     func offlineCacheWork(ownerName: String, tid: String) async -> MangaOfflineCacheWork?
     func allOfflineCacheWorks() async -> [MangaOfflineCacheWork]
+    func offlineCacheQueueWorks() async -> [OfflineCacheQueueWorkProjection]
+    func enqueueNovelOfflineCacheWork(_ request: NovelOfflineCacheWorkRequest) async throws -> NovelOfflineCacheEnqueueResult
+    func retryFailedOfflineCacheWorks() async throws
     func enqueueOfflineCacheWork(_ request: MangaOfflineCacheWorkRequest) async throws -> MangaOfflineCacheEnqueueResult
     func updateOfflineCacheWorkProgress(
         ownerName: String,
@@ -136,8 +145,11 @@ public protocol OfflineCacheStoring: Sendable {
     ) async throws
     func prepareOfflineCacheWorkForRun(ownerName: String, tid: String, targetImageURLs: [URL]?, completedImageURLs: [URL]) async throws
     func markOfflineCacheWorkFailed(ownerName: String, tid: String, message: String?) async throws
+    func markOfflineCacheWorkFailed(id: OfflineCacheWorkID, message: String?) async throws
     func cancelOfflineCacheWork(ownerName: String, tid: String) async throws
+    func cancelOfflineCacheWork(id: OfflineCacheWorkID) async throws
     func cancelOfflineCacheWorks(forOwnerName ownerName: String) async throws
+    func cancelOfflineCacheGroup(_ id: OfflineCacheGroupID) async throws
     func clearOfflineCacheQueue() async throws
     func offlineCacheQueueRunState() async -> MangaOfflineCacheQueueRunState
     func setOfflineCacheQueueRunState(_ state: MangaOfflineCacheQueueRunState) async throws

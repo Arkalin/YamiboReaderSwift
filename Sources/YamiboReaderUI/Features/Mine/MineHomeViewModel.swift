@@ -2,14 +2,21 @@ import Foundation
 import Observation
 import YamiboReaderCore
 
-public protocol MangaOfflineCacheQueueControlling: Sendable {
+public protocol OfflineCacheQueueControlling: Sendable {
     func continueQueue() async throws
     func pauseQueue() async throws
-    func cancelChapter(ownerName: String, tid: String) async throws
-    func cancelOwnerGroup(ownerName: String) async throws
+    func cancelWork(id: OfflineCacheWorkID) async throws
+    func cancelGroup(id: OfflineCacheGroupID) async throws
 }
 
-extension MangaOfflineCacheQueueExecutor: MangaOfflineCacheQueueControlling {}
+public extension OfflineCacheQueueControlling {
+    func cancelWork(id: OfflineCacheWorkID) async throws {}
+    func cancelGroup(id: OfflineCacheGroupID) async throws {}
+}
+
+public typealias MangaOfflineCacheQueueControlling = OfflineCacheQueueControlling
+
+extension MangaOfflineCacheQueueExecutor: OfflineCacheQueueControlling {}
 
 @MainActor
 @Observable
@@ -29,7 +36,7 @@ final class MineHomeViewModel {
     var offlineCacheQueueEntryCount = 0
     var isLoadingOfflineCacheQueue = false
     var isOfflineCacheQueueCommandRunning = false
-    var selectedOfflineCacheWorkIDs: Set<String> = []
+    var selectedOfflineCacheWorkIDs: Set<OfflineCacheWorkID> = []
     var isOfflineCacheQueueSelectionMode = false
 
     let loginQuestions = YamiboLoginQuestion.defaultQuestions
@@ -37,13 +44,13 @@ final class MineHomeViewModel {
 
     private let appContext: YamiboAppContext
     @ObservationIgnored private let checkInService: any YamiboCheckInServicing
-    @ObservationIgnored private var offlineCacheQueueController: (any MangaOfflineCacheQueueControlling)?
+    @ObservationIgnored private var offlineCacheQueueController: (any OfflineCacheQueueControlling)?
     @ObservationIgnored private var offlineCacheQueueUpdatesTask: Task<Void, Never>?
     @ObservationIgnored private var lastAutomaticProfileRefreshCredential: String?
 
     init(
         appContext: YamiboAppContext,
-        offlineCacheQueueController: (any MangaOfflineCacheQueueControlling)? = nil,
+        offlineCacheQueueController: (any OfflineCacheQueueControlling)? = nil,
         checkInService: (any YamiboCheckInServicing)? = nil
     ) {
         self.appContext = appContext
@@ -203,11 +210,11 @@ final class MineHomeViewModel {
         defer { isLoadingOfflineCacheQueue = false }
 
         let store = appContext.makeOfflineCacheStore()
-        let works = await store.allOfflineCacheWorks()
+        let works = await store.offlineCacheQueueWorks()
         let directoriesByOwnerName = await offlineCacheDirectoriesByOwnerName(for: works)
-        let projection = MangaOfflineCacheQueueProjection.project(
+        let projection = OfflineCacheQueueProjection.project(
             works: works,
-            directoriesByOwnerName: directoriesByOwnerName
+            mangaDirectoriesByOwnerName: directoriesByOwnerName
         )
         offlineCacheQueueGroups = projection.groups.map(MineOfflineCacheQueueOwnerGroup.init(group:))
         offlineCacheQueueEntryCount = projection.unfinishedCount
@@ -232,19 +239,16 @@ final class MineHomeViewModel {
         }
     }
 
-    func cancelOfflineCacheChapter(_ id: String) async {
+    func cancelOfflineCacheChapter(_ id: OfflineCacheWorkID) async {
         guard let row = offlineCacheChapterRow(id: id) else { return }
         await performOfflineCacheQueueCommand {
-            try await (await self.offlineCacheController()).cancelChapter(
-                ownerName: row.ownerName,
-                tid: row.tid
-            )
+            try await (await self.offlineCacheController()).cancelWork(id: row.id)
         }
     }
 
-    func cancelOfflineCacheOwnerGroup(ownerName: String) async {
+    func cancelOfflineCacheOwnerGroup(id: OfflineCacheGroupID) async {
         await performOfflineCacheQueueCommand {
-            try await (await self.offlineCacheController()).cancelOwnerGroup(ownerName: ownerName)
+            try await (await self.offlineCacheController()).cancelGroup(id: id)
         }
     }
 
@@ -257,7 +261,7 @@ final class MineHomeViewModel {
             let rowsByID = self.offlineCacheChapterRowsByID()
             for id in ids {
                 guard let row = rowsByID[id] else { continue }
-                try await controller.cancelChapter(ownerName: row.ownerName, tid: row.tid)
+                try await controller.cancelWork(id: row.id)
             }
         }
         selectedOfflineCacheWorkIDs.removeAll()
@@ -271,7 +275,7 @@ final class MineHomeViewModel {
         }
     }
 
-    func toggleOfflineCacheWorkSelection(_ id: String) {
+    func toggleOfflineCacheWorkSelection(_ id: OfflineCacheWorkID) {
         if selectedOfflineCacheWorkIDs.contains(id) {
             selectedOfflineCacheWorkIDs.remove(id)
         } else {
@@ -279,13 +283,13 @@ final class MineHomeViewModel {
         }
     }
 
-    func isOfflineCacheOwnerSelected(ownerName: String) -> Bool {
-        let ids = offlineCacheWorkIDs(ownerName: ownerName)
+    func isOfflineCacheOwnerSelected(id: OfflineCacheGroupID) -> Bool {
+        let ids = offlineCacheWorkIDs(groupID: id)
         return !ids.isEmpty && ids.isSubset(of: selectedOfflineCacheWorkIDs)
     }
 
-    func toggleOfflineCacheOwnerSelection(ownerName: String) {
-        let ids = offlineCacheWorkIDs(ownerName: ownerName)
+    func toggleOfflineCacheOwnerSelection(id: OfflineCacheGroupID) {
+        let ids = offlineCacheWorkIDs(groupID: id)
         guard !ids.isEmpty else { return }
 
         if ids.isSubset(of: selectedOfflineCacheWorkIDs) {
@@ -295,13 +299,13 @@ final class MineHomeViewModel {
         }
     }
 
-    func isOfflineCacheWorkSelectionComplete(ownerName: String? = nil) -> Bool {
-        let ids = offlineCacheWorkIDs(ownerName: ownerName)
+    func isOfflineCacheWorkSelectionComplete(groupID: OfflineCacheGroupID? = nil) -> Bool {
+        let ids = offlineCacheWorkIDs(groupID: groupID)
         return !ids.isEmpty && ids.isSubset(of: selectedOfflineCacheWorkIDs)
     }
 
-    func toggleAllOfflineCacheWorks(ownerName: String? = nil) {
-        let ids = offlineCacheWorkIDs(ownerName: ownerName)
+    func toggleAllOfflineCacheWorks(groupID: OfflineCacheGroupID? = nil) {
+        let ids = offlineCacheWorkIDs(groupID: groupID)
         guard !ids.isEmpty else { return }
 
         if ids.isSubset(of: selectedOfflineCacheWorkIDs) {
@@ -311,29 +315,29 @@ final class MineHomeViewModel {
         }
     }
 
-    private func offlineCacheWorkIDs(ownerName: String?) -> Set<String> {
-        let groups = ownerName.map { name in
-            offlineCacheQueueGroups.filter { $0.ownerName == name }
+    private func offlineCacheWorkIDs(groupID: OfflineCacheGroupID?) -> Set<OfflineCacheWorkID> {
+        let groups = groupID.map { id in
+            offlineCacheQueueGroups.filter { $0.id == id }
         } ?? offlineCacheQueueGroups
         return Set(groups.flatMap { group in
             group.chapters.map(\.id)
         })
     }
 
-    private func offlineCacheWorkIDs(ownerName: String) -> Set<String> {
+    private func offlineCacheWorkIDs(groupID: OfflineCacheGroupID) -> Set<OfflineCacheWorkID> {
         Set(
             offlineCacheQueueGroups
-                .first { $0.ownerName == ownerName }?
+                .first { $0.id == groupID }?
                 .chapters
                 .map(\.id) ?? []
         )
     }
 
-    private func offlineCacheChapterRow(id: String) -> MineOfflineCacheQueueChapterRow? {
+    private func offlineCacheChapterRow(id: OfflineCacheWorkID) -> MineOfflineCacheQueueChapterRow? {
         offlineCacheChapterRowsByID()[id]
     }
 
-    private func offlineCacheChapterRowsByID() -> [String: MineOfflineCacheQueueChapterRow] {
+    private func offlineCacheChapterRowsByID() -> [OfflineCacheWorkID: MineOfflineCacheQueueChapterRow] {
         Dictionary(
             uniqueKeysWithValues: offlineCacheQueueGroups.flatMap(\.chapters).map { ($0.id, $0) }
         )
@@ -353,7 +357,7 @@ final class MineHomeViewModel {
         await refreshOfflineCacheQueue()
     }
 
-    private func offlineCacheController() async -> any MangaOfflineCacheQueueControlling {
+    private func offlineCacheController() async -> any OfflineCacheQueueControlling {
         if let offlineCacheQueueController {
             return offlineCacheQueueController
         }
@@ -376,13 +380,14 @@ final class MineHomeViewModel {
     }
 
     private func offlineCacheDirectoriesByOwnerName(
-        for works: [MangaOfflineCacheWork]
+        for works: [OfflineCacheQueueWorkProjection]
     ) async -> [String: MangaDirectory] {
         var directoriesByOwnerName: [String: MangaDirectory] = [:]
         for work in works.sorted(by: { $0.insertionIndex < $1.insertionIndex }) {
-            guard directoriesByOwnerName[work.ownerName] == nil else { continue }
-            if let directory = try? await appContext.mangaDirectoryStore.directory(named: work.ownerName) {
-                directoriesByOwnerName[work.ownerName] = directory
+            guard work.groupID.readerKind == .manga else { continue }
+            guard directoriesByOwnerName[work.groupID.ownerKey] == nil else { continue }
+            if let directory = try? await appContext.mangaDirectoryStore.directory(named: work.groupID.ownerKey) {
+                directoriesByOwnerName[work.groupID.ownerKey] = directory
             }
         }
         return directoriesByOwnerName

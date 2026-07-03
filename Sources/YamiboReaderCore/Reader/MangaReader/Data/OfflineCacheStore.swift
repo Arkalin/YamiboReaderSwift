@@ -3,10 +3,10 @@ import Foundation
 @preconcurrency import GRDB
 
 public actor OfflineCacheStore: OfflineCacheStoring {
-    private let database: DatabasePool
-    private nonisolated(unsafe) let fileManager: FileManager
+    let database: DatabasePool
+    nonisolated(unsafe) let fileManager: FileManager
     private let baseDirectory: URL
-    private let imagesDirectory: URL
+    let imagesDirectory: URL
     private let updateNotifier = MangaOfflineCacheUpdateNotifier()
     private var didRecoverQueueState = false
     private static let mangaReaderKind = "manga"
@@ -408,7 +408,7 @@ public actor OfflineCacheStore: OfflineCacheStoring {
     public func clearOfflineCacheQueue() async throws {
         try await recoverQueueStateAfterRestart()
         try await database.write { db in
-            try db.execute(sql: "DELETE FROM offline_cache_works WHERE reader_kind = ?", arguments: [Self.mangaReaderKind])
+            try db.execute(sql: "DELETE FROM offline_cache_works")
             try Self.setQueueRunState(.paused, in: db)
         }
         notifyOfflineCacheDidChange()
@@ -457,6 +457,8 @@ public actor OfflineCacheStore: OfflineCacheStoring {
                 try db.execute(sql: "DELETE FROM offline_cache_completed_images")
                 try db.execute(sql: "DELETE FROM offline_cache_work_images")
                 try db.execute(sql: "DELETE FROM offline_cache_works")
+                try db.execute(sql: "DELETE FROM offline_cache_novel_entry_images")
+                try db.execute(sql: "DELETE FROM offline_cache_novel_entries")
                 try db.execute(sql: "DELETE FROM offline_cache_manga_entry_images")
                 try db.execute(sql: "DELETE FROM offline_cache_manga_entries")
                 try db.execute(sql: "DELETE FROM offline_cache_image_assets")
@@ -482,7 +484,15 @@ public actor OfflineCacheStore: OfflineCacheStoring {
     public func totalDiskUsageBytes() async -> Int {
         try? await recoverQueueStateAfterRestart()
         return (try? await database.read { db in
-            try Int.fetchOne(db, sql: "SELECT COALESCE(SUM(byte_count), 0) FROM offline_cache_image_assets") ?? 0
+            let imageBytes = try Int.fetchOne(
+                db,
+                sql: "SELECT COALESCE(SUM(byte_count), 0) FROM offline_cache_image_assets"
+            ) ?? 0
+            let novelBytes = try Int.fetchOne(
+                db,
+                sql: "SELECT COALESCE(SUM(byte_count), 0) FROM offline_cache_novel_entries"
+            ) ?? 0
+            return imageBytes + novelBytes
         }) ?? 0
     }
 
@@ -503,7 +513,7 @@ public actor OfflineCacheStore: OfflineCacheStoring {
         }
     }
 
-    private func recoverQueueStateAfterRestart() async throws {
+    func recoverQueueStateAfterRestart() async throws {
         guard !didRecoverQueueState else { return }
         didRecoverQueueState = true
         try await database.write { db in
@@ -522,7 +532,7 @@ public actor OfflineCacheStore: OfflineCacheStoring {
         return MangaOfflineCacheMembershipID(ownerName: ownerName, tid: tid)
     }
 
-    private func notifyOfflineCacheDidChange() {
+    func notifyOfflineCacheDidChange() {
         updateNotifier.notify()
     }
 
@@ -641,7 +651,7 @@ public actor OfflineCacheStore: OfflineCacheStoring {
         )
     }
 
-    private static func replaceImageList(
+    static func replaceImageList(
         table: String,
         readerKind: String,
         ownerName: String,
@@ -692,7 +702,7 @@ public actor OfflineCacheStore: OfflineCacheStoring {
         ).map { try membership(from: $0, in: db) }
     }
 
-    private static func allMemberships(in db: Database) throws -> [MangaOfflineCacheMembership] {
+    static func allMemberships(in db: Database) throws -> [MangaOfflineCacheMembership] {
         try Row.fetchAll(
             db,
             sql: """
@@ -762,6 +772,22 @@ public actor OfflineCacheStore: OfflineCacheStoring {
         ).map { try work(from: $0, in: db) }
     }
 
+    private static func work(workID: String, in db: Database) throws -> MangaOfflineCacheWork? {
+        guard let workID = workID.mangaReaderTrimmedNonEmpty,
+              let row = try Row.fetchOne(
+                db,
+                sql: """
+                SELECT work_id, owner_name, tid, chapter_title, state, failure_message, current_bytes_per_second, insertion_index, created_at, updated_at
+                FROM offline_cache_works
+                WHERE reader_kind = ? AND work_id = ?
+                """,
+                arguments: [mangaReaderKind, workID]
+              ) else {
+            return nil
+        }
+        return try work(from: row, in: db)
+    }
+
     private static func work(from row: Row, in db: Database) throws -> MangaOfflineCacheWork {
         let tid = row["tid"] as String
         let state = MangaOfflineCacheWorkState(rawValue: row["state"] as String) ?? .paused
@@ -794,7 +820,7 @@ public actor OfflineCacheStore: OfflineCacheStoring {
         )
     }
 
-    private static func imageURLs(
+    static func imageURLs(
         table: String,
         readerKind: String? = nil,
         ownerName: String,
@@ -847,7 +873,7 @@ public actor OfflineCacheStore: OfflineCacheStoring {
         return true
     }
 
-    private static func removeUnreferencedImages(
+    static func removeUnreferencedImages(
         candidateImageURLs: [URL],
         fileManager: FileManager,
         imagesDirectory: URL,
@@ -865,6 +891,7 @@ public actor OfflineCacheStore: OfflineCacheStoring {
         var referenced = Set<String>()
         for table in [
             "offline_cache_manga_entry_images",
+            "offline_cache_novel_entry_images",
             "offline_cache_work_images",
             "offline_cache_completed_images"
         ] {
@@ -881,9 +908,13 @@ public actor OfflineCacheStore: OfflineCacheStoring {
     }
 
     private static func deleteWork(ownerName: String, tid: String, in db: Database) throws {
+        try deleteWork(readerKind: mangaReaderKind, ownerName: ownerName, tid: tid, in: db)
+    }
+
+    static func deleteWork(readerKind: String, ownerName: String, tid: String, in db: Database) throws {
         try db.execute(
             sql: "DELETE FROM offline_cache_works WHERE reader_kind = ? AND owner_name = ? AND tid = ?",
-            arguments: [mangaReaderKind, ownerName, tid]
+            arguments: [readerKind, ownerName, tid]
         )
     }
 
@@ -918,10 +949,14 @@ public actor OfflineCacheStore: OfflineCacheStoring {
     }
 
     private static func nextQueueInsertionIndex(in db: Database) throws -> Int {
+        try nextQueueInsertionIndex(readerKind: mangaReaderKind, in: db)
+    }
+
+    static func nextQueueInsertionIndex(readerKind: String, in db: Database) throws -> Int {
         (try Int.fetchOne(
             db,
             sql: "SELECT MAX(insertion_index) FROM offline_cache_works WHERE reader_kind = ?",
-            arguments: [mangaReaderKind]
+            arguments: [readerKind]
         ) ?? 0) + 1
     }
 

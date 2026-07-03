@@ -14,7 +14,7 @@ public struct SystemSettingsView: View {
     @State private var showingWebDAVSettings = false
     @State private var showingFavoriteRemoteSyncProgress = false
     @State private var showingPeripheralSettings = false
-    @State private var showingMangaOfflineCacheCleanup = false
+    @State private var showingOfflineCacheManagement = false
     @State private var showingAboutSheet = false
     @State private var pendingConfirmation: SystemSettingsConfirmation?
     @State private var activeAppearanceCategory: FavoriteAppearanceCategory?
@@ -178,11 +178,11 @@ public struct SystemSettingsView: View {
                     .disabled(viewModel.isBusy)
 
                     Button {
-                        showingMangaOfflineCacheCleanup = true
+                        showingOfflineCacheManagement = true
                     } label: {
                         SystemSettingsRow(
-                            title: L10n.string("settings.manga_offline_cache.cleanup"),
-                            value: viewModel.mangaOfflineCacheLabel,
+                            title: L10n.string("settings.offline_cache.cleanup"),
+                            value: viewModel.offlineCacheLabel,
                             showsChevronAfterValue: true
                         )
                     }
@@ -240,8 +240,8 @@ public struct SystemSettingsView: View {
             .navigationDestination(isPresented: $showingPeripheralSettings) {
                 SystemSettingsPeripheralPageTurnView(viewModel: viewModel)
             }
-            .navigationDestination(isPresented: $showingMangaOfflineCacheCleanup) {
-                MangaOfflineCacheCleanupView(viewModel: viewModel)
+            .navigationDestination(isPresented: $showingOfflineCacheManagement) {
+                OfflineCacheManagementView(viewModel: viewModel)
             }
             .photosPicker(
                 isPresented: $showingFavoriteBackgroundPicker,

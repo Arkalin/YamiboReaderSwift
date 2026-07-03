@@ -85,6 +85,7 @@ public actor MangaOfflineCacheQueueExecutor {
     }
 
     public func continueQueue(submitsUserInitiatedRun: Bool) async throws {
+        try await store.retryFailedOfflineCacheWorks()
         try await store.setOfflineCacheQueueRunState(.running)
         if let runTask, !runTask.isCancelled {
             return
@@ -127,6 +128,30 @@ public actor MangaOfflineCacheQueueExecutor {
         runTask = nil
         await runObserver?.queueRunDidCancel()
         try await store.cancelOfflineCacheWorks(forOwnerName: ownerName)
+        if wasRunning {
+            try await continueQueue()
+        }
+    }
+
+    public func cancelWork(id: OfflineCacheWorkID) async throws {
+        let wasRunning = await store.offlineCacheQueueRunState() == .running
+        runGeneration += 1
+        runTask?.cancel()
+        runTask = nil
+        await runObserver?.queueRunDidCancel()
+        try await store.cancelOfflineCacheWork(id: id)
+        if wasRunning {
+            try await continueQueue()
+        }
+    }
+
+    public func cancelGroup(id: OfflineCacheGroupID) async throws {
+        let wasRunning = await store.offlineCacheQueueRunState() == .running
+        runGeneration += 1
+        runTask?.cancel()
+        runTask = nil
+        await runObserver?.queueRunDidCancel()
+        try await store.cancelOfflineCacheGroup(id)
         if wasRunning {
             try await continueQueue()
         }

@@ -847,6 +847,30 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
             targetImageURLs: [try #require(URL(string: "https://img.example.com/offline-reset-work.jpg"))]
         )
     )
+    try await offlineCacheStore.saveNovelOfflineCacheEntry(
+        NovelOfflineCacheEntry(
+            ownerTitle: "测试小说",
+            title: "第一页",
+            document: ReaderPageDocument(
+                threadURL: threadURL,
+                view: 1,
+                maxView: 2,
+                resolvedAuthorID: "author-700",
+                contentSource: .authorFilteredPage,
+                segments: [.text("离线小说正文", chapterTitle: "第一章")]
+            )
+        )
+    )
+    _ = try await offlineCacheStore.enqueueNovelOfflineCacheWork(
+        NovelOfflineCacheWorkRequest(
+            ownerTitle: "测试小说",
+            title: "第二页",
+            threadURL: threadURL,
+            view: 2,
+            authorID: "author-700",
+            contentSource: .authorFilteredPage
+        )
+    )
     try await offlineCacheStore.setOfflineCacheQueueRunState(.running)
     let coverKey = ContentCoverKey(targetType: .threadNovel, targetID: "700")
     try await contentCoverStore.setAutomaticCover(
@@ -868,6 +892,8 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
     let mangaOfflineCacheBytes = await offlineCacheStore.totalDiskUsageBytes()
     let mangaOfflineMemberships = await offlineCacheStore.allMemberships()
     let mangaOfflineWorks = await offlineCacheStore.allOfflineCacheWorks()
+    let novelOfflineEntries = await offlineCacheStore.allNovelOfflineCacheEntries()
+    let offlineQueueWorks = await offlineCacheStore.offlineCacheQueueWorks()
     let mangaOfflineQueueState = await offlineCacheStore.offlineCacheQueueRunState()
 
     #expect(session == SessionState())
@@ -883,6 +909,8 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
     #expect(mangaOfflineCacheBytes == 0)
     #expect(mangaOfflineMemberships.isEmpty)
     #expect(mangaOfflineWorks.isEmpty)
+    #expect(novelOfflineEntries.isEmpty)
+    #expect(offlineQueueWorks.isEmpty)
     #expect(mangaOfflineQueueState == .paused)
 }
 

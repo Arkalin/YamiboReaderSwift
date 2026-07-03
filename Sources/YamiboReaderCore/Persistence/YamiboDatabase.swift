@@ -69,6 +69,8 @@ public enum YamiboDatabase {
             try db.execute(sql: "DELETE FROM offline_cache_completed_images")
             try db.execute(sql: "DELETE FROM offline_cache_work_images")
             try db.execute(sql: "DELETE FROM offline_cache_works")
+            try db.execute(sql: "DELETE FROM offline_cache_novel_entry_images")
+            try db.execute(sql: "DELETE FROM offline_cache_novel_entries")
             try db.execute(sql: "DELETE FROM offline_cache_manga_entry_images")
             try db.execute(sql: "DELETE FROM offline_cache_manga_entries")
             try db.execute(sql: "DELETE FROM offline_cache_image_assets")
@@ -337,6 +339,32 @@ public enum YamiboDatabase {
             }
             try db.create(index: "offline_cache_manga_entries_owner_idx", on: "offline_cache_manga_entries", columns: ["owner_name"])
 
+            try db.create(table: "offline_cache_novel_entries") { table in
+                table.column("owner_name", .text).notNull()
+                table.column("entry_key", .text).notNull()
+                table.column("title", .text).notNull()
+                table.column("thread_url", .text).notNull()
+                table.column("view", .integer).notNull()
+                table.column("author_id", .text)
+                table.column("content_source", .text).notNull()
+                table.column("document_json", .text).notNull()
+                table.column("byte_count", .integer).notNull()
+                table.column("created_at", .double).notNull()
+                table.column("updated_at", .double).notNull()
+                table.primaryKey(["owner_name", "entry_key"], onConflict: .replace)
+            }
+            try db.create(index: "offline_cache_novel_entries_owner_idx", on: "offline_cache_novel_entries", columns: ["owner_name"])
+
+            try db.create(table: "offline_cache_novel_entry_images") { table in
+                table.column("owner_name", .text).notNull()
+                table.column("entry_key", .text).notNull()
+                table.column("manual_order", .integer).notNull()
+                table.column("image_url", .text).notNull()
+                table.primaryKey(["owner_name", "entry_key", "manual_order"], onConflict: .replace)
+                table.foreignKey(["owner_name", "entry_key"], references: "offline_cache_novel_entries", columns: ["owner_name", "entry_key"], onDelete: .cascade)
+            }
+            try db.create(index: "offline_cache_novel_entry_images_url_idx", on: "offline_cache_novel_entry_images", columns: ["image_url"])
+
             try db.create(table: "offline_cache_manga_entry_images") { table in
                 table.column("owner_name", .text).notNull()
                 table.column("tid", .text).notNull()
@@ -440,6 +468,38 @@ public enum YamiboDatabase {
                 SELECT key, value
                 FROM manga_offline_cache_queue_state
                 """)
+        }
+
+        migrator.registerMigration("create_offline_cache_novel_entries") { db in
+            if try !db.tableExists("offline_cache_novel_entries") {
+                try db.create(table: "offline_cache_novel_entries") { table in
+                    table.column("owner_name", .text).notNull()
+                    table.column("entry_key", .text).notNull()
+                    table.column("title", .text).notNull()
+                    table.column("thread_url", .text).notNull()
+                    table.column("view", .integer).notNull()
+                    table.column("author_id", .text)
+                    table.column("content_source", .text).notNull()
+                    table.column("document_json", .text).notNull()
+                    table.column("byte_count", .integer).notNull()
+                    table.column("created_at", .double).notNull()
+                    table.column("updated_at", .double).notNull()
+                    table.primaryKey(["owner_name", "entry_key"], onConflict: .replace)
+                }
+                try db.create(index: "offline_cache_novel_entries_owner_idx", on: "offline_cache_novel_entries", columns: ["owner_name"])
+            }
+
+            if try !db.tableExists("offline_cache_novel_entry_images") {
+                try db.create(table: "offline_cache_novel_entry_images") { table in
+                    table.column("owner_name", .text).notNull()
+                    table.column("entry_key", .text).notNull()
+                    table.column("manual_order", .integer).notNull()
+                    table.column("image_url", .text).notNull()
+                    table.primaryKey(["owner_name", "entry_key", "manual_order"], onConflict: .replace)
+                    table.foreignKey(["owner_name", "entry_key"], references: "offline_cache_novel_entries", columns: ["owner_name", "entry_key"], onDelete: .cascade)
+                }
+                try db.create(index: "offline_cache_novel_entry_images_url_idx", on: "offline_cache_novel_entry_images", columns: ["image_url"])
+            }
         }
 
         migrator.registerMigration("drop_image_data_cache_entries") { db in
