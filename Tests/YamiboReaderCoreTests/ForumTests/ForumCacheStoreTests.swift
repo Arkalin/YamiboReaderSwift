@@ -50,11 +50,11 @@ import Testing
     #expect(await store.loadHome() == nil)
 }
 
-@Test func forumCacheStoreWritesBoardPagesIntoTransparentJSONCacheNamespace() async throws {
+@Test func forumCacheStoreWritesBoardPagesIntoDiskCacheNamespace() async throws {
     let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
     let pool = try YamiboDatabase.openPool(rootDirectory: root)
-    let diskCache = JSONCacheStore(writer: pool, rootDirectory: root)
-    let store = ForumCacheStore(jsonCacheStore: diskCache)
+    let diskCache = DiskCacheStore(writer: pool, rootDirectory: root)
+    let store = ForumCacheStore(diskCacheStore: diskCache)
     let board = ForumBoardPage(
         board: ForumBoardSummary(
             fid: "49",
@@ -246,11 +246,11 @@ import Testing
     #expect(await store.loadBoard(fid: "49", allowExpired: true)?.board.fid == "49")
 }
 
-@Test func forumCacheStoreUsesTransparentJSONCacheNamespacesAndTidFirstKeys() async throws {
+@Test func forumCacheStoreUsesDiskCacheNamespacesAndTidFirstKeys() async throws {
     let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
     let pool = try YamiboDatabase.openPool(rootDirectory: root)
-    let diskCache = JSONCacheStore(writer: pool, rootDirectory: root)
-    let store = ForumCacheStore(jsonCacheStore: diskCache)
+    let diskCache = DiskCacheStore(writer: pool, rootDirectory: root)
+    let store = ForumCacheStore(diskCacheStore: diskCache)
     let thread = ThreadIdentity(tid: "990")
     try await store.saveHome(ForumHomePage(categories: [], fetchedAt: Date(timeIntervalSince1970: 100)))
 

@@ -4,7 +4,7 @@ import Foundation
 public actor ReaderCacheStore {
     public static let projectionNamespace = "novel_reader_projections"
 
-    private let cacheStore: JSONCacheStore
+    private let cacheStore: DiskCacheStore
     private nonisolated(unsafe) let fileManager: FileManager
     private let memoryCache = NSCache<NSString, CacheBox>()
 
@@ -13,10 +13,10 @@ public actor ReaderCacheStore {
         fileManager: FileManager = .default,
         rootDirectory: URL? = nil,
         baseDirectory: URL? = nil,
-        jsonCacheStore: JSONCacheStore? = nil
+        diskCacheStore: DiskCacheStore? = nil
     ) {
-        if let jsonCacheStore {
-            self.cacheStore = jsonCacheStore
+        if let diskCacheStore {
+            self.cacheStore = diskCacheStore
         } else {
             let resolvedRootDirectory = rootDirectory
                 ?? baseDirectory
@@ -25,7 +25,7 @@ public actor ReaderCacheStore {
                 rootDirectory: resolvedRootDirectory,
                 fileManager: fileManager
             )
-            self.cacheStore = JSONCacheStore(
+            self.cacheStore = DiskCacheStore(
                 writer: resolvedDatabase,
                 rootDirectory: resolvedRootDirectory
             )

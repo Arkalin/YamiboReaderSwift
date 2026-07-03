@@ -11,7 +11,7 @@ public actor ForumCacheStore {
     public static let threadPageNamespace = "forum_thread_pages"
     private static let homeKey = "home"
 
-    private let cacheStore: JSONCacheStore
+    private let cacheStore: DiskCacheStore
     private let now: @Sendable () -> Date
 
     public init(
@@ -19,11 +19,11 @@ public actor ForumCacheStore {
         fileManager: FileManager = .default,
         rootDirectory: URL? = nil,
         baseDirectory: URL? = nil,
-        jsonCacheStore: JSONCacheStore? = nil,
-        threadPageDiskCache: JSONCacheStore? = nil,
+        diskCacheStore: DiskCacheStore? = nil,
+        threadPageDiskCache: DiskCacheStore? = nil,
         now: @escaping @Sendable () -> Date = { Date() }
     ) {
-        if let injectedCacheStore = jsonCacheStore ?? threadPageDiskCache {
+        if let injectedCacheStore = diskCacheStore ?? threadPageDiskCache {
             self.cacheStore = injectedCacheStore
         } else {
             let resolvedRootDirectory = rootDirectory
@@ -33,7 +33,7 @@ public actor ForumCacheStore {
                 rootDirectory: resolvedRootDirectory,
                 fileManager: fileManager
             )
-            self.cacheStore = JSONCacheStore(
+            self.cacheStore = DiskCacheStore(
                 writer: resolvedDatabase,
                 rootDirectory: resolvedRootDirectory,
                 now: now

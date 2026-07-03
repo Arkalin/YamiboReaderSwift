@@ -46,7 +46,7 @@ struct StoreMigrationIssue001Tests {
 
     @Test func genericCacheStoresJSONBodyOnDiskAndThinMetadataInDatabase() async throws {
         let (pool, root) = try makeMigratedDatabase()
-        let store = JSONCacheStore(writer: pool, rootDirectory: root)
+        let store = DiskCacheStore(writer: pool, rootDirectory: root)
         let payload = CachePayload(title: "首页", page: 1)
 
         try await store.set(payload, namespace: "forum", key: "home")
@@ -79,7 +79,7 @@ struct StoreMigrationIssue001Tests {
     @Test func readsDoNotExtendTTLAndOnlyUpdateLRUAccessTime() async throws {
         let (pool, root) = try makeMigratedDatabase()
         nonisolated(unsafe) var now = Date(timeIntervalSince1970: 100)
-        let store = JSONCacheStore(writer: pool, rootDirectory: root, now: { now })
+        let store = DiskCacheStore(writer: pool, rootDirectory: root, now: { now })
 
         try await store.set(CachePayload(title: "第一页", page: 1), namespace: "novel", key: "tid-9-page-1")
         now = Date(timeIntervalSince1970: 120)
@@ -99,7 +99,7 @@ struct StoreMigrationIssue001Tests {
     @Test func trimNamespaceEvictsLeastRecentlyAccessedEntries() async throws {
         let (pool, root) = try makeMigratedDatabase()
         nonisolated(unsafe) var now = Date(timeIntervalSince1970: 100)
-        let store = JSONCacheStore(writer: pool, rootDirectory: root, now: { now })
+        let store = DiskCacheStore(writer: pool, rootDirectory: root, now: { now })
 
         try await store.set(CachePayload(title: "旧", page: 1), namespace: "forum", key: "old")
         now = Date(timeIntervalSince1970: 110)
@@ -119,7 +119,7 @@ struct StoreMigrationIssue001Tests {
 
     @Test func namespaceClearAndPrefixDeletionRemoveMetadataAndFiles() async throws {
         let (pool, root) = try makeMigratedDatabase()
-        let store = JSONCacheStore(writer: pool, rootDirectory: root)
+        let store = DiskCacheStore(writer: pool, rootDirectory: root)
 
         try await store.set(CachePayload(title: "第一页", page: 1), namespace: "thread_pages", key: "tid-1-page-1")
         try await store.set(CachePayload(title: "第二页", page: 2), namespace: "thread_pages", key: "tid-1-page-2")
@@ -138,7 +138,7 @@ struct StoreMigrationIssue001Tests {
 
     @Test func missingFileAndDecodeFailureSelfHealToCacheMiss() async throws {
         let (pool, root) = try makeMigratedDatabase()
-        let store = JSONCacheStore(writer: pool, rootDirectory: root)
+        let store = DiskCacheStore(writer: pool, rootDirectory: root)
 
         try await store.set(CachePayload(title: "missing", page: 1), namespace: "forum", key: "missing")
         try FileManager.default.removeItem(at: try await store.fileURL(namespace: "forum", key: "missing"))
@@ -160,7 +160,7 @@ struct StoreMigrationIssue001Tests {
         let defaults = try YamiboTestDefaults.make(suiteName: suiteName)
         defaults.set(Data("legacy-json".utf8), forKey: "yamibo.favoriteLibrary.localFirst")
 
-        let store = JSONCacheStore(writer: pool, rootDirectory: root)
+        let store = DiskCacheStore(writer: pool, rootDirectory: root)
         try await store.set(CachePayload(title: "缓存", page: 1), namespace: "forum", key: "home")
         try await pool.write { db in
             try db.execute(
