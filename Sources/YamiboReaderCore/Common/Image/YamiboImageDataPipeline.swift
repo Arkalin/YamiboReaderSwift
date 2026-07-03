@@ -5,8 +5,8 @@ public protocol YamiboOrdinaryImageCacheClearing: Sendable {
     func removeAllCachedData()
 }
 
-public final class YamiboNukeImageDataPipeline: YamiboOrdinaryImageCacheClearing, @unchecked Sendable {
-    public static let shared = YamiboNukeImageDataPipeline()
+public final class YamiboImageDataPipeline: YamiboOrdinaryImageCacheClearing, @unchecked Sendable {
+    public static let shared = YamiboImageDataPipeline()
     public static let defaultDataCacheLimitBytes = 512 * 1024 * 1024
     public static let defaultDataCacheName = "com.arkalin.YamiboReader.OrdinaryImageDataCache"
 
@@ -22,8 +22,8 @@ public final class YamiboNukeImageDataPipeline: YamiboOrdinaryImageCacheClearing
     }
 
     public convenience init(
-        dataCacheName: String = YamiboNukeImageDataPipeline.defaultDataCacheName,
-        dataCacheLimitBytes: Int = YamiboNukeImageDataPipeline.defaultDataCacheLimitBytes
+        dataCacheName: String = YamiboImageDataPipeline.defaultDataCacheName,
+        dataCacheLimitBytes: Int = YamiboImageDataPipeline.defaultDataCacheLimitBytes
     ) {
         let dataCache: DataCache
         do {
@@ -36,7 +36,7 @@ public final class YamiboNukeImageDataPipeline: YamiboOrdinaryImageCacheClearing
 
     public convenience init(
         dataCacheDirectory: URL,
-        dataCacheLimitBytes: Int = YamiboNukeImageDataPipeline.defaultDataCacheLimitBytes
+        dataCacheLimitBytes: Int = YamiboImageDataPipeline.defaultDataCacheLimitBytes
     ) throws {
         try self.init(
             dataCache: DataCache(path: dataCacheDirectory),
@@ -55,7 +55,7 @@ public final class YamiboNukeImageDataPipeline: YamiboOrdinaryImageCacheClearing
         configuration.isResumableDataEnabled = false
         self.pipeline = ImagePipeline(
             configuration: configuration,
-            delegate: YamiboNukeImagePipelineDelegate()
+            delegate: YamiboImagePipelineDelegate()
         )
     }
 
@@ -96,7 +96,7 @@ public final class YamiboNukeImageDataPipeline: YamiboOrdinaryImageCacheClearing
                !cookie.isEmpty {
                 urlRequest.setValue(cookie, forHTTPHeaderField: "Cookie")
             }
-            userInfo[.yamiboURLSession] = YamiboNukeImageRequestSession(client.session)
+            userInfo[.yamiboURLSession] = YamiboImageRequestSession(client.session)
         }
         if let refererURL = request.refererURL {
             urlRequest.setValue(refererURL.absoluteString, forHTTPHeaderField: "Referer")
@@ -136,16 +136,16 @@ public final class YamiboNukeImageDataPipeline: YamiboOrdinaryImageCacheClearing
     }
 }
 
-private final class YamiboNukeImagePipelineDelegate: ImagePipeline.Delegate {
+private final class YamiboImagePipelineDelegate: ImagePipeline.Delegate {
     func dataLoader(for request: ImageRequest, pipeline: ImagePipeline) -> any DataLoading {
-        if let session = request.userInfo[.yamiboURLSession] as? YamiboNukeImageRequestSession {
+        if let session = request.userInfo[.yamiboURLSession] as? YamiboImageRequestSession {
             return YamiboURLSessionImageDataLoader(session: session.value)
         }
         return pipeline.configuration.dataLoader
     }
 }
 
-private struct YamiboNukeImageRequestSession: @unchecked Sendable {
+private struct YamiboImageRequestSession: @unchecked Sendable {
     let value: URLSession
 
     init(_ value: URLSession) {

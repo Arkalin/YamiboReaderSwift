@@ -60,7 +60,7 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         mangaChapterDocumentStore: (any MangaChapterDocumentPersisting & MangaChapterDocumentStorageReporting)? = nil,
         mangaOfflineCacheStore: (any MangaOfflineCacheStoring)? = nil,
         forumCacheStore: ForumCacheStore? = nil,
-        ordinaryImageCache: any YamiboOrdinaryImageCacheClearing = YamiboNukeImageDataPipeline.shared,
+        ordinaryImageCache: any YamiboOrdinaryImageCacheClearing = YamiboImageDataPipeline.shared,
         mangaOfflineCacheBackgroundDownloadTransport: MangaOfflineCacheBackgroundDownloadTransport = MangaOfflineCacheBackgroundDownloadTransport(),
         mangaOfflineCacheContinuedProcessingCoordinator: MangaOfflineCacheContinuedProcessingCoordinator = MangaOfflineCacheContinuedProcessingCoordinator(),
         grdbRootDirectory: URL? = nil,

@@ -151,10 +151,10 @@ import Testing
     #expect(counter.value == 1)
 }
 
-@Test func yamiboNukeImageDataPipelineUsesExpectedCacheBudgetAndNoURLCacheDiskStorage() throws {
+@Test func yamiboImageDataPipelineUsesExpectedCacheBudgetAndNoURLCacheDiskStorage() throws {
     let pipeline = try makeIsolatedImageDataPipeline()
 
-    #expect(pipeline.dataCacheLimitBytes == YamiboNukeImageDataPipeline.defaultDataCacheLimitBytes)
+    #expect(pipeline.dataCacheLimitBytes == YamiboImageDataPipeline.defaultDataCacheLimitBytes)
     #expect(pipeline.usesURLCacheDiskStorage == false)
 }
 
@@ -168,15 +168,15 @@ private func imageRequest(
     )
 }
 
-private func makeIsolatedImageDataPipeline() throws -> YamiboNukeImageDataPipeline {
-    try YamiboNukeImageDataPipeline(
+private func makeIsolatedImageDataPipeline() throws -> YamiboImageDataPipeline {
+    try YamiboImageDataPipeline(
         dataCacheDirectory: FileManager.default.temporaryDirectory
             .appendingPathComponent("yamibo-nuke-test-\(UUID().uuidString)", isDirectory: true)
     )
 }
 
 private func waitForCachedData(
-    in pipeline: YamiboNukeImageDataPipeline,
+    in pipeline: YamiboImageDataPipeline,
     request: YamiboImageRequest
 ) async throws {
     for _ in 0 ..< 20 {

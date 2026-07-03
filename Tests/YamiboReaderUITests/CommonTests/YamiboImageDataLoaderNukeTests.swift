@@ -111,7 +111,7 @@ struct YamiboImageDataLoaderNukeTests {
     @Test func pipelineUsesExpectedCacheBudgetAndNoURLCacheDiskStorage() throws {
         let pipeline = try makeIsolatedImageDataPipeline()
 
-        #expect(pipeline.dataCacheLimitBytes == YamiboNukeImageDataPipeline.defaultDataCacheLimitBytes)
+        #expect(pipeline.dataCacheLimitBytes == YamiboImageDataPipeline.defaultDataCacheLimitBytes)
         #expect(pipeline.usesURLCacheDiskStorage == false)
     }
 }
@@ -253,15 +253,15 @@ private func imageRequest(
     )
 }
 
-private func makeIsolatedImageDataPipeline() throws -> YamiboNukeImageDataPipeline {
-    try YamiboNukeImageDataPipeline(
+private func makeIsolatedImageDataPipeline() throws -> YamiboImageDataPipeline {
+    try YamiboImageDataPipeline(
         dataCacheDirectory: FileManager.default.temporaryDirectory
             .appendingPathComponent("yamibo-nuke-ui-test-\(UUID().uuidString)", isDirectory: true)
     )
 }
 
 private func waitForCachedData(
-    in pipeline: YamiboNukeImageDataPipeline,
+    in pipeline: YamiboImageDataPipeline,
     request: YamiboImageRequest
 ) async throws {
     for _ in 0 ..< 20 {
@@ -274,7 +274,7 @@ private func waitForCachedData(
 }
 
 private func waitForNoCachedData(
-    in pipeline: YamiboNukeImageDataPipeline,
+    in pipeline: YamiboImageDataPipeline,
     request: YamiboImageRequest
 ) async throws {
     for _ in 0 ..< 20 {

@@ -31,11 +31,11 @@ public struct YamiboImageLoadingContext: Sendable {
 
 public actor YamiboImageDataLoader: YamiboImageDataLoading {
     private let client: YamiboClient
-    private let pipeline: YamiboNukeImageDataPipeline
+    private let pipeline: YamiboImageDataPipeline
 
     public init(
         client: YamiboClient,
-        pipeline: YamiboNukeImageDataPipeline = .shared
+        pipeline: YamiboImageDataPipeline = .shared
     ) {
         self.client = client
         self.pipeline = pipeline
