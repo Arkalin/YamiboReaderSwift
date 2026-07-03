@@ -5,7 +5,7 @@ import Testing
 @Suite("MangaReaderTests: Manga Offline Cache Queue Executor")
 struct MangaReaderTestsMangaOfflineCacheQueueExecutor {
     @Test func continueProcessesOneChapterAtATimeWithThreeImageTransferLimit() async throws {
-        let store = try makeTestMangaOfflineCacheStore(rootDirectory: try makeTemporaryExecutorDirectory())
+        let store = try makeTestOfflineCacheStore(rootDirectory: try makeTemporaryExecutorDirectory())
         let firstChapterImages = try makeImageURLs(tid: "100", count: 4)
         let secondChapterImages = try makeImageURLs(tid: "200", count: 2)
         _ = try await store.enqueueOfflineCacheWork(
@@ -37,7 +37,7 @@ struct MangaReaderTestsMangaOfflineCacheQueueExecutor {
     }
 
     @Test func continueLoadsReaderProjectionBeforeImageCountProgressAndRebuildsChapterURLFromTid() async throws {
-        let store = try makeTestMangaOfflineCacheStore(rootDirectory: try makeTemporaryExecutorDirectory())
+        let store = try makeTestOfflineCacheStore(rootDirectory: try makeTemporaryExecutorDirectory())
         let imageURLs = try makeImageURLs(tid: "300", count: 2)
         _ = try await store.enqueueOfflineCacheWork(
             MangaOfflineCacheWorkRequest(
@@ -75,12 +75,13 @@ struct MangaReaderTestsMangaOfflineCacheQueueExecutor {
         let completedWork = await store.offlineCacheWork(ownerName: "favorite-a", tid: "300")
         #expect(completedWork == nil)
         #expect(await store.offlineCacheState(ownerName: "favorite-a", tid: "300") == .cached)
+        #expect(await store.membership(ownerName: "favorite-a", tid: "300")?.sourcePage?.thread == ThreadIdentity(tid: "300"))
     }
 
     @Test func cacheCompletionDoesNotUpdateReadingProgressResumeRouteOrRecentReading() async throws {
         let suiteName = "manga-offline-cache-no-progress-side-effects-\(UUID().uuidString)"
         try #require(UserDefaults(suiteName: suiteName)).removePersistentDomain(forName: suiteName)
-        let store = try makeTestMangaOfflineCacheStore(rootDirectory: try makeTemporaryExecutorDirectory())
+        let store = try makeTestOfflineCacheStore(rootDirectory: try makeTemporaryExecutorDirectory())
         let localFavoriteLibraryStore = FavoriteLibraryStore(
             defaults: try #require(UserDefaults(suiteName: suiteName)),
             key: "local-favorites"
@@ -131,7 +132,7 @@ struct MangaReaderTestsMangaOfflineCacheQueueExecutor {
     }
 
     @Test func pauseCancelsInFlightTransfersAndPreservesCompletedProgress() async throws {
-        let store = try makeTestMangaOfflineCacheStore(rootDirectory: try makeTemporaryExecutorDirectory())
+        let store = try makeTestOfflineCacheStore(rootDirectory: try makeTemporaryExecutorDirectory())
         let imageURLs = try makeImageURLs(tid: "400", count: 4)
         _ = try await store.enqueueOfflineCacheWork(
             try makeExecutorWorkRequest(ownerName: "favorite-a", tid: "400", targetImageURLs: imageURLs)
@@ -160,7 +161,7 @@ struct MangaReaderTestsMangaOfflineCacheQueueExecutor {
     }
 
     @Test func failedWorkRemainsQueuedAndContinueRetriesFromRetainedProgress() async throws {
-        let store = try makeTestMangaOfflineCacheStore(rootDirectory: try makeTemporaryExecutorDirectory())
+        let store = try makeTestOfflineCacheStore(rootDirectory: try makeTemporaryExecutorDirectory())
         let imageURLs = try makeImageURLs(tid: "500", count: 2)
         _ = try await store.enqueueOfflineCacheWork(
             try makeExecutorWorkRequest(ownerName: "favorite-a", tid: "500", targetImageURLs: imageURLs)
@@ -191,7 +192,7 @@ struct MangaReaderTestsMangaOfflineCacheQueueExecutor {
     }
 
     @Test func emptyImageDataFailsWorkWithoutAdvancingProgress() async throws {
-        let store = try makeTestMangaOfflineCacheStore(rootDirectory: try makeTemporaryExecutorDirectory())
+        let store = try makeTestOfflineCacheStore(rootDirectory: try makeTemporaryExecutorDirectory())
         let imageURLs = try makeImageURLs(tid: "550", count: 2)
         _ = try await store.enqueueOfflineCacheWork(
             try makeExecutorWorkRequest(ownerName: "favorite-a", tid: "550", targetImageURLs: imageURLs)
@@ -216,7 +217,7 @@ struct MangaReaderTestsMangaOfflineCacheQueueExecutor {
     }
 
     @Test func continueReconcilesPersistedProgressAgainstOfflineImageStorage() async throws {
-        let store = try makeTestMangaOfflineCacheStore(rootDirectory: try makeTemporaryExecutorDirectory())
+        let store = try makeTestOfflineCacheStore(rootDirectory: try makeTemporaryExecutorDirectory())
         let imageURLs = try makeImageURLs(tid: "600", count: 2)
         _ = try await store.enqueueOfflineCacheWork(
             try makeExecutorWorkRequest(ownerName: "favorite-a", tid: "600", targetImageURLs: imageURLs)
@@ -245,7 +246,7 @@ struct MangaReaderTestsMangaOfflineCacheQueueExecutor {
     }
 
     @Test func queueWritesNetworkAcquiredBytesToOfflineStorage() async throws {
-        let store = try makeTestMangaOfflineCacheStore(rootDirectory: try makeTemporaryExecutorDirectory())
+        let store = try makeTestOfflineCacheStore(rootDirectory: try makeTemporaryExecutorDirectory())
         let imageURLs = try makeImageURLs(tid: "700", count: 2)
         _ = try await store.enqueueOfflineCacheWork(
             try makeExecutorWorkRequest(ownerName: "favorite-a", tid: "700", targetImageURLs: imageURLs)
@@ -288,7 +289,7 @@ struct MangaReaderTestsMangaOfflineCacheQueueExecutor {
     }
 
     @Test func observerReceivesSubmissionProgressAndSuccessfulFinish() async throws {
-        let store = try makeTestMangaOfflineCacheStore(rootDirectory: try makeTemporaryExecutorDirectory())
+        let store = try makeTestOfflineCacheStore(rootDirectory: try makeTemporaryExecutorDirectory())
         let imageURLs = try makeImageURLs(tid: "720", count: 2)
         _ = try await store.enqueueOfflineCacheWork(
             try makeExecutorWorkRequest(ownerName: "favorite-a", tid: "720", targetImageURLs: imageURLs)
@@ -317,7 +318,7 @@ struct MangaReaderTestsMangaOfflineCacheQueueExecutor {
     }
 
     @Test func observerIsNotResubmittedForSystemContinuedProcessingLaunch() async throws {
-        let store = try makeTestMangaOfflineCacheStore(rootDirectory: try makeTemporaryExecutorDirectory())
+        let store = try makeTestOfflineCacheStore(rootDirectory: try makeTemporaryExecutorDirectory())
         let imageURLs = try makeImageURLs(tid: "730", count: 1)
         _ = try await store.enqueueOfflineCacheWork(
             try makeExecutorWorkRequest(ownerName: "favorite-a", tid: "730", targetImageURLs: imageURLs)
@@ -340,7 +341,7 @@ struct MangaReaderTestsMangaOfflineCacheQueueExecutor {
     }
 
     @Test func continueWhileAlreadyRunningDoesNotSubmitAnotherContinuedProcessingRun() async throws {
-        let store = try makeTestMangaOfflineCacheStore(rootDirectory: try makeTemporaryExecutorDirectory())
+        let store = try makeTestOfflineCacheStore(rootDirectory: try makeTemporaryExecutorDirectory())
         let imageURLs = try makeImageURLs(tid: "735", count: 2)
         _ = try await store.enqueueOfflineCacheWork(
             try makeExecutorWorkRequest(ownerName: "favorite-a", tid: "735", targetImageURLs: imageURLs)
@@ -387,7 +388,7 @@ struct MangaReaderTestsMangaOfflineCacheQueueExecutor {
     }
 
     @Test func chapterCancellationRemovesPartialOfflineBytesForCanceledWork() async throws {
-        let store = try makeTestMangaOfflineCacheStore(rootDirectory: try makeTemporaryExecutorDirectory())
+        let store = try makeTestOfflineCacheStore(rootDirectory: try makeTemporaryExecutorDirectory())
         let imageURLs = try makeImageURLs(tid: "800", count: 2)
         _ = try await store.enqueueOfflineCacheWork(
             try makeExecutorWorkRequest(ownerName: "作品A", tid: "800", targetImageURLs: imageURLs)
@@ -413,7 +414,7 @@ struct MangaReaderTestsMangaOfflineCacheQueueExecutor {
     }
 
     @Test func ownerGroupCancellationRemovesPartialOfflineBytesForCanceledWorkOnly() async throws {
-        let store = try makeTestMangaOfflineCacheStore(rootDirectory: try makeTemporaryExecutorDirectory())
+        let store = try makeTestOfflineCacheStore(rootDirectory: try makeTemporaryExecutorDirectory())
         let canceledImages = try makeImageURLs(tid: "900", count: 1)
         let retainedImages = try makeImageURLs(tid: "901", count: 1)
         _ = try await store.enqueueOfflineCacheWork(
@@ -453,7 +454,7 @@ struct MangaReaderTestsMangaOfflineCacheQueueExecutor {
     }
 }
 
-private actor RecordingReaderProjectionLoader: MangaReaderProjectionLoading {
+private actor RecordingReaderProjectionLoader: MangaReaderProjectionSnapshotLoading {
     private(set) var requestedURLs: [URL] = []
     private var documentByURL: [String: MangaReaderProjection] = [:]
     private var anyDocument: MangaReaderProjection?
@@ -472,6 +473,30 @@ private actor RecordingReaderProjectionLoader: MangaReaderProjectionLoading {
             return document
         }
         throw YamiboError.parsingFailed(context: "Missing test Manga Chapter Document")
+    }
+
+    func loadReaderProjectionSnapshot(at url: URL) async throws -> MangaReaderProjectionSnapshot {
+        let projection = try await loadReaderProjection(at: url)
+        return MangaReaderProjectionSnapshot(
+            projection: projection,
+            sourcePage: makeSourcePage(projection: projection)
+        )
+    }
+
+    private func makeSourcePage(projection: MangaReaderProjection) -> ForumThreadPage {
+        ForumThreadPage(
+            thread: ThreadIdentity(tid: projection.tid),
+            title: projection.chapterTitle,
+            posts: [
+                ForumThreadPost(
+                    postID: projection.ownerPostID,
+                    author: BlogReaderUser(uid: projection.ownerAuthorID, name: projection.ownerAuthorName ?? "作者"),
+                    contentHTML: "",
+                    contentText: "",
+                    images: projection.imageURLs.map { ForumThreadPostImage(url: $0.absoluteString) }
+                )
+            ]
+        )
     }
 }
 

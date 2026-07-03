@@ -6,7 +6,7 @@ import Testing
 struct MangaReaderTestsCachedMangaImageDataLoader {
     @Test func matchingOfflineMembershipReadsRetainedBytesBeforeImageDataLoader() async throws {
         let imageURL = try #require(URL(string: "https://img.example.com/offline.jpg"))
-        let offlineStore = try makeTestMangaOfflineCacheStore(rootDirectory: try makeTemporaryCachedMangaImageLoaderDirectory())
+        let offlineStore = try makeTestOfflineCacheStore(rootDirectory: try makeTemporaryCachedMangaImageLoaderDirectory())
         try await offlineStore.saveOfflineImageData(Data([7]), for: imageURL)
         try await offlineStore.saveMembership(makeCachedMangaImageLoaderMembership(imageURLs: [imageURL]))
         let upstream = RecordingYamiboImageDataLoader(results: [.success(Data([9]))])
@@ -25,7 +25,7 @@ struct MangaReaderTestsCachedMangaImageDataLoader {
     @Test func missingOfflineBytesForMatchingMembershipFallsBackToImageDataLoader() async throws {
         let imageURL = try #require(URL(string: "https://img.example.com/fallback.jpg"))
         let refererURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?tid=100"))
-        let offlineStore = try makeTestMangaOfflineCacheStore(rootDirectory: try makeTemporaryCachedMangaImageLoaderDirectory())
+        let offlineStore = try makeTestOfflineCacheStore(rootDirectory: try makeTemporaryCachedMangaImageLoaderDirectory())
         try await offlineStore.saveMembership(makeCachedMangaImageLoaderMembership(imageURLs: [imageURL]))
         let upstream = RecordingYamiboImageDataLoader(results: [.success(Data([9]))])
         let loader = CachedMangaImageDataLoader(imageDataLoader: upstream, offlineCacheStore: offlineStore)
@@ -44,7 +44,7 @@ struct MangaReaderTestsCachedMangaImageDataLoader {
     @Test func nonMemberImageDoesNotUseOfflineBytesForSameURL() async throws {
         let memberImageURL = try #require(URL(string: "https://img.example.com/member.jpg"))
         let requestedImageURL = try #require(URL(string: "https://img.example.com/non-member.jpg"))
-        let offlineStore = try makeTestMangaOfflineCacheStore(rootDirectory: try makeTemporaryCachedMangaImageLoaderDirectory())
+        let offlineStore = try makeTestOfflineCacheStore(rootDirectory: try makeTemporaryCachedMangaImageLoaderDirectory())
         try await offlineStore.saveOfflineImageData(Data([7]), for: requestedImageURL)
         try await offlineStore.saveMembership(makeCachedMangaImageLoaderMembership(imageURLs: [memberImageURL]))
         let upstream = RecordingYamiboImageDataLoader(results: [.success(Data([3]))])
@@ -62,7 +62,7 @@ struct MangaReaderTestsCachedMangaImageDataLoader {
 
     @Test func noOfflineContextDelegatesToImageDataLoader() async throws {
         let imageURL = try #require(URL(string: "https://img.example.com/no-context.jpg"))
-        let offlineStore = try makeTestMangaOfflineCacheStore(rootDirectory: try makeTemporaryCachedMangaImageLoaderDirectory())
+        let offlineStore = try makeTestOfflineCacheStore(rootDirectory: try makeTemporaryCachedMangaImageLoaderDirectory())
         try await offlineStore.saveOfflineImageData(Data([7]), for: imageURL)
         try await offlineStore.saveMembership(makeCachedMangaImageLoaderMembership(imageURLs: [imageURL]))
         let upstream = RecordingYamiboImageDataLoader(results: [.success(Data([4]))])

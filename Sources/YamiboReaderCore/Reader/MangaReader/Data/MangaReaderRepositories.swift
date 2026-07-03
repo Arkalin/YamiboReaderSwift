@@ -4,6 +4,20 @@ public protocol MangaReaderProjectionLoading: Sendable {
     func loadReaderProjection(at url: URL) async throws -> MangaReaderProjection
 }
 
+public struct MangaReaderProjectionSnapshot: Sendable {
+    public var projection: MangaReaderProjection
+    public var sourcePage: ForumThreadPage
+
+    public init(projection: MangaReaderProjection, sourcePage: ForumThreadPage) {
+        self.projection = projection
+        self.sourcePage = sourcePage
+    }
+}
+
+public protocol MangaReaderProjectionSnapshotLoading: MangaReaderProjectionLoading {
+    func loadReaderProjectionSnapshot(at url: URL) async throws -> MangaReaderProjectionSnapshot
+}
+
 public protocol MangaReaderProjectionPersisting: Sendable {
     func projection(for identity: MangaReaderProjectionSourceIdentity) async -> MangaReaderProjection?
     func save(_ projection: MangaReaderProjection) async throws
@@ -98,7 +112,7 @@ public extension MangaImageDataLoading {
     }
 }
 
-public protocol MangaOfflineCacheStoring: Sendable {
+public protocol OfflineCacheStoring: Sendable {
     func offlineCacheUpdates() -> AsyncStream<Void>
     func membership(ownerName: String, tid: String) async -> MangaOfflineCacheMembership?
     func memberships(forOwnerName ownerName: String) async -> [MangaOfflineCacheMembership]

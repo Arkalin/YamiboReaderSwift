@@ -5,7 +5,7 @@ struct MangaReaderModelDependencies {
     var makeProjectionLoader: @Sendable () async -> any MangaReaderProjectionLoading
     var makeDirectoryRepository: @Sendable () async -> any MangaDirectoryRepository
     var makeDirectoryStore: @Sendable () -> any MangaDirectoryPersisting
-    var makeOfflineCacheStore: @Sendable () -> (any MangaOfflineCacheStoring)?
+    var makeOfflineCacheStore: @Sendable () -> (any OfflineCacheStoring)?
     var makeDirectorySearchCooldownState: @Sendable () -> MangaDirectorySearchCooldownState
     var directoryWorkflowConfiguration: MangaDirectoryWorkflowConfiguration
     var makeImageDataLoader: @Sendable () async -> any MangaImageDataLoading
@@ -15,7 +15,7 @@ struct MangaReaderModelDependencies {
         makeProjectionLoader: @escaping @Sendable () async -> any MangaReaderProjectionLoading,
         makeDirectoryRepository: @escaping @Sendable () async -> any MangaDirectoryRepository,
         makeDirectoryStore: @escaping @Sendable () -> any MangaDirectoryPersisting,
-        makeOfflineCacheStore: @escaping @Sendable () -> (any MangaOfflineCacheStoring)? = { nil },
+        makeOfflineCacheStore: @escaping @Sendable () -> (any OfflineCacheStoring)? = { nil },
         makeDirectorySearchCooldownState: @escaping @Sendable () -> MangaDirectorySearchCooldownState = {
             MangaDirectorySearchCooldownState()
         },
@@ -38,7 +38,7 @@ struct MangaReaderModelDependencies {
             makeProjectionLoader: { await appContext.makeMangaReaderProjectionLoader() },
             makeDirectoryRepository: { await appContext.makeMangaDirectoryRepository() },
             makeDirectoryStore: { appContext.makeMangaDirectoryStore() },
-            makeOfflineCacheStore: { appContext.makeMangaOfflineCacheStore() },
+            makeOfflineCacheStore: { appContext.makeOfflineCacheStore() },
             makeDirectorySearchCooldownState: { appContext.mangaDirectorySearchCooldownState },
             makeImageDataLoader: { await appContext.makeMangaImageDataLoader() },
             progressSync: ProgressSyncModule(

@@ -1,10 +1,10 @@
 import Foundation
 
-public actor YamiboMangaReaderProjectionLoader: MangaReaderProjectionLoading {
+public actor YamiboMangaReaderProjectionLoader: MangaReaderProjectionSnapshotLoading {
     private let client: YamiboClient
     private let projectionStore: any MangaReaderProjectionPersisting
     private let forumCacheStore: ForumCacheStore
-    private var inFlightTasks: [String: Task<MangaReaderProjection, Error>] = [:]
+    private var inFlightTasks: [String: Task<MangaReaderProjectionSnapshot, Error>] = [:]
 
     public init(
         client: YamiboClient,
@@ -17,14 +17,18 @@ public actor YamiboMangaReaderProjectionLoader: MangaReaderProjectionLoading {
     }
 
     public func loadReaderProjection(at url: URL) async throws -> MangaReaderProjection {
-        try await loadReaderProjection(at: url, ignoresCache: false)
+        try await loadReaderProjectionSnapshot(at: url, ignoresCache: false).projection
+    }
+
+    public func loadReaderProjectionSnapshot(at url: URL) async throws -> MangaReaderProjectionSnapshot {
+        try await loadReaderProjectionSnapshot(at: url, ignoresCache: false)
     }
 
     public func loadReaderProjectionIgnoringCache(at url: URL) async throws -> MangaReaderProjection {
-        try await loadReaderProjection(at: url, ignoresCache: true)
+        try await loadReaderProjectionSnapshot(at: url, ignoresCache: true).projection
     }
 
-    private func loadReaderProjection(at url: URL, ignoresCache: Bool) async throws -> MangaReaderProjection {
+    private func loadReaderProjectionSnapshot(at url: URL, ignoresCache: Bool) async throws -> MangaReaderProjectionSnapshot {
         let normalizedURL = YamiboRoute.normalizedChapterURL(url)
         guard let tid = MangaTitleCleaner.extractTid(from: normalizedURL.absoluteString)?.mangaReaderTrimmedNonEmpty else {
             throw MangaReaderDataSupport.currentMangaChapterParsingFailure()
@@ -44,7 +48,7 @@ public actor YamiboMangaReaderProjectionLoader: MangaReaderProjectionLoading {
             return try await task.value
         }
 
-        let task = Task<MangaReaderProjection, Error> {
+        let task = Task<MangaReaderProjectionSnapshot, Error> {
             let sourcePage = try await self.loadAuthorScopedThreadPage(
                 thread: thread,
                 authorID: authorID,
@@ -56,7 +60,7 @@ public actor YamiboMangaReaderProjectionLoader: MangaReaderProjectionLoading {
             if !ignoresCache,
                let cached = await projectionStore.projection(for: identity),
                Self.isReusableProjection(cached, identity: identity, fingerprint: fingerprint) {
-                return cached
+                return MangaReaderProjectionSnapshot(projection: cached, sourcePage: sourcePage)
             }
 
             let projection = try Self.deriveProjection(
@@ -65,7 +69,7 @@ public actor YamiboMangaReaderProjectionLoader: MangaReaderProjectionLoading {
                 sourceFingerprint: fingerprint
             )
             try? await projectionStore.save(projection)
-            return projection
+            return MangaReaderProjectionSnapshot(projection: projection, sourcePage: sourcePage)
         }
         inFlightTasks[taskKey] = task
         defer { inFlightTasks.removeValue(forKey: taskKey) }

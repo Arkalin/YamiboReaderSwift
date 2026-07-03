@@ -149,15 +149,17 @@ final class MangaReaderCacheViewModelTests: XCTestCase {
         XCTAssertEqual(fixture.model.rows.map(\.state), [.uncached, .uncached, .uncached])
     }
 
-    func testNonFavoriteCacheCommandPromptsInsteadOfQueueingWork() async throws {
+    func testNonFavoriteCacheCommandEnqueuesWorkWithoutPrompting() async throws {
         let fixture = try await makeCacheFixture(chapters: [cacheChapter(tid: "100", number: 1)], saveFavorite: false)
 
         await fixture.model.load()
         await fixture.model.cacheSelected(tids: ["100"])
 
-        XCTAssertEqual(fixture.model.prompt, .addFavorite(title: "测试漫画"))
+        XCTAssertNil(fixture.model.prompt)
         let works = await fixture.store.allOfflineCacheWorks()
-        XCTAssertTrue(works.isEmpty)
+        XCTAssertEqual(works.map(\.ownerName), ["测试漫画"])
+        XCTAssertEqual(works.map(\.tid), ["100"])
+        XCTAssertEqual(fixture.model.rows.map(\.state), [.caching])
     }
 
     func testNonFavoriteDeleteCommandCanRemoveExistingOfflineCache() async throws {
@@ -182,7 +184,7 @@ final class MangaReaderCacheViewModelTests: XCTestCase {
 private struct MangaReaderCacheFixture {
     let model: MangaReaderCacheViewModel
     let favorite: Favorite
-    let store: any MangaOfflineCacheStoring
+    let store: any OfflineCacheStoring
 }
 
 @MainActor
@@ -198,7 +200,7 @@ private func makeCacheFixture(
     )
     let offlineRoot = FileManager.default.temporaryDirectory
         .appendingPathComponent("manga-reader-cache-grdb-\(UUID().uuidString)", isDirectory: true)
-    let offlineStore = MangaOfflineCacheStore(
+    let offlineStore = OfflineCacheStore(
         databasePool: try YamiboDatabase.openPool(rootDirectory: offlineRoot),
         baseDirectory: offlineRoot.appendingPathComponent("offline-images", isDirectory: true)
     )

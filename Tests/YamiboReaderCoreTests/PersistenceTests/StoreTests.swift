@@ -749,7 +749,7 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
     )
     let mangaDirectoryStore = try makeTestMangaDirectoryStore(rootDirectory: rootDirectory)
     let mangaReaderProjectionStore = try makeTestMangaReaderProjectionStore(rootDirectory: rootDirectory)
-    let mangaOfflineCacheStore = try makeTestMangaOfflineCacheStore(rootDirectory: rootDirectory)
+    let offlineCacheStore = try makeTestOfflineCacheStore(rootDirectory: rootDirectory)
     let appContext = YamiboAppContext(
         sessionStore: sessionStore,
         settingsStore: settingsStore,
@@ -760,7 +760,7 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
         favoriteBackgroundImageStore: favoriteBackgroundImageStore,
         mangaDirectoryStore: mangaDirectoryStore,
         mangaReaderProjectionStore: mangaReaderProjectionStore,
-        mangaOfflineCacheStore: mangaOfflineCacheStore
+        offlineCacheStore: offlineCacheStore
     )
 
     let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=700&mobile=2"))
@@ -825,11 +825,11 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
         sourceFingerprint: "reset-fixture"
     ))
     let offlineImageURL = try #require(URL(string: "https://img.example.com/offline-reset.jpg"))
-    try await mangaOfflineCacheStore.saveOfflineImageData(
+    try await offlineCacheStore.saveOfflineImageData(
         Data(repeating: 7, count: 64),
         for: offlineImageURL
     )
-    try await mangaOfflineCacheStore.saveMembership(
+    try await offlineCacheStore.saveMembership(
         MangaOfflineCacheMembership(
             ownerName: "测试漫画",
             tid: "700",
@@ -838,7 +838,7 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
             imageURLs: [offlineImageURL]
         )
     )
-    _ = try await mangaOfflineCacheStore.enqueueOfflineCacheWork(
+    _ = try await offlineCacheStore.enqueueOfflineCacheWork(
         MangaOfflineCacheWorkRequest(
             ownerName: "测试漫画",
             tid: "701",
@@ -847,7 +847,7 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
             targetImageURLs: [try #require(URL(string: "https://img.example.com/offline-reset-work.jpg"))]
         )
     )
-    try await mangaOfflineCacheStore.setOfflineCacheQueueRunState(.running)
+    try await offlineCacheStore.setOfflineCacheQueueRunState(.running)
     let coverKey = ContentCoverKey(targetType: .threadNovel, targetID: "700")
     try await contentCoverStore.setAutomaticCover(
         try #require(URL(string: "https://img.example.com/reset-cover.jpg")),
@@ -865,10 +865,10 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
     let backgroundData = await favoriteBackgroundImageStore.loadData(imageID: "background")
     let mangaDirectoryBytes = await mangaDirectoryStore.totalDiskUsageBytes()
     let mangaReaderProjectionBytes = await mangaReaderProjectionStore.totalDiskUsageBytes()
-    let mangaOfflineCacheBytes = await mangaOfflineCacheStore.totalDiskUsageBytes()
-    let mangaOfflineMemberships = await mangaOfflineCacheStore.allMemberships()
-    let mangaOfflineWorks = await mangaOfflineCacheStore.allOfflineCacheWorks()
-    let mangaOfflineQueueState = await mangaOfflineCacheStore.offlineCacheQueueRunState()
+    let mangaOfflineCacheBytes = await offlineCacheStore.totalDiskUsageBytes()
+    let mangaOfflineMemberships = await offlineCacheStore.allMemberships()
+    let mangaOfflineWorks = await offlineCacheStore.allOfflineCacheWorks()
+    let mangaOfflineQueueState = await offlineCacheStore.offlineCacheQueueRunState()
 
     #expect(session == SessionState())
     #expect(settings == AppSettings())

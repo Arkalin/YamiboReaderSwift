@@ -31,7 +31,7 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
     public let mangaDirectoryStore: any MangaDirectoryPersisting & MangaDirectoryStorageReporting & MangaDirectoryClearing
     public let mangaDirectorySearchCooldownState: MangaDirectorySearchCooldownState
     public let mangaReaderProjectionStore: any MangaReaderProjectionPersisting & MangaReaderProjectionStorageReporting
-    public let mangaOfflineCacheStore: any MangaOfflineCacheStoring
+    public let offlineCacheStore: any OfflineCacheStoring
     public let forumCacheStore: ForumCacheStore
     public let ordinaryImageCache: any YamiboOrdinaryImageCacheClearing
     public let mangaOfflineCacheBackgroundDownloadTransport: MangaOfflineCacheBackgroundDownloadTransport
@@ -58,7 +58,7 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         mangaDirectoryStore: (any MangaDirectoryPersisting & MangaDirectoryStorageReporting & MangaDirectoryClearing)? = nil,
         mangaDirectorySearchCooldownState: MangaDirectorySearchCooldownState = MangaDirectorySearchCooldownState(),
         mangaReaderProjectionStore: (any MangaReaderProjectionPersisting & MangaReaderProjectionStorageReporting)? = nil,
-        mangaOfflineCacheStore: (any MangaOfflineCacheStoring)? = nil,
+        offlineCacheStore: (any OfflineCacheStoring)? = nil,
         forumCacheStore: ForumCacheStore? = nil,
         ordinaryImageCache: any YamiboOrdinaryImageCacheClearing = YamiboImageDataPipeline.shared,
         mangaOfflineCacheBackgroundDownloadTransport: MangaOfflineCacheBackgroundDownloadTransport = MangaOfflineCacheBackgroundDownloadTransport(),
@@ -83,7 +83,7 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         self.settingsStore = settingsStore
         self.webDAVSyncSettingsStore = webDAVSyncSettingsStore
         self.readerResumeRouteStore = readerResumeRouteStore
-        let resolvedMangaOfflineCacheStore = mangaOfflineCacheStore ?? MangaOfflineCacheStore(
+        let resolvedOfflineCacheStore = offlineCacheStore ?? OfflineCacheStore(
             databasePool: resolvedGRDBDatabasePool,
             baseDirectory: Self.mangaOfflineCacheDirectory(rootDirectory: resolvedGRDBRootDirectory)
         )
@@ -100,7 +100,7 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         self.mangaDirectoryStore = mangaDirectoryStore ?? MangaDirectoryStore(databasePool: resolvedGRDBDatabasePool)
         self.mangaDirectorySearchCooldownState = mangaDirectorySearchCooldownState
         self.mangaReaderProjectionStore = mangaReaderProjectionStore ?? MangaReaderProjectionStore(diskCacheStore: diskCacheStore)
-        self.mangaOfflineCacheStore = resolvedMangaOfflineCacheStore
+        self.offlineCacheStore = resolvedOfflineCacheStore
         self.forumCacheStore = forumCacheStore ?? ForumCacheStore(
             diskCacheStore: diskCacheStore
         )
@@ -283,12 +283,12 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         )
         return CachedMangaImageDataLoader(
             imageDataLoader: YamiboImageDataLoader(client: client),
-            offlineCacheStore: mangaOfflineCacheStore
+            offlineCacheStore: offlineCacheStore
         )
     }
 
-    public func makeMangaOfflineCacheStore() -> any MangaOfflineCacheStoring {
-        mangaOfflineCacheStore
+    public func makeOfflineCacheStore() -> any OfflineCacheStoring {
+        offlineCacheStore
     }
 
     public func makeMangaOfflineCacheQueueExecutor() async -> MangaOfflineCacheQueueExecutor {
@@ -303,7 +303,7 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
             userAgent: sessionState.userAgent
         )
         let executor = MangaOfflineCacheQueueExecutor(
-            store: mangaOfflineCacheStore,
+            store: offlineCacheStore,
             readerProjectionLoader: await makeMangaReaderProjectionLoader(),
             imageAcquirer: MangaOfflineCacheImageAcquirer(
                 networkLoader: YamiboImageDataLoader(client: client),
@@ -367,7 +367,7 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         try await mangaDirectoryStore.clearAll()
         await mangaDirectorySearchCooldownState.clear()
         try await mangaReaderProjectionStore.clearAll()
-        try await mangaOfflineCacheStore.clearAll()
+        try await offlineCacheStore.clearAll()
         try await forumCacheStore.clearAll()
         try await favoriteBackgroundImageStore.deleteAll()
         clearOrdinaryImageCache()

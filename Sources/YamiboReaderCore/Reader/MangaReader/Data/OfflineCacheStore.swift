@@ -2,13 +2,14 @@ import CryptoKit
 import Foundation
 @preconcurrency import GRDB
 
-public actor MangaOfflineCacheStore: MangaOfflineCacheStoring {
+public actor OfflineCacheStore: OfflineCacheStoring {
     private let database: DatabasePool
     private nonisolated(unsafe) let fileManager: FileManager
     private let baseDirectory: URL
     private let imagesDirectory: URL
     private let updateNotifier = MangaOfflineCacheUpdateNotifier()
     private var didRecoverQueueState = false
+    private static let mangaReaderKind = "manga"
 
     public init(
         databasePool: DatabasePool? = nil,
@@ -103,8 +104,11 @@ public actor MangaOfflineCacheStore: MangaOfflineCacheStoring {
             try await database.write { db in
                 let removed = try Self.memberships(ownerName: ownerName, in: db)
                 let canceled = try Self.works(ownerName: ownerName, in: db)
-                try db.execute(sql: "DELETE FROM manga_offline_cache_memberships WHERE owner_name = ?", arguments: [ownerName])
-                try db.execute(sql: "DELETE FROM manga_offline_cache_works WHERE owner_name = ?", arguments: [ownerName])
+                try db.execute(sql: "DELETE FROM offline_cache_manga_entries WHERE owner_name = ?", arguments: [ownerName])
+                try db.execute(
+                    sql: "DELETE FROM offline_cache_works WHERE reader_kind = ? AND owner_name = ?",
+                    arguments: [Self.mangaReaderKind, ownerName]
+                )
                 try Self.removeUnreferencedImages(
                     candidateImageURLs: removed.flatMap(\.imageURLs) + canceled.flatMap { $0.targetImageURLs + $0.completedImageURLs },
                     fileManager: fileManager,
@@ -131,8 +135,11 @@ public actor MangaOfflineCacheStore: MangaOfflineCacheStoring {
                 let works = try Self.works(ownerName: oldOwnerName, in: db)
                 guard !memberships.isEmpty || !works.isEmpty else { return }
 
-                try db.execute(sql: "DELETE FROM manga_offline_cache_memberships WHERE owner_name = ?", arguments: [oldOwnerName])
-                try db.execute(sql: "DELETE FROM manga_offline_cache_works WHERE owner_name = ?", arguments: [oldOwnerName])
+                try db.execute(sql: "DELETE FROM offline_cache_manga_entries WHERE owner_name = ?", arguments: [oldOwnerName])
+                try db.execute(
+                    sql: "DELETE FROM offline_cache_works WHERE reader_kind = ? AND owner_name = ?",
+                    arguments: [Self.mangaReaderKind, oldOwnerName]
+                )
 
                 for membership in memberships {
                     try Self.save(MangaOfflineCacheMembership(
@@ -141,11 +148,13 @@ public actor MangaOfflineCacheStore: MangaOfflineCacheStoring {
                         chapterTitle: membership.chapterTitle,
                         chapterURL: Self.chapterURL(tid: membership.tid),
                         imageURLs: membership.imageURLs,
+                        sourcePage: membership.sourcePage,
                         createdAt: membership.createdAt
                     ), in: db)
                 }
                 for work in works {
                     try Self.save(MangaOfflineCacheWork(
+                        workID: work.workID,
                         ownerName: newOwnerName,
                         tid: work.tid,
                         chapterTitle: work.chapterTitle,
@@ -173,7 +182,7 @@ public actor MangaOfflineCacheStore: MangaOfflineCacheStoring {
         guard let fileName = try? await database.read({ db in
             try String.fetchOne(
                 db,
-                sql: "SELECT file_name FROM manga_offline_cache_images WHERE image_url = ?",
+                sql: "SELECT file_name FROM offline_cache_image_assets WHERE image_url = ?",
                 arguments: [imageURLString]
             )
         }) else {
@@ -209,14 +218,14 @@ public actor MangaOfflineCacheStore: MangaOfflineCacheStoring {
 
                 if let oldFileName = try String.fetchOne(
                     db,
-                    sql: "SELECT file_name FROM manga_offline_cache_images WHERE image_url = ?",
+                    sql: "SELECT file_name FROM offline_cache_image_assets WHERE image_url = ?",
                     arguments: [imageURLString]
                 ), oldFileName != fileName {
                     try? fileManager.removeItem(at: imagesDirectory.appendingPathComponent(oldFileName, isDirectory: false))
                 }
                 try db.execute(
                     sql: """
-                    INSERT INTO manga_offline_cache_images (image_url, file_name, byte_count)
+                    INSERT INTO offline_cache_image_assets (image_url, file_name, byte_count)
                     VALUES (?, ?, ?)
                     """,
                     arguments: [imageURLString, fileName, data.count]
@@ -252,7 +261,7 @@ public actor MangaOfflineCacheStore: MangaOfflineCacheStoring {
                 for imageURL in imageURLs {
                     byteCount += try Int.fetchOne(
                         db,
-                        sql: "SELECT byte_count FROM manga_offline_cache_images WHERE image_url = ?",
+                        sql: "SELECT byte_count FROM offline_cache_image_assets WHERE image_url = ?",
                         arguments: [imageURL]
                     ) ?? 0
                 }
@@ -379,7 +388,10 @@ public actor MangaOfflineCacheStore: MangaOfflineCacheStoring {
         do {
             try await database.write { db in
                 let canceled = try Self.works(ownerName: ownerName, in: db)
-                try db.execute(sql: "DELETE FROM manga_offline_cache_works WHERE owner_name = ?", arguments: [ownerName])
+                try db.execute(
+                    sql: "DELETE FROM offline_cache_works WHERE reader_kind = ? AND owner_name = ?",
+                    arguments: [Self.mangaReaderKind, ownerName]
+                )
                 try Self.removeUnreferencedImages(
                     candidateImageURLs: canceled.flatMap { $0.targetImageURLs + $0.completedImageURLs },
                     fileManager: fileManager,
@@ -396,7 +408,7 @@ public actor MangaOfflineCacheStore: MangaOfflineCacheStoring {
     public func clearOfflineCacheQueue() async throws {
         try await recoverQueueStateAfterRestart()
         try await database.write { db in
-            try db.execute(sql: "DELETE FROM manga_offline_cache_works")
+            try db.execute(sql: "DELETE FROM offline_cache_works WHERE reader_kind = ?", arguments: [Self.mangaReaderKind])
             try Self.setQueueRunState(.paused, in: db)
         }
         notifyOfflineCacheDidChange()
@@ -415,7 +427,7 @@ public actor MangaOfflineCacheStore: MangaOfflineCacheStoring {
             try await database.write { db in
                 try Self.setQueueRunState(state, in: db)
                 if state == .paused {
-                    try db.execute(sql: "UPDATE manga_offline_cache_works SET current_bytes_per_second = 0")
+                    try Self.pauseRunningMangaWorks(in: db)
                 }
             }
             notifyOfflineCacheDidChange()
@@ -442,6 +454,13 @@ public actor MangaOfflineCacheStore: MangaOfflineCacheStoring {
     public func clearAll() async throws {
         do {
             try await database.write { db in
+                try db.execute(sql: "DELETE FROM offline_cache_completed_images")
+                try db.execute(sql: "DELETE FROM offline_cache_work_images")
+                try db.execute(sql: "DELETE FROM offline_cache_works")
+                try db.execute(sql: "DELETE FROM offline_cache_manga_entry_images")
+                try db.execute(sql: "DELETE FROM offline_cache_manga_entries")
+                try db.execute(sql: "DELETE FROM offline_cache_image_assets")
+                try db.execute(sql: "DELETE FROM offline_cache_queue_state")
                 try db.execute(sql: "DELETE FROM manga_offline_cache_completed_images")
                 try db.execute(sql: "DELETE FROM manga_offline_cache_work_images")
                 try db.execute(sql: "DELETE FROM manga_offline_cache_works")
@@ -463,7 +482,7 @@ public actor MangaOfflineCacheStore: MangaOfflineCacheStoring {
     public func totalDiskUsageBytes() async -> Int {
         try? await recoverQueueStateAfterRestart()
         return (try? await database.read { db in
-            try Int.fetchOne(db, sql: "SELECT COALESCE(SUM(byte_count), 0) FROM manga_offline_cache_images") ?? 0
+            try Int.fetchOne(db, sql: "SELECT COALESCE(SUM(byte_count), 0) FROM offline_cache_image_assets") ?? 0
         }) ?? 0
     }
 
@@ -490,7 +509,7 @@ public actor MangaOfflineCacheStore: MangaOfflineCacheStoring {
         try await database.write { db in
             if try Self.queueRunState(in: db) == .running {
                 try Self.setQueueRunState(.paused, in: db)
-                try db.execute(sql: "UPDATE manga_offline_cache_works SET current_bytes_per_second = 0")
+                try Self.pauseRunningMangaWorks(in: db)
             }
         }
     }
@@ -549,6 +568,7 @@ public actor MangaOfflineCacheStore: MangaOfflineCacheStoring {
             chapterTitle: membership.chapterTitle,
             chapterURL: chapterURL(tid: membership.tid),
             imageURLs: membership.imageURLs,
+            sourcePage: membership.sourcePage,
             createdAt: membership.createdAt
         )
     }
@@ -556,24 +576,25 @@ public actor MangaOfflineCacheStore: MangaOfflineCacheStoring {
     private static func save(_ membership: MangaOfflineCacheMembership, in db: Database) throws {
         try db.execute(
             sql: """
-            INSERT INTO manga_offline_cache_memberships (owner_name, tid, chapter_title, created_at)
-            VALUES (?, ?, ?, ?)
+            INSERT OR REPLACE INTO offline_cache_manga_entries (owner_name, tid, chapter_title, source_page_json, created_at)
+            VALUES (?, ?, ?, ?, ?)
             """,
             arguments: [
                 membership.ownerName,
                 membership.tid,
                 membership.chapterTitle,
+                try encodeSourcePage(membership.sourcePage),
                 offlineCacheTimeInterval(from: membership.createdAt)
             ]
         )
         try db.execute(
-            sql: "DELETE FROM manga_offline_cache_membership_images WHERE owner_name = ? AND tid = ?",
+            sql: "DELETE FROM offline_cache_manga_entry_images WHERE owner_name = ? AND tid = ?",
             arguments: [membership.ownerName, membership.tid]
         )
         for (index, imageURL) in membership.imageURLs.enumerated() {
             try db.execute(
                 sql: """
-                INSERT INTO manga_offline_cache_membership_images (owner_name, tid, manual_order, image_url)
+                INSERT INTO offline_cache_manga_entry_images (owner_name, tid, manual_order, image_url)
                 VALUES (?, ?, ?, ?)
                 """,
                 arguments: [membership.ownerName, membership.tid, index, imageURL.absoluteString]
@@ -584,11 +605,13 @@ public actor MangaOfflineCacheStore: MangaOfflineCacheStoring {
     private static func save(_ work: MangaOfflineCacheWork, in db: Database) throws {
         try db.execute(
             sql: """
-            INSERT INTO manga_offline_cache_works
-            (owner_name, tid, chapter_title, state, failure_message, current_bytes_per_second, insertion_index, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT OR REPLACE INTO offline_cache_works
+            (reader_kind, work_id, owner_name, tid, chapter_title, state, failure_message, current_bytes_per_second, insertion_index, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             arguments: [
+                mangaReaderKind,
+                work.workID,
                 work.ownerName,
                 work.tid,
                 work.chapterTitle,
@@ -601,14 +624,16 @@ public actor MangaOfflineCacheStore: MangaOfflineCacheStoring {
             ]
         )
         try replaceImageList(
-            table: "manga_offline_cache_work_images",
+            table: "offline_cache_work_images",
+            readerKind: mangaReaderKind,
             ownerName: work.ownerName,
             tid: work.tid,
             imageURLs: work.targetImageURLs,
             in: db
         )
         try replaceImageList(
-            table: "manga_offline_cache_completed_images",
+            table: "offline_cache_completed_images",
+            readerKind: mangaReaderKind,
             ownerName: work.ownerName,
             tid: work.tid,
             imageURLs: work.completedImageURLs,
@@ -618,19 +643,23 @@ public actor MangaOfflineCacheStore: MangaOfflineCacheStoring {
 
     private static func replaceImageList(
         table: String,
+        readerKind: String,
         ownerName: String,
         tid: String,
         imageURLs: [URL],
         in db: Database
     ) throws {
-        try db.execute(sql: "DELETE FROM \(table) WHERE owner_name = ? AND tid = ?", arguments: [ownerName, tid])
+        try db.execute(
+            sql: "DELETE FROM \(table) WHERE reader_kind = ? AND owner_name = ? AND tid = ?",
+            arguments: [readerKind, ownerName, tid]
+        )
         for (index, imageURL) in imageURLs.enumerated() {
             try db.execute(
                 sql: """
-                INSERT INTO \(table) (owner_name, tid, manual_order, image_url)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO \(table) (reader_kind, owner_name, tid, manual_order, image_url)
+                VALUES (?, ?, ?, ?, ?)
                 """,
-                arguments: [ownerName, tid, index, imageURL.absoluteString]
+                arguments: [readerKind, ownerName, tid, index, imageURL.absoluteString]
             )
         }
     }
@@ -639,8 +668,8 @@ public actor MangaOfflineCacheStore: MangaOfflineCacheStoring {
         guard let row = try Row.fetchOne(
             db,
             sql: """
-            SELECT owner_name, tid, chapter_title, created_at
-            FROM manga_offline_cache_memberships
+            SELECT owner_name, tid, chapter_title, source_page_json, created_at
+            FROM offline_cache_manga_entries
             WHERE owner_name = ? AND tid = ?
             """,
             arguments: [ownerName, tid]
@@ -654,8 +683,8 @@ public actor MangaOfflineCacheStore: MangaOfflineCacheStoring {
         try Row.fetchAll(
             db,
             sql: """
-            SELECT owner_name, tid, chapter_title, created_at
-            FROM manga_offline_cache_memberships
+            SELECT owner_name, tid, chapter_title, source_page_json, created_at
+            FROM offline_cache_manga_entries
             WHERE owner_name = ?
             ORDER BY owner_name ASC, tid ASC
             """,
@@ -667,8 +696,8 @@ public actor MangaOfflineCacheStore: MangaOfflineCacheStoring {
         try Row.fetchAll(
             db,
             sql: """
-            SELECT owner_name, tid, chapter_title, created_at
-            FROM manga_offline_cache_memberships
+            SELECT owner_name, tid, chapter_title, source_page_json, created_at
+            FROM offline_cache_manga_entries
             ORDER BY owner_name ASC, tid ASC
             """
         ).map { try membership(from: $0, in: db) }
@@ -682,11 +711,12 @@ public actor MangaOfflineCacheStore: MangaOfflineCacheStoring {
             chapterTitle: row["chapter_title"],
             chapterURL: chapterURL(tid: tid),
             imageURLs: try imageURLs(
-                table: "manga_offline_cache_membership_images",
+                table: "offline_cache_manga_entry_images",
                 ownerName: row["owner_name"],
                 tid: tid,
                 in: db
             ),
+            sourcePage: try decodeSourcePage(row["source_page_json"] as String?),
             createdAt: offlineCacheOptionalDate(from: row["created_at"] as Double?) ?? Date(timeIntervalSince1970: 0)
         )
     }
@@ -695,11 +725,11 @@ public actor MangaOfflineCacheStore: MangaOfflineCacheStoring {
         guard let row = try Row.fetchOne(
             db,
             sql: """
-            SELECT owner_name, tid, chapter_title, state, failure_message, current_bytes_per_second, insertion_index, created_at, updated_at
-            FROM manga_offline_cache_works
-            WHERE owner_name = ? AND tid = ?
+            SELECT work_id, owner_name, tid, chapter_title, state, failure_message, current_bytes_per_second, insertion_index, created_at, updated_at
+            FROM offline_cache_works
+            WHERE reader_kind = ? AND owner_name = ? AND tid = ?
             """,
-            arguments: [ownerName, tid]
+            arguments: [mangaReaderKind, ownerName, tid]
         ) else {
             return nil
         }
@@ -710,12 +740,12 @@ public actor MangaOfflineCacheStore: MangaOfflineCacheStoring {
         try Row.fetchAll(
             db,
             sql: """
-            SELECT owner_name, tid, chapter_title, state, failure_message, current_bytes_per_second, insertion_index, created_at, updated_at
-            FROM manga_offline_cache_works
-            WHERE owner_name = ?
+            SELECT work_id, owner_name, tid, chapter_title, state, failure_message, current_bytes_per_second, insertion_index, created_at, updated_at
+            FROM offline_cache_works
+            WHERE reader_kind = ? AND owner_name = ?
             ORDER BY insertion_index ASC, owner_name ASC, tid ASC
             """,
-            arguments: [ownerName]
+            arguments: [mangaReaderKind, ownerName]
         ).map { try work(from: $0, in: db) }
     }
 
@@ -723,10 +753,12 @@ public actor MangaOfflineCacheStore: MangaOfflineCacheStoring {
         try Row.fetchAll(
             db,
             sql: """
-            SELECT owner_name, tid, chapter_title, state, failure_message, current_bytes_per_second, insertion_index, created_at, updated_at
-            FROM manga_offline_cache_works
+            SELECT work_id, owner_name, tid, chapter_title, state, failure_message, current_bytes_per_second, insertion_index, created_at, updated_at
+            FROM offline_cache_works
+            WHERE reader_kind = ?
             ORDER BY insertion_index ASC, owner_name ASC, tid ASC
-            """
+            """,
+            arguments: [mangaReaderKind]
         ).map { try work(from: $0, in: db) }
     }
 
@@ -734,12 +766,25 @@ public actor MangaOfflineCacheStore: MangaOfflineCacheStoring {
         let tid = row["tid"] as String
         let state = MangaOfflineCacheWorkState(rawValue: row["state"] as String) ?? .paused
         return MangaOfflineCacheWork(
+            workID: row["work_id"],
             ownerName: row["owner_name"],
             tid: tid,
             chapterTitle: row["chapter_title"],
             chapterURL: chapterURL(tid: tid),
-            targetImageURLs: try imageURLs(table: "manga_offline_cache_work_images", ownerName: row["owner_name"], tid: tid, in: db),
-            completedImageURLs: try imageURLs(table: "manga_offline_cache_completed_images", ownerName: row["owner_name"], tid: tid, in: db),
+            targetImageURLs: try imageURLs(
+                table: "offline_cache_work_images",
+                readerKind: mangaReaderKind,
+                ownerName: row["owner_name"],
+                tid: tid,
+                in: db
+            ),
+            completedImageURLs: try imageURLs(
+                table: "offline_cache_completed_images",
+                readerKind: mangaReaderKind,
+                ownerName: row["owner_name"],
+                tid: tid,
+                in: db
+            ),
             state: state,
             failureMessage: row["failure_message"] as String?,
             currentBytesPerSecond: row["current_bytes_per_second"] as Int,
@@ -749,8 +794,27 @@ public actor MangaOfflineCacheStore: MangaOfflineCacheStoring {
         )
     }
 
-    private static func imageURLs(table: String, ownerName: String, tid: String, in db: Database) throws -> [URL] {
-        try String.fetchAll(
+    private static func imageURLs(
+        table: String,
+        readerKind: String? = nil,
+        ownerName: String,
+        tid: String,
+        in db: Database
+    ) throws -> [URL] {
+        if let readerKind {
+            return try String.fetchAll(
+                db,
+                sql: """
+                SELECT image_url
+                FROM \(table)
+                WHERE reader_kind = ? AND owner_name = ? AND tid = ?
+                ORDER BY manual_order ASC
+                """,
+                arguments: [readerKind, ownerName, tid]
+            ).compactMap(URL.init(string:))
+        }
+
+        return try String.fetchAll(
             db,
             sql: """
             SELECT image_url
@@ -772,7 +836,7 @@ public actor MangaOfflineCacheStore: MangaOfflineCacheStoring {
         for imageURL in membership.imageURLs {
             guard let fileName = try String.fetchOne(
                 db,
-                sql: "SELECT file_name FROM manga_offline_cache_images WHERE image_url = ?",
+                sql: "SELECT file_name FROM offline_cache_image_assets WHERE image_url = ?",
                 arguments: [imageURL.absoluteString]
             ) else {
                 return false
@@ -800,9 +864,9 @@ public actor MangaOfflineCacheStore: MangaOfflineCacheStoring {
     private static func referencedImageURLs(in db: Database) throws -> Set<String> {
         var referenced = Set<String>()
         for table in [
-            "manga_offline_cache_membership_images",
-            "manga_offline_cache_work_images",
-            "manga_offline_cache_completed_images"
+            "offline_cache_manga_entry_images",
+            "offline_cache_work_images",
+            "offline_cache_completed_images"
         ] {
             referenced.formUnion(try String.fetchAll(db, sql: "SELECT image_url FROM \(table)"))
         }
@@ -811,15 +875,15 @@ public actor MangaOfflineCacheStore: MangaOfflineCacheStoring {
 
     private static func deleteMembership(ownerName: String, tid: String, in db: Database) throws {
         try db.execute(
-            sql: "DELETE FROM manga_offline_cache_memberships WHERE owner_name = ? AND tid = ?",
+            sql: "DELETE FROM offline_cache_manga_entries WHERE owner_name = ? AND tid = ?",
             arguments: [ownerName, tid]
         )
     }
 
     private static func deleteWork(ownerName: String, tid: String, in db: Database) throws {
         try db.execute(
-            sql: "DELETE FROM manga_offline_cache_works WHERE owner_name = ? AND tid = ?",
-            arguments: [ownerName, tid]
+            sql: "DELETE FROM offline_cache_works WHERE reader_kind = ? AND owner_name = ? AND tid = ?",
+            arguments: [mangaReaderKind, ownerName, tid]
         )
     }
 
@@ -831,22 +895,55 @@ public actor MangaOfflineCacheStore: MangaOfflineCacheStoring {
     ) throws {
         if let fileName = try String.fetchOne(
             db,
-            sql: "SELECT file_name FROM manga_offline_cache_images WHERE image_url = ?",
+            sql: "SELECT file_name FROM offline_cache_image_assets WHERE image_url = ?",
             arguments: [imageURLString]
         ) {
             try? fileManager.removeItem(at: imagesDirectory.appendingPathComponent(fileName, isDirectory: false))
         }
-        try db.execute(sql: "DELETE FROM manga_offline_cache_images WHERE image_url = ?", arguments: [imageURLString])
+        try db.execute(sql: "DELETE FROM offline_cache_image_assets WHERE image_url = ?", arguments: [imageURLString])
+    }
+
+    private static func encodeSourcePage(_ sourcePage: ForumThreadPage?) throws -> String? {
+        guard let sourcePage else { return nil }
+        let data = try JSONEncoder().encode(sourcePage)
+        return String(data: data, encoding: .utf8)
+    }
+
+    private static func decodeSourcePage(_ value: String?) throws -> ForumThreadPage? {
+        guard let value,
+              let data = value.data(using: .utf8) else {
+            return nil
+        }
+        return try JSONDecoder().decode(ForumThreadPage.self, from: data)
     }
 
     private static func nextQueueInsertionIndex(in db: Database) throws -> Int {
-        (try Int.fetchOne(db, sql: "SELECT MAX(insertion_index) FROM manga_offline_cache_works") ?? 0) + 1
+        (try Int.fetchOne(
+            db,
+            sql: "SELECT MAX(insertion_index) FROM offline_cache_works WHERE reader_kind = ?",
+            arguments: [mangaReaderKind]
+        ) ?? 0) + 1
+    }
+
+    private static func pauseRunningMangaWorks(in db: Database) throws {
+        try db.execute(
+            sql: """
+            UPDATE offline_cache_works
+            SET state = ?, current_bytes_per_second = 0
+            WHERE reader_kind = ? AND state = ?
+            """,
+            arguments: [
+                MangaOfflineCacheWorkState.paused.rawValue,
+                mangaReaderKind,
+                MangaOfflineCacheWorkState.running.rawValue
+            ]
+        )
     }
 
     private static func queueRunState(in db: Database) throws -> MangaOfflineCacheQueueRunState {
         guard let rawValue = try String.fetchOne(
             db,
-            sql: "SELECT value FROM manga_offline_cache_queue_state WHERE key = ?",
+            sql: "SELECT value FROM offline_cache_queue_state WHERE key = ?",
             arguments: ["run_state"]
         ) else {
             return .paused
@@ -857,7 +954,7 @@ public actor MangaOfflineCacheStore: MangaOfflineCacheStoring {
     private static func setQueueRunState(_ state: MangaOfflineCacheQueueRunState, in db: Database) throws {
         try db.execute(
             sql: """
-            INSERT INTO manga_offline_cache_queue_state (key, value)
+            INSERT INTO offline_cache_queue_state (key, value)
             VALUES (?, ?)
             """,
             arguments: ["run_state", state.rawValue]
@@ -872,7 +969,7 @@ public actor MangaOfflineCacheStore: MangaOfflineCacheStoring {
         do {
             return try YamiboDatabase.openSharedPool()
         } catch {
-            fatalError("Failed to open MangaOfflineCacheStore database: \(error)")
+            fatalError("Failed to open OfflineCacheStore database: \(error)")
         }
     }
 }

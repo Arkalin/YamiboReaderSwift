@@ -66,6 +66,13 @@ public enum YamiboDatabase {
         fileManager: FileManager = .default
     ) throws {
         try writer.write { db in
+            try db.execute(sql: "DELETE FROM offline_cache_completed_images")
+            try db.execute(sql: "DELETE FROM offline_cache_work_images")
+            try db.execute(sql: "DELETE FROM offline_cache_works")
+            try db.execute(sql: "DELETE FROM offline_cache_manga_entry_images")
+            try db.execute(sql: "DELETE FROM offline_cache_manga_entries")
+            try db.execute(sql: "DELETE FROM offline_cache_image_assets")
+            try db.execute(sql: "DELETE FROM offline_cache_queue_state")
             try db.execute(sql: "DELETE FROM manga_offline_cache_completed_images")
             try db.execute(sql: "DELETE FROM manga_offline_cache_work_images")
             try db.execute(sql: "DELETE FROM manga_offline_cache_works")
@@ -317,6 +324,122 @@ public enum YamiboDatabase {
                 table.column("key", .text).primaryKey(onConflict: .replace)
                 table.column("value", .text).notNull()
             }
+        }
+
+        migrator.registerMigration("create_offline_cache_store") { db in
+            try db.create(table: "offline_cache_manga_entries") { table in
+                table.column("owner_name", .text).notNull()
+                table.column("tid", .text).notNull()
+                table.column("chapter_title", .text).notNull()
+                table.column("source_page_json", .text)
+                table.column("created_at", .double).notNull()
+                table.primaryKey(["owner_name", "tid"], onConflict: .replace)
+            }
+            try db.create(index: "offline_cache_manga_entries_owner_idx", on: "offline_cache_manga_entries", columns: ["owner_name"])
+
+            try db.create(table: "offline_cache_manga_entry_images") { table in
+                table.column("owner_name", .text).notNull()
+                table.column("tid", .text).notNull()
+                table.column("manual_order", .integer).notNull()
+                table.column("image_url", .text).notNull()
+                table.primaryKey(["owner_name", "tid", "manual_order"], onConflict: .replace)
+                table.foreignKey(["owner_name", "tid"], references: "offline_cache_manga_entries", columns: ["owner_name", "tid"], onDelete: .cascade)
+            }
+            try db.create(index: "offline_cache_manga_entry_images_url_idx", on: "offline_cache_manga_entry_images", columns: ["image_url"])
+
+            try db.create(table: "offline_cache_works") { table in
+                table.column("reader_kind", .text).notNull()
+                table.column("work_id", .text).notNull()
+                table.column("owner_name", .text).notNull()
+                table.column("tid", .text).notNull()
+                table.column("chapter_title", .text).notNull()
+                table.column("state", .text).notNull()
+                table.column("failure_message", .text)
+                table.column("current_bytes_per_second", .integer).notNull()
+                table.column("insertion_index", .integer).notNull()
+                table.column("created_at", .double).notNull()
+                table.column("updated_at", .double).notNull()
+                table.primaryKey(["reader_kind", "owner_name", "tid"], onConflict: .replace)
+            }
+            try db.create(index: "offline_cache_works_work_id_idx", on: "offline_cache_works", columns: ["work_id"], unique: true)
+            try db.create(index: "offline_cache_works_owner_idx", on: "offline_cache_works", columns: ["reader_kind", "owner_name"])
+            try db.create(index: "offline_cache_works_insertion_idx", on: "offline_cache_works", columns: ["insertion_index"])
+
+            try db.create(table: "offline_cache_work_images") { table in
+                table.column("reader_kind", .text).notNull()
+                table.column("owner_name", .text).notNull()
+                table.column("tid", .text).notNull()
+                table.column("manual_order", .integer).notNull()
+                table.column("image_url", .text).notNull()
+                table.primaryKey(["reader_kind", "owner_name", "tid", "manual_order"], onConflict: .replace)
+                table.foreignKey(["reader_kind", "owner_name", "tid"], references: "offline_cache_works", columns: ["reader_kind", "owner_name", "tid"], onDelete: .cascade)
+            }
+            try db.create(index: "offline_cache_work_images_url_idx", on: "offline_cache_work_images", columns: ["image_url"])
+
+            try db.create(table: "offline_cache_completed_images") { table in
+                table.column("reader_kind", .text).notNull()
+                table.column("owner_name", .text).notNull()
+                table.column("tid", .text).notNull()
+                table.column("manual_order", .integer).notNull()
+                table.column("image_url", .text).notNull()
+                table.primaryKey(["reader_kind", "owner_name", "tid", "manual_order"], onConflict: .replace)
+                table.foreignKey(["reader_kind", "owner_name", "tid"], references: "offline_cache_works", columns: ["reader_kind", "owner_name", "tid"], onDelete: .cascade)
+            }
+            try db.create(index: "offline_cache_completed_images_url_idx", on: "offline_cache_completed_images", columns: ["image_url"])
+
+            try db.create(table: "offline_cache_image_assets") { table in
+                table.column("image_url", .text).primaryKey(onConflict: .replace)
+                table.column("file_name", .text).notNull()
+                table.column("byte_count", .integer).notNull()
+            }
+
+            try db.create(table: "offline_cache_queue_state") { table in
+                table.column("key", .text).primaryKey(onConflict: .replace)
+                table.column("value", .text).notNull()
+            }
+
+            try db.execute(sql: """
+                INSERT OR IGNORE INTO offline_cache_manga_entries
+                (owner_name, tid, chapter_title, created_at)
+                SELECT owner_name, tid, chapter_title, created_at
+                FROM manga_offline_cache_memberships
+                """)
+            try db.execute(sql: """
+                INSERT OR IGNORE INTO offline_cache_manga_entry_images
+                (owner_name, tid, manual_order, image_url)
+                SELECT owner_name, tid, manual_order, image_url
+                FROM manga_offline_cache_membership_images
+                """)
+            try db.execute(sql: """
+                INSERT OR IGNORE INTO offline_cache_works
+                (reader_kind, work_id, owner_name, tid, chapter_title, state, failure_message, current_bytes_per_second, insertion_index, created_at, updated_at)
+                SELECT 'manga', lower(hex(randomblob(16))), owner_name, tid, chapter_title, state, failure_message, current_bytes_per_second, insertion_index, created_at, updated_at
+                FROM manga_offline_cache_works
+                """)
+            try db.execute(sql: """
+                INSERT OR IGNORE INTO offline_cache_work_images
+                (reader_kind, owner_name, tid, manual_order, image_url)
+                SELECT 'manga', owner_name, tid, manual_order, image_url
+                FROM manga_offline_cache_work_images
+                """)
+            try db.execute(sql: """
+                INSERT OR IGNORE INTO offline_cache_completed_images
+                (reader_kind, owner_name, tid, manual_order, image_url)
+                SELECT 'manga', owner_name, tid, manual_order, image_url
+                FROM manga_offline_cache_completed_images
+                """)
+            try db.execute(sql: """
+                INSERT OR IGNORE INTO offline_cache_image_assets
+                (image_url, file_name, byte_count)
+                SELECT image_url, file_name, byte_count
+                FROM manga_offline_cache_images
+                """)
+            try db.execute(sql: """
+                INSERT OR REPLACE INTO offline_cache_queue_state
+                (key, value)
+                SELECT key, value
+                FROM manga_offline_cache_queue_state
+                """)
         }
 
         migrator.registerMigration("drop_image_data_cache_entries") { db in

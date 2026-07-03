@@ -2,11 +2,11 @@ import Foundation
 
 public actor CachedMangaImageDataLoader: MangaImageDataLoading {
     private let imageDataLoader: any YamiboImageDataLoading
-    private let offlineCacheStore: (any MangaOfflineCacheStoring)?
+    private let offlineCacheStore: (any OfflineCacheStoring)?
 
     public init(
         imageDataLoader: any YamiboImageDataLoading,
-        offlineCacheStore: (any MangaOfflineCacheStoring)? = nil
+        offlineCacheStore: (any OfflineCacheStoring)? = nil
     ) {
         self.imageDataLoader = imageDataLoader
         self.offlineCacheStore = offlineCacheStore

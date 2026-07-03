@@ -16,6 +16,7 @@ public struct MangaOfflineCacheMembership: Codable, Hashable, Identifiable, Send
     public var chapterTitle: String
     public var chapterURL: URL
     public var imageURLs: [URL]
+    public var sourcePage: ForumThreadPage?
     public var createdAt: Date
 
     public var id: MangaOfflineCacheMembershipID {
@@ -28,6 +29,7 @@ public struct MangaOfflineCacheMembership: Codable, Hashable, Identifiable, Send
         chapterTitle: String,
         chapterURL: URL,
         imageURLs: [URL],
+        sourcePage: ForumThreadPage? = nil,
         createdAt: Date = .now
     ) {
         self.ownerName = ownerName.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -35,7 +37,17 @@ public struct MangaOfflineCacheMembership: Codable, Hashable, Identifiable, Send
         self.chapterTitle = chapterTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         self.chapterURL = YamiboRoute.normalizedChapterURL(chapterURL, tid: self.tid)
         self.imageURLs = imageURLs
+        self.sourcePage = sourcePage
         self.createdAt = createdAt
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(ownerName)
+        hasher.combine(tid)
+        hasher.combine(chapterTitle)
+        hasher.combine(chapterURL)
+        hasher.combine(imageURLs)
+        hasher.combine(createdAt)
     }
 }
 
@@ -56,6 +68,8 @@ public enum MangaOfflineCacheState: String, Codable, Hashable, Sendable {
 }
 
 public enum MangaOfflineCacheWorkState: String, Codable, Hashable, Sendable {
+    case queued
+    case running
     case paused
     case failed
 }
@@ -112,6 +126,7 @@ public struct MangaOfflineCacheProgress: Codable, Hashable, Sendable {
 }
 
 public struct MangaOfflineCacheWork: Codable, Hashable, Identifiable, Sendable {
+    public var workID: String
     public var ownerName: String
     public var tid: String
     public var chapterTitle: String
@@ -137,19 +152,24 @@ public struct MangaOfflineCacheWork: Codable, Hashable, Identifiable, Sendable {
     }
 
     public init(
+        workID: String = UUID().uuidString,
         ownerName: String,
         tid: String,
         chapterTitle: String,
         chapterURL: URL,
         targetImageURLs: [URL] = [],
         completedImageURLs: [URL] = [],
-        state: MangaOfflineCacheWorkState = .paused,
+        state: MangaOfflineCacheWorkState = .queued,
         failureMessage: String? = nil,
         currentBytesPerSecond: Int = 0,
         insertionIndex: Int,
         createdAt: Date = .now,
         updatedAt: Date = .now
     ) {
+        self.workID = workID.trimmingCharacters(in: .whitespacesAndNewlines)
+        if self.workID.isEmpty {
+            self.workID = UUID().uuidString
+        }
         self.ownerName = ownerName.trimmingCharacters(in: .whitespacesAndNewlines)
         self.tid = tid.trimmingCharacters(in: .whitespacesAndNewlines)
         self.chapterTitle = chapterTitle.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -170,6 +190,7 @@ public struct MangaOfflineCacheWork: Codable, Hashable, Identifiable, Sendable {
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.init(
+            workID: try container.decodeIfPresent(String.self, forKey: .workID) ?? UUID().uuidString,
             ownerName: try container.decode(String.self, forKey: .ownerName),
             tid: try container.decode(String.self, forKey: .tid),
             chapterTitle: try container.decode(String.self, forKey: .chapterTitle),
@@ -193,7 +214,7 @@ public struct MangaOfflineCacheWork: Codable, Hashable, Identifiable, Sendable {
             chapterURL: request.chapterURL,
             targetImageURLs: request.targetImageURLs,
             completedImageURLs: [],
-            state: .paused,
+            state: .queued,
             failureMessage: nil,
             currentBytesPerSecond: 0,
             insertionIndex: insertionIndex,
@@ -204,6 +225,7 @@ public struct MangaOfflineCacheWork: Codable, Hashable, Identifiable, Sendable {
 
     public func markingFailed(message: String?, at date: Date = .now) -> MangaOfflineCacheWork {
         MangaOfflineCacheWork(
+            workID: workID,
             ownerName: ownerName,
             tid: tid,
             chapterTitle: chapterTitle,
@@ -226,6 +248,7 @@ public struct MangaOfflineCacheWork: Codable, Hashable, Identifiable, Sendable {
         at date: Date = .now
     ) -> MangaOfflineCacheWork {
         MangaOfflineCacheWork(
+            workID: workID,
             ownerName: ownerName,
             tid: tid,
             chapterTitle: chapterTitle,
@@ -247,13 +270,14 @@ public struct MangaOfflineCacheWork: Codable, Hashable, Identifiable, Sendable {
         at date: Date = .now
     ) -> MangaOfflineCacheWork {
         MangaOfflineCacheWork(
+            workID: workID,
             ownerName: ownerName,
             tid: tid,
             chapterTitle: chapterTitle,
             chapterURL: chapterURL,
             targetImageURLs: targetImageURLs ?? self.targetImageURLs,
             completedImageURLs: completedImageURLs,
-            state: .paused,
+            state: .running,
             failureMessage: nil,
             currentBytesPerSecond: 0,
             insertionIndex: insertionIndex,

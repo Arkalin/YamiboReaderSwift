@@ -296,7 +296,7 @@ final class MineHomeViewModelTests: XCTestCase {
 
         XCTAssertEqual(viewModel.offlineCacheQueueEntryCount, 3)
         XCTAssertEqual(viewModel.offlineCacheQueueGroups.map(\.ownerName), ["作品B", "作品A"])
-        XCTAssertEqual(viewModel.offlineCacheQueueGroups[1].chapters.map(\.id.tid), ["100", "200"])
+        XCTAssertEqual(viewModel.offlineCacheQueueGroups[1].chapters.map(\.tid), ["100", "200"])
         XCTAssertEqual(viewModel.offlineCacheQueueGroups[1].progressText, L10n.string("mine.offline_queue.image_progress_format", 1, 2))
         XCTAssertEqual(viewModel.offlineCacheQueueGroups[1].percentageText, L10n.string("mine.offline_queue.percent_format", 50))
         XCTAssertEqual(viewModel.offlineCacheQueueGroups[1].progressFraction, 0.5)
@@ -403,9 +403,10 @@ final class MineHomeViewModelTests: XCTestCase {
         )
 
         await viewModel.refreshOfflineCacheQueue()
+        let workID = try XCTUnwrap(viewModel.offlineCacheQueueGroups.first?.chapters.first?.id)
         await viewModel.continueOfflineCacheQueue()
         await viewModel.pauseOfflineCacheQueue()
-        await viewModel.cancelOfflineCacheChapter(MangaOfflineCacheMembershipID(ownerName: "作品A", tid: "100"))
+        await viewModel.cancelOfflineCacheChapter(workID)
 
         let events = await controller.snapshotEvents()
         let canceledWork = await fixture.offlineCacheStore.offlineCacheWork(ownerName: "作品A", tid: "100")
@@ -457,10 +458,15 @@ final class MineHomeViewModelTests: XCTestCase {
             offlineCacheQueueController: controller
         )
         await viewModel.refreshOfflineCacheQueue()
+        let selectedIDs = viewModel.offlineCacheQueueGroups
+            .flatMap(\.chapters)
+            .filter { $0.ownerName == "作品A" && ["100", "200"].contains($0.tid) }
+            .map(\.id)
 
         viewModel.setOfflineCacheQueueSelectionMode(true)
-        viewModel.toggleOfflineCacheWorkSelection(MangaOfflineCacheMembershipID(ownerName: "作品A", tid: "100"))
-        viewModel.toggleOfflineCacheWorkSelection(MangaOfflineCacheMembershipID(ownerName: "作品A", tid: "200"))
+        for id in selectedIDs {
+            viewModel.toggleOfflineCacheWorkSelection(id)
+        }
         await viewModel.cancelSelectedOfflineCacheWorks()
 
         let events = await controller.snapshotEvents()
@@ -483,18 +489,18 @@ final class MineHomeViewModelTests: XCTestCase {
         )
         let viewModel = MineHomeViewModel(appContext: fixture.appContext)
         await viewModel.refreshOfflineCacheQueue()
+        let ownerAWorkIDs = Set(
+            viewModel.offlineCacheQueueGroups
+                .first { $0.ownerName == "作品A" }?
+                .chapters
+                .map(\.id) ?? []
+        )
 
         viewModel.toggleOfflineCacheOwnerSelection(ownerName: "作品A")
 
         XCTAssertTrue(viewModel.isOfflineCacheOwnerSelected(ownerName: "作品A"))
         XCTAssertFalse(viewModel.isOfflineCacheOwnerSelected(ownerName: "作品B"))
-        XCTAssertEqual(
-            viewModel.selectedOfflineCacheWorkIDs,
-            [
-                MangaOfflineCacheMembershipID(ownerName: "作品A", tid: "100"),
-                MangaOfflineCacheMembershipID(ownerName: "作品A", tid: "200")
-            ]
-        )
+        XCTAssertEqual(viewModel.selectedOfflineCacheWorkIDs, ownerAWorkIDs)
 
         viewModel.toggleOfflineCacheOwnerSelection(ownerName: "作品A")
 
@@ -506,7 +512,7 @@ final class MineHomeViewModelTests: XCTestCase {
 private struct MineHomeViewModelFixture {
     let appContext: YamiboAppContext
     let checkInStore: YamiboCheckInStore
-    let offlineCacheStore: any MangaOfflineCacheStoring
+    let offlineCacheStore: any OfflineCacheStoring
     let directoryStore: MangaDirectoryStore
 }
 
@@ -523,7 +529,7 @@ private func makeMineHomeFixture(
     )
     let offlineCacheRoot = makeMineTemporaryDirectory()
     let database = try YamiboDatabase.openPool(rootDirectory: offlineCacheRoot)
-    let offlineCacheStore = MangaOfflineCacheStore(
+    let offlineCacheStore = OfflineCacheStore(
         databasePool: database,
         baseDirectory: offlineCacheRoot.appendingPathComponent("offline-images", isDirectory: true)
     )
@@ -545,7 +551,7 @@ private func makeMineHomeFixture(
         profileStore: profileStore,
         checkInStore: checkInStore,
         mangaDirectoryStore: directoryStore,
-        mangaOfflineCacheStore: offlineCacheStore,
+        offlineCacheStore: offlineCacheStore,
         session: makeProfileRefreshTestSession()
     )
     return MineHomeViewModelFixture(
@@ -670,14 +676,14 @@ private func profileHTML(uid: String) -> String {
 }
 
 private actor RecordingOfflineCacheQueueController: MangaOfflineCacheQueueControlling {
-    private let store: any MangaOfflineCacheStoring
+    private let store: any OfflineCacheStoring
     private var recordedEvents: [String] = []
 
     func snapshotEvents() -> [String] {
         recordedEvents
     }
 
-    init(store: any MangaOfflineCacheStoring) {
+    init(store: any OfflineCacheStoring) {
         self.store = store
     }
 

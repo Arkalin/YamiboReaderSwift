@@ -342,7 +342,7 @@ final class SystemSettingsViewModel: ObservableObject {
         let directoryBytes = await appContext.mangaDirectoryStore.totalDiskUsageBytes()
         let projectionBytes = await appContext.mangaReaderProjectionStore.totalDiskUsageBytes()
         mangaIndexCacheBytes = directoryBytes + projectionBytes
-        mangaOfflineCacheBytes = await appContext.mangaOfflineCacheStore.totalDiskUsageBytes()
+        mangaOfflineCacheBytes = await appContext.offlineCacheStore.totalDiskUsageBytes()
     }
 
     func refreshMangaOfflineCacheCleanup() async {
@@ -419,7 +419,7 @@ final class SystemSettingsViewModel: ObservableObject {
 
         do {
             for ownerName in normalizedOwnerNames {
-                try await appContext.mangaOfflineCacheStore.removeMemberships(forOwnerName: ownerName)
+                try await appContext.offlineCacheStore.removeMemberships(forOwnerName: ownerName)
             }
             pendingMangaOfflineCacheCleanupConfirmation = nil
             selectedMangaOfflineCacheOwnerNames.subtract(normalizedOwnerNames)
@@ -436,7 +436,7 @@ final class SystemSettingsViewModel: ObservableObject {
     }
 
     private func refreshMangaOfflineCacheCleanupRows() async {
-        let store = appContext.mangaOfflineCacheStore
+        let store = appContext.offlineCacheStore
         let memberships = await store.allMemberships()
         let works = await store.allOfflineCacheWorks()
         let usageByOwnerName = Dictionary(

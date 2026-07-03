@@ -43,7 +43,9 @@ struct MineOfflineCacheQueueOwnerGroup: Hashable, Identifiable {
 }
 
 struct MineOfflineCacheQueueChapterRow: Hashable, Identifiable {
-    var id: MangaOfflineCacheMembershipID
+    var id: String
+    var ownerName: String
+    var tid: String
     var title: String
     var completedImageCount: Int
     var targetImageCount: Int
@@ -54,7 +56,9 @@ struct MineOfflineCacheQueueChapterRow: Hashable, Identifiable {
     var speedText: String?
 
     init(work: MangaOfflineCacheWork) {
-        id = work.id
+        id = work.workID
+        ownerName = work.ownerName
+        tid = work.tid
         title = work.chapterTitle.isEmpty ? work.tid : work.chapterTitle
         completedImageCount = work.progress.completedImageCount
         targetImageCount = work.progress.targetImageCount

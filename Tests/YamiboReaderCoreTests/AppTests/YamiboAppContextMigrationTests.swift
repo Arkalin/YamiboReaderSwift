@@ -58,7 +58,7 @@ import Testing
             "reading_progress": try tableCount("reading_progress", in: db),
             "manga_directories": try tableCount("manga_directories", in: db),
             "manga_chapter_documents": try tableCount("manga_chapter_documents", in: db),
-            "manga_offline_cache_memberships": try tableCount("manga_offline_cache_memberships", in: db),
+            "offline_cache_manga_entries": try tableCount("offline_cache_manga_entries", in: db),
             "cache_entries": try tableCount("cache_entries", in: db),
         ]
     }
@@ -67,7 +67,7 @@ import Testing
     #expect(counts["reading_progress"] == 1)
     #expect(counts["manga_directories"] == 1)
     #expect(counts["manga_chapter_documents"] == 0)
-    #expect(counts["manga_offline_cache_memberships"] == 1)
+    #expect(counts["offline_cache_manga_entries"] == 1)
     #expect(counts["cache_entries"] == 3)
     let readerCacheEntriesTableExists = try await database.read { db in
         try db.tableExists("reader_cache_entries")
@@ -157,8 +157,8 @@ import Testing
             "reading_progress": try tableCount("reading_progress", in: db),
             "manga_directories": try tableCount("manga_directories", in: db),
             "manga_chapter_documents": try tableCount("manga_chapter_documents", in: db),
-            "manga_offline_cache_memberships": try tableCount("manga_offline_cache_memberships", in: db),
-            "manga_offline_cache_images": try tableCount("manga_offline_cache_images", in: db),
+            "offline_cache_manga_entries": try tableCount("offline_cache_manga_entries", in: db),
+            "offline_cache_image_assets": try tableCount("offline_cache_image_assets", in: db),
             "cache_entries": try tableCount("cache_entries", in: db),
         ]
     }
@@ -168,8 +168,8 @@ import Testing
     #expect(counts["reading_progress"] == 0)
     #expect(counts["manga_directories"] == 0)
     #expect(counts["manga_chapter_documents"] == 0)
-    #expect(counts["manga_offline_cache_memberships"] == 0)
-    #expect(counts["manga_offline_cache_images"] == 0)
+    #expect(counts["offline_cache_manga_entries"] == 0)
+    #expect(counts["offline_cache_image_assets"] == 0)
     #expect(counts["cache_entries"] == 0)
     let readerCacheEntriesTableExists = try await database.read { db in
         try db.tableExists("reader_cache_entries")
@@ -268,7 +268,7 @@ private func saveMigratedAppState(
             imageURLs: [imageURL]
         )
     )
-    try await appContext.mangaOfflineCacheStore.saveMembership(
+    try await appContext.offlineCacheStore.saveMembership(
         MangaOfflineCacheMembership(
             ownerName: "Shared GRDB Manga",
             tid: chapter.tid,
@@ -277,7 +277,7 @@ private func saveMigratedAppState(
             imageURLs: [imageURL]
         )
     )
-    try await appContext.mangaOfflineCacheStore.saveOfflineImageData(Data("offline".utf8), for: imageURL)
+    try await appContext.offlineCacheStore.saveOfflineImageData(Data("offline".utf8), for: imageURL)
 }
 
 private func tableCount(_ table: String, in db: Database) throws -> Int {

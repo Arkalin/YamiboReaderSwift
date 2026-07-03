@@ -35,7 +35,7 @@ public final class MangaReaderWorkflow {
     private let context: MangaLaunchContext
     private let projectionLoader: any MangaReaderProjectionLoading
     private let directoryWorkflow: MangaDirectoryWorkflow
-    private let offlineCacheStore: (any MangaOfflineCacheStoring)?
+    private let offlineCacheStore: (any OfflineCacheStoring)?
     private let adjacentPrefetchPolicy: MangaAdjacentChapterPrefetchPolicy
     private var window: MangaChapterWindow?
     private var settings: MangaReaderSettings
@@ -48,7 +48,7 @@ public final class MangaReaderWorkflow {
         projectionLoader: any MangaReaderProjectionLoading,
         directoryRepository: any MangaDirectoryRepository,
         directoryStore: any MangaDirectoryPersisting,
-        offlineCacheStore: (any MangaOfflineCacheStoring)? = nil,
+        offlineCacheStore: (any OfflineCacheStoring)? = nil,
         settings: MangaReaderSettings = MangaReaderSettings(),
         directoryWorkflowConfiguration: MangaDirectoryWorkflowConfiguration = MangaDirectoryWorkflowConfiguration(),
         directorySearchCooldownState: MangaDirectorySearchCooldownState = MangaDirectorySearchCooldownState(),

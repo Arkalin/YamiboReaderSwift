@@ -5,15 +5,15 @@ import Testing
 
 @Suite("MangaReaderTests: Manga Offline Cache Persistence")
 struct MangaReaderTestsMangaOfflineCachePersistence {
-    @Test func appContextDefaultsUseMangaOfflineCacheStore() {
+    @Test func appContextDefaultsUseOfflineCacheStore() {
         let appContext = YamiboAppContext()
 
-        #expect(appContext.mangaOfflineCacheStore is MangaOfflineCacheStore)
+        #expect(appContext.offlineCacheStore is OfflineCacheStore)
     }
 
     @Test func membershipWorkAndProgressSurviveRestartWithoutChapterURLColumns() async throws {
         let fixture = try makeOfflineCacheFixture()
-        let firstStore = MangaOfflineCacheStore(
+        let firstStore = OfflineCacheStore(
             databasePool: fixture.database,
             baseDirectory: fixture.offlineDirectory
         )
@@ -33,7 +33,7 @@ struct MangaReaderTestsMangaOfflineCachePersistence {
             currentBytesPerSecond: 256
         )
 
-        let secondStore = MangaOfflineCacheStore(
+        let secondStore = OfflineCacheStore(
             databasePool: fixture.database,
             baseDirectory: fixture.offlineDirectory
         )
@@ -48,18 +48,18 @@ struct MangaReaderTestsMangaOfflineCachePersistence {
 
         let databaseState = try await fixture.database.read { db in
             (
-                membershipColumns: try offlineCacheColumnNames(table: "manga_offline_cache_memberships", in: db),
-                workColumns: try offlineCacheColumnNames(table: "manga_offline_cache_works", in: db),
+                membershipColumns: try offlineCacheColumnNames(table: "offline_cache_manga_entries", in: db),
+                workColumns: try offlineCacheColumnNames(table: "offline_cache_works", in: db),
                 persistedMetadataText: try String.fetchAll(
                     db,
                     sql: """
-                    SELECT owner_name FROM manga_offline_cache_memberships
-                    UNION ALL SELECT tid FROM manga_offline_cache_memberships
-                    UNION ALL SELECT chapter_title FROM manga_offline_cache_memberships
-                    UNION ALL SELECT owner_name FROM manga_offline_cache_works
-                    UNION ALL SELECT tid FROM manga_offline_cache_works
-                    UNION ALL SELECT chapter_title FROM manga_offline_cache_works
-                    UNION ALL SELECT state FROM manga_offline_cache_works
+                    SELECT owner_name FROM offline_cache_manga_entries
+                    UNION ALL SELECT tid FROM offline_cache_manga_entries
+                    UNION ALL SELECT chapter_title FROM offline_cache_manga_entries
+                    UNION ALL SELECT owner_name FROM offline_cache_works
+                    UNION ALL SELECT tid FROM offline_cache_works
+                    UNION ALL SELECT chapter_title FROM offline_cache_works
+                    UNION ALL SELECT state FROM offline_cache_works
                     """
                 )
             )
@@ -72,7 +72,7 @@ struct MangaReaderTestsMangaOfflineCachePersistence {
 
     @Test func offlineImageBytesStayInFilesWhileMetadataLivesInGRDB() async throws {
         let fixture = try makeOfflineCacheFixture()
-        let store = MangaOfflineCacheStore(
+        let store = OfflineCacheStore(
             databasePool: fixture.database,
             baseDirectory: fixture.offlineDirectory
         )
@@ -86,7 +86,7 @@ struct MangaReaderTestsMangaOfflineCachePersistence {
         let imageRows: [(imageURL: String, fileName: String, byteCount: Int)] = try await fixture.database.read { db in
             try Row.fetchAll(
                 db,
-                sql: "SELECT image_url, file_name, byte_count FROM manga_offline_cache_images"
+                sql: "SELECT image_url, file_name, byte_count FROM offline_cache_image_assets"
             ).map { row in
                 (
                     imageURL: row["image_url"] as String,
@@ -105,9 +105,38 @@ struct MangaReaderTestsMangaOfflineCachePersistence {
         #expect(FileManager.default.fileExists(atPath: fileURL.path))
     }
 
+    @Test func mangaEntryPersistsAuthorScopedThreadPageSnapshot() async throws {
+        let fixture = try makeOfflineCacheFixture()
+        let firstStore = OfflineCacheStore(
+            databasePool: fixture.database,
+            baseDirectory: fixture.offlineDirectory
+        )
+        let sourcePage = try makeOfflineSourcePage(tid: "150")
+        let imageURL = try #require(URL(string: "https://img.example.com/150-1.jpg"))
+
+        try await firstStore.saveMembership(
+            MangaOfflineCacheMembership(
+                ownerName: "作品A",
+                tid: "150",
+                chapterTitle: "第150话",
+                chapterURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=150&page=1")),
+                imageURLs: [imageURL],
+                sourcePage: sourcePage
+            )
+        )
+
+        let secondStore = OfflineCacheStore(
+            databasePool: fixture.database,
+            baseDirectory: fixture.offlineDirectory
+        )
+        let loaded = try #require(await secondStore.membership(ownerName: "作品A", tid: "150"))
+
+        #expect(loaded.sourcePage == sourcePage)
+    }
+
     @Test func restartRecoveryPausesRunningQueueAndKeepsFailedWork() async throws {
         let fixture = try makeOfflineCacheFixture()
-        let writingStore = MangaOfflineCacheStore(
+        let writingStore = OfflineCacheStore(
             databasePool: fixture.database,
             baseDirectory: fixture.offlineDirectory
         )
@@ -126,7 +155,7 @@ struct MangaReaderTestsMangaOfflineCachePersistence {
         try await writingStore.markOfflineCacheWorkFailed(ownerName: "作品A", tid: "200", message: "Timeout")
         try await writingStore.setOfflineCacheQueueRunState(.running)
 
-        let recoveredStore = MangaOfflineCacheStore(
+        let recoveredStore = OfflineCacheStore(
             databasePool: fixture.database,
             baseDirectory: fixture.offlineDirectory
         )
@@ -140,7 +169,7 @@ struct MangaReaderTestsMangaOfflineCachePersistence {
 
     @Test func cancelDeleteAndUsageDeriveFromGRDBMetadataPlusFileAvailability() async throws {
         let fixture = try makeOfflineCacheFixture()
-        let store = MangaOfflineCacheStore(
+        let store = OfflineCacheStore(
             databasePool: fixture.database,
             baseDirectory: fixture.offlineDirectory
         )
@@ -170,7 +199,7 @@ struct MangaReaderTestsMangaOfflineCachePersistence {
 
     @Test func queueExecutorProcessesGRDBBackedWorkAndRemovesCompletedQueueRows() async throws {
         let fixture = try makeOfflineCacheFixture()
-        let store = MangaOfflineCacheStore(
+        let store = OfflineCacheStore(
             databasePool: fixture.database,
             baseDirectory: fixture.offlineDirectory
         )
@@ -243,6 +272,24 @@ private func makeOfflineImageURLs(tid: String, count: Int) throws -> [URL] {
     try (1...count).map { index in
         try #require(URL(string: "https://img.example.com/\(tid)-\(index).jpg"))
     }
+}
+
+private func makeOfflineSourcePage(tid: String) throws -> ForumThreadPage {
+    ForumThreadPage(
+        thread: ThreadIdentity(tid: tid),
+        title: "第\(tid)话",
+        posts: [
+            ForumThreadPost(
+                postID: "p-\(tid)",
+                author: BlogReaderUser(uid: "author-\(tid)", name: "作者"),
+                contentHTML: #"<img src="https://img.example.com/\#(tid)-1.jpg">"#,
+                contentText: "",
+                images: [
+                    ForumThreadPostImage(url: "https://img.example.com/\(tid)-1.jpg")
+                ]
+            )
+        ]
+    )
 }
 
 private func offlineCacheColumnNames(table: String, in db: Database) throws -> [String] {

@@ -28,13 +28,13 @@ func makeTestMangaReaderProjectionStore(
     )
 }
 
-func makeTestMangaOfflineCacheStore(
+func makeTestOfflineCacheStore(
     rootDirectory: URL? = nil,
     baseDirectory: URL? = nil,
     prefix: String = "grdb-manga-offline-cache"
-) throws -> MangaOfflineCacheStore {
+) throws -> OfflineCacheStore {
     let rootDirectory = rootDirectory ?? makeTestMangaStoreRoot(prefix: prefix)
-    return MangaOfflineCacheStore(
+    return OfflineCacheStore(
         databasePool: try YamiboDatabase.openSharedPool(rootDirectory: rootDirectory.appendingPathComponent("grdb", isDirectory: true)),
         baseDirectory: baseDirectory ?? rootDirectory.appendingPathComponent("offline-images", isDirectory: true)
     )

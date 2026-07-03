@@ -156,7 +156,7 @@ private enum YamiboAccountTestError: Error {
         defaults: try #require(UserDefaults(suiteName: suiteName)),
         key: "local-favorites"
     )
-    let offlineStore = try makeTestMangaOfflineCacheStore(rootDirectory: rootDirectory)
+    let offlineStore = try makeTestOfflineCacheStore(rootDirectory: rootDirectory)
     let service = YamiboAccountService(
         session: makeAccountTestSession(),
         sessionStore: sessionStore,

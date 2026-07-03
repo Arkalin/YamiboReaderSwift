@@ -58,7 +58,7 @@ public actor MangaOfflineCacheImageAcquirer: MangaOfflineCacheImageAcquiring {
 }
 
 public actor MangaOfflineCacheQueueExecutor {
-    private let store: any MangaOfflineCacheStoring
+    private let store: any OfflineCacheStoring
     private let readerProjectionLoader: any MangaReaderProjectionLoading
     private let imageAcquirer: any MangaOfflineCacheImageAcquiring
     private let runObserver: (any MangaOfflineCacheQueueRunObserving)?
@@ -67,7 +67,7 @@ public actor MangaOfflineCacheQueueExecutor {
     private var runGeneration = 0
 
     public init(
-        store: any MangaOfflineCacheStoring,
+        store: any OfflineCacheStoring,
         readerProjectionLoader: any MangaReaderProjectionLoading,
         imageAcquirer: any MangaOfflineCacheImageAcquiring,
         runObserver: (any MangaOfflineCacheQueueRunObserving)? = nil,
@@ -186,7 +186,8 @@ public actor MangaOfflineCacheQueueExecutor {
             throw CancellationError()
         }
 
-        let projectionBackedWork = try await workWithReaderProjection(work)
+        let projectionBacked = try await workWithReaderProjection(work)
+        let projectionBackedWork = projectionBacked.work
         let targetImageURLs = projectionBackedWork.targetImageURLs
         guard !targetImageURLs.isEmpty else {
             throw YamiboError.parsingFailed(context: "Manga Offline Cache")
@@ -219,21 +220,35 @@ public actor MangaOfflineCacheQueueExecutor {
                 tid: projectionBackedWork.tid,
                 chapterTitle: projectionBackedWork.chapterTitle,
                 chapterURL: projectionBackedWork.chapterURL,
-                imageURLs: targetImageURLs
+                imageURLs: targetImageURLs,
+                sourcePage: projectionBacked.sourcePage
             )
         )
     }
 
-    private func workWithReaderProjection(_ work: MangaOfflineCacheWork) async throws -> MangaOfflineCacheWork {
+    private func workWithReaderProjection(_ work: MangaOfflineCacheWork) async throws -> MangaOfflineCacheProjectionBackedWork {
         guard work.targetImageURLs.isEmpty else {
-            return work
+            return MangaOfflineCacheProjectionBackedWork(work: work, sourcePage: nil)
         }
 
         let recoveryURL = Self.rebuiltChapterURL(tid: work.tid)
-        let projection = try await readerProjectionLoader.loadReaderProjection(at: recoveryURL)
-        return work.preparingForRun(
-            targetImageURLs: projection.imageURLs,
-            completedImageURLs: []
+        let snapshot: MangaReaderProjectionSnapshot?
+        let projection: MangaReaderProjection
+        if let snapshotLoader = readerProjectionLoader as? any MangaReaderProjectionSnapshotLoading {
+            let loadedSnapshot = try await snapshotLoader.loadReaderProjectionSnapshot(at: recoveryURL)
+            snapshot = loadedSnapshot
+            projection = loadedSnapshot.projection
+        } else {
+            snapshot = nil
+            projection = try await readerProjectionLoader.loadReaderProjection(at: recoveryURL)
+        }
+
+        return MangaOfflineCacheProjectionBackedWork(
+            work: work.preparingForRun(
+                targetImageURLs: projection.imageURLs,
+                completedImageURLs: []
+            ),
+            sourcePage: snapshot?.sourcePage
         )
     }
 
@@ -342,4 +357,9 @@ public actor MangaOfflineCacheQueueExecutor {
 private struct MangaOfflineCacheImageTransferResult: Sendable {
     var imageURL: URL
     var bytesPerSecond: Int
+}
+
+private struct MangaOfflineCacheProjectionBackedWork: Sendable {
+    var work: MangaOfflineCacheWork
+    var sourcePage: ForumThreadPage?
 }

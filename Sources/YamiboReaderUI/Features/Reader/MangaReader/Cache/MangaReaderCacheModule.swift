@@ -61,7 +61,7 @@ public final class MangaReaderCacheViewModel: ObservableObject {
     private let context: MangaLaunchContext
     private let panel: MangaDirectoryPanelPresentation
     private let localFavoriteLibraryStore: FavoriteLibraryStore
-    private let offlineCacheStore: any MangaOfflineCacheStoring
+    private let offlineCacheStore: any OfflineCacheStoring
     private let offlineCacheQueueControllerProvider: (@Sendable () async -> any MangaOfflineCacheQueueControlling)?
     private var offlineCacheQueueController: (any MangaOfflineCacheQueueControlling)?
     private var offlineCacheUpdatesTask: Task<Void, Never>?
@@ -70,7 +70,7 @@ public final class MangaReaderCacheViewModel: ObservableObject {
         context: MangaLaunchContext,
         panel: MangaDirectoryPanelPresentation,
         localFavoriteLibraryStore: FavoriteLibraryStore,
-        offlineCacheStore: any MangaOfflineCacheStoring,
+        offlineCacheStore: any OfflineCacheStoring,
         offlineCacheQueueControllerProvider: (@Sendable () async -> any MangaOfflineCacheQueueControlling)? = nil
     ) {
         self.context = context
@@ -145,10 +145,6 @@ public final class MangaReaderCacheViewModel: ObservableObject {
 
     public func cacheSelected(tids selectedTIDs: Set<String>) async {
         errorMessage = nil
-        guard favorite != nil else {
-            prompt = .addFavorite(title: presentationTitle)
-            return
-        }
         guard let ownerName = offlineCacheOwnerName else { return }
 
         let targetTIDs = selectionState(for: selectedTIDs).uncachedSelectedTIDs
