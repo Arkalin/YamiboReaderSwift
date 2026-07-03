@@ -16,7 +16,7 @@ struct MangaReaderTestsImageDataLoader {
             return MangaReaderDataTestResponse(data: Data([1, 2, 3]))
         }
 
-        let loader = YamiboMangaImageDataLoader(client: imageClient(session: harness.session))
+        let loader = YamiboMangaImageDataLoader(imageDataLoader: imageDataLoader(harness: harness))
         let data = try await loader.imageData(
             for: URL(string: "https://img.example.com/a.jpg")!,
             refererURL: URL(string: "https://bbs.yamibo.com/forum.php?tid=700")!
@@ -34,7 +34,7 @@ struct MangaReaderTestsImageDataLoader {
             return MangaReaderDataTestResponse(data: Data([4]))
         }
 
-        let loader = YamiboMangaImageDataLoader(client: imageClient(session: harness.session))
+        let loader = YamiboMangaImageDataLoader(imageDataLoader: imageDataLoader(harness: harness))
         _ = try await loader.imageData(for: URL(string: "https://img.example.com/a.jpg")!, refererURL: nil)
     }
 
@@ -49,7 +49,7 @@ struct MangaReaderTestsImageDataLoader {
             return MangaReaderDataTestResponse(data: Data([9]))
         }
 
-        let loader = YamiboMangaImageDataLoader(client: imageClient(session: harness.session))
+        let loader = YamiboMangaImageDataLoader(imageDataLoader: imageDataLoader(harness: harness))
         let imageURL = URL(string: "https://img.example.com/shared.jpg")!
         let refererURL = URL(string: "https://bbs.yamibo.com/forum.php?tid=1")!
         async let first = loader.imageData(for: imageURL, refererURL: refererURL)
@@ -77,7 +77,7 @@ struct MangaReaderTestsImageDataLoader {
         harness.setHandler { _ in
             throw URLError(.cannotFindHost)
         }
-        let loader = YamiboMangaImageDataLoader(client: imageClient(session: harness.session))
+        let loader = YamiboMangaImageDataLoader(imageDataLoader: imageDataLoader(harness: harness))
 
         await #expect(throws: YamiboError.self) {
             _ = try await loader.imageData(for: URL(string: "https://img.example.com/a.jpg")!, refererURL: nil)
@@ -91,7 +91,7 @@ struct MangaReaderTestsImageDataLoader {
         harness.setHandler { _ in
             MangaReaderDataTestResponse(statusCode: statusCode, data: data)
         }
-        let loader = YamiboMangaImageDataLoader(client: imageClient(session: harness.session))
+        let loader = YamiboMangaImageDataLoader(imageDataLoader: imageDataLoader(harness: harness))
 
         await #expect(throws: expected) {
             _ = try await loader.imageData(for: URL(string: "https://img.example.com/a.jpg")!, refererURL: nil)
@@ -105,16 +105,15 @@ struct MangaReaderTestsImageDataLoader {
         harness.setHandler { _ in
             throw URLError(code)
         }
-        let loader = YamiboMangaImageDataLoader(client: imageClient(session: harness.session))
+        let loader = YamiboMangaImageDataLoader(imageDataLoader: imageDataLoader(harness: harness))
 
         await #expect(throws: expected) {
             _ = try await loader.imageData(for: URL(string: "https://img.example.com/a.jpg")!, refererURL: nil)
         }
     }
 
-    private func imageClient(session: URLSession) -> YamiboClient {
-        YamiboClient(
-            session: session,
+    private func imageDataLoader(harness: MangaReaderDataTestHarness) -> YamiboImageDataLoader {
+        harness.imageDataLoader(
             cookie: "auth=1",
             userAgent: "ImageAgent/1"
         )

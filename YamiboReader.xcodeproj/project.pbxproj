@@ -14,18 +14,9 @@
 		8DB9A4DDB439844932621256 /* YamiboReaderApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 317B67A274BF37250EE14CD6 /* YamiboReaderApp.swift */; };
 		91A000000000000000000016 /* YamiboReaderUI in Frameworks */ = {isa = PBXBuildFile; productRef = A22732C54EFA3206F0D5DA4F /* YamiboReaderUI */; };
 		91A000000000000000000017 /* YamiboReaderCore in Frameworks */ = {isa = PBXBuildFile; productRef = 91A000000000000000000018 /* YamiboReaderCore */; };
+		91A000000000000000000029 /* YamiboReaderCore in Frameworks */ = {isa = PBXBuildFile; productRef = 91A000000000000000000018 /* YamiboReaderCore */; };
 		E40F0270FCC083EAA9080652 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = FDA66CE60A7503624B088913 /* Foundation.framework */; };
 /* End PBXBuildFile section */
-
-/* Begin PBXContainerItemProxy section */
-		91A000000000000000000019 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = A065A6EF6517521E911C6A32 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = 244F46FBACBE47D1E8CB35A0;
-			remoteInfo = YamiboReader;
-		};
-/* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
 		0E1A4C1E3E0A4F3A8DBD0011 /* zh-Hans */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "zh-Hans"; path = "YamiboReader/zh-Hans.lproj/Localizable.strings"; sourceTree = "<group>"; };
@@ -34,11 +25,13 @@
 		317B67A274BF37250EE14CD6 /* YamiboReaderApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = YamiboReaderApp.swift; path = YamiboReader/YamiboReaderApp.swift; sourceTree = "<group>"; };
 		8E2ADB21157A5B9E80EB6214 /* YamiboReader.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = YamiboReader.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		91A000000000000000000011 /* YamiboReaderUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = YamiboReaderUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		91A000000000000000000024 /* YamiboReaderCoreTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = YamiboReaderCoreTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		FDA66CE60A7503624B088913 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		91A000000000000000000015 /* Tests/YamiboReaderUITests */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = Tests/YamiboReaderUITests; sourceTree = "<group>"; };
+		91A000000000000000000025 /* Tests/YamiboReaderCoreTests */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = Tests/YamiboReaderCoreTests; sourceTree = "<group>"; };
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -48,6 +41,14 @@
 			files = (
 				91A000000000000000000017 /* YamiboReaderCore in Frameworks */,
 				91A000000000000000000016 /* YamiboReaderUI in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		91A000000000000000000027 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				91A000000000000000000029 /* YamiboReaderCore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -69,6 +70,7 @@
 				31D9190CDAB8C43CCF55087D /* Products */,
 				F060C3354D06F3D3A1C25841 /* Frameworks */,
 				443671A87482B50E67142F19 /* YamiboReader */,
+				91A000000000000000000025 /* Tests/YamiboReaderCoreTests */,
 				91A000000000000000000015 /* Tests/YamiboReaderUITests */,
 			);
 			sourceTree = "<group>";
@@ -77,6 +79,7 @@
 			isa = PBXGroup;
 			children = (
 				8E2ADB21157A5B9E80EB6214 /* YamiboReader.app */,
+				91A000000000000000000024 /* YamiboReaderCoreTests.xctest */,
 				91A000000000000000000011 /* YamiboReaderUITests.xctest */,
 			);
 			name = Products;
@@ -144,7 +147,6 @@
 			buildRules = (
 			);
 			dependencies = (
-				91A000000000000000000020 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				91A000000000000000000015 /* Tests/YamiboReaderUITests */,
@@ -156,6 +158,29 @@
 			);
 			productName = YamiboReaderUITests;
 			productReference = 91A000000000000000000011 /* YamiboReaderUITests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		91A00000000000000000002A /* YamiboReaderCoreTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 91A00000000000000000002D /* Build configuration list for PBXNativeTarget "YamiboReaderCoreTests" */;
+			buildPhases = (
+				91A000000000000000000026 /* Sources */,
+				91A000000000000000000027 /* Frameworks */,
+				91A000000000000000000028 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				91A000000000000000000025 /* Tests/YamiboReaderCoreTests */,
+			);
+			name = YamiboReaderCoreTests;
+			packageProductDependencies = (
+				91A000000000000000000018 /* YamiboReaderCore */,
+			);
+			productName = YamiboReaderCoreTests;
+			productReference = 91A000000000000000000024 /* YamiboReaderCoreTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
 /* End PBXNativeTarget section */
@@ -173,7 +198,9 @@
 					};
 					91A000000000000000000010 = {
 						CreatedOnToolsVersion = 27.0;
-						TestTargetID = 244F46FBACBE47D1E8CB35A0;
+					};
+					91A00000000000000000002A = {
+						CreatedOnToolsVersion = 27.0;
 					};
 				};
 			};
@@ -194,6 +221,7 @@
 			projectRoot = "";
 			targets = (
 				244F46FBACBE47D1E8CB35A0 /* YamiboReader */,
+				91A00000000000000000002A /* YamiboReaderCoreTests */,
 				91A000000000000000000010 /* YamiboReaderUITests */,
 			);
 		};
@@ -217,10 +245,24 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		91A000000000000000000028 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		91A000000000000000000012 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		91A000000000000000000026 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -241,11 +283,6 @@
 		3B538157EFE3A6DB183DB07F /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			productRef = A22732C54EFA3206F0D5DA4F /* YamiboReaderUI */;
-		};
-		91A000000000000000000020 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = 244F46FBACBE47D1E8CB35A0 /* YamiboReader */;
-			targetProxy = 91A000000000000000000019 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -302,7 +339,6 @@
 		91A000000000000000000021 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 67485D7YXU;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -321,8 +357,6 @@
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/YamiboReader.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/YamiboReader";
-				TEST_TARGET_NAME = YamiboReader;
 				WRAPPER_EXTENSION = xctest;
 			};
 			name = Debug;
@@ -330,7 +364,6 @@
 		91A000000000000000000022 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 67485D7YXU;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -349,8 +382,56 @@
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/YamiboReader.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/YamiboReader";
-				TEST_TARGET_NAME = YamiboReader;
+				WRAPPER_EXTENSION = xctest;
+			};
+			name = Release;
+		};
+		91A00000000000000000002B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 67485D7YXU;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.arkalin.YamiboReaderCoreTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = auto;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				WRAPPER_EXTENSION = xctest;
+			};
+			name = Debug;
+		};
+		91A00000000000000000002C /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 67485D7YXU;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.arkalin.YamiboReaderCoreTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = auto;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
 				WRAPPER_EXTENSION = xctest;
 			};
 			name = Release;
@@ -528,6 +609,15 @@
 			buildConfigurations = (
 				91A000000000000000000021 /* Debug */,
 				91A000000000000000000022 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		91A00000000000000000002D /* Build configuration list for PBXNativeTarget "YamiboReaderCoreTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				91A00000000000000000002B /* Debug */,
+				91A00000000000000000002C /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

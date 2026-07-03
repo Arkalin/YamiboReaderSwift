@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Enforce the expected runner for each YamiboReader test target.
+"""Block SwiftPM test runs for YamiboReader.
 
-Core tests are SwiftPM-compatible and should be run with `swift test`.
-UI tests require Xcode/iOS Simulator coverage and should be run with
-`xcodebuild test`.
+All project tests should run through the shared Xcode test plan with
+`xcodebuild test`. This avoids the macOS SwiftPM path and keeps Core and UI
+tests on the same iOS Simulator configuration.
 """
 
 from __future__ import annotations
@@ -11,9 +11,7 @@ from __future__ import annotations
 import json
 import shlex
 import sys
-
-CORE_TEST_TARGET = "YamiboReaderCoreTests"
-UI_TEST_TARGET = "YamiboReaderUITests"
+from pathlib import PurePath
 
 CONTROL_TOKENS = {"&&", "||", ";", "|"}
 
@@ -54,100 +52,67 @@ def _command_segments(command: str) -> list[list[str]]:
     return segments
 
 
+def _looks_like_environment_assignment(token: str) -> bool:
+    if "=" not in token:
+        return False
+    name, _, _ = token.partition("=")
+    return bool(name) and all(character.isalnum() or character == "_" for character in name)
+
+
+def _command_tokens(tokens: list[str]) -> list[str]:
+    index = 0
+    while index < len(tokens) and _looks_like_environment_assignment(tokens[index]):
+        index += 1
+    if index < len(tokens) and tokens[index] == "env":
+        index += 1
+        while index < len(tokens) and _looks_like_environment_assignment(tokens[index]):
+            index += 1
+    return tokens[index:]
+
+
+def _command_name(token: str) -> str:
+    return PurePath(token).name
+
+
 def _swift_token_index(tokens: list[str]) -> int | None:
-    if not tokens:
+    command_tokens = _command_tokens(tokens)
+    if not command_tokens:
         return None
-    if tokens[0] == "swift":
+    if _command_name(command_tokens[0]) == "swift":
         return 0
-    if tokens[0] == "xcrun":
-        try:
-            return tokens.index("swift", 1)
-        except ValueError:
-            return None
-    return None
-
-
-def _xcodebuild_token_index(tokens: list[str]) -> int | None:
-    if not tokens:
-        return None
-    if tokens[0] == "xcodebuild":
-        return 0
-    if tokens[0] == "xcrun":
-        try:
-            return tokens.index("xcodebuild", 1)
-        except ValueError:
-            return None
+    if _command_name(command_tokens[0]) == "xcrun":
+        for index, token in enumerate(command_tokens[1:], start=1):
+            if _command_name(token) == "swift":
+                return index
     return None
 
 
 def _is_swiftpm_test(tokens: list[str]) -> bool:
-    swift_index = _swift_token_index(tokens)
-    if swift_index is None or len(tokens) <= swift_index + 1:
+    command_tokens = _command_tokens(tokens)
+    swift_index = _swift_token_index(command_tokens)
+    if swift_index is None or len(command_tokens) <= swift_index + 1:
         return False
 
-    if tokens[swift_index + 1] == "test":
+    if command_tokens[swift_index + 1] == "test":
         return True
     return (
-        tokens[swift_index + 1] == "package"
-        and len(tokens) > swift_index + 2
-        and tokens[swift_index + 2] == "test"
+        command_tokens[swift_index + 1] == "package"
+        and len(command_tokens) > swift_index + 2
+        and command_tokens[swift_index + 2] == "test"
     )
-
-
-def _is_xcodebuild_test(tokens: list[str]) -> bool:
-    xcodebuild_index = _xcodebuild_token_index(tokens)
-    if xcodebuild_index is None:
-        return False
-    return "test" in tokens[xcodebuild_index + 1 :]
-
-
-def _references_target(tokens: list[str], target: str) -> bool:
-    path = f"Tests/{target}"
-    return any(target in token or path in token for token in tokens)
 
 
 def _deny_reason(tokens: list[str]) -> str | None:
     is_swiftpm_test = _is_swiftpm_test(tokens)
-    is_xcodebuild_test = _is_xcodebuild_test(tokens)
-    if not is_swiftpm_test and not is_xcodebuild_test:
+    if not is_swiftpm_test:
         return None
 
-    references_core = _references_target(tokens, CORE_TEST_TARGET)
-    references_ui = _references_target(tokens, UI_TEST_TARGET)
-    if references_core and references_ui:
-        return (
-            "Do not mix YamiboReaderCoreTests and YamiboReaderUITests in one "
-            "test command. Run Core tests with `swift test --filter "
-            "YamiboReaderCoreTests`, and UI tests with `xcodebuild test "
-            "-only-testing:YamiboReaderUITests`."
-        )
-
-    if is_swiftpm_test:
-        if references_core:
-            return None
-        if references_ui:
-            return (
-                "Blocked `swift test` for YamiboReaderUITests. Tests under "
-                "`Tests/YamiboReaderUITests` must be run with `xcodebuild "
-                "test` against an iOS Simulator."
-            )
-        return (
-            "Blocked unscoped `swift test`. SwiftPM tests are allowed only "
-            "when explicitly scoped to `YamiboReaderCoreTests`, for example "
-            "`swift test --filter YamiboReaderCoreTests`."
-        )
-
-    if references_ui:
-        return None
-    if references_core:
-        return (
-            "Blocked `xcodebuild test` for YamiboReaderCoreTests. Tests under "
-            "`Tests/YamiboReaderCoreTests` must be run with `swift test`."
-        )
     return (
-        "Blocked unscoped `xcodebuild test`. Xcode tests are allowed only "
-        "when explicitly scoped to `YamiboReaderUITests`, for example "
-        "`xcodebuild test -only-testing:YamiboReaderUITests`."
+        "Blocked `swift test`. YamiboReader tests must run through the Xcode "
+        "test plan, for example `xcodebuild test -project YamiboReader.xcodeproj "
+        "-scheme YamiboReader -testPlan YamiboReaderTests -destination "
+        "'platform=iOS Simulator,name=iPhone 16' -collect-test-diagnostics never "
+        "CODE_SIGNING_ALLOWED=NO`."
     )
 
 

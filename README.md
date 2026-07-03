@@ -84,10 +84,16 @@
 
 - [`Kanna`](https://github.com/tid-kijyun/Kanna)
 
-在仓库根目录执行测试：
+在仓库根目录执行测试。将示例中的模拟器名称替换为本机可用的 iOS Simulator：
 
 ```bash
-swift test
+xcodebuild test \
+  -project YamiboReader.xcodeproj \
+  -scheme YamiboReader \
+  -testPlan YamiboReaderTests \
+  -destination 'platform=iOS Simulator,name=iPhone 16' \
+  -collect-test-diagnostics never \
+  CODE_SIGNING_ALLOWED=NO
 ```
 
 ### iOS App

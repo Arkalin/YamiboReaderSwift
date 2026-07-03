@@ -59,16 +59,13 @@ jobs:
           -scheme YamiboReader \
           -destination "${IOS_SIMULATOR_DESTINATION}" \
           CODE_SIGNING_ALLOWED=NO
-    - name: Run core tests
-      run: swift test --filter YamiboReaderCoreTests
-    - name: Run UI tests
+    - name: Run tests
       run: |
         xcodebuild test \
           -quiet \
           -project YamiboReader.xcodeproj \
           -scheme YamiboReader \
-          -testPlan YamiboReaderUITests \
+          -testPlan YamiboReaderTests \
           -destination "${IOS_SIMULATOR_DESTINATION}" \
-          -only-testing:YamiboReaderUITests \
           -collect-test-diagnostics never \
           CODE_SIGNING_ALLOWED=NO

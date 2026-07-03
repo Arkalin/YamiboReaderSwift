@@ -8,7 +8,7 @@
       buildArchitectures = "Automatic">
       <BuildActionEntries>
          <BuildActionEntry
-            buildForTesting = "YES"
+            buildForTesting = "NO"
             buildForRunning = "YES"
             buildForProfiling = "YES"
             buildForArchiving = "YES"
@@ -18,6 +18,20 @@
                BlueprintIdentifier = "244F46FBACBE47D1E8CB35A0"
                BuildableName = "YamiboReader.app"
                BlueprintName = "YamiboReader"
+               ReferencedContainer = "container:YamiboReader.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
+         <BuildActionEntry
+            buildForTesting = "YES"
+            buildForRunning = "NO"
+            buildForProfiling = "NO"
+            buildForArchiving = "NO"
+            buildForAnalyzing = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "91A00000000000000000002A"
+               BuildableName = "YamiboReaderCoreTests.xctest"
+               BlueprintName = "YamiboReaderCoreTests"
                ReferencedContainer = "container:YamiboReader.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
@@ -42,10 +56,10 @@
       selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
       selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
       shouldUseLaunchSchemeArgsEnv = "YES"
-      shouldAutocreateTestPlan = "YES">
+      shouldAutocreateTestPlan = "NO">
       <TestPlans>
          <TestPlanReference
-            reference = "container:YamiboReaderUITests.xctestplan"
+            reference = "container:YamiboReaderTests.xctestplan"
             default = "YES">
          </TestPlanReference>
       </TestPlans>

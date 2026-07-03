@@ -1,4 +1,5 @@
 import Foundation
+@testable import YamiboReaderCore
 
 struct MangaReaderDataTestResponse: Sendable {
     var statusCode: Int
@@ -94,11 +95,25 @@ final class MangaReaderDataTestURLProtocol: URLProtocol, @unchecked Sendable {
     override func stopLoading() {}
 }
 
-final class MangaReaderDataTestHarness {
+final class MangaReaderDataTestHarness: @unchecked Sendable {
     let testID = UUID().uuidString
     let session: URLSession
+    private let dataCacheDirectory: URL
+    private let imagePipeline: YamiboImageDataPipeline
 
     init() {
+        dataCacheDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("YamiboReaderCoreTests-\(testID)", isDirectory: true)
+        try? FileManager.default.removeItem(at: dataCacheDirectory)
+        try? FileManager.default.createDirectory(
+            at: dataCacheDirectory,
+            withIntermediateDirectories: true
+        )
+        imagePipeline = try! YamiboImageDataPipeline(
+            dataCacheDirectory: dataCacheDirectory,
+            dataCacheLimitBytes: 16 * 1024 * 1024
+        )
+
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [MangaReaderDataTestURLProtocol.self]
         configuration.httpAdditionalHeaders = ["X-Manga-Test-ID": testID]
@@ -113,7 +128,20 @@ final class MangaReaderDataTestHarness {
         MangaReaderDataTestURLProtocol.requests(for: testID)
     }
 
+    func imageDataLoader(cookie: String, userAgent: String) -> YamiboImageDataLoader {
+        YamiboImageDataLoader(
+            client: YamiboClient(
+                session: session,
+                cookie: cookie,
+                userAgent: userAgent
+            ),
+            pipeline: imagePipeline
+        )
+    }
+
     func reset() {
+        imagePipeline.removeAllCachedData()
         MangaReaderDataTestURLProtocol.reset(testID: testID)
+        try? FileManager.default.removeItem(at: dataCacheDirectory)
     }
 }
