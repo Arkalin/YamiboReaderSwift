@@ -9,6 +9,8 @@ struct ReaderCachePanel: View {
     let onShowProgress: () -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var selectedViews: Set<Int> = []
+    @State private var isQueuePresented = false
+    @State private var queueViewModel: MineHomeViewModel?
 
     var body: some View {
         NavigationStack {
@@ -48,12 +50,7 @@ struct ReaderCachePanel: View {
                                     Text(L10n.string("reader.page_number_spaced", view))
                                         .foregroundStyle(.primary)
                                     Spacer()
-                                    if model.cachedViews.contains(view) {
-                                        Label(L10n.string("reader.cached"), systemImage: "checkmark.seal.fill")
-                                            .labelStyle(.titleAndIcon)
-                                            .font(.caption)
-                                            .foregroundStyle(.green)
-                                    }
+                                    cacheStateLabel(for: view)
                                 }
                             }
                             .buttonStyle(.plain)
@@ -73,6 +70,15 @@ struct ReaderCachePanel: View {
                 actionBar
             }
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        queueViewModel = model.makeOfflineCacheQueueViewModel()
+                        isQueuePresented = true
+                    } label: {
+                        Label(queueTitle, systemImage: "arrow.down.circle")
+                    }
+                }
+
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(L10n.string("common.close")) {
                         dismiss()
@@ -81,6 +87,11 @@ struct ReaderCachePanel: View {
             }
             .task {
                 await model.refreshCachedState()
+            }
+            .sheet(isPresented: $isQueuePresented) {
+                if let queueViewModel {
+                    MineOfflineCacheQueueSheet(viewModel: queueViewModel)
+                }
             }
         }
     }
@@ -95,16 +106,12 @@ struct ReaderCachePanel: View {
             HStack(spacing: 12) {
                 Button(L10n.string("reader.cache_action.cache")) {
                     model.startCaching(views: selectionState.uncachedSelectedViews)
-                    onShowProgress()
-                    dismiss()
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(!selectionState.canCache)
 
                 Button(L10n.string("reader.cache_action.update")) {
-                    model.updateCachedViews(selectionState.cachedSelectedViews)
-                    onShowProgress()
-                    dismiss()
+                    model.updateCachedViews(selectionState.updatableSelectedViews)
                 }
                 .buttonStyle(.bordered)
                 .disabled(!selectionState.canUpdate)
@@ -112,7 +119,7 @@ struct ReaderCachePanel: View {
                 Button(L10n.string("common.delete"), role: .destructive) {
                     Task {
                         await model.deleteCachedViews(selectionState.cachedSelectedViews)
-                        dismiss()
+                        selectedViews.subtract(selectionState.cachedSelectedViews)
                     }
                 }
                 .buttonStyle(.bordered)
@@ -123,6 +130,39 @@ struct ReaderCachePanel: View {
             .padding(.bottom, 12)
         }
         .background(.ultraThinMaterial)
+    }
+
+    @ViewBuilder
+    private func cacheStateLabel(for view: Int) -> some View {
+        VStack(alignment: .trailing, spacing: 3) {
+            switch model.cacheStatus(for: view) {
+            case .caching:
+                Label(L10n.string("reader.caching"), systemImage: "arrow.down.circle.fill")
+                    .labelStyle(.titleAndIcon)
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            case .cached:
+                Label(L10n.string("reader.cached"), systemImage: "checkmark.seal.fill")
+                    .labelStyle(.titleAndIcon)
+                    .font(.caption)
+                    .foregroundStyle(.green)
+            case .uncached:
+                EmptyView()
+            }
+
+            if let updateTime = model.cacheUpdateTime(for: view) {
+                Text(L10n.string("reader.cache_updated_at", updateTime.formatted(date: .abbreviated, time: .shortened)))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var queueTitle: String {
+        if model.offlineCacheQueueEntryCount > 0 {
+            return L10n.string("mine.download_queue_count", model.offlineCacheQueueEntryCount)
+        }
+        return L10n.string("mine.download_queue")
     }
 
     private func toggleSelection(for view: Int) {

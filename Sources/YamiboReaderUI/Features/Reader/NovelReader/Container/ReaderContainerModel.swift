@@ -23,6 +23,9 @@ public final class ReaderContainerModel: ObservableObject {
     @Published public private(set) var isApplyingAppearanceSettings = false
     @Published public private(set) var errorMessage: String?
     @Published public private(set) var cachedViews: Set<Int> = []
+    @Published public private(set) var cachingViews: Set<Int> = []
+    @Published public private(set) var cachedViewUpdateTimes: [Int: Date] = [:]
+    @Published public private(set) var offlineCacheQueueEntryCount = 0
     @Published private var bootstrapSettings = ReaderAppearanceSettings()
     @Published public var applePencilPageTurnSettings = ApplePencilPageTurnSettings()
     @Published public private(set) var sessionState = SessionState()
@@ -108,9 +111,14 @@ public final class ReaderContainerModel: ObservableObject {
                 readingProgressStore: appContext.readingProgressStore
             )
         )
-        cacheOperationModule.onChange = { [weak self] cachedViews, state in
-            self?.cachedViews = cachedViews
+        cacheOperationModule.onChange = { [weak self] snapshot, state in
+            self?.cachedViews = snapshot.cachedViews
+            self?.cachingViews = snapshot.cachingViews
+            self?.cachedViewUpdateTimes = snapshot.updateTimesByView
             self?.cacheOperationState = state
+            Task { [weak self] in
+                await self?.refreshOfflineCacheQueueCount()
+            }
         }
     }
 
@@ -133,9 +141,14 @@ public final class ReaderContainerModel: ObservableObject {
                 readingProgressStore: appContext.readingProgressStore
             )
         )
-        cacheOperationModule.onChange = { [weak self] cachedViews, state in
-            self?.cachedViews = cachedViews
+        cacheOperationModule.onChange = { [weak self] snapshot, state in
+            self?.cachedViews = snapshot.cachedViews
+            self?.cachingViews = snapshot.cachingViews
+            self?.cachedViewUpdateTimes = snapshot.updateTimesByView
             self?.cacheOperationState = state
+            Task { [weak self] in
+                await self?.refreshOfflineCacheQueueCount()
+            }
         }
     }
 
@@ -911,17 +924,28 @@ public final class ReaderContainerModel: ObservableObject {
     }
 
     public func refreshCachedState() async {
-        let context = cacheContext(forView: displayedView)
-        let views = await repository?.cachedViews(
-            for: self.context.threadURL,
-            authorID: context.authorID,
-            contentSource: context.contentSource
-        ) ?? []
-        syncCachedViews(views)
+        guard let cacheOperationRepository else {
+            syncCacheState(NovelOfflineCacheViewsSnapshot())
+            return
+        }
+        syncCacheState(await cacheOperationRepository.cacheState(for: cacheOperationSnapshot.context))
+        await refreshOfflineCacheQueueCount()
     }
 
     public func cacheSelectionState(for selectedViews: Set<Int>) -> ReaderCacheSelectionState {
         cacheOperationModule.selectionState(for: selectedViews, snapshot: cacheOperationSnapshot)
+    }
+
+    public func cacheStatus(for view: Int) -> NovelOfflineCacheViewStatus {
+        NovelOfflineCacheViewsSnapshot(
+            cachedViews: cachedViews,
+            cachingViews: cachingViews,
+            updateTimesByView: cachedViewUpdateTimes
+        ).state(for: view).status
+    }
+
+    public func cacheUpdateTime(for view: Int) -> Date? {
+        cachedViewUpdateTimes[max(1, view)]
     }
 
     public func startCaching(views: Set<Int>) {
@@ -990,12 +1014,9 @@ public final class ReaderContainerModel: ObservableObject {
 
     public func deleteCurrentCache() async {
         do {
-            let context = cacheContext(forView: displayedView)
-            try await repository?.deleteCachedViews(
+            try await cacheOperationRepository?.deleteCachedViews(
                 [displayedView],
-                for: self.context.threadURL,
-                authorID: context.authorID,
-                contentSource: context.contentSource
+                for: cacheOperationSnapshot.context
             )
             await refreshCachedState()
         } catch {
@@ -1004,18 +1025,26 @@ public final class ReaderContainerModel: ObservableObject {
     }
 
     public func refreshCurrentCache() async {
-        do {
-            let context = cacheContext(forView: displayedView)
-            try await repository?.refreshCachedViews(
-                [displayedView],
-                for: self.context.threadURL,
-                authorID: context.authorID,
-                contentSource: context.contentSource
-            )
+        guard let cacheOperationRepository else { return }
+        let result = await cacheOperationRepository.updateCachedViews(
+            [displayedView],
+            for: cacheOperationSnapshot.context,
+            progress: nil
+        )
+        if result.failedViews.isEmpty {
             await refreshCachedState()
-        } catch {
-            errorMessage = error.localizedDescription
+        } else {
+            errorMessage = L10n.string("common.operation_failed")
         }
+    }
+
+    func makeOfflineCacheQueueViewModel() -> MineHomeViewModel {
+        MineHomeViewModel(appContext: appContext)
+    }
+
+    public func refreshOfflineCacheQueueCount() async {
+        let store = appContext.makeOfflineCacheStore()
+        offlineCacheQueueEntryCount = await store.offlineCacheQueueWorks().count
     }
 
     @discardableResult
@@ -1047,6 +1076,7 @@ public final class ReaderContainerModel: ObservableObject {
             )
             syncFromWorkflowState(state)
             isLoading = false
+            await refreshCachedState()
 
             Task {
                 await prefetchIfNeeded(for: selectedSurfaceIndex)
@@ -1074,6 +1104,7 @@ public final class ReaderContainerModel: ObservableObject {
             )
             syncFromWorkflowState(state)
             isLoading = false
+            await refreshCachedState()
 
             Task {
                 await prefetchIfNeeded(for: selectedSurfaceIndex)
@@ -1167,7 +1198,6 @@ public final class ReaderContainerModel: ObservableObject {
         chromeProgressSnapshot = state.presentation.map(ReaderChromeProgressSnapshot.init) ?? .empty
         readerPresentation = state.presentation
         currentStableResumePoint = readingWorkflow?.captureNovelReadingPosition()
-        syncCachedViews(state.cachedViews)
     }
 
     private enum NavigationRestoreDirection {
@@ -1479,7 +1509,10 @@ public final class ReaderContainerModel: ObservableObject {
         return ReaderCacheOperationSnapshot(
             cacheableViews: Set(allCacheableViews),
             cachedViews: cachedViews,
+            cachingViews: cachingViews,
+            updateTimesByView: cachedViewUpdateTimes,
             context: ReaderCacheOperationContext(
+                ownerTitle: title,
                 threadURL: self.context.threadURL,
                 authorID: context.authorID,
                 contentSource: context.contentSource
@@ -1488,7 +1521,7 @@ public final class ReaderContainerModel: ObservableObject {
     }
 
     private var cacheOperationRepository: ReaderCacheOperationRepository? {
-        repository.map { ReaderRepositoryCacheOperationAdapter(repository: $0) }
+        OfflineStoreReaderCacheOperationAdapter(store: appContext.makeOfflineCacheStore())
     }
 
     private func cacheOperationSummary(
@@ -1568,8 +1601,8 @@ public final class ReaderContainerModel: ObservableObject {
         }
     }
 
-    private func syncCachedViews(_ views: Set<Int>) {
-        cacheOperationModule.syncCachedViews(views)
+    private func syncCacheState(_ snapshot: NovelOfflineCacheViewsSnapshot) {
+        cacheOperationModule.syncCacheState(snapshot)
     }
 
     private func beginApplyingAppearanceSettings() -> UInt64 {

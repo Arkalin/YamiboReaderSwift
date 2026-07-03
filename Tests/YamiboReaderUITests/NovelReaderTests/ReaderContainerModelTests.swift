@@ -2563,11 +2563,18 @@ final class ReaderContainerModelTests: XCTestCase {
             contentSource: .authorFilteredPage
         )
 
-        let unfilteredModel = try await makeModel(documents: [unfilteredDocument])
+        let unfilteredOfflineStore = try makeReaderModelOfflineCacheStore()
+        try await seedNovelOfflineCache(unfilteredOfflineStore, document: unfilteredDocument)
+        let unfilteredModel = try await makeModel(
+            documents: [unfilteredDocument],
+            offlineCacheStore: unfilteredOfflineStore
+        )
         await MainActor.run {
             XCTAssertEqual(unfilteredModel.cachedViews, [1])
         }
 
+        let filteredOfflineStore = try makeReaderModelOfflineCacheStore()
+        try await seedNovelOfflineCache(filteredOfflineStore, document: authorFilteredDocument)
         let filteredModel = try await makeModel(
             documents: [authorFilteredDocument],
             launchContext: ReaderLaunchContext(
@@ -2575,7 +2582,8 @@ final class ReaderContainerModelTests: XCTestCase {
                 threadTitle: "测试线程",
                 source: .forum,
                 authorID: "42"
-            )
+            ),
+            offlineCacheStore: filteredOfflineStore
         )
         await MainActor.run {
             XCTAssertEqual(filteredModel.cachedViews, [1])
@@ -2607,54 +2615,31 @@ final class ReaderContainerModelTests: XCTestCase {
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         let cacheStore = ReaderCacheStore(baseDirectory: cacheDirectory.appendingPathComponent("reader", isDirectory: true))
         let forumCacheStore = ForumCacheStore(baseDirectory: cacheDirectory.appendingPathComponent("forum", isDirectory: true))
+        let offlineStore = try makeReaderModelOfflineCacheStore(
+            rootDirectory: cacheDirectory.appendingPathComponent("offline-root", isDirectory: true)
+        )
+        try await seedNovelOfflineCache(offlineStore, document: authorFilteredDocument)
         try await cacheStore.save(unfilteredDocument)
-        try await seedReaderSourceCaches(
+
+        let model = try await makeModel(
             documents: [authorFilteredDocument],
-            readerCacheStore: cacheStore,
-            forumCacheStore: forumCacheStore
-        )
-
-        ReaderTestURLProtocol.handler = { request in
-            let absolute = request.url?.absoluteString ?? ""
-            let body = absolute.contains("authorid=42")
-                ? #"<html><body><div class="plc cl" id="pid4201"><ul class="authi"><li class="mtit"><a href="home.php?mod=space&amp;uid=42&amp;mobile=2">楼主</a></li></ul><div class="message">只看楼主新缓存</div></div></body></html>"#
-                : #"<html><body><div class="plc cl" id="pid7701"><ul class="authi"><li class="mtit"><a href="home.php?mod=space&amp;uid=77&amp;mobile=2">读者</a></li></ul><div class="message">全部回复新缓存</div></div></body></html>"#
-            return (
-                Data(body.utf8),
-                HTTPURLResponse(
-                    url: request.url!,
-                    statusCode: 200,
-                    httpVersion: nil,
-                    headerFields: ["Content-Type": "text/html; charset=utf-8"]
-                )!
-            )
-        }
-
-        let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "reader-container-author-cache")
-        let appContext = YamiboAppContext(
-            sessionStore: try SessionStore(testSuiteName: defaultsSuiteName, key: "session"),
-            settingsStore: try SettingsStore(testSuiteName: defaultsSuiteName, key: "settings"),
-            readerCacheStore: cacheStore,
+            launchContext: ReaderLaunchContext(
+                threadURL: threadURL,
+                threadTitle: "测试线程",
+                source: .forum,
+                authorID: "42"
+            ),
+            session: session,
+            cacheStore: cacheStore,
             forumCacheStore: forumCacheStore,
-            session: session
+            offlineCacheStore: offlineStore
         )
-        let model = await MainActor.run {
-            ReaderContainerModel(
-                context: ReaderLaunchContext(
-                    threadURL: threadURL,
-                    threadTitle: "测试线程",
-                    source: .forum,
-                    authorID: "42"
-                ),
-                appContext: appContext,
-                pagination: readerModelSegmentPagination
-            )
+        await model.refreshCurrentCache()
+        try await waitFor {
+            await MainActor.run { model.cachingViews == [1] }
         }
 
-        await model.prepare(layout: ReaderContainerLayout(width: 320, height: 568))
-        await model.refreshCurrentCache()
-
-        let refreshedAuthorFiltered = await cacheStore.loadDocument(
+        let preservedAuthorFiltered = await cacheStore.loadDocument(
             for: ReaderPageRequest(threadURL: threadURL, view: 1, authorID: "42"),
             contentSource: .authorFilteredPage
         )
@@ -2664,11 +2649,15 @@ final class ReaderContainerModelTests: XCTestCase {
         )
 
         XCTAssertTrue(
-            refreshedAuthorFiltered?.segments.contains(.text("只看楼主新缓存", chapterTitle: "只看楼主新缓存")) == true
+            preservedAuthorFiltered?.segments.contains(.text(String(repeating: "只看楼主旧缓存 内容。", count: 80), chapterTitle: "只看楼主旧缓存")) == true
         )
         XCTAssertTrue(
             preservedUnfiltered?.segments.contains(.text(String(repeating: "全部回复旧缓存 内容。", count: 80), chapterTitle: "全部回复旧缓存")) == true
         )
+        await MainActor.run {
+            XCTAssertEqual(model.cachedViews, [1])
+            XCTAssertEqual(model.offlineCacheQueueEntryCount, 1)
+        }
     }
 
     func testChapterCommentsReuseSessionCacheUntilExplicitRefresh() async throws {
@@ -2808,7 +2797,7 @@ final class ReaderContainerModelTests: XCTestCase {
 
         await model.loadChapterComments(for: target)
         servesComments = false
-        await model.refreshCurrentCache()
+        await model.loadCurrent(forceRefresh: true)
         await model.loadChapterComments(for: target)
 
         await MainActor.run {
@@ -2892,10 +2881,21 @@ final class ReaderContainerModelTests: XCTestCase {
     }
 
     func testCacheSelectionStateSeparatesCachedAndUncachedViews() async throws {
+        let offlineStore = try makeReaderModelOfflineCacheStore()
+        let document = makeDocument(view: 1, maxView: 3, chapterTitles: ["第一章"])
+        try await seedNovelOfflineCache(offlineStore, document: document)
+        let seededSnapshot = await offlineStore.novelOfflineCacheViewsSnapshot(
+            ownerTitle: "测试线程",
+            threadURL: document.threadURL,
+            authorID: "42",
+            contentSource: .authorFilteredPage
+        )
+        XCTAssertEqual(seededSnapshot.cachedViews, [1])
         let model = try await makeModel(
             documents: [
-                makeDocument(view: 1, maxView: 3, chapterTitles: ["第一章"]),
-            ]
+                document,
+            ],
+            offlineCacheStore: offlineStore
         )
 
         await MainActor.run {
@@ -2909,171 +2909,42 @@ final class ReaderContainerModelTests: XCTestCase {
         }
     }
 
-    func testStartCachingSupportsBackgroundProgressAndCompletion() async throws {
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.protocolClasses = [ReaderTestURLProtocol.self]
-        let session = URLSession(configuration: configuration)
+    func testStartCachingEnqueuesSelectedViewsInSharedDownloadQueue() async throws {
         let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=7001&mobile=2")!
-        ReaderTestURLProtocol.handler = { request in
-            let absolute = request.url?.absoluteString ?? ""
-            let page = absolute.contains("page=3") ? "3" : "2"
-            let body = #"<html><body><div class="plc cl" id="pid70\#(page)"><ul class="authi"><li class="mtit"><a href="home.php?mod=space&amp;uid=42&amp;mobile=2">楼主</a></li></ul><div class="message">缓存页\#(page)</div></div></body></html>"#
-            return (
-                Data(body.utf8),
-                HTTPURLResponse(
-                    url: request.url!,
-                    statusCode: 200,
-                    httpVersion: nil,
-                    headerFields: ["Content-Type": "text/html; charset=utf-8"]
-                )!
-            )
-        }
 
         let model = try await makeModel(
             documents: [
                 makeDocument(threadURL: threadURL, view: 1, maxView: 3, chapterTitles: ["当前页"]),
-            ],
-            session: session
+            ]
         )
 
         await MainActor.run {
             model.startCaching(views: [2, 3])
-            XCTAssertTrue(model.cacheOperationState.isRunning)
-            model.hideCacheProgress()
-            XCTAssertTrue(model.cacheOperationState.isProgressHidden)
         }
 
         try await waitFor {
-            await MainActor.run { model.cacheOperationState.isFinished }
+            await MainActor.run { model.cachingViews == [2, 3] }
         }
 
         await MainActor.run {
-            XCTAssertEqual(model.cachedViews, [1, 2, 3])
+            XCTAssertEqual(model.cachedViews, [])
+            XCTAssertEqual(model.offlineCacheQueueEntryCount, 2)
             XCTAssertEqual(model.cacheOperationState.status, .completed)
             XCTAssertEqual(model.cacheOperationState.completedViews, [2, 3])
         }
     }
 
-    func testStopCachingCancelsRemainingQueueButKeepsCompletedPages() async throws {
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.protocolClasses = [ReaderTestURLProtocol.self]
-        let session = URLSession(configuration: configuration)
+    func testUpdatingCachedViewShowsCachingWhileRetainingLastUpdateTime() async throws {
         let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=7002&mobile=2")!
-        ReaderTestURLProtocol.handler = { request in
-            Thread.sleep(forTimeInterval: 0.1)
-            let absolute = request.url?.absoluteString ?? ""
-            let page: String
-            if absolute.contains("page=4") {
-                page = "4"
-            } else if absolute.contains("page=3") {
-                page = "3"
-            } else {
-                page = "2"
-            }
-            let body = "<html><body><div class=\"message\">缓存页\(page)</div></body></html>"
-            return (
-                Data(body.utf8),
-                HTTPURLResponse(
-                    url: request.url!,
-                    statusCode: 200,
-                    httpVersion: nil,
-                    headerFields: ["Content-Type": "text/html; charset=utf-8"]
-                )!
-            )
-        }
-
-        let cacheDirectory = FileManager.default.temporaryDirectory
-            .appendingPathComponent(UUID().uuidString, isDirectory: true)
-        let cacheStore = ReaderCacheStore(baseDirectory: cacheDirectory.appendingPathComponent("reader", isDirectory: true))
-        let forumCacheStore = ForumCacheStore(baseDirectory: cacheDirectory.appendingPathComponent("forum", isDirectory: true))
+        let offlineStore = try makeReaderModelOfflineCacheStore()
+        let updatedAt = Date(timeIntervalSince1970: 44_000)
+        let document = makeDocument(threadURL: threadURL, view: 1, maxView: 4, chapterTitles: ["当前页"])
+        try await seedNovelOfflineCache(offlineStore, document: document, updatedAt: updatedAt)
         let model = try await makeModel(
             documents: [
-                makeDocument(threadURL: threadURL, view: 1, maxView: 4, chapterTitles: ["当前页"]),
+                document,
             ],
-            session: session,
-            cacheStore: cacheStore,
-            forumCacheStore: forumCacheStore
-        )
-        let thread = try makeThreadIdentity(from: threadURL)
-        let seededProjectionViews = await cacheStore.cachedViews(
-            for: threadURL,
-            authorID: "42",
-            contentSource: .authorFilteredPage
-        )
-        let seededSourceViews = await forumCacheStore.cachedThreadPageViews(thread: thread, authorID: "42")
-        XCTAssertEqual(seededProjectionViews, [1])
-        XCTAssertEqual(seededSourceViews, [1])
-        await MainActor.run {
-            XCTAssertEqual(model.cachedViews, [1])
-        }
-
-        await MainActor.run {
-            model.startCaching(views: [2, 3, 4])
-        }
-
-        try await Task.sleep(nanoseconds: 20_000_000)
-        await MainActor.run {
-            model.stopCaching()
-        }
-
-        try await waitFor {
-            await MainActor.run { model.cacheOperationState.isFinished }
-        }
-
-        let finalProjectionViews = await cacheStore.cachedViews(
-            for: threadURL,
-            authorID: "42",
-            contentSource: .authorFilteredPage
-        )
-        let finalSourceViews = await forumCacheStore.cachedThreadPageViews(thread: thread, authorID: "42")
-        await MainActor.run {
-            XCTAssertEqual(model.cacheOperationState.status, .cancelled)
-            XCTAssertLessThan(model.cacheOperationState.completedViews.count, 3)
-            XCTAssertTrue(
-                model.cachedViews.isSuperset(of: [1]),
-                "cachedViews=\(model.cachedViews), projections=\(finalProjectionViews), sources=\(finalSourceViews)"
-            )
-        }
-    }
-
-    func testUpdateCachedViewsRewritesSelectedPages() async throws {
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.protocolClasses = [ReaderTestURLProtocol.self]
-        let session = URLSession(configuration: configuration)
-        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=7003&mobile=2")!
-        let cacheDirectory = FileManager.default.temporaryDirectory
-            .appendingPathComponent(UUID().uuidString, isDirectory: true)
-        let cacheStore = ReaderCacheStore(baseDirectory: cacheDirectory)
-        let original = makeDocument(
-            threadURL: threadURL,
-            view: 1,
-            maxView: 2,
-            chapterTitles: ["旧缓存"]
-        )
-        let sibling = makeDocument(
-            threadURL: threadURL,
-            view: 2,
-            maxView: 2,
-            chapterTitles: ["保留缓存"]
-        )
-
-        ReaderTestURLProtocol.handler = { request in
-            let body = #"<html><body><div class="plc cl" id="pid700301"><ul class="authi"><li class="mtit"><a href="home.php?mod=space&amp;uid=42&amp;mobile=2">楼主</a></li></ul><div class="message">新缓存</div></div></body></html>"#
-            return (
-                Data(body.utf8),
-                HTTPURLResponse(
-                    url: request.url!,
-                    statusCode: 200,
-                    httpVersion: nil,
-                    headerFields: ["Content-Type": "text/html; charset=utf-8"]
-                )!
-            )
-        }
-
-        let model = try await makeModel(
-            documents: [original, sibling],
-            session: session,
-            cacheStore: cacheStore
+            offlineCacheStore: offlineStore
         )
 
         await MainActor.run {
@@ -3081,29 +2952,55 @@ final class ReaderContainerModelTests: XCTestCase {
         }
 
         try await waitFor {
-            await MainActor.run { model.cacheOperationState.isFinished }
+            await MainActor.run { model.cacheStatus(for: 1) == .caching }
         }
 
-        let updated = await cacheStore.loadDocument(
+        await MainActor.run {
+            XCTAssertEqual(model.cachedViews, [1])
+            XCTAssertEqual(model.cachingViews, [1])
+            XCTAssertEqual(model.cacheUpdateTime(for: 1), updatedAt)
+            XCTAssertEqual(model.offlineCacheQueueEntryCount, 1)
+        }
+    }
+
+    func testDeletingNovelOfflineCachePreservesTransparentCaches() async throws {
+        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=7003&mobile=2")!
+        let cacheDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let cacheStore = ReaderCacheStore(baseDirectory: cacheDirectory.appendingPathComponent("reader", isDirectory: true))
+        let forumCacheStore = ForumCacheStore(baseDirectory: cacheDirectory.appendingPathComponent("forum", isDirectory: true))
+        let offlineStore = try makeReaderModelOfflineCacheStore(rootDirectory: cacheDirectory.appendingPathComponent("offline-root", isDirectory: true))
+        let document = makeDocument(
+            threadURL: threadURL,
+            view: 1,
+            maxView: 2,
+            chapterTitles: ["离线缓存"]
+        )
+        try await seedNovelOfflineCache(offlineStore, document: document)
+
+        let model = try await makeModel(
+            documents: [document],
+            cacheStore: cacheStore,
+            forumCacheStore: forumCacheStore,
+            offlineCacheStore: offlineStore
+        )
+
+        await MainActor.run {
+            XCTAssertEqual(model.cachedViews, [1])
+        }
+        await model.deleteCachedViews([1])
+        try await waitFor {
+            await MainActor.run { model.cachedViews.isEmpty }
+        }
+
+        let thread = try makeThreadIdentity(from: threadURL)
+        let retainedThreadPage = await forumCacheStore.loadThreadPage(thread: thread, page: 1, authorID: "42")
+        XCTAssertNotNil(retainedThreadPage)
+        let retainedProjection = await cacheStore.loadDocument(
             for: ReaderPageRequest(threadURL: threadURL, view: 1, authorID: "42"),
             contentSource: .authorFilteredPage
         )
-        let preserved = await cacheStore.loadDocument(
-            for: ReaderPageRequest(threadURL: threadURL, view: 2, authorID: "42"),
-            contentSource: .authorFilteredPage
-        )
-
-        let updatedText = updated?.segments.compactMap { segment -> String? in
-            if case let .text(text, _) = segment { return text }
-            return nil
-        }.first
-        let preservedText = preserved?.segments.compactMap { segment -> String? in
-            if case let .text(text, _) = segment { return text }
-            return nil
-        }.first
-
-        XCTAssertEqual(updatedText, "新缓存")
-        XCTAssertTrue(preservedText?.contains("保留缓存") == true)
+        XCTAssertNotNil(retainedProjection)
     }
 }
 
@@ -3114,6 +3011,7 @@ private func makeModel(
     session: URLSession = .shared,
     cacheStore: ReaderCacheStore? = nil,
     forumCacheStore: ForumCacheStore? = nil,
+    offlineCacheStore: (any OfflineCacheStoring)? = nil,
     pagination: @escaping NovelTextLayoutFixture = readerModelSegmentPagination
 ) async throws -> ReaderContainerModel {
     let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "reader-container-model")
@@ -3129,6 +3027,16 @@ private func makeModel(
         ?? ReaderCacheStore(baseDirectory: cacheDirectory.appendingPathComponent("reader", isDirectory: true))
     let resolvedForumCacheStore = forumCacheStore
         ?? ForumCacheStore(baseDirectory: cacheDirectory.appendingPathComponent("forum", isDirectory: true))
+    let grdbRootDirectory = cacheDirectory.appendingPathComponent("grdb", isDirectory: true)
+    let resolvedOfflineCacheStore: any OfflineCacheStoring
+    if let offlineCacheStore {
+        resolvedOfflineCacheStore = offlineCacheStore
+    } else {
+        resolvedOfflineCacheStore = try OfflineCacheStore(
+            databasePool: try YamiboDatabase.openSharedPool(rootDirectory: grdbRootDirectory),
+            baseDirectory: cacheDirectory.appendingPathComponent("offline", isDirectory: true)
+        )
+    }
 
     try await settingsStore.save(AppSettings(reader: settings))
     try await seedReaderSourceCaches(
@@ -3142,7 +3050,9 @@ private func makeModel(
         settingsStore: settingsStore,
         readingProgressStore: readingProgressStore,
         readerCacheStore: resolvedCacheStore,
+        offlineCacheStore: resolvedOfflineCacheStore,
         forumCacheStore: resolvedForumCacheStore,
+        grdbRootDirectory: grdbRootDirectory,
         session: session
     )
     let model = await MainActor.run {
@@ -3158,6 +3068,7 @@ private func makeModel(
     }
 
     await model.prepare(layout: ReaderContainerLayout(width: 320, height: 568))
+    await model.refreshCachedState()
     return model
 }
 
@@ -3200,6 +3111,45 @@ private func seedReaderSourceCaches(
         projection.projectionSchemaVersion = 1
         try await readerCacheStore.save(projection)
     }
+}
+
+private func seedNovelOfflineCache(
+    _ store: any OfflineCacheStoring,
+    document: ReaderPageDocument,
+    ownerTitle: String = "测试线程",
+    updatedAt: Date = Date(timeIntervalSince1970: 40_000)
+) async throws {
+    let thread = try makeThreadIdentity(from: document.threadURL)
+    let trimmedAuthorID = document.resolvedAuthorID?.trimmingCharacters(in: .whitespacesAndNewlines)
+    let authorID = trimmedAuthorID?.isEmpty == false ? trimmedAuthorID! : "42"
+    let sourcePage = makeThreadPageSource(from: document, thread: thread, authorID: authorID)
+    let request = NovelOfflineCacheWorkRequest(
+        ownerTitle: ownerTitle,
+        title: L10n.string("reader.page_number_spaced", document.view),
+        threadURL: document.threadURL,
+        view: document.view,
+        authorID: authorID,
+        contentSource: .authorFilteredPage
+    )
+    var projection = document
+    projection.threadURL = thread.canonicalURL
+    projection.resolvedAuthorID = authorID
+    projection.contentSource = .authorFilteredPage
+    try await store.saveNovelOfflineSourcePage(
+        sourcePage,
+        request: request,
+        projectionPrewarm: projection,
+        updatedAt: updatedAt
+    )
+}
+
+private func makeReaderModelOfflineCacheStore(
+    rootDirectory: URL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+) throws -> OfflineCacheStore {
+    OfflineCacheStore(
+        databasePool: try YamiboDatabase.openSharedPool(rootDirectory: rootDirectory.appendingPathComponent("grdb", isDirectory: true)),
+        baseDirectory: rootDirectory.appendingPathComponent("offline", isDirectory: true)
+    )
 }
 
 private func makeThreadIdentity(from threadURL: URL) throws -> ThreadIdentity {

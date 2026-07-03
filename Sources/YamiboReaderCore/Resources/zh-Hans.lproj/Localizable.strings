@@ -579,6 +579,7 @@
 "mine.checking_in" = "签到中…";
 "mine.credit_progress_format" = "%d/%d";
 "mine.download_queue" = "下载队列";
+"mine.download_queue_count" = "下载队列（%d）";
 "mine.offline_queue.cancel_selected_format" = "取消 %d 项";
 "mine.offline_queue.chapter_count_format" = "%d 个未完成项目";
 "mine.offline_queue.continue" = "继续";
@@ -634,7 +635,9 @@
 "reader.cache_summary.cancelled" = "已终止，已完成 %d / %d 页%@";
 "reader.cache_summary.completed" = "已完成 %d / %d 页%@";
 "reader.cache_summary.failed_suffix" = "，%d 页失败，已跳过";
+"reader.cache_updated_at" = "更新于 %@";
 "reader.cached" = "已缓存";
+"reader.caching" = "缓存中";
 "reader.chapter_summary" = "目录项 %d · 过滤 %d";
 "reader.chapters" = "目录";
 "reader.chapter_comments" = "章节评论";

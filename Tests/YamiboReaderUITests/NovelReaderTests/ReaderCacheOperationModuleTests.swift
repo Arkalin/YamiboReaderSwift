@@ -32,6 +32,31 @@ final class ReaderCacheOperationModuleTests: XCTestCase {
         XCTAssertTrue(selection.isAllSelected)
     }
 
+    func testSelectionStateTreatsUnfinishedWorkAsCachingBeforeCacheOrUpdate() {
+        let module = ReaderCacheOperationModule()
+        let selection = module.selectionState(
+            for: [1, 2, 3],
+            snapshot: ReaderCacheOperationSnapshot(
+                cacheableViews: [1, 2, 3],
+                cachedViews: [1],
+                cachingViews: [1, 2],
+                context: ReaderCacheOperationContext(
+                    threadURL: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=1&mobile=2")!,
+                    authorID: "42",
+                    contentSource: .authorFilteredPage
+                )
+            )
+        )
+
+        XCTAssertEqual(selection.cachedSelectedViews, [1])
+        XCTAssertEqual(selection.cachingSelectedViews, [1, 2])
+        XCTAssertEqual(selection.updatableSelectedViews, [])
+        XCTAssertEqual(selection.uncachedSelectedViews, [3])
+        XCTAssertTrue(selection.canCache)
+        XCTAssertFalse(selection.canUpdate)
+        XCTAssertTrue(selection.canDelete)
+    }
+
     func testStartCachingUpdatesProgressAndCompletion() async throws {
         let repository = FakeCacheOperationRepository(cachedViews: [1])
         let module = ReaderCacheOperationModule()
@@ -100,8 +125,10 @@ final class ReaderCacheOperationModuleTests: XCTestCase {
 
         let deletedViews = await repository.deletedViews
         let cachedBatches = await repository.cachedBatches
-        XCTAssertEqual(deletedViews, [[1]])
-        XCTAssertEqual(cachedBatches, [[1]])
+        let updatedBatches = await repository.updatedBatches
+        XCTAssertEqual(deletedViews, [])
+        XCTAssertEqual(cachedBatches, [])
+        XCTAssertEqual(updatedBatches, [[1]])
         XCTAssertEqual(module.cachedViews, [1, 2])
         XCTAssertEqual(module.state.status, .completed)
         XCTAssertEqual(module.state.completedViews, [1])
@@ -165,6 +192,7 @@ final class ReaderCacheOperationModuleTests: XCTestCase {
 private actor FakeCacheOperationRepository: ReaderCacheOperationRepository {
     private(set) var deletedViews: [Set<Int>] = []
     private(set) var cachedBatches: [Set<Int>] = []
+    private(set) var updatedBatches: [Set<Int>] = []
     private(set) var receivedContexts: [ReaderCacheOperationContext] = []
     private var storedCachedViews: Set<Int>
     private let delayNanoseconds: UInt64
@@ -172,6 +200,11 @@ private actor FakeCacheOperationRepository: ReaderCacheOperationRepository {
     init(cachedViews: Set<Int>, delayNanoseconds: UInt64 = 0) {
         self.storedCachedViews = cachedViews
         self.delayNanoseconds = delayNanoseconds
+    }
+
+    func cacheState(for context: ReaderCacheOperationContext) async -> NovelOfflineCacheViewsSnapshot {
+        receivedContexts.append(context)
+        return NovelOfflineCacheViewsSnapshot(cachedViews: storedCachedViews)
     }
 
     func cachedViews(for context: ReaderCacheOperationContext) async -> Set<Int> {
@@ -241,6 +274,30 @@ private actor FakeCacheOperationRepository: ReaderCacheOperationRepository {
             completedViews: completedViews,
             failedViews: [],
             wasCancelled: wasCancelled
+        )
+    }
+
+    func updateCachedViews(
+        _ views: Set<Int>,
+        for context: ReaderCacheOperationContext,
+        progress: (@Sendable (ReaderCacheBatchProgress) async -> Void)?
+    ) async -> ReaderCacheBatchResult {
+        receivedContexts.append(context)
+        let targets = views.sorted()
+        updatedBatches.append(Set(targets))
+        await progress?(ReaderCacheBatchProgress(
+            totalCount: targets.count,
+            completedCount: targets.count,
+            currentView: nil,
+            completedViews: targets,
+            failedViews: [],
+            status: .completed
+        ))
+        return ReaderCacheBatchResult(
+            totalCount: targets.count,
+            completedViews: targets,
+            failedViews: [],
+            wasCancelled: false
         )
     }
 }

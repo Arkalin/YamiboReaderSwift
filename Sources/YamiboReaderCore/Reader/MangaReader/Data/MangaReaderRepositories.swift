@@ -130,10 +130,45 @@ public protocol OfflineCacheStoring: Sendable {
     func saveNovelOfflineCacheEntry(_ entry: NovelOfflineCacheEntry) async throws
     func novelOfflineCacheEntry(id: OfflineCacheEntryID) async -> NovelOfflineCacheEntry?
     func allNovelOfflineCacheEntries() async -> [NovelOfflineCacheEntry]
+    func saveNovelOfflineSourcePage(
+        _ sourcePage: ForumThreadPage,
+        request: NovelOfflineCacheWorkRequest,
+        projectionPrewarm: ReaderPageDocument?,
+        updatedAt: Date
+    ) async throws
+    func novelOfflineSourcePage(
+        ownerTitle: String,
+        threadURL: URL,
+        view: Int,
+        authorID: String?,
+        contentSource: ReaderContentSource?
+    ) async -> ForumThreadPage?
+    func saveNovelOfflineProjectionPrewarm(_ document: ReaderPageDocument, ownerTitle: String) async throws
+    func novelOfflineProjectionPrewarm(
+        ownerTitle: String,
+        threadURL: URL,
+        view: Int,
+        authorID: String?,
+        contentSource: ReaderContentSource?
+    ) async -> ReaderPageDocument?
+    func novelOfflineCacheViewsSnapshot(
+        ownerTitle: String,
+        threadURL: URL,
+        authorID: String?,
+        contentSource: ReaderContentSource?
+    ) async -> NovelOfflineCacheViewsSnapshot
+    func removeNovelOfflineCacheViews(
+        _ views: Set<Int>,
+        ownerTitle: String,
+        threadURL: URL,
+        authorID: String?,
+        contentSource: ReaderContentSource?
+    ) async throws
     func offlineCacheWork(ownerName: String, tid: String) async -> MangaOfflineCacheWork?
     func allOfflineCacheWorks() async -> [MangaOfflineCacheWork]
     func offlineCacheQueueWorks() async -> [OfflineCacheQueueWorkProjection]
     func enqueueNovelOfflineCacheWork(_ request: NovelOfflineCacheWorkRequest) async throws -> NovelOfflineCacheEnqueueResult
+    func enqueueNovelOfflineCacheUpdateWork(_ request: NovelOfflineCacheWorkRequest) async throws -> NovelOfflineCacheEnqueueResult
     func retryFailedOfflineCacheWorks() async throws
     func enqueueOfflineCacheWork(_ request: MangaOfflineCacheWorkRequest) async throws -> MangaOfflineCacheEnqueueResult
     func updateOfflineCacheWorkProgress(

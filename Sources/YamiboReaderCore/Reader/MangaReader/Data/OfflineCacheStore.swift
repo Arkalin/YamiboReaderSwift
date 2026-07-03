@@ -7,6 +7,8 @@ public actor OfflineCacheStore: OfflineCacheStoring {
     nonisolated(unsafe) let fileManager: FileManager
     private let baseDirectory: URL
     let imagesDirectory: URL
+    let novelSourcePagesDirectory: URL
+    let novelProjectionPrewarmDirectory: URL
     private let updateNotifier = MangaOfflineCacheUpdateNotifier()
     private var didRecoverQueueState = false
     private static let mangaReaderKind = "manga"
@@ -29,6 +31,8 @@ public actor OfflineCacheStore: OfflineCacheStoring {
                 .appendingPathComponent("offline-cache", isDirectory: true)
         self.baseDirectory = root
         self.imagesDirectory = root.appendingPathComponent("images", isDirectory: true)
+        self.novelSourcePagesDirectory = root.appendingPathComponent("novel-source-pages", isDirectory: true)
+        self.novelProjectionPrewarmDirectory = root.appendingPathComponent("novel-projections", isDirectory: true)
     }
 
     nonisolated public func offlineCacheUpdates() -> AsyncStream<Void> {
@@ -549,6 +553,20 @@ public actor OfflineCacheStore: OfflineCacheStoring {
         }
     }
 
+    func ensureNovelSourcePagesDirectoryExists() throws {
+        try ensureBaseDirectoryExists()
+        if !fileManager.fileExists(atPath: novelSourcePagesDirectory.path) {
+            try fileManager.createDirectory(at: novelSourcePagesDirectory, withIntermediateDirectories: true)
+        }
+    }
+
+    func ensureNovelProjectionPrewarmDirectoryExists() throws {
+        try ensureBaseDirectoryExists()
+        if !fileManager.fileExists(atPath: novelProjectionPrewarmDirectory.path) {
+            try fileManager.createDirectory(at: novelProjectionPrewarmDirectory, withIntermediateDirectories: true)
+        }
+    }
+
     private func imageFileName(for imageURL: URL) -> String {
         let rawExtension = imageURL.pathExtension.trimmingCharacters(in: .whitespacesAndNewlines)
         let safeExtension = sanitizedFileExtension(rawExtension.isEmpty ? "bin" : rawExtension)
@@ -560,7 +578,7 @@ public actor OfflineCacheStore: OfflineCacheStoring {
         return sanitized.isEmpty ? "bin" : sanitized
     }
 
-    private func sha256Hex(_ value: String) -> String {
+    func sha256Hex(_ value: String) -> String {
         let digest = SHA256.hash(data: Data(value.utf8))
         return digest.map { String(format: "%02x", $0) }.joined()
     }

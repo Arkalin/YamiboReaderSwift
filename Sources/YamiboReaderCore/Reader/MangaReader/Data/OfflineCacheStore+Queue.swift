@@ -10,6 +10,17 @@ extension OfflineCacheStore {
     }
 
     public func enqueueNovelOfflineCacheWork(_ request: NovelOfflineCacheWorkRequest) async throws -> NovelOfflineCacheEnqueueResult {
+        try await enqueueNovelOfflineCacheWork(request, skipsExistingCachedEntry: true)
+    }
+
+    public func enqueueNovelOfflineCacheUpdateWork(_ request: NovelOfflineCacheWorkRequest) async throws -> NovelOfflineCacheEnqueueResult {
+        try await enqueueNovelOfflineCacheWork(request, skipsExistingCachedEntry: false)
+    }
+
+    private func enqueueNovelOfflineCacheWork(
+        _ request: NovelOfflineCacheWorkRequest,
+        skipsExistingCachedEntry: Bool
+    ) async throws -> NovelOfflineCacheEnqueueResult {
         try await recoverQueueStateAfterRestart()
         do {
             let result: NovelOfflineCacheEnqueueResult = try await database.write { db in
@@ -19,7 +30,8 @@ extension OfflineCacheStore {
                     ownerKey: normalizedRequest.ownerTitle,
                     entryKey: normalizedRequest.entryKey
                 )
-                if let entry = try Self.novelEntry(ownerName: entryID.ownerKey, entryKey: entryID.entryKey, in: db) {
+                if skipsExistingCachedEntry,
+                   let entry = try Self.novelEntry(ownerName: entryID.ownerKey, entryKey: entryID.entryKey, in: db) {
                     return .alreadyCached(entry)
                 }
                 if let work = try Self.rawWork(

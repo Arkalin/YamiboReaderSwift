@@ -1,6 +1,9 @@
 import Foundation
 
 public struct NovelOfflineCacheEntry: Codable, Hashable, Identifiable, Sendable {
+    public static let sourcePageSchemaVersion = 1
+    public static let projectionPrewarmSchemaVersion = ReaderPageDocument.schemaVersion
+
     public var ownerTitle: String
     public var title: String
     public var document: ReaderPageDocument
@@ -154,5 +157,58 @@ public enum NovelOfflineCacheEnqueueResult: Hashable, Sendable {
             return work
         }
         return nil
+    }
+}
+
+public enum NovelOfflineCacheViewStatus: String, Codable, Hashable, Sendable {
+    case uncached
+    case cached
+    case caching
+}
+
+public struct NovelOfflineCacheViewState: Codable, Hashable, Sendable {
+    public var view: Int
+    public var status: NovelOfflineCacheViewStatus
+    public var updatedAt: Date?
+
+    public init(view: Int, status: NovelOfflineCacheViewStatus, updatedAt: Date? = nil) {
+        self.view = max(1, view)
+        self.status = status
+        self.updatedAt = updatedAt
+    }
+}
+
+public struct NovelOfflineCacheViewsSnapshot: Codable, Hashable, Sendable {
+    public var cachedViews: Set<Int>
+    public var cachingViews: Set<Int>
+    public var updateTimesByView: [Int: Date]
+
+    public init(
+        cachedViews: Set<Int> = [],
+        cachingViews: Set<Int> = [],
+        updateTimesByView: [Int: Date] = [:]
+    ) {
+        self.cachedViews = cachedViews
+        self.cachingViews = cachingViews
+        self.updateTimesByView = updateTimesByView
+    }
+
+    public func state(for view: Int) -> NovelOfflineCacheViewState {
+        let normalizedView = max(1, view)
+        if cachingViews.contains(normalizedView) {
+            return NovelOfflineCacheViewState(
+                view: normalizedView,
+                status: .caching,
+                updatedAt: updateTimesByView[normalizedView]
+            )
+        }
+        if cachedViews.contains(normalizedView) {
+            return NovelOfflineCacheViewState(
+                view: normalizedView,
+                status: .cached,
+                updatedAt: updateTimesByView[normalizedView]
+            )
+        }
+        return NovelOfflineCacheViewState(view: normalizedView, status: .uncached)
     }
 }

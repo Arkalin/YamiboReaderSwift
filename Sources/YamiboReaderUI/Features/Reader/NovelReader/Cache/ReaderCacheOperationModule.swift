@@ -2,11 +2,13 @@ import Foundation
 import YamiboReaderCore
 
 public struct ReaderCacheOperationContext: Equatable, Sendable {
+    public var ownerTitle: String
     public var threadURL: URL
     public var authorID: String?
     public var contentSource: ReaderContentSource?
 
-    public init(threadURL: URL, authorID: String?, contentSource: ReaderContentSource?) {
+    public init(ownerTitle: String = "", threadURL: URL, authorID: String?, contentSource: ReaderContentSource?) {
+        self.ownerTitle = ownerTitle
         self.threadURL = threadURL
         self.authorID = authorID
         self.contentSource = contentSource
@@ -16,11 +18,21 @@ public struct ReaderCacheOperationContext: Equatable, Sendable {
 public struct ReaderCacheOperationSnapshot: Equatable, Sendable {
     public var cacheableViews: Set<Int>
     public var cachedViews: Set<Int>
+    public var cachingViews: Set<Int>
+    public var updateTimesByView: [Int: Date]
     public var context: ReaderCacheOperationContext
 
-    public init(cacheableViews: Set<Int>, cachedViews: Set<Int>, context: ReaderCacheOperationContext) {
+    public init(
+        cacheableViews: Set<Int>,
+        cachedViews: Set<Int>,
+        cachingViews: Set<Int> = [],
+        updateTimesByView: [Int: Date] = [:],
+        context: ReaderCacheOperationContext
+    ) {
         self.cacheableViews = cacheableViews
         self.cachedViews = cachedViews
+        self.cachingViews = cachingViews
+        self.updateTimesByView = updateTimesByView
         self.context = context
     }
 }
@@ -84,6 +96,8 @@ public struct ReaderCacheOperationState: Equatable, Sendable {
 public struct ReaderCacheSelectionState: Equatable, Sendable {
     public var selectedViews: Set<Int>
     public var cachedSelectedViews: Set<Int>
+    public var cachingSelectedViews: Set<Int>
+    public var updatableSelectedViews: Set<Int>
     public var uncachedSelectedViews: Set<Int>
     public var canCache: Bool
     public var canUpdate: Bool
@@ -93,6 +107,8 @@ public struct ReaderCacheSelectionState: Equatable, Sendable {
     public init(
         selectedViews: Set<Int>,
         cachedSelectedViews: Set<Int>,
+        cachingSelectedViews: Set<Int> = [],
+        updatableSelectedViews: Set<Int>? = nil,
         uncachedSelectedViews: Set<Int>,
         canCache: Bool,
         canUpdate: Bool,
@@ -101,6 +117,8 @@ public struct ReaderCacheSelectionState: Equatable, Sendable {
     ) {
         self.selectedViews = selectedViews
         self.cachedSelectedViews = cachedSelectedViews
+        self.cachingSelectedViews = cachingSelectedViews
+        self.updatableSelectedViews = updatableSelectedViews ?? cachedSelectedViews.subtracting(cachingSelectedViews)
         self.uncachedSelectedViews = uncachedSelectedViews
         self.canCache = canCache
         self.canUpdate = canUpdate
@@ -115,6 +133,7 @@ public enum ReaderCacheOperationMode: Sendable {
 }
 
 public protocol ReaderCacheOperationRepository: Sendable {
+    func cacheState(for context: ReaderCacheOperationContext) async -> NovelOfflineCacheViewsSnapshot
     func cachedViews(for context: ReaderCacheOperationContext) async -> Set<Int>
 
     func deleteCachedViews(
@@ -127,55 +146,21 @@ public protocol ReaderCacheOperationRepository: Sendable {
         for context: ReaderCacheOperationContext,
         progress: (@Sendable (ReaderCacheBatchProgress) async -> Void)?
     ) async -> ReaderCacheBatchResult
-}
 
-public struct ReaderRepositoryCacheOperationAdapter: ReaderCacheOperationRepository {
-    private let repository: NovelReaderRepository
-
-    public init(repository: NovelReaderRepository) {
-        self.repository = repository
-    }
-
-    public func cachedViews(for context: ReaderCacheOperationContext) async -> Set<Int> {
-        await repository.cachedViews(
-            for: context.threadURL,
-            authorID: context.authorID,
-            contentSource: context.contentSource
-        )
-    }
-
-    public func deleteCachedViews(
-        _ views: Set<Int>,
-        for context: ReaderCacheOperationContext
-    ) async throws {
-        try await repository.deleteCachedViews(
-            views,
-            for: context.threadURL,
-            authorID: context.authorID,
-            contentSource: context.contentSource
-        )
-    }
-
-    public func cacheViews(
+    func updateCachedViews(
         _ views: Set<Int>,
         for context: ReaderCacheOperationContext,
         progress: (@Sendable (ReaderCacheBatchProgress) async -> Void)?
-    ) async -> ReaderCacheBatchResult {
-        await repository.cacheViews(
-            views,
-            for: context.threadURL,
-            authorID: context.authorID,
-            contentSource: context.contentSource,
-            progress: progress
-        )
-    }
+    ) async -> ReaderCacheBatchResult
 }
 
 @MainActor
 public final class ReaderCacheOperationModule {
     public private(set) var cachedViews: Set<Int> = []
+    public private(set) var cachingViews: Set<Int> = []
+    public private(set) var cachedViewUpdateTimes: [Int: Date] = [:]
     public private(set) var state = ReaderCacheOperationState()
-    public var onChange: (@MainActor (Set<Int>, ReaderCacheOperationState) -> Void)?
+    public var onChange: (@MainActor (NovelOfflineCacheViewsSnapshot, ReaderCacheOperationState) -> Void)?
 
     private var operationTask: Task<Void, Never>?
 
@@ -186,8 +171,14 @@ public final class ReaderCacheOperationModule {
     }
 
     public func syncCachedViews(_ views: Set<Int>) {
-        cachedViews = views
-        state.cachedViews = views
+        syncCacheState(NovelOfflineCacheViewsSnapshot(cachedViews: views))
+    }
+
+    public func syncCacheState(_ snapshot: NovelOfflineCacheViewsSnapshot) {
+        cachedViews = snapshot.cachedViews
+        cachingViews = snapshot.cachingViews
+        cachedViewUpdateTimes = snapshot.updateTimesByView
+        state.cachedViews = snapshot.cachedViews
         emitChange()
     }
 
@@ -197,13 +188,19 @@ public final class ReaderCacheOperationModule {
     ) -> ReaderCacheSelectionState {
         let validSelections = selectedViews.intersection(snapshot.cacheableViews)
         let cachedSelectedViews = validSelections.intersection(snapshot.cachedViews)
-        let uncachedSelectedViews = validSelections.subtracting(snapshot.cachedViews)
+        let cachingSelectedViews = validSelections.intersection(snapshot.cachingViews)
+        let updatableSelectedViews = cachedSelectedViews.subtracting(snapshot.cachingViews)
+        let uncachedSelectedViews = validSelections
+            .subtracting(snapshot.cachedViews)
+            .subtracting(snapshot.cachingViews)
         return ReaderCacheSelectionState(
             selectedViews: validSelections,
             cachedSelectedViews: cachedSelectedViews,
+            cachingSelectedViews: cachingSelectedViews,
+            updatableSelectedViews: updatableSelectedViews,
             uncachedSelectedViews: uncachedSelectedViews,
             canCache: !uncachedSelectedViews.isEmpty,
-            canUpdate: !cachedSelectedViews.isEmpty,
+            canUpdate: !updatableSelectedViews.isEmpty,
             canDelete: !cachedSelectedViews.isEmpty,
             isAllSelected: !snapshot.cacheableViews.isEmpty && validSelections.count == snapshot.cacheableViews.count
         )
@@ -236,38 +233,14 @@ public final class ReaderCacheOperationModule {
     ) {
         guard !state.isRunning else { return }
         let selection = selectionState(for: views, snapshot: snapshot)
-        guard !selection.cachedSelectedViews.isEmpty else { return }
-        let targetViews = selection.cachedSelectedViews
-
-        state = ReaderCacheOperationState(
-            cachedViews: cachedViews.subtracting(targetViews),
-            queuedViews: targetViews.sorted(),
-            totalCount: targetViews.count,
-            status: .running
+        guard !selection.updatableSelectedViews.isEmpty else { return }
+        startOperation(
+            mode: .update,
+            views: selection.updatableSelectedViews,
+            snapshot: snapshot,
+            repository: repository,
+            summary: summary
         )
-        emitChange()
-
-        operationTask?.cancel()
-        operationTask = Task { [weak self] in
-            guard let self else { return }
-            do {
-                try await repository.deleteCachedViews(
-                    targetViews,
-                    for: snapshot.context
-                )
-                self.syncCachedViews(self.cachedViews.subtracting(targetViews))
-                self.startOperation(
-                    mode: .update,
-                    views: targetViews,
-                    snapshot: snapshot,
-                    repository: repository,
-                    summary: summary
-                )
-            } catch {
-                self.reset()
-                onFailure(error)
-            }
-        }
     }
 
     public func deleteCachedViews(
@@ -283,7 +256,7 @@ public final class ReaderCacheOperationModule {
             selection.cachedSelectedViews,
             for: snapshot.context
         )
-        syncCachedViews(cachedViews.subtracting(selection.cachedSelectedViews))
+        syncCacheState(await repository.cacheState(for: snapshot.context))
     }
 
     public func showProgressIfRunning() {
@@ -334,11 +307,20 @@ public final class ReaderCacheOperationModule {
         operationTask?.cancel()
         operationTask = Task { [weak self] in
             guard let self else { return }
-            let result = await repository.cacheViews(
-                Set(targets),
-                for: snapshot.context
-            ) { [weak self] progress in
-                await self?.apply(progress: progress, allTargets: targets)
+            let result = if mode == .update {
+                await repository.updateCachedViews(
+                    Set(targets),
+                    for: snapshot.context
+                ) { [weak self] progress in
+                    await self?.apply(progress: progress, allTargets: targets)
+                }
+            } else {
+                await repository.cacheViews(
+                    Set(targets),
+                    for: snapshot.context
+                ) { [weak self] progress in
+                    await self?.apply(progress: progress, allTargets: targets)
+                }
             }
             await self.finalize(result: result, mode: mode, snapshot: snapshot, repository: repository, summary: summary)
         }
@@ -366,15 +348,11 @@ public final class ReaderCacheOperationModule {
         summary: @MainActor (ReaderCacheOperationMode, ReaderCacheBatchResult) -> String
     ) async {
         operationTask = nil
-        let refreshedViews = if result.wasCancelled {
-            cachedViews.union(result.completedViews)
-        } else {
-            await repository.cachedViews(for: snapshot.context)
-        }
-        syncCachedViews(refreshedViews)
+        let refreshedState = await repository.cacheState(for: snapshot.context)
+        syncCacheState(refreshedState)
 
         state.cachedViews = cachedViews
-        state.queuedViews = []
+        state.queuedViews = result.wasCancelled ? state.queuedViews : []
         state.completedViews = result.completedViews
         state.failedViews = result.failedViews
         state.totalCount = result.totalCount
@@ -387,6 +365,13 @@ public final class ReaderCacheOperationModule {
     }
 
     private func emitChange() {
-        onChange?(cachedViews, state)
+        onChange?(
+            NovelOfflineCacheViewsSnapshot(
+                cachedViews: cachedViews,
+                cachingViews: cachingViews,
+                updateTimesByView: cachedViewUpdateTimes
+            ),
+            state
+        )
     }
 }
