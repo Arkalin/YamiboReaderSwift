@@ -11,11 +11,11 @@ Pure manga reader values and rules:
 - `MangaChapter`
 - `MangaDirectory`
 - `MangaDirectoryStrategy`
-- `MangaChapterDocument`
+- `MangaReaderProjection`
 - `MangaChapterWindow`
 - `MangaReadingPosition`
 
-`MangaChapterDocument` represents parsed image-page content. It does not expose raw HTML.
+`MangaReaderProjection` represents derived image-page reader content from an author-scoped forum Thread Page. It does not expose raw HTML.
 
 ## Application
 
@@ -40,7 +40,7 @@ The core implementation supports final reader behavior through directory workflo
 
 Repository seams for future implementations:
 
-- `MangaChapterDocumentLoading`
+- `MangaReaderProjectionLoading`
 - `MangaDirectoryRepository`
 - `MangaDirectorySeed`
 - `MangaDirectoryPersisting`

@@ -1,0 +1,247 @@
+import Foundation
+
+public actor YamiboMangaReaderProjectionLoader: MangaReaderProjectionLoading {
+    private let client: YamiboClient
+    private let projectionStore: any MangaReaderProjectionPersisting
+    private let forumCacheStore: ForumCacheStore
+    private var inFlightTasks: [String: Task<MangaReaderProjection, Error>] = [:]
+
+    public init(
+        client: YamiboClient,
+        projectionStore: any MangaReaderProjectionPersisting,
+        forumCacheStore: ForumCacheStore
+    ) {
+        self.client = client
+        self.projectionStore = projectionStore
+        self.forumCacheStore = forumCacheStore
+    }
+
+    public func loadReaderProjection(at url: URL) async throws -> MangaReaderProjection {
+        try await loadReaderProjection(at: url, ignoresCache: false)
+    }
+
+    public func loadReaderProjectionIgnoringCache(at url: URL) async throws -> MangaReaderProjection {
+        try await loadReaderProjection(at: url, ignoresCache: true)
+    }
+
+    private func loadReaderProjection(at url: URL, ignoresCache: Bool) async throws -> MangaReaderProjection {
+        let normalizedURL = YamiboRoute.normalizedChapterURL(url)
+        guard let tid = MangaTitleCleaner.extractTid(from: normalizedURL.absoluteString)?.mangaReaderTrimmedNonEmpty else {
+            throw MangaReaderDataSupport.currentMangaChapterParsingFailure()
+        }
+        let thread = ThreadIdentity(tid: tid)
+        let view = Self.view(from: url)
+        let authorID = try await resolveAuthorID(for: url, thread: thread, ignoresCache: ignoresCache)
+        let identity = MangaReaderProjectionSourceIdentity(
+            tid: tid,
+            authorID: authorID,
+            contentSource: .authorFilteredPage,
+            view: view
+        )
+        let taskKey = [identity.tid, identity.authorID ?? "all", String(identity.view), ignoresCache ? "refresh" : "cache"]
+            .joined(separator: "\u{1F}")
+        if let task = inFlightTasks[taskKey] {
+            return try await task.value
+        }
+
+        let task = Task<MangaReaderProjection, Error> {
+            let sourcePage = try await self.loadAuthorScopedThreadPage(
+                thread: thread,
+                authorID: authorID,
+                view: view,
+                ignoresCache: ignoresCache
+            )
+            let fingerprint = Self.projectionFingerprint(page: sourcePage, identity: identity)
+
+            if !ignoresCache,
+               let cached = await projectionStore.projection(for: identity),
+               Self.isReusableProjection(cached, identity: identity, fingerprint: fingerprint) {
+                return cached
+            }
+
+            let projection = try Self.deriveProjection(
+                from: sourcePage,
+                identity: identity,
+                sourceFingerprint: fingerprint
+            )
+            try? await projectionStore.save(projection)
+            return projection
+        }
+        inFlightTasks[taskKey] = task
+        defer { inFlightTasks.removeValue(forKey: taskKey) }
+        return try await task.value
+    }
+
+    private func resolveAuthorID(
+        for url: URL,
+        thread: ThreadIdentity,
+        ignoresCache: Bool
+    ) async throws -> String {
+        if let authorID = Self.authorID(from: url) {
+            return authorID
+        }
+
+        let discoveryPage: ForumThreadPage
+        if !ignoresCache,
+           let cached = await forumCacheStore.loadThreadPage(thread: thread, page: 1, authorID: nil) {
+            discoveryPage = cached
+        } else {
+            let html = try await fetchThreadHTML(threadID: thread.tid, view: 1, authorID: nil)
+            discoveryPage = try ForumThreadPageHTMLParser.parsePage(
+                from: html,
+                thread: thread,
+                fallbackTitle: nil
+            )
+            try? await forumCacheStore.saveThreadPage(discoveryPage, thread: thread, pageNumber: 1, authorID: nil)
+            if let onlyAuthorID = ReaderHTMLParser.extractOnlyAuthorID(
+                from: html,
+                request: ReaderPageRequest(threadURL: thread.canonicalURL, view: 1)
+            )?.mangaReaderTrimmedNonEmpty {
+                return onlyAuthorID
+            }
+        }
+
+        if let authorID = discoveryPage.posts.first?.author.uid?.mangaReaderTrimmedNonEmpty {
+            return authorID
+        }
+        throw YamiboError.parsingFailed(context: "漫画作者范围")
+    }
+
+    private func loadAuthorScopedThreadPage(
+        thread: ThreadIdentity,
+        authorID: String,
+        view: Int,
+        ignoresCache: Bool
+    ) async throws -> ForumThreadPage {
+        if !ignoresCache,
+           let cached = await forumCacheStore.loadThreadPage(thread: thread, page: view, authorID: authorID) {
+            return cached
+        }
+        let html = try await fetchThreadHTML(threadID: thread.tid, view: view, authorID: authorID)
+        let parsed = try ForumThreadPageHTMLParser.parsePage(from: html, thread: thread, fallbackTitle: nil)
+        try? await forumCacheStore.saveThreadPage(parsed, thread: thread, pageNumber: view, authorID: authorID)
+        return parsed
+    }
+
+    private func fetchThreadHTML(threadID: String, view: Int, authorID: String?) async throws -> String {
+        do {
+            return try await client.fetchThreadById(tid: threadID, authorID: authorID, page: view)
+        } catch let error as YamiboError {
+            throw error
+        } catch let error as URLError {
+            switch error.code {
+            case .notConnectedToInternet, .networkConnectionLost:
+                throw YamiboError.offline
+            default:
+                throw YamiboError.underlying(error.localizedDescription)
+            }
+        }
+    }
+
+    private static func deriveProjection(
+        from page: ForumThreadPage,
+        identity: MangaReaderProjectionSourceIdentity,
+        sourceFingerprint: String
+    ) throws -> MangaReaderProjection {
+        guard identity.contentSource == .authorFilteredPage,
+              identity.authorID?.mangaReaderTrimmedNonEmpty != nil else {
+            throw YamiboError.parsingFailed(context: "漫画作者范围")
+        }
+        let imageURLs = orderedImageURLs(from: page)
+        guard !imageURLs.isEmpty else {
+            throw MangaReaderDataSupport.currentMangaChapterParsingFailure()
+        }
+        let ownerPost = page.posts.first
+        let rawTitle = page.title.mangaReaderTrimmedNonEmpty ?? identity.tid
+        let chapterTitle = MangaTitleCleaner.cleanThreadTitle(rawTitle).mangaReaderTrimmedNonEmpty
+            ?? rawTitle
+        let sourceURL = YamiboRoute.threadByID(
+            tid: identity.tid,
+            page: identity.view,
+            authorID: identity.authorID,
+            reverse: false
+        ).url
+
+        return MangaReaderProjection(
+            tid: identity.tid,
+            ownerPostID: ownerPost?.postID,
+            ownerAuthorID: identity.authorID,
+            ownerAuthorName: ownerPost?.author.name,
+            chapterTitle: chapterTitle,
+            chapterURL: sourceURL,
+            imageURLs: imageURLs,
+            sourceIdentity: identity,
+            sourceFingerprint: sourceFingerprint,
+            schemaVersion: MangaReaderProjection.schemaVersion,
+            parserVersion: MangaReaderProjection.parserVersion
+        )
+    }
+
+    private static func isReusableProjection(
+        _ projection: MangaReaderProjection,
+        identity: MangaReaderProjectionSourceIdentity,
+        fingerprint: String
+    ) -> Bool {
+        projection.sourceIdentity == identity &&
+            projection.sourceFingerprint == fingerprint &&
+            projection.schemaVersion == MangaReaderProjection.schemaVersion &&
+            projection.parserVersion == MangaReaderProjection.parserVersion &&
+            !projection.imageURLs.isEmpty
+    }
+
+    private static func orderedImageURLs(from page: ForumThreadPage) -> [URL] {
+        var seen: Set<String> = []
+        var urls: [URL] = []
+        for post in page.posts {
+            for image in post.images {
+                guard let url = HTMLTextExtractor.absoluteURL(from: image.url, baseURL: page.thread.canonicalURL) else {
+                    continue
+                }
+                if seen.insert(url.absoluteString).inserted {
+                    urls.append(url)
+                }
+            }
+        }
+        return urls
+    }
+
+    private static func projectionFingerprint(
+        page: ForumThreadPage,
+        identity: MangaReaderProjectionSourceIdentity
+    ) -> String {
+        let value = [
+            identity.tid,
+            identity.authorID ?? "",
+            identity.contentSource.rawValue,
+            String(identity.view),
+            page.posts.map { post in
+                [
+                    post.postID,
+                    post.author.uid ?? "",
+                    post.contentHTML,
+                    post.images.map(\.url).joined(separator: ",")
+                ].joined(separator: "\u{1E}")
+            }.joined(separator: "\u{1D}"),
+            String(page.pageNavigation?.totalPages ?? 0)
+        ].joined(separator: "\u{1F}")
+        var hash: UInt64 = 1469598103934665603
+        for byte in value.utf8 {
+            hash ^= UInt64(byte)
+            hash &*= 1099511628211
+        }
+        return String(hash, radix: 16)
+    }
+
+    private static func view(from url: URL) -> Int {
+        let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        let value = components?.queryItems?.first(where: { $0.name == "page" })?.value
+            .flatMap(Int.init) ?? 1
+        return max(1, value)
+    }
+
+    private static func authorID(from url: URL) -> String? {
+        let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        return components?.queryItems?.first(where: { $0.name.lowercased() == "authorid" })?.value?
+            .mangaReaderTrimmedNonEmpty
+    }
+}

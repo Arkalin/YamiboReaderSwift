@@ -182,7 +182,7 @@ struct MangaReaderTestsMangaOfflineCachePersistence {
         await acquirer.setData(for: imageURLs)
         let executor = MangaOfflineCacheQueueExecutor(
             store: store,
-            chapterDocumentLoader: RecordingChapterDocumentLoader(),
+            readerProjectionLoader: RecordingReaderProjectionLoader(),
             imageAcquirer: acquirer,
             maxConcurrentImageTransfers: 1
         )
@@ -268,8 +268,8 @@ private actor RecordingOfflineImageAcquirer: MangaOfflineCacheImageAcquiring {
     }
 }
 
-private actor RecordingChapterDocumentLoader: MangaChapterDocumentLoading {
-    func loadChapterDocument(at url: URL) async throws -> MangaChapterDocument {
+private actor RecordingReaderProjectionLoader: MangaReaderProjectionLoading {
+    func loadReaderProjection(at url: URL) async throws -> MangaReaderProjection {
         throw YamiboError.parsingFailed(context: "Unexpected document load in offline-cache test")
     }
 }

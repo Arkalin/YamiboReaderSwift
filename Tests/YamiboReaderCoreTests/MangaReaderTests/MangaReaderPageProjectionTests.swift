@@ -69,11 +69,11 @@ private func makeProjectionDirectory(tids: [String]) -> MangaDirectory {
     )
 }
 
-private func makeProjectionDocument(tid: String, pageCount: Int) throws -> MangaChapterDocument {
+private func makeProjectionDocument(tid: String, pageCount: Int) throws -> MangaReaderProjection {
     let imageURLs = try (0..<pageCount).map { index in
         try #require(URL(string: "https://img.example.com/\(tid)-\(index).jpg"))
     }
-    return MangaChapterDocument(
+    return MangaReaderProjection(
         tid: tid,
         ownerPostID: "post-\(tid)",
         chapterTitle: "第\(tid)话",

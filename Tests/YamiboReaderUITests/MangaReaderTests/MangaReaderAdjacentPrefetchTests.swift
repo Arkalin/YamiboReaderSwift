@@ -90,7 +90,7 @@ final class MangaReaderAdjacentPrefetchTests: XCTestCase {
         let document701 = try makeAdjacentPrefetchDocument(tid: "701", pageCount: 1)
         let document702 = try makeAdjacentPrefetchDocument(tid: "702", pageCount: 1)
         let delayedURL = document701.chapterURL
-        let loader = AdjacentPrefetchDocumentLoader(
+        let loader = AdjacentPrefetchProjectionLoader(
             documents: [document700, document701, document702],
             delayedURLs: [delayedURL]
         )
@@ -124,7 +124,7 @@ final class MangaReaderAdjacentPrefetchTests: XCTestCase {
         let document700 = try makeAdjacentPrefetchDocument(tid: "700", pageCount: 10)
         let document701 = try makeAdjacentPrefetchDocument(tid: "701", pageCount: 1)
         let delayedURL = document701.chapterURL
-        let loader = AdjacentPrefetchDocumentLoader(
+        let loader = AdjacentPrefetchProjectionLoader(
             documents: [document700, document701],
             delayedURLs: [delayedURL]
         )
@@ -214,7 +214,7 @@ final class MangaReaderAdjacentPrefetchTests: XCTestCase {
     func testAdjacentPrefetchFailureDoesNotSetDirectoryPanelError() async throws {
         let document700 = try makeAdjacentPrefetchDocument(tid: "700", pageCount: 10)
         let missingURL = makeAdjacentPrefetchURL(tid: "701")
-        let loader = AdjacentPrefetchDocumentLoader(documents: [document700])
+        let loader = AdjacentPrefetchProjectionLoader(documents: [document700])
         let fixture = try await makeAdjacentPrefetchFixture(
             document: document700,
             loader: loader,
@@ -244,10 +244,10 @@ private struct AdjacentPrefetchFixture {
 
 @MainActor
 private func makeAdjacentPrefetchFixture(
-    document: MangaChapterDocument,
+    document: MangaReaderProjection,
     initialPage: Int = 0,
-    extraDocuments: [MangaChapterDocument] = [],
-    loader: AdjacentPrefetchDocumentLoader? = nil,
+    extraDocuments: [MangaReaderProjection] = [],
+    loader: AdjacentPrefetchProjectionLoader? = nil,
     directory: MangaDirectory,
     progressSync: ProgressSyncModule? = nil
 ) async throws -> AdjacentPrefetchFixture {
@@ -260,7 +260,7 @@ private func makeAdjacentPrefetchFixture(
         settingsStore: settingsStore,
         readerResumeRouteStore: resumeRouteStore,
     )
-    let resolvedLoader = loader ?? AdjacentPrefetchDocumentLoader(documents: [document] + extraDocuments)
+    let resolvedLoader = loader ?? AdjacentPrefetchProjectionLoader(documents: [document] + extraDocuments)
     let resolvedProgressSync = progressSync ?? ProgressSyncModule(
         adapter: FavoriteLibraryProgressSyncAdapter(
                     readingProgressStore: appContext.readingProgressStore
@@ -269,7 +269,7 @@ private func makeAdjacentPrefetchFixture(
     )
     #if os(iOS)
     let dependencies = MangaReaderModelDependencies(
-        makeDocumentLoader: { resolvedLoader },
+        makeProjectionLoader: { resolvedLoader },
         makeDirectoryRepository: { AdjacentPrefetchDirectoryRepository(seed: makeAdjacentPrefetchSeed(document: document)) },
         makeDirectoryStore: { AdjacentPrefetchDirectoryStore(directories: [directory]) },
         makeDirectorySearchCooldownState: { MangaDirectorySearchCooldownState() },
@@ -278,7 +278,7 @@ private func makeAdjacentPrefetchFixture(
     )
     #else
     let dependencies = MangaReaderModelDependencies(
-        makeDocumentLoader: { resolvedLoader },
+        makeProjectionLoader: { resolvedLoader },
         makeDirectoryRepository: { AdjacentPrefetchDirectoryRepository(seed: makeAdjacentPrefetchSeed(document: document)) },
         makeDirectoryStore: { AdjacentPrefetchDirectoryStore(directories: [directory]) },
         makeDirectorySearchCooldownState: { MangaDirectorySearchCooldownState() },
@@ -307,18 +307,18 @@ private func makeAdjacentPrefetchFixture(
     )
 }
 
-private actor AdjacentPrefetchDocumentLoader: MangaChapterDocumentLoading {
-    private let documents: [URL: MangaChapterDocument]
+private actor AdjacentPrefetchProjectionLoader: MangaReaderProjectionLoading {
+    private let documents: [URL: MangaReaderProjection]
     private let delayedURLs: Set<URL>
     private var continuations: [URL: CheckedContinuation<Void, Never>] = [:]
     private var requestedURLs: [URL] = []
 
-    init(documents: [MangaChapterDocument], delayedURLs: Set<URL> = []) {
+    init(documents: [MangaReaderProjection], delayedURLs: Set<URL> = []) {
         self.documents = Dictionary(uniqueKeysWithValues: documents.map { ($0.chapterURL, $0) })
         self.delayedURLs = delayedURLs
     }
 
-    func loadChapterDocument(at url: URL) async throws -> MangaChapterDocument {
+    func loadReaderProjection(at url: URL) async throws -> MangaReaderProjection {
         requestedURLs.append(url)
         if delayedURLs.contains(url) {
             await withCheckedContinuation { continuation in
@@ -426,7 +426,7 @@ private func makeAdjacentPrefetchChapter(tid: String) -> MangaChapter {
     )
 }
 
-private func makeAdjacentPrefetchSeed(document: MangaChapterDocument) -> MangaDirectorySeed {
+private func makeAdjacentPrefetchSeed(document: MangaReaderProjection) -> MangaDirectorySeed {
     MangaDirectorySeed(
         currentChapter: MangaChapter(
             tid: document.tid,
@@ -438,8 +438,8 @@ private func makeAdjacentPrefetchSeed(document: MangaChapterDocument) -> MangaDi
     )
 }
 
-private func makeAdjacentPrefetchDocument(tid: String, pageCount: Int) throws -> MangaChapterDocument {
-    MangaChapterDocument(
+private func makeAdjacentPrefetchDocument(tid: String, pageCount: Int) throws -> MangaReaderProjection {
+    MangaReaderProjection(
         tid: tid,
         ownerPostID: "post-\(tid)",
         chapterTitle: "第\(tid)话",

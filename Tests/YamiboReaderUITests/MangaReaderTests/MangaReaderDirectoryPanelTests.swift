@@ -188,8 +188,8 @@ private struct MangaReaderDirectoryPanelFixture {
 @MainActor
 private func makeDirectoryPanelFixture(
     directoryName: String? = nil,
-    document: MangaChapterDocument? = nil,
-    extraDocuments: [MangaChapterDocument] = [],
+    document: MangaReaderProjection? = nil,
+    extraDocuments: [MangaReaderProjection] = [],
     seed: MangaDirectorySeed? = nil,
     repository: (any MangaDirectoryRepository)? = nil,
     storedDirectories: [MangaDirectory] = [],
@@ -229,7 +229,7 @@ private func makeDirectoryPanelFixture(
     )
     #if os(iOS)
     let dependencies = MangaReaderModelDependencies(
-        makeDocumentLoader: { DirectoryPanelDocumentLoader(documents: documents) },
+        makeProjectionLoader: { DirectoryPanelProjectionLoader(documents: documents) },
         makeDirectoryRepository: { resolvedRepository },
         makeDirectoryStore: { DirectoryPanelStore(directories: storedDirectories) },
         makeDirectorySearchCooldownState: { MangaDirectorySearchCooldownState() },
@@ -244,7 +244,7 @@ private func makeDirectoryPanelFixture(
     )
     #else
     let dependencies = MangaReaderModelDependencies(
-        makeDocumentLoader: { DirectoryPanelDocumentLoader(documents: documents) },
+        makeProjectionLoader: { DirectoryPanelProjectionLoader(documents: documents) },
         makeDirectoryRepository: { resolvedRepository },
         makeDirectoryStore: { DirectoryPanelStore(directories: storedDirectories) },
         makeDirectorySearchCooldownState: { MangaDirectorySearchCooldownState() },
@@ -263,14 +263,14 @@ private func makeDirectoryPanelFixture(
     )
 }
 
-private actor DirectoryPanelDocumentLoader: MangaChapterDocumentLoading {
-    private let documents: [URL: MangaChapterDocument]
+private actor DirectoryPanelProjectionLoader: MangaReaderProjectionLoading {
+    private let documents: [URL: MangaReaderProjection]
 
-    init(documents: [URL: MangaChapterDocument]) {
+    init(documents: [URL: MangaReaderProjection]) {
         self.documents = documents
     }
 
-    func loadChapterDocument(at url: URL) async throws -> MangaChapterDocument {
+    func loadReaderProjection(at url: URL) async throws -> MangaReaderProjection {
         guard let document = documents[url] else {
             throw YamiboError.unreadableBody
         }
@@ -398,8 +398,8 @@ private func makeChapter(tid: String, title: String) -> MangaChapter {
     )
 }
 
-private func makeDocument(tid: String, pageCount: Int) throws -> MangaChapterDocument {
-    MangaChapterDocument(
+private func makeDocument(tid: String, pageCount: Int) throws -> MangaReaderProjection {
+    MangaReaderProjection(
         tid: tid,
         ownerPostID: "post-\(tid)",
         chapterTitle: "第1话",

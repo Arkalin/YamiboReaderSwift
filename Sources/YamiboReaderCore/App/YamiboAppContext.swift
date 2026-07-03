@@ -30,7 +30,7 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
     public let favoriteBackgroundImageStore: FavoriteBackgroundImageStore
     public let mangaDirectoryStore: any MangaDirectoryPersisting & MangaDirectoryStorageReporting & MangaDirectoryClearing
     public let mangaDirectorySearchCooldownState: MangaDirectorySearchCooldownState
-    public let mangaChapterDocumentStore: any MangaChapterDocumentPersisting & MangaChapterDocumentStorageReporting
+    public let mangaReaderProjectionStore: any MangaReaderProjectionPersisting & MangaReaderProjectionStorageReporting
     public let mangaOfflineCacheStore: any MangaOfflineCacheStoring
     public let forumCacheStore: ForumCacheStore
     public let ordinaryImageCache: any YamiboOrdinaryImageCacheClearing
@@ -57,7 +57,7 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         favoriteBackgroundImageStore: FavoriteBackgroundImageStore? = nil,
         mangaDirectoryStore: (any MangaDirectoryPersisting & MangaDirectoryStorageReporting & MangaDirectoryClearing)? = nil,
         mangaDirectorySearchCooldownState: MangaDirectorySearchCooldownState = MangaDirectorySearchCooldownState(),
-        mangaChapterDocumentStore: (any MangaChapterDocumentPersisting & MangaChapterDocumentStorageReporting)? = nil,
+        mangaReaderProjectionStore: (any MangaReaderProjectionPersisting & MangaReaderProjectionStorageReporting)? = nil,
         mangaOfflineCacheStore: (any MangaOfflineCacheStoring)? = nil,
         forumCacheStore: ForumCacheStore? = nil,
         ordinaryImageCache: any YamiboOrdinaryImageCacheClearing = YamiboImageDataPipeline.shared,
@@ -99,7 +99,7 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         )
         self.mangaDirectoryStore = mangaDirectoryStore ?? MangaDirectoryStore(databasePool: resolvedGRDBDatabasePool)
         self.mangaDirectorySearchCooldownState = mangaDirectorySearchCooldownState
-        self.mangaChapterDocumentStore = mangaChapterDocumentStore ?? MangaChapterDocumentStore(databasePool: resolvedGRDBDatabasePool)
+        self.mangaReaderProjectionStore = mangaReaderProjectionStore ?? MangaReaderProjectionStore(diskCacheStore: diskCacheStore)
         self.mangaOfflineCacheStore = resolvedMangaOfflineCacheStore
         self.forumCacheStore = forumCacheStore ?? ForumCacheStore(
             diskCacheStore: diskCacheStore
@@ -246,16 +246,17 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         return BlogReaderRepository(client: client)
     }
 
-    public func makeMangaChapterDocumentLoader() async -> any MangaChapterDocumentLoading {
+    public func makeMangaReaderProjectionLoader() async -> any MangaReaderProjectionLoading {
         let sessionState = await sessionStore.load()
         let client = YamiboClient(
             session: session,
             cookie: sessionState.cookie,
             userAgent: sessionState.userAgent
         )
-        return CachedMangaChapterDocumentLoader(
-            store: mangaChapterDocumentStore,
-            upstream: YamiboMangaChapterDocumentLoader(client: client)
+        return YamiboMangaReaderProjectionLoader(
+            client: client,
+            projectionStore: mangaReaderProjectionStore,
+            forumCacheStore: forumCacheStore
         )
     }
 
@@ -303,7 +304,7 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         )
         let executor = MangaOfflineCacheQueueExecutor(
             store: mangaOfflineCacheStore,
-            chapterDocumentLoader: await makeMangaChapterDocumentLoader(),
+            readerProjectionLoader: await makeMangaReaderProjectionLoader(),
             imageAcquirer: MangaOfflineCacheImageAcquirer(
                 networkLoader: YamiboImageDataLoader(client: client),
                 backgroundTransport: mangaOfflineCacheBackgroundDownloadTransport
@@ -365,7 +366,7 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         try await readerCacheStore.clearAll()
         try await mangaDirectoryStore.clearAll()
         await mangaDirectorySearchCooldownState.clear()
-        try await mangaChapterDocumentStore.clearAll()
+        try await mangaReaderProjectionStore.clearAll()
         try await mangaOfflineCacheStore.clearAll()
         try await forumCacheStore.clearAll()
         try await favoriteBackgroundImageStore.deleteAll()

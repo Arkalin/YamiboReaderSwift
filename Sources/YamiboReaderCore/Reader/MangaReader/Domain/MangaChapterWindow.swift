@@ -1,9 +1,9 @@
 public struct MangaChapterWindowSnapshot: Hashable, Sendable {
-    public var documents: [MangaChapterDocument]
+    public var documents: [MangaReaderProjection]
     public var resolvedPosition: MangaReadingPosition?
 
     public init(
-        documents: [MangaChapterDocument],
+        documents: [MangaReaderProjection],
         resolvedPosition: MangaReadingPosition?
     ) {
         self.documents = documents
@@ -24,13 +24,13 @@ public enum MangaChapterWindowMutationResult: Hashable, Sendable {
 
 public struct MangaChapterWindow: Hashable, Sendable {
     public private(set) var directory: MangaDirectory
-    public private(set) var documents: [MangaChapterDocument]
+    public private(set) var documents: [MangaReaderProjection]
     public private(set) var position: MangaReadingPosition?
     private let maxLoadedDocuments: Int
 
     public init(
         directory: MangaDirectory,
-        initialDocument: MangaChapterDocument,
+        initialDocument: MangaReaderProjection,
         position: MangaReadingPosition? = nil,
         maxLoadedDocuments: Int = 10
     ) {
@@ -43,7 +43,7 @@ public struct MangaChapterWindow: Hashable, Sendable {
 
     public init?(
         directory: MangaDirectory,
-        documents: [MangaChapterDocument],
+        documents: [MangaReaderProjection],
         position: MangaReadingPosition? = nil,
         maxLoadedDocuments: Int = 10
     ) {
@@ -126,13 +126,13 @@ public struct MangaChapterWindow: Hashable, Sendable {
     }
 
     public mutating func insertAdjacentDocument(
-        _ document: MangaChapterDocument
+        _ document: MangaReaderProjection
     ) -> MangaChapterWindowMutationResult {
         insertAdjacentDocument(document, preserving: nil)
     }
 
     public mutating func insertAdjacentDocument(
-        _ document: MangaChapterDocument,
+        _ document: MangaReaderProjection,
         preserving position: MangaReadingPosition?
     ) -> MangaChapterWindowMutationResult {
         let unchangedSnapshot = snapshot
@@ -158,7 +158,7 @@ public struct MangaChapterWindow: Hashable, Sendable {
     }
 
     public mutating func reset(
-        to document: MangaChapterDocument,
+        to document: MangaReaderProjection,
         position: MangaReadingPosition?
     ) -> MangaChapterWindowSnapshot {
         documents = [document]
@@ -289,7 +289,7 @@ public struct MangaChapterWindow: Hashable, Sendable {
         return order
     }
 
-    private static func hasUniqueChapterIdentities(_ documents: [MangaChapterDocument]) -> Bool {
+    private static func hasUniqueChapterIdentities(_ documents: [MangaReaderProjection]) -> Bool {
         var tids: Set<String> = []
         for document in documents {
             guard tids.insert(document.tid).inserted else { return false }

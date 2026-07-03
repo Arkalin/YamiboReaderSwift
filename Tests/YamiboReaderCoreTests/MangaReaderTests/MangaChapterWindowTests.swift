@@ -430,11 +430,11 @@ private func makeDirectory(tids: [String]) -> MangaDirectory {
     )
 }
 
-private func makeDocument(tid: String, pageCount: Int) throws -> MangaChapterDocument {
+private func makeDocument(tid: String, pageCount: Int) throws -> MangaReaderProjection {
     let imageURLs = try (0..<pageCount).map { index in
         try #require(URL(string: "https://img.example.com/\(tid)-\(index).jpg"))
     }
-    return MangaChapterDocument(
+    return MangaReaderProjection(
         tid: tid,
         chapterTitle: "第\(tid)话",
         chapterURL: makeChapterURL(tid: tid),

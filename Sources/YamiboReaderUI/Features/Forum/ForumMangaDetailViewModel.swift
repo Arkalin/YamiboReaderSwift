@@ -6,7 +6,7 @@ import YamiboReaderCore
 @Observable
 final class ForumMangaDetailViewModel {
     var directory: MangaDirectory?
-    var currentDocument: MangaChapterDocument?
+    var currentDocument: MangaReaderProjection?
     var readingProgress: ReadingProgressRecord?
     var isLoading = false
     var errorMessage: String?
@@ -56,10 +56,10 @@ final class ForumMangaDetailViewModel {
         defer { isLoading = false }
 
         do {
-            let loader = await appContext.makeMangaChapterDocumentLoader()
+            let loader = await appContext.makeMangaReaderProjectionLoader()
             let repository = await appContext.makeMangaDirectoryRepository()
             let store = appContext.makeMangaDirectoryStore()
-            let document = try await loader.loadChapterDocument(at: context.thread.canonicalURL)
+            let document = try await loader.loadReaderProjection(at: context.thread.canonicalURL)
             let workflow = MangaDirectoryWorkflow(
                 repository: repository,
                 store: store,
@@ -74,7 +74,7 @@ final class ForumMangaDetailViewModel {
             )
             let resolution = try await workflow.resolveInitialDirectory(
                 context: launchContext,
-                document: document
+                projection: document
             )
             let resolvedDirectory = try await ensuringDirectoryContainsCurrentChapter(
                 resolution.directory,
@@ -122,7 +122,7 @@ final class ForumMangaDetailViewModel {
 
     private func ensuringDirectoryContainsCurrentChapter(
         _ directory: MangaDirectory,
-        document: MangaChapterDocument,
+        document: MangaReaderProjection,
         store: any MangaDirectoryPersisting
     ) async throws -> MangaDirectory {
         guard !directory.chapters.contains(where: { $0.tid == document.tid }) else {

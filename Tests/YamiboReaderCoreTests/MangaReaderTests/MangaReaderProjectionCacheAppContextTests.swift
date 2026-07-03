@@ -2,13 +2,13 @@ import Foundation
 import Testing
 @testable import YamiboReaderCore
 
-@Suite("MangaReaderTests: Chapter Document Cache App Context", .serialized)
-struct MangaReaderTestsChapterDocumentCacheAppContext {
-    @Test func appContextChapterDocumentLoaderUsesSharedStoreAcrossLoaderInstances() async throws {
+@Suite("MangaReaderTests: Reader Projection Cache App Context", .serialized)
+struct MangaReaderTestsReaderProjectionCacheAppContext {
+    @Test func appContextReaderProjectionLoaderUsesSharedStoreAcrossLoaderInstances() async throws {
         let harness = MangaReaderDataTestHarness()
         defer { harness.reset() }
 
-        let counter = MangaChapterDocumentCacheRequestCounter()
+        let counter = MangaReaderProjectionCacheRequestCounter()
         harness.setHandler { request in
             counter.increment()
             #expect(request.value(forHTTPHeaderField: "User-Agent") == "ChapterAgent/Context")
@@ -27,7 +27,7 @@ struct MangaReaderTestsChapterDocumentCacheAppContext {
             """)
         }
 
-        let defaults = try #require(UserDefaults(suiteName: "manga-document-context-\(UUID().uuidString)"))
+        let defaults = try #require(UserDefaults(suiteName: "manga-projection-context-\(UUID().uuidString)"))
         let sessionStore = SessionStore(defaults: defaults, key: "session")
         try await sessionStore.save(
             SessionState(
@@ -37,18 +37,18 @@ struct MangaReaderTestsChapterDocumentCacheAppContext {
             )
         )
 
-        let documentStore = try makeTestMangaChapterDocumentStore(rootDirectory: try makeTemporaryAppContextChapterDocumentDirectory())
+        let projectionStore = try makeTestMangaReaderProjectionStore(rootDirectory: try makeTemporaryAppContextReaderProjectionDirectory())
         let appContext = YamiboAppContext(
             sessionStore: sessionStore,
-            mangaChapterDocumentStore: documentStore,
+            mangaReaderProjectionStore: projectionStore,
             session: harness.session
         )
-        let chapterURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?tid=900&page=5"))
+        let chapterURL = YamiboRoute.threadByID(tid: "900", page: 5, authorID: "42", reverse: false).url
 
-        let firstLoader = await appContext.makeMangaChapterDocumentLoader()
-        let first = try await firstLoader.loadChapterDocument(at: chapterURL)
-        let secondLoader = await appContext.makeMangaChapterDocumentLoader()
-        let second = try await secondLoader.loadChapterDocument(at: chapterURL)
+        let firstLoader = await appContext.makeMangaReaderProjectionLoader()
+        let first = try await firstLoader.loadReaderProjection(at: chapterURL)
+        let secondLoader = await appContext.makeMangaReaderProjectionLoader()
+        let second = try await secondLoader.loadReaderProjection(at: chapterURL)
 
         #expect(first.tid == "900")
         #expect(second.tid == "900")
@@ -57,7 +57,7 @@ struct MangaReaderTestsChapterDocumentCacheAppContext {
     }
 }
 
-private final class MangaChapterDocumentCacheRequestCounter: @unchecked Sendable {
+private final class MangaReaderProjectionCacheRequestCounter: @unchecked Sendable {
     private let lock = NSLock()
     private var count = 0
 
@@ -74,6 +74,6 @@ private final class MangaChapterDocumentCacheRequestCounter: @unchecked Sendable
     }
 }
 
-private func makeTemporaryAppContextChapterDocumentDirectory() throws -> URL {
+private func makeTemporaryAppContextReaderProjectionDirectory() throws -> URL {
     FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
 }

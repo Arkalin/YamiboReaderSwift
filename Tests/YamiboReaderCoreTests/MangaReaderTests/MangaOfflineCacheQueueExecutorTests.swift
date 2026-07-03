@@ -18,7 +18,7 @@ struct MangaReaderTestsMangaOfflineCacheQueueExecutor {
         await acquirer.setData(for: firstChapterImages + secondChapterImages)
         let executor = MangaOfflineCacheQueueExecutor(
             store: store,
-            chapterDocumentLoader: RecordingChapterDocumentLoader(),
+            readerProjectionLoader: RecordingReaderProjectionLoader(),
             imageAcquirer: acquirer
         )
 
@@ -36,7 +36,7 @@ struct MangaReaderTestsMangaOfflineCacheQueueExecutor {
         #expect(await store.offlineCacheState(ownerName: "favorite-a", tid: "200") == .cached)
     }
 
-    @Test func continueLoadsChapterDocumentBeforeImageCountProgressAndRebuildsChapterURLFromTid() async throws {
+    @Test func continueLoadsReaderProjectionBeforeImageCountProgressAndRebuildsChapterURLFromTid() async throws {
         let store = try makeTestMangaOfflineCacheStore(rootDirectory: try makeTemporaryExecutorDirectory())
         let imageURLs = try makeImageURLs(tid: "300", count: 2)
         _ = try await store.enqueueOfflineCacheWork(
@@ -48,8 +48,8 @@ struct MangaReaderTestsMangaOfflineCacheQueueExecutor {
                 targetImageURLs: []
             )
         )
-        let documentLoader = RecordingChapterDocumentLoader()
-        await documentLoader.setDocument(
+        let projectionLoader = RecordingReaderProjectionLoader()
+        await projectionLoader.setDocument(
             try makeDocument(tid: "300", imageURLs: imageURLs),
             forAnyRequest: true
         )
@@ -57,14 +57,14 @@ struct MangaReaderTestsMangaOfflineCacheQueueExecutor {
         await acquirer.setData(for: imageURLs)
         let executor = MangaOfflineCacheQueueExecutor(
             store: store,
-            chapterDocumentLoader: documentLoader,
+            readerProjectionLoader: projectionLoader,
             imageAcquirer: acquirer
         )
 
         try await executor.continueQueue()
         await executor.waitForIdle()
 
-        let requestedURL = try #require(await documentLoader.requestedURLs.first)
+        let requestedURL = try #require(await projectionLoader.requestedURLs.first)
         let components = try #require(URLComponents(url: requestedURL, resolvingAgainstBaseURL: false))
         let queryItems = Dictionary(uniqueKeysWithValues: (components.queryItems ?? []).compactMap { item in
             item.value.map { (item.name, $0) }
@@ -112,7 +112,7 @@ struct MangaReaderTestsMangaOfflineCacheQueueExecutor {
         await acquirer.setData(for: imageURLs)
         let executor = MangaOfflineCacheQueueExecutor(
             store: store,
-            chapterDocumentLoader: RecordingChapterDocumentLoader(),
+            readerProjectionLoader: RecordingReaderProjectionLoader(),
             imageAcquirer: acquirer
         )
 
@@ -139,7 +139,7 @@ struct MangaReaderTestsMangaOfflineCacheQueueExecutor {
         let acquirer = FirstImageOnlyImmediateAcquirer(firstImageURL: imageURLs[0])
         let executor = MangaOfflineCacheQueueExecutor(
             store: store,
-            chapterDocumentLoader: RecordingChapterDocumentLoader(),
+            readerProjectionLoader: RecordingReaderProjectionLoader(),
             imageAcquirer: acquirer
         )
 
@@ -168,7 +168,7 @@ struct MangaReaderTestsMangaOfflineCacheQueueExecutor {
         let acquirer = RetryOfflineImageAcquirer(failingImageURL: imageURLs[1])
         let executor = MangaOfflineCacheQueueExecutor(
             store: store,
-            chapterDocumentLoader: RecordingChapterDocumentLoader(),
+            readerProjectionLoader: RecordingReaderProjectionLoader(),
             imageAcquirer: acquirer,
             maxConcurrentImageTransfers: 1
         )
@@ -199,7 +199,7 @@ struct MangaReaderTestsMangaOfflineCacheQueueExecutor {
         let acquirer = EmptyImageThenFailingAcquirer(emptyImageURL: imageURLs[0])
         let executor = MangaOfflineCacheQueueExecutor(
             store: store,
-            chapterDocumentLoader: RecordingChapterDocumentLoader(),
+            readerProjectionLoader: RecordingReaderProjectionLoader(),
             imageAcquirer: acquirer,
             maxConcurrentImageTransfers: 1
         )
@@ -233,7 +233,7 @@ struct MangaReaderTestsMangaOfflineCacheQueueExecutor {
         await acquirer.setData(for: [imageURLs[1]])
         let executor = MangaOfflineCacheQueueExecutor(
             store: store,
-            chapterDocumentLoader: RecordingChapterDocumentLoader(),
+            readerProjectionLoader: RecordingReaderProjectionLoader(),
             imageAcquirer: acquirer
         )
 
@@ -256,7 +256,7 @@ struct MangaReaderTestsMangaOfflineCacheQueueExecutor {
         ])
         let executor = MangaOfflineCacheQueueExecutor(
             store: store,
-            chapterDocumentLoader: RecordingChapterDocumentLoader(),
+            readerProjectionLoader: RecordingReaderProjectionLoader(),
             imageAcquirer: MangaOfflineCacheImageAcquirer(
                 networkLoader: networkLoader
             )
@@ -298,7 +298,7 @@ struct MangaReaderTestsMangaOfflineCacheQueueExecutor {
         let observer = RecordingQueueRunObserver()
         let executor = MangaOfflineCacheQueueExecutor(
             store: store,
-            chapterDocumentLoader: RecordingChapterDocumentLoader(),
+            readerProjectionLoader: RecordingReaderProjectionLoader(),
             imageAcquirer: acquirer,
             runObserver: observer,
             maxConcurrentImageTransfers: 1
@@ -327,7 +327,7 @@ struct MangaReaderTestsMangaOfflineCacheQueueExecutor {
         let observer = RecordingQueueRunObserver()
         let executor = MangaOfflineCacheQueueExecutor(
             store: store,
-            chapterDocumentLoader: RecordingChapterDocumentLoader(),
+            readerProjectionLoader: RecordingReaderProjectionLoader(),
             imageAcquirer: acquirer,
             runObserver: observer
         )
@@ -349,7 +349,7 @@ struct MangaReaderTestsMangaOfflineCacheQueueExecutor {
         let observer = RecordingQueueRunObserver()
         let executor = MangaOfflineCacheQueueExecutor(
             store: store,
-            chapterDocumentLoader: RecordingChapterDocumentLoader(),
+            readerProjectionLoader: RecordingReaderProjectionLoader(),
             imageAcquirer: acquirer,
             runObserver: observer
         )
@@ -402,7 +402,7 @@ struct MangaReaderTestsMangaOfflineCacheQueueExecutor {
         )
         let executor = MangaOfflineCacheQueueExecutor(
             store: store,
-            chapterDocumentLoader: RecordingChapterDocumentLoader(),
+            readerProjectionLoader: RecordingReaderProjectionLoader(),
             imageAcquirer: RecordingOfflineImageAcquirer()
         )
 
@@ -440,7 +440,7 @@ struct MangaReaderTestsMangaOfflineCacheQueueExecutor {
         )
         let executor = MangaOfflineCacheQueueExecutor(
             store: store,
-            chapterDocumentLoader: RecordingChapterDocumentLoader(),
+            readerProjectionLoader: RecordingReaderProjectionLoader(),
             imageAcquirer: RecordingOfflineImageAcquirer()
         )
 
@@ -453,12 +453,12 @@ struct MangaReaderTestsMangaOfflineCacheQueueExecutor {
     }
 }
 
-private actor RecordingChapterDocumentLoader: MangaChapterDocumentLoading {
+private actor RecordingReaderProjectionLoader: MangaReaderProjectionLoading {
     private(set) var requestedURLs: [URL] = []
-    private var documentByURL: [String: MangaChapterDocument] = [:]
-    private var anyDocument: MangaChapterDocument?
+    private var documentByURL: [String: MangaReaderProjection] = [:]
+    private var anyDocument: MangaReaderProjection?
 
-    func setDocument(_ document: MangaChapterDocument, forAnyRequest: Bool = false) {
+    func setDocument(_ document: MangaReaderProjection, forAnyRequest: Bool = false) {
         if forAnyRequest {
             anyDocument = document
         } else {
@@ -466,7 +466,7 @@ private actor RecordingChapterDocumentLoader: MangaChapterDocumentLoading {
         }
     }
 
-    func loadChapterDocument(at url: URL) async throws -> MangaChapterDocument {
+    func loadReaderProjection(at url: URL) async throws -> MangaReaderProjection {
         requestedURLs.append(url)
         if let document = documentByURL[url.absoluteString] ?? anyDocument {
             return document
@@ -647,8 +647,8 @@ private func makeExecutorWorkRequest(
     )
 }
 
-private func makeDocument(tid: String, imageURLs: [URL]) throws -> MangaChapterDocument {
-    MangaChapterDocument(
+private func makeDocument(tid: String, imageURLs: [URL]) throws -> MangaReaderProjection {
+    MangaReaderProjection(
         tid: tid,
         chapterTitle: "第\(tid)话",
         chapterURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(tid)&page=1")),

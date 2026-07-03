@@ -748,7 +748,7 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
         baseDirectory: rootDirectory.appendingPathComponent("favorite-background", isDirectory: true)
     )
     let mangaDirectoryStore = try makeTestMangaDirectoryStore(rootDirectory: rootDirectory)
-    let mangaChapterDocumentStore = try makeTestMangaChapterDocumentStore(rootDirectory: rootDirectory)
+    let mangaReaderProjectionStore = try makeTestMangaReaderProjectionStore(rootDirectory: rootDirectory)
     let mangaOfflineCacheStore = try makeTestMangaOfflineCacheStore(rootDirectory: rootDirectory)
     let appContext = YamiboAppContext(
         sessionStore: sessionStore,
@@ -759,7 +759,7 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
         readerCacheStore: readerCacheStore,
         favoriteBackgroundImageStore: favoriteBackgroundImageStore,
         mangaDirectoryStore: mangaDirectoryStore,
-        mangaChapterDocumentStore: mangaChapterDocumentStore,
+        mangaReaderProjectionStore: mangaReaderProjectionStore,
         mangaOfflineCacheStore: mangaOfflineCacheStore
     )
 
@@ -810,15 +810,20 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
             ]
         )
     )
-    try await mangaChapterDocumentStore.save(
-        MangaChapterDocument(
-            tid: "700",
-            chapterTitle: "测试漫画",
-            chapterURL: threadURL,
-            imageURLs: [try #require(URL(string: "https://img.example.com/reset-1.jpg"))]
-        ),
-        for: threadURL
+    let projectionIdentity = MangaReaderProjectionSourceIdentity(
+        tid: "700",
+        authorID: nil,
+        contentSource: .authorFilteredPage,
+        view: 1
     )
+    try await mangaReaderProjectionStore.save(MangaReaderProjection(
+        tid: "700",
+        chapterTitle: "测试漫画",
+        chapterURL: threadURL,
+        imageURLs: [try #require(URL(string: "https://img.example.com/reset-1.jpg"))],
+        sourceIdentity: projectionIdentity,
+        sourceFingerprint: "reset-fixture"
+    ))
     let offlineImageURL = try #require(URL(string: "https://img.example.com/offline-reset.jpg"))
     try await mangaOfflineCacheStore.saveOfflineImageData(
         Data(repeating: 7, count: 64),
@@ -859,7 +864,7 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
     let readerCacheBytes = await readerCacheStore.totalDiskUsageBytes()
     let backgroundData = await favoriteBackgroundImageStore.loadData(imageID: "background")
     let mangaDirectoryBytes = await mangaDirectoryStore.totalDiskUsageBytes()
-    let mangaChapterDocumentBytes = await mangaChapterDocumentStore.totalDiskUsageBytes()
+    let mangaReaderProjectionBytes = await mangaReaderProjectionStore.totalDiskUsageBytes()
     let mangaOfflineCacheBytes = await mangaOfflineCacheStore.totalDiskUsageBytes()
     let mangaOfflineMemberships = await mangaOfflineCacheStore.allMemberships()
     let mangaOfflineWorks = await mangaOfflineCacheStore.allOfflineCacheWorks()
@@ -874,7 +879,7 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
     #expect(readerCacheBytes == 0)
     #expect(backgroundData == nil)
     #expect(mangaDirectoryBytes == 0)
-    #expect(mangaChapterDocumentBytes == 0)
+    #expect(mangaReaderProjectionBytes == 0)
     #expect(mangaOfflineCacheBytes == 0)
     #expect(mangaOfflineMemberships.isEmpty)
     #expect(mangaOfflineWorks.isEmpty)

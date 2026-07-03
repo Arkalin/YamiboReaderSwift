@@ -141,9 +141,15 @@ struct MangaReaderTestsMangaOfflineCacheStore {
         let root = try makeTemporaryOfflineCacheDirectory()
         let offlineStore = try makeTestMangaOfflineCacheStore(rootDirectory: root)
         let directoryStore = try makeTestMangaDirectoryStore(rootDirectory: root)
-        let documentStore = try makeTestMangaChapterDocumentStore(rootDirectory: root)
+        let projectionStore = try makeTestMangaReaderProjectionStore(rootDirectory: root)
         let chapterURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100"))
         let imageURL = try #require(URL(string: "https://img.example.com/offline.jpg"))
+        let sourceIdentity = MangaReaderProjectionSourceIdentity(
+            tid: "100",
+            authorID: "42",
+            contentSource: .authorFilteredPage,
+            view: 1
+        )
 
         try await directoryStore.saveDirectory(
             MangaDirectory(
@@ -160,14 +166,16 @@ struct MangaReaderTestsMangaOfflineCacheStore {
                 ]
             )
         )
-        try await documentStore.save(
-            MangaChapterDocument(
+        try await projectionStore.save(
+            MangaReaderProjection(
                 tid: "100",
+                ownerAuthorID: "42",
                 chapterTitle: "第1话",
                 chapterURL: chapterURL,
-                imageURLs: [imageURL]
-            ),
-            for: chapterURL
+                imageURLs: [imageURL],
+                sourceIdentity: sourceIdentity,
+                sourceFingerprint: "source"
+            )
         )
         try await offlineStore.saveOfflineImageData(Data([1]), for: imageURL)
         try await offlineStore.saveMembership(makeOfflineMembership(ownerName: "透明目录", tid: "100", imageURLs: [imageURL]))
@@ -175,7 +183,7 @@ struct MangaReaderTestsMangaOfflineCacheStore {
         try await offlineStore.removeMembership(ownerName: "透明目录", tid: "100")
 
         #expect(try await directoryStore.directory(named: "透明目录")?.chapters.map(\.tid) == ["100"])
-        #expect(await documentStore.document(for: chapterURL)?.tid == "100")
+        #expect(await projectionStore.projection(for: sourceIdentity)?.tid == "100")
         #expect(await offlineStore.offlineImageData(for: imageURL) == nil)
     }
 

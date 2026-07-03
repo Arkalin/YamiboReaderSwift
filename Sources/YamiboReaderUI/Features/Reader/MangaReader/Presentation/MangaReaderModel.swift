@@ -2,7 +2,7 @@ import SwiftUI
 import YamiboReaderCore
 
 struct MangaReaderModelDependencies {
-    var makeDocumentLoader: @Sendable () async -> any MangaChapterDocumentLoading
+    var makeProjectionLoader: @Sendable () async -> any MangaReaderProjectionLoading
     var makeDirectoryRepository: @Sendable () async -> any MangaDirectoryRepository
     var makeDirectoryStore: @Sendable () -> any MangaDirectoryPersisting
     var makeOfflineCacheStore: @Sendable () -> (any MangaOfflineCacheStoring)?
@@ -12,7 +12,7 @@ struct MangaReaderModelDependencies {
     var progressSync: ProgressSyncModule
 
     init(
-        makeDocumentLoader: @escaping @Sendable () async -> any MangaChapterDocumentLoading,
+        makeProjectionLoader: @escaping @Sendable () async -> any MangaReaderProjectionLoading,
         makeDirectoryRepository: @escaping @Sendable () async -> any MangaDirectoryRepository,
         makeDirectoryStore: @escaping @Sendable () -> any MangaDirectoryPersisting,
         makeOfflineCacheStore: @escaping @Sendable () -> (any MangaOfflineCacheStoring)? = { nil },
@@ -23,7 +23,7 @@ struct MangaReaderModelDependencies {
         makeImageDataLoader: @escaping @Sendable () async -> any MangaImageDataLoading,
         progressSync: ProgressSyncModule
     ) {
-        self.makeDocumentLoader = makeDocumentLoader
+        self.makeProjectionLoader = makeProjectionLoader
         self.makeDirectoryRepository = makeDirectoryRepository
         self.makeDirectoryStore = makeDirectoryStore
         self.makeOfflineCacheStore = makeOfflineCacheStore
@@ -35,7 +35,7 @@ struct MangaReaderModelDependencies {
 
     init(appContext: YamiboAppContext) {
         self.init(
-            makeDocumentLoader: { await appContext.makeMangaChapterDocumentLoader() },
+            makeProjectionLoader: { await appContext.makeMangaReaderProjectionLoader() },
             makeDirectoryRepository: { await appContext.makeMangaDirectoryRepository() },
             makeDirectoryStore: { appContext.makeMangaDirectoryStore() },
             makeOfflineCacheStore: { appContext.makeMangaOfflineCacheStore() },
@@ -164,7 +164,7 @@ public final class MangaReaderModel: ObservableObject {
         )
         let workflow = MangaReaderWorkflow(
             context: context,
-            documentLoader: await dependencies.makeDocumentLoader(),
+            projectionLoader: await dependencies.makeProjectionLoader(),
             directoryRepository: await dependencies.makeDirectoryRepository(),
             directoryStore: dependencies.makeDirectoryStore(),
             offlineCacheStore: dependencies.makeOfflineCacheStore(),

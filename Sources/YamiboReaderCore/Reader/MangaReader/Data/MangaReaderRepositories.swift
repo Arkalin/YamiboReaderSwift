@@ -1,28 +1,17 @@
 import Foundation
 
-public protocol MangaChapterDocumentLoading: Sendable {
-    func loadChapterDocument(at url: URL) async throws -> MangaChapterDocument
+public protocol MangaReaderProjectionLoading: Sendable {
+    func loadReaderProjection(at url: URL) async throws -> MangaReaderProjection
 }
 
-public protocol MangaChapterDocumentPersisting: Sendable {
-    func document(for chapterURL: URL) async -> MangaChapterDocument?
-    func save(_ document: MangaChapterDocument, for chapterURL: URL) async throws
+public protocol MangaReaderProjectionPersisting: Sendable {
+    func projection(for identity: MangaReaderProjectionSourceIdentity) async -> MangaReaderProjection?
+    func save(_ projection: MangaReaderProjection) async throws
     func clearAll() async throws
 }
 
-public protocol MangaChapterDocumentStorageReporting: Sendable {
+public protocol MangaReaderProjectionStorageReporting: Sendable {
     func totalDiskUsageBytes() async -> Int
-}
-
-public extension MangaChapterDocumentPersisting {
-    func document(forTID tid: String) async -> MangaChapterDocument? {
-        guard let url = YamiboRoute.chapterURL(forTID: tid) else { return nil }
-        return await document(for: url)
-    }
-
-    func save(_ document: MangaChapterDocument) async throws {
-        try await save(document, for: document.chapterURL)
-    }
 }
 
 public struct MangaDirectorySeed: Hashable, Sendable {

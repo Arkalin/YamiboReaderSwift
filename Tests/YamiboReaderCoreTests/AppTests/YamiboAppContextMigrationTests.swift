@@ -66,9 +66,9 @@ import Testing
     #expect(counts["favorite_items"] == 1)
     #expect(counts["reading_progress"] == 1)
     #expect(counts["manga_directories"] == 1)
-    #expect(counts["manga_chapter_documents"] == 1)
+    #expect(counts["manga_chapter_documents"] == 0)
     #expect(counts["manga_offline_cache_memberships"] == 1)
-    #expect(counts["cache_entries"] == 2)
+    #expect(counts["cache_entries"] == 3)
     let readerCacheEntriesTableExists = try await database.read { db in
         try db.tableExists("reader_cache_entries")
     }
@@ -80,7 +80,7 @@ import Testing
     let jsonCacheNamespaces = try await database.read { db in
         try String.fetchAll(db, sql: "SELECT namespace FROM cache_entries ORDER BY namespace")
     }
-    #expect(jsonCacheNamespaces == ["forum_thread_pages", "novel_reader_projections"])
+    #expect(jsonCacheNamespaces == ["forum_thread_pages", "manga_reader_projections", "novel_reader_projections"])
     #expect(!FileManager.default.fileExists(atPath: rootDirectory.appendingPathComponent("reader-cache/index.json", isDirectory: false).path))
     #expect(!FileManager.default.fileExists(atPath: rootDirectory.appendingPathComponent("image-data/index.json", isDirectory: false).path))
 }
@@ -260,8 +260,8 @@ private func saveMigratedAppState(
             chapters: [chapter]
         )
     )
-    try await appContext.mangaChapterDocumentStore.save(
-        MangaChapterDocument(
+    try await appContext.mangaReaderProjectionStore.save(
+        MangaReaderProjection(
             tid: chapter.tid,
             chapterTitle: chapter.rawTitle,
             chapterURL: chapterURL,

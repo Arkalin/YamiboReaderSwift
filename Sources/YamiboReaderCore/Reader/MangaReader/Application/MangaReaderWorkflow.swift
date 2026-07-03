@@ -33,7 +33,7 @@ public final class MangaReaderWorkflow {
     public private(set) var shouldAutoUpdateDirectoryAfterPrepare = false
 
     private let context: MangaLaunchContext
-    private let documentLoader: any MangaChapterDocumentLoading
+    private let projectionLoader: any MangaReaderProjectionLoading
     private let directoryWorkflow: MangaDirectoryWorkflow
     private let offlineCacheStore: (any MangaOfflineCacheStoring)?
     private let adjacentPrefetchPolicy: MangaAdjacentChapterPrefetchPolicy
@@ -45,7 +45,7 @@ public final class MangaReaderWorkflow {
 
     public init(
         context: MangaLaunchContext,
-        documentLoader: any MangaChapterDocumentLoading,
+        projectionLoader: any MangaReaderProjectionLoading,
         directoryRepository: any MangaDirectoryRepository,
         directoryStore: any MangaDirectoryPersisting,
         offlineCacheStore: (any MangaOfflineCacheStoring)? = nil,
@@ -55,7 +55,7 @@ public final class MangaReaderWorkflow {
         adjacentPrefetchPolicy: MangaAdjacentChapterPrefetchPolicy = MangaAdjacentChapterPrefetchPolicy()
     ) {
         self.context = context
-        self.documentLoader = documentLoader
+        self.projectionLoader = projectionLoader
         self.offlineCacheStore = offlineCacheStore
         self.adjacentPrefetchPolicy = adjacentPrefetchPolicy
         self.directoryWorkflow = MangaDirectoryWorkflow(
@@ -82,12 +82,12 @@ public final class MangaReaderWorkflow {
         )
 
         do {
-            let document = try await documentLoader.loadChapterDocument(at: context.chapterURL)
+            let document = try await projectionLoader.loadReaderProjection(at: context.chapterURL)
             let resolution: MangaDirectoryResolutionResult
             do {
                 resolution = try await directoryWorkflow.resolveInitialDirectory(
                     context: context,
-                    document: document
+                    projection: document
                 )
             } catch {
                 guard let offlineDirectory = await offlineReadableCurrentChapterDirectory(for: document) else {
@@ -127,7 +127,7 @@ public final class MangaReaderWorkflow {
         return presentation
     }
 
-    private func offlineReadableCurrentChapterDirectory(for document: MangaChapterDocument) async -> MangaDirectory? {
+    private func offlineReadableCurrentChapterDirectory(for document: MangaReaderProjection) async -> MangaDirectory? {
         guard let offlineCacheStore,
               let ownerName = context.directoryName?.mangaReaderTrimmedNonEmpty,
               let membership = await offlineCacheStore.membership(ownerName: ownerName, tid: document.tid),
@@ -198,9 +198,9 @@ public final class MangaReaderWorkflow {
         for delta in deltas {
             guard !Task.isCancelled else { return nil }
             guard let chapter = window.adjacentChapterForLoadedRange(delta: delta) else { continue }
-            let document: MangaChapterDocument
+            let document: MangaReaderProjection
             do {
-                document = try await documentLoader.loadChapterDocument(at: chapter.url)
+                document = try await projectionLoader.loadReaderProjection(at: chapter.url)
             } catch {
                 guard !Task.isCancelled else { return nil }
                 continue
@@ -332,7 +332,7 @@ public final class MangaReaderWorkflow {
             return presentation
         }
 
-        let document = try await documentLoader.loadChapterDocument(at: chapter.url)
+        let document = try await projectionLoader.loadReaderProjection(at: chapter.url)
         try Task.checkCancellation()
 
         let targetPosition = MangaReadingPosition(tid: document.tid, localIndex: 0)
@@ -373,7 +373,7 @@ public final class MangaReaderWorkflow {
             throw YamiboError.underlying("Manga reader target chapter is unavailable.")
         }
 
-        let document = try await documentLoader.loadChapterDocument(at: chapter.url)
+        let document = try await projectionLoader.loadReaderProjection(at: chapter.url)
         try Task.checkCancellation()
 
         let targetPosition = MangaReadingPosition(tid: document.tid, localIndex: position.localIndex)
@@ -429,7 +429,7 @@ public final class MangaReaderWorkflow {
             return presentation
         }
 
-        let document = try await documentLoader.loadChapterDocument(at: chapter.url)
+        let document = try await projectionLoader.loadReaderProjection(at: chapter.url)
         try Task.checkCancellation()
         guard !document.imageURLs.isEmpty else {
             throw YamiboError.unreadableBody
@@ -535,7 +535,7 @@ public final class MangaReaderWorkflow {
     }
 
     private static func adjacentChapterTargetPosition(
-        document: MangaChapterDocument,
+        document: MangaReaderProjection,
         delta: Int
     ) -> MangaReadingPosition {
         MangaReadingPosition(

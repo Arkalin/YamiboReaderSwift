@@ -64,7 +64,7 @@ final class MangaReaderModelSettingsProgressTests: XCTestCase {
             initialPage: 0,
             directoryName: nil
         )
-        let document = MangaChapterDocument(
+        let document = MangaReaderProjection(
             tid: "701",
             ownerPostID: "9001",
             chapterTitle: "第1话",
@@ -74,7 +74,7 @@ final class MangaReaderModelSettingsProgressTests: XCTestCase {
                 try XCTUnwrap(URL(string: "https://img.example.com/701-1.jpg"))
             ]
         )
-        let loader = RetryableMangaChapterDocumentLoader(outputs: [
+        let loader = RetryableMangaReaderProjectionLoader(outputs: [
             .failure(.offline),
             .success(document)
         ])
@@ -98,7 +98,7 @@ final class MangaReaderModelSettingsProgressTests: XCTestCase {
         )
         #if os(iOS)
         let dependencies = MangaReaderModelDependencies(
-            makeDocumentLoader: { loader },
+            makeProjectionLoader: { loader },
             makeDirectoryRepository: { repository },
             makeDirectoryStore: { store },
             makeImageDataLoader: { StubMangaImageDataLoader() },
@@ -111,7 +111,7 @@ final class MangaReaderModelSettingsProgressTests: XCTestCase {
         )
         #else
         let dependencies = MangaReaderModelDependencies(
-            makeDocumentLoader: { loader },
+            makeProjectionLoader: { loader },
             makeDirectoryRepository: { repository },
             makeDirectoryStore: { store },
             progressSync: ProgressSyncModule(
@@ -212,7 +212,7 @@ final class MangaReaderModelSettingsProgressTests: XCTestCase {
         let savedPosition = try XCTUnwrap(savedPositions.first)
         XCTAssertEqual(savedPosition.threadURL, fixture.originalURL)
         XCTAssertEqual(savedPosition.chapterURL, fixture.chapterURL)
-        XCTAssertEqual(savedPosition.chapterTitle, "第1话")
+        XCTAssertEqual(savedPosition.chapterTitle, "第701话")
         XCTAssertEqual(savedPosition.pageIndex, 1)
         XCTAssertEqual(savedPosition.pageCount, 3)
         XCTAssertEqual(savedPosition.mangaID, "chapter:701")
@@ -395,8 +395,8 @@ final class MangaReaderModelSettingsProgressTests: XCTestCase {
         let target = try XCTUnwrap(fixture.model.currentChapterCommentTarget)
         XCTAssertEqual(target.threadURL, fixture.chapterURL)
         XCTAssertEqual(target.view, 1)
-        XCTAssertEqual(target.ownerPostID, "9001")
-        XCTAssertEqual(target.title, "第1话")
+        XCTAssertEqual(target.ownerPostID, "post-701")
+        XCTAssertEqual(target.title, "第701话")
     }
 
     func testNilMangaChapterCommentTargetShowsEmptyCommentsState() async throws {
@@ -698,10 +698,10 @@ private struct MangaReaderModelSettingsProgressFixture {
 private func makeFixture(
     initialPage: Int = 0,
     imageCount: Int = 3,
-    document suppliedDocument: MangaChapterDocument? = nil,
+    document suppliedDocument: MangaReaderProjection? = nil,
     appSettings: AppSettings = AppSettings(),
     progressSync: ProgressSyncModule? = nil,
-    documents suppliedDocuments: [MangaChapterDocument]? = nil,
+    documents suppliedDocuments: [MangaReaderProjection]? = nil,
     directory suppliedDirectory: MangaDirectory? = nil
 ) async throws -> MangaReaderModelSettingsProgressFixture {
     let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "manga-settings-progress-fixture")
@@ -751,7 +751,7 @@ private func makeFixture(
     )
     #if os(iOS)
     let dependencies = MangaReaderModelDependencies(
-        makeDocumentLoader: { StubMangaChapterDocumentLoader(documents: suppliedDocuments ?? [document]) },
+        makeProjectionLoader: { StubMangaReaderProjectionLoader(documents: suppliedDocuments ?? [document]) },
         makeDirectoryRepository: { repository },
         makeDirectoryStore: { store },
         makeImageDataLoader: { StubMangaImageDataLoader() },
@@ -759,7 +759,7 @@ private func makeFixture(
     )
     #else
     let dependencies = MangaReaderModelDependencies(
-        makeDocumentLoader: { StubMangaChapterDocumentLoader(documents: suppliedDocuments ?? [document]) },
+        makeProjectionLoader: { StubMangaReaderProjectionLoader(documents: suppliedDocuments ?? [document]) },
         makeDirectoryRepository: { repository },
         makeDirectoryStore: { store },
         progressSync: resolvedProgressSync
@@ -785,14 +785,14 @@ private func makeFixture(
     )
 }
 
-private actor StubMangaChapterDocumentLoader: MangaChapterDocumentLoading {
-    let documents: [URL: MangaChapterDocument]
+private actor StubMangaReaderProjectionLoader: MangaReaderProjectionLoading {
+    let documents: [URL: MangaReaderProjection]
 
-    init(documents: [MangaChapterDocument]) {
+    init(documents: [MangaReaderProjection]) {
         self.documents = Dictionary(uniqueKeysWithValues: documents.map { ($0.chapterURL, $0) })
     }
 
-    func loadChapterDocument(at url: URL) async throws -> MangaChapterDocument {
+    func loadReaderProjection(at url: URL) async throws -> MangaReaderProjection {
         guard let document = documents[url] else {
             throw YamiboError.unreadableBody
         }
@@ -800,9 +800,9 @@ private actor StubMangaChapterDocumentLoader: MangaChapterDocumentLoading {
     }
 }
 
-private actor RetryableMangaChapterDocumentLoader: MangaChapterDocumentLoading {
+private actor RetryableMangaReaderProjectionLoader: MangaReaderProjectionLoading {
     enum Output: Sendable {
-        case success(MangaChapterDocument)
+        case success(MangaReaderProjection)
         case failure(YamiboError)
     }
 
@@ -817,7 +817,7 @@ private actor RetryableMangaChapterDocumentLoader: MangaChapterDocumentLoading {
         self.outputs = outputs
     }
 
-    func loadChapterDocument(at url: URL) async throws -> MangaChapterDocument {
+    func loadReaderProjection(at url: URL) async throws -> MangaReaderProjection {
         loadCountValue += 1
         guard !outputs.isEmpty else {
             throw YamiboError.unreadableBody
@@ -878,8 +878,8 @@ private actor StubMangaDirectoryStore: MangaDirectoryPersisting {
     }
 }
 
-private func makeFixtureDocument(tid: String, pageCount: Int) throws -> MangaChapterDocument {
-    MangaChapterDocument(
+private func makeFixtureDocument(tid: String, pageCount: Int) throws -> MangaReaderProjection {
+    MangaReaderProjection(
         tid: tid,
         ownerPostID: "post-\(tid)",
         chapterTitle: "第\(tid)话",

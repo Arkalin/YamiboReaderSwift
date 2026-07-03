@@ -155,11 +155,23 @@ struct MangaReaderTestsMangaStores {
         #expect(progress?.manga?.chapterThreadID == "912")
     }
 
-    @Test func chapterDocumentSaveLoadPreservesOrderedImageURLsByTid() async throws {
+    @Test func readerProjectionSaveLoadPreservesOrderedImageURLsBySourceIdentity() async throws {
         let database = try YamiboDatabase.openPool(rootDirectory: makeMangaStoreRoot())
-        let store = MangaChapterDocumentStore(databasePool: database)
-        let boundaryURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=920&page=5&authorid=42"))
-        let variantURL = try #require(URL(string: "https://bbs.yamibo.com/thread-920-2-1.html"))
+        let store = MangaReaderProjectionStore(databasePool: database)
+        let firstIdentity = MangaReaderProjectionSourceIdentity(
+            tid: "920",
+            authorID: "42",
+            contentSource: .authorFilteredPage,
+            view: 5
+        )
+        let secondIdentity = MangaReaderProjectionSourceIdentity(
+            tid: "920",
+            authorID: "42",
+            contentSource: .authorFilteredPage,
+            view: 2
+        )
+        let firstURL = YamiboRoute.threadByID(tid: "920", page: 5, authorID: "42", reverse: false).url
+        let secondURL = YamiboRoute.threadByID(tid: "920", page: 2, authorID: "42", reverse: false).url
         let firstImages = try [
             #require(URL(string: "https://img.example.com/920-1.jpg")),
             #require(URL(string: "https://img.example.com/920-2.jpg")),
@@ -170,57 +182,42 @@ struct MangaReaderTestsMangaStores {
             #require(URL(string: "https://img.example.com/920-c.webp")),
         ]
 
-        try await store.save(MangaChapterDocument(
+        try await store.save(MangaReaderProjection(
             tid: " ",
             ownerPostID: " 8001 ",
             chapterTitle: "第5话",
-            chapterURL: boundaryURL,
-            imageURLs: firstImages
-        ), for: boundaryURL)
-        try await store.save(MangaChapterDocument(
+            chapterURL: firstURL,
+            imageURLs: firstImages,
+            sourceIdentity: firstIdentity,
+            sourceFingerprint: "first-source"
+        ))
+        try await store.save(MangaReaderProjection(
             tid: "920",
             ownerPostID: "8002",
             chapterTitle: "第5话 修订",
-            chapterURL: variantURL,
-            imageURLs: updatedImages
+            chapterURL: secondURL,
+            imageURLs: updatedImages,
+            sourceIdentity: secondIdentity,
+            sourceFingerprint: "second-source"
         ))
 
-        let loadedByTID = try #require(await store.document(forTID: "920"))
-        let loadedByURL = try #require(await store.document(for: variantURL))
+        let loadedFirst = try #require(await store.projection(for: firstIdentity))
+        let loadedSecond = try #require(await store.projection(for: secondIdentity))
 
-        #expect(loadedByTID == loadedByURL)
-        #expect(loadedByTID.tid == "920")
-        #expect(loadedByTID.ownerPostID == "8002")
-        #expect(loadedByTID.chapterTitle == "第5话 修订")
-        #expect(loadedByTID.chapterURL.absoluteString == "https://bbs.yamibo.com/forum.php?mobile=2&mod=viewthread&page=1&tid=920")
-        #expect(loadedByTID.imageURLs == updatedImages)
-
-        let databaseState = try await database.read { db in
-            (
-                documentColumns: try columnNames(table: "manga_chapter_documents", in: db),
-                imageColumns: try columnNames(table: "manga_chapter_document_images", in: db),
-                imageRows: try String.fetchAll(
-                    db,
-                    sql: """
-                    SELECT image_url
-                    FROM manga_chapter_document_images
-                    WHERE tid = ?
-                    ORDER BY manual_order ASC
-                    """,
-                    arguments: ["920"]
-                )
-            )
-        }
-        #expect(databaseState.documentColumns == ["tid", "owner_post_id", "chapter_title"])
-        #expect(databaseState.imageColumns == ["tid", "manual_order", "image_url"])
-        #expect(databaseState.imageRows == updatedImages.map(\.absoluteString))
+        #expect(loadedFirst.imageURLs == firstImages)
+        #expect(loadedSecond.tid == "920")
+        #expect(loadedSecond.ownerPostID == "8002")
+        #expect(loadedSecond.chapterTitle == "第5话 修订")
+        #expect(loadedSecond.chapterURL == secondURL)
+        #expect(loadedSecond.imageURLs == updatedImages)
+        #expect(loadedFirst != loadedSecond)
     }
 
-    @Test func appContextDefaultsUseMangaDirectoryAndDocumentStores() {
+    @Test func appContextDefaultsUseMangaDirectoryAndProjectionStores() {
         let appContext = YamiboAppContext()
 
         #expect(appContext.mangaDirectoryStore is MangaDirectoryStore)
-        #expect(appContext.mangaChapterDocumentStore is MangaChapterDocumentStore)
+        #expect(appContext.mangaReaderProjectionStore is MangaReaderProjectionStore)
     }
 
     @Test func readerResumeRoutePersistsMangaNativeContextByTidWithoutThreadURLs() async throws {

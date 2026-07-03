@@ -17,13 +17,14 @@ func makeTestMangaDirectoryStore(
     )
 }
 
-func makeTestMangaChapterDocumentStore(
+func makeTestMangaReaderProjectionStore(
     rootDirectory: URL? = nil,
-    prefix: String = "grdb-manga-chapter-document"
-) throws -> MangaChapterDocumentStore {
+    prefix: String = "grdb-manga-reader-projection"
+) throws -> MangaReaderProjectionStore {
     let rootDirectory = rootDirectory ?? makeTestMangaStoreRoot(prefix: prefix)
-    return MangaChapterDocumentStore(
-        databasePool: try YamiboDatabase.openSharedPool(rootDirectory: rootDirectory.appendingPathComponent("grdb", isDirectory: true))
+    return MangaReaderProjectionStore(
+        databasePool: try YamiboDatabase.openSharedPool(rootDirectory: rootDirectory.appendingPathComponent("grdb", isDirectory: true)),
+        rootDirectory: rootDirectory
     )
 }
 

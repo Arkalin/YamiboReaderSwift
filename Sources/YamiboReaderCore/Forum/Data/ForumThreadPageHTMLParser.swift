@@ -229,7 +229,8 @@ public enum ForumThreadPageHTMLParser {
         let imageElements = try body.select("img").array()
             + container.select(".img_one img").array()
         return try imageElements.compactMap { image in
-            let source = try image.attr("src").threadRoutingTrimmedNonEmpty
+            let source = try image.attr("zsrc").threadRoutingTrimmedNonEmpty
+                ?? image.attr("src").threadRoutingTrimmedNonEmpty
             guard let source,
                   !source.lowercased().contains("static/image/") else {
                 return nil

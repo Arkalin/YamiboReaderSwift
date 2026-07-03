@@ -8,13 +8,13 @@ struct MangaReaderTestsWorkflow {
     @Test func workflowStartsLoadingAndPublishesLoadedPresentation() async throws {
         let document = try makeWorkflowDocument(tid: "700", pageCount: 2)
         let seed = makeWorkflowSeed(currentTID: "700", tagIDs: ["12"])
-        let loader = RecordingMangaChapterDocumentLoader(output: .document(document))
+        let loader = RecordingMangaReaderProjectionLoader(output: .document(document))
         let repository = RecordingMangaDirectoryRepository(output: .seed(seed))
         let store = RecordingMangaDirectoryStore()
         let context = try makeWorkflowContext(tid: "700", initialPage: 1)
         let workflow = MangaReaderWorkflow(
             context: context,
-            documentLoader: loader,
+            projectionLoader: loader,
             directoryRepository: repository,
             directoryStore: store
         )
@@ -60,14 +60,14 @@ struct MangaReaderTestsWorkflow {
 
     @Test func workflowMovesReadingPositionInMemoryByLoadedPageIndex() async throws {
         let document = try makeWorkflowDocument(tid: "700", pageCount: 3)
-        let loader = RecordingMangaChapterDocumentLoader(output: .document(document))
+        let loader = RecordingMangaReaderProjectionLoader(output: .document(document))
         let repository = RecordingMangaDirectoryRepository(
             output: .seed(makeWorkflowSeed(currentTID: "700", tagIDs: ["12"]))
         )
         let store = RecordingMangaDirectoryStore()
         let workflow = MangaReaderWorkflow(
             context: try makeWorkflowContext(tid: "700", initialPage: 0),
-            documentLoader: loader,
+            projectionLoader: loader,
             directoryRepository: repository,
             directoryStore: store
         )
@@ -90,7 +90,7 @@ struct MangaReaderTestsWorkflow {
         let document = try makeWorkflowDocument(tid: "700", pageCount: 13)
         let workflow = MangaReaderWorkflow(
             context: try makeWorkflowContext(tid: "700", initialPage: 11),
-            documentLoader: RecordingMangaChapterDocumentLoader(output: .document(document)),
+            projectionLoader: RecordingMangaReaderProjectionLoader(output: .document(document)),
             directoryRepository: RecordingMangaDirectoryRepository(
                 output: .seed(makeWorkflowSeed(currentTID: "700", tagIDs: ["12"]))
             ),
@@ -132,7 +132,7 @@ struct MangaReaderTestsWorkflow {
         let document = try makeWorkflowDocument(tid: "700", pageCount: 2)
         let workflow = MangaReaderWorkflow(
             context: try makeWorkflowContext(tid: "700", initialPage: 1),
-            documentLoader: RecordingMangaChapterDocumentLoader(output: .document(document)),
+            projectionLoader: RecordingMangaReaderProjectionLoader(output: .document(document)),
             directoryRepository: RecordingMangaDirectoryRepository(
                 output: .seed(makeWorkflowSeed(currentTID: "700", tagIDs: ["12"]))
             ),
@@ -166,7 +166,7 @@ struct MangaReaderTestsWorkflow {
         let document = try makeWorkflowDocument(tid: "700", pageCount: 2)
         let workflow = MangaReaderWorkflow(
             context: try makeWorkflowContext(tid: "700", initialPage: 0),
-            documentLoader: RecordingMangaChapterDocumentLoader(output: .document(document)),
+            projectionLoader: RecordingMangaReaderProjectionLoader(output: .document(document)),
             directoryRepository: RecordingMangaDirectoryRepository(
                 output: .seed(makeWorkflowSeed(currentTID: "700", tagIDs: ["12"]))
             ),
@@ -192,7 +192,7 @@ struct MangaReaderTestsWorkflow {
         let document = try makeWorkflowDocument(tid: "700", pageCount: 2)
         let workflow = MangaReaderWorkflow(
             context: try makeWorkflowContext(tid: "700", initialPage: 0),
-            documentLoader: RecordingMangaChapterDocumentLoader(output: .document(document)),
+            projectionLoader: RecordingMangaReaderProjectionLoader(output: .document(document)),
             directoryRepository: RecordingMangaDirectoryRepository(
                 output: .seed(makeWorkflowSeed(currentTID: "700", tagIDs: ["12"]))
             ),
@@ -216,7 +216,7 @@ struct MangaReaderTestsWorkflow {
             sourceKey: "local",
             tids: ["999"]
         )
-        let loader = RecordingMangaChapterDocumentLoader(output: .document(document))
+        let loader = RecordingMangaReaderProjectionLoader(output: .document(document))
         let repository = RecordingMangaDirectoryRepository(
             output: .seed(makeWorkflowSeed(currentTID: "700", tagIDs: ["12"]))
         )
@@ -228,7 +228,7 @@ struct MangaReaderTestsWorkflow {
         )
         let workflow = MangaReaderWorkflow(
             context: context,
-            documentLoader: loader,
+            projectionLoader: loader,
             directoryRepository: repository,
             directoryStore: store
         )
@@ -256,12 +256,12 @@ struct MangaReaderTestsWorkflow {
             sourceKey: "local",
             tids: ["700", "701"]
         )
-        let loader = RecordingMangaChapterDocumentLoader(output: .document(document))
+        let loader = RecordingMangaReaderProjectionLoader(output: .document(document))
         let repository = RecordingMangaDirectoryRepository(output: .failure(.offline))
         let store = RecordingMangaDirectoryStore(directories: [existingDirectory])
         let workflow = MangaReaderWorkflow(
             context: try makeWorkflowContext(tid: "700", initialPage: 0),
-            documentLoader: loader,
+            projectionLoader: loader,
             directoryRepository: repository,
             directoryStore: store
         )
@@ -289,12 +289,12 @@ struct MangaReaderTestsWorkflow {
             sourceKey: "local",
             tids: ["700"]
         )
-        let loader = RecordingMangaChapterDocumentLoader(output: .document(document))
+        let loader = RecordingMangaReaderProjectionLoader(output: .document(document))
         let repository = RecordingMangaDirectoryRepository(output: .failure(.offline))
         let store = RecordingMangaDirectoryStore(directories: [existingDirectory])
         let workflow = MangaReaderWorkflow(
             context: try makeWorkflowContext(tid: "700", directoryName: "Missing"),
-            documentLoader: loader,
+            projectionLoader: loader,
             directoryRepository: repository,
             directoryStore: store
         )
@@ -315,13 +315,13 @@ struct MangaReaderTestsWorkflow {
     @Test func directoryNameAndTIDMissInitializesSeedDirectory() async throws {
         let document = try makeWorkflowDocument(tid: "700", pageCount: 1)
         let seed = makeWorkflowSeed(currentTID: "700", tagIDs: ["12"])
-        let loader = RecordingMangaChapterDocumentLoader(output: .document(document))
+        let loader = RecordingMangaReaderProjectionLoader(output: .document(document))
         let repository = RecordingMangaDirectoryRepository(output: .seed(seed))
         let store = RecordingMangaDirectoryStore()
         let context = try makeWorkflowContext(tid: "700", directoryName: "Missing")
         let workflow = MangaReaderWorkflow(
             context: context,
-            documentLoader: loader,
+            projectionLoader: loader,
             directoryRepository: repository,
             directoryStore: store
         )
@@ -351,12 +351,12 @@ struct MangaReaderTestsWorkflow {
             cleanBookName: " 测试漫画 ",
             firstPostID: "9001"
         )
-        let loader = RecordingMangaChapterDocumentLoader(output: .document(document))
+        let loader = RecordingMangaReaderProjectionLoader(output: .document(document))
         let repository = RecordingMangaDirectoryRepository(output: .seed(seed))
         let store = RecordingMangaDirectoryStore()
         let workflow = MangaReaderWorkflow(
             context: try makeWorkflowContext(tid: "700"),
-            documentLoader: loader,
+            projectionLoader: loader,
             directoryRepository: repository,
             directoryStore: store
         )
@@ -432,14 +432,14 @@ struct MangaReaderTestsWorkflow {
     }
 
     @Test func documentLoadingFailurePublishesFailedPresentation() async throws {
-        let loader = RecordingMangaChapterDocumentLoader(output: .failure(.offline))
+        let loader = RecordingMangaReaderProjectionLoader(output: .failure(.offline))
         let repository = RecordingMangaDirectoryRepository(
             output: .seed(makeWorkflowSeed(currentTID: "700", tagIDs: ["12"]))
         )
         let store = RecordingMangaDirectoryStore()
         let workflow = MangaReaderWorkflow(
             context: try makeWorkflowContext(tid: "700"),
-            documentLoader: loader,
+            projectionLoader: loader,
             directoryRepository: repository,
             directoryStore: store
         )
@@ -475,7 +475,7 @@ struct MangaReaderTestsWorkflow {
         let store = RecordingMangaDirectoryStore()
         let workflow = MangaReaderWorkflow(
             context: try makeWorkflowContext(tid: "700", directoryName: "测试漫画"),
-            documentLoader: RecordingMangaChapterDocumentLoader(output: .document(document)),
+            projectionLoader: RecordingMangaReaderProjectionLoader(output: .document(document)),
             directoryRepository: repository,
             directoryStore: store,
             offlineCacheStore: offlineStore
@@ -507,7 +507,7 @@ struct MangaReaderTestsWorkflow {
         )
         let workflow = MangaReaderWorkflow(
             context: try makeWorkflowContext(tid: "700", initialPage: 1, directoryName: "测试漫画"),
-            documentLoader: RecordingMangaChapterDocumentLoader(output: .document(document)),
+            projectionLoader: RecordingMangaReaderProjectionLoader(output: .document(document)),
             directoryRepository: repository,
             directoryStore: RecordingMangaDirectoryStore(directories: [directory])
         )
@@ -538,7 +538,7 @@ struct MangaReaderTestsWorkflow {
         let store = RecordingMangaDirectoryStore(directories: [directory])
         let workflow = MangaReaderWorkflow(
             context: try makeWorkflowContext(tid: "700", directoryName: "测试漫画"),
-            documentLoader: RecordingMangaChapterDocumentLoader(documents: documentsByURL),
+            projectionLoader: RecordingMangaReaderProjectionLoader(documents: documentsByURL),
             directoryRepository: RecordingMangaDirectoryRepository(output: .failure(.offline)),
             directoryStore: store
         )
@@ -565,13 +565,13 @@ struct MangaReaderTestsWorkflow {
             sourceKey: "测试漫画",
             tids: ["700", "701"]
         )
-        let loader = RecordingMangaChapterDocumentLoader(documents: [
+        let loader = RecordingMangaReaderProjectionLoader(documents: [
             document700.chapterURL: document700,
             document701.chapterURL: document701
         ])
         let workflow = MangaReaderWorkflow(
             context: try makeWorkflowContext(tid: "700", directoryName: "测试漫画"),
-            documentLoader: loader,
+            projectionLoader: loader,
             directoryRepository: RecordingMangaDirectoryRepository(output: .failure(.offline)),
             directoryStore: RecordingMangaDirectoryStore(directories: [directory])
         )
@@ -601,7 +601,7 @@ struct MangaReaderTestsWorkflow {
         )
         let workflow = MangaReaderWorkflow(
             context: try makeWorkflowContext(tid: "700", directoryName: "测试漫画"),
-            documentLoader: RecordingMangaChapterDocumentLoader(documents: [
+            projectionLoader: RecordingMangaReaderProjectionLoader(documents: [
                 document700.chapterURL: document700,
                 document701.chapterURL: document701
             ]),
@@ -632,7 +632,7 @@ struct MangaReaderTestsWorkflow {
         )
         let workflow = MangaReaderWorkflow(
             context: try makeWorkflowContext(tid: "700", directoryName: "测试漫画"),
-            documentLoader: RecordingMangaChapterDocumentLoader(documents: [
+            projectionLoader: RecordingMangaReaderProjectionLoader(documents: [
                 document699.chapterURL: document699,
                 document700.chapterURL: document700
             ]),
@@ -669,7 +669,7 @@ struct MangaReaderTestsWorkflow {
         )
         let workflow = MangaReaderWorkflow(
             context: try makeWorkflowContext(tid: "700", initialPage: 3, directoryName: "测试漫画"),
-            documentLoader: RecordingMangaChapterDocumentLoader(documents: [
+            projectionLoader: RecordingMangaReaderProjectionLoader(documents: [
                 document700.chapterURL: document700,
                 document701.chapterURL: document701
             ]),
@@ -704,10 +704,10 @@ struct MangaReaderTestsWorkflow {
             sourceKey: "测试漫画",
             tids: ["699", "700", "701"]
         )
-        let loader = RecordingMangaChapterDocumentLoader(documents: documentsByURL)
+        let loader = RecordingMangaReaderProjectionLoader(documents: documentsByURL)
         let workflow = MangaReaderWorkflow(
             context: try makeWorkflowContext(tid: "700", directoryName: "测试漫画"),
-            documentLoader: loader,
+            projectionLoader: loader,
             directoryRepository: RecordingMangaDirectoryRepository(output: .failure(.offline)),
             directoryStore: RecordingMangaDirectoryStore(directories: [directory])
         )
@@ -736,7 +736,7 @@ struct MangaReaderTestsWorkflow {
         )
         let workflow = MangaReaderWorkflow(
             context: try makeWorkflowContext(tid: "700", directoryName: "测试漫画"),
-            documentLoader: RecordingMangaChapterDocumentLoader(documents: [
+            projectionLoader: RecordingMangaReaderProjectionLoader(documents: [
                 document700.chapterURL: document700
             ]),
             directoryRepository: RecordingMangaDirectoryRepository(output: .failure(.offline)),
@@ -769,7 +769,7 @@ struct MangaReaderTestsWorkflow {
         )
         let workflow = MangaReaderWorkflow(
             context: try makeWorkflowContext(tid: "700", directoryName: "测试漫画"),
-            documentLoader: RecordingMangaChapterDocumentLoader(documents: [
+            projectionLoader: RecordingMangaReaderProjectionLoader(documents: [
                 document700.chapterURL: document700
             ]),
             directoryRepository: RecordingMangaDirectoryRepository(output: .failure(.offline)),
@@ -799,7 +799,7 @@ struct MangaReaderTestsWorkflow {
         )
         let workflow = MangaReaderWorkflow(
             context: try makeWorkflowContext(tid: "700", directoryName: "测试漫画"),
-            documentLoader: RecordingMangaChapterDocumentLoader(documents: [
+            projectionLoader: RecordingMangaReaderProjectionLoader(documents: [
                 document700.chapterURL: document700,
                 document701.chapterURL: document701
             ]),
@@ -828,7 +828,7 @@ struct MangaReaderTestsWorkflow {
             sourceKey: "测试漫画",
             tids: ["700", "701"]
         )
-        let loader = BlockingMangaChapterDocumentLoader(
+        let loader = BlockingMangaReaderProjectionLoader(
             documents: [
                 document700.chapterURL: document700,
                 document701.chapterURL: document701
@@ -837,7 +837,7 @@ struct MangaReaderTestsWorkflow {
         )
         let workflow = MangaReaderWorkflow(
             context: try makeWorkflowContext(tid: "700", initialPage: 1, directoryName: "测试漫画"),
-            documentLoader: loader,
+            projectionLoader: loader,
             directoryRepository: RecordingMangaDirectoryRepository(output: .failure(.offline)),
             directoryStore: RecordingMangaDirectoryStore(directories: [directory])
         )
@@ -874,7 +874,7 @@ struct MangaReaderTestsWorkflow {
         )
         let workflow = MangaReaderWorkflow(
             context: try makeWorkflowContext(tid: "700", directoryName: "测试漫画"),
-            documentLoader: RecordingMangaChapterDocumentLoader(documents: [
+            projectionLoader: RecordingMangaReaderProjectionLoader(documents: [
                 document700.chapterURL: document700,
                 document703.chapterURL: document703
             ]),
@@ -904,7 +904,7 @@ struct MangaReaderTestsWorkflow {
         )
         let workflow = MangaReaderWorkflow(
             context: try makeWorkflowContext(tid: "700", directoryName: "测试漫画"),
-            documentLoader: RecordingMangaChapterDocumentLoader(documents: [
+            projectionLoader: RecordingMangaReaderProjectionLoader(documents: [
                 document700.chapterURL: document700
             ]),
             directoryRepository: RecordingMangaDirectoryRepository(output: .failure(.offline)),
@@ -924,7 +924,7 @@ struct MangaReaderTestsWorkflow {
         #expect(loaded.currentPage?.id == "700#0")
     }
 
-    @Test func workflowPrefetchNearEndAppendsNextChapterDocument() async throws {
+    @Test func workflowPrefetchNearEndAppendsNextReaderProjection() async throws {
         let document700 = try makeWorkflowDocument(tid: "700", pageCount: 10)
         let document701 = try makeWorkflowDocument(tid: "701", pageCount: 2)
         let directory = makeWorkflowDirectory(
@@ -935,7 +935,7 @@ struct MangaReaderTestsWorkflow {
         )
         let workflow = MangaReaderWorkflow(
             context: try makeWorkflowContext(tid: "700", initialPage: 8, directoryName: "测试漫画"),
-            documentLoader: RecordingMangaChapterDocumentLoader(documents: [
+            projectionLoader: RecordingMangaReaderProjectionLoader(documents: [
                 document700.chapterURL: document700,
                 document701.chapterURL: document701
             ]),
@@ -961,7 +961,7 @@ struct MangaReaderTestsWorkflow {
         #expect(loaded.viewportPlacement?.animated == false)
     }
 
-    @Test func workflowPrefetchNearBeginningPrependsPreviousChapterDocumentAndStabilizesPlacement() async throws {
+    @Test func workflowPrefetchNearBeginningPrependsPreviousReaderProjectionAndStabilizesPlacement() async throws {
         let document699 = try makeWorkflowDocument(tid: "699", pageCount: 3)
         let document700 = try makeWorkflowDocument(tid: "700", pageCount: 4)
         let directory = makeWorkflowDirectory(
@@ -972,7 +972,7 @@ struct MangaReaderTestsWorkflow {
         )
         let workflow = MangaReaderWorkflow(
             context: try makeWorkflowContext(tid: "700", initialPage: 1, directoryName: "测试漫画"),
-            documentLoader: RecordingMangaChapterDocumentLoader(documents: [
+            projectionLoader: RecordingMangaReaderProjectionLoader(documents: [
                 document699.chapterURL: document699,
                 document700.chapterURL: document700
             ]),
@@ -1008,7 +1008,7 @@ struct MangaReaderTestsWorkflow {
         )
         let workflow = MangaReaderWorkflow(
             context: try makeWorkflowContext(tid: "700", directoryName: "测试漫画"),
-            documentLoader: RecordingMangaChapterDocumentLoader(documents: documentsByURL),
+            projectionLoader: RecordingMangaReaderProjectionLoader(documents: documentsByURL),
             directoryRepository: RecordingMangaDirectoryRepository(output: .failure(.offline)),
             directoryStore: RecordingMangaDirectoryStore(directories: [directory])
         )
@@ -1037,7 +1037,7 @@ struct MangaReaderTestsWorkflow {
         )
         let workflow = MangaReaderWorkflow(
             context: try makeWorkflowContext(tid: "700", directoryName: "测试漫画"),
-            documentLoader: RecordingMangaChapterDocumentLoader(documents: documentsByURL),
+            projectionLoader: RecordingMangaReaderProjectionLoader(documents: documentsByURL),
             directoryRepository: RecordingMangaDirectoryRepository(output: .failure(.offline)),
             directoryStore: RecordingMangaDirectoryStore(directories: [directory])
         )
@@ -1066,7 +1066,7 @@ struct MangaReaderTestsWorkflow {
         )
         let workflow = MangaReaderWorkflow(
             context: try makeWorkflowContext(tid: "700", initialPage: 8, directoryName: "测试漫画"),
-            documentLoader: RecordingMangaChapterDocumentLoader(documents: [
+            projectionLoader: RecordingMangaReaderProjectionLoader(documents: [
                 document700.chapterURL: document700
             ]),
             directoryRepository: RecordingMangaDirectoryRepository(output: .failure(.offline)),
@@ -1111,26 +1111,26 @@ struct MangaReaderTestsWorkflow {
 @MainActor
 private func makeLoadedPresentation(
     context: MangaLaunchContext,
-    document: MangaChapterDocument,
+    document: MangaReaderProjection,
     seed: MangaDirectorySeed
 ) async -> MangaReaderPresentation {
     let workflow = MangaReaderWorkflow(
         context: context,
-        documentLoader: RecordingMangaChapterDocumentLoader(output: .document(document)),
+        projectionLoader: RecordingMangaReaderProjectionLoader(output: .document(document)),
         directoryRepository: RecordingMangaDirectoryRepository(output: .seed(seed)),
         directoryStore: RecordingMangaDirectoryStore()
     )
     return await workflow.prepare()
 }
 
-private actor RecordingMangaChapterDocumentLoader: MangaChapterDocumentLoading {
+private actor RecordingMangaReaderProjectionLoader: MangaReaderProjectionLoading {
     enum Output: Sendable {
-        case document(MangaChapterDocument)
+        case document(MangaReaderProjection)
         case failure(YamiboError)
     }
 
     private let output: Output
-    private let documents: [URL: MangaChapterDocument]?
+    private let documents: [URL: MangaReaderProjection]?
     private(set) var loadedURLs: [URL] = []
 
     init(output: Output) {
@@ -1138,12 +1138,12 @@ private actor RecordingMangaChapterDocumentLoader: MangaChapterDocumentLoading {
         self.documents = nil
     }
 
-    init(documents: [URL: MangaChapterDocument]) {
+    init(documents: [URL: MangaReaderProjection]) {
         self.output = .failure(.unreadableBody)
         self.documents = documents
     }
 
-    func loadChapterDocument(at url: URL) async throws -> MangaChapterDocument {
+    func loadReaderProjection(at url: URL) async throws -> MangaReaderProjection {
         loadedURLs.append(url)
         if let documents {
             guard let document = documents[url] else {
@@ -1160,22 +1160,22 @@ private actor RecordingMangaChapterDocumentLoader: MangaChapterDocumentLoading {
     }
 }
 
-private actor BlockingMangaChapterDocumentLoader: MangaChapterDocumentLoading {
-    private let documents: [URL: MangaChapterDocument]
+private actor BlockingMangaReaderProjectionLoader: MangaReaderProjectionLoading {
+    private let documents: [URL: MangaReaderProjection]
     private let delayedURLs: Set<URL>
     private var delayedLoadContinuations: [CheckedContinuation<Void, Never>] = []
     private var delayedLoadWaiters: [CheckedContinuation<Void, Never>] = []
     private(set) var loadedURLs: [URL] = []
 
     init(
-        documents: [URL: MangaChapterDocument],
+        documents: [URL: MangaReaderProjection],
         delayedURLs: Set<URL>
     ) {
         self.documents = documents
         self.delayedURLs = delayedURLs
     }
 
-    func loadChapterDocument(at url: URL) async throws -> MangaChapterDocument {
+    func loadReaderProjection(at url: URL) async throws -> MangaReaderProjection {
         loadedURLs.append(url)
         if delayedURLs.contains(url) {
             delayedLoadWaiters.forEach { $0.resume() }
@@ -1344,11 +1344,11 @@ private func makeWorkflowChapter(tid: String, title: String) -> MangaChapter {
     )
 }
 
-private func makeWorkflowDocument(tid: String, pageCount: Int) throws -> MangaChapterDocument {
+private func makeWorkflowDocument(tid: String, pageCount: Int) throws -> MangaReaderProjection {
     let imageURLs = try (0..<pageCount).map { index in
         try #require(URL(string: "https://img.example.com/\(tid)-\(index).jpg"))
     }
-    return MangaChapterDocument(
+    return MangaReaderProjection(
         tid: tid,
         ownerPostID: "post-\(tid)",
         chapterTitle: "第\(tid)话",
@@ -1372,8 +1372,8 @@ private func loadedPresentation(in presentation: MangaReaderPresentation?) -> Ma
 
 @MainActor
 private func expectPrefetchNoop(
-    initialDocument: MangaChapterDocument,
-    returnedDocument: MangaChapterDocument,
+    initialDocument: MangaReaderProjection,
+    returnedDocument: MangaReaderProjection,
     directoryTIDs: [String],
     reason: String
 ) async throws {
@@ -1385,7 +1385,7 @@ private func expectPrefetchNoop(
     )
     let workflow = MangaReaderWorkflow(
         context: try makeWorkflowContext(tid: initialDocument.tid, initialPage: 8, directoryName: "测试漫画"),
-        documentLoader: RecordingMangaChapterDocumentLoader(documents: [
+        projectionLoader: RecordingMangaReaderProjectionLoader(documents: [
             initialDocument.chapterURL: initialDocument,
             makeWorkflowURL(tid: "701"): returnedDocument
         ]),

@@ -13,14 +13,14 @@ struct MangaDirectoryWorkflowTests {
         let document = try makeDocument(tid: "700")
         let context = try makeContext(tid: "700", directoryName: " 命名目录 ")
 
-        let resolvedByName = try await workflow.resolveInitialDirectory(context: context, document: document)
+        let resolvedByName = try await workflow.resolveInitialDirectory(context: context, projection: document)
         #expect(resolvedByName.directory.cleanBookName == "命名目录")
         #expect(!resolvedByName.shouldAutoUpdateAfterInitialLoad)
         #expect(await repository.seedURLs.isEmpty)
         #expect(await store.savedDirectories.isEmpty)
 
         let missingContext = try makeContext(tid: "700", directoryName: "missing")
-        let resolvedByTID = try await workflow.resolveInitialDirectory(context: missingContext, document: document)
+        let resolvedByTID = try await workflow.resolveInitialDirectory(context: missingContext, projection: document)
         #expect(resolvedByTID.directory.cleanBookName == "包含目录")
         #expect(await repository.seedURLs.isEmpty)
     }
@@ -34,7 +34,7 @@ struct MangaDirectoryWorkflowTests {
         let context = try makeContext(tid: "700")
         let document = try makeDocument(tid: "700")
 
-        let resolved = try await workflow.resolveInitialDirectory(context: context, document: document)
+        let resolved = try await workflow.resolveInitialDirectory(context: context, projection: document)
 
         #expect(resolved.directory.strategy == .tag)
         #expect(resolved.directory.sourceKey == "31")
@@ -408,8 +408,8 @@ private func makeChapter(
     )
 }
 
-private func makeDocument(tid: String) throws -> MangaChapterDocument {
-    MangaChapterDocument(
+private func makeDocument(tid: String) throws -> MangaReaderProjection {
+    MangaReaderProjection(
         tid: tid,
         ownerPostID: "post-\(tid)",
         chapterTitle: "第1话",

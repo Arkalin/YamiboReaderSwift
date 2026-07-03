@@ -107,7 +107,7 @@ public struct MangaDirectoryWorkflow: Sendable {
 
     public func resolveInitialDirectory(
         context: MangaLaunchContext,
-        document: MangaChapterDocument
+        projection: MangaReaderProjection
     ) async throws -> MangaDirectoryResolutionResult {
         if let directoryName = normalizedNonEmpty(context.directoryName),
            let existing = try await store.directory(named: directoryName) {
@@ -117,7 +117,7 @@ public struct MangaDirectoryWorkflow: Sendable {
             )
         }
 
-        if let existing = try await store.directory(containingTID: document.tid) {
+        if let existing = try await store.directory(containingTID: projection.tid) {
             return MangaDirectoryResolutionResult(
                 directory: existing,
                 shouldAutoUpdateAfterInitialLoad: shouldAutoUpdate(existing)

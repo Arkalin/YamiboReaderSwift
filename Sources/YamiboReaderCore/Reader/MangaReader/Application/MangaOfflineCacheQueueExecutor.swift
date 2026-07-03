@@ -59,7 +59,7 @@ public actor MangaOfflineCacheImageAcquirer: MangaOfflineCacheImageAcquiring {
 
 public actor MangaOfflineCacheQueueExecutor {
     private let store: any MangaOfflineCacheStoring
-    private let chapterDocumentLoader: any MangaChapterDocumentLoading
+    private let readerProjectionLoader: any MangaReaderProjectionLoading
     private let imageAcquirer: any MangaOfflineCacheImageAcquiring
     private let runObserver: (any MangaOfflineCacheQueueRunObserving)?
     private let maxConcurrentImageTransfers: Int
@@ -68,13 +68,13 @@ public actor MangaOfflineCacheQueueExecutor {
 
     public init(
         store: any MangaOfflineCacheStoring,
-        chapterDocumentLoader: any MangaChapterDocumentLoading,
+        readerProjectionLoader: any MangaReaderProjectionLoading,
         imageAcquirer: any MangaOfflineCacheImageAcquiring,
         runObserver: (any MangaOfflineCacheQueueRunObserving)? = nil,
         maxConcurrentImageTransfers: Int = 3
     ) {
         self.store = store
-        self.chapterDocumentLoader = chapterDocumentLoader
+        self.readerProjectionLoader = readerProjectionLoader
         self.imageAcquirer = imageAcquirer
         self.runObserver = runObserver
         self.maxConcurrentImageTransfers = max(1, maxConcurrentImageTransfers)
@@ -186,16 +186,16 @@ public actor MangaOfflineCacheQueueExecutor {
             throw CancellationError()
         }
 
-        let documentBackedWork = try await workWithChapterDocument(work)
-        let targetImageURLs = documentBackedWork.targetImageURLs
+        let projectionBackedWork = try await workWithReaderProjection(work)
+        let targetImageURLs = projectionBackedWork.targetImageURLs
         guard !targetImageURLs.isEmpty else {
             throw YamiboError.parsingFailed(context: "Manga Offline Cache")
         }
 
         var completedImageURLs = await reconciledCompletedImageURLs(targetImageURLs)
         try await store.prepareOfflineCacheWorkForRun(
-            ownerName: documentBackedWork.ownerName,
-            tid: documentBackedWork.tid,
+            ownerName: projectionBackedWork.ownerName,
+            tid: projectionBackedWork.tid,
             targetImageURLs: targetImageURLs,
             completedImageURLs: completedImageURLs
         )
@@ -206,7 +206,7 @@ public actor MangaOfflineCacheQueueExecutor {
 
         if completedImageURLs.count < targetImageURLs.count {
             completedImageURLs = try await transferMissingImages(
-                for: documentBackedWork,
+                for: projectionBackedWork,
                 targetImageURLs: targetImageURLs,
                 completedImageURLs: completedImageURLs
             )
@@ -215,24 +215,24 @@ public actor MangaOfflineCacheQueueExecutor {
         try Task.checkCancellation()
         try await store.saveMembership(
             MangaOfflineCacheMembership(
-                ownerName: documentBackedWork.ownerName,
-                tid: documentBackedWork.tid,
-                chapterTitle: documentBackedWork.chapterTitle,
-                chapterURL: documentBackedWork.chapterURL,
+                ownerName: projectionBackedWork.ownerName,
+                tid: projectionBackedWork.tid,
+                chapterTitle: projectionBackedWork.chapterTitle,
+                chapterURL: projectionBackedWork.chapterURL,
                 imageURLs: targetImageURLs
             )
         )
     }
 
-    private func workWithChapterDocument(_ work: MangaOfflineCacheWork) async throws -> MangaOfflineCacheWork {
+    private func workWithReaderProjection(_ work: MangaOfflineCacheWork) async throws -> MangaOfflineCacheWork {
         guard work.targetImageURLs.isEmpty else {
             return work
         }
 
         let recoveryURL = Self.rebuiltChapterURL(tid: work.tid)
-        let document = try await chapterDocumentLoader.loadChapterDocument(at: recoveryURL)
+        let projection = try await readerProjectionLoader.loadReaderProjection(at: recoveryURL)
         return work.preparingForRun(
-            targetImageURLs: document.imageURLs,
+            targetImageURLs: projection.imageURLs,
             completedImageURLs: []
         )
     }
