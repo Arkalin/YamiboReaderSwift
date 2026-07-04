@@ -35,11 +35,11 @@ public actor YamiboNovelInlineImageDataLoader: NovelInlineImageDataLoading {
 
 public actor CachedNovelInlineImageDataLoader: NovelInlineImageDataLoading {
     private let imageDataLoader: any NovelInlineImageDataLoading
-    private let offlineCacheStore: (any OfflineCacheStoring)?
+    private let offlineCacheStore: (any NovelOfflineImageDataProviding)?
 
     public init(
         imageDataLoader: any NovelInlineImageDataLoading,
-        offlineCacheStore: (any OfflineCacheStoring)? = nil
+        offlineCacheStore: (any NovelOfflineImageDataProviding)? = nil
     ) {
         self.imageDataLoader = imageDataLoader
         self.offlineCacheStore = offlineCacheStore
@@ -53,15 +53,6 @@ public actor CachedNovelInlineImageDataLoader: NovelInlineImageDataLoading {
     }
 
     private func offlineImageData(for imageURL: URL, refererURL: URL) async -> Data? {
-        guard let offlineCacheStore else { return nil }
-        let canonicalRefererURL = ReaderCacheIdentity.canonicalThreadURL(from: refererURL)
-        let entries = await offlineCacheStore.allNovelOfflineCacheEntries()
-        guard entries.contains(where: { entry in
-            ReaderCacheIdentity.canonicalThreadURL(from: entry.document.threadURL) == canonicalRefererURL &&
-                entry.imageURLs.contains { $0.absoluteString == imageURL.absoluteString }
-        }) else {
-            return nil
-        }
-        return await offlineCacheStore.offlineImageData(for: imageURL)
+        await offlineCacheStore?.novelOfflineImageData(for: imageURL, refererURL: refererURL)
     }
 }

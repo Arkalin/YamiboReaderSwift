@@ -106,6 +106,46 @@ struct NovelInlineImageDataLoaderTests {
         }
     }
 
+    @Test func cachedLoaderUsesOfflineImageProviderBeforeUpstream() async throws {
+        let imageURL = try #require(URL(string: "https://img.example.com/provider-hit.jpg"))
+        let refererURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=910&page=2"))
+        let offlineProvider = RecordingNovelOfflineImageProvider(result: Data([4, 2]))
+        let upstream = RecordingNovelInlineImageDataLoader(results: [.success(Data([9]))])
+        let loader = CachedNovelInlineImageDataLoader(
+            imageDataLoader: upstream,
+            offlineCacheStore: offlineProvider
+        )
+
+        let data = try await loader.imageData(for: imageURL, refererURL: refererURL)
+
+        #expect(data == Data([4, 2]))
+        #expect(await offlineProvider.requestedRequests == [
+            YamiboImageRequest(url: imageURL, refererURL: refererURL)
+        ])
+        #expect(await upstream.callCount == 0)
+    }
+
+    @Test func cachedLoaderDelegatesWhenOfflineImageProviderMisses() async throws {
+        let imageURL = try #require(URL(string: "https://img.example.com/provider-miss.jpg"))
+        let refererURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=911&page=2"))
+        let offlineProvider = RecordingNovelOfflineImageProvider(result: nil)
+        let upstream = RecordingNovelInlineImageDataLoader(results: [.success(Data([6]))])
+        let loader = CachedNovelInlineImageDataLoader(
+            imageDataLoader: upstream,
+            offlineCacheStore: offlineProvider
+        )
+
+        let data = try await loader.imageData(for: imageURL, refererURL: refererURL)
+
+        #expect(data == Data([6]))
+        #expect(await offlineProvider.requestedRequests == [
+            YamiboImageRequest(url: imageURL, refererURL: refererURL)
+        ])
+        #expect(await upstream.requestedRequests == [
+            YamiboImageRequest(url: imageURL, refererURL: refererURL)
+        ])
+    }
+
     @Test func cachedLoaderReadsRetainedOfflineImageBeforeUpstream() async throws {
         let imageURL = try #require(URL(string: "https://img.example.com/novel-offline.jpg"))
         let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=900&page=1"))
@@ -227,6 +267,20 @@ struct NovelInlineImageDataLoaderTests {
                 refererURL: URL(string: "https://bbs.yamibo.com/forum.php?tid=900")!
             )
         }
+    }
+}
+
+private actor RecordingNovelOfflineImageProvider: NovelOfflineImageDataProviding {
+    private let result: Data?
+    private(set) var requestedRequests: [YamiboImageRequest] = []
+
+    init(result: Data?) {
+        self.result = result
+    }
+
+    func novelOfflineImageData(for imageURL: URL, refererURL: URL) async -> Data? {
+        requestedRequests.append(YamiboImageRequest(url: imageURL, refererURL: refererURL))
+        return result
     }
 }
 

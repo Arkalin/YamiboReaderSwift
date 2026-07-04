@@ -112,7 +112,11 @@ public extension MangaImageDataLoading {
     }
 }
 
-public protocol OfflineCacheStoring: Sendable {
+public protocol NovelOfflineImageDataProviding: Sendable {
+    func novelOfflineImageData(for imageURL: URL, refererURL: URL) async -> Data?
+}
+
+public protocol OfflineCacheStoring: NovelOfflineImageDataProviding, Sendable {
     func offlineCacheUpdates() -> AsyncStream<Void>
     func membership(ownerName: String, tid: String) async -> MangaOfflineCacheMembership?
     func memberships(forOwnerName ownerName: String) async -> [MangaOfflineCacheMembership]

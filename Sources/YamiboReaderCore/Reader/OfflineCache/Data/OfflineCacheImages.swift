@@ -16,6 +16,38 @@ extension OfflineCacheStore {
             return nil
         }
 
+        return await offlineImageData(imageURLString: imageURLString, fileName: fileName)
+    }
+
+    public func novelOfflineImageData(for imageURL: URL, refererURL: URL) async -> Data? {
+        try? await recoverQueueStateAfterRestart()
+        let imageURLString = imageURL.absoluteString
+        let canonicalRefererURLString = ReaderCacheIdentity.canonicalThreadURL(from: refererURL).absoluteString
+        guard let fileName = try? await database.read({ db in
+            try String.fetchOne(
+                db,
+                sql: """
+                SELECT assets.file_name
+                FROM offline_cache_novel_entry_images AS entry_images
+                JOIN offline_cache_novel_entries AS entries
+                    ON entries.entry_key = entry_images.entry_key
+                JOIN offline_cache_image_assets AS assets
+                    ON assets.image_url = entry_images.image_url
+                WHERE entry_images.image_url = ?
+                    AND entries.thread_url = ?
+                ORDER BY entries.updated_at DESC, entry_images.entry_key ASC
+                LIMIT 1
+                """,
+                arguments: [imageURLString, canonicalRefererURLString]
+            )
+        }) else {
+            return nil
+        }
+
+        return await offlineImageData(imageURLString: imageURLString, fileName: fileName)
+    }
+
+    private func offlineImageData(imageURLString: String, fileName: String) async -> Data? {
         let fileURL = imagesDirectory.appendingPathComponent(fileName, isDirectory: false)
         guard let data = try? Data(contentsOf: fileURL), !data.isEmpty else {
             try? await database.write { db in

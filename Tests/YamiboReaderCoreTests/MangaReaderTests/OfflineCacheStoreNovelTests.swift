@@ -206,6 +206,44 @@ struct MangaReaderTestsNovelOfflineCacheStore {
         #expect(group.entries.count == 1)
     }
 
+    @Test func novelOfflineImageDataMatchesCanonicalRefererAndReferencedImage() async throws {
+        let store = try makeTestOfflineCacheStore(rootDirectory: try makeTemporaryNovelOfflineCacheDirectory())
+        let sharedImageURL = try #require(URL(string: "https://img.example.com/shared-inline.jpg"))
+        let matchingRequest = try NovelOfflineCacheWorkRequest(
+            ownerTitle: "小说7013",
+            title: "第1页",
+            threadURL: #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=7013&mobile=2")),
+            view: 1,
+            authorID: "42",
+            contentSource: .authorFilteredPage,
+            targetImageURLs: [sharedImageURL],
+            retainsInlineImages: true
+        )
+        let otherRequest = try makeNovelWorkRequest(tid: "7014", view: 1)
+        let matchingSourcePage = try makeNovelSourcePage(tid: "7013", view: 1, totalPages: 1)
+        let otherSourcePage = try makeNovelSourcePage(tid: "7014", view: 1, totalPages: 1)
+
+        try await store.saveNovelOfflineSourcePage(
+            matchingSourcePage,
+            request: matchingRequest,
+            projectionPrewarm: nil,
+            updatedAt: Date(timeIntervalSince1970: 70_130)
+        )
+        try await store.saveNovelOfflineSourcePage(
+            otherSourcePage,
+            request: otherRequest,
+            projectionPrewarm: nil,
+            updatedAt: Date(timeIntervalSince1970: 70_140)
+        )
+        try await store.saveOfflineImageData(Data([1, 3]), for: sharedImageURL)
+
+        let matchingReferer = try #require(URL(string: "https://bbs.yamibo.com/forum.php?page=9&tid=7013&mod=viewthread&mobile=2"))
+        let otherReferer = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=7014&page=1&mobile=2"))
+
+        #expect(await store.novelOfflineImageData(for: sharedImageURL, refererURL: matchingReferer) == Data([1, 3]))
+        #expect(await store.novelOfflineImageData(for: sharedImageURL, refererURL: otherReferer) == nil)
+    }
+
     @Test func deletingNovelOfflineEntryPreservesTransparentThreadPageAndProjectionCaches() async throws {
         let root = try makeTemporaryNovelOfflineCacheDirectory()
         let offlineStore = try makeTestOfflineCacheStore(rootDirectory: root)
