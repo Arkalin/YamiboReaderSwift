@@ -16,7 +16,7 @@ public struct MangaOfflineCacheMembership: Codable, Hashable, Identifiable, Send
     public var chapterTitle: String
     public var chapterURL: URL
     public var imageURLs: [URL]
-    public var sourcePage: ForumThreadPage?
+    public var sourcePage: ForumThreadPage
     public var createdAt: Date
 
     public var id: MangaOfflineCacheMembershipID {
@@ -29,7 +29,7 @@ public struct MangaOfflineCacheMembership: Codable, Hashable, Identifiable, Send
         chapterTitle: String,
         chapterURL: URL,
         imageURLs: [URL],
-        sourcePage: ForumThreadPage? = nil,
+        sourcePage: ForumThreadPage,
         createdAt: Date = .now
     ) {
         self.ownerName = ownerName.trimmingCharacters(in: .whitespacesAndNewlines)

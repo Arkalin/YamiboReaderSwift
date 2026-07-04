@@ -840,7 +840,8 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
             tid: "700",
             chapterTitle: "测试漫画",
             chapterURL: threadURL,
-            imageURLs: [offlineImageURL]
+            imageURLs: [offlineImageURL],
+            sourcePage: makeStoreTestMangaOfflineSourcePage(tid: "700")
         )
     )
     _ = try await offlineCacheStore.enqueueOfflineCacheWork(
@@ -965,7 +966,23 @@ private func makeMangaOfflineMembership(
         tid: tid,
         chapterTitle: "第\(tid)话",
         chapterURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(tid)&mobile=2")),
-        imageURLs: imageURLs
+        imageURLs: imageURLs,
+        sourcePage: makeStoreTestMangaOfflineSourcePage(tid: tid)
+    )
+}
+
+private func makeStoreTestMangaOfflineSourcePage(tid: String) -> ForumThreadPage {
+    ForumThreadPage(
+        thread: ThreadIdentity(tid: tid),
+        title: "第\(tid)话",
+        posts: [
+            ForumThreadPost(
+                postID: "p-\(tid)",
+                author: BlogReaderUser(uid: "author-\(tid)", name: "作者"),
+                contentHTML: "",
+                contentText: ""
+            )
+        ]
     )
 }
 

@@ -237,7 +237,8 @@ import Testing
             tid: "9003",
             chapterTitle: "旧第一话",
             chapterURL: chapterURL,
-            imageURLs: [imageURL]
+            imageURLs: [imageURL],
+            sourcePage: makeAppMigrationMangaSourcePage(tid: "9003")
         )
     )
     try await legacyStore.saveNovelOfflineSourcePage(
@@ -354,10 +355,26 @@ private func saveMigratedAppState(
             tid: chapter.tid,
             chapterTitle: chapter.rawTitle,
             chapterURL: chapterURL,
-            imageURLs: [imageURL]
+            imageURLs: [imageURL],
+            sourcePage: makeAppMigrationMangaSourcePage(tid: chapter.tid)
         )
     )
     try await appContext.offlineCacheStore.saveOfflineImageData(Data("offline".utf8), for: imageURL)
+}
+
+private func makeAppMigrationMangaSourcePage(tid: String) -> ForumThreadPage {
+    ForumThreadPage(
+        thread: ThreadIdentity(tid: tid),
+        title: "第\(tid)话",
+        posts: [
+            ForumThreadPost(
+                postID: "p-\(tid)",
+                author: BlogReaderUser(uid: "author-\(tid)", name: "作者"),
+                contentHTML: "",
+                contentText: ""
+            )
+        ]
+    )
 }
 
 private func tableCount(_ table: String, in db: Database) throws -> Int {

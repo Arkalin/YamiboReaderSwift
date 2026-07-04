@@ -1,4 +1,5 @@
 import XCTest
+import GRDB
 @testable import YamiboReaderCore
 @testable import YamiboReaderUI
 
@@ -86,6 +87,34 @@ final class MangaReaderCacheViewModelTests: XCTestCase {
         XCTAssertEqual(Set(works.map(\.tid)), ["200", "300"])
         XCTAssertEqual(works.first(where: { $0.tid == "300" })?.state, .failed)
         XCTAssertEqual(fixture.model.rows.map(\.state), [.cached, .caching, .caching])
+    }
+
+    func testLegacyNilSourceCacheEntryProjectsUncachedAndCanBeEnqueued() async throws {
+        let controller = RecordingMangaReaderCacheQueueController()
+        let fixture = try await makeCacheFixture(
+            chapters: [cacheChapter(tid: "100", number: 1)],
+            offlineCacheQueueControllerProvider: { controller }
+        )
+        let legacyImage = try XCTUnwrap(URL(string: "https://img.example.com/legacy-100-1.jpg"))
+        try await fixture.store.saveOfflineImageData(Data([1]), for: legacyImage)
+        try await seedLegacyMangaCacheEntry(
+            ownerName: fixture.favorite.title,
+            tid: "100",
+            imageURLs: [legacyImage],
+            sourcePageJSON: nil,
+            in: fixture.database
+        )
+
+        await fixture.model.load()
+        XCTAssertEqual(fixture.model.rows.map(\.state), [.uncached])
+
+        await fixture.model.cacheSelected(tids: ["100"])
+
+        let works = await fixture.store.allOfflineCacheWorks()
+        XCTAssertEqual(works.map(\.tid), ["100"])
+        XCTAssertEqual(fixture.model.rows.map(\.state), [.caching])
+        let events = await controller.snapshotEvents()
+        XCTAssertEqual(events, ["continue"])
     }
 
     func testCacheCommandStartsOfflineCacheQueueAfterEnqueuingNewChapters() async throws {
@@ -184,7 +213,8 @@ final class MangaReaderCacheViewModelTests: XCTestCase {
 private struct MangaReaderCacheFixture {
     let model: MangaReaderCacheViewModel
     let favorite: Favorite
-    let store: any OfflineCacheStoring
+    let store: OfflineCacheStore
+    let database: DatabasePool
 }
 
 @MainActor
@@ -200,8 +230,9 @@ private func makeCacheFixture(
     )
     let offlineRoot = FileManager.default.temporaryDirectory
         .appendingPathComponent("manga-reader-cache-grdb-\(UUID().uuidString)", isDirectory: true)
+    let database = try YamiboDatabase.openPool(rootDirectory: offlineRoot)
     let offlineStore = OfflineCacheStore(
-        databasePool: try YamiboDatabase.openPool(rootDirectory: offlineRoot),
+        databasePool: database,
         baseDirectory: offlineRoot.appendingPathComponent("offline-images", isDirectory: true)
     )
     let threadURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/thread-900-1-1.html"))
@@ -238,7 +269,8 @@ private func makeCacheFixture(
             offlineCacheQueueControllerProvider: offlineCacheQueueControllerProvider
         ),
         favorite: favorite,
-        store: offlineStore
+        store: offlineStore,
+        database: database
     )
 }
 
@@ -285,8 +317,63 @@ private func cacheMembership(
         tid: tid,
         chapterTitle: "第\(tid)话",
         chapterURL: try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(tid)&page=1")),
-        imageURLs: imageURLs
+        imageURLs: imageURLs,
+        sourcePage: makeCacheSourcePage(tid: tid)
     )
+}
+
+private func makeCacheSourcePage(tid: String) -> ForumThreadPage {
+    ForumThreadPage(
+        thread: ThreadIdentity(tid: tid),
+        title: "第\(tid)话",
+        posts: [
+            ForumThreadPost(
+                postID: "p-\(tid)",
+                author: BlogReaderUser(uid: "author-\(tid)", name: "作者"),
+                contentHTML: "",
+                contentText: ""
+            )
+        ]
+    )
+}
+
+private func seedLegacyMangaCacheEntry(
+    ownerName: String,
+    tid: String,
+    imageURLs: [URL],
+    sourcePageJSON: String?,
+    in database: DatabasePool
+) async throws {
+    try await database.write { db in
+        try db.execute(
+            sql: """
+            INSERT OR REPLACE INTO offline_cache_manga_entries
+            (owner_name, tid, chapter_title, source_page_json, created_at)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            arguments: [
+                ownerName,
+                tid,
+                "第\(tid)话",
+                sourcePageJSON,
+                Date().timeIntervalSince1970
+            ]
+        )
+        try db.execute(
+            sql: "DELETE FROM offline_cache_manga_entry_images WHERE owner_name = ? AND tid = ?",
+            arguments: [ownerName, tid]
+        )
+        for (index, imageURL) in imageURLs.enumerated() {
+            try db.execute(
+                sql: """
+                INSERT INTO offline_cache_manga_entry_images
+                (owner_name, tid, manual_order, image_url)
+                VALUES (?, ?, ?, ?)
+                """,
+                arguments: [ownerName, tid, index, imageURL.absoluteString]
+            )
+        }
+    }
 }
 
 private func cacheWorkRequest(favorite: Favorite, tid: String) throws -> MangaOfflineCacheWorkRequest {

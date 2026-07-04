@@ -134,6 +134,115 @@ struct MangaReaderTestsMangaOfflineCachePersistence {
         #expect(loaded.sourcePage == sourcePage)
     }
 
+    @Test func mangaEntryRejectsMismatchedSourcePageThread() async throws {
+        let fixture = try makeOfflineCacheFixture()
+        let store = OfflineCacheStore(
+            databasePool: fixture.database,
+            baseDirectory: fixture.offlineDirectory
+        )
+        let imageURL = try #require(URL(string: "https://img.example.com/mismatch.jpg"))
+
+        await #expect(throws: YamiboError.self) {
+            try await store.saveMembership(
+                MangaOfflineCacheMembership(
+                    ownerName: "作品A",
+                    tid: "151",
+                    chapterTitle: "第151话",
+                    chapterURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=151&page=1")),
+                    imageURLs: [imageURL],
+                    sourcePage: try makeOfflineSourcePage(tid: "999")
+                )
+            )
+        }
+
+        #expect(await store.membership(ownerName: "作品A", tid: "151") == nil)
+    }
+
+    @Test func legacyNilSourceMangaEntryDoesNotBecomeCachedOrBlockEnqueue() async throws {
+        let fixture = try makeOfflineCacheFixture()
+        let writingStore = OfflineCacheStore(
+            databasePool: fixture.database,
+            baseDirectory: fixture.offlineDirectory
+        )
+        let imageURL = try #require(URL(string: "https://img.example.com/legacy-nil-source.jpg"))
+        try await writingStore.saveOfflineImageData(Data([9]), for: imageURL)
+        try await seedLegacyMangaEntry(
+            ownerName: "作品A",
+            tid: "160",
+            imageURLs: [imageURL],
+            sourcePageJSON: nil,
+            in: fixture.database
+        )
+
+        let recoveredStore = OfflineCacheStore(
+            databasePool: fixture.database,
+            baseDirectory: fixture.offlineDirectory
+        )
+
+        #expect(await recoveredStore.membership(ownerName: "作品A", tid: "160") == nil)
+        #expect(await recoveredStore.offlineCacheState(ownerName: "作品A", tid: "160") == .uncached)
+        let result = try await recoveredStore.enqueueOfflineCacheWork(
+            try makeOfflineWorkRequest(ownerName: "作品A", tid: "160", targetImageURLs: [imageURL])
+        )
+        #expect(result.enqueuedWork?.tid == "160")
+    }
+
+    @Test func legacyNilSourceMangaEntryIsExcludedFromCompletedListsUsageAndManagement() async throws {
+        let fixture = try makeOfflineCacheFixture()
+        let store = OfflineCacheStore(
+            databasePool: fixture.database,
+            baseDirectory: fixture.offlineDirectory
+        )
+        let imageURL = try #require(URL(string: "https://img.example.com/legacy-completed-list.jpg"))
+        try await store.saveOfflineImageData(Data([7, 8]), for: imageURL)
+        try await seedLegacyMangaEntry(
+            ownerName: "作品A",
+            tid: "165",
+            imageURLs: [imageURL],
+            sourcePageJSON: nil,
+            in: fixture.database
+        )
+
+        #expect(await store.allMemberships().isEmpty)
+        #expect(await store.memberships(forOwnerName: "作品A").isEmpty)
+        #expect(await store.diskUsageByOwner().isEmpty)
+        #expect(await store.offlineCacheManagementSnapshot().groups.isEmpty)
+        #expect(await store.offlineImageData(for: imageURL) == Data([7, 8]))
+    }
+
+    @Test func restartRecoveryDoesNotRepairDeleteInvalidMangaEntriesOrImageBytes() async throws {
+        let fixture = try makeOfflineCacheFixture()
+        let writingStore = OfflineCacheStore(
+            databasePool: fixture.database,
+            baseDirectory: fixture.offlineDirectory
+        )
+        let staleImage = try #require(URL(string: "https://img.example.com/stale-only.jpg"))
+        let workImage = try #require(URL(string: "https://img.example.com/work-shared.jpg"))
+        try await writingStore.saveOfflineImageData(Data([1]), for: staleImage)
+        try await writingStore.saveOfflineImageData(Data([2]), for: workImage)
+        _ = try await writingStore.enqueueOfflineCacheWork(
+            try makeOfflineWorkRequest(ownerName: "作品A", tid: "171", targetImageURLs: [workImage])
+        )
+        try await seedLegacyMangaEntry(
+            ownerName: "作品A",
+            tid: "170",
+            imageURLs: [staleImage, workImage],
+            sourcePageJSON: #"{"not":"a thread page"}"#,
+            in: fixture.database
+        )
+
+        let recoveredStore = OfflineCacheStore(
+            databasePool: fixture.database,
+            baseDirectory: fixture.offlineDirectory
+        )
+
+        #expect(await recoveredStore.membership(ownerName: "作品A", tid: "170") == nil)
+        #expect(await recoveredStore.offlineCacheState(ownerName: "作品A", tid: "170") == .uncached)
+        #expect(await recoveredStore.offlineImageData(for: staleImage) == Data([1]))
+        #expect(await recoveredStore.offlineImageData(for: workImage) == Data([2]))
+        #expect(await recoveredStore.offlineCacheWork(ownerName: "作品A", tid: "171") != nil)
+    }
+
     @Test func restartRecoveryPausesRunningQueueAndKeepsFailedWork() async throws {
         let fixture = try makeOfflineCacheFixture()
         let writingStore = OfflineCacheStore(
@@ -211,7 +320,9 @@ struct MangaReaderTestsMangaOfflineCachePersistence {
         await acquirer.setData(for: imageURLs)
         let executor = OfflineCacheQueueExecutor(
             store: store,
-            readerProjectionLoader: RecordingReaderProjectionLoader(),
+            readerProjectionLoader: RecordingReaderProjectionLoader(documents: [
+                try makeDocument(tid: "400", imageURLs: imageURLs)
+            ]),
             imageAcquirer: acquirer,
             maxConcurrentImageTransfers: 1
         )
@@ -250,7 +361,8 @@ private func makeOfflineMembership(
         tid: tid,
         chapterTitle: "第\(tid)话",
         chapterURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(tid)&page=5")),
-        imageURLs: imageURLs
+        imageURLs: imageURLs,
+        sourcePage: try makeOfflineSourcePage(tid: tid)
     )
 }
 
@@ -274,6 +386,15 @@ private func makeOfflineImageURLs(tid: String, count: Int) throws -> [URL] {
     }
 }
 
+private func makeDocument(tid: String, imageURLs: [URL]) throws -> MangaReaderProjection {
+    MangaReaderProjection(
+        tid: tid,
+        chapterTitle: "第\(tid)话",
+        chapterURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(tid)&page=1")),
+        imageURLs: imageURLs
+    )
+}
+
 private func makeOfflineSourcePage(tid: String) throws -> ForumThreadPage {
     ForumThreadPage(
         thread: ThreadIdentity(tid: tid),
@@ -290,6 +411,45 @@ private func makeOfflineSourcePage(tid: String) throws -> ForumThreadPage {
             )
         ]
     )
+}
+
+private func seedLegacyMangaEntry(
+    ownerName: String,
+    tid: String,
+    imageURLs: [URL],
+    sourcePageJSON: String?,
+    in database: DatabasePool
+) async throws {
+    try await database.write { db in
+        try db.execute(
+            sql: """
+            INSERT OR REPLACE INTO offline_cache_manga_entries
+            (owner_name, tid, chapter_title, source_page_json, created_at)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            arguments: [
+                ownerName,
+                tid,
+                "第\(tid)话",
+                sourcePageJSON,
+                Date().timeIntervalSince1970
+            ]
+        )
+        try db.execute(
+            sql: "DELETE FROM offline_cache_manga_entry_images WHERE owner_name = ? AND tid = ?",
+            arguments: [ownerName, tid]
+        )
+        for (index, imageURL) in imageURLs.enumerated() {
+            try db.execute(
+                sql: """
+                INSERT INTO offline_cache_manga_entry_images
+                (owner_name, tid, manual_order, image_url)
+                VALUES (?, ?, ?, ?)
+                """,
+                arguments: [ownerName, tid, index, imageURL.absoluteString]
+            )
+        }
+    }
 }
 
 private func offlineCacheColumnNames(table: String, in db: Database) throws -> [String] {
@@ -315,8 +475,25 @@ private actor RecordingOfflineImageAcquirer: OfflineCacheImageAcquiring {
     }
 }
 
-private actor RecordingReaderProjectionLoader: MangaReaderProjectionLoading {
+private actor RecordingReaderProjectionLoader: MangaReaderProjectionSnapshotLoading {
+    private let documentsByTID: [String: MangaReaderProjection]
+
+    init(documents: [MangaReaderProjection] = []) {
+        self.documentsByTID = Dictionary(uniqueKeysWithValues: documents.map { ($0.tid, $0) })
+    }
+
     func loadReaderProjection(at url: URL) async throws -> MangaReaderProjection {
-        throw YamiboError.parsingFailed(context: "Unexpected document load in offline-cache test")
+        try await loadReaderProjectionSnapshot(at: url).projection
+    }
+
+    func loadReaderProjectionSnapshot(at url: URL) async throws -> MangaReaderProjectionSnapshot {
+        guard let tid = MangaTitleCleaner.extractTid(from: url.absoluteString),
+              let projection = documentsByTID[tid] else {
+            throw YamiboError.parsingFailed(context: "Unexpected document load in offline-cache test")
+        }
+        return MangaReaderProjectionSnapshot(
+            projection: projection,
+            sourcePage: try makeOfflineSourcePage(tid: projection.tid)
+        )
     }
 }

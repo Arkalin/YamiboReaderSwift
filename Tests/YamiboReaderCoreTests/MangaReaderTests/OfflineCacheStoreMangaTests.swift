@@ -16,7 +16,8 @@ struct MangaReaderTestsOfflineCacheStore {
                 tid: "900",
                 chapterTitle: "第1话",
                 chapterURL: chapterURL,
-                imageURLs: [imageURL]
+                imageURLs: [imageURL],
+                sourcePage: makeTestMangaOfflineSourcePage(tid: "900")
             )
         )
 
@@ -213,7 +214,23 @@ private func makeOfflineMembership(
         tid: tid,
         chapterTitle: "第\(tid)话",
         chapterURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(tid)&page=5")),
-        imageURLs: imageURLs
+        imageURLs: imageURLs,
+        sourcePage: makeTestMangaOfflineSourcePage(tid: tid)
+    )
+}
+
+private func makeTestMangaOfflineSourcePage(tid: String) -> ForumThreadPage {
+    ForumThreadPage(
+        thread: ThreadIdentity(tid: tid),
+        title: "第\(tid)话",
+        posts: [
+            ForumThreadPost(
+                postID: "p-\(tid)",
+                author: BlogReaderUser(uid: "author-\(tid)", name: "作者"),
+                contentHTML: "",
+                contentText: ""
+            )
+        ]
     )
 }
 

@@ -116,6 +116,7 @@ extension OfflineCacheStore {
         imagesDirectory: URL,
         in db: Database
     ) throws -> Bool {
+        guard membership.sourcePage.thread.tid == membership.tid else { return false }
         guard !membership.imageURLs.isEmpty else { return false }
         for imageURL in membership.imageURLs {
             guard let fileName = try String.fetchOne(

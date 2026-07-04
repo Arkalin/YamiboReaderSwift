@@ -188,7 +188,8 @@ private enum YamiboAccountTestError: Error {
         tid: "970",
         chapterTitle: "第970话",
         chapterURL: favoriteURL,
-        imageURLs: [imageURL]
+        imageURLs: [imageURL],
+        sourcePage: makeAccountOfflineSourcePage(tid: "970")
     ))
     _ = try await offlineStore.enqueueOfflineCacheWork(MangaOfflineCacheWorkRequest(
         ownerName: favoriteItem.title,
@@ -206,6 +207,21 @@ private enum YamiboAccountTestError: Error {
     #expect(await offlineStore.membership(ownerName: favoriteItem.title, tid: "970") != nil)
     #expect(await offlineStore.offlineCacheWork(ownerName: favoriteItem.title, tid: "971") != nil)
     #expect(await offlineStore.offlineImageData(for: imageURL) == Data([7]))
+}
+
+private func makeAccountOfflineSourcePage(tid: String) -> ForumThreadPage {
+    ForumThreadPage(
+        thread: ThreadIdentity(tid: tid),
+        title: "第\(tid)话",
+        posts: [
+            ForumThreadPost(
+                postID: "p-\(tid)",
+                author: BlogReaderUser(uid: "author-\(tid)", name: "作者"),
+                contentHTML: "",
+                contentText: ""
+            )
+        ]
+    )
 }
 
 private func makeAccountTestSession() -> URLSession {

@@ -868,7 +868,23 @@ private func makeMineOfflineCacheMembership(
         tid: tid,
         chapterTitle: "第\(tid)话",
         chapterURL: try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(tid)&page=1")),
-        imageURLs: imageURLs
+        imageURLs: imageURLs,
+        sourcePage: makeMineOfflineSourcePage(tid: tid)
+    )
+}
+
+private func makeMineOfflineSourcePage(tid: String) -> ForumThreadPage {
+    ForumThreadPage(
+        thread: ThreadIdentity(tid: tid),
+        title: "第\(tid)话",
+        posts: [
+            ForumThreadPost(
+                postID: "p-\(tid)",
+                author: BlogReaderUser(uid: "author-\(tid)", name: "作者"),
+                contentHTML: "",
+                contentText: ""
+            )
+        ]
     )
 }
 

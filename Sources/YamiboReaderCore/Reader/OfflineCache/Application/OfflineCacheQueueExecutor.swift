@@ -59,7 +59,7 @@ public actor OfflineCacheImageAcquirer: OfflineCacheImageAcquiring {
 
 public actor OfflineCacheQueueExecutor {
     private let store: any OfflineCacheStoring
-    private let readerProjectionLoader: any MangaReaderProjectionLoading
+    private let readerProjectionLoader: any MangaReaderProjectionSnapshotLoading
     private let novelSourcePageLoader: (any NovelOfflineCacheSourcePageLoading)?
     private let imageAcquirer: any OfflineCacheImageAcquiring
     private let runObserver: (any OfflineCacheQueueRunObserving)?
@@ -69,7 +69,7 @@ public actor OfflineCacheQueueExecutor {
 
     public init(
         store: any OfflineCacheStoring,
-        readerProjectionLoader: any MangaReaderProjectionLoading,
+        readerProjectionLoader: any MangaReaderProjectionSnapshotLoading,
         novelSourcePageLoader: (any NovelOfflineCacheSourcePageLoading)? = nil,
         imageAcquirer: any OfflineCacheImageAcquiring,
         runObserver: (any OfflineCacheQueueRunObserving)? = nil,
@@ -337,28 +337,15 @@ public actor OfflineCacheQueueExecutor {
     }
 
     private func workWithReaderProjection(_ work: MangaOfflineCacheWork) async throws -> MangaOfflineCacheProjectionBackedWork {
-        guard work.targetImageURLs.isEmpty else {
-            return MangaOfflineCacheProjectionBackedWork(work: work, sourcePage: nil)
-        }
-
         let recoveryURL = Self.rebuiltChapterURL(tid: work.tid)
-        let snapshot: MangaReaderProjectionSnapshot?
-        let projection: MangaReaderProjection
-        if let snapshotLoader = readerProjectionLoader as? any MangaReaderProjectionSnapshotLoading {
-            let loadedSnapshot = try await snapshotLoader.loadReaderProjectionSnapshot(at: recoveryURL)
-            snapshot = loadedSnapshot
-            projection = loadedSnapshot.projection
-        } else {
-            snapshot = nil
-            projection = try await readerProjectionLoader.loadReaderProjection(at: recoveryURL)
-        }
+        let snapshot = try await readerProjectionLoader.loadReaderProjectionSnapshot(at: recoveryURL)
 
         return MangaOfflineCacheProjectionBackedWork(
             work: work.preparingForRun(
-                targetImageURLs: projection.imageURLs,
+                targetImageURLs: snapshot.projection.imageURLs,
                 completedImageURLs: []
             ),
-            sourcePage: snapshot?.sourcePage
+            sourcePage: snapshot.sourcePage
         )
     }
 
@@ -500,5 +487,5 @@ private struct OfflineCacheImageTransferResult: Sendable {
 
 private struct MangaOfflineCacheProjectionBackedWork: Sendable {
     var work: MangaOfflineCacheWork
-    var sourcePage: ForumThreadPage?
+    var sourcePage: ForumThreadPage
 }

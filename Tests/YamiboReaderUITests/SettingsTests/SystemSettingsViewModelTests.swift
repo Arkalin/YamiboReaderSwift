@@ -868,7 +868,23 @@ private func makeMangaOfflineMembership(
         tid: tid,
         chapterTitle: "第\(tid)话",
         chapterURL: try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(tid)&mobile=2")),
-        imageURLs: imageURLs
+        imageURLs: imageURLs,
+        sourcePage: makeSystemSettingsOfflineSourcePage(tid: tid)
+    )
+}
+
+private func makeSystemSettingsOfflineSourcePage(tid: String) -> ForumThreadPage {
+    ForumThreadPage(
+        thread: ThreadIdentity(tid: tid),
+        title: "第\(tid)话",
+        posts: [
+            ForumThreadPost(
+                postID: "p-\(tid)",
+                author: BlogReaderUser(uid: "author-\(tid)", name: "作者"),
+                contentHTML: "",
+                contentText: ""
+            )
+        ]
     )
 }
 

@@ -126,7 +126,19 @@ private func makeCachedMangaImageLoaderMembership(imageURLs: [URL]) throws -> Ma
         tid: "100",
         chapterTitle: "第100话",
         chapterURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100")),
-        imageURLs: imageURLs
+        imageURLs: imageURLs,
+        sourcePage: ForumThreadPage(
+            thread: ThreadIdentity(tid: "100"),
+            title: "第100话",
+            posts: [
+                ForumThreadPost(
+                    postID: "p-100",
+                    author: BlogReaderUser(uid: "author-100", name: "作者"),
+                    contentHTML: "",
+                    contentText: ""
+                )
+            ]
+        )
     )
 }
 

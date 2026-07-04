@@ -468,7 +468,8 @@ struct MangaReaderTestsWorkflow {
                 tid: "700",
                 chapterTitle: document.chapterTitle,
                 chapterURL: document.chapterURL,
-                imageURLs: document.imageURLs
+                imageURLs: document.imageURLs,
+                sourcePage: makeWorkflowSourcePage(tid: document.tid)
             )
         )
         let repository = RecordingMangaDirectoryRepository(output: .failure(.offline))
@@ -1354,6 +1355,21 @@ private func makeWorkflowDocument(tid: String, pageCount: Int) throws -> MangaRe
         chapterTitle: "第\(tid)话",
         chapterURL: makeWorkflowURL(tid: tid),
         imageURLs: imageURLs
+    )
+}
+
+private func makeWorkflowSourcePage(tid: String) -> ForumThreadPage {
+    ForumThreadPage(
+        thread: ThreadIdentity(tid: tid),
+        title: "第\(tid)话",
+        posts: [
+            ForumThreadPost(
+                postID: "post-\(tid)",
+                author: BlogReaderUser(uid: "author-\(tid)", name: "作者"),
+                contentHTML: "",
+                contentText: ""
+            )
+        ]
     )
 }
 

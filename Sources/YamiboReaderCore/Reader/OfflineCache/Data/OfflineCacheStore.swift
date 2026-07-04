@@ -463,6 +463,9 @@ public actor OfflineCacheStore: OfflineCacheStoring {
         guard membership.tid.mangaReaderTrimmedNonEmpty != nil else {
             throw YamiboError.persistenceFailed("Chapter tid is empty")
         }
+        guard membership.sourcePage.thread.tid == membership.tid else {
+            throw YamiboError.persistenceFailed("Manga offline source page does not match chapter tid")
+        }
         return MangaOfflineCacheMembership(
             ownerName: membership.ownerName,
             tid: membership.tid,
@@ -591,7 +594,7 @@ public actor OfflineCacheStore: OfflineCacheStoring {
             ORDER BY owner_name ASC, tid ASC
             """,
             arguments: [ownerName]
-        ).map { try membership(from: $0, in: db) }
+        ).compactMap { try membership(from: $0, in: db) }
     }
 
     static func allMemberships(in db: Database) throws -> [MangaOfflineCacheMembership] {
@@ -602,11 +605,14 @@ public actor OfflineCacheStore: OfflineCacheStoring {
             FROM offline_cache_manga_entries
             ORDER BY owner_name ASC, tid ASC
             """
-        ).map { try membership(from: $0, in: db) }
+        ).compactMap { try membership(from: $0, in: db) }
     }
 
-    private static func membership(from row: Row, in db: Database) throws -> MangaOfflineCacheMembership {
+    private static func membership(from row: Row, in db: Database) throws -> MangaOfflineCacheMembership? {
         let tid = row["tid"] as String
+        guard let sourcePage = validSourcePage(row["source_page_json"] as String?, tid: tid) else {
+            return nil
+        }
         return MangaOfflineCacheMembership(
             ownerName: row["owner_name"],
             tid: tid,
@@ -618,7 +624,7 @@ public actor OfflineCacheStore: OfflineCacheStoring {
                 tid: tid,
                 in: db
             ),
-            sourcePage: try decodeSourcePage(row["source_page_json"] as String?),
+            sourcePage: sourcePage,
             createdAt: offlineCacheOptionalDate(from: row["created_at"] as Double?) ?? Date(timeIntervalSince1970: 0)
         )
     }
@@ -762,18 +768,24 @@ public actor OfflineCacheStore: OfflineCacheStoring {
         )
     }
 
-    private static func encodeSourcePage(_ sourcePage: ForumThreadPage?) throws -> String? {
-        guard let sourcePage else { return nil }
+    private static func encodeSourcePage(_ sourcePage: ForumThreadPage) throws -> String {
         let data = try JSONEncoder().encode(sourcePage)
-        return String(data: data, encoding: .utf8)
+        guard let value = String(data: data, encoding: .utf8) else {
+            throw YamiboError.persistenceFailed("Failed to encode manga offline source page")
+        }
+        return value
     }
 
-    private static func decodeSourcePage(_ value: String?) throws -> ForumThreadPage? {
+    private static func validSourcePage(_ value: String?, tid: String) -> ForumThreadPage? {
         guard let value,
               let data = value.data(using: .utf8) else {
             return nil
         }
-        return try JSONDecoder().decode(ForumThreadPage.self, from: data)
+        guard let sourcePage = try? JSONDecoder().decode(ForumThreadPage.self, from: data),
+              sourcePage.thread.tid == tid else {
+            return nil
+        }
+        return sourcePage
     }
 
     private static func nextQueueInsertionIndex(in db: Database) throws -> Int {

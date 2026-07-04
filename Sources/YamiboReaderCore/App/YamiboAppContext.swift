@@ -257,7 +257,7 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         return BlogReaderRepository(client: client)
     }
 
-    public func makeMangaReaderProjectionLoader() async -> any MangaReaderProjectionLoading {
+    public func makeMangaReaderProjectionLoader() async -> any MangaReaderProjectionSnapshotLoading {
         let sessionState = await sessionStore.load()
         let client = YamiboClient(
             session: session,
