@@ -57,7 +57,6 @@ import Testing
             "favorite_items": try tableCount("favorite_items", in: db),
             "reading_progress": try tableCount("reading_progress", in: db),
             "manga_directories": try tableCount("manga_directories", in: db),
-            "manga_chapter_documents": try tableCount("manga_chapter_documents", in: db),
             "offline_cache_manga_entries": try tableCount("offline_cache_manga_entries", in: db),
             "cache_entries": try tableCount("cache_entries", in: db),
         ]
@@ -66,9 +65,12 @@ import Testing
     #expect(counts["favorite_items"] == 1)
     #expect(counts["reading_progress"] == 1)
     #expect(counts["manga_directories"] == 1)
-    #expect(counts["manga_chapter_documents"] == 0)
     #expect(counts["offline_cache_manga_entries"] == 1)
     #expect(counts["cache_entries"] == 3)
+    let legacyTables = try await database.read { db in
+        try legacyStructuredTablePresence(in: db)
+    }
+    #expect(legacyTables.allSatisfy { !$0.exists })
     let readerCacheEntriesTableExists = try await database.read { db in
         try db.tableExists("reader_cache_entries")
     }
@@ -156,7 +158,6 @@ import Testing
             "favorite_items": try tableCount("favorite_items", in: db),
             "reading_progress": try tableCount("reading_progress", in: db),
             "manga_directories": try tableCount("manga_directories", in: db),
-            "manga_chapter_documents": try tableCount("manga_chapter_documents", in: db),
             "offline_cache_manga_entries": try tableCount("offline_cache_manga_entries", in: db),
             "offline_cache_image_assets": try tableCount("offline_cache_image_assets", in: db),
             "cache_entries": try tableCount("cache_entries", in: db),
@@ -167,10 +168,13 @@ import Testing
     #expect(counts["favorite_items"] == 0)
     #expect(counts["reading_progress"] == 0)
     #expect(counts["manga_directories"] == 0)
-    #expect(counts["manga_chapter_documents"] == 0)
     #expect(counts["offline_cache_manga_entries"] == 0)
     #expect(counts["offline_cache_image_assets"] == 0)
     #expect(counts["cache_entries"] == 0)
+    let legacyTables = try await database.read { db in
+        try legacyStructuredTablePresence(in: db)
+    }
+    #expect(legacyTables.allSatisfy { !$0.exists })
     let readerCacheEntriesTableExists = try await database.read { db in
         try db.tableExists("reader_cache_entries")
     }
@@ -379,4 +383,20 @@ private func makeAppMigrationMangaSourcePage(tid: String) -> ForumThreadPage {
 
 private func tableCount(_ table: String, in db: Database) throws -> Int {
     try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM \(table)") ?? 0
+}
+
+private func legacyStructuredTablePresence(in db: Database) throws -> [(name: String, exists: Bool)] {
+    try [
+        "manga_chapter_documents",
+        "manga_chapter_document_images",
+        "manga_offline_cache_memberships",
+        "manga_offline_cache_membership_images",
+        "manga_offline_cache_works",
+        "manga_offline_cache_work_images",
+        "manga_offline_cache_completed_images",
+        "manga_offline_cache_images",
+        "manga_offline_cache_queue_state",
+    ].map { table in
+        (name: table, exists: try db.tableExists(table))
+    }
 }

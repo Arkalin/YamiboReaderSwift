@@ -75,15 +75,6 @@ public enum YamiboDatabase {
             try db.execute(sql: "DELETE FROM offline_cache_manga_entries")
             try db.execute(sql: "DELETE FROM offline_cache_image_assets")
             try db.execute(sql: "DELETE FROM offline_cache_queue_state")
-            try db.execute(sql: "DELETE FROM manga_offline_cache_completed_images")
-            try db.execute(sql: "DELETE FROM manga_offline_cache_work_images")
-            try db.execute(sql: "DELETE FROM manga_offline_cache_works")
-            try db.execute(sql: "DELETE FROM manga_offline_cache_membership_images")
-            try db.execute(sql: "DELETE FROM manga_offline_cache_memberships")
-            try db.execute(sql: "DELETE FROM manga_offline_cache_images")
-            try db.execute(sql: "DELETE FROM manga_offline_cache_queue_state")
-            try db.execute(sql: "DELETE FROM manga_chapter_document_images")
-            try db.execute(sql: "DELETE FROM manga_chapter_documents")
             try db.execute(sql: "DELETE FROM manga_directory_chapters")
             try db.execute(sql: "DELETE FROM manga_directories")
             try db.execute(sql: "DELETE FROM reading_progress")
@@ -245,89 +236,10 @@ public enum YamiboDatabase {
             }
             try db.create(index: "manga_directory_chapters_tid_idx", on: "manga_directory_chapters", columns: ["tid"])
             try db.create(index: "manga_directory_chapters_directory_order_idx", on: "manga_directory_chapters", columns: ["directory_name", "manual_order"])
-
-            try db.create(table: "manga_chapter_documents") { table in
-                table.column("tid", .text).primaryKey(onConflict: .replace)
-                table.column("owner_post_id", .text).notNull()
-                table.column("chapter_title", .text).notNull()
-            }
-
-            try db.create(table: "manga_chapter_document_images") { table in
-                table.column("tid", .text).notNull().references("manga_chapter_documents", onDelete: .cascade)
-                table.column("manual_order", .integer).notNull()
-                table.column("image_url", .text).notNull()
-                table.primaryKey(["tid", "manual_order"], onConflict: .replace)
-            }
-            try db.create(index: "manga_chapter_document_images_tid_idx", on: "manga_chapter_document_images", columns: ["tid"])
         }
 
-        migrator.registerMigration("create_manga_offline_cache_metadata") { db in
-            try db.create(table: "manga_offline_cache_memberships") { table in
-                table.column("owner_name", .text).notNull()
-                table.column("tid", .text).notNull()
-                table.column("chapter_title", .text).notNull()
-                table.column("created_at", .double).notNull()
-                table.primaryKey(["owner_name", "tid"], onConflict: .replace)
-            }
-            try db.create(index: "manga_offline_cache_memberships_owner_idx", on: "manga_offline_cache_memberships", columns: ["owner_name"])
-
-            try db.create(table: "manga_offline_cache_membership_images") { table in
-                table.column("owner_name", .text).notNull()
-                table.column("tid", .text).notNull()
-                table.column("manual_order", .integer).notNull()
-                table.column("image_url", .text).notNull()
-                table.primaryKey(["owner_name", "tid", "manual_order"], onConflict: .replace)
-                table.foreignKey(["owner_name", "tid"], references: "manga_offline_cache_memberships", columns: ["owner_name", "tid"], onDelete: .cascade)
-            }
-            try db.create(index: "manga_offline_cache_membership_images_url_idx", on: "manga_offline_cache_membership_images", columns: ["image_url"])
-
-            try db.create(table: "manga_offline_cache_works") { table in
-                table.column("owner_name", .text).notNull()
-                table.column("tid", .text).notNull()
-                table.column("chapter_title", .text).notNull()
-                table.column("retains_inline_images", .boolean).notNull().defaults(to: false)
-                table.column("state", .text).notNull()
-                table.column("failure_message", .text)
-                table.column("current_bytes_per_second", .integer).notNull()
-                table.column("insertion_index", .integer).notNull()
-                table.column("created_at", .double).notNull()
-                table.column("updated_at", .double).notNull()
-                table.primaryKey(["owner_name", "tid"], onConflict: .replace)
-            }
-            try db.create(index: "manga_offline_cache_works_owner_idx", on: "manga_offline_cache_works", columns: ["owner_name"])
-            try db.create(index: "manga_offline_cache_works_insertion_idx", on: "manga_offline_cache_works", columns: ["insertion_index"])
-
-            try db.create(table: "manga_offline_cache_work_images") { table in
-                table.column("owner_name", .text).notNull()
-                table.column("tid", .text).notNull()
-                table.column("manual_order", .integer).notNull()
-                table.column("image_url", .text).notNull()
-                table.primaryKey(["owner_name", "tid", "manual_order"], onConflict: .replace)
-                table.foreignKey(["owner_name", "tid"], references: "manga_offline_cache_works", columns: ["owner_name", "tid"], onDelete: .cascade)
-            }
-            try db.create(index: "manga_offline_cache_work_images_url_idx", on: "manga_offline_cache_work_images", columns: ["image_url"])
-
-            try db.create(table: "manga_offline_cache_completed_images") { table in
-                table.column("owner_name", .text).notNull()
-                table.column("tid", .text).notNull()
-                table.column("manual_order", .integer).notNull()
-                table.column("image_url", .text).notNull()
-                table.primaryKey(["owner_name", "tid", "manual_order"], onConflict: .replace)
-                table.foreignKey(["owner_name", "tid"], references: "manga_offline_cache_works", columns: ["owner_name", "tid"], onDelete: .cascade)
-            }
-            try db.create(index: "manga_offline_cache_completed_images_url_idx", on: "manga_offline_cache_completed_images", columns: ["image_url"])
-
-            try db.create(table: "manga_offline_cache_images") { table in
-                table.column("image_url", .text).primaryKey(onConflict: .replace)
-                table.column("file_name", .text).notNull()
-                table.column("byte_count", .integer).notNull()
-            }
-
-            try db.create(table: "manga_offline_cache_queue_state") { table in
-                table.column("key", .text).primaryKey(onConflict: .replace)
-                table.column("value", .text).notNull()
-            }
-        }
+        // Keep the historical migration identifier without creating or migrating the old manga-only cache tables.
+        migrator.registerMigration("create_manga_offline_cache_metadata") { _ in }
 
         migrator.registerMigration("create_offline_cache_store") { db in
             try db.create(table: "offline_cache_manga_entries") { table in
@@ -432,49 +344,6 @@ public enum YamiboDatabase {
                 table.column("key", .text).primaryKey(onConflict: .replace)
                 table.column("value", .text).notNull()
             }
-
-            try db.execute(sql: """
-                INSERT OR IGNORE INTO offline_cache_manga_entries
-                (owner_name, tid, chapter_title, created_at)
-                SELECT owner_name, tid, chapter_title, created_at
-                FROM manga_offline_cache_memberships
-                """)
-            try db.execute(sql: """
-                INSERT OR IGNORE INTO offline_cache_manga_entry_images
-                (owner_name, tid, manual_order, image_url)
-                SELECT owner_name, tid, manual_order, image_url
-                FROM manga_offline_cache_membership_images
-                """)
-            try db.execute(sql: """
-                INSERT OR IGNORE INTO offline_cache_works
-                (reader_kind, work_id, owner_name, owner_title, tid, chapter_title, state, failure_message, current_bytes_per_second, insertion_index, created_at, updated_at)
-                SELECT 'manga', lower(hex(randomblob(16))), owner_name, owner_name, tid, chapter_title, state, failure_message, current_bytes_per_second, insertion_index, created_at, updated_at
-                FROM manga_offline_cache_works
-                """)
-            try db.execute(sql: """
-                INSERT OR IGNORE INTO offline_cache_work_images
-                (reader_kind, owner_name, tid, manual_order, image_url)
-                SELECT 'manga', owner_name, tid, manual_order, image_url
-                FROM manga_offline_cache_work_images
-                """)
-            try db.execute(sql: """
-                INSERT OR IGNORE INTO offline_cache_completed_images
-                (reader_kind, owner_name, tid, manual_order, image_url)
-                SELECT 'manga', owner_name, tid, manual_order, image_url
-                FROM manga_offline_cache_completed_images
-                """)
-            try db.execute(sql: """
-                INSERT OR IGNORE INTO offline_cache_image_assets
-                (image_url, file_name, byte_count)
-                SELECT image_url, file_name, byte_count
-                FROM manga_offline_cache_images
-                """)
-            try db.execute(sql: """
-                INSERT OR REPLACE INTO offline_cache_queue_state
-                (key, value)
-                SELECT key, value
-                FROM manga_offline_cache_queue_state
-                """)
         }
 
         migrator.registerMigration("create_offline_cache_novel_entries") { db in

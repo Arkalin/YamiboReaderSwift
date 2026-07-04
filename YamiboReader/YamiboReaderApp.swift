@@ -54,14 +54,14 @@ struct YamiboReaderApp: App {
     private static func registerMangaOfflineCacheBackgroundTasks(appContext: YamiboAppContext) {
         #if os(iOS) && canImport(BackgroundTasks)
         guard #available(iOS 26.0, *) else { return }
-        MangaOfflineCacheContinuedProcessingCoordinator.configureLaunchHandler(
-            coordinator: appContext.mangaOfflineCacheContinuedProcessingCoordinator,
+        OfflineCacheContinuedProcessingCoordinator.configureLaunchHandler(
+            coordinator: appContext.offlineCacheContinuedProcessingCoordinator,
             continueQueue: {
-                let executor = await appContext.makeMangaOfflineCacheQueueExecutor()
+                let executor = await appContext.makeOfflineCacheQueueExecutor()
                 try? await executor.continueQueue(submitsUserInitiatedRun: false)
             },
             pauseQueue: {
-                let executor = await appContext.makeMangaOfflineCacheQueueExecutor()
+                let executor = await appContext.makeOfflineCacheQueueExecutor()
                 try? await executor.pauseQueue()
             }
         )
@@ -78,7 +78,7 @@ private final class YamiboAppDelegate: NSObject, UIApplicationDelegate {
         handleEventsForBackgroundURLSession identifier: String,
         completionHandler: @escaping () -> Void
     ) {
-        Self.appContext?.mangaOfflineCacheBackgroundDownloadTransport
+        Self.appContext?.offlineCacheBackgroundDownloadTransport
             .setBackgroundEventsCompletionHandler(
                 completionHandler,
                 forSessionIdentifier: identifier

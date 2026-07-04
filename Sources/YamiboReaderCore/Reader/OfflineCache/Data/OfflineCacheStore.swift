@@ -363,13 +363,6 @@ public actor OfflineCacheStore: OfflineCacheStoring {
                 try db.execute(sql: "DELETE FROM offline_cache_manga_entries")
                 try db.execute(sql: "DELETE FROM offline_cache_image_assets")
                 try db.execute(sql: "DELETE FROM offline_cache_queue_state")
-                try db.execute(sql: "DELETE FROM manga_offline_cache_completed_images")
-                try db.execute(sql: "DELETE FROM manga_offline_cache_work_images")
-                try db.execute(sql: "DELETE FROM manga_offline_cache_works")
-                try db.execute(sql: "DELETE FROM manga_offline_cache_membership_images")
-                try db.execute(sql: "DELETE FROM manga_offline_cache_memberships")
-                try db.execute(sql: "DELETE FROM manga_offline_cache_images")
-                try db.execute(sql: "DELETE FROM manga_offline_cache_queue_state")
             }
             if fileManager.fileExists(atPath: baseDirectory.path) {
                 try fileManager.removeItem(at: baseDirectory)
