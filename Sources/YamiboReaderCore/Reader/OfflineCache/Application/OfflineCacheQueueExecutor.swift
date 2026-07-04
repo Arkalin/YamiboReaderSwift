@@ -59,11 +59,9 @@ public actor OfflineCacheImageAcquirer: OfflineCacheImageAcquiring {
 
 public actor OfflineCacheQueueExecutor {
     private let store: any OfflineCacheStoring
-    private let readerProjectionLoader: any MangaReaderProjectionSnapshotLoading
-    private let novelSourcePageLoader: (any NovelOfflineCacheSourcePageLoading)?
-    private let imageAcquirer: any OfflineCacheImageAcquiring
     private let runObserver: (any OfflineCacheQueueRunObserving)?
-    private let maxConcurrentImageTransfers: Int
+    private let mangaWorkProcessor: OfflineCacheWorkProcessor<MangaOfflineCacheWorkProcessingStrategy>
+    private let novelWorkProcessor: OfflineCacheWorkProcessor<NovelOfflineCacheWorkProcessingStrategy>?
     private var runTask: Task<Void, Never>?
     private var runGeneration = 0
 
@@ -76,11 +74,26 @@ public actor OfflineCacheQueueExecutor {
         maxConcurrentImageTransfers: Int = 3
     ) {
         self.store = store
-        self.readerProjectionLoader = readerProjectionLoader
-        self.novelSourcePageLoader = novelSourcePageLoader
-        self.imageAcquirer = imageAcquirer
         self.runObserver = runObserver
-        self.maxConcurrentImageTransfers = max(1, maxConcurrentImageTransfers)
+        let transferLimit = max(1, maxConcurrentImageTransfers)
+        self.mangaWorkProcessor = OfflineCacheWorkProcessor(
+            store: store,
+            imageAcquirer: imageAcquirer,
+            runObserver: runObserver,
+            maxConcurrentImageTransfers: transferLimit,
+            strategy: MangaOfflineCacheWorkProcessingStrategy(readerProjectionLoader: readerProjectionLoader)
+        )
+        if let novelSourcePageLoader {
+            self.novelWorkProcessor = OfflineCacheWorkProcessor(
+                store: store,
+                imageAcquirer: imageAcquirer,
+                runObserver: runObserver,
+                maxConcurrentImageTransfers: transferLimit,
+                strategy: NovelOfflineCacheWorkProcessingStrategy(sourcePageLoader: novelSourcePageLoader)
+            )
+        } else {
+            self.novelWorkProcessor = nil
+        }
     }
 
     public func continueQueue() async throws {
@@ -210,261 +223,13 @@ public actor OfflineCacheQueueExecutor {
     private func process(_ work: OfflineCacheProcessingWork) async throws {
         switch work.id.readerKind {
         case .manga:
-            try await processManga(work)
+            try await mangaWorkProcessor.process(work)
         case .novel:
-            try await processNovel(work)
-        }
-    }
-
-    private func processManga(_ work: OfflineCacheProcessingWork) async throws {
-        let mangaWork = MangaOfflineCacheWork(
-            workID: work.id.rawValue,
-            ownerName: work.entryID.ownerKey,
-            tid: work.entryID.entryKey,
-            chapterTitle: work.title,
-            targetImageURLs: work.targetImageURLs,
-            completedImageURLs: work.completedImageURLs,
-            state: MangaOfflineCacheWorkState(rawValue: work.state.rawValue) ?? .paused,
-            failureMessage: work.failureMessage,
-            currentBytesPerSecond: work.currentBytesPerSecond,
-            insertionIndex: work.insertionIndex,
-            createdAt: work.createdAt,
-            updatedAt: work.updatedAt
-        )
-        try await process(mangaWork)
-    }
-
-    private func process(_ work: MangaOfflineCacheWork) async throws {
-        try Task.checkCancellation()
-        let workID = OfflineCacheWorkID(readerKind: .manga, rawValue: work.workID)
-        guard await store.offlineCacheProcessingWork(id: workID) != nil else {
-            throw CancellationError()
-        }
-
-        let projectionBacked = try await workWithReaderProjection(work)
-        let projectionBackedWork = projectionBacked.work
-        let targetImageURLs = projectionBackedWork.targetImageURLs
-        guard !targetImageURLs.isEmpty else {
-            throw YamiboError.parsingFailed(context: "Manga Offline Cache")
-        }
-
-        var completedImageURLs = await reconciledCompletedImageURLs(targetImageURLs)
-        try await store.prepareOfflineCacheWorkForRun(
-            id: workID,
-            targetImageURLs: targetImageURLs,
-            completedImageURLs: completedImageURLs
-        )
-        await runObserver?.queueRunDidUpdateProgress(
-            completedImageCount: completedImageURLs.count,
-            targetImageCount: targetImageURLs.count
-        )
-
-        if completedImageURLs.count < targetImageURLs.count {
-            completedImageURLs = try await transferMissingImages(
-                workID: workID,
-                refererURL: Self.refererURL(for: projectionBacked.sourceIdentity),
-                targetImageURLs: targetImageURLs,
-                completedImageURLs: completedImageURLs
-            )
-        }
-
-        try Task.checkCancellation()
-        try await store.saveMembership(
-            MangaOfflineCacheMembership(
-                ownerName: projectionBackedWork.ownerName,
-                tid: projectionBackedWork.tid,
-                chapterTitle: projectionBackedWork.chapterTitle,
-                imageURLs: targetImageURLs,
-                sourcePage: projectionBacked.sourcePage
-            )
-        )
-    }
-
-    private func processNovel(_ work: OfflineCacheProcessingWork) async throws {
-        try Task.checkCancellation()
-        guard await store.offlineCacheProcessingWork(id: work.id) != nil else {
-            throw CancellationError()
-        }
-        guard let novelSourcePageLoader else {
-            throw YamiboError.parsingFailed(context: "Novel Offline Cache")
-        }
-
-        let request = try novelWorkRequest(from: work)
-        let prepared = try await novelSourcePageLoader.loadNovelOfflineCacheSourcePage(request)
-        let targetImageURLs = work.retainsInlineImages
-            ? Self.inlineImageURLs(in: prepared.projection)
-            : work.targetImageURLs
-        var sourcePageRequest = request
-        sourcePageRequest.targetImageURLs = targetImageURLs
-        try await store.saveNovelOfflineSourcePage(
-            prepared.sourcePage,
-            request: sourcePageRequest,
-            updatedAt: .now,
-            completesMatchingWork: targetImageURLs.isEmpty,
-            preservesExistingImageReferencesWhenEmpty: targetImageURLs.isEmpty && !work.retainsInlineImages
-        )
-
-        guard !targetImageURLs.isEmpty else { return }
-
-        var completedImageURLs = await reconciledCompletedImageURLs(targetImageURLs)
-        try await store.prepareOfflineCacheWorkForRun(
-            id: work.id,
-            targetImageURLs: targetImageURLs,
-            completedImageURLs: completedImageURLs
-        )
-        await runObserver?.queueRunDidUpdateProgress(
-            completedImageCount: completedImageURLs.count,
-            targetImageCount: targetImageURLs.count
-        )
-
-        if completedImageURLs.count < targetImageURLs.count {
-            completedImageURLs = try await transferMissingImages(
-                workID: work.id,
-                refererURL: YamiboRoute.threadByID(
-                    tid: request.threadID,
-                    page: request.view,
-                    authorID: request.authorID,
-                    reverse: false
-                ).url,
-                targetImageURLs: targetImageURLs,
-                completedImageURLs: completedImageURLs
-            )
-        }
-
-        try Task.checkCancellation()
-        guard await store.offlineCacheProcessingWork(id: work.id) != nil else {
-            throw CancellationError()
-        }
-        try await store.finishOfflineCacheWork(id: work.id)
-    }
-
-    private func workWithReaderProjection(_ work: MangaOfflineCacheWork) async throws -> MangaOfflineCacheProjectionBackedWork {
-        let snapshot = try await readerProjectionLoader.loadReaderProjectionSnapshot(
-            MangaReaderProjectionRequest(threadID: work.tid)
-        )
-
-        return MangaOfflineCacheProjectionBackedWork(
-            work: work.preparingForRun(
-                targetImageURLs: snapshot.projection.imageURLs,
-                completedImageURLs: []
-            ),
-            sourceIdentity: snapshot.projection.sourceIdentity,
-            sourcePage: snapshot.sourcePage
-        )
-    }
-
-    private func reconciledCompletedImageURLs(_ targetImageURLs: [URL]) async -> [URL] {
-        var completed: [URL] = []
-        for imageURL in targetImageURLs {
-            if await store.offlineImageData(for: imageURL) != nil {
-                completed.append(imageURL)
+            guard let novelWorkProcessor else {
+                throw YamiboError.parsingFailed(context: "Novel Offline Cache")
             }
+            try await novelWorkProcessor.process(work)
         }
-        return completed
-    }
-
-    private func transferMissingImages(
-        workID: OfflineCacheWorkID,
-        refererURL: URL,
-        targetImageURLs: [URL],
-        completedImageURLs: [URL]
-    ) async throws -> [URL] {
-        var completedKeys = Set(completedImageURLs.map(\.absoluteString))
-        var completed = targetImageURLs.filter { completedKeys.contains($0.absoluteString) }
-        let pending = targetImageURLs.filter { !completedKeys.contains($0.absoluteString) }
-
-        try await withThrowingTaskGroup(of: OfflineCacheImageTransferResult.self) { group in
-            var pendingIterator = pending.makeIterator()
-            var activeCount = 0
-
-            func submitNext() {
-                guard activeCount < maxConcurrentImageTransfers, let imageURL = pendingIterator.next() else {
-                    return
-                }
-                activeCount += 1
-                group.addTask { [store, imageAcquirer] in
-                    try Task.checkCancellation()
-                    guard await store.offlineCacheProcessingWork(id: workID) != nil else {
-                        throw CancellationError()
-                    }
-                    let startedAt = Date()
-                    let acquisition = try await imageAcquirer.acquireImageData(for: imageURL, refererURL: refererURL)
-                    guard !acquisition.data.isEmpty else {
-                        throw YamiboError.invalidResponse(statusCode: nil)
-                    }
-                    try Task.checkCancellation()
-                    guard await store.offlineCacheProcessingWork(id: workID) != nil else {
-                        throw CancellationError()
-                    }
-                    try await store.saveOfflineImageData(acquisition.data, for: imageURL)
-                    return OfflineCacheImageTransferResult(
-                        imageURL: imageURL,
-                        bytesPerSecond: Self.bytesPerSecond(byteCount: acquisition.data.count, startedAt: startedAt)
-                    )
-                }
-            }
-
-            for _ in 0..<maxConcurrentImageTransfers {
-                submitNext()
-            }
-
-            while let result = try await group.next() {
-                activeCount -= 1
-                completedKeys.insert(result.imageURL.absoluteString)
-                completed = targetImageURLs.filter { completedKeys.contains($0.absoluteString) }
-                try await store.updateOfflineCacheWorkProgress(
-                    id: workID,
-                    targetImageURLs: targetImageURLs,
-                    completedImageURLs: completed,
-                    currentBytesPerSecond: result.bytesPerSecond
-                )
-                await runObserver?.queueRunDidUpdateProgress(
-                    completedImageCount: completed.count,
-                    targetImageCount: targetImageURLs.count
-                )
-                submitNext()
-            }
-        }
-
-        return completed
-    }
-
-    private func novelWorkRequest(from work: OfflineCacheProcessingWork) throws -> NovelOfflineCacheWorkRequest {
-        guard work.entryID.readerKind == .novel,
-              let components = OfflineCacheStore.novelEntryKeyComponents(from: work.entryID.entryKey) else {
-            throw YamiboError.parsingFailed(context: "Novel Offline Cache")
-        }
-        return NovelOfflineCacheWorkRequest(
-            ownerTitle: work.ownerTitle,
-            title: work.title,
-            threadID: components.threadID,
-            view: components.view,
-            authorID: components.authorID,
-            contentSource: components.contentSource,
-            targetImageURLs: work.targetImageURLs,
-            retainsInlineImages: work.retainsInlineImages
-        )
-    }
-
-    private static func inlineImageURLs(in document: NovelReaderProjection) -> [URL] {
-        var seen: Set<String> = []
-        var urls: [URL] = []
-        for segment in document.segments {
-            guard case let .image(url, _) = segment else { continue }
-            if seen.insert(url.absoluteString).inserted {
-                urls.append(url)
-            }
-        }
-        return urls
-    }
-
-    private static func refererURL(for sourceIdentity: MangaReaderProjectionSourceIdentity) -> URL {
-        YamiboRoute.threadByID(
-            tid: sourceIdentity.tid,
-            page: sourceIdentity.view,
-            authorID: sourceIdentity.authorID,
-            reverse: false
-        ).url
     }
 
     private static func failureMessage(from error: Error) -> String {
@@ -474,20 +239,4 @@ public actor OfflineCacheQueueExecutor {
         }
         return error.localizedDescription
     }
-
-    private static func bytesPerSecond(byteCount: Int, startedAt: Date) -> Int {
-        let elapsed = max(Date().timeIntervalSince(startedAt), 0.001)
-        return max(0, Int(Double(byteCount) / elapsed))
-    }
-}
-
-private struct OfflineCacheImageTransferResult: Sendable {
-    var imageURL: URL
-    var bytesPerSecond: Int
-}
-
-private struct MangaOfflineCacheProjectionBackedWork: Sendable {
-    var work: MangaOfflineCacheWork
-    var sourceIdentity: MangaReaderProjectionSourceIdentity
-    var sourcePage: ForumThreadPage
 }

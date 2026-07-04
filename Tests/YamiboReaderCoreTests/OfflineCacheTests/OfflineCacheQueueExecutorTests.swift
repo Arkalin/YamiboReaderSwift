@@ -687,6 +687,181 @@ struct OfflineCacheTestsQueueExecutor {
         ))
         #expect(entry?.ownerTitle == "新标题1130")
     }
+
+    @Test func workProcessorDownloadsOnlyMissingImagesAndReportsOrderedProgress() async throws {
+        let store = try makeTestOfflineCacheStore(rootDirectory: try makeTemporaryExecutorDirectory())
+        let imageURLs = try makeImageURLs(tid: "1200", count: 3)
+        _ = try await store.enqueueOfflineCacheWork(
+            try makeExecutorWorkRequest(ownerName: "processor", tid: "1200", targetImageURLs: [])
+        )
+        try await store.saveOfflineImageData(Data([9]), for: imageURLs[0])
+        let work = try #require(await store.nextOfflineCacheProcessingWork())
+        let acquirer = RecordingOfflineImageAcquirer()
+        await acquirer.setData(for: Array(imageURLs.dropFirst()))
+        let observer = RecordingQueueRunObserver()
+        let strategy = RecordingOfflineCacheWorkStrategy(targetImageURLs: imageURLs)
+        let processor = makeRecordingWorkProcessor(
+            store: store,
+            imageAcquirer: acquirer,
+            runObserver: observer,
+            strategy: strategy,
+            maxConcurrentImageTransfers: 1
+        )
+
+        try await processor.process(work)
+
+        #expect(await acquirer.requestedURLs == Array(imageURLs.dropFirst()))
+        #expect(await store.offlineImageData(for: imageURLs[0]) == Data([9]))
+        #expect(await store.offlineImageData(for: imageURLs[1]) == Data([1]))
+        #expect(await store.offlineImageData(for: imageURLs[2]) == Data([2]))
+        #expect(await observer.progressUpdates == [
+            MangaOfflineCacheProgress(completedImageCount: 1, targetImageCount: 3),
+            MangaOfflineCacheProgress(completedImageCount: 2, targetImageCount: 3),
+            MangaOfflineCacheProgress(completedImageCount: 3, targetImageCount: 3)
+        ])
+        #expect(await strategy.persistCount == 1)
+        #expect(await strategy.finishCount == 1)
+    }
+
+    @Test func workProcessorFinishesEmptyTargetWithoutPreparingTransferProgress() async throws {
+        let store = try makeTestOfflineCacheStore(rootDirectory: try makeTemporaryExecutorDirectory())
+        let staleImageURLs = try makeImageURLs(tid: "1210", count: 1)
+        _ = try await store.enqueueOfflineCacheWork(
+            try makeExecutorWorkRequest(ownerName: "processor", tid: "1210", targetImageURLs: staleImageURLs)
+        )
+        let work = try #require(await store.nextOfflineCacheProcessingWork())
+        let acquirer = RecordingOfflineImageAcquirer()
+        let observer = RecordingQueueRunObserver()
+        let strategy = RecordingOfflineCacheWorkStrategy(targetImageURLs: [])
+        let processor = makeRecordingWorkProcessor(
+            store: store,
+            imageAcquirer: acquirer,
+            runObserver: observer,
+            strategy: strategy
+        )
+
+        try await processor.process(work)
+
+        let retainedWork = try #require(await store.offlineCacheProcessingWork(id: work.id))
+        #expect(retainedWork.state == .queued)
+        #expect(retainedWork.targetImageURLs == staleImageURLs)
+        #expect(await acquirer.requestedURLs.isEmpty)
+        #expect(await observer.progressUpdates.isEmpty)
+        #expect(await strategy.persistCount == 1)
+        #expect(await strategy.finishCount == 1)
+    }
+
+    @Test func workProcessorRejectsEmptyImageDataWithoutAdvancingProgress() async throws {
+        let store = try makeTestOfflineCacheStore(rootDirectory: try makeTemporaryExecutorDirectory())
+        let imageURLs = try makeImageURLs(tid: "1220", count: 2)
+        _ = try await store.enqueueOfflineCacheWork(
+            try makeExecutorWorkRequest(ownerName: "processor", tid: "1220", targetImageURLs: [])
+        )
+        let work = try #require(await store.nextOfflineCacheProcessingWork())
+        let acquirer = EmptyImageThenFailingAcquirer(emptyImageURL: imageURLs[0])
+        let strategy = RecordingOfflineCacheWorkStrategy(targetImageURLs: imageURLs)
+        let processor = makeRecordingWorkProcessor(
+            store: store,
+            imageAcquirer: acquirer,
+            strategy: strategy,
+            maxConcurrentImageTransfers: 1
+        )
+
+        do {
+            try await processor.process(work)
+            Issue.record("Expected empty image data to fail the processor")
+        } catch let error as YamiboError {
+            #expect(error == .invalidResponse(statusCode: nil))
+        }
+
+        let retainedWork = try #require(await store.offlineCacheProcessingWork(id: work.id))
+        #expect(retainedWork.completedImageURLs.isEmpty)
+        #expect(await store.offlineImageData(for: imageURLs[0]) == nil)
+        #expect(await strategy.finishCount == 0)
+    }
+
+    @Test func workProcessorCancelsWhenWorkIsRemovedDuringTransfer() async throws {
+        let store = try makeTestOfflineCacheStore(rootDirectory: try makeTemporaryExecutorDirectory())
+        let imageURLs = try makeImageURLs(tid: "1230", count: 1)
+        _ = try await store.enqueueOfflineCacheWork(
+            try makeExecutorWorkRequest(ownerName: "processor", tid: "1230", targetImageURLs: [])
+        )
+        let work = try #require(await store.nextOfflineCacheProcessingWork())
+        let acquirer = CancelingOfflineImageAcquirer(store: store, workID: work.id)
+        let strategy = RecordingOfflineCacheWorkStrategy(targetImageURLs: imageURLs)
+        let processor = makeRecordingWorkProcessor(
+            store: store,
+            imageAcquirer: acquirer,
+            strategy: strategy,
+            maxConcurrentImageTransfers: 1
+        )
+
+        do {
+            try await processor.process(work)
+            Issue.record("Expected removed work to cancel the processor")
+        } catch is CancellationError {
+            #expect(true)
+        }
+
+        #expect(await store.offlineCacheProcessingWork(id: work.id) == nil)
+        #expect(await store.offlineImageData(for: imageURLs[0]) == nil)
+        #expect(await strategy.finishCount == 0)
+    }
+}
+
+private func makeRecordingWorkProcessor(
+    store: any OfflineCacheStoring,
+    imageAcquirer: any OfflineCacheImageAcquiring,
+    runObserver: (any OfflineCacheQueueRunObserving)? = nil,
+    strategy: RecordingOfflineCacheWorkStrategy,
+    maxConcurrentImageTransfers: Int = 3
+) -> OfflineCacheWorkProcessor<RecordingOfflineCacheWorkStrategy> {
+    OfflineCacheWorkProcessor(
+        store: store,
+        imageAcquirer: imageAcquirer,
+        runObserver: runObserver,
+        maxConcurrentImageTransfers: maxConcurrentImageTransfers,
+        strategy: strategy
+    )
+}
+
+private struct RecordingOfflineCachePayload: Sendable {}
+
+private actor RecordingOfflineCacheWorkStrategy: OfflineCacheWorkProcessingStrategy {
+    private(set) var prepareCount = 0
+    private(set) var persistCount = 0
+    private(set) var finishCount = 0
+    private let targetImageURLs: [URL]
+    private let refererURL: URL
+
+    init(targetImageURLs: [URL]) {
+        self.targetImageURLs = targetImageURLs
+        self.refererURL = YamiboRoute.threadByID(tid: "processor", page: 1, authorID: nil, reverse: false).url
+    }
+
+    func prepare(_ work: OfflineCacheProcessingWork) async throws -> OfflineCachePreparedWork<RecordingOfflineCachePayload> {
+        prepareCount += 1
+        return OfflineCachePreparedWork(
+            workID: work.id,
+            targetImageURLs: targetImageURLs,
+            refererURL: refererURL,
+            payload: RecordingOfflineCachePayload()
+        )
+    }
+
+    func persistPreparedSource(
+        _ preparedWork: OfflineCachePreparedWork<RecordingOfflineCachePayload>,
+        in store: any OfflineCacheStoring
+    ) async throws {
+        persistCount += 1
+    }
+
+    func finish(
+        _ preparedWork: OfflineCachePreparedWork<RecordingOfflineCachePayload>,
+        in store: any OfflineCacheStoring
+    ) async throws {
+        finishCount += 1
+    }
 }
 
 private actor RecordingReaderProjectionLoader: MangaReaderProjectionSnapshotLoading {
@@ -824,6 +999,21 @@ private actor EmptyImageThenFailingAcquirer: OfflineCacheImageAcquiring {
             return OfflineCacheImageAcquisition(data: Data(), source: .network)
         }
         throw YamiboError.offline
+    }
+}
+
+private actor CancelingOfflineImageAcquirer: OfflineCacheImageAcquiring {
+    private let store: any OfflineCacheStoring
+    private let workID: OfflineCacheWorkID
+
+    init(store: any OfflineCacheStoring, workID: OfflineCacheWorkID) {
+        self.store = store
+        self.workID = workID
+    }
+
+    func acquireImageData(for imageURL: URL, refererURL: URL?) async throws -> OfflineCacheImageAcquisition {
+        try await store.cancelOfflineCacheWork(id: workID)
+        return OfflineCacheImageAcquisition(data: Data([1]), source: .network)
     }
 }
 

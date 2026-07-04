@@ -162,6 +162,7 @@ _Avoid_: app sync, startup restore, lifecycle handler
 - **Download Queue** may contain manga and novel offline-cache work together, with row type and grouping making the reader context explicit.
 - **Mine Home** represents pending **Download Queue** activity by unfinished work item count, not by completed cached content or owner group count.
 - Failed work remains in the **Download Queue** until the user continues the queue, cancels the work, or deletes the matching offline-cache content. Continuing the queue retries failed work as well as queued or paused work.
+- The offline-cache queue executor owns **Download Queue** run lifecycle, while each single work item's durable source payload and image asset transfer are processed through a shared work processor with reader-specific strategy adapters.
 - **Offline Cache Management** groups offline-cache content by reader context and owner, supports deleting an owner group, and supports deleting individual cached chapter or view entries.
 - Manga offline cache records and image bytes are device-local content availability data and are not synchronized as **Favorite Library** metadata through WebDAV.
 - Manga offline cache completion does not update **Favorite Library** reading progress, resume routes, or recent-reading timestamps.
