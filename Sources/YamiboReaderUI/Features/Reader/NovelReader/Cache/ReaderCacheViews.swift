@@ -72,17 +72,18 @@ struct ReaderCachePanel: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button {
-                        queueViewModel = model.makeOfflineCacheQueueViewModel()
-                        isQueuePresented = true
+                        dismiss()
                     } label: {
-                        Label(queueTitle, systemImage: "arrow.down.circle")
+                        Image(systemName: "xmark")
                     }
+                    .accessibilityLabel(L10n.string("common.close"))
                 }
 
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button(L10n.string("common.close")) {
-                        dismiss()
-                    }
+                    ReaderCacheQueueToolbarButton(
+                        entryCount: model.offlineCacheQueueEntryCount,
+                        action: showQueue
+                    )
                 }
             }
             .task {
@@ -158,19 +159,42 @@ struct ReaderCachePanel: View {
         }
     }
 
-    private var queueTitle: String {
-        if model.offlineCacheQueueEntryCount > 0 {
-            return L10n.string("mine.download_queue_count", model.offlineCacheQueueEntryCount)
-        }
-        return L10n.string("mine.download_queue")
-    }
-
     private func toggleSelection(for view: Int) {
         if selectedViews.contains(view) {
             selectedViews.remove(view)
         } else {
             selectedViews.insert(view)
         }
+    }
+
+    private func showQueue() {
+        queueViewModel = model.makeOfflineCacheQueueViewModel()
+        isQueuePresented = true
+    }
+}
+
+private struct ReaderCacheQueueToolbarButton: View {
+    let entryCount: Int
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                ReaderCacheDownloadQueueIcon(isActive: entryCount > 0)
+                Text(verbatim: "\(entryCount)")
+                    .font(.caption.monospacedDigit().weight(.semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                    .frame(minWidth: 12, alignment: .trailing)
+            }
+            .frame(minWidth: 48, minHeight: 32, alignment: .center)
+            .foregroundStyle(entryCount > 0 ? Color.accentColor : Color.secondary)
+            .contentShape(Rectangle())
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(
+            L10n.string("reader.cache_queue_button_accessibility_format", entryCount)
+        )
     }
 }
 

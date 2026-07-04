@@ -353,7 +353,7 @@ private struct MangaReaderCacheQueueToolbarButton: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 5) {
-                MangaReaderCacheDownloadQueueIcon(isActive: entryCount > 0)
+                ReaderCacheDownloadQueueIcon(isActive: entryCount > 0)
                     .mangaReaderCacheQueueBadgeAnchor(.queueButton)
                 Text(verbatim: "\(entryCount)")
                     .font(.caption.monospacedDigit().weight(.semibold))
@@ -367,7 +367,7 @@ private struct MangaReaderCacheQueueToolbarButton: View {
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(
-            L10n.string("manga.offline_cache.queue_button_accessibility_format", entryCount)
+            L10n.string("reader.cache_queue_button_accessibility_format", entryCount)
         )
     }
 }

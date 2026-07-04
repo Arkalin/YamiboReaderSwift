@@ -1,6 +1,6 @@
 import SwiftUI
 
-struct MangaReaderCacheDownloadQueueIcon: View {
+struct ReaderCacheDownloadQueueIcon: View {
     let isActive: Bool
     @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
 

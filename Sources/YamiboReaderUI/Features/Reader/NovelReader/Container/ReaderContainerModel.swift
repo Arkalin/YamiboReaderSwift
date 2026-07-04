@@ -1535,6 +1535,9 @@ public final class ReaderContainerModel: ObservableObject {
             store: appContext.makeOfflineCacheStore(),
             novelOfflineCacheSettings: { [settingsStore = appContext.settingsStore] in
                 await settingsStore.load().novelOfflineCache
+            },
+            continueOfflineCacheQueue: { [appContext] in
+                try await appContext.makeOfflineCacheQueueExecutor().continueQueue()
             }
         )
     }

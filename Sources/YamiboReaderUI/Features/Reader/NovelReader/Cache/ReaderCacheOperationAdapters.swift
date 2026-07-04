@@ -63,13 +63,16 @@ public struct ReaderRepositoryCacheOperationAdapter: ReaderCacheOperationReposit
 public struct OfflineStoreReaderCacheOperationAdapter: ReaderCacheOperationRepository {
     private let store: any OfflineCacheStoring
     private let novelOfflineCacheSettings: @Sendable () async -> NovelOfflineCacheSettings
+    private let continueOfflineCacheQueue: (@Sendable () async throws -> Void)?
 
     public init(
         store: any OfflineCacheStoring,
-        novelOfflineCacheSettings: @escaping @Sendable () async -> NovelOfflineCacheSettings = { .init() }
+        novelOfflineCacheSettings: @escaping @Sendable () async -> NovelOfflineCacheSettings = { .init() },
+        continueOfflineCacheQueue: (@Sendable () async throws -> Void)? = nil
     ) {
         self.store = store
         self.novelOfflineCacheSettings = novelOfflineCacheSettings
+        self.continueOfflineCacheQueue = continueOfflineCacheQueue
     }
 
     public func cacheState(for context: ReaderCacheOperationContext) async -> NovelOfflineCacheViewsSnapshot {
@@ -121,6 +124,7 @@ public struct OfflineStoreReaderCacheOperationAdapter: ReaderCacheOperationRepos
     ) async -> ReaderCacheBatchResult {
         var submittedViews: [Int] = []
         var failedViews: [Int] = []
+        var didEnqueueWork = false
         let settings = await novelOfflineCacheSettings()
         for view in views.sorted() {
             do {
@@ -139,18 +143,35 @@ public struct OfflineStoreReaderCacheOperationAdapter: ReaderCacheOperationRepos
                 switch result {
                 case .alreadyCached:
                     break
-                case .alreadyQueued, .enqueued:
+                case .alreadyQueued:
                     submittedViews.append(view)
+                case .enqueued:
+                    submittedViews.append(view)
+                    didEnqueueWork = true
                 }
             } catch {
                 failedViews.append(view)
             }
         }
+        if didEnqueueWork {
+            do {
+                try await continueOfflineCacheQueueIfAllowed()
+            } catch {
+                failedViews.append(contentsOf: submittedViews.filter { !failedViews.contains($0) })
+            }
+        }
+        let completedViews = submittedViews.filter { !failedViews.contains($0) }
         return ReaderCacheBatchResult(
             totalCount: views.count,
-            completedViews: submittedViews,
+            completedViews: completedViews,
             failedViews: failedViews,
             wasCancelled: false
         )
+    }
+
+    private func continueOfflineCacheQueueIfAllowed() async throws {
+        let works = await store.offlineCacheQueueWorks()
+        guard works.allSatisfy({ $0.state != .failed }) else { return }
+        try await continueOfflineCacheQueue?()
     }
 }

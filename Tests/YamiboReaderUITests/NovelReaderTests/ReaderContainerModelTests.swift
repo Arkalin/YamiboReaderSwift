@@ -2996,6 +2996,26 @@ final class ReaderContainerModelTests: XCTestCase {
         }
     }
 
+    func testStartCachingContinuesSharedDownloadQueue() async throws {
+        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=7101&mobile=2")!
+        let offlineStore = try makeReaderModelOfflineCacheStore()
+
+        let model = try await makeModel(
+            documents: [
+                makeDocument(threadURL: threadURL, view: 1, maxView: 2, chapterTitles: ["当前页"]),
+            ],
+            offlineCacheStore: offlineStore
+        )
+
+        await MainActor.run {
+            model.startCaching(views: [2])
+        }
+
+        try await waitFor {
+            await offlineStore.offlineCacheQueueRunState() == .running
+        }
+    }
+
     func testUpdatingCachedViewShowsCachingWhileRetainingLastUpdateTime() async throws {
         let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=7002&mobile=2")!
         let offlineStore = try makeReaderModelOfflineCacheStore()
