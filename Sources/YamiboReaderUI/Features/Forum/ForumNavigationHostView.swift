@@ -230,20 +230,20 @@ public struct ForumNavigationHostView: View {
         _ url: URL,
         title: String?,
         containingFid: String?,
-        intent: ThreadRouteIntent = .contentRoute
+        intent: YamiboThreadRouteIntent = .contentRoute
     ) {
         Task {
             do {
-                let resolver = await appContext.makeForumThreadRouteResolver()
+                let resolver = await appContext.makeYamiboThreadRouteResolver()
                 let target = try await resolver.resolve(
-                    ThreadRouteRequest(
+                    YamiboThreadRouteRequest(
                         threadURL: url,
                         title: title,
                         intent: intent,
-                        tapContext: ForumThreadTapContext(containingFid: containingFid)
+                        tapContext: YamiboThreadTapContext(containingFid: containingFid)
                     )
                 )
-                openThreadRouteTarget(target)
+                openYamiboThreadRouteTarget(target)
             } catch {
                 actionErrorMessage = error.localizedDescription
             }
@@ -253,31 +253,50 @@ public struct ForumNavigationHostView: View {
     private func openThread(_ thread: ForumThreadSummary, containingFid: String?) {
         Task {
             do {
-                let resolver = await appContext.makeForumThreadRouteResolver()
+                let resolver = await appContext.makeYamiboThreadRouteResolver()
                 let target = try await resolver.resolve(
-                    ThreadRouteRequest(
+                    YamiboThreadRouteRequest(
                         threadURL: thread.url,
                         threadID: thread.tid,
                         title: thread.title,
                         authorID: thread.authorID,
                         threadFid: thread.fid,
-                        tapContext: ForumThreadTapContext(containingFid: containingFid)
+                        tapContext: YamiboThreadTapContext(containingFid: containingFid)
                     )
                 )
-                openThreadRouteTarget(target)
+                openYamiboThreadRouteTarget(target)
             } catch {
                 actionErrorMessage = error.localizedDescription
             }
         }
     }
 
-    private func openThreadRouteTarget(_ target: ThreadRouteTarget) {
+    private func openYamiboThreadRouteTarget(_ target: YamiboThreadRouteTarget) {
         switch target {
-        case let .novelDetail(context):
+        case let .novel(payload):
+            let context = NovelDetailLaunchContext(
+                thread: payload.thread,
+                title: payload.title,
+                authorID: payload.authorID
+            )
             path.append(.novelDetail(context))
-        case let .mangaDetail(context):
+        case let .manga(payload):
+            let cleanBookName = MangaTitleCleaner.cleanBookName(payload.title)
+            let context = MangaDetailLaunchContext(
+                thread: payload.thread,
+                title: cleanBookName,
+                focusedChapterTID: payload.thread.tid,
+                directoryNameHint: cleanBookName
+            )
             path.append(.mangaDetail(context))
-        case let .threadReader(context):
+        case let .thread(payload):
+            let context = ThreadReaderLaunchContext(
+                thread: payload.thread,
+                title: payload.title,
+                initialPage: payload.initialPage,
+                targetPostID: payload.targetPostID,
+                authorID: payload.authorID
+            )
             path.append(.threadReader(context))
         case let .webFallback(url):
             path.append(.web(url))

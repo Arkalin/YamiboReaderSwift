@@ -1,6 +1,6 @@
 import Foundation
 
-public struct ThreadMetadata: Hashable, Sendable {
+public struct YamiboThreadMetadata: Hashable, Sendable {
     public var tid: String?
     public var fid: String?
     public var title: String?
@@ -22,8 +22,8 @@ public struct ThreadMetadata: Hashable, Sendable {
     }
 }
 
-public enum ThreadMetadataHTMLParser {
-    public static func parse(from html: String, url: URL) throws -> ThreadMetadata {
+public enum YamiboThreadMetadataHTMLParser {
+    public static func parse(from html: String, url: URL) throws -> YamiboThreadMetadata {
         if ReaderHTMLParser.isNotAuthenticated(html) {
             throw YamiboError.notAuthenticated
         }
@@ -44,7 +44,7 @@ public enum ThreadMetadataHTMLParser {
         let authorLink = try? document.select("a[href*='mod=space'][href*='uid='], a[href*='space-uid-']").first()
         let authorURL = HTMLTextExtractor.absoluteURL(from: (try? authorLink?.attr("href")) ?? "")
 
-        return ThreadMetadata(
+        return YamiboThreadMetadata(
             tid: threadID(from: url) ?? threadID(from: html),
             fid: sectionURL.flatMap(forumID(from:)) ?? forumID(from: html),
             title: title,

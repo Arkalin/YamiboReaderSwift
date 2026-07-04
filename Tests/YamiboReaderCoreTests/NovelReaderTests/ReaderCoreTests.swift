@@ -459,13 +459,6 @@ private final class StubURLProtocol: URLProtocol {
     override func stopLoading() {}
 }
 
-@Test func readerModeDetectorMatchesNovelThreadPages() async throws {
-    let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=563621&mobile=2"))
-    #expect(ReaderModeDetector.canOpenReader(url: url, title: "文學區 - 测试帖子"))
-    #expect(!ReaderModeDetector.canOpenReader(url: url, title: "绘图区 - 测试帖子"))
-    #expect(!ReaderModeDetector.canOpenReader(url: URL(string: "https://bbs.yamibo.com/home.php"), title: "文學區"))
-}
-
 @Test func threadRoutePreservesAuthorIDFromExistingURL() async throws {
     let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&page=1&authorid=77&mobile=2"))
     let built = YamiboRoute.thread(url: url, page: 2, authorID: nil).url.absoluteString

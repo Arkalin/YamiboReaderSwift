@@ -1,13 +1,13 @@
 import Foundation
 
-public actor ForumThreadRouteResolver {
+public actor YamiboThreadRouteResolver {
     private let client: YamiboClient
 
     public init(client: YamiboClient) {
         self.client = client
     }
 
-    public func resolve(_ request: ThreadRouteRequest) async throws -> ThreadRouteTarget {
+    public func resolve(_ request: YamiboThreadRouteRequest) async throws -> YamiboThreadRouteTarget {
         let requestURL = URL(string: request.threadURL.absoluteString, relativeTo: YamiboRoute.baseURL)?.absoluteURL
             ?? request.threadURL.absoluteURL
         let canonicalURL = canonicalThreadURL(from: requestURL) ?? requestURL
@@ -29,13 +29,15 @@ public actor ForumThreadRouteResolver {
                 thread: thread,
                 title: request.title
             )
-            return .threadReader(
-                ThreadReaderLaunchContext(
+            return .thread(
+                YamiboThreadRoutePayload(
                     thread: thread,
                     title: request.title ?? L10n.string("forum.default_title"),
+                    authorID: request.authorID,
+                    canonicalURL: canonicalURL,
+                    requestedURL: requestURL,
                     initialPage: initialPage,
-                    targetPostID: targetPostID,
-                    authorID: request.authorID
+                    targetPostID: targetPostID
                 )
             )
         }
@@ -47,11 +49,11 @@ public actor ForumThreadRouteResolver {
             title: nil
         )
 
-        let metadata: ThreadMetadata?
+        let metadata: YamiboThreadMetadata?
         if shouldFetchMetadata(fid: initialFid, knownThreadKind: request.knownThreadKind) {
             do {
                 metadata = try await loadMetadata(for: requestURL)
-            } catch let fallback as ForumThreadRouteResolverWebFallback {
+            } catch let fallback as YamiboThreadRouteResolverWebFallback {
                 return .webFallback(fallback.url)
             }
         } else {
@@ -77,22 +79,27 @@ public actor ForumThreadRouteResolver {
 
         switch kind {
         case .novel:
-            return .novelDetail(
-                NovelDetailLaunchContext(
+            return .novel(
+                YamiboThreadRoutePayload(
                     thread: thread,
                     title: title ?? L10n.string("reader.title"),
-                    authorID: authorID
+                    authorID: authorID,
+                    canonicalURL: canonicalURL,
+                    requestedURL: requestURL,
+                    initialPage: baseInitialPage,
+                    targetPostID: targetPostID
                 )
             )
         case .manga:
-            let rawTitle = title ?? L10n.string("manga.reader.title")
-            let cleanBookName = MangaTitleCleaner.cleanBookName(rawTitle)
-            return .mangaDetail(
-                MangaDetailLaunchContext(
+            return .manga(
+                YamiboThreadRoutePayload(
                     thread: thread,
-                    title: cleanBookName,
-                    focusedChapterTID: tid,
-                    directoryNameHint: cleanBookName
+                    title: title ?? L10n.string("manga.reader.title"),
+                    authorID: authorID,
+                    canonicalURL: canonicalURL,
+                    requestedURL: requestURL,
+                    initialPage: baseInitialPage,
+                    targetPostID: targetPostID
                 )
             )
         case .regular, .unknown:
@@ -102,20 +109,22 @@ public actor ForumThreadRouteResolver {
                 thread: thread,
                 title: title
             )
-            return .threadReader(
-                ThreadReaderLaunchContext(
+            return .thread(
+                YamiboThreadRoutePayload(
                     thread: thread,
                     title: title ?? L10n.string("forum.default_title"),
+                    authorID: authorID,
+                    canonicalURL: canonicalURL,
+                    requestedURL: requestURL,
                     initialPage: initialPage,
-                    targetPostID: targetPostID,
-                    authorID: authorID
+                    targetPostID: targetPostID
                 )
             )
         }
     }
 
-    private func shouldFetchMetadata(fid: String?, knownThreadKind: YamiboForumThreadKind?) -> Bool {
-        if let fid, YamiboForumTaxonomy.threadKind(for: fid) != .unknown {
+    private func shouldFetchMetadata(fid: String?, knownThreadKind: YamiboThreadKind?) -> Bool {
+        if let fid, YamiboThreadTaxonomy.threadKind(for: fid) != .unknown {
             return false
         }
         if let knownThreadKind, knownThreadKind != .unknown {
@@ -124,24 +133,24 @@ public actor ForumThreadRouteResolver {
         return fid == nil
     }
 
-    private func loadMetadata(for url: URL) async throws -> ThreadMetadata {
+    private func loadMetadata(for url: URL) async throws -> YamiboThreadMetadata {
         do {
             let html = try await client.fetchHTML(for: .thread(url: url, page: 1, authorID: nil))
-            return try ThreadMetadataHTMLParser.parse(from: html, url: url)
+            return try YamiboThreadMetadataHTMLParser.parse(from: html, url: url)
         } catch YamiboError.notAuthenticated {
-            throw ForumThreadRouteResolverWebFallback(url: url)
+            throw YamiboThreadRouteResolverWebFallback(url: url)
         } catch YamiboError.floodControl {
-            throw ForumThreadRouteResolverWebFallback(url: url)
+            throw YamiboThreadRouteResolverWebFallback(url: url)
         }
     }
 
     private func kindForKnownInputs(
         fid: String?,
-        knownThreadKind: YamiboForumThreadKind?,
+        knownThreadKind: YamiboThreadKind?,
         title: String?
-    ) -> YamiboForumThreadKind {
+    ) -> YamiboThreadKind {
         if let fid {
-            let taxonomyKind = YamiboForumTaxonomy.threadKind(for: fid)
+            let taxonomyKind = YamiboThreadTaxonomy.threadKind(for: fid)
             if taxonomyKind != .unknown {
                 return taxonomyKind
             }
@@ -261,7 +270,7 @@ public actor ForumThreadRouteResolver {
     }
 }
 
-private struct ForumThreadRouteResolverWebFallback: Error {
+private struct YamiboThreadRouteResolverWebFallback: Error {
     var url: URL
 }
 

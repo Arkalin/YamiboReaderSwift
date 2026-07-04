@@ -1,6 +1,6 @@
 import Foundation
 
-public enum YamiboForumTaxonomy {
+public enum YamiboThreadTaxonomy {
     public static let defaultNovelForumIDs: Set<String> = [
         "49",
         "55"
@@ -12,7 +12,7 @@ public enum YamiboForumTaxonomy {
         "37"
     ]
 
-    public static func threadKind(for fid: String) -> YamiboForumThreadKind {
+    public static func threadKind(for fid: String) -> YamiboThreadKind {
         let normalized = fid.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalized.isEmpty else { return .unknown }
         if defaultNovelForumIDs.contains(normalized) {

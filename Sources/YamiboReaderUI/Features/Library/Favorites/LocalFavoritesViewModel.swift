@@ -1048,7 +1048,7 @@ final class LocalFavoritesViewModel: ObservableObject {
                 snapshot.scannedCount = entries.count
                 snapshot.logMessages.append(L10n.string("favorites.sync.log.fetched", entries.count))
             }
-            let resolver = await appContext.makeThreadOpenResolver()
+            let resolver = await appContext.makeYamiboThreadRouteResolver()
             let coverRepository = await appContext.makeForumThreadReaderRepository()
             let report = await updatedDocument.syncYamiboRemoteFavorites(
                 into: targetCategoryID,
@@ -1887,36 +1887,49 @@ final class LocalFavoritesViewModel: ObservableObject {
     private static func probeResult(
         forThreadID threadID: String,
         title: String?,
-        resolver: ThreadOpenResolver,
+        resolver: YamiboThreadRouteResolver,
         coverRepository: ForumThreadReaderRepository
     ) async throws -> FavoriteThreadProbeResult {
         let url = YamiboRoute.threadByID(tid: threadID, page: 1, authorID: nil, reverse: false).url
-        switch try await resolver.resolve(threadURL: url, title: title) {
-        case let .novel(context):
+        switch try await resolver.resolve(YamiboThreadRouteRequest(threadURL: url, title: title)) {
+        case let .novel(payload):
             let metadata = await threadMetadata(
-                forThreadID: context.threadID,
-                title: context.threadTitle,
+                forThreadID: payload.thread.tid,
+                title: payload.title,
                 repository: coverRepository
             )
             return FavoriteThreadProbeResult(
-                target: .novelThread(threadID: context.threadID),
-                title: context.threadTitle,
+                target: .novelThread(threadID: payload.thread.tid),
+                title: payload.title,
                 sourceGroup: metadata.sourceGroup,
                 coverURL: metadata.coverURL,
                 contentUpdatedAt: metadata.contentUpdatedAt,
-                authorID: context.authorID
+                authorID: payload.authorID
             )
-        case let .manga(context):
-            let cleanBookName = context.directoryName ?? context.displayTitle
-            let mangaID = context.originalThreadID
+        case let .manga(payload):
+            let cleanBookName = MangaTitleCleaner.cleanBookName(payload.title)
+            let mangaID = payload.thread.tid
             return FavoriteThreadProbeResult(
                 target: FavoriteContentTarget(mangaID: "thread:\(mangaID)", mangaCleanBookName: cleanBookName),
-                title: context.displayTitle,
+                title: cleanBookName,
                 sourceGroup: .mangaTitle(mangaID: "thread:\(mangaID)", cleanBookName: cleanBookName)
             )
-        case let .web(url):
+        case let .thread(payload):
+            let metadata = await threadMetadata(
+                thread: payload.thread,
+                title: payload.title,
+                repository: coverRepository
+            )
+            return FavoriteThreadProbeResult(
+                target: .normalThread(threadID: payload.thread.tid),
+                title: payload.title,
+                sourceGroup: metadata.sourceGroup,
+                coverURL: metadata.coverURL,
+                contentUpdatedAt: metadata.contentUpdatedAt
+            )
+        case let .webFallback(url):
             let resolvedTitle = title ?? L10n.string("forum.default_title")
-            let canonicalURL = ReaderModeDetector.canonicalThreadURL(from: url) ?? url
+            let canonicalURL = YamiboThreadURLCanonicalizer.canonicalThreadURL(from: url) ?? url
             guard let threadID = YamiboThreadURLCanonicalizer.threadID(from: canonicalURL) else {
                 throw YamiboError.missingFavoriteThreadID
             }
@@ -1940,7 +1953,7 @@ final class LocalFavoritesViewModel: ObservableObject {
         title: String,
         repository: ForumThreadReaderRepository
     ) async -> (coverURL: URL?, sourceGroup: FavoriteSourceGroup, contentUpdatedAt: Date?) {
-        let canonicalURL = ReaderModeDetector.canonicalThreadURL(from: url) ?? url
+        let canonicalURL = YamiboThreadURLCanonicalizer.canonicalThreadURL(from: url) ?? url
         guard let threadID = YamiboThreadURLCanonicalizer.threadID(from: canonicalURL)
             ?? MangaTitleCleaner.extractTid(from: canonicalURL.absoluteString) else {
             return (nil, .unknown, nil)

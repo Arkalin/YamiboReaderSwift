@@ -67,7 +67,7 @@ Phase 2 changes the refactor policy from behavior-preserving seam extraction aro
 - Existing manga entry points should route to the phase 2 route surface rather than disabling manga opening. That route surface keeps the public `MangaReaderView(context:appModel:)` entry shape so app routing can stay narrow.
 - During phase 2, `YamiboAppModel.openManga` should route directly to the native skeleton and should not invoke legacy probing or automatically fall back to Web.
 - Legacy probe support types and behavior, including `MangaProbePayload`, `MangaProbeOutcome`, and `MangaProbeDecision`, should move to reference with the old probe implementation. Phase 2 keeps Web route context only as an app-level route contract.
-- `ThreadOpenResolver` and `ThreadOpenTarget.manga(MangaLaunchContext)` remain source code because they classify forum threads and create app-level manga opening routes rather than implementing the legacy manga reader.
+- `YamiboThreadRouteResolver` remains source code because it classifies Yamibo threads; callers decide whether a manga target opens Manga Detail, native manga reading, or another app-level route rather than relying on legacy manga reader code.
 
 This revision supersedes the earlier assumption that phase 2 must preserve production manga reader behavior while extracting protocol seams.
 

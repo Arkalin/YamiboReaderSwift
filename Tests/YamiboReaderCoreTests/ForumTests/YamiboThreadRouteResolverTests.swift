@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import YamiboReaderCore
 
-private final class ForumThreadRouteResolverTestURLProtocol: URLProtocol {
+private final class YamiboThreadRouteResolverTestURLProtocol: URLProtocol {
     typealias Handler = (URLRequest) throws -> (Data, HTTPURLResponse)
 
     nonisolated(unsafe) static var handler: Handler?
@@ -17,7 +17,7 @@ private final class ForumThreadRouteResolverTestURLProtocol: URLProtocol {
 
     override func startLoading() {
         guard let handler = Self.handler else {
-            client?.urlProtocol(self, didFailWithError: ForumThreadRouteResolverTestError.missingHandler)
+            client?.urlProtocol(self, didFailWithError: YamiboThreadRouteResolverTestError.missingHandler)
             return
         }
 
@@ -34,25 +34,25 @@ private final class ForumThreadRouteResolverTestURLProtocol: URLProtocol {
     override func stopLoading() {}
 }
 
-private enum ForumThreadRouteResolverTestError: Error {
+private enum YamiboThreadRouteResolverTestError: Error {
     case missingHandler
 }
 
 @Suite(.serialized)
-struct ForumThreadRouteResolverTests {
+struct YamiboThreadRouteResolverTests {
 
-@Test func forumThreadRouteResolverUsesContainingBoardForNovelThreadsWithoutFetching() async throws {
-    let resolver = ForumThreadRouteResolver(client: forumThreadRouteTestClient())
-    let request = ThreadRouteRequest(
+@Test func yamiboThreadRouteResolverUsesContainingBoardForNovelThreadsWithoutFetching() async throws {
+    let resolver = YamiboThreadRouteResolver(client: yamiboThreadRouteTestClient())
+    let request = YamiboThreadRouteRequest(
         threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100&mobile=2")),
         title: "小说标题",
         authorID: "705216",
-        tapContext: ForumThreadTapContext(containingFid: "49")
+        tapContext: YamiboThreadTapContext(containingFid: "49")
     )
 
     let target = try await resolver.resolve(request)
 
-    guard case let .novelDetail(context) = target else {
+    guard case let .novel(context) = target else {
         Issue.record("Expected novel detail target, got \(target)")
         return
     }
@@ -61,18 +61,18 @@ struct ForumThreadRouteResolverTests {
     #expect(context.authorID == "705216")
 }
 
-@Test func forumThreadRouteResolverUsesLightNovelSubBoardForNovelDetail() async throws {
-    let resolver = ForumThreadRouteResolver(client: forumThreadRouteTestClient())
-    let request = ThreadRouteRequest(
+@Test func yamiboThreadRouteResolverUsesLightNovelSubBoardForNovelDetail() async throws {
+    let resolver = YamiboThreadRouteResolver(client: yamiboThreadRouteTestClient())
+    let request = YamiboThreadRouteRequest(
         threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=101&extra=page%3D1&mobile=2&page=25&authorid=705217")),
         title: "轻小说标题",
         authorID: "705217",
-        tapContext: ForumThreadTapContext(containingFid: "55")
+        tapContext: YamiboThreadTapContext(containingFid: "55")
     )
 
     let target = try await resolver.resolve(request)
 
-    guard case let .novelDetail(context) = target else {
+    guard case let .novel(context) = target else {
         Issue.record("Expected novel detail target, got \(target)")
         return
     }
@@ -82,9 +82,9 @@ struct ForumThreadRouteResolverTests {
     #expect(context.authorID == "705217")
 }
 
-@Test func forumThreadRouteResolverUsesKnownMangaKindWhenTaxonomyMisses() async throws {
-    let resolver = ForumThreadRouteResolver(client: forumThreadRouteTestClient())
-    let request = ThreadRouteRequest(
+@Test func yamiboThreadRouteResolverUsesKnownMangaKindWhenTaxonomyMisses() async throws {
+    let resolver = YamiboThreadRouteResolver(client: yamiboThreadRouteTestClient())
+    let request = YamiboThreadRouteRequest(
         threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=200&mobile=2")),
         title: "漫画标题",
         threadFid: "999999",
@@ -93,7 +93,7 @@ struct ForumThreadRouteResolverTests {
 
     let target = try await resolver.resolve(request)
 
-    guard case let .mangaDetail(context) = target else {
+    guard case let .manga(context) = target else {
         Issue.record("Expected manga detail target, got \(target)")
         return
     }
@@ -102,19 +102,19 @@ struct ForumThreadRouteResolverTests {
     #expect(context.title == "漫画标题")
 }
 
-@Test func forumThreadRouteResolverNativeThreadIntentBypassesNovelClassification() async throws {
-    let resolver = ForumThreadRouteResolver(client: forumThreadRouteTestClient())
-    let request = ThreadRouteRequest(
+@Test func yamiboThreadRouteResolverNativeThreadIntentBypassesNovelClassification() async throws {
+    let resolver = YamiboThreadRouteResolver(client: yamiboThreadRouteTestClient())
+    let request = YamiboThreadRouteRequest(
         threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=201&page=4&mobile=2")),
         title: "小说原帖",
         authorID: "705216",
         intent: .nativeThreadReader,
-        tapContext: ForumThreadTapContext(containingFid: "49")
+        tapContext: YamiboThreadTapContext(containingFid: "49")
     )
 
     let target = try await resolver.resolve(request)
 
-    guard case let .threadReader(context) = target else {
+    guard case let .thread(context) = target else {
         Issue.record("Expected native thread reader target, got \(target)")
         return
     }
@@ -125,9 +125,9 @@ struct ForumThreadRouteResolverTests {
     #expect(context.authorID == "705216")
 }
 
-@Test func forumThreadRouteResolverNativeThreadIntentBypassesMangaClassification() async throws {
-    let resolver = ForumThreadRouteResolver(client: forumThreadRouteTestClient())
-    let request = ThreadRouteRequest(
+@Test func yamiboThreadRouteResolverNativeThreadIntentBypassesMangaClassification() async throws {
+    let resolver = YamiboThreadRouteResolver(client: yamiboThreadRouteTestClient())
+    let request = YamiboThreadRouteRequest(
         threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=202&mobile=2")),
         title: "漫画原帖",
         threadFid: "999999",
@@ -137,7 +137,7 @@ struct ForumThreadRouteResolverTests {
 
     let target = try await resolver.resolve(request)
 
-    guard case let .threadReader(context) = target else {
+    guard case let .thread(context) = target else {
         Issue.record("Expected native thread reader target, got \(target)")
         return
     }
@@ -146,9 +146,9 @@ struct ForumThreadRouteResolverTests {
     #expect(context.title == "漫画原帖")
 }
 
-@Test func forumThreadRouteResolverNativeThreadIntentExtractsTargetPostFromFragment() async throws {
-    let resolver = ForumThreadRouteResolver(client: forumThreadRouteTestClient())
-    let request = ThreadRouteRequest(
+@Test func yamiboThreadRouteResolverNativeThreadIntentExtractsTargetPostFromFragment() async throws {
+    let resolver = YamiboThreadRouteResolver(client: yamiboThreadRouteTestClient())
+    let request = YamiboThreadRouteRequest(
         threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=203&page=5&mobile=2#pid9901")),
         title: "原帖",
         intent: .nativeThreadReader
@@ -156,7 +156,7 @@ struct ForumThreadRouteResolverTests {
 
     let target = try await resolver.resolve(request)
 
-    guard case let .threadReader(context) = target else {
+    guard case let .thread(context) = target else {
         Issue.record("Expected native thread reader target, got \(target)")
         return
     }
@@ -165,9 +165,9 @@ struct ForumThreadRouteResolverTests {
     #expect(context.targetPostID == "9901")
 }
 
-@Test func forumThreadRouteResolverDefaultsUnknownBoardToNativeThreadReader() async throws {
-    let resolver = ForumThreadRouteResolver(client: forumThreadRouteTestClient())
-    let request = ThreadRouteRequest(
+@Test func yamiboThreadRouteResolverDefaultsUnknownBoardToNativeThreadReader() async throws {
+    let resolver = YamiboThreadRouteResolver(client: yamiboThreadRouteTestClient())
+    let request = YamiboThreadRouteRequest(
         threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=300&page=2&mobile=2")),
         title: "普通帖子",
         threadFid: "999999",
@@ -176,7 +176,7 @@ struct ForumThreadRouteResolverTests {
 
     let target = try await resolver.resolve(request)
 
-    guard case let .threadReader(context) = target else {
+    guard case let .thread(context) = target else {
         Issue.record("Expected native thread reader target, got \(target)")
         return
     }
@@ -184,12 +184,11 @@ struct ForumThreadRouteResolverTests {
     #expect(context.thread.fid == "999999")
     #expect(context.initialPage == 2)
     #expect(context.targetPostID == "42")
-    #expect(context.loadsAllPosts)
 }
 
-@Test func forumThreadRouteResolverExtractsInitialPageFromRewriteThreadURL() async throws {
-    let resolver = ForumThreadRouteResolver(client: forumThreadRouteTestClient())
-    let request = ThreadRouteRequest(
+@Test func yamiboThreadRouteResolverExtractsInitialPageFromRewriteThreadURL() async throws {
+    let resolver = YamiboThreadRouteResolver(client: yamiboThreadRouteTestClient())
+    let request = YamiboThreadRouteRequest(
         threadURL: try #require(URL(string: "https://bbs.yamibo.com/thread-301-4-1.html")),
         title: "普通帖子",
         threadFid: "999999"
@@ -197,7 +196,7 @@ struct ForumThreadRouteResolverTests {
 
     let target = try await resolver.resolve(request)
 
-    guard case let .threadReader(context) = target else {
+    guard case let .thread(context) = target else {
         Issue.record("Expected native thread reader target, got \(target)")
         return
     }
@@ -205,21 +204,21 @@ struct ForumThreadRouteResolverTests {
     #expect(context.initialPage == 4)
 }
 
-@Test func forumThreadRouteResolverNormalizesFindPostURLAndCarriesTargetPost() async throws {
-    defer { ForumThreadRouteResolverTestURLProtocol.handler = nil }
+@Test func yamiboThreadRouteResolverNormalizesFindPostURLAndCarriesTargetPost() async throws {
+    defer { YamiboThreadRouteResolverTestURLProtocol.handler = nil }
 
-    let resolver = ForumThreadRouteResolver(client: forumThreadRouteTestClientWithHandler())
-    let request = ThreadRouteRequest(
+    let resolver = YamiboThreadRouteResolver(client: yamiboThreadRouteTestClientWithHandler())
+    let request = YamiboThreadRouteRequest(
         threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=redirect&goto=findpost&ptid=302&pid=9001&mobile=2")),
         title: "普通帖子",
         threadFid: "999999"
     )
-    ForumThreadRouteResolverTestURLProtocol.handler = { request in
+    YamiboThreadRouteResolverTestURLProtocol.handler = { request in
         let items = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)?.queryItems ?? []
         #expect(items.value(named: "goto") == "findpost")
         #expect(items.value(named: "ptid") == "302")
         #expect(items.value(named: "pid") == "9001")
-        return forumThreadRouteHTTPResponse(
+        return yamiboThreadRouteHTTPResponse(
             url: request.url!,
             body: #"""
             <html>
@@ -241,7 +240,7 @@ struct ForumThreadRouteResolverTests {
 
     let target = try await resolver.resolve(request)
 
-    guard case let .threadReader(context) = target else {
+    guard case let .thread(context) = target else {
         Issue.record("Expected native thread reader target, got \(target)")
         return
     }
@@ -250,22 +249,22 @@ struct ForumThreadRouteResolverTests {
     #expect(context.targetPostID == "9001")
 }
 
-@Test func forumThreadRouteResolverNativeThreadIntentKeepsFindPostTargetWhenPageResolutionFails() async throws {
-    defer { ForumThreadRouteResolverTestURLProtocol.handler = nil }
+@Test func yamiboThreadRouteResolverNativeThreadIntentKeepsFindPostTargetWhenPageResolutionFails() async throws {
+    defer { YamiboThreadRouteResolverTestURLProtocol.handler = nil }
 
-    let resolver = ForumThreadRouteResolver(client: forumThreadRouteTestClientWithHandler())
-    let request = ThreadRouteRequest(
+    let resolver = YamiboThreadRouteResolver(client: yamiboThreadRouteTestClientWithHandler())
+    let request = YamiboThreadRouteRequest(
         threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=redirect&goto=findpost&ptid=303&pid=9002&mobile=2")),
         title: "原帖",
         intent: .nativeThreadReader
     )
-    ForumThreadRouteResolverTestURLProtocol.handler = { request in
-        forumThreadRouteHTTPResponse(url: request.url!, body: "forbidden", statusCode: 403)
+    YamiboThreadRouteResolverTestURLProtocol.handler = { request in
+        yamiboThreadRouteHTTPResponse(url: request.url!, body: "forbidden", statusCode: 403)
     }
 
     let target = try await resolver.resolve(request)
 
-    guard case let .threadReader(context) = target else {
+    guard case let .thread(context) = target else {
         Issue.record("Expected native thread reader target, got \(target)")
         return
     }
@@ -274,17 +273,17 @@ struct ForumThreadRouteResolverTests {
     #expect(context.targetPostID == "9002")
 }
 
-@Test func forumThreadRouteResolverFetchesThreadMetadataWhenBoardIsUnknown() async throws {
-    defer { ForumThreadRouteResolverTestURLProtocol.handler = nil }
+@Test func yamiboThreadRouteResolverFetchesYamiboThreadMetadataWhenBoardIsUnknown() async throws {
+    defer { YamiboThreadRouteResolverTestURLProtocol.handler = nil }
 
-    let resolver = ForumThreadRouteResolver(client: forumThreadRouteTestClientWithHandler())
+    let resolver = YamiboThreadRouteResolver(client: yamiboThreadRouteTestClientWithHandler())
     let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=400&mobile=2"))
 
-    ForumThreadRouteResolverTestURLProtocol.handler = { request in
+    YamiboThreadRouteResolverTestURLProtocol.handler = { request in
         #expect(request.url?.path == "/forum.php")
         let items = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)?.queryItems ?? []
         #expect(items.value(named: "tid") == "400")
-        return forumThreadRouteHTTPResponse(
+        return yamiboThreadRouteHTTPResponse(
             url: request.url!,
             body: #"""
             <html>
@@ -298,9 +297,9 @@ struct ForumThreadRouteResolverTests {
         )
     }
 
-    let target = try await resolver.resolve(ThreadRouteRequest(threadURL: url))
+    let target = try await resolver.resolve(YamiboThreadRouteRequest(threadURL: url))
 
-    guard case let .novelDetail(context) = target else {
+    guard case let .novel(context) = target else {
         Issue.record("Expected novel detail target, got \(target)")
         return
     }
@@ -310,17 +309,45 @@ struct ForumThreadRouteResolverTests {
     #expect(context.authorID == "88")
 }
 
-@Test func forumThreadRouteResolverUsesWebFallbackForAuthenticatedMetadataFailure() async throws {
-    defer { ForumThreadRouteResolverTestURLProtocol.handler = nil }
+@Test func yamiboThreadRouteResolverUsesNovelMarkerWhenBoardMetadataIsMissing() async throws {
+    defer { YamiboThreadRouteResolverTestURLProtocol.handler = nil }
 
-    let resolver = ForumThreadRouteResolver(client: forumThreadRouteTestClientWithHandler())
-    let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=500&mobile=2"))
+    let resolver = YamiboThreadRouteResolver(client: yamiboThreadRouteTestClientWithHandler())
+    let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=401&mobile=2"))
 
-    ForumThreadRouteResolverTestURLProtocol.handler = { request in
-        forumThreadRouteHTTPResponse(url: request.url!, body: "forbidden", statusCode: 403)
+    YamiboThreadRouteResolverTestURLProtocol.handler = { request in
+        yamiboThreadRouteHTTPResponse(
+            url: request.url!,
+            body: #"""
+            <html>
+            <head><title>文學區 - 测试帖子 - 百合会</title></head>
+            <body><div class="message">正文</div></body>
+            </html>
+            """#
+        )
     }
 
-    let target = try await resolver.resolve(ThreadRouteRequest(threadURL: url))
+    let target = try await resolver.resolve(YamiboThreadRouteRequest(threadURL: url))
+
+    guard case let .novel(context) = target else {
+        Issue.record("Expected novel target, got \(target)")
+        return
+    }
+    #expect(context.thread.tid == "401")
+    #expect(context.title == "文學區 - 测试帖子 - 百合会")
+}
+
+@Test func yamiboThreadRouteResolverUsesWebFallbackForAuthenticatedMetadataFailure() async throws {
+    defer { YamiboThreadRouteResolverTestURLProtocol.handler = nil }
+
+    let resolver = YamiboThreadRouteResolver(client: yamiboThreadRouteTestClientWithHandler())
+    let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=500&mobile=2"))
+
+    YamiboThreadRouteResolverTestURLProtocol.handler = { request in
+        yamiboThreadRouteHTTPResponse(url: request.url!, body: "forbidden", statusCode: 403)
+    }
+
+    let target = try await resolver.resolve(YamiboThreadRouteRequest(threadURL: url))
 
     guard case let .webFallback(fallbackURL) = target else {
         Issue.record("Expected web fallback target, got \(target)")
@@ -329,34 +356,34 @@ struct ForumThreadRouteResolverTests {
     #expect(fallbackURL == url)
 }
 
-@Test func forumThreadRouteResolverPropagatesNonFallbackMetadataFailure() async throws {
-    defer { ForumThreadRouteResolverTestURLProtocol.handler = nil }
+@Test func yamiboThreadRouteResolverPropagatesNonFallbackMetadataFailure() async throws {
+    defer { YamiboThreadRouteResolverTestURLProtocol.handler = nil }
 
-    let resolver = ForumThreadRouteResolver(client: forumThreadRouteTestClientWithHandler())
+    let resolver = YamiboThreadRouteResolver(client: yamiboThreadRouteTestClientWithHandler())
     let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=600&mobile=2"))
 
-    ForumThreadRouteResolverTestURLProtocol.handler = { request in
-        forumThreadRouteHTTPResponse(url: request.url!, body: "")
+    YamiboThreadRouteResolverTestURLProtocol.handler = { request in
+        yamiboThreadRouteHTTPResponse(url: request.url!, body: "")
     }
 
     await #expect(throws: YamiboError.emptyHTML) {
-        _ = try await resolver.resolve(ThreadRouteRequest(threadURL: url))
+        _ = try await resolver.resolve(YamiboThreadRouteRequest(threadURL: url))
     }
 }
 
 }
 
-private func forumThreadRouteTestClient() -> YamiboClient {
+private func yamiboThreadRouteTestClient() -> YamiboClient {
     YamiboClient(session: URLSession(configuration: .ephemeral), userAgent: "Test-UA")
 }
 
-private func forumThreadRouteTestClientWithHandler() -> YamiboClient {
+private func yamiboThreadRouteTestClientWithHandler() -> YamiboClient {
     let configuration = URLSessionConfiguration.ephemeral
-    configuration.protocolClasses = [ForumThreadRouteResolverTestURLProtocol.self]
+    configuration.protocolClasses = [YamiboThreadRouteResolverTestURLProtocol.self]
     return YamiboClient(session: URLSession(configuration: configuration), userAgent: "Test-UA")
 }
 
-private func forumThreadRouteHTTPResponse(
+private func yamiboThreadRouteHTTPResponse(
     url: URL,
     body: String,
     statusCode: Int = 200

@@ -359,9 +359,3 @@ public struct MangaReaderSettings: Codable, Hashable, Sendable {
         try container.encode(directorySortOrder, forKey: .directorySortOrder)
     }
 }
-
-public enum ThreadOpenTarget: Hashable, Sendable {
-    case novel(ReaderLaunchContext)
-    case manga(MangaLaunchContext)
-    case web(URL)
-}

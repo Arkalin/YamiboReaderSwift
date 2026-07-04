@@ -125,7 +125,7 @@ The route graph should support:
 External URL entry points should resolve intent before routing:
 
 - URLs with `fid` route to **Forum Board** when parseable.
-- Board/search thread taps route through `ThreadOpenResolver`.
+- Board/search thread taps route through `YamiboThreadRouteResolver`.
 - Reader-origin "open in forum" URLs route directly to **Forum Web Fallback**.
 - Unknown or unsupported URLs route to **Forum Web Fallback**.
 
@@ -135,7 +135,7 @@ This means the current `ForumNavigationRequest(url:)` should become intent-aware
 
 Thread links from Board, pinned thread rows, carousel thread targets, and Search Results:
 
-- Try `ThreadOpenResolver`.
+- Try `YamiboThreadRouteResolver`.
 - Open native novel or manga readers when supported.
 - Open **Forum Web Fallback** for unsupported thread types or resolver failure.
 

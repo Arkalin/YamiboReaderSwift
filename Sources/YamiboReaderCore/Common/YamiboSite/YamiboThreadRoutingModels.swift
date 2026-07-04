@@ -1,6 +1,6 @@
 import Foundation
 
-public enum YamiboForumThreadKind: String, Codable, Hashable, Sendable {
+public enum YamiboThreadKind: String, Codable, Hashable, Sendable {
     case novel
     case manga
     case regular
@@ -17,7 +17,7 @@ public struct ThreadIdentity: Codable, Hashable, Sendable {
     }
 }
 
-public struct ForumThreadTapContext: Codable, Hashable, Sendable {
+public struct YamiboThreadTapContext: Codable, Hashable, Sendable {
     public var containingFid: String?
     public var isTagMangaMode: Bool
 
@@ -27,21 +27,21 @@ public struct ForumThreadTapContext: Codable, Hashable, Sendable {
     }
 }
 
-public enum ThreadRouteIntent: String, Codable, Hashable, Sendable {
+public enum YamiboThreadRouteIntent: String, Codable, Hashable, Sendable {
     case contentRoute
     case nativeThreadReader
 }
 
-public struct ThreadRouteRequest: Codable, Hashable, Sendable {
+public struct YamiboThreadRouteRequest: Codable, Hashable, Sendable {
     public var threadURL: URL
     public var threadID: String?
     public var title: String?
     public var authorID: String?
     public var threadFid: String?
     public var targetPostID: String?
-    public var knownThreadKind: YamiboForumThreadKind?
-    public var intent: ThreadRouteIntent
-    public var tapContext: ForumThreadTapContext
+    public var knownThreadKind: YamiboThreadKind?
+    public var intent: YamiboThreadRouteIntent
+    public var tapContext: YamiboThreadTapContext
 
     public init(
         threadURL: URL,
@@ -50,9 +50,9 @@ public struct ThreadRouteRequest: Codable, Hashable, Sendable {
         authorID: String? = nil,
         threadFid: String? = nil,
         targetPostID: String? = nil,
-        knownThreadKind: YamiboForumThreadKind? = nil,
-        intent: ThreadRouteIntent = .contentRoute,
-        tapContext: ForumThreadTapContext = ForumThreadTapContext()
+        knownThreadKind: YamiboThreadKind? = nil,
+        intent: YamiboThreadRouteIntent = .contentRoute,
+        tapContext: YamiboThreadTapContext = YamiboThreadTapContext()
     ) {
         self.threadURL = threadURL
         self.threadID = threadID?.threadRoutingTrimmedNonEmpty
@@ -121,10 +121,38 @@ public struct ThreadReaderLaunchContext: Codable, Hashable, Sendable {
     }
 }
 
-public enum ThreadRouteTarget: Hashable, Sendable {
-    case novelDetail(NovelDetailLaunchContext)
-    case mangaDetail(MangaDetailLaunchContext)
-    case threadReader(ThreadReaderLaunchContext)
+public struct YamiboThreadRoutePayload: Hashable, Sendable {
+    public var thread: ThreadIdentity
+    public var title: String
+    public var authorID: String?
+    public var canonicalURL: URL
+    public var requestedURL: URL
+    public var initialPage: Int
+    public var targetPostID: String?
+
+    public init(
+        thread: ThreadIdentity,
+        title: String,
+        authorID: String? = nil,
+        canonicalURL: URL,
+        requestedURL: URL,
+        initialPage: Int = 1,
+        targetPostID: String? = nil
+    ) {
+        self.thread = thread
+        self.title = title.threadRoutingTrimmedNonEmpty ?? L10n.string("forum.default_title")
+        self.authorID = authorID?.threadRoutingTrimmedNonEmpty
+        self.canonicalURL = canonicalURL
+        self.requestedURL = requestedURL
+        self.initialPage = max(1, initialPage)
+        self.targetPostID = targetPostID?.threadRoutingTrimmedNonEmpty
+    }
+}
+
+public enum YamiboThreadRouteTarget: Hashable, Sendable {
+    case novel(YamiboThreadRoutePayload)
+    case manga(YamiboThreadRoutePayload)
+    case thread(YamiboThreadRoutePayload)
     case webFallback(URL)
 }
 

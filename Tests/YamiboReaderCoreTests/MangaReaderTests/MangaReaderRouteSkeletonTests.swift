@@ -4,29 +4,23 @@ import Testing
 
 @Suite("MangaReaderTests: Route Contracts")
 struct MangaReaderTestsRouteContracts {
-    @Test func threadOpenResolverStillCreatesMangaLaunchContext() async throws {
-        let resolver = ThreadOpenResolver(
+    @Test func yamiboThreadRouteResolverCreatesMangaPayload() async throws {
+        let resolver = YamiboThreadRouteResolver(
             client: YamiboClient(session: URLSession(configuration: .ephemeral), cookie: nil, userAgent: "Test-UA")
         )
         let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=700&mobile=2"))
-        let html = """
-        <title>测试漫画 第1话 - 中文百合漫画区 - 百合会</title>
-        <div class="header"><h2><a>中文百合漫画区</a></h2></div>
-        <div class="message"><img src="https://img.example.com/700-0.jpg" /></div>
-        """
 
-        let target = try await resolver.resolve(
+        let target = try await resolver.resolve(YamiboThreadRouteRequest(
             threadURL: url,
             title: "测试漫画 第1话",
-            htmlOverride: html
-        )
+            knownThreadKind: .manga
+        ))
 
-        guard case let .manga(context) = target else {
-            Issue.record("Expected manga launch context")
+        guard case let .manga(payload) = target else {
+            Issue.record("Expected manga payload")
             return
         }
-        #expect(context.originalThreadID == "700")
-        #expect(context.chapterTID == "700")
-        #expect(context.source == .forum)
+        #expect(payload.thread.tid == "700")
+        #expect(payload.title == "测试漫画 第1话")
     }
 }
