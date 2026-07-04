@@ -6,15 +6,15 @@ public enum ForumThreadPageHTMLParser {
         thread: ThreadIdentity,
         fallbackTitle: String?
     ) throws -> ForumThreadPage {
-        if ReaderHTMLParser.isNotAuthenticated(html) {
+        if YamiboHTMLPageInspector.isNotAuthenticated(html) {
             throw YamiboError.notAuthenticated
         }
-        if ReaderHTMLParser.isFloodControlOrError(html) {
+        if YamiboHTMLPageInspector.isFloodControlOrError(html) {
             throw YamiboError.floodControl
         }
 
         let document = try KannaSoup.parse(html, baseURL: YamiboRoute.baseURL.absoluteString)
-        let title = ForumThreadTitleSanitizer.sanitize(ReaderHTMLParser.extractPageTitle(from: html))
+        let title = ForumThreadTitleSanitizer.sanitize(YamiboHTMLPageInspector.pageTitle(from: html))
             ?? ForumThreadTitleSanitizer.sanitize(fallbackTitle)
             ?? L10n.string("forum.default_title")
         let posts = try parsePosts(in: document)
@@ -37,10 +37,10 @@ public enum ForumThreadPageHTMLParser {
     }
 
     public static func parseRatingResults(from html: String) throws -> ForumThreadRatingResultsPage {
-        if ReaderHTMLParser.isNotAuthenticated(html) {
+        if YamiboHTMLPageInspector.isNotAuthenticated(html) {
             throw YamiboError.notAuthenticated
         }
-        if ReaderHTMLParser.isFloodControlOrError(html) {
+        if YamiboHTMLPageInspector.isFloodControlOrError(html) {
             throw YamiboError.floodControl
         }
 
@@ -59,10 +59,10 @@ public enum ForumThreadPageHTMLParser {
     }
 
     public static func parseRateOptions(from html: String) throws -> ForumThreadRateOptionsPage {
-        if ReaderHTMLParser.isNotAuthenticated(html) {
+        if YamiboHTMLPageInspector.isNotAuthenticated(html) {
             throw YamiboError.notAuthenticated
         }
-        if ReaderHTMLParser.isFloodControlOrError(html) {
+        if YamiboHTMLPageInspector.isFloodControlOrError(html) {
             throw YamiboError.floodControl
         }
 
@@ -91,10 +91,10 @@ public enum ForumThreadPageHTMLParser {
         threadID: String,
         requestedOptionID: String? = nil
     ) throws -> ForumThreadPollVotersPage {
-        if ReaderHTMLParser.isNotAuthenticated(html) {
+        if YamiboHTMLPageInspector.isNotAuthenticated(html) {
             throw YamiboError.notAuthenticated
         }
-        if ReaderHTMLParser.isFloodControlOrError(html) {
+        if YamiboHTMLPageInspector.isFloodControlOrError(html) {
             throw YamiboError.floodControl
         }
 
@@ -124,10 +124,10 @@ public enum ForumThreadPageHTMLParser {
         from html: String,
         context: String = L10n.string("context.thread_page")
     ) throws -> String {
-        if ReaderHTMLParser.isNotAuthenticated(html) {
+        if YamiboHTMLPageInspector.isNotAuthenticated(html) {
             throw YamiboError.notAuthenticated
         }
-        if ReaderHTMLParser.isFloodControlOrError(html) {
+        if YamiboHTMLPageInspector.isFloodControlOrError(html) {
             throw YamiboError.floodControl
         }
 

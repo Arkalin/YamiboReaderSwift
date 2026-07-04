@@ -180,7 +180,7 @@ private struct MangaProjectionLoadingStrategy: ReaderProjectionLoadingStrategy {
                 fallbackTitle: nil
             )
             try? await forumCacheStore.saveThreadPage(discoveryPage, thread: thread, pageNumber: 1, authorID: nil)
-            if let onlyAuthorID = ReaderHTMLParser.extractOnlyAuthorID(
+            if let onlyAuthorID = YamiboThreadHTMLFacts.onlyAuthorID(
                 from: html,
                 request: ReaderPageRequest(threadID: thread.tid, view: 1)
             )?.mangaReaderTrimmedNonEmpty {

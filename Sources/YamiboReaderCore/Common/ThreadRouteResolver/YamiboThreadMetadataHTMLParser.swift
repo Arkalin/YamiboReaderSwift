@@ -24,15 +24,15 @@ public struct YamiboThreadMetadata: Hashable, Sendable {
 
 public enum YamiboThreadMetadataHTMLParser {
     public static func parse(from html: String, url: URL) throws -> YamiboThreadMetadata {
-        if ReaderHTMLParser.isNotAuthenticated(html) {
+        if YamiboHTMLPageInspector.isNotAuthenticated(html) {
             throw YamiboError.notAuthenticated
         }
-        if ReaderHTMLParser.isFloodControlOrError(html) {
+        if YamiboHTMLPageInspector.isFloodControlOrError(html) {
             throw YamiboError.floodControl
         }
 
         let document = try KannaSoup.parse(html, baseURL: YamiboRoute.baseURL.absoluteString)
-        let title = ReaderHTMLParser.extractPageTitle(from: html)
+        let title = YamiboHTMLPageInspector.pageTitle(from: html)
         let sectionLink = try? document
             .select("a[href*='mod=forumdisplay'][href*='fid='], a[href*='forum-']")
             .array()

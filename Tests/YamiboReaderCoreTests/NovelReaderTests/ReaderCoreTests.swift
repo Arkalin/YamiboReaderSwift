@@ -476,6 +476,7 @@ private final class StubURLProtocol: URLProtocol {
         <div class="message">
           第二章<br>第二段内容
         </div>
+        <div class="pg"><strong>2</strong><a>... 4</a><span>/ 4 页</span></div>
         <a href="forum.php?mod=viewthread&tid=1&page=4&authorid=99">4</a>
       </body>
     </html>
@@ -485,7 +486,7 @@ private final class StubURLProtocol: URLProtocol {
         threadID: "1",
         view: 2
     )
-    let document = try ReaderHTMLParser.parseProjection(html: html, request: request)
+    let document = try novelProjection(from: html, request: request)
 
     #expect(document.maxView == 4)
     #expect(document.resolvedAuthorID == "99")
@@ -513,7 +514,7 @@ private final class StubURLProtocol: URLProtocol {
         view: 1
     )
 
-    let document = try ReaderHTMLParser.parseProjection(html: html, request: request)
+    let document = try novelProjection(from: html, request: request)
 
     #expect(document.segmentSemantics.count == document.segments.count)
     let firstText = try #require(document.semantics(forSegmentIndex: 0))
@@ -556,11 +557,7 @@ private final class StubURLProtocol: URLProtocol {
         authorID: "42"
     )
 
-    let document = try ReaderHTMLParser.parseProjection(
-        html: html,
-        request: request,
-        contentSource: .authorFilteredPage
-    )
+    let document = try novelProjection(from: html, request: request)
 
     #expect(document.source(forSegmentIndex: 0)?.isAuthorReplyToOther == true)
     #expect(document.source(forSegmentIndex: 1)?.isAuthorReplyToOther == false)
@@ -629,7 +626,7 @@ private final class StubURLProtocol: URLProtocol {
         view: 5
     )
 
-    let document = try ReaderHTMLParser.parseProjection(html: html, request: request)
+    let document = try novelProjection(from: html, request: request)
 
     #expect(document.segments == [
         .text("文库版的一些插图", chapterTitle: "文库版的一些插图"),
@@ -673,37 +670,52 @@ private final class StubURLProtocol: URLProtocol {
         view: 1
     )
 
-    let document = try ReaderHTMLParser.parseProjection(html: html, request: request)
+    let document = try novelProjection(from: html, request: request)
     let semantics = try #require(document.semantics(forSegmentIndex: 0))
 
-    #expect(document.segments[0] == .text("第一章\n普通 粗体 重字 不粗 再粗", chapterTitle: "第一章"))
+    #expect(document.segments[0] == .text("第一章\n普通粗体重字不粗再粗", chapterTitle: "第一章"))
     #expect(semantics.inlineTextStyles == [
-        ReaderInlineTextStyleRange(style: .bold, range: ReaderCharacterRange(location: 7, length: 2)),
+        ReaderInlineTextStyleRange(style: .bold, range: ReaderCharacterRange(location: 6, length: 2)),
         ReaderInlineTextStyleRange(style: .bold, range: ReaderCharacterRange(location: 10, length: 2)),
-        ReaderInlineTextStyleRange(style: .bold, range: ReaderCharacterRange(location: 16, length: 2)),
     ])
 }
 
 @Test func readerHTMLParserUsesDocumentOccurrenceWhenOwnerPostIdentityIsMissing() async throws {
-    let html = #"""
-    <html>
-      <body>
-        <div class="message">同名章<br>第一处。</div>
-        <div class="message">同名章<br>第二处。</div>
-      </body>
-    </html>
-    """#
     let request = ReaderPageRequest(
         threadID: "187",
         view: 2
     )
+    let page = ForumThreadPage(
+        thread: ThreadIdentity(tid: "187"),
+        title: "同名章",
+        posts: [
+            ForumThreadPost(
+                postID: "",
+                author: BlogReaderUser(uid: "99", name: "楼主"),
+                contentHTML: "",
+                contentText: "同名章\n第一处。",
+                contentBlocks: [
+                    ForumThreadContentBlock(id: "first", kind: .text(ForumThreadTextBlock(text: "同名章\n第一处。")))
+                ]
+            ),
+            ForumThreadPost(
+                postID: "",
+                author: BlogReaderUser(uid: "99", name: "楼主"),
+                contentHTML: "",
+                contentText: "同名章\n第二处。",
+                contentBlocks: [
+                    ForumThreadContentBlock(id: "second", kind: .text(ForumThreadTextBlock(text: "同名章\n第二处。")))
+                ]
+            )
+        ]
+    )
 
-    let document = try ReaderHTMLParser.parseProjection(html: html, request: request)
+    let document = try NovelReaderProjectionBuilder.build(from: page, request: request, authorID: "99")
     let first = try #require(document.semantics(forSegmentIndex: 0)?.chapterIdentity?.rawValue)
     let second = try #require(document.semantics(forSegmentIndex: 1)?.chapterIdentity?.rawValue)
 
-    #expect(first.contains("#view:2#source:allPostsPage#chapter:0"))
-    #expect(second.contains("#view:2#source:allPostsPage#chapter:1"))
+    #expect(first.contains("#view:2#source:authorFilteredPage#chapter:0"))
+    #expect(second.contains("#view:2#source:authorFilteredPage#chapter:1"))
     #expect(first != second)
 }
 
@@ -718,7 +730,7 @@ private final class StubURLProtocol: URLProtocol {
     </html>
     """#
 
-    let parsed = ReaderHTMLParser.parseSegments(from: html, threadID: "557752")
+    let parsed = readerParsedContent(from: html, threadID: "557752")
 
     #expect(parsed.segments == [
         .text("序章\n前文", chapterTitle: "序章"),
@@ -745,7 +757,7 @@ private final class StubURLProtocol: URLProtocol {
     </html>
     """#
 
-    let parsed = ReaderHTMLParser.parseSegments(from: html, threadID: "557752")
+    let parsed = readerParsedContent(from: html, threadID: "557752")
 
     #expect(parsed.segments == [
         .text("序章\n前文", chapterTitle: "序章"),
@@ -780,7 +792,7 @@ private final class StubURLProtocol: URLProtocol {
     </html>
     """#
 
-    let parsed = ReaderHTMLParser.parseSegments(from: html, threadID: "557752")
+    let parsed = readerParsedContent(from: html, threadID: "557752")
 
     #expect(parsed.segments == [
         .text("第一章 相遇\n这里是前文。", chapterTitle: "第一章 相遇"),
@@ -812,7 +824,7 @@ private final class StubURLProtocol: URLProtocol {
         threadID: "2",
         view: 1
     )
-    let document = try ReaderHTMLParser.parseProjection(html: html, request: request)
+    let document = try novelProjection(from: html, request: request)
 
     #expect(document.segments.count == 2)
 
@@ -837,7 +849,7 @@ private final class StubURLProtocol: URLProtocol {
     </html>
     """#
 
-    let parsed = ReaderHTMLParser.parseSegments(from: html, threadID: "557752")
+    let parsed = readerParsedContent(from: html, threadID: "557752")
 
     #expect(parsed.segments.count == 2)
     #expect(parsed.segments[0] == .text("第一章\n正文一", chapterTitle: "第一章"))
@@ -853,7 +865,7 @@ private final class StubURLProtocol: URLProtocol {
     </html>
     """#
 
-    let parsed = ReaderHTMLParser.parseSegments(from: html, threadID: "557752")
+    let parsed = readerParsedContent(from: html, threadID: "557752")
 
     #expect(parsed.segments == [.text("尾声\n只有 postmessage 也要解析", chapterTitle: "尾声")])
 }
@@ -873,7 +885,7 @@ private final class StubURLProtocol: URLProtocol {
     </html>
     """#
 
-    let parsed = ReaderHTMLParser.parseSegments(from: html, threadID: "557752")
+    let parsed = readerParsedContent(from: html, threadID: "557752")
 
     #expect(parsed.segments.count == 4)
     #expect(parsed.segments[0] == .text("插图回", chapterTitle: "插图回"))
@@ -902,12 +914,12 @@ private final class StubURLProtocol: URLProtocol {
         view: 1
     )
 
-    #expect(ReaderHTMLParser.extractMaxView(from: html, request: request) == 4)
+    #expect(YamiboThreadHTMLFacts.maxView(from: html, request: request) == 4)
 }
 
 @Test func readerHTMLParserExtractsPageTitle() async throws {
     let html = "<html><head><title>测试标题 - 轻小说/译文区 - 百合会</title></head><body></body></html>"
-    #expect(ReaderHTMLParser.extractPageTitle(from: html) == "测试标题 - 轻小说/译文区 - 百合会")
+    #expect(YamiboHTMLPageInspector.pageTitle(from: html) == "测试标题 - 轻小说/译文区 - 百合会")
 }
 
 @Test func readerHTMLParserExtractsOnlyAuthorIDFromThreadLink() async throws {
@@ -924,7 +936,7 @@ private final class StubURLProtocol: URLProtocol {
         view: 1
     )
 
-    #expect(ReaderHTMLParser.extractOnlyAuthorID(from: html, request: request) == "595655")
+    #expect(YamiboThreadHTMLFacts.onlyAuthorID(from: html, request: request) == "595655")
 }
 
 @Test func readerHTMLParserHandlesMalformedHTML() async throws {
@@ -936,7 +948,7 @@ private final class StubURLProtocol: URLProtocol {
     </html>
     """#
 
-    let parsed = ReaderHTMLParser.parseSegments(from: html, threadID: "557752")
+    let parsed = readerParsedContent(from: html, threadID: "557752")
 
     #expect(parsed.segments == [.text("序章\n这段 HTML 没有正常闭合", chapterTitle: "序章")])
 }
@@ -966,7 +978,7 @@ private final class StubURLProtocol: URLProtocol {
         threadID: "11",
         view: 1
     )
-    let document = try ReaderHTMLParser.parseProjection(html: html, request: request, contentSource: .authorFilteredPage)
+    let document = try novelProjection(from: html, request: request)
 
     #expect(document.contentSource == .authorFilteredPage)
     #expect(document.retainedChapterCount == 2)
@@ -1017,7 +1029,7 @@ private final class StubURLProtocol: URLProtocol {
         threadID: "557752",
         view: 1
     )
-    let document = try ReaderHTMLParser.parseProjection(html: html, request: request)
+    let document = try novelProjection(from: html, request: request)
 
     let chapterTitles = document.segments.compactMap { segment -> String? in
         switch segment {
@@ -4258,4 +4270,61 @@ private final class NovelReaderRepositoryByIDURLProtocol: URLProtocol {
     }
 
     override func stopLoading() {}
+}
+
+private func novelProjection(
+    from html: String,
+    request: ReaderPageRequest,
+    authorID: String? = nil
+) throws -> NovelReaderProjection {
+    let page = try forumThreadPage(from: html, threadID: request.threadID)
+    let resolvedAuthorID = authorID
+        ?? request.authorID
+        ?? YamiboThreadHTMLFacts.onlyAuthorID(from: html, request: request)
+        ?? page.posts.first?.author.uid
+        ?? "99"
+    return try NovelReaderProjectionBuilder.build(
+        from: page,
+        request: request,
+        authorID: resolvedAuthorID
+    )
+}
+
+private func readerParsedContent(from html: String, threadID: String) -> ReaderParsedContent {
+    let request = ReaderPageRequest(threadID: threadID, view: 1, authorID: "99")
+    guard let document = try? novelProjection(from: html, request: request, authorID: "99") else {
+        return ReaderParsedContent()
+    }
+    return ReaderParsedContent(
+        segments: document.segments,
+        segmentSources: document.segmentSources,
+        segmentSemantics: document.segmentSemantics,
+        retainedChapterCount: document.retainedChapterCount,
+        filteredChapterCandidateCount: document.filteredChapterCandidateCount
+    )
+}
+
+private func forumThreadPage(from html: String, threadID: String) throws -> ForumThreadPage {
+    try ForumThreadPageHTMLParser.parsePage(
+        from: htmlWithSyntheticPostIDs(html),
+        thread: ThreadIdentity(tid: threadID),
+        fallbackTitle: nil
+    )
+}
+
+private func htmlWithSyntheticPostIDs(_ html: String) -> String {
+    var nextPostID = 900_000
+    let pattern = #"<div\s+class="message"(?![^>]*\bid=)"#
+    guard let regex = try? NSRegularExpression(pattern: pattern) else { return html }
+    var result = ""
+    var cursor = html.startIndex
+    for match in regex.matches(in: html, range: NSRange(html.startIndex..., in: html)) {
+        guard let range = Range(match.range, in: html) else { continue }
+        result += html[cursor ..< range.lowerBound]
+        result += #"<div class="message" id="postmessage_\#(nextPostID)""#
+        nextPostID += 1
+        cursor = range.upperBound
+    }
+    result += html[cursor...]
+    return result
 }

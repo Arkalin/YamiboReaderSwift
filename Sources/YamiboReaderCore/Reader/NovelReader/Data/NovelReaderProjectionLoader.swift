@@ -164,8 +164,8 @@ private struct NovelProjectionLoadingStrategy: ReaderProjectionLoadingStrategy {
         identity: NovelProjectionIdentity,
         fingerprint: String
     ) throws -> NovelReaderProjection {
-        try ReaderHTMLParser.parseProjection(
-            threadPage: sourcePage,
+        try NovelReaderProjectionBuilder.build(
+            from: sourcePage,
             request: ReaderPageRequest(threadID: identity.threadID, view: identity.view, authorID: identity.authorID),
             authorID: identity.authorID,
             projectionSourceFingerprint: fingerprint,
@@ -198,7 +198,7 @@ private struct NovelProjectionLoadingStrategy: ReaderProjectionLoadingStrategy {
                 fallbackTitle: nil
             )
             try? await forumCacheStore.saveThreadPage(discoveryPage, thread: thread, pageNumber: 1, authorID: nil)
-            if let onlyAuthorID = ReaderHTMLParser.extractOnlyAuthorID(
+            if let onlyAuthorID = YamiboThreadHTMLFacts.onlyAuthorID(
                 from: html,
                 request: ReaderPageRequest(threadID: thread.tid, view: 1)
             ) {

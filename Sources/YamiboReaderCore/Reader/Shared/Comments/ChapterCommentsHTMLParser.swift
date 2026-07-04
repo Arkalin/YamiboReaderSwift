@@ -428,8 +428,11 @@ public enum ChapterCommentsHTMLParser {
         isBoundaryClosed: Bool
     ) -> Int? {
         guard !isBoundaryClosed else { return nil }
-        let request = ReaderPageRequest(threadID: target.threadID, view: currentView)
-        let maxView = (try? ReaderHTMLDOMParser.parseMaxView(in: .init(document: document), request: request)) ?? currentView
+        let maxView = YamiboThreadHTMLFacts.maxView(
+            in: document,
+            threadID: target.threadID,
+            currentView: currentView
+        )
         let next = currentView + 1
         return next <= maxView ? next : nil
     }

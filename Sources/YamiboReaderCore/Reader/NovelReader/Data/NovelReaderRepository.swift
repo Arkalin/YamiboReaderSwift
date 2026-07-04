@@ -218,7 +218,7 @@ public actor NovelReaderRepository {
 
     public func fetchThreadDisplayTitle(threadID: String, authorID: String? = nil) async throws -> String {
         let html = try await client.fetchThreadById(tid: threadID, authorID: authorID, page: 1)
-        guard let title = ReaderHTMLParser.extractPageTitle(from: html) else {
+        guard let title = YamiboHTMLPageInspector.pageTitle(from: html) else {
             throw YamiboError.parsingFailed(context: L10n.string("context.thread_title"))
         }
         return title

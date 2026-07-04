@@ -275,8 +275,8 @@ extension OfflineCacheStore {
         let authorID = request.authorID
             ?? sourcePage.posts.first?.author.uid?.mangaReaderTrimmedNonEmpty
             ?? "offline"
-        return try ReaderHTMLParser.parseProjection(
-            threadPage: sourcePage,
+        return try NovelReaderProjectionBuilder.build(
+            from: sourcePage,
             request: ReaderPageRequest(
                 threadID: request.threadID,
                 view: request.view,

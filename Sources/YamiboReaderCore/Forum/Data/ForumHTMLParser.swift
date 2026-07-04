@@ -2,10 +2,10 @@ import Foundation
 
 public enum ForumHTMLParser {
     public static func parseHomePage(from html: String, fetchedAt: Date = .now) throws -> ForumHomePage {
-        if ReaderHTMLParser.isNotAuthenticated(html) {
+        if YamiboHTMLPageInspector.isNotAuthenticated(html) {
             throw YamiboError.notAuthenticated
         }
-        if ReaderHTMLParser.isFloodControlOrError(html) {
+        if YamiboHTMLPageInspector.isFloodControlOrError(html) {
             throw YamiboError.floodControl
         }
 
@@ -29,10 +29,10 @@ public enum ForumHTMLParser {
         title: String? = nil,
         fetchedAt: Date = .now
     ) throws -> ForumBoardPage {
-        if ReaderHTMLParser.isNotAuthenticated(html) {
+        if YamiboHTMLPageInspector.isNotAuthenticated(html) {
             throw YamiboError.notAuthenticated
         }
-        if ReaderHTMLParser.isFloodControlOrError(html) {
+        if YamiboHTMLPageInspector.isFloodControlOrError(html) {
             throw YamiboError.floodControl
         }
 
@@ -66,10 +66,10 @@ public enum ForumHTMLParser {
     }
 
     public static func parseBoardFavoriteResult(from html: String) throws -> String {
-        if ReaderHTMLParser.isNotAuthenticated(html) {
+        if YamiboHTMLPageInspector.isNotAuthenticated(html) {
             throw YamiboError.notAuthenticated
         }
-        if ReaderHTMLParser.isFloodControlOrError(html) {
+        if YamiboHTMLPageInspector.isFloodControlOrError(html) {
             throw YamiboError.floodControl
         }
 
@@ -97,10 +97,10 @@ public enum ForumHTMLParser {
     }
 
     public static func parseSearchPage(from html: String, query: String) throws -> ForumSearchPage {
-        if ReaderHTMLParser.isNotAuthenticated(html) {
+        if YamiboHTMLPageInspector.isNotAuthenticated(html) {
             throw YamiboError.notAuthenticated
         }
-        if ReaderHTMLParser.isFloodControlOrError(html) {
+        if YamiboHTMLPageInspector.isFloodControlOrError(html) {
             throw YamiboError.floodControl
         }
 

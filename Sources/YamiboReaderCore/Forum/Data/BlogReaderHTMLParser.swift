@@ -53,10 +53,10 @@ public enum BlogReaderHTMLParser {
     }
 
     private static func validate(_ html: String) throws {
-        if ReaderHTMLParser.isNotAuthenticated(html) {
+        if YamiboHTMLPageInspector.isNotAuthenticated(html) {
             throw YamiboError.notAuthenticated
         }
-        if ReaderHTMLParser.isFloodControlOrError(html) {
+        if YamiboHTMLPageInspector.isFloodControlOrError(html) {
             throw YamiboError.floodControl
         }
     }

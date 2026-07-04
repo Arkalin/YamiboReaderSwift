@@ -15,11 +15,7 @@ import Testing
         authorID: "7"
     )
 
-    let document = try ReaderHTMLParser.parseProjection(
-        html: html,
-        request: request,
-        contentSource: .authorFilteredPage
-    )
+    let document = try chapterCommentsNovelProjection(from: html, request: request)
     let pagination = try NovelTextLayout.layout(
         document: document,
         settings: ReaderAppearanceSettings(),
@@ -47,11 +43,7 @@ import Testing
         authorID: "595655"
     )
 
-    let document = try ReaderHTMLParser.parseProjection(
-        html: html,
-        request: request,
-        contentSource: .authorFilteredPage
-    )
+    let document = try chapterCommentsNovelProjection(from: html, request: request)
     let pagination = try NovelTextLayout.layout(
         document: document,
         settings: ReaderAppearanceSettings(),
@@ -77,11 +69,7 @@ import Testing
         authorID: "595655"
     )
 
-    let document = try ReaderHTMLParser.parseProjection(
-        html: html,
-        request: request,
-        contentSource: .authorFilteredPage
-    )
+    let document = try chapterCommentsNovelProjection(from: html, request: request)
     let pagination = try NovelTextLayout.layout(
         document: document,
         settings: ReaderAppearanceSettings(),
@@ -140,6 +128,22 @@ import Testing
     #expect(page.comments.first?.metadata == "发表于 2026-5-1 12:00")
     #expect(page.comments.last?.metadata == nil)
     #expect(page.isBoundaryClosed == false)
+}
+
+private func chapterCommentsNovelProjection(
+    from html: String,
+    request: ReaderPageRequest
+) throws -> NovelReaderProjection {
+    let page = try ForumThreadPageHTMLParser.parsePage(
+        from: html,
+        thread: ThreadIdentity(tid: request.threadID),
+        fallbackTitle: nil
+    )
+    return try NovelReaderProjectionBuilder.build(
+        from: page,
+        request: request,
+        authorID: request.authorID ?? "7"
+    )
 }
 
 @Test func chapterCommentsParserReadsMobileOwnerPostCommentsAndRatings() throws {

@@ -515,8 +515,8 @@ final class ForumNovelDetailViewModel {
             view: pageNumber,
             authorID: resolvedAuthorID
         )
-        guard let document = try? ReaderHTMLParser.parseProjection(
-            threadPage: page,
+        guard let document = try? NovelReaderProjectionBuilder.build(
+            from: page,
             request: request,
             authorID: resolvedAuthorID
         ) else {

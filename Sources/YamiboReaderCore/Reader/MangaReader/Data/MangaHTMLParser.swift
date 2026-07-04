@@ -133,7 +133,7 @@ public enum MangaHTMLParser {
     }
 
     public static func extractThreadTitle(from html: String) -> String? {
-        if let title = ReaderHTMLParser.extractPageTitle(from: html), !title.isEmpty {
+        if let title = YamiboHTMLPageInspector.pageTitle(from: html), !title.isEmpty {
             return title
         }
         guard let document = try? KannaSoup.parse(html) else { return nil }
