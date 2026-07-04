@@ -157,7 +157,6 @@ import Testing
 }
 
 @Test func threadFavoriteOpenRoutesUseNormalAndNovelNativeTargets() throws {
-    let normalURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=424"))
     var document = FavoriteLibraryDocument()
     let normal = try document.importThreadFavorite(
         probeResult: FavoriteThreadProbeResult(
@@ -172,6 +171,6 @@ import Testing
         )
     )
 
-    #expect(document.openRoute(for: normal) == .nativeThread(FavoriteLibraryURLIdentity.canonicalThreadURL(from: normalURL)))
+    #expect(document.openRoute(for: normal) == .nativeThread(threadID: "424"))
     #expect(document.openRoute(for: novel) == .novelDetail(threadID: "425"))
 }

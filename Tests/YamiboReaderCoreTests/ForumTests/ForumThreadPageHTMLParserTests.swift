@@ -35,7 +35,7 @@ import Testing
         </body>
         </html>
         """#,
-        thread: ThreadIdentity(tid: "700", canonicalURL: url),
+        thread: ThreadIdentity(tid: "700"),
         fallbackTitle: nil
     )
 
@@ -104,7 +104,7 @@ import Testing
         </body>
         </html>
         """#,
-        thread: ThreadIdentity(tid: "544422", canonicalURL: url),
+        thread: ThreadIdentity(tid: "544422"),
         fallbackTitle: nil
     )
 
@@ -150,7 +150,7 @@ import Testing
         </body>
         </html>
         """#,
-        thread: ThreadIdentity(tid: "544422", canonicalURL: url),
+        thread: ThreadIdentity(tid: "544422"),
         fallbackTitle: nil
     )
 
@@ -185,7 +185,7 @@ import Testing
         </body>
         </html>
         """#,
-        thread: ThreadIdentity(tid: "545000", canonicalURL: url),
+        thread: ThreadIdentity(tid: "545000"),
         fallbackTitle: "图片测试"
     )
 
@@ -216,7 +216,7 @@ import Testing
         </body>
         </html>
         """#,
-        thread: ThreadIdentity(tid: "701", canonicalURL: url),
+        thread: ThreadIdentity(tid: "701"),
         fallbackTitle: nil
     )
 
@@ -271,7 +271,7 @@ import Testing
         </body>
         </html>
         """#,
-        thread: ThreadIdentity(tid: "702", canonicalURL: url),
+        thread: ThreadIdentity(tid: "702"),
         fallbackTitle: "普通讨论"
     )
 
@@ -359,7 +359,7 @@ import Testing
         </body>
         </html>
         """#,
-        thread: ThreadIdentity(tid: "703", canonicalURL: url),
+        thread: ThreadIdentity(tid: "703"),
         fallbackTitle: "链接测试"
     )
 
@@ -388,7 +388,7 @@ import Testing
         </body>
         </html>
         """#,
-        thread: ThreadIdentity(tid: "702", canonicalURL: url),
+        thread: ThreadIdentity(tid: "702"),
         fallbackTitle: "普通讨论"
     )
 
@@ -427,7 +427,7 @@ import Testing
         </body>
         </html>
         """#,
-        thread: ThreadIdentity(tid: "703", canonicalURL: url),
+        thread: ThreadIdentity(tid: "703"),
         fallbackTitle: "普通讨论"
     )
 
@@ -516,7 +516,7 @@ private extension ForumThreadTextBlock {
         </body>
         </html>
         """#,
-        thread: ThreadIdentity(tid: "704", canonicalURL: url),
+        thread: ThreadIdentity(tid: "704"),
         fallbackTitle: "普通讨论"
     )
 
@@ -746,7 +746,7 @@ private extension ForumThreadTextBlock {
         </body>
         </html>
         """#,
-        thread: ThreadIdentity(tid: "705", canonicalURL: url),
+        thread: ThreadIdentity(tid: "705"),
         fallbackTitle: "普通讨论"
     )
 
@@ -767,7 +767,7 @@ private extension ForumThreadTextBlock {
     #expect(throws: YamiboError.parsingFailed(context: L10n.string("context.thread_page"))) {
         _ = try ForumThreadPageHTMLParser.parsePage(
             from: "<html><body><div>empty</div></body></html>",
-            thread: ThreadIdentity(tid: "701", canonicalURL: url),
+            thread: ThreadIdentity(tid: "701"),
             fallbackTitle: "普通讨论"
         )
     }
@@ -787,7 +787,7 @@ private extension ForumThreadTextBlock {
         </body>
         </html>
         """,
-        thread: ThreadIdentity(tid: "703", canonicalURL: url),
+        thread: ThreadIdentity(tid: "703"),
         fallbackTitle: "普通讨论"
     )
 

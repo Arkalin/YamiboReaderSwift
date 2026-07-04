@@ -46,7 +46,7 @@ private struct ForumThreadReaderRepositoryTests {
     let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
     let cacheStore = ForumCacheStore(baseDirectory: directory)
     let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=704&mobile=2"))
-    let thread = ThreadIdentity(tid: "704", canonicalURL: threadURL)
+    let thread = ThreadIdentity(tid: "704")
     let repository = ForumThreadReaderRepository(
         client: YamiboClient(session: makeForumThreadReaderRepositoryTestSession(), cookie: "auth=token", userAgent: "Test-UA"),
         cacheStore: cacheStore
@@ -83,7 +83,7 @@ private struct ForumThreadReaderRepositoryTests {
     let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
     let cacheStore = ForumCacheStore(baseDirectory: directory)
     let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=705&mobile=2"))
-    let thread = ThreadIdentity(tid: "705", canonicalURL: threadURL)
+    let thread = ThreadIdentity(tid: "705")
     let repository = ForumThreadReaderRepository(
         client: YamiboClient(session: makeForumThreadReaderRepositoryTestSession(), cookie: "auth=token", userAgent: "Test-UA"),
         cacheStore: cacheStore
@@ -116,7 +116,7 @@ private struct ForumThreadReaderRepositoryTests {
     let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
     let cacheStore = ForumCacheStore(baseDirectory: directory)
     let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=708&mobile=2"))
-    let thread = ThreadIdentity(tid: "708", canonicalURL: threadURL)
+    let thread = ThreadIdentity(tid: "708")
     let repository = ForumThreadReaderRepository(
         client: YamiboClient(session: makeForumThreadReaderRepositoryTestSession(), cookie: "auth=token", userAgent: "Test-UA"),
         cacheStore: cacheStore
@@ -148,7 +148,7 @@ private struct ForumThreadReaderRepositoryTests {
     let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
     let cacheStore = ForumCacheStore(baseDirectory: directory)
     let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=706&mobile=2"))
-    let thread = ThreadIdentity(tid: "706", canonicalURL: threadURL)
+    let thread = ThreadIdentity(tid: "706")
     let repository = ForumThreadReaderRepository(
         client: YamiboClient(session: makeForumThreadReaderRepositoryTestSession(), cookie: "auth=token", userAgent: "Test-UA"),
         cacheStore: cacheStore

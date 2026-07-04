@@ -293,10 +293,7 @@ import Testing
 }
 
 private func makeCacheTestThread(tid: String) throws -> ThreadIdentity {
-    ThreadIdentity(
-        tid: tid,
-        canonicalURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(tid)&mobile=2"))
-    )
+    ThreadIdentity(tid: tid)
 }
 
 private func makeCacheTestThreadPage(thread: ThreadIdentity, title: String) -> ForumThreadPage {

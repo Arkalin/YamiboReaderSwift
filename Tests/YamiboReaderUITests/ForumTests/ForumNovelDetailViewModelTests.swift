@@ -121,7 +121,6 @@ import Testing
     model.threadPage = ForumThreadPage(
         thread: ThreadIdentity(
             tid: "900",
-            canonicalURL: model.context.thread.canonicalURL,
             fid: "123"
         ),
         title: "解析标题",
@@ -270,7 +269,7 @@ import Testing
     let initialImage = try #require(URL(string: "https://img.example.com/initial-owner.jpg"))
     let threadPageLoader = FakeForumNovelThreadPageLoader(pages: [
         1: ForumThreadPage(
-            thread: ThreadIdentity(tid: "900", canonicalURL: try modelThreadURL(), fid: "49"),
+            thread: ThreadIdentity(tid: "900", fid: "49"),
             title: "小说标题",
             posts: [
                 ForumThreadPost(
@@ -312,7 +311,7 @@ import Testing
 @MainActor
 @Test func forumNovelDetailReloadUsesCachedInitialThreadPageWithoutFetching() async throws {
     let cachedPage = ForumThreadPage(
-        thread: ThreadIdentity(tid: "900", canonicalURL: try modelThreadURL(), fid: "49"),
+        thread: ThreadIdentity(tid: "900", fid: "49"),
         title: "缓存小说标题",
         posts: [
             ForumThreadPost(
@@ -342,7 +341,7 @@ import Testing
 @MainActor
 @Test func forumNovelDetailReloadKeepsCachedInitialThreadPageWhenReaderDocumentTimesOut() async throws {
     let cachedPage = ForumThreadPage(
-        thread: ThreadIdentity(tid: "900", canonicalURL: try modelThreadURL(), fid: "49"),
+        thread: ThreadIdentity(tid: "900", fid: "49"),
         title: "缓存小说标题",
         posts: [
             ForumThreadPost(
@@ -374,7 +373,7 @@ import Testing
 @MainActor
 @Test func forumNovelDetailLoadChapterSectionUsesCachedThreadPageWithoutFetching() async throws {
     let firstPage = ForumThreadPage(
-        thread: ThreadIdentity(tid: "900", canonicalURL: try modelThreadURL(), fid: "49"),
+        thread: ThreadIdentity(tid: "900", fid: "49"),
         title: "小说标题",
         posts: [
             ForumThreadPost(
@@ -388,7 +387,7 @@ import Testing
         pageNavigation: ForumPageNavigation(currentPage: 1, totalPages: 2)
     )
     let secondPage = ForumThreadPage(
-        thread: ThreadIdentity(tid: "900", canonicalURL: try modelThreadURL(), fid: "49"),
+        thread: ThreadIdentity(tid: "900", fid: "49"),
         title: "小说标题",
         posts: [
             ForumThreadPost(
@@ -563,7 +562,7 @@ import Testing
     )
     let threadPageLoader = FakeForumNovelThreadPageLoader(pages: [
         1: ForumThreadPage(
-            thread: ThreadIdentity(tid: "900", canonicalURL: try modelThreadURL(), fid: "49"),
+            thread: ThreadIdentity(tid: "900", fid: "49"),
             title: "小说标题",
             posts: [
                 ForumThreadPost(
@@ -608,7 +607,7 @@ import Testing
     )
     let threadPageLoader = FakeForumNovelThreadPageLoader(pages: [
         1: ForumThreadPage(
-            thread: ThreadIdentity(tid: "900", canonicalURL: try modelThreadURL(), fid: "49"),
+            thread: ThreadIdentity(tid: "900", fid: "49"),
             title: "小说标题",
             posts: [
                 ForumThreadPost(
@@ -641,7 +640,7 @@ import Testing
             pageNavigation: ForumPageNavigation(currentPage: 1, totalPages: 2)
         ),
         2: ForumThreadPage(
-            thread: ThreadIdentity(tid: "900", canonicalURL: try modelThreadURL(), fid: "49"),
+            thread: ThreadIdentity(tid: "900", fid: "49"),
             title: "小说标题",
             posts: [
                 ForumThreadPost(
@@ -1198,7 +1197,6 @@ private func makeForumNovelDetailViewModel(
     threadPageLoader: (any ForumNovelThreadPageLoading)? = nil,
     authorID: String? = "42"
 ) throws -> ForumNovelDetailViewModel {
-    let url = try modelThreadURL()
     let resolvedAppContext: YamiboAppContext
     if let appContext {
         resolvedAppContext = appContext
@@ -1220,7 +1218,7 @@ private func makeForumNovelDetailViewModel(
     }
     return ForumNovelDetailViewModel(
         context: NovelDetailLaunchContext(
-            thread: ThreadIdentity(tid: "900", canonicalURL: url, fid: "49"),
+            thread: ThreadIdentity(tid: "900", fid: "49"),
             title: "小说标题",
             authorID: authorID
         ),
@@ -1230,10 +1228,6 @@ private func makeForumNovelDetailViewModel(
     )
 }
 
-private func modelThreadURL() throws -> URL {
-    try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=900&mobile=2"))
-}
-
 private func makeNovelDetailThreadPage(
     page: Int,
     totalPages: Int,
@@ -1241,7 +1235,7 @@ private func makeNovelDetailThreadPage(
     chapterTitle: String
 ) throws -> ForumThreadPage {
     ForumThreadPage(
-        thread: ThreadIdentity(tid: "900", canonicalURL: try modelThreadURL(), fid: "49"),
+        thread: ThreadIdentity(tid: "900", fid: "49"),
         title: "小说标题",
         posts: [
             ForumThreadPost(

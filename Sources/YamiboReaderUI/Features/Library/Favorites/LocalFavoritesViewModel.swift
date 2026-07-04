@@ -1367,12 +1367,11 @@ final class LocalFavoritesViewModel: ObservableObject {
             if let favoriteUpdatePageFetcher {
                 return try await favoriteUpdatePageFetcher(item)
             }
-            guard let tid = item.target.threadID,
-                  let url = threadURL(for: item.target) else {
+            guard let tid = item.target.threadID else {
                 return nil
             }
             let repository = await appContext.makeForumThreadReaderRepository()
-            let thread = ThreadIdentity(tid: tid, canonicalURL: url, fid: item.fid)
+            let thread = ThreadIdentity(tid: tid, fid: item.fid)
             let context = ThreadReaderLaunchContext(thread: thread, title: item.resolvedDisplayTitle)
             return try await repository.fetchThreadPage(context: context, page: 1)
         } catch {
@@ -1947,7 +1946,7 @@ final class LocalFavoritesViewModel: ObservableObject {
             return (nil, .unknown, nil)
         }
         return await threadMetadata(
-            thread: ThreadIdentity(tid: threadID, canonicalURL: canonicalURL),
+            thread: ThreadIdentity(tid: threadID),
             title: title,
             repository: repository
         )

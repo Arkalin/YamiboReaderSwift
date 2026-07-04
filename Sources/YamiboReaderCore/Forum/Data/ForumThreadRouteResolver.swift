@@ -21,7 +21,6 @@ public actor ForumThreadRouteResolver {
                 ?? ""
             let thread = ThreadIdentity(
                 tid: tid,
-                canonicalURL: canonicalURL,
                 fid: request.tapContext.containingFid ?? request.threadFid
             )
             let initialPage = await resolvedNativeThreadReaderInitialPage(
@@ -67,7 +66,7 @@ public actor ForumThreadRouteResolver {
         let fid = initialFid ?? metadata?.fid
         let title = request.title ?? metadata?.title
         let authorID = request.authorID ?? metadata?.authorID
-        let thread = ThreadIdentity(tid: tid, canonicalURL: canonicalURL, fid: fid)
+        let thread = ThreadIdentity(tid: tid, fid: fid)
         let kind = metadata == nil
             ? initialKind
             : kindForKnownInputs(

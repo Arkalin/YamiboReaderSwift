@@ -218,7 +218,7 @@ import Testing
     )
     let imageURL = try #require(URL(string: "https://img.example.test/9003-1.jpg"))
     let novelSourcePage = ForumThreadPage(
-        thread: ThreadIdentity(tid: "9004", canonicalURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9004"))),
+        thread: ThreadIdentity(tid: "9004"),
         title: "Legacy Novel",
         posts: [
             ForumThreadPost(

@@ -9,24 +9,11 @@ public enum YamiboForumThreadKind: String, Codable, Hashable, Sendable {
 
 public struct ThreadIdentity: Codable, Hashable, Sendable {
     public var tid: String
-    public var canonicalURL: URL
     public var fid: String?
 
-    public init(tid: String, canonicalURL: URL, fid: String? = nil) {
-        self.tid = tid.trimmingCharacters(in: .whitespacesAndNewlines)
-        self.canonicalURL = canonicalURL
-        self.fid = fid?.threadRoutingTrimmedNonEmpty
-    }
-
     public init(tid: String, fid: String? = nil) {
-        let normalizedTID = tid.trimmingCharacters(in: .whitespacesAndNewlines)
-        self.init(
-            tid: normalizedTID,
-            canonicalURL: YamiboThreadURLCanonicalizer.canonicalThreadURL(
-                from: YamiboRoute.threadByID(tid: normalizedTID, page: 1, authorID: nil, reverse: false).url
-            ),
-            fid: fid
-        )
+        self.tid = tid.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.fid = fid?.threadRoutingTrimmedNonEmpty
     }
 }
 

@@ -1144,11 +1144,10 @@ private func makeNovelExecutorPreparedSourcePage(
     view: Int,
     imageURLs: [URL]
 ) throws -> NovelOfflineCachePreparedSourcePage {
-    let canonicalURL = YamiboRoute.threadByID(tid: tid, page: 1, authorID: nil, reverse: false).url
     let segments = [.text("正文\(view)", chapterTitle: "第\(view)章")]
         + imageURLs.map { ReaderSegment.image($0, chapterTitle: nil) }
     let sourcePage = ForumThreadPage(
-        thread: ThreadIdentity(tid: tid, canonicalURL: canonicalURL),
+        thread: ThreadIdentity(tid: tid),
         title: "小说\(tid)",
         posts: [
             ForumThreadPost(

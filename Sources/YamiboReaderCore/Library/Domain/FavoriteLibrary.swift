@@ -491,7 +491,7 @@ public enum FavoriteThreadImportFailure: Error, Equatable, Sendable {
 }
 
 public enum FavoriteItemOpenRoute: Equatable, Sendable {
-    case nativeThread(URL)
+    case nativeThread(threadID: String)
     case novelDetail(threadID: String)
     case mangaTitle(cleanBookName: String)
     case unsupported
@@ -678,18 +678,12 @@ public struct FavoriteLibraryDocument: Codable, Equatable, Sendable {
     public func openRoute(for item: FavoriteItem) -> FavoriteItemOpenRoute {
         switch item.target {
         case let .normalThread(threadID):
-            .nativeThread(Self.threadURL(for: threadID))
+            .nativeThread(threadID: threadID)
         case let .novelThread(threadID):
             .novelDetail(threadID: threadID)
         case let .mangaTitle(_, cleanBookName):
             .mangaTitle(cleanBookName: cleanBookName)
         }
-    }
-
-    private static func threadURL(for threadID: String) -> URL {
-        FavoriteLibraryURLIdentity.canonicalThreadURL(
-            from: YamiboRoute.threadByID(tid: threadID, page: 1, authorID: nil, reverse: false).url
-        )
     }
 
     @discardableResult

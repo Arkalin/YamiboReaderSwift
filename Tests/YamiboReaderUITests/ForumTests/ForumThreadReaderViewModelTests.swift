@@ -66,7 +66,7 @@ import Testing
 @MainActor
 @Test func forumThreadReaderLoadUsesCachedPageWithoutFetching() async throws {
     let cachedPage = ForumThreadPage(
-        thread: ThreadIdentity(tid: "704", canonicalURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=704&mobile=2"))),
+        thread: ThreadIdentity(tid: "704"),
         title: "缓存标题",
         posts: [
             ForumThreadPost(
@@ -91,7 +91,7 @@ import Testing
 @MainActor
 @Test func forumThreadReaderRefreshBypassesCachedPageAndFetches() async throws {
     let cachedPage = ForumThreadPage(
-        thread: ThreadIdentity(tid: "704", canonicalURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=704&mobile=2"))),
+        thread: ThreadIdentity(tid: "704"),
         title: "缓存标题",
         posts: [
             ForumThreadPost(
@@ -172,11 +172,10 @@ private func makeThreadPage(
     title: String,
     postID: String,
     contentText: String,
-    page: Int = 1,
-    threadURL: URL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=704&mobile=2")!
+    page: Int = 1
 ) -> ForumThreadPage {
     ForumThreadPage(
-        thread: ThreadIdentity(tid: "704", canonicalURL: threadURL),
+        thread: ThreadIdentity(tid: "704"),
         title: title,
         posts: [
             ForumThreadPost(
@@ -225,7 +224,7 @@ private struct ForumThreadReaderViewModelFixture {
     func makeModel() -> ForumThreadReaderViewModel {
         ForumThreadReaderViewModel(
             context: ThreadReaderLaunchContext(
-                thread: ThreadIdentity(tid: "704", canonicalURL: threadURL, fid: "40"),
+                thread: ThreadIdentity(tid: "704", fid: "40"),
                 title: "上下文标题"
             ),
             repository: repository,
@@ -258,7 +257,7 @@ private final class FakeForumThreadPageLoader: ForumThreadPageLoading, @unchecke
         if let fetchError {
             throw fetchError
         }
-        return makeThreadPage(title: "解析标题", postID: "4001", contentText: "正文", page: page, threadURL: threadURL)
+        return makeThreadPage(title: "解析标题", postID: "4001", contentText: "正文", page: page)
     }
 
     func cachedPageCalls() -> [Int] {

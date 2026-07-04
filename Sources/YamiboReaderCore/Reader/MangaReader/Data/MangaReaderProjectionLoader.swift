@@ -233,9 +233,15 @@ private struct MangaProjectionLoadingStrategy: ReaderProjectionLoadingStrategy {
     private static func orderedImageURLs(from page: ForumThreadPage) -> [URL] {
         var seen: Set<String> = []
         var urls: [URL] = []
+        let baseURL = YamiboRoute.threadByID(
+            tid: page.thread.tid,
+            page: page.pageNavigation?.currentPage ?? 1,
+            authorID: nil,
+            reverse: false
+        ).url
         for post in page.posts {
             for image in post.images {
-                guard let url = HTMLTextExtractor.absoluteURL(from: image.url, baseURL: page.thread.canonicalURL) else {
+                guard let url = HTMLTextExtractor.absoluteURL(from: image.url, baseURL: baseURL) else {
                     continue
                 }
                 if seen.insert(url.absoluteString).inserted {

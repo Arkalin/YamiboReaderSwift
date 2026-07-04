@@ -179,7 +179,12 @@ private struct ForumThreadReaderBodyView: View {
                                 threadTitle: isFirstPost ? page.title : nil,
                                 totalViews: isFirstPost ? page.totalViews : nil,
                                 totalReplies: isFirstPost ? page.totalReplies : nil,
-                                refererURL: page.thread.canonicalURL,
+                                refererURL: YamiboRoute.threadByID(
+                                    tid: page.thread.tid,
+                                    page: currentPage,
+                                    authorID: nil,
+                                    reverse: false
+                                ).url,
                                 threadID: page.thread.tid,
                                 currentPage: currentPage,
                                 forumID: page.forumID,
@@ -312,7 +317,7 @@ private struct ForumThreadReaderActionBar: View {
                 isFavorited ? L10n.string("forum.thread.favorited") : L10n.string("forum.thread.favorite")
             )
 
-            ShareLink(item: thread.canonicalURL) {
+            ShareLink(item: Self.threadURL(for: thread)) {
                 Label(L10n.string("forum.thread.share"), systemImage: "square.and.arrow.up")
                     .labelStyle(.iconOnly)
                     .foregroundStyle(ForumColors.brownEmphasis)
@@ -327,6 +332,10 @@ private struct ForumThreadReaderActionBar: View {
         .padding(.top, 10)
         .padding(.bottom, 8)
         .background(.regularMaterial)
+    }
+
+    private static func threadURL(for thread: ThreadIdentity) -> URL {
+        YamiboRoute.threadByID(tid: thread.tid, page: 1, authorID: nil, reverse: false).url
     }
 }
 

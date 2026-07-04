@@ -189,7 +189,6 @@ import Testing
 
 private let testThread = ThreadIdentity(
     tid: "900",
-    canonicalURL: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=900&mobile=2")!,
     fid: "49"
 )
 

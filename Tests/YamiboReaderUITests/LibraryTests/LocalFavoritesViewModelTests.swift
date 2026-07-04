@@ -1174,9 +1174,8 @@ final class LocalFavoritesViewModelTests: XCTestCase {
         replyCount: Int,
         pageCount: Int
     ) throws -> ForumThreadPage {
-        let url = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(threadID)"))
         return ForumThreadPage(
-            thread: ThreadIdentity(tid: threadID, canonicalURL: url, fid: "50"),
+            thread: ThreadIdentity(tid: threadID, fid: "50"),
             title: title,
             posts: [
                 ForumThreadPost(
