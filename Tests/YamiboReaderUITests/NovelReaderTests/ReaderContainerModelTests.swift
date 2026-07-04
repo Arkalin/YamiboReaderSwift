@@ -3016,6 +3016,83 @@ final class ReaderContainerModelTests: XCTestCase {
         }
     }
 
+    func testOfflineCacheQueueUpdatesRefreshNovelCacheStateAndEntryCount() async throws {
+        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=7102&mobile=2")!
+        let offlineStore = try makeReaderModelOfflineCacheStore()
+        let document = makeDocument(
+            threadURL: threadURL,
+            view: 1,
+            maxView: 2,
+            chapterTitles: ["当前页"],
+            authorID: "42",
+            contentSource: .authorFilteredPage
+        )
+        let model = try await makeModel(
+            documents: [document],
+            launchContext: ReaderLaunchContext(
+                threadURL: threadURL,
+                threadTitle: "测试线程",
+                source: .forum,
+                authorID: "42"
+            ),
+            offlineCacheStore: offlineStore
+        )
+
+        await MainActor.run {
+            XCTAssertEqual(model.cacheStatus(for: 2), .uncached)
+            XCTAssertEqual(model.offlineCacheQueueEntryCount, 0)
+        }
+
+        let request = NovelOfflineCacheWorkRequest(
+            ownerTitle: "测试线程",
+            title: L10n.string("reader.page_number_spaced", 2),
+            threadURL: threadURL,
+            view: 2,
+            authorID: "42",
+            contentSource: .authorFilteredPage
+        )
+        _ = try await offlineStore.enqueueNovelOfflineCacheWork(request)
+
+        try await waitFor {
+            await MainActor.run {
+                model.cacheStatus(for: 2) == .caching
+                    && model.offlineCacheQueueEntryCount == 1
+            }
+        }
+
+        let completedAt = Date(timeIntervalSince1970: 71_020)
+        let completionDocument = makeDocument(
+            threadURL: threadURL,
+            view: 2,
+            maxView: 2,
+            chapterTitles: ["离线完成"],
+            authorID: "42",
+            contentSource: .authorFilteredPage
+        )
+        let thread = try makeThreadIdentity(from: threadURL)
+        let sourcePage = makeThreadPageSource(from: completionDocument, thread: thread, authorID: "42")
+        var projection = completionDocument
+        projection.threadURL = thread.canonicalURL
+        projection.resolvedAuthorID = "42"
+        projection.contentSource = .authorFilteredPage
+        try await offlineStore.saveNovelOfflineSourcePage(
+            sourcePage,
+            request: request,
+            projectionPrewarm: projection,
+            updatedAt: completedAt,
+            completesMatchingWork: true,
+            preservesExistingImageReferencesWhenEmpty: false
+        )
+
+        try await waitFor {
+            await MainActor.run {
+                model.cacheStatus(for: 2) == .cached
+                    && model.offlineCacheQueueEntryCount == 0
+                    && model.cacheUpdateTime(for: 2) == completedAt
+            }
+        }
+    }
+
     func testUpdatingCachedViewShowsCachingWhileRetainingLastUpdateTime() async throws {
         let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=7002&mobile=2")!
         let offlineStore = try makeReaderModelOfflineCacheStore()

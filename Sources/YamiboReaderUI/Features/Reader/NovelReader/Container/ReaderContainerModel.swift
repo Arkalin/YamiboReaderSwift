@@ -61,6 +61,7 @@ public final class ReaderContainerModel: ObservableObject {
     private var usesPadPresentation = false
     private var chapterDirectoryAnchors: [Int: NovelChapterAnchor] = [:]
     private var currentStableResumePoint: ReaderResumePoint?
+    private var offlineCacheUpdatesTask: Task<Void, Never>?
     private let runtimeAdapter: (any NovelTextLayoutRuntimeAdapter)?
     private let onReaderResumeRouteChange: ReaderResumeRouteChangeHandler
     package var runtimeUpdatePreparation: NovelReadingWorkflowRuntimeUpdatePreparation = { $0 }
@@ -150,6 +151,10 @@ public final class ReaderContainerModel: ObservableObject {
                 await self?.refreshOfflineCacheQueueCount()
             }
         }
+    }
+
+    deinit {
+        offlineCacheUpdatesTask?.cancel()
     }
 
     public var title: String {
@@ -934,12 +939,24 @@ public final class ReaderContainerModel: ObservableObject {
     }
 
     public func refreshCachedState() async {
+        startObservingOfflineCacheUpdates()
         guard let cacheOperationRepository else {
             syncCacheState(NovelOfflineCacheViewsSnapshot())
             return
         }
         syncCacheState(await cacheOperationRepository.cacheState(for: cacheOperationSnapshot.context))
         await refreshOfflineCacheQueueCount()
+    }
+
+    private func startObservingOfflineCacheUpdates() {
+        guard offlineCacheUpdatesTask == nil else { return }
+        let updates = appContext.makeOfflineCacheStore().offlineCacheUpdates()
+        offlineCacheUpdatesTask = Task { @MainActor [weak self] in
+            for await _ in updates {
+                guard !Task.isCancelled else { return }
+                await self?.refreshCachedState()
+            }
+        }
     }
 
     public func cacheSelectionState(for selectedViews: Set<Int>) -> ReaderCacheSelectionState {

@@ -10,7 +10,13 @@ struct ReaderCachePanel: View {
     @Environment(\.dismiss) private var dismiss
     @State private var selectedViews: Set<Int> = []
     @State private var isQueuePresented = false
-    @State private var queueViewModel: MineHomeViewModel?
+    @State private var queueViewModel: MineHomeViewModel
+
+    init(model: ReaderContainerModel, onShowProgress: @escaping () -> Void) {
+        _model = ObservedObject(wrappedValue: model)
+        self.onShowProgress = onShowProgress
+        _queueViewModel = State(initialValue: model.makeOfflineCacheQueueViewModel())
+    }
 
     var body: some View {
         NavigationStack {
@@ -90,9 +96,7 @@ struct ReaderCachePanel: View {
                 await model.refreshCachedState()
             }
             .sheet(isPresented: $isQueuePresented) {
-                if let queueViewModel {
-                    MineOfflineCacheQueueSheet(viewModel: queueViewModel)
-                }
+                MineOfflineCacheQueueSheet(viewModel: queueViewModel)
             }
         }
     }
@@ -168,7 +172,6 @@ struct ReaderCachePanel: View {
     }
 
     private func showQueue() {
-        queueViewModel = model.makeOfflineCacheQueueViewModel()
         isQueuePresented = true
     }
 }
