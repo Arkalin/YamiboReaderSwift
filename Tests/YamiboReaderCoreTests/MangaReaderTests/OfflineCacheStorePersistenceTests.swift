@@ -130,8 +130,46 @@ struct MangaReaderTestsMangaOfflineCachePersistence {
             baseDirectory: fixture.offlineDirectory
         )
         let loaded = try #require(await secondStore.membership(ownerName: "作品A", tid: "150"))
+        let persisted = try #require(try await fixture.database.read { db -> (
+            columns: [String],
+            fileName: String,
+            schemaVersion: Int?,
+            fingerprint: String?,
+            byteCount: Int
+        )? in
+            guard let row = try Row.fetchOne(
+                db,
+                sql: """
+                SELECT source_page_file_name, source_page_schema_version, source_page_fingerprint, byte_count
+                FROM offline_cache_manga_entries
+                WHERE owner_name = ? AND tid = ?
+                """,
+                arguments: ["作品A", "150"]
+            ) else {
+                return nil
+            }
+            return (
+                columns: try offlineCacheColumnNames(table: "offline_cache_manga_entries", in: db),
+                fileName: row["source_page_file_name"] as String,
+                schemaVersion: row["source_page_schema_version"] as Int?,
+                fingerprint: row["source_page_fingerprint"] as String?,
+                byteCount: row["byte_count"] as Int
+            )
+        })
+        let sourceFileURL = fixture.offlineDirectory
+            .appendingPathComponent("manga-source-pages", isDirectory: true)
+            .appendingPathComponent(persisted.fileName, isDirectory: false)
+        let sourceData = try Data(contentsOf: sourceFileURL)
+        let decodedSourcePage = try JSONDecoder().decode(ForumThreadPage.self, from: sourceData)
+        let expectedSourceBytes = try JSONEncoder().encode(sourcePage).count
 
         #expect(loaded.sourcePage == sourcePage)
+        #expect(!persisted.columns.contains("source_page_json"))
+        #expect(persisted.schemaVersion == 1)
+        #expect(persisted.fingerprint?.isEmpty == false)
+        #expect(persisted.byteCount == expectedSourceBytes)
+        #expect(decodedSourcePage == sourcePage)
+        #expect(await firstStore.totalDiskUsageBytes() == persisted.byteCount)
     }
 
     @Test func mangaEntryRejectsMismatchedSourcePageThread() async throws {
@@ -158,7 +196,60 @@ struct MangaReaderTestsMangaOfflineCachePersistence {
         #expect(await store.membership(ownerName: "作品A", tid: "151") == nil)
     }
 
-    @Test func legacyNilSourceMangaEntryDoesNotBecomeCachedOrBlockEnqueue() async throws {
+    @Test func mangaEntryWithMissingOrDamagedSourceFileIsUnreadableAndUncached() async throws {
+        let fixture = try makeOfflineCacheFixture()
+        let store = OfflineCacheStore(
+            databasePool: fixture.database,
+            baseDirectory: fixture.offlineDirectory
+        )
+        let membership = try makeOfflineMembership(ownerName: "作品A", tid: "155", imageURLs: [])
+
+        try await store.saveMembership(membership)
+        let fileName = try #require(try await fixture.database.read { db in
+            try String.fetchOne(
+                db,
+                sql: """
+                SELECT source_page_file_name
+                FROM offline_cache_manga_entries
+                WHERE owner_name = ? AND tid = ?
+                """,
+                arguments: ["作品A", "155"]
+            )
+        })
+        let sourceFileURL = fixture.offlineDirectory
+            .appendingPathComponent("manga-source-pages", isDirectory: true)
+            .appendingPathComponent(fileName, isDirectory: false)
+
+        try FileManager.default.removeItem(at: sourceFileURL)
+
+        #expect(await store.membership(ownerName: "作品A", tid: "155") == nil)
+        #expect(await store.offlineCacheState(ownerName: "作品A", tid: "155") == .uncached)
+
+        try Data("not-json".utf8).write(to: sourceFileURL, options: [.atomic])
+
+        #expect(await store.membership(ownerName: "作品A", tid: "155") == nil)
+        #expect(await store.offlineCacheState(ownerName: "作品A", tid: "155") == .uncached)
+
+        var tamperedSourcePage = membership.sourcePage
+        tamperedSourcePage.title = "第155集"
+        let tamperedData = try JSONEncoder().encode(tamperedSourcePage)
+        try tamperedData.write(to: sourceFileURL, options: [.atomic])
+        try await fixture.database.write { db in
+            try db.execute(
+                sql: """
+                UPDATE offline_cache_manga_entries
+                SET byte_count = ?
+                WHERE owner_name = ? AND tid = ?
+                """,
+                arguments: [tamperedData.count, "作品A", "155"]
+            )
+        }
+
+        #expect(await store.membership(ownerName: "作品A", tid: "155") == nil)
+        #expect(await store.offlineCacheState(ownerName: "作品A", tid: "155") == .uncached)
+    }
+
+    @Test func mangaEntryWithoutSourceFileDoesNotBecomeCachedOrBlockEnqueue() async throws {
         let fixture = try makeOfflineCacheFixture()
         let writingStore = OfflineCacheStore(
             databasePool: fixture.database,
@@ -166,11 +257,10 @@ struct MangaReaderTestsMangaOfflineCachePersistence {
         )
         let imageURL = try #require(URL(string: "https://img.example.com/legacy-nil-source.jpg"))
         try await writingStore.saveOfflineImageData(Data([9]), for: imageURL)
-        try await seedLegacyMangaEntry(
+        try await seedMangaEntryWithoutSourceFile(
             ownerName: "作品A",
             tid: "160",
             imageURLs: [imageURL],
-            sourcePageJSON: nil,
             in: fixture.database
         )
 
@@ -187,7 +277,7 @@ struct MangaReaderTestsMangaOfflineCachePersistence {
         #expect(result.enqueuedWork?.tid == "160")
     }
 
-    @Test func legacyNilSourceMangaEntryIsExcludedFromCompletedListsUsageAndManagement() async throws {
+    @Test func mangaEntryWithoutSourceFileIsExcludedFromCompletedListsUsageAndManagement() async throws {
         let fixture = try makeOfflineCacheFixture()
         let store = OfflineCacheStore(
             databasePool: fixture.database,
@@ -195,11 +285,10 @@ struct MangaReaderTestsMangaOfflineCachePersistence {
         )
         let imageURL = try #require(URL(string: "https://img.example.com/legacy-completed-list.jpg"))
         try await store.saveOfflineImageData(Data([7, 8]), for: imageURL)
-        try await seedLegacyMangaEntry(
+        try await seedMangaEntryWithoutSourceFile(
             ownerName: "作品A",
             tid: "165",
             imageURLs: [imageURL],
-            sourcePageJSON: nil,
             in: fixture.database
         )
 
@@ -223,11 +312,10 @@ struct MangaReaderTestsMangaOfflineCachePersistence {
         _ = try await writingStore.enqueueOfflineCacheWork(
             try makeOfflineWorkRequest(ownerName: "作品A", tid: "171", targetImageURLs: [workImage])
         )
-        try await seedLegacyMangaEntry(
+        try await seedMangaEntryWithoutSourceFile(
             ownerName: "作品A",
             tid: "170",
             imageURLs: [staleImage, workImage],
-            sourcePageJSON: #"{"not":"a thread page"}"#,
             in: fixture.database
         )
 
@@ -290,20 +378,53 @@ struct MangaReaderTestsMangaOfflineCachePersistence {
         try await store.saveMembership(
             try makeOfflineMembership(ownerName: "作品A", tid: "300", imageURLs: [sharedImage, removedImage])
         )
-        try await store.saveMembership(
-            try makeOfflineMembership(ownerName: "作品A", tid: "301", imageURLs: [sharedImage])
-        )
+        let retainedMembership = try makeOfflineMembership(ownerName: "作品A", tid: "301", imageURLs: [sharedImage])
+        try await store.saveMembership(retainedMembership)
 
         #expect(await store.offlineCacheState(ownerName: "作品A", tid: "300") == .cached)
 
         try await store.removeMembership(ownerName: "作品A", tid: "300")
+        let expectedBytes = try mangaSourcePageByteCount(retainedMembership) + 3
 
         #expect(await store.membership(ownerName: "作品A", tid: "300") == nil)
         #expect(await store.offlineImageData(for: sharedImage) == Data([1, 2, 3]))
         #expect(await store.offlineImageData(for: removedImage) == nil)
         #expect(await store.diskUsageByOwner() == [
-            MangaOfflineCacheOwnerUsage(ownerName: "作品A", byteCount: 3)
+            MangaOfflineCacheOwnerUsage(ownerName: "作品A", byteCount: expectedBytes)
         ])
+    }
+
+    @Test func removingMangaMembershipOrOwnerDeletesUnreferencedSourcePageFiles() async throws {
+        let fixture = try makeOfflineCacheFixture()
+        let store = OfflineCacheStore(
+            databasePool: fixture.database,
+            baseDirectory: fixture.offlineDirectory
+        )
+        let firstMembership = try makeOfflineMembership(ownerName: "作品A", tid: "310", imageURLs: [])
+        let secondMembership = try makeOfflineMembership(ownerName: "作品A", tid: "311", imageURLs: [])
+
+        try await store.saveMembership(firstMembership)
+        try await store.saveMembership(secondMembership)
+        let fileNames = try await mangaSourcePageFileNames(
+            ownerName: "作品A",
+            tids: ["310", "311"],
+            in: fixture.database
+        )
+        let firstFileURL = fixture.offlineDirectory
+            .appendingPathComponent("manga-source-pages", isDirectory: true)
+            .appendingPathComponent(try #require(fileNames["310"]), isDirectory: false)
+        let secondFileURL = fixture.offlineDirectory
+            .appendingPathComponent("manga-source-pages", isDirectory: true)
+            .appendingPathComponent(try #require(fileNames["311"]), isDirectory: false)
+
+        try await store.removeMembership(ownerName: "作品A", tid: "310")
+
+        #expect(!FileManager.default.fileExists(atPath: firstFileURL.path))
+        #expect(FileManager.default.fileExists(atPath: secondFileURL.path))
+
+        try await store.removeMemberships(forOwnerName: "作品A")
+
+        #expect(!FileManager.default.fileExists(atPath: secondFileURL.path))
     }
 
     @Test func queueExecutorProcessesGRDBBackedWorkAndRemovesCompletedQueueRows() async throws {
@@ -413,25 +534,49 @@ private func makeOfflineSourcePage(tid: String) throws -> ForumThreadPage {
     )
 }
 
-private func seedLegacyMangaEntry(
+private func mangaSourcePageByteCount(_ membership: MangaOfflineCacheMembership) throws -> Int {
+    try JSONEncoder().encode(membership.sourcePage).count
+}
+
+private func mangaSourcePageFileNames(
+    ownerName: String,
+    tids: [String],
+    in database: DatabasePool
+) async throws -> [String: String] {
+    try await database.read { db in
+        var fileNames: [String: String] = [:]
+        for tid in tids {
+            fileNames[tid] = try String.fetchOne(
+                db,
+                sql: """
+                SELECT source_page_file_name
+                FROM offline_cache_manga_entries
+                WHERE owner_name = ? AND tid = ?
+                """,
+                arguments: [ownerName, tid]
+            )
+        }
+        return fileNames
+    }
+}
+
+private func seedMangaEntryWithoutSourceFile(
     ownerName: String,
     tid: String,
     imageURLs: [URL],
-    sourcePageJSON: String?,
     in database: DatabasePool
 ) async throws {
     try await database.write { db in
         try db.execute(
             sql: """
             INSERT OR REPLACE INTO offline_cache_manga_entries
-            (owner_name, tid, chapter_title, source_page_json, created_at)
-            VALUES (?, ?, ?, ?, ?)
+            (owner_name, tid, chapter_title, source_page_file_name, source_page_schema_version, source_page_fingerprint, byte_count, created_at)
+            VALUES (?, ?, ?, NULL, NULL, NULL, 0, ?)
             """,
             arguments: [
                 ownerName,
                 tid,
                 "第\(tid)话",
-                sourcePageJSON,
                 Date().timeIntervalSince1970
             ]
         )

@@ -404,11 +404,8 @@ public actor NovelReaderRepository {
             view: request.view,
             authorID: effectiveAuthorID
         )
-        if let prewarm = await offlineCacheStore.novelOfflineProjectionPrewarm(
-            ownerTitle: sourceSnapshot.ownerTitle,
-            threadURL: thread.canonicalURL,
-            view: request.view,
-            authorID: effectiveAuthorID,
+        if let prewarm = await cacheStore.loadDocument(
+            for: projectedRequest,
             contentSource: .authorFilteredPage
         ),
             isReusableProjection(prewarm, fingerprint: fingerprint) {
@@ -427,10 +424,7 @@ public actor NovelReaderRepository {
         ) else {
             return nil
         }
-        try? await offlineCacheStore.saveNovelOfflineProjectionPrewarm(
-            document,
-            ownerTitle: sourceSnapshot.ownerTitle
-        )
+        try? await cacheStore.save(document)
         return NovelReaderPageLoad(
             document: document,
             source: .offlineFallback(updatedAt: sourceSnapshot.updatedAt)
@@ -466,7 +460,6 @@ public actor NovelReaderRepository {
         try? await offlineCacheStore.saveNovelOfflineSourcePage(
             onlinePage.sourcePage,
             request: request,
-            projectionPrewarm: onlinePage.document,
             updatedAt: .now,
             completesMatchingWork: targetImageURLs.isEmpty,
             preservesExistingImageReferencesWhenEmpty: !retainsInlineImages

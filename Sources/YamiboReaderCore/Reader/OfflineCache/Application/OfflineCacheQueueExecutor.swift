@@ -301,7 +301,6 @@ public actor OfflineCacheQueueExecutor {
         try await store.saveNovelOfflineSourcePage(
             prepared.sourcePage,
             request: sourcePageRequest,
-            projectionPrewarm: prepared.document,
             updatedAt: .now,
             completesMatchingWork: targetImageURLs.isEmpty,
             preservesExistingImageReferencesWhenEmpty: targetImageURLs.isEmpty && !work.retainsInlineImages

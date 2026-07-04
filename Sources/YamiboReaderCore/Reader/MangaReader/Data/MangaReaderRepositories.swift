@@ -137,7 +137,6 @@ public protocol OfflineCacheStoring: NovelOfflineImageDataProviding, Sendable {
     func saveNovelOfflineSourcePage(
         _ sourcePage: ForumThreadPage,
         request: NovelOfflineCacheWorkRequest,
-        projectionPrewarm: ReaderPageDocument?,
         updatedAt: Date,
         completesMatchingWork: Bool,
         preservesExistingImageReferencesWhenEmpty: Bool
@@ -155,14 +154,6 @@ public protocol OfflineCacheStoring: NovelOfflineImageDataProviding, Sendable {
         authorID: String?,
         contentSource: ReaderContentSource?
     ) async -> NovelOfflineSourcePageSnapshot?
-    func saveNovelOfflineProjectionPrewarm(_ document: ReaderPageDocument, ownerTitle: String) async throws
-    func novelOfflineProjectionPrewarm(
-        ownerTitle: String,
-        threadURL: URL,
-        view: Int,
-        authorID: String?,
-        contentSource: ReaderContentSource?
-    ) async -> ReaderPageDocument?
     func novelOfflineCacheViewsSnapshot(
         ownerTitle: String,
         threadURL: URL,

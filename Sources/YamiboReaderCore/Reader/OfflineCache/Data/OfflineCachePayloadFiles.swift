@@ -5,7 +5,6 @@ extension OfflineCacheStore {
     public func saveNovelOfflineSourcePage(
         _ sourcePage: ForumThreadPage,
         request: NovelOfflineCacheWorkRequest,
-        projectionPrewarm: ReaderPageDocument?,
         updatedAt: Date = .now,
         completesMatchingWork: Bool = true,
         preservesExistingImageReferencesWhenEmpty: Bool = false
@@ -21,7 +20,7 @@ extension OfflineCacheStore {
             try ensureNovelSourcePagesDirectoryExists()
             let sourceURL = novelSourcePagesDirectory.appendingPathComponent(sourceFileName, isDirectory: false)
             try sourceData.write(to: sourceURL, options: [.atomic])
-            let document = try projectionPrewarm ?? Self.projectionDocument(
+            let document = try Self.projectionDocument(
                 from: sourcePage,
                 request: normalized
             )
@@ -60,9 +59,6 @@ extension OfflineCacheStore {
                 sourcePageFileNames: previousFiles.sourcePageFileNames.subtracting([sourceFileName])
             ))
             notifyOfflineCacheDidChange()
-            if projectionPrewarm != nil {
-                try? await saveNovelOfflineProjectionPrewarm(document, ownerTitle: normalized.ownerTitle)
-            }
         } catch {
             throw novelPayloadPersistenceError(from: error)
         }
@@ -159,85 +155,6 @@ extension OfflineCacheStore {
         )
     }
 
-    public func saveNovelOfflineProjectionPrewarm(_ document: ReaderPageDocument, ownerTitle: String) async throws {
-        try await recoverQueueStateAfterRestart()
-        let displayOwnerTitle = Self.novelDisplayOwnerTitle(ownerTitle: ownerTitle, threadURL: document.threadURL)
-        let entryKey = NovelOfflineCacheEntry.entryKey(document: document)
-        do {
-            guard entryKey.mangaReaderTrimmedNonEmpty != nil else {
-                throw YamiboError.persistenceFailed("Novel offline cache entry is empty")
-            }
-            let data = try Self.encodeJSONData(document, context: "novel offline projection prewarm")
-            let fileName = novelPayloadFileName(
-                prefix: "projection",
-                entryKey: entryKey
-            )
-            try ensureNovelProjectionPrewarmDirectoryExists()
-            let fileURL = novelProjectionPrewarmDirectory.appendingPathComponent(fileName, isDirectory: false)
-            try data.write(to: fileURL, options: [.atomic])
-            let previousFiles = try await database.write { db in
-                let previousFiles = try Self.novelPayloadFileNames(entryKey: entryKey, in: db)
-                try db.execute(
-                    sql: """
-                    UPDATE offline_cache_novel_entries
-                    SET owner_title = ?, projection_file_name = ?, projection_schema_version = ?
-                    WHERE entry_key = ?
-                    """,
-                    arguments: [
-                        displayOwnerTitle,
-                        fileName,
-                        document.projectionSchemaVersion ?? NovelOfflineCacheEntry.projectionPrewarmSchemaVersion,
-                        entryKey
-                    ]
-                )
-                return previousFiles
-            }
-            removeNovelPayloadFiles(NovelPayloadFileNames(
-                projectionFileNames: previousFiles.projectionFileNames.subtracting([fileName])
-            ))
-            notifyOfflineCacheDidChange()
-        } catch {
-            throw novelPayloadPersistenceError(from: error)
-        }
-    }
-
-    public func novelOfflineProjectionPrewarm(
-        ownerTitle: String,
-        threadURL: URL,
-        view: Int,
-        authorID: String?,
-        contentSource: ReaderContentSource?
-    ) async -> ReaderPageDocument? {
-        try? await recoverQueueStateAfterRestart()
-        guard let identity = novelEntryLookup(
-            ownerTitle: ownerTitle,
-            threadURL: threadURL,
-            view: view,
-            authorID: authorID,
-            contentSource: contentSource
-        ) else { return nil }
-        let fileName = try? await database.read { db in
-            try String.fetchOne(
-                db,
-                sql: """
-                SELECT projection_file_name
-                FROM offline_cache_novel_entries
-                WHERE entry_key = ?
-                """,
-                arguments: [identity.entryKey]
-            )
-        }
-        guard let fileName else {
-            return nil
-        }
-        return Self.decodeFile(
-            fileName: fileName,
-            directory: novelProjectionPrewarmDirectory,
-            fileManager: fileManager,
-            as: ReaderPageDocument.self
-        )
-    }
-
     func novelEntryLookup(
         ownerTitle: String,
         threadURL: URL,
@@ -282,16 +199,13 @@ extension OfflineCacheStore {
         for fileName in files.sourcePageFileNames {
             try? fileManager.removeItem(at: novelSourcePagesDirectory.appendingPathComponent(fileName, isDirectory: false))
         }
-        for fileName in files.projectionFileNames {
-            try? fileManager.removeItem(at: novelProjectionPrewarmDirectory.appendingPathComponent(fileName, isDirectory: false))
-        }
     }
 
     static func novelPayloadFileNames(entryKey: String, in db: Database) throws -> NovelPayloadFileNames {
         guard let row = try Row.fetchOne(
             db,
             sql: """
-            SELECT source_page_file_name, projection_file_name
+            SELECT source_page_file_name
             FROM offline_cache_novel_entries
             WHERE entry_key = ?
             """,
@@ -300,8 +214,7 @@ extension OfflineCacheStore {
             return NovelPayloadFileNames()
         }
         return NovelPayloadFileNames(
-            sourcePageFileNames: Set((row["source_page_file_name"] as String?).map { [$0] } ?? []),
-            projectionFileNames: Set((row["projection_file_name"] as String?).map { [$0] } ?? [])
+            sourcePageFileNames: Set((row["source_page_file_name"] as String?).map { [$0] } ?? [])
         )
     }
 
@@ -309,15 +222,14 @@ extension OfflineCacheStore {
         let rows = try Row.fetchAll(
             db,
             sql: """
-            SELECT source_page_file_name, projection_file_name
+            SELECT source_page_file_name
             FROM offline_cache_novel_entries
             WHERE owner_name = ?
             """,
             arguments: [ownerName]
         )
         return NovelPayloadFileNames(
-            sourcePageFileNames: Set(rows.compactMap { $0["source_page_file_name"] as String? }),
-            projectionFileNames: Set(rows.compactMap { $0["projection_file_name"] as String? })
+            sourcePageFileNames: Set(rows.compactMap { $0["source_page_file_name"] as String? })
         )
     }
 
@@ -451,7 +363,6 @@ struct NovelEntryKeyComponents {
 
 struct NovelPayloadFileNames {
     var sourcePageFileNames: Set<String> = []
-    var projectionFileNames: Set<String> = []
 }
 
 private struct NovelOfflineSourcePageSnapshotRow: Sendable {

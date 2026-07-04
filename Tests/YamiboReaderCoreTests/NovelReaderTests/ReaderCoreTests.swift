@@ -3559,7 +3559,6 @@ private func makeReaderRepositoryThreadPage(
             authorID: "42",
             contentSource: .authorFilteredPage
         ),
-        projectionPrewarm: nil,
         updatedAt: updatedAt
     )
     let repository = NovelReaderRepository(
@@ -3570,11 +3569,8 @@ private func makeReaderRepositoryThreadPage(
     )
 
     let load = try await repository.loadPageResult(ReaderPageRequest(threadURL: threadURL, view: 1, authorID: "42"))
-    let prewarm = await offlineStore.novelOfflineProjectionPrewarm(
-        ownerTitle: "离线小说",
-        threadURL: threadURL,
-        view: 1,
-        authorID: "42",
+    let prewarm = await readerCacheStore.loadDocument(
+        for: ReaderPageRequest(threadURL: threadURL, view: 1, authorID: "42"),
         contentSource: .authorFilteredPage
     )
 
@@ -3583,6 +3579,63 @@ private func makeReaderRepositoryThreadPage(
     #expect(load.document.projectionSourceFingerprint != nil)
     #expect(load.document.projectionSchemaVersion == 1)
     #expect(prewarm?.segments == load.document.segments)
+}
+
+@Test func readerRepositoryOfflineFallbackReusesValidTransparentProjectionCache() async throws {
+    let configuration = URLSessionConfiguration.ephemeral
+    configuration.protocolClasses = [StubURLProtocol.self]
+    let session = URLSession(configuration: configuration)
+    let directory = URL(fileURLWithPath: NSTemporaryDirectory())
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    let offlineStore = try makeTestOfflineCacheStore(rootDirectory: directory)
+    let readerCacheStore = ReaderCacheStore(baseDirectory: directory.appendingPathComponent("reader", isDirectory: true))
+    let forumCacheStore = ForumCacheStore(baseDirectory: directory.appendingPathComponent("forum", isDirectory: true))
+    let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=341&mobile=2"))
+    let thread = ThreadIdentity(tid: "341", canonicalURL: ReaderCacheIdentity.canonicalThreadURL(from: threadURL))
+    let sourcePage = makeReaderRepositoryThreadPage(
+        thread: thread,
+        title: "离线小说",
+        postID: "34101",
+        authorID: "42",
+        contentHTML: "<strong>离线章节</strong><br>离线正文"
+    )
+    let updatedAt = Date(timeIntervalSince1970: 341_000)
+    try await offlineStore.saveNovelOfflineSourcePage(
+        sourcePage,
+        request: NovelOfflineCacheWorkRequest(
+            ownerTitle: "离线小说",
+            title: "第一页",
+            threadURL: threadURL,
+            view: 1,
+            authorID: "42",
+            contentSource: .authorFilteredPage
+        ),
+        updatedAt: updatedAt
+    )
+    let repository = NovelReaderRepository(
+        client: YamiboClient(session: session, cookie: "sid=reader", userAgent: "Test-UA"),
+        cacheStore: readerCacheStore,
+        forumCacheStore: forumCacheStore,
+        offlineCacheStore: offlineStore
+    )
+    let parsedLoad = try await repository.loadPageResult(ReaderPageRequest(threadURL: threadURL, view: 1, authorID: "42"))
+    let fingerprint = try #require(parsedLoad.document.projectionSourceFingerprint)
+    let cachedProjection = ReaderPageDocument(
+        threadURL: parsedLoad.document.threadURL,
+        view: 1,
+        maxView: parsedLoad.document.maxView,
+        resolvedAuthorID: "42",
+        contentSource: .authorFilteredPage,
+        segments: [.text("透明缓存正文", chapterTitle: "透明缓存章节")],
+        projectionSourceFingerprint: fingerprint,
+        projectionSchemaVersion: parsedLoad.document.projectionSchemaVersion
+    )
+    try await readerCacheStore.save(cachedProjection)
+
+    let cachedLoad = try await repository.loadPageResult(ReaderPageRequest(threadURL: threadURL, view: 1, authorID: "42"))
+
+    #expect(cachedLoad.source == .offlineFallback(updatedAt: updatedAt))
+    #expect(cachedLoad.document.segments == cachedProjection.segments)
 }
 
 @Test func readerRepositoryDoesNotUseOfflineFallbackForParserFailures() async throws {
@@ -3611,7 +3664,6 @@ private func makeReaderRepositoryThreadPage(
             authorID: "42",
             contentSource: .authorFilteredPage
         ),
-        projectionPrewarm: nil,
         updatedAt: Date(timeIntervalSince1970: 35_000)
     )
     let repository = NovelReaderRepository(
@@ -3653,7 +3705,6 @@ private func makeReaderRepositoryThreadPage(
             authorID: "42",
             contentSource: .authorFilteredPage
         ),
-        projectionPrewarm: nil,
         updatedAt: oldUpdatedAt
     )
     let repository = NovelReaderRepository(

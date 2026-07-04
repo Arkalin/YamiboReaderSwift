@@ -367,9 +367,8 @@ final class SystemSettingsViewModelTests: XCTestCase {
         let workImage = try XCTUnwrap(URL(string: "https://img.example.com/offline-b.jpg"))
         try await fixture.offlineCacheStore.saveOfflineImageData(Data(repeating: 1, count: 4), for: membershipImage)
         try await fixture.offlineCacheStore.saveOfflineImageData(Data(repeating: 2, count: 7), for: workImage)
-        try await fixture.offlineCacheStore.saveMembership(
-            try makeMangaOfflineMembership(ownerName: "作品A", tid: "310", imageURLs: [membershipImage])
-        )
+        let membership = try makeMangaOfflineMembership(ownerName: "作品A", tid: "310", imageURLs: [membershipImage])
+        try await fixture.offlineCacheStore.saveMembership(membership)
         _ = try await fixture.offlineCacheStore.enqueueOfflineCacheWork(
             try makeMangaOfflineWorkRequest(ownerName: "作品B", tid: "320", targetImageURLs: [workImage])
         )
@@ -394,8 +393,9 @@ final class SystemSettingsViewModelTests: XCTestCase {
         let cachedMangaGroup = groupsByID[OfflineCacheGroupID(readerKind: .manga, ownerKey: "作品A")]
         let pendingMangaGroup = groupsByID[OfflineCacheGroupID(readerKind: .manga, ownerKey: "作品B")]
         let novelGroup = groupsByID[novelGroupID]
+        let expectedMangaBytes = try JSONEncoder().encode(membership.sourcePage).count + 4
         XCTAssertEqual(cachedMangaGroup?.title, "作品A")
-        XCTAssertEqual(cachedMangaGroup?.byteCount, 4)
+        XCTAssertEqual(cachedMangaGroup?.byteCount, expectedMangaBytes)
         XCTAssertEqual(pendingMangaGroup?.title, "作品B")
         XCTAssertEqual(pendingMangaGroup?.byteCount, 7)
         XCTAssertEqual(novelGroup?.title, "小说A")

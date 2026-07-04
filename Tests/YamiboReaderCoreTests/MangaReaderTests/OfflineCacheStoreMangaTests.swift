@@ -38,14 +38,18 @@ struct MangaReaderTestsOfflineCacheStore {
 
         try await store.saveOfflineImageData(Data(repeating: 1, count: 3), for: firstImage)
         try await store.saveOfflineImageData(Data(repeating: 2, count: 5), for: secondImage)
-        try await store.saveMembership(makeOfflineMembership(ownerName: "作品A", tid: "1", imageURLs: [firstImage]))
-        try await store.saveMembership(makeOfflineMembership(ownerName: "作品B", tid: "2", imageURLs: [firstImage, secondImage]))
+        let firstMembership = try makeOfflineMembership(ownerName: "作品A", tid: "1", imageURLs: [firstImage])
+        let secondMembership = try makeOfflineMembership(ownerName: "作品B", tid: "2", imageURLs: [firstImage, secondImage])
+        try await store.saveMembership(firstMembership)
+        try await store.saveMembership(secondMembership)
 
         let usage = await store.diskUsageByOwner()
+        let firstExpectedBytes = try mangaSourcePageByteCount(firstMembership) + 3
+        let secondExpectedBytes = try mangaSourcePageByteCount(secondMembership) + 8
 
         #expect(usage == [
-            MangaOfflineCacheOwnerUsage(ownerName: "作品A", byteCount: 3),
-            MangaOfflineCacheOwnerUsage(ownerName: "作品B", byteCount: 8)
+            MangaOfflineCacheOwnerUsage(ownerName: "作品A", byteCount: firstExpectedBytes),
+            MangaOfflineCacheOwnerUsage(ownerName: "作品B", byteCount: secondExpectedBytes)
         ])
     }
 
@@ -53,10 +57,12 @@ struct MangaReaderTestsOfflineCacheStore {
         let store = try makeTestOfflineCacheStore(rootDirectory: try makeTemporaryOfflineCacheDirectory())
         let missingImage = try #require(URL(string: "https://img.example.com/missing.jpg"))
 
-        try await store.saveMembership(makeOfflineMembership(ownerName: "作品A", tid: "1", imageURLs: [missingImage]))
+        let membership = try makeOfflineMembership(ownerName: "作品A", tid: "1", imageURLs: [missingImage])
+        try await store.saveMembership(membership)
+        let expectedBytes = try mangaSourcePageByteCount(membership)
 
         #expect(await store.diskUsageByOwner() == [
-            MangaOfflineCacheOwnerUsage(ownerName: "作品A", byteCount: 0)
+            MangaOfflineCacheOwnerUsage(ownerName: "作品A", byteCount: expectedBytes)
         ])
     }
 
@@ -94,7 +100,8 @@ struct MangaReaderTestsOfflineCacheStore {
 
         try await store.saveOfflineImageData(Data([1, 2, 3]), for: cachedImage)
         try await store.saveOfflineImageData(Data([4, 5]), for: workImage)
-        try await store.saveMembership(makeOfflineMembership(ownerName: "旧作品名", tid: "1", imageURLs: [cachedImage]))
+        let membership = try makeOfflineMembership(ownerName: "旧作品名", tid: "1", imageURLs: [cachedImage])
+        try await store.saveMembership(membership)
         _ = try await store.enqueueOfflineCacheWork(makeOfflineWorkRequest(ownerName: "旧作品名", tid: "2", targetImageURLs: [workImage]))
         try await store.updateOfflineCacheWorkProgress(
             ownerName: "旧作品名",
@@ -105,6 +112,7 @@ struct MangaReaderTestsOfflineCacheStore {
         )
 
         try await store.renameOwner(from: "旧作品名", to: "新作品名")
+        let expectedBytes = try mangaSourcePageByteCount(membership) + 5
 
         #expect(await store.membership(ownerName: "旧作品名", tid: "1") == nil)
         #expect(await store.offlineCacheWork(ownerName: "旧作品名", tid: "2") == nil)
@@ -113,7 +121,7 @@ struct MangaReaderTestsOfflineCacheStore {
         #expect(await store.offlineImageData(for: cachedImage) == Data([1, 2, 3]))
         #expect(await store.offlineImageData(for: workImage) == Data([4, 5]))
         #expect(await store.diskUsageByOwner() == [
-            MangaOfflineCacheOwnerUsage(ownerName: "新作品名", byteCount: 5)
+            MangaOfflineCacheOwnerUsage(ownerName: "新作品名", byteCount: expectedBytes)
         ])
     }
 
@@ -126,15 +134,17 @@ struct MangaReaderTestsOfflineCacheStore {
         try await store.saveOfflineImageData(Data([1, 2, 3]), for: sharedImage)
         try await store.saveOfflineImageData(Data([4, 5]), for: firstOnlyImage)
         try await store.saveMembership(makeOfflineMembership(ownerName: "作品A", tid: "1", imageURLs: [sharedImage, firstOnlyImage]))
-        try await store.saveMembership(makeOfflineMembership(ownerName: "作品A", tid: "2", imageURLs: [sharedImage]))
+        let retainedMembership = try makeOfflineMembership(ownerName: "作品A", tid: "2", imageURLs: [sharedImage])
+        try await store.saveMembership(retainedMembership)
 
         try await store.removeMembership(ownerName: "作品A", tid: "1")
+        let expectedBytes = try mangaSourcePageByteCount(retainedMembership) + 3
 
         #expect(await store.membership(ownerName: "作品A", tid: "1") == nil)
         #expect(await store.offlineImageData(for: sharedImage) == Data([1, 2, 3]))
         #expect(await store.offlineImageData(for: firstOnlyImage) == nil)
         #expect(await store.diskUsageByOwner() == [
-            MangaOfflineCacheOwnerUsage(ownerName: "作品A", byteCount: 3)
+            MangaOfflineCacheOwnerUsage(ownerName: "作品A", byteCount: expectedBytes)
         ])
     }
 
@@ -232,6 +242,10 @@ private func makeTestMangaOfflineSourcePage(tid: String) -> ForumThreadPage {
             )
         ]
     )
+}
+
+private func mangaSourcePageByteCount(_ membership: MangaOfflineCacheMembership) throws -> Int {
+    try JSONEncoder().encode(membership.sourcePage).count
 }
 
 private func makeOfflineWorkRequest(

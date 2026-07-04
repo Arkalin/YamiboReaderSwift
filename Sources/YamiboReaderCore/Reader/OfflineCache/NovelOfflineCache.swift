@@ -2,7 +2,6 @@ import Foundation
 
 public struct NovelOfflineCacheEntry: Codable, Hashable, Identifiable, Sendable {
     public static let sourcePageSchemaVersion = 1
-    public static let projectionPrewarmSchemaVersion = ReaderPageDocument.schemaVersion
 
     public var ownerTitle: String
     public var title: String

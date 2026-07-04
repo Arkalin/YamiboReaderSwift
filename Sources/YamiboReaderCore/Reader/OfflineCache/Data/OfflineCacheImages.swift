@@ -90,7 +90,11 @@ extension OfflineCacheStore {
                     arguments: [imageURLString, fileName, data.count]
                 )
 
-                let memberships = try Self.allMemberships(in: db)
+                let memberships = try Self.allMemberships(
+                    fileManager: fileManager,
+                    mangaSourcePagesDirectory: mangaSourcePagesDirectory,
+                    in: db
+                )
                 for membership in memberships where membership.imageURLs.contains(imageURL) {
                     if try Self.isMembershipComplete(membership, fileManager: fileManager, imagesDirectory: imagesDirectory, in: db) {
                         try Self.deleteWork(ownerName: membership.ownerName, tid: membership.tid, in: db)
@@ -107,16 +111,27 @@ extension OfflineCacheStore {
         try? await recoverQueueStateAfterRestart()
         return (try? await database.read { db in
             var imageURLsByOwner: [String: Set<String>] = [:]
-            for membership in try Self.allMemberships(in: db) {
+            var byteCountByOwner: [String: Int] = [:]
+            for membership in try Self.allMemberships(
+                fileManager: fileManager,
+                mangaSourcePagesDirectory: mangaSourcePagesDirectory,
+                in: db
+            ) {
                 imageURLsByOwner[membership.ownerName, default: []].formUnion(membership.imageURLs.map(\.absoluteString))
+                byteCountByOwner[membership.ownerName, default: 0] += try Self.mangaEntryByteCount(
+                    ownerName: membership.ownerName,
+                    tid: membership.tid,
+                    in: db
+                )
             }
             for work in try Self.allWorks(in: db) {
                 imageURLsByOwner[work.ownerName, default: []].formUnion((work.targetImageURLs + work.completedImageURLs).map(\.absoluteString))
             }
 
             var usage: [MangaOfflineCacheOwnerUsage] = []
-            for (ownerName, imageURLs) in imageURLsByOwner {
-                var byteCount = 0
+            for ownerName in Set(imageURLsByOwner.keys).union(byteCountByOwner.keys) {
+                var byteCount = byteCountByOwner[ownerName] ?? 0
+                let imageURLs = imageURLsByOwner[ownerName] ?? []
                 for imageURL in imageURLs {
                     byteCount += try Int.fetchOne(
                         db,

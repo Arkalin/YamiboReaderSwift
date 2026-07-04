@@ -25,7 +25,7 @@ The user-selected manga chapters intended to be readable without network access,
 _Avoid_: manga cache, chapter cache, transparent cache
 
 **Manga Offline Source Page**:
-The author-scoped forum **Thread Page** snapshot persisted as the authoritative readable content for one manga offline-cache chapter.
+The author-scoped forum **Thread Page** snapshot persisted as the authoritative readable content for one manga offline-cache chapter. It is durable file payload under `offline-cache/manga-source-pages`; GRDB stores only source-page file metadata and membership metadata.
 _Avoid_: manga reader projection, transparent thread page cache, image URL list only
 
 **Manga Offline Fallback**:
@@ -107,6 +107,7 @@ _Avoid_: double page position, two-page progress, spread position
 - **Manga Detail** ignores target post identity from thread or find-post links. It uses the thread or chapter identity for **Manga Directory** resolution and chapter-row focus, not post-level positioning.
 - **Manga Detail** may provide a secondary native discussion action that opens the relevant chapter thread in **Native Thread Reader**. It does not need a separate proactive web-original action.
 - A **Manga Offline Cache** depends on durable **Manga Offline Source Page** content and manga image bytes being available locally.
+- Durable **Manga Offline Source Page** content is stored separately from derived **Manga Reader Projection** JSON. A missing or undecodable source-page file makes the membership unreadable and the chapter uncached.
 - A **Manga Offline Cache** is managed at chapter granularity from the chapters in a **Manga Directory**.
 - A chapter belongs to the **Manga Offline Cache** only through explicit offline-cache membership; transparent document or image cache hits do not by themselves create that membership.
 - **Manga Offline Cache** membership is owned by a **Manga Offline Cache Owner** and chapter `tid`; chapter thread URLs are not retained as recovery metadata.
@@ -120,7 +121,7 @@ _Avoid_: double page position, two-page progress, spread position
 - **Manga Offline Cache Work** uses chapter `tid` as the chapter identity and should not persist a chapter thread URL as recovery metadata.
 - **Manga Offline Cache** image bytes are user-retained offline content and are not governed by the ordinary image cache's reclaim policy.
 - A completed **Manga Offline Cache** preserves the **Manga Offline Source Page** and image URL set as the offline-readable version; later remote chapter changes do not automatically invalidate that membership.
-- A **Manga Reader Projection** for offline manga reading is optional prewarming and may be regenerated from the **Manga Offline Source Page**.
+- A **Manga Reader Projection** for offline manga reading is a transparent, regenerable performance cache and may be regenerated from the **Manga Offline Source Page**.
 - Ordinary online manga reading does not automatically refresh an existing **Manga Offline Cache** chapter's **Manga Offline Source Page**. Refreshing manga offline content requires an explicit cache update or future manga-specific auto-refresh setting.
 - Normal online manga reading may use **Manga Offline Fallback** when the online path cannot acquire current content. Unlike novel fallback, manga fallback does not need a visible stale-offline-content notice.
 - **Manga Offline Fallback** applies only when the online path cannot acquire current content, such as no network, timeout, server failure, or an expired transparent **Thread Page** refresh failure. Parser failures, missing author scope, incompatible projection schema, and empty image-page content remain reader content errors rather than fallback triggers.
@@ -133,7 +134,7 @@ _Avoid_: double page position, two-page progress, spread position
 - **Manga Offline Cache Queue** work appears in the shared **Download Queue** alongside other reader offline-cache work, with queue rows preserving their reader context.
 - A manga chapter can enter the **Manga Offline Cache Queue** without first being present in the **Favorite Library**. Unified offline-cache management is responsible for keeping non-favorite cached manga discoverable and removable.
 - System storage management clears **Manga Offline Cache** content by **Manga Offline Cache Owner** rather than by individual chapter.
-- Clearing **Manga Offline Cache** content for a **Manga Offline Cache Owner** removes that owner's completed memberships, unfinished or failed work, and offline image bytes, while reusable transparent manga caches may remain available.
+- Clearing **Manga Offline Cache** content for a **Manga Offline Cache Owner** removes that owner's completed memberships, durable source-page files, unfinished or failed work, and offline image bytes, while reusable transparent manga caches may remain available.
 - Adding a chapter to the **Manga Offline Cache Queue** is idempotent; existing cached or caching chapters are not duplicated or reordered.
 - Adding a chapter from the manga reader cache sheet does not retry failed work; failed work resumes only through continuing the **Manga Offline Cache Queue**.
 - **Manga Offline Cache Work** executes in the order it was added; queue groups are ordered by their earliest unfinished work, while chapters inside a group follow **Manga Directory** order.
@@ -141,7 +142,7 @@ _Avoid_: double page position, two-page progress, spread position
 - Removing a **Favorite Library** entry does not remove **Manga Offline Cache** content owned by the same manga title.
 - Canceling **Manga Offline Cache Work** stops that chapter from becoming cached and removes locally stored image bytes for that chapter, while reusable **Manga Directory** data and transparent manga projection caches may remain available.
 - Canceling a **Manga Offline Cache Queue** group cancels that group's unfinished or failed work without deleting already completed cached chapters that have left the queue.
-- Deleting a cached chapter from the **Manga Offline Cache** removes its offline-cache membership and locally stored image bytes, while reusable **Manga Directory** data and transparent manga projection caches may remain available.
+- Deleting a cached chapter from the **Manga Offline Cache** removes its offline-cache membership, durable source-page file, and locally stored image bytes, while reusable **Manga Directory** data and transparent manga projection caches may remain available.
 - Deleting a chapter from the **Manga Offline Cache** also cancels any unfinished or failed work for that same chapter so the queue cannot recreate the deleted membership.
 - Deleting **Manga Offline Cache** membership preserves image bytes still required by remaining offline-cache memberships, including when multiple memberships are deleted together.
 - **Manga Offline Cache** storage has no configured size limit, but its disk usage is visible to the user.

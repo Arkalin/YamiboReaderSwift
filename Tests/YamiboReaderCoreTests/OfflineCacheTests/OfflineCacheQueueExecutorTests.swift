@@ -574,7 +574,10 @@ struct OfflineCacheTestsQueueExecutor {
             entryKey: request.entryKey
         ))
         #expect(entry?.imageURLs.isEmpty == true)
-        #expect(entry?.document.segments.contains(.image(imageURLs[0], chapterTitle: nil)) == true)
+        #expect(entry?.document.segments.contains { segment in
+            guard case let .text(text, _) = segment else { return false }
+            return text.contains("正文1")
+        } == true)
     }
 
     @Test func continueProcessesNovelInlineImagesWhenRetentionFlagEnabled() async throws {

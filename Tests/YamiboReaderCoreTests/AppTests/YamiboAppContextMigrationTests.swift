@@ -255,7 +255,6 @@ import Testing
             authorID: "42",
             contentSource: .authorFilteredPage
         ),
-        projectionPrewarm: nil,
         updatedAt: Date(timeIntervalSince1970: 100),
         completesMatchingWork: true,
         preservesExistingImageReferencesWhenEmpty: false

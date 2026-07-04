@@ -246,7 +246,10 @@ public enum YamiboDatabase {
                 table.column("owner_name", .text).notNull()
                 table.column("tid", .text).notNull()
                 table.column("chapter_title", .text).notNull()
-                table.column("source_page_json", .text)
+                table.column("source_page_file_name", .text)
+                table.column("source_page_schema_version", .integer)
+                table.column("source_page_fingerprint", .text)
+                table.column("byte_count", .integer).notNull()
                 table.column("created_at", .double).notNull()
                 table.primaryKey(["owner_name", "tid"], onConflict: .replace)
             }
@@ -265,8 +268,6 @@ public enum YamiboDatabase {
                 table.column("source_page_file_name", .text)
                 table.column("source_page_schema_version", .integer)
                 table.column("source_page_fingerprint", .text)
-                table.column("projection_file_name", .text)
-                table.column("projection_schema_version", .integer)
                 table.column("byte_count", .integer).notNull()
                 table.column("created_at", .double).notNull()
                 table.column("updated_at", .double).notNull()
@@ -361,8 +362,6 @@ public enum YamiboDatabase {
                     table.column("source_page_file_name", .text)
                     table.column("source_page_schema_version", .integer)
                     table.column("source_page_fingerprint", .text)
-                    table.column("projection_file_name", .text)
-                    table.column("projection_schema_version", .integer)
                     table.column("byte_count", .integer).notNull()
                     table.column("created_at", .double).notNull()
                     table.column("updated_at", .double).notNull()
@@ -399,11 +398,22 @@ public enum YamiboDatabase {
             if !columns.contains("source_page_fingerprint") {
                 try db.execute(sql: "ALTER TABLE offline_cache_novel_entries ADD COLUMN source_page_fingerprint TEXT")
             }
-            if !columns.contains("projection_file_name") {
-                try db.execute(sql: "ALTER TABLE offline_cache_novel_entries ADD COLUMN projection_file_name TEXT")
+        }
+
+        migrator.registerMigration("add_offline_cache_manga_source_files") { db in
+            guard try db.tableExists("offline_cache_manga_entries") else { return }
+            let columns = Set(try db.columns(in: "offline_cache_manga_entries").map(\.name))
+            if !columns.contains("source_page_file_name") {
+                try db.execute(sql: "ALTER TABLE offline_cache_manga_entries ADD COLUMN source_page_file_name TEXT")
             }
-            if !columns.contains("projection_schema_version") {
-                try db.execute(sql: "ALTER TABLE offline_cache_novel_entries ADD COLUMN projection_schema_version INTEGER")
+            if !columns.contains("source_page_schema_version") {
+                try db.execute(sql: "ALTER TABLE offline_cache_manga_entries ADD COLUMN source_page_schema_version INTEGER")
+            }
+            if !columns.contains("source_page_fingerprint") {
+                try db.execute(sql: "ALTER TABLE offline_cache_manga_entries ADD COLUMN source_page_fingerprint TEXT")
+            }
+            if !columns.contains("byte_count") {
+                try db.execute(sql: "ALTER TABLE offline_cache_manga_entries ADD COLUMN byte_count INTEGER NOT NULL DEFAULT 0")
             }
         }
 

@@ -3078,7 +3078,6 @@ final class ReaderContainerModelTests: XCTestCase {
         try await offlineStore.saveNovelOfflineSourcePage(
             sourcePage,
             request: request,
-            projectionPrewarm: projection,
             updatedAt: completedAt,
             completesMatchingWork: true,
             preservesExistingImageReferencesWhenEmpty: false
@@ -3300,7 +3299,6 @@ private func seedNovelOfflineCache(
     try await store.saveNovelOfflineSourcePage(
         sourcePage,
         request: request,
-        projectionPrewarm: projection,
         updatedAt: updatedAt,
         completesMatchingWork: true,
         preservesExistingImageReferencesWhenEmpty: false

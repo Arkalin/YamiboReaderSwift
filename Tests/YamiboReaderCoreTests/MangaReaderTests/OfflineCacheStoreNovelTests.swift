@@ -20,7 +20,6 @@ struct MangaReaderTestsNovelOfflineCacheStore {
         try await store.saveNovelOfflineSourcePage(
             sourcePage,
             request: request,
-            projectionPrewarm: nil,
             updatedAt: updatedAt
         )
 
@@ -37,28 +36,26 @@ struct MangaReaderTestsNovelOfflineCacheStore {
             authorID: request.authorID,
             contentSource: request.contentSource
         )
+        let expectedBytes = try JSONEncoder().encode(sourcePage).count
 
         #expect(snapshot.cachedViews == [2])
         #expect(snapshot.cachingViews.isEmpty)
         #expect(snapshot.updateTimesByView[2] == updatedAt)
         #expect(snapshot.state(for: 2).status == .cached)
         #expect(loadedSource == sourcePage)
+        #expect(await store.totalDiskUsageBytes() == expectedBytes)
     }
 
-    @Test func projectionPrewarmFailureDoesNotFailSourcePageSave() async throws {
+    @Test func sourcePageSaveDoesNotCreateNovelProjectionPayloadDirectory() async throws {
         let root = try makeTemporaryNovelOfflineCacheDirectory()
         let baseDirectory = root.appendingPathComponent("offline", isDirectory: true)
-        try FileManager.default.createDirectory(at: baseDirectory, withIntermediateDirectories: true)
-        try Data([1]).write(to: baseDirectory.appendingPathComponent("novel-projections", isDirectory: false))
         let store = try makeTestOfflineCacheStore(rootDirectory: root, baseDirectory: baseDirectory)
         let request = try makeNovelWorkRequest(tid: "7002", view: 1)
         let sourcePage = try makeNovelSourcePage(tid: "7002", view: 1, totalPages: 1)
-        let projection = try makeNovelDocument(tid: "7002", view: 1, maxView: 1)
 
         try await store.saveNovelOfflineSourcePage(
             sourcePage,
             request: request,
-            projectionPrewarm: projection,
             updatedAt: Date(timeIntervalSince1970: 22_000)
         )
 
@@ -68,16 +65,9 @@ struct MangaReaderTestsNovelOfflineCacheStore {
             authorID: request.authorID,
             contentSource: request.contentSource
         )
-        let prewarm = await store.novelOfflineProjectionPrewarm(
-            ownerTitle: request.ownerTitle,
-            threadURL: request.threadURL,
-            view: request.view,
-            authorID: request.authorID,
-            contentSource: request.contentSource
-        )
 
         #expect(snapshot.cachedViews == [1])
-        #expect(prewarm == nil)
+        #expect(!FileManager.default.fileExists(atPath: baseDirectory.appendingPathComponent("novel-projections", isDirectory: true).path))
     }
 
     @Test func queuedNovelWorkProjectsAsCachingWithoutCachedSourcePage() async throws {
@@ -108,7 +98,6 @@ struct MangaReaderTestsNovelOfflineCacheStore {
         try await store.saveNovelOfflineSourcePage(
             sourcePage,
             request: originalRequest,
-            projectionPrewarm: nil,
             updatedAt: Date(timeIntervalSince1970: 70_100)
         )
 
@@ -181,13 +170,11 @@ struct MangaReaderTestsNovelOfflineCacheStore {
         try await store.saveNovelOfflineSourcePage(
             sourcePage,
             request: originalRequest,
-            projectionPrewarm: nil,
             updatedAt: Date(timeIntervalSince1970: 70_120)
         )
         try await store.saveNovelOfflineSourcePage(
             sourcePage,
             request: renamedRequest,
-            projectionPrewarm: nil,
             updatedAt: Date(timeIntervalSince1970: 70_121)
         )
 
@@ -226,13 +213,11 @@ struct MangaReaderTestsNovelOfflineCacheStore {
         try await store.saveNovelOfflineSourcePage(
             matchingSourcePage,
             request: matchingRequest,
-            projectionPrewarm: nil,
             updatedAt: Date(timeIntervalSince1970: 70_130)
         )
         try await store.saveNovelOfflineSourcePage(
             otherSourcePage,
             request: otherRequest,
-            projectionPrewarm: nil,
             updatedAt: Date(timeIntervalSince1970: 70_140)
         )
         try await store.saveOfflineImageData(Data([1, 3]), for: sharedImageURL)
@@ -259,7 +244,6 @@ struct MangaReaderTestsNovelOfflineCacheStore {
         try await offlineStore.saveNovelOfflineSourcePage(
             sourcePage,
             request: request,
-            projectionPrewarm: projection,
             updatedAt: Date(timeIntervalSince1970: 33_000)
         )
         _ = try await offlineStore.enqueueNovelOfflineCacheUpdateWork(request)
@@ -317,13 +301,11 @@ struct MangaReaderTestsNovelOfflineCacheStore {
         try await store.saveNovelOfflineSourcePage(
             sourcePage,
             request: initialRequest,
-            projectionPrewarm: nil,
             updatedAt: Date(timeIntervalSince1970: 10)
         )
         try await store.saveNovelOfflineSourcePage(
             sourcePage,
             request: disabledRequest,
-            projectionPrewarm: nil,
             updatedAt: Date(timeIntervalSince1970: 11),
             preservesExistingImageReferencesWhenEmpty: true
         )

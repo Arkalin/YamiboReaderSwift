@@ -4,8 +4,7 @@ import Foundation
 extension OfflineCacheStore {
     private static let novelEntryColumnList = """
     owner_name, owner_title, entry_key, title, thread_url, view, author_id, content_source, document_json,
-    source_page_file_name, source_page_schema_version, source_page_fingerprint,
-    projection_file_name, projection_schema_version, byte_count, created_at, updated_at
+    source_page_file_name, source_page_schema_version, source_page_fingerprint, byte_count, created_at, updated_at
     """
 
     public func removeOfflineCacheGroup(_ id: OfflineCacheGroupID) async throws {
@@ -40,7 +39,6 @@ extension OfflineCacheStore {
         try await saveNovelOfflineSourcePage(
             Self.syntheticSourcePage(from: entry.document),
             request: request,
-            projectionPrewarm: entry.document,
             updatedAt: entry.updatedAt
         )
     }
@@ -311,9 +309,9 @@ extension OfflineCacheStore {
             (
                 owner_name, owner_title, entry_key, title, thread_url, view, author_id, content_source, document_json,
                 source_page_file_name, source_page_schema_version, source_page_fingerprint,
-                projection_file_name, projection_schema_version, byte_count, created_at, updated_at
+                byte_count, created_at, updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL, ?, COALESCE((SELECT created_at FROM offline_cache_novel_entries WHERE entry_key = ?), ?), ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, ?, COALESCE((SELECT created_at FROM offline_cache_novel_entries WHERE entry_key = ?), ?), ?)
             """,
             arguments: [
                 entry.id.ownerKey,
@@ -362,9 +360,9 @@ extension OfflineCacheStore {
             (
                 owner_name, owner_title, entry_key, title, thread_url, view, author_id, content_source, document_json,
                 source_page_file_name, source_page_schema_version, source_page_fingerprint,
-                projection_file_name, projection_schema_version, byte_count, created_at, updated_at
+                byte_count, created_at, updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE((SELECT projection_file_name FROM offline_cache_novel_entries WHERE entry_key = ?), NULL), COALESCE((SELECT projection_schema_version FROM offline_cache_novel_entries WHERE entry_key = ?), NULL), ?, COALESCE((SELECT created_at FROM offline_cache_novel_entries WHERE entry_key = ?), ?), ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE((SELECT created_at FROM offline_cache_novel_entries WHERE entry_key = ?), ?), ?)
             """,
             arguments: [
                 request.groupKey,
@@ -379,8 +377,6 @@ extension OfflineCacheStore {
                 sourceFileName,
                 NovelOfflineCacheEntry.sourcePageSchemaVersion,
                 sourceFingerprint,
-                request.entryKey,
-                request.entryKey,
                 sourceByteCount,
                 request.entryKey,
                 offlineCacheTimeInterval(from: updatedAt),
@@ -431,7 +427,14 @@ extension OfflineCacheStore {
     }
 
     private static func novelEntry(from row: Row, in db: Database) throws -> NovelOfflineCacheEntry {
-        let document = try decodeNovelDocument(row["document_json"] as String)
+        var document = try decodeNovelDocument(row["document_json"] as String)
+        if let threadURLString = row["thread_url"] as String?,
+           let threadURL = URL(string: threadURLString) {
+            document.threadURL = ReaderCacheIdentity.canonicalThreadURL(from: threadURL)
+        }
+        document.view = row["view"] as Int
+        document.resolvedAuthorID = row["author_id"] as String?
+        document.contentSource = ReaderContentSource(rawValue: row["content_source"] as String) ?? document.contentSource
         return NovelOfflineCacheEntry(
             ownerTitle: (row["owner_title"] as String?) ?? novelDisplayOwnerTitle(ownerTitle: "", threadURL: document.threadURL),
             title: row["title"],

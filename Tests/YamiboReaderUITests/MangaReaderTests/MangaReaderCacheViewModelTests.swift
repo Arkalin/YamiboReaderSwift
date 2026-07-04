@@ -89,7 +89,7 @@ final class MangaReaderCacheViewModelTests: XCTestCase {
         XCTAssertEqual(fixture.model.rows.map(\.state), [.cached, .caching, .caching])
     }
 
-    func testLegacyNilSourceCacheEntryProjectsUncachedAndCanBeEnqueued() async throws {
+    func testCacheEntryWithoutSourceFileProjectsUncachedAndCanBeEnqueued() async throws {
         let controller = RecordingMangaReaderCacheQueueController()
         let fixture = try await makeCacheFixture(
             chapters: [cacheChapter(tid: "100", number: 1)],
@@ -97,11 +97,10 @@ final class MangaReaderCacheViewModelTests: XCTestCase {
         )
         let legacyImage = try XCTUnwrap(URL(string: "https://img.example.com/legacy-100-1.jpg"))
         try await fixture.store.saveOfflineImageData(Data([1]), for: legacyImage)
-        try await seedLegacyMangaCacheEntry(
+        try await seedMangaCacheEntryWithoutSourceFile(
             ownerName: fixture.favorite.title,
             tid: "100",
             imageURLs: [legacyImage],
-            sourcePageJSON: nil,
             in: fixture.database
         )
 
@@ -337,25 +336,23 @@ private func makeCacheSourcePage(tid: String) -> ForumThreadPage {
     )
 }
 
-private func seedLegacyMangaCacheEntry(
+private func seedMangaCacheEntryWithoutSourceFile(
     ownerName: String,
     tid: String,
     imageURLs: [URL],
-    sourcePageJSON: String?,
     in database: DatabasePool
 ) async throws {
     try await database.write { db in
         try db.execute(
             sql: """
             INSERT OR REPLACE INTO offline_cache_manga_entries
-            (owner_name, tid, chapter_title, source_page_json, created_at)
-            VALUES (?, ?, ?, ?, ?)
+            (owner_name, tid, chapter_title, source_page_file_name, source_page_schema_version, source_page_fingerprint, byte_count, created_at)
+            VALUES (?, ?, ?, NULL, NULL, NULL, 0, ?)
             """,
             arguments: [
                 ownerName,
                 tid,
                 "第\(tid)话",
-                sourcePageJSON,
                 Date().timeIntervalSince1970
             ]
         )

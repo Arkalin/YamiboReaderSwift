@@ -5,15 +5,27 @@ extension OfflineCacheStore {
     public func offlineCacheManagementSnapshot() async -> OfflineCacheManagementSnapshot {
         try? await recoverQueueStateAfterRestart()
         return (try? await database.read { db in
-            try Self.managementSnapshot(in: db)
+            try Self.managementSnapshot(
+                fileManager: fileManager,
+                mangaSourcePagesDirectory: mangaSourcePagesDirectory,
+                in: db
+            )
         }) ?? OfflineCacheManagementSnapshot(groups: [])
     }
 
-    private static func managementSnapshot(in db: Database) throws -> OfflineCacheManagementSnapshot {
+    private static func managementSnapshot(
+        fileManager: FileManager,
+        mangaSourcePagesDirectory: URL,
+        in db: Database
+    ) throws -> OfflineCacheManagementSnapshot {
         var builders: [OfflineCacheEntryID: OfflineCacheManagementEntryBuilder] = [:]
         var groupTitles: [OfflineCacheGroupID: OfflineCacheManagementGroupTitle] = [:]
 
-        for membership in try allMemberships(in: db) {
+        for membership in try allMemberships(
+            fileManager: fileManager,
+            mangaSourcePagesDirectory: mangaSourcePagesDirectory,
+            in: db
+        ) {
             let entryID = OfflineCacheEntryID(
                 readerKind: .manga,
                 ownerKey: membership.ownerName,
@@ -26,6 +38,7 @@ extension OfflineCacheStore {
                 updatedAt: membership.createdAt
             )
             builder.title = offlineCacheEntryTitle(chapterTitle: membership.chapterTitle, entryKey: membership.tid)
+            builder.byteCount += try mangaEntryByteCount(ownerName: membership.ownerName, tid: membership.tid, in: db)
             builder.imageURLStrings.formUnion(membership.imageURLs.map(\.absoluteString))
             builder.updatedAt = max(builder.updatedAt, membership.createdAt)
             builders[entryID] = builder
