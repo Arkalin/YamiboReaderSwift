@@ -1,7 +1,7 @@
 import Foundation
 import Kanna
 
-enum HTMLDocumentParser {
+enum KannaSoup {
     static func parse(_ html: String, baseURL: String? = nil) throws -> Document {
         try Document(document: HTML(html: html, url: baseURL, encoding: .utf8))
     }

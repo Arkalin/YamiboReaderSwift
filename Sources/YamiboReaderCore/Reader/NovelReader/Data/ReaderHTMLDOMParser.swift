@@ -28,7 +28,7 @@ enum ReaderHTMLDOMParser {
     }
 
     static func parse(html: String) throws -> Context {
-        Context(document: try HTMLDocumentParser.parse(html))
+        Context(document: try KannaSoup.parse(html))
     }
 
     static func messageNodes(in context: Context) throws -> [Element] {
@@ -101,7 +101,7 @@ enum ReaderHTMLDOMParser {
 
     private static func parseMessage(_ element: Element) throws -> ParsedMessage {
         let fragmentHTML = try element.html()
-        let fragment = try HTMLDocumentParser.parseBodyFragment(fragmentHTML)
+        let fragment = try KannaSoup.parseBodyFragment(fragmentHTML)
         guard let body = fragment.body() else {
             return ParsedMessage(
                 segments: [],
@@ -144,7 +144,7 @@ enum ReaderHTMLDOMParser {
             return false
         }
 
-        let remainingFragment = try HTMLDocumentParser.parseBodyFragment(try body.html())
+        let remainingFragment = try KannaSoup.parseBodyFragment(try body.html())
         guard let remainingBody = remainingFragment.body() else { return false }
         try remainingBody.select(".quote").remove()
         for blockquote in try remainingBody.select("blockquote") where isDiscuzReplyQuote(blockquote) {

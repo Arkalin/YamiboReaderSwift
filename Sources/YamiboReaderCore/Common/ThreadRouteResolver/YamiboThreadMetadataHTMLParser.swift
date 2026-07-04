@@ -31,7 +31,7 @@ public enum YamiboThreadMetadataHTMLParser {
             throw YamiboError.floodControl
         }
 
-        let document = try HTMLDocumentParser.parse(html, baseURL: YamiboRoute.baseURL.absoluteString)
+        let document = try KannaSoup.parse(html, baseURL: YamiboRoute.baseURL.absoluteString)
         let title = ReaderHTMLParser.extractPageTitle(from: html)
         let sectionLink = try? document
             .select("a[href*='mod=forumdisplay'][href*='fid='], a[href*='forum-']")

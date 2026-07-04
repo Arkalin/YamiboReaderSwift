@@ -31,7 +31,7 @@ public enum MangaHTMLParser {
     }
 
     public static func findTagIDsMobile(in html: String) -> [String] {
-        guard let document = try? HTMLDocumentParser.parse(html) else { return [] }
+        guard let document = try? KannaSoup.parse(html) else { return [] }
         let links = (try? document.select("a[href*='mod=tag']")) ?? Elements()
         return Array(Set(links.compactMap { element in
             let href = (try? element.attr("href")) ?? ""
@@ -44,7 +44,7 @@ public enum MangaHTMLParser {
         from html: String,
         baseURL: URL = YamiboRoute.baseURL
     ) -> [MangaChapter] {
-        guard let document = try? HTMLDocumentParser.parse(html) else { return [] }
+        guard let document = try? KannaSoup.parse(html) else { return [] }
         guard let message = try? document.select(".message").first() else { return [] }
         let links = (try? message.select("a[href*='tid='], a[href*='thread-']")) ?? Elements()
         return links.compactMap { link in
@@ -67,7 +67,7 @@ public enum MangaHTMLParser {
     }
 
     public static func extractFirstPostID(from html: String) -> String? {
-        guard let document = try? HTMLDocumentParser.parse(html) else { return nil }
+        guard let document = try? KannaSoup.parse(html) else { return nil }
         let selectors = [
             "[id^=postmessage_]",
             "[id^=pid]",
@@ -87,7 +87,7 @@ public enum MangaHTMLParser {
     }
 
     public static func extractSectionName(from html: String) -> String? {
-        guard let document = try? HTMLDocumentParser.parse(html) else { return nil }
+        guard let document = try? KannaSoup.parse(html) else { return nil }
         let selectors = [
             ".header h2 a",
             ".z a",
@@ -109,13 +109,13 @@ public enum MangaHTMLParser {
     }
 
     public static func isAnnouncement(from html: String) -> Bool {
-        guard let document = try? HTMLDocumentParser.parse(html) else { return false }
+        guard let document = try? KannaSoup.parse(html) else { return false }
         let label = (try? document.select(".view_tit em").text()) ?? ""
         return label.contains("公告")
     }
 
     public static func extractImageURLs(from html: String, baseURL: URL = YamiboRoute.baseURL) -> [URL] {
-        guard let document = try? HTMLDocumentParser.parse(html) else { return [] }
+        guard let document = try? KannaSoup.parse(html) else { return [] }
         let images = (try? document.select(".img_one img, .message img:not([src*='smiley'])")) ?? Elements()
         var urls: [URL] = []
         var seen = Set<String>()
@@ -136,7 +136,7 @@ public enum MangaHTMLParser {
         if let title = ReaderHTMLParser.extractPageTitle(from: html), !title.isEmpty {
             return title
         }
-        guard let document = try? HTMLDocumentParser.parse(html) else { return nil }
+        guard let document = try? KannaSoup.parse(html) else { return nil }
         let text = (try? document.select(".view_tit").text()) ?? ""
         return text.nilIfEmpty
     }

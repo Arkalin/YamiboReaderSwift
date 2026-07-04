@@ -9,7 +9,7 @@ public enum ForumHTMLParser {
             throw YamiboError.floodControl
         }
 
-        let document = try HTMLDocumentParser.parse(html, baseURL: YamiboRoute.baseURL.absoluteString)
+        let document = try KannaSoup.parse(html, baseURL: YamiboRoute.baseURL.absoluteString)
         let categories = parseCategories(in: document)
         guard categories.contains(where: { !$0.boards.isEmpty }) else {
             throw YamiboError.parsingFailed(context: L10n.string("context.forum_home"))
@@ -36,7 +36,7 @@ public enum ForumHTMLParser {
             throw YamiboError.floodControl
         }
 
-        let document = try HTMLDocumentParser.parse(html, baseURL: YamiboRoute.baseURL.absoluteString)
+        let document = try KannaSoup.parse(html, baseURL: YamiboRoute.baseURL.absoluteString)
         let documentTitle = (try? document.select("title").first()?.text())?
             .replacingOccurrences(of: " -  百合会.*", with: "", options: .regularExpression)
         let headerTitle = ((try? document.select(".header h2").first()?.text()) ?? "").nilIfBlank
@@ -73,7 +73,7 @@ public enum ForumHTMLParser {
             throw YamiboError.floodControl
         }
 
-        let document = try HTMLDocumentParser.parse(html, baseURL: YamiboRoute.baseURL.absoluteString)
+        let document = try KannaSoup.parse(html, baseURL: YamiboRoute.baseURL.absoluteString)
         let message = (
             (try? document.select(".jump_c, .alert_info, .messagetext, .showmessage, .wp").first()?.text())
                 ?? (try? document.body()?.text())
@@ -104,7 +104,7 @@ public enum ForumHTMLParser {
             throw YamiboError.floodControl
         }
 
-        let document = try HTMLDocumentParser.parse(html, baseURL: YamiboRoute.baseURL.absoluteString)
+        let document = try KannaSoup.parse(html, baseURL: YamiboRoute.baseURL.absoluteString)
         let results = parseThreadSummaries(in: document)
         guard !results.isEmpty else {
             throw YamiboError.parsingFailed(context: L10n.string("context.forum_search"))

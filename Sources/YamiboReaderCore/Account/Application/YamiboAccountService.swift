@@ -201,7 +201,7 @@ public struct YamiboAccountService: Sendable {
     }
 
     private func extractLoginFailureMessage(from html: String) -> String {
-        guard let document = try? HTMLDocumentParser.parse(html) else {
+        guard let document = try? KannaSoup.parse(html) else {
             return L10n.string("error.login_failed")
         }
 

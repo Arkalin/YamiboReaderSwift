@@ -16,7 +16,7 @@ public enum ChapterCommentsHTMLParser {
         html: String,
         target: ReaderChapterCommentTarget
     ) throws -> ChapterCommentsPage {
-        let document = try HTMLDocumentParser.parse(html)
+        let document = try KannaSoup.parse(html)
         var comments: [ChapterComment] = []
         comments.append(contentsOf: try postComments(in: document, target: target))
         comments.append(contentsOf: try ratingReasons(in: document, target: target))
@@ -35,7 +35,7 @@ public enum ChapterCommentsHTMLParser {
         target: ReaderChapterCommentTarget,
         view: Int
     ) throws -> ChapterCommentsPage {
-        let document = try HTMLDocumentParser.parse(html)
+        let document = try KannaSoup.parse(html)
         let replies = try continuationReplies(in: document, target: target)
         return ChapterCommentsPage(
             target: target,
@@ -46,7 +46,7 @@ public enum ChapterCommentsHTMLParser {
     }
 
     public static func currentView(html: String, fallback: Int) throws -> Int {
-        let document = try HTMLDocumentParser.parse(html)
+        let document = try KannaSoup.parse(html)
         let current = try document.select(".pg strong").first()?.text()
             .trimmingCharacters(in: .whitespacesAndNewlines)
         return current.flatMap(Int.init) ?? max(1, fallback)
@@ -56,7 +56,7 @@ public enum ChapterCommentsHTMLParser {
         html: String,
         target: ReaderChapterCommentTarget
     ) throws -> URL? {
-        let document = try HTMLDocumentParser.parse(html)
+        let document = try KannaSoup.parse(html)
         guard let href = try document
             .select("[id=ratelog_\(target.ownerPostID)] a[href*=action=viewratings]")
             .first()?
@@ -72,7 +72,7 @@ public enum ChapterCommentsHTMLParser {
         html: String,
         target: ReaderChapterCommentTarget
     ) throws -> [ChapterComment] {
-        let document = try HTMLDocumentParser.parse(html)
+        let document = try KannaSoup.parse(html)
         let rows = try document.select(".post_box li.flex-box").array()
         var comments: [ChapterComment] = []
         var pending: (author: String, metadata: String?)?
@@ -290,7 +290,7 @@ public enum ChapterCommentsHTMLParser {
     }
 
     private static func replyBody(from message: Element) throws -> String? {
-        let fragment = try HTMLDocumentParser.parseBodyFragment(try message.html())
+        let fragment = try KannaSoup.parseBodyFragment(try message.html())
         guard let body = fragment.body() else { return nil }
         try body.select(".quote, blockquote, i, .pstatus").remove()
         let text = normalizeText(try body.text())
