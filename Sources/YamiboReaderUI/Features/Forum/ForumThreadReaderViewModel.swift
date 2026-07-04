@@ -134,15 +134,13 @@ final class ForumThreadReaderViewModel {
     }
 
     func toggleFavorite() async {
-        let url = context.thread.canonicalURL
-
         do {
             guard let localFavoriteLibraryStore = await localFavoriteLibraryStoreProvider() else {
                 throw YamiboError.persistenceFailed("Local favorite library store is unavailable")
             }
-            if let favoriteItem = await localFavoriteItem(for: url) {
+            if let favoriteItem = await localFavoriteItem(forThreadID: context.thread.tid) {
                 try await ForumThreadFavoriteSync.removeFavorite(
-                    favoriteItem.favorite(threadURL: url, type: .other),
+                    favoriteItem.favorite(type: .other),
                     localFavoriteLibraryStore: localFavoriteLibraryStore,
                     readingProgressStore: await readingProgressStoreProvider(),
                     remoteRepository: await favoriteRepositoryProvider()
@@ -152,7 +150,7 @@ final class ForumThreadReaderViewModel {
             }
 
             _ = try await ForumThreadFavoriteSync.addFavorite(
-                threadURL: url,
+                threadID: context.thread.tid,
                 title: favoriteTitle,
                 type: .other,
                 authorID: nil,
@@ -289,7 +287,7 @@ final class ForumThreadReaderViewModel {
             return loadedTitle
         }
         let contextTitle = context.title.trimmingCharacters(in: .whitespacesAndNewlines)
-        return contextTitle.isEmpty ? context.thread.canonicalURL.absoluteString : contextTitle
+        return contextTitle.isEmpty ? context.thread.tid : contextTitle
     }
 
     private static func contentUpdatedAt(from page: ForumThreadPage?) -> Date? {
@@ -301,12 +299,11 @@ final class ForumThreadReaderViewModel {
     }
 
     private func refreshFavoriteState() async {
-        isFavorited = await localFavoriteItem(for: context.thread.canonicalURL) != nil
+        isFavorited = await localFavoriteItem(forThreadID: context.thread.tid) != nil
     }
 
-    private func localFavoriteItem(for url: URL) async -> FavoriteItem? {
+    private func localFavoriteItem(forThreadID threadID: String) async -> FavoriteItem? {
         guard let localFavoriteLibraryStore = await localFavoriteLibraryStoreProvider() else { return nil }
-        guard let threadID = YamiboThreadURLCanonicalizer.threadID(from: url) else { return nil }
         let target = FavoriteContentTarget.normalThread(threadID: threadID)
         return await localFavoriteLibraryStore.load().items.first { item in
             item.target.id == target.id || item.target.threadID == target.threadID
@@ -315,12 +312,15 @@ final class ForumThreadReaderViewModel {
 }
 
 private extension FavoriteItem {
-    func favorite(threadURL: URL, type: FavoriteType) -> Favorite {
-        Favorite(
+    func favorite(type: FavoriteType) -> Favorite {
+        guard let threadID = target.threadID else {
+            preconditionFailure("Thread favorite conversion requires thread target")
+        }
+        return Favorite(
             id: id,
             title: title,
             displayName: displayName,
-            url: threadURL,
+            threadID: threadID,
             remoteFavoriteID: remoteMapping?.yamiboFavoriteID,
             type: type,
             tagIDs: tagIDs

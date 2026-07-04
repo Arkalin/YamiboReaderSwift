@@ -53,7 +53,6 @@ private func makeProjection(tid: String, authorID: String, view: Int, imageName:
         ownerAuthorID: authorID,
         ownerAuthorName: "作者\(authorID)",
         chapterTitle: "第\(view)话",
-        chapterURL: YamiboRoute.threadByID(tid: tid, page: view, authorID: authorID, reverse: false).url,
         imageURLs: [
             try #require(URL(string: "https://img.example.com/\(tid)-\(imageName).jpg")),
         ],

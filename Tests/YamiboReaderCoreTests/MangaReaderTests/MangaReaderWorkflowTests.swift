@@ -467,7 +467,6 @@ struct MangaReaderTestsWorkflow {
                 ownerName: "测试漫画",
                 tid: "700",
                 chapterTitle: document.chapterTitle,
-                chapterURL: document.chapterURL,
                 imageURLs: document.imageURLs,
                 sourcePage: makeWorkflowSourcePage(tid: document.tid)
             )
@@ -1339,8 +1338,7 @@ private func makeWorkflowChapter(tid: String, title: String) -> MangaChapter {
     MangaChapter(
         tid: tid,
         rawTitle: title,
-        chapterNumber: Double(tid) ?? 0,
-        url: makeWorkflowURL(tid: tid)
+        chapterNumber: Double(tid) ?? 0
     )
 }
 
@@ -1352,7 +1350,6 @@ private func makeWorkflowDocument(tid: String, pageCount: Int) throws -> MangaRe
         tid: tid,
         ownerPostID: "post-\(tid)",
         chapterTitle: "第\(tid)话",
-        chapterURL: makeWorkflowURL(tid: tid),
         imageURLs: imageURLs
     )
 }

@@ -35,7 +35,7 @@ final class MangaImagePipeline {
     func prefetchImages(for pages: [MangaReaderPageProjection]) {
         for page in pages {
             let imageURL = page.imageURL
-            let refererURL = page.refererURL
+            let refererURL = refererURL(for: page)
             let offlineContext = offlineCacheContext(page)
             imagePipeline.prefetchImage(for: imageRequest(for: page)) { [dataLoader] in
                 try await dataLoader.imageData(
@@ -49,7 +49,7 @@ final class MangaImagePipeline {
 
     func image(for page: MangaReaderPageProjection) async throws -> UIImage {
         let imageURL = page.imageURL
-        let refererURL = page.refererURL
+        let refererURL = refererURL(for: page)
         let offlineContext = offlineCacheContext(page)
         do {
             return try await imagePipeline.image(for: imageRequest(for: page)) { [dataLoader] in
@@ -67,7 +67,7 @@ final class MangaImagePipeline {
     func imageData(for page: MangaReaderPageProjection) async throws -> Data {
         try await dataLoader.imageData(
             for: page.imageURL,
-            refererURL: page.refererURL,
+            refererURL: refererURL(for: page),
             offlineCacheContext: offlineCacheContext(page)
         )
     }
@@ -75,8 +75,17 @@ final class MangaImagePipeline {
     private func imageRequest(for page: MangaReaderPageProjection) -> YamiboImageRequest {
         YamiboImageRequest(
             url: page.imageURL,
-            refererURL: page.refererURL
+            refererURL: refererURL(for: page)
         )
+    }
+
+    private func refererURL(for page: MangaReaderPageProjection) -> URL {
+        YamiboRoute.threadByID(
+            tid: page.sourceIdentity.tid,
+            page: page.sourceIdentity.view,
+            authorID: page.sourceIdentity.authorID,
+            reverse: false
+        ).url
     }
 }
 #endif

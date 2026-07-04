@@ -40,9 +40,7 @@ struct MangaReaderTestsMangaOfflineCachePersistence {
         let membership = try #require(await secondStore.membership(ownerName: "作品A", tid: "100"))
         let work = try #require(await secondStore.offlineCacheWork(ownerName: "作品A", tid: "101"))
 
-        #expect(membership.chapterURL.absoluteString == "https://bbs.yamibo.com/forum.php?mobile=2&mod=viewthread&page=1&tid=100")
         #expect(membership.imageURLs == imageURLs)
-        #expect(work.chapterURL.absoluteString == "https://bbs.yamibo.com/forum.php?mobile=2&mod=viewthread&page=1&tid=101")
         #expect(work.completedImageURLs == [imageURLs[0]])
         #expect(work.progress == MangaOfflineCacheProgress(completedImageCount: 1, targetImageCount: 2))
 
@@ -119,7 +117,6 @@ struct MangaReaderTestsMangaOfflineCachePersistence {
                 ownerName: "作品A",
                 tid: "150",
                 chapterTitle: "第150话",
-                chapterURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=150&page=1")),
                 imageURLs: [imageURL],
                 sourcePage: sourcePage
             )
@@ -186,7 +183,6 @@ struct MangaReaderTestsMangaOfflineCachePersistence {
                     ownerName: "作品A",
                     tid: "151",
                     chapterTitle: "第151话",
-                    chapterURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=151&page=1")),
                     imageURLs: [imageURL],
                     sourcePage: try makeOfflineSourcePage(tid: "999")
                 )
@@ -481,7 +477,6 @@ private func makeOfflineMembership(
         ownerName: ownerName,
         tid: tid,
         chapterTitle: "第\(tid)话",
-        chapterURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(tid)&page=5")),
         imageURLs: imageURLs,
         sourcePage: try makeOfflineSourcePage(tid: tid)
     )
@@ -496,7 +491,6 @@ private func makeOfflineWorkRequest(
         ownerName: ownerName,
         tid: tid,
         chapterTitle: "第\(tid)话",
-        chapterURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(tid)&page=5")),
         targetImageURLs: targetImageURLs
     )
 }
@@ -511,7 +505,6 @@ private func makeDocument(tid: String, imageURLs: [URL]) throws -> MangaReaderPr
     MangaReaderProjection(
         tid: tid,
         chapterTitle: "第\(tid)话",
-        chapterURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(tid)&page=1")),
         imageURLs: imageURLs
     )
 }

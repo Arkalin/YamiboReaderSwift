@@ -202,7 +202,6 @@ public actor OfflineCacheStore: OfflineCacheStoring {
                     ownerName: newOwnerName,
                     tid: membership.tid,
                     chapterTitle: membership.chapterTitle,
-                    chapterURL: try Self.chapterURL(tid: membership.tid),
                     imageURLs: membership.imageURLs,
                     sourcePage: membership.sourcePage,
                     createdAt: membership.createdAt
@@ -231,13 +230,12 @@ public actor OfflineCacheStore: OfflineCacheStoring {
                 for work in works {
                     try Self.save(MangaOfflineCacheWork(
                         workID: work.workID,
-                        ownerName: newOwnerName,
-                        tid: work.tid,
-                        chapterTitle: work.chapterTitle,
-                        chapterURL: try Self.chapterURL(tid: work.tid),
-                        targetImageURLs: work.targetImageURLs,
-                        completedImageURLs: work.completedImageURLs,
-                        state: work.state,
+                    ownerName: newOwnerName,
+                    tid: work.tid,
+                    chapterTitle: work.chapterTitle,
+                    targetImageURLs: work.targetImageURLs,
+                    completedImageURLs: work.completedImageURLs,
+                    state: work.state,
                         failureMessage: work.failureMessage,
                         currentBytesPerSecond: work.currentBytesPerSecond,
                         insertionIndex: work.insertionIndex,
@@ -290,7 +288,6 @@ public actor OfflineCacheStore: OfflineCacheStoring {
                     ownerName: request.ownerName,
                     tid: request.tid,
                     chapterTitle: request.chapterTitle,
-                    chapterURL: try Self.chapterURL(tid: request.tid),
                     targetImageURLs: request.targetImageURLs
                 )
                 if let membership = try Self.membership(
@@ -588,7 +585,6 @@ public actor OfflineCacheStore: OfflineCacheStoring {
             ownerName: membership.ownerName,
             tid: membership.tid,
             chapterTitle: membership.chapterTitle,
-            chapterURL: try chapterURL(tid: membership.tid),
             imageURLs: membership.imageURLs,
             sourcePage: membership.sourcePage,
             createdAt: membership.createdAt
@@ -793,7 +789,6 @@ public actor OfflineCacheStore: OfflineCacheStoring {
             ownerName: row["owner_name"],
             tid: tid,
             chapterTitle: row["chapter_title"],
-            chapterURL: try chapterURL(tid: tid),
             imageURLs: try imageURLs(
                 table: "offline_cache_manga_entry_images",
                 ownerName: row["owner_name"],
@@ -870,7 +865,6 @@ public actor OfflineCacheStore: OfflineCacheStoring {
             ownerName: row["owner_name"],
             tid: tid,
             chapterTitle: row["chapter_title"],
-            chapterURL: try chapterURL(tid: tid),
             targetImageURLs: try imageURLs(
                 table: "offline_cache_work_images",
                 readerKind: mangaReaderKind,
@@ -1095,13 +1089,6 @@ public actor OfflineCacheStore: OfflineCacheStoring {
             """,
             arguments: ["run_state", state.rawValue]
         )
-    }
-
-    private static func chapterURL(tid: String) throws -> URL {
-        guard let url = YamiboRoute.chapterURL(forTID: tid) else {
-            throw YamiboError.persistenceFailed("Chapter tid is empty")
-        }
-        return url
     }
 
     private static func defaultBaseDirectory(fileManager: FileManager) -> URL {

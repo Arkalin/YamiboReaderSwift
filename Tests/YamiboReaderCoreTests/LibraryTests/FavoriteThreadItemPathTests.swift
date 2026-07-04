@@ -3,13 +3,12 @@ import Testing
 @testable import YamiboReaderCore
 
 @Test func threadFavoriteImportProbesBeforeCreatingNormalThreadItem() async throws {
-    let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=420"))
     let target = FavoriteContentTarget(kind: .normalThread, threadID: "420")
     var document = FavoriteLibraryDocument()
-    var probedURL: URL?
+    var probedThreadID: String?
 
-    let item = try await document.importThreadFavorite(threadURL: url) { url in
-        probedURL = url
+    let item = try await document.importThreadFavorite(threadID: "420") { threadID in
+        probedThreadID = threadID
         return FavoriteThreadProbeResult(
             target: target,
             title: "普通主题",
@@ -17,7 +16,7 @@ import Testing
         )
     }
 
-    #expect(probedURL == url)
+    #expect(probedThreadID == "420")
     #expect(item.target == target)
     #expect(item.locations == [.category(FavoriteCategory.defaultID)])
     #expect(item.sourceGroup == .forumBoard(id: "fid-regular", label: "综合讨论"))
@@ -26,7 +25,6 @@ import Testing
 }
 
 @Test func threadFavoriteNormalizesExplicitForumMetadataIntoSourceGroup() throws {
-    let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=426"))
     var document = FavoriteLibraryDocument()
 
     let item = try document.importThreadFavorite(
@@ -48,7 +46,6 @@ import Testing
 }
 
 @Test func threadFavoriteProbeResultCarriesExplicitForumMetadata() throws {
-    let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=428"))
     let target = FavoriteContentTarget(kind: .normalThread, threadID: "428")
     let probe = FavoriteThreadProbeResult(
         target: target,
@@ -81,7 +78,6 @@ import Testing
 }
 
 @Test func threadFavoriteImportDoesNotEraseExistingForumMetadataWhenProbeSourceIsUnknown() throws {
-    let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=427"))
     let target = FavoriteContentTarget(kind: .normalThread, threadID: "427")
     var document = FavoriteLibraryDocument()
     let existing = try FavoriteItem(
@@ -108,11 +104,10 @@ import Testing
 }
 
 @Test func threadFavoriteImportFailureSkipsPlaceholderCreation() async throws {
-    let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=421"))
     var document = FavoriteLibraryDocument()
 
     await #expect(throws: FavoriteThreadImportFailure.self) {
-        _ = try await document.importThreadFavorite(threadURL: url) { _ in
+        _ = try await document.importThreadFavorite(threadID: "421") { _ in
             throw FavoriteThreadImportFailure.probeFailed("missing thread")
         }
     }
@@ -121,7 +116,6 @@ import Testing
 }
 
 @Test func threadFavoriteImportRetargetsExistingItemWhenThreadKindChanges() async throws {
-    let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=422"))
     let normalTarget = FavoriteContentTarget(kind: .normalThread, threadID: "422")
     let novelTarget = FavoriteContentTarget(kind: .novelThread, threadID: "422")
     var document = FavoriteLibraryDocument()
@@ -135,7 +129,7 @@ import Testing
     )
     document.addItem(existing)
 
-    let imported = try await document.importThreadFavorite(threadURL: url) { _ in
+    let imported = try await document.importThreadFavorite(threadID: "422") { _ in
         FavoriteThreadProbeResult(target: novelTarget, title: "轻小说主题")
     }
 
@@ -148,7 +142,6 @@ import Testing
 }
 
 @Test func threadFavoriteDisplayNameStaysLocalMetadata() throws {
-    let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=423"))
     let target = FavoriteContentTarget(kind: .normalThread, threadID: "423")
     var document = FavoriteLibraryDocument()
 

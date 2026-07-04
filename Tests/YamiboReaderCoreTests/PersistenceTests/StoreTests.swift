@@ -524,8 +524,6 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
         key: "reading-progress",
         databasePool: database
     )
-    let canonicalURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=12345"))
-    let chapterURL = try #require(URL(string: "https://bbs.yamibo.com/thread-12346-1-1.html"))
     let threadCoverURL = try #require(URL(string: "https://img.example.com/thread-cover.jpg"))
     let resumePoint = ReaderResumePoint(
         view: 3,
@@ -560,8 +558,8 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
     #expect(novel?.novel?.novelResumePoint == resumePoint)
 
     try await store.saveManga(MangaProgressReadingPosition(
-        threadURL: canonicalURL,
-        chapterURL: chapterURL,
+        threadID: "12345",
+        chapterThreadID: "12346",
         chapterTitle: "第 12 话",
         pageIndex: 6,
         pageCount: 12
@@ -571,7 +569,6 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
     #expect(manga?.kind == .manga)
     #expect(manga?.novel == nil)
     #expect(manga?.threadID == "12345")
-    #expect(manga?.manga?.lastMangaURL.absoluteString == "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=12346")
     #expect(manga?.manga?.chapterThreadID == "12346")
     #expect(manga?.manga?.lastChapter == "第 12 话")
     #expect(manga?.manga?.mangaPageIndex == 6)
@@ -754,9 +751,6 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
         mangaReaderProjectionStore: mangaReaderProjectionStore,
         offlineCacheStore: offlineCacheStore
     )
-
-    let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=700&mobile=2"))
-
     try await sessionStore.updateWebSession(cookie: "sid=1", userAgent: "UA", isLoggedIn: true)
     try await settingsStore.save(AppSettings(webBrowser: WebBrowserSettings(showsNavigationBar: false)))
     try await readerResumeRouteStore.save(
@@ -796,8 +790,7 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
                 MangaChapter(
                     tid: "700",
                     rawTitle: "第1话",
-                    chapterNumber: 1,
-                    url: threadURL
+                    chapterNumber: 1
                 )
             ]
         )
@@ -811,7 +804,6 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
     try await mangaReaderProjectionStore.save(MangaReaderProjection(
         tid: "700",
         chapterTitle: "测试漫画",
-        chapterURL: threadURL,
         imageURLs: [try #require(URL(string: "https://img.example.com/reset-1.jpg"))],
         sourceIdentity: projectionIdentity,
         sourceFingerprint: "reset-fixture"
@@ -826,7 +818,6 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
             ownerName: "测试漫画",
             tid: "700",
             chapterTitle: "测试漫画",
-            chapterURL: threadURL,
             imageURLs: [offlineImageURL],
             sourcePage: makeStoreTestMangaOfflineSourcePage(tid: "700")
         )
@@ -836,7 +827,6 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
             ownerName: "测试漫画",
             tid: "701",
             chapterTitle: "测试漫画续篇",
-            chapterURL: threadURL,
             targetImageURLs: [try #require(URL(string: "https://img.example.com/offline-reset-work.jpg"))]
         )
     )
@@ -952,7 +942,6 @@ private func makeMangaOfflineMembership(
         ownerName: ownerName,
         tid: tid,
         chapterTitle: "第\(tid)话",
-        chapterURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(tid)&mobile=2")),
         imageURLs: imageURLs,
         sourcePage: makeStoreTestMangaOfflineSourcePage(tid: tid)
     )
@@ -982,7 +971,6 @@ private func makeMangaOfflineWorkRequest(
         ownerName: ownerName,
         tid: tid,
         chapterTitle: "第\(tid)话",
-        chapterURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(tid)&mobile=2")),
         targetImageURLs: targetImageURLs
     )
 }

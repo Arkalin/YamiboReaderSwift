@@ -104,13 +104,12 @@ final class ForumMangaDetailViewModel {
         let fallbackChapter = directory.chapters.first
         let fallbackChapterTID = fallbackChapter?.tid ?? currentDocument?.tid ?? context.thread.tid
         let fallbackChapterView = fallbackChapter?.view ?? currentDocument?.sourceIdentity.view ?? 1
-        let progressChapterTID = (manga?.lastMangaURL).flatMap(Self.threadID(from:))
         return MangaLaunchContext(
             originalThreadID: context.thread.tid,
-            chapterTID: progressChapterTID ?? fallbackChapterTID,
+            chapterTID: manga?.chapterThreadID ?? fallbackChapterTID,
             displayTitle: directory.cleanBookName,
             source: manga == nil ? .forum : .resume,
-            chapterView: (manga?.lastMangaURL).map(Self.page(from:)) ?? fallbackChapterView,
+            chapterView: manga?.chapterView ?? fallbackChapterView,
             initialPage: manga?.mangaPageIndex ?? 0,
             directoryName: directory.cleanBookName
         )
@@ -144,25 +143,14 @@ final class ForumMangaDetailViewModel {
                     tid: document.tid,
                     rawTitle: document.chapterTitle,
                     chapterNumber: MangaTitleCleaner.extractChapterNumber(document.chapterTitle),
-                    url: document.chapterURL
+                    view: document.sourceIdentity.view,
+                    authorUID: document.sourceIdentity.authorID,
+                    authorName: document.ownerAuthorName
                 )
             ]
         )
         updated.lastUpdatedAt = Date()
         try await store.saveDirectory(updated)
         return updated
-    }
-
-    private static func threadID(from url: URL) -> String? {
-        let value = MangaTitleCleaner.extractTid(from: url.absoluteString)?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        return value?.isEmpty == false ? value : nil
-    }
-
-    private static func page(from url: URL) -> Int {
-        let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
-        let page = components?.queryItems?.first(where: { $0.name == "page" })?.value
-            .flatMap(Int.init) ?? 1
-        return max(1, page)
     }
 }

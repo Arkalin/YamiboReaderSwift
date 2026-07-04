@@ -155,8 +155,9 @@ public final class MangaReaderWorkflow {
                     tid: document.tid,
                     rawTitle: document.chapterTitle,
                     chapterNumber: MangaTitleCleaner.extractChapterNumber(document.chapterTitle),
-                    url: membership.chapterURL,
-                    view: MangaChapter.view(from: membership.chapterURL)
+                    view: document.sourceIdentity.view,
+                    authorUID: document.sourceIdentity.authorID,
+                    authorName: document.ownerAuthorName
                 )
             ]
         )

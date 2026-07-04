@@ -25,8 +25,8 @@ public actor FavoriteRepository {
         return parsed
     }
 
-    public func addThreadFavorite(threadURL: URL, formHash preferredFormHash: String? = nil) async throws -> Favorite? {
-        guard let tid = Self.threadID(from: threadURL) else {
+    public func addThreadFavorite(threadID: String, formHash preferredFormHash: String? = nil) async throws -> Favorite? {
+        guard let tid = threadID.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty else {
             throw YamiboError.missingFavoriteThreadID
         }
         let formHash = try await ensureFormHash(preferred: preferredFormHash)
@@ -39,10 +39,11 @@ public actor FavoriteRepository {
             throw YamiboError.favoriteAddFailed
         }
 
-        return try? await remoteFavorite(for: threadURL)
+        return try? await remoteFavorite(forThreadID: tid)
     }
 
-    public func remoteFavorite(for threadURL: URL, maxPages: Int = 30) async throws -> Favorite? {
+    public func remoteFavorite(forThreadID threadID: String, maxPages: Int = 30) async throws -> Favorite? {
+        guard let threadID = threadID.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty else { return nil }
         guard maxPages > 0 else { return nil }
         for page in 1 ... maxPages {
             let html = try await client.fetchHTML(for: .favorites(page: page))
@@ -59,7 +60,7 @@ public actor FavoriteRepository {
                     throw error
                 }
             }
-            if let favorite = parsed.favorites.first(where: { Self.sameThread($0.url, threadURL) }) {
+            if let favorite = parsed.favorites.first(where: { $0.threadID == threadID }) {
                 return favorite
             }
             if parsed.currentPage >= parsed.totalPages || page >= parsed.totalPages {
@@ -169,15 +170,10 @@ public actor FavoriteRepository {
         return markers.contains { html.localizedCaseInsensitiveContains($0) }
     }
 
-    private static func threadID(from url: URL) -> String? {
-        YamiboThreadURLCanonicalizer.threadID(from: url)
-    }
+}
 
-    private static func sameThread(_ lhs: URL, _ rhs: URL) -> Bool {
-        guard let lhsThreadID = threadID(from: lhs),
-              let rhsThreadID = threadID(from: rhs) else {
-            return lhs.absoluteString == rhs.absoluteString
-        }
-        return lhsThreadID == rhsThreadID
+private extension String {
+    var nilIfEmpty: String? {
+        isEmpty ? nil : self
     }
 }

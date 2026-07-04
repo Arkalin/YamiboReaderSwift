@@ -260,7 +260,12 @@ private func makePipelinePage() throws -> MangaReaderPageProjection {
         ownerPostID: "post-700",
         chapterTitle: "Chapter 700",
         imageURL: try #require(URL(string: "https://img.example.com/700-0.png")),
-        refererURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?tid=700")),
+        sourceIdentity: MangaReaderProjectionSourceIdentity(
+            tid: "700",
+            authorID: nil,
+            contentSource: .authorFilteredPage,
+            view: 1
+        ),
         globalIndex: 0,
         localIndex: 0,
         chapterPageCount: 1

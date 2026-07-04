@@ -853,7 +853,6 @@ private func makeMineOfflineCacheWorkRequest(
         ownerName: ownerName,
         tid: tid,
         chapterTitle: "第\(tid)话",
-        chapterURL: try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(tid)&page=1")),
         targetImageURLs: targetImageURLs
     )
 }
@@ -867,7 +866,6 @@ private func makeMineOfflineCacheMembership(
         ownerName: ownerName,
         tid: tid,
         chapterTitle: "第\(tid)话",
-        chapterURL: try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(tid)&page=1")),
         imageURLs: imageURLs,
         sourcePage: makeMineOfflineSourcePage(tid: tid)
     )
@@ -892,8 +890,7 @@ private func makeMineDirectoryChapter(tid: String, chapterNumber: Double) throws
     MangaChapter(
         tid: tid,
         rawTitle: "第\(tid)话",
-        chapterNumber: chapterNumber,
-        url: try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(tid)"))
+        chapterNumber: chapterNumber
     )
 }
 

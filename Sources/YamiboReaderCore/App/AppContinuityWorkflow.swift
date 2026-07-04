@@ -196,19 +196,12 @@ public final class AppContinuityWorkflow {
             }
             return nil
         case let .web(context):
-            if let progress = await readingProgress(forThreadURL: context.originalThreadURL),
+            if let progress = await appContext.readingProgressStore.load(threadID: context.originalThreadID),
                progress.hasMangaReadingProgress {
                 return .web(context.reconciledWithReadingProgress(progress))
             }
             return nil
         }
-    }
-
-    private func readingProgress(forThreadURL url: URL) async -> ReadingProgressRecord? {
-        guard let threadID = YamiboThreadURLCanonicalizer.threadID(from: FavoriteLibraryURLIdentity.canonicalThreadURL(from: url)) else {
-            return nil
-        }
-        return await appContext.readingProgressStore.load(threadID: threadID)
     }
 
     private func favoriteItem(forThreadID threadID: String) async -> FavoriteItem? {
@@ -269,7 +262,7 @@ private extension MangaLaunchContext {
 
 private extension MangaWebContext {
     var hasLocalReadingProgress: Bool {
-        initialPage > 0 || currentURL != originalThreadURL
+        initialPage > 0 || currentThreadID != originalThreadID || currentPage > 1
     }
 }
 
@@ -313,24 +306,16 @@ private extension MangaLaunchContext {
         favoriteItem: FavoriteItem?
     ) -> MangaLaunchContext {
         guard let manga = progress.manga else { return self }
-        let chapterTID = YamiboThreadURLCanonicalizer.threadID(from: manga.lastMangaURL) ?? self.chapterTID
         return MangaLaunchContext(
             originalThreadID: originalThreadID,
-            chapterTID: chapterTID,
+            chapterTID: manga.chapterThreadID,
             displayTitle: favoriteItem?.resolvedDisplayTitle ?? displayTitle,
             source: .resume,
-            chapterView: Self.page(from: manga.lastMangaURL),
+            chapterView: manga.chapterView,
             initialPage: manga.mangaPageIndex,
             directoryName: directoryName,
             offlineCacheFavoriteID: favoriteItem?.id ?? offlineCacheFavoriteID
         )
-    }
-
-    private static func page(from url: URL) -> Int {
-        let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
-        let page = components?.queryItems?.first(where: { $0.name == "page" })?.value
-            .flatMap(Int.init) ?? 1
-        return max(1, page)
     }
 }
 
@@ -338,8 +323,9 @@ private extension MangaWebContext {
     func reconciledWithReadingProgress(_ progress: ReadingProgressRecord) -> MangaWebContext {
         guard let manga = progress.manga else { return self }
         return MangaWebContext(
-            currentURL: manga.lastMangaURL,
-            originalThreadURL: originalThreadURL,
+            currentThreadID: manga.chapterThreadID,
+            currentPage: manga.chapterView,
+            originalThreadID: originalThreadID,
             source: .resume,
             initialPage: manga.mangaPageIndex,
             autoOpenNative: autoOpenNative,

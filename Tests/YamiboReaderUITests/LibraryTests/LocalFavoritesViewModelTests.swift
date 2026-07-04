@@ -872,11 +872,10 @@ final class LocalFavoritesViewModelTests: XCTestCase {
             defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
             key: "local-favorites"
         )
-        let threadURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=902"))
         let coverURL = try XCTUnwrap(URL(string: "https://img.example.com/cover.jpg"))
 
         _ = try await ForumThreadFavoriteSync.addFavorite(
-            threadURL: threadURL,
+            threadID: "902",
             title: "普通主题",
             type: .other,
             authorID: nil,
@@ -905,10 +904,8 @@ final class LocalFavoritesViewModelTests: XCTestCase {
             defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
             key: "local-favorites"
         )
-        let threadURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=903"))
-
         _ = try await ForumThreadFavoriteSync.addFavorite(
-            threadURL: threadURL,
+            threadID: "903",
             title: "小说主题",
             type: .novel,
             authorID: "42",

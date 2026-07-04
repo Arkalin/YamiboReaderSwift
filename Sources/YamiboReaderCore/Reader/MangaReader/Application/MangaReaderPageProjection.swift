@@ -5,7 +5,7 @@ public struct MangaReaderPageProjection: Hashable, Identifiable, Sendable {
     public var ownerPostID: String
     public var chapterTitle: String
     public var imageURL: URL
-    public var refererURL: URL
+    public var sourceIdentity: MangaReaderProjectionSourceIdentity
     public var globalIndex: Int
     public var localIndex: Int
     public var chapterPageCount: Int
@@ -19,7 +19,7 @@ public struct MangaReaderPageProjection: Hashable, Identifiable, Sendable {
         ownerPostID: String,
         chapterTitle: String,
         imageURL: URL,
-        refererURL: URL,
+        sourceIdentity: MangaReaderProjectionSourceIdentity,
         globalIndex: Int,
         localIndex: Int,
         chapterPageCount: Int
@@ -28,7 +28,7 @@ public struct MangaReaderPageProjection: Hashable, Identifiable, Sendable {
         self.ownerPostID = ownerPostID
         self.chapterTitle = chapterTitle
         self.imageURL = imageURL
-        self.refererURL = refererURL
+        self.sourceIdentity = sourceIdentity
         self.globalIndex = max(0, globalIndex)
         self.localIndex = max(0, localIndex)
         self.chapterPageCount = max(0, chapterPageCount)
@@ -46,7 +46,7 @@ public struct MangaReaderPageProjection: Hashable, Identifiable, Sendable {
                         ownerPostID: document.ownerPostID,
                         chapterTitle: document.chapterTitle,
                         imageURL: imageURL,
-                        refererURL: document.chapterURL,
+                        sourceIdentity: document.sourceIdentity,
                         globalIndex: pages.count,
                         localIndex: localIndex,
                         chapterPageCount: document.imageURLs.count

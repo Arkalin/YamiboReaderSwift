@@ -22,7 +22,6 @@ struct MangaReaderTestsMangaOfflineCacheQueue {
         let enqueued = try #require(result.enqueuedWork)
         #expect(enqueued.ownerName == "favorite-a")
         #expect(enqueued.tid == "100")
-        #expect(enqueued.chapterURL.absoluteString == "https://bbs.yamibo.com/forum.php?mobile=2&mod=viewthread&page=1&tid=100")
         #expect(enqueued.insertionIndex == 1)
         #expect(enqueued.state == .queued)
 
@@ -60,7 +59,6 @@ struct MangaReaderTestsMangaOfflineCacheQueue {
         }
         #expect(loadedMembership.id == cachedMembership.id)
         #expect(loadedMembership.chapterTitle == cachedMembership.chapterTitle)
-        #expect(loadedMembership.chapterURL == cachedMembership.chapterURL)
         #expect(loadedMembership.imageURLs == cachedMembership.imageURLs)
         #expect(await store.allOfflineCacheWorks() == [firstWork])
     }
@@ -268,7 +266,6 @@ private func makeOfflineCacheWorkRequest(
         ownerName: ownerName,
         tid: tid,
         chapterTitle: "第\(tid)话",
-        chapterURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(tid)&page=5")),
         targetImageURLs: targetImageURLs
     )
 }
@@ -282,7 +279,6 @@ private func makeOfflineCacheMembership(
         ownerName: ownerName,
         tid: tid,
         chapterTitle: "第\(tid)话",
-        chapterURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(tid)&page=5")),
         imageURLs: imageURLs,
         sourcePage: makeTestMangaOfflineSourcePage(tid: tid)
     )
@@ -307,8 +303,7 @@ private func makeDirectoryChapter(tid: String, chapterNumber: Double) throws -> 
     MangaChapter(
         tid: tid,
         rawTitle: "第\(tid)话",
-        chapterNumber: chapterNumber,
-        url: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(tid)"))
+        chapterNumber: chapterNumber
     )
 }
 

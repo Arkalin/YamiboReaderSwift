@@ -403,8 +403,7 @@ private func makeChapter(
     MangaChapter(
         tid: tid,
         rawTitle: title,
-        chapterNumber: chapterNumber ?? MangaTitleCleaner.extractChapterNumber(title),
-        url: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(tid)&mobile=2")!
+        chapterNumber: chapterNumber ?? MangaTitleCleaner.extractChapterNumber(title)
     )
 }
 
@@ -413,7 +412,6 @@ private func makeDocument(tid: String) throws -> MangaReaderProjection {
         tid: tid,
         ownerPostID: "post-\(tid)",
         chapterTitle: "第1话",
-        chapterURL: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(tid)&mobile=2")!,
         imageURLs: [
             try #require(URL(string: "https://img.example.com/\(tid)-0.jpg"))
         ]

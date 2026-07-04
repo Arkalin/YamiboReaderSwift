@@ -14,7 +14,6 @@ public struct MangaOfflineCacheMembership: Codable, Hashable, Identifiable, Send
     public var ownerName: String
     public var tid: String
     public var chapterTitle: String
-    public var chapterURL: URL
     public var imageURLs: [URL]
     public var sourcePage: ForumThreadPage
     public var createdAt: Date
@@ -27,7 +26,6 @@ public struct MangaOfflineCacheMembership: Codable, Hashable, Identifiable, Send
         ownerName: String,
         tid: String,
         chapterTitle: String,
-        chapterURL: URL,
         imageURLs: [URL],
         sourcePage: ForumThreadPage,
         createdAt: Date = .now
@@ -35,7 +33,6 @@ public struct MangaOfflineCacheMembership: Codable, Hashable, Identifiable, Send
         self.ownerName = ownerName.trimmingCharacters(in: .whitespacesAndNewlines)
         self.tid = tid.trimmingCharacters(in: .whitespacesAndNewlines)
         self.chapterTitle = chapterTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        self.chapterURL = YamiboRoute.normalizedChapterURL(chapterURL, tid: self.tid)
         self.imageURLs = imageURLs
         self.sourcePage = sourcePage
         self.createdAt = createdAt
@@ -45,7 +42,6 @@ public struct MangaOfflineCacheMembership: Codable, Hashable, Identifiable, Send
         hasher.combine(ownerName)
         hasher.combine(tid)
         hasher.combine(chapterTitle)
-        hasher.combine(chapterURL)
         hasher.combine(imageURLs)
         hasher.combine(createdAt)
     }
@@ -83,20 +79,17 @@ public struct MangaOfflineCacheWorkRequest: Hashable, Sendable {
     public var ownerName: String
     public var tid: String
     public var chapterTitle: String
-    public var chapterURL: URL
     public var targetImageURLs: [URL]
 
     public init(
         ownerName: String,
         tid: String,
         chapterTitle: String,
-        chapterURL: URL,
         targetImageURLs: [URL] = []
     ) {
         self.ownerName = ownerName.trimmingCharacters(in: .whitespacesAndNewlines)
         self.tid = tid.trimmingCharacters(in: .whitespacesAndNewlines)
         self.chapterTitle = chapterTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        self.chapterURL = YamiboRoute.normalizedChapterURL(chapterURL, tid: self.tid)
         self.targetImageURLs = Self.uniqueURLs(targetImageURLs)
     }
 
@@ -130,7 +123,6 @@ public struct MangaOfflineCacheWork: Codable, Hashable, Identifiable, Sendable {
     public var ownerName: String
     public var tid: String
     public var chapterTitle: String
-    public var chapterURL: URL
     public var targetImageURLs: [URL]
     public var completedImageURLs: [URL]
     public var state: MangaOfflineCacheWorkState
@@ -156,7 +148,6 @@ public struct MangaOfflineCacheWork: Codable, Hashable, Identifiable, Sendable {
         ownerName: String,
         tid: String,
         chapterTitle: String,
-        chapterURL: URL,
         targetImageURLs: [URL] = [],
         completedImageURLs: [URL] = [],
         state: MangaOfflineCacheWorkState = .queued,
@@ -173,7 +164,6 @@ public struct MangaOfflineCacheWork: Codable, Hashable, Identifiable, Sendable {
         self.ownerName = ownerName.trimmingCharacters(in: .whitespacesAndNewlines)
         self.tid = tid.trimmingCharacters(in: .whitespacesAndNewlines)
         self.chapterTitle = chapterTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        self.chapterURL = YamiboRoute.normalizedChapterURL(chapterURL, tid: self.tid)
         self.targetImageURLs = Self.uniqueURLs(targetImageURLs)
         self.completedImageURLs = Self.uniqueURLs(completedImageURLs)
         self.state = state
@@ -194,7 +184,6 @@ public struct MangaOfflineCacheWork: Codable, Hashable, Identifiable, Sendable {
             ownerName: try container.decode(String.self, forKey: .ownerName),
             tid: try container.decode(String.self, forKey: .tid),
             chapterTitle: try container.decode(String.self, forKey: .chapterTitle),
-            chapterURL: try container.decode(URL.self, forKey: .chapterURL),
             targetImageURLs: try container.decode([URL].self, forKey: .targetImageURLs),
             completedImageURLs: try container.decode([URL].self, forKey: .completedImageURLs),
             state: try container.decode(MangaOfflineCacheWorkState.self, forKey: .state),
@@ -211,7 +200,6 @@ public struct MangaOfflineCacheWork: Codable, Hashable, Identifiable, Sendable {
             ownerName: request.ownerName,
             tid: request.tid,
             chapterTitle: request.chapterTitle,
-            chapterURL: request.chapterURL,
             targetImageURLs: request.targetImageURLs,
             completedImageURLs: [],
             state: .queued,
@@ -229,7 +217,6 @@ public struct MangaOfflineCacheWork: Codable, Hashable, Identifiable, Sendable {
             ownerName: ownerName,
             tid: tid,
             chapterTitle: chapterTitle,
-            chapterURL: chapterURL,
             targetImageURLs: targetImageURLs,
             completedImageURLs: completedImageURLs,
             state: .failed,
@@ -252,7 +239,6 @@ public struct MangaOfflineCacheWork: Codable, Hashable, Identifiable, Sendable {
             ownerName: ownerName,
             tid: tid,
             chapterTitle: chapterTitle,
-            chapterURL: chapterURL,
             targetImageURLs: targetImageURLs ?? self.targetImageURLs,
             completedImageURLs: completedImageURLs,
             state: state,
@@ -274,7 +260,6 @@ public struct MangaOfflineCacheWork: Codable, Hashable, Identifiable, Sendable {
             ownerName: ownerName,
             tid: tid,
             chapterTitle: chapterTitle,
-            chapterURL: chapterURL,
             targetImageURLs: targetImageURLs ?? self.targetImageURLs,
             completedImageURLs: completedImageURLs,
             state: .running,

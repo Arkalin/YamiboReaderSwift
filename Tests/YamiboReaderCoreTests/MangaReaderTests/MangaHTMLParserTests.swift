@@ -54,15 +54,9 @@ import Testing
     """
 
     let chapter = try #require(MangaHTMLParser.parseListHTML(html).first)
-    let components = try #require(URLComponents(url: chapter.url, resolvingAgainstBaseURL: false))
-    let queryItems = Dictionary(uniqueKeysWithValues: (components.queryItems ?? []).compactMap { item in
-        item.value.map { (item.name, $0) }
-    })
 
     #expect(chapter.tid == "501595")
-    #expect(queryItems["tid"] == "501595")
-    #expect(queryItems["amp;tid"] == nil)
-    #expect(chapter.url.absoluteString.contains("&amp;") == false)
+    #expect(chapter.view == 1)
 }
 
 @Test func favoriteParserKeepsOnlyThreadLinks() async throws {
@@ -113,7 +107,5 @@ import Testing
 
     #expect(chapters.count == 1)
     #expect(chapters.first?.tid == "701")
-    #expect(chapters.first?.url.host == "bbs.yamibo.com")
-    #expect(chapters.first?.url.absoluteString.contains("page=1") == true)
-    #expect(chapters.first?.url.absoluteString.contains("mobile=2") == true)
+    #expect(chapters.first?.view == 1)
 }

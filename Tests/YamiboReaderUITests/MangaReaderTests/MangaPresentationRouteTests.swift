@@ -24,7 +24,6 @@ final class MangaPresentationRouteTests: XCTestCase {
     func testBootstrapRestoresMangaResumeRoute() async throws {
         let (appModel, store) = try await makeAppModelWithReaderResumeRouteStore()
         let originalURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=721&mobile=2"))
-        let chapterURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=722&mobile=2"))
         let route = MangaPresentationRoute.native(
             MangaLaunchContext(
                 originalThreadID: "721",
@@ -99,7 +98,7 @@ final class MangaPresentationRouteTests: XCTestCase {
             username: "admin",
             password: "secret",
             isAutoSyncEnabled: true,
-            lastRemoteUpdatedAt: Date(timeIntervalSince1970: 1_000),
+            lastRemoteUpdatedAt: Date(timeIntervalSince1970: 2_000),
             localUpdatedAt: Date(timeIntervalSince1970: 1_000)
         ))
 
@@ -123,6 +122,7 @@ final class MangaPresentationRouteTests: XCTestCase {
             settingsStore: fixture.settingsStore,
             webDAVSyncSettingsStore: fixture.webDAVSettingsStore,
             readerResumeRouteStore: fixture.resumeRouteStore,
+            grdbRootDirectory: fixture.grdbRootDirectory,
             session: fixture.session
         )
         let appModel = YamiboAppModel(appContext: appContext)
@@ -146,10 +146,6 @@ final class MangaPresentationRouteTests: XCTestCase {
         let suiteName = "reader-resume-webdav-manga-\(UUID().uuidString)"
         let fixture = try makeAppModelWebDAVFixture(suiteName: suiteName)
         let host = "reader-restore-manga.example.com"
-        let originalURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=731&mobile=2"))
-        let staleChapterURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=732&mobile=2"))
-        let remoteChapterURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=733&mobile=2"))
-        let expectedRemoteChapterURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=733"))
         let staleContext = MangaLaunchContext(
             originalThreadID: "731",
             chapterTID: "732",
@@ -168,7 +164,8 @@ final class MangaPresentationRouteTests: XCTestCase {
                     updatedAt: Date(timeIntervalSince1970: 2_000),
                     lastReadAt: Date(timeIntervalSince1970: 2_000),
                     manga: MangaReadingProgressRecord(
-                        lastMangaURL: remoteChapterURL,
+                        chapterThreadID: "733",
+                        chapterView: 1,
                         lastChapter: "第七页",
                         mangaPageIndex: 7
                     )
@@ -184,7 +181,7 @@ final class MangaPresentationRouteTests: XCTestCase {
             username: "admin",
             password: "secret",
             isAutoSyncEnabled: true,
-            lastRemoteUpdatedAt: Date(timeIntervalSince1970: 1_000),
+            lastRemoteUpdatedAt: Date(timeIntervalSince1970: 2_000),
             localUpdatedAt: Date(timeIntervalSince1970: 1_000)
         ))
 
@@ -208,6 +205,7 @@ final class MangaPresentationRouteTests: XCTestCase {
             settingsStore: fixture.settingsStore,
             webDAVSyncSettingsStore: fixture.webDAVSettingsStore,
             readerResumeRouteStore: fixture.resumeRouteStore,
+            grdbRootDirectory: fixture.grdbRootDirectory,
             session: fixture.session
         )
         let appModel = YamiboAppModel(appContext: appContext)
@@ -331,8 +329,9 @@ final class MangaPresentationRouteTests: XCTestCase {
         let (appModel, store) = try await makeAppModelWithReaderResumeRouteStore()
         let originalURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=724&mobile=2"))
         let context = MangaWebContext(
-            currentURL: originalURL,
-            originalThreadURL: originalURL,
+            currentThreadID: "724",
+            currentPage: 1,
+            originalThreadID: "724",
             source: .favorites,
             initialPage: 1,
             autoOpenNative: false
@@ -349,10 +348,10 @@ final class MangaPresentationRouteTests: XCTestCase {
 
     func testReaderResumeRouteUpdateAfterDismissDoesNotRecreateRestoreState() async throws {
         let (appModel, store) = try await makeAppModelWithReaderResumeRouteStore()
-        let originalURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=725&mobile=2"))
         let context = MangaWebContext(
-            currentURL: originalURL,
-            originalThreadURL: originalURL,
+            currentThreadID: "725",
+            currentPage: 1,
+            originalThreadID: "725",
             source: .forum
         )
 
@@ -372,17 +371,17 @@ final class MangaPresentationRouteTests: XCTestCase {
     func testMangaFavoriteLaunchDoesNotNeedProbeBlocker() {
         let manga = Favorite(
             title: "测试漫画",
-            url: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=704&mobile=2")!,
+            threadID: "704",
             type: .manga
         )
         let novel = Favorite(
             title: "测试小说",
-            url: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=705&mobile=2")!,
+            threadID: "705",
             type: .novel
         )
         let unknown = Favorite(
             title: "未知收藏",
-            url: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=706&mobile=2")!
+            threadID: "706"
         )
 
         XCTAssertFalse(favoriteLaunchNeedsMangaProbeBlocker(manga))
@@ -398,8 +397,9 @@ final class MangaPresentationRouteTests: XCTestCase {
     func testPresentMangaFromWebStoresSuspendedContextAndDismissRestoresWeb() {
         let appModel = makeIsolatedAppModel()
         let webContext = MangaWebContext(
-            currentURL: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=700&mobile=2")!,
-            originalThreadURL: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=700&mobile=2")!,
+            currentThreadID: "700",
+            currentPage: 1,
+            originalThreadID: "700",
             source: .forum,
             autoOpenNative: false
         )
@@ -431,10 +431,10 @@ final class MangaPresentationRouteTests: XCTestCase {
 
     func testPresentMangaAfterAutomaticFallbackDoesNotRestoreWebOnDismiss() {
         let appModel = makeIsolatedAppModel()
-        let originalURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=704&mobile=2")!
         let webContext = MangaWebContext(
-            currentURL: originalURL,
-            originalThreadURL: originalURL,
+            currentThreadID: "704",
+            currentPage: 1,
+            originalThreadID: "704",
             source: .favorites,
             autoOpenNative: true
         )
@@ -463,8 +463,9 @@ final class MangaPresentationRouteTests: XCTestCase {
         let appModel = makeIsolatedAppModel()
         let originalURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=701&mobile=2")!
         let webContext = MangaWebContext(
-            currentURL: originalURL,
-            originalThreadURL: originalURL,
+            currentThreadID: "701",
+            currentPage: 1,
+            originalThreadID: "701",
             source: .favorites
         )
         let nativeContext = MangaLaunchContext(
@@ -711,8 +712,9 @@ final class MangaPresentationRouteTests: XCTestCase {
     func testFallbackMangaToWebDisablesAutoOpenLoop() {
         let appModel = makeIsolatedAppModel()
         let context = MangaWebContext(
-            currentURL: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=702&mobile=2")!,
-            originalThreadURL: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=700&mobile=2")!,
+            currentThreadID: "702",
+            currentPage: 1,
+            originalThreadID: "700",
             source: .forum,
             initialPage: 0,
             autoOpenNative: true,
@@ -787,6 +789,7 @@ private struct AppModelWebDAVFixture: Sendable {
     let settingsStore: SettingsStore
     let webDAVSettingsStore: WebDAVSyncSettingsStore
     let resumeRouteStore: ReaderResumeRouteStore
+    let grdbRootDirectory: URL
     let session: URLSession
 }
 
@@ -797,6 +800,8 @@ private func makeAppModelWebDAVFixture(suiteName: String) throws -> AppModelWebD
         settingsStore: try SettingsStore(testSuiteName: defaultsSuiteName, key: "settings"),
         webDAVSettingsStore: try WebDAVSyncSettingsStore(testSuiteName: defaultsSuiteName, key: "webdav"),
         resumeRouteStore: try ReaderResumeRouteStore(testSuiteName: defaultsSuiteName, key: "reader-route"),
+        grdbRootDirectory: FileManager.default.temporaryDirectory
+            .appendingPathComponent("yamibo-webdav-route-\(UUID().uuidString)", isDirectory: true),
         session: makeAppModelWebDAVTestSession()
     )
 }

@@ -47,7 +47,6 @@ struct OfflineCacheTestsQueueExecutor {
                 ownerName: "favorite-a",
                 tid: "300",
                 chapterTitle: "第300话",
-                chapterURL: try #require(URL(string: "https://stale.example.com/old/path?x=1")),
                 targetImageURLs: []
             )
         )
@@ -152,8 +151,6 @@ struct OfflineCacheTestsQueueExecutor {
             key: "local-favorites"
         )
         let resumeRouteStore = ReaderResumeRouteStore(defaults: try #require(UserDefaults(suiteName: suiteName)), key: "resume-route")
-        let ownerURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=350&mobile=2"))
-        let chapterURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=350&page=2&mobile=2"))
         var favoriteLibrary = FavoriteLibraryDocument()
         let favorite = try FavoriteItem(
             target: FavoriteContentTarget(kind: .normalThread, threadID: "350"),
@@ -931,7 +928,6 @@ private func makeExecutorWorkRequest(
         ownerName: ownerName,
         tid: tid,
         chapterTitle: "第\(tid)话",
-        chapterURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(tid)&page=5")),
         targetImageURLs: targetImageURLs
     )
 }
@@ -992,7 +988,6 @@ private func makeDocument(tid: String, imageURLs: [URL]) throws -> MangaReaderPr
     MangaReaderProjection(
         tid: tid,
         chapterTitle: "第\(tid)话",
-        chapterURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(tid)&page=1")),
         imageURLs: imageURLs
     )
 }

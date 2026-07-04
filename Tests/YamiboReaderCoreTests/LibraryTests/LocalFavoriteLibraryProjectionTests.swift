@@ -135,7 +135,7 @@ import Testing
         updatedAt: Date(timeIntervalSince1970: 50),
         lastReadAt: Date(timeIntervalSince1970: 60),
         manga: MangaReadingProgressRecord(
-            lastMangaURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=703")),
+            chapterThreadID: "703",
             lastChapter: "第3话",
             mangaPageIndex: 4,
             mangaPageCount: 10
@@ -186,7 +186,7 @@ private func makeProjectionDocument() throws -> (FavoriteLibraryDocument, Projec
         contentUpdatedAt: Date(timeIntervalSince1970: 300),
         mangaChapterMetadata: FavoriteMangaChapterMetadata(
             chapterTID: "703",
-            chapterURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=703"))
+            chapterView: 1
         ),
         locations: [.category(categoryID)],
         updatedAt: Date(timeIntervalSince1970: 30)

@@ -429,7 +429,7 @@ private struct ForumNovelDetailHeader: View {
                 isFavorited: summary.isFavorited,
                 canReadStart: canReadStart,
                 hasReadingProgress: hasReadingProgress,
-                threadURL: summary.threadURL,
+                threadID: summary.threadID,
                 onFavoriteTap: onFavoriteTap,
                 onReadStart: onReadStart,
                 onViewThread: onViewThread
@@ -448,7 +448,12 @@ private struct ForumNovelDetailHeader: View {
             if let coverURL = summary.coverURL {
                 YamiboRemoteImage(
                     url: coverURL,
-                    refererURL: summary.threadURL
+                    refererURL: YamiboRoute.threadByID(
+                        tid: summary.threadID,
+                        page: 1,
+                        authorID: nil,
+                        reverse: false
+                    ).url
                 ) { image in
                     image
                         .resizable()
@@ -485,10 +490,14 @@ private struct ForumNovelHeaderActions: View {
     let isFavorited: Bool
     let canReadStart: Bool
     let hasReadingProgress: Bool
-    let threadURL: URL
+    let threadID: String
     let onFavoriteTap: () -> Void
     let onReadStart: () -> Void
     let onViewThread: () -> Void
+
+    private var threadURL: URL {
+        YamiboRoute.threadByID(tid: threadID, page: 1, authorID: nil, reverse: false).url
+    }
 
     var body: some View {
         ViewThatFits(in: .horizontal) {

@@ -41,7 +41,7 @@ struct MangaReaderTestsDirectoryRepository {
         #expect(requestURL.contains("tid=700"))
         #expect(requestURL.contains("page=1"))
         #expect(requestURL.contains("authorid=42") == false)
-        #expect(seed.currentChapter.url.absoluteString == "https://bbs.yamibo.com/forum.php?mobile=2&mod=viewthread&page=1&tid=700")
+        #expect(seed.currentChapter.view == 1)
         #expect(seed.cleanBookName == "作品")
         #expect(seed.tagIDs == ["12", "34"])
         #expect(seed.firstPostID == "9001")

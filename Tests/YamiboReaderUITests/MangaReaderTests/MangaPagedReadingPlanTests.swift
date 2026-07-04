@@ -333,7 +333,12 @@ private func makePagedPlanPages(pageCountsByTID: [(String, Int)]) throws -> [Man
                     ownerPostID: "post-\(tid)",
                     chapterTitle: "Chapter \(tid)",
                     imageURL: try #require(URL(string: "https://img.example.com/\(tid)-\(localIndex).png")),
-                    refererURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?tid=\(tid)")),
+                    sourceIdentity: MangaReaderProjectionSourceIdentity(
+                        tid: tid,
+                        authorID: nil,
+                        contentSource: .authorFilteredPage,
+                        view: 1
+                    ),
                     globalIndex: globalIndex,
                     localIndex: localIndex,
                     chapterPageCount: pageCount

@@ -6,7 +6,6 @@ import Testing
 struct MangaReaderTestsOfflineCacheStore {
     @Test func savesMembershipWithOwnerAndChapterIdentityAcrossStoreInstances() async throws {
         let directory = try makeTemporaryOfflineCacheDirectory()
-        let chapterURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=900&page=3"))
         let imageURL = try #require(URL(string: "https://img.example.com/page-1.jpg"))
 
         let writingStore = try makeTestOfflineCacheStore(rootDirectory: directory)
@@ -15,7 +14,6 @@ struct MangaReaderTestsOfflineCacheStore {
                 ownerName: "作品",
                 tid: "900",
                 chapterTitle: "第1话",
-                chapterURL: chapterURL,
                 imageURLs: [imageURL],
                 sourcePage: makeTestMangaOfflineSourcePage(tid: "900")
             )
@@ -25,7 +23,6 @@ struct MangaReaderTestsOfflineCacheStore {
         let loaded = await readingStore.membership(ownerName: "作品", tid: "900")
 
         #expect(loaded?.id == MangaOfflineCacheMembershipID(ownerName: "作品", tid: "900"))
-        #expect(loaded?.chapterURL.absoluteString == "https://bbs.yamibo.com/forum.php?mobile=2&mod=viewthread&page=1&tid=900")
         #expect(loaded?.chapterTitle == "第1话")
         #expect(loaded?.imageURLs == [imageURL])
     }
@@ -153,7 +150,6 @@ struct MangaReaderTestsOfflineCacheStore {
         let offlineStore = try makeTestOfflineCacheStore(rootDirectory: root)
         let directoryStore = try makeTestMangaDirectoryStore(rootDirectory: root)
         let projectionStore = try makeTestMangaReaderProjectionStore(rootDirectory: root)
-        let chapterURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100"))
         let imageURL = try #require(URL(string: "https://img.example.com/offline.jpg"))
         let sourceIdentity = MangaReaderProjectionSourceIdentity(
             tid: "100",
@@ -171,8 +167,7 @@ struct MangaReaderTestsOfflineCacheStore {
                     MangaChapter(
                         tid: "100",
                         rawTitle: "第1话",
-                        chapterNumber: 1,
-                        url: chapterURL
+                        chapterNumber: 1
                     )
                 ]
             )
@@ -182,7 +177,6 @@ struct MangaReaderTestsOfflineCacheStore {
                 tid: "100",
                 ownerAuthorID: "42",
                 chapterTitle: "第1话",
-                chapterURL: chapterURL,
                 imageURLs: [imageURL],
                 sourceIdentity: sourceIdentity,
                 sourceFingerprint: "source"
@@ -223,7 +217,6 @@ private func makeOfflineMembership(
         ownerName: ownerName,
         tid: tid,
         chapterTitle: "第\(tid)话",
-        chapterURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(tid)&page=5")),
         imageURLs: imageURLs,
         sourcePage: makeTestMangaOfflineSourcePage(tid: tid)
     )
@@ -257,7 +250,6 @@ private func makeOfflineWorkRequest(
         ownerName: ownerName,
         tid: tid,
         chapterTitle: "第\(tid)话",
-        chapterURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(tid)&page=5")),
         targetImageURLs: targetImageURLs
     )
 }

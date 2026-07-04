@@ -4,7 +4,7 @@ import Testing
 
 @Suite("MangaReaderTests: Page Projection")
 struct MangaReaderTestsPageProjection {
-    @Test func pageProjectionExpandsDocumentsWithStableIndexesAndReferers() throws {
+    @Test func pageProjectionExpandsDocumentsWithStableIndexesAndSourceIdentity() throws {
         let first = try makeProjectionDocument(tid: "700", pageCount: 2)
         let second = try makeProjectionDocument(tid: "701", pageCount: 1)
         let window = try #require(MangaChapterWindow(
@@ -18,8 +18,8 @@ struct MangaReaderTestsPageProjection {
         #expect(pages.map(\.globalIndex) == [0, 1, 2])
         #expect(pages.map(\.localIndex) == [0, 1, 0])
         #expect(pages.map(\.chapterPageCount) == [2, 2, 1])
-        #expect(pages[0].refererURL == first.chapterURL)
-        #expect(pages[2].refererURL == second.chapterURL)
+        #expect(pages[0].sourceIdentity == first.sourceIdentity)
+        #expect(pages[2].sourceIdentity == second.sourceIdentity)
         #expect(pages[0].ownerPostID == "post-700")
     }
 
@@ -62,8 +62,7 @@ private func makeProjectionDirectory(tids: [String]) -> MangaDirectory {
             MangaChapter(
                 tid: tid,
                 rawTitle: "第\(index + 1)话",
-                chapterNumber: Double(index + 1),
-                url: makeProjectionChapterURL(tid: tid)
+                chapterNumber: Double(index + 1)
             )
         }
     )
@@ -77,11 +76,6 @@ private func makeProjectionDocument(tid: String, pageCount: Int) throws -> Manga
         tid: tid,
         ownerPostID: "post-\(tid)",
         chapterTitle: "第\(tid)话",
-        chapterURL: makeProjectionChapterURL(tid: tid),
         imageURLs: imageURLs
     )
-}
-
-private func makeProjectionChapterURL(tid: String) -> URL {
-    URL(string: "https://bbs.yamibo.com/thread-\(tid)-1-1.html")!
 }

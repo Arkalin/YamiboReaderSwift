@@ -327,7 +327,7 @@ public final class MangaReaderModel: ObservableObject {
         }
         return ReaderChapterCommentTarget(
             threadID: currentPage.tid,
-            view: Self.webViewPage(from: currentPage.refererURL),
+            view: currentPage.sourceIdentity.view,
             ownerPostID: currentPage.ownerPostID,
             title: currentPage.chapterTitle
         )
@@ -1000,11 +1000,10 @@ public final class MangaReaderModel: ObservableObject {
         }
 
         let directoryName = normalizedDirectoryName(loaded.directoryTitle) ?? normalizedDirectoryName(context.directoryName)
-        let threadURL = Self.threadURL(threadID: context.originalThreadID)
-        let chapterView = Self.webViewPage(from: currentPage.refererURL)
         let progress = MangaProgressReadingPosition(
-            threadURL: threadURL,
-            chapterURL: currentPage.refererURL,
+            threadID: context.originalThreadID,
+            chapterThreadID: currentPage.tid,
+            chapterView: currentPage.sourceIdentity.view,
             chapterTitle: currentPage.chapterTitle,
             pageIndex: currentPage.localIndex,
             pageCount: currentPage.chapterPageCount,
@@ -1016,7 +1015,7 @@ public final class MangaReaderModel: ObservableObject {
             chapterTID: currentPage.tid,
             displayTitle: context.displayTitle,
             source: .resume,
-            chapterView: chapterView,
+            chapterView: currentPage.sourceIdentity.view,
             initialPage: currentPage.localIndex,
             directoryName: directoryName,
             offlineCacheFavoriteID: context.offlineCacheFavoriteID
@@ -1055,18 +1054,6 @@ public final class MangaReaderModel: ObservableObject {
         isLoadingMoreChapterComments = module.isLoadingMore
         chapterCommentsLoadMoreError = module.loadMoreError
         chapterCommentsRefreshError = module.refreshError
-    }
-
-    private static func webViewPage(from url: URL) -> Int {
-        URLComponents(url: url, resolvingAgainstBaseURL: false)?
-            .queryItems?
-            .first(where: { $0.name == "page" })?
-            .value
-            .flatMap(Int.init) ?? 1
-    }
-
-    private static func threadURL(threadID: String, view: Int = 1) -> URL {
-        YamiboRoute.threadByID(tid: threadID, page: view, authorID: nil, reverse: false).url
     }
 
     private static func normalizedSettings(_ settings: MangaReaderSettings) -> MangaReaderSettings {

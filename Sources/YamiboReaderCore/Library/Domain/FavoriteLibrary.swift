@@ -370,13 +370,13 @@ public struct FavoriteRemoteMapping: Codable, Hashable, Sendable {
 
 public struct FavoriteMangaChapterMetadata: Codable, Hashable, Sendable {
     public var chapterTID: String
-    public var chapterURL: URL
+    public var chapterView: Int
     public var chapterTitle: String?
     public var importedAt: Date
 
-    public init(chapterTID: String, chapterURL: URL, chapterTitle: String? = nil, importedAt: Date = .now) {
-        self.chapterTID = chapterTID
-        self.chapterURL = chapterURL
+    public init(chapterTID: String, chapterView: Int = 1, chapterTitle: String? = nil, importedAt: Date = .now) {
+        self.chapterTID = chapterTID.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.chapterView = max(1, chapterView)
         self.chapterTitle = chapterTitle
         self.importedAt = importedAt
     }
@@ -598,15 +598,16 @@ public struct FavoriteLibraryDocument: Codable, Equatable, Sendable {
 
     @discardableResult
     public mutating func importThreadFavorite(
-        threadURL: URL,
+        threadID: String,
         displayName: String? = nil,
         location: FavoriteLocation? = nil,
         remoteMapping: FavoriteRemoteMapping? = nil,
         date: Date = .now,
-        probe: (URL) async throws -> FavoriteThreadProbeResult
+        probe: (String) async throws -> FavoriteThreadProbeResult
     ) async throws -> FavoriteItem {
         do {
-            let result = try await probe(threadURL)
+            let normalizedThreadID = threadID.trimmingCharacters(in: .whitespacesAndNewlines)
+            let result = try await probe(normalizedThreadID)
             return try importThreadFavorite(
                 probeResult: result,
                 displayName: displayName,
@@ -763,7 +764,7 @@ public struct FavoriteLibraryDocument: Codable, Equatable, Sendable {
     @discardableResult
     public mutating func importMangaChapterFavorite(
         chapterTID: String,
-        chapterURL: URL,
+        chapterView: Int = 1,
         chapterTitle: String? = nil,
         directories: [MangaDirectory],
         fallbackCleanBookName: String? = nil,
@@ -790,7 +791,7 @@ public struct FavoriteLibraryDocument: Codable, Equatable, Sendable {
             contentUpdatedAt: matchedDirectory?.lastUpdatedAt,
             chapterMetadata: FavoriteMangaChapterMetadata(
                 chapterTID: chapterTID,
-                chapterURL: chapterURL,
+                chapterView: chapterView,
                 chapterTitle: chapterTitle,
                 importedAt: date
             ),

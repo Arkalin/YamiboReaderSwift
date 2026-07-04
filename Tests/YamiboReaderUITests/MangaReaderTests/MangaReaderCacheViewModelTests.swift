@@ -234,11 +234,10 @@ private func makeCacheFixture(
         databasePool: database,
         baseDirectory: offlineRoot.appendingPathComponent("offline-images", isDirectory: true)
     )
-    let threadURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/thread-900-1-1.html"))
     let favorite = Favorite(
         id: "favorite-900",
         title: "测试漫画",
-        url: threadURL,
+        threadID: "900",
         type: .manga
     )
     if saveFavorite {
@@ -301,8 +300,7 @@ private func cacheChapter(tid: String, number: Double) throws -> MangaChapter {
     MangaChapter(
         tid: tid,
         rawTitle: "第\(Int(number))话",
-        chapterNumber: number,
-        url: try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(tid)&page=1"))
+        chapterNumber: number
     )
 }
 
@@ -315,7 +313,6 @@ private func cacheMembership(
         ownerName: favorite.title,
         tid: tid,
         chapterTitle: "第\(tid)话",
-        chapterURL: try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(tid)&page=1")),
         imageURLs: imageURLs,
         sourcePage: makeCacheSourcePage(tid: tid)
     )
@@ -377,8 +374,7 @@ private func cacheWorkRequest(favorite: Favorite, tid: String) throws -> MangaOf
     MangaOfflineCacheWorkRequest(
         ownerName: favorite.title,
         tid: tid,
-        chapterTitle: "第\(tid)话",
-        chapterURL: try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(tid)&page=1"))
+        chapterTitle: "第\(tid)话"
     )
 }
 

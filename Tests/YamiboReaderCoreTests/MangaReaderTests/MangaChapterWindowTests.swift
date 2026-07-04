@@ -423,8 +423,7 @@ private func makeDirectory(tids: [String]) -> MangaDirectory {
             MangaChapter(
                 tid: tid,
                 rawTitle: "第\(index + 1)话",
-                chapterNumber: Double(index + 1),
-                url: makeChapterURL(tid: tid)
+                chapterNumber: Double(index + 1)
             )
         }
     )
@@ -437,11 +436,6 @@ private func makeDocument(tid: String, pageCount: Int) throws -> MangaReaderProj
     return MangaReaderProjection(
         tid: tid,
         chapterTitle: "第\(tid)话",
-        chapterURL: makeChapterURL(tid: tid),
         imageURLs: imageURLs
     )
-}
-
-private func makeChapterURL(tid: String) -> URL {
-    URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(tid)&mobile=2")!
 }

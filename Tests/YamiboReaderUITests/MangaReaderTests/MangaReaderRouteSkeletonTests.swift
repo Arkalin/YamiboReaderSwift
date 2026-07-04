@@ -25,10 +25,10 @@ struct MangaReaderTestsUIRouteContracts {
         #if os(iOS)
         let appModel = try makeAppModel()
         let nativeContext = try makeLaunchContext(tid: "700")
-        let url = try #require(YamiboRoute.chapterURL(forTID: nativeContext.chapterTID))
         let webContext = MangaWebContext(
-            currentURL: url,
-            originalThreadURL: url,
+            currentThreadID: nativeContext.chapterTID,
+            currentPage: nativeContext.chapterView,
+            originalThreadID: nativeContext.originalThreadID,
             source: .forum
         )
 

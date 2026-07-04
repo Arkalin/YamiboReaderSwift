@@ -5,14 +5,15 @@ import Testing
 @Test func yamiboRemoteSyncImportsIntoSelectedCategoryOnlyAfterProbe() async throws {
     var document = FavoriteLibraryDocument()
     let category = document.createCategory(name: "远端")
-    let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=901"))
+    var probedThreadID: String?
 
     let report = await document.syncYamiboRemoteFavorites(
         into: category.id,
-        remoteEntries: [YamiboRemoteFavoriteEntry(remoteFavoriteID: "r-901", threadURL: url, remoteOrder: 3)],
+        remoteEntries: [YamiboRemoteFavoriteEntry(remoteFavoriteID: "r-901", threadID: "901", remoteOrder: 3)],
         date: Date(timeIntervalSince1970: 10)
-    ) { _ in
-        FavoriteThreadProbeResult(
+    ) { threadID in
+        probedThreadID = threadID
+        return FavoriteThreadProbeResult(
             target: FavoriteContentTarget(kind: .novelThread, threadID: "901"),
             title: "远端小说",
             sourceGroup: .forumBoard(id: "fid", label: "小说")
@@ -20,6 +21,7 @@ import Testing
     }
 
     let item = try #require(document.items.first)
+    #expect(probedThreadID == "901")
     #expect(report.importedTargetIDs == [item.id])
     #expect(item.locations == [.category(category.id)])
     #expect(item.remoteMapping?.yamiboFavoriteID == "r-901")
@@ -28,11 +30,10 @@ import Testing
 
 @Test func yamiboRemoteSyncSkipsFailedProbeWithoutPlaceholder() async throws {
     var document = FavoriteLibraryDocument()
-    let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=902"))
 
     let report = await document.syncYamiboRemoteFavorites(
         into: document.defaultCategory.id,
-        remoteEntries: [YamiboRemoteFavoriteEntry(remoteFavoriteID: "r-902", threadURL: url)]
+        remoteEntries: [YamiboRemoteFavoriteEntry(remoteFavoriteID: "r-902", threadID: "902")]
     ) { _ in
         throw FavoriteThreadImportFailure.probeFailed("offline")
     }
@@ -44,11 +45,10 @@ import Testing
 @Test func yamiboRemoteSyncImportsMangaIntoSelectedCategoryWithRemoteMapping() async throws {
     var document = FavoriteLibraryDocument()
     let category = document.createCategory(name: "漫画同步")
-    let chapterURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=905"))
 
     let report = await document.syncYamiboRemoteFavorites(
         into: category.id,
-        remoteEntries: [YamiboRemoteFavoriteEntry(remoteFavoriteID: "r-905", threadURL: chapterURL, title: "第5话", remoteOrder: 7)],
+        remoteEntries: [YamiboRemoteFavoriteEntry(remoteFavoriteID: "r-905", threadID: "905", title: "第5话", remoteOrder: 7)],
         date: Date(timeIntervalSince1970: 20)
     ) { _ in
         FavoriteThreadProbeResult(
@@ -65,7 +65,8 @@ import Testing
     #expect(item.remoteMapping?.yamiboFavoriteID == "r-905")
     #expect(item.remoteMapping?.yamiboRemoteOrder == 7)
     #expect(item.remoteMapping?.isMarkedRemoteMissing == false)
-    #expect(item.mangaChapterMetadata?.chapterURL == chapterURL)
+    #expect(item.mangaChapterMetadata?.chapterTID == "905")
+    #expect(item.mangaChapterMetadata?.chapterView == 1)
 
     let secondReport = await document.syncYamiboRemoteFavorites(
         into: category.id,

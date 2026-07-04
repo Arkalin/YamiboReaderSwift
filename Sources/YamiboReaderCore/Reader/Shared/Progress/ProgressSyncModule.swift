@@ -34,8 +34,9 @@ public struct NovelReadingPosition: Hashable, Sendable {
 }
 
 public struct MangaProgressReadingPosition: Hashable, Sendable {
-    public var threadURL: URL
-    public var chapterURL: URL
+    public var threadID: String
+    public var chapterThreadID: String
+    public var chapterView: Int
     public var chapterTitle: String
     public var pageIndex: Int
     public var pageCount: Int?
@@ -43,16 +44,20 @@ public struct MangaProgressReadingPosition: Hashable, Sendable {
     public var directoryName: String?
 
     public init(
-        threadURL: URL,
-        chapterURL: URL,
+        threadID: String? = nil,
+        chapterThreadID: String,
+        chapterView: Int = 1,
         chapterTitle: String,
         pageIndex: Int,
         pageCount: Int? = nil,
         mangaID: String? = nil,
         directoryName: String? = nil
     ) {
-        self.threadURL = threadURL
-        self.chapterURL = chapterURL
+        let normalizedChapterThreadID = chapterThreadID.trimmingCharacters(in: .whitespacesAndNewlines)
+        precondition(!normalizedChapterThreadID.isEmpty, "MangaProgressReadingPosition requires a Yamibo chapter tid")
+        self.chapterThreadID = normalizedChapterThreadID
+        self.threadID = threadID?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? normalizedChapterThreadID
+        self.chapterView = max(1, chapterView)
         self.chapterTitle = chapterTitle
         self.pageIndex = max(0, pageIndex)
         self.pageCount = pageCount.map { max(1, $0) }

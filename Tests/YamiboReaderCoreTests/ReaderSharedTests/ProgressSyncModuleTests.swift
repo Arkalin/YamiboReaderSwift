@@ -73,9 +73,6 @@ import Testing
         readingProgressStore: readingProgressStore
     )
     let sync = ProgressSyncModule(adapter: adapter, debounceNanoseconds: 0)
-    let novelURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=7&mobile=2")!
-    let mangaURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=8&mobile=2")!
-    let chapterURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9&mobile=2")!
     var favoriteLibrary = FavoriteLibraryDocument()
     favoriteLibrary.addItem(try FavoriteItem(
         target: FavoriteContentTarget(kind: .novelThread, threadID: "7"),
@@ -106,8 +103,8 @@ import Testing
         )
     )))
     try await sync.flush(.manga(MangaProgressReadingPosition(
-        threadURL: mangaURL,
-        chapterURL: chapterURL,
+        threadID: "8",
+        chapterThreadID: "9",
         chapterTitle: "第9话",
         pageIndex: 4,
         pageCount: 9
@@ -118,7 +115,6 @@ import Testing
     let mangaProgress = await readingProgressStore.load(threadID: "8")
     #expect(storedFavoriteLibrary == favoriteLibrary)
     #expect(novelProgress?.novel?.novelResumePoint?.displayedTextOffset == 120)
-    #expect(mangaProgress?.manga?.lastMangaURL.absoluteString == "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9")
     #expect(mangaProgress?.manga?.chapterThreadID == "9")
     #expect(mangaProgress?.manga?.mangaPageIndex == 4)
     #expect(mangaProgress?.manga?.mangaPageCount == 9)

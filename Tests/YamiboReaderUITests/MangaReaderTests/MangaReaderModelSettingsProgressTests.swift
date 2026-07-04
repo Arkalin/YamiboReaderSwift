@@ -54,8 +54,6 @@ final class MangaReaderModelSettingsProgressTests: XCTestCase {
         let resumeRouteStore = try ReaderResumeRouteStore(testSuiteName: defaultsSuiteName, key: "resume")
         try await settingsStore.save(AppSettings())
 
-        let originalURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=700&mobile=2"))
-        let chapterURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=701&mobile=2"))
         let context = MangaLaunchContext(
             originalThreadID: "700",
             chapterTID: "701",
@@ -68,7 +66,6 @@ final class MangaReaderModelSettingsProgressTests: XCTestCase {
             tid: "701",
             ownerPostID: "9001",
             chapterTitle: "第1话",
-            chapterURL: chapterURL,
             imageURLs: [
                 try XCTUnwrap(URL(string: "https://img.example.com/701-0.jpg")),
                 try XCTUnwrap(URL(string: "https://img.example.com/701-1.jpg"))
@@ -83,8 +80,7 @@ final class MangaReaderModelSettingsProgressTests: XCTestCase {
                 currentChapter: MangaChapter(
                     tid: "701",
                     rawTitle: "第1话",
-                    chapterNumber: 1,
-                    url: chapterURL
+                    chapterNumber: 1
                 ),
                 cleanBookName: "Resolved Directory",
                 firstPostID: "9001"
@@ -210,8 +206,9 @@ final class MangaReaderModelSettingsProgressTests: XCTestCase {
 
         let savedPositions = await progressAdapter.savedPositions
         let savedPosition = try XCTUnwrap(savedPositions.first)
-        XCTAssertEqual(savedPosition.threadURL, fixture.originalURL)
-        XCTAssertEqual(savedPosition.chapterURL, fixture.chapterURL)
+        XCTAssertEqual(savedPosition.threadID, "700")
+        XCTAssertEqual(savedPosition.chapterThreadID, "701")
+        XCTAssertEqual(savedPosition.chapterView, 1)
         XCTAssertEqual(savedPosition.chapterTitle, "第701话")
         XCTAssertEqual(savedPosition.pageIndex, 1)
         XCTAssertEqual(savedPosition.pageCount, 3)
@@ -350,7 +347,8 @@ final class MangaReaderModelSettingsProgressTests: XCTestCase {
         let route = await fixture.model.saveProgress()
 
         let progress = await readingProgressStore.load(threadID: "700")
-        XCTAssertEqual(progress?.manga?.lastMangaURL.absoluteString, "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=701")
+        XCTAssertEqual(progress?.manga?.chapterThreadID, "701")
+        XCTAssertEqual(progress?.manga?.chapterView, 1)
         XCTAssertEqual(progress?.manga?.mangaPageIndex, 2)
 
         guard case let .native(savedContext) = route else {
@@ -383,7 +381,8 @@ final class MangaReaderModelSettingsProgressTests: XCTestCase {
         let favorites = await fixture.localFavoriteLibraryStore.load().items
         XCTAssertTrue(favorites.isEmpty)
         let progress = await readingProgressStore.load(threadID: "700")
-        XCTAssertEqual(progress?.manga?.lastMangaURL.absoluteString, "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=701")
+        XCTAssertEqual(progress?.manga?.chapterThreadID, "701")
+        XCTAssertEqual(progress?.manga?.chapterView, 1)
         XCTAssertEqual(progress?.manga?.mangaPageIndex, 2)
     }
 
@@ -511,7 +510,8 @@ final class MangaReaderModelSettingsProgressTests: XCTestCase {
 
         try await waitFor {
             await progressAdapter.savedPositions.contains { position in
-                position.chapterURL == previous.chapterURL &&
+                position.chapterThreadID == previous.tid &&
+                    position.chapterView == previous.sourceIdentity.view &&
                     position.pageIndex == 3
             }
         }
@@ -647,8 +647,6 @@ final class MangaReaderModelSettingsProgressTests: XCTestCase {
             )
         )
         let originalURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=700&mobile=2"))
-        let oldChapterURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=701&mobile=2"))
-        let latestChapterURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=702&mobile=2"))
         let originalContext = MangaLaunchContext(
             originalThreadID: "700",
             chapterTID: "701",
@@ -687,8 +685,6 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute?) throws -> ReaderR
 private struct MangaReaderModelSettingsProgressFixture {
     let model: MangaReaderModel
     let context: MangaLaunchContext
-    let originalURL: URL
-    let chapterURL: URL
     let settingsStore: SettingsStore
     let resumeRouteStore: ReaderResumeRouteStore
     let localFavoriteLibraryStore: FavoriteLibraryStore
@@ -709,13 +705,6 @@ private func makeFixture(
     let resumeRouteStore = try ReaderResumeRouteStore(testSuiteName: defaultsSuiteName, key: "resume")
     try await settingsStore.save(appSettings)
 
-    let originalURL = YamiboRoute.threadByID(tid: "700", page: 1, authorID: nil, reverse: false).url
-    let chapterURL: URL
-    if let suppliedDocument {
-        chapterURL = suppliedDocument.chapterURL
-    } else {
-        chapterURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=701&mobile=2"))
-    }
     let context = MangaLaunchContext(
         originalThreadID: "700",
         chapterTID: suppliedDocument?.tid ?? "701",
@@ -730,8 +719,7 @@ private func makeFixture(
             currentChapter: MangaChapter(
                 tid: document.tid,
                 rawTitle: document.chapterTitle,
-                chapterNumber: MangaTitleCleaner.extractChapterNumber(document.chapterTitle),
-                url: document.chapterURL
+                chapterNumber: MangaTitleCleaner.extractChapterNumber(document.chapterTitle)
             ),
             cleanBookName: "Resolved Directory",
             firstPostID: document.ownerPostID
@@ -777,8 +765,6 @@ private func makeFixture(
     return MangaReaderModelSettingsProgressFixture(
         model: model,
         context: context,
-        originalURL: originalURL,
-        chapterURL: chapterURL,
         settingsStore: settingsStore,
         resumeRouteStore: resumeRouteStore,
         localFavoriteLibraryStore: appContext.localFavoriteLibraryStore
@@ -883,7 +869,6 @@ private func makeFixtureDocument(tid: String, pageCount: Int) throws -> MangaRea
         tid: tid,
         ownerPostID: "post-\(tid)",
         chapterTitle: "第\(tid)话",
-        chapterURL: makeFixtureURL(tid: tid),
         imageURLs: try (0..<max(pageCount, 0)).map { index in
             try XCTUnwrap(URL(string: "https://img.example.com/\(tid)-\(index).jpg"))
         }
@@ -903,13 +888,8 @@ private func makeFixtureChapter(tid: String) -> MangaChapter {
     MangaChapter(
         tid: tid,
         rawTitle: "第\(tid)话",
-        chapterNumber: Double(tid) ?? 0,
-        url: makeFixtureURL(tid: tid)
+        chapterNumber: Double(tid) ?? 0
     )
-}
-
-private func makeFixtureURL(tid: String) -> URL {
-    URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(tid)&mobile=2")!
 }
 
 #if os(iOS)

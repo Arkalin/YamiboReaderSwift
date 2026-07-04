@@ -31,7 +31,6 @@ public struct MangaReaderProjection: Codable, Hashable, Sendable {
     public var ownerAuthorID: String?
     public var ownerAuthorName: String?
     public var chapterTitle: String
-    public var chapterURL: URL
     public var imageURLs: [URL]
     public var sourceIdentity: MangaReaderProjectionSourceIdentity
     public var sourceFingerprint: String
@@ -44,7 +43,6 @@ public struct MangaReaderProjection: Codable, Hashable, Sendable {
         ownerAuthorID: String? = nil,
         ownerAuthorName: String? = nil,
         chapterTitle: String,
-        chapterURL: URL,
         imageURLs: [URL],
         sourceIdentity: MangaReaderProjectionSourceIdentity? = nil,
         sourceFingerprint: String = "",
@@ -67,7 +65,6 @@ public struct MangaReaderProjection: Codable, Hashable, Sendable {
             self.ownerAuthorName = nil
         }
         self.chapterTitle = chapterTitle
-        self.chapterURL = chapterURL
         self.imageURLs = imageURLs
         self.sourceIdentity = sourceIdentity ?? MangaReaderProjectionSourceIdentity(
             tid: tid,

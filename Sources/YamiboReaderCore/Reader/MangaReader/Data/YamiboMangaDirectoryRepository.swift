@@ -27,7 +27,6 @@ public struct YamiboMangaDirectoryRepository: MangaDirectoryRepository {
                 tid: tid,
                 rawTitle: cleanedThreadTitle,
                 chapterNumber: MangaTitleCleaner.extractChapterNumber(rawTitle),
-                url: YamiboRoute.chapterURL(forTID: tid) ?? normalizedURL,
                 view: 1
             )
             let mobileTagIDs = MangaHTMLParser.findTagIDsMobile(in: html)

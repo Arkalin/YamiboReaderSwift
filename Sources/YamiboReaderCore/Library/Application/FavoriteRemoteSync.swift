@@ -2,13 +2,13 @@ import Foundation
 
 public struct YamiboRemoteFavoriteEntry: Hashable, Sendable {
     public var remoteFavoriteID: String
-    public var threadURL: URL
+    public var threadID: String
     public var title: String?
     public var remoteOrder: Int
 
-    public init(remoteFavoriteID: String, threadURL: URL, title: String? = nil, remoteOrder: Int = 0) {
+    public init(remoteFavoriteID: String, threadID: String, title: String? = nil, remoteOrder: Int = 0) {
         self.remoteFavoriteID = remoteFavoriteID
-        self.threadURL = threadURL
+        self.threadID = threadID.trimmingCharacters(in: .whitespacesAndNewlines)
         self.title = title
         self.remoteOrder = remoteOrder
     }
@@ -41,7 +41,7 @@ public extension FavoriteLibraryDocument {
         directories: [MangaDirectory] = [],
         fallbackMangaCleanBookName: @Sendable (YamiboRemoteFavoriteEntry) -> String? = { _ in nil },
         date: Date = .now,
-        probe: @Sendable (URL) async throws -> FavoriteThreadProbeResult
+        probe: @Sendable (String) async throws -> FavoriteThreadProbeResult
     ) async -> YamiboFavoriteSyncReport {
         let location = FavoriteLocation.category(categoryID)
         var importedTargetIDs: [String] = []
@@ -51,7 +51,7 @@ public extension FavoriteLibraryDocument {
 
         for remoteEntry in remoteEntries {
             do {
-                let probeResult = try await probe(remoteEntry.threadURL)
+                let probeResult = try await probe(remoteEntry.threadID)
                 let remoteMapping = FavoriteRemoteMapping(
                     yamiboFavoriteID: remoteEntry.remoteFavoriteID,
                     yamiboRemoteOrder: remoteEntry.remoteOrder,
@@ -61,8 +61,7 @@ public extension FavoriteLibraryDocument {
                 let item: FavoriteItem
                 if case let .mangaTitle(_, cleanBookName) = probeResult.target {
                     item = try importMangaChapterFavorite(
-                        chapterTID: YamiboThreadURLCanonicalizer.threadID(from: remoteEntry.threadURL) ?? remoteEntry.remoteFavoriteID,
-                        chapterURL: remoteEntry.threadURL,
+                        chapterTID: remoteEntry.threadID,
                         chapterTitle: remoteEntry.title ?? probeResult.title,
                         directories: directories,
                         fallbackCleanBookName: cleanBookName.nilIfEmpty ?? fallbackMangaCleanBookName(remoteEntry),

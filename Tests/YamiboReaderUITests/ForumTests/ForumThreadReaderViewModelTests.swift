@@ -41,7 +41,7 @@ import Testing
         lastEditedText: "本帖最后由 楼主 于 2026-6-2 12:00 编辑",
         postedAtText: "2026-6-1 10:00"
     ))
-    #expect(await fixture.favoriteRepository.addedThreadURLs == [fixture.threadURL])
+    #expect(await fixture.favoriteRepository.addedThreadIDs == ["704"])
 
     await model.toggleFavorite()
 
@@ -302,24 +302,24 @@ private final class FakeForumThreadPageLoader: ForumThreadPageLoading, @unchecke
 }
 
 private actor FakeThreadFavoriteRepository: ForumThreadFavoriteRemoteOperating {
-    let threadURL: URL
-    var addedThreadURLs: [URL] = []
+    let threadID: String
+    var addedThreadIDs: [String] = []
     var deletedRemoteFavoriteIDs: [String] = []
 
     init(threadURL: URL) {
-        self.threadURL = threadURL
+        self.threadID = YamiboThreadURLCanonicalizer.threadID(from: threadURL) ?? "704"
     }
 
-    func addThreadFavorite(threadURL: URL, formHash: String?) async throws -> Favorite? {
-        addedThreadURLs.append(threadURL)
-        return Favorite(title: "远端标题", url: threadURL, remoteFavoriteID: "8801")
+    func addThreadFavorite(threadID: String, formHash: String?) async throws -> Favorite? {
+        addedThreadIDs.append(threadID)
+        return Favorite(title: "远端标题", threadID: threadID, remoteFavoriteID: "8801")
     }
 
     func deleteFavorite(remoteFavoriteID: String) async throws {
         deletedRemoteFavoriteIDs.append(remoteFavoriteID)
     }
 
-    func remoteFavorite(for threadURL: URL, maxPages: Int) async throws -> Favorite? {
-        Favorite(title: "远端标题", url: threadURL, remoteFavoriteID: "8801")
+    func remoteFavorite(forThreadID threadID: String, maxPages: Int) async throws -> Favorite? {
+        Favorite(title: "远端标题", threadID: threadID, remoteFavoriteID: "8801")
     }
 }

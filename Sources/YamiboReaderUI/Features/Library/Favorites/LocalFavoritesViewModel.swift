@@ -1037,7 +1037,7 @@ final class LocalFavoritesViewModel: ObservableObject {
             let entries = remoteFavorites.enumerated().map { index, favorite in
                 YamiboRemoteFavoriteEntry(
                     remoteFavoriteID: favorite.remoteFavoriteID ?? favorite.id,
-                    threadURL: favorite.url,
+                    threadID: favorite.threadID,
                     title: favorite.title,
                     remoteOrder: index
                 )
@@ -1054,13 +1054,10 @@ final class LocalFavoritesViewModel: ObservableObject {
                 into: targetCategoryID,
                 remoteEntries: entries,
                 date: .now,
-                probe: { url in
-                    let targetKey = YamiboThreadURLCanonicalizer.canonicalThreadURLKey(for: url)
-                    let title = remoteFavorites.first {
-                        YamiboThreadURLCanonicalizer.canonicalThreadURLKey(for: $0.url) == targetKey
-                    }?.title
+                probe: { threadID in
+                    let title = remoteFavorites.first { $0.threadID == threadID }?.title
                     return try await Self.probeResult(
-                        for: url,
+                        forThreadID: threadID,
                         title: title,
                         resolver: resolver,
                         coverRepository: coverRepository
@@ -1500,24 +1497,20 @@ final class LocalFavoritesViewModel: ObservableObject {
             guard let url = threadURL(for: latestItem.target) else { return nil }
             return .nativeThread(url: url, title: latestItem.resolvedDisplayTitle)
         case let .mangaTitle(_, cleanBookName):
-            guard let chapterURL = mode == .start
-                ? latestItem.mangaChapterMetadata?.chapterURL
-                : (progress?.manga?.lastMangaURL ?? latestItem.mangaChapterMetadata?.chapterURL) else {
+            let progressManga = mode == .start ? nil : progress?.manga
+            let metadata = latestItem.mangaChapterMetadata
+            guard let chapterTID = progressManga?.chapterThreadID ?? metadata?.chapterTID else {
                 errorMessage = L10n.string("favorite_library.manga_title_resolution_failed")
                 return nil
             }
-            guard let chapterTID = YamiboThreadURLCanonicalizer.threadID(from: chapterURL) else {
-                errorMessage = L10n.string("favorite_library.manga_title_resolution_failed")
-                return nil
-            }
-            let originalThreadID = latestItem.mangaChapterMetadata?.chapterTID ?? chapterTID
+            let originalThreadID = metadata?.chapterTID ?? chapterTID
             return .manga(
                 MangaLaunchContext(
                     originalThreadID: originalThreadID,
                     chapterTID: chapterTID,
                     displayTitle: latestItem.resolvedDisplayTitle,
                     source: .favorites,
-                    chapterView: Self.page(from: chapterURL),
+                    chapterView: progressManga?.chapterView ?? metadata?.chapterView ?? 1,
                     initialPage: mode == .start ? 0 : (progress?.manga?.mangaPageIndex ?? 0),
                     directoryName: cleanBookName,
                     offlineCacheFavoriteID: latestItem.id
@@ -1538,8 +1531,7 @@ final class LocalFavoritesViewModel: ObservableObject {
             if let progress = await appContext.readingProgressStore.load(for: item.target) {
                 return progress
             }
-            if let url = item.mangaChapterMetadata?.chapterURL {
-                guard let threadID = YamiboThreadURLCanonicalizer.threadID(from: url) else { return nil }
+            if let threadID = item.mangaChapterMetadata?.chapterTID {
                 return await appContext.readingProgressStore.load(threadID: threadID)
             }
             return nil
@@ -1634,10 +1626,10 @@ final class LocalFavoritesViewModel: ObservableObject {
            !remoteFavoriteID.isEmpty {
             return remoteFavoriteID
         }
-        guard let threadURL = threadURL(for: item.target) else {
+        guard let threadID = item.target.threadID else {
             throw YamiboError.missingFavoriteDeleteID
         }
-        if let remoteFavorite = try await repository.remoteFavorite(for: threadURL, maxPages: 30),
+        if let remoteFavorite = try await repository.remoteFavorite(forThreadID: threadID, maxPages: 30),
            let remoteFavoriteID = remoteFavorite.remoteFavoriteID?.trimmingCharacters(in: .whitespacesAndNewlines),
            !remoteFavoriteID.isEmpty {
             return remoteFavoriteID
@@ -1894,11 +1886,12 @@ final class LocalFavoritesViewModel: ObservableObject {
     }
 
     private static func probeResult(
-        for url: URL,
+        forThreadID threadID: String,
         title: String?,
         resolver: ThreadOpenResolver,
         coverRepository: ForumThreadReaderRepository
     ) async throws -> FavoriteThreadProbeResult {
+        let url = YamiboRoute.threadByID(tid: threadID, page: 1, authorID: nil, reverse: false).url
         switch try await resolver.resolve(threadURL: url, title: title) {
         case let .novel(context):
             let metadata = await threadMetadata(

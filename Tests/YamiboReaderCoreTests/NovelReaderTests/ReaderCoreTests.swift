@@ -2913,7 +2913,6 @@ private final class StubURLProtocol: URLProtocol {
 
     #expect(object["schemaVersion"] as? Int == ReaderPageDocument.schemaVersion)
     #expect(object["threadID"] as? String == "18601")
-    #expect(object["threadURL"] == nil)
     #expect(chapterIdentity["rawValue"] as? String != nil)
     #expect(textSegmentIdentity["rawValue"] as? String != nil)
     #expect(titleRange["location"] as? Int == 0)
@@ -3932,19 +3931,17 @@ final class FavoriteRepositoryDeleteTests: XCTestCase {
 final class FavoriteRepositoryThreadFavoriteTests: XCTestCase {
     func testAddsThreadFavoriteAndBackfillsRemoteFavoriteID() async throws {
         let repository = makeFavoriteRepository(cookie: "sid=1; favorite-add-success=1")
-        let threadURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=704&mobile=2"))
 
-        let remoteFavorite = try await repository.addThreadFavorite(threadURL: threadURL, formHash: "abc12345")
+        let remoteFavorite = try await repository.addThreadFavorite(threadID: "704", formHash: "abc12345")
 
         XCTAssertEqual(remoteFavorite?.remoteFavoriteID, "8801")
-        XCTAssertEqual(remoteFavorite?.url.absoluteString, "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=704&mobile=2")
+        XCTAssertEqual(remoteFavorite?.threadID, "704")
     }
 
     func testFindsRemoteFavoriteIDAcrossFavoritePages() async throws {
         let repository = makeFavoriteRepository(cookie: "sid=1; favorite-target-page2=1")
-        let threadURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=805&mobile=2"))
 
-        let remoteFavorite = try await repository.remoteFavorite(for: threadURL)
+        let remoteFavorite = try await repository.remoteFavorite(forThreadID: "805")
 
         XCTAssertEqual(remoteFavorite?.remoteFavoriteID, "9902")
     }

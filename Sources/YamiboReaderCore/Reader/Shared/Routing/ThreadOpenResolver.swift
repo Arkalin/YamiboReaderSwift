@@ -12,7 +12,6 @@ public actor ThreadOpenResolver {
         title: String? = nil,
         htmlOverride: String? = nil,
         favoriteType: FavoriteType = .unknown,
-        favoriteChapterURL: URL? = nil,
         initialMangaPageIndex: Int = 0
     ) async throws -> ThreadOpenTarget {
         let requestURL = URL(string: threadURL.absoluteString, relativeTo: YamiboRoute.baseURL)?.absoluteURL
@@ -37,8 +36,7 @@ public actor ThreadOpenResolver {
             guard let originalThreadID = Self.threadID(from: requestURL) else {
                 return .web(requestURL)
             }
-            let chapterURL = favoriteChapterURL ?? requestURL
-            guard let chapterTID = Self.threadID(from: chapterURL) else {
+            guard let chapterTID = Self.threadID(from: requestURL) else {
                 return .web(requestURL)
             }
             return .manga(
@@ -47,7 +45,7 @@ public actor ThreadOpenResolver {
                     chapterTID: chapterTID,
                     displayTitle: title ?? L10n.string("manga.reader.title"),
                     source: .favorites,
-                    chapterView: Self.page(from: chapterURL),
+                    chapterView: Self.page(from: requestURL),
                     initialPage: initialMangaPageIndex
                 )
             )
@@ -76,8 +74,7 @@ public actor ThreadOpenResolver {
             guard let originalThreadID = Self.threadID(from: requestURL) else {
                 return .web(requestURL)
             }
-            let chapterURL = favoriteChapterURL ?? requestURL
-            guard let chapterTID = Self.threadID(from: chapterURL) else {
+            guard let chapterTID = Self.threadID(from: requestURL) else {
                 return .web(requestURL)
             }
             return .manga(
@@ -86,7 +83,7 @@ public actor ThreadOpenResolver {
                     chapterTID: chapterTID,
                     displayTitle: MangaTitleCleaner.cleanBookName(snapshot.title.isEmpty ? (title ?? L10n.string("manga.reader.title")) : snapshot.title),
                     source: .forum,
-                    chapterView: Self.page(from: chapterURL),
+                    chapterView: Self.page(from: requestURL),
                     initialPage: initialMangaPageIndex
                 )
             )

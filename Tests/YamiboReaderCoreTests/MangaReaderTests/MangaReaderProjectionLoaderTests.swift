@@ -104,7 +104,6 @@ struct MangaReaderTestsReaderProjectionLoader {
             ownerPostID: "old",
             ownerAuthorID: "42",
             chapterTitle: "旧缓存",
-            chapterURL: YamiboRoute.threadByID(tid: "702", page: 1, authorID: "42", reverse: false).url,
             imageURLs: [try #require(URL(string: "https://img.example.com/old.jpg"))],
             sourceIdentity: sourceIdentity,
             sourceFingerprint: "stale"

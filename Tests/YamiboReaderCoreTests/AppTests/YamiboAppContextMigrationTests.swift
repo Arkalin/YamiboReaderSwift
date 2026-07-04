@@ -30,10 +30,9 @@ import Testing
     _ = try YamiboTestDefaults.make(suiteName: suiteName)
     let rootDirectory = makeTemporaryAppRoot()
     let appContext = try makeIsolatedAppContext(suiteName: suiteName, rootDirectory: rootDirectory)
-    let chapterURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=7001"))
     let imageURL = try #require(URL(string: "https://img.example.test/7001-1.jpg"))
 
-    try await saveMigratedAppState(appContext: appContext, chapterTID: "7001", chapterURL: chapterURL, imageURL: imageURL)
+    try await saveMigratedAppState(appContext: appContext, chapterTID: "7001", imageURL: imageURL)
     try await appContext.readerCacheStore.save(
         ReaderPageDocument(
             threadID: "7001",
@@ -97,10 +96,9 @@ import Testing
     defaults.set(legacyLibraryData, forKey: "yamibo.favoriteLibrary.localFirst")
     defaults.set(legacyProgressData, forKey: "yamibo.readingProgress.records")
     let appContext = try makeIsolatedAppContext(suiteName: suiteName, rootDirectory: rootDirectory)
-    let chapterURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=7002"))
     let imageURL = try #require(URL(string: "https://img.example.test/7002-1.jpg"))
 
-    try await saveMigratedAppState(appContext: appContext, chapterTID: "7002", chapterURL: chapterURL, imageURL: imageURL)
+    try await saveMigratedAppState(appContext: appContext, chapterTID: "7002", imageURL: imageURL)
     try await appContext.readerCacheStore.save(
         ReaderPageDocument(
             threadID: "7002",
@@ -218,7 +216,6 @@ import Testing
         databasePool: database,
         baseDirectory: legacyOfflineCacheDirectory(rootDirectory: rootDirectory)
     )
-    let chapterURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9003"))
     let imageURL = try #require(URL(string: "https://img.example.test/9003-1.jpg"))
     let novelSourcePage = ForumThreadPage(
         thread: ThreadIdentity(tid: "9004", canonicalURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9004"))),
@@ -240,7 +237,6 @@ import Testing
             ownerName: "Legacy Manga",
             tid: "9003",
             chapterTitle: "旧第一话",
-            chapterURL: chapterURL,
             imageURLs: [imageURL],
             sourcePage: makeAppMigrationMangaSourcePage(tid: "9003")
         )
@@ -315,7 +311,6 @@ private func makeIsolatedAppContext(suiteName: String, rootDirectory: URL) throw
 private func saveMigratedAppState(
     appContext: YamiboAppContext,
     chapterTID: String,
-    chapterURL: URL,
     imageURL: URL
 ) async throws {
     var library = FavoriteLibraryDocument()
@@ -332,10 +327,9 @@ private func saveMigratedAppState(
         NovelReadingPosition(threadID: chapterTID, view: 3)
     )
     let chapter = MangaChapter(
-        tid: "7001",
+        tid: chapterTID,
         rawTitle: "第一话",
-        chapterNumber: 1,
-        url: chapterURL
+        chapterNumber: 1
     )
     try await appContext.mangaDirectoryStore.saveDirectory(
         MangaDirectory(
@@ -349,7 +343,6 @@ private func saveMigratedAppState(
         MangaReaderProjection(
             tid: chapter.tid,
             chapterTitle: chapter.rawTitle,
-            chapterURL: chapterURL,
             imageURLs: [imageURL]
         )
     )
@@ -358,7 +351,6 @@ private func saveMigratedAppState(
             ownerName: "Shared GRDB Manga",
             tid: chapter.tid,
             chapterTitle: chapter.rawTitle,
-            chapterURL: chapterURL,
             imageURLs: [imageURL],
             sourcePage: makeAppMigrationMangaSourcePage(tid: chapter.tid)
         )

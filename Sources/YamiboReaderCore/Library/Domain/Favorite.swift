@@ -4,7 +4,7 @@ public struct Favorite: Codable, Hashable, Identifiable, Sendable {
     public let id: String
     public var title: String
     public var displayName: String?
-    public var url: URL
+    public var threadID: String
     public var remoteFavoriteID: String?
     public var mangaPageIndex: Int
     public var lastView: Int
@@ -14,7 +14,6 @@ public struct Favorite: Codable, Hashable, Identifiable, Sendable {
     public var novelMaxView: Int?
     public var novelDocumentSurfaceProgressPercent: Int?
     public var type: FavoriteType
-    public var lastMangaURL: URL?
     public var parentCollectionID: String?
     public var manualOrder: Int
     public var lastReadAt: Date?
@@ -24,7 +23,7 @@ public struct Favorite: Codable, Hashable, Identifiable, Sendable {
         case id
         case title
         case displayName
-        case url
+        case threadID
         case remoteFavoriteID
         case mangaPageIndex = "lastPage"
         case lastView
@@ -34,7 +33,6 @@ public struct Favorite: Codable, Hashable, Identifiable, Sendable {
         case novelMaxView
         case novelDocumentSurfaceProgressPercent
         case type
-        case lastMangaURL
         case parentCollectionID
         case manualOrder
         case lastReadAt
@@ -45,7 +43,7 @@ public struct Favorite: Codable, Hashable, Identifiable, Sendable {
         id: String? = nil,
         title: String,
         displayName: String? = nil,
-        url: URL,
+        threadID: String,
         remoteFavoriteID: String? = nil,
         mangaPageIndex: Int = 0,
         lastView: Int = 1,
@@ -55,16 +53,17 @@ public struct Favorite: Codable, Hashable, Identifiable, Sendable {
         novelMaxView: Int? = nil,
         novelDocumentSurfaceProgressPercent: Int? = nil,
         type: FavoriteType = .unknown,
-        lastMangaURL: URL? = nil,
         parentCollectionID: String? = nil,
         manualOrder: Int = 0,
         lastReadAt: Date? = nil,
         tagIDs: [String] = []
     ) {
-        self.id = id ?? url.absoluteString
+        let normalizedThreadID = threadID.trimmingCharacters(in: .whitespacesAndNewlines)
+        precondition(!normalizedThreadID.isEmpty, "Favorite requires a Yamibo thread tid")
+        self.id = id ?? remoteFavoriteID ?? "favorite:\(normalizedThreadID)"
         self.title = title
         self.displayName = displayName
-        self.url = url
+        self.threadID = normalizedThreadID
         self.remoteFavoriteID = remoteFavoriteID
         self.mangaPageIndex = max(0, mangaPageIndex)
         self.lastView = lastView
@@ -74,7 +73,6 @@ public struct Favorite: Codable, Hashable, Identifiable, Sendable {
         self.novelMaxView = novelMaxView.map { max(1, $0) }
         self.novelDocumentSurfaceProgressPercent = novelDocumentSurfaceProgressPercent.map { min(max($0, 0), 100) }
         self.type = type
-        self.lastMangaURL = lastMangaURL
         self.parentCollectionID = parentCollectionID
         self.manualOrder = manualOrder
         self.lastReadAt = lastReadAt
@@ -91,7 +89,7 @@ public struct Favorite: Codable, Hashable, Identifiable, Sendable {
         id = try container.decode(String.self, forKey: .id)
         title = try container.decode(String.self, forKey: .title)
         displayName = try container.decodeIfPresent(String.self, forKey: .displayName)
-        url = try container.decode(URL.self, forKey: .url)
+        threadID = try Self.decodeThreadID(from: container)
         remoteFavoriteID = try container.decodeIfPresent(String.self, forKey: .remoteFavoriteID)
         mangaPageIndex = max(0, try container.decodeIfPresent(Int.self, forKey: .mangaPageIndex) ?? 0)
         lastView = try container.decodeIfPresent(Int.self, forKey: .lastView) ?? 1
@@ -104,11 +102,25 @@ public struct Favorite: Codable, Hashable, Identifiable, Sendable {
             forKey: .novelDocumentSurfaceProgressPercent
         ).map { min(max($0, 0), 100) }
         type = try container.decodeIfPresent(FavoriteType.self, forKey: .type) ?? .unknown
-        lastMangaURL = try container.decodeIfPresent(URL.self, forKey: .lastMangaURL)
         parentCollectionID = try container.decodeIfPresent(String.self, forKey: .parentCollectionID)
         manualOrder = try container.decodeIfPresent(Int.self, forKey: .manualOrder) ?? 0
         lastReadAt = try container.decodeIfPresent(Date.self, forKey: .lastReadAt)
         tagIDs = try container.decodeIfPresent([String].self, forKey: .tagIDs) ?? []
+    }
+
+    private static func decodeThreadID(
+        from container: KeyedDecodingContainer<CodingKeys>
+    ) throws -> String {
+        let threadID = try container.decode(String.self, forKey: .threadID)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !threadID.isEmpty else {
+            throw DecodingError.dataCorruptedError(
+                forKey: .threadID,
+                in: container,
+                debugDescription: "Favorite requires threadID"
+            )
+        }
+        return threadID
     }
 }
 

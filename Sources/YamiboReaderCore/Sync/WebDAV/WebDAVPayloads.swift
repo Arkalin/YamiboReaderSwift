@@ -362,7 +362,8 @@ private struct ReadingProgressWebDAVRecord: Codable, Equatable, Sendable {
         self.novel = record.novel
         if let manga = record.manga {
             self.manga = MangaReadingProgressWebDAVRecord(
-                chapterThreadID: manga.chapterThreadID ?? YamiboThreadURLCanonicalizer.threadID(from: manga.lastMangaURL),
+                chapterThreadID: manga.chapterThreadID,
+                chapterView: manga.chapterView,
                 lastChapter: manga.lastChapter,
                 mangaPageIndex: manga.mangaPageIndex,
                 mangaPageCount: manga.mangaPageCount
@@ -376,18 +377,18 @@ private struct ReadingProgressWebDAVRecord: Codable, Equatable, Sendable {
         let resolvedThreadID = contentTarget.threadID ?? threadID ?? manga?.chapterThreadID
         let mangaRecord: MangaReadingProgressRecord?
         if let payload = manga {
-            guard let lastMangaURL = Self.threadURL(for: payload.chapterThreadID)
-                ?? Self.threadURL(for: resolvedThreadID) else {
+            guard let chapterThreadID = payload.chapterThreadID?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !chapterThreadID.isEmpty else {
                 throw DecodingError.dataCorrupted(
                     DecodingError.Context(
                         codingPath: [],
-                        debugDescription: "Manga reading progress WebDAV records require chapterThreadID or threadID."
+                        debugDescription: "Manga reading progress WebDAV records require chapterThreadID."
                     )
                 )
             }
             mangaRecord = MangaReadingProgressRecord(
-                lastMangaURL: lastMangaURL,
-                chapterThreadID: payload.chapterThreadID,
+                chapterThreadID: chapterThreadID,
+                chapterView: payload.chapterView,
                 lastChapter: payload.lastChapter,
                 mangaPageIndex: payload.mangaPageIndex,
                 mangaPageCount: payload.mangaPageCount
@@ -405,18 +406,11 @@ private struct ReadingProgressWebDAVRecord: Codable, Equatable, Sendable {
             manga: mangaRecord
         )
     }
-
-    private static func threadURL(for threadID: String?) -> URL? {
-        let trimmed = threadID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        guard !trimmed.isEmpty else { return nil }
-        return FavoriteLibraryURLIdentity.canonicalThreadURL(
-            from: YamiboRoute.threadByID(tid: trimmed, page: 1, authorID: nil, reverse: false).url
-        )
-    }
 }
 
 private struct MangaReadingProgressWebDAVRecord: Codable, Equatable, Sendable {
     var chapterThreadID: String?
+    var chapterView: Int
     var lastChapter: String
     var mangaPageIndex: Int
     var mangaPageCount: Int?

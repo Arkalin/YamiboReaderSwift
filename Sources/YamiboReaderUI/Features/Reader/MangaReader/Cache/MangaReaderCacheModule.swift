@@ -90,7 +90,7 @@ public final class MangaReaderCacheViewModel: ObservableObject {
 
     public func load() async {
         startObservingOfflineCacheUpdates()
-        favorite = await localFavoriteItem()?.favorite(threadURL: Self.threadURL(threadID: context.originalThreadID), type: .manga)
+        favorite = await localFavoriteItem()?.favorite(type: .manga)
         await refreshRows()
     }
 
@@ -157,8 +157,7 @@ public final class MangaReaderCacheViewModel: ObservableObject {
                     MangaOfflineCacheWorkRequest(
                         ownerName: ownerName,
                         tid: chapter.tid,
-                        chapterTitle: chapter.rawTitle,
-                        chapterURL: chapter.url
+                        chapterTitle: chapter.rawTitle
                     )
                 )
                 if case .enqueued = result {
@@ -247,18 +246,16 @@ public final class MangaReaderCacheViewModel: ObservableObject {
         }
     }
 
-    private static func threadURL(threadID: String) -> URL {
-        YamiboRoute.threadByID(tid: threadID, page: 1, authorID: nil, reverse: false).url
-    }
 }
 
 private extension FavoriteItem {
-    func favorite(threadURL: URL, type: FavoriteType) -> Favorite {
-        Favorite(
+    func favorite(type: FavoriteType) -> Favorite {
+        let threadID = target.threadID ?? mangaChapterMetadata?.chapterTID ?? target.mangaID ?? id
+        return Favorite(
             id: id,
             title: title,
             displayName: displayName,
-            url: threadURL,
+            threadID: threadID,
             remoteFavoriteID: remoteMapping?.yamiboFavoriteID,
             type: type,
             tagIDs: tagIDs

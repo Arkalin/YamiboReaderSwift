@@ -29,7 +29,7 @@ import Testing
     )
     model.favorite = Favorite(
         title: "收藏标题",
-        url: model.context.thread.canonicalURL,
+        threadID: model.context.thread.tid,
         type: .novel
     )
     model.readingProgress = ReadingProgressRecord(
@@ -160,7 +160,7 @@ import Testing
     let summary = model.headerSummary
 
     #expect(summary.title == "解析标题")
-    #expect(summary.threadURL == model.context.thread.canonicalURL)
+    #expect(summary.threadID == model.context.thread.tid)
     #expect(summary.authorID == "42")
     #expect(summary.authorName == "楼主名")
     #expect(summary.postedAtText == "2026-6-1 10:00")

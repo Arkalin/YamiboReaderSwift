@@ -222,7 +222,6 @@ public actor OfflineCacheQueueExecutor {
             ownerName: work.entryID.ownerKey,
             tid: work.entryID.entryKey,
             chapterTitle: work.title,
-            chapterURL: Self.rebuiltChapterURL(tid: work.entryID.entryKey),
             targetImageURLs: work.targetImageURLs,
             completedImageURLs: work.completedImageURLs,
             state: MangaOfflineCacheWorkState(rawValue: work.state.rawValue) ?? .paused,
@@ -263,7 +262,7 @@ public actor OfflineCacheQueueExecutor {
         if completedImageURLs.count < targetImageURLs.count {
             completedImageURLs = try await transferMissingImages(
                 workID: workID,
-                refererURL: projectionBackedWork.chapterURL,
+                refererURL: Self.refererURL(for: projectionBacked.sourceIdentity),
                 targetImageURLs: targetImageURLs,
                 completedImageURLs: completedImageURLs
             )
@@ -275,7 +274,6 @@ public actor OfflineCacheQueueExecutor {
                 ownerName: projectionBackedWork.ownerName,
                 tid: projectionBackedWork.tid,
                 chapterTitle: projectionBackedWork.chapterTitle,
-                chapterURL: projectionBackedWork.chapterURL,
                 imageURLs: targetImageURLs,
                 sourcePage: projectionBacked.sourcePage
             )
@@ -350,6 +348,7 @@ public actor OfflineCacheQueueExecutor {
                 targetImageURLs: snapshot.projection.imageURLs,
                 completedImageURLs: []
             ),
+            sourceIdentity: snapshot.projection.sourceIdentity,
             sourcePage: snapshot.sourcePage
         )
     }
@@ -459,16 +458,13 @@ public actor OfflineCacheQueueExecutor {
         return urls
     }
 
-    private static func rebuiltChapterURL(tid: String) -> URL {
-        var components = URLComponents(url: YamiboRoute.baseURL, resolvingAgainstBaseURL: false)!
-        components.path = "/forum.php"
-        components.queryItems = [
-            URLQueryItem(name: "mobile", value: "2"),
-            URLQueryItem(name: "mod", value: "viewthread"),
-            URLQueryItem(name: "page", value: "1"),
-            URLQueryItem(name: "tid", value: tid.trimmingCharacters(in: .whitespacesAndNewlines))
-        ]
-        return components.url!
+    private static func refererURL(for sourceIdentity: MangaReaderProjectionSourceIdentity) -> URL {
+        YamiboRoute.threadByID(
+            tid: sourceIdentity.tid,
+            page: sourceIdentity.view,
+            authorID: sourceIdentity.authorID,
+            reverse: false
+        ).url
     }
 
     private static func failureMessage(from error: Error) -> String {
@@ -492,5 +488,6 @@ private struct OfflineCacheImageTransferResult: Sendable {
 
 private struct MangaOfflineCacheProjectionBackedWork: Sendable {
     var work: MangaOfflineCacheWork
+    var sourceIdentity: MangaReaderProjectionSourceIdentity
     var sourcePage: ForumThreadPage
 }

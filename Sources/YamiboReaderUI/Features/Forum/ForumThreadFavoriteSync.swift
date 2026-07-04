@@ -2,16 +2,16 @@ import Foundation
 import YamiboReaderCore
 
 protocol ForumThreadFavoriteRemoteOperating: Sendable {
-    func addThreadFavorite(threadURL: URL, formHash: String?) async throws -> Favorite?
+    func addThreadFavorite(threadID: String, formHash: String?) async throws -> Favorite?
     func deleteFavorite(remoteFavoriteID: String) async throws
-    func remoteFavorite(for threadURL: URL, maxPages: Int) async throws -> Favorite?
+    func remoteFavorite(forThreadID threadID: String, maxPages: Int) async throws -> Favorite?
 }
 
 extension FavoriteRepository: ForumThreadFavoriteRemoteOperating {}
 
 enum ForumThreadFavoriteSync {
     static func addFavorite(
-        threadURL: URL,
+        threadID: String,
         title: String,
         type: FavoriteType,
         authorID: String?,
@@ -23,10 +23,10 @@ enum ForumThreadFavoriteSync {
         localFavoriteLibraryStore: FavoriteLibraryStore,
         remoteRepository: (any ForumThreadFavoriteRemoteOperating)?
     ) async throws -> Favorite {
-        let remoteFavorite = try await remoteRepository?.addThreadFavorite(threadURL: threadURL, formHash: formHash)
+        let remoteFavorite = try await remoteRepository?.addThreadFavorite(threadID: threadID, formHash: formHash)
         let favorite = Favorite(
             title: title,
-            url: threadURL,
+            threadID: threadID,
             remoteFavoriteID: remoteFavorite?.remoteFavoriteID,
             authorID: authorID,
             type: type
@@ -39,7 +39,7 @@ enum ForumThreadFavoriteSync {
             contentUpdatedAt: contentUpdatedAt,
             localFavoriteLibraryStore: localFavoriteLibraryStore
         )
-        return item.favorite(threadURL: threadURL, type: type)
+        return item.favorite(type: type)
     }
 
     static func removeFavorite(
@@ -65,7 +65,7 @@ enum ForumThreadFavoriteSync {
            !remoteFavoriteID.isEmpty {
             return remoteFavoriteID
         }
-        if let remoteFavorite = try await remoteRepository.remoteFavorite(for: favorite.url, maxPages: 30),
+        if let remoteFavorite = try await remoteRepository.remoteFavorite(forThreadID: favorite.threadID, maxPages: 30),
            let remoteFavoriteID = remoteFavorite.remoteFavoriteID?.trimmingCharacters(in: .whitespacesAndNewlines),
            !remoteFavoriteID.isEmpty {
             return remoteFavoriteID
@@ -110,20 +110,20 @@ enum ForumThreadFavoriteSync {
 
     private static func localTarget(for favorite: Favorite) throws -> FavoriteContentTarget {
         let kind: FavoriteContentTargetKind = favorite.type == .novel ? .novelThread : .normalThread
-        guard let threadID = YamiboThreadURLCanonicalizer.threadID(from: favorite.url) else {
-            throw YamiboError.missingFavoriteThreadID
-        }
-        return FavoriteContentTarget(kind: kind, threadID: threadID)
+        return FavoriteContentTarget(kind: kind, threadID: favorite.threadID)
     }
 }
 
 private extension FavoriteItem {
-    func favorite(threadURL: URL, type: FavoriteType) -> Favorite {
-        Favorite(
+    func favorite(type: FavoriteType) -> Favorite {
+        guard let threadID = target.threadID else {
+            preconditionFailure("Thread favorite conversion requires thread target")
+        }
+        return Favorite(
             id: id,
             title: title,
             displayName: displayName,
-            url: threadURL,
+            threadID: threadID,
             remoteFavoriteID: remoteMapping?.yamiboFavoriteID,
             type: type,
             tagIDs: tagIDs

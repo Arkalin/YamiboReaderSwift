@@ -178,7 +178,8 @@ final class MangaReaderAdjacentPrefetchTests: XCTestCase {
         try await Task.sleep(nanoseconds: 100_000_000)
 
         let savedPositions = await progressAdapter.savedPositions
-        XCTAssertEqual(savedPositions.map(\.chapterURL), [document700.chapterURL])
+        XCTAssertEqual(savedPositions.map(\.chapterThreadID), [document700.tid])
+        XCTAssertEqual(savedPositions.map(\.chapterView), [document700.sourceIdentity.view])
         XCTAssertEqual(savedPositions.map(\.pageIndex), [8])
     }
 
@@ -199,7 +200,9 @@ final class MangaReaderAdjacentPrefetchTests: XCTestCase {
 
         try await waitForAdjacentPrefetch {
             await progressAdapter.savedPositions.contains {
-                $0.chapterURL == document701.chapterURL && $0.pageIndex == 0
+                $0.chapterThreadID == document701.tid &&
+                    $0.chapterView == document701.sourceIdentity.view &&
+                    $0.pageIndex == 0
             }
         }
 
@@ -420,8 +423,7 @@ private func makeAdjacentPrefetchChapter(tid: String) -> MangaChapter {
     MangaChapter(
         tid: tid,
         rawTitle: "第\(tid)话",
-        chapterNumber: Double(tid) ?? 0,
-        url: makeAdjacentPrefetchURL(tid: tid)
+        chapterNumber: Double(tid) ?? 0
     )
 }
 
@@ -430,8 +432,7 @@ private func makeAdjacentPrefetchSeed(document: MangaReaderProjection) -> MangaD
         currentChapter: MangaChapter(
             tid: document.tid,
             rawTitle: document.chapterTitle,
-            chapterNumber: MangaTitleCleaner.extractChapterNumber(document.chapterTitle),
-            url: document.chapterURL
+            chapterNumber: MangaTitleCleaner.extractChapterNumber(document.chapterTitle)
         ),
         cleanBookName: "Resolved Directory"
     )
@@ -442,15 +443,10 @@ private func makeAdjacentPrefetchDocument(tid: String, pageCount: Int) throws ->
         tid: tid,
         ownerPostID: "post-\(tid)",
         chapterTitle: "第\(tid)话",
-        chapterURL: makeAdjacentPrefetchURL(tid: tid),
         imageURLs: try (0..<pageCount).map { index in
             try XCTUnwrap(URL(string: "https://img.example.com/\(tid)-\(index).jpg"))
         }
     )
-}
-
-private func makeAdjacentPrefetchURL(tid: String) -> URL {
-    URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(tid)&mobile=2")!
 }
 
 @MainActor

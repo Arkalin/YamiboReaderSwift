@@ -50,9 +50,10 @@ public enum FavoriteHTMLParser {
         for link in links {
             let href = ((try? link.attr("href")) ?? "")
             guard let url = HTMLTextExtractor.absoluteURL(from: href) else { continue }
+            guard let threadID = YamiboThreadURLCanonicalizer.threadID(from: url) else { continue }
             let title = ((try? link.text()) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !title.isEmpty, seen.insert(url.absoluteString).inserted else { continue }
-            favorites.append(Favorite(title: title, url: url))
+            guard !title.isEmpty, seen.insert(threadID).inserted else { continue }
+            favorites.append(Favorite(title: title, threadID: threadID))
         }
 
         return FavoritePageResult(
@@ -66,12 +67,13 @@ public enum FavoriteHTMLParser {
         guard let link = findFavoriteLink(in: item) else { return nil }
         let href = ((try? link.attr("href")) ?? "")
         guard let url = HTMLTextExtractor.absoluteURL(from: href) else { return nil }
+        guard let threadID = YamiboThreadURLCanonicalizer.threadID(from: url) else { return nil }
 
         let title = ((try? link.text()) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !title.isEmpty, seen.insert(url.absoluteString).inserted else { return nil }
+        guard !title.isEmpty, seen.insert(threadID).inserted else { return nil }
 
         let remoteFavoriteID = extractRemoteFavoriteID(from: item)
-        return Favorite(title: title, url: url, remoteFavoriteID: remoteFavoriteID)
+        return Favorite(title: title, threadID: threadID, remoteFavoriteID: remoteFavoriteID)
     }
 
     private static func findFavoriteLink(in item: Element) -> Element? {

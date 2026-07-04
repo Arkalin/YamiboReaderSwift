@@ -3,44 +3,6 @@ import Foundation
 public enum YamiboRoute: Sendable {
     public static let baseURL = URL(string: "https://bbs.yamibo.com")!
 
-    public static func normalizedChapterURL(_ url: URL) -> URL {
-        Self.thread(url: url, page: 1, authorID: nil).url
-    }
-
-    public static func normalizedChapterURL(_ url: URL, tid: String) -> URL {
-        let normalizedTid = tid.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !normalizedTid.isEmpty else {
-            return normalizedChapterURL(url)
-        }
-
-        let resolvedURL = URL(string: url.absoluteString, relativeTo: Self.baseURL)?.absoluteURL ?? url.absoluteURL
-        var components = URLComponents(url: resolvedURL, resolvingAgainstBaseURL: false)
-            ?? URLComponents(url: Self.baseURL, resolvingAgainstBaseURL: false)!
-        components.scheme = components.scheme ?? Self.baseURL.scheme
-        components.host = components.host ?? Self.baseURL.host
-        components.path = "/forum.php"
-
-        var items: [String: String] = [:]
-        for item in components.queryItems ?? [] {
-            guard let value = item.value, !value.isEmpty else { continue }
-            items[item.name] = value
-        }
-        items["mod"] = "viewthread"
-        items["mobile"] = "2"
-        items["page"] = "1"
-        items["tid"] = normalizedTid
-        components.queryItems = items
-            .map { URLQueryItem(name: $0.key, value: $0.value) }
-            .sorted { $0.name < $1.name }
-        return components.url ?? normalizedChapterURL(url)
-    }
-
-    public static func chapterURL(forTID tid: String) -> URL? {
-        let normalizedTid = tid.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !normalizedTid.isEmpty else { return nil }
-        return Self.threadByID(tid: normalizedTid, page: 1, authorID: nil, reverse: false).url
-    }
-
     public static func findPostURL(threadURL: URL, postID: String?) -> URL? {
         let normalizedPostID = postID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         guard !normalizedPostID.isEmpty else { return nil }

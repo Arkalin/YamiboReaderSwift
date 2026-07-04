@@ -10,9 +10,7 @@ enum FavoriteLibraryURLIdentity {
     }
 
     static func favorite(_ favorite: Favorite, matches url: URL) -> Bool {
-        favorite.url == url ||
-            favorite.id == url.absoluteString ||
-            canonicalThreadURLKey(for: favorite.url) == canonicalThreadURLKey(for: url)
+        YamiboThreadURLCanonicalizer.threadID(from: url) == favorite.threadID
     }
 
 }

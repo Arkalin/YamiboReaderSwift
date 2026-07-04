@@ -819,7 +819,6 @@ private func seedNovelCache(_ fixture: SystemSettingsFixture) async throws {
 }
 
 private func seedMangaIndexCache(_ fixture: SystemSettingsFixture) async throws {
-    let chapterURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=901&mobile=2"))
     try await fixture.mangaDirectoryStore.saveDirectory(
         MangaDirectory(
             cleanBookName: "测试漫画",
@@ -829,8 +828,7 @@ private func seedMangaIndexCache(_ fixture: SystemSettingsFixture) async throws 
                 MangaChapter(
                     tid: "901",
                     rawTitle: "第1话",
-                    chapterNumber: 1,
-                    url: chapterURL
+                    chapterNumber: 1
                 )
             ],
             lastUpdatedAt: Date(timeIntervalSince1970: 1)
@@ -846,7 +844,6 @@ private func seedMangaIndexCache(_ fixture: SystemSettingsFixture) async throws 
         tid: "901",
         ownerPostID: "post-901",
         chapterTitle: "第1话",
-        chapterURL: chapterURL,
         imageURLs: [
             try XCTUnwrap(URL(string: "https://img.example.com/901-1.jpg")),
             try XCTUnwrap(URL(string: "https://img.example.com/901-2.jpg"))
@@ -873,7 +870,6 @@ private func makeMangaOfflineMembership(
         ownerName: ownerName,
         tid: tid,
         chapterTitle: "第\(tid)话",
-        chapterURL: try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(tid)&mobile=2")),
         imageURLs: imageURLs,
         sourcePage: makeSystemSettingsOfflineSourcePage(tid: tid)
     )
@@ -903,7 +899,6 @@ private func makeMangaOfflineWorkRequest(
         ownerName: ownerName,
         tid: tid,
         chapterTitle: "第\(tid)话",
-        chapterURL: try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(tid)&mobile=2")),
         targetImageURLs: targetImageURLs
     )
 }

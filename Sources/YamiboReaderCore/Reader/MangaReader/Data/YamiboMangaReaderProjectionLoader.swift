@@ -162,12 +162,6 @@ public actor YamiboMangaReaderProjectionLoader: MangaReaderProjectionSnapshotLoa
         let rawTitle = page.title.mangaReaderTrimmedNonEmpty ?? identity.tid
         let chapterTitle = MangaTitleCleaner.cleanThreadTitle(rawTitle).mangaReaderTrimmedNonEmpty
             ?? rawTitle
-        let sourceURL = YamiboRoute.threadByID(
-            tid: identity.tid,
-            page: identity.view,
-            authorID: identity.authorID,
-            reverse: false
-        ).url
 
         return MangaReaderProjection(
             tid: identity.tid,
@@ -175,7 +169,6 @@ public actor YamiboMangaReaderProjectionLoader: MangaReaderProjectionSnapshotLoa
             ownerAuthorID: identity.authorID,
             ownerAuthorName: ownerPost?.author.name,
             chapterTitle: chapterTitle,
-            chapterURL: sourceURL,
             imageURLs: imageURLs,
             sourceIdentity: identity,
             sourceFingerprint: sourceFingerprint,

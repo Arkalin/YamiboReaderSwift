@@ -187,7 +187,6 @@ private enum YamiboAccountTestError: Error {
         ownerName: favoriteItem.title,
         tid: "970",
         chapterTitle: "第970话",
-        chapterURL: favoriteURL,
         imageURLs: [imageURL],
         sourcePage: makeAccountOfflineSourcePage(tid: "970")
     ))
@@ -195,7 +194,6 @@ private enum YamiboAccountTestError: Error {
         ownerName: favoriteItem.title,
         tid: "971",
         chapterTitle: "第971话",
-        chapterURL: favoriteURL,
         targetImageURLs: [imageURL]
     ))
 

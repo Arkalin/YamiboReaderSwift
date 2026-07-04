@@ -186,12 +186,10 @@ public actor MangaDirectoryStore: MangaDirectoryPersisting, MangaDirectoryStorag
             arguments: [name]
         ).compactMap { row -> MangaChapter? in
             let tid = row["tid"] as String
-            guard let url = YamiboRoute.chapterURL(forTID: tid) else { return nil }
             return MangaChapter(
                 tid: tid,
                 rawTitle: row["raw_title"],
                 chapterNumber: row["chapter_number"],
-                url: url,
                 view: row["view"],
                 authorUID: row["author_uid"] as String?,
                 authorName: row["author_name"] as String?,

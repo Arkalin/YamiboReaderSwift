@@ -40,7 +40,7 @@ struct ForumNovelChapterSection: Identifiable, Hashable, Sendable {
 
 struct ForumNovelDetailHeaderSummary: Equatable, Sendable {
     var title: String
-    var threadURL: URL
+    var threadID: String
     var authorID: String?
     var authorName: String?
     var postedAtText: String?
@@ -144,7 +144,7 @@ final class ForumNovelDetailViewModel {
         let previewPost = loadedThreadPages[1]?.posts.first
         return ForumNovelDetailHeaderSummary(
             title: displayTitle(threadPage?.title ?? context.title),
-            threadURL: context.thread.canonicalURL,
+            threadID: context.thread.tid,
             authorID: resolvedAuthorID ?? Self.trimmedNonEmpty(firstPost?.author.uid) ?? context.authorID,
             authorName: Self.trimmedNonEmpty(firstPost?.author.name),
             postedAtText: firstPost?.postedAtText,
@@ -195,10 +195,7 @@ final class ForumNovelDetailViewModel {
         defer { isLoading = false }
 
         do {
-            favorite = await localFavoriteItem()?.favorite(
-                threadURL: context.thread.canonicalURL,
-                type: .novel
-            )
+            favorite = await localFavoriteItem()?.favorite(type: .novel)
             readingProgress = await appContext.readingProgressStore.load(threadID: context.thread.tid)
             contentCover = await loadContentCover()
             readerSettings = await appContext.settingsStore.load().reader
@@ -377,7 +374,6 @@ final class ForumNovelDetailViewModel {
     }
 
     func toggleFavorite() async {
-        let url = context.thread.canonicalURL
         favoriteErrorMessage = nil
 
         do {
@@ -394,7 +390,7 @@ final class ForumNovelDetailViewModel {
             }
 
             let favorite = try await ForumThreadFavoriteSync.addFavorite(
-                threadURL: url,
+                threadID: context.thread.tid,
                 title: favoriteTitle,
                 type: .novel,
                 authorID: resolvedAuthorID ?? context.authorID,
@@ -410,7 +406,7 @@ final class ForumNovelDetailViewModel {
             rebuildChapterDirectory()
         } catch {
             favoriteErrorMessage = error.localizedDescription
-            favorite = await localFavoriteItem()?.favorite(threadURL: url, type: .novel)
+            favorite = await localFavoriteItem()?.favorite(type: .novel)
             rebuildChapterDirectory()
         }
     }
@@ -420,10 +416,7 @@ final class ForumNovelDetailViewModel {
     }
 
     private func refreshFavorite(from localFavoriteLibraryStore: FavoriteLibraryStore) async {
-        favorite = await localFavoriteItem(from: localFavoriteLibraryStore)?.favorite(
-            threadURL: context.thread.canonicalURL,
-            type: .novel
-        )
+        favorite = await localFavoriteItem(from: localFavoriteLibraryStore)?.favorite(type: .novel)
         rebuildChapterDirectory()
     }
 
@@ -588,7 +581,7 @@ final class ForumNovelDetailViewModel {
 
     private func displayTitle(_ value: String?) -> String {
         ForumThreadTitleSanitizer.sanitize(value)
-            ?? context.thread.canonicalURL.absoluteString
+            ?? context.thread.tid
     }
 
     private static func resolveAuthorID(context: NovelDetailLaunchContext, page: ForumThreadPage?) throws -> String {
@@ -744,12 +737,15 @@ final class ForumNovelDetailViewModel {
 }
 
 private extension FavoriteItem {
-    func favorite(threadURL: URL, type: FavoriteType) -> Favorite {
-        Favorite(
+    func favorite(type: FavoriteType) -> Favorite {
+        guard let threadID = target.threadID else {
+            preconditionFailure("Thread favorite conversion requires thread target")
+        }
+        return Favorite(
             id: id,
             title: title,
             displayName: displayName,
-            url: threadURL,
+            threadID: threadID,
             remoteFavoriteID: remoteMapping?.yamiboFavoriteID,
             type: type,
             tagIDs: tagIDs

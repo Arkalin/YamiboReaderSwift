@@ -392,8 +392,7 @@ private func makeChapter(tid: String, title: String) -> MangaChapter {
     MangaChapter(
         tid: tid,
         rawTitle: title,
-        chapterNumber: MangaTitleCleaner.extractChapterNumber(title),
-        url: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(tid)&mobile=2")!
+        chapterNumber: MangaTitleCleaner.extractChapterNumber(title)
     )
 }
 
@@ -402,7 +401,6 @@ private func makeDocument(tid: String, pageCount: Int) throws -> MangaReaderProj
         tid: tid,
         ownerPostID: "post-\(tid)",
         chapterTitle: "第1话",
-        chapterURL: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(tid)&mobile=2")!,
         imageURLs: try (0..<pageCount).map { index in
             try XCTUnwrap(URL(string: "https://img.example.com/\(tid)-\(index).jpg"))
         }

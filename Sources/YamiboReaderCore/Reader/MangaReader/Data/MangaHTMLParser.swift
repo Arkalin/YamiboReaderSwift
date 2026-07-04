@@ -61,8 +61,7 @@ public enum MangaHTMLParser {
                 tid: tid,
                 rawTitle: title,
                 chapterNumber: MangaTitleCleaner.extractChapterNumber(title),
-                url: YamiboRoute.thread(url: url, page: MangaChapter.view(from: url), authorID: nil).url,
-                view: MangaChapter.view(from: url)
+                view: view(from: url)
             )
         }
     }
@@ -225,8 +224,7 @@ public enum MangaHTMLParser {
                 tid: tid,
                 rawTitle: title,
                 chapterNumber: MangaTitleCleaner.extractChapterNumber(title),
-                url: url,
-                view: MangaChapter.view(from: url),
+                view: view(from: url),
                 authorUID: extractUID(from: authorURL),
                 authorName: authorName,
                 groupIndex: groupIndex,
@@ -267,8 +265,7 @@ public enum MangaHTMLParser {
                 tid: tid,
                 rawTitle: title,
                 chapterNumber: MangaTitleCleaner.extractChapterNumber(title),
-                url: url,
-                view: MangaChapter.view(from: url),
+                view: view(from: url),
                 authorUID: extractUID(from: authorMatch?[1] ?? ""),
                 authorName: authorMatch.map { HTMLTextExtractor.stripTags($0[2]) },
                 groupIndex: groupIndex
@@ -279,6 +276,13 @@ public enum MangaHTMLParser {
     private static func extractUID(from url: String) -> String? {
         HTMLTextExtractor.firstMatch(pattern: #"uid=(\d+)"#, in: url)?.dropFirst().first
             ?? HTMLTextExtractor.firstMatch(pattern: #"uid-(\d+)"#, in: url)?.dropFirst().first
+    }
+
+    private static func view(from url: URL) -> Int {
+        let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        let page = components?.queryItems?.first(where: { $0.name == "page" })?.value
+            .flatMap(Int.init) ?? 1
+        return max(1, page)
     }
 
     private static func postID(fromRawID rawID: String, prefix: String) -> String? {
