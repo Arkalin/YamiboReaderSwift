@@ -570,7 +570,7 @@ struct OfflineCacheTestsQueueExecutor {
         #expect(await store.offlineImageData(for: imageURLs[0]) == nil)
         let entry = await store.novelOfflineCacheEntry(id: OfflineCacheEntryID(
             readerKind: .novel,
-            ownerKey: request.ownerTitle,
+            ownerKey: request.groupKey,
             entryKey: request.entryKey
         ))
         #expect(entry?.imageURLs.isEmpty == true)
@@ -606,7 +606,7 @@ struct OfflineCacheTestsQueueExecutor {
         #expect(await store.offlineImageData(for: imageURLs[1]) == Data([2]))
         let entry = await store.novelOfflineCacheEntry(id: OfflineCacheEntryID(
             readerKind: .novel,
-            ownerKey: request.ownerTitle,
+            ownerKey: request.groupKey,
             entryKey: request.entryKey
         ))
         #expect(entry?.imageURLs == imageURLs)
@@ -646,10 +646,51 @@ struct OfflineCacheTestsQueueExecutor {
         #expect(sourceSnapshot?.sourcePage == preparedPage.sourcePage)
         let entry = await store.novelOfflineCacheEntry(id: OfflineCacheEntryID(
             readerKind: .novel,
-            ownerKey: request.ownerTitle,
+            ownerKey: request.groupKey,
             entryKey: request.entryKey
         ))
         #expect(entry?.imageURLs == imageURLs)
+    }
+
+    @Test func continueProcessesNovelWorkAfterOwnerTitleChanges() async throws {
+        let store = try makeTestOfflineCacheStore(rootDirectory: try makeTemporaryExecutorDirectory())
+        let originalRequest = try makeNovelExecutorWorkRequest(
+            tid: "1130",
+            view: 1,
+            retainsInlineImages: false,
+            ownerTitle: "旧标题1130"
+        )
+        let renamedRequest = try makeNovelExecutorWorkRequest(
+            tid: "1130",
+            view: 1,
+            retainsInlineImages: false,
+            ownerTitle: "新标题1130"
+        )
+        _ = try await store.enqueueNovelOfflineCacheWork(originalRequest)
+        _ = try await store.enqueueNovelOfflineCacheWork(renamedRequest)
+        let sourceLoader = RecordingNovelOfflineSourcePageLoader()
+        await sourceLoader.setPreparedPage(
+            try makeNovelExecutorPreparedSourcePage(tid: "1130", view: 1, imageURLs: []),
+            for: renamedRequest
+        )
+        let executor = OfflineCacheQueueExecutor(
+            store: store,
+            readerProjectionLoader: RecordingReaderProjectionLoader(),
+            novelSourcePageLoader: sourceLoader,
+            imageAcquirer: RecordingOfflineImageAcquirer()
+        )
+
+        try await executor.continueQueue()
+        await executor.waitForIdle()
+
+        #expect(await store.offlineCacheQueueWorks().isEmpty)
+        #expect(await sourceLoader.requests.map(\.ownerTitle) == ["新标题1130"])
+        let entry = await store.novelOfflineCacheEntry(id: OfflineCacheEntryID(
+            readerKind: .novel,
+            ownerKey: renamedRequest.groupKey,
+            entryKey: renamedRequest.entryKey
+        ))
+        #expect(entry?.ownerTitle == "新标题1130")
     }
 }
 
@@ -905,10 +946,11 @@ private func makeExecutorWorkRequest(
 private func makeNovelExecutorWorkRequest(
     tid: String,
     view: Int,
-    retainsInlineImages: Bool
+    retainsInlineImages: Bool,
+    ownerTitle: String? = nil
 ) throws -> NovelOfflineCacheWorkRequest {
     NovelOfflineCacheWorkRequest(
-        ownerTitle: "小说\(tid)",
+        ownerTitle: ownerTitle ?? "小说\(tid)",
         title: "第\(view)页",
         threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(tid)&mobile=2")),
         view: view,

@@ -99,6 +99,113 @@ struct MangaReaderTestsNovelOfflineCacheStore {
         #expect(snapshot.state(for: 3).status == .caching)
     }
 
+    @Test func sourcePageIdentityIgnoresOwnerTitleChanges() async throws {
+        let store = try makeTestOfflineCacheStore(rootDirectory: try makeTemporaryNovelOfflineCacheDirectory())
+        let originalRequest = try makeNovelWorkRequest(tid: "7010", view: 1, ownerTitle: "旧标题7010")
+        let renamedRequest = try makeNovelWorkRequest(tid: "7010", view: 1, ownerTitle: "新标题7010")
+        let sourcePage = try makeNovelSourcePage(tid: "7010", view: 1, totalPages: 1)
+
+        try await store.saveNovelOfflineSourcePage(
+            sourcePage,
+            request: originalRequest,
+            projectionPrewarm: nil,
+            updatedAt: Date(timeIntervalSince1970: 70_100)
+        )
+
+        let renamedSnapshot = await store.novelOfflineCacheViewsSnapshot(
+            ownerTitle: renamedRequest.ownerTitle,
+            threadURL: renamedRequest.threadURL,
+            authorID: renamedRequest.authorID,
+            contentSource: renamedRequest.contentSource
+        )
+        let loadedSource = await store.novelOfflineSourcePage(
+            ownerTitle: renamedRequest.ownerTitle,
+            threadURL: renamedRequest.threadURL,
+            view: renamedRequest.view,
+            authorID: renamedRequest.authorID,
+            contentSource: renamedRequest.contentSource
+        )
+
+        #expect(renamedSnapshot.cachedViews == [1])
+        #expect(loadedSource == sourcePage)
+
+        try await store.removeNovelOfflineCacheViews(
+            [1],
+            ownerTitle: renamedRequest.ownerTitle,
+            threadURL: renamedRequest.threadURL,
+            authorID: renamedRequest.authorID,
+            contentSource: renamedRequest.contentSource
+        )
+
+        #expect(await store.novelOfflineSourcePage(
+            ownerTitle: originalRequest.ownerTitle,
+            threadURL: originalRequest.threadURL,
+            view: originalRequest.view,
+            authorID: originalRequest.authorID,
+            contentSource: originalRequest.contentSource
+        ) == nil)
+        #expect(await store.allNovelOfflineCacheEntries().isEmpty)
+    }
+
+    @Test func queuedNovelWorkIdentityIgnoresOwnerTitleAndUpdatesDisplayTitle() async throws {
+        let store = try makeTestOfflineCacheStore(rootDirectory: try makeTemporaryNovelOfflineCacheDirectory())
+        let originalRequest = try makeNovelWorkRequest(tid: "7011", view: 2, ownerTitle: "旧标题7011")
+        let renamedRequest = try makeNovelWorkRequest(tid: "7011", view: 2, ownerTitle: "新标题7011")
+
+        _ = try await store.enqueueNovelOfflineCacheWork(originalRequest)
+        let secondResult = try await store.enqueueNovelOfflineCacheWork(renamedRequest)
+
+        guard case let .alreadyQueued(projectedWork) = secondResult else {
+            Issue.record("Second enqueue should return the existing novel work")
+            return
+        }
+        let works = await store.offlineCacheQueueWorks()
+        let expectedGroupKey = NovelOfflineCacheEntry.groupKey(
+            threadURL: renamedRequest.threadURL,
+            authorID: renamedRequest.authorID,
+            contentSource: renamedRequest.contentSource
+        )
+
+        #expect(works.count == 1)
+        #expect(projectedWork.groupID.ownerKey == expectedGroupKey)
+        #expect(projectedWork.ownerTitle == "新标题7011")
+        #expect(works.first?.ownerTitle == "新标题7011")
+    }
+
+    @Test func savingSameNovelViewWithNewOwnerTitleUpdatesManagementGroupWithoutDuplicate() async throws {
+        let store = try makeTestOfflineCacheStore(rootDirectory: try makeTemporaryNovelOfflineCacheDirectory())
+        let originalRequest = try makeNovelWorkRequest(tid: "7012", view: 1, ownerTitle: "旧标题7012")
+        let renamedRequest = try makeNovelWorkRequest(tid: "7012", view: 1, ownerTitle: "新标题7012")
+        let sourcePage = try makeNovelSourcePage(tid: "7012", view: 1, totalPages: 1)
+
+        try await store.saveNovelOfflineSourcePage(
+            sourcePage,
+            request: originalRequest,
+            projectionPrewarm: nil,
+            updatedAt: Date(timeIntervalSince1970: 70_120)
+        )
+        try await store.saveNovelOfflineSourcePage(
+            sourcePage,
+            request: renamedRequest,
+            projectionPrewarm: nil,
+            updatedAt: Date(timeIntervalSince1970: 70_121)
+        )
+
+        let snapshot = await store.offlineCacheManagementSnapshot()
+        let group = try #require(snapshot.groups.first)
+        let expectedGroupKey = NovelOfflineCacheEntry.groupKey(
+            threadURL: renamedRequest.threadURL,
+            authorID: renamedRequest.authorID,
+            contentSource: renamedRequest.contentSource
+        )
+
+        #expect(snapshot.groups.count == 1)
+        #expect(group.id.ownerKey == expectedGroupKey)
+        #expect(group.title == "新标题7012")
+        #expect(group.cachedCount == 1)
+        #expect(group.entries.count == 1)
+    }
+
     @Test func deletingNovelOfflineEntryPreservesTransparentThreadPageAndProjectionCaches() async throws {
         let root = try makeTemporaryNovelOfflineCacheDirectory()
         let offlineStore = try makeTestOfflineCacheStore(rootDirectory: root)
@@ -185,7 +292,7 @@ struct MangaReaderTestsNovelOfflineCacheStore {
 
         let entry = await store.novelOfflineCacheEntry(id: OfflineCacheEntryID(
             readerKind: .novel,
-            ownerKey: initialRequest.ownerTitle,
+            ownerKey: initialRequest.groupKey,
             entryKey: initialRequest.entryKey
         ))
         #expect(entry?.imageURLs == [imageURL])
@@ -193,9 +300,13 @@ struct MangaReaderTestsNovelOfflineCacheStore {
     }
 }
 
-private func makeNovelWorkRequest(tid: String, view: Int) throws -> NovelOfflineCacheWorkRequest {
+private func makeNovelWorkRequest(
+    tid: String,
+    view: Int,
+    ownerTitle: String? = nil
+) throws -> NovelOfflineCacheWorkRequest {
     NovelOfflineCacheWorkRequest(
-        ownerTitle: "小说\(tid)",
+        ownerTitle: ownerTitle ?? "小说\(tid)",
         title: "第\(view)页",
         threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(tid)&mobile=2")),
         view: view,

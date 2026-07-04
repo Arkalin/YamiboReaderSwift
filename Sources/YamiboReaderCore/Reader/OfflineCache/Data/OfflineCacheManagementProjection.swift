@@ -11,6 +11,7 @@ extension OfflineCacheStore {
 
     private static func managementSnapshot(in db: Database) throws -> OfflineCacheManagementSnapshot {
         var builders: [OfflineCacheEntryID: OfflineCacheManagementEntryBuilder] = [:]
+        var groupTitles: [OfflineCacheGroupID: OfflineCacheManagementGroupTitle] = [:]
 
         for membership in try allMemberships(in: db) {
             let entryID = OfflineCacheEntryID(
@@ -28,6 +29,7 @@ extension OfflineCacheStore {
             builder.imageURLStrings.formUnion(membership.imageURLs.map(\.absoluteString))
             builder.updatedAt = max(builder.updatedAt, membership.createdAt)
             builders[entryID] = builder
+            recordGroupTitle(membership.ownerName, updatedAt: membership.createdAt, groupID: entryID.groupID, in: &groupTitles)
         }
 
         for entry in try allNovelEntries(in: db) {
@@ -39,10 +41,11 @@ extension OfflineCacheStore {
                 updatedAt: entry.updatedAt
             )
             builder.title = entry.title
-            builder.byteCount += try novelEntryByteCount(ownerName: entry.ownerTitle, entryKey: entryID.entryKey, in: db)
+            builder.byteCount += try novelEntryByteCount(entryKey: entryID.entryKey, in: db)
             builder.imageURLStrings.formUnion(entry.imageURLs.map(\.absoluteString))
             builder.updatedAt = max(builder.updatedAt, entry.updatedAt)
             builders[entryID] = builder
+            recordGroupTitle(entry.ownerTitle, updatedAt: entry.updatedAt, groupID: entryID.groupID, in: &groupTitles)
         }
 
         for work in try allRawWorks(in: db) {
@@ -63,6 +66,7 @@ extension OfflineCacheStore {
             builder.workID = OfflineCacheWorkID(readerKind: work.readerKind, rawValue: work.workID)
             builder.imageURLStrings.formUnion((work.targetImageURLs + work.completedImageURLs).map(\.absoluteString))
             builders[entryID] = builder
+            recordGroupTitle(work.ownerTitle, updatedAt: work.updatedAt, groupID: entryID.groupID, in: &groupTitles)
         }
 
         let entries = try builders.values.map { builder in
@@ -89,7 +93,7 @@ extension OfflineCacheStore {
             let cachedCount = sortedEntries.filter { $0.state == .cached }.count
             return OfflineCacheManagementGroup(
                 id: groupID,
-                title: groupID.ownerKey,
+                title: groupTitles[groupID]?.title ?? groupID.ownerKey,
                 byteCount: byteCount,
                 cachedCount: cachedCount,
                 pendingCount: pendingCount,
@@ -112,6 +116,19 @@ extension OfflineCacheStore {
         return OfflineCacheManagementSnapshot(groups: groups)
     }
 
+    private static func recordGroupTitle(
+        _ title: String,
+        updatedAt: Date,
+        groupID: OfflineCacheGroupID,
+        in groupTitles: inout [OfflineCacheGroupID: OfflineCacheManagementGroupTitle]
+    ) {
+        guard let title = title.mangaReaderTrimmedNonEmpty else { return }
+        if let existing = groupTitles[groupID], existing.updatedAt > updatedAt {
+            return
+        }
+        groupTitles[groupID] = OfflineCacheManagementGroupTitle(title: title, updatedAt: updatedAt)
+    }
+
     private static func imageByteCount(for imageURLStrings: Set<String>, in db: Database) throws -> Int {
         var byteCount = 0
         for imageURLString in imageURLStrings {
@@ -123,6 +140,11 @@ extension OfflineCacheStore {
         }
         return byteCount
     }
+}
+
+private struct OfflineCacheManagementGroupTitle {
+    var title: String
+    var updatedAt: Date
 }
 
 private struct OfflineCacheManagementEntryBuilder {

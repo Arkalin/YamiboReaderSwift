@@ -390,9 +390,10 @@ final class SystemSettingsViewModelTests: XCTestCase {
         let groupsByID = Dictionary(
             uniqueKeysWithValues: viewModel.offlineCacheManagementRows.map { ($0.id, $0) }
         )
+        let novelGroupID = try novelOfflineEntryID(ownerTitle: "小说A", tid: "410", view: 1).groupID
         let cachedMangaGroup = groupsByID[OfflineCacheGroupID(readerKind: .manga, ownerKey: "作品A")]
         let pendingMangaGroup = groupsByID[OfflineCacheGroupID(readerKind: .manga, ownerKey: "作品B")]
-        let novelGroup = groupsByID[OfflineCacheGroupID(readerKind: .novel, ownerKey: "小说A")]
+        let novelGroup = groupsByID[novelGroupID]
         XCTAssertEqual(cachedMangaGroup?.title, "作品A")
         XCTAssertEqual(cachedMangaGroup?.byteCount, 4)
         XCTAssertEqual(pendingMangaGroup?.title, "作品B")
@@ -575,6 +576,8 @@ final class SystemSettingsViewModelTests: XCTestCase {
         )
         let firstEntryID = try novelOfflineEntryID(tid: "410", view: 1)
         let secondEntryID = try novelOfflineEntryID(tid: "410", view: 2)
+        let firstGroupID = firstEntryID.groupID
+        let otherGroupID = try novelOfflineEntryID(ownerTitle: "小说B", tid: "420", view: 1).groupID
         let viewModel = SystemSettingsViewModel(appContext: fixture.appContext)
         await viewModel.refreshOfflineCacheManagement()
 
@@ -586,15 +589,17 @@ final class SystemSettingsViewModelTests: XCTestCase {
         let retainedEntry = await fixture.offlineCacheStore.novelOfflineCacheEntry(id: secondEntryID)
         XCTAssertNil(removedEntry)
         XCTAssertNotNil(retainedEntry)
-        XCTAssertEqual(viewModel.offlineCacheManagementRows.first { $0.id.ownerKey == "小说A" }?.entries.count, 1)
+        XCTAssertEqual(viewModel.offlineCacheManagementRows.first { $0.id == firstGroupID }?.title, "小说A")
+        XCTAssertEqual(viewModel.offlineCacheManagementRows.first { $0.id == firstGroupID }?.entries.count, 1)
 
-        viewModel.requestOfflineCacheGroupDeletion(id: OfflineCacheGroupID(readerKind: .novel, ownerKey: "小说A"))
+        viewModel.requestOfflineCacheGroupDeletion(id: firstGroupID)
         let didDeleteGroup = await viewModel.confirmPendingOfflineCacheManagementDeletion()
 
         XCTAssertTrue(didDeleteGroup)
         let removedGroupEntry = await fixture.offlineCacheStore.novelOfflineCacheEntry(id: secondEntryID)
         XCTAssertNil(removedGroupEntry)
-        XCTAssertEqual(viewModel.offlineCacheManagementRows.map(\.id.ownerKey), ["小说B"])
+        XCTAssertEqual(viewModel.offlineCacheManagementRows.map(\.id.ownerKey), [otherGroupID.ownerKey])
+        XCTAssertEqual(viewModel.offlineCacheManagementRows.map(\.title), ["小说B"])
     }
 
     func testOfflineCacheManagementConfirmUsesCapturedConfirmationAfterPendingDismissal() async throws {
@@ -747,7 +752,11 @@ private func novelOfflineEntryID(
 ) throws -> OfflineCacheEntryID {
     OfflineCacheEntryID(
         readerKind: .novel,
-        ownerKey: ownerTitle,
+        ownerKey: NovelOfflineCacheEntry.groupKey(
+            threadURL: try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(tid)&mobile=2")),
+            authorID: authorID,
+            contentSource: contentSource
+        ),
         entryKey: NovelOfflineCacheEntry.entryKey(
             threadURL: try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(tid)&mobile=2")),
             view: view,

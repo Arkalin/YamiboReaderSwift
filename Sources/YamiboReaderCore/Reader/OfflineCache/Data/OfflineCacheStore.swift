@@ -510,12 +510,13 @@ public actor OfflineCacheStore: OfflineCacheStoring {
         try db.execute(
             sql: """
             INSERT OR REPLACE INTO offline_cache_works
-            (reader_kind, work_id, owner_name, tid, chapter_title, retains_inline_images, state, failure_message, current_bytes_per_second, insertion_index, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (reader_kind, work_id, owner_name, owner_title, tid, chapter_title, retains_inline_images, state, failure_message, current_bytes_per_second, insertion_index, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             arguments: [
                 mangaReaderKind,
                 work.workID,
+                work.ownerName,
                 work.ownerName,
                 work.tid,
                 work.chapterTitle,

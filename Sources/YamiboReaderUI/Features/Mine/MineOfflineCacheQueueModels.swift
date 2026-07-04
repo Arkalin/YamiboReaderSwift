@@ -21,7 +21,7 @@ struct MineOfflineCacheQueueOwnerGroup: Hashable, Identifiable {
         let currentBytesPerSecond = group.works.reduce(0) { $0 + $1.currentBytesPerSecond }
         id = group.id
         readerKind = group.id.readerKind
-        ownerName = group.id.ownerKey
+        ownerName = group.title
         title = group.title
         chapterCount = rows.count
         progressFraction = targetImageCount > 0
@@ -67,7 +67,7 @@ struct MineOfflineCacheQueueChapterRow: Hashable, Identifiable {
         groupID = work.groupID
         entryID = work.entryID
         readerKind = work.id.readerKind
-        ownerName = work.groupID.ownerKey
+        ownerName = work.ownerTitle
         tid = work.entryID.entryKey
         title = work.title.isEmpty ? work.entryID.entryKey : work.title
         completedImageCount = work.progress.completedUnitCount

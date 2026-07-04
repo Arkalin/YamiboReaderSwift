@@ -13,7 +13,7 @@ public struct NovelOfflineCacheEntry: Codable, Hashable, Identifiable, Sendable 
     public var id: OfflineCacheEntryID {
         OfflineCacheEntryID(
             readerKind: .novel,
-            ownerKey: ownerTitle,
+            ownerKey: Self.groupKey(document: document),
             entryKey: Self.entryKey(document: document)
         )
     }
@@ -44,15 +44,22 @@ public struct NovelOfflineCacheEntry: Codable, Hashable, Identifiable, Sendable 
         )
     }
 
-    public static func entryKey(
+    public static func groupKey(document: ReaderPageDocument) -> String {
+        groupKey(
+            threadURL: document.threadURL,
+            authorID: document.resolvedAuthorID,
+            contentSource: document.contentSource
+        )
+    }
+
+    public static func groupKey(
         threadURL: URL,
-        view: Int,
         authorID: String?,
         contentSource: ReaderContentSource?
     ) -> String {
         let identity = ReaderCacheIdentity(
             threadURL: threadURL,
-            view: view,
+            view: 1,
             authorID: authorID,
             contentSource: contentSource
         )
@@ -63,9 +70,26 @@ public struct NovelOfflineCacheEntry: Codable, Hashable, Identifiable, Sendable 
             "source",
             source.rawValue,
             "author",
-            normalizedAuthorID(authorID) ?? "all",
+            normalizedAuthorID(authorID) ?? "all"
+        ].joined(separator: "_")
+    }
+
+    public static func entryKey(
+        threadURL: URL,
+        view: Int,
+        authorID: String?,
+        contentSource: ReaderContentSource?
+    ) -> String {
+        let normalizedView = ReaderCacheIdentity(
+            threadURL: threadURL,
+            view: view,
+            authorID: authorID,
+            contentSource: contentSource
+        ).view
+        return [
+            groupKey(threadURL: threadURL, authorID: authorID, contentSource: contentSource),
             "view",
-            String(identity.view)
+            String(normalizedView)
         ].joined(separator: "_")
     }
 
@@ -112,6 +136,14 @@ public struct NovelOfflineCacheWorkRequest: Hashable, Sendable {
         NovelOfflineCacheEntry.entryKey(
             threadURL: threadURL,
             view: view,
+            authorID: authorID,
+            contentSource: contentSource
+        )
+    }
+
+    public var groupKey: String {
+        NovelOfflineCacheEntry.groupKey(
+            threadURL: threadURL,
             authorID: authorID,
             contentSource: contentSource
         )

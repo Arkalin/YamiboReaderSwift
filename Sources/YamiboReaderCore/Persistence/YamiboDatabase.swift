@@ -342,6 +342,7 @@ public enum YamiboDatabase {
 
             try db.create(table: "offline_cache_novel_entries") { table in
                 table.column("owner_name", .text).notNull()
+                table.column("owner_title", .text).notNull()
                 table.column("entry_key", .text).notNull()
                 table.column("title", .text).notNull()
                 table.column("thread_url", .text).notNull()
@@ -357,17 +358,16 @@ public enum YamiboDatabase {
                 table.column("byte_count", .integer).notNull()
                 table.column("created_at", .double).notNull()
                 table.column("updated_at", .double).notNull()
-                table.primaryKey(["owner_name", "entry_key"], onConflict: .replace)
+                table.primaryKey(["entry_key"], onConflict: .replace)
             }
             try db.create(index: "offline_cache_novel_entries_owner_idx", on: "offline_cache_novel_entries", columns: ["owner_name"])
 
             try db.create(table: "offline_cache_novel_entry_images") { table in
-                table.column("owner_name", .text).notNull()
                 table.column("entry_key", .text).notNull()
                 table.column("manual_order", .integer).notNull()
                 table.column("image_url", .text).notNull()
-                table.primaryKey(["owner_name", "entry_key", "manual_order"], onConflict: .replace)
-                table.foreignKey(["owner_name", "entry_key"], references: "offline_cache_novel_entries", columns: ["owner_name", "entry_key"], onDelete: .cascade)
+                table.primaryKey(["entry_key", "manual_order"], onConflict: .replace)
+                table.foreignKey(["entry_key"], references: "offline_cache_novel_entries", columns: ["entry_key"], onDelete: .cascade)
             }
             try db.create(index: "offline_cache_novel_entry_images_url_idx", on: "offline_cache_novel_entry_images", columns: ["image_url"])
 
@@ -385,6 +385,7 @@ public enum YamiboDatabase {
                 table.column("reader_kind", .text).notNull()
                 table.column("work_id", .text).notNull()
                 table.column("owner_name", .text).notNull()
+                table.column("owner_title", .text).notNull()
                 table.column("tid", .text).notNull()
                 table.column("chapter_title", .text).notNull()
                 table.column("state", .text).notNull()
@@ -446,8 +447,8 @@ public enum YamiboDatabase {
                 """)
             try db.execute(sql: """
                 INSERT OR IGNORE INTO offline_cache_works
-                (reader_kind, work_id, owner_name, tid, chapter_title, state, failure_message, current_bytes_per_second, insertion_index, created_at, updated_at)
-                SELECT 'manga', lower(hex(randomblob(16))), owner_name, tid, chapter_title, state, failure_message, current_bytes_per_second, insertion_index, created_at, updated_at
+                (reader_kind, work_id, owner_name, owner_title, tid, chapter_title, state, failure_message, current_bytes_per_second, insertion_index, created_at, updated_at)
+                SELECT 'manga', lower(hex(randomblob(16))), owner_name, owner_name, tid, chapter_title, state, failure_message, current_bytes_per_second, insertion_index, created_at, updated_at
                 FROM manga_offline_cache_works
                 """)
             try db.execute(sql: """
@@ -480,6 +481,7 @@ public enum YamiboDatabase {
             if try !db.tableExists("offline_cache_novel_entries") {
                 try db.create(table: "offline_cache_novel_entries") { table in
                     table.column("owner_name", .text).notNull()
+                    table.column("owner_title", .text).notNull()
                     table.column("entry_key", .text).notNull()
                     table.column("title", .text).notNull()
                     table.column("thread_url", .text).notNull()
@@ -495,19 +497,18 @@ public enum YamiboDatabase {
                     table.column("byte_count", .integer).notNull()
                     table.column("created_at", .double).notNull()
                     table.column("updated_at", .double).notNull()
-                    table.primaryKey(["owner_name", "entry_key"], onConflict: .replace)
+                    table.primaryKey(["entry_key"], onConflict: .replace)
                 }
                 try db.create(index: "offline_cache_novel_entries_owner_idx", on: "offline_cache_novel_entries", columns: ["owner_name"])
             }
 
             if try !db.tableExists("offline_cache_novel_entry_images") {
                 try db.create(table: "offline_cache_novel_entry_images") { table in
-                    table.column("owner_name", .text).notNull()
                     table.column("entry_key", .text).notNull()
                     table.column("manual_order", .integer).notNull()
                     table.column("image_url", .text).notNull()
-                    table.primaryKey(["owner_name", "entry_key", "manual_order"], onConflict: .replace)
-                    table.foreignKey(["owner_name", "entry_key"], references: "offline_cache_novel_entries", columns: ["owner_name", "entry_key"], onDelete: .cascade)
+                    table.primaryKey(["entry_key", "manual_order"], onConflict: .replace)
+                    table.foreignKey(["entry_key"], references: "offline_cache_novel_entries", columns: ["entry_key"], onDelete: .cascade)
                 }
                 try db.create(index: "offline_cache_novel_entry_images_url_idx", on: "offline_cache_novel_entry_images", columns: ["image_url"])
             }

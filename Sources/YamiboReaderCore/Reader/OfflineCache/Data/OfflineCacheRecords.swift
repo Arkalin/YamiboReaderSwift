@@ -3,7 +3,7 @@ import Foundation
 
 extension OfflineCacheStore {
     private static let novelEntryColumnList = """
-    owner_name, entry_key, title, thread_url, view, author_id, content_source, document_json,
+    owner_name, owner_title, entry_key, title, thread_url, view, author_id, content_source, document_json,
     source_page_file_name, source_page_schema_version, source_page_fingerprint,
     projection_file_name, projection_schema_version, byte_count, created_at, updated_at
     """
@@ -22,7 +22,7 @@ extension OfflineCacheStore {
         case .manga:
             try await removeMembership(ownerName: id.ownerKey, tid: id.entryKey)
         case .novel:
-            try await removeNovelOfflineCacheEntry(ownerName: id.ownerKey, entryKey: id.entryKey)
+            try await removeNovelOfflineCacheEntry(entryKey: id.entryKey)
         }
     }
 
@@ -49,7 +49,7 @@ extension OfflineCacheStore {
         try? await recoverQueueStateAfterRestart()
         guard id.readerKind == .novel else { return nil }
         return try? await database.read { db in
-            try Self.novelEntry(ownerName: id.ownerKey, entryKey: id.entryKey, in: db)
+            try Self.novelEntry(entryKey: id.entryKey, in: db)
         }
     }
 
@@ -86,7 +86,7 @@ extension OfflineCacheStore {
                     ORDER BY view ASC
                     """,
                     arguments: [
-                        lookup.ownerTitle,
+                        lookup.groupKey,
                         lookup.threadURL.absoluteString,
                         authorID,
                         lookup.contentSource.rawValue
@@ -102,7 +102,7 @@ extension OfflineCacheStore {
                     ORDER BY view ASC
                     """,
                     arguments: [
-                        lookup.ownerTitle,
+                        lookup.groupKey,
                         lookup.threadURL.absoluteString,
                         lookup.contentSource.rawValue
                     ]
@@ -126,7 +126,7 @@ extension OfflineCacheStore {
                 }
             }
 
-            let works = try Self.rawWorks(readerKind: .novel, ownerKey: lookup.ownerTitle, in: db)
+            let works = try Self.rawWorks(readerKind: .novel, ownerKey: lookup.groupKey, in: db)
             let cachingViews = Set(works.compactMap { work -> Int? in
                 guard let parsed = Self.novelEntryKeyComponents(from: work.entryKey),
                       parsed.threadID == lookup.threadID,
@@ -159,26 +159,28 @@ extension OfflineCacheStore {
                 authorID: authorID,
                 contentSource: contentSource
             ) else { continue }
-            try await removeNovelOfflineCacheEntry(ownerName: lookup.ownerTitle, entryKey: lookup.entryKey)
+            try await removeNovelOfflineCacheEntry(entryKey: lookup.entryKey)
         }
     }
 
-    private func removeNovelOfflineCacheEntry(ownerName: String, entryKey: String) async throws {
+    private func removeNovelOfflineCacheEntry(entryKey: String) async throws {
         try await recoverQueueStateAfterRestart()
-        guard let ownerName = ownerName.mangaReaderTrimmedNonEmpty,
-              let entryKey = entryKey.mangaReaderTrimmedNonEmpty else { return }
+        guard let entryKey = entryKey.mangaReaderTrimmedNonEmpty else { return }
         do {
             let files = try await database.write { db -> NovelPayloadFileNames in
-                let removed = try Self.novelEntry(ownerName: ownerName, entryKey: entryKey, in: db)
-                let canceled = try Self.rawWork(readerKind: .novel, ownerKey: ownerName, entryKey: entryKey, in: db)
-                let files = try Self.novelPayloadFileNames(ownerName: ownerName, entryKey: entryKey, in: db)
-                try Self.deleteNovelEntry(ownerName: ownerName, entryKey: entryKey, in: db)
-                try Self.deleteWork(
-                    readerKind: OfflineCacheReaderKind.novel.rawValue,
-                    ownerName: ownerName,
-                    tid: entryKey,
-                    in: db
-                )
+                let removed = try Self.novelEntry(entryKey: entryKey, in: db)
+                let groupKey = removed?.id.ownerKey ?? Self.novelGroupKey(fromEntryKey: entryKey)
+                let canceled = groupKey.flatMap { try? Self.rawWork(readerKind: .novel, ownerKey: $0, entryKey: entryKey, in: db) }
+                let files = try Self.novelPayloadFileNames(entryKey: entryKey, in: db)
+                try Self.deleteNovelEntry(entryKey: entryKey, in: db)
+                if let groupKey {
+                    try Self.deleteWork(
+                        readerKind: OfflineCacheReaderKind.novel.rawValue,
+                        ownerName: groupKey,
+                        tid: entryKey,
+                        in: db
+                    )
+                }
                 try Self.removeUnreferencedImages(
                     candidateImageURLs: (removed?.imageURLs ?? []) + (canceled.map { $0.targetImageURLs + $0.completedImageURLs } ?? []),
                     fileManager: fileManager,
@@ -225,14 +227,11 @@ extension OfflineCacheStore {
     static func normalizedNovelWorkRequest(
         _ request: NovelOfflineCacheWorkRequest
     ) throws -> NovelOfflineCacheWorkRequest {
-        guard request.ownerTitle.mangaReaderTrimmedNonEmpty != nil else {
-            throw YamiboError.persistenceFailed("Offline cache owner is empty")
-        }
         guard request.entryKey.mangaReaderTrimmedNonEmpty != nil else {
             throw YamiboError.persistenceFailed("Novel offline cache entry is empty")
         }
         return NovelOfflineCacheWorkRequest(
-            ownerTitle: request.ownerTitle,
+            ownerTitle: novelDisplayOwnerTitle(ownerTitle: request.ownerTitle, threadURL: request.threadURL),
             title: request.title,
             threadURL: request.threadURL,
             view: request.view,
@@ -243,15 +242,15 @@ extension OfflineCacheStore {
         )
     }
 
-    static func novelEntry(ownerName: String, entryKey: String, in db: Database) throws -> NovelOfflineCacheEntry? {
+    static func novelEntry(entryKey: String, in db: Database) throws -> NovelOfflineCacheEntry? {
         guard let row = try Row.fetchOne(
             db,
             sql: """
             SELECT \(novelEntryColumnList)
             FROM offline_cache_novel_entries
-            WHERE owner_name = ? AND entry_key = ?
+            WHERE entry_key = ?
             """,
-            arguments: [ownerName, entryKey]
+            arguments: [entryKey]
         ) else {
             return nil
         }
@@ -282,23 +281,20 @@ extension OfflineCacheStore {
         ).map { try novelEntry(from: $0, in: db) }
     }
 
-    static func novelEntryByteCount(ownerName: String, entryKey: String, in db: Database) throws -> Int {
+    static func novelEntryByteCount(entryKey: String, in db: Database) throws -> Int {
         try Int.fetchOne(
             db,
-            sql: "SELECT byte_count FROM offline_cache_novel_entries WHERE owner_name = ? AND entry_key = ?",
-            arguments: [ownerName, entryKey]
+            sql: "SELECT byte_count FROM offline_cache_novel_entries WHERE entry_key = ?",
+            arguments: [entryKey]
         ) ?? 0
     }
 
     private static func normalizedNovelEntry(_ entry: NovelOfflineCacheEntry) throws -> NovelOfflineCacheEntry {
-        guard entry.ownerTitle.mangaReaderTrimmedNonEmpty != nil else {
-            throw YamiboError.persistenceFailed("Offline cache owner is empty")
-        }
         guard entry.id.entryKey.mangaReaderTrimmedNonEmpty != nil else {
             throw YamiboError.persistenceFailed("Novel offline cache entry is empty")
         }
         return NovelOfflineCacheEntry(
-            ownerTitle: entry.ownerTitle,
+            ownerTitle: novelDisplayOwnerTitle(ownerTitle: entry.ownerTitle, threadURL: entry.document.threadURL),
             title: entry.title,
             document: entry.document,
             imageURLs: entry.imageURLs,
@@ -313,13 +309,14 @@ extension OfflineCacheStore {
             sql: """
             INSERT OR REPLACE INTO offline_cache_novel_entries
             (
-                owner_name, entry_key, title, thread_url, view, author_id, content_source, document_json,
+                owner_name, owner_title, entry_key, title, thread_url, view, author_id, content_source, document_json,
                 source_page_file_name, source_page_schema_version, source_page_fingerprint,
                 projection_file_name, projection_schema_version, byte_count, created_at, updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL, ?, COALESCE((SELECT created_at FROM offline_cache_novel_entries WHERE owner_name = ? AND entry_key = ?), ?), ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL, ?, COALESCE((SELECT created_at FROM offline_cache_novel_entries WHERE entry_key = ?), ?), ?)
             """,
             arguments: [
+                entry.id.ownerKey,
                 entry.ownerTitle,
                 entryKey,
                 entry.title,
@@ -329,23 +326,22 @@ extension OfflineCacheStore {
                 entry.document.contentSource.rawValue,
                 documentJSON,
                 documentJSON.utf8.count,
-                entry.ownerTitle,
                 entryKey,
                 offlineCacheTimeInterval(from: entry.updatedAt),
                 offlineCacheTimeInterval(from: entry.updatedAt)
             ]
         )
         try db.execute(
-            sql: "DELETE FROM offline_cache_novel_entry_images WHERE owner_name = ? AND entry_key = ?",
-            arguments: [entry.ownerTitle, entryKey]
+            sql: "DELETE FROM offline_cache_novel_entry_images WHERE entry_key = ?",
+            arguments: [entryKey]
         )
         for (index, imageURL) in entry.imageURLs.enumerated() {
             try db.execute(
                 sql: """
-                INSERT INTO offline_cache_novel_entry_images (owner_name, entry_key, manual_order, image_url)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO offline_cache_novel_entry_images (entry_key, manual_order, image_url)
+                VALUES (?, ?, ?)
                 """,
-                arguments: [entry.ownerTitle, entryKey, index, imageURL.absoluteString]
+                arguments: [entryKey, index, imageURL.absoluteString]
             )
         }
     }
@@ -364,13 +360,14 @@ extension OfflineCacheStore {
             sql: """
             INSERT OR REPLACE INTO offline_cache_novel_entries
             (
-                owner_name, entry_key, title, thread_url, view, author_id, content_source, document_json,
+                owner_name, owner_title, entry_key, title, thread_url, view, author_id, content_source, document_json,
                 source_page_file_name, source_page_schema_version, source_page_fingerprint,
                 projection_file_name, projection_schema_version, byte_count, created_at, updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE((SELECT projection_file_name FROM offline_cache_novel_entries WHERE owner_name = ? AND entry_key = ?), NULL), COALESCE((SELECT projection_schema_version FROM offline_cache_novel_entries WHERE owner_name = ? AND entry_key = ?), NULL), ?, COALESCE((SELECT created_at FROM offline_cache_novel_entries WHERE owner_name = ? AND entry_key = ?), ?), ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE((SELECT projection_file_name FROM offline_cache_novel_entries WHERE entry_key = ?), NULL), COALESCE((SELECT projection_schema_version FROM offline_cache_novel_entries WHERE entry_key = ?), NULL), ?, COALESCE((SELECT created_at FROM offline_cache_novel_entries WHERE entry_key = ?), ?), ?)
             """,
             arguments: [
+                request.groupKey,
                 request.ownerTitle,
                 request.entryKey,
                 request.title.isEmpty ? L10n.string("reader.page_number_spaced", request.view) : request.title,
@@ -382,28 +379,25 @@ extension OfflineCacheStore {
                 sourceFileName,
                 NovelOfflineCacheEntry.sourcePageSchemaVersion,
                 sourceFingerprint,
-                request.ownerTitle,
                 request.entryKey,
-                request.ownerTitle,
                 request.entryKey,
                 sourceByteCount,
-                request.ownerTitle,
                 request.entryKey,
                 offlineCacheTimeInterval(from: updatedAt),
                 offlineCacheTimeInterval(from: updatedAt)
             ]
         )
         try db.execute(
-            sql: "DELETE FROM offline_cache_novel_entry_images WHERE owner_name = ? AND entry_key = ?",
-            arguments: [request.ownerTitle, request.entryKey]
+            sql: "DELETE FROM offline_cache_novel_entry_images WHERE entry_key = ?",
+            arguments: [request.entryKey]
         )
         for (index, imageURL) in imageURLs.enumerated() {
             try db.execute(
                 sql: """
-                INSERT INTO offline_cache_novel_entry_images (owner_name, entry_key, manual_order, image_url)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO offline_cache_novel_entry_images (entry_key, manual_order, image_url)
+                VALUES (?, ?, ?)
                 """,
-                arguments: [request.ownerTitle, request.entryKey, index, imageURL.absoluteString]
+                arguments: [request.entryKey, index, imageURL.absoluteString]
             )
         }
     }
@@ -417,36 +411,53 @@ extension OfflineCacheStore {
         guard preservesExistingImageReferencesWhenEmpty, imageURLs.isEmpty else {
             return imageURLs
         }
-        return try novelImageURLs(ownerName: request.ownerTitle, entryKey: request.entryKey, in: db)
+        return try novelImageURLs(entryKey: request.entryKey, in: db)
+    }
+
+    static func updateNovelEntryDisplayMetadata(
+        entryKey: String,
+        ownerTitle: String,
+        title: String,
+        in db: Database
+    ) throws {
+        try db.execute(
+            sql: """
+            UPDATE offline_cache_novel_entries
+            SET owner_title = ?, title = ?
+            WHERE entry_key = ?
+            """,
+            arguments: [ownerTitle, title, entryKey]
+        )
     }
 
     private static func novelEntry(from row: Row, in db: Database) throws -> NovelOfflineCacheEntry {
-        NovelOfflineCacheEntry(
-            ownerTitle: row["owner_name"],
+        let document = try decodeNovelDocument(row["document_json"] as String)
+        return NovelOfflineCacheEntry(
+            ownerTitle: (row["owner_title"] as String?) ?? novelDisplayOwnerTitle(ownerTitle: "", threadURL: document.threadURL),
             title: row["title"],
-            document: try decodeNovelDocument(row["document_json"] as String),
-            imageURLs: try novelImageURLs(ownerName: row["owner_name"], entryKey: row["entry_key"], in: db),
+            document: document,
+            imageURLs: try novelImageURLs(entryKey: row["entry_key"], in: db),
             updatedAt: offlineCacheOptionalDate(from: row["updated_at"] as Double?) ?? Date(timeIntervalSince1970: 0)
         )
     }
 
-    private static func novelImageURLs(ownerName: String, entryKey: String, in db: Database) throws -> [URL] {
+    private static func novelImageURLs(entryKey: String, in db: Database) throws -> [URL] {
         try String.fetchAll(
             db,
             sql: """
             SELECT image_url
             FROM offline_cache_novel_entry_images
-            WHERE owner_name = ? AND entry_key = ?
+            WHERE entry_key = ?
             ORDER BY manual_order ASC
             """,
-            arguments: [ownerName, entryKey]
+            arguments: [entryKey]
         ).compactMap(URL.init(string:))
     }
 
-    private static func deleteNovelEntry(ownerName: String, entryKey: String, in db: Database) throws {
+    private static func deleteNovelEntry(entryKey: String, in db: Database) throws {
         try db.execute(
-            sql: "DELETE FROM offline_cache_novel_entries WHERE owner_name = ? AND entry_key = ?",
-            arguments: [ownerName, entryKey]
+            sql: "DELETE FROM offline_cache_novel_entries WHERE entry_key = ?",
+            arguments: [entryKey]
         )
     }
 
@@ -463,6 +474,22 @@ extension OfflineCacheStore {
             throw YamiboError.persistenceFailed("Failed to decode novel offline cache document")
         }
         return try JSONDecoder().decode(ReaderPageDocument.self, from: data)
+    }
+
+    static func novelDisplayOwnerTitle(ownerTitle: String, threadURL: URL) -> String {
+        ownerTitle.mangaReaderTrimmedNonEmpty ?? ReaderCacheIdentity.canonicalThreadURL(from: threadURL).absoluteString
+    }
+
+    static func novelGroupKey(fromEntryKey entryKey: String) -> String? {
+        let components = entryKey.components(separatedBy: "_")
+        guard components.count == 8,
+              components[0] == "tid",
+              components[2] == "source",
+              components[4] == "author",
+              components[6] == "view" else {
+            return nil
+        }
+        return components.prefix(6).joined(separator: "_")
     }
 
 }

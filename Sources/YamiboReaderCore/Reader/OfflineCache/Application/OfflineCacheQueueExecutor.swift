@@ -431,7 +431,7 @@ public actor OfflineCacheQueueExecutor {
             throw YamiboError.parsingFailed(context: "Novel Offline Cache")
         }
         return NovelOfflineCacheWorkRequest(
-            ownerTitle: work.entryID.ownerKey,
+            ownerTitle: work.ownerTitle,
             title: work.title,
             threadURL: Self.rebuiltChapterURL(tid: components.threadID),
             view: components.view,
