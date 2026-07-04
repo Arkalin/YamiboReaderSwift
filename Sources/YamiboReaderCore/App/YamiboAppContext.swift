@@ -268,7 +268,8 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         return YamiboMangaReaderProjectionLoader(
             client: client,
             projectionStore: mangaReaderProjectionStore,
-            forumCacheStore: forumCacheStore
+            forumCacheStore: forumCacheStore,
+            offlineCacheStore: offlineCacheStore
         )
     }
 

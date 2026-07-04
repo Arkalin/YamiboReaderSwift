@@ -83,7 +83,11 @@ public final class MangaReaderWorkflow {
 
         do {
             let document = try await projectionLoader.loadReaderProjection(
-                MangaReaderProjectionRequest(threadID: context.chapterTID, view: context.chapterView)
+                MangaReaderProjectionRequest(
+                    threadID: context.chapterTID,
+                    view: context.chapterView,
+                    offlineOwnerName: context.directoryName
+                )
             )
             let resolution: MangaDirectoryResolutionResult
             do {
@@ -204,7 +208,9 @@ public final class MangaReaderWorkflow {
             guard let chapter = window.adjacentChapterForLoadedRange(delta: delta) else { continue }
             let document: MangaReaderProjection
             do {
-                document = try await projectionLoader.loadReaderProjection(MangaReaderProjectionRequest(chapter: chapter))
+                document = try await projectionLoader.loadReaderProjection(
+                    MangaReaderProjectionRequest(chapter: chapter, offlineOwnerName: window.directory.cleanBookName)
+                )
             } catch {
                 guard !Task.isCancelled else { return nil }
                 continue
@@ -336,7 +342,9 @@ public final class MangaReaderWorkflow {
             return presentation
         }
 
-        let document = try await projectionLoader.loadReaderProjection(MangaReaderProjectionRequest(chapter: chapter))
+        let document = try await projectionLoader.loadReaderProjection(
+            MangaReaderProjectionRequest(chapter: chapter, offlineOwnerName: window.directory.cleanBookName)
+        )
         try Task.checkCancellation()
 
         let targetPosition = MangaReadingPosition(tid: document.tid, localIndex: 0)
@@ -377,7 +385,9 @@ public final class MangaReaderWorkflow {
             throw YamiboError.underlying("Manga reader target chapter is unavailable.")
         }
 
-        let document = try await projectionLoader.loadReaderProjection(MangaReaderProjectionRequest(chapter: chapter))
+        let document = try await projectionLoader.loadReaderProjection(
+            MangaReaderProjectionRequest(chapter: chapter, offlineOwnerName: window.directory.cleanBookName)
+        )
         try Task.checkCancellation()
 
         let targetPosition = MangaReadingPosition(tid: document.tid, localIndex: position.localIndex)
@@ -433,7 +443,9 @@ public final class MangaReaderWorkflow {
             return presentation
         }
 
-        let document = try await projectionLoader.loadReaderProjection(MangaReaderProjectionRequest(chapter: chapter))
+        let document = try await projectionLoader.loadReaderProjection(
+            MangaReaderProjectionRequest(chapter: chapter, offlineOwnerName: initialWindow.directory.cleanBookName)
+        )
         try Task.checkCancellation()
         guard !document.imageURLs.isEmpty else {
             throw YamiboError.unreadableBody

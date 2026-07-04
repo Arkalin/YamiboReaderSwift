@@ -246,6 +246,7 @@ struct MangaReaderTestsWorkflow {
         #expect(await store.requestedTIDs.isEmpty)
         #expect(await repository.seedThreadIDs.isEmpty)
         #expect(await store.savedDirectories.isEmpty)
+        #expect(await loader.loadedRequests.map(\.offlineOwnerName) == ["本地目录"])
     }
 
     @Test func existingDirectoryContainingDocumentTIDIsReusedWithoutSeedOrSave() async throws {
@@ -488,6 +489,33 @@ struct MangaReaderTestsWorkflow {
         #expect(loaded.readingPosition == MangaReadingPosition(tid: "700", localIndex: 0))
         #expect(await repository.seedThreadIDs == [document.tid])
         #expect(await store.savedDirectories.isEmpty)
+    }
+
+    @Test func workflowPassesDirectoryOwnerWhenLoadingAdjacentChapter() async throws {
+        let documents = try ["700", "701"].map { try makeWorkflowDocument(tid: $0, pageCount: 1) }
+        let loader = RecordingMangaReaderProjectionLoader(documents: Dictionary(uniqueKeysWithValues: documents.map { ($0.tid, $0) }))
+        let directory = makeWorkflowDirectory(
+            name: "测试漫画",
+            strategy: .searched,
+            sourceKey: "local",
+            tids: ["700", "701"]
+        )
+        let workflow = MangaReaderWorkflow(
+            context: try makeWorkflowContext(tid: "700", directoryName: "测试漫画"),
+            projectionLoader: loader,
+            directoryRepository: RecordingMangaDirectoryRepository(output: .failure(.offline)),
+            directoryStore: RecordingMangaDirectoryStore(directories: [directory])
+        )
+
+        _ = await workflow.prepare()
+        _ = try await workflow.jumpToAdjacentChapter(
+            from: MangaReadingPosition(tid: "700", localIndex: 0),
+            delta: 1
+        )
+
+        let requests = await loader.loadedRequests
+        #expect(requests.map(\.threadID) == ["700", "701"])
+        #expect(requests.map(\.offlineOwnerName) == ["测试漫画", "测试漫画"])
     }
 
     @Test func workflowUpdatesDirectoryPreservingCurrentReadingPosition() async throws {
@@ -1006,9 +1034,10 @@ struct MangaReaderTestsWorkflow {
             sourceKey: "测试漫画",
             tids: ["699", "700", "701"]
         )
+        let loader = RecordingMangaReaderProjectionLoader(documents: documentsByTID)
         let workflow = MangaReaderWorkflow(
             context: try makeWorkflowContext(tid: "700", directoryName: "测试漫画"),
-            projectionLoader: RecordingMangaReaderProjectionLoader(documents: documentsByTID),
+            projectionLoader: loader,
             directoryRepository: RecordingMangaDirectoryRepository(output: .failure(.offline)),
             directoryStore: RecordingMangaDirectoryStore(directories: [directory])
         )
@@ -1023,6 +1052,7 @@ struct MangaReaderTestsWorkflow {
         #expect(loaded.currentPage?.id == "700#0")
         #expect(loaded.viewportPlacement?.targetPageIndex == 1)
         #expect(loaded.viewportPlacement?.revision == initialRevision + 1)
+        #expect(await loader.loadedRequests.map(\.offlineOwnerName) == ["测试漫画", "测试漫画", "测试漫画"])
     }
 
     @Test func workflowAdjacentPrefetchKeepsChapterWindowBoundedToTenDocuments() async throws {
@@ -1132,6 +1162,7 @@ private actor RecordingMangaReaderProjectionLoader: MangaReaderProjectionLoading
     private let output: Output
     private let documents: [String: MangaReaderProjection]?
     private(set) var loadedThreadIDs: [String] = []
+    private(set) var loadedRequests: [MangaReaderProjectionRequest] = []
 
     init(output: Output) {
         self.output = output
@@ -1144,6 +1175,7 @@ private actor RecordingMangaReaderProjectionLoader: MangaReaderProjectionLoading
     }
 
     func loadReaderProjection(_ request: MangaReaderProjectionRequest) async throws -> MangaReaderProjection {
+        loadedRequests.append(request)
         loadedThreadIDs.append(request.threadID)
         if let documents {
             guard let document = documents[request.threadID] else {

@@ -4,16 +4,19 @@ public actor YamiboMangaReaderProjectionLoader: MangaReaderProjectionSnapshotLoa
     private let client: YamiboClient
     private let projectionStore: any MangaReaderProjectionPersisting
     private let forumCacheStore: ForumCacheStore
+    private let offlineCacheStore: (any OfflineCacheStoring)?
     private var inFlightTasks: [String: Task<MangaReaderProjectionSnapshot, Error>] = [:]
 
     public init(
         client: YamiboClient,
         projectionStore: any MangaReaderProjectionPersisting,
-        forumCacheStore: ForumCacheStore
+        forumCacheStore: ForumCacheStore,
+        offlineCacheStore: (any OfflineCacheStoring)? = nil
     ) {
         self.client = client
         self.projectionStore = projectionStore
         self.forumCacheStore = forumCacheStore
+        self.offlineCacheStore = offlineCacheStore
     }
 
     public func loadReaderProjection(_ request: MangaReaderProjectionRequest) async throws -> MangaReaderProjection {
@@ -29,6 +32,21 @@ public actor YamiboMangaReaderProjectionLoader: MangaReaderProjectionSnapshotLoa
     }
 
     private func loadReaderProjectionSnapshot(
+        _ request: MangaReaderProjectionRequest,
+        ignoresCache: Bool
+    ) async throws -> MangaReaderProjectionSnapshot {
+        do {
+            return try await loadOnlineProjectionSnapshot(request, ignoresCache: ignoresCache)
+        } catch {
+            guard isEligibleOfflineFallbackTrigger(error),
+                  let fallback = await loadOfflineFallback(request) else {
+                throw error
+            }
+            return fallback
+        }
+    }
+
+    private func loadOnlineProjectionSnapshot(
         _ request: MangaReaderProjectionRequest,
         ignoresCache: Bool
     ) async throws -> MangaReaderProjectionSnapshot {
@@ -77,6 +95,48 @@ public actor YamiboMangaReaderProjectionLoader: MangaReaderProjectionSnapshotLoa
         inFlightTasks[taskKey] = task
         defer { inFlightTasks.removeValue(forKey: taskKey) }
         return try await task.value
+    }
+
+    private func loadOfflineFallback(_ request: MangaReaderProjectionRequest) async -> MangaReaderProjectionSnapshot? {
+        guard let offlineCacheStore,
+              let ownerName = request.offlineOwnerName?.mangaReaderTrimmedNonEmpty,
+              let membership = await offlineCacheStore.membership(ownerName: ownerName, tid: request.threadID),
+              membership.tid == request.threadID,
+              membership.sourcePage.thread.tid == request.threadID,
+              sourcePageMatchesRequestedView(membership.sourcePage, view: request.view) else {
+            return nil
+        }
+
+        let authorID = request.authorID?.mangaReaderTrimmedNonEmpty
+            ?? membership.sourcePage.posts.first?.author.uid?.mangaReaderTrimmedNonEmpty
+        guard let authorID else { return nil }
+
+        let identity = MangaReaderProjectionSourceIdentity(
+            tid: request.threadID,
+            authorID: authorID,
+            contentSource: .authorFilteredPage,
+            view: request.view
+        )
+        let fingerprint = Self.projectionFingerprint(page: membership.sourcePage, identity: identity)
+        if let cached = await projectionStore.projection(for: identity),
+           Self.isReusableProjection(cached, identity: identity, fingerprint: fingerprint) {
+            return MangaReaderProjectionSnapshot(projection: cached, sourcePage: membership.sourcePage)
+        }
+
+        guard let projection = try? Self.deriveProjection(
+            from: membership.sourcePage,
+            identity: identity,
+            sourceFingerprint: fingerprint
+        ) else {
+            return nil
+        }
+        try? await projectionStore.save(projection)
+        return MangaReaderProjectionSnapshot(projection: projection, sourcePage: membership.sourcePage)
+    }
+
+    private func sourcePageMatchesRequestedView(_ sourcePage: ForumThreadPage, view: Int) -> Bool {
+        guard let currentPage = sourcePage.pageNavigation?.currentPage else { return true }
+        return currentPage == max(1, view)
     }
 
     private func resolveAuthorID(
@@ -142,6 +202,41 @@ public actor YamiboMangaReaderProjectionLoader: MangaReaderProjectionSnapshotLoa
             default:
                 throw YamiboError.underlying(error.localizedDescription)
             }
+        }
+    }
+
+    private func isEligibleOfflineFallbackTrigger(_ error: Error) -> Bool {
+        if error is CancellationError {
+            return false
+        }
+        if let urlError = error as? URLError {
+            return urlError.code != .cancelled
+        }
+        guard let yamiboError = error as? YamiboError else {
+            return false
+        }
+        switch yamiboError {
+        case .offline, .underlying, .invalidResponse, .unreadableBody, .emptyHTML:
+            return true
+        case .parsingFailed,
+             .floodControl,
+             .notAuthenticated,
+             .accountUIDUnavailable,
+             .loginFormUnavailable,
+             .loginFailed,
+             .loginVerificationRequired,
+             .searchCooldown,
+             .persistenceFailed,
+             .missingFavoriteDeleteToken,
+             .missingFavoriteDeleteID,
+             .favoriteDeleteFailed,
+             .missingFavoriteAddToken,
+             .missingFavoriteThreadID,
+             .favoriteAddFailed,
+             .missingForumBoardFavoriteToken,
+             .forumBoardFavoriteFailed,
+             .missingForumSearchToken:
+            return false
         }
     }
 

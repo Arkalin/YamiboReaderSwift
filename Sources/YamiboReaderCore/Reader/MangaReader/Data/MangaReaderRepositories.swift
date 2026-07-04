@@ -4,8 +4,9 @@ public struct MangaReaderProjectionRequest: Codable, Hashable, Sendable {
     public var threadID: String
     public var view: Int
     public var authorID: String?
+    public var offlineOwnerName: String?
 
-    public init(threadID: String, view: Int = 1, authorID: String? = nil) {
+    public init(threadID: String, view: Int = 1, authorID: String? = nil, offlineOwnerName: String? = nil) {
         let normalizedThreadID = threadID.trimmingCharacters(in: .whitespacesAndNewlines)
         precondition(!normalizedThreadID.isEmpty, "MangaReaderProjectionRequest requires a Yamibo thread tid")
         self.threadID = normalizedThreadID
@@ -14,10 +15,14 @@ public struct MangaReaderProjectionRequest: Codable, Hashable, Sendable {
         if self.authorID?.isEmpty == true {
             self.authorID = nil
         }
+        self.offlineOwnerName = offlineOwnerName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if self.offlineOwnerName?.isEmpty == true {
+            self.offlineOwnerName = nil
+        }
     }
 
-    public init(chapter: MangaChapter) {
-        self.init(threadID: chapter.tid, view: chapter.view, authorID: chapter.authorUID)
+    public init(chapter: MangaChapter, offlineOwnerName: String? = nil) {
+        self.init(threadID: chapter.tid, view: chapter.view, authorID: chapter.authorUID, offlineOwnerName: offlineOwnerName)
     }
 }
 
