@@ -14,7 +14,7 @@ import Testing
 
     #expect(session.cookie == "sid=123")
     #expect(session.isLoggedIn)
-    #expect(session.userAgent == YamiboDefaults.defaultMobileUserAgent)
+    #expect(session.userAgent == YamiboNetworkConfiguration.defaultMobileUserAgent)
 }
 
 @Test func sessionStoreUpdatesUserAgentFromWebSession() async throws {

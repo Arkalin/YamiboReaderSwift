@@ -71,7 +71,7 @@ public actor FavoriteRepository {
     }
 
     public func deleteFavorite(remoteFavoriteID: String) async throws {
-        let formHTML = try await client.fetchHTML(for: .favoriteDeleteForm, userAgent: YamiboDefaults.desktopTagUserAgent)
+        let formHTML = try await client.fetchHTML(for: .favoriteDeleteForm, userAgent: YamiboNetworkConfiguration.desktopTagUserAgent)
         if isLoginPage(formHTML) {
             throw YamiboError.notAuthenticated
         }
@@ -87,7 +87,7 @@ public actor FavoriteRepository {
                 ("deletesubmit", "true"),
                 ("favorite[]", remoteFavoriteID)
             ],
-            userAgent: YamiboDefaults.desktopTagUserAgent
+            userAgent: YamiboNetworkConfiguration.desktopTagUserAgent
         )
 
         if isLoginPage(responseHTML) {

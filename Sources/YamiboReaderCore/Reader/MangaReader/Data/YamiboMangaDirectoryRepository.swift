@@ -56,7 +56,7 @@ public struct YamiboMangaDirectoryRepository: MangaDirectoryRepository {
                 try Task.checkCancellation()
                 let firstHTML = try await client.fetchHTML(
                     for: .tag(id: tagID, page: 1),
-                    userAgent: YamiboDefaults.desktopTagUserAgent
+                    userAgent: YamiboNetworkConfiguration.desktopTagUserAgent
                 )
                 try MangaReaderDataSupport.validateReadableMangaHTML(firstHTML)
                 chapters.append(contentsOf: MangaHTMLParser.parseTagThreadListHTML(firstHTML, groupIndex: groupIndex))
@@ -68,7 +68,7 @@ public struct YamiboMangaDirectoryRepository: MangaDirectoryRepository {
                     try Task.checkCancellation()
                     let html = try await client.fetchHTML(
                         for: .tag(id: tagID, page: page),
-                        userAgent: YamiboDefaults.desktopTagUserAgent
+                        userAgent: YamiboNetworkConfiguration.desktopTagUserAgent
                     )
                     try MangaReaderDataSupport.validateReadableMangaHTML(html)
                     let pageChapters = MangaHTMLParser.parseTagThreadListHTML(html, groupIndex: groupIndex)

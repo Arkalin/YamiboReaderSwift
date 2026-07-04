@@ -11,7 +11,7 @@ public struct SessionState: Codable, Hashable, Sendable {
 
     public init(
         cookie: String = "",
-        userAgent: String = YamiboDefaults.defaultMobileUserAgent,
+        userAgent: String = YamiboNetworkConfiguration.defaultMobileUserAgent,
         isLoggedIn: Bool = false,
         lastUpdatedAt: Date? = nil,
         accountUID: String? = nil

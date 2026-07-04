@@ -23,7 +23,7 @@ Chapter URL normalization for Phase 4 is: use `YamiboRoute.thread(url: page: 1, 
 `YamiboMangaDirectoryRepository` returns raw directory ingredients only:
 
 - `loadDirectorySeed(for:)` fetches the current chapter page, returns the current chapter, clean book name, tag IDs, same-page chapters, and first post ID, but does not decide `MangaDirectoryStrategy`.
-- `loadTagDirectory(tagIDs:)` fetches all pages for each normalized unique tag ID sequentially, uses `YamiboDefaults.desktopTagUserAgent`, assigns stable `groupIndex` by tag order, and does not sort, merge, or deduplicate returned chapters.
+- `loadTagDirectory(tagIDs:)` fetches all pages for each normalized unique tag ID sequentially, uses `YamiboNetworkConfiguration.desktopTagUserAgent`, assigns stable `groupIndex` by tag order, and does not sort, merge, or deduplicate returned chapters.
 - `searchDirectory(keyword:forumID:)` trims input, defaults blank forum IDs to `"30"`, follows search pagination through `searchID` when present, and does not apply cooldown, fallback, sorting, merging, or deduplication.
 
 Remote pagination has no artificial maximum page cap in Phase 4. Requests are sequential and should check cancellation between pages. Login, flood-control, and non-2xx responses fail the operation instead of returning partial results; 2xx follow-up pages that parse to no chapters are skipped.

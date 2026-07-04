@@ -13,7 +13,7 @@ public struct YamiboClient: Sendable {
     public init(
         session: URLSession = YamiboNetworkConfiguration.makeSession(),
         cookie: String? = nil,
-        userAgent: String = YamiboDefaults.defaultMobileUserAgent
+        userAgent: String = YamiboNetworkConfiguration.defaultMobileUserAgent
     ) {
         self.session = session
         self.cookie = cookie

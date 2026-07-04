@@ -13,7 +13,7 @@ public struct YamiboAccountService: Sendable {
         session: URLSession = YamiboNetworkConfiguration.makeSession(),
         sessionStore: SessionStore,
         profileStore: YamiboProfileStore,
-        userAgent: String = YamiboDefaults.defaultMobileUserAgent
+        userAgent: String = YamiboNetworkConfiguration.defaultMobileUserAgent
     ) {
         self.session = session
         self.sessionStore = sessionStore

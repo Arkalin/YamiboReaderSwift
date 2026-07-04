@@ -271,7 +271,7 @@ public struct IOSForumWebView: UIViewRepresentable {
                 .map { "\($0.name)=\($0.value)" }
                 .joined(separator: "; ")
 
-            let userAgent = webView.customUserAgent ?? YamiboDefaults.defaultMobileUserAgent
+            let userAgent = webView.customUserAgent ?? YamiboNetworkConfiguration.defaultMobileUserAgent
             sessionSyncState.markPersistedWebSession(cookieHeader: header)
             try await appContext.sessionStore.updateWebSession(
                 cookie: header,

@@ -88,7 +88,7 @@ struct MangaReaderTestsDirectoryRepository {
         harness.setHandler { request in
             let absolute = request.url?.absoluteString ?? ""
             #expect(request.value(forHTTPHeaderField: "Cookie") == "auth=1")
-            #expect(request.value(forHTTPHeaderField: "User-Agent") == YamiboDefaults.desktopTagUserAgent)
+            #expect(request.value(forHTTPHeaderField: "User-Agent") == YamiboNetworkConfiguration.desktopTagUserAgent)
             if absolute.contains("id=12"), absolute.contains("page=1") {
                 return MangaReaderDataTestResponse(html: listHTML(tid: "1201", title: "第1话", totalPages: 2))
             }
