@@ -2,8 +2,8 @@ import Foundation
 import Testing
 @testable import YamiboReaderCore
 
-@Suite("OfflineCacheTests: Offline Cache Queue Executor")
-struct OfflineCacheTestsQueueExecutor {
+@Suite("ReaderSharedTests: Offline Cache Queue Executor")
+struct ReaderSharedTestsOfflineCacheQueueExecutor {
     @Test func continueProcessesOneChapterAtATimeWithThreeImageTransferLimit() async throws {
         let store = try makeTestOfflineCacheStore(rootDirectory: try makeTemporaryExecutorDirectory())
         let firstChapterImages = try makeImageURLs(tid: "100", count: 4)
