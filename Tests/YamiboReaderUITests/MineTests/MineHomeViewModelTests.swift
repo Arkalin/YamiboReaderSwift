@@ -765,7 +765,7 @@ private func profileHTML(uid: String) -> String {
     """
 }
 
-private actor RecordingOfflineCacheQueueController: MangaOfflineCacheQueueControlling {
+private actor RecordingOfflineCacheQueueController: OfflineCacheQueueControlling {
     private let store: any OfflineCacheStoring
     private var recordedEvents: [String] = []
 

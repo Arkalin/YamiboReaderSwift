@@ -1,47 +1,47 @@
 import Foundation
 
-public enum MangaOfflineCacheImageAcquisitionSource: Hashable, Sendable {
+public enum OfflineCacheImageAcquisitionSource: Hashable, Sendable {
     case network
 }
 
-public struct MangaOfflineCacheImageAcquisition: Hashable, Sendable {
+public struct OfflineCacheImageAcquisition: Hashable, Sendable {
     public var data: Data
-    public var source: MangaOfflineCacheImageAcquisitionSource
+    public var source: OfflineCacheImageAcquisitionSource
 
-    public init(data: Data, source: MangaOfflineCacheImageAcquisitionSource) {
+    public init(data: Data, source: OfflineCacheImageAcquisitionSource) {
         self.data = data
         self.source = source
     }
 }
 
-public protocol MangaOfflineCacheImageAcquiring: Sendable {
-    func acquireImageData(for imageURL: URL, refererURL: URL?) async throws -> MangaOfflineCacheImageAcquisition
+public protocol OfflineCacheImageAcquiring: Sendable {
+    func acquireImageData(for imageURL: URL, refererURL: URL?) async throws -> OfflineCacheImageAcquisition
 }
 
-public protocol MangaOfflineCacheImageTransporting: Sendable {
+public protocol OfflineCacheImageTransporting: Sendable {
     func downloadImageData(for imageURL: URL, refererURL: URL?) async throws -> Data
 }
 
-public protocol MangaOfflineCacheQueueRunObserving: Sendable {
+public protocol OfflineCacheQueueRunObserving: Sendable {
     func submitUserInitiatedRun() async
     func queueRunDidUpdateProgress(completedImageCount: Int, targetImageCount: Int) async
     func queueRunDidFinish(success: Bool) async
     func queueRunDidCancel() async
 }
 
-public actor MangaOfflineCacheImageAcquirer: MangaOfflineCacheImageAcquiring {
+public actor OfflineCacheImageAcquirer: OfflineCacheImageAcquiring {
     private let networkLoader: any YamiboImageDataLoading
-    private let backgroundTransport: (any MangaOfflineCacheImageTransporting)?
+    private let backgroundTransport: (any OfflineCacheImageTransporting)?
 
     public init(
         networkLoader: any YamiboImageDataLoading,
-        backgroundTransport: (any MangaOfflineCacheImageTransporting)? = nil
+        backgroundTransport: (any OfflineCacheImageTransporting)? = nil
     ) {
         self.networkLoader = networkLoader
         self.backgroundTransport = backgroundTransport
     }
 
-    public func acquireImageData(for imageURL: URL, refererURL: URL?) async throws -> MangaOfflineCacheImageAcquisition {
+    public func acquireImageData(for imageURL: URL, refererURL: URL?) async throws -> OfflineCacheImageAcquisition {
         let request = YamiboImageRequest(
             url: imageURL,
             refererURL: refererURL
@@ -53,16 +53,16 @@ public actor MangaOfflineCacheImageAcquirer: MangaOfflineCacheImageAcquiring {
         } else {
             data = try await networkLoader.imageData(for: request)
         }
-        return MangaOfflineCacheImageAcquisition(data: data, source: .network)
+        return OfflineCacheImageAcquisition(data: data, source: .network)
     }
 }
 
-public actor MangaOfflineCacheQueueExecutor {
+public actor OfflineCacheQueueExecutor {
     private let store: any OfflineCacheStoring
     private let readerProjectionLoader: any MangaReaderProjectionLoading
     private let novelSourcePageLoader: (any NovelOfflineCacheSourcePageLoading)?
-    private let imageAcquirer: any MangaOfflineCacheImageAcquiring
-    private let runObserver: (any MangaOfflineCacheQueueRunObserving)?
+    private let imageAcquirer: any OfflineCacheImageAcquiring
+    private let runObserver: (any OfflineCacheQueueRunObserving)?
     private let maxConcurrentImageTransfers: Int
     private var runTask: Task<Void, Never>?
     private var runGeneration = 0
@@ -71,8 +71,8 @@ public actor MangaOfflineCacheQueueExecutor {
         store: any OfflineCacheStoring,
         readerProjectionLoader: any MangaReaderProjectionLoading,
         novelSourcePageLoader: (any NovelOfflineCacheSourcePageLoading)? = nil,
-        imageAcquirer: any MangaOfflineCacheImageAcquiring,
-        runObserver: (any MangaOfflineCacheQueueRunObserving)? = nil,
+        imageAcquirer: any OfflineCacheImageAcquiring,
+        runObserver: (any OfflineCacheQueueRunObserving)? = nil,
         maxConcurrentImageTransfers: Int = 3
     ) {
         self.store = store
@@ -382,7 +382,7 @@ public actor MangaOfflineCacheQueueExecutor {
         var completed = targetImageURLs.filter { completedKeys.contains($0.absoluteString) }
         let pending = targetImageURLs.filter { !completedKeys.contains($0.absoluteString) }
 
-        try await withThrowingTaskGroup(of: MangaOfflineCacheImageTransferResult.self) { group in
+        try await withThrowingTaskGroup(of: OfflineCacheImageTransferResult.self) { group in
             var pendingIterator = pending.makeIterator()
             var activeCount = 0
 
@@ -406,7 +406,7 @@ public actor MangaOfflineCacheQueueExecutor {
                         throw CancellationError()
                     }
                     try await store.saveOfflineImageData(acquisition.data, for: imageURL)
-                    return MangaOfflineCacheImageTransferResult(
+                    return OfflineCacheImageTransferResult(
                         imageURL: imageURL,
                         bytesPerSecond: Self.bytesPerSecond(byteCount: acquisition.data.count, startedAt: startedAt)
                     )
@@ -493,7 +493,7 @@ public actor MangaOfflineCacheQueueExecutor {
     }
 }
 
-private struct MangaOfflineCacheImageTransferResult: Sendable {
+private struct OfflineCacheImageTransferResult: Sendable {
     var imageURL: URL
     var bytesPerSecond: Int
 }

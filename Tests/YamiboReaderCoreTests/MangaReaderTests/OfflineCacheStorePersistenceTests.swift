@@ -209,7 +209,7 @@ struct MangaReaderTestsMangaOfflineCachePersistence {
         )
         let acquirer = RecordingOfflineImageAcquirer()
         await acquirer.setData(for: imageURLs)
-        let executor = MangaOfflineCacheQueueExecutor(
+        let executor = OfflineCacheQueueExecutor(
             store: store,
             readerProjectionLoader: RecordingReaderProjectionLoader(),
             imageAcquirer: acquirer,
@@ -296,7 +296,7 @@ private func offlineCacheColumnNames(table: String, in db: Database) throws -> [
     try Row.fetchAll(db, sql: "PRAGMA table_info(\(table))").map { $0["name"] as String }
 }
 
-private actor RecordingOfflineImageAcquirer: MangaOfflineCacheImageAcquiring {
+private actor RecordingOfflineImageAcquirer: OfflineCacheImageAcquiring {
     private(set) var requestedURLs: [URL] = []
     private var dataByURL: [URL: Data] = [:]
 
@@ -306,12 +306,12 @@ private actor RecordingOfflineImageAcquirer: MangaOfflineCacheImageAcquiring {
         }
     }
 
-    func acquireImageData(for imageURL: URL, refererURL: URL?) async throws -> MangaOfflineCacheImageAcquisition {
+    func acquireImageData(for imageURL: URL, refererURL: URL?) async throws -> OfflineCacheImageAcquisition {
         requestedURLs.append(imageURL)
         guard let data = dataByURL[imageURL] else {
             throw YamiboError.invalidResponse(statusCode: 404)
         }
-        return MangaOfflineCacheImageAcquisition(data: data, source: .network)
+        return OfflineCacheImageAcquisition(data: data, source: .network)
     }
 }
 

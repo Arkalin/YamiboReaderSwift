@@ -34,11 +34,11 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
     public let offlineCacheStore: any OfflineCacheStoring
     public let forumCacheStore: ForumCacheStore
     public let ordinaryImageCache: any YamiboOrdinaryImageCacheClearing
-    public let mangaOfflineCacheBackgroundDownloadTransport: MangaOfflineCacheBackgroundDownloadTransport
-    public let mangaOfflineCacheContinuedProcessingCoordinator: MangaOfflineCacheContinuedProcessingCoordinator
+    public let offlineCacheBackgroundDownloadTransport: OfflineCacheBackgroundDownloadTransport
+    public let offlineCacheContinuedProcessingCoordinator: OfflineCacheContinuedProcessingCoordinator
     let session: URLSession
     let imageSession: URLSession
-    private let mangaOfflineCacheQueueExecutorBox = MangaOfflineCacheQueueExecutorBox()
+    private let offlineCacheQueueExecutorBox = OfflineCacheQueueExecutorBox()
     private nonisolated(unsafe) let uiDefaults: UserDefaults
     private let clearsWebDataOnReset: Bool
 
@@ -61,8 +61,8 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         offlineCacheStore: (any OfflineCacheStoring)? = nil,
         forumCacheStore: ForumCacheStore? = nil,
         ordinaryImageCache: any YamiboOrdinaryImageCacheClearing = YamiboImageDataPipeline.shared,
-        mangaOfflineCacheBackgroundDownloadTransport: MangaOfflineCacheBackgroundDownloadTransport = MangaOfflineCacheBackgroundDownloadTransport(),
-        mangaOfflineCacheContinuedProcessingCoordinator: MangaOfflineCacheContinuedProcessingCoordinator = MangaOfflineCacheContinuedProcessingCoordinator(),
+        offlineCacheBackgroundDownloadTransport: OfflineCacheBackgroundDownloadTransport = OfflineCacheBackgroundDownloadTransport(),
+        offlineCacheContinuedProcessingCoordinator: OfflineCacheContinuedProcessingCoordinator = OfflineCacheContinuedProcessingCoordinator(),
         grdbRootDirectory: URL? = nil,
         uiDefaults: UserDefaults = .standard,
         clearsWebDataOnReset: Bool = true,
@@ -85,7 +85,7 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         self.readerResumeRouteStore = readerResumeRouteStore
         let resolvedOfflineCacheStore = offlineCacheStore ?? OfflineCacheStore(
             databasePool: resolvedGRDBDatabasePool,
-            baseDirectory: Self.mangaOfflineCacheDirectory(rootDirectory: resolvedGRDBRootDirectory)
+            baseDirectory: Self.offlineCacheDirectory(rootDirectory: resolvedGRDBRootDirectory)
         )
         self.localFavoriteLibraryStore = localFavoriteLibraryStore ?? FavoriteLibraryStore(databasePool: resolvedGRDBDatabasePool)
         self.favoriteUpdateStore = favoriteUpdateStore
@@ -105,8 +105,8 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
             diskCacheStore: diskCacheStore
         )
         self.ordinaryImageCache = ordinaryImageCache
-        self.mangaOfflineCacheBackgroundDownloadTransport = mangaOfflineCacheBackgroundDownloadTransport
-        self.mangaOfflineCacheContinuedProcessingCoordinator = mangaOfflineCacheContinuedProcessingCoordinator
+        self.offlineCacheBackgroundDownloadTransport = offlineCacheBackgroundDownloadTransport
+        self.offlineCacheContinuedProcessingCoordinator = offlineCacheContinuedProcessingCoordinator
         self.session = session
         self.imageSession = imageSession
     }
@@ -302,8 +302,8 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         offlineCacheStore
     }
 
-    public func makeMangaOfflineCacheQueueExecutor() async -> MangaOfflineCacheQueueExecutor {
-        if let executor = await mangaOfflineCacheQueueExecutorBox.value {
+    public func makeOfflineCacheQueueExecutor() async -> OfflineCacheQueueExecutor {
+        if let executor = await offlineCacheQueueExecutorBox.value {
             return executor
         }
 
@@ -313,17 +313,17 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
             cookie: sessionState.cookie,
             userAgent: sessionState.userAgent
         )
-        let executor = MangaOfflineCacheQueueExecutor(
+        let executor = OfflineCacheQueueExecutor(
             store: offlineCacheStore,
             readerProjectionLoader: await makeMangaReaderProjectionLoader(),
             novelSourcePageLoader: await makeNovelReaderRepository(),
-            imageAcquirer: MangaOfflineCacheImageAcquirer(
+            imageAcquirer: OfflineCacheImageAcquirer(
                 networkLoader: YamiboImageDataLoader(client: client),
-                backgroundTransport: mangaOfflineCacheBackgroundDownloadTransport
+                backgroundTransport: offlineCacheBackgroundDownloadTransport
             ),
-            runObserver: mangaOfflineCacheContinuedProcessingCoordinator
+            runObserver: offlineCacheContinuedProcessingCoordinator
         )
-        return await mangaOfflineCacheQueueExecutorBox.setIfEmpty(executor)
+        return await offlineCacheQueueExecutorBox.setIfEmpty(executor)
     }
 
     public func makeCheckInService() -> any YamiboCheckInServicing {
@@ -413,10 +413,8 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         rootDirectory.appendingPathComponent("favorite-background", isDirectory: true)
     }
 
-    private static func mangaOfflineCacheDirectory(rootDirectory: URL) -> URL {
-        rootDirectory
-            .appendingPathComponent("manga-reader", isDirectory: true)
-            .appendingPathComponent("offline-cache", isDirectory: true)
+    private static func offlineCacheDirectory(rootDirectory: URL) -> URL {
+        rootDirectory.appendingPathComponent("offline-cache", isDirectory: true)
     }
 
     @MainActor
@@ -439,10 +437,10 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
     }
 }
 
-private actor MangaOfflineCacheQueueExecutorBox {
-    var value: MangaOfflineCacheQueueExecutor?
+private actor OfflineCacheQueueExecutorBox {
+    var value: OfflineCacheQueueExecutor?
 
-    func setIfEmpty(_ executor: MangaOfflineCacheQueueExecutor) -> MangaOfflineCacheQueueExecutor {
+    func setIfEmpty(_ executor: OfflineCacheQueueExecutor) -> OfflineCacheQueueExecutor {
         if let value {
             return value
         }

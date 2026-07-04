@@ -191,7 +191,7 @@ private struct MangaReaderCacheFixture {
 private func makeCacheFixture(
     chapters: [MangaChapter],
     saveFavorite: Bool = true,
-    offlineCacheQueueControllerProvider: (@Sendable () async -> any MangaOfflineCacheQueueControlling)? = nil
+    offlineCacheQueueControllerProvider: (@Sendable () async -> any OfflineCacheQueueControlling)? = nil
 ) async throws -> MangaReaderCacheFixture {
     let suiteName = YamiboTestDefaults.suiteName(prefix: "manga-reader-cache")
     let localFavoriteLibraryStore = FavoriteLibraryStore(
@@ -242,7 +242,7 @@ private func makeCacheFixture(
     )
 }
 
-private actor RecordingMangaReaderCacheQueueController: MangaOfflineCacheQueueControlling {
+private actor RecordingMangaReaderCacheQueueController: OfflineCacheQueueControlling {
     private var events: [String] = []
 
     func snapshotEvents() -> [String] {

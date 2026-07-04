@@ -62,8 +62,8 @@ public final class MangaReaderCacheViewModel: ObservableObject {
     private let panel: MangaDirectoryPanelPresentation
     private let localFavoriteLibraryStore: FavoriteLibraryStore
     private let offlineCacheStore: any OfflineCacheStoring
-    private let offlineCacheQueueControllerProvider: (@Sendable () async -> any MangaOfflineCacheQueueControlling)?
-    private var offlineCacheQueueController: (any MangaOfflineCacheQueueControlling)?
+    private let offlineCacheQueueControllerProvider: (@Sendable () async -> any OfflineCacheQueueControlling)?
+    private var offlineCacheQueueController: (any OfflineCacheQueueControlling)?
     private var offlineCacheUpdatesTask: Task<Void, Never>?
 
     public init(
@@ -71,7 +71,7 @@ public final class MangaReaderCacheViewModel: ObservableObject {
         panel: MangaDirectoryPanelPresentation,
         localFavoriteLibraryStore: FavoriteLibraryStore,
         offlineCacheStore: any OfflineCacheStoring,
-        offlineCacheQueueControllerProvider: (@Sendable () async -> any MangaOfflineCacheQueueControlling)? = nil
+        offlineCacheQueueControllerProvider: (@Sendable () async -> any OfflineCacheQueueControlling)? = nil
     ) {
         self.context = context
         self.panel = panel
@@ -213,7 +213,7 @@ public final class MangaReaderCacheViewModel: ObservableObject {
         try await controller.continueQueue()
     }
 
-    private func offlineCacheController() async -> (any MangaOfflineCacheQueueControlling)? {
+    private func offlineCacheController() async -> (any OfflineCacheQueueControlling)? {
         if let offlineCacheQueueController {
             return offlineCacheQueueController
         }

@@ -1,7 +1,7 @@
 import Foundation
 
-public final class MangaOfflineCacheBackgroundDownloadTransport: NSObject, MangaOfflineCacheImageTransporting, URLSessionDownloadDelegate, @unchecked Sendable {
-    public static let defaultIdentifier = "com.arkalin.YamiboReader.mangaOfflineCache.backgroundDownloads"
+public final class OfflineCacheBackgroundDownloadTransport: NSObject, OfflineCacheImageTransporting, URLSessionDownloadDelegate, @unchecked Sendable {
+    public static let defaultIdentifier = "com.arkalin.YamiboReader.offlineCache.backgroundDownloads"
 
     private let lock = NSLock()
     private let sessionFactory: @Sendable (URLSessionDelegate) -> URLSession
@@ -10,7 +10,7 @@ public final class MangaOfflineCacheBackgroundDownloadTransport: NSObject, Manga
     private var backgroundEventCompletionHandlers: [String: () -> Void] = [:]
 
     public init(
-        configuration: URLSessionConfiguration = MangaOfflineCacheBackgroundDownloadTransport.makeBackgroundConfiguration(),
+        configuration: URLSessionConfiguration = OfflineCacheBackgroundDownloadTransport.makeBackgroundConfiguration(),
         delegateQueue: OperationQueue? = nil
     ) {
         let queue = delegateQueue ?? OperationQueue()

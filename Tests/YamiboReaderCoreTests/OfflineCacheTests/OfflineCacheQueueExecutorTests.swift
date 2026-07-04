@@ -2,8 +2,8 @@ import Foundation
 import Testing
 @testable import YamiboReaderCore
 
-@Suite("MangaReaderTests: Manga Offline Cache Queue Executor")
-struct MangaReaderTestsMangaOfflineCacheQueueExecutor {
+@Suite("OfflineCacheTests: Offline Cache Queue Executor")
+struct OfflineCacheTestsQueueExecutor {
     @Test func continueProcessesOneChapterAtATimeWithThreeImageTransferLimit() async throws {
         let store = try makeTestOfflineCacheStore(rootDirectory: try makeTemporaryExecutorDirectory())
         let firstChapterImages = try makeImageURLs(tid: "100", count: 4)
@@ -16,7 +16,7 @@ struct MangaReaderTestsMangaOfflineCacheQueueExecutor {
         )
         let acquirer = RecordingOfflineImageAcquirer(delayNanoseconds: 20_000_000)
         await acquirer.setData(for: firstChapterImages + secondChapterImages)
-        let executor = MangaOfflineCacheQueueExecutor(
+        let executor = OfflineCacheQueueExecutor(
             store: store,
             readerProjectionLoader: RecordingReaderProjectionLoader(),
             imageAcquirer: acquirer
@@ -55,7 +55,7 @@ struct MangaReaderTestsMangaOfflineCacheQueueExecutor {
         )
         let acquirer = RecordingOfflineImageAcquirer()
         await acquirer.setData(for: imageURLs)
-        let executor = MangaOfflineCacheQueueExecutor(
+        let executor = OfflineCacheQueueExecutor(
             store: store,
             readerProjectionLoader: projectionLoader,
             imageAcquirer: acquirer
@@ -111,7 +111,7 @@ struct MangaReaderTestsMangaOfflineCacheQueueExecutor {
         )
         let acquirer = RecordingOfflineImageAcquirer()
         await acquirer.setData(for: imageURLs)
-        let executor = MangaOfflineCacheQueueExecutor(
+        let executor = OfflineCacheQueueExecutor(
             store: store,
             readerProjectionLoader: RecordingReaderProjectionLoader(),
             imageAcquirer: acquirer
@@ -138,7 +138,7 @@ struct MangaReaderTestsMangaOfflineCacheQueueExecutor {
             try makeExecutorWorkRequest(ownerName: "favorite-a", tid: "400", targetImageURLs: imageURLs)
         )
         let acquirer = FirstImageOnlyImmediateAcquirer(firstImageURL: imageURLs[0])
-        let executor = MangaOfflineCacheQueueExecutor(
+        let executor = OfflineCacheQueueExecutor(
             store: store,
             readerProjectionLoader: RecordingReaderProjectionLoader(),
             imageAcquirer: acquirer
@@ -167,7 +167,7 @@ struct MangaReaderTestsMangaOfflineCacheQueueExecutor {
             try makeExecutorWorkRequest(ownerName: "favorite-a", tid: "500", targetImageURLs: imageURLs)
         )
         let acquirer = RetryOfflineImageAcquirer(failingImageURL: imageURLs[1])
-        let executor = MangaOfflineCacheQueueExecutor(
+        let executor = OfflineCacheQueueExecutor(
             store: store,
             readerProjectionLoader: RecordingReaderProjectionLoader(),
             imageAcquirer: acquirer,
@@ -198,7 +198,7 @@ struct MangaReaderTestsMangaOfflineCacheQueueExecutor {
             try makeExecutorWorkRequest(ownerName: "favorite-a", tid: "550", targetImageURLs: imageURLs)
         )
         let acquirer = EmptyImageThenFailingAcquirer(emptyImageURL: imageURLs[0])
-        let executor = MangaOfflineCacheQueueExecutor(
+        let executor = OfflineCacheQueueExecutor(
             store: store,
             readerProjectionLoader: RecordingReaderProjectionLoader(),
             imageAcquirer: acquirer,
@@ -232,7 +232,7 @@ struct MangaReaderTestsMangaOfflineCacheQueueExecutor {
         )
         let acquirer = RecordingOfflineImageAcquirer()
         await acquirer.setData(for: [imageURLs[1]])
-        let executor = MangaOfflineCacheQueueExecutor(
+        let executor = OfflineCacheQueueExecutor(
             store: store,
             readerProjectionLoader: RecordingReaderProjectionLoader(),
             imageAcquirer: acquirer
@@ -255,10 +255,10 @@ struct MangaReaderTestsMangaOfflineCacheQueueExecutor {
             imageURLs[0]: Data([7]),
             imageURLs[1]: Data([8])
         ])
-        let executor = MangaOfflineCacheQueueExecutor(
+        let executor = OfflineCacheQueueExecutor(
             store: store,
             readerProjectionLoader: RecordingReaderProjectionLoader(),
-            imageAcquirer: MangaOfflineCacheImageAcquirer(
+            imageAcquirer: OfflineCacheImageAcquirer(
                 networkLoader: networkLoader
             )
         )
@@ -275,7 +275,7 @@ struct MangaReaderTestsMangaOfflineCacheQueueExecutor {
         let imageURL = try #require(URL(string: "https://img.example.com/710-1.jpg"))
         let transport = RecordingImageTransport(dataByURL: [imageURL: Data([8])])
         let networkLoader = RecordingNetworkImageLoader(dataByURL: [:])
-        let acquirer = MangaOfflineCacheImageAcquirer(
+        let acquirer = OfflineCacheImageAcquirer(
             networkLoader: networkLoader,
             backgroundTransport: transport
         )
@@ -283,7 +283,7 @@ struct MangaReaderTestsMangaOfflineCacheQueueExecutor {
 
         let acquisition = try await acquirer.acquireImageData(for: imageURL, refererURL: refererURL)
 
-        #expect(acquisition == MangaOfflineCacheImageAcquisition(data: Data([8]), source: .network))
+        #expect(acquisition == OfflineCacheImageAcquisition(data: Data([8]), source: .network))
         #expect(await transport.requests == [ImageTransportRequest(imageURL: imageURL, refererURL: refererURL)])
         #expect(await networkLoader.requestedURLs.isEmpty)
     }
@@ -297,7 +297,7 @@ struct MangaReaderTestsMangaOfflineCacheQueueExecutor {
         let acquirer = RecordingOfflineImageAcquirer()
         await acquirer.setData(for: imageURLs)
         let observer = RecordingQueueRunObserver()
-        let executor = MangaOfflineCacheQueueExecutor(
+        let executor = OfflineCacheQueueExecutor(
             store: store,
             readerProjectionLoader: RecordingReaderProjectionLoader(),
             imageAcquirer: acquirer,
@@ -326,7 +326,7 @@ struct MangaReaderTestsMangaOfflineCacheQueueExecutor {
         let acquirer = RecordingOfflineImageAcquirer()
         await acquirer.setData(for: imageURLs)
         let observer = RecordingQueueRunObserver()
-        let executor = MangaOfflineCacheQueueExecutor(
+        let executor = OfflineCacheQueueExecutor(
             store: store,
             readerProjectionLoader: RecordingReaderProjectionLoader(),
             imageAcquirer: acquirer,
@@ -348,7 +348,7 @@ struct MangaReaderTestsMangaOfflineCacheQueueExecutor {
         )
         let acquirer = FirstImageOnlyImmediateAcquirer(firstImageURL: imageURLs[0])
         let observer = RecordingQueueRunObserver()
-        let executor = MangaOfflineCacheQueueExecutor(
+        let executor = OfflineCacheQueueExecutor(
             store: store,
             readerProjectionLoader: RecordingReaderProjectionLoader(),
             imageAcquirer: acquirer,
@@ -379,7 +379,7 @@ struct MangaReaderTestsMangaOfflineCacheQueueExecutor {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [MangaReaderDataTestURLProtocol.self]
         configuration.httpAdditionalHeaders = ["X-Manga-Test-ID": harness.testID]
-        let transport = MangaOfflineCacheBackgroundDownloadTransport(configuration: configuration)
+        let transport = OfflineCacheBackgroundDownloadTransport(configuration: configuration)
 
         let data = try await transport.downloadImageData(for: imageURL, refererURL: refererURL)
 
@@ -401,7 +401,7 @@ struct MangaReaderTestsMangaOfflineCacheQueueExecutor {
             completedImageURLs: [imageURLs[0]],
             currentBytesPerSecond: nil
         )
-        let executor = MangaOfflineCacheQueueExecutor(
+        let executor = OfflineCacheQueueExecutor(
             store: store,
             readerProjectionLoader: RecordingReaderProjectionLoader(),
             imageAcquirer: RecordingOfflineImageAcquirer()
@@ -439,7 +439,7 @@ struct MangaReaderTestsMangaOfflineCacheQueueExecutor {
             completedImageURLs: retainedImages,
             currentBytesPerSecond: nil
         )
-        let executor = MangaOfflineCacheQueueExecutor(
+        let executor = OfflineCacheQueueExecutor(
             store: store,
             readerProjectionLoader: RecordingReaderProjectionLoader(),
             imageAcquirer: RecordingOfflineImageAcquirer()
@@ -465,7 +465,7 @@ struct MangaReaderTestsMangaOfflineCacheQueueExecutor {
         )
         let acquirer = RecordingOfflineImageAcquirer()
         await acquirer.setData(for: imageURLs)
-        let executor = MangaOfflineCacheQueueExecutor(
+        let executor = OfflineCacheQueueExecutor(
             store: store,
             readerProjectionLoader: RecordingReaderProjectionLoader(),
             novelSourcePageLoader: sourceLoader,
@@ -499,7 +499,7 @@ struct MangaReaderTestsMangaOfflineCacheQueueExecutor {
         )
         let acquirer = RecordingOfflineImageAcquirer()
         await acquirer.setData(for: imageURLs)
-        let executor = MangaOfflineCacheQueueExecutor(
+        let executor = OfflineCacheQueueExecutor(
             store: store,
             readerProjectionLoader: RecordingReaderProjectionLoader(),
             novelSourcePageLoader: sourceLoader,
@@ -531,7 +531,7 @@ struct MangaReaderTestsMangaOfflineCacheQueueExecutor {
         let preparedPage = try makeNovelExecutorPreparedSourcePage(tid: "1120", view: 2, imageURLs: imageURLs)
         await sourceLoader.setPreparedPage(preparedPage, for: request)
         let acquirer = RetryOfflineImageAcquirer(failingImageURL: imageURLs[1])
-        let executor = MangaOfflineCacheQueueExecutor(
+        let executor = OfflineCacheQueueExecutor(
             store: store,
             readerProjectionLoader: RecordingReaderProjectionLoader(),
             novelSourcePageLoader: sourceLoader,
@@ -609,7 +609,7 @@ private actor RecordingReaderProjectionLoader: MangaReaderProjectionSnapshotLoad
     }
 }
 
-private actor RecordingOfflineImageAcquirer: MangaOfflineCacheImageAcquiring {
+private actor RecordingOfflineImageAcquirer: OfflineCacheImageAcquiring {
     private(set) var requestedURLs: [URL] = []
     private(set) var maxActiveCount = 0
     private let delayNanoseconds: UInt64
@@ -626,7 +626,7 @@ private actor RecordingOfflineImageAcquirer: MangaOfflineCacheImageAcquiring {
         }
     }
 
-    func acquireImageData(for imageURL: URL, refererURL: URL?) async throws -> MangaOfflineCacheImageAcquisition {
+    func acquireImageData(for imageURL: URL, refererURL: URL?) async throws -> OfflineCacheImageAcquisition {
         requestedURLs.append(imageURL)
         activeCount += 1
         maxActiveCount = max(maxActiveCount, activeCount)
@@ -637,27 +637,27 @@ private actor RecordingOfflineImageAcquirer: MangaOfflineCacheImageAcquiring {
         guard let data = dataByURL[imageURL] else {
             throw YamiboError.invalidResponse(statusCode: 404)
         }
-        return MangaOfflineCacheImageAcquisition(data: data, source: .network)
+        return OfflineCacheImageAcquisition(data: data, source: .network)
     }
 }
 
-private actor FirstImageOnlyImmediateAcquirer: MangaOfflineCacheImageAcquiring {
+private actor FirstImageOnlyImmediateAcquirer: OfflineCacheImageAcquiring {
     private let firstImageURL: URL
 
     init(firstImageURL: URL) {
         self.firstImageURL = firstImageURL
     }
 
-    func acquireImageData(for imageURL: URL, refererURL: URL?) async throws -> MangaOfflineCacheImageAcquisition {
+    func acquireImageData(for imageURL: URL, refererURL: URL?) async throws -> OfflineCacheImageAcquisition {
         if imageURL == firstImageURL {
-            return MangaOfflineCacheImageAcquisition(data: Data([1]), source: .network)
+            return OfflineCacheImageAcquisition(data: Data([1]), source: .network)
         }
         try await Task.sleep(nanoseconds: 5_000_000_000)
-        return MangaOfflineCacheImageAcquisition(data: Data([2]), source: .network)
+        return OfflineCacheImageAcquisition(data: Data([2]), source: .network)
     }
 }
 
-private actor RetryOfflineImageAcquirer: MangaOfflineCacheImageAcquiring {
+private actor RetryOfflineImageAcquirer: OfflineCacheImageAcquiring {
     private(set) var requestedURLs: [URL] = []
     private let failingImageURL: URL
     private var shouldFail = true
@@ -671,16 +671,16 @@ private actor RetryOfflineImageAcquirer: MangaOfflineCacheImageAcquiring {
         requestedURLs.removeAll()
     }
 
-    func acquireImageData(for imageURL: URL, refererURL: URL?) async throws -> MangaOfflineCacheImageAcquisition {
+    func acquireImageData(for imageURL: URL, refererURL: URL?) async throws -> OfflineCacheImageAcquisition {
         requestedURLs.append(imageURL)
         if imageURL == failingImageURL, shouldFail {
             throw YamiboError.offline
         }
-        return MangaOfflineCacheImageAcquisition(data: imageURL == failingImageURL ? Data([2]) : Data([1]), source: .network)
+        return OfflineCacheImageAcquisition(data: imageURL == failingImageURL ? Data([2]) : Data([1]), source: .network)
     }
 }
 
-private actor EmptyImageThenFailingAcquirer: MangaOfflineCacheImageAcquiring {
+private actor EmptyImageThenFailingAcquirer: OfflineCacheImageAcquiring {
     private(set) var requestedURLs: [URL] = []
     private let emptyImageURL: URL
 
@@ -688,10 +688,10 @@ private actor EmptyImageThenFailingAcquirer: MangaOfflineCacheImageAcquiring {
         self.emptyImageURL = emptyImageURL
     }
 
-    func acquireImageData(for imageURL: URL, refererURL: URL?) async throws -> MangaOfflineCacheImageAcquisition {
+    func acquireImageData(for imageURL: URL, refererURL: URL?) async throws -> OfflineCacheImageAcquisition {
         requestedURLs.append(imageURL)
         if imageURL == emptyImageURL {
-            return MangaOfflineCacheImageAcquisition(data: Data(), source: .network)
+            return OfflineCacheImageAcquisition(data: Data(), source: .network)
         }
         throw YamiboError.offline
     }
@@ -723,7 +723,7 @@ private struct ImageTransportRequest: Hashable, Sendable {
     var refererURL: URL?
 }
 
-private actor RecordingImageTransport: MangaOfflineCacheImageTransporting {
+private actor RecordingImageTransport: OfflineCacheImageTransporting {
     private(set) var requests: [ImageTransportRequest] = []
     private let dataByURL: [URL: Data]
 
@@ -740,7 +740,7 @@ private actor RecordingImageTransport: MangaOfflineCacheImageTransporting {
     }
 }
 
-private actor RecordingQueueRunObserver: MangaOfflineCacheQueueRunObserving {
+private actor RecordingQueueRunObserver: OfflineCacheQueueRunObserving {
     private(set) var submissionCount = 0
     private(set) var progressUpdates: [MangaOfflineCacheProgress] = []
     private(set) var finishResults: [Bool] = []

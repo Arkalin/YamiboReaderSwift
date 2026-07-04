@@ -4,8 +4,8 @@ import Foundation
 @preconcurrency import BackgroundTasks
 #endif
 
-public final class MangaOfflineCacheContinuedProcessingCoordinator: MangaOfflineCacheQueueRunObserving, @unchecked Sendable {
-    public static let permittedIdentifier = "com.arkalin.YamiboReader.mangaOfflineCache.continuedProcessing.*"
+public final class OfflineCacheContinuedProcessingCoordinator: OfflineCacheQueueRunObserving, @unchecked Sendable {
+    public static let permittedIdentifier = "com.arkalin.YamiboReader.offlineCache.continuedProcessing.*"
 
     private let lock = NSLock()
     private let title: String
@@ -81,7 +81,7 @@ public final class MangaOfflineCacheContinuedProcessingCoordinator: MangaOffline
 
     @available(iOS 26.0, *)
     public static func configureLaunchHandler(
-        coordinator: MangaOfflineCacheContinuedProcessingCoordinator,
+        coordinator: OfflineCacheContinuedProcessingCoordinator,
         queue: DispatchQueue? = nil,
         continueQueue: @escaping @Sendable () async -> Void,
         pauseQueue: @escaping @Sendable () async -> Void
@@ -95,7 +95,7 @@ public final class MangaOfflineCacheContinuedProcessingCoordinator: MangaOffline
 
     @available(iOS 26.0, *)
     public static func registerLaunchHandler(
-        coordinator: MangaOfflineCacheContinuedProcessingCoordinator,
+        coordinator: OfflineCacheContinuedProcessingCoordinator,
         queue: DispatchQueue? = nil,
         continueQueue: @escaping @Sendable () async -> Void,
         pauseQueue: @escaping @Sendable () async -> Void
@@ -168,7 +168,7 @@ public final class MangaOfflineCacheContinuedProcessingCoordinator: MangaOffline
     @available(iOS 26.0, *)
     private static func makeTaskIdentifier() -> String {
         let bundleIdentifier = Bundle.main.bundleIdentifier ?? "com.arkalin.YamiboReader"
-        return "\(bundleIdentifier).mangaOfflineCache.continuedProcessing.\(UUID().uuidString)"
+        return "\(bundleIdentifier).offlineCache.continuedProcessing.\(UUID().uuidString)"
     }
     #endif
 }

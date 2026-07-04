@@ -14,9 +14,7 @@ public extension OfflineCacheQueueControlling {
     func cancelGroup(id: OfflineCacheGroupID) async throws {}
 }
 
-public typealias MangaOfflineCacheQueueControlling = OfflineCacheQueueControlling
-
-extension MangaOfflineCacheQueueExecutor: OfflineCacheQueueControlling {}
+extension OfflineCacheQueueExecutor: OfflineCacheQueueControlling {}
 
 @MainActor
 @Observable
@@ -362,7 +360,7 @@ final class MineHomeViewModel {
             return offlineCacheQueueController
         }
 
-        let controller = await appContext.makeMangaOfflineCacheQueueExecutor()
+        let controller = await appContext.makeOfflineCacheQueueExecutor()
         offlineCacheQueueController = controller
         return controller
     }

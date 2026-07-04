@@ -24,7 +24,7 @@ struct MangaReaderCacheSheet: View {
                 localFavoriteLibraryStore: appContext.localFavoriteLibraryStore,
                 offlineCacheStore: appContext.offlineCacheStore,
                 offlineCacheQueueControllerProvider: {
-                    await appContext.makeMangaOfflineCacheQueueExecutor()
+                    await appContext.makeOfflineCacheQueueExecutor()
                 }
             )
         )

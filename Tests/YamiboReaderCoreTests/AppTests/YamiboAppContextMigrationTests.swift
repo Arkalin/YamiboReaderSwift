@@ -134,7 +134,7 @@ import Testing
             .appendingPathComponent("novel_reader_projections", isDirectory: true)
             .path
     ))
-    #expect(FileManager.default.fileExists(atPath: rootDirectory.appendingPathComponent("manga-reader/offline-cache/images", isDirectory: true).path))
+    #expect(FileManager.default.fileExists(atPath: offlineCacheDirectory(rootDirectory: rootDirectory).appendingPathComponent("images", isDirectory: true).path))
     #expect(FileManager.default.fileExists(atPath: YamiboDatabase.cacheDirectoryURL(rootDirectory: rootDirectory).path))
     #expect(FileManager.default.fileExists(
         atPath: YamiboDatabase.cacheDirectoryURL(rootDirectory: rootDirectory)
@@ -184,7 +184,7 @@ import Testing
             .appendingPathComponent("novel_reader_projections", isDirectory: true)
             .path
     ))
-    #expect(!FileManager.default.fileExists(atPath: rootDirectory.appendingPathComponent("manga-reader/offline-cache", isDirectory: true).path))
+    #expect(!FileManager.default.fileExists(atPath: offlineCacheDirectory(rootDirectory: rootDirectory).path))
     #expect(!FileManager.default.fileExists(
         atPath: YamiboDatabase.cacheDirectoryURL(rootDirectory: rootDirectory)
             .appendingPathComponent("forum_home", isDirectory: true)
@@ -204,9 +204,89 @@ import Testing
     #expect(defaults.data(forKey: "yamibo.readingProgress.records") == legacyProgressData)
 }
 
+@MainActor
+@Test func appContextDoesNotMigrateLegacyMangaNamedOfflineCacheDirectory() async throws {
+    let suiteName = YamiboTestDefaults.suiteName(prefix: "app-context-offline-cache-dir")
+    _ = try YamiboTestDefaults.make(suiteName: suiteName)
+    let rootDirectory = makeTemporaryAppRoot()
+    let database = try YamiboDatabase.openSharedPool(rootDirectory: rootDirectory)
+    let legacyStore = OfflineCacheStore(
+        databasePool: database,
+        baseDirectory: legacyOfflineCacheDirectory(rootDirectory: rootDirectory)
+    )
+    let chapterURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9003"))
+    let imageURL = try #require(URL(string: "https://img.example.test/9003-1.jpg"))
+    let novelSourcePage = ForumThreadPage(
+        thread: ThreadIdentity(tid: "9004", canonicalURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9004"))),
+        title: "Legacy Novel",
+        posts: [
+            ForumThreadPost(
+                postID: "9004-1",
+                author: BlogReaderUser(uid: "42", name: "作者"),
+                contentHTML: "<p>Legacy source page</p>",
+                contentText: "Legacy source page"
+            )
+        ],
+        pageNavigation: ForumPageNavigation(currentPage: 1, totalPages: 1)
+    )
+
+    try await legacyStore.saveOfflineImageData(Data([9, 3]), for: imageURL)
+    try await legacyStore.saveMembership(
+        MangaOfflineCacheMembership(
+            ownerName: "Legacy Manga",
+            tid: "9003",
+            chapterTitle: "旧第一话",
+            chapterURL: chapterURL,
+            imageURLs: [imageURL]
+        )
+    )
+    try await legacyStore.saveNovelOfflineSourcePage(
+        novelSourcePage,
+        request: NovelOfflineCacheWorkRequest(
+            ownerTitle: "Legacy Novel",
+            title: "第一页",
+            threadURL: novelSourcePage.thread.canonicalURL,
+            view: 1,
+            authorID: "42",
+            contentSource: .authorFilteredPage
+        ),
+        projectionPrewarm: nil,
+        updatedAt: Date(timeIntervalSince1970: 100),
+        completesMatchingWork: true,
+        preservesExistingImageReferencesWhenEmpty: false
+    )
+    #expect(FileManager.default.fileExists(atPath: legacyOfflineCacheDirectory(rootDirectory: rootDirectory).path))
+    #expect(!FileManager.default.fileExists(atPath: offlineCacheDirectory(rootDirectory: rootDirectory).path))
+
+    let appContext = try makeIsolatedAppContext(suiteName: suiteName, rootDirectory: rootDirectory)
+
+    #expect(FileManager.default.fileExists(atPath: legacyOfflineCacheDirectory(rootDirectory: rootDirectory).path))
+    #expect(!FileManager.default.fileExists(atPath: offlineCacheDirectory(rootDirectory: rootDirectory).path))
+    #expect(await appContext.offlineCacheStore.offlineImageData(for: imageURL) == nil)
+    #expect(await appContext.offlineCacheStore.offlineCacheState(ownerName: "Legacy Manga", tid: "9003") == .uncached)
+    let loadedNovelSourcePage = await appContext.offlineCacheStore.novelOfflineSourcePage(
+        ownerTitle: "Legacy Novel",
+        threadURL: novelSourcePage.thread.canonicalURL,
+        view: 1,
+        authorID: "42",
+        contentSource: .authorFilteredPage
+    )
+    #expect(loadedNovelSourcePage == nil)
+}
+
 private func makeTemporaryAppRoot() -> URL {
     FileManager.default.temporaryDirectory
         .appendingPathComponent("yamibo-app-context-grdb-\(UUID().uuidString)", isDirectory: true)
+}
+
+private func offlineCacheDirectory(rootDirectory: URL) -> URL {
+    rootDirectory.appendingPathComponent("offline-cache", isDirectory: true)
+}
+
+private func legacyOfflineCacheDirectory(rootDirectory: URL) -> URL {
+    rootDirectory
+        .appendingPathComponent("manga-reader", isDirectory: true)
+        .appendingPathComponent("offline-cache", isDirectory: true)
 }
 
 private func makeIsolatedAppContext(suiteName: String, rootDirectory: URL) throws -> YamiboAppContext {
