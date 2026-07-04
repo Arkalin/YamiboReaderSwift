@@ -18,10 +18,6 @@ final class LocalFavoritesViewModelTests: XCTestCase {
         let boardA = FavoriteSourceGroup.forumBoard(id: "10", label: "版区A")
         let boardALegacy = FavoriteSourceGroup.forumBoard(id: "10", label: "旧版区A")
         let boardB = FavoriteSourceGroup.forumBoard(id: "20", label: "版区B")
-        let firstURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=940"))
-        let secondURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=941"))
-        let thirdURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=942"))
-        let fourthURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=943"))
         let firstTarget = FavoriteContentTarget(kind: .normalThread, threadID: "940")
         let secondTarget = FavoriteContentTarget(kind: .normalThread, threadID: "941")
         let thirdTarget = FavoriteContentTarget(kind: .normalThread, threadID: "942")
@@ -87,8 +83,6 @@ final class LocalFavoritesViewModelTests: XCTestCase {
         let viewModel = LocalFavoritesViewModel(appContext: appContext)
         await viewModel.load()
 
-        let firstURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=930"))
-        let secondURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=931"))
         let firstTarget = FavoriteContentTarget(kind: .normalThread, threadID: "930")
         let secondTarget = FavoriteContentTarget(kind: .normalThread, threadID: "931")
         var document = await localFavoriteLibraryStore.load()
@@ -150,8 +144,6 @@ final class LocalFavoritesViewModelTests: XCTestCase {
         let existingCollection = try XCTUnwrap(createdExistingCollection)
         viewModel.closeCollection()
 
-        let firstURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=920"))
-        let secondURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=921"))
         let firstTarget = FavoriteContentTarget(kind: .normalThread, threadID: "920")
         let secondTarget = FavoriteContentTarget(kind: .normalThread, threadID: "921")
         var document = await localFavoriteLibraryStore.load()
@@ -221,7 +213,6 @@ final class LocalFavoritesViewModelTests: XCTestCase {
         viewModel.selectedCategoryID = sourceCategory.id
         viewModel.closeCollection()
 
-        let url = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=940"))
         let target = FavoriteContentTarget(kind: .normalThread, threadID: "940")
         var document = await localFavoriteLibraryStore.load()
         document.addItem(try FavoriteItem(
@@ -280,7 +271,6 @@ final class LocalFavoritesViewModelTests: XCTestCase {
         let sourceCategory = try XCTUnwrap(createdSourceCategory)
         let createdDestinationCategory = await viewModel.createCategory(name: "分类B")
         let destinationCategory = try XCTUnwrap(createdDestinationCategory)
-        let url = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=952"))
         let target = FavoriteContentTarget(kind: .normalThread, threadID: "952")
         var document = await localFavoriteLibraryStore.load()
         document.addItem(try FavoriteItem(
@@ -320,7 +310,6 @@ final class LocalFavoritesViewModelTests: XCTestCase {
         let createdCollection = await viewModel.createCollection(name: "合集A", color: .blue)
         let collection = try XCTUnwrap(createdCollection)
         viewModel.closeCollection()
-        let url = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=956"))
         let target = FavoriteContentTarget(kind: .normalThread, threadID: "956")
         var document = await localFavoriteLibraryStore.load()
         document.addItem(try FavoriteItem(
@@ -363,7 +352,6 @@ final class LocalFavoritesViewModelTests: XCTestCase {
         )
         await viewModel.load()
 
-        let url = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=953"))
         let target = FavoriteContentTarget(kind: .normalThread, threadID: "953")
         var document = await localFavoriteLibraryStore.load()
         document.addItem(try FavoriteItem(
@@ -401,7 +389,6 @@ final class LocalFavoritesViewModelTests: XCTestCase {
         let viewModel = LocalFavoritesViewModel(appContext: appContext)
         await viewModel.load()
 
-        let url = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=955&mobile=2"))
         let target = FavoriteContentTarget(kind: .normalThread, threadID: "955")
         var document = await localFavoriteLibraryStore.load()
         let item = try FavoriteItem(
@@ -433,7 +420,6 @@ final class LocalFavoritesViewModelTests: XCTestCase {
         let viewModel = LocalFavoritesViewModel(appContext: appContext)
         await viewModel.load()
 
-        let url = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=954"))
         let target = FavoriteContentTarget(kind: .normalThread, threadID: "954")
         var document = await localFavoriteLibraryStore.load()
         let item = try FavoriteItem(
@@ -470,8 +456,6 @@ final class LocalFavoritesViewModelTests: XCTestCase {
         let createdSecondCollection = await viewModel.createCollection(name: "合集B", color: .gray)
         let secondCollection = try XCTUnwrap(createdSecondCollection)
 
-        let firstURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=910"))
-        let secondURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=911"))
         let firstTarget = FavoriteContentTarget(kind: .normalThread, threadID: "910")
         let secondTarget = FavoriteContentTarget(kind: .normalThread, threadID: "911")
         var document = await localFavoriteLibraryStore.load()
@@ -544,7 +528,6 @@ final class LocalFavoritesViewModelTests: XCTestCase {
         let category = try XCTUnwrap(createdCategory)
         XCTAssertEqual(viewModel.selectedCategoryID, category.id)
 
-        let threadURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=904"))
         var document = await localFavoriteLibraryStore.load()
         let item = try FavoriteItem(
             target: FavoriteContentTarget(kind: .normalThread, threadID: "904"),
@@ -790,7 +773,6 @@ final class LocalFavoritesViewModelTests: XCTestCase {
             localFavoriteLibraryStore: localFavoriteLibraryStore,
             favoriteUpdateStore: favoriteUpdateStore
         )
-        let threadURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=960"))
         let target = FavoriteContentTarget(kind: .normalThread, threadID: "960")
         var document = FavoriteLibraryDocument()
         let category = document.createCategory(name: "更新检测")
@@ -946,7 +928,6 @@ final class LocalFavoritesViewModelTests: XCTestCase {
             readingProgressStore: readingProgressStore,
             contentCoverStore: contentCoverStore
         )
-        let threadURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=903"))
         let target = FavoriteContentTarget(kind: .normalThread, threadID: "903")
         let coverURL = try XCTUnwrap(URL(string: "https://img.example.com/store-cover.jpg"))
         var document = FavoriteLibraryDocument()
@@ -988,7 +969,6 @@ final class LocalFavoritesViewModelTests: XCTestCase {
             readingProgressStore: readingProgressStore,
             contentCoverStore: contentCoverStore
         )
-        let threadURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=904"))
         let target = FavoriteContentTarget(kind: .normalThread, threadID: "904")
         let persistedCoverURL = try XCTUnwrap(URL(string: "https://img.example.com/old-normal-cover.jpg"))
         let resolvedCoverURL = try XCTUnwrap(URL(string: "https://img.example.com/resolved-normal-cover.jpg"))
@@ -1033,7 +1013,6 @@ final class LocalFavoritesViewModelTests: XCTestCase {
             readingProgressStore: readingProgressStore,
             contentCoverStore: contentCoverStore
         )
-        let threadURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=905"))
         let target = FavoriteContentTarget(kind: .novelThread, threadID: "905")
         let persistedCoverURL = try XCTUnwrap(URL(string: "https://img.example.com/old-novel-cover.jpg"))
         let resolvedCoverURL = try XCTUnwrap(URL(string: "https://img.example.com/resolved-novel-cover.jpg"))
@@ -1073,7 +1052,6 @@ final class LocalFavoritesViewModelTests: XCTestCase {
             localFavoriteLibraryStore: localFavoriteLibraryStore,
             readingProgressStore: readingProgressStore
         )
-        let threadURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=901"))
         let originalUpdatedAt = Date(timeIntervalSince1970: 1_000)
         var document = FavoriteLibraryDocument()
         let item = try FavoriteItem(
@@ -1110,9 +1088,6 @@ final class LocalFavoritesViewModelTests: XCTestCase {
         let secondCategory = document.createCategory(name: "分类B")
         let matchingCollection = document.createCollection(categoryID: document.defaultCategory.id, name: "命中合集")
         _ = document.createCollection(categoryID: document.defaultCategory.id, name: "其他合集")
-        let firstURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=950"))
-        let secondURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=951"))
-        let thirdURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=952"))
         let firstTarget = FavoriteContentTarget(kind: .normalThread, threadID: "950")
         let secondTarget = FavoriteContentTarget(kind: .normalThread, threadID: "951")
         let thirdTarget = FavoriteContentTarget(kind: .normalThread, threadID: "952")
