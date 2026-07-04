@@ -25,9 +25,10 @@ struct MangaReaderTestsUIRouteContracts {
         #if os(iOS)
         let appModel = try makeAppModel()
         let nativeContext = try makeLaunchContext(tid: "700")
+        let url = try #require(YamiboRoute.chapterURL(forTID: nativeContext.chapterTID))
         let webContext = MangaWebContext(
-            currentURL: nativeContext.chapterURL,
-            originalThreadURL: nativeContext.originalThreadURL,
+            currentURL: url,
+            originalThreadURL: url,
             source: .forum
         )
 
@@ -54,10 +55,9 @@ private func makeAppContext() throws -> YamiboAppContext {
 }
 
 private func makeLaunchContext(tid: String) throws -> MangaLaunchContext {
-    let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(tid)&mobile=2"))
-    return MangaLaunchContext(
-        originalThreadURL: url,
-        chapterURL: url,
+    MangaLaunchContext(
+        originalThreadID: tid,
+        chapterTID: tid,
         displayTitle: "测试漫画",
         source: .forum
     )

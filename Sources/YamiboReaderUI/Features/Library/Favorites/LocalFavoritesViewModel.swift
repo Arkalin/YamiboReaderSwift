@@ -1506,12 +1506,18 @@ final class LocalFavoritesViewModel: ObservableObject {
                 errorMessage = L10n.string("favorite_library.manga_title_resolution_failed")
                 return nil
             }
+            guard let chapterTID = YamiboThreadURLCanonicalizer.threadID(from: chapterURL) else {
+                errorMessage = L10n.string("favorite_library.manga_title_resolution_failed")
+                return nil
+            }
+            let originalThreadID = latestItem.mangaChapterMetadata?.chapterTID ?? chapterTID
             return .manga(
                 MangaLaunchContext(
-                    originalThreadURL: latestItem.mangaChapterMetadata?.chapterURL ?? chapterURL,
-                    chapterURL: chapterURL,
+                    originalThreadID: originalThreadID,
+                    chapterTID: chapterTID,
                     displayTitle: latestItem.resolvedDisplayTitle,
                     source: .favorites,
+                    chapterView: Self.page(from: chapterURL),
                     initialPage: mode == .start ? 0 : (progress?.manga?.mangaPageIndex ?? 0),
                     directoryName: cleanBookName,
                     offlineCacheFavoriteID: latestItem.id
@@ -1910,9 +1916,7 @@ final class LocalFavoritesViewModel: ObservableObject {
             )
         case let .manga(context):
             let cleanBookName = context.directoryName ?? context.displayTitle
-            let mangaID = YamiboThreadURLCanonicalizer.threadID(from: context.originalThreadURL)
-                ?? YamiboThreadURLCanonicalizer.threadID(from: context.chapterURL)
-                ?? cleanBookName
+            let mangaID = context.originalThreadID
             return FavoriteThreadProbeResult(
                 target: FavoriteContentTarget(mangaID: "thread:\(mangaID)", mangaCleanBookName: cleanBookName),
                 title: context.displayTitle,
@@ -2036,6 +2040,13 @@ final class LocalFavoritesViewModel: ObservableObject {
         }
         let nsError = error as NSError
         return nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorCancelled
+    }
+
+    private static func page(from url: URL) -> Int {
+        let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        let page = components?.queryItems?.first(where: { $0.name == "page" })?.value
+            .flatMap(Int.init) ?? 1
+        return max(1, page)
     }
 }
 

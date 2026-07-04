@@ -59,15 +59,17 @@ final class ForumMangaDetailViewModel {
             let loader = await appContext.makeMangaReaderProjectionLoader()
             let repository = await appContext.makeMangaDirectoryRepository()
             let store = appContext.makeMangaDirectoryStore()
-            let document = try await loader.loadReaderProjection(at: context.thread.canonicalURL)
+            let document = try await loader.loadReaderProjection(
+                MangaReaderProjectionRequest(threadID: context.thread.tid)
+            )
             let workflow = MangaDirectoryWorkflow(
                 repository: repository,
                 store: store,
                 searchCooldownState: appContext.mangaDirectorySearchCooldownState
             )
             let launchContext = MangaLaunchContext(
-                originalThreadURL: context.thread.canonicalURL,
-                chapterURL: context.thread.canonicalURL,
+                originalThreadID: context.thread.tid,
+                chapterTID: context.thread.tid,
                 displayTitle: context.title,
                 source: .forum,
                 directoryName: context.directoryNameHint
@@ -99,12 +101,16 @@ final class ForumMangaDetailViewModel {
     func continueLaunchContext() -> MangaLaunchContext? {
         guard let directory else { return nil }
         let manga = readingProgress?.manga
-        let fallbackChapterURL = directory.chapters.first?.url ?? currentDocument?.chapterURL ?? context.thread.canonicalURL
+        let fallbackChapter = directory.chapters.first
+        let fallbackChapterTID = fallbackChapter?.tid ?? currentDocument?.tid ?? context.thread.tid
+        let fallbackChapterView = fallbackChapter?.view ?? currentDocument?.sourceIdentity.view ?? 1
+        let progressChapterTID = (manga?.lastMangaURL).flatMap(Self.threadID(from:))
         return MangaLaunchContext(
-            originalThreadURL: context.thread.canonicalURL,
-            chapterURL: manga?.lastMangaURL ?? fallbackChapterURL,
+            originalThreadID: context.thread.tid,
+            chapterTID: progressChapterTID ?? fallbackChapterTID,
             displayTitle: directory.cleanBookName,
             source: manga == nil ? .forum : .resume,
+            chapterView: (manga?.lastMangaURL).map(Self.page(from:)) ?? fallbackChapterView,
             initialPage: manga?.mangaPageIndex ?? 0,
             directoryName: directory.cleanBookName
         )
@@ -112,10 +118,11 @@ final class ForumMangaDetailViewModel {
 
     func launchContext(for chapter: MangaChapter) -> MangaLaunchContext {
         MangaLaunchContext(
-            originalThreadURL: context.thread.canonicalURL,
-            chapterURL: chapter.url,
+            originalThreadID: context.thread.tid,
+            chapterTID: chapter.tid,
             displayTitle: directory?.cleanBookName ?? context.title,
             source: .forum,
+            chapterView: chapter.view,
             directoryName: directory?.cleanBookName ?? context.directoryNameHint
         )
     }
@@ -144,5 +151,18 @@ final class ForumMangaDetailViewModel {
         updated.lastUpdatedAt = Date()
         try await store.saveDirectory(updated)
         return updated
+    }
+
+    private static func threadID(from url: URL) -> String? {
+        let value = MangaTitleCleaner.extractTid(from: url.absoluteString)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return value?.isEmpty == false ? value : nil
+    }
+
+    private static func page(from url: URL) -> Int {
+        let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        let page = components?.queryItems?.first(where: { $0.name == "page" })?.value
+            .flatMap(Int.init) ?? 1
+        return max(1, page)
     }
 }

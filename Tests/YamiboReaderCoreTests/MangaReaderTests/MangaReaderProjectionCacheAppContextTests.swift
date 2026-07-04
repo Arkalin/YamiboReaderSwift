@@ -43,12 +43,12 @@ struct MangaReaderTestsReaderProjectionCacheAppContext {
             mangaReaderProjectionStore: projectionStore,
             session: harness.session
         )
-        let chapterURL = YamiboRoute.threadByID(tid: "900", page: 5, authorID: "42", reverse: false).url
+        let request = MangaReaderProjectionRequest(threadID: "900", view: 5, authorID: "42")
 
         let firstLoader = await appContext.makeMangaReaderProjectionLoader()
-        let first = try await firstLoader.loadReaderProjection(at: chapterURL)
+        let first = try await firstLoader.loadReaderProjection(request)
         let secondLoader = await appContext.makeMangaReaderProjectionLoader()
-        let second = try await secondLoader.loadReaderProjection(at: chapterURL)
+        let second = try await secondLoader.loadReaderProjection(request)
 
         #expect(first.tid == "900")
         #expect(second.tid == "900")

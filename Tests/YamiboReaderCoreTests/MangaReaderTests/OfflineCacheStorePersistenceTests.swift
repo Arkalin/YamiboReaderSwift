@@ -627,13 +627,12 @@ private actor RecordingReaderProjectionLoader: MangaReaderProjectionSnapshotLoad
         self.documentsByTID = Dictionary(uniqueKeysWithValues: documents.map { ($0.tid, $0) })
     }
 
-    func loadReaderProjection(at url: URL) async throws -> MangaReaderProjection {
-        try await loadReaderProjectionSnapshot(at: url).projection
+    func loadReaderProjection(_ request: MangaReaderProjectionRequest) async throws -> MangaReaderProjection {
+        try await loadReaderProjectionSnapshot(request).projection
     }
 
-    func loadReaderProjectionSnapshot(at url: URL) async throws -> MangaReaderProjectionSnapshot {
-        guard let tid = MangaTitleCleaner.extractTid(from: url.absoluteString),
-              let projection = documentsByTID[tid] else {
+    func loadReaderProjectionSnapshot(_ request: MangaReaderProjectionRequest) async throws -> MangaReaderProjectionSnapshot {
+        guard let projection = documentsByTID[request.threadID] else {
             throw YamiboError.parsingFailed(context: "Unexpected document load in offline-cache test")
         }
         return MangaReaderProjectionSnapshot(

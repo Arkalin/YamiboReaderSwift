@@ -1,7 +1,28 @@
 import Foundation
 
+public struct MangaReaderProjectionRequest: Codable, Hashable, Sendable {
+    public var threadID: String
+    public var view: Int
+    public var authorID: String?
+
+    public init(threadID: String, view: Int = 1, authorID: String? = nil) {
+        let normalizedThreadID = threadID.trimmingCharacters(in: .whitespacesAndNewlines)
+        precondition(!normalizedThreadID.isEmpty, "MangaReaderProjectionRequest requires a Yamibo thread tid")
+        self.threadID = normalizedThreadID
+        self.view = max(1, view)
+        self.authorID = authorID?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if self.authorID?.isEmpty == true {
+            self.authorID = nil
+        }
+    }
+
+    public init(chapter: MangaChapter) {
+        self.init(threadID: chapter.tid, view: chapter.view, authorID: chapter.authorUID)
+    }
+}
+
 public protocol MangaReaderProjectionLoading: Sendable {
-    func loadReaderProjection(at url: URL) async throws -> MangaReaderProjection
+    func loadReaderProjection(_ request: MangaReaderProjectionRequest) async throws -> MangaReaderProjection
 }
 
 public struct MangaReaderProjectionSnapshot: Sendable {
@@ -15,7 +36,7 @@ public struct MangaReaderProjectionSnapshot: Sendable {
 }
 
 public protocol MangaReaderProjectionSnapshotLoading: MangaReaderProjectionLoading {
-    func loadReaderProjectionSnapshot(at url: URL) async throws -> MangaReaderProjectionSnapshot
+    func loadReaderProjectionSnapshot(_ request: MangaReaderProjectionRequest) async throws -> MangaReaderProjectionSnapshot
 }
 
 public protocol MangaReaderProjectionPersisting: Sendable {
@@ -52,7 +73,7 @@ public struct MangaDirectorySeed: Hashable, Sendable {
 }
 
 public protocol MangaDirectoryRepository: Sendable {
-    func loadDirectorySeed(for chapterURL: URL) async throws -> MangaDirectorySeed
+    func loadDirectorySeed(for threadID: String) async throws -> MangaDirectorySeed
     func loadTagDirectory(tagIDs: [String]) async throws -> [MangaChapter]
     func searchDirectory(keyword: String, forumID: String) async throws -> [MangaChapter]
 }

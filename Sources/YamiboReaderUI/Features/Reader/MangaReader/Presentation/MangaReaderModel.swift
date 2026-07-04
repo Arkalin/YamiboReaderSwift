@@ -335,16 +335,9 @@ public final class MangaReaderModel: ObservableObject {
 
     public func loadChapterComments(for target: ReaderChapterCommentTarget?) async {
         guard let target else {
-            guard let threadID = YamiboThreadURLCanonicalizer.threadID(from: context.chapterURL) else {
-                chapterCommentsState = .unsupported
-                isLoadingMoreChapterComments = false
-                chapterCommentsLoadMoreError = nil
-                chapterCommentsRefreshError = nil
-                return
-            }
             let emptyTarget = ReaderChapterCommentTarget(
-                threadID: threadID,
-                view: 1,
+                threadID: context.chapterTID,
+                view: context.chapterView,
                 ownerPostID: "",
                 title: nil
             )
@@ -1007,8 +1000,10 @@ public final class MangaReaderModel: ObservableObject {
         }
 
         let directoryName = normalizedDirectoryName(loaded.directoryTitle) ?? normalizedDirectoryName(context.directoryName)
+        let threadURL = Self.threadURL(threadID: context.originalThreadID)
+        let chapterView = Self.webViewPage(from: currentPage.refererURL)
         let progress = MangaProgressReadingPosition(
-            threadURL: context.originalThreadURL,
+            threadURL: threadURL,
             chapterURL: currentPage.refererURL,
             chapterTitle: currentPage.chapterTitle,
             pageIndex: currentPage.localIndex,
@@ -1017,10 +1012,11 @@ public final class MangaReaderModel: ObservableObject {
             directoryName: directoryName
         )
         let resumeContext = MangaLaunchContext(
-            originalThreadURL: context.originalThreadURL,
-            chapterURL: currentPage.refererURL,
+            originalThreadID: context.originalThreadID,
+            chapterTID: currentPage.tid,
             displayTitle: context.displayTitle,
             source: .resume,
+            chapterView: chapterView,
             initialPage: currentPage.localIndex,
             directoryName: directoryName,
             offlineCacheFavoriteID: context.offlineCacheFavoriteID
@@ -1067,6 +1063,10 @@ public final class MangaReaderModel: ObservableObject {
             .first(where: { $0.name == "page" })?
             .value
             .flatMap(Int.init) ?? 1
+    }
+
+    private static func threadURL(threadID: String, view: Int = 1) -> URL {
+        YamiboRoute.threadByID(tid: threadID, page: view, authorID: nil, reverse: false).url
     }
 
     private static func normalizedSettings(_ settings: MangaReaderSettings) -> MangaReaderSettings {

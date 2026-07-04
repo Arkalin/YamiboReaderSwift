@@ -225,6 +225,7 @@ public enum YamiboDatabase {
             try db.create(table: "manga_directory_chapters") { table in
                 table.column("directory_name", .text).notNull().references("manga_directories", onDelete: .cascade)
                 table.column("tid", .text).notNull()
+                table.column("view", .integer).notNull()
                 table.column("raw_title", .text).notNull()
                 table.column("chapter_number", .double).notNull()
                 table.column("author_uid", .text)

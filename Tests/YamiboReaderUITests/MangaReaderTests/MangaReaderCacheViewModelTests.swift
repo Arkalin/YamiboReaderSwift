@@ -253,8 +253,8 @@ private func makeCacheFixture(
         sortOrder: .ascending
     )
     let context = MangaLaunchContext(
-        originalThreadURL: threadURL,
-        chapterURL: chapters[0].url,
+        originalThreadID: "900",
+        chapterTID: chapters[0].tid,
         displayTitle: "测试漫画",
         source: .forum,
         directoryName: "测试漫画"

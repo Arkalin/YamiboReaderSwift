@@ -34,12 +34,20 @@ public actor ThreadOpenResolver {
                 )
             )
         case .manga:
+            guard let originalThreadID = Self.threadID(from: requestURL) else {
+                return .web(requestURL)
+            }
+            let chapterURL = favoriteChapterURL ?? requestURL
+            guard let chapterTID = Self.threadID(from: chapterURL) else {
+                return .web(requestURL)
+            }
             return .manga(
                 MangaLaunchContext(
-                    originalThreadURL: requestURL,
-                    chapterURL: favoriteChapterURL ?? requestURL,
+                    originalThreadID: originalThreadID,
+                    chapterTID: chapterTID,
                     displayTitle: title ?? L10n.string("manga.reader.title"),
                     source: .favorites,
+                    chapterView: Self.page(from: chapterURL),
                     initialPage: initialMangaPageIndex
                 )
             )
@@ -65,12 +73,20 @@ public actor ThreadOpenResolver {
         }
 
         if MangaHTMLParser.isLikelyMangaThread(title: snapshot.title, html: snapshot.html) {
+            guard let originalThreadID = Self.threadID(from: requestURL) else {
+                return .web(requestURL)
+            }
+            let chapterURL = favoriteChapterURL ?? requestURL
+            guard let chapterTID = Self.threadID(from: chapterURL) else {
+                return .web(requestURL)
+            }
             return .manga(
                 MangaLaunchContext(
-                    originalThreadURL: requestURL,
-                    chapterURL: favoriteChapterURL ?? requestURL,
+                    originalThreadID: originalThreadID,
+                    chapterTID: chapterTID,
                     displayTitle: MangaTitleCleaner.cleanBookName(snapshot.title.isEmpty ? (title ?? L10n.string("manga.reader.title")) : snapshot.title),
                     source: .forum,
+                    chapterView: Self.page(from: chapterURL),
                     initialPage: initialMangaPageIndex
                 )
             )
@@ -98,5 +114,16 @@ public actor ThreadOpenResolver {
             return nil
         }
         return value
+    }
+
+    private static func threadID(from url: URL) -> String? {
+        MangaTitleCleaner.extractTid(from: url.absoluteString)?.mangaReaderTrimmedNonEmpty
+    }
+
+    private static func page(from url: URL) -> Int {
+        let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        let page = components?.queryItems?.first(where: { $0.name == "page" })?.value
+            .flatMap(Int.init) ?? 1
+        return max(1, page)
     }
 }

@@ -102,7 +102,7 @@ public actor MangaDirectoryStore: MangaDirectoryPersisting, MangaDirectoryStorag
                         length(CAST(raw_title AS BLOB)) +
                         COALESCE(length(CAST(author_uid AS BLOB)), 0) +
                         COALESCE(length(CAST(author_name AS BLOB)), 0) +
-                        32
+                        40
                     ), 0)
                     FROM manga_directory_chapters
                     """
@@ -141,12 +141,13 @@ public actor MangaDirectoryStore: MangaDirectoryPersisting, MangaDirectoryStorag
             try db.execute(
                 sql: """
                 INSERT INTO manga_directory_chapters
-                (directory_name, tid, raw_title, chapter_number, author_uid, author_name, group_index, publish_time, manual_order)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (directory_name, tid, view, raw_title, chapter_number, author_uid, author_name, group_index, publish_time, manual_order)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 arguments: [
                     normalized.cleanBookName,
                     tid,
+                    chapter.view,
                     chapter.rawTitle,
                     chapter.chapterNumber,
                     chapter.authorUID,
@@ -177,7 +178,7 @@ public actor MangaDirectoryStore: MangaDirectoryPersisting, MangaDirectoryStorag
         let chapters: [MangaChapter] = try Row.fetchAll(
             db,
             sql: """
-            SELECT tid, raw_title, chapter_number, author_uid, author_name, group_index, publish_time
+            SELECT tid, view, raw_title, chapter_number, author_uid, author_name, group_index, publish_time
             FROM manga_directory_chapters
             WHERE directory_name = ?
             ORDER BY manual_order ASC, tid ASC
@@ -191,6 +192,7 @@ public actor MangaDirectoryStore: MangaDirectoryPersisting, MangaDirectoryStorag
                 rawTitle: row["raw_title"],
                 chapterNumber: row["chapter_number"],
                 url: url,
+                view: row["view"],
                 authorUID: row["author_uid"] as String?,
                 authorName: row["author_name"] as String?,
                 groupIndex: row["group_index"],

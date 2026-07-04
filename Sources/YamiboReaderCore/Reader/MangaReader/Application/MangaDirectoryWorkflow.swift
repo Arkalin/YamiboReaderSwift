@@ -124,7 +124,7 @@ public struct MangaDirectoryWorkflow: Sendable {
             )
         }
 
-        let seed = try await repository.loadDirectorySeed(for: context.chapterURL)
+        let seed = try await repository.loadDirectorySeed(for: context.chapterTID)
         let directory = MangaDirectoryInitialization.directory(from: seed)
         try await store.saveDirectory(directory)
         return MangaDirectoryResolutionResult(

@@ -187,7 +187,7 @@ public final class AppContinuityWorkflow {
     private func mangaRouteReconciledWithReadingProgress(_ route: MangaPresentationRoute) async -> MangaPresentationRoute? {
         switch route {
         case let .native(context):
-            if let progress = await readingProgress(forThreadURL: context.originalThreadURL),
+            if let progress = await appContext.readingProgressStore.load(threadID: context.originalThreadID),
                progress.hasMangaReadingProgress {
                 return .native(context.reconciledWithReadingProgress(
                     progress,
@@ -227,9 +227,8 @@ public final class AppContinuityWorkflow {
                 return item
             }
         }
-        let threadID = YamiboThreadURLCanonicalizer.threadID(from: context.originalThreadURL)
         return document.items.first { item in
-            item.target.threadID == threadID || item.mangaChapterMetadata?.chapterURL == context.chapterURL
+            item.target.threadID == context.originalThreadID || item.mangaChapterMetadata?.chapterTID == context.chapterTID
         }
     }
 }
@@ -264,7 +263,7 @@ private extension MangaPresentationRoute {
 
 private extension MangaLaunchContext {
     var hasLocalReadingProgress: Bool {
-        initialPage > 0 || chapterURL != originalThreadURL
+        initialPage > 0 || chapterTID != originalThreadID || chapterView > 1
     }
 }
 
@@ -314,15 +313,24 @@ private extension MangaLaunchContext {
         favoriteItem: FavoriteItem?
     ) -> MangaLaunchContext {
         guard let manga = progress.manga else { return self }
+        let chapterTID = YamiboThreadURLCanonicalizer.threadID(from: manga.lastMangaURL) ?? self.chapterTID
         return MangaLaunchContext(
-            originalThreadURL: originalThreadURL,
-            chapterURL: manga.lastMangaURL,
+            originalThreadID: originalThreadID,
+            chapterTID: chapterTID,
             displayTitle: favoriteItem?.resolvedDisplayTitle ?? displayTitle,
             source: .resume,
+            chapterView: Self.page(from: manga.lastMangaURL),
             initialPage: manga.mangaPageIndex,
             directoryName: directoryName,
             offlineCacheFavoriteID: favoriteItem?.id ?? offlineCacheFavoriteID
         )
+    }
+
+    private static func page(from url: URL) -> Int {
+        let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        let page = components?.queryItems?.first(where: { $0.name == "page" })?.value
+            .flatMap(Int.init) ?? 1
+        return max(1, page)
     }
 }
 

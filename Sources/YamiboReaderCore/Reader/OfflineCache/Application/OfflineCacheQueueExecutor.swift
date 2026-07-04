@@ -341,8 +341,9 @@ public actor OfflineCacheQueueExecutor {
     }
 
     private func workWithReaderProjection(_ work: MangaOfflineCacheWork) async throws -> MangaOfflineCacheProjectionBackedWork {
-        let recoveryURL = Self.rebuiltChapterURL(tid: work.tid)
-        let snapshot = try await readerProjectionLoader.loadReaderProjectionSnapshot(at: recoveryURL)
+        let snapshot = try await readerProjectionLoader.loadReaderProjectionSnapshot(
+            MangaReaderProjectionRequest(threadID: work.tid)
+        )
 
         return MangaOfflineCacheProjectionBackedWork(
             work: work.preparingForRun(

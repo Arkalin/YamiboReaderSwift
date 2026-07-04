@@ -25,8 +25,8 @@ struct MangaReaderTestsRouteContracts {
             Issue.record("Expected manga launch context")
             return
         }
-        #expect(context.originalThreadURL == url)
-        #expect(context.chapterURL == url)
+        #expect(context.originalThreadID == "700")
+        #expect(context.chapterTID == "700")
         #expect(context.source == .forum)
     }
 }

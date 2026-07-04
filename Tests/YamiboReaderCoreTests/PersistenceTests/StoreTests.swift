@@ -452,12 +452,10 @@ import Testing
 @Test func readerResumeRouteStorePersistsMangaRouteAndIgnoresInvalidData() async throws {
     let defaults = try makeIsolatedDefaults(prefix: "reader-resume-manga-tests")
     let store = ReaderResumeRouteStore(defaults: defaults, key: "reader-route")
-    let originalURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=612&mobile=2"))
-    let chapterURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=613&mobile=2"))
     let route = MangaPresentationRoute.native(
         MangaLaunchContext(
-            originalThreadURL: originalURL,
-            chapterURL: chapterURL,
+            originalThreadID: "612",
+            chapterTID: "613",
             displayTitle: "测试漫画",
             source: .resume,
             initialPage: 7,

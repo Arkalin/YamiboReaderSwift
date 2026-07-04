@@ -32,9 +32,8 @@ struct MangaReaderTestsReaderProjectionLoader {
             projectionStore: fixtures.projectionStore,
             forumCacheStore: fixtures.forumCacheStore
         )
-        let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=700&page=5"))
 
-        let projection = try await loader.loadReaderProjection(at: url)
+        let projection = try await loader.loadReaderProjection(MangaReaderProjectionRequest(threadID: "700", view: 5))
 
         #expect(projection.tid == "700")
         #expect(projection.ownerPostID == "9001")
@@ -82,10 +81,10 @@ struct MangaReaderTestsReaderProjectionLoader {
             projectionStore: fixtures.projectionStore,
             forumCacheStore: fixtures.forumCacheStore
         )
-        let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?tid=701&page=1"))
 
-        let first = try await loader.loadReaderProjection(at: url)
-        let second = try await loader.loadReaderProjection(at: url)
+        let request = MangaReaderProjectionRequest(threadID: "701")
+        let first = try await loader.loadReaderProjection(request)
+        let second = try await loader.loadReaderProjection(request)
 
         #expect(first == second)
         #expect(requestCounter.value == 2)
@@ -130,9 +129,10 @@ struct MangaReaderTestsReaderProjectionLoader {
             projectionStore: fixtures.projectionStore,
             forumCacheStore: fixtures.forumCacheStore
         )
-        let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?tid=702&authorid=42&page=1"))
 
-        let projection = try await loader.loadReaderProjection(at: url)
+        let projection = try await loader.loadReaderProjection(
+            MangaReaderProjectionRequest(threadID: "702", authorID: "42")
+        )
 
         #expect(projection.ownerPostID == "9001")
         #expect(projection.chapterTitle == "新内容 第2话")
@@ -169,7 +169,7 @@ struct MangaReaderTestsReaderProjectionLoader {
         )
 
         let projection = try await loader.loadReaderProjection(
-            at: try #require(URL(string: "https://bbs.yamibo.com/forum.php?tid=703"))
+            MangaReaderProjectionRequest(threadID: "703")
         )
 
         #expect(projection.tid == "703")
@@ -201,7 +201,7 @@ struct MangaReaderTestsReaderProjectionLoader {
 
         await #expect(throws: YamiboError.parsingFailed(context: L10n.string("context.current_page_not_manga_chapter"))) {
             _ = try await loader.loadReaderProjection(
-                at: try #require(URL(string: "https://bbs.yamibo.com/forum.php?tid=704"))
+                MangaReaderProjectionRequest(threadID: "704")
             )
         }
     }

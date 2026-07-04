@@ -89,10 +89,10 @@ final class MangaReaderAdjacentPrefetchTests: XCTestCase {
         let document700 = try makeAdjacentPrefetchDocument(tid: "700", pageCount: 10)
         let document701 = try makeAdjacentPrefetchDocument(tid: "701", pageCount: 1)
         let document702 = try makeAdjacentPrefetchDocument(tid: "702", pageCount: 1)
-        let delayedURL = document701.chapterURL
+        let delayedTID = document701.tid
         let loader = AdjacentPrefetchProjectionLoader(
             documents: [document700, document701, document702],
-            delayedURLs: [delayedURL]
+            delayedTIDs: [delayedTID]
         )
         let directory = makeAdjacentPrefetchDirectory(tids: ["700", "701", "702"])
         let fixture = try await makeAdjacentPrefetchFixture(
@@ -104,11 +104,11 @@ final class MangaReaderAdjacentPrefetchTests: XCTestCase {
         await fixture.model.prepare()
         fixture.model.updateCurrentPage(globalIndex: 8)
         try await waitForAdjacentPrefetch {
-            await loader.hasRequested(delayedURL)
+            await loader.hasRequested(delayedTID)
         }
 
         await fixture.model.jumpToChapter(directory.chapters[2])
-        await loader.release(delayedURL)
+        await loader.release(delayedTID)
         try await Task.sleep(nanoseconds: 100_000_000)
 
         guard case let .loaded(loaded) = fixture.model.presentation.state else {
@@ -123,10 +123,10 @@ final class MangaReaderAdjacentPrefetchTests: XCTestCase {
     func testDirectoryChapterDeleteSupersedesInFlightAdjacentPrefetch() async throws {
         let document700 = try makeAdjacentPrefetchDocument(tid: "700", pageCount: 10)
         let document701 = try makeAdjacentPrefetchDocument(tid: "701", pageCount: 1)
-        let delayedURL = document701.chapterURL
+        let delayedTID = document701.tid
         let loader = AdjacentPrefetchProjectionLoader(
             documents: [document700, document701],
-            delayedURLs: [delayedURL]
+            delayedTIDs: [delayedTID]
         )
         let fixture = try await makeAdjacentPrefetchFixture(
             document: document700,
@@ -137,11 +137,11 @@ final class MangaReaderAdjacentPrefetchTests: XCTestCase {
         await fixture.model.prepare()
         fixture.model.updateCurrentPage(globalIndex: 8)
         try await waitForAdjacentPrefetch {
-            await loader.hasRequested(delayedURL)
+            await loader.hasRequested(delayedTID)
         }
 
         await fixture.model.deleteDirectoryChapters(tids: ["701"])
-        await loader.release(delayedURL)
+        await loader.release(delayedTID)
         try await Task.sleep(nanoseconds: 100_000_000)
 
         guard case let .loaded(loaded) = fixture.model.presentation.state else {
@@ -207,13 +207,13 @@ final class MangaReaderAdjacentPrefetchTests: XCTestCase {
             XCTFail("Expected saved manga resume route")
             return
         }
-        XCTAssertEqual(savedContext.chapterURL, YamiboRoute.chapterURL(forTID: "701"))
+        XCTAssertEqual(savedContext.chapterTID, "701")
         XCTAssertEqual(savedContext.initialPage, 0)
     }
 
     func testAdjacentPrefetchFailureDoesNotSetDirectoryPanelError() async throws {
         let document700 = try makeAdjacentPrefetchDocument(tid: "700", pageCount: 10)
-        let missingURL = makeAdjacentPrefetchURL(tid: "701")
+        let missingTID = "701"
         let loader = AdjacentPrefetchProjectionLoader(documents: [document700])
         let fixture = try await makeAdjacentPrefetchFixture(
             document: document700,
@@ -224,7 +224,7 @@ final class MangaReaderAdjacentPrefetchTests: XCTestCase {
         await fixture.model.prepare()
         fixture.model.updateCurrentPage(globalIndex: 8)
         try await waitForAdjacentPrefetch {
-            await loader.hasRequested(missingURL)
+            await loader.hasRequested(missingTID)
         }
         try await Task.sleep(nanoseconds: 100_000_000)
 
@@ -285,10 +285,9 @@ private func makeAdjacentPrefetchFixture(
         progressSync: resolvedProgressSync
     )
     #endif
-    let originalURL = makeAdjacentPrefetchURL(tid: "700")
     let context = MangaLaunchContext(
-        originalThreadURL: originalURL,
-        chapterURL: document.chapterURL,
+        originalThreadID: "700",
+        chapterTID: document.tid,
         displayTitle: "测试漫画",
         source: .forum,
         initialPage: initialPage,
@@ -308,35 +307,35 @@ private func makeAdjacentPrefetchFixture(
 }
 
 private actor AdjacentPrefetchProjectionLoader: MangaReaderProjectionLoading {
-    private let documents: [URL: MangaReaderProjection]
-    private let delayedURLs: Set<URL>
-    private var continuations: [URL: CheckedContinuation<Void, Never>] = [:]
-    private var requestedURLs: [URL] = []
+    private let documents: [String: MangaReaderProjection]
+    private let delayedTIDs: Set<String>
+    private var continuations: [String: CheckedContinuation<Void, Never>] = [:]
+    private var requestedTIDs: [String] = []
 
-    init(documents: [MangaReaderProjection], delayedURLs: Set<URL> = []) {
-        self.documents = Dictionary(uniqueKeysWithValues: documents.map { ($0.chapterURL, $0) })
-        self.delayedURLs = delayedURLs
+    init(documents: [MangaReaderProjection], delayedTIDs: Set<String> = []) {
+        self.documents = Dictionary(uniqueKeysWithValues: documents.map { ($0.tid, $0) })
+        self.delayedTIDs = delayedTIDs
     }
 
-    func loadReaderProjection(at url: URL) async throws -> MangaReaderProjection {
-        requestedURLs.append(url)
-        if delayedURLs.contains(url) {
+    func loadReaderProjection(_ request: MangaReaderProjectionRequest) async throws -> MangaReaderProjection {
+        requestedTIDs.append(request.threadID)
+        if delayedTIDs.contains(request.threadID) {
             await withCheckedContinuation { continuation in
-                continuations[url] = continuation
+                continuations[request.threadID] = continuation
             }
         }
-        guard let document = documents[url] else {
+        guard let document = documents[request.threadID] else {
             throw YamiboError.unreadableBody
         }
         return document
     }
 
-    func hasRequested(_ url: URL) -> Bool {
-        requestedURLs.contains(url)
+    func hasRequested(_ threadID: String) -> Bool {
+        requestedTIDs.contains(threadID)
     }
 
-    func release(_ url: URL) {
-        continuations.removeValue(forKey: url)?.resume()
+    func release(_ threadID: String) {
+        continuations.removeValue(forKey: threadID)?.resume()
     }
 }
 
@@ -347,7 +346,7 @@ private actor AdjacentPrefetchDirectoryRepository: MangaDirectoryRepository {
         self.seed = seed
     }
 
-    func loadDirectorySeed(for chapterURL: URL) async throws -> MangaDirectorySeed {
+    func loadDirectorySeed(for threadID: String) async throws -> MangaDirectorySeed {
         seed
     }
 

@@ -39,7 +39,7 @@ struct OfflineCacheTestsQueueExecutor {
         #expect(await store.offlineCacheState(ownerName: "favorite-a", tid: "200") == .cached)
     }
 
-    @Test func continueLoadsReaderProjectionBeforeImageCountProgressAndRebuildsChapterURLFromTid() async throws {
+    @Test func continueLoadsReaderProjectionBeforeImageCountProgressUsingTid() async throws {
         let store = try makeTestOfflineCacheStore(rootDirectory: try makeTemporaryExecutorDirectory())
         let imageURLs = try makeImageURLs(tid: "300", count: 2)
         _ = try await store.enqueueOfflineCacheWork(
@@ -67,14 +67,7 @@ struct OfflineCacheTestsQueueExecutor {
         try await executor.continueQueue()
         await executor.waitForIdle()
 
-        let requestedURL = try #require(await projectionLoader.requestedURLs.first)
-        let components = try #require(URLComponents(url: requestedURL, resolvingAgainstBaseURL: false))
-        let queryItems = Dictionary(uniqueKeysWithValues: (components.queryItems ?? []).compactMap { item in
-            item.value.map { (item.name, $0) }
-        })
-        #expect(components.host == "bbs.yamibo.com")
-        #expect(components.path == "/forum.php")
-        #expect(queryItems["tid"] == "300")
+        #expect(await projectionLoader.requestedThreadIDs == ["300"])
         let completedWork = await store.offlineCacheWork(ownerName: "favorite-a", tid: "300")
         #expect(completedWork == nil)
         #expect(await store.offlineCacheState(ownerName: "favorite-a", tid: "300") == .cached)
@@ -102,7 +95,7 @@ struct OfflineCacheTestsQueueExecutor {
         try await executor.continueQueue()
         await executor.waitForIdle()
 
-        #expect(await projectionLoader.requestedURLs.count == 1)
+        #expect(await projectionLoader.requestedThreadIDs == ["310"])
         #expect(await acquirer.requestedURLs == projectionImages)
         let membership = try #require(await store.membership(ownerName: "favorite-a", tid: "310"))
         #expect(membership.imageURLs == projectionImages)
@@ -169,10 +162,11 @@ struct OfflineCacheTestsQueueExecutor {
         )
         favoriteLibrary.addItem(favorite)
         let resumeRoute = ReaderResumeRoute.manga(.native(MangaLaunchContext(
-            originalThreadURL: ownerURL,
-            chapterURL: chapterURL,
+            originalThreadID: "350",
+            chapterTID: "350",
             displayTitle: "阅读进度漫画",
             source: .resume,
+            chapterView: 2,
             initialPage: 5
         )))
         let imageURLs = try makeImageURLs(tid: "350", count: 2)
@@ -197,10 +191,11 @@ struct OfflineCacheTestsQueueExecutor {
         #expect(await store.offlineCacheState(ownerName: favorite.id, tid: "350") == .cached)
         #expect(await localFavoriteLibraryStore.load() == favoriteLibrary)
         #expect(await resumeRouteStore.load() == .manga(.native(MangaLaunchContext(
-            originalThreadURL: try #require(YamiboRoute.chapterURL(forTID: "350")),
-            chapterURL: try #require(YamiboRoute.chapterURL(forTID: "350")),
+            originalThreadID: "350",
+            chapterTID: "350",
             displayTitle: "阅读进度漫画",
             source: .resume,
+            chapterView: 2,
             initialPage: 5
         ))))
     }
@@ -698,8 +693,7 @@ struct OfflineCacheTestsQueueExecutor {
 }
 
 private actor RecordingReaderProjectionLoader: MangaReaderProjectionSnapshotLoading {
-    private(set) var requestedURLs: [URL] = []
-    private var documentByURL: [String: MangaReaderProjection] = [:]
+    private(set) var requestedThreadIDs: [String] = []
     private var documentByTID: [String: MangaReaderProjection] = [:]
     private var anyDocument: MangaReaderProjection?
 
@@ -711,24 +705,20 @@ private actor RecordingReaderProjectionLoader: MangaReaderProjectionSnapshotLoad
         if forAnyRequest {
             anyDocument = document
         } else {
-            documentByURL[document.chapterURL.absoluteString] = document
             documentByTID[document.tid] = document
         }
     }
 
-    func loadReaderProjection(at url: URL) async throws -> MangaReaderProjection {
-        requestedURLs.append(url)
-        let tid = MangaTitleCleaner.extractTid(from: url.absoluteString)
-        if let document = documentByURL[url.absoluteString]
-            ?? tid.flatMap({ documentByTID[$0] })
-            ?? anyDocument {
+    func loadReaderProjection(_ request: MangaReaderProjectionRequest) async throws -> MangaReaderProjection {
+        requestedThreadIDs.append(request.threadID)
+        if let document = documentByTID[request.threadID] ?? anyDocument {
             return document
         }
         throw YamiboError.parsingFailed(context: "Missing test Manga Chapter Document")
     }
 
-    func loadReaderProjectionSnapshot(at url: URL) async throws -> MangaReaderProjectionSnapshot {
-        let projection = try await loadReaderProjection(at: url)
+    func loadReaderProjectionSnapshot(_ request: MangaReaderProjectionRequest) async throws -> MangaReaderProjectionSnapshot {
+        let projection = try await loadReaderProjection(request)
         return MangaReaderProjectionSnapshot(
             projection: projection,
             sourcePage: makeSourcePage(projection: projection)

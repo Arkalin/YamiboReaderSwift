@@ -7,13 +7,12 @@ public struct YamiboMangaDirectoryRepository: MangaDirectoryRepository {
         self.client = client
     }
 
-    public func loadDirectorySeed(for chapterURL: URL) async throws -> MangaDirectorySeed {
-        let normalizedURL = YamiboRoute.normalizedChapterURL(chapterURL)
-
+    public func loadDirectorySeed(for threadID: String) async throws -> MangaDirectorySeed {
         return try await MangaReaderDataSupport.mapNetworkErrors {
-            guard let tid = MangaTitleCleaner.extractTid(from: normalizedURL.absoluteString)?.mangaReaderTrimmedNonEmpty else {
+            guard let tid = threadID.mangaReaderTrimmedNonEmpty else {
                 throw MangaReaderDataSupport.mangaDirectoryParsingFailure()
             }
+            let normalizedURL = YamiboRoute.threadByID(tid: tid, page: 1, authorID: nil, reverse: false).url
             let html = try await client.fetchThreadById(tid: tid)
             try MangaReaderDataSupport.validateReadableMangaHTML(html)
 
@@ -28,7 +27,8 @@ public struct YamiboMangaDirectoryRepository: MangaDirectoryRepository {
                 tid: tid,
                 rawTitle: cleanedThreadTitle,
                 chapterNumber: MangaTitleCleaner.extractChapterNumber(rawTitle),
-                url: YamiboRoute.chapterURL(forTID: tid) ?? normalizedURL
+                url: YamiboRoute.chapterURL(forTID: tid) ?? normalizedURL,
+                view: 1
             )
             let mobileTagIDs = MangaHTMLParser.findTagIDsMobile(in: html)
             let tagIDs = mobileTagIDs.isEmpty ? MangaHTMLParser.findTagIDs(in: html) : mobileTagIDs

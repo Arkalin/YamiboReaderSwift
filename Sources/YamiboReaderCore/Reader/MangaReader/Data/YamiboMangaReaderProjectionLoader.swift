@@ -16,28 +16,31 @@ public actor YamiboMangaReaderProjectionLoader: MangaReaderProjectionSnapshotLoa
         self.forumCacheStore = forumCacheStore
     }
 
-    public func loadReaderProjection(at url: URL) async throws -> MangaReaderProjection {
-        try await loadReaderProjectionSnapshot(at: url, ignoresCache: false).projection
+    public func loadReaderProjection(_ request: MangaReaderProjectionRequest) async throws -> MangaReaderProjection {
+        try await loadReaderProjectionSnapshot(request, ignoresCache: false).projection
     }
 
-    public func loadReaderProjectionSnapshot(at url: URL) async throws -> MangaReaderProjectionSnapshot {
-        try await loadReaderProjectionSnapshot(at: url, ignoresCache: false)
+    public func loadReaderProjectionSnapshot(_ request: MangaReaderProjectionRequest) async throws -> MangaReaderProjectionSnapshot {
+        try await loadReaderProjectionSnapshot(request, ignoresCache: false)
     }
 
-    public func loadReaderProjectionIgnoringCache(at url: URL) async throws -> MangaReaderProjection {
-        try await loadReaderProjectionSnapshot(at: url, ignoresCache: true).projection
+    public func loadReaderProjectionIgnoringCache(_ request: MangaReaderProjectionRequest) async throws -> MangaReaderProjection {
+        try await loadReaderProjectionSnapshot(request, ignoresCache: true).projection
     }
 
-    private func loadReaderProjectionSnapshot(at url: URL, ignoresCache: Bool) async throws -> MangaReaderProjectionSnapshot {
-        let normalizedURL = YamiboRoute.normalizedChapterURL(url)
-        guard let tid = MangaTitleCleaner.extractTid(from: normalizedURL.absoluteString)?.mangaReaderTrimmedNonEmpty else {
-            throw MangaReaderDataSupport.currentMangaChapterParsingFailure()
-        }
-        let thread = ThreadIdentity(tid: tid)
-        let view = Self.view(from: url)
-        let authorID = try await resolveAuthorID(for: url, thread: thread, ignoresCache: ignoresCache)
+    private func loadReaderProjectionSnapshot(
+        _ request: MangaReaderProjectionRequest,
+        ignoresCache: Bool
+    ) async throws -> MangaReaderProjectionSnapshot {
+        let thread = ThreadIdentity(tid: request.threadID)
+        let view = request.view
+        let authorID = try await resolveAuthorID(
+            requestedAuthorID: request.authorID,
+            thread: thread,
+            ignoresCache: ignoresCache
+        )
         let identity = MangaReaderProjectionSourceIdentity(
-            tid: tid,
+            tid: request.threadID,
             authorID: authorID,
             contentSource: .authorFilteredPage,
             view: view
@@ -77,11 +80,11 @@ public actor YamiboMangaReaderProjectionLoader: MangaReaderProjectionSnapshotLoa
     }
 
     private func resolveAuthorID(
-        for url: URL,
+        requestedAuthorID: String?,
         thread: ThreadIdentity,
         ignoresCache: Bool
     ) async throws -> String {
-        if let authorID = Self.authorID(from: url) {
+        if let authorID = requestedAuthorID?.mangaReaderTrimmedNonEmpty {
             return authorID
         }
 
@@ -236,16 +239,4 @@ public actor YamiboMangaReaderProjectionLoader: MangaReaderProjectionSnapshotLoa
         return String(hash, radix: 16)
     }
 
-    private static func view(from url: URL) -> Int {
-        let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
-        let value = components?.queryItems?.first(where: { $0.name == "page" })?.value
-            .flatMap(Int.init) ?? 1
-        return max(1, value)
-    }
-
-    private static func authorID(from url: URL) -> String? {
-        let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
-        return components?.queryItems?.first(where: { $0.name.lowercased() == "authorid" })?.value?
-            .mangaReaderTrimmedNonEmpty
-    }
 }

@@ -41,6 +41,7 @@ struct MangaReaderTestsMangaStores {
         #expect(loaded.searchKeyword == "第一本")
         #expect(loaded.chapters.map(\.tid) == ["901", "902"])
         #expect(loaded.chapters.map(\.rawTitle) == ["第2话", "第3话"])
+        #expect(loaded.chapters.map(\.view) == [7, 7])
         #expect(loaded.chapters.map { $0.url.absoluteString } == [
             "https://bbs.yamibo.com/forum.php?mobile=2&mod=viewthread&page=1&tid=901",
             "https://bbs.yamibo.com/forum.php?mobile=2&mod=viewthread&page=1&tid=902",
@@ -68,6 +69,7 @@ struct MangaReaderTestsMangaStores {
         #expect(databaseState.directoryChapterColumns == [
             "directory_name",
             "tid",
+            "view",
             "raw_title",
             "chapter_number",
             "author_uid",
@@ -225,13 +227,12 @@ struct MangaReaderTestsMangaStores {
         let defaults = try #require(UserDefaults(suiteName: suiteName))
         defaults.removePersistentDomain(forName: suiteName)
         let store = ReaderResumeRouteStore(defaults: defaults, key: "resume")
-        let originalURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=930&mobile=2"))
-        let chapterURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=931&page=8&mobile=2"))
         let route = ReaderResumeRoute.manga(.native(MangaLaunchContext(
-            originalThreadURL: originalURL,
-            chapterURL: chapterURL,
+            originalThreadID: "930",
+            chapterTID: "931",
             displayTitle: "测试漫画",
             source: .resume,
+            chapterView: 8,
             initialPage: 4,
             directoryName: "测试漫画",
             offlineCacheFavoriteID: "favorite-1"
@@ -246,12 +247,14 @@ struct MangaReaderTestsMangaStores {
         #expect(!payload.contains("originalThreadURL"))
         #expect(payload.contains(#""chapterTID":"931""#))
         #expect(payload.contains(#""originalThreadID":"930""#))
+        #expect(payload.contains(#""chapterView":8"#))
         let loaded = try #require(await store.load())
         #expect(loaded == .manga(.native(MangaLaunchContext(
-            originalThreadURL: try #require(YamiboRoute.chapterURL(forTID: "930")),
-            chapterURL: try #require(YamiboRoute.chapterURL(forTID: "931")),
+            originalThreadID: "930",
+            chapterTID: "931",
             displayTitle: "测试漫画",
             source: .resume,
+            chapterView: 8,
             initialPage: 4,
             directoryName: "测试漫画",
             offlineCacheFavoriteID: "favorite-1"
@@ -305,6 +308,7 @@ private func makeChapter(tid: String, title: String, order: Double) -> MangaChap
         rawTitle: title,
         chapterNumber: order,
         url: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(tid)&page=7&authorid=42&mobile=2")!,
+        view: 7,
         authorUID: "77",
         authorName: "作者甲",
         groupIndex: Int(order),

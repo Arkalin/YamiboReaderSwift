@@ -203,10 +203,9 @@ private func makeDirectoryPanelFixture(
     try await settingsStore.save(appSettings)
 
     let resolvedDocument = try document ?? makeDocument(tid: "700", pageCount: 1)
-    let originalURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=700&mobile=2"))
     let context = MangaLaunchContext(
-        originalThreadURL: originalURL,
-        chapterURL: resolvedDocument.chapterURL,
+        originalThreadID: "700",
+        chapterTID: resolvedDocument.tid,
         displayTitle: "测试漫画",
         source: .forum,
         directoryName: directoryName
@@ -220,7 +219,7 @@ private func makeDirectoryPanelFixture(
         searchChapters: searchChapters
     )
     let documents = Dictionary(
-        uniqueKeysWithValues: ([resolvedDocument] + extraDocuments).map { ($0.chapterURL, $0) }
+        uniqueKeysWithValues: ([resolvedDocument] + extraDocuments).map { ($0.tid, $0) }
     )
     let appContext = YamiboAppContext(
         sessionStore: try SessionStore(testSuiteName: defaultsSuiteName, key: "session"),
@@ -264,14 +263,14 @@ private func makeDirectoryPanelFixture(
 }
 
 private actor DirectoryPanelProjectionLoader: MangaReaderProjectionLoading {
-    private let documents: [URL: MangaReaderProjection]
+    private let documents: [String: MangaReaderProjection]
 
-    init(documents: [URL: MangaReaderProjection]) {
+    init(documents: [String: MangaReaderProjection]) {
         self.documents = documents
     }
 
-    func loadReaderProjection(at url: URL) async throws -> MangaReaderProjection {
-        guard let document = documents[url] else {
+    func loadReaderProjection(_ request: MangaReaderProjectionRequest) async throws -> MangaReaderProjection {
+        guard let document = documents[request.threadID] else {
             throw YamiboError.unreadableBody
         }
         return document
@@ -293,7 +292,7 @@ private actor DirectoryPanelRepository: MangaDirectoryRepository {
         self.searchChapters = searchChapters
     }
 
-    func loadDirectorySeed(for chapterURL: URL) async throws -> MangaDirectorySeed {
+    func loadDirectorySeed(for threadID: String) async throws -> MangaDirectorySeed {
         seed
     }
 
@@ -323,7 +322,7 @@ private actor DelayedDirectoryPanelRepository: MangaDirectoryRepository {
         self.searchChapters = searchChapters
     }
 
-    func loadDirectorySeed(for chapterURL: URL) async throws -> MangaDirectorySeed {
+    func loadDirectorySeed(for threadID: String) async throws -> MangaDirectorySeed {
         seed
     }
 

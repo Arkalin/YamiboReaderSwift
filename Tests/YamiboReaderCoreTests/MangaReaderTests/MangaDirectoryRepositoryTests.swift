@@ -31,9 +31,8 @@ struct MangaReaderTestsDirectoryRepository {
         }
 
         let repository = YamiboMangaDirectoryRepository(client: testClient(session: harness.session))
-        let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?tid=700&page=5&authorid=42"))
 
-        let seed = try await repository.loadDirectorySeed(for: url)
+        let seed = try await repository.loadDirectorySeed(for: "700")
         let requestURL = try #require(harness.requests.first?.url?.absoluteString)
 
         #expect(seed.currentChapter.tid == "700")
@@ -63,9 +62,8 @@ struct MangaReaderTestsDirectoryRepository {
         }
 
         let repository = YamiboMangaDirectoryRepository(client: YamiboClient(session: harness.session))
-        let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?tid=702"))
 
-        let seed = try await repository.loadDirectorySeed(for: url)
+        let seed = try await repository.loadDirectorySeed(for: "702")
 
         #expect(seed.currentChapter.tid == "702")
         #expect(seed.tagIDs.isEmpty)
@@ -204,10 +202,9 @@ struct MangaReaderTestsDirectoryRepository {
             MangaReaderDataTestResponse(html: html)
         }
         let repository = YamiboMangaDirectoryRepository(client: YamiboClient(session: harness.session))
-        let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?tid=702"))
 
         await #expect(throws: expected) {
-            _ = try await repository.loadDirectorySeed(for: url)
+            _ = try await repository.loadDirectorySeed(for: "702")
         }
     }
 

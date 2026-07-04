@@ -61,7 +61,8 @@ public enum MangaHTMLParser {
                 tid: tid,
                 rawTitle: title,
                 chapterNumber: MangaTitleCleaner.extractChapterNumber(title),
-                url: YamiboRoute.thread(url: url, page: 1, authorID: nil).url
+                url: YamiboRoute.thread(url: url, page: MangaChapter.view(from: url), authorID: nil).url,
+                view: MangaChapter.view(from: url)
             )
         }
     }
@@ -225,6 +226,7 @@ public enum MangaHTMLParser {
                 rawTitle: title,
                 chapterNumber: MangaTitleCleaner.extractChapterNumber(title),
                 url: url,
+                view: MangaChapter.view(from: url),
                 authorUID: extractUID(from: authorURL),
                 authorName: authorName,
                 groupIndex: groupIndex,
@@ -266,6 +268,7 @@ public enum MangaHTMLParser {
                 rawTitle: title,
                 chapterNumber: MangaTitleCleaner.extractChapterNumber(title),
                 url: url,
+                view: MangaChapter.view(from: url),
                 authorUID: extractUID(from: authorMatch?[1] ?? ""),
                 authorName: authorMatch.map { HTMLTextExtractor.stripTags($0[2]) },
                 groupIndex: groupIndex

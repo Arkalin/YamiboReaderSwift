@@ -90,7 +90,7 @@ public final class MangaReaderCacheViewModel: ObservableObject {
 
     public func load() async {
         startObservingOfflineCacheUpdates()
-        favorite = await localFavoriteItem()?.favorite(threadURL: context.originalThreadURL, type: .manga)
+        favorite = await localFavoriteItem()?.favorite(threadURL: Self.threadURL(threadID: context.originalThreadID), type: .manga)
         await refreshRows()
     }
 
@@ -242,10 +242,13 @@ public final class MangaReaderCacheViewModel: ObservableObject {
                 return item
             }
         }
-        let threadID = YamiboThreadURLCanonicalizer.threadID(from: context.originalThreadURL)
         return document.items.first { item in
-            item.target.threadID == threadID || item.mangaChapterMetadata?.chapterURL == context.chapterURL
+            item.target.threadID == context.originalThreadID || item.mangaChapterMetadata?.chapterTID == context.chapterTID
         }
+    }
+
+    private static func threadURL(threadID: String) -> URL {
+        YamiboRoute.threadByID(tid: threadID, page: 1, authorID: nil, reverse: false).url
     }
 }
 

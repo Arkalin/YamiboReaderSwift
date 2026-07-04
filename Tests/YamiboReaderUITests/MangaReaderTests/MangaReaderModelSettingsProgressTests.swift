@@ -57,8 +57,8 @@ final class MangaReaderModelSettingsProgressTests: XCTestCase {
         let originalURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=700&mobile=2"))
         let chapterURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=701&mobile=2"))
         let context = MangaLaunchContext(
-            originalThreadURL: originalURL,
-            chapterURL: chapterURL,
+            originalThreadID: "700",
+            chapterTID: "701",
             displayTitle: "测试漫画",
             source: .forum,
             initialPage: 0,
@@ -222,7 +222,7 @@ final class MangaReaderModelSettingsProgressTests: XCTestCase {
             return
         }
         XCTAssertEqual(savedContext.source, .resume)
-        XCTAssertEqual(savedContext.chapterURL, YamiboRoute.chapterURL(forTID: "701"))
+        XCTAssertEqual(savedContext.chapterTID, "701")
         XCTAssertEqual(savedContext.initialPage, 1)
         XCTAssertEqual(savedContext.directoryName, "Resolved Directory")
     }
@@ -617,8 +617,8 @@ final class MangaReaderModelSettingsProgressTests: XCTestCase {
         let existingRoute = ReaderResumeRoute.manga(
             .native(
                 MangaLaunchContext(
-                    originalThreadURL: fixture.originalURL,
-                    chapterURL: fixture.chapterURL,
+                    originalThreadID: fixture.context.originalThreadID,
+                    chapterTID: fixture.context.chapterTID,
                     displayTitle: "Existing",
                     source: .resume,
                     initialPage: 6,
@@ -650,8 +650,8 @@ final class MangaReaderModelSettingsProgressTests: XCTestCase {
         let oldChapterURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=701&mobile=2"))
         let latestChapterURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=702&mobile=2"))
         let originalContext = MangaLaunchContext(
-            originalThreadURL: originalURL,
-            chapterURL: oldChapterURL,
+            originalThreadID: "700",
+            chapterTID: "701",
             displayTitle: "测试漫画",
             source: .forum,
             initialPage: 0,
@@ -659,8 +659,8 @@ final class MangaReaderModelSettingsProgressTests: XCTestCase {
         )
         let latestRoute = MangaPresentationRoute.native(
             MangaLaunchContext(
-                originalThreadURL: originalURL,
-                chapterURL: latestChapterURL,
+                originalThreadID: "700",
+                chapterTID: "702",
                 displayTitle: "测试漫画",
                 source: .resume,
                 initialPage: 4,
@@ -709,7 +709,7 @@ private func makeFixture(
     let resumeRouteStore = try ReaderResumeRouteStore(testSuiteName: defaultsSuiteName, key: "resume")
     try await settingsStore.save(appSettings)
 
-    let originalURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=700&mobile=2"))
+    let originalURL = YamiboRoute.threadByID(tid: "700", page: 1, authorID: nil, reverse: false).url
     let chapterURL: URL
     if let suppliedDocument {
         chapterURL = suppliedDocument.chapterURL
@@ -717,8 +717,8 @@ private func makeFixture(
         chapterURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=701&mobile=2"))
     }
     let context = MangaLaunchContext(
-        originalThreadURL: originalURL,
-        chapterURL: chapterURL,
+        originalThreadID: "700",
+        chapterTID: suppliedDocument?.tid ?? "701",
         displayTitle: "测试漫画",
         source: .forum,
         initialPage: initialPage,
@@ -786,14 +786,14 @@ private func makeFixture(
 }
 
 private actor StubMangaReaderProjectionLoader: MangaReaderProjectionLoading {
-    let documents: [URL: MangaReaderProjection]
+    let documents: [String: MangaReaderProjection]
 
     init(documents: [MangaReaderProjection]) {
-        self.documents = Dictionary(uniqueKeysWithValues: documents.map { ($0.chapterURL, $0) })
+        self.documents = Dictionary(uniqueKeysWithValues: documents.map { ($0.tid, $0) })
     }
 
-    func loadReaderProjection(at url: URL) async throws -> MangaReaderProjection {
-        guard let document = documents[url] else {
+    func loadReaderProjection(_ request: MangaReaderProjectionRequest) async throws -> MangaReaderProjection {
+        guard let document = documents[request.threadID] else {
             throw YamiboError.unreadableBody
         }
         return document
@@ -817,7 +817,7 @@ private actor RetryableMangaReaderProjectionLoader: MangaReaderProjectionLoading
         self.outputs = outputs
     }
 
-    func loadReaderProjection(at url: URL) async throws -> MangaReaderProjection {
+    func loadReaderProjection(_ request: MangaReaderProjectionRequest) async throws -> MangaReaderProjection {
         loadCountValue += 1
         guard !outputs.isEmpty else {
             throw YamiboError.unreadableBody
@@ -839,7 +839,7 @@ private actor StubMangaDirectoryRepository: MangaDirectoryRepository {
         self.seed = seed
     }
 
-    func loadDirectorySeed(for chapterURL: URL) async throws -> MangaDirectorySeed {
+    func loadDirectorySeed(for threadID: String) async throws -> MangaDirectorySeed {
         seed
     }
 

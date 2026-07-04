@@ -252,7 +252,12 @@ public struct MangaReaderView: View {
         Task {
             let latestRoute = await model.saveProgress()
             appModel.dismissManga(
-                openThreadInForum: context.originalThreadURL,
+                openThreadInForum: YamiboRoute.threadByID(
+                    tid: context.originalThreadID,
+                    page: 1,
+                    authorID: nil,
+                    reverse: false
+                ).url,
                 suspendedRoute: latestRoute
             )
         }

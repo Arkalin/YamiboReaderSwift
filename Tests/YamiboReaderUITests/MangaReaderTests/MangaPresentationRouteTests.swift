@@ -27,8 +27,8 @@ final class MangaPresentationRouteTests: XCTestCase {
         let chapterURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=722&mobile=2"))
         let route = MangaPresentationRoute.native(
             MangaLaunchContext(
-                originalThreadURL: originalURL,
-                chapterURL: chapterURL,
+                originalThreadID: "721",
+                chapterTID: "722",
                 displayTitle: "测试漫画",
                 source: .resume,
                 initialPage: 6
@@ -151,8 +151,8 @@ final class MangaPresentationRouteTests: XCTestCase {
         let remoteChapterURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=733&mobile=2"))
         let expectedRemoteChapterURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=733"))
         let staleContext = MangaLaunchContext(
-            originalThreadURL: originalURL,
-            chapterURL: staleChapterURL,
+            originalThreadID: "731",
+            chapterTID: "732",
             displayTitle: "本地漫画",
             source: .resume,
             initialPage: 0,
@@ -215,8 +215,8 @@ final class MangaPresentationRouteTests: XCTestCase {
         await appModel.bootstrapIfNeeded()
 
         let expectedContext = MangaLaunchContext(
-            originalThreadURL: try XCTUnwrap(YamiboRoute.chapterURL(forTID: "731")),
-            chapterURL: expectedRemoteChapterURL,
+            originalThreadID: "731",
+            chapterTID: "733",
             displayTitle: "本地漫画",
             source: .resume,
             initialPage: 7,
@@ -282,8 +282,8 @@ final class MangaPresentationRouteTests: XCTestCase {
         try await waitForReaderResumeRoute(store, equals: nil)
 
         let mangaContext = MangaLaunchContext(
-            originalThreadURL: originalURL,
-            chapterURL: originalURL,
+            originalThreadID: "723",
+            chapterTID: "723",
             displayTitle: "测试漫画",
             source: .favorites,
             initialPage: 2
@@ -301,16 +301,16 @@ final class MangaPresentationRouteTests: XCTestCase {
         let originalChapterURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=727&mobile=2"))
         let nextChapterURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=728&mobile=2"))
         let originalContext = MangaLaunchContext(
-            originalThreadURL: originalURL,
-            chapterURL: originalChapterURL,
+            originalThreadID: "726",
+            chapterTID: "727",
             displayTitle: "测试漫画",
             source: .favorites,
             initialPage: 12,
             directoryName: "Resolved Directory"
         )
         let resumeContext = MangaLaunchContext(
-            originalThreadURL: originalURL,
-            chapterURL: nextChapterURL,
+            originalThreadID: "726",
+            chapterTID: "728",
             displayTitle: "测试漫画",
             source: .resume,
             initialPage: 0,
@@ -404,8 +404,8 @@ final class MangaPresentationRouteTests: XCTestCase {
             autoOpenNative: false
         )
         let nativeContext = MangaLaunchContext(
-            originalThreadURL: webContext.originalThreadURL,
-            chapterURL: webContext.currentURL,
+            originalThreadID: "700",
+            chapterTID: "700",
             displayTitle: "测试漫画",
             source: .forum,
             initialPage: 3
@@ -439,8 +439,8 @@ final class MangaPresentationRouteTests: XCTestCase {
             autoOpenNative: true
         )
         let nativeContext = MangaLaunchContext(
-            originalThreadURL: originalURL,
-            chapterURL: originalURL,
+            originalThreadID: "704",
+            chapterTID: "704",
             displayTitle: "测试漫画",
             source: .favorites
         )
@@ -468,8 +468,8 @@ final class MangaPresentationRouteTests: XCTestCase {
             source: .favorites
         )
         let nativeContext = MangaLaunchContext(
-            originalThreadURL: originalURL,
-            chapterURL: originalURL,
+            originalThreadID: "701",
+            chapterTID: "701",
             displayTitle: "测试漫画",
             source: .favorites
         )
@@ -488,10 +488,11 @@ final class MangaPresentationRouteTests: XCTestCase {
         let appModel = makeIsolatedAppModel(initialTab: .favorites)
         let originalURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=704&mobile=2")!
         let context = MangaLaunchContext(
-            originalThreadURL: originalURL,
-            chapterURL: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=704&page=3&mobile=2")!,
+            originalThreadID: "704",
+            chapterTID: "704",
             displayTitle: "测试漫画",
             source: .favorites,
+            chapterView: 3,
             initialPage: 5
         )
 
@@ -511,8 +512,8 @@ final class MangaPresentationRouteTests: XCTestCase {
         let appModel = makeIsolatedAppModel(initialTab: .favorites)
         let originalURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=704&mobile=2")!
         let context = MangaLaunchContext(
-            originalThreadURL: originalURL,
-            chapterURL: originalURL,
+            originalThreadID: "704",
+            chapterTID: "704",
             displayTitle: "测试漫画",
             source: .favorites,
             initialPage: 2
@@ -596,8 +597,8 @@ final class MangaPresentationRouteTests: XCTestCase {
         let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=704&mobile=2")!
         let clipboardURL = URL(string: "https://bbs.yamibo.com/thread-901-1-1.html")!
         let context = MangaLaunchContext(
-            originalThreadURL: threadURL,
-            chapterURL: threadURL,
+            originalThreadID: "704",
+            chapterTID: "704",
             displayTitle: "测试漫画",
             source: .forum,
             initialPage: 2
@@ -618,8 +619,8 @@ final class MangaPresentationRouteTests: XCTestCase {
         let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=704&mobile=2")!
         let clipboardURL = URL(string: "https://bbs.yamibo.com/thread-903-1-1.html")!
         let context = MangaLaunchContext(
-            originalThreadURL: threadURL,
-            chapterURL: threadURL,
+            originalThreadID: "704",
+            chapterTID: "704",
             displayTitle: "测试漫画",
             source: .forum,
             initialPage: 2

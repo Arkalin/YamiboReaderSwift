@@ -78,8 +78,8 @@ import Testing
     let originalURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=700&mobile=2"))
     let route = MangaPresentationRoute.native(
         MangaLaunchContext(
-            originalThreadURL: originalURL,
-            chapterURL: originalURL,
+            originalThreadID: "700",
+            chapterTID: "700",
             displayTitle: "大家不可以忘記三之昔的一個貢獻",
             source: .resume,
             initialPage: 0

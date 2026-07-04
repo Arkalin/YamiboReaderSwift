@@ -16,13 +16,13 @@ struct MangaDirectoryWorkflowTests {
         let resolvedByName = try await workflow.resolveInitialDirectory(context: context, projection: document)
         #expect(resolvedByName.directory.cleanBookName == "命名目录")
         #expect(!resolvedByName.shouldAutoUpdateAfterInitialLoad)
-        #expect(await repository.seedURLs.isEmpty)
+        #expect(await repository.seedThreadIDs.isEmpty)
         #expect(await store.savedDirectories.isEmpty)
 
         let missingContext = try makeContext(tid: "700", directoryName: "missing")
         let resolvedByTID = try await workflow.resolveInitialDirectory(context: missingContext, projection: document)
         #expect(resolvedByTID.directory.cleanBookName == "包含目录")
-        #expect(await repository.seedURLs.isEmpty)
+        #expect(await repository.seedThreadIDs.isEmpty)
     }
 
     @Test func initialTagDirectoryIsSeededAndMarkedForDeferredRefresh() async throws {
@@ -39,7 +39,7 @@ struct MangaDirectoryWorkflowTests {
         #expect(resolved.directory.strategy == .tag)
         #expect(resolved.directory.sourceKey == "31")
         #expect(resolved.shouldAutoUpdateAfterInitialLoad)
-        #expect(await repository.seedURLs == [context.chapterURL])
+        #expect(await repository.seedThreadIDs == [context.chapterTID])
         #expect(await store.savedDirectories.map(\.cleanBookName) == ["测试漫画"])
     }
 
@@ -249,7 +249,7 @@ private actor RecordingDirectoryRepository: MangaDirectoryRepository {
     private let seed: MangaDirectorySeed
     private let tagChapters: [MangaChapter]
     private let searchChapters: [MangaChapter]
-    private(set) var seedURLs: [URL] = []
+    private(set) var seedThreadIDs: [String] = []
     private(set) var tagDirectoryRequests: [[String]] = []
     private(set) var searchRequests: [(keyword: String, forumID: String)] = []
 
@@ -263,8 +263,8 @@ private actor RecordingDirectoryRepository: MangaDirectoryRepository {
         self.searchChapters = searchChapters
     }
 
-    func loadDirectorySeed(for chapterURL: URL) async throws -> MangaDirectorySeed {
-        seedURLs.append(chapterURL)
+    func loadDirectorySeed(for threadID: String) async throws -> MangaDirectorySeed {
+        seedThreadIDs.append(threadID)
         return seed
     }
 
@@ -421,10 +421,9 @@ private func makeDocument(tid: String) throws -> MangaReaderProjection {
 }
 
 private func makeContext(tid: String, directoryName: String? = nil) throws -> MangaLaunchContext {
-    let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(tid)&mobile=2"))
-    return MangaLaunchContext(
-        originalThreadURL: url,
-        chapterURL: url,
+    MangaLaunchContext(
+        originalThreadID: tid,
+        chapterTID: tid,
         displayTitle: "测试漫画",
         source: .forum,
         directoryName: directoryName
